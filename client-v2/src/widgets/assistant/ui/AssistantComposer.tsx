@@ -1,6 +1,11 @@
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
-import { PgSession } from "@/features/auth";
+import { PgAssistantContext } from "@/entities/assistant-context";
+import {
+  isSignInFailure,
+  PgSession,
+  SIGN_IN_FAILED_UNKNOWN,
+} from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
@@ -13,13 +18,20 @@ import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-c
 import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-bridge";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import type { AiOffInput, AiOffReason } from "../model/ai-off";
+import { aiOff } from "../model/ai-off";
 import type { ModelOption } from "../model/choice";
 import { modelOptions, modelShown } from "../model/choice";
-import { DEFAULT_CONNECTION } from "../model/connection";
-import { useDefaultBackend } from "../model/default-backend";
+import { connectLabel, DEFAULT_CONNECTION } from "../model/connection";
+import {
+  retryDefaultBackend,
+  useDefaultBackend,
+} from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";
 import { withEffort, withModel } from "../model/tune";
+import { useSignedIn } from "../model/use-signed-in";
 import type { Turn, TurnPhase } from "../model/use-turn";
+import { AI_OFF_SEND_BLOCKED, BaseAiOffRow } from "./BaseAiOffRow";
 import {
   BaseAssistantComposer,
   type ComposerContextChip,
@@ -29,51 +41,86 @@ import { BaseModelMenu } from "./BaseModelMenu";
 
 const log = createLogger("assistant:composer");
 
-/** What the assistant reads each turn, as chips over the input */
-const contextChips = (lessonState: LessonState): ComposerContextChip[] => {
-  // Mirror what `describeProject()` actually sends, so the row cannot claim
-  // less than the model gets. Paths only — never file content, since this runs
-  // on every render, including every streamed token.
-  const currentFilePath = PgExplorer.currentFilePath;
-  const filePaths = realBridge.listFiles();
-  const openPaths = realBridge.listOpenFiles();
+/** How a chip names what it sends, for a screen reader */
+const sent = (what: string) => `Sent with this message: ${what}`;
+
+/** The workspace a context choice belongs to, by its stable id */
+const workspace = () => PgExplorer.currentWorkspaceId;
+
+/**
+ * What the assistant reads each turn, as chips over the input: the lesson
+ * step, one chip per file in the context (each removable until it is added
+ * back), the build error and the IDL.
+ *
+ * Mirrors what `describeProject()` sends, so the row cannot claim less than
+ * the model gets. Paths only, never file content: this runs on every render,
+ * including every streamed token.
+ */
+const contextChips = (
+  lessonState: LessonState,
+  contextFiles: readonly string[]
+): ComposerContextChip[] => {
   const lesson = describeLesson(lessonState);
-  // The prototype's order: where you are, what you are looking at, then
-  // what else is sent
+  const files = contextFiles.map((path): ComposerContextChip => {
+    const name = PgExplorer.getItemNameFromPath(path);
+    return {
+      label: name,
+      title: `${path}\nSent in full with every message`,
+      spoken: sent(`${name}, in full`),
+      remove: {
+        label: `Remove ${name} from the context`,
+        run: () => {
+          PgAssistantContext.remove(workspace(), path);
+          assistantTelemetry.track("assistant_file_chip_removed", {});
+        },
+      },
+    };
+  });
+  // Where you are, the files (tabs in tab order, then the added ones),
+  // then what else is sent
   return [
     lesson
       ? {
           label: `Step ${lesson.stepIndex} of ${lesson.stepCount}`,
           title: lesson.objective,
+          spoken: sent(
+            `step ${lesson.stepIndex} of ${lesson.stepCount} and its goal`
+          ),
         }
       : null,
-    currentFilePath
-      ? {
-          label: PgExplorer.getItemNameFromPath(currentFilePath),
-          title: "The tab you are looking at, sent in full every turn",
-        }
-      : null,
-    {
-      label: `${filePaths.length} ${filePaths.length === 1 ? "file" : "files"}`,
-      title: `Every path is sent each turn, and the assistant can read any of them:\n\n${filePaths.join(
-        "\n"
-      )}`,
-    },
-    openPaths.length > 1
-      ? {
-          label: `${openPaths.length} open`,
-          title: `Your open tabs are named each turn; only the active one is sent in full:\n\n${openPaths.join(
-            "\n"
-          )}`,
-        }
-      : null,
+    ...files,
     PgBuildOutput.latest?.failed
-      ? { label: "build error", title: "The last build's compiler output" }
+      ? {
+          label: "build error",
+          title: "The last build's compiler output",
+          spoken: sent("the last build's compiler output"),
+        }
       : null,
     PgProgramInfo.idl
-      ? { label: "idl", title: "The built program's interface" }
+      ? {
+          label: "idl",
+          title: "The built program's interface",
+          spoken: sent("the built program's interface"),
+        }
       : null,
   ].filter((chip): chip is ComposerContextChip => !!chip);
+};
+
+/** The project files not in the context, for + › Add a file */
+const addableFiles = (contextFiles: readonly string[]) => {
+  const inContext = new Set(contextFiles);
+  return realBridge
+    .listFiles()
+    .filter((path) => !inContext.has(path))
+    .map((path) => ({
+      path,
+      add: () => {
+        PgAssistantContext.add(workspace(), path);
+        assistantTelemetry.track("assistant_context_file_added", {
+          via: "menu",
+        });
+      },
+    }));
 };
 
 /** The input's placeholder, by where the turn is */
@@ -86,12 +133,51 @@ const PLACEHOLDERS: Record<TurnPhase, string> = {
 };
 
 /**
- * The assistant's composer, connected: the context it reads, the model and
- * effort menus, and the turn shared with the thread.
+ * Why the assistant is off, reported once per reason while the composer is
+ * mounted, however often it redraws
  */
-export function AssistantComposer({ turn }: { turn: Turn }) {
+const useAiOff = (input: AiOffInput) => {
+  const reason = aiOff(input);
+  const reported = useRef(new Set<AiOffReason>());
+  useEffect(() => {
+    if (!reason || reported.current.has(reason)) return;
+    reported.current.add(reason);
+    assistantTelemetry.track("assistant_ai_off_shown", { reason });
+  }, [reason]);
+  return reason;
+};
+
+/**
+ * The assistant's composer, connected: the context it reads, the model and
+ * effort menus, the + menu, and the turn shared with the thread.
+ */
+export function AssistantComposer({
+  turn,
+  onSources,
+  focusPicked,
+}: {
+  turn: Turn;
+  /** Opens Sources and tools in place of the conversation */
+  onSources(): void;
+  /** Gives focus to what a pick from + opened, as the head's More does */
+  focusPicked(): boolean;
+}) {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
+  // The chips follow the context: a pick, a tab opened or closed, a file
+  // created or deleted, another project
+  useEffect(() => PgAssistantContext.onDidChange(render).dispose, []);
+  useEffect(() => {
+    const subs = [
+      PgExplorer.onDidSetTabs(render),
+      PgExplorer.onDidCreateItem(render),
+      PgExplorer.onDidDeleteItem(render),
+      PgExplorer.onDidRenameItem(render),
+      PgExplorer.onDidSwitchWorkspace(render),
+    ];
+    return () => subs.forEach((sub) => sub.dispose());
+  }, []);
+  const contextFiles = realBridge.listContextFiles();
 
   const [lessonState, setLessonState] =
     useState<LessonState>(INITIAL_LESSON_STATE);
@@ -100,6 +186,45 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
   const defaultBackend = useDefaultBackend();
   const connection = PgAssistant.connection;
   const shown = modelShown(connection, defaultBackend);
+  const signedIn = useSignedIn();
+  const off = useAiOff({
+    connected: connection?.id,
+    backend: defaultBackend,
+    signedIn,
+  });
+  const [signInError, setSignInError] = useState<string>();
+  const [retrying, setRetrying] = useState(false);
+  // A failed sign-in speaks for the row it was pressed in, never a later one
+  useEffect(() => setSignInError(undefined), [off]);
+
+  /** The off row's sign-in: Connect a model's, which keeps the open project */
+  const signIn = () => {
+    setSignInError(undefined);
+    PgSession.signIn({ from: "assistant" }).catch((error: unknown) => {
+      if (isSignInFailure(error)) {
+        // Not reported: a blocked popup or a cancelled sign-in is expected,
+        // and its message says what to do
+        log.info("sign-in from the off row failed", {
+          context: { error: String(error) },
+        });
+        setSignInError((error as Error).message);
+        return;
+      }
+      log.error(error, { report: true, context: { from: "ai-off" } });
+      setSignInError(SIGN_IN_FAILED_UNKNOWN);
+    });
+  };
+
+  const retry = () => {
+    setRetrying(true);
+    retryDefaultBackend()
+      .catch((error: unknown) => {
+        // The probe answers its own failures and has told every reader the
+        // default is unreachable; this is the bug past them
+        log.error(error, { report: true, context: { from: "ai-off" } });
+      })
+      .finally(() => setRetrying(false));
+  };
 
   /**
    * Apply a model or effort pick, then `track` it. Nothing when `next` is
@@ -136,8 +261,8 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
         turn.openConnect("model", { provider: "default" });
         return;
       }
-      // From a keyed backend this is a change of backend, and starts a new
-      // conversation as connecting always has
+      // From a keyed backend this is a change of backend; the conversation
+      // carries over, as it does on every connect
       PgAssistant.connect(DEFAULT_CONNECTION);
       assistantTelemetry.track("assistant_model_picked", {
         provider: "default",
@@ -179,19 +304,31 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
 
   return (
     <div className="flex shrink-0 flex-col gap-2 px-3 pt-2 pb-3">
-      {turn.promptWaiting && (
+      {off && (
+        <BaseAiOffRow
+          reason={off}
+          promptWaiting={turn.promptWaiting}
+          signInError={signInError}
+          signingIn={PgSession.signInState().status === "pending"}
+          retrying={retrying}
+          onAddKey={turn.addKey}
+          onSignIn={signIn}
+          onRetry={retry}
+        />
+      )}
+      {!off && turn.promptWaiting && (
+        // With no default at all the off row says it; this is the wait for a
+        // thread's own key, or for the deployment's answer
         <Callout variant="info" role="status">
           <CalloutDescription>
-            {/* No default to sign in for: the model is the one way in */}
-            {shown.kind === "none"
-              ? "Connect a model to send this to the assistant."
-              : "Connect a backend, or sign in for the default one, to send this to the assistant."}{" "}
-            Your prompt is waiting in the composer.
+            Connect a backend, or sign in for the default one, to send this to
+            the assistant. Your prompt is waiting in the composer.
           </CalloutDescription>
         </Callout>
       )}
       <BaseAssistantComposer
-        chips={contextChips(lessonState)}
+        chips={contextChips(lessonState, contextFiles)}
+        addable={addableFiles(contextFiles)}
         value={turn.input}
         onValueChange={turn.setInput}
         onSend={(text) => {
@@ -213,15 +350,13 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
         }
         effort={effort}
         focusRequest={turn.focusRequest}
-        // The deployment serves no default and nothing is connected: the model
-        // button reads "Connect a model" and is the way in, so Send waits for
-        // it. A default the probe could not reach keeps Send, whose send asks
-        // again
-        sendBlocked={
-          shown.kind === "none" && defaultBackend.state === "absent"
-            ? "Connect a model to send"
-            : null
-        }
+        onSources={onSources}
+        onConnect={() => turn.openConnect("add")}
+        connectLabel={connectLabel(connection)}
+        focusPicked={focusPicked}
+        // While no model can answer this user, Send waits with the reason
+        // and the off row above names the way in
+        sendBlocked={off ? AI_OFF_SEND_BLOCKED[off] : undefined}
       />
     </div>
   );

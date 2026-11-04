@@ -529,7 +529,7 @@
       "name": "callout",
       "type": "registry:ui",
       "title": "Callout",
-      "description": "A tinted note in a page or form: default, info, warning, success, error.",
+      "description": "A tinted note in a page or form: default, info, warning, success, error, with actions in its tone.",
       "registryDependencies": [
         "@playground/playground-tokens",
         "@playground/utils"
@@ -541,7 +541,8 @@
         }
       ],
       "dependencies": [
-        "class-variance-authority"
+        "class-variance-authority",
+        "radix-ui"
       ]
     },
     {

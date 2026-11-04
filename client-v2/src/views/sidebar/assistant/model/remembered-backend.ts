@@ -2,24 +2,26 @@ import type { ModelProvider } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import type { Connection } from "../store";
+import type { BackendParams } from "./backend-params";
+import { backendParamsFrom, paramsOf } from "./backend-params";
 import { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
-import { PROVIDERS } from "./types";
 
 export { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
 
 /**
- * Which backend to reconnect to on the next load.
+ * Which backend to offer on the next load.
  *
- * Two answers in two stores. The keyless default backend is remembered by id
- * in `localStorage`, across tabs and restarts: nothing secret is written.
- * A backend that needs the user's own key is remembered whole, key included,
- * in `sessionStorage`, which is kept per tab: a new tab starts without it,
- * while a tab the browser duplicates or restores (a reopened closed tab, a
- * restored session) carries it and reconnects, as after a reload. Project
- * code runs in this origin and can read either store; `sessionStorage` bounds
- * that to the tab the user is already working in. See the design in
- * `openspec/changes/archive/2026-10-15-assistant-own-key-storage/design.md`
- * (HOO-1748).
+ * The backend last chosen is remembered by its parameters (provider, model,
+ * base URL, effort) in `localStorage`, across tabs and restarts: nothing
+ * secret is written. It reconnects the keyless default, and presets Connect a
+ * model for a key-based one (HOO-1719).
+ *
+ * The user's own key is held in memory only, by `PgAssistant`, and never
+ * written to browser storage: a reload, a new tab and a restored tab all ask
+ * for it again (HOO-2423, the 29 Oct security review). Builds before that
+ * kept the whole connection, key included, in `sessionStorage` under
+ * `CONNECTION_KEY`; `dropKeptKey` removes what they left. See the change
+ * `openspec/changes/archive/2026-11-03-assistant-key-in-memory/design.md`.
  *
  * Every access is guarded. Storage throws rather than returning `null` with
  * site data blocked, and the panel has to open either way. A failure is
@@ -59,126 +61,16 @@ const attempt = (what: string, run: () => void) =>
     false
   );
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
+/** Whether a key that survived `dropKept` was reported in this tab already */
+let survivorReported = false;
 
 /**
- * Every field of a `Connection`, none optional, so the copies below must name
- * each one: a field added to `Connection` fails the build here until it is
- * written and read back, instead of being dropped on a reload.
- */
-type StoredConnection = { [K in keyof Required<Connection>]: Connection[K] };
-
-/** The connection as it is written to `sessionStorage` */
-const toStored = (connection: Connection): string => {
-  const stored: StoredConnection = {
-    id: connection.id,
-    apiKey: connection.apiKey,
-    endpoint: connection.endpoint && {
-      baseUrl: connection.endpoint.baseUrl,
-      model: connection.endpoint.model,
-    },
-    settings: connection.settings && {
-      model: connection.settings.model,
-      effort: connection.settings.effort,
-    },
-  };
-  // `JSON.stringify` leaves out the fields that are `undefined`
-  return JSON.stringify(stored);
-};
-
-/**
- * Why a kept connection was dropped. Logged in its place, since the value
- * itself carries the key.
- */
-type DropReason =
-  /** The entry `dropKept` leaves when it cannot remove one */
-  | "blank"
-  | "not-json"
-  | "not-an-object"
-  /** A provider this build no longer has */
-  | "unknown-provider"
-  /** The keyless default, which is remembered in `localStorage` instead */
-  | "default-backend"
-  /** Missing, or blank for a provider whose key is not optional */
-  | "no-key"
-  /** Missing or malformed where needed, or present where there is none */
-  | "bad-endpoint"
-  /** Malformed, or an effort the provider does not offer */
-  | "bad-settings";
-
-type ReadBack =
-  | { connection: Connection; reason?: never }
-  | { connection?: never; reason: DropReason };
-
-const dropped = (reason: DropReason): ReadBack => ({ reason });
-
-/** A stored connection, rebuilt field by field so nothing unknown rides along */
-const fromStored = (raw: string): ReadBack => {
-  if (raw === "") return dropped("blank");
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    // Not rethrown: the caller drops the entry and logs this reason
-    return dropped("not-json");
-  }
-  if (!isRecord(parsed)) return dropped("not-an-object");
-
-  const { id, apiKey } = parsed;
-  const provider = PROVIDERS.find((p) => p.id === id);
-  if (!provider) return dropped("unknown-provider");
-  if (provider.id === DEFAULT_ID) return dropped("default-backend");
-
-  if (typeof apiKey !== "string") return dropped("no-key");
-  if (!apiKey.trim() && !provider.keyOptional) return dropped("no-key");
-
-  let endpoint: Connection["endpoint"];
-  if (provider.endpoint) {
-    // An OpenAI-compatible provider cannot talk without its base URL and model
-    const stored = parsed.endpoint;
-    if (
-      !isRecord(stored) ||
-      typeof stored.baseUrl !== "string" ||
-      typeof stored.model !== "string"
-    ) {
-      return dropped("bad-endpoint");
-    }
-    endpoint = { baseUrl: stored.baseUrl, model: stored.model };
-  } else if (parsed.endpoint !== undefined) {
-    return dropped("bad-endpoint");
-  }
-
-  let settings: Connection["settings"];
-  if (parsed.settings !== undefined) {
-    const stored = parsed.settings;
-    if (!isRecord(stored) || typeof stored.model !== "string") {
-      return dropped("bad-settings");
-    }
-    const effort = provider.modelSettings?.efforts.find(
-      (e) => e === stored.effort
-    );
-    if (!effort) return dropped("bad-settings");
-    settings = { model: stored.model, effort };
-  }
-
-  const connection: StoredConnection = {
-    id: provider.id,
-    apiKey,
-    endpoint,
-    settings,
-  };
-  return { connection };
-};
-
-/**
- * Remove the kept connection, the one way every path that must lose the key
- * does it. If the removal throws, the entry is blanked instead: `fromStored`
- * drops a blank one, so the next read forgets it.
+ * Remove the connection an older build kept for this tab, the one way every
+ * path that must lose the key does it. If the removal throws, the entry is
+ * blanked instead, which leaves no key to read.
  *
  * Reported only when the key verifiably survived both, which is a privacy
- * failure the team must hear about. Storage that refuses everything (site
+ * failure the team must hear about, and once per tab. Storage that refuses everything (site
  * data blocked) fails the read-back too; then nothing was ever written, and
  * it is only logged.
  *
@@ -197,44 +89,42 @@ const dropKept = (what: string) => {
   );
   if (!left) return true;
 
-  log.error(new Error("could not forget the key kept for this tab"), {
-    report: true,
-  });
+  // Once per tab: every mount of the panel and the Settings row tries again,
+  // and a tab whose storage refuses writes would report on each
+  if (!survivorReported) {
+    survivorReported = true;
+    log.error(new Error("could not forget the key kept for this tab"), {
+      report: true,
+    });
+  }
   return false;
 };
 
 /**
- * Record the user's choice, so a later load can reconnect to it: the default
- * in any tab of this browser, a key-based backend only in this tab.
+ * Record the user's choice, so a later load can offer it again: its
+ * parameters in every tab of this browser, never its key. A connection an
+ * older build kept for this tab is dropped on the way, since it may hold an
+ * earlier backend's key.
  */
 export const rememberBackend = (connection: Connection) => {
-  // Written down as a whole id rather than a flag, so switching to a
-  // key-based backend overwrites it instead of leaving a stale `true` behind
+  // The whole choice, so the newest pick always overwrites the last one.
+  // `paramsOf` leaves the key out by construction
   attempt("remember the backend", () =>
-    localStorage.setItem(REMEMBERED_BACKEND_KEY, connection.id)
+    localStorage.setItem(
+      REMEMBERED_BACKEND_KEY,
+      JSON.stringify(paramsOf(connection))
+    )
   );
-
-  if (connection.id === DEFAULT_ID) {
-    dropKept("forget the previous key");
-    return;
-  }
-
-  const kept = attempt("keep the connection for this tab", () =>
-    sessionStorage.setItem(CONNECTION_KEY, toStored(connection))
-  );
-  if (kept) return;
-
-  // The write failed, so an earlier backend's key may still be there and a
-  // reload would reconnect to it instead of the one just chosen. Dropping it
-  // makes the next load ask.
-  dropKept("drop the previous connection");
+  dropKept("forget the kept key");
 };
 
 /**
- * Drop both. Disconnecting is the user saying not to reconnect.
+ * Drop the remembered choice and any connection an older build kept for this
+ * tab. Disconnecting is the user saying not to reconnect. The key in memory
+ * is dropped by `PgAssistant.disconnect`, which calls this.
  *
- * @returns whether the key is gone, so the caller can tell the user when it
- * is not
+ * @returns whether no key is left in this tab's storage, so the caller can
+ * tell the user when one is
  */
 export const forgetBackend = () => {
   attempt("forget the backend", () =>
@@ -243,31 +133,61 @@ export const forgetBackend = () => {
   return dropKept("forget the key");
 };
 
+/**
+ * A stored choice, read as `backendParamsFrom` reads any. Before HOO-1719
+ * the choice was the bare provider id, which is not JSON; it reads as that
+ * provider with nothing else.
+ */
+const choiceFrom = (raw: string): BackendParams | undefined => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    // Not JSON: the bare id written before the choice carried its parameters
+    parsed = { provider: raw };
+  }
+  return backendParamsFrom(parsed);
+};
+
+/**
+ * The backend this browser last chose, without its key: what a send with
+ * nothing connected offers when the thread names no backend of its own
+ */
+export const rememberedChoice = (): BackendParams | undefined => {
+  const raw = guarded(
+    "read the remembered backend",
+    () => localStorage.getItem(REMEMBERED_BACKEND_KEY) ?? undefined,
+    undefined
+  );
+  if (raw === undefined) return undefined;
+  const choice = choiceFrom(raw);
+  // Logged without the value, like a dropped connection: without the choice a
+  // send can only offer the default, and the log is where that shows
+  if (!choice) log.warn("ignored a remembered backend this build cannot use");
+  return choice;
+};
+
 /** Whether this browser should reconnect to the default backend by itself */
 export const isDefaultBackendRemembered = () =>
-  guarded(
-    "read the remembered backend",
-    () => localStorage.getItem(REMEMBERED_BACKEND_KEY) === DEFAULT_ID,
-    false
-  );
+  rememberedChoice()?.provider === DEFAULT_ID;
 
-/** The key-based connection this tab was using before a reload, if any */
-export const rememberedConnection = (): Connection | null => {
-  const raw = guarded(
+/**
+ * Remove the key-based connection an older build kept for this tab. Run at
+ * startup (`effects/kept-key`), whatever panel is open, and on every mount
+ * that may come before it (the panel, the Settings row), so a tab reloaded
+ * across the deploy does not keep the key in storage; it reads one entry when
+ * nothing is kept.
+ *
+ * @returns whether the key is gone from this tab's storage
+ */
+export const dropKeptKey = () => {
+  const left = guarded(
     "read the connection kept for this tab",
     () => sessionStorage.getItem(CONNECTION_KEY),
     null
   );
-  if (raw === null) return null;
-
-  const { connection, reason } = fromStored(raw);
-  if (connection) return connection;
-
-  log.warn("dropped a kept connection this build cannot use", {
-    context: { reason },
-  });
-  dropKept("drop the unusable connection");
-  return null;
+  if (left === null) return true;
+  return dropKept("drop the kept key");
 };
 
 if (import.meta.vitest) {
@@ -298,6 +218,20 @@ if (import.meta.vitest) {
     };
     const defaultBackend: Connection = { id: "default", apiKey: "" };
 
+    /** What a build before HOO-2423 kept for the tab, key included */
+    const keepAsOlderBuild = () =>
+      sessionStorage.setItem(
+        CONNECTION_KEY,
+        JSON.stringify({ id: "openai", apiKey: KEY, endpoint: openai.endpoint })
+      );
+
+    /** Every value in both stores, to look for the key in */
+    const everything = () =>
+      JSON.stringify([
+        storedValues(localStorage),
+        storedValues(sessionStorage),
+      ]);
+
     describe("remembered backend", () => {
       beforeEach(() => {
         localStorage.clear();
@@ -306,153 +240,94 @@ if (import.meta.vitest) {
       afterEach(() => {
         vi.restoreAllMocks();
         resetLogger();
+        survivorReported = false;
       });
 
       it("remembers nothing until a backend has been chosen", () => {
         expect(isDefaultBackendRemembered()).toBe(false);
-        expect(rememberedConnection()).toBeNull();
+        expect(rememberedChoice()).toBeUndefined();
       });
 
       it("remembers the default backend in localStorage only", () => {
         rememberBackend(defaultBackend);
         expect(isDefaultBackendRemembered()).toBe(true);
-        expect(rememberedConnection()).toBeNull();
+        expect(sessionStorage.length).toBe(0);
       });
 
-      it("keeps a key-based connection for this tab", () => {
+      it("remembers the chosen backend's parameters without the key", () => {
         rememberBackend(openai);
-        expect(rememberedConnection()).toEqual(openai);
-        expect(isDefaultBackendRemembered()).toBe(false);
-      });
-
-      it("keeps model settings for a backend without a base URL", () => {
+        expect(rememberedChoice()).toEqual({
+          provider: "openai",
+          model: "gpt-x",
+          baseUrl: "https://api.example.test/v1",
+        });
         rememberBackend(anthropic);
-        expect(rememberedConnection()).toEqual(anthropic);
-      });
-
-      it("never writes the key to localStorage", () => {
-        rememberBackend(openai);
-        expect(JSON.stringify(storedValues(localStorage))).not.toContain(KEY);
-      });
-
-      it("drops the key once the default backend is chosen", () => {
-        rememberBackend(openai);
-        rememberBackend(defaultBackend);
-        expect(rememberedConnection()).toBeNull();
-        expect(sessionStorage.length).toBe(0);
-      });
-
-      it("forgets both on request", () => {
-        rememberBackend(defaultBackend);
-        rememberBackend(openai);
-        expect(forgetBackend()).toBe(true);
+        expect(rememberedChoice()).toEqual({
+          provider: "anthropic",
+          model: "claude-opus-5",
+          effort: "high",
+        });
         expect(isDefaultBackendRemembered()).toBe(false);
-        expect(rememberedConnection()).toBeNull();
+      });
+
+      it("never writes the key to any storage", () => {
+        rememberBackend(openai);
+        rememberBackend(anthropic);
+        expect(everything()).not.toContain(KEY);
         expect(sessionStorage.length).toBe(0);
+      });
+
+      it("reads a choice written as a bare provider id", () => {
+        localStorage.setItem(REMEMBERED_BACKEND_KEY, "openai");
+        expect(rememberedChoice()).toEqual({ provider: "openai" });
+        localStorage.setItem(REMEMBERED_BACKEND_KEY, "default");
+        expect(isDefaultBackendRemembered()).toBe(true);
       });
 
       it.each([
-        ["not JSON", "{", "not-json"],
-        ["a blanked entry", "", "blank"],
-        ["a JSON value that is not an object", "42", "not-an-object"],
-        ["JSON null", "null", "not-an-object"],
-        [
-          "an unknown provider",
-          JSON.stringify({ id: "nope", apiKey: KEY }),
-          "unknown-provider",
-        ],
-        [
-          "the default backend",
-          JSON.stringify({ id: "default", apiKey: "" }),
-          "default-backend",
-        ],
-        ["no key", JSON.stringify({ id: "openai" }), "no-key"],
-        [
-          "a blank key for a provider that needs one",
-          JSON.stringify({
-            id: "anthropic",
-            apiKey: " ",
-            settings: anthropic.settings,
-          }),
-          "no-key",
-        ],
-        [
-          "an OpenAI-compatible provider with no endpoint",
-          JSON.stringify({ id: "openai", apiKey: KEY }),
-          "bad-endpoint",
-        ],
-        [
-          "a half endpoint",
-          JSON.stringify({
-            id: "openai",
-            apiKey: KEY,
-            endpoint: { baseUrl: "x" },
-          }),
-          "bad-endpoint",
-        ],
-        [
-          "an endpoint for a provider that has none",
-          JSON.stringify({
-            id: "anthropic",
-            apiKey: KEY,
-            endpoint: openai.endpoint,
-            settings: anthropic.settings,
-          }),
-          "bad-endpoint",
-        ],
-        [
-          "settings without a string model",
-          JSON.stringify({
-            id: "anthropic",
-            apiKey: KEY,
-            settings: { model: 5, effort: "high" },
-          }),
-          "bad-settings",
-        ],
-        [
-          "an effort the provider does not offer",
-          JSON.stringify({
-            id: "anthropic",
-            apiKey: KEY,
-            settings: { model: "m", effort: "turbo" },
-          }),
-          "bad-settings",
-        ],
-      ])("drops a stored value with %s", (_, raw, reason) => {
-        const logged = memoryProvider();
-        initLogger({ providers: [logged] });
-        sessionStorage.setItem("assistant.connection", raw);
-
-        expect(rememberedConnection()).toBeNull();
-        expect(sessionStorage.getItem("assistant.connection")).toBeNull();
-        // Why it was dropped, and never the value it was dropped for
-        expect(logged.entries).toContainEqual(
-          expect.objectContaining({ context: { reason } })
-        );
-        expect(JSON.stringify(logged.entries)).not.toContain(KEY);
+        ["an unknown provider", JSON.stringify({ provider: "nope" })],
+        ["an unknown bare id", "nope"],
+        ["no provider", JSON.stringify({ model: "m" })],
+        ["JSON null", "null"],
+      ])("reads %s as no choice", (_, raw) => {
+        localStorage.setItem(REMEMBERED_BACKEND_KEY, raw);
+        expect(rememberedChoice()).toBeUndefined();
+        expect(isDefaultBackendRemembered()).toBe(false);
       });
 
-      it("keeps a blank key for a provider whose key is optional", () => {
-        const proxy: Connection = {
-          id: "openai",
-          apiKey: "",
-          endpoint: { baseUrl: "http://localhost:4000/v1", model: "local" },
-        };
-        rememberBackend(proxy);
-        expect(rememberedConnection()).toEqual(proxy);
+      it("leaves out an effort the provider does not offer", () => {
+        localStorage.setItem(
+          REMEMBERED_BACKEND_KEY,
+          JSON.stringify({ provider: "anthropic", model: "m", effort: "turbo" })
+        );
+        expect(rememberedChoice()).toEqual({
+          provider: "anthropic",
+          model: "m",
+        });
       });
 
-      it("carries no field it does not know", () => {
-        sessionStorage.setItem(
-          "assistant.connection",
-          JSON.stringify({
-            id: "openai",
-            apiKey: KEY,
-            endpoint: openai.endpoint,
-            extra: 1,
-          })
-        );
-        expect(rememberedConnection()).toEqual(openai);
+      it("drops a connection an older build kept for this tab", () => {
+        keepAsOlderBuild();
+        expect(dropKeptKey()).toBe(true);
+        expect(sessionStorage.getItem(CONNECTION_KEY)).toBeNull();
+      });
+
+      it("drops a kept connection whichever backend is chosen next", () => {
+        keepAsOlderBuild();
+        rememberBackend(anthropic);
+        expect(sessionStorage.length).toBe(0);
+        keepAsOlderBuild();
+        rememberBackend(defaultBackend);
+        expect(sessionStorage.length).toBe(0);
+      });
+
+      it("forgets the choice and a kept key on request", () => {
+        rememberBackend(openai);
+        keepAsOlderBuild();
+        expect(forgetBackend()).toBe(true);
+        expect(isDefaultBackendRemembered()).toBe(false);
+        expect(rememberedChoice()).toBeUndefined();
+        expect(sessionStorage.length).toBe(0);
       });
 
       it("answers no when storage refuses to say", () => {
@@ -460,7 +335,7 @@ if (import.meta.vitest) {
           throw new Error("SecurityError");
         });
         expect(isDefaultBackendRemembered()).toBe(false);
-        expect(rememberedConnection()).toBeNull();
+        expect(dropKeptKey()).toBe(true);
       });
 
       it("logs a refused write without the key", () => {
@@ -504,41 +379,23 @@ if (import.meta.vitest) {
       const reported = (logged: ReturnType<typeof memoryProvider>) =>
         logged.entries.filter((e) => e.report);
 
-      it("does not leave an earlier key behind when the new one cannot be kept", () => {
-        rememberBackend(openai);
-        failOnSession("setItem");
-
-        rememberBackend(anthropic);
-
-        expect(rememberedConnection()).toBeNull();
-      });
-
-      it("does not leave the key behind when the default cannot remove it", () => {
-        rememberBackend(openai);
-        failOnSession("removeItem");
-
-        rememberBackend(defaultBackend);
-
-        expect(rememberedConnection()).toBeNull();
-      });
-
-      it("blanks a key it cannot remove, and reports nothing", () => {
+      it("blanks a kept key it cannot remove, and reports nothing", () => {
         const logged = memoryProvider();
         initLogger({ providers: [logged] });
-        rememberBackend(openai);
+        keepAsOlderBuild();
         failOnSession("removeItem");
 
-        expect(forgetBackend()).toBe(true);
+        expect(dropKeptKey()).toBe(true);
 
-        expect(rememberedConnection()).toBeNull();
+        expect(sessionStorage.getItem(CONNECTION_KEY)).toBe("");
         expect(reported(logged)).toEqual([]);
         expect(JSON.stringify(logged.entries)).not.toContain(KEY);
       });
 
-      it("reports a key that survives a disconnect, without the key", () => {
+      it("reports a kept key that survives, without the key", () => {
         const logged = memoryProvider();
         initLogger({ providers: [logged] });
-        rememberBackend(openai);
+        keepAsOlderBuild();
         failOnSession("removeItem", "setItem");
 
         expect(forgetBackend()).toBe(false);
@@ -549,16 +406,17 @@ if (import.meta.vitest) {
         expect(JSON.stringify(logged.entries)).not.toContain(KEY);
       });
 
-      it("reports a key a failed write could not drop", () => {
+      it("reports a key that survives only once per tab", () => {
         const logged = memoryProvider();
         initLogger({ providers: [logged] });
-        rememberBackend(openai);
+        keepAsOlderBuild();
         failOnSession("removeItem", "setItem");
 
-        rememberBackend(anthropic);
+        expect(dropKeptKey()).toBe(false);
+        expect(dropKeptKey()).toBe(false);
+        expect(forgetBackend()).toBe(false);
 
         expect(reported(logged)).toHaveLength(1);
-        expect(JSON.stringify(logged.entries)).not.toContain(KEY);
       });
 
       it("reports nothing when storage is blocked outright", () => {
@@ -569,6 +427,7 @@ if (import.meta.vitest) {
 
         // Nothing could be written, so there is no key to have survived
         expect(forgetBackend()).toBe(true);
+        expect(dropKeptKey()).toBe(true);
         expect(reported(logged)).toEqual([]);
       });
     });

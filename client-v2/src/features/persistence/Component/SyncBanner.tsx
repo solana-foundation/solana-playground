@@ -3,8 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
-import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import {
+  Callout,
+  CalloutAction,
+  CalloutDescription,
+} from "@/shared/ui/callout";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import type { Conflict, Resolution } from "../model/project-sync";
@@ -68,18 +71,18 @@ const PROMPTS: Record<
   Conflict["kind"],
   {
     message: (conflict: Conflict) => string;
-    // Only the answers a button can give alone; `resolved` carries content
+    // Only the answers a button can give alone; `resolved` carries content.
+    // The first is the one the banner expects
     actions: {
       label: string;
       resolution: Extract<Resolution, string>;
-      primary?: boolean;
     }[];
   }
 > = {
   divergent: {
     message: divergentMessage,
     actions: [
-      { label: "Keep this version", resolution: "keep-local", primary: true },
+      { label: "Keep this version", resolution: "keep-local" },
       { label: "Take the other version", resolution: "take-server" },
     ],
   },
@@ -87,11 +90,7 @@ const PROMPTS: Record<
     message: () =>
       "This project was deleted on another device, but you have unsaved changes here.",
     actions: [
-      {
-        label: "Keep as a new project",
-        resolution: "keep-as-new",
-        primary: true,
-      },
+      { label: "Keep as a new project", resolution: "keep-as-new" },
       { label: "Delete anyway", resolution: "delete-local" },
     ],
   },
@@ -104,12 +103,12 @@ const PROMPTS: Record<
   "name-taken": {
     message: () =>
       "Another project in your account already uses this name, so this one cannot be uploaded. Rename it, then try again.",
-    actions: [{ label: "Try again", resolution: "retry", primary: true }],
+    actions: [{ label: "Try again", resolution: "retry" }],
   },
   "too-large": {
     message: () =>
       "This project is too large to sync. Remove or shrink its largest files, then try again.",
-    actions: [{ label: "Try again", resolution: "retry", primary: true }],
+    actions: [{ label: "Try again", resolution: "retry" }],
   },
 };
 
@@ -214,26 +213,25 @@ const SyncBanner = () => {
           </p>
           <div className="flex flex-wrap gap-2">
             {resolvable && (
-              <Button
-                variant="outline"
-                size="sm"
+              <CalloutAction
                 disabled={busy || !!resolving}
                 onClick={() => setResolving(shown.projectId)}
               >
                 Resolve…
-              </Button>
+              </CalloutAction>
             )}
             {prompt.actions.map((action) => (
-              <AsyncButton
-                key={action.resolution}
-                variant={action.primary ? "default" : "outline"}
-                size="sm"
-                disabled={busy}
-                onClick={() => answer(action.resolution)}
-                onError={reportButtonFailure("apply your choice")}
-              >
-                {action.label}
-              </AsyncButton>
+              <CalloutAction key={action.resolution} asChild>
+                <AsyncButton
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => answer(action.resolution)}
+                  onError={reportButtonFailure("apply your choice")}
+                >
+                  {action.label}
+                </AsyncButton>
+              </CalloutAction>
             ))}
           </div>
         </CalloutDescription>

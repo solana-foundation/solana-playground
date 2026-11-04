@@ -15,7 +15,7 @@
  * serves no turns at all.
  *
  * **How much they spend is bounded three ways** (HOO-1751). A body over
- * `AGENT_MAX_BODY_BYTES` is refused, and every upstream request carries
+ * `PG_AI_MAX_BODY_BYTES` is refused, and every upstream request carries
  * an output limit, so a turn's worst-case cost is known before the call. The
  * ledger in `features/agent` reserves that cost against the user's daily cap
  * for their tier before the upstream is dialled, and settles it to the
@@ -40,6 +40,8 @@ import {
   learnAccountAge,
   POOL_EXHAUSTED_REASON,
   readBoundedBody,
+  recordCapped,
+  redactSecretsWith,
   REFUSAL_MESSAGES,
   REFUSAL_STATUS,
   reserve,
@@ -63,6 +65,7 @@ import {
 } from "../src/features/auth/server.mjs";
 import { query } from "../src/features/persistence/server.mjs";
 import { agentEnv } from "../src/shared/config/server-env.mjs";
+import { UPSTREAM_DROPPED } from "../src/shared/lib/ai/config.mjs";
 import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
 
 const log = createServerLogger("api:agent");
@@ -72,6 +75,9 @@ const log = createServerLogger("api:agent");
  * decide, the output limit and `providerOptions` included
  */
 const FORWARDED = ["messages", "tools", "tool_choice"];
+
+/** How much of an upstream error text the route relays or logs */
+const MAX_ERROR_TEXT = 300;
 
 /**
  * The `error.type` of a Gateway `402`: a budget in scope is spent, or the
@@ -90,7 +96,7 @@ const POOL_EXHAUSTED_TYPES = [
  * with no key of its own gets the panel reporting the default backend as
  * unavailable.
  *
- * `AGENT_BASE_URL` is used as given: a base with no trailing slash and no
+ * `PG_AI_BASE_URL` is used as given: a base with no trailing slash and no
  * `/chat/completions`, the path this appends.
  */
 const upstream = () => {
@@ -136,16 +142,62 @@ const sendJson = (res, status, body) => {
  * @param body the upstream's web stream
  * @param {(chunk: Uint8Array) => void} observe sees every chunk as it is
  *   forwarded, for the usage the ledger charges
+ * @param {(text: string) => string} redact keeps the keys out of the error
+ *   frames and log lines this writes, whose messages the route did not write
  * @returns {Promise<boolean>} whether the upstream's stream ended with the
  *   caller still there; false when the caller left or the stream broke
  */
-const pipeStream = async (res, body, observe) => {
+const pipeStream = async (res, body, observe, redact) => {
   const reader = body.getReader();
   let finished = false;
 
+  /**
+   * Tell a caller still there that the answer stopped short, in the error
+   * frame `@ai-sdk/openai-compatible` reads; `runTurn` (shared/lib/ai) raises
+   * it as `AiTurnError`. The leading blank line closes whatever frame the
+   * upstream left unfinished; glued onto it, the error would be one malformed
+   * line the panel skips. A socket that already failed may throw again here,
+   * and there is nobody left to tell.
+   *
+   * @param {{ message: string, code?: string }} error the frame's error; the
+   *   code `UPSTREAM_DROPPED` tells the panel the connection dropped, so it
+   *   keeps what streamed and offers Try again, and a failure of ours carries
+   *   none, so the panel reports it as a bug
+   */
+  const sayCutShort = (error) => {
+    if (res.writableEnded || res.destroyed) return;
+    try {
+      res.write(`\n\ndata: ${JSON.stringify({ error })}\n\n`);
+    } catch (e) {
+      // The failure itself is already logged by this function's caller
+      log.warn("the cut-short frame could not be written", {
+        context: { error: e instanceof Error ? e.name : typeof e },
+      });
+    }
+  };
+
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      let chunk;
+      try {
+        chunk = await reader.read();
+      } catch (e) {
+        // The caller left and the route aborted the upstream: the read failed
+        // because of us, which is no incident
+        if (res.destroyed && e?.name === "AbortError") break;
+        // The upstream broke: logged whether or not the caller is still
+        // there, since a caller who left gets no frame to read it from
+        const message = redact(String(e?.message ?? e));
+        log.warn("upstream stream failed", {
+          context: { message, callerLeft: res.destroyed },
+        });
+        sayCutShort({
+          message: `Upstream stream failed: ${message}`,
+          code: UPSTREAM_DROPPED,
+        });
+        break;
+      }
+      const { done, value } = chunk;
       if (done) {
         finished = !res.destroyed;
         break;
@@ -172,15 +224,23 @@ const pipeStream = async (res, body, observe) => {
       }
     }
   } catch (e) {
-    if (!res.writableEnded && !res.destroyed) {
-      // The error frame `@ai-sdk/openai-compatible` reads; `runTurn` (shared/lib/ai) raises it as `AiTurnError`
-      const message = `Upstream stream failed: ${e.message}`;
-      // The leading blank line closes whatever frame the upstream left
-      // unfinished; glued onto it, the error would be one malformed line
-      // the panel skips
-      res.write(`\n\ndata: ${JSON.stringify({ error: { message } })}\n\n`);
-    }
+    // Ours, not the upstream's: the usage reader or the write to the caller
+    // threw. Named as such, so a bug here is not chased upstream.
+    log.error(
+      new Error(
+        `relaying the stream failed: ${redact(String(e?.message ?? e))}`
+      ),
+      {
+        report: true,
+        context: { error: e instanceof Error ? e.name : typeof e },
+      }
+    );
+    sayCutShort({
+      message: "The default backend failed while relaying the answer.",
+    });
   } finally {
+    // The upstream is finished with either way; a cancel that fails has
+    // nothing left to release
     await reader.cancel().catch(() => {});
     if (!res.writableEnded) res.end();
   }
@@ -316,21 +376,40 @@ async function handler(req, res) {
     }
     end = await relay(res, configured, body, gate.tier, now);
   } finally {
-    // The response has ended on every path here, so none of this delays an
-    // answer. Neither step throws: there is nobody left to tell.
+    // On every path that returns, the response has ended here, so none of
+    // this delays an answer. None of these steps throws: there is nobody left
+    // to tell.
     if (gate.admitted) {
       await settle(query, {
         userId: turn.userId,
         day: turn.day,
         reserved: turn.amount,
         charge: chargeFor(end, turn.amount, configured.prices),
+        tier: gate.tier,
+        end,
       }).catch((e) =>
         // The reservation stays spent for the day: an overcharge, never an
         // undercharge
         log.error(e, {
           report: true,
-          context: { code: e?.code, end: end.kind },
+          context: {
+            code: e?.code,
+            end: end.kind,
+            tier: gate.tier,
+            day: turn.day,
+            reserved: turn.amount,
+            charge: chargeFor(end, turn.amount, configured.prices),
+          },
         })
+      );
+    } else {
+      // Only the count is lost: the caller already has the 429
+      await recordCapped(query, { userId: turn.userId, day: turn.day }).catch(
+        (e) =>
+          log.error(e, {
+            report: true,
+            context: { code: e?.code, tier: gate.tier, day: turn.day },
+          })
       );
     }
     if (!gate.dated) await learnAccountAge(query, turn.userId);
@@ -359,6 +438,17 @@ const relay = async (res, configured, body, tier, now) => {
   // response before the listener above existed, so the signal never aborts:
   // nothing has been sent, and the reservation goes back
   if (res.destroyed) return { kind: "abandoned" };
+
+  // An error text the upstream or a thrown error wrote, as the route may relay
+  // or log it: cut to `MAX_ERROR_TEXT`, then without the keys, since an
+  // upstream may quote the key it was sent. Cutting first bounds the
+  // redaction's work. A key the cut splits loses every run of eight or more
+  // of its characters, like any other. The upstream's own 200 stream is
+  // forwarded as it comes, and is not this function's.
+  const redact = (text) =>
+    redactSecretsWith(Object.values(configured.keys))(
+      text.slice(0, MAX_ERROR_TEXT)
+    );
 
   let response;
   try {
@@ -397,16 +487,28 @@ const relay = async (res, configured, body, tier, now) => {
     // the upstream may already have taken the request: charging nothing here
     // would let a caller that hangs up early spend past the cap
     if (abortUpstream.signal.aborted) return { kind: "unfinished" };
-    log.error(e, { report: true });
-    sendJson(res, 502, { error: `Upstream unreachable: ${e.message}` });
+    // Rebuilt rather than passed on: the error's message and stack may quote
+    // the key it was dialled with
+    const unreachable = redact(`Upstream unreachable: ${e?.message ?? e}`);
+    log.error(new Error(unreachable), {
+      report: true,
+      context: { error: e instanceof Error ? e.name : typeof e },
+    });
+    sendJson(res, 502, { error: unreachable });
     return { kind: "refused" };
   }
 
   if (!response.ok) {
+    // Classified as received, relayed and logged only redacted
     const text = await response.text().catch((e) => {
-      log.warn(`upstream ${response.status} body unreadable: ${e.message}`);
+      log.warn(
+        `upstream ${response.status} body unreadable: ${redact(
+          String(e?.message ?? e)
+        )}`
+      );
       return "";
     });
+    const shown = redact(text);
     // Our request was refused: relayed, it would read as this route refusing
     // the caller
     if (response.status === 401 || response.status === 403) {
@@ -415,8 +517,9 @@ const relay = async (res, configured, body, tier, now) => {
         report: true,
         context: { status: response.status, cause, tier },
       });
-      // Kept out of Sentry: a refusal's text can quote part of the key
-      log.warn(`upstream ${response.status} body: ${text.slice(0, 300)}`);
+      // Kept out of Sentry even redacted: a refusal's text can quote a part
+      // of the key shorter than the redaction catches
+      log.warn(`upstream ${response.status} body: ${shown}`);
       sendJson(res, 502, {
         error: `${REFUSAL_CAUSES[cause]} (${response.status}).`,
       });
@@ -426,7 +529,7 @@ const relay = async (res, configured, body, tier, now) => {
       // Reported: the tier's pool stays out until a person buys credits
       log.warn("tier pool exhausted", {
         report: true,
-        context: { tier, body: text.slice(0, 300) },
+        context: { tier, body: shown },
       });
       res.setHeader("retry-after", String(secondsToReset(now)));
       sendJson(res, REFUSAL_STATUS[POOL_EXHAUSTED_REASON], {
@@ -438,7 +541,7 @@ const relay = async (res, configured, body, tier, now) => {
     }
     // The upstream's own status, so a 429 still reads as a 429 in the panel
     sendJson(res, response.status, {
-      error: `Upstream ${response.status}: ${text.slice(0, 300)}`,
+      error: `Upstream ${response.status}: ${shown}`,
     });
     return { kind: "refused" };
   }
@@ -457,7 +560,7 @@ const relay = async (res, configured, body, tier, now) => {
   res.setHeader("content-type", "text/event-stream");
   res.setHeader("cache-control", "no-cache, no-transform");
   const usage = usageReader();
-  const finished = await pipeStream(res, response.body, usage.push);
+  const finished = await pipeStream(res, response.body, usage.push, redact);
   const reported = usage.usage();
   // Usage seen on a turn that did not finish may be a running total, not the
   // turn's: only a stream read to its end is charged what it reported

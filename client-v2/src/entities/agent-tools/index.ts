@@ -1,0 +1,69 @@
+// Public API of the slice for the browser. `server.mjs` is the same registry
+// for server code.
+import type { ToolDefinition } from "@/shared/lib/ai";
+
+import { BUILTIN_TOOLS } from "./model/registry.mjs";
+
+export { BUILTIN_TOOLS } from "./model/registry.mjs";
+export type { ToolDeclaration } from "./model/registry.mjs";
+
+/**
+ * A declared tool with the browser's runner attached. Name, description and
+ * schema come from the registry, so the panel cannot describe a tool
+ * differently from its declaration, which `server.mjs` exposes to server code.
+ *
+ * @param name a name in {@link BUILTIN_TOOLS}
+ * @returns a function taking what the tool does in this tab
+ * @throws when the name is not declared, so a runner cannot exist without a
+ *   declaration
+ */
+export const bindToolFor = (name: string) => {
+  const declared = BUILTIN_TOOLS.find((tool) => tool.name === name);
+  if (!declared) {
+    throw new Error(
+      `"${name}" is not declared in entities/agent-tools; declare it there ` +
+        "so the browser and server code agree on it."
+    );
+  }
+  const { description, schema } = declared;
+  return (run: ToolDefinition["run"]): ToolDefinition => ({
+    name,
+    description,
+    schema,
+    run,
+  });
+};
+
+if (import.meta.vitest) {
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
+
+  describe("entities/agent-tools/index", () => {
+    let browser: typeof import("./index");
+    let server: typeof import("./server.mjs");
+    beforeAll(async () => {
+      browser = await import("./index");
+      server = await import("./server.mjs");
+    });
+
+    it("gives server code the same registry as the browser", () => {
+      expect(server.BUILTIN_TOOLS).toBe(browser.BUILTIN_TOOLS);
+    });
+
+    it("bindToolFor takes the description and schema from the registry", () => {
+      const run = () => "ran";
+      const tool = bindToolFor("read_file")(run);
+      const declared = BUILTIN_TOOLS.find((t) => t.name === "read_file");
+      if (!declared) throw new Error("read_file is not in the registry");
+
+      expect(tool.description).toBe(declared.description);
+      expect(tool.schema).toBe(declared.schema);
+      expect(tool.run).toBe(run);
+    });
+
+    it("bindToolFor refuses a name the registry does not declare", () => {
+      expect(() => bindToolFor("format_disk")).toThrow(
+        /"format_disk" is not declared/
+      );
+    });
+  });
+}

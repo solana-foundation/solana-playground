@@ -5,6 +5,13 @@ export const isDefaultBackend = (id: ModelProvider | undefined) =>
   id === "default";
 
 /**
+ * Whether Delete my key can act, wherever it is offered (Settings, the
+ * assistant head's More): `none` while no backend holding the user's key is
+ * connected, `busy` while a turn is using the key, else `ready`
+ */
+export type KeyHold = "none" | "ready" | "busy";
+
+/**
  * One conversation with one backend.
  *
  * A provider owns its own message history and streams text into the store as it
@@ -18,12 +25,12 @@ export interface Provider {
    * Take one turn.
    *
    * @param input what the user typed
-   * @param signal aborts the turn; rejects with the abort reason
+   * @param turn `signal` aborts the turn, which rejects with the abort reason
    * @throws {TurnFailure} when the backend, the model or the backend's cost
    *   gate ended the turn without an answer; any other rejection is the abort
    *   reason or a failure raised on this side
    */
-  send(input: string, signal?: AbortSignal): Promise<void>;
+  send(input: string, turn?: { signal?: AbortSignal }): Promise<void>;
 }
 
 /**
@@ -36,10 +43,11 @@ export type TurnFailureReason = "provider" | "refusal" | "paused" | "capped";
 
 /**
  * A turn the provider ended without an answer. `message` is what the thread
- * shows; `reason` and `status` are for telemetry to report, so the widget
+ * shows; `reason` and `status` are for telemetry to report, so telemetry
  * reads neither the SDK's error class, which is loaded on demand, nor the
- * message's text. `cause` keeps the SDK's error, with its stack and the
- * redacted response body, for a log.
+ * message's text. `cause` keeps the SDK's error, with its stack, the redacted
+ * response body and its finer `kind`: the widget reads that kind by name to
+ * offer a refused key again and to cut off a reply whose stream dropped.
  */
 export class TurnFailure extends Error {
   readonly reason: TurnFailureReason;

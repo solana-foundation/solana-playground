@@ -4,9 +4,9 @@ import { requireFor } from "../src/test-utils/require-for";
 import {
   expect,
   FAILED_BUILD_STDERR,
-  json,
   LONG,
   seedWorkspace,
+  stubAiStatus,
   test,
 } from "./fixtures";
 
@@ -133,9 +133,8 @@ test.describe("client-v2-controls", () => {
   test("client-v2-controls: The backend list by keyboard", async ({ page }) => {
     // The toggle only exists while a default backend is offered, and CI
     // configures none: answer the probe here
-    await page.route("**/api/agent", (route) =>
-      json(route, { configured: true })
-    );
+    // eslint-disable-next-line unicorn/no-null -- `stubAiStatus(page, null)` offers a hosted key with no model named
+    await stubAiStatus(page, null);
     await seedWorkspace(page);
     // The editor takes focus once the project opens; wait for that, or it
     // takes it back from the radio between the keys
@@ -145,7 +144,9 @@ test.describe("client-v2-controls", () => {
 
     // Connect a model opens from the head's More, not on its own
     await page.getByRole("button", { name: "More", exact: true }).click();
-    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+    await page
+      .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+      .click();
 
     const toggle = page.getByRole("button", { name: "Bring your own key" });
     await toggle.click();

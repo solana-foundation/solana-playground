@@ -188,7 +188,8 @@ function ComposerAdd({ className, ...props }: React.ComponentProps<"button">) {
   );
 }
 
-/* The model you are talking to, named in the box and never hidden in settings */
+/* The model you are talking to, named in the box and never hidden in settings.
+   On a phone it is as tall as + and Send beside it, a thumb's target. */
 function ComposerModel({
   className,
   ...props
@@ -198,7 +199,7 @@ function ComposerModel({
       type="button"
       data-slot="composer-model"
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-act text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5",
+        "inline-flex h-8 max-md:h-12 items-center gap-1.5 rounded-lg px-2.5 text-xs font-act text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5",
         className
       )}
       {...props}
@@ -227,7 +228,7 @@ function ComposerEffort({
       data-slot="composer-effort"
       aria-label={`${label}: ${value} of ${max}`}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-act text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        "inline-flex h-8 max-md:h-12 items-center gap-1.5 rounded-lg px-2 text-xs font-act text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
         className
       )}
       {...props}

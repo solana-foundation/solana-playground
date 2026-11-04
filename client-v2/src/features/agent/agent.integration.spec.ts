@@ -2,6 +2,7 @@
 import type { Mock } from "vitest";
 import { describe, it } from "vitest";
 
+import { UPSTREAM_DROPPED } from "@/shared/lib/ai/config.mjs";
 import type { ServerLogEntry } from "@/shared/lib/logger/server.mjs";
 import {
   initServerLogger,
@@ -48,6 +49,17 @@ const db = vi.hoisted(() => {
     users: new Map<string, User>(),
     /** `${userId}|${day}` to the day's row, in micro-USD */
     spend: new Map<string, { reserved: number; spent: number }>(),
+    /** `agent_spend.capped` by `${userId}|${day}`, kept apart so `spend` rows compare as before */
+    capped: new Map<string, number>(),
+    /** `agent_turn`, in insertion order */
+    turns: [] as {
+      userId: string;
+      tier: string;
+      outcome: string;
+      promptTokens: number | null;
+      completionTokens: number | null;
+      charged: number;
+    }[],
     /** Every query and upstream call, in order */
     log: [] as string[],
     down: false,
@@ -60,6 +72,11 @@ const db = vi.hoisted(() => {
     state.during?.(text);
     if (state.down) throw new Error("connect ECONNREFUSED");
 
+    if (text.includes("capped = s.capped + 1")) {
+      const key = `${params[0] as string}|${params[1] as string}`;
+      state.capped.set(key, (state.capped.get(key) ?? 0) + 1);
+      return { rows: [] };
+    }
     if (text.includes("insert into agent_spend")) {
       const [userId, day, ageDays, amount, newcomerCap, establishedCap] =
         params as [string, string, number, number, number, number];
@@ -97,6 +114,26 @@ const db = vi.hoisted(() => {
         row.reserved -= reserved;
         row.spent += charge;
       }
+      // The same statement records the turn
+      const [, , , , tier, outcome, promptTokens, completionTokens] =
+        params as [
+          string,
+          string,
+          number,
+          number,
+          string,
+          string,
+          number | null,
+          number | null
+        ];
+      state.turns.push({
+        userId,
+        tier,
+        outcome,
+        promptTokens,
+        completionTokens,
+        charged: charge,
+      });
       return { rows: [] };
     }
     if (text.includes('"accessToken"')) {
@@ -154,6 +191,8 @@ beforeEach(() => {
   session.userId = "user-1";
   db.state.users.clear();
   db.state.spend.clear();
+  db.state.turns.length = 0;
+  db.state.capped.clear();
   db.state.log.length = 0;
   db.state.down = false;
   db.state.during = null;
@@ -175,7 +214,7 @@ beforeEach(() => {
  */
 describe("POST /api/agent sign-in gate", () => {
   beforeEach(() => {
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_API_KEY", "k");
   });
 
   afterEach(() => {
@@ -241,7 +280,7 @@ describe("POST /api/agent sign-in gate", () => {
 /** Discovery tells the panel whether a turn could be answered at all */
 describe("GET /api/agent", () => {
   beforeEach(() => {
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_API_KEY", "k");
   });
 
   afterEach(() => {
@@ -277,9 +316,9 @@ describe("GET /api/agent", () => {
 describe("POST /api/agent body validation", () => {
   beforeEach(() => {
     // A configured rail, so requests get past the 503 and into parsing
-    vi.stubEnv("AGENT_BASE_URL", "https://llm.test/v1");
-    vi.stubEnv("AGENT_MODEL", "test-model");
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_BASE_URL", "https://llm.test/v1");
+    vi.stubEnv("PG_AI_MODEL", "test-model");
+    vi.stubEnv("PG_AI_API_KEY", "k");
   });
 
   afterEach(() => {
@@ -339,7 +378,7 @@ describe("POST /api/agent body validation", () => {
 
   missingKeys.forEach(([label, key]) => {
     it(`answers 503 when the key is ${label}, before reading the body`, async () => {
-      vi.stubEnv("AGENT_API_KEY", key);
+      vi.stubEnv("PG_AI_API_KEY", key);
       const res = await postJson(handler, "null");
       expect(res.statusCode).toBe(503);
     });
@@ -352,10 +391,10 @@ describe("POST /api/agent body validation", () => {
  */
 describe("POST /api/agent upstream request", () => {
   beforeEach(() => {
-    vi.stubEnv("AGENT_BASE_URL", undefined);
-    vi.stubEnv("AGENT_MODEL", undefined);
-    vi.stubEnv("AGENT_REASONING_EFFORT", undefined);
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_BASE_URL", undefined);
+    vi.stubEnv("PG_AI_MODEL", undefined);
+    vi.stubEnv("PG_AI_REASONING_EFFORT", undefined);
+    vi.stubEnv("PG_AI_API_KEY", "k");
     (globalThis as { fetch: unknown }).fetch = vi.fn(async () => ({
       ok: false,
       status: 418,
@@ -390,7 +429,7 @@ describe("POST /api/agent upstream request", () => {
   });
 
   it("restricts the Gateway to its default providers", async () => {
-    vi.stubEnv("AGENT_BASE_URL", "https://ai-gateway.vercel.sh/v1");
+    vi.stubEnv("PG_AI_BASE_URL", "https://ai-gateway.vercel.sh/v1");
     const { body } = await sent();
     expect(body.providerOptions).toEqual({
       gateway: { only: ["baseten", "fireworks"] },
@@ -398,9 +437,9 @@ describe("POST /api/agent upstream request", () => {
   });
 
   it("lets each variable override its own default", async () => {
-    vi.stubEnv("AGENT_BASE_URL", "https://llm.test/v1");
-    vi.stubEnv("AGENT_MODEL", "test-model");
-    vi.stubEnv("AGENT_REASONING_EFFORT", "high");
+    vi.stubEnv("PG_AI_BASE_URL", "https://llm.test/v1");
+    vi.stubEnv("PG_AI_MODEL", "test-model");
+    vi.stubEnv("PG_AI_REASONING_EFFORT", "high");
     const { url, body } = await sent();
     expect(url).toBe("https://llm.test/v1/chat/completions");
     expect(body.model).toBe("test-model");
@@ -415,9 +454,9 @@ describe("POST /api/agent upstream request", () => {
  */
 describe("POST /api/agent streaming", () => {
   beforeEach(() => {
-    vi.stubEnv("AGENT_BASE_URL", "https://llm.test/v1");
-    vi.stubEnv("AGENT_MODEL", "test-model");
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_BASE_URL", "https://llm.test/v1");
+    vi.stubEnv("PG_AI_MODEL", "test-model");
+    vi.stubEnv("PG_AI_API_KEY", "k");
   });
 
   afterEach(() => {
@@ -594,6 +633,37 @@ describe("POST /api/agent streaming", () => {
       .filter((e) => e.startsWith("data: "));
     const last = JSON.parse(events[events.length - 1].slice(6));
     expect(last.error.message).toMatch(/connection reset/);
+    // The panel reads the code as a dropped connection: cut off, Try again
+    expect(last.error.code).toBe(UPSTREAM_DROPPED);
+  });
+
+  it("leaves the dropped-connection code off a failure of its own", async () => {
+    // A throw past the read is ours, not the model's connection: the panel
+    // must report it, not offer Try again over it
+    let thrown = false;
+    const res = makeRes({
+      write: (c) => {
+        if (!thrown) {
+          thrown = true;
+          throw new Error("write failed");
+        }
+        res.chunks.push(Buffer.from(c as Uint8Array));
+        return true;
+      },
+    });
+    await call(res, upstream(["data: a\n\n"]));
+
+    const events = res
+      .body()
+      .split("\n\n")
+      .filter((e) => e.startsWith("data: "));
+    const last = JSON.parse(events[events.length - 1].slice(6));
+    // Reported in the route's own words: the thrown message stays in the log
+    expect(last.error.message).toBe(
+      "The default backend failed while relaying the answer."
+    );
+    expect(last.error.message).not.toMatch(/write failed/);
+    expect(last.error.code).toBeUndefined();
   });
 
   it("says so inside the stream when the upstream drops mid-answer", async () => {
@@ -604,6 +674,92 @@ describe("POST /api/agent streaming", () => {
     expect(res.body()).toContain("data: a\n\n");
     expect(res.body()).toContain("Upstream stream failed");
     expect(res.body()).toContain("connection reset");
+    expect(res.ended).toBe(true);
+  });
+
+  it("logs an upstream that drops mid-answer, without the key", async () => {
+    const logged = serverLog();
+    await call(makeRes(), upstream(["data: a\n\n"], "fail"));
+
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "upstream stream failed",
+        context: { message: "connection reset", callerLeft: false },
+      })
+    );
+  });
+
+  it("logs an upstream that drops after the caller left", async () => {
+    const logged = serverLog();
+    const res = makeRes();
+    const dropping = upstream(["data: a\n\n"], "fail");
+    const read = dropping.body.getReader();
+    let reads = 0;
+    dropping.body.getReader = () => ({
+      // The caller goes away between the first chunk and the failure
+      read: async () => {
+        reads += 1;
+        if (reads === 2) res.destroyed = true;
+        return read.read();
+      },
+      cancel: read.cancel,
+    });
+
+    await call(res, dropping);
+
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "upstream stream failed",
+        context: { message: "connection reset", callerLeft: true },
+      })
+    );
+  });
+
+  it("logs nothing when the read fails on the caller's own hang-up", async () => {
+    const logged = serverLog();
+    const res = makeRes();
+    const stream = upstream(["data: a\n\n"]);
+    const read = stream.body.getReader();
+    let reads = 0;
+    stream.body.getReader = () => ({
+      // The caller leaves, and the abort that follows ends the upstream read
+      read: async () => {
+        reads += 1;
+        if (reads === 1) return read.read();
+        res.destroyed = true;
+        throw new DOMException("This operation was aborted", "AbortError");
+      },
+      cancel: read.cancel,
+    });
+
+    await call(res, stream);
+
+    expect(logged).toEqual([]);
+  });
+
+  it("reports a failure to relay as its own, not as the upstream's", async () => {
+    const logged = serverLog();
+    const res = makeRes({
+      write: () => {
+        throw new Error("write EPIPE");
+      },
+    });
+
+    await call(res, upstream(["data: a\n\n"]));
+
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        report: true,
+        error: expect.objectContaining({
+          message: "relaying the stream failed: write EPIPE",
+        }),
+        context: { error: "Error" },
+      })
+    );
+    expect(res.body()).not.toContain("Upstream stream failed");
     expect(res.ended).toBe(true);
   });
 
@@ -655,10 +811,10 @@ describe("POST /api/agent spend gate", () => {
   });
 
   beforeEach(() => {
-    vi.stubEnv("AGENT_BASE_URL", "https://llm.test/v1");
-    vi.stubEnv("AGENT_MODEL", "test-model");
-    vi.stubEnv("AGENT_API_KEY", "established-key");
-    vi.stubEnv("AGENT_NEWCOMER_API_KEY", "newcomer-key");
+    vi.stubEnv("PG_AI_BASE_URL", "https://llm.test/v1");
+    vi.stubEnv("PG_AI_MODEL", "test-model");
+    vi.stubEnv("PG_AI_API_KEY", "established-key");
+    vi.stubEnv("PG_AI_NEWCOMER_API_KEY", "newcomer-key");
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-29T12:00:00Z"));
   });
@@ -981,7 +1137,7 @@ describe("POST /api/agent spend gate", () => {
 
   describe("One request's cost is bounded", () => {
     it("refuses an oversized body", async () => {
-      vi.stubEnv("AGENT_MAX_BODY_BYTES", "16");
+      vi.stubEnv("PG_AI_MAX_BODY_BYTES", "16");
       const fetched = network();
 
       const res = await postJson(handler, TURN);
@@ -1010,7 +1166,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("names the output limit the same way to the Gateway", async () => {
-      vi.stubEnv("AGENT_BASE_URL", "https://ai-gateway.vercel.sh/v1");
+      vi.stubEnv("PG_AI_BASE_URL", "https://ai-gateway.vercel.sh/v1");
       const fetched = network();
 
       await postJson(handler, TURN);
@@ -1023,7 +1179,7 @@ describe("POST /api/agent spend gate", () => {
 
   describe("Turns are served only by the configured providers", () => {
     it("names the configured providers in the upstream request", async () => {
-      vi.stubEnv("AGENT_PROVIDERS", "baseten,fireworks");
+      vi.stubEnv("PG_AI_PROVIDERS", "baseten,fireworks");
       const fetched = network();
 
       await postJson(handler, TURN);
@@ -1034,7 +1190,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("ignores the providers the caller names", async () => {
-      vi.stubEnv("AGENT_PROVIDERS", "baseten,fireworks");
+      vi.stubEnv("PG_AI_PROVIDERS", "baseten,fireworks");
       const fetched = network();
 
       await postJson(
@@ -1053,10 +1209,10 @@ describe("POST /api/agent spend gate", () => {
       expect(body).not.toHaveProperty("provider");
     });
 
-    it("sends no routing restriction when AGENT_PROVIDERS is set but empty", async () => {
+    it("sends no routing restriction when PG_AI_PROVIDERS is set but empty", async () => {
       // Set, not unset: an unset variable takes the Gateway's default
       // providers instead ("restricts the Gateway to its default providers")
-      vi.stubEnv("AGENT_PROVIDERS", "");
+      vi.stubEnv("PG_AI_PROVIDERS", "");
       const fetched = network();
 
       await postJson(handler, TURN);
@@ -1108,7 +1264,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("spends through the one key when no newcomer key is set", async () => {
-      vi.stubEnv("AGENT_NEWCOMER_API_KEY", "");
+      vi.stubEnv("PG_AI_NEWCOMER_API_KEY", "");
       db.state.users.set("user-1", {
         githubCreatedAt: createdDaysAgo(3),
         token: "gho_1",
@@ -1242,6 +1398,335 @@ describe("POST /api/agent spend gate", () => {
 
       expect(res.statusCode).toBe(503);
       expect(fetched).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("The hosted keys never leave the route's own text", () => {
+    const KEY = "vck_live_9fA2bQ7xLm4pZr8TuW1yN6cK";
+    const NEWCOMER_KEY = "vck_new_3Hs8kD2mQp7vRt5Wz1Lc";
+
+    /** Every console line the route writes, as one text */
+    const consoleText = (...spies: Array<{ mock: { calls: unknown[][] } }>) =>
+      spies
+        .flatMap((spy) => spy.mock.calls)
+        .map((args) => JSON.stringify(args))
+        .join("\n");
+
+    /** Every run of eight characters of either key */
+    const runs = [KEY, NEWCOMER_KEY].flatMap((key) =>
+      Array.from({ length: key.length - 7 }, (_, at) => key.slice(at, at + 8))
+    );
+
+    /** The first run of a key `text` holds, or undefined */
+    const leak = (text: string) => runs.find((run) => text.includes(run));
+
+    beforeEach(() => {
+      vi.stubEnv("PG_AI_API_KEY", KEY);
+      vi.stubEnv("PG_AI_NEWCOMER_API_KEY", NEWCOMER_KEY);
+    });
+
+    /** One turn whose upstream answers `answer`, dialled with `key` */
+    const failingWith = (key: string) => async (answer: Answer) => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const fetched = network(answer);
+      const res = await postJson(handler, TURN);
+      // The route must have dialled with the test's key, or it has nothing of
+      // that key to redact and every leak check passes on an empty claim
+      expect(sent(fetched).key).toBe(`Bearer ${key}`);
+      return { res, logged: consoleText(error, warn) };
+    };
+    const failing = failingWith(KEY);
+
+    /** An upstream that masks the key's middle when it quotes it */
+    const masked = (key: string) => `${key.slice(0, 12)}****${key.slice(-10)}`;
+
+    it.each([
+      [500, `{"error":{"message":"bad key ${KEY}"}}`],
+      [401, `Incorrect API key provided: ${masked(KEY)}`],
+      [401, `{"error":{"message":"invalid key ${KEY}"}}`],
+      [403, `{"error":{"type":"forbidden","message":"key ${KEY} restricted"}}`],
+      [402, `Payment required for ${KEY}`],
+      [429, `rate limited: ${masked(NEWCOMER_KEY)}`],
+    ])("keeps the key out of an upstream %i", async (status, body) => {
+      const { res, logged } = await failing(
+        () => new Response(body, { status })
+      );
+
+      expect(res.statusCode).toBeGreaterThanOrEqual(400);
+      expect(leak(res.body())).toBeUndefined();
+      expect(leak(logged)).toBeUndefined();
+    });
+
+    it("still reports an exhausted pool whose message quotes the key", async () => {
+      const { res, logged } = await failing(() =>
+        json(
+          {
+            error: {
+              type: "quota_for_entity_exceeded",
+              message: `budget spent for ${KEY}`,
+            },
+          },
+          { status: 402 }
+        )
+      );
+
+      expect(res.statusCode).toBe(503);
+      expect(jsonBody(res)).toMatchObject({ reason: "pool-exhausted" });
+      expect(leak(logged)).toBeUndefined();
+    });
+
+    it("still names a refusal's cause when its message quotes the key", async () => {
+      const { res, logged } = await failing(() =>
+        json(
+          {
+            error: {
+              type: "customer_verification_required",
+              message: `add a card for ${KEY}`,
+            },
+          },
+          { status: 403 }
+        )
+      );
+
+      expect(jsonBody(res).error).toMatch(/needs a payment method/);
+      expect(leak(res.body())).toBeUndefined();
+      expect(leak(logged)).toBeUndefined();
+    });
+
+    it("keeps the key out of an upstream that cannot be reached", async () => {
+      const { res, logged } = await failing(() => {
+        throw new Error(`getaddrinfo failed for Bearer ${KEY}`);
+      });
+
+      expect(res.statusCode).toBe(502);
+      expect(jsonBody(res).error).toMatch(/^Upstream unreachable: /);
+      expect(leak(res.body())).toBeUndefined();
+      expect(leak(logged)).toBeUndefined();
+    });
+
+    it("keeps the newcomer key out of a newcomer's failed turn", async () => {
+      // eslint-disable-next-line unicorn/no-null -- the `users` row: a newcomer's `github_created_at` is SQL `NULL`
+      db.state.users.set("user-1", { githubCreatedAt: null, token: "gho_1" });
+      const { res, logged } = await failingWith(NEWCOMER_KEY)(() => {
+        throw new Error(`refused Bearer ${NEWCOMER_KEY}`);
+      });
+
+      expect(res.statusCode).toBe(502);
+      expect(leak(res.body())).toBeUndefined();
+      expect(leak(logged)).toBeUndefined();
+    });
+
+    it("keeps the key out of a stream that breaks", async () => {
+      const { res, logged } = await failing(
+        () =>
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                controller.error(new Error(`reset, key ${KEY}`));
+              },
+            }),
+            { status: 200 }
+          )
+      );
+
+      expect(res.body()).toMatch(/Upstream stream failed: /);
+      expect(leak(res.body())).toBeUndefined();
+      expect(leak(logged)).toBeUndefined();
+    });
+
+    it("relays and logs no more than 300 characters of an upstream error", async () => {
+      const { res, logged } = await failing(
+        () => new Response("x".repeat(100_000), { status: 500 })
+      );
+
+      expect(jsonBody(res).error).toBe(`Upstream 500: ${"x".repeat(300)}`);
+      expect(logged).toBe("");
+    });
+  });
+
+  describe("Every turn that reaches the ledger is recorded", () => {
+    /** The one turn recorded, for a turn by user-1 at the established tier */
+    const recorded = (turn: {
+      outcome: string;
+      charged: number;
+      tokens?: [number, number];
+    }) => [
+      {
+        userId: "user-1",
+        tier: "established",
+        outcome: turn.outcome,
+        /* eslint-disable unicorn/no-null -- the `agent_turns` row: no usage is SQL `NULL` */
+        promptTokens: turn.tokens?.[0] ?? null,
+        completionTokens: turn.tokens?.[1] ?? null,
+        /* eslint-enable unicorn/no-null */
+        charged: turn.charged,
+      },
+    ];
+
+    it("records a completed turn with its tokens and charge", async () => {
+      network();
+
+      await postJson(handler, TURN);
+
+      expect(db.state.turns).toEqual(
+        recorded({
+          outcome: "completed",
+          charged: USAGE_COST,
+          tokens: [1000, 100],
+        })
+      );
+    });
+
+    it("records a turn that ends without usage with no tokens", async () => {
+      // eslint-disable-next-line unicorn/no-null -- `streamed(null)` is an upstream that sends no usage frame
+      network(() => streamed(null));
+
+      await postJson(handler, TURN);
+
+      expect(db.state.turns).toEqual(
+        recorded({ outcome: "unfinished", charged: RESERVED })
+      );
+    });
+
+    it("records a turn the upstream refuses, charged nothing", async () => {
+      network(() => new Response("down", { status: 500 }));
+
+      await postJson(handler, TURN);
+
+      expect(db.state.turns).toEqual(
+        recorded({ outcome: "refused", charged: 0 })
+      );
+    });
+
+    it("records a turn the caller abandons before the upstream is dialled", async () => {
+      const res = makeRes();
+      network();
+      db.state.during = (text) => {
+        if (!text.includes("insert into agent_spend")) return;
+        res.destroyed = true;
+        res.emit("close");
+      };
+
+      await handler(makeReq(TURN), res as never);
+
+      expect(db.state.turns).toEqual(
+        recorded({ outcome: "abandoned", charged: 0 })
+      );
+    });
+
+    it("records a completed turn whose usage cannot be priced at its reservation", async () => {
+      network(() => streamed({ prompt_tokens: "x", completion_tokens: 5 }));
+
+      const res = await postJson(handler, TURN);
+
+      expect(res.statusCode).toBe(200);
+      expect(db.state.turns).toEqual([
+        {
+          userId: "user-1",
+          tier: "established",
+          outcome: "completed",
+          // eslint-disable-next-line unicorn/no-null -- the `agent_turns` row: a count the upstream left out is SQL `NULL`
+          promptTokens: null,
+          completionTokens: 5,
+          charged: RESERVED,
+        },
+      ]);
+      expect(spend()).toEqual({ reserved: 0, spent: RESERVED });
+    });
+
+    it("logs a settle that fails, with what it would have charged", async () => {
+      const logged = serverLog();
+      network();
+      db.state.during = (text) => {
+        if (text.includes("insert into agent_turn")) db.state.down = true;
+      };
+
+      const res = await postJson(handler, TURN);
+
+      expect(res.statusCode).toBe(200);
+      expect(res.ended).toBe(true);
+      expect(db.state.turns).toEqual([]);
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "error",
+          report: true,
+          error: expect.objectContaining({ message: "connect ECONNREFUSED" }),
+          context: expect.objectContaining({
+            end: "completed",
+            tier: "established",
+            day: today(),
+            reserved: RESERVED,
+            charge: USAGE_COST,
+          }),
+        })
+      );
+    });
+
+    it("counts a turn the cap refuses, with no turn row and no upstream call", async () => {
+      spendSoFar("user-1", CAP.established);
+      const fetched = network();
+
+      const res = await postJson(handler, TURN);
+
+      expect(res.statusCode).toBe(429);
+      expect(upstreamCalls(fetched)).toHaveLength(0);
+      expect(db.state.capped.get(`user-1|${today()}`)).toBe(1);
+      expect(db.state.turns).toEqual([]);
+    });
+
+    it("still answers 429 when counting a capped turn fails", async () => {
+      const logged = serverLog();
+      spendSoFar("user-1", CAP.established);
+      network();
+      db.state.during = (text) => {
+        if (text.includes("capped = s.capped + 1")) db.state.down = true;
+      };
+
+      const res = await postJson(handler, TURN);
+
+      expect(res.statusCode).toBe(429);
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "error",
+          report: true,
+          error: expect.objectContaining({ message: "connect ECONNREFUSED" }),
+          context: expect.objectContaining({
+            tier: "established",
+            day: today(),
+          }),
+        })
+      );
+    });
+
+    it.each([
+      [
+        "a signed-out caller",
+        () => {
+          session.state = "signed-out";
+        },
+      ],
+      [
+        "an oversized body",
+        () => {
+          vi.stubEnv("PG_AI_MAX_BODY_BYTES", "16");
+        },
+      ],
+      [
+        "a ledger that cannot be read",
+        () => {
+          vi.spyOn(console, "error").mockImplementation(() => {});
+          db.state.down = true;
+        },
+      ],
+    ])("records nothing for %s", async (_, arrange) => {
+      arrange();
+      network();
+
+      await postJson(handler, TURN);
+
+      expect(db.state.turns).toEqual([]);
+      expect(db.state.capped.size).toBe(0);
     });
   });
 

@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { requireFor } from "../src/test-utils/require-for";
-import { expect, home, homeRegion, test } from "./fixtures";
+import { expect, home, homeRegion, stubAiStatus, test } from "./fixtures";
 
 const FIRST = "Define the hello instruction and log a message";
 
@@ -18,9 +18,7 @@ const rows = (page: Page) =>
  */
 const startHelloAnchor = async (page: Page) => {
   // No default backend, whatever the dev server is configured with
-  await page.route("**/api/agent", (route) =>
-    route.fulfill({ json: { configured: false, model: null } })
-  );
+  await stubAiStatus(page, "own");
   await page.goto("/");
   await expect(home(page)).toBeVisible();
   // A wide Home opens it with the card's "Open" button; a phone's card is
@@ -295,9 +293,13 @@ test.describe("client-v2-lessons", () => {
     ]) {
       await expect(page.getByRole("button", { name })).toBeVisible();
     }
-    // Each chip is its tooltip's trigger, which takes over its data-slot
-    const chips = page.locator('[data-slot="composer-context"] > *');
-    await expect(chips).toHaveText(["Step 1 of 4", "lib.rs", "1 file"]);
+    // Each chip is its tooltip's trigger, which takes over its data-slot;
+    // its short label is the part hidden from screen readers, which hear
+    // what it sends instead
+    const chips = page.locator(
+      '[data-slot="composer-context"] > * > [aria-hidden="true"]'
+    );
+    await expect(chips).toHaveText(["Step 1 of 4", "lib.rs"]);
   });
 
   test("client-v2-lessons: The band and the bar on a phone", async ({

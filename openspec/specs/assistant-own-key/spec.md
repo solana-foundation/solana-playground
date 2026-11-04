@@ -8,64 +8,6 @@ that the keyless default backend needs a signed-in user.
 
 ## Requirements
 
-### Requirement: The key survives a reload of its tab
-
-When the user connects to a backend that needs a key, the panel SHALL keep that
-connection (provider, key, base URL, model and effort) in the tab's
-`sessionStorage`, and on the next load of the same tab SHALL reconnect to it
-without showing the picker or asking for the key.
-
-#### Scenario: Reloading the tab keeps the connection
-
-- **WHEN** the user connects to a key-based backend with a key and reloads the
-  tab
-- **THEN** the panel is connected to the same backend with the same key, model
-  and base URL, and the key field `#assistant-api-key` is not shown
-
-#### Scenario: Changing the backend is not undone
-
-- **WHEN** the user is connected with a key and opens the picker to change
-  backend
-- **THEN** the panel stays on the picker with the current connection
-  unchanged, and does not reconnect by itself
-
-#### Scenario: Storage that refuses access
-
-- **WHEN** `sessionStorage` throws on read or write (a private window, blocked
-  site data)
-- **THEN** connecting still works for the life of the page, and the next load
-  shows the picker instead of failing
-
-### Requirement: The key is kept per tab
-
-The panel SHALL keep the key in the tab's `sessionStorage` only, so a new tab
-of the same origin SHALL start with no stored key-based connection. A tab the
-browser duplicates or restores carries its `sessionStorage` with it, and
-reconnects with the key as after a reload.
-
-#### Scenario: A new tab asks again
-
-- **WHEN** the user has connected to a key-based backend in one tab and opens
-  the app in a new tab
-- **THEN** the new tab is not connected and shows the picker
-
-### Requirement: Disconnecting forgets the key
-
-Disconnecting (the Forget key button in the chat header), or connecting to a
-backend that needs no key, SHALL remove the stored key-based connection, so the
-next load does not reconnect to it.
-
-#### Scenario: Forgetting the key, then reload
-
-- **WHEN** the user is connected to a key-based backend, presses Forget key in
-  the chat header and reloads the tab
-- **THEN** the panel is not connected and `sessionStorage` holds no key
-
-#### Scenario: Switching to the default backend
-
-- **WHEN** the user switches from a key-based backend to the keyless default
-- **THEN** `sessionStorage` holds no key
-
 ### Requirement: The key goes only to the provider
 
 The key SHALL be sent only to the provider the user picked, as a request header
@@ -75,12 +17,14 @@ an error report.
 
 #### Scenario: Nothing durable holds the key
 
-- **WHEN** the user connects to a key-based backend and reloads the tab
+- **WHEN** the user connects to a key-based backend and the key is held in
+  memory
 - **THEN** neither `localStorage` nor IndexedDB contains the key string
 
 #### Scenario: Requests to our origin carry no key
 
-- **WHEN** the user connects to a key-based backend and reloads the tab
+- **WHEN** the user connects to a key-based backend and the key is held in
+  memory
 - **THEN** no request to the app's own origin carries the key in a header or
   body
 
@@ -154,3 +98,247 @@ project.
 
 Checked by the unit test "keeps the open project when the sign-in started in
 the assistant panel" in `client-v2/src/effects/session/session.test.ts`.
+
+### Requirement: A thread keeps its backend when the key is gone
+
+When the user sends a message with nothing connected, the panel SHALL take the
+backend that produced the open thread's last reply. If that backend needs a
+key, the panel SHALL NOT connect the keyless default in its place: it SHALL
+open Connect a model preset to that backend's provider, model, base URL and
+effort, with the key field `#assistant-api-key` empty, and SHALL keep the typed
+prompt in the composer `Message the assistant`. If the last reply came from the
+default backend, the send SHALL connect the default as before. A thread with no
+reply that names its backend SHALL take the backend this browser last chose
+(see "The remembered choice carries no key").
+
+#### Scenario: A new tab does not continue a keyed thread on the default
+
+- **WHEN** a signed-in user on a deployment that serves a default backend has
+  a thread last answered by a key-based backend, opens the project in a new
+  tab and sends a message
+- **THEN** no request goes to the default backend, Connect a model opens with
+  that provider and model selected and an empty key field, and the message
+  stays in the composer
+
+#### Scenario: Entering the key continues the same thread
+
+- **WHEN** the user in the scenario above enters the key and connects
+- **THEN** the thread's earlier messages are still shown, and sending the
+  waiting message adds it below them
+
+#### Scenario: A thread answered by the default reconnects the default
+
+- **WHEN** a signed-in user has a thread last answered by the default backend,
+  opens the project in a new tab and sends a message
+- **THEN** the panel connects the default backend and sends the message
+  without opening Connect a model
+
+#### Scenario: A new thread takes the last chosen backend
+
+- **WHEN** the user last chose a key-based backend in this browser, opens a
+  project with no conversation in a new tab and sends a message
+- **THEN** Connect a model opens preset to that backend with an empty key
+  field, and nothing is sent to the default backend
+
+### Requirement: The remembered choice carries no key
+
+The backend the user last chose SHALL be remembered in `localStorage` as its
+provider, model, base URL and effort, and never with the key. A remembered
+choice written as a bare provider id SHALL still be read, as that provider
+with no other parameters. Disconnecting (Delete my key, in Settings or the
+chat header's More) SHALL remove it, as today.
+
+#### Scenario: The remembered choice holds no key
+
+- **WHEN** the user connects to a key-based backend with a model and a base URL
+- **THEN** `localStorage` holds that provider, model and base URL, and does not
+  contain the key string
+
+### Requirement: Changing the backend keeps the conversation
+
+Connecting to a backend while another is connected SHALL keep the open thread
+on screen and in storage; the next turn SHALL be sent to the new backend with
+the conversation so far. Connect a model SHALL NOT say that switching starts a
+new conversation.
+
+#### Scenario: Switching backends keeps the thread
+
+- **WHEN** the user has a conversation with one backend and connects to a
+  different one in Connect a model
+- **THEN** the conversation's messages are still shown, and the next message
+  is sent to the new backend
+
+#### Scenario: No warning about a new conversation
+
+- **WHEN** the user connected to one backend opens Connect a model and picks a
+  different one
+- **THEN** the dialog does not show "Switching starts a new conversation."
+
+### Requirement: A rejected key can be entered again
+
+When the provider answers a turn on a key-based backend with 401, the turn
+SHALL end in an error that names the provider as the assistant's head does
+(Anthropic, OpenAI, OpenRouter, Gemini) and says its key was not accepted,
+without the status code: "{Provider} did not accept this key." Its buttons say
+what to do. The error SHALL carry a **Change key** button
+(`#assistant-enter-key`) that opens Connect a model preset to that backend with
+an empty key field. While the deployment serves a hosted model, the error SHALL
+also carry a **Use hosted model** button (`#assistant-use-hosted`) that switches
+the thread to the hosted model without sending anything, and puts the last
+message the user sent back in the composer when the composer is empty; for a
+signed-out user it SHALL instead open Connect a model on the hosted model. Both
+buttons SHALL be offered only while nothing but notices follows that error,
+and SHALL be at least 44px tall below the `md` breakpoint. Other failures, a
+403 included (a valid key without access to the model), keep their current
+error.
+
+#### Scenario: A 401 offers Enter key
+
+- **WHEN** the user is connected to a key-based backend and a turn's request
+  is answered with 401
+- **THEN** the chat shows "OpenAI did not accept this key." with a **Change
+  key** button, and pressing it opens
+  Connect a model with that provider selected and the key field empty
+
+#### Scenario: A 401 offers the hosted model
+
+- **WHEN** a signed-in user's turn on a key-based backend is answered with 401
+  on a deployment that serves a hosted model, and the user presses **Use hosted
+  model**
+- **THEN** the thread is connected to the hosted model, nothing is sent, and
+  the refused message is back in the composer
+
+#### Scenario: A 403 or a 500 keeps the ordinary error (manual)
+
+- **WHEN** a turn's request is answered with 403 or 500
+- **THEN** the chat shows the provider's error without a **Change key** or
+  **Use hosted model** button
+
+Checked by a unit test in `client-v2/src/widgets/assistant/model/use-turn.test.tsx`.
+
+### Requirement: Recovering a backend is measured
+
+The assistant widget SHALL report, through its tracker:
+
+- `assistant_connect_opened` with `via` `"thread"` when a send with nothing
+  connected opens Connect a model preset to the thread's own backend, and
+  `"key-rejected"` when the **Change key** button, or **Use hosted model** for
+  a signed-out user, opens it; its other values (`"menu"`, `"model"`,
+  `"send"`, `"setup"`) are unchanged.
+- `assistant_key_rejected` when a turn on a key-based backend ends on 401,
+  with `provider` the backend's provider id. It carries nothing else: no key,
+  no model, no base URL.
+- `assistant_model_picked` with `provider` `"default"` and `via`
+  `"key-rejected"` when **Use hosted model** switches the thread; its other
+  `via` values (`"menu"`, `"dialog"`) are unchanged.
+
+#### Scenario: A rejected key is counted (manual)
+
+- **WHEN** a turn's request on a key-based backend is answered with 401
+- **THEN** `assistant_key_rejected` is reported once with the provider
+
+#### Scenario: A switch to the hosted model from a refused key is counted (manual)
+
+- **WHEN** a signed-in user presses **Use hosted model** on a refused key's
+  error
+- **THEN** `assistant_model_picked` is reported once with `provider`
+  `"default"` and `via` `"key-rejected"`
+
+Checked by unit tests through the memory provider in
+`client-v2/src/widgets/assistant/model/use-turn.test.tsx` and
+`client-v2/src/widgets/assistant/ui/Thread.test.tsx`.
+
+### Requirement: The key is held in memory only
+
+When the user connects to a backend that needs a key, the panel SHALL hold
+the key in the page's memory only and SHALL NOT write it, or any value
+containing it, to `sessionStorage`, `localStorage` or IndexedDB. A reload, a
+new tab, or a tab the browser duplicates or restores SHALL start with no
+key-based connection. The backend's parameters without the key (provider,
+model, base URL, effort) stay remembered, so Connect a model, opened with
+nothing connected, starts on them with the key field `#assistant-api-key`
+empty. A key-based connection
+an older build left in `sessionStorage` SHALL be removed on the first load,
+whether or not the assistant panel is open.
+
+#### Scenario: A reload asks for the key again
+
+- **WHEN** the user connects to a key-based backend with a key, reloads the
+  tab and presses **Connect a model** in the composer
+- **THEN** the panel was not connected after the reload, Connect a model
+  opens on the same provider and model with an empty `#assistant-api-key`,
+  and no storage holds the key string
+
+#### Scenario: A new tab asks again
+
+- **WHEN** the user has connected to a key-based backend in one tab and opens
+  the app in a new tab
+- **THEN** the new tab is not connected and shows the picker
+
+#### Scenario: A key an older build kept is removed
+
+- **WHEN** the tab's `sessionStorage` holds a key-based connection under
+  `assistant.connection` and the app loads
+- **THEN** the panel is not connected and `sessionStorage` no longer holds
+  the entry
+
+#### Scenario: A kept key is removed with the panel closed (manual)
+
+- **WHEN** the tab's `sessionStorage` holds a key-based connection under
+  `assistant.connection` and the app loads on the code view with the
+  assistant panel closed, as a phone starts
+- **THEN** `sessionStorage` no longer holds the entry, before the panel is
+  opened (checked by the unit test in
+  `client-v2/src/effects/kept-key/kept-key.ts`)
+
+#### Scenario: Changing the backend is not undone
+
+- **WHEN** the user is connected with a key and opens the picker to change
+  backend
+- **THEN** the panel stays on the picker with the current connection
+  unchanged, and does not reconnect by itself
+
+### Requirement: Delete my key removes the key
+
+Settings SHALL show an **Assistant** section, after Network, with a row
+"Your model key" and a button **Delete my key**. The button SHALL be enabled
+while a backend holding the user's key is connected, and disabled when no
+key is entered or while a turn is using the key. The assistant head's More
+menu SHALL offer the same action under the same name while such a backend
+is connected. Pressing either SHALL drop the key from memory and from any
+storage an older build wrote, disconnect the backend, forget the remembered
+choice, and leave the panel unconnected, so the next send goes where a send
+with nothing chosen goes: the keyless default when the deployment serves it
+to this user, else Connect a model. If the key an older build kept cannot be
+removed, Settings SHALL say so in the row, since its notice in the panel is
+hidden under Settings. Connecting to a backend
+that needs no key SHALL drop the key too.
+
+Pressing it in Settings SHALL fire `settings_key_deleted` with no
+parameters; picking it from the head's More SHALL fire
+`assistant_key_deleted` with no parameters.
+
+#### Scenario: Delete my key from Settings
+
+- **WHEN** the user is connected to a key-based backend, opens Settings and
+  presses **Delete my key**
+- **THEN** the button becomes disabled, the row reads that no key is
+  entered, the panel is not connected after Back to app, and no storage
+  holds the key string
+
+#### Scenario: Delete my key from the chat header
+
+- **WHEN** the user is connected to a key-based backend, picks **Delete my
+  key** in the chat header's More and reloads the tab
+- **THEN** the panel is not connected and `sessionStorage` holds no key
+
+#### Scenario: No key, nothing to delete
+
+- **WHEN** the panel is connected to the default backend, or to nothing, and
+  the user opens Settings
+- **THEN** **Delete my key** is shown disabled
+
+#### Scenario: Switching to the default backend
+
+- **WHEN** the user switches from a key-based backend to the keyless default
+- **THEN** no storage holds the key

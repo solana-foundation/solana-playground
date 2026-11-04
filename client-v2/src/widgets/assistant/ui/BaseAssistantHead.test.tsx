@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
 
-import type { ForgetKey } from "./BaseAssistantHead";
+import type { AiOffReason } from "../model/ai-off";
+import type { HeadLabel } from "../model/head-label";
+import type { DeleteKey } from "./BaseAssistantHead";
 import { BaseAssistantHead } from "./BaseAssistantHead";
 
 interface HeadChoice {
@@ -13,8 +15,34 @@ interface HeadChoice {
   canWiden?: boolean;
   /** What the caller's `focusPicked` does; takes focus by default */
   focusPicked?: () => boolean;
-  forgetKey?: ForgetKey;
+  deleteKey?: DeleteKey;
+  label?: HeadLabel;
+  off?: AiOffReason;
 }
+
+const HOSTED: HeadLabel = {
+  kind: "model",
+  lead: "Assistant · ",
+  model: "GLM 5.3 Flash",
+  tail: " · hosted",
+};
+
+const LONG = "deepseek/deepseek-chat-v3.1-terminus-instruct:free";
+
+const KEYED_LONG: HeadLabel = {
+  kind: "model",
+  lead: "",
+  model: LONG,
+  tail: " · your OpenRouter key",
+};
+
+/** jsdom lays nothing out, so whether the head's model name is cut is stated */
+const cutName = (cut: boolean) => {
+  const text = screen.getByText(LONG);
+  Object.defineProperty(text, "scrollWidth", { value: cut ? 300 : 100 });
+  Object.defineProperty(text, "clientWidth", { value: 100 });
+  return text;
+};
 
 const setup = (choice: HeadChoice = {}) => {
   const onSources = vi.fn();
@@ -22,20 +50,22 @@ const setup = (choice: HeadChoice = {}) => {
   const focusPicked = vi.fn(() => choice.focusPicked?.() ?? true);
   const onWiden = vi.fn();
   const onHide = vi.fn();
-  const onForgetKey = vi.fn();
+  const onDeleteKey = vi.fn();
   render(
     <TooltipProvider>
       <BaseAssistantHead
-        title="hello-anchor"
+        label={choice.label ?? HOSTED}
+        off={choice.off}
         onSources={onSources}
         onConnect={onConnect}
+        connectLabel="Connect a model…"
         focusPicked={focusPicked}
         wide={choice.wide ?? false}
         onWiden={onWiden}
         onHide={onHide}
         canWiden={choice.canWiden ?? true}
-        forgetKey={choice.forgetKey ?? "none"}
-        onForgetKey={onForgetKey}
+        deleteKey={choice.deleteKey ?? "none"}
+        onDeleteKey={onDeleteKey}
       />
     </TooltipProvider>
   );
@@ -45,7 +75,7 @@ const setup = (choice: HeadChoice = {}) => {
     focusPicked,
     onWiden,
     onHide,
-    onForgetKey,
+    onDeleteKey,
     user: userEvent.setup(),
   };
 };
@@ -62,9 +92,43 @@ describe("BaseAssistantHead", () => {
   beforeEach(() => vi.stubGlobal("ResizeObserver", NoopResizeObserver));
   afterEach(() => vi.unstubAllGlobals());
 
-  it("names the project", () => {
+  it("reads the model in use", () => {
     setup();
-    expect(screen.getByText("hello-anchor")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", {
+        name: "Assistant · GLM 5.3 Flash · hosted",
+      })
+    ).toBeTruthy();
+  });
+
+  it("reads Assistant alone with no model", () => {
+    setup({ label: { kind: "plain", text: "Assistant" } });
+    expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
+  });
+
+  it("cuts only the model's name, keeping the words around it whole", () => {
+    setup({
+      label: KEYED_LONG,
+    });
+    expect(screen.getByText(LONG).className).toContain("truncate");
+    expect(screen.getByText(LONG).hasAttribute("data-overflow")).toBe(true);
+    expect(screen.getByText("· your OpenRouter key").className).toContain(
+      "shrink-0"
+    );
+  });
+
+  it("shows a cut model name whole in a tooltip on hover", async () => {
+    const { user } = setup({
+      label: KEYED_LONG,
+    });
+    await user.hover(cutName(true));
+    expect((await screen.findByRole("tooltip")).textContent).toBe(LONG);
+  });
+
+  it("shows no tooltip for a model name that fits", async () => {
+    const { user } = setup({ label: KEYED_LONG });
+    await user.hover(cutName(false));
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("lists the three items under More, Clear conversation disabled", async () => {
@@ -94,32 +158,32 @@ describe("BaseAssistantHead", () => {
     );
   });
 
-  it("offers Forget key only while a key is held, and forgets it", async () => {
-    const { user, onForgetKey } = setup({ forgetKey: "ready" });
+  it("offers Delete my key only while a key is held, and forgets it", async () => {
+    const { user, onDeleteKey } = setup({ deleteKey: "ready" });
     await user.click(more());
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent)
     ).toEqual([
       "Sources and toolsS",
       "Connect a model…K",
-      "Forget key",
+      "Delete my key",
       "Clear conversation",
     ]);
-    await user.click(screen.getByRole("menuitem", { name: "Forget key" }));
-    expect(onForgetKey).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("menuitem", { name: "Delete my key" }));
+    expect(onDeleteKey).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps Forget key disabled during a turn, and says why", async () => {
-    const { user, onForgetKey } = setup({ forgetKey: "busy" });
+  it("keeps Delete my key disabled during a turn, and says why", async () => {
+    const { user, onDeleteKey } = setup({ deleteKey: "busy" });
     await user.click(more());
-    const item = screen.getByRole("menuitem", { name: "Forget key" });
+    const item = screen.getByRole("menuitem", { name: "Delete my key" });
     expect(item.getAttribute("aria-disabled")).toBe("true");
     // The item takes no pointer events while disabled; its wrapper does
     await user.hover(requireFor("the item's row")(item.parentElement));
     expect((await screen.findByRole("tooltip")).textContent).toBe(
       "Finish this turn first"
     );
-    expect(onForgetKey).not.toHaveBeenCalled();
+    expect(onDeleteKey).not.toHaveBeenCalled();
   });
 
   it("opens Sources and tools and Connect a model from their items", async () => {
@@ -242,8 +306,38 @@ describe("BaseAssistantHead", () => {
 it("is the frame's 44 px column bar", () => {
   setup();
   const head = requireFor("the heading's bar")(
-    screen.getByRole("heading", { name: "hello-anchor" }).parentElement
+    screen.getByRole("heading", { name: "Assistant · GLM 5.3 Flash · hosted" })
+      .parentElement
   );
   expect(head.className).toMatch(/\bh-11\b/);
   expect(head.className).toMatch(/\bborder-b\b/);
+});
+
+describe("BaseAssistantHead, the off status", () => {
+  const status = () => document.getElementById("assistant-status");
+
+  it("shows no status while the assistant can answer", () => {
+    setup();
+    expect(status()).toBeNull();
+  });
+
+  it("says Off with no hosted key or nobody signed in", () => {
+    setup({ off: "no-key" });
+    expect(status()?.textContent).toBe("Off");
+  });
+
+  it("says Off to a signed-out user", () => {
+    setup({ off: "signed-out" });
+    expect(status()?.textContent).toBe("Off");
+  });
+
+  it("says Not responding where the model could not be reached, with a red dot", () => {
+    setup({ off: "unreachable" });
+    expect(status()?.textContent).toBe("Not responding");
+    expect(
+      status()
+        ?.querySelector('[data-slot="status-dot"]')
+        ?.getAttribute("data-variant")
+    ).toBe("error");
+  });
 });

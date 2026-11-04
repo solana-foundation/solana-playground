@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+import { PgSession } from "@/features/auth";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+
 import { useRenderOnChange } from "../../../hooks/useRenderOnChange";
 import { PgCommand } from "../../../utils/command";
 import type { LessonState } from "../../../views/flow/lessons";
@@ -12,11 +15,17 @@ import {
   verifyingStage,
 } from "../../../views/flow/lessons";
 import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
+import { backendParamsFrom } from "../../../views/sidebar/assistant/model/backend-params";
+import { PgPatchUndo } from "../../../views/sidebar/assistant/patch-undo";
 import {
+  isConnectionLost,
+  isStoppedNotice,
   PgAssistant,
   turnAppliedApproval,
   turnProducedApproval,
 } from "../../../views/sidebar/assistant/store";
+import { DEFAULT_CONNECTION } from "../model/connection";
+import { useDefaultBackend } from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";
 import type { Turn } from "../model/use-turn";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
@@ -66,6 +75,8 @@ export const Thread = ({
   const [lessonState, setLessonState] =
     useState<LessonState>(INITIAL_LESSON_STATE);
   useEffect(() => PgLesson.onDidChange(setLessonState).dispose, []);
+
+  const defaultBackend = useDefaultBackend();
 
   const items = PgAssistant.items;
   const status = PgAssistant.status;
@@ -119,8 +130,47 @@ export const Thread = ({
   const skippableId =
     onFinishedReply && stepAttempted && PgLesson.canPass() ? lastItem.id : null;
 
+  // Change key goes on a refused key only while nothing has followed it but
+  // notices: a reply or a newer error after it means it has been answered,
+  // and `recover` is stored with the thread, so it would otherwise come back
+  // on every load
+  const lastWord = items.findLast((item) => item.kind !== "notice");
+  const refused =
+    lastWord?.kind === "error"
+      ? backendParamsFrom(lastWord.recover)
+      : undefined;
+
+  /**
+   * Use hosted model on a refused key: the thread moves to the hosted model
+   * and nothing is sent; the refused message goes back in an empty composer
+   * for the user to send. The hosted model answers only a signed-in user, so
+   * anyone else gets Connect a model on it, where the sign-in is, as the
+   * composer's model menu does.
+   */
+  const handleUseHosted = () => {
+    if (!PgSession.get()) {
+      turn.openConnect("key-rejected", { provider: "default" });
+      return;
+    }
+    PgAssistant.connect(DEFAULT_CONNECTION);
+    assistantTelemetry.track("assistant_model_picked", {
+      provider: "default",
+      via: "key-rejected",
+    });
+    const refusedMessage = items.findLast((item) => item.kind === "user");
+    if (!turn.input && refusedMessage?.kind === "user") {
+      turn.setInput(refusedMessage.text);
+    }
+  };
+
   const actionsFor = (id: string): ReplyActions | undefined => {
     const actions: ReplyActions = {};
+    if (refused && id === lastWord?.id) {
+      actions.changeKey = () => turn.openConnect("key-rejected", refused);
+      if (defaultBackend.state === "present") {
+        actions.useHosted = handleUseHosted;
+      }
+    }
     if (id === changeableId) {
       actions.makeChange = {
         mode: lesson ? "lastResort" : "next",
@@ -159,6 +209,56 @@ export const Thread = ({
     PgAssistant.resolveApproval(id, answer === "allow");
   };
 
+  // Asked on every render: the thread redraws on every change in the store,
+  // and an edit in the editor that takes Undo away is caught again by `undo`
+  const undoFor = (id: string) => {
+    const card = items.find((item) => item.id === id);
+    if (card?.kind !== "approval" || !PgPatchUndo.can(card)) return undefined;
+    return () => {
+      PgPatchUndo.undo(card)
+        .then((result) => {
+          if (result === "undone") {
+            assistantTelemetry.track("assistant_patch_undone", { via: "card" });
+          }
+        })
+        .catch(reportButtonFailure("undo the patch"));
+    };
+  };
+
+  const originalFor = (id: string) => {
+    const card = items.find((item) => item.id === id);
+    if (card?.kind !== "approval") return undefined;
+    return PgPatchUndo.original(card);
+  };
+
+  // Try again sends the last message once more, from the thread's last item
+  // only, and only when that item is where a turn was stopped or cut off
+  const lastSent = items.findLast((item) => item.kind === "user");
+  const retryAfter = (): "stopped" | "interrupted" | undefined => {
+    if (busy || !lastItem || lastSent?.kind !== "user") return undefined;
+    if (isStoppedNotice(lastItem)) return "stopped";
+    // Not once the turn applied a change: sent again, the same request would
+    // propose that change over the code it already rewrote
+    if (
+      (PgAssistant.isCutOff(lastItem) || isConnectionLost(lastItem)) &&
+      !turnAppliedApproval(items)
+    ) {
+      return "interrupted";
+    }
+    return undefined;
+  };
+  const after = retryAfter();
+  const retryFor = (id: string) => {
+    if (!after || id !== lastItem?.id || lastSent?.kind !== "user") {
+      return undefined;
+    }
+    const text = lastSent.text;
+    return () => {
+      assistantTelemetry.track("assistant_reply_retried", { after });
+      send(text);
+    };
+  };
+
   // Cover the silent gaps: before the first token and while tools run.
   // Once text streams into the last assistant item the marker comes down.
   const working =
@@ -189,6 +289,10 @@ export const Thread = ({
             }
           : undefined
       }
+      undoFor={undoFor}
+      originalFor={originalFor}
+      isCutOff={(item) => PgAssistant.isCutOff(item)}
+      retryFor={retryFor}
     />
   );
 };

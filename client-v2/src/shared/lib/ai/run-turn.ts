@@ -9,6 +9,9 @@ import type {
 import { APICallError, isStepCount, streamText } from "ai";
 
 import { createLogger } from "../logger";
+import type { AiFailureKind } from "./failure";
+import { FAILURE_MESSAGE, failureKindOf, isReportedFailure } from "./failure";
+import { isNetworkFailure } from "./network-failure";
 import { redactKey } from "./redact";
 
 const log = createLogger("ai:run-turn");
@@ -23,19 +26,17 @@ const FALLBACK_MAX_RESUMES = 3;
 const PAUSE_TURN = "pause_turn";
 
 /**
- * Why a turn failed, so a caller can word each case for its own users:
- * `busy` is a 429, `key-refused` a 401, `provider` any other failure
+ * Why a turn failed, so a caller can word each case for its own users: a
+ * failed request is an {@link AiFailureKind} (`failure.ts` maps its status),
+ * then a refusal, a turn that kept pausing, or the connection dropping
  */
-export type AiTurnErrorKind =
-  | "provider"
-  | "busy"
-  | "key-refused"
-  | "refusal"
-  | "paused";
+export type AiTurnErrorKind = AiFailureKind | "refusal" | "paused" | "network";
 
 /**
- * A turn the provider ended in failure: an error, a refusal, or a turn that
- * kept pausing. The message never carries the connection's key.
+ * A turn the provider ended in failure: an error, a refusal, a turn that
+ * kept pausing, or the connection dropping (`isNetworkFailure`). A failed
+ * request's message is Spec 08's words; the provider's own is in `detail`.
+ * Neither carries the connection's key.
  */
 export class AiTurnError extends Error {
   readonly kind: AiTurnErrorKind;
@@ -84,6 +85,20 @@ export interface ToolCallEvent {
   input: unknown;
 }
 
+/**
+ * A tool's answer, reported once it is final. `output` is always text: the
+ * tool's own, anything else it returned as JSON (or its string form when JSON
+ * cannot write it), nothing as `""`, and a tool that threw as its message.
+ */
+export interface ToolResultEvent {
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  output: string;
+  /** The tool threw; `output` is its message */
+  failed: boolean;
+}
+
 export interface RunTurnOptions {
   model: LanguageModel;
   /** The conversation so far, ending with the user's message */
@@ -104,6 +119,7 @@ export interface RunTurnOptions {
   onText?: (delta: string) => void;
   onReasoning?: (delta: string) => void;
   onToolCall?: (call: ToolCallEvent) => void;
+  onToolResult?: (result: ToolResultEvent) => void;
 }
 
 export interface TurnResult {
@@ -124,8 +140,49 @@ const messageOf = (error: unknown): string => {
   return String(error);
 };
 
-/** Characters of an unparsed error body kept in the message */
-const BODY_IN_MESSAGE = 300;
+/** What a tool's output or failure reads as when it cannot be written at all */
+const UNPRINTABLE = "(a value that could not be written as text)";
+
+/**
+ * A tool's output, or what it threw, as text. Total, since it runs inside the
+ * stream after the tool already ran: nothing is `""`, a value JSON cannot
+ * write (a cycle, a BigInt) falls back to `String`, and one neither can
+ * write to `UNPRINTABLE`.
+ */
+const textOf = (value: unknown): string => {
+  if (typeof value === "string") return value;
+  if (value === undefined) return "";
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    // Not JSON: its own string form is still a truthful answer for the model
+    try {
+      return String(value);
+    } catch {
+      // Not even that (a throwing `toString`); the call still gets a result
+      return UNPRINTABLE;
+    }
+  }
+};
+
+/** What a tool threw, as the text the model reads: its message when it has one */
+const toolErrorText = (error: unknown) => {
+  try {
+    const { message } = (error ?? {}) as { message?: unknown };
+    return typeof message === "string" ? message : textOf(error);
+  } catch (cause) {
+    // A getter that throws on `message`: the call still gets a result, and
+    // the team hears of the tool that threw it
+    log.warn("a tool's error could not be read", {
+      report: true,
+      context: { detail: textOf(cause) },
+    });
+    return UNPRINTABLE;
+  }
+};
+
+/** Characters of an unparsed error body kept in the detail */
+const BODY_IN_DETAIL = 300;
 
 /**
  * The SDK's message, or, for a failed response whose body did not match the
@@ -143,17 +200,22 @@ const apiCallDetail = (error: APICallError, body: string | undefined) => {
     .filter(Boolean)
     .join(" ");
   const detail = body.trim();
-  return detail ? `${status} — ${detail.slice(0, BODY_IN_MESSAGE)}` : status;
+  return detail ? `${status} — ${detail.slice(0, BODY_IN_DETAIL)}` : status;
 };
 
 const toTurnError = (error: unknown, apiKey: string | undefined) => {
   if (error instanceof AiTurnError) return error;
+  // Before the status: a body that drops early is wrapped with the 200 it began with
+  if (isNetworkFailure(error)) {
+    return new AiTurnError(redactKey(messageOf(error), apiKey), {
+      kind: "network",
+    });
+  }
   if (!APICallError.isInstance(error)) {
-    // A dropped stream or a fetch that never reached the provider: Spec 08's
-    // words on screen, the raw text in the log
+    // Neither the provider nor the connection: a bug of ours (a tool or a
+    // callback that threw), which a resend repeats, so the team hears of it
     const detail = redactKey(messageOf(error), apiKey);
-    // Not reported: an offline user would send one event per message
-    log.warn("model request failed", { context: { detail } });
+    log.warn("model request failed", { report: true, context: { detail } });
     return new AiTurnError(FAILURE_MESSAGE.provider, { detail });
   }
   const body =
@@ -162,12 +224,10 @@ const toTurnError = (error: unknown, apiKey: string | undefined) => {
       : redactKey(error.responseBody, apiKey);
   const status = error.statusCode;
   const detail = redactKey(apiCallDetail(error, body), apiKey);
-  const kind = kindOf(status);
-  // Spec 08: the status and the server's words stay in the log. A refused
-  // key or a busy model is the user's or the provider's; anything else the
-  // team hears of
+  const kind = failureKindOf(status, body);
+  // Spec 08: the status and the server's words stay in the log
   log.warn("model request failed", {
-    report: kind === "provider",
+    report: isReportedFailure(kind, status),
     context: { status, detail },
   });
   return new AiTurnError(FAILURE_MESSAGE[kind], {
@@ -177,28 +237,6 @@ const toTurnError = (error: unknown, apiKey: string | undefined) => {
     detail,
     retryAfter: kind === "busy" ? retryAfterOf(error) : undefined,
   });
-};
-
-/**
- * Which failure an HTTP status is, for the words a user reads. Only a 401
- * says the key was refused: a 403 is as often a region, a policy or a quota,
- * and "check your key" would send the user to the wrong fix.
- */
-const kindOf = (status: number | undefined) => {
-  if (status === 429) return "busy";
-  if (status === 401) return "key-refused";
-  return "provider";
-};
-
-/**
- * Spec 08's words for a failed model request (AI-03, AI-05, and the
- * assistant's "Could not …" fallback): no status, JSON or server text
- */
-const FAILURE_MESSAGE: Record<ReturnType<typeof kindOf>, string> = {
-  busy: "The model is busy.",
-  "key-refused":
-    "The model's provider did not accept this key. Check it in Settings, or use the hosted model.",
-  provider: "Could not get an answer from the model. Send your message again.",
 };
 
 /** The `retry-after` header in seconds; an HTTP date is not worth parsing here */
@@ -242,6 +280,7 @@ export const runTurn = async ({
   onText,
   onReasoning,
   onToolCall,
+  onToolResult,
 }: RunTurnOptions): Promise<TurnResult> => {
   const history = Array.from(messages);
   let stepsTaken = 0;
@@ -280,6 +319,26 @@ export const runTurn = async ({
               toolCallId: part.toolCallId,
               toolName: part.toolName,
               input: part.input,
+            });
+            break;
+          case "tool-result":
+            // A streaming tool's partial results are followed by its final one
+            if (part.preliminary) break;
+            onToolResult?.({
+              toolCallId: part.toolCallId,
+              toolName: part.toolName,
+              input: part.input,
+              output: textOf(part.output),
+              failed: false,
+            });
+            break;
+          case "tool-error":
+            onToolResult?.({
+              toolCallId: part.toolCallId,
+              toolName: part.toolName,
+              input: part.input,
+              output: toolErrorText(part.error),
+              failed: true,
             });
             break;
           case "error":

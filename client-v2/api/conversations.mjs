@@ -18,6 +18,8 @@ import {
   isEnabled,
   listMessages,
   listThreads,
+  MAX_BATCH_BYTES,
+  MAX_BATCH_ITEMS,
   NotYours,
   ThreadDeleted,
 } from "../src/features/persistence/server.mjs";
@@ -25,9 +27,12 @@ import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
 
 const log = createServerLogger("api:conversations");
 
-/** Anything larger is not a conversation batch, it is an attack or a bug */
-const MAX_BODY_BYTES = 2_000_000;
-const MAX_ITEMS = 500;
+/**
+ * The caps on one batch. Shared with the client, which splits a thread so no
+ * body it sends reaches them (`chat-batch.mjs`).
+ */
+const MAX_BODY_BYTES = MAX_BATCH_BYTES;
+const MAX_ITEMS = MAX_BATCH_ITEMS;
 
 /** Long enough for a sentence lifted off the first message, no longer */
 const MAX_TITLE = 200;

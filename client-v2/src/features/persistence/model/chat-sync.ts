@@ -2,6 +2,7 @@
 import { PgSession } from "@/features/auth";
 
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
+import { batchPush, MAX_BATCH_BYTES } from "./chat-batch.mjs";
 import { decodeThread, encodeThread, mergeThreads } from "./chat-codec";
 import { PgChatStorage, withoutTruncationNotice } from "./chat-storage";
 import { DELETED_REASON, isDeletedScope } from "./deleted.mjs";
@@ -42,7 +43,10 @@ interface HandedThread {
  *   under it can be pushed. The caller leaves it for the user's answer about
  *   the project (`SyncBanner`): "keep as new" carries the conversation,
  *   "delete" drops it.
- * - `failed`: nothing is known; the thread stays and is tried again.
+ * - `failed`: nothing is known; the thread stays and is tried again. Also a
+ *   thread pushed whole but for items too large for any batch: those stay on
+ *   this device, so a sign-out must not drop the thread, and the retry sends
+ *   the rest again, which the server's upsert makes harmless.
  *
  * Neither deletion is `failed`: a failed thread is tried again on every
  * turn, and a tombstone never lifts.
@@ -175,19 +179,59 @@ export class PgChatSync {
       return "failed";
     }
 
+    // In batches under the server's caps: a thread sent whole outgrew the
+    // byte cap and got a 413 on every push, for good. The server upserts by
+    // id, so the batches land what one body would have.
+    const { bodies, oversized } = batchPush(
+      { threadId, projectId },
+      // The truncation notice is this device's own bookkeeping. The server
+      // keeps every message, so uploading it would tell the next device that
+      // history it can still read is gone.
+      encodeThread(withoutTruncationNotice(items))
+    );
+
+    // Said before the batches go, so a batch that fails cannot hide it, and
+    // once per item: the push is retried every turn, and a report each time
+    // would crowd every other failure out of the diagnostics
+    const unreported = oversized.filter(
+      (id) => !PgChatSync._oversizedReported.has(`${threadId}:${id}`)
+    );
+    if (unreported.length) {
+      unreported.forEach((id) =>
+        PgChatSync._oversizedReported.add(`${threadId}:${id}`)
+      );
+      report(
+        `push ${threadId}: larger than the ${MAX_BATCH_BYTES}-byte batch cap, kept on this device only: ${unreported.join(
+          ", "
+        )}`,
+        // eslint-disable-next-line unicorn/no-null -- no cause, as every other `report` here says it
+        null
+      );
+    }
+
+    for (const body of bodies) {
+      const outcome = await PgChatSync._post(threadId, body);
+      if (outcome !== "pushed") return outcome;
+    }
+    // The rest is on the server, but not the whole thread: a sign-out drops
+    // only what the server holds, so this one must not read as `pushed`
+    return oversized.length ? "failed" : "pushed";
+  }
+
+  /** `<threadId>:<itemId>` of every item `push` has reported as too large */
+  private static _oversizedReported = new Set<string>();
+
+  /** One batch of a push. @returns how it ended -- see `PushOutcome` */
+  private static async _post(
+    threadId: string,
+    body: string
+  ): Promise<PushOutcome> {
     try {
       const response = await fetch("/api/conversations", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          threadId,
-          projectId,
-          // The truncation notice is this device's own bookkeeping. The
-          // server keeps every message, so uploading it would tell the next
-          // device that history it can still read is gone.
-          items: encodeThread(withoutTruncationNotice(items)),
-        }),
+        body,
       });
       if (response.ok) return "pushed";
       // Not a failure: the server has decided about this thread, and the
@@ -589,6 +633,123 @@ if (import.meta.vitest) {
         await PgChatSync.push(threadId);
 
         expect(postedBody()).toMatchObject({ threadId, projectId: "w1" });
+      });
+
+      describe("a thread past the batch cap", () => {
+        /**
+         * 200 items, the most a device keeps, each of a three-byte
+         * character: about 12 MB on the wire against a 2 MB cap
+         */
+        const longReplyOf =
+          (chars: number) =>
+          (n: number): ChatItem => ({
+            kind: "assistant",
+            id: idOf(`long:${n}`),
+            createdAt: new Date(n * 1000).toISOString(),
+            text: "語".repeat(chars),
+          });
+        const longReply = longReplyOf(20_000);
+        const longThread = () =>
+          Array.from({ length: 200 }, (_, n) => longReply(n));
+
+        const posts = () =>
+          fetchMock.mock.calls
+            .filter(([, init]) => init?.method === "POST")
+            .map(([, init]) => init.body as string);
+
+        it("goes up in batches the server takes, every item once", async () => {
+          respondingWith(() =>
+            Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
+          );
+          await signedIn();
+          const thread = longThread();
+          await PgChatStorage.write(threadId, thread);
+
+          expect(await PgChatSync.push(threadId)).toBe("pushed");
+
+          const bodies = posts();
+          expect(bodies.length).toBeGreaterThan(1);
+          bodies.forEach((body) =>
+            expect(new TextEncoder().encode(body).length).toBeLessThanOrEqual(
+              MAX_BATCH_BYTES
+            )
+          );
+          const sent = bodies.flatMap((body) =>
+            JSON.parse(body).items.map((i: ChatItem) => i.id)
+          );
+          expect(sent).toEqual(thread.map((i) => i.id));
+        });
+
+        it("stops at a refused batch and counts the push as failed", async () => {
+          let n = 0;
+          respondingWith(() =>
+            Promise.resolve(
+              ++n === 2
+                ? { ok: false, status: 413, json: async () => ({}) }
+                : { ok: true, json: async () => ({ written: 1 }) }
+            )
+          );
+          await signedIn();
+          await PgChatStorage.write(threadId, longThread());
+
+          expect(await PgChatSync.push(threadId)).toBe("failed");
+          expect(posts()).toHaveLength(2);
+        });
+
+        it("still posts a thread holding only the truncation notice, empty", async () => {
+          respondingWith(() =>
+            Promise.resolve({ ok: true, json: async () => ({ written: 0 }) })
+          );
+          await signedIn();
+          await PgChatStorage.write(threadId, [
+            {
+              kind: "notice",
+              id: `truncated:${threadId}`,
+              createdAt: new Date(0).toISOString(),
+              text: "Earlier messages are not kept on this device.",
+            },
+          ]);
+
+          expect(await PgChatSync.push(threadId)).toBe("pushed");
+          expect(posts().map((body) => JSON.parse(body).items)).toEqual([[]]);
+        });
+
+        it("reads a tombstone on a later batch as it reads one on the first", async () => {
+          let n = 0;
+          respondingWith(() =>
+            Promise.resolve(
+              ++n === 2
+                ? {
+                    ok: false,
+                    status: 410,
+                    json: async () => ({ reason: "deleted", scope: "project" }),
+                  }
+                : { ok: true, json: async () => ({ written: 1 }) }
+            )
+          );
+          await signedIn();
+          await PgChatStorage.write(threadId, longThread());
+
+          expect(await PgChatSync.push(threadId)).toBe("project-deleted");
+          expect(posts()).toHaveLength(2);
+        });
+
+        it("sends the rest past an item too large to send, and keeps the thread", async () => {
+          respondingWith(() =>
+            Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
+          );
+          await signedIn();
+          const huge = longReplyOf(1_000_000)(1);
+          await PgChatStorage.write(threadId, [item(0), huge, item(2)]);
+
+          // Not `pushed`: a sign-out drops what the server holds, and the
+          // server does not hold this one
+          expect(await PgChatSync.push(threadId)).toBe("failed");
+          const sent = posts().flatMap((body) =>
+            JSON.parse(body).items.map((i: ChatItem) => i.id)
+          );
+          expect(sent).toEqual([item(0).id, item(2).id]);
+        });
       });
 
       it("never sends the API key, under any name", async () => {

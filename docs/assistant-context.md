@@ -2,15 +2,14 @@
 
 This is what the in-product assistant knows about **itself and this project**.
 It is loaded into the assistant's context so that questions like "what is this?",
-"how does it work?", "what's the status?" and "what did you decide and why?" are
-answered from maintained documents rather than invented.
+"how does it work?", "what's the status?" and "why is it built this way?" are
+answered from a maintained document rather than invented.
 
 The panel does not render it: it is context the assistant answers from, not a
 page to read.
 
 > **Maintained by hand, for now.** Keep it short and keep it true. When it
-> disagrees with `decisions.md`, `product-brief.md` or `codebase-map.yaml`,
-> those win and this file is wrong. See `decisions.md` → D6.
+> disagrees with the code, the code wins and this file is wrong.
 
 ---
 
@@ -84,7 +83,7 @@ else — no model calls, no key, no quota, no state. The default backend
 (`client-v2/api/agent.mjs`) is where a model call does leave the browser: it
 forwards a chat-completions turn to an upstream configured server-side, so the
 key stays off the client. Every tool that touches your project still runs in
-the browser, behind the same approval gates. See `decisions.md` → D19.
+the browser, behind the same approval gates.
 
 - The providers share one vendor-neutral tool set (`createTools()`) and one
   turn loop: the default backend (whatever this deployment configured, reached
@@ -103,18 +102,23 @@ the browser, behind the same approval gates. See `decisions.md` → D19.
   provider to call on its side; a configuration that still names
   `"executor": "server"` loads, and that server is called from the browser like
   any other.
-- The tools map onto the playground: read and list files, read the last build
-  error, write a file, build, deploy. The gate lives inside each
+- The tools map onto the playground: read a file in the context, read the
+  last build error, write a file, build, deploy. The gate lives inside each
   state-changing tool's own `run` — `write_file`, `build` and `deploy` each
   `await PgAssistant.requestApproval(...)` and do not return until the user
   clicks, which holds the agent loop open. That is how "propose automatically,
   apply explicitly" is enforced in the loop itself, identically for every
   provider, rather than by the transport inspecting a call before it runs.
 - Project context comes from what the client already holds: `PgExplorer` for
-  files and the open tab, `PgProgramInfo` for the IDL and program ID,
-  `PgGlobal` for build and deploy state. Every turn carries the whole file
-  list, the open tabs by name, and the active tab in full; any other file is a
-  `read_file` away. The row above the composer names exactly that.
+  files and the open tabs, `PgProgramInfo` for the IDL and program ID,
+  `PgGlobal` for build and deploy state. Every turn carries the
+  conversation's context in full: the open tabs plus the files the user added
+  with + › Add a file, minus the ones they removed from it. No other path of
+  the project is sent, and `read_file` refuses any file outside the context,
+  telling the model to ask for it, so the user decides what of their code
+  goes to the model provider. The chips above the composer name exactly that,
+  one per file. One known limit: a failed build's compiler output is sent as
+  it is, and it can name or quote a file outside the context.
 - The panel is a new sidebar page, so it sits beside the editor without covering
   it, and it is the page the app opens on.
 - You stay in control of a turn: the backend is named above the chat and can be
@@ -123,12 +127,12 @@ the browser, behind the same approval gates. See `decisions.md` → D19.
   in prose instead of writing it, **Make this change** asks for the same edit as
   a patch — which still arrives as a diff you accept or reject. Inside a lesson
   step it reads **Write it for me**, because taking it skips the rest of the
-  hints. See `decisions.md` → D14.
+  hints.
 
 **One gap we had to close.** The client did not keep the compiler's output
 anywhere — the raw `stderr` was printed to the terminal and discarded, leaving
 only a `lastBuildFailed` boolean. Explaining a real error needs the compiler's
-real words, so the build command now stores it. See `decisions.md` → D4.
+real words, so the build command now stores it.
 
 ## Status
 
@@ -139,9 +143,8 @@ milestone demo works end to end.
 
 Done:
 
-- Repository mapped and verified — `codebase-map.yaml` records how the client
-  actually works, with file paths, and was checked by running it, not by reading
-  alone.
+- Repository mapped and verified — how the client actually works was checked
+  by running it, not by reading alone.
 - Local development unblocked: the client would not install until six Rust→WASM
   packages were compiled (~1 hour). `yarn setup` builds them into the
   checkout's own cargo target folders, and a new worktree starts from a copy of
@@ -152,7 +155,8 @@ Done:
 - Verified the client runs standalone against the public build server
   (`https://api.solpg.io`) — CORS allows `http://localhost:3000` and a real build
   returned in 3.5 seconds. No Docker, no Rust toolchain needed.
-- Runtime and architecture decided and written down (`decisions.md`).
+- Runtime and architecture decided: the assistant runs in the browser, with
+  two small routes deployed alongside the client.
 - The assistant panel: the default backend needs no key, only a GitHub
   sign-in, and is preselected when the deployment configured one; Anthropic,
   and OpenAI-compatible with
@@ -162,8 +166,8 @@ Done:
   from solana.com, `Solana V2` as the fork's default), the floating-panel
   layout (anatomy and navigation built on top of it; the classic layout, since
   removed), then **Flow** —
-  re-anatomizing the UI around the Write → Build → Deploy → Interact loop
-  (`decisions.md` → D10, D17). Flow is the only layout, a frame of four
+  re-anatomizing the UI around the Write → Build → Deploy → Interact loop.
+  Flow is the only layout, a frame of four
   columns with no header. From the left: the navigation (Home, New project,
   Tutorials, Programs, the project list under them, and its session
   footer: a cluster row, which opens the settings on the cluster, and an
@@ -299,24 +303,24 @@ Honesty rule for the demo — never present a mocked step as working.
 - **Prototype-grade:** the default backend's spend: sign-in decides who can
   spend the configured key, but nothing yet caps how much one signed-in user
   spends.
-- **Real, kept per tab:** your own key. It is kept in the tab's
-  `sessionStorage`: a reload keeps it and a new tab asks again, while a tab the
-  browser duplicates or restores (a reopened closed tab, a restored session)
-  carries it and reconnects, as after a reload. Forget key, in the panel
-  head's More menu, removes it. It goes from the browser straight to the provider as a header on
-  every request, never through our server, and is never logged or synced.
-  Project code runs in the same origin and could read it while the tab is open;
-  that is why it is not in `localStorage`.
+- **Real, held in memory only:** your own key. It is never written to
+  browser storage: a reload, a new tab, and a tab the browser duplicates or
+  restores all ask for it again, with the backend chosen before (provider,
+  model, base URL, effort, kept without the key in `localStorage`) already
+  picked. Delete my key, in Settings (Assistant) and in the panel head's More
+  menu, removes it and disconnects. It goes from the browser straight to the
+  provider as a header on every request, never through our server, and is
+  never logged or synced. Project code runs in the same origin and could read
+  it while the tab is open.
 
 ## Answering questions about this project
 
 When someone asks what this is, what is planned, how it works, or why it was
-built this way, answer from this file and from `decisions.md` — those are the
-maintained sources.
+built this way, answer from this file — it is the maintained source.
 
 Lead with the outcome, then the supporting detail. Be concrete: name the actual
 mechanism rather than gesturing at it. If something is not built yet, say so
 plainly — the credibility of the whole demo rests on not overclaiming.
 
-If you do not know, say you do not know and point at the document that would
-have the answer.
+Answer "why" only from what this file states. If it does not say, say you do
+not know rather than reconstructing a reason.

@@ -3,18 +3,29 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PgSession } from "@/features/auth";
+import * as reportModule from "@/shared/lib/report-button-failure";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import {
+  CONNECTION_LOST,
   PgAssistant,
   THREAD_NOT_SAVED,
 } from "../../../views/sidebar/assistant/store";
+import type { DefaultBackend } from "../model/default-backend";
 import type { Turn } from "../model/use-turn";
 import { Thread } from "./Thread";
+
+// The probe is the deployment's; a test says what it answered
+let backend: DefaultBackend = { state: "absent" };
+vi.mock("../model/default-backend", () => ({
+  useDefaultBackend: () => backend,
+}));
 
 /** The open lesson as the thread sees it; no lesson unless a test opens one */
 const lesson = vi.hoisted(() => ({
@@ -54,6 +65,20 @@ vi.mock("../../../views/flow/lessons", () => ({
 vi.mock("../../../views/sidebar/assistant/bridge/lesson-context", () => ({
   describeLesson: (state: { path: unknown }) =>
     state.path ? { verifiedBy: "A build proves this step" } : null,
+}));
+// Undo reads and writes the project through the real bridge, which reaches
+// the same barrel; the thread only decides when to offer it and what to report
+const undo = vi.hoisted(() => ({
+  can: vi.fn(() => false),
+  original: vi.fn((): string | undefined => undefined),
+  undo: vi.fn(
+    async (): Promise<
+      import("../../../views/sidebar/assistant/patch-undo").UndoResult
+    > => "undone"
+  ),
+}));
+vi.mock("../../../views/sidebar/assistant/patch-undo", () => ({
+  PgPatchUndo: undo,
 }));
 vi.mock("../../../components/Markdown", () => ({
   default: ({ children }: { children: string }) => <p>{children}</p>,
@@ -103,8 +128,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  undo.original.mockReturnValue(undefined);
   // The thread is still mounted here: RTL's own cleanup runs after this hook
   act(() => PgAssistant.clear());
+  act(() => PgAssistant.disconnect());
+  PgSession.reset();
+  backend = { state: "absent" };
   resetTelemetry();
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -158,6 +187,182 @@ describe("Thread, approvals", () => {
   });
 });
 
+describe("Thread, undo", () => {
+  const applied = () => {
+    act(() => {
+      PgAssistant.requestApproval(PATCH);
+      PgAssistant.resolveApproval(PgAssistant.items[0].id, true);
+    });
+  };
+
+  it("offers Undo patch on a card it can take back, and reports the undo once", async () => {
+    undo.can.mockReturnValue(true);
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Undo patch" }));
+    });
+
+    expect(undo.undo).toHaveBeenCalledWith(PgAssistant.items[0]);
+    expect(tracked()).toEqual([["assistant_patch_undone", { via: "card" }]]);
+  });
+
+  it("reports nothing when the file moved on", async () => {
+    undo.can.mockReturnValue(true);
+    undo.undo.mockResolvedValueOnce("moved-on");
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Undo patch" }));
+    });
+
+    expect(tracked()).toEqual([]);
+  });
+
+  it("reports a failed Undo on the button and counts no undo", async () => {
+    const report = vi.fn();
+    const reportFor = vi
+      .spyOn(reportModule, "reportButtonFailure")
+      .mockReturnValue(report);
+    const failure = new Error("the write failed");
+    undo.can.mockReturnValue(true);
+    undo.undo.mockRejectedValueOnce(failure);
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Undo patch" }));
+    });
+
+    expect(reportFor).toHaveBeenCalledWith("undo the patch");
+    expect(report).toHaveBeenCalledWith(failure);
+    expect(tracked()).toEqual([]);
+    reportFor.mockRestore();
+  });
+
+  it("offers the original to copy on a card whose Undo could not finish", () => {
+    undo.original.mockReturnValue("old");
+    applied();
+    render(
+      <TooltipProvider>
+        <Thread turn={stubTurn(false)} project="Counter" />
+      </TooltipProvider>
+    );
+    expect(
+      screen.getByRole("button", { name: "Copy the original" })
+    ).toBeTruthy();
+  });
+
+  it("offers nothing to copy on a card whose Undo did not strand", () => {
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(
+      screen.queryByRole("button", { name: "Copy the original" })
+    ).toBeNull();
+  });
+
+  it("offers no Undo patch on a card it cannot take back", () => {
+    undo.can.mockReturnValue(false);
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(screen.queryByRole("button", { name: "Undo patch" })).toBeNull();
+  });
+});
+
+describe("Thread, try again", () => {
+  const stopped = () => {
+    PgAssistant.addUserMessage("What does this program do?");
+    const id = PgAssistant.startAssistantMessage();
+    PgAssistant.appendToAssistantMessage(id, "The program");
+    PgAssistant.addNotice("Stopped.");
+  };
+
+  it("after Stop sends the last message again and reports it", () => {
+    stopped();
+    const send = vi.fn();
+    render(<Thread turn={stubTurn(false, send)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(send).toHaveBeenCalledWith("What does this program do?");
+    expect(tracked()).toEqual([
+      ["assistant_reply_retried", { after: "stopped" }],
+    ]);
+  });
+
+  it("after a cut-off reply sends the last message again", () => {
+    PgAssistant.addUserMessage("What does this program do?");
+    const id = PgAssistant.startAssistantMessage();
+    PgAssistant.appendToAssistantMessage(id, "The program");
+    PgAssistant.markCutOff(id);
+    const send = vi.fn();
+    render(<Thread turn={stubTurn(false, send)} project="Counter" />);
+
+    expect(screen.getByText("This reply was cut off.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(send).toHaveBeenCalledWith("What does this program do?");
+    expect(tracked()).toEqual([
+      ["assistant_reply_retried", { after: "interrupted" }],
+    ]);
+  });
+
+  it("after the connection dropped with no reply sends the last message again", () => {
+    PgAssistant.addUserMessage("What does this program do?");
+    PgAssistant.addError(CONNECTION_LOST);
+    const send = vi.fn();
+    render(<Thread turn={stubTurn(false, send)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(send).toHaveBeenCalledWith("What does this program do?");
+    expect(tracked()).toEqual([
+      ["assistant_reply_retried", { after: "interrupted" }],
+    ]);
+  });
+
+  it("offers no Try again once the turn applied a change", () => {
+    PgAssistant.addUserMessage("Rename the counter");
+    void PgAssistant.requestApproval({
+      type: "patch",
+      path: "src/lib.rs",
+      before: "old",
+      after: "new",
+    });
+    const card = PgAssistant.items.at(-1);
+    if (!card) throw new Error("the thread is empty");
+    PgAssistant.resolveApproval(card.id, true);
+    PgAssistant.addError(CONNECTION_LOST);
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    // Sent again, the same request would propose the applied patch once more
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("offers no Try again under any other error", () => {
+    PgAssistant.addUserMessage("What does this program do?");
+    PgAssistant.addError("The model declined this request.");
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("is not offered while a turn runs", () => {
+    stopped();
+    render(<Thread turn={stubTurn(true)} project="Counter" />);
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("is not offered once the conversation moved on", () => {
+    stopped();
+    PgAssistant.addUserMessage("Something else");
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+});
+
 describe("Thread, the working marker", () => {
   const marker = () =>
     screen.queryByRole("status", { name: "Assistant is working" });
@@ -193,6 +398,123 @@ describe("Thread, the working marker", () => {
     });
     render(<Thread turn={stubTurn(true)} project="Counter" />);
     expect(marker()).toBeNull();
+  });
+});
+
+describe("Thread, a refused key", () => {
+  const RECOVER = { provider: "openai" as const, model: "gpt-x" };
+  const REFUSED = "OpenAI did not accept this key.";
+  const withOpener = (openConnect: Turn["openConnect"]) =>
+    ({ busy: false, send: vi.fn(), openConnect } as unknown as Turn);
+  /** A turn whose composer reads `input`, for Use hosted model to fill */
+  const withInput = (input: string, setInput: Turn["setInput"]) =>
+    ({
+      busy: false,
+      send: vi.fn(),
+      openConnect: vi.fn(),
+      input,
+      setInput,
+    } as unknown as Turn);
+  const refuse = () =>
+    act(() => {
+      PgAssistant.addUserMessage("hi");
+      PgAssistant.addErrorWith(RECOVER)(REFUSED);
+    });
+  const hosted = () => {
+    backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
+  };
+  const signIn = () =>
+    act(() =>
+      // eslint-disable-next-line unicorn/no-null -- a session user's fields are `null` when GitHub gave none
+      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+    );
+
+  it("offers Change key on the error, opening Connect on that backend", () => {
+    refuse();
+    const openConnect = vi.fn();
+    render(<Thread turn={withOpener(openConnect)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Change key" }));
+
+    expect(openConnect).toHaveBeenCalledWith("key-rejected", RECOVER);
+  });
+
+  it("offers no hosted model on a deployment without one", () => {
+    refuse();
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(
+      screen.queryByRole("button", { name: "Use hosted model" })
+    ).toBeNull();
+  });
+
+  it("moves the thread to the hosted model, sends nothing and puts the message back", async () => {
+    hosted();
+    await signIn();
+    refuse();
+    const setInput = vi.fn();
+    const turn = withInput("", setInput);
+    render(<Thread turn={turn} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(PgAssistant.connection).toMatchObject({ id: "default" });
+    expect(turn.send).not.toHaveBeenCalled();
+    expect(setInput).toHaveBeenCalledWith("hi");
+    expect(tracked()).toContainEqual([
+      "assistant_model_picked",
+      { provider: "default", via: "key-rejected" },
+    ]);
+  });
+
+  it("leaves a draft in the composer as it is", async () => {
+    hosted();
+    await signIn();
+    refuse();
+    const setInput = vi.fn();
+    render(<Thread turn={withInput("draft", setInput)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(setInput).not.toHaveBeenCalled();
+  });
+
+  it("opens Connect on the hosted model for a signed-out user", () => {
+    hosted();
+    refuse();
+    const openConnect = vi.fn();
+    render(<Thread turn={withOpener(openConnect)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(openConnect).toHaveBeenCalledWith("key-rejected", {
+      provider: "default",
+    });
+    expect(PgAssistant.connection).toBeNull();
+  });
+
+  it("offers nothing once a reply came after the error", () => {
+    hosted();
+    refuse();
+    act(() => finishedReply("Hello."));
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(screen.queryByRole("button", { name: "Change key" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Use hosted model" })
+    ).toBeNull();
+  });
+
+  it("offers nothing for a backend this build does not have", () => {
+    act(() => {
+      PgAssistant.addUserMessage("hi");
+      PgAssistant.addErrorWith({
+        provider: "gone" as typeof RECOVER.provider,
+      })("Gone did not accept this key.");
+    });
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(screen.queryByRole("button", { name: "Change key" })).toBeNull();
   });
 });
 

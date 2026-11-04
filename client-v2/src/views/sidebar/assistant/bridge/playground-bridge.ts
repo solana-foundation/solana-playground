@@ -1,4 +1,11 @@
 import {
+  contextPathsWith,
+  normalizeProjectPath,
+  PgAssistantContext,
+} from "@/entities/assistant-context";
+import { merge3 } from "@/features/persistence/model/merge";
+
+import {
   PgBlockExplorer,
   PgCommand,
   PgConnection,
@@ -24,12 +31,12 @@ export interface ProjectContext {
   workspaceName: string | null;
   /** Relative path of the file the user is looking at */
   currentFilePath: string | null;
-  /** Content of that file */
-  currentFileContent: string | null;
-  /** Relative paths of every open editor tab, the current one included */
-  openFilePaths: string[];
-  /** Relative paths of every file in the project */
-  filePaths: string[];
+  /**
+   * The files in the conversation's context, in full: the open tabs and the
+   * files the user added, minus the ones they removed. No other file of the
+   * project is named here, so the user decides what reaches the model (HOO-2424)
+   */
+  contextFiles: { path: string; content: string }[];
   /** Compiler output from the last failed build, noise removed */
   buildError: string | null;
   /** Program interface, available only after a successful Anchor build */
@@ -57,17 +64,34 @@ export interface Patch {
  * real implementation is the default because most of it is genuinely real —
  * only the model call is simulated when there is no key.
  *
- * Reading is free. Everything that writes, builds or deploys is called only
- * after the user has approved it in the UI — the bridge does not gate, the
- * caller does.
+ * Reading is free on this side; what reaches the model is limited to the
+ * conversation's context by the tools and the prompt. Everything that
+ * writes, builds or deploys is called only after the user has approved it in
+ * the UI — the bridge does not gate, the caller does.
  */
 export interface PlaygroundBridge {
   getProjectContext(): ProjectContext;
+  /** Every file of the project; for the + menu, never sent to the model */
   listFiles(): string[];
   /** Relative paths of the editor's open tabs, in tab order */
   listOpenFiles(): string[];
+  /** Relative paths of the files in the conversation's context */
+  listContextFiles(): string[];
+  /**
+   * A path the model wrote (`/src/lib.rs`, `./src/lib.rs`) as `src/lib.rs`,
+   * or `undefined` when it names nothing in the project
+   */
+  toProjectPath(path: string): string | undefined;
+  /**
+   * Any file of the project, context or not: for the approval card and the
+   * tools' own checks. What the model may read goes through `read_file`,
+   * which checks `listContextFiles()` first; a new reader for the model must
+   * do the same
+   */
   readFile(path: string): string | null;
   applyPatch(patch: Patch): Promise<void>;
+  /** Removes a file; what Undo patch does to a file the patch created */
+  deleteFile(path: string): Promise<void>;
   build(): Promise<void>;
   /** @returns where the deployed program can be seen, when that is known */
   deploy(): Promise<{ programId: string; explorerUrl: string } | null>;
@@ -93,6 +117,25 @@ const summarizeIdl = (): IdlSummary | null => {
 };
 
 /** The real playground. */
+/**
+ * The text for a buffer the user typed into while a patch was being written:
+ * the patch with the typing folded in, or the typing alone when the two
+ * overlap, since autosave then writes it and a card can say the file moved on,
+ * while lost typing cannot be told at all
+ */
+const foldTyping = ({
+  base,
+  typed,
+  content,
+}: {
+  base: string;
+  typed: string;
+  content: string;
+}) => {
+  const merged = merge3(base, content, typed);
+  return merged.kind === "clean" ? merged.text : typed;
+};
+
 export const realBridge: PlaygroundBridge = {
   getProjectContext() {
     const currentFullPath = PgExplorer.currentFilePath;
@@ -101,11 +144,13 @@ export const realBridge: PlaygroundBridge = {
     return {
       workspaceName: PgExplorer.currentWorkspaceName ?? null,
       currentFilePath: currentFullPath ? toRelative(currentFullPath) : null,
-      currentFileContent: currentFullPath
-        ? PgExplorer.getFileContent(currentFullPath) ?? null
-        : null,
-      openFilePaths: this.listOpenFiles(),
-      filePaths: this.listFiles(),
+      // A file that cannot be read now (deleted between the listing and the
+      // read) is left out rather than sent as empty, which the model would
+      // take for the file's content
+      contextFiles: this.listContextFiles().flatMap((path) => {
+        const content = this.readFile(path);
+        return content === null ? [] : [{ path, content }];
+      }),
       buildError: build && build.failed ? stripKnownNoise(build.stderr) : null,
       idl: summarizeIdl(),
       programId: PgProgramInfo.getPkStr() ?? null,
@@ -129,14 +174,41 @@ export const realBridge: PlaygroundBridge = {
     return PgExplorer.tabs.map(toRelative);
   },
 
-  readFile(path) {
-    return (
-      PgExplorer.getFileContent(PgExplorer.convertToFullPath(path)) ?? null
+  listContextFiles() {
+    const files = new Set(this.listFiles());
+    return contextPathsWith((path) => files.has(path))(
+      this.listOpenFiles(),
+      PgAssistantContext.choice(PgExplorer.currentWorkspaceId)
     );
+  },
+
+  toProjectPath(path) {
+    // The full path the explorer itself uses, `/<workspace>/src/lib.rs`, is
+    // relative once its workspace prefix goes; anything else is read as
+    // relative to the project root
+    const name = PgExplorer.currentWorkspaceName;
+    const prefix = name ? `/${name}/` : undefined;
+    const trimmed = path.trim();
+    return normalizeProjectPath(
+      prefix && trimmed.startsWith(prefix)
+        ? trimmed.slice(prefix.length)
+        : trimmed
+    );
+  },
+
+  readFile(path) {
+    const fullPath = PgExplorer.convertToFullPath(path);
+    const saved = PgExplorer.getFileContent(fullPath);
+    // eslint-disable-next-line unicorn/no-null -- `PlaygroundBridge.readFile` types an absent file as null
+    if (saved === undefined) return null;
+    // Autosave lags typing by about 500 ms, so the explorer can be behind what
+    // the user sees: Undo would pass its check and overwrite the new typing
+    return PgExplorer.editorBuffers?.read(fullPath) ?? saved;
   },
 
   async applyPatch({ path, content }) {
     const fullPath = PgExplorer.convertToFullPath(path);
+    const buffered = PgExplorer.editorBuffers?.read(fullPath);
 
     // Write without touching tabs; the editor is synced separately below
     await PgExplorer.createItem(fullPath, content, {
@@ -159,7 +231,17 @@ export const realBridge: PlaygroundBridge = {
     const model = monaco.editor
       .getModels()
       .find((m) => m.uri.path === fullPath);
-    if (model && model.getValue() !== content) model.setValue(content);
+    if (!model) return;
+    const live = model.getValue();
+    const text =
+      buffered === undefined || live === buffered
+        ? content
+        : foldTyping({ base: buffered, typed: live, content });
+    if (live !== text) model.setValue(text);
+  },
+
+  async deleteFile(path) {
+    await PgExplorer.deleteItem(PgExplorer.convertToFullPath(path));
   },
 
   async build() {
@@ -179,3 +261,27 @@ export const realBridge: PlaygroundBridge = {
     };
   },
 };
+
+// A deleted file's choices go with it, so a new file made at its path is not
+// in the context until the user adds it. Here, not in the composer: the
+// store outlives the panel, and a delete while it is closed counts too
+PgExplorer.onDidDeleteItem((fullPath) => {
+  const path = realBridge.toProjectPath(fullPath);
+  if (path) {
+    PgAssistantContext.forget(PgExplorer.currentWorkspaceId, path);
+  }
+});
+
+// A renamed file or folder keeps its choices under its new path: a removal is
+// the user keeping a file from the model provider, and a rename must not undo
+// it. A workspace's own rename resolves to no project path and is skipped
+PgExplorer.onDidMoveItem(({ from, to }) => {
+  const before = realBridge.toProjectPath(from);
+  const after = realBridge.toProjectPath(to);
+  if (before && after) {
+    PgAssistantContext.move(PgExplorer.currentWorkspaceId, {
+      from: before,
+      to: after,
+    });
+  }
+});

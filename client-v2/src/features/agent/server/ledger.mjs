@@ -80,8 +80,26 @@ export const costOf = (usage, prices) =>
  *   | { kind: "unfinished" }} TurnEnd
  */
 
+/** The largest count a Postgres `integer` holds */
+const MAX_TOKENS = 2 ** 31 - 1;
+
 /**
- * What a turn is charged, in micro-USD.
+ * A token count fit for `agent_turn`, or null. The usage comes from the
+ * upstream, and a count that is fractional, negative, out of range or not a
+ * number would fail the statement that also settles the turn's charge.
+ *
+ * @param {unknown} count
+ * @returns {number | null}
+ */
+const tokenCount = (count) =>
+  Number.isSafeInteger(count) && count >= 0 && count <= MAX_TOKENS
+    ? count
+    : // eslint-disable-next-line unicorn/no-null -- stored in `agent_turn`: SQL `NULL` for a count it cannot hold
+      null;
+
+/**
+ * What a turn is charged, in micro-USD. A completed turn whose usage cannot
+ * be priced is charged its reservation, as one that reported none.
  *
  * @param {TurnEnd} end
  * @param {number} reserved the turn's reservation, in micro-USD
@@ -89,9 +107,24 @@ export const costOf = (usage, prices) =>
  */
 export const chargeFor = (end, reserved, prices) => {
   if (end.kind === "refused" || end.kind === "abandoned") return 0;
-  if (end.kind === "completed") return costOf(end.usage, prices);
+  if (end.kind === "completed" && isPriceable(end.usage)) {
+    return costOf(end.usage, prices);
+  }
   return reserved;
 };
+
+/**
+ * Whether reported usage can be priced: each count the upstream gave is one
+ * {@link tokenCount} accepts. A missing count is priced as none, as
+ * {@link costOf} does; one that is NaN, negative, fractional or out of range
+ * would make the charge one the ledger cannot store.
+ *
+ * @param {{ prompt_tokens?: unknown; completion_tokens?: unknown }} usage
+ */
+const isPriceable = (usage) =>
+  [usage.prompt_tokens, usage.completion_tokens].every(
+    (count) => count === undefined || tokenCount(count) !== null
+  );
 
 /**
  * Decide the caller's tier and reserve `amount` against their cap, in one
@@ -164,18 +197,63 @@ export const reserve = async (query, turn) => {
 };
 
 /**
- * Replace a turn's reservation with its charge, on the day it was reserved.
+ * Replace a turn's reservation with its charge, on the day it was reserved,
+ * and record the turn in `agent_turn`, in one statement: the route makes one
+ * round trip after the response. The turn is recorded even when the day has
+ * no row to settle. Tokens the upstream reported that `agent_turn` cannot
+ * hold are recorded as null rather than failing the settle.
  *
  * @param {Query} query
- * @param {{ userId: string; day: string; reserved: number; charge: number }} turn
- *   amounts in micro-USD; `day` the one {@link reserve} was given
+ * @param {{
+ *   userId: string;
+ *   day: string;
+ *   reserved: number;
+ *   charge: number;
+ *   tier: Tier;
+ *   end: TurnEnd;
+ * }} turn amounts in micro-USD; `day` the one {@link reserve} was given;
+ *   `tier` the one it returned; `end` how the turn ended, whose usage is
+ *   recorded for a `completed` turn only
  */
 export const settle = async (query, turn) => {
+  const usage = turn.end.kind === "completed" ? turn.end.usage : {};
   await query(
-    `update agent_spend
-        set reserved = reserved - $3::bigint,
-            spent = spent + $4::bigint
-      where user_id = $1 and day = $2::date`,
-    [turn.userId, turn.day, turn.reserved, turn.charge]
+    `with settled as (
+       update agent_spend
+          set reserved = reserved - $3::bigint,
+              spent = spent + $4::bigint
+        where user_id = $1 and day = $2::date
+     )
+     insert into agent_turn
+       (user_id, day, tier, outcome, prompt_tokens, completion_tokens, charged)
+     values ($1, $2::date, $5, $6, $7::integer, $8::integer, $4::bigint)`,
+    [
+      turn.userId,
+      turn.day,
+      turn.reserved,
+      turn.charge,
+      turn.tier,
+      turn.end.kind,
+      tokenCount(usage.prompt_tokens),
+      tokenCount(usage.completion_tokens),
+    ]
+  );
+};
+
+/**
+ * Count a turn the daily cap refused on the day's row. It reserved nothing,
+ * so there is nothing to settle; the count is what lets the quota's shape see
+ * refusals. A turn larger than the whole cap is refused on a day with no row
+ * yet, so this inserts one.
+ *
+ * @param {Query} query
+ * @param {{ userId: string; day: string }} turn `day` from {@link utcDay}
+ */
+export const recordCapped = async (query, turn) => {
+  await query(
+    `insert into agent_spend as s (user_id, day, capped)
+     values ($1, $2::date, 1)
+     on conflict (user_id, day) do update set capped = s.capped + 1`,
+    [turn.userId, turn.day]
   );
 };

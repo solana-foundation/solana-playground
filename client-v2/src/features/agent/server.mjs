@@ -16,12 +16,14 @@ export {
 } from "./server/bounds.mjs";
 export {
   chargeFor,
+  recordCapped,
   reserve,
   secondsToReset,
   settle,
   toMicro,
   utcDay,
 } from "./server/ledger.mjs";
+export { redactSecretsWith } from "./server/redact.mjs";
 export { usageReader } from "./server/stream-usage.mjs";
 export {
   DAILY_CAP_REASON,

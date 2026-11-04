@@ -18,8 +18,13 @@ import {
 } from "@/shared/ui/select";
 
 import Link from "../../../../components/Link";
-import { isSignInFailure, PgSession } from "../../../../features/auth";
+import {
+  isSignInFailure,
+  PgSession,
+  SIGN_IN_FAILED_UNKNOWN,
+} from "../../../../features/auth";
 import { useRenderOnChange } from "../../../../hooks/useRenderOnChange";
+import type { BackendParams } from "../model/backend-params";
 import { displayModelName, EFFORT_LABELS } from "../model/labels";
 import {
   type Effort,
@@ -66,16 +71,13 @@ const ALTERNATIVES = PROVIDERS.filter((p) => p.id !== "default");
 /** The prototype's field label: small, grey, in sentence case, untracked */
 const FIELD_LABEL = "text-[0.7rem] font-normal text-muted-foreground";
 
-/** The backend, and maybe the model, Connect a model opens on */
-export interface ConnectPreset {
-  /**
-   * A key-based backend, or the default only for a signed-out user: the
-   * form is where they sign in for it
-   */
-  provider: ModelProvider;
-  /** A model of the backend's own list, or its endpoint's model id */
-  model?: string;
-}
+/**
+ * The backend, and maybe its model, base URL and effort, Connect a model opens
+ * on: a key-based backend, or the default only for a signed-out user, for
+ * whom the form is where they sign in for it. A backend's parameters as a
+ * thread records them, so a field added there reaches the form too.
+ */
+export type ConnectPreset = BackendParams;
 
 /**
  * The form's one action. Its host draws it (`ConnectProps.frame`): Connect a
@@ -114,20 +116,28 @@ export interface ConnectProps {
   frame(parts: { action: ConnectAction; form: ReactNode }): ReactElement;
 }
 
-/** The endpoint fields a backend starts with, `model` in place of its own */
-const startEndpoint = (provider: ProviderInfo, model?: string) =>
+/** The endpoint fields a backend starts with, the preset's in place of its own */
+const startEndpoint = (provider: ProviderInfo, preset?: ConnectPreset) =>
   provider.endpoint
     ? {
-        baseUrl: provider.endpoint.baseUrl,
-        model: model ?? provider.endpoint.model,
+        baseUrl: preset?.baseUrl ?? provider.endpoint.baseUrl,
+        model: preset?.model ?? provider.endpoint.model,
       }
     : null;
 
-/** The settings a backend starts with, `model` in place of its default */
-const startSettings = (provider: ProviderInfo, model?: string) => {
+/**
+ * The settings a backend starts with, the preset's model and effort in place
+ * of its defaults where the backend offers them
+ */
+const startSettings = (provider: ProviderInfo, preset?: ConnectPreset) => {
   const settings = defaultSettings(provider);
-  if (settings && model && provider.modelSettings?.models.includes(model)) {
-    settings.model = model;
+  if (!settings || !provider.modelSettings) return settings;
+  const { models, efforts } = provider.modelSettings;
+  if (preset?.model && models.includes(preset.model)) {
+    settings.model = preset.model;
+  }
+  if (preset?.effort && efforts.includes(preset.effort)) {
+    settings.effort = preset.effort;
   }
   return settings;
 };
@@ -146,8 +156,12 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   const signedIn = !!PgSession.get();
   const startId = preset?.provider ?? current?.id ?? "default";
   const initial = PROVIDERS.find((p) => p.id === startId)!;
-  /** Opened on the backend already connected: its own key and choices */
-  const onCurrent = current?.id === startId ? current : null;
+  /**
+   * Opened on the backend already connected: its own key and choices. Not for
+   * a preset, which says what to start from; one naming the connected backend
+   * comes from Enter key, after the provider refused that very key.
+   */
+  const onCurrent = !preset && current?.id === startId ? current : null;
 
   const [providerId, setProviderId] = useState<ModelProvider>(startId);
   const [expanded, setExpanded] = useState(false);
@@ -165,12 +179,12 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   } | null>(() =>
     onCurrent?.endpoint
       ? { ...onCurrent.endpoint }
-      : startEndpoint(initial, preset?.model)
+      : startEndpoint(initial, preset)
   );
   const [settings, setSettings] = useState(() =>
     onCurrent?.settings
       ? { ...onCurrent.settings }
-      : startSettings(initial, preset?.model)
+      : startSettings(initial, preset)
   );
 
   /** The probe is still out: the default is neither offered nor ruled out yet */
@@ -230,7 +244,6 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
     endpoint: trimmedEndpoint,
     settings: activeSettings,
   };
-  const switching = !!current && !PgAssistant.isCurrent(next);
 
   const connect = () => PgAssistant.connect(next);
 
@@ -247,7 +260,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         return;
       }
       log.error(error, { report: true, context: { from: "assistant" } });
-      setSignInError("Sign-in failed. Try again.");
+      setSignInError(SIGN_IN_FAILED_UNKNOWN);
     });
   };
 
@@ -531,17 +544,10 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         <SignInError role="alert">{signInError}</SignInError>
       )}
 
-      {switching && (
-        <Note>
-          Switching starts a new conversation. The current one cannot be
-          replayed to another backend.
-        </Note>
-      )}
-
       {provider.needsKey && (
         <Note>
-          Kept in this tab until you press Forget key or close it; a copy of
-          this tab keeps it too. Sent only to{" "}
+          Kept in this tab&apos;s memory only, until you reload or close it or
+          press Delete my key. Sent only to{" "}
           {provider.endpoint ? "the endpoint above" : provider.name}, never to
           our server.
         </Note>

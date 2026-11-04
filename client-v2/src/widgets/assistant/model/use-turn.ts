@@ -1,36 +1,62 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
 import { PgSession } from "@/features/auth";
-import { report, toReplayMessages } from "@/features/persistence";
-import type { ModelProvider } from "@/shared/lib/ai";
+import { report, toReplayMessagesWith } from "@/features/persistence";
+import type { AiTurnError, ModelProvider } from "@/shared/lib/ai";
+import { isNetworkFailure } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 import { pushThread } from "../../../effects/chat-thread/push-thread";
 // Deep import rather than the `utils` barrel, as `effects/chat-thread` does
 import { PgExplorer } from "../../../utils/explorer/explorer";
+import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-bridge";
 import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
 import {
+  dropKeptKey,
   isDefaultBackendRemembered,
-  rememberedConnection,
+  rememberedChoice,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
+import { threadBackend } from "../../../views/sidebar/assistant/model/thread-backend";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import { TurnFailure } from "../../../views/sidebar/assistant/model/types";
+import {
+  isDefaultBackend,
+  TurnFailure,
+} from "../../../views/sidebar/assistant/model/types";
 import type {
   Connection,
   PromptRequest,
 } from "../../../views/sidebar/assistant/store";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import {
+  CONNECTION_LOST,
+  paramsOf,
+  PgAssistant,
+  STOPPED_NOTICE,
+} from "../../../views/sidebar/assistant/store";
 import { DEFAULT_CONNECTION } from "./connection";
 import { probeDefaultBackend } from "./default-backend";
+import { KEY_OWNER } from "./head-label";
 import type { AssistantEvents } from "./telemetry";
 import { assistantTelemetry } from "./telemetry";
 
 export type { ConnectPreset };
 
 const log = createLogger("assistant:turn");
+
+/**
+ * The open thread as the model's history, without the content of a file the
+ * user has taken out of the context since: a path is read the way `read_file`
+ * reads it
+ *
+ * @param context the context's project-relative paths now
+ */
+const replayFor = (context: readonly string[]) =>
+  toReplayMessagesWith((asked) => {
+    const path = realBridge.toProjectPath(asked);
+    return path !== undefined && context.includes(path);
+  })(PgAssistant.items);
 const connectLog = createLogger("assistant:connect");
 
 /**
@@ -62,6 +88,13 @@ const COME_BACK_LATER = "Send your message again in a minute.";
 const NOT_RESENT =
   "The model changed while your message waited, so it was not sent again. Send it again.";
 
+/** A message on its way to the model */
+interface Outgoing {
+  text: string;
+  /** Which retry this is, 0 for the first send */
+  attempt: number;
+}
+
 /** A message the model turned away for load, waiting to be sent again */
 interface BusyRetry {
   text: string;
@@ -75,18 +108,52 @@ interface BusyRetry {
   threadId: string | null;
   /** `PgAssistant.conversation` when it waited: a sign-out drops it too */
   conversation: number;
+  /** The backend the turn was sent to, which its outcome is reported under */
+  provider: ModelProvider;
 }
 
 /**
+ * The SDK's `AiTurnError` a turn failed with, which the provider keeps as its
+ * `TurnFailure`'s `cause`. By name, since the slice entry
+ * exports `AiTurnError` as a type only: the class loads with the SDK.
+ */
+const turnErrorOf = (error: unknown): AiTurnError | undefined => {
+  if (!(error instanceof Error)) return undefined;
+  if (error.name === "AiTurnError") return error as AiTurnError;
+  return error.name === "TurnFailure" ? turnErrorOf(error.cause) : undefined;
+};
+
+/**
+ * Whether a turn ended on the provider refusing the key: kind `key-refused`,
+ * a 401 or Gemini's 400 (`failureKindOf`). Not a 403, which providers also
+ * answer for a valid key without access to the model, a region or an
+ * organisation's policy; asking for the key again there loops, so a 403 gets
+ * the `forbidden` words.
+ */
+const isRejectedKey = (error: unknown) =>
+  turnErrorOf(error)?.kind === "key-refused";
+
+/**
+ * Whether the turn ended on the connection dropping: `runTurn` reports it as
+ * an `AiTurnError` of kind `network`; a send that failed before reaching it
+ * throws the dropped fetch itself.
+ */
+const isDroppedConnection = (error: unknown) =>
+  isNetworkFailure(error) || turnErrorOf(error)?.kind === "network";
+
+/**
  * Report a turn that ended without an answer: capped for the cost gate's
- * refusal, failed otherwise, with the `TurnFailure`'s reason and status, or
- * `other` for any error raised on this side.
+ * refusal, failed otherwise, with the `TurnFailure`'s reason and status. A
+ * dropped connection is the backend not answering (`provider`); anything else
+ * raised on this side is `other`. Never the error's text, which can quote the
+ * prompt. `runTurn` calls it for every failure but a busy model's, which
+ * `waitOnBusyWith` reports once it gives up.
  */
 const trackTurnFailureFor = (backend: ModelProvider) => (error: unknown) => {
   if (!(error instanceof TurnFailure)) {
     assistantTelemetry.track("assistant_turn_failed", {
       provider: backend,
-      reason: "other",
+      reason: isDroppedConnection(error) ? "provider" : "other",
     });
     return;
   }
@@ -157,6 +224,12 @@ export interface Turn {
   setInput(value: string): void;
   /** Open Connect a model, on `preset`'s backend when given */
   openConnect: ConnectOpener;
+  /**
+   * The off row's Add an API key: Connect a model, on the backend that answered
+   * the open thread when that one needs a key, so a key-based conversation is
+   * never offered to another backend from here either (HOO-1719)
+   */
+  addKey(): void;
   /** A requested prompt waits in the composer for a backend to be connected */
   promptWaiting: boolean;
   /** Bumped whenever the composer's input should take focus */
@@ -201,6 +274,55 @@ const connectDefault = async (): Promise<Connection | null> => {
   return PgAssistant.connection;
 };
 
+/** Where a send with nothing connected goes */
+type SendBackend =
+  /** The default, if this deployment serves it to this user */
+  | { kind: "default" }
+  /** A key-based backend: the user has to give its key in Connect a model */
+  | { kind: "ask"; via: "thread" | "send"; preset: ConnectPreset };
+
+/**
+ * The backend a send with nothing connected goes to: the one that last
+ * answered the open thread, else the one this browser last chose, else the
+ * default. A key-based answer is never replaced by the default, which would
+ * continue the user's conversation with their own model on another one
+ * behind their back (HOO-1719).
+ */
+const resolveSendBackend = (): SendBackend => {
+  const thread = threadBackend(PgAssistant.items);
+  if (thread) {
+    return isDefaultBackend(thread.provider)
+      ? { kind: "default" }
+      : { kind: "ask", via: "thread", preset: thread };
+  }
+  const choice = rememberedChoice();
+  if (choice && !isDefaultBackend(choice.provider)) {
+    return { kind: "ask", via: "send", preset: choice };
+  }
+  return { kind: "default" };
+};
+
+/**
+ * The backend Connect a model starts on when it is opened with nothing
+ * connected and no preset of its own: the one a send would ask for, or none
+ * (the default) when a send would take the default
+ */
+const unconnectedPreset = (): ConnectPreset | undefined => {
+  if (PgAssistant.connection) return undefined;
+  const backend = resolveSendBackend();
+  return backend.kind === "ask" ? backend.preset : undefined;
+};
+
+/**
+ * Connections the page made on its own, reconnecting a remembered default:
+ * nobody chose them for the thread now open. A send treats one as nothing
+ * connected when that thread was last answered by a key-based backend, so
+ * project A's conversation never goes to the default the user picked in
+ * project B (HOO-1719). A pick in Connect a model connects a new object, and
+ * from then on the user's choice holds.
+ */
+const restored = new WeakSet<Connection>();
+
 export const useTurn = ({ open }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
@@ -220,6 +342,11 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     threadId: string | null;
     /** `PgAssistant.conversation` when it was seeded */
     conversation: number;
+    /**
+     * Every file in the context at a send since it was seeded: what its
+     * history may hold the content of
+     */
+    context: ReadonlySet<string>;
     instance: Provider;
   } | null>(null);
   const turn = useRef<AbortController | null>(null);
@@ -255,6 +382,12 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   };
   const phase = phaseOf();
   const busy = phase !== "idle";
+  // Delete my key reads this through `PgAssistant.keyHold`, in the head and
+  // in Settings alike
+  useEffect(() => {
+    PgAssistant.markTurnBusy(busy);
+  }, [busy]);
+  useEffect(() => () => PgAssistant.markTurnBusy(false), []);
 
   const connection = usableConnection();
   // Connecting answers the hint; a later disconnect must not bring it back
@@ -263,31 +396,27 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   }, [connection]);
 
   /**
-   * Reconnect what this tab was using before a reload, without asking again.
+   * Reconnect the keyless default this browser chose before, without asking
+   * again: only once the probe confirms this deployment still serves it, and
+   * only for a signed-in user, tried again when a user arrives, since the
+   * session is read after this mounts and a sign-in can come later.
    *
-   * First the key-based backend kept in this tab's `sessionStorage` by
-   * `rememberBackend` (a new tab has none; a tab the browser duplicates or
-   * restores carries it). It needs no probe, so it is connected on mount,
-   * before the probe can answer, and the default's reconnect then finds a
-   * connection and stands down: a kept key wins over a remembered default.
-   *
-   * Then the keyless default, only if the user picked it before, only once
-   * the probe confirms this deployment still serves it, and only for a
-   * signed-in user: tried again when a user arrives, since the session is
-   * read after this mounts and a sign-in can come later.
+   * A key-based backend is never reconnected: its key lives in memory only,
+   * so a reload asks for it again, and the next send opens Connect a model
+   * preset to it (`resolveSendBackend`). A key an older build kept in this
+   * tab's `sessionStorage` is removed at startup (`effects/kept-key`), and
+   * again here, for a panel that mounts before the effects run (HOO-2423).
    *
    * `probeDefaultBackend` is shared with the composer and Connect a model, so
    * the page asks once (again only after a failure).
    *
-   * Neither overrules a live connection or a choice in progress in Connect a
-   * model. A Forget key stays forgotten because `forgetBackend` drops what
-   * both would read.
+   * It never overrules a live connection or a choice in progress in Connect a
+   * model, and a default reconnected here never answers a thread a key-based
+   * backend answered (`restored`). A Delete my key stays deleted because
+   * `forgetBackend` drops the remembered choice it reads.
    */
   useEffect(() => {
-    if (!PgAssistant.connection && !PgAssistant.isPickingBackend) {
-      const kept = rememberedConnection();
-      if (kept) PgAssistant.connect(kept);
-    }
+    dropKeptKey();
 
     let live = true;
     const reconnectDefault = () =>
@@ -297,6 +426,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
           if (PgAssistant.connection || PgAssistant.isPickingBackend) return;
           if (!isDefaultBackendRemembered() || !PgSession.get()) return;
           PgAssistant.connect(DEFAULT_CONNECTION);
+          if (PgAssistant.connection) restored.add(PgAssistant.connection);
         })
         .catch((error: unknown) => {
           // Nothing on screen asked for it: the panel opens unconnected, and
@@ -325,8 +455,16 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   // render's `open`; the ref hands it the latest
   const opener = useRef(open);
   opener.current = open;
+  // With nothing connected, Connect a model starts on the backend a send
+  // would ask for: the user's own key lives in memory only, so after a reload
+  // this is how they are asked for it again (HOO-2423)
   const openConnect = (via: ConnectVia, preset?: ConnectPreset) =>
-    opener.current(via, preset);
+    opener.current(via, preset ?? unconnectedPreset());
+
+  const addKey = () => {
+    const backend = resolveSendBackend();
+    openConnect("ai-off", backend.kind === "ask" ? backend.preset : undefined);
+  };
 
   /**
    * Whether a turn, a send still finding its backend, or a message waiting on
@@ -354,9 +492,24 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // Only a send with nothing connected waits, so a connected one has started
     // its turn by the time it first yields
     let current = usableConnection();
-    // Nothing connected: try the default. Connected to the default with no
-    // session falls through to Connect a model, which offers sign-in
+    if (current && restored.has(current)) {
+      const backend = resolveSendBackend();
+      if (backend.kind === "ask") {
+        setInput(text);
+        openConnect(backend.via, backend.preset);
+        return true;
+      }
+    }
+    // Nothing connected: the thread's own backend, or the default. Connected
+    // to the default with no session falls through to Connect a model, which
+    // offers sign-in
     if (!current && !PgAssistant.connection) {
+      const backend = resolveSendBackend();
+      if (backend.kind === "ask") {
+        setInput(text);
+        openConnect(backend.via, backend.preset);
+        return true;
+      }
       const project = PgExplorer.currentWorkspaceId;
       starting.current = true;
       try {
@@ -385,66 +538,117 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // or the model would carry the last project's turns. `conversation`
     // catches what is dropped with no thread change: sign-out with no thread
     // open would otherwise hand the next account the last one's history. A
-    // rebuild is harmless: the new provider is seeded from what is rendered.
+    // rebuild loses little: the new provider is seeded from the open thread,
+    // which drops provider-only parts and the oldest calls past the replay
+    // budget (`toReplayMessagesWith`).
+    //
+    // A file taken out of the context rebuilds it too: the history holds what
+    // the model read of it, and the replay leaves that out (`replayFor`)
+    const context = realBridge.listContextFiles();
     if (
       provider.current?.connection !== current ||
       provider.current.threadId !== PgAssistant.threadId ||
-      provider.current.conversation !== PgAssistant.conversation
+      provider.current.conversation !== PgAssistant.conversation ||
+      [...provider.current.context].some((path) => !context.includes(path))
     ) {
       provider.current = {
         connection: current,
         threadId: PgAssistant.threadId,
         conversation: PgAssistant.conversation,
-        // Seeded from what is rendered, so reopening a stored thread gives the
-        // model the conversation rather than amnesia behind a full transcript
-        instance: createProvider(current, toReplayMessages(PgAssistant.items)),
+        context: new Set(context),
+        // Seeded from the open thread, its stored tool calls included, so
+        // reopening it gives the model the conversation and what its tools
+        // returned
+        instance: createProvider(current, replayFor(context)),
       };
+    } else {
+      provider.current.context = new Set([
+        ...provider.current.context,
+        ...context,
+      ]);
     }
     PgAssistant.addUserMessage(trimmed);
     // Cleared only once the message is in: a store that throws leaves the
     // typed text where the user can send it again
     setInput("");
-    await runTurn(trimmed, 0);
+    await runTurn({ text: trimmed, attempt: 0 });
     return true;
   };
   /**
    * One request for a message already in the thread, on the provider `start`
    * chose: the first send, or a busy message sent again.
-   *
-   * @param attempt which retry this is, 0 for the first send
    */
-  const runTurn = async (text: string, attempt: number) => {
+  const runTurn = async (outgoing: Outgoing) => {
+    const { text, attempt } = outgoing;
     if (!provider.current) {
       throw new Error("runTurn has no provider: start builds one first");
     }
-    const {
-      instance,
-      connection: { id: backend },
-    } = provider.current;
+    const { instance, connection: current } = provider.current;
     const controller = new AbortController();
     turn.current = controller;
     PgAssistant.beginTurn(controller);
     PgAssistant.setStatus("running");
     // A busy message sent again is the same turn, so only the first attempt reports a send
     if (attempt === 0) {
-      assistantTelemetry.track("assistant_turn_sent", { provider: backend });
+      assistantTelemetry.track("assistant_turn_sent", { provider: current.id });
     }
 
     try {
-      await instance.send(text, controller.signal);
+      await instance.send(text, { signal: controller.signal });
       // A provider may resolve after Stop, which has already ended the turn
       if (!controller.signal.aborted) {
         assistantTelemetry.track("assistant_turn_answered", {
-          provider: backend,
+          provider: current.id,
         });
       }
     } catch (e) {
+      const cutReply = isDroppedConnection(e)
+        ? PgAssistant.turnReplyWithText()
+        : undefined;
+      // A stopped turn's outcome is `stop`'s; a busy one waits for its resend
+      if (!controller.signal.aborted && !(e instanceof ModelBusyError)) {
+        trackTurnFailureFor(current.id)(e);
+      }
       if (!controller.signal.aborted && e instanceof ModelBusyError) {
-        // A busy answer sent again ends no turn; the one the panel gives up on does
-        if (!waitOnBusy(text, attempt, e)) trackTurnFailureFor(backend)(e);
+        waitOnBusyWith(current.id)(outgoing, e);
+      } else if (
+        !controller.signal.aborted &&
+        isRejectedKey(e) &&
+        !isDefaultBackend(current.id)
+      ) {
+        // The key-based backend refused the key: say whose, as the head does;
+        // the error's buttons say what to do (`Thread`)
+        const { id } = current;
+        const name = id === "default" ? id : KEY_OWNER[id];
+        PgAssistant.addErrorWith(paramsOf(current))(
+          `${name} did not accept this key.`
+        );
+        assistantTelemetry.track("assistant_key_rejected", {
+          provider: current.id,
+        });
+        connectLog.warn("the provider refused the key", {
+          context: { provider: current.id },
+        });
+      } else if (!controller.signal.aborted && cutReply) {
+        // The reply keeps what it streamed and says it was cut off
+        PgAssistant.markCutOff(cutReply);
+        log.warn("the connection dropped mid-reply", {
+          context: { error: e instanceof Error ? e.message : String(e) },
+        });
+        assistantTelemetry.track("assistant_reply_failed", {
+          reason: "interrupted",
+        });
+      } else if (!controller.signal.aborted && isDroppedConnection(e)) {
+        // No reply text to keep: say so in words, with Try again (`isConnectionLost`)
+        PgAssistant.addError(CONNECTION_LOST);
+        log.warn("the connection dropped before the reply", {
+          context: { error: e instanceof Error ? e.message : String(e) },
+        });
+        assistantTelemetry.track("assistant_reply_failed", {
+          reason: "connection-lost",
+        });
       } else if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
-        trackTurnFailureFor(backend)(e);
       } else if (isAbort(e)) {
         // Aborted by `stop`, which has already written its notice, or by the
         // store cutting the turn off, when there is nothing to tell the user
@@ -476,33 +680,33 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * A busy model: count down and send the message again, up to
    * `BUSY_RETRIES` times, then say so in the thread. The wait is the
    * server's when it names one, and Try now is off until it ends; a wait past
-   * `BUSY_WAIT_MAX_SECONDS` is not counted down at all.
+   * `BUSY_WAIT_MAX_SECONDS` is not counted down at all; giving up reports the
+   * turn as failed.
    *
-   * @returns whether the message waits to be sent again; `false` once the
-   *   thread said to come back later, which ends the turn
+   * @param backend the backend the turn was sent to, which giving up reports
    */
-  const waitOnBusy = (
-    text: string,
-    attempt: number,
-    busyError: ModelBusyError
-  ): boolean => {
-    const seconds = Math.max(1, busyError.waitSeconds ?? BUSY_WAIT_SECONDS);
-    if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
-      PgAssistant.addError(`${busyError.message} ${COME_BACK_LATER}`);
-      return false;
-    }
-    const at = Date.now();
-    setNow(at);
-    setWaiting({
-      text,
-      at: at + seconds * 1000,
-      canTryNow: busyError.waitSeconds === undefined,
-      attempt: attempt + 1,
-      threadId: PgAssistant.threadId,
-      conversation: PgAssistant.conversation,
-    });
-    return true;
-  };
+  const waitOnBusyWith =
+    (backend: ModelProvider) =>
+    (outgoing: Outgoing, busyError: ModelBusyError) => {
+      const { text, attempt } = outgoing;
+      const seconds = Math.max(1, busyError.waitSeconds ?? BUSY_WAIT_SECONDS);
+      if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
+        PgAssistant.addError(`${busyError.message} ${COME_BACK_LATER}`);
+        trackTurnFailureFor(backend)(busyError);
+        return;
+      }
+      const at = Date.now();
+      setNow(at);
+      setWaiting({
+        text,
+        at: at + seconds * 1000,
+        canTryNow: busyError.waitSeconds === undefined,
+        attempt: attempt + 1,
+        threadId: PgAssistant.threadId,
+        conversation: PgAssistant.conversation,
+        provider: backend,
+      });
+    };
 
   // Another thread, or a sign-out, while a message waits: it belongs to the
   // conversation it was written in, so it is dropped, not sent here. That
@@ -540,15 +744,14 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     const current = usableConnection();
     if (!current || provider.current?.connection !== current) {
       PgAssistant.addError(NOT_RESENT);
-      // `provider.current` still holds the connection the turn was sent on
-      if (provider.current) {
-        trackTurnFailureFor(provider.current.connection.id)(
-          new Error(NOT_RESENT)
-        );
-      }
+      // The turn ends here, on this side: no backend saw the resend
+      assistantTelemetry.track("assistant_turn_failed", {
+        provider: held.provider,
+        reason: "other",
+      });
       return;
     }
-    await runTurn(held.text, held.attempt);
+    await runTurn({ text: held.text, attempt: held.attempt });
   };
   const resendRef = useRef(resend);
   resendRef.current = resend;
@@ -599,7 +802,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (!turn.current || turn.current.signal.aborted) return;
     turn.current.abort();
     PgAssistant.cancelPending();
-    PgAssistant.addNotice("Stopped.");
+    PgAssistant.addNotice(STOPPED_NOTICE);
     assistantTelemetry.track("assistant_turn_stopped", {});
   };
 
@@ -645,9 +848,24 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     };
     return PgAssistant.onDidRequestPrompt(
       (request) => {
+        // Nothing is sent, so no backend is needed: the prompt takes the
+        // composer and its focus whether or not one is connected
+        if (!request.send) {
+          place(request.text);
+          return;
+        }
         if (usableConnection()) {
           run(request);
           return;
+        }
+        if (!PgAssistant.connection) {
+          const backend = resolveSendBackend();
+          if (backend.kind === "ask") {
+            setInput(request.text);
+            setPromptWaiting(true);
+            openConnect(backend.via, backend.preset);
+            return;
+          }
         }
         const project = PgExplorer.currentWorkspaceId;
         Promise.all([probeDefaultBackend(), isSignedIn()])
@@ -673,7 +891,9 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
               run(request);
               return;
             }
-            setInput(request.text);
+            // Focused first, so Connect a model gives focus back to the
+            // composer holding the prompt when it closes
+            place(request.text);
             setPromptWaiting(true);
             openConnect("send");
           })
@@ -703,6 +923,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     input,
     setInput,
     openConnect,
+    addKey,
     promptWaiting,
     focusRequest,
   };

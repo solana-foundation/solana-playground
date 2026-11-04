@@ -2,6 +2,7 @@ import type {
   ApprovalRequest,
   ChatItem,
 } from "../../../views/sidebar/assistant/store";
+import { TOOL_NAME } from "./tool-call";
 
 /**
  * Unchanged lines kept either side of a change.
@@ -178,10 +179,64 @@ const isStoredItem = (value: unknown): value is StoredItem => {
  * An `updatedAt` that does not parse is dropped rather than costing the item:
  * the item falls back to `createdAt` as its version. Kept, it would be
  * uploaded with every push of the thread, and the server refuses a whole
- * thread over one item it cannot cast.
+ * thread over one item it cannot cast. An approval card's `undo` that the
+ * card cannot have is dropped too (`withValidUndo`). A tool item whose stored
+ * call a replay could not send is not one (`isReplayableCall`).
  */
 export const decodeItem = (stored: unknown): ChatItem | null => {
   if (!isStoredItem(stored)) return null;
+  // A stored call is an item of its own, never a marker: one a replay could
+  // not send goes whole, so it costs that call, not every later turn, and is
+  // not drawn as a second marker either
+  if (
+    stored.kind === "tool" &&
+    "call" in stored &&
+    !isReplayableCall(stored.call)
+  ) {
+    // eslint-disable-next-line unicorn/no-null -- `decodeItem` answers `null` for a dropped item, as above
+    return null;
+  }
+  return withValidUndo(withValidVersion(stored));
+};
+
+/**
+ * Whether a tool item's stored call can be replayed: a name and an output
+ * that are non-empty text, an input that is a plain object (Anthropic refuses
+ * any other, and an empty text block), and `failed` absent or `true`.
+ */
+const isReplayableCall = (call: unknown) => {
+  if (!call || typeof call !== "object") return false;
+  const { name, input, output, failed } = call as Record<string, unknown>;
+  return (
+    typeof name === "string" &&
+    TOOL_NAME.test(name) &&
+    typeof output === "string" &&
+    output.trim() !== "" &&
+    typeof input === "object" &&
+    input !== null &&
+    !Array.isArray(input) &&
+    (failed === undefined || failed === true)
+  );
+};
+
+/**
+ * An approval card keeps an undo state only where Undo patch can leave one
+ * (`PgAssistant.markUndone`, `markUndoStranded`, `clearUndoStranded`): on an
+ * allowed patch card, as one of its states
+ */
+const withValidUndo = (item: ChatItem): ChatItem => {
+  if (item.kind !== "approval" || item.undo === undefined) return item;
+  const valid =
+    item.status === "allowed" &&
+    item.request.type === "patch" &&
+    (item.undo === "done" || item.undo === "stranded");
+  if (valid) return item;
+  const card = { ...item };
+  delete card.undo;
+  return card;
+};
+
+const withValidVersion = (stored: ChatItem): ChatItem => {
   if (stored.updatedAt === undefined) return stored;
   if (
     typeof stored.updatedAt === "string" &&
@@ -291,6 +346,35 @@ if (import.meta.vitest) {
         );
       });
 
+      it("keeps an undone patch undone and a reply's state", () => {
+        const undone: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "approval",
+          status: "allowed",
+          undo: "done",
+          request: {
+            type: "patch",
+            path: "src/lib.rs",
+            before: "a",
+            after: "b",
+          },
+        };
+        const cut: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "assistant",
+          text: "The program",
+          state: "cut-off",
+        };
+
+        expect(encodeItem(undone)).toMatchObject({ undo: "done" });
+        expect(encodeItem(cut)).toMatchObject({ state: "cut-off" });
+        // And back, through JSON as storage and the server hold it
+        const stored = JSON.parse(JSON.stringify([undone, cut]));
+        expect(decodeThread(stored)).toEqual([undone, cut]);
+      });
+
       it("stores a pending approval as unanswered, since it can never resume", () => {
         const item: ChatItem = {
           ...base,
@@ -365,6 +449,68 @@ if (import.meta.vitest) {
       });
     });
 
+    describe("decodeItem", () => {
+      /** A stored patch card, as another build or a hand edit may have left it */
+      const storedCardOf =
+        (type: string) => (status: string, undo: unknown) => ({
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "approval",
+          status,
+          undo,
+          request:
+            type === "patch"
+              ? { type, path: "src/lib.rs", before: "a", after: "b" }
+              : { type, name: "build" },
+        });
+      const storedCard = storedCardOf("patch");
+      const undoOf = (item: ChatItem | null) =>
+        item?.kind === "approval" ? item.undo : "not a card";
+
+      it("keeps an allowed patch card's undo state", () => {
+        expect(undoOf(decodeItem(storedCard("allowed", "stranded")))).toBe(
+          "stranded"
+        );
+      });
+
+      it("keeps a refused key's backend and a reply's origin, through storage and a merge", () => {
+        const refused: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "error",
+          text: "OpenAI did not accept this key.",
+          recover: { provider: "openai", model: "gpt-x" },
+        };
+        const reply: ChatItem = {
+          id: "22222222-2222-4222-8222-222222222222",
+          createdAt: base.createdAt,
+          kind: "assistant",
+          text: "hi",
+          origin: { provider: "anthropic", effort: "high" },
+        };
+
+        const stored = JSON.parse(
+          JSON.stringify(encodeThread([refused, reply]))
+        );
+        const decoded = decodeThread(stored);
+
+        expect(decoded).toEqual([refused, reply]);
+        expect(mergeThreads(decoded, [])).toEqual([refused, reply]);
+      });
+
+      it("drops an undo state the card cannot have", () => {
+        expect(
+          undoOf(decodeItem(storedCard("denied", "done")))
+        ).toBeUndefined();
+        expect(
+          undoOf(decodeItem(storedCardOf("command")("allowed", "done")))
+        ).toBeUndefined();
+        expect(
+          undoOf(decodeItem(storedCard("allowed", "maybe")))
+        ).toBeUndefined();
+      });
+    });
+
     describe("decodeThread", () => {
       it("round-trips text items", () => {
         const items: ChatItem[] = [
@@ -396,6 +542,98 @@ if (import.meta.vitest) {
         ];
 
         expect(decodeThread(encodeThread(items))).toHaveLength(items.length);
+      });
+
+      it("keeps a tool item's stored call", () => {
+        const items: ChatItem[] = [
+          {
+            id: base.id,
+            createdAt: base.createdAt,
+            kind: "tool",
+            label: "read_file",
+            call: {
+              name: "read_file",
+              input: { path: "src/lib.rs" },
+              output: "fn main() {}",
+              failed: true,
+            },
+          },
+        ];
+
+        expect(decodeThread(encodeThread(items))).toEqual(items);
+      });
+
+      it.each([
+        ["a name that is not text", { name: 1, input: {}, output: "x" }],
+        ["an empty name", { name: "", input: {}, output: "x" }],
+        [
+          "a name no backend takes",
+          { name: "functions.read", input: {}, output: "x" },
+        ],
+        ["no input", { name: "read_file", output: "x" }],
+        [
+          "an input that is text",
+          { name: "read_file", input: "{", output: "x" },
+        ],
+        [
+          "an input that is a list",
+          { name: "read_file", input: [], output: "x" },
+        ],
+        [
+          "an output that is not text",
+          // eslint-disable-next-line unicorn/no-null -- stored JSON: `null` is what a bad row holds
+          { name: "read_file", input: {}, output: null },
+        ],
+        ["an empty output", { name: "read_file", input: {}, output: " " }],
+        [
+          "failed: false",
+          { name: "read_file", input: {}, output: "x", failed: false },
+        ],
+        // eslint-disable-next-line unicorn/no-null -- stored JSON: `null` is what a bad row holds
+        ["no call at all", null],
+      ])("drops a tool item whose stored call has %s", (_, call) => {
+        const stored = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "tool",
+          label: "read_file",
+          call,
+        };
+
+        expect(decodeThread([stored])).toEqual([]);
+      });
+
+      it.each([
+        ["a wrapped input", { value: "{bad" }, "x"],
+        ["an omitted input", { omitted: "9000 characters of input" }, "x"],
+        ["no output", {}, "(no output)"],
+        // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
+      ])("keeps a stored call with %s through storage", (_, input, output) => {
+        const record: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "tool",
+          label: "read_file",
+          call: { name: "read_file", input, output, failed: true },
+        };
+
+        expect(
+          decodeThread(JSON.parse(JSON.stringify(encodeThread([record]))))
+        ).toEqual([record]);
+      });
+
+      it("keeps a stored call through a merge with a local copy of the same item", () => {
+        const record: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "tool",
+          label: "read_file",
+          call: { name: "read_file", input: {}, output: "fn main() {}" },
+        };
+        const pulled = decodeThread(JSON.parse(JSON.stringify([record])));
+
+        expect(mergeThreads([record], pulled)).toEqual([record]);
+        expect(mergeThreads(pulled, [record])).toEqual([record]);
       });
 
       it("drops hand-edited junk rather than throwing", () => {

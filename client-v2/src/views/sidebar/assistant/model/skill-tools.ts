@@ -1,3 +1,4 @@
+import { bindToolFor } from "@/entities/agent-tools";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 import {
@@ -27,88 +28,125 @@ const explain = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * @returns vendor-neutral tool definitions, so every provider gets them
  */
 export const createSkillTools = (): ToolDefinition[] => [
-  {
-    name: "list_skills",
-    description:
-      "List the enabled skills with what each covers. Returns the same " +
-      "catalogue the system prompt already lists, so there is no need to " +
-      "call it before load_skill.",
-    schema: { type: "object", properties: {}, additionalProperties: false },
-    run: () => {
-      PgAssistant.addToolCall("listed the skills");
-      return describeCatalog(PgAssistant.enabledSkills);
-    },
-  },
+  bindToolFor("list_skills")(() => {
+    PgAssistant.addToolCall("listed the skills");
+    return describeCatalog(PgAssistant.enabledSkills);
+  }),
 
-  {
-    name: "load_skill",
-    description:
-      "Read a skill's main document. The document names its own reference " +
-      "files; read those with read_skill_reference rather than guessing at " +
-      "their contents. Returns an error string if the id is unknown, the " +
-      "skill is switched off, or the fetch fails.",
-    schema: {
-      type: "object",
-      properties: {
-        id: {
-          type: "string",
-          description: "Skill id from list_skills, e.g. playground-env",
-        },
-      },
-      required: ["id"],
-      additionalProperties: false,
-    },
-    run: async (input) => {
-      const id = str(input, "id");
-      try {
-        const skill = requireSkill(
-          id,
-          PgAssistant.skills,
-          PgAssistant.enabledSkillIds
-        );
-        PgAssistant.addToolCall(`loaded the ${skill.name} skill`);
-        return await loadSkill(skill);
-      } catch (e) {
-        return `Could not load ${id}: ${explain(e)}`;
-      }
-    },
-  },
+  bindToolFor("load_skill")(async (input) => {
+    const id = str(input, "id");
+    try {
+      const skill = requireSkill(
+        id,
+        PgAssistant.skills,
+        PgAssistant.enabledSkillIds
+      );
+      PgAssistant.addToolCall(`loaded ${skill.name}`);
+      return await loadSkill(skill);
+    } catch (e) {
+      return `Could not load ${id}: ${explain(e)}`;
+    }
+  }),
 
-  {
-    name: "read_skill_reference",
-    description:
-      "Read one reference file belonging to a skill, using a path the " +
-      "skill's own document gave you. Paths are relative to the skill " +
-      "folder, e.g. references/common-errors.md; a path outside that " +
-      "folder is rejected. Bundled skills such as playground-env have no " +
-      "reference files. Very large files come back truncated with a marker.",
-    schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Skill id, e.g. solana-dev" },
-        path: {
-          type: "string",
-          description:
-            "Path relative to the skill folder, e.g. references/security.md",
-        },
-      },
-      required: ["id", "path"],
-      additionalProperties: false,
-    },
-    run: async (input) => {
-      const id = str(input, "id");
-      const path = str(input, "path");
-      try {
-        const skill = requireSkill(
-          id,
-          PgAssistant.skills,
-          PgAssistant.enabledSkillIds
-        );
-        PgAssistant.addToolCall(`read ${skill.id}/${path}`);
-        return await loadReference(skill, path);
-      } catch (e) {
-        return `Could not read ${path} from ${id}: ${explain(e)}`;
-      }
-    },
-  },
+  bindToolFor("read_skill_reference")(async (input) => {
+    const id = str(input, "id");
+    const path = str(input, "path");
+    try {
+      const skill = requireSkill(
+        id,
+        PgAssistant.skills,
+        PgAssistant.enabledSkillIds
+      );
+      PgAssistant.addToolCall(`read ${skill.id}/${path}`);
+      return await loadReference(skill, path);
+    } catch (e) {
+      return `Could not read ${path} from ${id}: ${explain(e)}`;
+    }
+  }),
 ];
+
+if (import.meta.vitest) {
+  const { describe, it, expect, vi, afterEach } = import.meta.vitest;
+  type SkillEntry = import("../grounding").SkillEntry;
+
+  describe("views/sidebar/assistant/model/skill-tools", () => {
+    const SOLANA_DEV: SkillEntry = {
+      id: "solana-dev",
+      name: "Official Solana developer skill",
+      description: "d",
+      source: {
+        type: "remote",
+        baseUrl: "https://skills.test/solana-dev/",
+        entry: "SKILL.md",
+      },
+      enabled: true,
+    };
+
+    const tool = (name: string) => {
+      const found = createSkillTools().find((t) => t.name === name);
+      if (!found) throw new Error(`no tool ${name}`);
+      return found;
+    };
+
+    /** The server lists `solana-dev`; the user has it on or off */
+    const listed = (on: boolean) => {
+      vi.spyOn(PgAssistant, "skills", "get").mockReturnValue([SOLANA_DEV]);
+      vi.spyOn(PgAssistant, "enabledSkillIds", "get").mockReturnValue(
+        on ? [SOLANA_DEV.id] : []
+      );
+      const fetch = vi.fn(async () => new Response("# skill", { status: 200 }));
+      vi.stubGlobal("fetch", fetch);
+      const addToolCall = vi.spyOn(PgAssistant, "addToolCall");
+      return { fetch, addToolCall };
+    };
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    });
+
+    it("refuses to load a skill switched off, without fetching it", async () => {
+      const { fetch, addToolCall } = listed(false);
+
+      const result = await tool("load_skill").run({ id: "solana-dev" });
+
+      expect(result).toMatch(/^Could not load solana-dev: .*switched off/);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(addToolCall).not.toHaveBeenCalled();
+    });
+
+    it("refuses to read a reference of a skill switched off", async () => {
+      const { fetch, addToolCall } = listed(false);
+
+      const result = await tool("read_skill_reference").run({
+        id: "solana-dev",
+        path: "references/security.md",
+      });
+
+      expect(result).toMatch(
+        /^Could not read references\/security.md from solana-dev: .*switched off/
+      );
+      expect(fetch).not.toHaveBeenCalled();
+      expect(addToolCall).not.toHaveBeenCalled();
+    });
+
+    it("still tells an unknown id apart from one switched off", async () => {
+      listed(true);
+
+      const result = await tool("load_skill").run({ id: "no-such-skill" });
+
+      expect(result).toMatch(/There is no skill with id "no-such-skill"/);
+    });
+
+    it("loads a skill that is on, naming it once in the tool-call line", async () => {
+      const { addToolCall } = listed(true);
+
+      const result = await tool("load_skill").run({ id: "solana-dev" });
+
+      expect(result).toBe("# skill");
+      // The catalogue's name already ends in "skill"
+      expect(addToolCall).toHaveBeenCalledWith(`loaded ${SOLANA_DEV.name}`);
+      expect(addToolCall.mock.calls[0][0]).not.toMatch(/skill skill/);
+    });
+  });
+}

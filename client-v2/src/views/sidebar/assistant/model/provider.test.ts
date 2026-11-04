@@ -1,10 +1,25 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import {
   DAILY_CAP_REASON,
   POOL_EXHAUSTED_REASON,
   REFUSAL_MESSAGES,
 } from "@/features/agent";
+import { toReplayMessagesWith } from "@/features/persistence";
+import {
+  decodeThread,
+  encodeThread,
+  mergeThreads,
+} from "@/features/persistence/model/chat-codec";
+import { PgChatStorage } from "@/features/persistence/model/chat-storage";
 import {
   anthropicText,
   fakeFetch,
@@ -14,6 +29,11 @@ import {
   sse,
 } from "@/shared/lib/ai/__fixtures__/fake-provider";
 import {
+  initLogger,
+  memoryProvider as memoryLog,
+  resetLogger,
+} from "@/shared/lib/logger";
+import {
   initTelemetry,
   memoryProvider,
   resetTelemetry,
@@ -21,7 +41,7 @@ import {
 
 import { PgSession } from "../../../../features/auth";
 import { DEFAULT_BACKEND_URL, MAX_RESUMES, MAX_STEPS } from "../config";
-import { type ChatItem, PgAssistant } from "../store";
+import { type ChatItem, isToolCallRecord, PgAssistant } from "../store";
 import { ModelBusyError } from "./model-busy";
 import { MODEL_PROVIDER_PROFILES } from "./model-providers";
 import { createProvider } from "./provider";
@@ -40,10 +60,34 @@ vi.mock("./prompt", () => ({
   describeProject: () => "project",
 }));
 
+/** Holds the `slow` tool until a test lets it finish */
+const slow = vi.hoisted(() => {
+  let release = () => {};
+  let started = () => {};
+  return {
+    started: new Promise<void>((resolve) => (started = resolve)),
+    reset() {
+      this.started = new Promise<void>((resolve) => (started = resolve));
+    },
+    run: () =>
+      new Promise<string>((resolve) => {
+        release = () => resolve("Done slowly.");
+        started();
+      }),
+    release: () => release(),
+  };
+});
+
 vi.mock("./tools", async () => {
   const { PgAssistant: assistant } = await import("../store");
   return {
     createTools: () => [
+      {
+        name: "slow",
+        description: "Takes a while",
+        schema: { type: "object", properties: {}, additionalProperties: false },
+        run: () => slow.run(),
+      },
       {
         name: "write_file",
         description: "Write a file",
@@ -147,14 +191,17 @@ const anthropicThinkingThenText = (thinking: string, text: string) =>
 const defaultBackend = () => createProvider({ id: "default", apiKey: "" });
 const anthropic = () => createProvider({ id: "anthropic", apiKey: KEY });
 
+/** What the thread draws: a stored call is for the replay, not the thread */
 const rendered = () =>
-  PgAssistant.items.map((item: ChatItem) => {
-    if (item.kind === "tool") return `tool: ${item.label}`;
-    if (item.kind === "assistant" || item.kind === "error") {
-      return `${item.kind}: ${item.text}`;
-    }
-    return item.kind;
-  });
+  PgAssistant.items
+    .filter((item) => !isToolCallRecord(item))
+    .map((item: ChatItem) => {
+      if (item.kind === "tool") return `tool: ${item.label}`;
+      if (item.kind === "assistant" || item.kind === "error") {
+        return `${item.kind}: ${item.text}`;
+      }
+      return item.kind;
+    });
 
 const messagesOf = (body: Record<string, unknown>) =>
   body.messages as Array<Record<string, unknown>>;
@@ -251,6 +298,175 @@ describe("the assistant's provider", () => {
     ]);
   });
 
+  describe("tool calls kept in the history", () => {
+    /** A turn that calls write_file once, then answers */
+    const writeTurn = () =>
+      respond(
+        chatStream(
+          [
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "sdk-id-1",
+                  type: "function",
+                  function: {
+                    name: "write_file",
+                    arguments: '{"path":"src/lib.rs"}',
+                  },
+                },
+              ],
+            },
+          ],
+          "tool_calls"
+        ),
+        openAiText("Done.")
+      );
+
+    const toolMessages = (body: Record<string, unknown>) =>
+      messagesOf(body).filter(
+        (m) => m.role === "tool" || (m.role === "assistant" && m.tool_calls)
+      );
+
+    it("stores the tool's result after the tool's own marker", async () => {
+      writeTurn();
+
+      await defaultBackend().send("make the change");
+
+      expect(
+        PgAssistant.items.map((item) =>
+          isToolCallRecord(item)
+            ? `call: ${item.call.name} -> ${item.call.output}`
+            : item.kind
+        )
+      ).toEqual(["tool", "call: write_file -> Wrote src/lib.rs.", "assistant"]);
+      expect(rendered()).toEqual([
+        "tool: wrote src/lib.rs",
+        "assistant: Done.",
+      ]);
+    });
+
+    it("replays a stored call to Anthropic as tool_use and tool_result", async () => {
+      PgAssistant.addToolResultWith(undefined)({
+        toolName: "read_file",
+        input: { path: "src/lib.rs" },
+        output: "Not found",
+        failed: true,
+      });
+      const asked: ChatItem = {
+        id: "u-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        kind: "user",
+        text: "read lib.rs",
+      };
+      const seed = toReplayMessagesWith(() => true)(
+        Array.of<ChatItem>(asked).concat(PgAssistant.items)
+      );
+      const sent = respond(anthropicText("It is missing.", "end_turn"));
+
+      await createProvider({ id: "anthropic", apiKey: KEY }, seed).send("why?");
+
+      expect(messagesOf(sent[0].body).slice(0, 3)).toEqual([
+        { role: "user", content: [{ type: "text", text: "read lib.rs" }] },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "call_1",
+              name: "read_file",
+              input: { path: "src/lib.rs" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            expect.objectContaining({
+              type: "tool_result",
+              tool_use_id: "call_1",
+              is_error: true,
+            }),
+            expect.objectContaining({ type: "text", text: "why?" }),
+          ],
+        },
+      ]);
+    });
+
+    it.each([
+      ["stopped", () => PgAssistant.stopTurn()],
+      ["its thread closed", () => PgAssistant.closeThread()],
+    ])(
+      "stores no call whose turn was %s while the tool ran",
+      async (_, cut) => {
+        slow.reset();
+        respond(openAiToolCall("c1", "slow", {}), openAiText("Late."));
+        // Closing cuts the turn only while a thread is open, as in the panel
+        await PgAssistant.loadThread("slow-turn");
+        const turn = new AbortController();
+        PgAssistant.beginTurn(turn);
+
+        const sent = defaultBackend().send("go slowly", {
+          signal: turn.signal,
+        });
+        await slow.started;
+        cut();
+        slow.release();
+        await sent.catch(() => undefined);
+        PgAssistant.endTurn(turn);
+
+        expect(PgAssistant.items.filter(isToolCallRecord)).toEqual([]);
+        PgAssistant.closeThread();
+      }
+    );
+
+    it("survives storage and a pull from another device, and goes with the next request", async () => {
+      writeTurn();
+      // The panel adds the message before the turn (`use-turn`)
+      PgAssistant.addUserMessage("make the change");
+      await defaultBackend().send("make the change");
+      vi.restoreAllMocks();
+
+      // This device's storage, then the account's copy as another device reads it
+      await PgChatStorage.write("round-trip", PgAssistant.items);
+      const local = (await PgChatStorage.read("round-trip")) ?? [];
+      const pulled = decodeThread(
+        JSON.parse(JSON.stringify(encodeThread(local)))
+      );
+      const thread = mergeThreads([], pulled);
+
+      const sent = respond(openAiText("It is written."));
+      await createProvider(
+        { id: "default", apiKey: "" },
+        toReplayMessagesWith(() => true)(thread)
+      ).send("is it written?");
+
+      expect(toolMessages(sent[0].body)).toEqual([
+        {
+          role: "assistant",
+          // eslint-disable-next-line unicorn/no-null -- the OpenAI-compatible body: a call-only message has `content: null`
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "write_file",
+                arguments: '{"path":"src/lib.rs"}',
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: "Wrote src/lib.rs.",
+        },
+      ]);
+    });
+  });
+
   it("reports an empty response when the turn did nothing at all", async () => {
     respond(chatStream([], "stop"));
 
@@ -300,7 +516,8 @@ describe("the assistant's provider", () => {
     });
 
     it.each([
-      [true, ["write_file"]],
+      // Every tool the mocked `createTools` builds
+      [true, ["slow", "write_file"]],
       [false, undefined],
     ])(
       "with supportsTools %s, the request declares tools %j",
@@ -424,6 +641,112 @@ describe("the assistant's provider", () => {
     });
   });
 
+  describe("an outage", () => {
+    let entries: ReturnType<typeof memoryLog>["entries"];
+
+    beforeEach(() => {
+      const memory = memoryLog();
+      entries = memory.entries;
+      initLogger({ providers: [memory] });
+    });
+
+    afterEach(() => resetLogger());
+
+    const reported = () => entries.filter((entry) => entry.report);
+
+    it("of the default backend is reported: it is ours", async () => {
+      respond(
+        new Response(
+          JSON.stringify({
+            error: "The default backend's key was refused upstream (401).",
+          }),
+          {
+            status: 502,
+            statusText: "Bad Gateway",
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+
+      await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(reported()).toHaveLength(1);
+    });
+
+    it("is not reported for the default backend's own refusal", async () => {
+      respond(
+        new Response(
+          JSON.stringify({ error: "Sign-in is unavailable right now." }),
+          {
+            status: 503,
+            statusText: "Service Unavailable",
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+
+      await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(reported()).toEqual([]);
+    });
+
+    it("of the default backend with nothing to stream is reported", async () => {
+      respond(
+        new Response(
+          JSON.stringify({ error: "Upstream 200 with no body to stream." }),
+          {
+            status: 502,
+            statusText: "Bad Gateway",
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+
+      await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(reported()).toHaveLength(1);
+    });
+
+    it("relayed by the default backend from its upstream is not reported", async () => {
+      respond(
+        new Response(
+          JSON.stringify({
+            error: 'Upstream 529: {"type":"overloaded_error"}',
+          }),
+          {
+            status: 529,
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+
+      await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(reported()).toEqual([]);
+    });
+
+    it("of a third-party provider is not reported", async () => {
+      respond(openAiError(503, "overloaded"));
+      const provider = createProvider({
+        id: "openai",
+        apiKey: KEY,
+        endpoint: { baseUrl: "https://llm.test/v1", model: "m" },
+      });
+
+      await provider.send("hi").catch((e: unknown) => e);
+
+      expect(reported()).toEqual([]);
+    });
+  });
+
   it("never shows the default backend's relay of an upstream failure", async () => {
     respond(
       new Response(
@@ -454,6 +777,7 @@ describe("the assistant's provider", () => {
 
     // Its own refusal, written for people: shown whole, with no status
     await expect(defaultBackend().send("hi")).rejects.toMatchObject({
+      name: "TurnFailure",
       message: sentence,
       reason: "provider",
     });
@@ -649,6 +973,10 @@ describe("the assistant's provider", () => {
     });
 
     it("shows the pool-exhausted sentence and tracks it once", async () => {
+      // A cap of ours, not an outage: the team does not hear of each one
+      const log = memoryLog();
+      initLogger({ providers: [log] });
+      onTestFinished(() => resetLogger());
       refuses(503, {
         error: "server text",
         reason: "pool-exhausted",
@@ -664,6 +992,7 @@ describe("the assistant's provider", () => {
           params: { reason: "pool-exhausted", tier: "established" },
         },
       ]);
+      expect(log.entries.filter((entry) => entry.report)).toEqual([]);
     });
 
     it("tracks a refusal without a tier as unknown", async () => {
@@ -710,8 +1039,8 @@ describe("the assistant's provider", () => {
         .send("hi")
         .catch((e: Error) => e.message);
 
-      expect(failure).toMatch(
-        /^Could not get an answer from the model\. Send your message again\.$/
+      expect(failure).toBe(
+        "Could not get an answer from the model. Send your message again."
       );
       expect(refused()).toEqual([]);
     });
@@ -772,8 +1101,7 @@ describe("a turn's failure", () => {
       ],
       reason: "provider",
       status: undefined,
-      message:
-        /^Could not get an answer from the model\. Send your message again\.$/,
+      message: /Failed to fetch/,
     },
     {
       // The panel's own sentence for the limit, not the SDK's wrapper around the status

@@ -4,8 +4,6 @@ import {
   PanelLeftClose,
   UnfoldHorizontal,
 } from "lucide-react";
-import type { KeyboardEvent } from "react";
-import { useRef, useState } from "react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -16,22 +14,50 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
+import { StatusDot } from "@/shared/ui/status-dot";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
+import type { KeyHold } from "../../../views/sidebar/assistant/model/types";
+import type { AiOffReason } from "../model/ai-off";
+import type { HeadLabel } from "../model/head-label";
+import { headText } from "../model/head-label";
+import { OverflowTooltip } from "./OverflowTooltip";
+import { KEY_HINT, usePickedMenu } from "./use-picked-menu";
+
+/** The head's icon buttons are thumb sized on a phone */
+const THUMB = "max-md:size-11";
+
 /**
- * Forget key in More: `none` while no backend holding the user's key is
- * connected (the item is not shown), `busy` while a turn runs (shown
- * disabled, since the turn is using the key)
+ * Delete my key in More, by `KeyHold`: not shown at `none`, shown disabled at
+ * `busy`, since the turn is using the key
  */
-export type ForgetKey = "none" | "ready" | "busy";
+export type DeleteKey = KeyHold;
+
+/**
+ * The head's word for each off reason, the status row's word for the same
+ * state without its "AI ·", so one state keeps one word across the app:
+ * "Off" for no model, and "Not responding", the app's word for a service
+ * that does not answer while the browser is online. No model is a setup step, grey; a status
+ * route that did not answer is a failure, red.
+ */
+const OFF_STATUS: Record<AiOffReason, { word: string; dot: "idle" | "error" }> =
+  {
+    "no-key": { word: "Off", dot: "idle" },
+    "signed-out": { word: "Off", dot: "idle" },
+    unreachable: { word: "Not responding", dot: "error" },
+  };
 
 export interface BaseAssistantHeadProps {
-  /** The open project's name */
-  title: string;
+  /** The model in use, in the head's words (`headLabel`) */
+  label: HeadLabel;
+  /** Why no model can answer, while the composer's off row stands; `undefined` otherwise */
+  off: AiOffReason | undefined;
   /** Opens Sources and tools in place of the conversation */
   onSources(): void;
   /** Opens Connect a model */
   onConnect(): void;
+  /** Connect's item, from `connectLabel` in `model/connection` */
+  connectLabel: string;
   /**
    * Called once More's menu has closed on a picked item: gives focus to what
    * the pick opened. `false` when nothing took it, and More takes it back.
@@ -45,104 +71,108 @@ export interface BaseAssistantHeadProps {
   onHide(): void;
   /** Widen is offered: not in the Sheet, which has no width to change */
   canWiden: boolean;
-  forgetKey: ForgetKey;
+  deleteKey: DeleteKey;
   /** Drops the backend and the key this tab holds */
-  onForgetKey(): void;
+  onDeleteKey(): void;
 }
 
 /**
- * The assistant's head: the project's name, then More, Widen and Hide.
+ * The assistant's head: the model in use, the off status while no model can
+ * answer, then More, Widen and Hide. Only
+ * the model's name is cut when the column is narrow; the words around it
+ * stay, and the cut name shows whole on hover (`OverflowTooltip`).
  *
- * More's items take S and K while it is open. The shortcuts are shown with
- * `DropdownMenuShortcut`, which only draws them, and the menu's typeahead
- * would take S but never K ("Connect…"), so the keys are read here.
+ * More's items take S and K while it is open (`usePickedMenu`); the shortcuts
+ * are shown with `DropdownMenuShortcut`, which only draws them.
  */
 export function BaseAssistantHead({
-  title,
+  label,
+  off,
   onSources,
   onConnect,
+  connectLabel,
   focusPicked,
   wide,
   onWiden,
   onHide,
   canWiden,
-  forgetKey,
-  onForgetKey,
+  deleteKey,
+  onDeleteKey,
 }: BaseAssistantHeadProps) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  // A picked item may open something (Sources in place of the chat, Connect
-  // a model over it), so once the menu has closed (after its exit animation)
-  // focus goes there (`focusPicked`), not back to More, which would blur
-  // whatever the user reached in the meantime:
-  // a select opened in that window shut. A dismissal (Escape, a click outside)
-  // still returns focus to More.
-  const picked = useRef(false);
-
-  const pick = (action: () => void) => {
-    picked.current = true;
-    setMoreOpen(false);
-    action();
-  };
-
-  /** S and K with no modifier; anything else stays the menu's */
-  const onMenuKey = (event: KeyboardEvent) => {
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const shortcuts: Record<string, () => void> = {
-      s: onSources,
-      k: onConnect,
-    };
-    const action = shortcuts[event.key.toLowerCase()];
-    if (!action) return;
-    // Keeps the menu's own typeahead from also acting on the key
-    event.preventDefault();
-    pick(action);
-  };
+  const more = usePickedMenu(focusPicked, { s: onSources, k: onConnect });
+  const { pick } = more;
 
   const widenLabel = wide ? "Narrow the assistant" : "Widen the assistant";
 
   return (
     <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3">
+      {/* Named whole: the name is computed per span, and would lose the
+          spaces between the parts */}
       <h2
-        className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
-        title={title}
+        className="flex min-w-0 flex-1 text-sm font-medium whitespace-pre text-foreground"
+        aria-label={headText(label)}
       >
-        {title}
+        {label.kind === "plain" ? (
+          <span className="truncate">{label.text}</span>
+        ) : (
+          <>
+            {label.lead && <span className="shrink-0">{label.lead}</span>}
+            {/* Hover only: the head is no tab stop, and the composer's model
+                button shows the same name on focus */}
+            <OverflowTooltip label={label.model}>
+              <span data-overflow="" className="min-w-0 truncate">
+                {label.model}
+              </span>
+            </OverflowTooltip>
+            <span className="shrink-0">{label.tail}</span>
+          </>
+        )}
       </h2>
-      <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+      {off && (
+        <span
+          id="assistant-status"
+          className="inline-flex shrink-0 items-center gap-1.5 pr-1 text-caption text-muted-foreground"
+        >
+          <StatusDot variant={OFF_STATUS[off].dot} />
+          {OFF_STATUS[off].word}
+        </span>
+      )}
+      <DropdownMenu open={more.open} onOpenChange={more.setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="More">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={THUMB}
+            aria-label="More"
+          >
             <EllipsisVertical aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           align="end"
           className="w-auto min-w-48"
-          onKeyDown={onMenuKey}
-          onCloseAutoFocus={(event) => {
-            const wasPicked = picked.current;
-            picked.current = false;
-            if (wasPicked && focusPicked()) event.preventDefault();
-          }}
+          onKeyDown={more.onKeyDown}
+          onCloseAutoFocus={more.onCloseAutoFocus}
         >
           <DropdownMenuItem onSelect={() => pick(onSources)}>
             <MenuItemText>Sources and tools</MenuItemText>
-            <DropdownMenuShortcut>S</DropdownMenuShortcut>
+            <DropdownMenuShortcut className={KEY_HINT}>S</DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => pick(onConnect)}>
-            <MenuItemText>Connect a model…</MenuItemText>
-            <DropdownMenuShortcut>K</DropdownMenuShortcut>
+            <MenuItemText>{connectLabel}</MenuItemText>
+            <DropdownMenuShortcut className={KEY_HINT}>K</DropdownMenuShortcut>
           </DropdownMenuItem>
-          {forgetKey === "ready" && (
-            <DropdownMenuItem onSelect={() => pick(onForgetKey)}>
-              <MenuItemText>Forget key</MenuItemText>
+          {deleteKey === "ready" && (
+            <DropdownMenuItem onSelect={() => pick(onDeleteKey)}>
+              <MenuItemText>Delete my key</MenuItemText>
             </DropdownMenuItem>
           )}
-          {forgetKey === "busy" && (
+          {deleteKey === "busy" && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
                   <DropdownMenuItem disabled>
-                    <MenuItemText>Forget key</MenuItemText>
+                    <MenuItemText>Delete my key</MenuItemText>
                   </DropdownMenuItem>
                 </div>
               </TooltipTrigger>
@@ -173,6 +203,7 @@ export function BaseAssistantHead({
             <Button
               variant="ghost"
               size="icon-sm"
+              className={THUMB}
               aria-label={widenLabel}
               onClick={onWiden}
             >
@@ -191,6 +222,7 @@ export function BaseAssistantHead({
           <Button
             variant="ghost"
             size="icon-sm"
+            className={THUMB}
             aria-label="Collapse assistant"
             onClick={onHide}
           >

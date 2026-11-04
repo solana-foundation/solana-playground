@@ -1,0 +1,496 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import {
+  decodeItem,
+  encodeItem,
+} from "@/features/persistence/model/chat-codec";
+import {
+  clearFailures,
+  getFailures,
+} from "@/features/persistence/model/diagnostics";
+
+import type { PlaygroundBridge } from "./bridge/playground-bridge";
+import { PgPatchUndo } from "./patch-undo";
+import type { ChatItem } from "./store";
+import { PgAssistant } from "./store";
+
+// The real bridge reaches the explorer and the settings, which need the
+// build's globals; every test here hands the module a bridge of its own
+vi.mock("./bridge/playground-bridge", () => ({ realBridge: {} }));
+
+type ApprovalItem = Extract<ChatItem, { kind: "approval" }>;
+
+/**
+ * No file: what `PlaygroundBridge.readFile` answers for one, and the `before`
+ * a patch that created its file carries in the stored thread
+ */
+// eslint-disable-next-line unicorn/no-null -- the bridge's and the stored card's type for an absent file
+const NO_FILE = null;
+
+describe("PgPatchUndo", () => {
+  /** A bridge over one file, recording what it is asked to write */
+  const fakeBridge = (content: string | null) => {
+    const file = { content };
+    const bridge = {
+      readFile: () => file.content,
+      applyPatch: vi.fn(async ({ content: written }: { content: string }) => {
+        file.content = written;
+      }),
+      deleteFile: vi.fn(async () => {
+        file.content = NO_FILE;
+      }),
+    } as unknown as PlaygroundBridge;
+    return { bridge, file };
+  };
+
+  /** An applied patch card, as the store holds it after Apply */
+  const applied = async (before: string | null, after: string) => {
+    const asked = PgAssistant.requestApproval({
+      type: "patch",
+      path: "src/lib.rs",
+      before,
+      after,
+    });
+    const card = PgAssistant.items[PgAssistant.items.length - 1];
+    PgAssistant.resolveApproval(card.id, true);
+    await asked;
+    const held = PgAssistant.items.find(
+      (i): i is ApprovalItem => i.id === card.id
+    );
+    if (!held) throw new Error("the card left the thread");
+    return held;
+  };
+
+  beforeEach(() => {
+    PgAssistant.clear();
+  });
+
+  it("can undo a patch this tab wrote while the file holds it", async () => {
+    const card = await applied("old", "new");
+    const { bridge } = fakeBridge("new");
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    PgPatchUndo.wrote(card.id);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+  });
+
+  it("cannot undo a card restored from history", async () => {
+    const card = await applied("old", "new");
+    const { bridge } = fakeBridge("new");
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("not-undoable");
+    expect(bridge.applyPatch).not.toHaveBeenCalled();
+  });
+
+  it("keeps Undo for a card the thread reopened from storage", async () => {
+    // A project switch and back reopens the thread from its stored copy,
+    // whose patch keeps only the region the card shows (`trimPatch`)
+    const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`);
+    const before = lines.join("\n");
+    const after = lines.map((l, i) => (i === 20 ? "changed" : l)).join("\n");
+    const card = await applied(before, after);
+    PgPatchUndo.wrote(card.id);
+    const reopened = decodeItem(encodeItem(card)) as ApprovalItem;
+    expect(reopened.request).not.toEqual(card.request);
+    const { bridge, file } = fakeBridge(after);
+
+    expect(PgPatchUndo.canWith(bridge)(reopened)).toBe(true);
+    expect(await PgPatchUndo.undoWith(bridge)(reopened)).toBe("undone");
+    expect(file.content).toBe(before);
+  });
+
+  it("puts an edited file back and marks the card undone", async () => {
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge("new");
+
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
+
+    expect(file.content).toBe("old");
+    expect(card.undo).toBe("done");
+    expect(card.outcome).toBe("src/lib.rs is back as it was");
+    expect(card.updatedAt).toBeDefined();
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+  });
+
+  it("deletes a file the patch created", async () => {
+    const card = await applied(NO_FILE, "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge("new");
+
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
+
+    expect(bridge.deleteFile).toHaveBeenCalledWith("src/lib.rs");
+    expect(file.content).toBeNull();
+  });
+
+  it("keeps the id a build wrote into declare_id!", async () => {
+    const card = await applied(
+      'declare_id!("11111111111111111111111111111111");\nold',
+      'declare_id!("11111111111111111111111111111111");\nnew'
+    );
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge('declare_id!("Built1111");\nnew');
+
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+    await PgPatchUndo.undoWith(bridge)(card);
+
+    expect(file.content).toBe('declare_id!("Built1111");\nold');
+  });
+
+  it("puts back the id a patch changed when no build ran since", async () => {
+    const card = await applied(
+      'declare_id!("Before1111");\nfn main() {}',
+      'declare_id!("Patched111");\nfn main() {}'
+    );
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge(
+      'declare_id!("Patched111");\nfn main() {}'
+    );
+
+    await PgPatchUndo.undoWith(bridge)(card);
+
+    expect(file.content).toBe('declare_id!("Before1111");\nfn main() {}');
+  });
+
+  it("keeps a build's id over the one a patch wrote", async () => {
+    const card = await applied(
+      'declare_id!("Before1111");\nold',
+      'declare_id!("Patched111");\nnew'
+    );
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge('declare_id!("Built1111");\nnew');
+
+    await PgPatchUndo.undoWith(bridge)(card);
+
+    expect(file.content).toBe('declare_id!("Built1111");\nold');
+  });
+
+  it("offers no Undo, and reports why, while the file cannot be read", async () => {
+    clearFailures();
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge } = fakeBridge("new");
+    bridge.readFile = () => {
+      throw new Error("no current workspace");
+    };
+
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(getFailures().map((f) => f.what)).toEqual([
+      expect.stringContaining("src/lib.rs"),
+    ]);
+
+    // Readable again: Undo is back, and the next outage is reported again
+    bridge.readFile = () => "new";
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+    bridge.readFile = () => {
+      throw new Error("no current workspace");
+    };
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(getFailures()).toHaveLength(2);
+  });
+
+  it("writes nothing over an edit made after Apply, and says so", async () => {
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge("new, edited");
+
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("moved-on");
+
+    expect(file.content).toBe("new, edited");
+    expect(card.undo).toBeUndefined();
+    expect(PgAssistant.items[PgAssistant.items.length - 1]).toMatchObject({
+      kind: "notice",
+      text: "You edited src/lib.rs after applying. Use undo in the editor.",
+    });
+  });
+
+  it("takes a patch back once when pressed twice", async () => {
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge } = fakeBridge("new");
+
+    const results = await Promise.all([
+      PgPatchUndo.undoWith(bridge)(card),
+      PgPatchUndo.undoWith(bridge)(card),
+    ]);
+
+    expect(results).toEqual(["undone", "not-undoable"]);
+    expect(bridge.applyPatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("says so, reported, when the card is gone by the time the file is back", async () => {
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge("new");
+    const { initLogger, memoryProvider, resetLogger } = await import(
+      "@/shared/lib/logger"
+    );
+    const logs = memoryProvider();
+    initLogger({ providers: [logs] });
+    vi.mocked(bridge.applyPatch).mockImplementationOnce(async ({ content }) => {
+      file.content = content;
+      // A workspace switch lands while the write runs
+      PgAssistant.clear();
+    });
+
+    try {
+      expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
+      expect(file.content).toBe("old");
+      expect(logs.entries.map((e) => [e.ns, e.level, e.report])).toContainEqual(
+        ["assistant:patch-undo", "warn", true]
+      );
+    } finally {
+      resetLogger();
+    }
+  });
+
+  it("writes nothing for a file deleted after Apply", async () => {
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge } = fakeBridge(NO_FILE);
+
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("moved-on");
+    expect(bridge.applyPatch).not.toHaveBeenCalled();
+  });
+
+  it("marks the card undone when the write landed and what followed failed", async () => {
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge("new");
+    vi.mocked(bridge.applyPatch).mockImplementationOnce(async ({ content }) => {
+      file.content = content;
+      throw new Error("the editor's model could not load");
+    });
+
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("model");
+
+    expect(file.content).toBe("old");
+    expect(card.undo).toBe("done");
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+  });
+
+  it("marks a created file's card undone when the delete landed and what followed failed", async () => {
+    const card = await applied(NO_FILE, "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge("new");
+    vi.mocked(bridge.deleteFile).mockImplementationOnce(async () => {
+      file.content = NO_FILE;
+      throw new Error("the explorer could not refresh");
+    });
+
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("refresh");
+
+    expect(card.undo).toBe("done");
+  });
+
+  describe("a failed write that strands the card", () => {
+    beforeEach(() => clearFailures());
+
+    it("says so on the card, offers the original and reports it, when the file holds neither", async () => {
+      const card = await applied("old", "new");
+      PgPatchUndo.wrote(card.id);
+      const { bridge, file } = fakeBridge("new");
+      vi.mocked(bridge.applyPatch).mockImplementationOnce(async () => {
+        // Another tab writes while this one fails
+        file.content = "someone else's edit";
+        throw new Error("disk");
+      });
+
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
+
+      expect(card.undo).toBe("stranded");
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+      expect(card.outcome).toBe(
+        "Undo did not finish: src/lib.rs changed while Undo wrote it."
+      );
+      expect(PgPatchUndo.original(card)).toBe("old");
+      expect(getFailures().map((f) => f.what)).toEqual([
+        "undo src/lib.rs: it changed while Undo wrote it",
+      ]);
+    });
+
+    it("says so, reports it and keeps Undo when the file cannot be read back", async () => {
+      const card = await applied("old", "new");
+      PgPatchUndo.wrote(card.id);
+      const { bridge } = fakeBridge("new");
+      vi.mocked(bridge.applyPatch).mockRejectedValueOnce(new Error("disk"));
+      const read = vi.spyOn(bridge, "readFile");
+      read.mockReturnValueOnce("new").mockImplementationOnce(() => {
+        throw new Error("the explorer is gone");
+      });
+
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
+
+      expect(card.outcome).toBe(
+        "Undo did not finish: src/lib.rs could not be read back."
+      );
+      expect(PgPatchUndo.original(card)).toBe("old");
+      expect(getFailures().map((f) => f.what)).toEqual([
+        "undo src/lib.rs: read it back after the write failed",
+      ]);
+      // The file still holds the patch once it reads: Undo is offered, and
+      // a retry that lands clears the copy
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+      expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
+      expect(card.undo).toBe("done");
+      expect(card.outcome).toBe("src/lib.rs is back as it was");
+      expect(PgPatchUndo.original(card)).toBeUndefined();
+    });
+
+    it("finishes a retry whose earlier write had landed though it could not be read back", async () => {
+      const card = await applied("old", "new");
+      PgPatchUndo.wrote(card.id);
+      const { bridge, file } = fakeBridge("new");
+      vi.mocked(bridge.applyPatch).mockImplementationOnce(
+        async ({ content }) => {
+          file.content = content;
+          throw new Error("the editor's model could not load");
+        }
+      );
+      const read = vi.spyOn(bridge, "readFile");
+      read.mockReturnValueOnce("new").mockImplementationOnce(() => {
+        throw new Error("the explorer is gone");
+      });
+
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("model");
+      expect(file.content).toBe("old");
+
+      // The card offers Undo, and the press finishes it
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+      expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
+      expect(card.outcome).toBe("src/lib.rs is back as it was");
+      expect(PgAssistant.items.some((i) => i.kind === "notice")).toBe(false);
+    });
+
+    it("drops the warning when a later failed attempt finds the patch whole", async () => {
+      const card = await applied("old", "new");
+      PgPatchUndo.wrote(card.id);
+      const { bridge } = fakeBridge("new");
+      vi.mocked(bridge.applyPatch).mockRejectedValue(new Error("disk"));
+      vi.spyOn(bridge, "readFile")
+        .mockReturnValueOnce("new")
+        .mockImplementationOnce(() => {
+          throw new Error("the explorer is gone");
+        });
+
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
+      expect(card.outcome).toContain("Undo did not finish");
+
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
+      expect(card.outcome).toBe("Wrote src/lib.rs");
+      expect(PgPatchUndo.original(card)).toBeUndefined();
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+    });
+
+    it("logs, and keeps nothing, when the card is gone by the time the write fails", async () => {
+      const card = await applied("old", "new");
+      PgPatchUndo.wrote(card.id);
+      const { bridge, file } = fakeBridge("new");
+      const { initLogger, memoryProvider, resetLogger } = await import(
+        "@/shared/lib/logger"
+      );
+      const logs = memoryProvider();
+      initLogger({ providers: [logs] });
+      vi.mocked(bridge.applyPatch).mockImplementationOnce(async () => {
+        file.content = "someone else's edit";
+        PgAssistant.clear();
+        throw new Error("disk");
+      });
+
+      try {
+        await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow(
+          "disk"
+        );
+        expect(PgPatchUndo.original(card)).toBeUndefined();
+        expect(
+          logs.entries.map((e) => [e.ns, e.level, e.report])
+        ).toContainEqual(["assistant:patch-undo", "warn", true]);
+      } finally {
+        resetLogger();
+      }
+    });
+
+    it("offers nothing to copy for a created file, and says it did not exist", async () => {
+      const card = await applied(NO_FILE, "new");
+      PgPatchUndo.wrote(card.id);
+      const { bridge, file } = fakeBridge("new");
+      vi.mocked(bridge.deleteFile).mockImplementationOnce(async () => {
+        file.content = "someone else's edit";
+        throw new Error("disk");
+      });
+
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
+
+      expect(card.outcome).toBe(
+        "Undo did not finish: src/lib.rs changed while Undo wrote it. It did not exist before the patch."
+      );
+      expect(card.undo).toBe("stranded");
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+      expect(PgPatchUndo.original(card)).toBeUndefined();
+    });
+  });
+
+  it("offers Undo again when a created file's delete failed before it landed", async () => {
+    const card = await applied(NO_FILE, "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge } = fakeBridge("new");
+    vi.mocked(bridge.deleteFile).mockRejectedValueOnce(new Error("disk"));
+
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
+
+    expect(card.undo).toBeUndefined();
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+    expect(card.outcome).toBeUndefined();
+    expect(PgPatchUndo.original(card)).toBeUndefined();
+  });
+
+  it("offers Undo again when a write failed before it landed, under the build's id", async () => {
+    const card = await applied(
+      'declare_id!("11111111111111111111111111111111");\nold',
+      'declare_id!("11111111111111111111111111111111");\nnew'
+    );
+    PgPatchUndo.wrote(card.id);
+    const { bridge } = fakeBridge('declare_id!("Built1111");\nnew');
+    vi.mocked(bridge.applyPatch).mockRejectedValueOnce(new Error("disk"));
+
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
+
+    expect(card.undo).toBeUndefined();
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+    expect(PgPatchUndo.original(card)).toBeUndefined();
+  });
+
+  it("marks the card undone when the write with the build's id landed and what followed failed", async () => {
+    const card = await applied(
+      'declare_id!("11111111111111111111111111111111");\nold',
+      'declare_id!("11111111111111111111111111111111");\nnew'
+    );
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge('declare_id!("Built1111");\nnew');
+    vi.mocked(bridge.applyPatch).mockImplementationOnce(async ({ content }) => {
+      file.content = content;
+      throw new Error("the editor's model could not load");
+    });
+
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("model");
+
+    expect(file.content).toBe('declare_id!("Built1111");\nold');
+    expect(card.undo).toBe("done");
+    expect(PgPatchUndo.original(card)).toBeUndefined();
+  });
+
+  it("can undo again when the write failed", async () => {
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge } = fakeBridge("new");
+    vi.mocked(bridge.applyPatch).mockRejectedValueOnce(new Error("disk"));
+
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
+
+    expect(card.undo).toBeUndefined();
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+  });
+});

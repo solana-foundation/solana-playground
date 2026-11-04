@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
+
+import { AGENT_SUFFIXES } from "../src/shared/config/server-env.mjs";
 
 // The browser's probe (`probeDefaultBackend`) reads this answer: a boolean
 // `configured`, and the model by id or `null`. The key never leaves.
@@ -29,9 +31,12 @@ const SIGN_IN = {
   AUTH_SECRET: "test-auth-secret",
 };
 
+/** Every deprecated name `agentEnv` falls back to, which an old `.env` may set */
+const DEPRECATED_VARS = AGENT_SUFFIXES.map((suffix) => `AGENT_${suffix}`);
+
 const AGENT_VARS = [
-  "AGENT_API_KEY",
-  "AGENT_MODEL",
+  "PG_AI_API_KEY",
+  "PG_AI_MODEL",
   "AUTH_OAUTH_PROXY_URL",
   ...Object.keys(SIGN_IN),
 ];
@@ -43,16 +48,21 @@ describe("GET /api/agent", () => {
   const saved = {};
 
   beforeEach(() => {
-    for (const name of AGENT_VARS) {
-      saved[name] = process.env[name];
-      delete process.env[name];
+    for (const list of [AGENT_VARS, DEPRECATED_VARS]) {
+      for (const name of list) {
+        saved[name] = process.env[name];
+        delete process.env[name];
+      }
     }
   });
 
   afterEach(() => {
-    for (const name of AGENT_VARS) {
-      if (saved[name] === undefined) delete process.env[name];
-      else process.env[name] = saved[name];
+    mock.restoreAll();
+    for (const list of [AGENT_VARS, DEPRECATED_VARS]) {
+      for (const name of list) {
+        if (saved[name] === undefined) delete process.env[name];
+        else process.env[name] = saved[name];
+      }
     }
   });
 
@@ -69,15 +79,15 @@ describe("GET /api/agent", () => {
   });
 
   it("answers configured: false with a key but no sign-in", async () => {
-    process.env.AGENT_API_KEY = "sk-agent-test-key";
+    process.env.PG_AI_API_KEY = "sk-agent-test-key";
 
     assert.deepEqual(await get(), { configured: false, model: null });
   });
 
   it("answers configured: true and the model id with a key, never the key", async () => {
     configureSignIn();
-    process.env.AGENT_API_KEY = "sk-agent-test-key";
-    process.env.AGENT_MODEL = "vendor/model-x";
+    process.env.PG_AI_API_KEY = "sk-agent-test-key";
+    process.env.PG_AI_MODEL = "vendor/model-x";
 
     const body = await get();
 
@@ -85,9 +95,21 @@ describe("GET /api/agent", () => {
     assert.doesNotMatch(JSON.stringify(body), /sk-agent-test-key/);
   });
 
-  it("names the default model when none is set", async () => {
+  it("still answers configured: true with only the deprecated AGENT_ names", async () => {
+    mock.method(console, "warn", () => {});
     configureSignIn();
     process.env.AGENT_API_KEY = "sk-agent-test-key";
+    process.env.AGENT_MODEL = "vendor/model-old";
+
+    assert.deepEqual(await get(), {
+      configured: true,
+      model: "vendor/model-old",
+    });
+  });
+
+  it("names the default model when none is set", async () => {
+    configureSignIn();
+    process.env.PG_AI_API_KEY = "sk-agent-test-key";
 
     const body = await get();
 

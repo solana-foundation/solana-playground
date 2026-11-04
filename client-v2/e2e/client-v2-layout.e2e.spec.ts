@@ -1077,7 +1077,9 @@ test.describe("a select inside the assistant Sheet", () => {
     await expect(sheet).toBeVisible();
     // Connect a model opens from the head's More, as a dialog over the Sheet
     await sheet.getByRole("button", { name: "More" }).click();
-    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+    await page
+      .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+      .click();
     const dialog = page.getByRole("dialog", { name: "Connect a model" });
     await dialog.getByRole("combobox", { name: "Model" }).click();
     const option = page.getByRole("option").first();
@@ -1831,6 +1833,7 @@ const sectionList = (page: Page) =>
   settingsPage(page).getByRole("navigation", { name: "Settings sections" });
 const SECTIONS = [
   "Network",
+  "Assistant",
   "Project",
   "Block Explorer",
   "Build",

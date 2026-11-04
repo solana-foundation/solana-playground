@@ -195,7 +195,7 @@ leaves out the `@real-wasm` specs as [client-v2-with-stubs.yml](../.github/workf
 free slot port from "Slots" in
 [Parallel runs](#8-parallel-runs), with no dev server on it, so the run starts its own. The suite needs no build
 server, no Postgres, and no default backend: every spec answers the account and model endpoints with `page.route`.
-`AGENT_API_KEY=` on the command empties what `client-v2/.env` would set, so the dev server reports no default
+`PG_AI_API_KEY=` on the command empties what `client-v2/.env` would set, so the dev server reports no default
 backend, as CI's does. With one configured, the panel opens with "Bring your own key" collapsed, and the specs that
 fill that form without expanding it fail. The platform RPC variables in `client-v2/.env.local`
 (`REACT_APP_DEVNET_RPC_URL` and the others) can stay set: the `test` fixture in
@@ -204,7 +204,7 @@ specs stub, instead of the platform devnet those variables make the default.
 
 ```sh
 k=5
-PORT=$((13000 + 10 * k)) AGENT_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e
+PORT=$((13000 + 10 * k)) PG_AI_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e
 grep -cv '^#\|^$' client-v2/e2e/known-skips.txt
 ```
 
@@ -1120,7 +1120,7 @@ or any other HTTP client. The answers are listed in
 
 Precondition, local: `yarn --cwd client-v2 dev` with sign-in configured (`SIGN_IN_ENV` in
 `client-v2/src/features/auth/config.mjs`), a migrated Postgres, `AUTH_BASE_URL=http://localhost:3000`, and
-`AGENT_API_KEY` set. A placeholder key is enough for every case: a turn that passes the gate reaches the upstream and
+`PG_AI_API_KEY` set. A placeholder key is enough for every case: a turn that passes the gate reaches the upstream and
 comes back as the upstream's own refusal, which spends nothing. Against a deployment, read `http://localhost:3000` as
 its origin.
 

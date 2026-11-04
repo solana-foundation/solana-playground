@@ -1,0 +1,159 @@
+import type { Page } from "@playwright/test";
+
+import {
+  expect,
+  LONG,
+  startProject,
+  stubAiStatus,
+  stubSession,
+  test,
+} from "./fixtures";
+
+/**
+ * The assistant either works or says why not, before anything is typed
+ * (`assistant-ai-gate`). Each test says what `GET /api/ai/status` answers and
+ * who is signed in; no turn is ever sent, so `/api/agent` needs no stub.
+ */
+
+type AssistantWindow = Window & {
+  __pgAssistant?: { requestPrompt: (text: string) => void };
+};
+
+const row = (page: Page) => page.locator("#assistant-ai-off");
+const title = (page: Page) => row(page).locator('[data-slot="callout-title"]');
+const status = (page: Page) => page.locator("#assistant-status");
+const input = (page: Page) =>
+  page.getByRole("textbox", { name: "Message the assistant" });
+const send = (page: Page) => page.getByRole("button", { name: "Send" });
+
+/** Types a question and presses Enter; the composer must keep it */
+const typeAndEnter = async (page: Page) => {
+  await input(page).fill("What does this program do?");
+  await input(page).press("Enter");
+  await expect(input(page)).toHaveValue("What does this program do?");
+  await expect(send(page)).toHaveAttribute("aria-disabled", "true");
+};
+
+test("assistant-ai-gate: No hosted key, nothing connected", async ({
+  page,
+}) => {
+  await stubAiStatus(page, "own");
+  await page.goto("/");
+  await startProject(page, "ai-off-no-key", LONG);
+
+  await expect(title(page)).toHaveText("The assistant has no model", LONG);
+  await expect(row(page)).toContainText(
+    "The hosted model is not available. Add your own key to use the assistant."
+  );
+  await expect(status(page)).toHaveText("Off");
+  await typeAndEnter(page);
+  await expect(page.getByText("Connect a model to send")).toBeAttached();
+
+  await row(page).getByRole("button", { name: "Add an API key" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+});
+
+test("assistant-ai-gate: Signed out with a hosted model", async ({ page }) => {
+  await stubAiStatus(page, "glm-5.3-flash");
+  // eslint-disable-next-line unicorn/no-null -- the get-session body: no user is `user: null` on the wire
+  await stubSession(page, null);
+  await page.goto("/");
+  await startProject(page, "ai-off-signed-out", LONG);
+
+  await expect(title(page)).toHaveText("Sign in to use the assistant", LONG);
+  await expect(row(page)).toContainText(
+    "Sign in with GitHub to use the hosted model, or add a key of your own."
+  );
+  await expect(
+    row(page).getByRole("button", { name: "Sign in with GitHub" })
+  ).toBeVisible();
+  await expect(
+    row(page).getByRole("button", { name: "Add an API key" })
+  ).toBeVisible();
+  await typeAndEnter(page);
+  await expect(page.getByText("Sign in to send")).toBeAttached();
+});
+
+test("assistant-ai-gate: Hosted model unreachable", async ({ page }) => {
+  let asked = 0;
+  await page.route("**/api/ai/status", (route) => {
+    asked += 1;
+    return route.abort("failed");
+  });
+  await page.goto("/");
+  await startProject(page, "ai-off-unreachable", LONG);
+
+  await expect(title(page)).toHaveText("Model not answering", LONG);
+  await expect(row(page)).toContainText(
+    "The assistant can't reach its model. Try again in a minute."
+  );
+  const before = asked;
+  await row(page).getByRole("button", { name: "Try again" }).click();
+  await expect.poll(() => asked).toBeGreaterThan(before);
+});
+
+test("assistant-ai-gate: Try again with no hosted key", async ({ page }) => {
+  await stubAiStatus(page, "own");
+  let asked = 0;
+  // Registered last, so it sees each request first and hands it to the stub
+  await page.route("**/api/ai/status", (route) => {
+    asked += 1;
+    return route.fallback();
+  });
+  await page.goto("/");
+  await startProject(page, "ai-off-no-key-retry", LONG);
+
+  await expect(title(page)).toHaveText("The assistant has no model", LONG);
+  const before = asked;
+  await row(page).getByRole("button", { name: "Try again" }).click();
+  await expect.poll(() => asked).toBeGreaterThan(before);
+});
+
+test("assistant-ai-gate: The head says the assistant is off", async ({
+  page,
+}) => {
+  await stubAiStatus(page, "own");
+  await page.goto("/");
+  await startProject(page, "ai-off-head", LONG);
+
+  await expect(status(page)).toHaveText("Off", LONG);
+});
+
+test("assistant-ai-gate: The head says the model is not responding", async ({
+  page,
+}) => {
+  await page.route("**/api/ai/status", (route) => route.abort("failed"));
+  await page.goto("/");
+  await startProject(page, "ai-off-head-unreachable", LONG);
+
+  await expect(status(page)).toHaveText("Not responding", LONG);
+});
+
+test("assistant-ai-gate: A prompt sent from outside the panel while the assistant is off", async ({
+  page,
+}) => {
+  await stubAiStatus(page, "own");
+  await page.goto("/");
+  await startProject(page, "ai-off-prompt", LONG);
+  await expect(row(page)).toBeVisible(LONG);
+
+  // The entry every outside surface uses: Build's Ask, the server console,
+  // a lesson's objective
+  await page.evaluate(() => {
+    const assistant = (window as AssistantWindow).__pgAssistant;
+    if (!assistant) throw new Error("the assistant's window hook is missing");
+    assistant.requestPrompt("Explain this build error");
+  });
+  // Connect a model opens once the default backend and the session are
+  // read: an Escape sent before it lands closes nothing, and the dialog then
+  // covers the composer
+  const connect = page.getByRole("dialog", { name: "Connect a model" });
+  await expect(connect).toBeVisible(LONG);
+  await page.keyboard.press("Escape");
+  await expect(connect).toHaveCount(0);
+
+  await expect(input(page)).toHaveValue("Explain this build error", LONG);
+  await expect(row(page)).toContainText(
+    "Your prompt is waiting in the composer."
+  );
+});

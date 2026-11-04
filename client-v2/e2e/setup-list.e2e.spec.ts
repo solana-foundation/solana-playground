@@ -2,16 +2,16 @@ import type { BrowserContext, Page } from "@playwright/test";
 
 import {
   expect,
-  json,
   LONG,
   seedWorkspace,
+  stubAiStatus,
   stubSignedIn,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
 
 /**
- * The navigation's Get set up checklist. Every test stubs `/api/agent` with
+ * The navigation's Get set up checklist. Every test stubs `/api/ai/status` with
  * no default backend, so the assistant step waits on Connect a model and
  * nothing depends on the dev server's own backend.
  */
@@ -27,12 +27,10 @@ const doneStep = (page: Page, name: string) =>
     .filter({ hasText: name });
 
 /** On the context, so a second tab gets them too */
-const stubNoDefaultBackend = (context: BrowserContext) =>
-  context.route("**/api/agent", (route) =>
-    route.request().method() === "GET"
-      ? json(route, { configured: false, model: null })
-      : route.abort()
-  );
+const stubNoDefaultBackend = async (context: BrowserContext) => {
+  await stubAiStatus(context, "own");
+  await context.route("**/api/agent", (route) => route.abort());
+};
 
 /** Through the step itself: the Playground wallet's setup, then Continue */
 const connectWallet = async (page: Page) => {
@@ -140,7 +138,7 @@ test("client-v2-layout: Finishing the checklist", async ({ page, context }) => {
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(setupList(page)).toHaveCount(0);
 
-  // A new tab has no model connected: the connection is per tab
+  // A new tab has no model connected: the key is held in memory only
   const second = await context.newPage();
   await second.goto("/");
   await expect(second.locator("#root-dir")).toBeVisible(LONG);

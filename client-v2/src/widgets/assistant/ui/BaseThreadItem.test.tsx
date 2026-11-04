@@ -98,6 +98,62 @@ describe("BaseThreadItem", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  it("an error offers Change key and the hosted model when its turn says so", () => {
+    const changeKey = vi.fn();
+    const useHosted = vi.fn();
+    render(
+      <BaseThreadItem
+        item={{
+          kind: "error",
+          id: "e",
+          createdAt: CREATED,
+          text: "OpenAI did not accept this key.",
+        }}
+        actions={{ changeKey, useHosted }}
+        onAnswer={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Change key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(changeKey).toHaveBeenCalledTimes(1);
+    expect(useHosted).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("#assistant-enter-key")).not.toBeNull();
+    expect(document.querySelector("#assistant-use-hosted")).not.toBeNull();
+  });
+
+  it("an error offers nothing on its own", () => {
+    render(
+      <BaseThreadItem
+        item={{ kind: "error", id: "e", createdAt: CREATED, text: "quota" }}
+        onAnswer={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("a stored tool call draws nothing; the tool's own marker is drawn", () => {
+    const { container } = render(
+      <BaseThreadItem
+        item={{
+          id: "t-2",
+          createdAt: CREATED,
+          kind: "tool",
+          label: "read_file",
+          call: {
+            name: "read_file",
+            input: { path: "src/lib.rs" },
+            output: "fn main() {}",
+          },
+        }}
+        onAnswer={vi.fn()}
+      />
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
   it("a tool line is a marker", () => {
     const { container } = render(
       <BaseThreadItem
@@ -262,6 +318,64 @@ describe("BaseThreadItem", () => {
     );
     expect(screen.getByRole("status").textContent).toBe("Stopped.");
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a stopped notice offers Try again when given onRetry", () => {
+    const onRetry = vi.fn();
+    render(
+      <BaseThreadItem
+        item={{
+          id: "n-1",
+          createdAt: CREATED,
+          kind: "notice",
+          text: "Stopped.",
+        }}
+        onAnswer={vi.fn()}
+        onRetry={onRetry}
+      />
+    );
+    expect(screen.getByRole("status").textContent).toContain("Stopped.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("a notice without onRetry offers nothing", () => {
+    render(
+      <BaseThreadItem
+        item={{
+          id: "n-1",
+          createdAt: CREATED,
+          kind: "notice",
+          text: "Stopped.",
+        }}
+        onAnswer={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("a cut-off reply keeps its text, says so, and offers Try again", () => {
+    const onRetry = vi.fn();
+    render(
+      <BaseThreadItem
+        item={reply("The program")}
+        cutOff
+        onAnswer={vi.fn()}
+        onRetry={onRetry}
+      />
+    );
+    expect(screen.getByText("The program")).toBeTruthy();
+    expect(screen.getByText("This reply was cut off.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("a cut-off reply that is not the last says so without Try again", () => {
+    render(
+      <BaseThreadItem item={reply("The program")} cutOff onAnswer={vi.fn()} />
+    );
+    expect(screen.getByText("This reply was cut off.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("an approval answers with its own id", () => {

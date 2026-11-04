@@ -58,6 +58,14 @@ vi.mock("@/widgets/assistant", async () => ({
     .useDefaultBackend,
   useTurn: (await import("@/widgets/assistant/model/use-turn")).useTurn,
 }));
+// A send reads the context; the real bridge reaches the build's generated
+// globals
+vi.mock("@/views/sidebar/assistant/bridge/playground-bridge", () => ({
+  realBridge: {
+    listContextFiles: () => [],
+    toProjectPath: (path: string) => path,
+  },
+}));
 vi.mock("@/effects/chat-thread/push-thread", () => ({
   pushThread: vi.fn(() => Promise.resolve()),
 }));
@@ -141,6 +149,21 @@ describe("ConnectDialog", () => {
     expect(PgAssistant.isPickingBackend).toBe(true);
     expect(eventNames()).toEqual([
       ["assistant_connect_opened", { via: "menu" }],
+    ]);
+  });
+
+  it("opens on the thread's own backend, and says so", () => {
+    renderHost();
+
+    act(() =>
+      openConnectDialog("thread", { provider: "openai", model: "gpt-x" })
+    );
+
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-model")?.value
+    ).toBe("gpt-x");
+    expect(eventNames()).toEqual([
+      ["assistant_connect_opened", { via: "thread" }],
     ]);
   });
 

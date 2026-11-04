@@ -5,12 +5,15 @@ const log = createLogger("settings-page:sections");
 
 /**
  * The page's sections, in the prototype's order (design.md, "Settings as a
- * full page (5.20)"). `network` and `project` are the page's own; the rest are
+ * full page (5.20)"), with `assistant` after `network` as the designers'
+ * settings spec puts Program Pal (HOO-2423). `network`, `assistant` and
+ * `project` are the page's own; the rest are
  * the prefixes of `PgSettings.all`'s ids, and `experimental` is the one the
  * prototype leaves out.
  */
 export const SECTION_ORDER = [
   "network",
+  "assistant",
   "project",
   "blockExplorer",
   "build",
@@ -138,6 +141,7 @@ if (import.meta.vitest) {
     it("titles the sections as the prototype does", () => {
       expect(SECTION_ORDER).toEqual([
         "network",
+        "assistant",
         "project",
         "blockExplorer",
         "build",

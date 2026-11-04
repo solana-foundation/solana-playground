@@ -1,5 +1,8 @@
 import type { ModelMessage } from "ai";
+import { it, vi } from "vitest";
 
+import type { LogEntry } from "../logger";
+import { initLogger, memoryProvider, resetLogger } from "../logger";
 import {
   anthropicText,
   fakeFetch,
@@ -8,6 +11,7 @@ import {
   openAiToolCall,
   sse,
 } from "./__fixtures__/fake-provider";
+import { UPSTREAM_DROPPED } from "./config.mjs";
 import { createModel } from "./models";
 import { AiTurnError, runTurn } from "./run-turn";
 import { toSdkTools } from "./tools";
@@ -145,7 +149,17 @@ describe("runTurn", () => {
   });
 
   describe("a failed request reads as Spec 08 words, never its status or body", () => {
-    const failOn = async (response: Response) => {
+    let entries: LogEntry[];
+
+    beforeEach(() => {
+      const memory = memoryProvider();
+      entries = memory.entries;
+      initLogger({ providers: [memory] });
+    });
+
+    afterEach(() => resetLogger());
+
+    const failOn = async (response: Response | (() => Response)) => {
       const { fetch } = fakeFetch(response);
       return (await runTurn({
         model: openAi(fetch),
@@ -153,6 +167,8 @@ describe("runTurn", () => {
         apiKey: "test-key-123",
       }).catch((e: unknown) => e)) as AiTurnError;
     };
+
+    const reported = () => entries.filter((entry) => entry.report);
 
     it("keeps the status and the redacted body in the detail, not the message", async () => {
       const failure = await failOn(
@@ -170,6 +186,77 @@ describe("runTurn", () => {
       expect(failure.detail).toBe(
         '502 Bad Gateway — {"error":"Upstream 500: [your key] was not used."}'
       );
+      // An outage: the provider's status page says so, and a resend repeats it
+      expect(reported()).toEqual([]);
+    });
+
+    it("a server error that is not an outage is reported", async () => {
+      const failure = await failOn(openAiError(500, "internal error"));
+
+      expect(failure.kind).toBe("provider");
+      expect(reported()).toHaveLength(1);
+    });
+
+    it.each([
+      [404, "The model gpt-9 does not exist", "no-model"],
+      [403, "This key has no access to the model", "forbidden"],
+      [413, "Request too large", "too-long"],
+      [400, "prompt is too long: 210000 tokens > 200000 maximum", "too-long"],
+      [401, "Incorrect API key provided: test-key-123", "key-refused"],
+      [429, "Rate limit reached", "busy"],
+    ])(
+      "a %i (%s) is %s: no resend, nothing reported",
+      // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
+      async (status, said, kind) => {
+        const failure = await failOn(openAiError(status, said));
+
+        expect(failure.kind).toBe(kind);
+        expect(failure.status).toBe(status);
+        expect(failure.message).not.toMatch(/Send your message again/);
+        expect(failure.message).not.toContain(String(status));
+        expect(failure.detail).toContain(
+          said.replace("test-key-123", "[your key]")
+        );
+        expect(reported()).toEqual([]);
+      }
+    );
+
+    it("Gemini's 400 for a bad key is key-refused", async () => {
+      const failure = await failOn(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 400,
+              message: "API key not valid. Please pass a valid API key.",
+              status: "INVALID_ARGUMENT",
+              details: [{ reason: "API_KEY_INVALID" }],
+            },
+          }),
+          { status: 400, headers: { "content-type": "application/json" } }
+        )
+      );
+
+      expect(failure.kind).toBe("key-refused");
+      expect(reported()).toEqual([]);
+    });
+
+    it("a 400 the provider could not read is reported, and not resent", async () => {
+      const failure = await failOn(openAiError(400, "Invalid 'messages[0]'"));
+
+      expect(failure.kind).toBe("invalid");
+      expect(failure.message).not.toMatch(/Send your message again/);
+      expect(reported()).toHaveLength(1);
+    });
+
+    it("a programming error is reported, its text kept off screen", async () => {
+      const failure = await failOn(() => {
+        throw new TypeError("x.fetch is not a function");
+      });
+
+      expect(failure.kind).toBe("provider");
+      expect(failure.message).not.toContain("x.fetch");
+      expect(failure.detail).toContain("x.fetch is not a function");
+      expect(reported()).toHaveLength(1);
     });
 
     it("a 429 is busy, with the server's wait in seconds", async () => {
@@ -192,20 +279,6 @@ describe("runTurn", () => {
       expect(failure.kind).toBe("busy");
       expect(failure.retryAfter).toBeUndefined();
       expect(failure.detail).toContain("Rate limit reached");
-    });
-
-    it("a refused key says so, with no 401 in sight", async () => {
-      const failure = await failOn(
-        openAiError(401, "Incorrect API key provided: test-key-123")
-      );
-
-      expect(failure.kind).toBe("key-refused");
-      expect(failure.message).toBe(
-        "The model's provider did not accept this key. Check it in Settings, or use the hosted model."
-      );
-      expect(failure.detail).toContain(
-        "Incorrect API key provided: [your key]"
-      );
     });
   });
 
@@ -278,6 +351,89 @@ describe("runTurn", () => {
     expect(failure.detail).toMatch(/overloaded/);
   });
 
+  it("rejects a stream the connection drops after text as a network failure", async () => {
+    const encoder = new TextEncoder();
+    const dropped = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  id: "1",
+                  created: 0,
+                  model: "m",
+                  choices: [{ index: 0, delta: { content: "The program" } }],
+                })}\n\n`
+              )
+            );
+          },
+          // Later, as a real drop: an error in `start` would drop the queue
+          async pull(controller) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            controller.error(new TypeError("network error"));
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } }
+      );
+    const { fetch } = fakeFetch(dropped);
+    const text: string[] = [];
+
+    const failure = await runTurn({
+      model: openAi(fetch),
+      messages: USER,
+      onText: (delta) => text.push(delta),
+    }).catch((e: unknown) => e);
+
+    expect(text.join("")).toBe("The program");
+    expect(failure).toBeInstanceOf(AiTurnError);
+    expect((failure as AiTurnError).kind).toBe("network");
+  });
+
+  it("rejects the error frame /api/agent sends when its model drops as a network failure", async () => {
+    // What `pipeStream` in `api/agent.mjs` writes once its read of the model fails
+    const { fetch } = fakeFetch(
+      sse([
+        `data: ${JSON.stringify({
+          id: "1",
+          created: 0,
+          model: "m",
+          choices: [{ index: 0, delta: { content: "The program" } }],
+        })}\n\n`,
+        `\n\ndata: ${JSON.stringify({
+          error: {
+            message: "Upstream stream failed: terminated",
+            code: UPSTREAM_DROPPED,
+          },
+        })}\n\n`,
+      ])
+    );
+    const text: string[] = [];
+
+    const failure = await runTurn({
+      model: openAi(fetch),
+      messages: USER,
+      onText: (delta) => text.push(delta),
+    }).catch((e: unknown) => e);
+
+    expect(text.join("")).toBe("The program");
+    expect(failure).toBeInstanceOf(AiTurnError);
+    expect((failure as AiTurnError).kind).toBe("network");
+  });
+
+  it("keeps a programming TypeError a provider failure", async () => {
+    const { fetch } = fakeFetch(() => {
+      throw new TypeError("x.fetch is not a function");
+    });
+
+    const failure = await runTurn({
+      model: openAi(fetch),
+      messages: USER,
+    }).catch((e: unknown) => e);
+
+    expect((failure as AiTurnError).kind).toBe("provider");
+  });
+
   it("rejects a refusal with its category", async () => {
     const { fetch } = fakeFetch(
       anthropicText("", "refusal", { type: "refusal", category: "cyber" })
@@ -288,5 +444,107 @@ describe("runTurn", () => {
     await expect(turn).rejects.toThrow(AiTurnError);
     await expect(turn).rejects.toThrow(/cyber/);
     await expect(turn).rejects.toMatchObject({ kind: "refusal" });
+  });
+  describe("tool results", () => {
+    const toolReturning = (run: () => unknown) =>
+      toSdkTools([
+        {
+          name: "probe",
+          description: "Probe",
+          schema: {
+            type: "object",
+            properties: {},
+            additionalProperties: false,
+          },
+          run: run as () => string,
+        },
+      ]);
+
+    const resultsOf = async (tools: ReturnType<typeof toSdkTools>) => {
+      const { fetch } = fakeFetch(
+        openAiToolCall("c1", "probe", { path: "src/lib.rs" }),
+        openAiText("ok")
+      );
+      const onToolResult = vi.fn();
+      await runTurn({
+        model: openAi(fetch),
+        messages: USER,
+        tools,
+        onToolResult,
+      });
+      return onToolResult.mock.calls.map(([result]) => result);
+    };
+
+    it("reports each tool's result after it runs", async () => {
+      expect(await resultsOf(toolReturning(() => "echoed"))).toEqual([
+        {
+          toolCallId: "c1",
+          toolName: "probe",
+          input: { path: "src/lib.rs" },
+          output: "echoed",
+          failed: false,
+        },
+      ]);
+    });
+
+    it("reports a tool that throws as failed, with its message", async () => {
+      const results = await resultsOf(
+        toolReturning(() => {
+          throw new Error("Not found");
+        })
+      );
+
+      expect(results).toEqual([
+        {
+          toolCallId: "c1",
+          toolName: "probe",
+          input: { path: "src/lib.rs" },
+          output: "Not found",
+          failed: true,
+        },
+      ]);
+    });
+
+    it("reports only a streaming tool's final result", async () => {
+      const results = await resultsOf(
+        toolReturning(async function* () {
+          yield "half";
+          yield "whole";
+        })
+      );
+
+      expect(results.map(({ output }) => output)).toEqual(["whole"]);
+    });
+
+    it("reports a tool that returned nothing as empty text", async () => {
+      const results = await resultsOf(toolReturning(() => undefined));
+
+      expect(results.map(({ output }) => output)).toEqual([""]);
+    });
+
+    it("reports a failure whose message cannot be read as a placeholder", async () => {
+      const results = await resultsOf(
+        toolReturning(() => {
+          throw Object.defineProperty({}, "message", {
+            get() {
+              throw new Error("no message");
+            },
+          });
+        })
+      );
+
+      expect(results).toEqual([
+        expect.objectContaining({
+          output: "(a value that could not be written as text)",
+          failed: true,
+        }),
+      ]);
+    });
+
+    it("reports a result that is not text as JSON", async () => {
+      const results = await resultsOf(toolReturning(() => ({ a: 1 })));
+
+      expect(results.map(({ output }) => output)).toEqual(['{"a":1}']);
+    });
   });
 });

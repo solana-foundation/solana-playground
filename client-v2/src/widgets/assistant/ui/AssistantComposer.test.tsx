@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,6 +31,7 @@ vi.mock("../model/default-backend", async (importOriginal) => {
   return {
     probeDefaultBackend: original.probeDefaultBackend,
     resetDefaultBackendProbe: original.resetDefaultBackendProbe,
+    retryDefaultBackend: vi.fn(() => Promise.resolve(backend)),
     useDefaultBackend: () => backend,
   };
 });
@@ -44,21 +45,47 @@ vi.mock("../../../effects/chat-thread/push-thread", () => ({
 
 // What the chips read: the workspace, the bridge and the lesson. The real ones
 // reach the utils barrel, which needs the build's globals
+const { noEvent } = vi.hoisted(() => ({
+  noEvent: () => ({ dispose: () => {} }),
+}));
 vi.mock("../../../utils/explorer/explorer", () => ({
   PgExplorer: {
     currentFilePath: "src/lib.rs",
+    // Each test gets its own, so one test's context choice is not another's
+    currentWorkspaceId: "w0",
     getItemNameFromPath: (path: string) => path.split("/").pop(),
+    onDidSetTabs: noEvent,
+    onDidCreateItem: noEvent,
+    onDidDeleteItem: noEvent,
+    onDidRenameItem: noEvent,
+    onDidSwitchWorkspace: noEvent,
   },
 }));
 vi.mock("../../../utils/program-info", () => ({
   PgProgramInfo: { idl: null },
 }));
-vi.mock("../../../views/sidebar/assistant/bridge/playground-bridge", () => ({
-  realBridge: {
-    listFiles: () => ["src/lib.rs"],
-    listOpenFiles: () => ["src/lib.rs"],
-  },
-}));
+// The bridge's context from the real store, over a fixed project
+const FILES = ["src/lib.rs", "tests/anchor.test.ts", "secret/other.rs"];
+vi.mock(
+  "../../../views/sidebar/assistant/bridge/playground-bridge",
+  async () => {
+    const { contextPathsWith, PgAssistantContext } = await import(
+      "@/entities/assistant-context"
+    );
+    const { PgExplorer } = await import("../../../utils/explorer/explorer");
+    return {
+      realBridge: {
+        listFiles: () => FILES,
+        listOpenFiles: () => ["src/lib.rs"],
+        listContextFiles: () =>
+          contextPathsWith((path) => FILES.includes(path))(
+            ["src/lib.rs"],
+            PgAssistantContext.choice(PgExplorer.currentWorkspaceId)
+          ),
+      },
+    };
+  }
+);
 vi.mock("../../../views/sidebar/assistant/bridge/build-output", () => ({
   PgBuildOutput: { latest: null },
 }));
@@ -81,13 +108,18 @@ const anthropic: Connection = {
  * dialog opens on is `ConnectDialog`'s to test
  */
 const openConnect = vi.fn();
+const openSources = vi.fn();
 
 /** The composer with the turn held by its parent, as the widget holds it */
 function Harness() {
   const turn = useTurn({ open: openConnect });
   return (
     <TooltipProvider>
-      <AssistantComposer turn={turn} />
+      <AssistantComposer
+        turn={turn}
+        onSources={openSources}
+        focusPicked={() => false}
+      />
     </TooltipProvider>
   );
 }
@@ -108,7 +140,16 @@ beforeEach(() => {
   backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
   vi.spyOn(globalThis, "fetch").mockResolvedValue({
     ok: true,
-    json: async () => ({ configured: false }),
+    // `GET /api/ai/status` for a deployment with no hosted key; the session
+    // read finds no user in it
+    json: async () => ({
+      available: false,
+      key: "own",
+      /* eslint-disable unicorn/no-null -- a `GET /api/ai/status` body: `null` is on the wire */
+      reason: null,
+      model: null,
+      /* eslint-enable unicorn/no-null */
+    }),
   } as Response);
   PgAssistant.disconnect();
   PgAssistant.connect(anthropic);
@@ -118,6 +159,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   openConnect.mockReset();
+  openSources.mockReset();
   // The harness is still mounted here: RTL's own cleanup runs after this hook
   act(() => PgAssistant.disconnect());
   PgSession.reset();
@@ -126,14 +168,157 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * Opens + › Add a file from the keyboard, as the submenu's own focus: jsdom
+ * has no pointer geometry for Radix's grace area, so a click into the
+ * submenu closes it first
+ */
+const openAddFile = async (user: ReturnType<typeof userEvent.setup>) => {
+  screen.getByRole("menuitem", { name: "Add a file" }).focus();
+  await user.keyboard("{ArrowRight}");
+};
+
+/** Picks a file in the open Add a file submenu */
+const pickFile = async (
+  user: ReturnType<typeof userEvent.setup>,
+  path: string
+) => {
+  screen.getByRole("menuitem", { name: path }).focus();
+  await user.keyboard("{Enter}");
+};
+
+// A fresh workspace per test: the context store outlives a render
+let workspaces = 0;
+beforeEach(async () => {
+  const { PgExplorer } = await import("../../../utils/explorer/explorer");
+  (
+    PgExplorer as { currentWorkspaceId: string }
+  ).currentWorkspaceId = `w${++workspaces}`;
+});
+
 describe("AssistantComposer, context chips", () => {
-  it("names the active file before the file count, as the prototype orders them", () => {
+  // Removing a chip focuses it first, and its tooltip watches its size
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+
+  it("names a chip per file in the context, and none for the rest of the project", () => {
     render(<Harness />);
+    expect(
+      screen.getByText("Sent with this message: lib.rs, in full")
+    ).toBeTruthy();
+    expect(screen.queryByText(/the paths? of/)).toBeNull();
+    expect(screen.queryByText("other.rs")).toBeNull();
+  });
+
+  it("keeps a removed file out until it is added back, and reports it", async () => {
+    const send = vi.fn(() => Promise.resolve());
+    vi.spyOn(
+      await import("../../../views/sidebar/assistant/model"),
+      "createProvider"
+    ).mockReturnValue({ id: "anthropic", label: "stub", send });
+    render(<Harness />);
+    const user = userEvent.setup();
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove lib.rs from the context" })
+    );
+    expect(screen.queryByText("lib.rs")).toBeNull();
+    expect(tracked()).toContainEqual(["assistant_file_chip_removed", {}]);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Message the assistant" }),
+      "hi{Enter}"
+    );
+    // The send starts after the default backend's probe; slow under load
+    await waitFor(() => expect(send).toHaveBeenCalled(), { timeout: 5_000 });
+    // Not "the next message only": the chip stays gone after the send
+    expect(screen.queryByText("lib.rs")).toBeNull();
+  });
+
+  it("adds a file from + › Add a file, and reports it", async () => {
+    render(<Harness />);
+    const user = await openMenu(/Add context/);
+
+    await openAddFile(user);
+    await pickFile(user, "tests/anchor.test.ts");
+
+    expect(
+      await screen.findByText("Sent with this message: anchor.test.ts, in full")
+    ).toBeTruthy();
+    expect(tracked()).toContainEqual([
+      "assistant_context_file_added",
+      { via: "menu" },
+    ]);
+  });
+
+  it("offers a removed tab under Add a file, and brings its chip back", async () => {
+    render(<Harness />);
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Remove lib.rs from the context" })
+    );
+
+    await user.click(screen.getByRole("button", { name: /Add context/ }));
+    await openAddFile(user);
+    await pickFile(user, "src/lib.rs");
+
+    expect(
+      await screen.findByText("Sent with this message: lib.rs, in full")
+    ).toBeTruthy();
+  });
+});
+
+describe("AssistantComposer, the + menu", () => {
+  it("opens Sources and tools", async () => {
+    render(<Harness />);
+    const user = await openMenu(/Add context/);
+    await user.click(
+      screen.getByRole("menuitem", { name: /Sources and tools/ })
+    );
+    expect(openSources).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Connection and key… once connected, and opens Connect from +", async () => {
+    render(<Harness />);
+    const user = await openMenu(/Add context/);
+    await user.click(
+      screen.getByRole("menuitem", { name: /Connection and key…/ })
+    );
+    expect(openConnect).toHaveBeenCalledWith("add", undefined);
+  });
+
+  it("offers Connect a model… with nothing connected", async () => {
+    PgAssistant.disconnect();
+    render(<Harness />);
+    await openMenu(/Add context/);
+    expect(
+      screen.getByRole("menuitem", { name: /Connect a model…/ })
+    ).toBeTruthy();
+  });
+});
+
+describe("AssistantComposer, chip order", () => {
+  it("names the files in tab order, then the added ones", async () => {
+    render(<Harness />);
+    const user = await openMenu(/Add context/);
+    await openAddFile(user);
+    await pickFile(user, "tests/anchor.test.ts");
     // Each chip is its tooltip's trigger, which takes over its data-slot
     const chips = Array.from(
       document.querySelectorAll('[data-slot="composer-context"] > *')
-    ).map((chip) => chip.textContent);
-    expect(chips).toEqual(["lib.rs", "1 file"]);
+    ).map(
+      // The short label; the chip also carries its spoken name for a reader
+      (chip) => chip.querySelector('[aria-hidden="true"]')?.textContent
+    );
+    expect(chips).toEqual(["lib.rs", "anchor.test.ts"]);
   });
 });
 
@@ -168,7 +353,7 @@ describe("AssistantComposer, connected", () => {
     expect(PgAssistant.items.length).toBe(1);
   });
 
-  it("connects the default from a keyed backend and clears the thread", async () => {
+  it("connects the default from a keyed backend and keeps the thread", async () => {
     await PgSession.refreshWith({
       id: "u1",
       name: null,
@@ -182,7 +367,7 @@ describe("AssistantComposer, connected", () => {
     );
 
     expect(PgAssistant.connection?.id).toBe("default");
-    expect(PgAssistant.items.length).toBe(0);
+    expect(PgAssistant.items.length).toBe(1);
     expect(tracked()).toEqual([
       ["assistant_model_picked", { provider: "default", via: "menu" }],
     ]);
@@ -277,6 +462,15 @@ describe("AssistantComposer, re-picking and busy", () => {
   });
 
   it("sends nothing for a re-pick of the connected default", async () => {
+    // Signed in, so the connected default answers and no off row is reported
+    await PgSession.refreshWith({
+      id: "u1",
+      /* eslint-disable unicorn/no-null -- `SessionUser` types these fields `| null` */
+      name: null,
+      image: null,
+      login: null,
+      /* eslint-enable unicorn/no-null */
+    });
     PgAssistant.connect({ id: "default", apiKey: "" });
     const connect = vi.spyOn(PgAssistant, "connect");
     render(<Harness />);
@@ -333,18 +527,79 @@ describe("AssistantComposer, nothing connected", () => {
     expect(sendBlocked()).toBe(true);
   });
 
+  // With no model, a message waits for one rather than going nowhere
+  it("sends nothing on Enter with no model, keeps the text, and offers Connect a model", async () => {
+    PgAssistant.disconnect();
+    backend = { state: "absent" };
+    const add = vi.spyOn(PgAssistant, "addUserMessage");
+    render(<Harness />);
+    await typeIn();
+    await userEvent.setup().keyboard("{Enter}");
+
+    expect(add).not.toHaveBeenCalled();
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "Message the assistant",
+        }) as HTMLTextAreaElement
+      ).value
+    ).toBe("hello");
+    expect(sendBlocked()).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Connect a model" })
+    ).toBeTruthy();
+  });
+
+  it("keeps Send while the default is still being asked about", async () => {
+    PgAssistant.disconnect();
+    backend = { state: "checking" };
+    render(<Harness />);
+    await typeIn();
+    expect(sendBlocked()).toBe(false);
+  });
+
+  it("keeps Send where the default is served to a signed-in user", async () => {
+    await PgSession.refreshWith({
+      id: "u1",
+      /* eslint-disable unicorn/no-null -- `SessionUser` types these fields `| null` */
+      name: null,
+      image: null,
+      login: null,
+      /* eslint-enable unicorn/no-null */
+    });
+    PgAssistant.disconnect();
+    // eslint-disable-next-line unicorn/no-null -- `DefaultBackend` types `model` `| null`
+    backend = { state: "present", model: null };
+    render(<Harness />);
+    await typeIn();
+    expect(sendBlocked()).toBe(false);
+  });
+
   it.each([
-    ["could not be reached, so a send asks again", { state: "unreachable" }],
-    ["is still being asked about", { state: "checking" }],
-    ["is served, for a signed-out user", { state: "present", model: null }],
+    [
+      "the default could not be reached",
+      { state: "unreachable" },
+      "Can't reach the model",
+    ],
+    [
+      "the default is served to a signed-out user",
+      // eslint-disable-next-line unicorn/no-null -- `DefaultBackend` types `model` `| null`
+      { state: "present", model: null },
+      "Sign in to send",
+    ],
   ] as const)(
-    "keeps Send where the default %s",
-    async (_, answer: DefaultBackend) => {
+    "blocks Send, with its reason, where %s",
+    // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
+    async (_, answer: DefaultBackend, reason) => {
+      // eslint-disable-next-line unicorn/no-null -- `PgSession.refreshWith(null)` is a signed-out session
+      await PgSession.refreshWith(null);
       PgAssistant.disconnect();
       backend = answer;
       render(<Harness />);
       await typeIn();
-      expect(sendBlocked()).toBe(false);
+      expect(sendBlocked()).toBe(true);
+      expect(screen.getByRole("status").id).toBe("assistant-ai-off");
+      expect(document.body.innerHTML).toContain(reason);
     }
   );
 
@@ -359,6 +614,8 @@ describe("AssistantComposer, nothing connected", () => {
 
   it("says a requested prompt is waiting, in an info callout", async () => {
     PgAssistant.disconnect();
+    // Still being asked about, so nothing says the assistant is off
+    backend = { state: "checking" };
     render(<Harness />);
 
     act(() => PgAssistant.requestPrompt("Explain this error"));
@@ -371,15 +628,176 @@ describe("AssistantComposer, nothing connected", () => {
     );
   });
 
-  it("names no sign-in in the waiting notice where there is no default", async () => {
+  it("folds a waiting prompt into the off row where there is no default", async () => {
     PgAssistant.disconnect();
     backend = { state: "absent" };
     render(<Harness />);
 
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
-    expect((await screen.findByRole("status")).textContent).toBe(
-      "Connect a model to send this to the assistant. Your prompt is waiting in the composer."
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain(
+        "Your prompt is waiting in the composer."
+      )
     );
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status").id).toBe("assistant-ai-off");
+  });
+});
+
+describe("AssistantComposer, the off row", () => {
+  const row = () => document.getElementById("assistant-ai-off");
+  /** The row, once the page's session read has answered */
+  const shownRow = () =>
+    waitFor(() => {
+      const found = row();
+      if (!found) throw new Error("no off row yet");
+      return found;
+    });
+
+  beforeEach(async () => {
+    // eslint-disable-next-line unicorn/no-null -- `PgSession.refreshWith(null)` is a signed-out session
+    await PgSession.refreshWith(null);
+    PgAssistant.disconnect();
+  });
+
+  it("says a deployment with no hosted key needs a key, and Add an API key opens Connect a model", async () => {
+    backend = { state: "absent" };
+    render(<Harness />);
+    expect(row()?.getAttribute("role")).toBe("status");
+    expect(row()?.textContent).toContain(
+      "The hosted model is not available. Add your own key to use the assistant."
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Add an API key" }));
+    expect(openConnect).toHaveBeenCalledWith("ai-off", undefined);
+    expect(tracked()).toEqual([
+      ["assistant_ai_off_shown", { reason: "no-key" }],
+    ]);
+  });
+
+  it("titles each reason over its line", async () => {
+    const titleOf = () =>
+      row()?.querySelector('[data-slot="callout-title"]')?.textContent;
+    backend = { state: "absent" };
+    const { unmount } = render(<Harness />);
+    expect(titleOf()).toBe("The assistant has no model");
+    unmount();
+    backend = { state: "unreachable" };
+    const second = render(<Harness />);
+    expect(titleOf()).toBe("Model not answering");
+    second.unmount();
+    backend = { state: "present", model: "m" };
+    render(<Harness />);
+    await shownRow();
+    expect(titleOf()).toBe("Sign in to use the assistant");
+  });
+
+  it("asks again from Try again where the deployment has no hosted key", async () => {
+    backend = { state: "absent" };
+    const { retryDefaultBackend } = await import("../model/default-backend");
+    vi.mocked(retryDefaultBackend).mockClear();
+    render(<Harness />);
+    const names = Array.from(
+      row()?.querySelectorAll("button") ?? [],
+      (button) => button.textContent
+    );
+    expect(names).toEqual(["Add an API key", "Try again"]);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Try again" }));
+    expect(retryDefaultBackend).toHaveBeenCalled();
+  });
+
+  it("offers sign-in or a key to a signed-out user, and signs in from the assistant", async () => {
+    backend = { state: "present", model: "m" };
+    const signIn = vi.spyOn(PgSession, "signIn").mockResolvedValue(undefined);
+    render(<Harness />);
+    expect((await shownRow()).textContent).toContain(
+      "Sign in with GitHub to use the hosted model, or add a key of your own."
+    );
+    expect(screen.getByRole("button", { name: "Add an API key" })).toBeTruthy();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Sign in with GitHub" }));
+    expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+    expect(tracked()).toEqual([
+      ["assistant_ai_off_shown", { reason: "signed-out" }],
+    ]);
+  });
+
+  it("says a failed sign-in in the row", async () => {
+    backend = { state: "present", model: "m" };
+    vi.spyOn(PgSession, "signIn").mockRejectedValue(new Error("boom"));
+    render(<Harness />);
+    await shownRow();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Sign in with GitHub" }));
+    await waitFor(() =>
+      expect(row()?.textContent).toContain("Couldn't sign in. Try again.")
+    );
+  });
+
+  it("goes away once the user signs in", async () => {
+    backend = { state: "present", model: "m" };
+    render(<Harness />);
+    await shownRow();
+    await act(() =>
+      // eslint-disable-next-line unicorn/no-null -- `SessionUser` types these fields `| null`
+      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+    );
+    expect(row()).toBeNull();
+  });
+
+  it("asks again from Try again where the model could not be reached", async () => {
+    backend = { state: "unreachable" };
+    const { retryDefaultBackend } = await import("../model/default-backend");
+    render(<Harness />);
+    expect(row()?.textContent).toContain(
+      "The assistant can't reach its model. Try again in a minute."
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Try again" }));
+    expect(retryDefaultBackend).toHaveBeenCalled();
+  });
+
+  it("is reported once per reason however often it draws", () => {
+    backend = { state: "absent" };
+    const { rerender } = render(<Harness />);
+    rerender(<Harness />);
+    act(() => PgAssistant.addUserMessage("again"));
+    expect(
+      tracked().filter(([name]) => name === "assistant_ai_off_shown")
+    ).toEqual([["assistant_ai_off_shown", { reason: "no-key" }]]);
+  });
+
+  it("does not show while a key-based backend is connected", () => {
+    backend = { state: "absent" };
+    act(() => PgAssistant.connect(anthropic));
+    render(<Harness />);
+    expect(row()).toBeNull();
+  });
+
+  it("starts no session read of its own: the page's session effect reads it", () => {
+    PgSession.reset();
+    backend = { state: "present", model: "m" };
+    const reads = vi.mocked(globalThis.fetch);
+    reads.mockClear();
+    render(<Harness />);
+    expect(
+      reads.mock.calls.filter(([url]) =>
+        String(url).includes("/api/auth/get-session")
+      )
+    ).toEqual([]);
+    expect(row()).toBeNull();
+  });
+
+  it("does not show while the default is being asked about", () => {
+    backend = { state: "checking" };
+    render(<Harness />);
+    expect(row()).toBeNull();
   });
 });
