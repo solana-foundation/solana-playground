@@ -50,7 +50,7 @@ for `"setup"`. The setup list's "Connect a wallet" step reads only
 4. **Unavailable in the UI.** `connect.ts` throws a marked
    `WalletUnavailableError` for `"unavailable"`. The setup list's wallet step
    gets a `warn` status with the label "Wallet unavailable" when
-   `state === "unavailable"`; picking it runs `PgWallet.reload()` (re-read
+   `state === "unavailable"`; picking it runs `PgWallet.refresh()` (re-read
    through storage) and records `setup_wallet_retried` with the outcome.
    The account row's wallet toggle shows the same toast as other connect
    failures.
