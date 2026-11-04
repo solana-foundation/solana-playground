@@ -85,6 +85,35 @@ describe("utils/wallet/wallet", () => {
     await expect(result).rejects.toBe(failure);
   });
 
+  describe("while the wallet is unavailable", () => {
+    // `updatable` defines `state` only once the wallet initializes
+    const makeUnavailable = () =>
+      Object.defineProperty(PgWallet, "state", {
+        get: () => "unavailable",
+        configurable: true,
+      });
+
+    afterEach(() => {
+      Reflect.deleteProperty(PgWallet, "state");
+    });
+
+    it("add refuses, so no account lives only in memory", () => {
+      makeUnavailable();
+      const update = vi.spyOn(PgWallet, "update");
+
+      expect(() => PgWallet.add()).toThrow("Wallet unavailable");
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it("import refuses before the file picker opens", async () => {
+      makeUnavailable();
+      const click = vi.spyOn(HTMLInputElement.prototype, "click");
+
+      await expect(PgWallet.import()).rejects.toThrow("Wallet unavailable");
+      expect(click).not.toHaveBeenCalled();
+    });
+  });
+
   describe("the signer provider", () => {
     const keypair = PgWeb3.Keypair.generate();
     const kp = Array.from(keypair.secretKey);

@@ -368,6 +368,18 @@ const migrate = () => {
   localStorage.removeItem("walletName");
 };
 
+/**
+ * Refuse a new account while the wallet is unavailable: it is never saved
+ * then, so the account would live only in memory and be lost on reload
+ */
+const refuseWhileUnavailable = () => {
+  if (PgWallet.state === "unavailable") {
+    throw new Error(
+      "Wallet unavailable: it could not be read, so no account can be added. Try again from Get set up."
+    );
+  }
+};
+
 @derivable(derive)
 @updatable({ defaultState, storage, migrate })
 class _PgWallet {
@@ -378,8 +390,10 @@ class _PgWallet {
    * @param keypair optional keypair, default to a random keypair
    * @returns `false` when an account with the name or keypair already existed
    * and it switched to that account instead
+   * @throws while the wallet is unavailable
    */
   static add(params?: { name?: string; keypair?: PgWeb3.Keypair }) {
+    refuseWhileUnavailable();
     const { name, keypair } = PgCommon.setDefault(params, {
       name: PgWallet.getNextAvailableAccountName(),
       keypair: PgWeb3.Keypair.generate(),
@@ -454,8 +468,10 @@ class _PgWallet {
    * was chosen
    * @throws {KeypairFileError} when the file is not a keypair; any other
    * failure, such as an unreadable file, propagates as it is
+   * @throws while the wallet is unavailable, before the file picker opens
    */
   static async import(name?: string) {
+    refuseWhileUnavailable();
     try {
       return await PgCommon.import(
         async (ev) => {
