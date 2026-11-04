@@ -27,6 +27,7 @@ export type StepView =
 /**
  * Whether a step counts towards "n of total": a done one, and the network
  * while it warns, since a network that is not answering is still the one
- * chosen and an outage takes no step back
+ * chosen and an outage takes no step back. Counting is not completing: the
+ * list completes only once every step is done
  */
 export const counts = (view: StepView) => view.done || "warn" in view;

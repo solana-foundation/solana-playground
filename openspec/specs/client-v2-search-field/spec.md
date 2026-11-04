@@ -18,8 +18,8 @@ the field as picking the row did. A field with nothing else to pick (an item
 shown only when the input is valid, Custom, does not count) SHALL be a plain
 textbox: no list, no chevron, and Escape or a click outside SHALL keep what
 was typed. A field with a list SHALL show a chevron ("Show options") that
-toggles it; a magnifier ("Search") SHALL show only where the caller asks for
-search. The field keeps the `id` its user gives it.
+toggles it, and no field SHALL show a magnifier. The field keeps the `id`
+its user gives it.
 
 #### Scenario: Random fills an instruction value
 

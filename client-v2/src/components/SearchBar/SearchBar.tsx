@@ -10,7 +10,7 @@ import {
   useState,
   type JSX,
 } from "react";
-import { ArrowLeft, ChevronDown, Search, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, X } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -42,14 +42,6 @@ export interface SearchBarProps extends InputProps {
   showSearchOnMount?: boolean;
   labelToSelectOnPaste?: string;
   restoreIfNotSelected?: boolean;
-  /**
-   * Shows a magnifier, on the given side, for a field that searches a list.
-   * Without it a field with items gets a chevron and one without gets no
-   * icon, so a value field does not read as a search box.
-   */
-  searchButton?: {
-    position?: "left" | "right";
-  };
   /**
    * The item, by label, that gets a button of its own in the field instead
    * of a row in the list: Interact's Random, one press and no menu. The
@@ -103,7 +95,6 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
   showSearchOnMount,
   labelToSelectOnPaste,
   restoreIfNotSelected,
-  searchButton,
   inlineItem: inline,
   endAddon,
   onSearch,
@@ -117,7 +108,6 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
   validator,
   ...props
 }) => {
-  const searchButtonPosition = searchButton?.position ?? "left";
   const inlineLabel = inline?.label;
   const inlineItem = inlineLabel
     ? allItems?.find((item) => normalizeItem(item).label === inlineLabel)
@@ -135,8 +125,9 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
   const offersPicks = !!items?.some(
     (item) => !normalizeItem(item).onlyShowIfValid
   );
-  // The magnifier already opens the list, so a search field needs no chevron
-  const showsChevron = offersPicks && !searchButton;
+  // A field with items gets a chevron and one without gets no icon, so a
+  // value field does not read as a search box
+  const showsChevron = offersPicks;
 
   const inputRef = useRef<HTMLInputElement>(null);
   const lastValue = useRef(props.value);
@@ -460,24 +451,6 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
       <Popover open={isOpen}>
         <PopoverAnchor>
           <InputGroup>
-            {searchButton && (
-              <InputGroupAddon
-                align={
-                  searchButtonPosition === "left"
-                    ? "inline-start"
-                    : "inline-end"
-                }
-              >
-                <InputGroupButton
-                  size="icon-xs"
-                  aria-label="Search"
-                  onClick={searchTopResult}
-                >
-                  <Search />
-                </InputGroupButton>
-              </InputGroupAddon>
-            )}
-
             <InputGroupInput
               ref={inputRef}
               role={offersPicks ? "combobox" : undefined}

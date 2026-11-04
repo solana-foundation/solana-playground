@@ -43,7 +43,8 @@ close the sheet. Every button in the sheet SHALL be at least 48 px tall.
 
 Signed in, the sheet SHALL say the project is saved to their account and
 name the GitHub login to sign in with on the computer. Signed out, it SHALL
-say the project is saved on this phone only and offer "Sign in with GitHub",
+say the project stays on this phone, without telling the person to open a
+link while none is shown, and offer "Sign in with GitHub",
 with the GitHub mark, as its one action; it starts the sign-in, and once
 signed in the sheet reads as signed in.
 
@@ -55,7 +56,7 @@ signed in the sheet reads as signed in.
 #### Scenario: Signed out
 
 - **WHEN** a signed-out person opens the sheet
-- **THEN** it says the project is on this phone only
+- **THEN** it says the project stays on this phone
 - **AND** it shows a "Sign in with GitHub" button and no link
 
 ### Requirement: The hand-off is measured

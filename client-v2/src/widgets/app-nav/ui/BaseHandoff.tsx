@@ -123,7 +123,7 @@ const BaseHandoff = ({
               <DrawerDescription className="text-body! font-read text-pretty text-muted-foreground">
                 {account.status === "signed-in"
                   ? `Your projects are saved to your account. Open this link on a computer and sign in with GitHub as @${account.login}: this project is in your list there.`
-                  : "This project is saved on this phone only. Sign in with GitHub to keep it in your account, then open this link on a computer and sign in there too."}
+                  : "This project stays on this phone. Sign in with GitHub to take it to a computer."}
               </DrawerDescription>
               {account.status === "signed-out" ? (
                 <SignIn account={account} onSignIn={onSignIn} />
