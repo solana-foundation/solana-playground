@@ -229,6 +229,7 @@ test("project-without-program: An imported TypeScript project", async ({
   await expect(page.locator("#flow-client-project")).toHaveText(
     "Client project"
   );
+  await expect(page.locator("#flow-run")).toHaveText("Run");
   await page.keyboard.press("Control+2");
   await expect(page.locator("#flow-stage-panel-write")).toBeVisible();
   await expect(page.locator("#flow-stage-panel-build")).toHaveCount(0);
@@ -249,6 +250,7 @@ test("project-without-program: A project with no program on a phone", async ({
     page.getByRole("tablist", { name: "Development loop" })
   ).toHaveCount(0);
   await expect(page.locator("#flow-client-project")).toHaveCount(1);
+  await expect(page.locator("#flow-run")).toBeVisible();
 });
 
 test("project-without-program: A program is added", async ({
@@ -276,6 +278,7 @@ test("project-without-program: A program is added", async ({
       "flow-stage-tab-interact",
     ]);
   await expect(page.locator("#flow-client-project")).toHaveCount(0);
+  await expect(page.locator("#flow-run")).toHaveCount(0);
 });
 
 test("project-without-program: A project with a program", async ({
@@ -290,4 +293,12 @@ test("project-without-program: A project with a program", async ({
       "flow-stage-tab-deploy",
       "flow-stage-tab-interact",
     ]);
+});
+
+test("client-run: A project with a program", async ({ seededPage: page }) => {
+  // The seeded project is the default native program
+  await expect
+    .poll(() => stageTabIds(page), LONG)
+    .toContain("flow-stage-tab-build");
+  await expect(page.locator("#flow-run")).toHaveCount(0);
 });

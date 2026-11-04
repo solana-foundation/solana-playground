@@ -5,6 +5,7 @@ import {
   PgLanguage,
   PgTerminal,
 } from "../../utils";
+import type { RunResult } from "../../utils/js-runtime";
 import { createArgs, createCmd } from "../create";
 
 /**
@@ -69,7 +70,7 @@ export const test = createCmd({
 const processCommon = async (params: {
   paths: string[] | undefined;
   isTest: boolean;
-}) => {
+}): Promise<RunResult> => {
   const { paths, isTest } = params;
   PgTerminal.println(
     PgTerminal.info(`Running ${isTest ? "tests" : "client"}...`)
@@ -77,6 +78,7 @@ const processCommon = async (params: {
 
   const { PgJsRuntime } = await PgJsRuntimeImporter.import();
 
+  let ended: RunResult = { ok: true };
   const folderPath = isTest
     ? PgExplorer.PATHS.TESTS_DIRNAME
     : PgExplorer.PATHS.CLIENT_DIRNAME;
@@ -96,10 +98,12 @@ const processCommon = async (params: {
         throw new Error(`File '${fileName}' is not a script file`);
       }
 
-      await PgJsRuntime.execute({ fileName, code, isTest });
+      const result = await PgJsRuntime.execute({ fileName, code, isTest });
+      if (!result.ok && !isTest) return result;
+      if (!result.ok && ended.ok) ended = result;
     }
 
-    return;
+    return ended;
   }
 
   // Create default client/test if the folder is empty
@@ -119,13 +123,19 @@ const processCommon = async (params: {
     return await PgJsRuntime.execute({ fileName, code, isTest });
   }
 
-  // Run all files inside the folder
+  // Run all files inside the folder. A script that fails ends `run`, since
+  // the next one may need what it did; `test` runs every file, as it always
+  // has, and reports the first failure
   for (const fileName of folder.files.filter(PgLanguage.getIsPathJsLike)) {
     const code = PgExplorer.getFileContent(
       PgCommon.joinPaths(folderPath, fileName)
     )!;
-    await PgJsRuntime.execute({ fileName, code, isTest });
+    const result = await PgJsRuntime.execute({ fileName, code, isTest });
+    if (!result.ok && !isTest) return result;
+    if (!result.ok && ended.ok) ended = result;
   }
+
+  return ended;
 };
 
 /** Default client files*/

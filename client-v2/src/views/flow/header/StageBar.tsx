@@ -2,6 +2,7 @@ import type { FC } from "react";
 import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { PgClientRun, RunButton } from "@/features/docs-link";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { Badge } from "@/shared/ui/badge";
 
@@ -26,14 +27,16 @@ import Stepper from "./Stepper";
  * owns the Ctrl+1..4 stage keys and points the stepper at the stage the
  * current lesson step is graded on. A project with no program offers only
  * Write, so the other keys do nothing, and the row labels it "Client
- * project"; on a phone, where Write is the code's own page, it has no stepper
- * at all, only the label. The
+ * project" and carries its Run; on a phone, where Write is the code's own
+ * page, it has no stepper at all, only the label and Run. The
  * project list and the session footer live in the navigation (`AppNav`),
  * not here.
  */
 const StageBar: FC = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
   useEffect(() => PgFlow.onDidChange(setState).dispose, []);
+  // Every run is shown and measured, in a project with a program too
+  useEffect(() => PgClientRun.follow(), []);
 
   const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
   useEffect(() => PgLesson.onDidChange(setLesson).dispose, []);
@@ -71,9 +74,12 @@ const StageBar: FC = () => {
         phone={!row}
       />
       {!state.hasProgram && (
-        <Badge variant="outline" id="flow-client-project">
-          Client project
-        </Badge>
+        <>
+          <Badge variant="outline" id="flow-client-project">
+            Client project
+          </Badge>
+          <RunButton />
+        </>
       )}
     </Bar>
   );

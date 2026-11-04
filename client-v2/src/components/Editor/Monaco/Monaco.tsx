@@ -60,7 +60,9 @@ const Monaco = () => {
     // Compiler options
     const compilerOptions: monaco.languages.typescript.CompilerOptions = {
       lib: ["es2020"],
-      target: monaco.languages.typescript.ScriptTarget.ES2017,
+      // As scripts run (`TRANSPILE_OPTIONS`): BigInt literals are errors below
+      // ES2020, and Kit scripts use them for every amount
+      target: monaco.languages.typescript.ScriptTarget.ES2020,
       module: monaco.languages.typescript.ModuleKind.ESNext,
       moduleResolution: monaco.languages.typescript.ModuleResolutionKind.NodeJs,
       allowNonTsExtensions: true,

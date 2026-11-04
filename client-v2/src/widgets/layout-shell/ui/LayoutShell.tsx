@@ -410,6 +410,8 @@ const LayoutShell = ({
     let prevDeploy: StageStatus | undefined;
     const subs = [
       PgCommand.deploy.onDidStart(openConsole),
+      // A script's output is the run's result: the stage row's Run shows it
+      PgCommand.run.onDidStart(openConsole),
       PgFlow.onDidChange((flow) => {
         if (
           prevDeploy !== undefined &&

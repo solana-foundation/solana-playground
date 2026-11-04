@@ -20,9 +20,12 @@ import { requireFor } from "@/test-utils/require-for";
 // The `@/utils` barrel reaches generated globals (`GLOBAL_SETTINGS`) that
 // exist only in a booted app, so the test builds it from the pieces the shell
 // uses: the real keybinds, editor events and view (so a modal opens through
-// `PgView.setModal`, the event the shell listens to) and a deploy command it
-// can start.
+// `PgView.setModal`, the event the shell listens to) and the deploy and run
+// commands it can start.
 const deploy = vi.hoisted(() => ({
+  starts: new Set<(input: string | null) => void>(),
+}));
+const run = vi.hoisted(() => ({
   starts: new Set<(input: string | null) => void>(),
 }));
 // The open file and project the phone's bar and picker name, and the listeners
@@ -62,6 +65,12 @@ vi.mock("@/utils", async () => {
         onDidStart: (cb: (input: string | null) => void) => {
           deploy.starts.add(cb);
           return { dispose: () => deploy.starts.delete(cb) };
+        },
+      },
+      run: {
+        onDidStart: (cb: (input: string | null) => void) => {
+          run.starts.add(cb);
+          return { dispose: () => run.starts.delete(cb) };
         },
       },
     },
@@ -695,6 +704,13 @@ it("should close the Sheet when crossing to wide and keep the saved state", () =
 it("should open the console when a deploy starts, as auto", () => {
   shell();
   act(() => deploy.starts.forEach((cb) => cb(null)));
+  expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+  expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
+});
+
+it("should open the console when a script run starts, as auto", () => {
+  shell();
+  act(() => run.starts.forEach((cb) => cb("run")));
   expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
   expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
 });

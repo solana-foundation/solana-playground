@@ -5,6 +5,7 @@ export const EVENT_PREFIXES = {
   "app-nav": "nav",
   assistant: "assistant",
   catalog: "catalog",
+  "docs-link": "docs_link",
   feedback: "feedback",
   gist: "gist",
   home: "home",
