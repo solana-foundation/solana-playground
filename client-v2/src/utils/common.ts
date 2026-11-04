@@ -67,6 +67,7 @@ export class PgCommon {
     }
 
     if (result.reason instanceof Error) throw result.reason;
+    // TODO: carry failures as a Result (ok | err) so a non-Error never reaches here
     throw new Error(result.reason?.message);
   }
 

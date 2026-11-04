@@ -31,6 +31,7 @@ export const markFailureShown = (error: unknown): void => {
     shownObjects.add(error);
     return;
   }
+  // TODO: carry failures as a Result (ok | err) so a non-Error never reaches here
   // The terminal and a stage may both mark one thrown string; kept twice, the
   // spare copy would hide a later, unrelated failure with the same text
   if (shownStrings.includes(error)) return;

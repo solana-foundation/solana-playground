@@ -62,6 +62,7 @@ const UNKNOWN_ERROR = "Something went wrong";
 
 /** The message to show for whatever a submit threw; never empty */
 const messageOf = (error: unknown) => {
+  // TODO: carry failures as a Result (ok | err) so a non-Error never reaches here
   if (typeof error === "string") return error || UNKNOWN_ERROR;
   // An `Error`, or a plain `{ message }`
   if (
