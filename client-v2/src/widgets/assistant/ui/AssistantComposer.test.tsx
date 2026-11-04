@@ -677,6 +677,39 @@ describe("AssistantComposer, the off row", () => {
     ]);
   });
 
+  it("titles each reason over its line", async () => {
+    const titleOf = () =>
+      row()?.querySelector('[data-slot="callout-title"]')?.textContent;
+    backend = { state: "absent" };
+    const { unmount } = render(<Harness />);
+    expect(titleOf()).toBe("The assistant has no model");
+    unmount();
+    backend = { state: "unreachable" };
+    const second = render(<Harness />);
+    expect(titleOf()).toBe("Model not answering");
+    second.unmount();
+    backend = { state: "present", model: "m" };
+    render(<Harness />);
+    await shownRow();
+    expect(titleOf()).toBe("Sign in to use the assistant");
+  });
+
+  it("asks again from Try again where the deployment has no hosted key", async () => {
+    backend = { state: "absent" };
+    const { retryDefaultBackend } = await import("../model/default-backend");
+    vi.mocked(retryDefaultBackend).mockClear();
+    render(<Harness />);
+    const names = Array.from(
+      row()?.querySelectorAll("button") ?? [],
+      (button) => button.textContent
+    );
+    expect(names).toEqual(["Add an API key", "Try again"]);
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Try again" }));
+    expect(retryDefaultBackend).toHaveBeenCalled();
+  });
+
   it("offers sign-in or a key to a signed-out user, and signs in from the assistant", async () => {
     backend = { state: "present", model: "m" };
     const signIn = vi.spyOn(PgSession, "signIn").mockResolvedValue(undefined);

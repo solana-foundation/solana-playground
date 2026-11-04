@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
 
+import type { AiOffReason } from "../model/ai-off";
 import type { HeadLabel } from "../model/head-label";
 import type { DeleteKey } from "./BaseAssistantHead";
 import { BaseAssistantHead } from "./BaseAssistantHead";
@@ -16,6 +17,7 @@ interface HeadChoice {
   focusPicked?: () => boolean;
   deleteKey?: DeleteKey;
   label?: HeadLabel;
+  off?: AiOffReason;
 }
 
 const HOSTED: HeadLabel = {
@@ -53,6 +55,7 @@ const setup = (choice: HeadChoice = {}) => {
     <TooltipProvider>
       <BaseAssistantHead
         label={choice.label ?? HOSTED}
+        off={choice.off}
         onSources={onSources}
         onConnect={onConnect}
         connectLabel="Connect a model…"
@@ -308,4 +311,33 @@ it("is the frame's 44 px column bar", () => {
   );
   expect(head.className).toMatch(/\bh-11\b/);
   expect(head.className).toMatch(/\bborder-b\b/);
+});
+
+describe("BaseAssistantHead, the off status", () => {
+  const status = () => document.getElementById("assistant-status");
+
+  it("shows no status while the assistant can answer", () => {
+    setup();
+    expect(status()).toBeNull();
+  });
+
+  it("says Off with no hosted key or nobody signed in", () => {
+    setup({ off: "no-key" });
+    expect(status()?.textContent).toBe("Off");
+  });
+
+  it("says Off to a signed-out user", () => {
+    setup({ off: "signed-out" });
+    expect(status()?.textContent).toBe("Off");
+  });
+
+  it("says Not responding where the model could not be reached, with a red dot", () => {
+    setup({ off: "unreachable" });
+    expect(status()?.textContent).toBe("Not responding");
+    expect(
+      status()
+        ?.querySelector('[data-slot="status-dot"]')
+        ?.getAttribute("data-variant")
+    ).toBe("error");
+  });
 });

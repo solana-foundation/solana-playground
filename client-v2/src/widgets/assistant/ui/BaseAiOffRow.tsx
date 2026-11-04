@@ -1,21 +1,29 @@
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
 
 import type { AiOffReason } from "../model/ai-off";
 
-/** What each reason says, and whether it offers sign-in or a retry */
+/**
+ * What each reason says, and the action it leads with: the designers' Spec 08
+ * (AI-01) and Spec 04 ("Model unavailable") give the no-key and unreachable
+ * titles; the signed-out title is ours, as no spec gives one. The key button follows on every reason; a
+ * reason whose first action is the key offers Try again after it.
+ */
 const REASONS: Record<
   AiOffReason,
-  { text: string; action?: "sign-in" | "retry" }
+  { title: string; text: string; action?: "sign-in" | "retry" }
 > = {
   "no-key": {
+    title: "The assistant has no model",
     text: "The hosted model is not available. Add your own key to use the assistant.",
   },
   "signed-out": {
+    title: "Sign in to use the assistant",
     text: "Sign in with GitHub to use the hosted model, or add a key of your own.",
     action: "sign-in",
   },
   unreachable: {
+    title: "Model not answering",
     text: "The assistant can't reach its model. Try again in a minute.",
     action: "retry",
   },
@@ -44,8 +52,8 @@ export interface BaseAiOffRowProps {
 }
 
 /**
- * The composer's top row while no model can answer this user: why, and the
- * one way in. The designers' first-run spec keeps the composer on screen and
+ * The composer's top row while no model can answer this user: a title, why,
+ * and the ways in. The designers' first-run spec keeps the composer on screen and
  * puts the reason in its top row, so this sits above the composer, never in
  * its place.
  */
@@ -59,9 +67,20 @@ export function BaseAiOffRow({
   onSignIn,
   onRetry,
 }: BaseAiOffRowProps) {
-  const { text, action } = REASONS[reason];
+  const { title, text, action } = REASONS[reason];
+  const retryButton = (
+    <Button
+      size="sm"
+      variant={action === "retry" ? "default" : "outline"}
+      onClick={onRetry}
+      disabled={retrying}
+    >
+      Try again
+    </Button>
+  );
   return (
     <Callout id="assistant-ai-off" variant="info" role="status">
+      <CalloutTitle>{title}</CalloutTitle>
       <CalloutDescription>
         {text}
         {promptWaiting && " Your prompt is waiting in the composer."}
@@ -75,11 +94,7 @@ export function BaseAiOffRow({
             Sign in with GitHub
           </Button>
         )}
-        {action === "retry" && (
-          <Button size="sm" onClick={onRetry} disabled={retrying}>
-            Try again
-          </Button>
-        )}
+        {action === "retry" && retryButton}
         <Button
           size="sm"
           variant={action === undefined ? "default" : "outline"}
@@ -87,6 +102,7 @@ export function BaseAiOffRow({
         >
           Add an API key
         </Button>
+        {action === undefined && retryButton}
       </div>
     </Callout>
   );

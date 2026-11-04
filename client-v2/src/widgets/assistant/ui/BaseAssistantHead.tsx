@@ -14,9 +14,11 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
+import { StatusDot } from "@/shared/ui/status-dot";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import type { KeyHold } from "../../../views/sidebar/assistant/model/types";
+import type { AiOffReason } from "../model/ai-off";
 import type { HeadLabel } from "../model/head-label";
 import { headText } from "../model/head-label";
 import { OverflowTooltip } from "./OverflowTooltip";
@@ -28,9 +30,25 @@ import { usePickedMenu } from "./use-picked-menu";
  */
 export type DeleteKey = KeyHold;
 
+/**
+ * The head's word for each off reason, the status row's word for the same
+ * state without its "AI ·", so one state keeps one word across the app:
+ * "Off" for no model, and "Not responding", the app's word for a service
+ * that does not answer while the browser is online. No model is a setup step, grey; a status
+ * route that did not answer is a failure, red.
+ */
+const OFF_STATUS: Record<AiOffReason, { word: string; dot: "idle" | "error" }> =
+  {
+    "no-key": { word: "Off", dot: "idle" },
+    "signed-out": { word: "Off", dot: "idle" },
+    unreachable: { word: "Not responding", dot: "error" },
+  };
+
 export interface BaseAssistantHeadProps {
   /** The model in use, in the head's words (`headLabel`) */
   label: HeadLabel;
+  /** Why no model can answer, while the composer's off row stands; `undefined` otherwise */
+  off: AiOffReason | undefined;
   /** Opens Sources and tools in place of the conversation */
   onSources(): void;
   /** Opens Connect a model */
@@ -56,7 +74,8 @@ export interface BaseAssistantHeadProps {
 }
 
 /**
- * The assistant's head: the model in use, then More, Widen and Hide. Only
+ * The assistant's head: the model in use, the off status while no model can
+ * answer, then More, Widen and Hide. Only
  * the model's name is cut when the column is narrow; the words around it
  * stay, and the cut name shows whole on hover (`OverflowTooltip`).
  *
@@ -65,6 +84,7 @@ export interface BaseAssistantHeadProps {
  */
 export function BaseAssistantHead({
   label,
+  off,
   onSources,
   onConnect,
   connectLabel,
@@ -105,6 +125,15 @@ export function BaseAssistantHead({
           </>
         )}
       </h2>
+      {off && (
+        <span
+          id="assistant-status"
+          className="inline-flex shrink-0 items-center gap-1.5 pr-1 text-caption text-muted-foreground"
+        >
+          <StatusDot variant={OFF_STATUS[off].dot} />
+          {OFF_STATUS[off].word}
+        </span>
+      )}
       <DropdownMenu open={more.open} onOpenChange={more.setOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label="More">

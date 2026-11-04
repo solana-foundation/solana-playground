@@ -20,6 +20,8 @@ type AssistantWindow = Window & {
 };
 
 const row = (page: Page) => page.locator("#assistant-ai-off");
+const title = (page: Page) => row(page).locator('[data-slot="callout-title"]');
+const status = (page: Page) => page.locator("#assistant-status");
 const input = (page: Page) =>
   page.getByRole("textbox", { name: "Message the assistant" });
 const send = (page: Page) => page.getByRole("button", { name: "Send" });
@@ -39,10 +41,11 @@ test("assistant-ai-gate: No hosted key, nothing connected", async ({
   await page.goto("/");
   await startProject(page, "ai-off-no-key", LONG);
 
+  await expect(title(page)).toHaveText("The assistant has no model", LONG);
   await expect(row(page)).toContainText(
-    "The hosted model is not available. Add your own key to use the assistant.",
-    LONG
+    "The hosted model is not available. Add your own key to use the assistant."
   );
+  await expect(status(page)).toHaveText("Off");
   await typeAndEnter(page);
   await expect(page.getByText("Connect a model to send")).toBeAttached();
 
@@ -57,9 +60,9 @@ test("assistant-ai-gate: Signed out with a hosted model", async ({ page }) => {
   await page.goto("/");
   await startProject(page, "ai-off-signed-out", LONG);
 
+  await expect(title(page)).toHaveText("Sign in to use the assistant", LONG);
   await expect(row(page)).toContainText(
-    "Sign in with GitHub to use the hosted model, or add a key of your own.",
-    LONG
+    "Sign in with GitHub to use the hosted model, or add a key of your own."
   );
   await expect(
     row(page).getByRole("button", { name: "Sign in with GitHub" })
@@ -80,13 +83,50 @@ test("assistant-ai-gate: Hosted model unreachable", async ({ page }) => {
   await page.goto("/");
   await startProject(page, "ai-off-unreachable", LONG);
 
+  await expect(title(page)).toHaveText("Model not answering", LONG);
   await expect(row(page)).toContainText(
-    "The assistant can't reach its model. Try again in a minute.",
-    LONG
+    "The assistant can't reach its model. Try again in a minute."
   );
   const before = asked;
   await row(page).getByRole("button", { name: "Try again" }).click();
   await expect.poll(() => asked).toBeGreaterThan(before);
+});
+
+test("assistant-ai-gate: Try again with no hosted key", async ({ page }) => {
+  await stubAiStatus(page, "own");
+  let asked = 0;
+  // Registered last, so it sees each request first and hands it to the stub
+  await page.route("**/api/ai/status", (route) => {
+    asked += 1;
+    return route.fallback();
+  });
+  await page.goto("/");
+  await startProject(page, "ai-off-no-key-retry", LONG);
+
+  await expect(title(page)).toHaveText("The assistant has no model", LONG);
+  const before = asked;
+  await row(page).getByRole("button", { name: "Try again" }).click();
+  await expect.poll(() => asked).toBeGreaterThan(before);
+});
+
+test("assistant-ai-gate: The head says the assistant is off", async ({
+  page,
+}) => {
+  await stubAiStatus(page, "own");
+  await page.goto("/");
+  await startProject(page, "ai-off-head", LONG);
+
+  await expect(status(page)).toHaveText("Off", LONG);
+});
+
+test("assistant-ai-gate: The head says the model is not responding", async ({
+  page,
+}) => {
+  await page.route("**/api/ai/status", (route) => route.abort("failed"));
+  await page.goto("/");
+  await startProject(page, "ai-off-head-unreachable", LONG);
+
+  await expect(status(page)).toHaveText("Not responding", LONG);
 });
 
 test("assistant-ai-gate: A prompt sent from outside the panel while the assistant is off", async ({
