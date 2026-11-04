@@ -155,150 +155,180 @@ const mergeWallets = (
  * `write` calls run one after another, in call order: `updatable` does not
  * await them, and two quick changes must not land out of order.
  *
+ * A save waits for the lock, so a tab closed while another tab holds it would
+ * drop the queued save, and with it a key that exists only in memory (a new
+ * account). `keepUnsaved`, called when the page is hidden, writes the newest
+ * save that has not landed to `localStorage`, where the next load moves it
+ * into the store; if the save lands after all, the copy is removed again.
+ *
  * @param store the keystore
  * @param local the `localStorage` to migrate from and fall back to
  */
-export const walletStorageWith = (store: WalletStore, local: LocalStorage) => {
-  let isDegraded = false;
-  let writes = Promise.resolve();
+export const walletStorageWith =
+  (store: WalletStore) => (local: LocalStorage) => {
+    let isDegraded = false;
+    let writes = Promise.resolve();
+    /** The newest save that has not landed in either store */
+    let unsaved: SerializedWalletState | undefined;
+    /** The text `keepUnsaved` put in `localStorage`, removed once the save lands */
+    let keptText: string | undefined;
 
-  /** The `localStorage` wallet and its text, or `undefined` for none */
-  const readLocal = () => {
-    let text: string | null;
-    try {
-      text = local.getItem(WALLET_LOCAL_KEY);
-    } catch (error) {
-      // Storage refused (a sandboxed or blocked origin): the store may still
-      // hold the wallet, so go on to it
-      reportFailure("localStorage unavailable", error);
-      return undefined;
-    }
-    if (text === null) return undefined;
-    let value: unknown;
-    try {
-      value = JSON.parse(text);
-    } catch (error) {
-      keepUnreadable(text);
-      reportFailure("Unreadable wallet in localStorage", error);
-      return undefined;
-    }
-    // The pre-accounts format: `wallet.ts`'s `migrate` upgrades it in place
-    // before this runs in its own tab, so here it is another tab mid-upgrade
-    if (isLegacyWallet(value)) return undefined;
-    if (!isStoredWallet(value)) {
-      keepUnreadable(text);
-      reportFailure("Unreadable wallet in localStorage", new Error("shape"));
-      return undefined;
-    }
-    return { wallet: value, text };
-  };
-
-  /** Keep the first unreadable copy aside; a later one never replaces it */
-  const keepUnreadable = (text: string) => {
-    try {
-      if (local.getItem(UNREADABLE_KEY) === null) {
-        local.setItem(UNREADABLE_KEY, text);
+    /** The `localStorage` wallet and its text, or `undefined` for none */
+    const readLocal = () => {
+      let text: string | null;
+      try {
+        text = local.getItem(WALLET_LOCAL_KEY);
+      } catch (error) {
+        // Storage refused (a sandboxed or blocked origin): the store may still
+        // hold the wallet, so go on to it
+        reportFailure("localStorage unavailable", error);
+        return undefined;
       }
-    } catch (error) {
-      reportFailure("Unreadable wallet not kept aside", error);
-    }
-  };
-
-  const writeLocal = (state: SerializedWalletState) => {
-    try {
-      local.setItem(WALLET_LOCAL_KEY, JSON.stringify(state));
-    } catch (error) {
-      reportFailureFor(state)("Wallet not saved to localStorage", error);
-    }
-  };
-
-  /** Read the store, treating a record of the wrong shape as a failure */
-  const readStore = async () => {
-    const value = await store.read();
-    if (value === undefined || isStoredWallet(value)) return value;
-    throw new Error("The stored wallet has the wrong shape");
-  };
-
-  /** Copy `state` into the store and confirm it reads back the same */
-  const copyToStore = async (state: SerializedWalletState) => {
-    await store.write(state);
-    const back = await store.read();
-    if (!PgCommon.isEqual(back, state)) {
-      throw new Error("The stored wallet reads back different");
-    }
-  };
-
-  /** Remove the `localStorage` copy unless someone rewrote it meanwhile */
-  const removeLocal = (text: string) => {
-    try {
-      if (local.getItem(WALLET_LOCAL_KEY) === text) {
-        local.removeItem(WALLET_LOCAL_KEY);
+      if (text === null) return undefined;
+      let value: unknown;
+      try {
+        value = JSON.parse(text);
+      } catch (error) {
+        keepUnreadable(text);
+        reportFailure("Unreadable wallet in localStorage", error);
+        return undefined;
       }
-    } catch (error) {
-      // The store holds the wallet; the next load merges and retries this
-      reportFailure("Wallet left in localStorage", error);
-    }
-  };
+      // The pre-accounts format: `wallet.ts`'s `migrate` upgrades it in place
+      // before this runs in its own tab, so here it is another tab mid-upgrade
+      if (isLegacyWallet(value)) return undefined;
+      if (!isStoredWallet(value)) {
+        keepUnreadable(text);
+        reportFailure("Unreadable wallet in localStorage", new Error("shape"));
+        return undefined;
+      }
+      return { wallet: value, text };
+    };
 
-  const migrate = async (): Promise<SerializedWalletState | undefined> => {
-    const fromLocal = readLocal();
-    if (isDegraded) return fromLocal?.wallet;
+    /** Keep the first unreadable copy aside; a later one never replaces it */
+    const keepUnreadable = (text: string) => {
+      try {
+        if (local.getItem(UNREADABLE_KEY) === null) {
+          local.setItem(UNREADABLE_KEY, text);
+        }
+      } catch (error) {
+        reportFailure("Unreadable wallet not kept aside", error);
+      }
+    };
 
-    let stored: SerializedWalletState | undefined;
-    try {
-      stored = await readStore();
-    } catch (error) {
-      isDegraded = true;
-      reportFailure("Wallet store unavailable", error);
-      return fromLocal?.wallet;
-    }
-    if (!fromLocal) return stored;
+    const writeLocal = (state: SerializedWalletState) => {
+      try {
+        local.setItem(WALLET_LOCAL_KEY, JSON.stringify(state));
+      } catch (error) {
+        reportFailureFor(state)("Wallet not saved to localStorage", error);
+      }
+    };
 
-    const merged = stored
-      ? mergeWallets(fromLocal.wallet, stored)
-      : fromLocal.wallet;
-    try {
-      await copyToStore(merged);
-    } catch (error) {
-      isDegraded = true;
-      reportFailureFor(merged)("Wallet not moved out of localStorage", error);
+    /** Read the store, treating a record of the wrong shape as a failure */
+    const readStore = async () => {
+      const value = await store.read();
+      if (value === undefined || isStoredWallet(value)) return value;
+      throw new Error("The stored wallet has the wrong shape");
+    };
+
+    /** Copy `state` into the store and confirm it reads back the same */
+    const copyToStore = async (state: SerializedWalletState) => {
+      await store.write(state);
+      const back = await store.read();
+      if (!PgCommon.isEqual(back, state)) {
+        throw new Error("The stored wallet reads back different");
+      }
+    };
+
+    /** Remove the `localStorage` copy unless someone rewrote it meanwhile */
+    const removeLocal = (text: string) => {
+      try {
+        if (local.getItem(WALLET_LOCAL_KEY) === text) {
+          local.removeItem(WALLET_LOCAL_KEY);
+        }
+      } catch (error) {
+        // The store holds the wallet; the next load merges and retries this
+        reportFailure("Wallet left in localStorage", error);
+      }
+    };
+
+    const migrate = async (): Promise<SerializedWalletState | undefined> => {
+      const fromLocal = readLocal();
+      if (isDegraded) return fromLocal?.wallet;
+
+      let stored: SerializedWalletState | undefined;
+      try {
+        stored = await readStore();
+      } catch (error) {
+        isDegraded = true;
+        reportFailure("Wallet store unavailable", error);
+        return fromLocal?.wallet;
+      }
+      if (!fromLocal) return stored;
+
+      const merged = stored
+        ? mergeWallets(fromLocal.wallet, stored)
+        : fromLocal.wallet;
+      try {
+        await copyToStore(merged);
+      } catch (error) {
+        isDegraded = true;
+        reportFailureFor(merged)("Wallet not moved out of localStorage", error);
+        return merged;
+      }
+
+      removeLocal(fromLocal.text);
       return merged;
-    }
+    };
 
-    removeLocal(fromLocal.text);
-    return merged;
-  };
+    return {
+      /** Read the wallet, moving a `localStorage` copy into the store */
+      read(): Promise<SerializedWalletState | undefined> {
+        return store.exclusive(migrate);
+      },
 
-  return {
-    /** Read the wallet, moving a `localStorage` copy into the store */
-    read(): Promise<SerializedWalletState | undefined> {
-      return store.exclusive(migrate);
-    },
-
-    /** Write the wallet; falls back to `localStorage` if the store fails */
-    write(state: SerializedWalletState): Promise<void> {
-      writes = writes
-        .then(() =>
-          // Under the lock, so another tab's move cannot land on top of it
-          store.exclusive(async () => {
-            if (isDegraded) return writeLocal(state);
-            try {
-              await store.write(state);
-            } catch (error) {
-              isDegraded = true;
-              reportFailureFor(state)("Wallet not saved to the store", error);
-              writeLocal(state);
-            }
+      /** Write the wallet; falls back to `localStorage` if the store fails */
+      write(state: SerializedWalletState): Promise<void> {
+        unsaved = state;
+        writes = writes
+          .then(() =>
+            // Under the lock, so another tab's move cannot land on top of it
+            store.exclusive(async () => {
+              if (isDegraded) return writeLocal(state);
+              try {
+                await store.write(state);
+                if (keptText !== undefined && unsaved === state) {
+                  removeLocal(keptText);
+                  keptText = undefined;
+                }
+              } catch (error) {
+                isDegraded = true;
+                reportFailureFor(state)("Wallet not saved to the store", error);
+                writeLocal(state);
+              }
+            })
+          )
+          .then(() => {
+            if (unsaved === state) unsaved = undefined;
           })
-        )
-        .catch((error: unknown) => {
-          // Nothing above should throw; if it does, the next write still runs
-          reportFailureFor(state)("Wallet write failed", error);
-        });
-      return writes;
-    },
+          .catch((error: unknown) => {
+            // Nothing above should throw; if it does, the next write still runs
+            reportFailureFor(state)("Wallet write failed", error);
+          });
+        return writes;
+      },
+
+      /**
+       * Put the newest save that has not landed in `localStorage`, so a tab
+       * closed while it waits for the lock does not lose it. Synchronous: the
+       * page may be gone before anything awaited would run.
+       */
+      keepUnsaved(): void {
+        if (unsaved === undefined) return;
+        writeLocal(unsaved);
+        keptText = JSON.stringify(unsaved);
+      },
+    };
   };
-};
 
 if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeAll, beforeEach, afterEach } =
@@ -372,8 +402,7 @@ if (import.meta.vitest) {
     };
 
     it("reads nothing when nothing is stored", async () => {
-      const storage = walletStorageWith(
-        memoryStore(undefined),
+      const storage = walletStorageWith(memoryStore(undefined))(
         memoryLocal(undefined)
       );
       expect(await storage.read()).toBeUndefined();
@@ -381,8 +410,7 @@ if (import.meta.vitest) {
 
     it("reads a wallet the store holds", async () => {
       const stored = walletOf([account(1, "Wallet 1")]);
-      const storage = walletStorageWith(
-        memoryStore(stored),
+      const storage = walletStorageWith(memoryStore(stored))(
         memoryLocal(undefined)
       );
       expect(await storage.read()).toEqual(stored);
@@ -398,7 +426,7 @@ if (import.meta.vitest) {
         setItem: local.setItem,
         removeItem: local.removeItem,
       };
-      const storage = walletStorageWith(memoryStore(stored), refused);
+      const storage = walletStorageWith(memoryStore(stored))(refused);
 
       expect(await storage.read()).toEqual(stored);
       expect(logged.entries).toHaveLength(1);
@@ -414,7 +442,7 @@ if (import.meta.vitest) {
       const store = memoryStore(undefined);
       const local = memoryLocal(JSON.stringify(old));
 
-      const read = await walletStorageWith(store, local).read();
+      const read = await walletStorageWith(store)(local).read();
 
       expect(store.held()).toEqual(old);
       expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
@@ -427,7 +455,7 @@ if (import.meta.vitest) {
       store.write.mockRejectedValueOnce(new Error("quota"));
       const local = memoryLocal(JSON.stringify(old));
 
-      const read = await walletStorageWith(store, local).read();
+      const read = await walletStorageWith(store)(local).read();
 
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(old));
       expect(read).toEqual(old);
@@ -442,7 +470,7 @@ if (import.meta.vitest) {
       store.write.mockImplementationOnce(async () => {});
       const local = memoryLocal(JSON.stringify(old));
 
-      const read = await walletStorageWith(store, local).read();
+      const read = await walletStorageWith(store)(local).read();
 
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(old));
       expect(read).toEqual(old);
@@ -470,7 +498,7 @@ if (import.meta.vitest) {
       const store = memoryStore(inStore);
       const local = memoryLocal(JSON.stringify(inLocal));
 
-      const read = await walletStorageWith(store, local).read();
+      const read = await walletStorageWith(store)(local).read();
 
       const expected: SerializedWalletState = {
         state: "pg",
@@ -489,8 +517,7 @@ if (import.meta.vitest) {
 
     it("moves the wallet under the store's lock", async () => {
       const store = memoryStore(undefined);
-      const storage = walletStorageWith(
-        store,
+      const storage = walletStorageWith(store)(
         memoryLocal(JSON.stringify(walletOf([account(1, "Wallet 1")])))
       );
 
@@ -511,7 +538,7 @@ if (import.meta.vitest) {
         await write?.(state);
       });
 
-      await walletStorageWith(store, local).read();
+      await walletStorageWith(store)(local).read();
 
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(rewritten);
     });
@@ -521,7 +548,7 @@ if (import.meta.vitest) {
       const store = memoryStore(stored);
       const local = memoryLocal(JSON.stringify({ accounts: [{ kp: [1, 2] }] }));
 
-      const read = await walletStorageWith(store, local).read();
+      const read = await walletStorageWith(store)(local).read();
 
       expect(read).toEqual(stored);
       expect(local.items.get("wallet.unreadable")).toBe(
@@ -536,7 +563,7 @@ if (import.meta.vitest) {
       store.read.mockResolvedValue({ accounts: "corrupt" } as never);
       const local = memoryLocal(JSON.stringify(old));
 
-      const read = await walletStorageWith(store, local).read();
+      const read = await walletStorageWith(store)(local).read();
 
       expect(read).toEqual(old);
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(old));
@@ -547,7 +574,7 @@ if (import.meta.vitest) {
       const store = memoryStore(undefined);
       const local = memoryLocal("{not json");
 
-      const read = await walletStorageWith(store, local).read();
+      const read = await walletStorageWith(store)(local).read();
 
       expect(read).toBeUndefined();
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe("{not json");
@@ -560,7 +587,7 @@ if (import.meta.vitest) {
       const store = memoryStore(undefined);
       store.read.mockRejectedValue(new Error("blocked"));
       const local = memoryLocal("{not json");
-      const storage = walletStorageWith(store, local);
+      const storage = walletStorageWith(store)(local);
 
       await storage.read();
       await storage.write(walletOf([account(1, "Wallet 1")]));
@@ -573,7 +600,7 @@ if (import.meta.vitest) {
       const store = memoryStore(undefined);
       store.read.mockRejectedValue(new Error("indexedDB is not available"));
       const local = memoryLocal(JSON.stringify(old));
-      const storage = walletStorageWith(store, local);
+      const storage = walletStorageWith(store)(local);
 
       const read = await storage.read();
       await storage.write({
@@ -594,7 +621,7 @@ if (import.meta.vitest) {
     it("writes to the store, not localStorage", async () => {
       const store = memoryStore(undefined);
       const local = memoryLocal(undefined);
-      const storage = walletStorageWith(store, local);
+      const storage = walletStorageWith(store)(local);
       await storage.read();
 
       const next = walletOf([account(1, "Wallet 1")]);
@@ -607,7 +634,7 @@ if (import.meta.vitest) {
     it("writes to localStorage when a store write fails", async () => {
       const store = memoryStore(undefined);
       const local = memoryLocal(undefined);
-      const storage = walletStorageWith(store, local);
+      const storage = walletStorageWith(store)(local);
       await storage.read();
       store.write.mockRejectedValueOnce(new Error("unknown"));
 
@@ -620,7 +647,7 @@ if (import.meta.vitest) {
 
     it("applies two quick writes in call order", async () => {
       const store = memoryStore(undefined);
-      const storage = walletStorageWith(store, memoryLocal(undefined));
+      const storage = walletStorageWith(store)(memoryLocal(undefined));
       await storage.read();
       let release = () => {};
       const held = new Promise<void>((resolve) => (release = resolve));
@@ -638,12 +665,65 @@ if (import.meta.vitest) {
       expect(store.held()?.accounts[0].name).toBe("B");
     });
 
+    /** A store whose lock is held by another tab until `release` is called */
+    const heldLock = () => {
+      const store = memoryStore(undefined);
+      let release = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      store.exclusive.mockImplementation(
+        async (task: () => Promise<unknown>) => {
+          await held;
+          return task();
+        }
+      );
+      return { store, release };
+    };
+
+    it("keeps a save that waits for the lock in localStorage when the page hides", async () => {
+      const { store } = heldLock();
+      const local = memoryLocal(undefined);
+      const storage = walletStorageWith(store)(local);
+
+      const next = walletOf([account(1, "Wallet 1")]);
+      void storage.write(next);
+      storage.keepUnsaved();
+
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(next));
+      expect(store.held()).toBeUndefined();
+    });
+
+    it("removes the kept copy once the save lands in the store", async () => {
+      const { store, release } = heldLock();
+      const local = memoryLocal(undefined);
+      const storage = walletStorageWith(store)(local);
+
+      const next = walletOf([account(1, "Wallet 1")]);
+      const saved = storage.write(next);
+      storage.keepUnsaved();
+      release();
+      await saved;
+
+      expect(store.held()).toEqual(next);
+      expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+    });
+
+    it("keeps nothing when every save has landed", async () => {
+      const store = memoryStore(undefined);
+      const local = memoryLocal(undefined);
+      const storage = walletStorageWith(store)(local);
+
+      await storage.write(walletOf([account(1, "Wallet 1")]));
+      storage.keepUnsaved();
+
+      expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+    });
+
     it("keeps the first unreadable copy when a later one turns up", async () => {
       const local = memoryLocal("{first");
-      await walletStorageWith(memoryStore(undefined), local).read();
+      await walletStorageWith(memoryStore(undefined))(local).read();
       local.items.set(WALLET_LOCAL_KEY, "{second");
 
-      await walletStorageWith(memoryStore(undefined), local).read();
+      await walletStorageWith(memoryStore(undefined))(local).read();
 
       expect(local.items.get("wallet.unreadable")).toBe("{first");
     });
@@ -651,7 +731,7 @@ if (import.meta.vitest) {
     it("moves a fallback write back into the store on the next load", async () => {
       const store = memoryStore(walletOf([account(1, "Wallet 1")]));
       const local = memoryLocal(undefined);
-      const failing = walletStorageWith(store, local);
+      const failing = walletStorageWith(store)(local);
       await failing.read();
       store.write.mockRejectedValueOnce(new Error("quota"));
       const next: SerializedWalletState = {
@@ -663,7 +743,7 @@ if (import.meta.vitest) {
       await failing.write(next);
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(next));
 
-      const read = await walletStorageWith(store, local).read();
+      const read = await walletStorageWith(store)(local).read();
 
       expect(read).toEqual(next);
       expect(store.held()).toEqual(next);
@@ -674,8 +754,7 @@ if (import.meta.vitest) {
       const store = memoryStore(undefined);
       store.read.mockResolvedValue({ accounts: "corrupt" } as never);
 
-      const read = await walletStorageWith(
-        store,
+      const read = await walletStorageWith(store)(
         memoryLocal(undefined)
       ).read();
 
@@ -721,7 +800,7 @@ if (import.meta.vitest) {
         const store = memoryStore(undefined);
         const local = memoryLocal(JSON.stringify(shape));
 
-        expect(await walletStorageWith(store, local).read()).toBeUndefined();
+        expect(await walletStorageWith(store)(local).read()).toBeUndefined();
         expect(store.write).not.toHaveBeenCalled();
         expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(shape));
       }
@@ -729,7 +808,7 @@ if (import.meta.vitest) {
 
     it("saves under the store's lock", async () => {
       const store = memoryStore(undefined);
-      const storage = walletStorageWith(store, memoryLocal(undefined));
+      const storage = walletStorageWith(store)(memoryLocal(undefined));
       await storage.read();
 
       await storage.write(walletOf([account(1, "Wallet 1")]));
@@ -742,7 +821,7 @@ if (import.meta.vitest) {
       const store = memoryStore(undefined);
       const local = memoryLocal(legacy);
 
-      expect(await walletStorageWith(store, local).read()).toBeUndefined();
+      expect(await walletStorageWith(store)(local).read()).toBeUndefined();
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(legacy);
       expect(local.items.has("wallet.unreadable")).toBe(false);
       expect(logged.entries).toHaveLength(0);
@@ -752,8 +831,7 @@ if (import.meta.vitest) {
       const secret = walletOf([account(9, "Secret name")]);
       const failing = memoryStore(undefined);
       failing.write.mockRejectedValue(new Error("quota"));
-      const storage = walletStorageWith(
-        failing,
+      const storage = walletStorageWith(failing)(
         memoryLocal(JSON.stringify(secret))
       );
       await storage.read();
@@ -766,9 +844,8 @@ if (import.meta.vitest) {
       // in it, here the whole wallet
       const throwsText = memoryStore(undefined);
       throwsText.read.mockRejectedValue(JSON.stringify(secret));
-      await walletStorageWith(throwsText, memoryLocal(undefined)).read();
-      await walletStorageWith(
-        unopened,
+      await walletStorageWith(throwsText)(memoryLocal(undefined)).read();
+      await walletStorageWith(unopened)(
         memoryLocal(JSON.stringify(secret))
       ).read();
 
@@ -777,8 +854,7 @@ if (import.meta.vitest) {
       const stored = JSON.stringify(secret);
       const at = stored.indexOf("[", stored.indexOf('"kp"')) + 12;
       const truncated = `${stored.slice(0, at)},,${stored.slice(at)}`;
-      await walletStorageWith(
-        memoryStore(undefined),
+      await walletStorageWith(memoryStore(undefined))(
         memoryLocal(truncated)
       ).read();
 
