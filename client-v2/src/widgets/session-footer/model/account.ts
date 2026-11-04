@@ -213,7 +213,7 @@ if (import.meta.vitest) {
       const FAILED = {
         status: "failed",
         reason: "popup-blocked",
-        message: "Allow popups for this site to sign in.",
+        message: "Allow pop-ups for this site to sign in with GitHub.",
       } as const;
 
       it("asks to sign in with nothing under it", () => {
@@ -231,7 +231,10 @@ if (import.meta.vitest) {
 
       it("says a sign-in failed, with its reason", () => {
         expect(accountLines(view({ session: FAILED })).lines).toEqual([
-          { kind: "failed", message: "Allow popups for this site to sign in." },
+          {
+            kind: "failed",
+            message: "Allow pop-ups for this site to sign in with GitHub.",
+          },
         ]);
       });
 
@@ -253,7 +256,10 @@ if (import.meta.vitest) {
         expect(
           accountLines(view({ session: FAILED, wallet: WALLET })).lines
         ).toEqual([
-          { kind: "failed", message: "Allow popups for this site to sign in." },
+          {
+            kind: "failed",
+            message: "Allow pop-ups for this site to sign in with GitHub.",
+          },
           {
             kind: "wallet",
             address: WALLET.address,

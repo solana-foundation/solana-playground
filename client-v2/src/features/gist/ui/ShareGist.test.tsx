@@ -3,7 +3,7 @@
 // gist access asked for only when the token lacks it, the links it copies,
 // and every ending counted once.
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { StrictMode } from "react";
+import { type ComponentType, StrictMode } from "react";
 import type { Mock } from "vitest";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -205,6 +205,8 @@ it("copies the Playground link, toasts and counts it", async () => {
   expect(toast.mock.calls[0][1]).toEqual({
     options: { name: "gist-link-copied" },
   });
+  const Toast = toast.mock.calls[0][0] as ComponentType;
+  expect(render(<Toast />).container.textContent).toBe("Link copied");
   expect(sent.events.at(-1)).toEqual({
     name: "gist_link_copied",
     params: { copied: "playground" },
@@ -356,12 +358,28 @@ it("stays ready when the project cannot be read, and tells the user", async () =
   expect(sent.events).toEqual([]);
 });
 
+it("says it could not sign in when the failure carries no words", async () => {
+  renderShareWith({
+    signedIn: false,
+    signIn: vi.fn().mockRejectedValue(new Error("")),
+    cancelSignIn: noCancel(),
+    readFiles: async () => FILES,
+  });
+
+  await press(/^Sign in with GitHub$/);
+
+  // Spec 08 ACCT-03
+  expect(screen.getByText("Could not sign in.")).toBeTruthy();
+});
+
 it("says so when the browser blocks the sign-in popup", async () => {
   renderShareWith({
     signedIn: false,
     signIn: vi
       .fn()
-      .mockRejectedValue(new Error("Allow popups for this site to sign in.")),
+      .mockRejectedValue(
+        new Error("Allow pop-ups for this site to sign in with GitHub.")
+      ),
     cancelSignIn: noCancel(),
     readFiles: async () => FILES,
   });
@@ -369,7 +387,7 @@ it("says so when the browser blocks the sign-in popup", async () => {
   await press(/^Sign in with GitHub$/);
 
   expect(
-    screen.getByText("Allow popups for this site to sign in.")
+    screen.getByText("Allow pop-ups for this site to sign in with GitHub.")
   ).toBeTruthy();
 });
 
@@ -499,7 +517,9 @@ it("says a sign-in the user ended on GitHub quietly too, and a failure in red", 
   const signIn = vi
     .fn<ShareGistProps["signIn"]>()
     .mockResolvedValueOnce("cancelled")
-    .mockRejectedValueOnce(new Error("Allow popups for this site to sign in."));
+    .mockRejectedValueOnce(
+      new Error("Allow pop-ups for this site to sign in with GitHub.")
+    );
   renderShareWith({
     signedIn: false,
     signIn,
@@ -511,7 +531,9 @@ it("says a sign-in the user ended on GitHub quietly too, and a failure in red", 
   expectQuietCancel();
 
   await press(/^Sign in with GitHub$/);
-  const failure = screen.getByText("Allow popups for this site to sign in.");
+  const failure = screen.getByText(
+    "Allow pop-ups for this site to sign in with GitHub."
+  );
   expect(failure.closest('[data-slot="callout"]')).not.toBeNull();
   expect(screen.queryByText("Sign-in cancelled.")).toBeNull();
 });

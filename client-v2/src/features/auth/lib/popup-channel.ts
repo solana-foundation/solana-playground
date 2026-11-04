@@ -87,7 +87,7 @@ interface PopupChannelOptions {
  *   accept: (data) => isExampleMessage(data),
  *   timeoutMs: 600_000,
  * });
- * if (!channel) throw new Error("Allow popups for this site.");
+ * if (!channel) throw new Error("Allow pop-ups for this site to sign in with GitHub.");
  * const receipt = await channel.receive();
  * ```
  */

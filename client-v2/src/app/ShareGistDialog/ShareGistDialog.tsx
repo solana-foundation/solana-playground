@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { isSignInFailure, PgSession } from "@/features/auth";
 import type { GistShareSource, SignInEnding } from "@/features/gist";
-import { ShareGist } from "@/features/gist";
+import { ShareGist, signInFailureMessage } from "@/features/gist";
 import { useRenderOnChange } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
@@ -32,10 +32,6 @@ const isCancel = (error: unknown) => {
     state.reason === "cancelled"
   );
 };
-
-/** What the prompt shows for a sign-in that ended without a session */
-const messageOf = (error: unknown) =>
-  error instanceof Error && error.message ? error.message : "Sign-in failed.";
 
 /** The prompt's one button: sign in, cancel its own wait, or wait on another's */
 const buttonText = (waiting: boolean, cancellable: boolean) => {
@@ -110,7 +106,7 @@ const SignInToShare = () => {
         if (mounted.current) {
           setEnded({
             kind: isCancel(error) ? "cancelled" : "failed",
-            message: messageOf(error),
+            message: signInFailureMessage(error),
           });
         }
       })

@@ -306,6 +306,16 @@ describe("app/ShareGistDialog", () => {
     expect(reported()).toHaveLength(1);
   });
 
+  it("says it could not sign in when the failure carries no words", async () => {
+    vi.spyOn(PgSession, "signIn").mockRejectedValue(new Error(""));
+    await open();
+
+    await press("Sign in with GitHub");
+
+    // Spec 08 ACCT-03
+    expect(screen.getByText("Could not sign in.")).toBeTruthy();
+  });
+
   it("reports a sign-in that could not start, beside saying so", async () => {
     // The server could not hand out an authorize URL: ours to fix, not the user's
     fetchSpy.mockResolvedValue({

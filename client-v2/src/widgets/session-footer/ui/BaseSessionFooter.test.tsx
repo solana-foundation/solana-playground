@@ -122,14 +122,14 @@ it("announces Couldn't sign in under the row after a failure, the reason on hove
       session: {
         status: "failed",
         reason: "popup-blocked",
-        message: "Allow popups for this site to sign in.",
+        message: "Allow pop-ups for this site to sign in with GitHub.",
       },
     }),
   });
   const line = screen.getByRole("status");
   expect(line.textContent).toBe("Couldn't sign in");
   expect(line.getAttribute("title")).toBe(
-    "Allow popups for this site to sign in."
+    "Allow pop-ups for this site to sign in with GitHub."
   );
 });
 
@@ -139,7 +139,7 @@ it("keeps the wallet under a failed sign-in", () => {
       session: {
         status: "failed",
         reason: "popup-blocked",
-        message: "Allow popups for this site to sign in.",
+        message: "Allow pop-ups for this site to sign in with GitHub.",
       },
       wallet: {
         address: "7Hq5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaXk2P",

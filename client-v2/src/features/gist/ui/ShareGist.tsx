@@ -52,8 +52,14 @@ export interface ShareGistProps {
 /** What the dialog says after a sign-in the user ended */
 const SIGN_IN_CANCELLED = "Sign-in cancelled.";
 
-const messageOf = (error: unknown) =>
-  error instanceof Error && error.message ? error.message : "Sign-in failed.";
+/**
+ * What a failed sign-in says: its own words, or Spec 08's "Could not sign in."
+ * when it has none. The sign-in prompt before sharing says the same.
+ */
+export const signInFailureMessage = (error: unknown) =>
+  error instanceof Error && error.message
+    ? error.message
+    : "Could not sign in.";
 
 /** The toast a copy that reached the clipboard shows */
 const LinkCopied = () => <span>Link copied</span>;
@@ -154,7 +160,7 @@ const ShareGist = ({
         ended = { kind: "cancelled", message: SIGN_IN_CANCELLED };
       }
     } catch (e) {
-      ended = { kind: "failed", message: messageOf(e) };
+      ended = { kind: "failed", message: signInFailureMessage(e) };
     }
     if (ended) {
       // `signIn` counted its own ending (`auth_sign_in_failed`); this one is
@@ -182,7 +188,9 @@ const ShareGist = ({
       return;
     }
     if (mounted.current) setCopyFailed(false);
-    PgView.setToast(LinkCopied, { options: { name: "gist-link-copied" } });
+    PgView.setToast(LinkCopied, {
+      options: { name: "gist-link-copied" },
+    });
     gistTelemetry.track("gist_link_copied", { copied: link });
   };
 
