@@ -216,7 +216,7 @@ freeze is needed, and this guide does not give it.
    production`, and remove `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
 5. Redeploy production. `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, and a sign-in and a project
    edit on the production domain write a row to `solpg`.
-6. `make -f client-v2/Makefile.vercel migrate-production-db` names `solpg` and reports nothing to apply.
+6. Return to the repository root with `cd ..`, then run `make -f client-v2/Makefile.vercel migrate-production-db`. It names `solpg` and reports nothing to apply.
 
 From then on, `migrate-production-db` migrates `solpg`: it reads `DB_PROVIDER` and the `CLOUD_SQL_*` variables from
 the Production environment it pulls, prints the database and instance, starts the proxy as `gcloud`'s active
