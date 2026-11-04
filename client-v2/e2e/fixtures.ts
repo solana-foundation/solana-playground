@@ -1,5 +1,8 @@
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
+import { Keypair } from "@solana/web3.js";
+import fs from "fs";
+import path from "path";
 
 import { isUuid } from "../src/shared/lib/ids";
 import { requireFor } from "../src/test-utils/require-for";
@@ -648,13 +651,13 @@ export const playnetReady = (page: Page) =>
   );
 
 /** A browser with one Native project, whose test is the hello world one */
-export const seedNativeWorkspace = async (page: Page, name = "e2e-native") => {
+export const seedNativeWorkspace = async (page: Page) => {
   await page.goto("/");
   await expect(home(page)).toBeVisible();
   const region = homeRegion(page);
   await region.getByRole("button", { name: /^New project/ }).click();
   await region.getByRole("radio", { name: /Native/ }).click();
-  await region.getByLabel("Project name").fill(name);
+  await region.getByLabel("Project name").fill("e2e-native");
   await region.getByRole("button", { name: /^Start/ }).click();
   await expect(home(page)).toBeHidden();
   await expect(page.locator("#root-dir")).toBeVisible();
@@ -669,7 +672,7 @@ export const openTerminal = async (page: Page) => {
 };
 
 /**
- * Opens `folder/file` from the tree and replaces its text with `code`.
+ * Opens `folder/file` from the tree, then replaces its text with `code`.
  *
  * A paste, not typing: the editor closes brackets as they are typed. Then a
  * wait for the editor's autosave (500 ms after the last change,
@@ -677,7 +680,8 @@ export const openTerminal = async (page: Page) => {
  */
 export const replaceFile =
   (context: BrowserContext, page: Page) =>
-  async (folder: string, file: string, code: string) => {
+  (folder: string, file: string) =>
+  async (code: string) => {
     await page.getByRole("button", { name: folder, exact: true }).click();
     await page.getByRole("button", { name: file, exact: true }).click();
     const lines = page.locator(".monaco-editor .view-lines");
@@ -694,3 +698,123 @@ export const replaceFile =
 
 /** The terminal's rows in view */
 export const terminalRows = (page: Page) => page.locator(".xterm-rows").first();
+
+/**
+ * The hello world program's ELF, the one the Native template's test greets,
+ * as Playnet's own tests carry it (`wasm/playnet/src/test_programs`)
+ */
+const helloWorldElf = () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "../../wasm/playnet/src/test_programs/hello_world.rs"),
+    "utf8"
+  );
+  const body = source.slice(source.indexOf("["), source.lastIndexOf("]"));
+  return Buffer.from(body.match(/\d+/g)?.map(Number) ?? []);
+};
+
+/**
+ * Builds and deploys the hello world program to Playnet from the terminal,
+ * with the build server answered here: CI has none. The build hands the
+ * project its program id and, when given, an IDL.
+ *
+ * @param idl the IDL the build answers with
+ */
+export const deployHelloWorldWith =
+  (idl: object | undefined) => async (page: Page) => {
+    const uuid = "e2e-hello-world";
+    await page.route("**/build", (route) =>
+      // eslint-disable-next-line unicorn/no-null -- the build server's wire shape
+      json(route, { stderr: "", uuid, idl: idl ?? null })
+    );
+    await page.route(`**/deploy/${uuid}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: helloWorldElf(),
+      })
+    );
+    const rows = terminalRows(page);
+    await runInTerminal(page, "airdrop 5");
+    await expect(rows).toContainText("Airdrop successful.", LONG);
+    await runInTerminal(page, "build");
+    await expect(rows).toContainText("Build successful.", LONG);
+    await runInTerminal(page, "deploy");
+    await expect(rows).toContainText("Deployment successful.", LONG);
+  };
+
+/**
+ * A seeded built-in wallet and a Native project on Playnet, with the terminal
+ * open; returns the wallet's keypair and writers for the client and the test
+ */
+export const seedPlaynetProject = async (
+  context: BrowserContext,
+  page: Page
+) => {
+  const keypair = Keypair.generate();
+  await seedLocalWallet(page)({
+    state: "pg",
+    accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
+    currentIndex: 0,
+  });
+  await startOnPlaynet(page);
+  await seedNativeWorkspace(page);
+  await playnetReady(page);
+  await openTerminal(page);
+  return {
+    keypair,
+    address: keypair.publicKey.toBase58(),
+    writeClient: (code: string) =>
+      replaceFile(context, page)("client", "client.ts")(code),
+    writeTest: (code: string) =>
+      replaceFile(context, page)("tests", "native.test.ts")(code),
+  };
+};
+
+/**
+ * An Anchor IDL for the hello world program: it ignores the instruction data
+ * and greets its first account, which the program must own
+ */
+export const HELLO_ANCHOR_IDL = {
+  version: "0.1.0",
+  name: "hello_anchor",
+  instructions: [
+    {
+      name: "greet",
+      accounts: [
+        { name: "greeting", isMut: true, isSigner: false },
+        { name: "payer", isMut: true, isSigner: true },
+      ],
+      args: [],
+    },
+  ],
+};
+
+/**
+ * Test code that creates a greeting account owned by the program in the
+ * same transaction as Anchor's `greet`, with `payer` among the signers
+ */
+export const greetWithAnchor = (sign: "signers" | "sendAndConfirm") =>
+  [
+    'describe("Anchor", () => {',
+    '  it("greets", async () => {',
+    "    anchor.setProvider(anchor.AnchorProvider.env());",
+    "    const program = anchor.workspace.HelloAnchor;",
+    "    const payer = anchor.getProvider().wallet.payer;",
+    "    const greeting = web3.Keypair.generate();",
+    "    const lamports = await pg.connection.getMinimumBalanceForRentExemption(4);",
+    "    const create = web3.SystemProgram.createAccount({",
+    "      fromPubkey: payer.publicKey, newAccountPubkey: greeting.publicKey,",
+    "      lamports, space: 4, programId: pg.PROGRAM_ID,",
+    "    });",
+    "    const greet = program.methods.greet()",
+    "      .accounts({ greeting: greeting.publicKey, payer: payer.publicKey })",
+    "      .preInstructions([create]);",
+    sign === "signers"
+      ? "    await greet.signers([greeting, payer]).rpc();"
+      : "    await web3.sendAndConfirmTransaction(pg.connection, await greet.transaction(), [payer, greeting]);",
+    "    const info = await pg.connection.getAccountInfo(greeting.publicKey);",
+    '    console.log("same program:", program.programId.equals(pg.PROGRAM_ID), pg.program.programId.equals(pg.PROGRAM_ID));',
+    '    console.log("greeted:", info.data[0]);',
+    "  });",
+    "});",
+  ].join("\n");

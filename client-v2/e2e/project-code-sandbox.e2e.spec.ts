@@ -1,16 +1,13 @@
-import type { BrowserContext, Page } from "@playwright/test";
-import { Keypair } from "@solana/web3.js";
+import type { Page } from "@playwright/test";
 
 import {
+  deployHelloWorldWith,
   expect,
+  greetWithAnchor,
+  HELLO_ANCHOR_IDL,
   LONG,
-  openTerminal,
-  playnetReady,
-  replaceFile,
   runInTerminal,
-  seedLocalWallet,
-  seedNativeWorkspace,
-  startOnPlaynet,
+  seedPlaynetProject,
   terminalRows,
   test,
 } from "./fixtures";
@@ -20,28 +17,6 @@ import {
  * (`utils/js-runtime`, `runtime.html`). Every case runs on Playnet, so
  * nothing leaves the browser.
  */
-
-/** A seeded wallet and a Native project on Playnet, with the terminal open */
-const setUp = async (context: BrowserContext, page: Page) => {
-  const keypair = Keypair.generate();
-  await seedLocalWallet(page)({
-    state: "pg",
-    accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
-    currentIndex: 0,
-  });
-  await startOnPlaynet(page);
-  await seedNativeWorkspace(page);
-  await playnetReady(page);
-  await openTerminal(page);
-  return {
-    keypair,
-    address: keypair.publicKey.toBase58(),
-    writeClient: (code: string) =>
-      replaceFile(context, page)("client", "client.ts", code),
-    writeTest: (code: string) =>
-      replaceFile(context, page)("tests", "native.test.ts", code),
-  };
-};
 
 /** Runs a command and waits for the line that says it is over */
 const runFor = (page: Page) => async (command: string, expected: RegExp) => {
@@ -54,7 +29,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { address } = await setUp(context, page);
+    const { address } = await seedPlaynetProject(context, page);
 
     await runFor(page)("run", /My balance: [\d.]+ SOL/);
 
@@ -65,7 +40,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await setUp(context, page);
+    const { writeClient } = await seedPlaynetProject(context, page);
     await writeClient(
       [
         'import * as anchor from "@coral-xyz/anchor";',
@@ -81,7 +56,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await setUp(context, page);
+    const { writeClient } = await seedPlaynetProject(context, page);
     await writeClient('console.log("a" "b");');
 
     await runInTerminal(page, "run");
@@ -95,7 +70,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeTest } = await setUp(context, page);
+    const { writeTest } = await seedPlaynetProject(context, page);
     await writeTest(
       [
         'describe("Suite", () => {',
@@ -111,11 +86,26 @@ test.describe("project-code-sandbox", () => {
     await expect(terminalRows(page)).toHaveText(/\$\s*$/, LONG);
   });
 
+  test("project-code-sandbox: Anchor workspace and program are ready", async ({
+    context,
+    page,
+  }) => {
+    test.slow();
+    const { writeTest } = await seedPlaynetProject(context, page);
+    await deployHelloWorldWith(HELLO_ANCHOR_IDL)(page);
+    await writeTest(greetWithAnchor("signers"));
+
+    await runFor(page)("test", /1 passing/);
+
+    await expect(terminalRows(page)).toContainText("same program: true true");
+    await expect(terminalRows(page)).toContainText("greeted: 1");
+  });
+
   test("project-code-sandbox: A script runs against Playnet", async ({
     context,
     page,
   }) => {
-    const { writeClient } = await setUp(context, page);
+    const { writeClient } = await seedPlaynetProject(context, page);
     await writeClient(
       [
         "const airdrop = await pg.connection.requestAirdrop(pg.wallet.publicKey, 2 * web3.LAMPORTS_PER_SOL);",
@@ -136,16 +126,16 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient, address } = await setUp(context, page);
+    const { writeClient, address } = await seedPlaynetProject(context, page);
     await writeClient(
       [
         "const results = [];",
         "const probe = async (name, read) => {",
         "  try {",
         "    const value = await read();",
-        '    results.push(`${name}:${value ? "found " + value : "empty"}`);',
+        '    results.push(name + ":" + (value ? "found " + value : "empty"));',
         "  } catch (e) {",
-        "    results.push(`${name}:threw`);",
+        '    results.push(name + ":threw");',
         "  }",
         "};",
         'await probe("localStorage", () => localStorage.getItem("wallet"));',
@@ -176,16 +166,16 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient } = await setUp(context, page);
+    const { writeClient } = await seedPlaynetProject(context, page);
     await writeClient(
       [
         "const results = [];",
         "const probe = (name, read) => {",
         "  try {",
         "    read();",
-        "    results.push(`${name}:read`);",
+        '    results.push(name + ":read");',
         "  } catch (e) {",
-        "    results.push(`${name}:${e.name}`);",
+        '    results.push(name + ":" + e.name);',
         "  }",
         "};",
         'probe("parent.document", () => window.parent.document.title);',
@@ -208,7 +198,7 @@ test.describe("project-code-sandbox", () => {
     context,
     page,
   }) => {
-    const { writeClient, keypair } = await setUp(context, page);
+    const { writeClient, keypair } = await seedPlaynetProject(context, page);
     const privateKeyHex = Buffer.from(keypair.secretKey.slice(0, 32)).toString(
       "hex"
     );
@@ -271,7 +261,7 @@ test.describe("project-code-sandbox", () => {
         return post.apply(this, args);
       };
     });
-    const { writeClient, address } = await setUp(context, page);
+    const { writeClient, address } = await seedPlaynetProject(context, page);
     await writeClient(
       [
         'console.log("waiting");',
