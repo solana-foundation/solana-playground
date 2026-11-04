@@ -31,11 +31,14 @@ export interface WalletAccount {
   name: string;
 }
 
+/** The connection states a stored wallet can have: `unavailable` is never saved */
+export type SavedWalletState = Exclude<WalletState["state"], "unavailable">;
+
 /** Serialized wallet that's used in storage */
 export type SerializedWalletState = Pick<
   WalletState,
-  "state" | "accounts" | "currentIndex" | "standardName"
->;
+  "accounts" | "currentIndex" | "standardName"
+> & { state: SavedWalletState };
 
 /** Legacy or versioned transaction */
 export type AnyTransaction = PgWeb3.Transaction | PgWeb3.VersionedTransaction;
