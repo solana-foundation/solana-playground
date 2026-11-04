@@ -13,9 +13,10 @@ import {
 import { lineOf, linesOn } from "./telemetry";
 
 /**
- * Share to GitHub, against stubs: `/api/gists` answers as GitHub would through
- * it, and sign-in's popup lands straight on the real `/api/auth-complete`,
- * which reports back the way it does after GitHub. No account, no GitHub.
+ * Sharing a project as a gist, against stubs: `/api/gists` answers as
+ * GitHub would through it, and sign-in's popup lands straight on the real
+ * `/api/auth-complete`, which reports back the way it does after GitHub. No
+ * account, no GitHub.
  */
 
 const PROJECT = "e2e-project";
@@ -23,8 +24,11 @@ const GIST_URL = "https://gist.github.com/t/abc123";
 
 const LINK_PATH = "/gist/abc123";
 
+/** The share dialog, titled by the project before the gist and by the gist after */
 const dialog = (page: Page) =>
-  page.getByRole("dialog", { name: "Share to GitHub" });
+  page.getByRole("dialog", {
+    name: /^Share .+ as a gist$|^Shared as a (secret|public) gist$/,
+  });
 
 /** The Playground link the shared state hands out */
 const playgroundLink = (page: Page) =>
@@ -101,7 +105,7 @@ test("gist-sharing: Nothing is sent on open", async ({ page }) => {
   await openShare(page);
 
   await expect(
-    dialog(page).getByRole("button", { name: "Share to GitHub" })
+    dialog(page).getByRole("button", { name: "Create secret gist" })
   ).toBeVisible();
   expect(requests).toHaveLength(0);
 });
@@ -115,14 +119,20 @@ test("gist-sharing: Successful share", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
 
   await expect(playgroundLink(page)).toHaveValue(
     new URL(LINK_PATH, page.url()).href,
     LONG
   );
-  await expect(dialog(page).getByText("Shared")).toBeVisible();
-  const open = dialog(page).getByRole("link", { name: /Open on GitHub/ });
+  await expect(
+    dialog(page).getByRole("heading", { name: "Shared as a secret gist" })
+  ).toBeVisible();
+  const open = dialog(page).getByRole("link", {
+    name: /Open the gist on GitHub/,
+  });
   await expect(open).toHaveAttribute("href", GIST_URL);
   await expect(open).toHaveAttribute("target", "_blank");
   await expect(open).toHaveAttribute("rel", "noopener noreferrer");
@@ -176,7 +186,7 @@ test("gist-sharing: Signed out, then signed in", async ({ page }) => {
     .click();
 
   await expect(
-    dialog(page).getByRole("button", { name: "Share to GitHub" })
+    dialog(page).getByRole("button", { name: "Create secret gist" })
   ).toBeVisible(LONG);
   await expect(prompt(page)).toHaveCount(0);
   expect(requests).toHaveLength(0);
@@ -232,9 +242,11 @@ test("gist-sharing: Closing the dialog while sign-in waits", async ({
   await expect(
     prompt(page).getByRole("button", { name: "Cancel sign-in" })
   ).toBeVisible();
-  await prompt(page)
-    .getByRole("button", { name: "Cancel", exact: true })
-    .click();
+  // One cancel while the popup waits: the head's Close is the way out
+  await expect(
+    prompt(page).getByRole("button", { name: "Cancel", exact: true })
+  ).toHaveCount(0);
+  await prompt(page).getByRole("button", { name: "Close" }).click();
 
   await expect(prompt(page)).toHaveCount(0);
   expect(requests).toHaveLength(0);
@@ -282,7 +294,9 @@ test("gist-sharing: A session without gist access", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
   await dialog(page)
     .getByRole("button", { name: "Allow gists on GitHub" })
     .click(LONG);
@@ -301,7 +315,9 @@ test("gist-sharing: Rate limited", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
 
   await expect(
     dialog(page).getByText(
@@ -319,7 +335,9 @@ test("gist-sharing: GitHub refused the gist", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
 
   await expect(
     dialog(page).getByText("GitHub refused the gist. Nothing was published.")
@@ -335,7 +353,9 @@ test("gist-sharing: Request failed", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
 
   await expect(
     dialog(page).getByText(
@@ -353,7 +373,9 @@ test("gist-sharing: The keypair stays home", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
   await expect(playgroundLink(page)).toBeVisible(LONG);
 
   const body = requests[0].postDataJSON();
@@ -375,7 +397,9 @@ test("gist-sharing: Access still missing after the popup", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
   await dialog(page)
     .getByRole("button", { name: "Allow gists on GitHub" })
     .click(LONG);
@@ -392,10 +416,12 @@ test("gist-sharing: Authorization revoked", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
 
   await expect(
-    dialog(page).getByRole("button", { name: "Sign in with GitHub again" })
+    dialog(page).getByRole("button", { name: "Sign in with GitHub" })
   ).toBeVisible(LONG);
 });
 
@@ -406,7 +432,9 @@ test("gist-sharing: A successful share is counted", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
 
   await expect.poll(() => lineOf(lines, "gist_export_succeeded")).toBeTruthy();
   const started = lineOf(lines, "gist_export_started");
@@ -425,7 +453,9 @@ test("gist-sharing: A failure is counted by reason", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
 
   await expect
     .poll(() => lineOf(lines, "gist_export_failed"))
@@ -465,14 +495,23 @@ test("gist-sharing: Too large is caught before sending", async ({ page }) => {
   const big = "github-alice/big/";
   const menu = await projectMenu(page, big);
   await menu.getByRole("menuitem", { name: `Share ${big}` }).click();
-  await page
-    .getByRole("dialog", { name: "Share to GitHub" })
-    .getByRole("button", { name: "Share to GitHub" })
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
     .click();
 
   await expect(
     page.getByText(`${big} is too large to share as a gist`)
   ).toBeVisible(LONG);
+  // Sending again would fail the same way, so the footer offers Close only
+  await expect(
+    dialog(page).getByRole("button", { name: "Try again" })
+  ).toHaveCount(0);
+  await expect(
+    dialog(page).getByRole("button", { name: /^Create .* gist$/ })
+  ).toHaveCount(0);
+  await expect(
+    dialog(page).getByRole("button", { name: "Close", exact: true })
+  ).not.toHaveCount(0);
   expect(requests).toHaveLength(0);
 });
 
@@ -485,7 +524,9 @@ test("gist-sharing: Sharing with the default", async ({ page }) => {
   await seedWorkspace(page);
   await openShare(page);
 
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
 
   await expect(playgroundLink(page)).toBeVisible(LONG);
   expect(requests[0].postDataJSON().public).toBe(false);
@@ -501,7 +542,9 @@ test("gist-sharing: Sharing a public gist", async ({ page }) => {
   await openShare(page);
 
   await dialog(page).getByRole("radio", { name: "Public" }).click();
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create public gist" })
+    .click();
 
   await expect(playgroundLink(page)).toBeVisible(LONG);
   expect(requests[0].postDataJSON().public).toBe(true);
@@ -513,33 +556,16 @@ test("gist-sharing: Copying the Playground link", async ({ page, context }) => {
   await stubGists(page, [201, { url: GIST_URL, id: "abc123" }]);
   await seedWorkspace(page);
   await openShare(page);
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
   await expect(playgroundLink(page)).toBeVisible(LONG);
 
-  await dialog(page)
-    .getByRole("button", { name: "Copy Playground link" })
-    .click();
+  await dialog(page).getByRole("button", { name: "Copy link" }).click();
 
   await expect(page.getByText("Link copied", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
     new URL(LINK_PATH, page.url()).href
-  );
-});
-
-test("gist-sharing: Copying the GitHub link", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await stubAuth(page, { signedIn: true });
-  await stubGists(page, [201, { url: GIST_URL, id: "abc123" }]);
-  await seedWorkspace(page);
-  await openShare(page);
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
-  await expect(playgroundLink(page)).toBeVisible(LONG);
-
-  await dialog(page).getByRole("button", { name: "Copy GitHub link" }).click();
-
-  await expect(page.getByText("Link copied", { exact: true })).toBeVisible();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-    GIST_URL
   );
 });
 
@@ -588,12 +614,12 @@ test("gist-sharing: A copy is counted", async ({ page, context }) => {
   await stubGists(page, [201, { url: GIST_URL, id: "abc123" }]);
   await seedWorkspace(page);
   await openShare(page);
-  await dialog(page).getByRole("button", { name: "Share to GitHub" }).click();
+  await dialog(page)
+    .getByRole("button", { name: "Create secret gist" })
+    .click();
   await expect(playgroundLink(page)).toBeVisible(LONG);
 
-  await dialog(page)
-    .getByRole("button", { name: "Copy Playground link" })
-    .click();
+  await dialog(page).getByRole("button", { name: "Copy link" }).click();
 
   await expect
     .poll(() => lineOf(lines, "gist_link_copied"))

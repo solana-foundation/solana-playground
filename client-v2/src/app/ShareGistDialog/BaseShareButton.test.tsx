@@ -1,23 +1,22 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import BaseShareButton from "./BaseShareButton";
 
-// The widget's entry boots `@/utils`, whose settings need the build's
-// globals; the mark is all this button takes from it
-vi.mock("@/widgets/session-footer", () => ({
-  GithubMark: (props: { className?: string }) => (
-    <svg data-testid="github-mark" className={props.className} />
-  ),
-}));
-
-it("names the project it shares, says Share, and calls back on a click", () => {
+it("names the project it shares, draws an icon, and calls back on a click", () => {
   const onShare = vi.fn();
-  render(<BaseShareButton name="counter" onShare={onShare} />);
+  render(
+    <TooltipProvider>
+      <BaseShareButton name="counter" onShare={onShare} />
+    </TooltipProvider>
+  );
 
   const share = screen.getByRole("button", { name: "Share counter" });
   expect(share.id).toBe("flow-share");
-  expect(share.textContent).toBe("Share");
+  // An icon, as the bar's other controls; its name is the tooltip
+  expect(share.textContent).toBe("");
   expect(share.querySelector("svg")).toBeTruthy();
   fireEvent.click(share);
 

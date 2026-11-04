@@ -3,6 +3,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import ShareButton from "./ShareButton";
 import { openShareGistDialogFor } from "./ShareGistDialog";
 
@@ -47,11 +49,14 @@ const openProject = (name: string | undefined) => {
 
 it("opens the share dialog for the open project, from the header", async () => {
   openProject("counter");
-  render(<ShareButton />);
+  render(
+    <TooltipProvider>
+      <ShareButton />
+    </TooltipProvider>
+  );
 
   const share = screen.getByRole("button", { name: "Share counter" });
   expect(share.id).toBe("flow-share");
-  expect(share.textContent).toBe("Share");
   await act(async () => fireEvent.click(share));
 
   expect(openShareGistDialogFor).toHaveBeenCalledWith("header");

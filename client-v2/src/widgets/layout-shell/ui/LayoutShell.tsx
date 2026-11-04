@@ -104,6 +104,12 @@ export interface LayoutShellProps {
    * Share; not drawn under Home or over a page
    */
   stageBarActions?: ReactNode;
+  /**
+   * Shares a project as a gist, from the phone's Code head. The dialog is the
+   * app's, which a widget may not import, so the app hands it in; the head
+   * offers it for the open project
+   */
+  onShare?: (project: string) => void;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -131,6 +137,7 @@ const LayoutShell = ({
   cover,
   keepWork,
   stageBarActions,
+  onShare,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -512,6 +519,13 @@ const LayoutShell = ({
   if (screen.kind === "home") phoneTitle = homeTitle ?? "";
   if (screen.kind === "page") phoneTitle = screen.cover.title;
 
+  // Share acts on the open project, so none is offered over Home or a page
+  const shareName = PgExplorer.currentWorkspaceName;
+  const phoneShare =
+    onShare && shareName && screen.kind !== "home" && screen.kind !== "page"
+      ? () => onShare(shareName)
+      : undefined;
+
   // The bar names the project while the assistant is out of view, since its
   // head cannot; under Home it names Home, as the phone's bar does
   let barTitle: string | null = null;
@@ -592,6 +606,7 @@ const LayoutShell = ({
         onFilesOpenChange: (open) => setPhoneFiles(open, lastInput.current),
         stageOn: stagePageOf(flowStage),
         consoleOpen: phoneConsole,
+        onShare: phoneShare,
       }}
       stageBar={
         <BaseStageBar

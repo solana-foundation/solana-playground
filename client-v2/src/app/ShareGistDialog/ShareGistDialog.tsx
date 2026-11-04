@@ -1,12 +1,24 @@
-import { TriangleAlert } from "lucide-react";
+import { Check, Copy, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { isSignInFailure, PgSession } from "@/features/auth";
-import type { GistShareSource, SignInEnding } from "@/features/gist";
-import { ShareGist, signInFailureMessage } from "@/features/gist";
+import type {
+  GistShareSource,
+  ShareGistControl,
+  SignInEnding,
+} from "@/features/gist";
+import {
+  BaseShareGist,
+  shareAction,
+  shareTitle,
+  signInFailureMessage,
+  useShareGist,
+} from "@/features/gist";
 import { useRenderOnChange } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Spinner } from "@/shared/ui/spinner";
 import { PgView } from "@/utils/view";
 import { ModalFrame } from "@/widgets/overlays";
 import { GithubMark } from "@/widgets/session-footer";
@@ -40,6 +52,14 @@ const buttonText = (waiting: boolean, cancellable: boolean) => {
   return "Sign in with GitHub";
 };
 
+/** The prompt's icon: GitHub's mark, none on the cancel, a spinner on another's wait */
+const signInIcon = (waiting: boolean, cancellable: boolean) => {
+  if (cancellable) return undefined;
+  // Hidden from the button's name, which the label says already
+  if (waiting) return <Spinner aria-hidden="true" />;
+  return <GithubMark className="size-4" />;
+};
+
 /**
  * What a signed-out Share shows first (the `gist-sharing` spec, "Sign in to
  * share"): why sharing needs GitHub, and the sign-in. Signing in is a popup,
@@ -50,8 +70,8 @@ const buttonText = (waiting: boolean, cancellable: boolean) => {
  * say it was closed (`popup-channel`), so a submit that waited on it would
  * hold the dialog busy, with Cancel off, until the flow expires. While it
  * waits the submit reads "Cancel sign-in" and stops it, keeping the prompt
- * open, as the prototype's own sign-in control does; the frame's Cancel
- * closes the dialog and cancels it too.
+ * open, as the prototype's own sign-in control does. The footer has no Cancel
+ * then; the header's Close closes the dialog and cancels the sign-in too.
  */
 const SignInToShare = () => {
   useRenderOnChange(PgSession.onDidChange);
@@ -119,15 +139,21 @@ const SignInToShare = () => {
     <ModalFrame
       name="share-gist-sign-in"
       title="Sign in to share"
+      size="narrow"
       buttonProps={{
         text: buttonText(waiting, cancellable),
-        icon: waiting ? undefined : <GithubMark className="size-4" />,
+        icon: signInIcon(waiting, cancellable),
         onSubmit: signIn,
         noCloseOnSubmit: true,
         disabled: waiting && !cancellable,
+        // One cancel while the popup waits, Cancel sign-in; the head's Close
+        // still closes the prompt and cancels it, as the share dialog's does
+        noCancel: waiting && cancellable,
+        // The same one action as every other step of Share
+        variant: "brand",
       }}
     >
-      <div className="flex max-w-md flex-col gap-3">
+      <div className="flex flex-col gap-3">
         <p className="text-body font-read text-muted-foreground">
           Your project goes to a gist on your GitHub account.
         </p>
@@ -150,6 +176,96 @@ const SignInToShare = () => {
   );
 };
 
+const onShareError = reportButtonFailure("share the project");
+
+/**
+ * The share dialog's frame: its heading and its one action follow the step
+ * (`shareTitle`, `shareAction`), the body is the gist feature's.
+ *
+ * A sign-in or a grant runs beside the frame's submit, not inside it, as the
+ * prompt's does: a submit that waited on the popup would hold the dialog
+ * busy, with Cancel off, while the footer offers "Cancel sign-in".
+ */
+const ShareFrame = ({ body, run }: ShareGistControl) => {
+  const action = shareAction(body);
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const copy = async () => {
+    if (!(await run.copy())) return;
+    setCopied(true);
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setCopied(false), 1400);
+  };
+
+  const submits: Record<Exclude<typeof action.run, "close">, () => unknown> = {
+    create: () => run.create().catch(onShareError),
+    "sign-in": () => void run["sign-in"]().catch(onShareError),
+    grant: () => void run.grant().catch(onShareError),
+    "cancel-sign-in": run["cancel-sign-in"],
+    copy,
+  };
+  // Without a submit of its own, the frame's button closes the dialog
+  // (Close), and that is no call to action: outlined, not the brand one
+  const closes = action.run === "close";
+  const onSubmit = action.run === "close" ? undefined : submits[action.run];
+
+  let icon;
+  if (action.busy) icon = <Spinner aria-hidden="true" />;
+  else if (action.github) icon = <GithubMark className="size-4" />;
+  else if (action.run === "copy") icon = copied ? <Check /> : <Copy />;
+
+  return (
+    <ModalFrame
+      name="share-gist"
+      title={shareTitle(body)}
+      // Created opens with nothing ringed: focus on the link would select it
+      // and scroll it to its end, hiding where the address starts
+      openFocus={body.state.step === "created" ? "dialog" : undefined}
+      buttonProps={{
+        text: action.run === "copy" && copied ? "Copied" : action.label,
+        icon,
+        onSubmit,
+        noCloseOnSubmit: !closes,
+        // The gist exists by then: Cancel would read as undoing the share.
+        // While GitHub's popup waits, Cancel beside Cancel sign-in reads as
+        // two of the same; the head's Close is the way out then
+        noCancel: action.run === "copy" || action.run === "cancel-sign-in",
+        disabled: action.busy,
+        variant: closes ? "outline" : "brand",
+      }}
+    >
+      <BaseShareGist {...body} githubMark={<GithubMark />} />
+    </ModalFrame>
+  );
+};
+
+/** The share dialog with its state connected */
+const ConnectedShare = ({
+  name,
+  readFiles,
+  source,
+  signedIn,
+}: ShareGistDialogProps & { signedIn: boolean }) => {
+  const control = useShareGist({
+    name,
+    readFiles,
+    source,
+    signedIn,
+    signIn: (options) =>
+      PgSession.signInWith({ scopes: options?.scopes }).then(
+        () => "signed-in" as const,
+        (error: unknown) => {
+          if (isCancel(error)) return "cancelled" as const;
+          throw error;
+        }
+      ),
+    cancelSignIn: () => PgSession.cancelSignIn(),
+  });
+  return <ShareFrame {...control} />;
+};
+
 /**
  * Share a project as a gist: the gist feature's body in a dialog of
  * `PgView`'s stack, with sign-in from the auth feature. It lives in the app
@@ -168,24 +284,12 @@ const ShareGistDialog = ({ name, readFiles, source }: ShareGistDialogProps) => {
   if (signedIn) shared.current = true;
   if (!shared.current) return <SignInToShare />;
   return (
-    <ModalFrame name="share-gist" title="Share to GitHub">
-      <ShareGist
-        name={name}
-        readFiles={readFiles}
-        source={source}
-        signedIn={signedIn}
-        signIn={(options) =>
-          PgSession.signInWith({ scopes: options?.scopes }).then(
-            () => "signed-in" as const,
-            (error: unknown) => {
-              if (isCancel(error)) return "cancelled" as const;
-              throw error;
-            }
-          )
-        }
-        cancelSignIn={() => PgSession.cancelSignIn()}
-      />
-    </ModalFrame>
+    <ConnectedShare
+      name={name}
+      readFiles={readFiles}
+      source={source}
+      signedIn={signedIn}
+    />
   );
 };
 

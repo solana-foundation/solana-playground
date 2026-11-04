@@ -8,7 +8,8 @@ import { openShareGistDialogFor } from "./ShareGistDialog";
 /**
  * The frame header's Share, connected: opens the share dialog for the open
  * project, and draws nothing while no project is open. The stage bar it sits
- * in is desktop-only, so a phone shares from the open project's row.
+ * in is desktop-only; a phone shares from the Code head (`LayoutShell`'s
+ * `onShare`) and from the open project's row.
  */
 const ShareButton = () => {
   useRenderOnChange(PgExplorer.onDidSwitchWorkspace);

@@ -1,7 +1,7 @@
-// The share dialog's body end to end against a stubbed `/api/gists`: the
-// visibility it shares with, sign-in first when signed out (and its cancel),
-// gist access asked for only when the token lacks it, the links it copies,
-// and every ending counted once.
+// The share dialog's body and its one action end to end against a stubbed
+// `/api/gists`: the visibility it shares with, sign-in first when signed out
+// (and its cancel), gist access asked for only when the token lacks it, the
+// link it copies, and every ending counted once.
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { type ComponentType, StrictMode } from "react";
 import type { Mock } from "vitest";
@@ -15,8 +15,44 @@ import {
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgView } from "@/utils/view";
 
-import type { ShareGistProps } from "./ShareGist";
-import ShareGist from "./ShareGist";
+import BaseShareGist, { shareAction, shareTitle } from "./BaseShareGist";
+import type { ShareGistOptions } from "./ShareGist";
+import { useShareGist } from "./ShareGist";
+
+/** What a create rejected with, which the app's frame reports and toasts */
+const frameFailures: unknown[] = [];
+
+/**
+ * The dialog as the app's frame draws it: the step's title, the body, and
+ * the footer's one action, which starts a sign-in without waiting on it
+ */
+const Dialog = (options: ShareGistOptions) => {
+  const { body, run } = useShareGist(options);
+  const action = shareAction(body);
+  const press = () => {
+    switch (action.run) {
+      case "close":
+        return;
+      case "create":
+        return run.create().catch((e: unknown) => frameFailures.push(e));
+      case "sign-in":
+      case "grant":
+        void run[action.run]();
+        return;
+      default:
+        return run[action.run]();
+    }
+  };
+  return (
+    <>
+      <h2>{shareTitle(body)}</h2>
+      <BaseShareGist {...body} githubMark={<svg />} />
+      <button type="button" disabled={action.busy} onClick={press}>
+        {action.label}
+      </button>
+    </>
+  );
+};
 
 /** A cancel the user made is a quiet line, never an error callout */
 const expectQuietCancel = () => {
@@ -31,6 +67,7 @@ const FILES = { "src/lib.rs": "a", "client/client.ts": "b" };
 
 let sent: ReturnType<typeof memoryProvider>;
 beforeEach(() => {
+  frameFailures.length = 0;
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
 });
@@ -53,9 +90,11 @@ const answers = (...replies: Array<[number, unknown]>) => {
 };
 
 const resolvingSignIn = () =>
-  vi.fn<ShareGistProps["signIn"]>().mockResolvedValue("signed-in");
+  vi.fn<ShareGistOptions["signIn"]>().mockResolvedValue("signed-in");
 
-const noCancel = () => vi.fn<ShareGistProps["cancelSignIn"]>();
+const noCancel = () => vi.fn<ShareGistOptions["cancelSignIn"]>();
+
+const readsFiles: ShareGistOptions["readFiles"] = async () => FILES;
 
 const renderShareWith = ({
   signedIn,
@@ -64,16 +103,16 @@ const renderShareWith = ({
   readFiles,
 }: {
   signedIn: boolean;
-  signIn: Mock<ShareGistProps["signIn"]>;
-  cancelSignIn: Mock<ShareGistProps["cancelSignIn"]>;
-  readFiles: ShareGistProps["readFiles"];
+  signIn: Mock<ShareGistOptions["signIn"]>;
+  cancelSignIn: Mock<ShareGistOptions["cancelSignIn"]>;
+  readFiles: ShareGistOptions["readFiles"];
 }) => {
   // The app's root provides the tooltips Copy needs, and runs under
   // StrictMode in development, which mounts every effect twice
   render(
     <StrictMode>
       <TooltipProvider>
-        <ShareGist
+        <Dialog
           name="counter"
           readFiles={readFiles}
           source="header"
@@ -88,10 +127,18 @@ const renderShareWith = ({
   return { signIn, cancelSignIn };
 };
 
+const renderShare = () =>
+  renderShareWith({
+    signedIn: true,
+    signIn: resolvingSignIn(),
+    cancelSignIn: noCancel(),
+    readFiles: readsFiles,
+  });
+
 /** A sign-in whose popup stays open until the test cancels it */
 const pendingSignIn = () => {
   let answer: (outcome: "signed-in" | "cancelled") => void = () => {};
-  const signIn = vi.fn<ShareGistProps["signIn"]>(
+  const signIn = vi.fn<ShareGistOptions["signIn"]>(
     () =>
       new Promise((resolve) => {
         answer = resolve;
@@ -113,18 +160,10 @@ const stubClipboard = (writeText: () => Promise<void>) => {
   return write;
 };
 
-const renderShare = () =>
-  renderShareWith({
-    signedIn: true,
-    signIn: resolvingSignIn(),
-    cancelSignIn: noCancel(),
-    readFiles: async () => FILES,
-  });
-
 const press = (name: RegExp) =>
   act(async () => fireEvent.click(screen.getByRole("button", { name })));
 
-it("sends nothing on open, with Secret chosen and Share to GitHub offered", () => {
+it("sends nothing on open, with Secret chosen and Create secret gist offered", () => {
   const fetch = vi.spyOn(globalThis, "fetch");
 
   renderShare();
@@ -135,7 +174,12 @@ it("sends nothing on open, with Secret chosen and Share to GitHub offered", () =
   expect(
     screen.getByRole("radio", { name: "Public" }).getAttribute("aria-checked")
   ).toBe("false");
-  expect(screen.getByRole("button", { name: "Share to GitHub" })).toBeTruthy();
+  expect(
+    screen.getByRole("heading", { name: "Share counter as a gist" })
+  ).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Create secret gist" })
+  ).toBeTruthy();
   expect(screen.getByText(/program keypair/)).toBeTruthy();
   expect(fetch).not.toHaveBeenCalled();
 });
@@ -144,10 +188,12 @@ it("shares a secret gist and shows the Playground link, not the gist URL", async
   const fetch = answers([201, { url: URL, id: "abc" }]);
   renderShare();
 
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
 
   expect(postedPublic(fetch, 0)).toBe(false);
-  expect(screen.getByText("Shared")).toBeTruthy();
+  expect(
+    screen.getByRole("heading", { name: "Shared as a secret gist" })
+  ).toBeTruthy();
   expect(screen.getByLabelText("Playground link")).toHaveProperty(
     "value",
     LINK
@@ -155,10 +201,11 @@ it("shares a secret gist and shows the Playground link, not the gist URL", async
   expect(screen.queryByDisplayValue(URL)).toBeNull();
   expect(
     screen.getByText(
-      "Opens counter in Solana Playground as a preview. Anyone with the link can see the code."
+      "Anyone with this link can open it. It isn't on your GitHub profile."
     )
   ).toBeTruthy();
-  const open = screen.getByRole("link", { name: /Open on GitHub/ });
+  expect(screen.getByRole("button", { name: "Copy link" })).toBeTruthy();
+  const open = screen.getByRole("link", { name: /Open the gist on GitHub/ });
   expect(open.getAttribute("href")).toBe(URL);
   expect(open.getAttribute("target")).toBe("_blank");
   expect(open.getAttribute("rel")).toBe("noopener noreferrer");
@@ -181,7 +228,7 @@ it("shares a public gist when Public is picked", async () => {
   await act(async () =>
     fireEvent.click(screen.getByRole("radio", { name: "Public" }))
   );
-  await press(/^Share to GitHub$/);
+  await press(/^Create public gist$/);
 
   expect(postedPublic(fetch, 0)).toBe(true);
   expect(sent.events[0].params).toEqual({
@@ -196,9 +243,9 @@ it("copies the Playground link, toasts and counts it", async () => {
   const write = stubClipboard(async () => {});
   const toast = vi.spyOn(PgView, "setToast").mockImplementation(vi.fn());
   renderShare();
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
 
-  await press(/^Copy Playground link$/);
+  await press(/^Copy link$/);
 
   expect(write).toHaveBeenCalledWith(LINK);
   expect(toast).toHaveBeenCalledTimes(1);
@@ -213,20 +260,17 @@ it("copies the Playground link, toasts and counts it", async () => {
   });
 });
 
-it("copies the GitHub link from its own button", async () => {
+it("offers one copy, the Playground link's, and the gist on GitHub as a link", async () => {
   answers([201, { url: URL, id: "abc" }]);
-  const write = stubClipboard(async () => {});
-  vi.spyOn(PgView, "setToast").mockImplementation(vi.fn());
   renderShare();
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
 
-  await press(/^Copy GitHub link$/);
-
-  expect(write).toHaveBeenCalledWith(URL);
-  expect(sent.events.at(-1)).toEqual({
-    name: "gist_link_copied",
-    params: { copied: "github" },
-  });
+  expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([
+    "Copy link",
+  ]);
+  expect(
+    screen.getByRole("link", { name: /Open the gist on GitHub/ })
+  ).toBeTruthy();
 });
 
 it("says the link was not copied when the clipboard refuses, with no toast", async () => {
@@ -234,9 +278,9 @@ it("says the link was not copied when the clipboard refuses, with no toast", asy
   stubClipboard(() => Promise.reject(new Error("denied")));
   const toast = vi.spyOn(PgView, "setToast").mockImplementation(vi.fn());
   renderShare();
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
 
-  await press(/^Copy Playground link$/);
+  await press(/^Copy link$/);
 
   expect(screen.getByText(/Could not copy the link/)).toBeTruthy();
   expect(toast).not.toHaveBeenCalled();
@@ -249,7 +293,7 @@ it("signs a signed-out user in, then shares without a second press", async () =>
     signedIn: false,
     signIn: resolvingSignIn(),
     cancelSignIn: noCancel(),
-    readFiles: async () => FILES,
+    readFiles: readsFiles,
   });
 
   await press(/^Sign in with GitHub$/);
@@ -269,15 +313,14 @@ it("offers Cancel sign-in while the popup waits, and stays on sign-in after it",
     signedIn: false,
     signIn: popup.signIn,
     cancelSignIn,
-    readFiles: async () => FILES,
+    readFiles: readsFiles,
   });
 
   await press(/^Sign in with GitHub$/);
   expect(
     screen.queryByRole("button", { name: "Sign in with GitHub" })
   ).toBeNull();
-  const cancel = screen.getByRole("button", { name: "Cancel sign-in" });
-  expect(cancel.id).toBe("share-gist-cancel-sign-in");
+  expect(screen.getByRole("button", { name: "Cancel sign-in" })).toBeTruthy();
 
   await press(/^Cancel sign-in$/);
 
@@ -302,9 +345,9 @@ it("returns to Allow gists after a cancelled grant", async () => {
     signedIn: true,
     signIn: popup.signIn,
     cancelSignIn: vi.fn(() => popup.cancel()),
-    readFiles: async () => FILES,
+    readFiles: readsFiles,
   });
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
 
   await press(/Allow gists on GitHub/);
   await press(/^Cancel sign-in$/);
@@ -318,7 +361,7 @@ it("returns to Allow gists after a cancelled grant", async () => {
 it("moves on to share once the session reads as signed in", () => {
   const share = (signedIn: boolean) => (
     <TooltipProvider>
-      <ShareGist
+      <Dialog
         name="counter"
         readFiles={async () => FILES}
         source="project_menu"
@@ -336,13 +379,13 @@ it("moves on to share once the session reads as signed in", () => {
 
   rerender(share(true));
 
-  expect(screen.getByRole("button", { name: "Share to GitHub" })).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Create secret gist" })
+  ).toBeTruthy();
 });
 
-it("stays ready when the project cannot be read, and tells the user", async () => {
+it("stays ready when the project cannot be read, and leaves the failure to the frame", async () => {
   const fetch = vi.spyOn(globalThis, "fetch");
-  const toast = vi.fn();
-  vi.spyOn(PgView, "setToast").mockImplementation(toast);
   renderShareWith({
     signedIn: true,
     signIn: resolvingSignIn(),
@@ -350,26 +393,30 @@ it("stays ready when the project cannot be read, and tells the user", async () =
     readFiles: () => Promise.reject(new Error("store unreadable")),
   });
 
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
 
   expect(fetch).not.toHaveBeenCalled();
-  expect(toast).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole("button", { name: "Share to GitHub" })).toBeTruthy();
+  expect(frameFailures).toEqual([new Error("store unreadable")]);
+  expect(
+    screen.getByRole("button", { name: "Create secret gist" })
+  ).toBeTruthy();
   expect(sent.events).toEqual([]);
 });
 
-it("says it could not sign in when the failure carries no words", async () => {
-  renderShareWith({
-    signedIn: false,
-    signIn: vi.fn().mockRejectedValue(new Error("")),
-    cancelSignIn: noCancel(),
-    readFiles: async () => FILES,
+it("lists what goes to the gist, folded, with the manifest named", async () => {
+  renderShare();
+
+  const row = await screen.findByRole("button", {
+    name: /2 files go to the gist/,
   });
+  expect(screen.queryByText("src/lib.rs")).toBeNull();
 
-  await press(/^Sign in with GitHub$/);
+  await act(async () => fireEvent.click(row));
 
-  // Spec 08 ACCT-03
-  expect(screen.getByText("Could not sign in.")).toBeTruthy();
+  expect(row.getAttribute("aria-expanded")).toBe("true");
+  expect(screen.getByText("client/client.ts")).toBeTruthy();
+  expect(screen.getByText("src/lib.rs")).toBeTruthy();
+  expect(screen.getByText(".playground.json")).toBeTruthy();
 });
 
 it("says so when the browser blocks the sign-in popup", async () => {
@@ -381,7 +428,7 @@ it("says so when the browser blocks the sign-in popup", async () => {
         new Error("Allow pop-ups for this site to sign in with GitHub.")
       ),
     cancelSignIn: noCancel(),
-    readFiles: async () => FILES,
+    readFiles: readsFiles,
   });
 
   await press(/^Sign in with GitHub$/);
@@ -401,8 +448,9 @@ it("asks for gist access once, then retries by itself with the same visibility",
   await act(async () =>
     fireEvent.click(screen.getByRole("radio", { name: "Public" }))
   );
-  await press(/^Share to GitHub$/);
-  expect(screen.getByText(/GitHub needs your permission/)).toBeTruthy();
+  await press(/^Create public gist$/);
+  expect(screen.getByText("One more step on GitHub")).toBeTruthy();
+  expect(screen.getByText(/Then the public gist is created/)).toBeTruthy();
 
   await press(/Allow gists on GitHub/);
 
@@ -427,7 +475,7 @@ it("stops when GitHub still lacks gist access after the grant", async () => {
   );
   renderShare();
 
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
   await press(/Allow gists on GitHub/);
 
   expect(screen.getByText(/GitHub did not grant gist access/)).toBeTruthy();
@@ -442,12 +490,12 @@ it("offers sign-in again when GitHub revoked the grant", async () => {
   answers([401, { reason: "github-unauthorized" }], [201, { url: URL }]);
   const { signIn } = renderShare();
 
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
   expect(
     screen.getByText(/GitHub no longer accepts this sign-in/)
   ).toBeTruthy();
 
-  await press(/Sign in with GitHub again/);
+  await press(/^Sign in with GitHub$/);
 
   expect(signIn).toHaveBeenCalledTimes(1);
   // The id read from the gist's URL when the answer names none
@@ -461,7 +509,7 @@ it("goes back to sign-in when the session ended meanwhile", async () => {
   answers([401, { reason: "signed-out" }]);
   renderShare();
 
-  await press(/^Share to GitHub$/);
+  await press(/^Create secret gist$/);
 
   expect(screen.getByText(/Your session ended/)).toBeTruthy();
   expect(
@@ -474,38 +522,39 @@ it("goes back to sign-in when the session ended meanwhile", async () => {
 });
 
 it.each([
-  [
-    429,
-    { reason: "rate-limited" },
-    "GitHub is limiting requests from this browser. Try again in a few minutes.",
-    "rate-limited",
-    true,
-  ],
-  [
-    422,
-    { reason: "rejected" },
-    "GitHub refused the gist. Nothing was published.",
-    "rejected",
-    false,
-  ],
-  [
-    502,
-    { reason: "request-failed" },
-    "Could not export to GitHub. Check your gists on GitHub before you try again.",
-    "request-failed",
-    true,
-  ],
+  {
+    status: 429,
+    body: { reason: "rate-limited" },
+    message:
+      "GitHub is limiting requests from this browser. Try again in a few minutes.",
+    reason: "rate-limited",
+    action: "Try again",
+  },
+  {
+    status: 422,
+    body: { reason: "rejected" },
+    message: "GitHub refused the gist. Nothing was published.",
+    reason: "rejected",
+    action: "Close",
+  },
+  {
+    status: 502,
+    body: { reason: "request-failed" },
+    message:
+      "Could not export to GitHub. Check your gists on GitHub before you try again.",
+    reason: "request-failed",
+    action: "Try again",
+  },
 ])(
-  "tells a %i apart, offering a retry unless GitHub refused the gist",
-  // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
-  async (status, body, message, reason, retry) => {
+  "tells a $status apart, offering a retry unless GitHub refused the gist",
+  async ({ status, body, message, reason, action }) => {
     answers([status, body]);
     renderShare();
 
-    await press(/^Share to GitHub$/);
+    await press(/^Create secret gist$/);
 
     expect(screen.getByText(message)).toBeTruthy();
-    expect(!!screen.queryByRole("button", { name: "Try again" })).toBe(retry);
+    expect(screen.getAllByRole("button").at(-1)?.textContent).toBe(action);
     expect(sent.events.at(-1)).toEqual({
       name: "gist_export_failed",
       params: { reason, visibility: "secret" },
@@ -513,9 +562,23 @@ it.each([
   }
 );
 
+it("says it could not sign in when the failure carries no words", async () => {
+  renderShareWith({
+    signedIn: false,
+    signIn: vi.fn().mockRejectedValue(new Error("")),
+    cancelSignIn: noCancel(),
+    readFiles: readsFiles,
+  });
+
+  await press(/^Sign in with GitHub$/);
+
+  // Spec 08 ACCT-03
+  expect(screen.getByText("Could not sign in.")).toBeTruthy();
+});
+
 it("says a sign-in the user ended on GitHub quietly too, and a failure in red", async () => {
   const signIn = vi
-    .fn<ShareGistProps["signIn"]>()
+    .fn<ShareGistOptions["signIn"]>()
     .mockResolvedValueOnce("cancelled")
     .mockRejectedValueOnce(
       new Error("Allow pop-ups for this site to sign in with GitHub.")
@@ -524,7 +587,7 @@ it("says a sign-in the user ended on GitHub quietly too, and a failure in red", 
     signedIn: false,
     signIn,
     cancelSignIn: noCancel(),
-    readFiles: async () => FILES,
+    readFiles: readsFiles,
   });
 
   await press(/^Sign in with GitHub$/);

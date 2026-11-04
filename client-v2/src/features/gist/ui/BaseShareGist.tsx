@@ -1,16 +1,23 @@
-import { ExternalLink, TriangleAlert } from "lucide-react";
+import {
+  ChevronDown,
+  CircleCheck,
+  ExternalLink,
+  Files,
+  InfoIcon,
+  Lock,
+  TriangleAlert,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { useState } from "react";
 
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { AsyncButton } from "@/shared/ui/async-button";
-import { Button } from "@/shared/ui/button";
+import { cn } from "@/shared/lib/utils";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
-import { HelpTip } from "@/shared/ui/help-tip";
 import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
 
+import { MANIFEST_NAME } from "../lib/format";
 import type { ExportFailure } from "../model/export";
-import type { GistCopiedLink, GistVisibility } from "../model/telemetry";
+import type { GistVisibility } from "../model/telemetry";
 
 /** Why a share ended without a gist, as the dialog words it */
 export type ShareFailure = ExportFailure | "scope-not-granted";
@@ -36,6 +43,21 @@ export type ShareStep =
   | { step: "created"; url: string; link: string }
   | { step: "failed"; reason: ShareFailure };
 
+/** What goes to the gist: shown folded to a count and a size */
+export interface ShareFiles {
+  paths: string[];
+  bytes: number;
+}
+
+/** The dialog's one action for a step, drawn in its footer */
+export interface ShareAction {
+  label: string;
+  run: "create" | "sign-in" | "grant" | "cancel-sign-in" | "copy" | "close";
+  busy?: boolean;
+  /** The action opens GitHub, so it carries GitHub's mark */
+  github?: boolean;
+}
+
 export interface BaseShareGistProps {
   /** The project's name */
   name: string;
@@ -45,25 +67,20 @@ export interface BaseShareGistProps {
   onVisibilityChange: (visibility: GistVisibility) => void;
   /** Whether an export request runs, which locks the visibility */
   busy: boolean;
-  /** Create the gist; settles when the attempt has an answer */
-  onCreate: () => Promise<unknown>;
-  /** Sign in with GitHub, then create the gist */
-  onSignIn: () => Promise<unknown>;
-  /** Allow gists on GitHub, then create the gist */
-  onGrant: () => Promise<unknown>;
-  /** Stop the sign-in or grant the `waiting` step waits on */
-  onCancelSignIn: () => void;
-  /** Put one of the shared state's links on the clipboard */
-  onCopy: (link: GistCopiedLink) => Promise<unknown>;
+  /** `undefined` while the project is still being read */
+  files: ShareFiles | undefined;
   /** Whether the last copy was refused by the clipboard */
   copyFailed: boolean;
+  /** GitHub's mark, for the step GitHub asks; the caller's, as auth's is */
+  githubMark: ReactNode;
 }
 
 /**
- * A refused gist (422) fails the same on every retry, so it offers none.
+ * A refused gist (422) fails the same on every retry, and a project over the
+ * limits needs to get smaller first, so neither offers a retry.
  * `request-failed` also covers a gist GitHub may have created (a 201 whose
- * body did not parse, a drop after GitHub accepted), so its text sends the
- * user to their gists before a retry that could publish a second copy.
+ * body did not parse, a drop after GitHub accepted), so it sends the user to
+ * their gists before a retry that could publish a second copy.
  */
 const FAILURE: Record<ShareFailure, (name: string) => string> = {
   "too-large": (name) =>
@@ -79,142 +96,264 @@ const FAILURE: Record<ShareFailure, (name: string) => string> = {
     "GitHub did not grant gist access, so the gist was not created.",
 };
 
-/** The one action each step offers, with its label */
-const ACTION: Record<
-  Exclude<ShareStep["step"], "created" | "waiting">,
-  { label: string; run: "create" | "sign-in" | "grant" }
-> = {
-  ready: { label: "Share to GitHub", run: "create" },
-  "sign-in": { label: "Sign in with GitHub", run: "sign-in" },
-  grant: { label: "Allow gists on GitHub", run: "grant" },
-  failed: { label: "Try again", run: "create" },
+/** A failure that is GitHub holding back, not something wrong: a warning */
+const WARNS: ShareFailure[] = ["rate-limited"];
+
+const RETRY: Record<ShareFailure, ShareAction> = {
+  "too-large": { label: "Close", run: "close" },
+  rejected: { label: "Close", run: "close" },
+  // A revoked grant is mended by signing in again, not by the same request
+  "github-unauthorized": {
+    label: "Sign in with GitHub",
+    run: "sign-in",
+    github: true,
+  },
+  "scope-not-granted": {
+    label: "Allow gists on GitHub",
+    run: "grant",
+    github: true,
+  },
+  "rate-limited": { label: "Try again", run: "create" },
+  "request-failed": { label: "Try again", run: "create" },
 };
 
-const VISIBILITY: Array<{ value: GistVisibility; label: string }> = [
-  { value: "secret", label: "Secret" },
-  { value: "public", label: "Public" },
-];
+/**
+ * The footer's action for a step. While a popup waits on GitHub it is the
+ * cancel, as the sign-in prompt's is; a refused gist and one over the limits
+ * offer no retry, which would fail the same: Close is all they have.
+ */
+export const shareAction = ({
+  state,
+  visibility,
+  busy,
+}: Pick<BaseShareGistProps, "state" | "visibility" | "busy">): ShareAction => {
+  if (busy) return { label: "Creating gist…", run: "create", busy: true };
+  switch (state.step) {
+    case "ready":
+      return { label: `Create ${visibility} gist`, run: "create" };
+    case "sign-in":
+      return { label: "Sign in with GitHub", run: "sign-in", github: true };
+    case "grant":
+      return { label: "Allow gists on GitHub", run: "grant", github: true };
+    case "waiting":
+      return { label: "Cancel sign-in", run: "cancel-sign-in" };
+    case "created":
+      // The link is what the share was for, so copying it is the primary,
+      // in the footer: a phone pins it at the thumb, full width
+      return { label: "Copy link", run: "copy" };
+    case "failed":
+      return RETRY[state.reason];
+  }
+};
 
-const onError = reportButtonFailure("share the project");
-const onCopyError = reportButtonFailure("copy the link");
+/** The dialog's heading for a step */
+export const shareTitle = ({
+  name,
+  state,
+  visibility,
+}: Pick<BaseShareGistProps, "name" | "state" | "visibility">) =>
+  state.step === "created"
+    ? `Shared as a ${visibility} gist`
+    : `Share ${name} as a gist`;
 
-/** The Secret / Public choice, Secret first, locked while a request runs */
-const VisibilityChoice = ({
+const sizeLabel = (bytes: number) =>
+  bytes < 1024 ? `${bytes} B` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
+const VISIBILITY: Record<GistVisibility, { title: string; detail: string }> = {
+  secret: {
+    title: "Secret",
+    detail:
+      "Only people you send the link to. Not listed on your GitHub profile.",
+  },
+  public: {
+    title: "Public",
+    detail: "Listed on your GitHub profile, anyone can find it.",
+  },
+};
+
+/** Secret or Public, as two cards, Secret first; locked while a request runs */
+const WhoCanOpen = ({
   visibility,
   onChange,
-  disabled,
+  locked,
 }: {
   visibility: GistVisibility;
   onChange: (visibility: GistVisibility) => void;
-  disabled: boolean;
+  locked: boolean;
 }) => (
   <div className="flex flex-col gap-2">
-    <div className="flex items-center gap-1.5">
-      <span
-        id="share-gist-visibility-label"
-        className="text-control font-act text-foreground"
-      >
-        Visibility
-      </span>
-      <HelpTip label="About secret gists">
-        Secret gists don&apos;t show on your profile. Anyone with the link can
-        open them.
-      </HelpTip>
-    </div>
+    <p
+      id="share-gist-visibility-label"
+      className="text-caption font-act text-foreground"
+    >
+      Who can open it
+    </p>
     <RadioGroup
       aria-labelledby="share-gist-visibility-label"
-      className="flex gap-4"
+      className="grid-cols-1 sm:grid-cols-2"
       value={visibility}
       onValueChange={(value) => onChange(value as GistVisibility)}
-      disabled={disabled}
+      disabled={locked}
     >
-      {VISIBILITY.map(({ value, label }) => (
-        <Label
-          key={value}
-          htmlFor={`share-gist-visibility-${value}`}
-          className="font-read"
+      {(Object.keys(VISIBILITY) as GistVisibility[]).map((id) => (
+        <label
+          key={id}
+          className={cn(
+            "flex cursor-pointer gap-2.5 rounded-xl border border-border p-3 transition-colors has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/10",
+            locked && "cursor-default opacity-60"
+          )}
         >
-          <RadioGroupItem id={`share-gist-visibility-${value}`} value={value} />
-          {label}
-        </Label>
+          {/* Named by its title alone, the detail its description */}
+          <RadioGroupItem
+            id={`share-gist-visibility-${id}`}
+            value={id}
+            className="mt-0.5"
+            aria-labelledby={`share-gist-visibility-${id}-title`}
+            aria-describedby={`share-gist-visibility-${id}-detail`}
+          />
+          <span className="flex flex-col gap-0.5">
+            <span
+              id={`share-gist-visibility-${id}-title`}
+              className="text-body font-act text-foreground"
+            >
+              {VISIBILITY[id].title}
+            </span>
+            <span
+              id={`share-gist-visibility-${id}-detail`}
+              className="text-body font-read text-muted-foreground"
+            >
+              {VISIBILITY[id].detail}
+            </span>
+          </span>
+        </label>
       ))}
     </RadioGroup>
   </div>
 );
 
-/** The shared state: the Playground link to send, and the gist on GitHub */
-const Shared = ({
+/**
+ * What goes to the gist, folded to a count, and what stays: the row is a
+ * control, at controls' size; what stays is a note under it, at the size of
+ * supporting text, so it holds one line
+ */
+const WhatGoes = ({ files }: { files: ShareFiles | undefined }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-border">
+      <button
+        type="button"
+        // The ring follows the box's top corners, which clip it otherwise
+        className="flex items-center gap-2.5 rounded-t-xl px-3 py-2.5 text-left text-control font-read text-foreground outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-inset disabled:cursor-default"
+        aria-expanded={open}
+        disabled={!files}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <Files className="size-4 text-muted-foreground" aria-hidden="true" />
+        <span className="flex-1">
+          {files
+            ? `${files.paths.length} files go to the gist`
+            : "Reading the project…"}
+        </span>
+        {files && (
+          <span className="text-body font-read text-muted-foreground">
+            {sizeLabel(files.bytes)}
+          </span>
+        )}
+        <ChevronDown
+          aria-hidden="true"
+          className={cn(
+            "size-4 text-muted-foreground transition-transform",
+            open && "rotate-180"
+          )}
+        />
+      </button>
+      {/* The paths sit under the row's words, past its icon (12 + 16 + 10),
+          and the manifest is named, so no file on GitHub comes unannounced */}
+      {open && files && (
+        <ul className="flex max-h-40 list-none flex-col gap-1 overflow-y-auto border-t border-border py-2.5 pr-3 pl-[2.375rem] text-caption">
+          {files.paths.map((path) => (
+            <li key={path} className="font-mono text-muted-foreground">
+              {path}
+            </li>
+          ))}
+          <li className="mt-1 font-read text-muted-foreground">
+            plus <span className="font-mono">{MANIFEST_NAME}</span>, so
+            Playground can open the gist again
+          </li>
+        </ul>
+      )}
+      <p className="flex items-center gap-2.5 border-t border-border px-3 py-2.5 text-caption font-read text-muted-foreground">
+        <Lock className="size-4 shrink-0" aria-hidden="true" />
+        Stays in this browser: the program keypair and workspace settings
+      </p>
+    </div>
+  );
+};
+
+/** The created gist: the Playground link to copy, the gist itself quietly */
+const Created = ({
   name,
-  url,
   link,
-  onCopy,
+  url,
+  visibility,
   copyFailed,
 }: {
   name: string;
-  url: string;
   link: string;
-  onCopy: (link: GistCopiedLink) => Promise<unknown>;
+  url: string;
+  visibility: GistVisibility;
   copyFailed: boolean;
 }) => (
-  <div
-    className="flex max-w-md flex-col gap-3"
-    data-testid="share-gist-created"
-  >
-    <p className="text-body font-act text-foreground">Shared</p>
-    <div className="flex gap-2">
-      <Input
-        readOnly
-        aria-label="Playground link"
-        className="min-w-0 flex-1"
-        value={link}
-        onFocus={(event) => event.currentTarget.select()}
+  <div className="flex flex-col gap-4" data-testid="share-gist-created">
+    <div className="flex gap-3">
+      <CircleCheck
+        className="mt-0.5 size-5 shrink-0 text-success"
+        aria-hidden="true"
       />
-      <AsyncButton
-        type="button"
-        onClick={() => onCopy("playground")}
-        onError={onCopyError}
-      >
-        Copy Playground link
-      </AsyncButton>
+      <p className="flex flex-col gap-0.5">
+        <span className="text-body font-act text-foreground">
+          {name} opens in Playground from this link
+        </span>
+        <span className="text-body font-read text-muted-foreground">
+          {visibility === "secret"
+            ? "Anyone with this link can open it. It isn't on your GitHub profile."
+            : "It's on your GitHub profile. Anyone with this link can open it."}
+        </span>
+      </p>
     </div>
-    <p className="text-body font-read text-muted-foreground">
-      Opens {name} in Solana Playground as a preview. Anyone with the link can
-      see the code.
-    </p>
+    {/* The whole width, so the address shows from its start; a tap selects
+        it for a copy by hand, the footer's Copy link does it in one press */}
+    <Input
+      readOnly
+      aria-label="Playground link"
+      className="w-full font-mono"
+      value={link}
+      onFocus={(event) => event.currentTarget.select()}
+    />
     {copyFailed && (
       <Callout variant="error">
         <TriangleAlert />
         <CalloutDescription>
-          Could not copy the link. Select it and copy it by hand.
+          Could not copy the link. Select it above and copy it by hand.
         </CalloutDescription>
       </Callout>
     )}
-    <div className="flex flex-wrap items-center gap-3">
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-control font-act text-primary underline-offset-4 hover:underline"
-      >
-        Open on GitHub
-        <ExternalLink className="size-3.5" aria-hidden="true" />
-      </a>
-      <AsyncButton
-        type="button"
-        variant="ghost"
-        onClick={() => onCopy("github")}
-        onError={onCopyError}
-      >
-        Copy GitHub link
-      </AsyncButton>
-    </div>
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 self-start text-caption font-read text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+    >
+      Open the gist on GitHub
+      <ExternalLink className="size-3.5" aria-hidden="true" />
+    </a>
   </div>
 );
 
 /**
- * The share dialog's body: the visibility to share with, the one action the
- * step offers, and the Playground link once the gist is made. The frame
- * (title, Close) is the caller's.
+ * The share dialog's body: who can open the gist, what goes into it, the step
+ * GitHub asks once, and the Playground link once the gist is made. The frame
+ * (title, Close and the one action, `shareAction`) is the caller's.
  */
 const BaseShareGist = ({
   name,
@@ -222,112 +361,94 @@ const BaseShareGist = ({
   visibility,
   onVisibilityChange,
   busy,
-  onCreate,
-  onSignIn,
-  onGrant,
-  onCancelSignIn,
-  onCopy,
+  files,
   copyFailed,
+  githubMark,
 }: BaseShareGistProps) => {
   if (state.step === "created") {
     return (
-      <Shared
+      <Created
         name={name}
-        url={state.url}
         link={state.link}
-        onCopy={onCopy}
+        url={state.url}
+        visibility={visibility}
         copyFailed={copyFailed}
       />
     );
   }
 
-  let action: typeof ACTION[keyof typeof ACTION] | undefined =
-    state.step === "waiting" ? undefined : ACTION[state.step];
-  // A revoked grant is mended by signing in again, not by the same request
-  if (state.step === "failed" && state.reason === "github-unauthorized") {
-    action = { label: "Sign in with GitHub again", run: "sign-in" };
-  }
-  // A refused gist fails the same on every retry, so only Close is left
-  if (state.step === "failed" && state.reason === "rejected") {
-    action = undefined;
-  }
-  const run = action
-    ? { create: onCreate, "sign-in": onSignIn, grant: onGrant }[action.run]
-    : undefined;
-
-  let problem: string | undefined;
-  let notice: string | undefined;
-  if (state.step === "failed") problem = FAILURE[state.reason](name);
-  else if (state.step === "sign-in" || state.step === "grant") {
-    if (state.ended?.kind === "cancelled") notice = state.ended.message;
-    else problem = state.ended?.message;
-  }
-
+  // The permission is one more step, so it reads as a step, not a paragraph
   const granting =
-    state.step === "grant" ||
+    (state.step === "grant" && !state.ended) ||
     (state.step === "waiting" && state.for === "grant");
+  if (granting) {
+    return (
+      <div className="flex gap-3" data-testid="share-gist">
+        {/* 18, a step under the 20 outline icons: a filled mark reads
+            larger at one size. Centred on the heading's 24 px line */}
+        <span className="mt-[3px] shrink-0 text-foreground [&_svg]:size-[18px]">
+          {githubMark}
+        </span>
+        <p className="flex flex-col gap-0.5">
+          <span className="text-body font-act text-foreground">
+            One more step on GitHub
+          </span>
+          <span className="text-body font-read text-muted-foreground">
+            GitHub asks you once to let Playground create gists on your account.
+            Then the {visibility} gist is created right away.
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  let problem: { text: string; warn: boolean } | undefined;
+  let notice: string | undefined;
+  if (state.step === "failed") {
+    problem = {
+      text: FAILURE[state.reason](name),
+      warn: WARNS.includes(state.reason),
+    };
+  } else if (state.step === "sign-in" || state.step === "grant") {
+    if (state.ended?.kind === "cancelled") notice = state.ended.message;
+    else if (state.ended) problem = { text: state.ended.message, warn: false };
+  }
+  // A session that ended is the user's to mend, not a fault: a warning
+  const signInStep = state.step === "sign-in";
 
   return (
-    <div className="flex max-w-md flex-col gap-4" data-testid="share-gist">
-      <VisibilityChoice
+    <div className="flex flex-col gap-4" data-testid="share-gist">
+      <WhoCanOpen
         visibility={visibility}
         onChange={onVisibilityChange}
-        disabled={busy || state.step === "waiting"}
+        locked={busy || state.step === "waiting"}
       />
-
-      <p className="text-body font-read text-muted-foreground">
-        The program keypair and the project&apos;s workspace settings stay in
-        this browser.
-      </p>
-
-      {granting && (
-        <p className="text-body font-read text-muted-foreground">
-          GitHub needs your permission for Playground to create gists on your
-          account. It asks once.
-        </p>
-      )}
-
+      <WhatGoes files={files} />
       {notice && (
         <p role="status" className="text-body font-read text-muted-foreground">
           {notice}
         </p>
       )}
-
       {problem && (
-        <Callout variant="error">
-          <TriangleAlert />
-          <CalloutDescription>{problem}</CalloutDescription>
+        <Callout variant={problem.warn || signInStep ? "warning" : "error"}>
+          {signInStep ? <InfoIcon /> : <TriangleAlert />}
+          <CalloutDescription>
+            {problem.text}
+            {state.step === "failed" && state.reason === "request-failed" && (
+              <>
+                {" "}
+                <a
+                  href="https://gist.github.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-act underline underline-offset-4"
+                >
+                  Your gists
+                </a>
+              </>
+            )}
+          </CalloutDescription>
         </Callout>
-      )}
-
-      {state.step === "waiting" && (
-        // The popup cannot say it was closed (`popup-channel`), so the wait
-        // ends here, as the prototype's sign-in control does: its own label
-        // turns into the cancel
-        <Button
-          type="button"
-          id="share-gist-cancel-sign-in"
-          variant="outline"
-          className="self-start"
-          onClick={onCancelSignIn}
-        >
-          Cancel sign-in
-        </Button>
-      )}
-
-      {action && run && (
-        <AsyncButton
-          type="button"
-          className="self-start"
-          onClick={run}
-          onError={onError}
-          loading={busy}
-          loadingText={
-            action.run === "create" ? "Sharing to GitHub…" : undefined
-          }
-        >
-          {action.label}
-        </AsyncButton>
       )}
     </div>
   );

@@ -39,7 +39,7 @@ export type OpenFocus = "field" | "dialog";
  * or `brand`, the ring `BrandButton`, for a dialog whose submit is its view's
  * one call to action
  */
-export type SubmitVariant = "default" | "destructive" | "brand";
+export type SubmitVariant = "default" | "outline" | "destructive" | "brand";
 
 /** Whether the submit can be pressed, and why not */
 export type SubmitStatus = "ready" | "disabled" | "busy";
@@ -99,6 +99,19 @@ const FIRST_FIELD = [
  */
 const OWNS_ENTER =
   'button, textarea, select, a[href], [contenteditable="true"], [role="combobox"], [role="listbox"], [role="option"], [role="menu"], [role="menuitem"]';
+
+/**
+ * A footer button beside the brand submit: its height, size and face, so the
+ * two read as one set. TODO(design-system): the kit's footer sizes
+ */
+const FOOTER_BUTTON =
+  "h-10 rounded-full px-4 font-heading text-[0.9375rem] font-normal";
+
+/** The brand submit's size: a phone's full width foot, or a desk's pill */
+const submitPadding = (phone: boolean, icon: boolean) => {
+  if (phone) return "h-12 rounded-xl text-control";
+  return icon ? "pr-5 pl-4" : "px-5";
+};
 
 /**
  * A dialog's content: its heading, the last error, the body and the buttons.
@@ -194,12 +207,18 @@ export const BaseModalFrame = ({
       >
         {/* A hidden title draws no hairline on a desk; a phone's bar keeps
             its edge */}
-        <ModalHeader className={cn(title.hidden && "md:border-b-0")}>
+        {/* The kit's header sits 20 above the title and 4 below it, which
+            presses the title and Close onto the rule; 16 below centres both
+            in their band. TODO(design-system): move into the kit's
+            ModalHeader, then drop this */}
+        <ModalHeader className={cn("md:pb-4", title.hidden && "md:border-b-0")}>
           <ModalTitle className={cn(title.hidden && "sr-only")}>
             {title.text}
           </ModalTitle>
         </ModalHeader>
-        <ModalBody>
+        {/* 20 under the rule, as under the title above it: the kit's 16
+            pressed the body onto the rule. TODO(design-system): the kit's */}
+        <ModalBody className="md:pt-5">
           {error && (
             <p role="alert" className="mb-4 text-caption text-destructive">
               {error}
@@ -213,6 +232,7 @@ export const BaseModalFrame = ({
               <Button
                 type="button"
                 variant="ghost"
+                className={FOOTER_BUTTON}
                 disabled={submit.status === "busy"}
                 onClick={submit.onCancel}
               >
@@ -224,7 +244,10 @@ export const BaseModalFrame = ({
                 ref={submitRef}
                 type="submit"
                 variant={phone ? "accent" : "ring"}
-                className={phone ? "h-12 rounded-xl text-control" : undefined}
+                // The brand size leaves room for a trailing arrow (Build's);
+                // a dialog's submit has none, so its padding is even, a step
+                // less before a leading icon, which reads heavier than text
+                className={submitPadding(phone, !!submit.icon)}
                 disabled={!canSubmit}
               >
                 {submitLabel}
@@ -234,6 +257,8 @@ export const BaseModalFrame = ({
                 ref={submitRef}
                 type="submit"
                 variant={submit.variant}
+                // The foot's height on a phone as on a desk, whatever the face
+                className={phone ? submitPadding(true, false) : FOOTER_BUTTON}
                 disabled={!canSubmit}
               >
                 {submitLabel}

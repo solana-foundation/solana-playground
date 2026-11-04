@@ -1,9 +1,20 @@
-import { CircleHelp, FolderClosed, MessageSquare } from "lucide-react";
+import {
+  CircleHelp,
+  Ellipsis,
+  FolderClosed,
+  MessageSquare,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
-import { Separator } from "@/shared/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
+import { MenuItemText } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 export const DOCS_URL = "https://solana.com/docs";
@@ -34,32 +45,31 @@ export interface BaseStageBarProps {
   assistantKey?: string | null;
   /**
    * The page's own actions for the open project, drawn before the toggles,
-   * as the header's Share
+   * as the header's Share. Here, not in the assistant's head, so they stay
+   * while the assistant is folded
    */
   actions?: ReactNode;
 }
 
 /**
- * The prototype's head control: 30 px tall, radius 8, muted until hovered
- * or while its column shows, when it takes the accent fill
+ * The head control, as Claude's app draws its corner: a 32 px square, radius
+ * 8, a thin 18 px icon, muted until hovered or while its column shows, when
+ * the square takes the accent fill. Its name is the tooltip
  */
 const BAR_CONTROL =
-  "h-7.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground dark:hover:bg-accent";
+  "h-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-[18px] [&_svg]:stroke-[1.6]";
 
 /** An icon button with its label as the tooltip, as the assistant's head draws them */
 const BarButton = ({
   label,
   hint,
   expanded,
-  text,
   onClick,
   children,
 }: {
   label: string;
   hint: string;
   expanded?: boolean;
-  /** A visible label beside the icon, as the prototype's "Files" */
-  text?: string;
   onClick: () => void;
   children: ReactNode;
 }) => (
@@ -67,17 +77,13 @@ const BarButton = ({
     <TooltipTrigger asChild>
       <Button
         variant="ghost"
-        size={text ? "default" : "icon-sm"}
-        className={cn(
-          BAR_CONTROL,
-          text ? "gap-1.5 pr-2.5 pl-2 text-[0.8125rem]" : "size-7.5"
-        )}
+        size="icon-sm"
+        className={cn(BAR_CONTROL, "size-8")}
         aria-label={label}
         aria-expanded={expanded}
         onClick={onClick}
       >
         {children}
-        {text}
       </Button>
     </TooltipTrigger>
     <TooltipContent>{hint}</TooltipContent>
@@ -92,7 +98,6 @@ const FilesToggle = ({ files }: { files: BarToggle }) => {
       label={label}
       hint={`${label} (⌘E)`}
       expanded={files.open}
-      text="Files"
       onClick={files.onToggle}
     >
       <FolderClosed aria-hidden="true" />
@@ -127,10 +132,11 @@ const AssistantToggle = ({
 
 /**
  * The 44 px bar over the files column and the stage (design.md, "Frame chrome
- * (5.25)"): the project's name while the assistant is hidden, then the page's
- * actions, the files and assistant toggles and the documentation. The assistant's toggle is
- * named apart from the head's "Collapse assistant", so each name stays one
- * button.
+ * (5.25)"): the project's name while the assistant is hidden, then one row
+ * of icons, as Claude's corner: the page's actions (Share), the files and
+ * assistant toggles and More, which holds the documentation. The
+ * assistant's toggle is named apart from the head's "Collapse assistant", so
+ * each name stays one button.
  */
 const BaseStageBar = ({
   title,
@@ -150,35 +156,46 @@ const BaseStageBar = ({
       >
         {title}
       </span>
-      {actions}
-      {files && <FilesToggle files={files} />}
-      {assistant && (
-        <AssistantToggle assistant={assistant} assistantKey={assistantKey} />
-      )}
-      <Separator
-        orientation="vertical"
-        className="mx-1 data-vertical:h-4 data-vertical:self-center"
-      />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={cn(BAR_CONTROL, "size-7.5")}
-            asChild
-          >
-            <a
-              href={DOCS_URL}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Documentation"
-            >
-              <CircleHelp aria-hidden="true" />
-            </a>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Solana documentation</TooltipContent>
-      </Tooltip>
+      <div className="flex items-center gap-1">
+        {actions}
+        {files && <FilesToggle files={files} />}
+        {assistant && (
+          <AssistantToggle assistant={assistant} assistantKey={assistantKey} />
+        )}
+        {/* What is rarely needed waits behind More, as in Claude's corner */}
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className={cn(BAR_CONTROL, "size-8")}
+                  // Apart from the assistant head's "More", so each name
+                  // stays one button
+                  aria-label="More options"
+                >
+                  <Ellipsis aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>More</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end" className="w-auto min-w-48">
+            <DropdownMenuItem asChild>
+              <a
+                href={DOCS_URL}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Documentation"
+              >
+                <CircleHelp aria-hidden="true" />
+                <MenuItemText>Solana documentation</MenuItemText>
+              </a>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 };

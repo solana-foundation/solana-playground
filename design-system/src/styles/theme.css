@@ -143,6 +143,11 @@
     62% { opacity: 1; transform: translate3d(0, -0.045em, 0) scale(1.015); }
     100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
+  /* A timed toast's bar (sonner's ToastProgress), full to empty over the toast's duration */
+  @keyframes toast-progress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
 }
 
 /* Sizes and weights are values rather than references, so they sit in a

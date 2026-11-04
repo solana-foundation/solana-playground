@@ -25,12 +25,18 @@ export type {
 } from "./model/telemetry";
 export { exportProjectWith } from "./model/export";
 export type { ExportFailure, ExportResult } from "./model/export";
-export { default as ShareGist, signInFailureMessage } from "./ui/ShareGist";
-export type { ShareGistProps } from "./ui/ShareGist";
-export { default as BaseShareGist } from "./ui/BaseShareGist";
+export { signInFailureMessage, useShareGist } from "./ui/ShareGist";
+export type { ShareGistControl, ShareGistOptions } from "./ui/ShareGist";
+export {
+  default as BaseShareGist,
+  shareAction,
+  shareTitle,
+} from "./ui/BaseShareGist";
 export type {
   BaseShareGistProps,
+  ShareAction,
   ShareFailure,
+  ShareFiles,
   ShareStep,
   SignInEnding,
 } from "./ui/BaseShareGist";

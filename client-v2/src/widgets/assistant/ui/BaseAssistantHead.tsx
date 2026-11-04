@@ -1,5 +1,5 @@
 import {
-  EllipsisVertical,
+  Ellipsis,
   FoldHorizontal,
   PanelLeftClose,
   UnfoldHorizontal,
@@ -28,8 +28,18 @@ import { KEY_HINT, usePickedMenu } from "./use-picked-menu";
 const THUMB = "max-md:size-11";
 
 /**
- * Delete my key in More, by `KeyHold`: not shown at `none`, shown disabled at
- * `busy`, since the turn is using the key
+ * The head's icon buttons drawn as the stage bar's (BaseStageBar's
+ * `BAR_CONTROL`): a 32 px square, a thin 18 px icon, so the icons along the
+ * top read as one set. TODO(design-system): a bar icon size in the kit's
+ * Button, then drop this and the bar's copy
+ */
+const HEAD_CONTROL =
+  "size-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-[18px] [&_svg]:stroke-[1.6]";
+
+/**
+ * Forget key in More: `none` while no backend holding the user's key is
+ * connected (the item is not shown), `busy` while a turn runs (shown
+ * disabled, since the turn is using the key)
  */
 export type DeleteKey = KeyHold;
 
@@ -128,24 +138,50 @@ export function BaseAssistantHead({
           </>
         )}
       </h2>
-      {off && (
-        <span
-          id="assistant-status"
-          className="inline-flex shrink-0 items-center gap-1.5 pr-1 text-caption text-muted-foreground"
-        >
-          <StatusDot variant={OFF_STATUS[off].dot} />
-          {OFF_STATUS[off].word}
-        </span>
+      {canWiden && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={HEAD_CONTROL}
+              aria-label={widenLabel}
+              onClick={onWiden}
+            >
+              {wide ? (
+                <FoldHorizontal aria-hidden="true" />
+              ) : (
+                <UnfoldHorizontal aria-hidden="true" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{widenLabel}</TooltipContent>
+        </Tooltip>
       )}
-      <DropdownMenu open={more.open} onOpenChange={more.setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={HEAD_CONTROL}
+            aria-label="Collapse assistant"
+            onClick={onHide}
+          >
+            <PanelLeftClose aria-hidden="true" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Collapse assistant</TooltipContent>
+      </Tooltip>
+      {/* More last, at the edge, as the stage bar's and every toolbar's */}
+      <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
             size="icon-sm"
-            className={THUMB}
+            className={HEAD_CONTROL}
             aria-label="More"
           >
-            <EllipsisVertical aria-hidden="true" />
+            <Ellipsis aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -197,40 +233,6 @@ export function BaseAssistantHead({
           </Tooltip>
         </DropdownMenuContent>
       </DropdownMenu>
-      {canWiden && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className={THUMB}
-              aria-label={widenLabel}
-              onClick={onWiden}
-            >
-              {wide ? (
-                <FoldHorizontal aria-hidden="true" />
-              ) : (
-                <UnfoldHorizontal aria-hidden="true" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{widenLabel}</TooltipContent>
-        </Tooltip>
-      )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className={THUMB}
-            aria-label="Collapse assistant"
-            onClick={onHide}
-          >
-            <PanelLeftClose aria-hidden="true" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Collapse assistant</TooltipContent>
-      </Tooltip>
     </div>
   );
 }

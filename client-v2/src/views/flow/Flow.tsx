@@ -18,8 +18,8 @@ import {
 } from "@/shared/lib/settings-request";
 import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
-import { PgView } from "@/utils";
-import { AppNav, ProjectList } from "@/widgets/app-nav";
+import { PgExplorer, PgView } from "@/utils";
+import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
 import { Assistant } from "@/widgets/assistant";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { homeSlot, useStartView } from "@/widgets/home";
@@ -119,6 +119,16 @@ const fallbackFocus = () =>
 type SettingsState =
   | { open: false }
   | { open: true; focus: SettingsFocus; returnTo: HTMLElement | null };
+
+/**
+ * Share a project as a gist from the phone's Code head, the phone's place
+ * for the header's Share; the dialog counts and reports its own outcome
+ */
+const shareFromCodeHead = (name: string) =>
+  void openShareGistDialogFor("header")(
+    () => readProjectFiles(name, PgExplorer.fs),
+    name
+  );
 
 const FlowFrame = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
@@ -265,6 +275,7 @@ const FlowFrame = () => {
           keepWork={page.workKept}
           cover={catalogSlot(catalog)}
           stageBarActions={<ShareButton />}
+          onShare={shareFromCodeHead}
           nav={({ collapsed, toggle, closeSheet, phone: menuPage }) => {
             closeNavSheet.current = closeSheet;
             return (

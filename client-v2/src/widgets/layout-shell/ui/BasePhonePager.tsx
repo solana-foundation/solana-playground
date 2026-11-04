@@ -1,3 +1,4 @@
+import { Share } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
@@ -36,6 +37,8 @@ export interface PhonePagerState {
   /** The console's height on the preview: open (beside the stage, or the
    * whole page when the stage stays on Code), or its folded bar */
   consoleOpen: boolean;
+  /** Shares the open project as a gist; absent with no project open */
+  onShare?: () => void;
 }
 
 /** The content and the outlets' nodes the pager lays out */
@@ -390,21 +393,36 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
                   file={props.file}
                   onOpen={() => props.onFilesOpenChange(true)}
                 />
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="icon"
-                  className={HEAD_BUTTON}
-                >
-                  <a
-                    href="https://solana.com/docs"
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Documentation"
+                {/* The two icons touch: their 48 px targets stay, and the
+                    icons read as one pair, not two far apart */}
+                <div className="flex items-center">
+                  {props.onShare && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={HEAD_BUTTON}
+                      aria-label="Share as a gist"
+                      onClick={props.onShare}
+                    >
+                      <Share aria-hidden="true" />
+                    </Button>
+                  )}
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    className={HEAD_BUTTON}
                   >
-                    {PHONE_ICONS.help}
-                  </a>
-                </Button>
+                    <a
+                      href="https://solana.com/docs"
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Documentation"
+                    >
+                      {PHONE_ICONS.help}
+                    </a>
+                  </Button>
+                </div>
               </CodeHead>
               {props.stageOn === "work" && (
                 <Outlet

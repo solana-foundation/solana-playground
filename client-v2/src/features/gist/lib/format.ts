@@ -274,6 +274,19 @@ export const measureGist = (files: GistFiles) => {
   };
 };
 
+/**
+ * What the share dialog lists: the project's paths that go to the gist, by
+ * their names in the project, and the gist's size with the manifest, which
+ * the dialog names on a line of its own
+ */
+export const shareFilesOf = (project: {
+  name: string;
+  files: Record<string, string>;
+}) => ({
+  paths: Object.keys(project.files).filter(isExportablePath).sort(),
+  bytes: measureGist(toGistFiles(project)).bytes,
+});
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
