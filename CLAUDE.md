@@ -172,7 +172,8 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `yarn dev-cra` (which `vercel dev` runs) and `yarn test-e2e` refuse stubs
   nobody asked for, `vercel-install.sh` refuses the variable, and the
   Vercel build fails on a bundle that carries a stub or lacks any of the six
-  real packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`). yarn 1 copies a `file:`
+  real packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`);
+  `openspec/specs/client-v2-build/spec.md` holds these requirements. yarn 1 copies a `file:`
   package again only when its folder is missing, so `setup-wasm.sh` clears
   `node_modules` (all but `.cache`, less webpack's `default-<mode>` caches, which
   identify a package by name and version) before it installs; `--check-files` alone
