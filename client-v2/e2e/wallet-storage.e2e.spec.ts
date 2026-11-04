@@ -36,6 +36,12 @@ const walletStep = (page: Page) =>
     .locator('[data-slot="setup-list-item"][data-status="done"]')
     .filter({ hasText: "Connect a wallet" });
 
+/** The "Connect a wallet" step while the wallet could not be read */
+const walletWarning = (page: Page) =>
+  page
+    .locator('[data-slot="setup-list-item"][data-status="warn"]')
+    .filter({ hasText: "Wallet unavailable" });
+
 const localWallet = (page: Page) =>
   page.evaluate(() => localStorage.getItem("wallet"));
 
@@ -119,20 +125,43 @@ test("wallet-storage: The copy fails", async ({ page }) => {
 });
 
 test("wallet-storage: IndexedDB is blocked", async ({ page }) => {
+  const keypair = Keypair.generate();
+  const address = keypair.publicKey.toBase58();
   await blockWalletDatabase(page);
+  await seedLocalWallet(page)({
+    state: "disconnected",
+    accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
+    currentIndex: 0,
+  });
   await seedWorkspace(page);
-  const shown = await createWallet(page);
 
+  // Connecting is a save, and it lands in localStorage
+  await page
+    .locator('[data-slot="setup-list"]')
+    .getByRole("button", { name: "Connect a wallet", exact: true })
+    .click();
+
+  await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
   await expect
-    .poll(
-      async () =>
-        JSON.parse((await localWallet(page)) ?? "{}").accounts?.length,
-      LONG
-    )
-    .toBe(1);
+    .poll(async () => JSON.parse((await localWallet(page)) ?? "{}").state, LONG)
+    .toBe("pg");
 
   await page.reload();
-  await expect(walletStep(page)).toHaveText(shown, LONG);
+  await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
+});
+
+test("wallet-storage: The store fails and nothing is in localStorage", async ({
+  page,
+}) => {
+  await blockWalletDatabase(page);
+
+  await seedWorkspace(page);
+
+  await expect(walletWarning(page)).toBeVisible(LONG);
+  await expect(
+    page.getByRole("button", { name: "Continue", exact: true })
+  ).toHaveCount(0);
+  expect(await localWallet(page)).toBeNull();
 });
 
 test("wallet-storage: A wallet in localStorage moves to IndexedDB", async ({

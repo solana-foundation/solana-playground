@@ -23,6 +23,16 @@ export interface WalletStore {
 
 const STORE_NAME = "state";
 
+/** What `read` and `write` reject with where the browser has no IndexedDB */
+const INDEXEDDB_MISSING = "indexedDB is not available";
+
+/**
+ * Whether a store failure is IndexedDB not existing in this browser, the one
+ * failure that means no wallet can have been stored there
+ */
+export const isIndexedDbMissing = (error: unknown) =>
+  error instanceof Error && error.message === INDEXEDDB_MISSING;
+
 /**
  * How long an open may take before it fails. An open that never answers (some
  * private modes, a stalled browser) would otherwise hold the lock and the
@@ -61,7 +71,7 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
   const open = () => {
     opened ??= new Promise<IDBDatabase>((resolve, reject) => {
       if (typeof indexedDB === "undefined") {
-        reject(new Error("indexedDB is not available"));
+        reject(new Error(INDEXEDDB_MISSING));
         return;
       }
       let isSettled = false;

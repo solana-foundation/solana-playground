@@ -36,6 +36,7 @@ const connection = vi.hoisted(() => {
 });
 const wallet = vi.hoisted(() => ({
   current: null as null | undefined | { publicKey: { toBase58: () => string } },
+  state: "setup" as string,
 }));
 const assistant = vi.hoisted(() => ({ connected: false }));
 const connect = vi.hoisted(() => ({ execute: vi.fn() }));
@@ -60,6 +61,12 @@ vi.mock("@/utils", () => ({
   PgCommand: { connect },
   PgConnection: connection,
   PgView: { setToast },
+  PgWallet: {
+    get state() {
+      return wallet.state;
+    },
+    onDidChangeState: () => ({ dispose: () => {} }),
+  },
 }));
 vi.mock("@/views/sidebar/assistant/store", () => ({
   PgAssistant: {
@@ -88,6 +95,7 @@ afterEach(() => {
   connect.execute.mockReset();
   setToast.mockReset();
   wallet.current = null;
+  wallet.state = "setup";
   assistant.connected = false;
   health.isConnected = true;
   health.slotStalled = false;
@@ -219,6 +227,14 @@ it("ticks the wallet step with the short address", () => {
   wallet.current = { publicKey: { toBase58: () => ADDRESS } };
   draw();
   expect(screen.getByText("7Hq5…Xk2P")).toBeTruthy();
+});
+
+it("warns that the wallet is unavailable instead of offering a new one", () => {
+  wallet.state = "unavailable";
+  draw();
+  expect(screen.queryByRole("button", { name: "Connect a wallet" })).toBeNull();
+  const step = screen.getByText("Wallet unavailable").closest("li");
+  expect(step?.getAttribute("data-status")).toBe("warn");
 });
 
 it("starts a sign-in from its step", async () => {
