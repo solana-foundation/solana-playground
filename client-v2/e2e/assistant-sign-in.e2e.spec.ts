@@ -19,7 +19,7 @@ import {
  *
  * The `/api/ai/status` probe is stubbed as hosted, so this runs where no key exists, CI
  * included. Signed out, nothing pops up: Send waits, the composer's off row
- * says why, and its Add a key opens Connect a model, which offers sign-in in
+ * says why, and its Add an API key opens Connect a model, which offers sign-in in
  * place of Start; the prompt stays in the composer.
  */
 
@@ -75,13 +75,13 @@ const send = async (page: Page, text: string) => {
 /**
  * Asks once more after the session ended. The panel knows nobody is signed
  * in by then (a sign-out, or the turn's 401 re-reading the session), so Send
- * waits and the off row's Add a key is the way to Connect a model
+ * waits and the off row's Add an API key is the way to Connect a model
  */
 const askAgain = async (page: Page, text: string) => {
   await composer(page).fill(text);
   const addKey = page
     .locator("#assistant-ai-off")
-    .getByRole("button", { name: "Add a key" });
+    .getByRole("button", { name: "Add an API key" });
   await expect(addKey).toBeVisible(LONG);
   await addKey.click();
 };
@@ -119,7 +119,7 @@ test("assistant-own-key: Signed out, the default backend offers sign-in", async 
   // The off row stands once the page has read the session, before any send
   const addKey = page
     .locator("#assistant-ai-off")
-    .getByRole("button", { name: "Add a key" });
+    .getByRole("button", { name: "Add an API key" });
   await expect(addKey).toBeVisible(LONG);
   await composer(page).fill("Why did my build fail?");
   await composer(page).press("Enter");

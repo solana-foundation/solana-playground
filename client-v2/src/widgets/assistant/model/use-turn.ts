@@ -207,7 +207,7 @@ export interface Turn {
   /** Open Connect a model, on `preset`'s backend when given */
   openConnect: ConnectOpener;
   /**
-   * The off row's Add a key: Connect a model, on the backend that answered
+   * The off row's Add an API key: Connect a model, on the backend that answered
    * the open thread when that one needs a key, so a key-based conversation is
    * never offered to another backend from here either (HOO-1719)
    */

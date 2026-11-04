@@ -1,7 +1,11 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
 import { PgAssistantContext } from "@/entities/assistant-context";
-import { isSignInFailure, PgSession } from "@/features/auth";
+import {
+  isSignInFailure,
+  PgSession,
+  SIGN_IN_FAILED_UNKNOWN,
+} from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
@@ -229,7 +233,7 @@ export function AssistantComposer({
         return;
       }
       log.error(error, { report: true, context: { from: "ai-off" } });
-      setSignInError("Sign-in failed. Try again.");
+      setSignInError(SIGN_IN_FAILED_UNKNOWN);
     });
   };
 

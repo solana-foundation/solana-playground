@@ -30,21 +30,21 @@ The assistant SHALL learn whether the deployment offers a hosted model, and that
 
 While nothing usable is connected and the hosted model cannot answer this user, the composer SHALL stay on screen and a row `#assistant-ai-off` with `role="status"` SHALL stand above it, holding one reason and its actions:
 
-- no hosted model on this deployment: "The assistant needs a key of your own on this deployment." with **Add a key**;
-- a hosted model, nobody signed in: "Sign in with GitHub to use the hosted model, or add a key of your own." with **Sign in with GitHub** and **Add a key**;
-- the hosted model's availability unknown: "The assistant can't reach its model. Try again in a minute." with **Try again** and **Add a key**.
+- no hosted model on this deployment: "The hosted model is not available. Add your own key to use the assistant." with **Add an API key**;
+- a hosted model, nobody signed in: "Sign in with GitHub to use the hosted model, or add a key of your own." with **Sign in with GitHub** and **Add an API key**;
+- the hosted model's availability unknown: "The assistant can't reach its model. Try again in a minute." with **Try again** and **Add an API key**.
 
-**Add a key** SHALL open Connect a model, preset to the backend that answered the open thread when that backend needs a key. **Sign in with GitHub** SHALL start the same sign-in as Connect a model's, leaving the open project open, and a failed sign-in SHALL say so in the row. **Try again** SHALL ask the status route again. When a prompt is waiting in the composer, the row SHALL add "Your prompt is waiting in the composer." The row SHALL NOT show while the deployment's answer is still being read, while a model is connected, or once the person signs in with a hosted model offered.
+**Add an API key** SHALL open Connect a model, preset to the backend that answered the open thread when that backend needs a key. **Sign in with GitHub** SHALL start the same sign-in as Connect a model's, leaving the open project open, and a failed sign-in SHALL say so in the row. **Try again** SHALL ask the status route again. When a prompt is waiting in the composer, the row SHALL add "Your prompt is waiting in the composer." The row SHALL NOT show while the deployment's answer is still being read, while a model is connected, or once the person signs in with a hosted model offered.
 
 #### Scenario: No hosted key, nothing connected
 
 - **WHEN** the status route answers `key: "own"`, no key is kept, and the panel opens
-- **THEN** `#assistant-ai-off` reads "The assistant needs a key of your own on this deployment.", **Add a key** opens Connect a model, and Send is disabled with "Connect a model to send"
+- **THEN** `#assistant-ai-off` reads "The hosted model is not available. Add your own key to use the assistant.", **Add an API key** opens Connect a model, and Send is disabled with "Connect a model to send"
 
 #### Scenario: Signed out with a hosted model
 
 - **WHEN** the status route answers `key: "hosted"`, nobody is signed in, and the panel opens
-- **THEN** `#assistant-ai-off` offers **Sign in with GitHub** and **Add a key**, and Send is disabled with "Sign in to send"
+- **THEN** `#assistant-ai-off` offers **Sign in with GitHub** and **Add an API key**, and Send is disabled with "Sign in to send"
 
 #### Scenario: Signing in turns the assistant on (manual)
 
@@ -72,7 +72,7 @@ The assistant widget SHALL report, through its tracker:
 
 - `assistant_ai_off_shown` when `#assistant-ai-off` appears, with `reason` one of `"no-key"`, `"signed-out"` or `"unreachable"`, at most once per reason while the composer stays mounted;
 - `assistant_default_probe_retried` (no parameters) when **Try again** in the row asks the status route again;
-- `assistant_connect_opened` with `via` `"ai-off"` when the row's **Add a key** opens Connect a model;
+- `assistant_connect_opened` with `via` `"ai-off"` when the row's **Add an API key** opens Connect a model;
 - `assistant_default_probe_failed` with `reason` `"session"` when the status route answers `reason: "unavailable"`, alongside its existing `"network"`, `"status"` and `"body"`.
 
 #### Scenario: The off row is reported once per reason (manual)

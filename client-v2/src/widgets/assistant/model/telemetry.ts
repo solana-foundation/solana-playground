@@ -14,7 +14,7 @@ export type AssistantEvents = {
   assistant_model_picked: { provider: ModelProvider; via: "menu" | "dialog" };
   /** The user changed the reasoning effort in the composer's menu. */
   assistant_effort_changed: { effort: Effort };
-  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist, the Enter key button of a rejected key, the composer's + menu or the off row's Add a key. */
+  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist, the Enter key button of a rejected key, the composer's + menu or the off row's Add an API key. */
   assistant_connect_opened: {
     via:
       | "menu"

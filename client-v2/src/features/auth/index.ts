@@ -3,7 +3,11 @@
 // convention of the app consuming it. Callers alias to `Pg*` at the import.
 import { PgSession } from "./model/session";
 
-export { isSignInFailure, PgSession } from "./model/session";
+export {
+  isSignInFailure,
+  PgSession,
+  SIGN_IN_FAILED_UNKNOWN,
+} from "./model/session";
 export type { SessionUser, SignInState } from "./model/session";
 export type { SignInFailure } from "./model/telemetry";
 export { SIGNED_OUT_REASON } from "./config.mjs";

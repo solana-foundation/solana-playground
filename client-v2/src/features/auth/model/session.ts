@@ -31,6 +31,9 @@ const reasonOf = (error: unknown): SignInFailure =>
 export const isSignInFailure = (error: unknown) =>
   error instanceof SignInFailed;
 
+/** What a sign-in button says when it failed in a way `isSignInFailure` does not know */
+export const SIGN_IN_FAILED_UNKNOWN = "Couldn't sign in. Try again.";
+
 const log = createLogger("auth:session");
 
 /** Distinguishes this flow's reply from anything else on the same-origin bus */

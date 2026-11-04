@@ -183,7 +183,7 @@ describe("Connect", () => {
       await act(async () => connect());
 
       expect((await screen.findByRole("alert")).textContent).toBe(
-        "Sign-in failed. Try again."
+        "Couldn't sign in. Try again."
       );
       expect(logged.entries).toEqual([
         expect.objectContaining({ level: "error", report: true }),
