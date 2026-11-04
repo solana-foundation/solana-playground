@@ -584,7 +584,7 @@ const KEPT_BALANCE_MS = 5000;
  * The RPC that failed the close may hang here too, so the read is bounded
  * and the stop never waits on it for long.
  *
- * @returns the lamports, or `null` when the cluster did not answer in time,
+ * @returns the lamports, or `undefined` when the cluster did not answer in time,
  * and the line says "its SOL"
  */
 const keptLamports = async (buffer: PgWeb3.PublicKey) => {
@@ -597,7 +597,7 @@ const keptLamports = async (buffer: PgWeb3.PublicKey) => {
     // Not reported: the close failure just before it already is, and the
     // line still says what to do
     log.error(e, { context: { action: "read the kept buffer's balance" } });
-    return null;
+    return undefined;
   }
 };
 

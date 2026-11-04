@@ -43,7 +43,11 @@ describe("commands/deploy/stopped", () => {
 
   it('keeps "its SOL" when the buffer\'s balance could not be read', () => {
     expect(
-      deployStoppedLine({ state: "kept", address: "Buf1111", lamports: null })
+      deployStoppedLine({
+        state: "kept",
+        address: "Buf1111",
+        lamports: undefined,
+      })
     ).toBe(
       "Stopped. The program was not deployed. Its buffer Buf1111 " +
         "still holds its SOL. Run `solana program close --buffers` to get it back."

@@ -34,7 +34,7 @@ if (import.meta.vitest) {
   describe("widgets/home/model/recent", () => {
     const noLessons = () => false;
 
-    describe("recentProjects", () => {
+    describe("recentProjectsWith", () => {
       it("puts the open project first, then the newest, three in all", () => {
         const recent = recentProjectsWith(noLessons)(
           ["a", "b", "c", "d", "e"],

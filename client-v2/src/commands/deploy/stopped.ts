@@ -5,15 +5,15 @@ import { lamportsToSol } from "../../utils/web3/utils";
 export type StoppedBuffer =
   | { state: "none" }
   | { state: "closed" }
-  | { state: "kept"; address: string; lamports: number | null };
+  | { state: "kept"; address: string; lamports: number | undefined };
 
 /**
  * What a kept buffer still holds, to two decimals as the session footer's
  * `formatBalance` shows a wallet's; under 0.005 SOL reads "less than 0.01
  * SOL", and an unread balance "its SOL"
  */
-const heldSol = (lamports: number | null) => {
-  if (lamports === null) return "its SOL";
+const heldSol = (lamports: number | undefined) => {
+  if (lamports === undefined) return "its SOL";
   const sol = lamportsToSol(lamports).toFixed(2);
   return sol === "0.00" ? "less than 0.01 SOL" : `${sol} SOL`;
 };
@@ -23,8 +23,8 @@ const heldSol = (lamports: number | null) => {
  * program was not deployed."), naming what the stop left behind.
  *
  * @param buffer the buffer account: never created, closed on the stop, or
- * kept because closing it failed, with the lamports it still holds (`null`
- * when they could not be read)
+ * kept because closing it failed, with the lamports it still holds
+ * (`undefined` when they could not be read)
  * @returns the line for `StoppedError`
  */
 export const deployStoppedLine = (buffer: StoppedBuffer) => {
