@@ -28,7 +28,7 @@ export interface WalletStore {
   exclusive<T>(task: () => Promise<T>): Promise<T>;
 }
 
-const STORE_NAME = "state";
+const STORE_NAME = "wallet-state";
 
 /** What `read` and `write` reject with where the browser has no IndexedDB */
 const INDEXEDDB_MISSING = "indexedDB is not available";
@@ -125,7 +125,7 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
     return opened;
   };
 
-  const lockName = `${name}:state`;
+  const lockName = `${name}:${STORE_NAME}`;
   /** Whether a refused lock was reported: once a page, not once a save */
   let hasReportedRefusal = false;
 
@@ -288,7 +288,7 @@ if (import.meta.vitest) {
         };
         request.onerror = () => reject(request.error);
       });
-      expect(names).toEqual(["state"]);
+      expect(names).toEqual(["wallet-state"]);
     });
 
     it("reads back what it wrote, in a new connection too", async () => {
@@ -324,8 +324,8 @@ if (import.meta.vitest) {
         const request = indexedDB.open("pg-wallet");
         request.onsuccess = () => {
           const get = request.result
-            .transaction("state", "readonly")
-            .objectStore("state")
+            .transaction("wallet-state", "readonly")
+            .objectStore("wallet-state")
             .get("set-aside");
           get.onsuccess = () => resolve(get.result);
           get.onerror = () => reject(get.error);
@@ -397,7 +397,7 @@ if (import.meta.vitest) {
       );
 
       expect(result).toBe("done");
-      expect(locks.names).toEqual(["pg-wallet:state"]);
+      expect(locks.names).toEqual(["pg-wallet:wallet-state"]);
     });
 
     it("runs tasks under the lock one at a time", async () => {
