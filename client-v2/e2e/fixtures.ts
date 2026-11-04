@@ -56,7 +56,7 @@ export const startTutorialFromAbout = async (page: Page) => {
  * the first load only, so a reload finds what the wallet's migration wrote
  * rather than a fresh seed.
  */
-export const seedLocalWallet = (page: Page, wallet: unknown) =>
+export const seedLocalWallet = (page: Page) => (wallet: unknown) =>
   page.addInitScript((text) => {
     if (sessionStorage.getItem("e2e-wallet-seeded")) return;
     sessionStorage.setItem("e2e-wallet-seeded", "1");
