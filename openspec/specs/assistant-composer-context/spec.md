@@ -76,7 +76,12 @@ The + menu SHALL offer "Add a file", a submenu listing by relative path every pr
 
 ### Requirement: Choices belong to their project
 
-Files added and files removed SHALL apply to the project they were chosen in, and SHALL be kept for it while the page is open, across a switch to another project and back and across a rename. Another project SHALL start from its own open tabs. A reload SHALL start from the open tabs. Deleting a file SHALL drop the choices about it, so a new file made at its path is not in the context until it is added.
+Files added and files removed SHALL apply to the project they were chosen in, and SHALL be kept for it while the page is open, across a switch to another project and back and across a rename. Another project SHALL start from its own open tabs. A reload SHALL start from the open tabs. Deleting a file SHALL drop the choices about it, so a new file made at its path is not in the context until it is added. Renaming or moving a file or a folder SHALL carry the choices about it, and about every file under the folder, to the new path, so a removed file stays out of the context.
+
+#### Scenario: Rename a removed file's folder (manual)
+
+- **WHEN** the person removed `src/keys/secret.rs` from the context, then renames `src/keys` to `src/vault`
+- **THEN** `src/vault/secret.rs` stays out of the context while its tab stays open
 
 #### Scenario: Switch projects (manual)
 

@@ -55,6 +55,7 @@ export class PgExplorer {
     ON_DID_INIT: "explorerondidinit",
     ON_DID_CREATE_ITEM: "explorerondidcreateitem",
     ON_DID_RENAME_ITEM: "explorerondidrenameitem",
+    ON_DID_MOVE_ITEM: "explorerondidmoveitem",
     ON_DID_DELETE_ITEM: "explorerondiddeleteitem",
     ON_DID_SAVE_FILE: "explorerondidsavefile",
     ON_DID_OPEN_FILE: "explorerondidopenfile",
@@ -449,6 +450,10 @@ export class PgExplorer {
       this.events.ON_DID_RENAME_ITEM,
       oldPath
     );
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_MOVE_ITEM, {
+      from: oldPath,
+      to: newPath,
+    });
 
     await this.saveMeta();
   }
@@ -1327,6 +1332,17 @@ export class PgExplorer {
    */
   static onDidRenameItem(cb: (path: string) => unknown) {
     return PgCommon.onDidChange(PgExplorer.events.ON_DID_RENAME_ITEM, cb);
+  }
+
+  /**
+   * Runs after renaming or moving an item, with its full path before and
+   * after: what a listener that keeps state per path needs to carry it over.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidMoveItem(cb: (move: { from: string; to: string }) => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_MOVE_ITEM, cb);
   }
 
   /**

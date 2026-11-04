@@ -103,6 +103,23 @@ class AssistantContextStore {
     });
   }
 
+  /**
+   * Carries every choice about `from` and what is under it to `to`: a
+   * renamed or moved file's or folder's. A removal is the user keeping a file
+   * from the model provider, so a new name must not bring it back.
+   */
+  move(workspace: string | undefined, rename: { from: string; to: string }) {
+    const { from, to } = rename;
+    const { added, removed } = this.choice(workspace);
+    const moved = (path: string) =>
+      isAtOrUnder(path, from) ? `${to}${path.slice(from.length)}` : path;
+    // A rename over an existing path can leave two choices for one path
+    this.write(workspace, {
+      added: [...new Set(added.map(moved))],
+      removed: [...new Set(removed.map(moved))],
+    });
+  }
+
   onDidChange(cb: () => void) {
     this.listeners.add(cb);
     return { dispose: () => void this.listeners.delete(cb) };
@@ -195,6 +212,30 @@ if (import.meta.vitest) {
       store.remove("w", "src/dir/c.ts");
       store.forget("w", "src/dir");
       expect(store.choice("w")).toEqual(choiceOf(["src/a.ts"], []));
+    });
+
+    it("keeps a removed file out after it is renamed", () => {
+      const store = new AssistantContextStore();
+      store.remove("w", "src/secret.rs");
+      store.add("w", "src/a.rs");
+      store.move("w", { from: "src/secret.rs", to: "src/hidden.rs" });
+      expect(store.choice("w")).toEqual(
+        choiceOf(["src/a.rs"], ["src/hidden.rs"])
+      );
+    });
+
+    it("moves every choice under a renamed folder", () => {
+      const store = new AssistantContextStore();
+      store.remove("w", "src/keys/secret.rs");
+      store.add("w", "src/keys/b.rs");
+      store.add("w", "src/keysmith.rs");
+      store.move("w", { from: "src/keys", to: "src/vault" });
+      expect(store.choice("w")).toEqual(
+        choiceOf(["src/vault/b.rs", "src/keysmith.rs"], ["src/vault/secret.rs"])
+      );
+      expect(
+        contextPathsWith(all)(["src/vault/secret.rs"], store.choice("w"))
+      ).toEqual(["src/vault/b.rs", "src/keysmith.rs"]);
     });
 
     it("tells no listener when nothing changed", () => {

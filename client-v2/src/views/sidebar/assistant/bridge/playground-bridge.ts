@@ -240,3 +240,17 @@ PgExplorer.onDidDeleteItem((fullPath) => {
     PgAssistantContext.forget(PgExplorer.currentWorkspaceId, path);
   }
 });
+
+// A renamed file or folder keeps its choices under its new path: a removal is
+// the user keeping a file from the model provider, and a rename must not undo
+// it. A workspace's own rename resolves to no project path and is skipped
+PgExplorer.onDidMoveItem(({ from, to }) => {
+  const before = realBridge.toProjectPath(from);
+  const after = realBridge.toProjectPath(to);
+  if (before && after) {
+    PgAssistantContext.move(PgExplorer.currentWorkspaceId, {
+      from: before,
+      to: after,
+    });
+  }
+});
