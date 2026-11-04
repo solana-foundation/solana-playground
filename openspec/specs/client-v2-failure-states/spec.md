@@ -10,17 +10,25 @@ message alone: what they say and how they reach the full log.
 
 When a build fails before the compiler runs for a reason the product cannot
 name (Spec 08 ANY-00), the Build stage SHALL show the title "Could not
-build.", the line "The full log has the details.", "Try again" as its primary
-action and a "Show full log" button as its secondary. "Show full log" SHALL
-open the console drawer, or the console sheet on a phone, where the terminal
-holds the build's whole output. A build whose server did not answer
-(BUILD-04) SHALL keep "Show details" with the server's address instead.
+build" under the red failure icon, with no duration, and the line "The full
+log has the details." as its description, announced as an alert when it shows. "Try again" SHALL be its
+brand pill and "Show full log" a link on a line of its own under it. "Show
+full log" SHALL open the console drawer, or the console sheet on a phone,
+where the terminal holds the build's whole output. A build whose server did
+not answer (BUILD-04) SHALL keep "Show details" with the server's address
+instead, its reason announced the same way.
 
 #### Scenario: An unmapped build failure opens the log
 
 - **WHEN** a build fails before the compiler with an error the product does
   not map, and the user presses "Show full log"
 - **THEN** the console drawer opens with the terminal's output
+
+#### Scenario: The reason of a build that never ran is announced (manual)
+
+- **WHEN** a build fails before the compiler, with or without an answer from
+  the server
+- **THEN** a screen reader reads the stage's reason line as soon as it shows
 
 #### Scenario: A build server that did not answer keeps its details (manual)
 

@@ -84,10 +84,16 @@ it("signed in with work the account lacks, promises nothing it has not got", () 
   ).toBeNull();
 });
 
-it("signed out, says the project is on this phone only and offers sign-in", () => {
+it("signed out, says the project stays on this phone and offers sign-in", () => {
   const onSignIn = vi.fn();
   render(sheet({ account: SIGNED_OUT, onSignIn }));
-  expect(screen.getByText(/This project stays on this phone/)).toBeTruthy();
+  // Designers' spec 15: no link is shown before the sign-in, so the words
+  // promise none
+  expect(
+    screen.getByText(
+      "This project stays on this phone. Sign in with GitHub to take it to a computer."
+    )
+  ).toBeTruthy();
   const signIn = screen.getByRole("button", { name: "Sign in with GitHub" });
   // GitHub's mark, as on every GitHub sign-in
   expect(signIn.querySelector("svg")).toBeTruthy();

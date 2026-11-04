@@ -42,7 +42,8 @@ export interface SetupListProps {
 /**
  * "Get set up": the four steps' live state, and their actions. Folded as the
  * user last left it on this device; gone for good on it once dismissed, or
- * once all four were done together.
+ * once all four were done together (a network that does not answer counts in
+ * "n of 4" but is not done).
  */
 const SetupList = ({
   onConnectAssistant,
@@ -86,7 +87,9 @@ const SetupList = ({
     return done ? { step, done, value } : { step, done };
   });
   const done = steps.filter(counts).length;
-  const allDone = done === steps.length;
+  // Every step done, not every step counted: a warning network counts in
+  // "n of 4" but needs the user still, and completing hides the list for good
+  const allDone = steps.every((view) => view.done);
 
   useEffect(() => {
     if (!allDone || setupMarks.get().completed) return;

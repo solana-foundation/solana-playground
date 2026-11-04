@@ -364,6 +364,46 @@ describe("the network row", () => {
     expect(title()?.textContent).toBe("Get set up· 1 of 4");
   });
 
+  // Counted, never complete: completing would hide the list for good on this
+  // device while the one step that still needs the user is the network
+  it.each([
+    ["does not answer", { isConnected: false, slotStalled: null }],
+    ["answers with a stalled slot", { isConnected: true, slotStalled: true }],
+  ] as const)(
+    "does not complete with the other three done while the cluster %s",
+    async (_, reading) => {
+      await doAllFour();
+      health.isConnected = reading.isConnected;
+      health.slotStalled = reading.slotStalled;
+      const { view, onConnectAssistant } = draw();
+      view.rerender(<SetupList onConnectAssistant={onConnectAssistant} />);
+      expect(title()?.textContent).toBe("Get set up· 4 of 4");
+      expect(networkRow().getAttribute("data-status")).toBe("warn");
+      expect(eventsNamed("setup_completed")).toEqual([]);
+      expect(setupMarks.get().completed).toBe(false);
+    }
+  );
+
+  it("stays gone after completion when the cluster then stops answering", async () => {
+    await doAllFour();
+    setupMarks.mark("completed");
+    health.isConnected = false;
+    draw();
+    expect(title()).toBeNull();
+    expect(eventsNamed("setup_completed")).toEqual([]);
+    expect(setupMarks.get().completed).toBe(true);
+  });
+
+  it("completes once the stalled cluster answers again", async () => {
+    await doAllFour();
+    health.isConnected = false;
+    const { view, onConnectAssistant } = draw();
+    health.isConnected = true;
+    view.rerender(<SetupList onConnectAssistant={onConnectAssistant} />);
+    expect(title()).toBeNull();
+    expect(eventsNamed("setup_completed")).toEqual([{}]);
+  });
+
   it("ticks while the cluster has not been asked yet", () => {
     health.isConnected = null;
     health.slotStalled = null;

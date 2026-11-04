@@ -7,7 +7,7 @@ person can name what is not ready from the indicator alone.
 
 ## Requirements
 
-### Requirement: One indicator pattern in three states
+### Requirement: One indicator pattern in five states
 
 The network, the AI and the Rust analyzer SHALL each show as one status
 indicator: a dot and words, drawn as a button whose accessible name says the
@@ -214,15 +214,24 @@ when its condition ends.
 ### Requirement: The setup list warns on a network that does not answer
 
 While the chosen cluster does not answer or its slot does not move, the
-"Choose a network" row of "Get set up" SHALL show its warn state in place of
-its tick, with the cluster's name as its value and "<cluster> is not
-responding" as its title and as the words read after its label. It SHALL
-still count as done: the network stays the one chosen, so an outage takes no
-step back (DES-194 design review, Almaz, 3 Nov). It SHALL tick again when the
-cluster answers.
+"Choose a network" row of "Get set up" SHALL lose its tick and show its warn
+state, with the cluster's name as its value and "<cluster> is not responding"
+as its title and as the words read after its label. The network is still the
+one chosen, so the row SHALL still count in "n of 4"; but the list SHALL NOT
+complete while it warns: with the other three steps done it stays, sends no
+completion event and is not marked completed. It SHALL tick again when the
+cluster answers, and the list completes then if the other three are done.
 
 #### Scenario: The setup row warns while the cluster does not answer
 
 - **WHEN** the cluster stops answering
 - **THEN** the "Choose a network" row shows its warn state, titled "devnet
-  is not responding", and the list's count of done steps does not change
+  is not responding", and the list still counts it in "n of 4"
+
+#### Scenario: The setup list does not complete on a network that does not answer (manual)
+
+- **WHEN** the assistant, GitHub and the wallet are done and the cluster
+  does not answer
+- **THEN** "Get set up" stays, reading "4 of 4" with the network row warning,
+  and no completion is recorded
+- **AND** once the cluster answers, the list completes and goes

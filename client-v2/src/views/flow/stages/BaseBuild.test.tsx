@@ -154,6 +154,8 @@ describe("BaseBuild", () => {
       screen.getByRole("heading", { name: "Build succeeded" })
     ).toBeTruthy();
     expect(screen.getByText("Built in 2.9 s")).toBeTruthy();
+    // Only a build that never ran announces itself
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(brandButtons(container)).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Continue to Deploy" }));
     expect(p.onContinue).toHaveBeenCalled();
@@ -275,6 +277,22 @@ describe("BaseBuild", () => {
         container.querySelector('[data-slot="stage-empty-meta"]')
       ).toBeNull();
       expect(screen.queryByText(/2\.9 s/)).toBeNull();
+    }
+  );
+
+  // Spec 08: the reason was an error callout's, announced as an alert; out
+  // of the callout it is still announced, with the description's look
+  it.each([
+    ["ANY-00", { kind: "other", message: "boom" }],
+    ["BUILD-04", { kind: "no-answer", message: "Failed to fetch" }],
+  ] as const)(
+    "announces the reason of a build that never ran (%s)",
+    (_, failure) => {
+      render(<BaseBuild {...props({ kind: "unreached", failure })} />);
+
+      const alert = screen.getByRole("alert");
+      expect(alert.getAttribute("data-slot")).toBe("stage-empty-description");
+      expect(alert.textContent).toMatch(/did not answer|reason we can't name/);
     }
   );
 
