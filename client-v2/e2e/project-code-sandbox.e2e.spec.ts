@@ -369,6 +369,14 @@ test.describe("project-code-sandbox", () => {
       ].join("\n")
     );
 
+    // Another frame announces itself as the runtime from before the run
+    // starts until it ends: the page must wait for its own frame's handshake
+    await page.evaluate(() => {
+      const forger = document.createElement("iframe");
+      forger.srcdoc =
+        "<script>setInterval(() => parent.postMessage({ type: 'ready' }, '*'), 5)</script>";
+      document.body.appendChild(forger);
+    });
     await runInTerminal(page, "run");
     await expect(terminalRows(page)).toContainText("waiting", LONG);
     // A window that is not the sandbox asks the page to sign, and to hand
