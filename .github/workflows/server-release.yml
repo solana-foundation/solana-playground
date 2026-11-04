@@ -1,0 +1,74 @@
+name: Server release
+
+# Makes a deployed version of the server live, or rolls back. cicd.yml only parks versions. See docs/server-release.md.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version or tag to send all traffic to. Empty rolls back to the version before the live one.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# Queued, not cancelled: a cancelled run could stop between moving traffic and checking it
+concurrency:
+  group: server-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Move traffic
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Sign in to GCP
+        uses: ./.github/actions/gcp-auth
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.GCP_KEY }}
+          project_id: ${{ secrets.PROJECT_ID }}
+
+      - name: Choose the target
+        id: select
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/versions.json"
+          node client-v2/scripts/lib/release/resolve-target.mjs select < "$RUNNER_TEMP/versions.json" >> "$GITHUB_OUTPUT"
+
+      - name: Move all traffic
+        if: steps.select.outputs.changed == 'true'
+        env:
+          TARGET_VERSION: ${{ steps.select.outputs.target }}
+        run: gcloud app services set-traffic playground-server --splits="$TARGET_VERSION=1" --quiet
+
+      - name: Check the target is live
+        env:
+          TARGET_VERSION: ${{ steps.select.outputs.target }}
+        run: |
+          gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/after.json"
+          node client-v2/scripts/lib/release/resolve-target.mjs verify < "$RUNNER_TEMP/after.json"
+
+      - name: Summary
+        env:
+          CURRENT_VERSION: ${{ steps.select.outputs.current }}
+          TARGET_VERSION: ${{ steps.select.outputs.target }}
+          CHANGED: ${{ steps.select.outputs.changed }}
+        run: |
+          if [ "$CHANGED" = "true" ]; then
+            echo "playground-server: \`$CURRENT_VERSION\` before, \`$TARGET_VERSION\` after." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "playground-server: \`$TARGET_VERSION\` was already live; traffic not changed." >> "$GITHUB_STEP_SUMMARY"
+          fi
