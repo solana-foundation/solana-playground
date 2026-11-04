@@ -25,6 +25,15 @@
       "headers": [
         { "key": "Cross-Origin-Resource-Policy", "value": "cross-origin" }
       ]
+    },
+    {
+      "source": "/runtime.html",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "sandbox allow-scripts; frame-ancestors 'self'"
+        }
+      ]
     }
   ],
   "rewrites": [

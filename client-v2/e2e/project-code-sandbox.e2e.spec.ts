@@ -287,9 +287,59 @@ test.describe("project-code-sandbox", () => {
     await runFor(page)("run", /reloaded or navigated away/);
     await expect(terminalRows(page)).toHaveText(/\$\s*$/, LONG);
 
-    await writeClient('console.log("next run");');
-    await runFor(page)("run", /next run/);
+    // The run ended, so the next one starts
+    await runFor(page)(
+      "run",
+      /reloaded or navigated away[\s\S]*reloaded or navigated away/
+    );
     await expect(terminalRows(page)).not.toContainText("already running");
+  });
+
+  test("project-code-sandbox: The runtime is served sandboxed, for the app's frames only", async ({
+    page,
+  }) => {
+    const response = await page.request.get("/runtime.html");
+    expect(response.headers()["content-security-policy"]).toBe(
+      "sandbox allow-scripts; frame-ancestors 'self'"
+    );
+  });
+
+  test("project-code-sandbox: The runtime refuses to start on the app's origin", async ({
+    context,
+    page,
+  }) => {
+    await seedPlaynetProject(context, page);
+    // The runtime's page as a `srcdoc`, which has no CSP of its own: without
+    // a `sandbox` attribute it runs on the app's origin
+    const runtimePage = await (await page.request.get("/runtime.html")).text();
+
+    /** Whether the runtime, framed with this `sandbox`, announces itself */
+    const announces = (sandbox: string | undefined) =>
+      page.evaluate(
+        ([html, attribute]) =>
+          new Promise<boolean>((resolve) => {
+            const frame = document.createElement("iframe");
+            if (attribute !== undefined) {
+              frame.setAttribute("sandbox", attribute);
+            }
+            const handleMessage = (event: MessageEvent) => {
+              if (
+                event.source === frame.contentWindow &&
+                (event.data as { type?: string })?.type === "ready"
+              ) {
+                resolve(true);
+              }
+            };
+            window.addEventListener("message", handleMessage);
+            setTimeout(() => resolve(false), 10_000);
+            frame.srcdoc = html;
+            document.body.appendChild(frame);
+          }),
+        [runtimePage, sandbox] as const
+      );
+
+    expect(await announces("allow-scripts")).toBe(true);
+    expect(await announces(undefined)).toBe(false);
   });
 
   test("project-code-sandbox: Messages from elsewhere are ignored", async ({
