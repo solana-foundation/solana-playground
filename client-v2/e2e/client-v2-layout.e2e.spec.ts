@@ -739,6 +739,44 @@ test.describe("on a phone", () => {
     expect(shown[0]).toContain("page: preview");
   });
 
+  // A held finger keeps the swipe from settling, so the work page is still not
+  // inert when the editor opens its file: focus there would scroll the pager
+  // back under the finger. The editor's chunk waits for the swipe, so the open
+  // always comes after it.
+  test("leaves the pager where it is when a file opens under a swipe", async ({
+    page,
+  }) => {
+    await seedThenNarrow(page);
+    let release = () => {};
+    const swiped = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/src_components_Editor_Monaco_index_ts/, async (route) => {
+      await swiped;
+      await route.continue();
+    });
+    // Not "load": the held chunk is what the page's load waits for
+    await page.reload({ waitUntil: "commit" });
+    const pager = page.getByTestId("phone-pager");
+    const pageAt = () => pager.evaluate((el) => el.scrollLeft / el.clientWidth);
+    await expect
+      .poll(() => pager.evaluate((el) => el.scrollWidth / el.clientWidth))
+      .toBeGreaterThanOrEqual(3);
+    await pager.evaluate((el) => {
+      el.dispatchEvent(new Event("touchstart"));
+      el.scrollTo({ left: 2 * el.clientWidth, behavior: "instant" });
+    });
+    await expect.poll(pageAt).toBeCloseTo(2, 1);
+
+    release();
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      "use anchor_lang"
+    );
+    // A focus would have started its smooth scroll back by now
+    await page.waitForTimeout(500);
+    expect(await pageAt()).toBeCloseTo(2, 1);
+  });
+
   test("client-v2-layout: Opening the preview on a phone", async ({ page }) => {
     await seedThenNarrow(page);
     const lines = linesOn(page);

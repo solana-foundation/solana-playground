@@ -31,6 +31,9 @@ export const startProject = async (page: Page, name: string, timeout = {}) => {
   await expect(home(page)).toBeHidden(timeout);
 };
 
+/** The editor head's Files toggle (client-v2-editor-head) */
+export const filesToggle = (page: Page) => page.locator("#editor-head-files");
+
 /**
  * A browser with one project already created.
  *
@@ -46,8 +49,15 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
   await startProject(page, name);
 
   // `PgExplorer.createWorkspace` hands the work over, then the explorer
-  // re-initializes -- wait for the tree, not just Home going away.
-  await expect(page.locator("#root-dir")).toBeVisible();
+  // re-initializes -- wait for the work, not just Home going away: its
+  // editor head, and the tree when the layout has it open. A spec that
+  // clears the tree-open seed (playwright.config's `storageState`) gets a
+  // closed tree, which `openFiles` opens.
+  const toggle = filesToggle(page);
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute("aria-pressed")) === "true") {
+    await expect(page.locator("#root-dir")).toBeVisible();
+  }
 };
 
 /**
@@ -56,9 +66,6 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
  */
 export const consoleTrigger = (page: Page) =>
   page.locator('[data-slot="console-drawer-trigger"]');
-
-/** The editor head's Files toggle (client-v2-editor-head) */
-export const filesToggle = (page: Page) => page.locator("#editor-head-files");
 
 /** Opens the file tree from the editor head, if it is not open already */
 export const openFiles = async (page: Page) => {

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, LONG, test } from "./fixtures";
+import { expect, LONG, openFiles, test } from "./fixtures";
 
 /** The About page's action; `exact` keeps it off other names holding "Start" */
 const startButton = (page: Page) =>
@@ -32,7 +32,9 @@ test("client-v2-tutorials: Starting from the About page", async ({ page }) => {
   await startButton(page).click();
 
   await expect(page).toHaveURL(/\/tutorials\/hello-seahorse\/1$/, LONG);
-  // The tutorial's project now exists, and the files column shows it
+  // The tutorial's project now exists, and the files column shows it once
+  // opened, whatever the layout left it at
+  await openFiles(page);
   await expect(page.locator("#root-dir")).toBeVisible(LONG);
   await expect(askAbout(page, "Hello Seahorse")).toBeVisible();
 });
