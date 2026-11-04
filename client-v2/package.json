@@ -114,6 +114,7 @@
     "eslint-plugin-simple-import-sort": "14.0.0",
     "eslint-plugin-unicorn": "47.0.0",
     "express": "^5.2.1",
+    "fake-indexeddb": "^6.2.7",
     "jsdom": "^29.1.1",
     "markdownlint-cli2": "0.24.0",
     "monaco-editor-webpack-plugin": "^7.0.1",

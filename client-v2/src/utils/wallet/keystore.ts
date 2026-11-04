@@ -155,3 +155,243 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
     },
   };
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect, vi, beforeAll, beforeEach, afterEach } =
+    import.meta.vitest;
+
+  describe("utils/wallet/keystore", () => {
+    type Logger = typeof import("../../shared/lib/logger");
+    let initLogger: Logger["initLogger"];
+    let memoryProvider: Logger["memoryProvider"];
+    let resetLogger: Logger["resetLogger"];
+    let logged: ReturnType<Logger["memoryProvider"]>;
+    type Fake = typeof import("fake-indexeddb");
+    let FakeFactory: Fake["IDBFactory"];
+    let FakeObjectStore: Fake["IDBObjectStore"];
+
+    beforeAll(async () => {
+      ({ initLogger, memoryProvider, resetLogger } = await import(
+        "../../shared/lib/logger"
+      ));
+      ({ IDBFactory: FakeFactory, IDBObjectStore: FakeObjectStore } =
+        await import("fake-indexeddb"));
+    });
+
+    beforeEach(() => {
+      logged = memoryProvider();
+      initLogger({ providers: [logged] });
+      // A fresh, empty IndexedDB per test
+      vi.stubGlobal("indexedDB", new FakeFactory());
+    });
+
+    afterEach(() => {
+      resetLogger();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    });
+
+    /** No Wallet Standard wallet: `WalletState.standardName` stores `null` */
+    // eslint-disable-next-line unicorn/no-null -- the stored shape's own "none"
+    const NO_STANDARD = null;
+
+    const walletOf = (name: string): SerializedWalletState => ({
+      state: "pg",
+      accounts: [{ kp: Array.from({ length: 64 }, (_, i) => i), name }],
+      currentIndex: 0,
+      standardName: NO_STANDARD,
+    });
+
+    /** An `indexedDB` whose open request never answers, or answers `blocked` */
+    const stalledFactoryWith = (answer: "never" | "blocked") => ({
+      open: () => {
+        const request = {} as IDBOpenDBRequest;
+        if (answer === "blocked") {
+          setTimeout(() => request.onblocked?.({} as IDBVersionChangeEvent));
+        }
+        return request;
+      },
+    });
+
+    /** A `navigator.locks` that grants every request, recording the names */
+    const grantingLocks = () => {
+      const names: string[] = [];
+      let tail = Promise.resolve();
+      // eslint-disable-next-line layers/curry-order -- `LockManager.request`'s own order
+      const request = (name: string, task: () => Promise<unknown>) => {
+        names.push(name);
+        const run = tail.then(task);
+        tail = run.then(
+          () => undefined,
+          () => undefined
+        );
+        return run;
+      };
+      return { names, request };
+    };
+
+    it("reads nothing from a new database", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+
+      expect(await store.read()).toBeUndefined();
+    });
+
+    it("creates the database with its one object store", async () => {
+      await indexedDbStoreFor("pg-wallet").read();
+
+      const names = await new Promise<string[]>((resolve, reject) => {
+        const request = indexedDB.open("pg-wallet");
+        request.onsuccess = () => {
+          resolve(Array.from(request.result.objectStoreNames));
+          request.result.close();
+        };
+        request.onerror = () => reject(request.error);
+      });
+      expect(names).toEqual(["state"]);
+    });
+
+    it("reads back what it wrote, in a new connection too", async () => {
+      const wallet = walletOf("Wallet 1");
+      const store = indexedDbStoreFor("pg-wallet");
+
+      await store.write(wallet);
+
+      expect(await store.read()).toEqual(wallet);
+      expect(await indexedDbStoreFor("pg-wallet").read()).toEqual(wallet);
+    });
+
+    it("replaces the record on a second write", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+
+      await store.write(walletOf("Wallet 1"));
+      await store.write(walletOf("Wallet 2"));
+
+      expect((await store.read())?.accounts[0].name).toBe("Wallet 2");
+    });
+
+    it("keeps databases of different names apart", async () => {
+      await indexedDbStoreFor("pg-wallet").write(walletOf("Wallet 1"));
+
+      expect(await indexedDbStoreFor("other").read()).toBeUndefined();
+    });
+
+    it("rejects when IndexedDB is not available, and retries on the next call", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      vi.stubGlobal("indexedDB", undefined);
+
+      await expect(store.read()).rejects.toThrow("indexedDB is not available");
+
+      vi.stubGlobal("indexedDB", new FakeFactory());
+      expect(await store.read()).toBeUndefined();
+    });
+
+    it("rejects a write that the database refuses", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.read();
+      const put = vi
+        .spyOn(FakeObjectStore.prototype, "put")
+        .mockImplementation(() => {
+          throw new DOMException("refused", "QuotaExceededError");
+        });
+
+      await expect(store.write(walletOf("Wallet 1"))).rejects.toThrow(
+        "refused"
+      );
+      put.mockRestore();
+    });
+
+    it("rejects an open that does not answer within 5 seconds", async () => {
+      vi.useFakeTimers();
+      vi.stubGlobal("indexedDB", stalledFactoryWith("never"));
+      const read = indexedDbStoreFor("pg-wallet").read();
+      const settled = expect(read).rejects.toThrow("indexedDB open timed out");
+
+      await vi.advanceTimersByTimeAsync(5000);
+
+      await settled;
+    });
+
+    it("rejects an open that is blocked", async () => {
+      vi.stubGlobal("indexedDB", stalledFactoryWith("blocked"));
+
+      await expect(indexedDbStoreFor("pg-wallet").read()).rejects.toThrow(
+        "indexedDB open is blocked"
+      );
+    });
+
+    it("runs a task under the store's own lock", async () => {
+      const locks = grantingLocks();
+      vi.stubGlobal("navigator", { locks });
+
+      const result = await indexedDbStoreFor("pg-wallet").exclusive(
+        async () => "done"
+      );
+
+      expect(result).toBe("done");
+      expect(locks.names).toEqual(["pg-wallet:state"]);
+    });
+
+    it("runs tasks under the lock one at a time", async () => {
+      vi.stubGlobal("navigator", { locks: grantingLocks() });
+      const store = indexedDbStoreFor("pg-wallet");
+      const order: string[] = [];
+      let release = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+
+      const first = store.exclusive(async () => {
+        await held;
+        order.push("first");
+      });
+      const second = store.exclusive(async () => {
+        order.push("second");
+      });
+      release();
+      await Promise.all([first, second]);
+
+      expect(order).toEqual(["first", "second"]);
+    });
+
+    it("runs the task unguarded where there are no Web Locks", async () => {
+      vi.stubGlobal("navigator", {});
+
+      expect(
+        await indexedDbStoreFor("pg-wallet").exclusive(async () => 1)
+      ).toBe(1);
+      expect(logged.entries).toHaveLength(0);
+    });
+
+    it("runs the task when the lock is refused, and logs that once", async () => {
+      vi.stubGlobal("navigator", {
+        locks: {
+          // A browser's `DOMException` is an `Error`; jsdom's is not
+          request: () =>
+            Promise.reject(
+              Object.assign(new Error("denied"), { name: "SecurityError" })
+            ),
+        },
+      });
+      const store = indexedDbStoreFor("pg-wallet");
+
+      expect(await store.exclusive(async () => 1)).toBe(1);
+      expect(await store.exclusive(async () => 2)).toBe(2);
+
+      expect(logged.entries).toHaveLength(1);
+      expect(logged.entries[0].ns).toBe("wallet:storage");
+      expect(logged.entries[0].report).toBe(true);
+      expect(String(logged.entries[0].error)).toContain("SecurityError");
+    });
+
+    it("rethrows the task's own failure, not as a refused lock", async () => {
+      vi.stubGlobal("navigator", { locks: grantingLocks() });
+      const task = vi.fn(async () => {
+        throw new Error("task failed");
+      });
+
+      await expect(
+        indexedDbStoreFor("pg-wallet").exclusive(task)
+      ).rejects.toThrow("task failed");
+      expect(task).toHaveBeenCalledTimes(1);
+      expect(logged.entries).toHaveLength(0);
+    });
+  });
+}
