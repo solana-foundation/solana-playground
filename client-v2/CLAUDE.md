@@ -399,8 +399,15 @@ reason.
   memory, with no side effects; `fetch` goes over the network; `read` and
   `write` go to storage (IndexedDB, localStorage, the file system).
 - **A predicate starts with `is`, `has`, `can` or `should`**, functions and
-  booleans alike. Review only: the check needs type-aware ESLint, which this
-  config does not run.
+  booleans alike. Review only: the check needs a type-aware rule, and none
+  is configured for it, though type-aware ESLint runs over
+  `src/**/*.{ts,tsx}`.
+- **Throw an `Error`, never a string or a plain object.** A thrown `Error`
+  keeps its stack and its `message`; carry the original value in `cause`.
+  ESLint warns (`@typescript-eslint/no-throw-literal` over
+  `src/**/*.{ts,tsx}`, which reads the thrown value's type, and
+  `prefer-promise-reject-errors` in `src/` and `e2e/`). A test that
+  simulates a non-`Error` throw disables the line with a reason.
 - **Handler props are `onX`; the functions that implement them are
   `handleX`.** Review only. With its default options,
   `react/jsx-handler-names` checks only `x.y` member expressions, so it

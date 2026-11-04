@@ -106,7 +106,8 @@ export class PgShell {
    */
   async waitForInput(msg: string) {
     return new Promise<string>(async (res, rej) => {
-      if (this._waitingForInput) return rej("Already waiting for input.");
+      if (this._waitingForInput)
+        return rej(new Error("Already waiting for input."));
 
       // This will trigger once the user sends input
       const handleInput = () => {

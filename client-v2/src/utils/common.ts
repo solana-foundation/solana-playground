@@ -1,3 +1,4 @@
+import { CustomEventError } from "./custom-event-error";
 import type {
   Accessor,
   AllPartial,
@@ -66,6 +67,7 @@ export class PgCommon {
     }
 
     if (result.reason instanceof Error) throw result.reason;
+    // TODO: carry failures as a Result (ok | err) so a non-Error never reaches here
     throw new Error(result.reason?.message);
   }
 
@@ -82,7 +84,9 @@ export class PgCommon {
     }
 
     return (await Promise.race([
-      new Promise((_, rej) => this.sleep(ms).then(() => rej("Timed out"))),
+      new Promise((_, rej) =>
+        this.sleep(ms).then(() => rej(new Error("Timed out")))
+      ),
       promisable,
     ])) as Awaited<R>;
   }
@@ -1007,7 +1011,7 @@ export class PgCommon {
    * - `noReceiver`: the failure to reject with at once when nothing claims
    * the event, such as a call to a component that is not mounted
    * @returns the resolved data
-   * @throws a plain `{ message }` when the receiver fails, or what
+   * @throws {CustomEventError} when the receiver fails, or what
    * `noReceiver` returns, as it is, when nothing claims the event
    */
   static async sendAndReceiveCustomEvent<R, D = unknown>(
@@ -1027,7 +1031,7 @@ export class PgCommon {
         );
 
         if (ev.detail.error) {
-          rej({ message: ev.detail.error });
+          rej(new CustomEventError(ev.detail.error));
         } else {
           res(ev.detail.data);
         }
@@ -1496,6 +1500,25 @@ if (import.meta.vitest) {
         }
       });
 
+      it("rejects with a CustomEventError carrying the receiver's error", async () => {
+        const handleSend = (ev: Event) => {
+          ev.preventDefault();
+          void Promise.resolve().then(() =>
+            PgCommon.createAndDispatchCustomEvent(receive, { error: "no host" })
+          );
+        };
+        document.addEventListener(send, handleSend);
+        try {
+          const failure = PgCommon.sendAndReceiveCustomEvent(event, undefined, {
+            noReceiver,
+          });
+          await expect(failure).rejects.toBeInstanceOf(CustomEventError);
+          await expect(failure).rejects.toThrow("no host");
+        } finally {
+          document.removeEventListener(send, handleSend);
+        }
+      });
+
       it("leaves no receive listener behind when it rejects", async () => {
         const added = vi.spyOn(document, "addEventListener");
         const removed = vi.spyOn(document, "removeEventListener");
@@ -1546,9 +1569,11 @@ if (import.meta.vitest) {
       // Callers read `.message` in their `catch`
       it("rejects with an Error carrying a non-Error's message", async () => {
         await expect(
+          // eslint-disable-next-line prefer-promise-reject-errors -- the case under test is a non-Error rejection
           PgCommon.transition(Promise.reject({ message: "locked" }), 0)
         ).rejects.toThrow(new Error("locked"));
         await expect(
+          // eslint-disable-next-line prefer-promise-reject-errors -- the case under test is a non-Error rejection
           PgCommon.transition(Promise.reject(undefined), 0)
         ).rejects.toBeInstanceOf(Error);
       });
