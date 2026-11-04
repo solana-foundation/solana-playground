@@ -82,7 +82,7 @@ export const getRustDependencies = async (files: TupleFiles) => {
  * @param files all files
  * @returns a map of package name to version, `*` when the version is unknown
  */
-export const getJSDependencyMap = async (files: TupleFiles) => {
+export const fetchJSDependencyMap = async (files: TupleFiles) => {
   const versions = await getVersions("packages");
   const getVersion = (packageName: string) => versions[packageName] ?? "*";
 
@@ -118,7 +118,7 @@ export const getJSDependencyMap = async (files: TupleFiles) => {
  * @returns the dependency list
  */
 export const getJSDependencies = async (files: TupleFiles) => {
-  const dependencies = await getJSDependencyMap(files);
+  const dependencies = await fetchJSDependencyMap(files);
   const devDependencies: Dependencies = {
     "@types/bn.js": "^5.1.1",
     "@types/chai": "^4.3.5",

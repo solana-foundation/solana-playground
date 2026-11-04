@@ -41,7 +41,7 @@ vi.mock("@/utils", () => utils);
 // what these two feed it
 const common = vi.hoisted(() => ({
   addImports: (content: string) => content,
-  getJSDependencyMap: vi.fn(),
+  fetchJSDependencyMap: vi.fn(),
 }));
 vi.mock("@/frameworks/common", () => common);
 
@@ -62,7 +62,7 @@ beforeEach(() => {
   utils.PgFramework.downloadZip.mockReset().mockResolvedValue(undefined);
   utils.PgFramework.convertToFramework.mockReset();
   utils.PgFramework.getFromFiles.mockReset().mockResolvedValue(undefined);
-  common.getJSDependencyMap
+  common.fetchJSDependencyMap
     .mockReset()
     .mockResolvedValue({ "@solana/web3.js": "1.98.0" });
 });
@@ -224,7 +224,7 @@ describe("features/project-export/model/export", () => {
     });
 
     it("names the TypeScript profile when it fails", async () => {
-      common.getJSDependencyMap.mockRejectedValue(new Error("offline"));
+      common.fetchJSDependencyMap.mockRejectedValue(new Error("offline"));
 
       const failure = await exportConverted("beta").catch((e: unknown) => e);
       expect(isDownloadFailure(failure)).toBe(false);

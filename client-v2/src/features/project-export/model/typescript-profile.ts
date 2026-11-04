@@ -61,6 +61,10 @@ const PREFERRED_CLIENTS = [
  */
 const hasDeclarationOf = (name: string) => (content: string) =>
   new RegExp(`\\b(const|let|var|function|class)\\s+${name}\\b`).test(content) ||
+  // A destructuring binding: `const { sleep } = helpers`, `let [web3] = x`
+  new RegExp(
+    `\\b(const|let|var)\\s*[{[][^}\\]=]*?\\b${name}\\b[^}\\]=]*[}\\]]\\s*=`
+  ).test(content) ||
   new RegExp(
     `^\\s*import\\s+[^;'"]*?\\b${name}\\b[^;'"]*?\\s+from\\s+["']`,
     "m"
@@ -95,6 +99,29 @@ const shimImport = (path: string, content: string) => {
   return `import { ${names.join(", ")} } from "${from}";\n`;
 };
 
+/** The name an `import ... from` line written by `addImports` binds */
+const importedNameOf = (line: string) =>
+  /^import\s+(?:\*\s+as\s+(\w+)|\{\s*(\w+)\s*\}|(\w+))\s+from\s/
+    .exec(line)
+    ?.slice(1)
+    .find(Boolean);
+
+/**
+ * Drop the import lines `addImports` added for a name the script already
+ * binds itself: it adds `web3` on any `web3.`, even when the script imports
+ * it, and two imports of one name do not compile. `addImports` puts its lines
+ * at the top, so a line goes when the name is bound again further down.
+ */
+const withoutImportsOfBound = (converted: string) => {
+  const lines = converted.split("\n");
+  return lines
+    .filter((line, i) => {
+      const name = importedNameOf(line);
+      return !name || !hasDeclarationOf(name)(lines.slice(i + 1).join("\n"));
+    })
+    .join("\n");
+};
+
 /**
  * Make a script run under Node: import the Playground's global packages,
  * and `pg` and `sleep` from the shim
@@ -102,7 +129,7 @@ const shimImport = (path: string, content: string) => {
 const convertScriptWith =
   (importGlobals: (content: string) => string) =>
   (path: string, content: string) => {
-    const converted = importGlobals(content);
+    const converted = withoutImportsOfBound(importGlobals(content));
     return shimImport(path, converted) + converted;
   };
 
@@ -116,6 +143,10 @@ const clientEntry = (paths: string[]) => {
   const topLevel = clients.find((path) => path.split("/").length === 2);
   return topLevel ?? clients[0];
 };
+
+/** A path as one shell word: as it is when it is plain, single-quoted otherwise */
+const shellQuote = (path: string) =>
+  /^[\w./-]+$/.test(path) ? path : `'${path.replace(/'/g, "'\\''")}'`;
 
 /** An npm package name from a project name */
 const toPackageName = (name: string) =>
@@ -283,7 +314,7 @@ exist only in Playground.
  * already.
  *
  * @param getDependencies the packages the given files use, with versions
- * (`getJSDependencyMap`)
+ * (`fetchJSDependencyMap`)
  * @param importGlobals the script with imports added for the Playground's
  * global packages (`addImports`); both are passed in because
  * `frameworks/common` imports the `utils` barrel, whose settings need the
@@ -324,7 +355,7 @@ export const toNodeProjectWith =
     for (const used of Object.keys(dependencies)) delete devDependencies[used];
 
     const scripts: Record<string, string> = {};
-    if (client) scripts.client = `tsx ${client}`;
+    if (client) scripts.client = `tsx ${shellQuote(client)}`;
     if (hasTests) {
       scripts.test =
         'mocha --node-option import=tsx --timeout 1000000 "tests/**/*.{ts,js,tsx,jsx}"';
@@ -497,6 +528,26 @@ console.log(await pg.connection.getSlot());
       expect(fileOf(files, "client/own.ts")).not.toContain("playground");
       expect(fileOf(files, "client/none.ts")).toBe("console.log(1);");
       expect(fileOf(files, "client/longer.ts")).not.toContain("playground");
+    });
+
+    it("adds no second import of a global the client already imports", async () => {
+      const client =
+        'import * as web3 from "@solana/web3.js";\nconsole.log(web3.Keypair.generate());';
+      // `importGlobals` adds web3 on `web3.` alone, as `addImports` does
+      const files = await exportOf([["client/client.ts", client]]);
+      expect(fileOf(files, "client/client.ts")).toBe(client);
+    });
+
+    it("adds no sleep import a script destructures itself", async () => {
+      const files = await exportOf([
+        ["client/own.ts", "const { sleep } = helpers;\nawait sleep(1);"],
+      ]);
+      expect(fileOf(files, "client/own.ts")).not.toContain("playground");
+    });
+
+    it("quotes a client path with a space in the client script", async () => {
+      const pkg = packageOf(await exportOf([["client/my client.ts", CLIENT]]));
+      expect(pkg.scripts.client).toBe("tsx 'client/my client.ts'");
     });
 
     it("leaves files outside client and tests as they are", async () => {

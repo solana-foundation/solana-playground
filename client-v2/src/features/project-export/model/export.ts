@@ -1,4 +1,4 @@
-import { addImports, getJSDependencyMap } from "@/frameworks/common";
+import { addImports, fetchJSDependencyMap } from "@/frameworks/common";
 import type { TupleFiles } from "@/utils";
 import { PgConnection, PgFramework } from "@/utils";
 
@@ -120,7 +120,7 @@ export const exportConverted = async (name: string) => {
       };
     } else {
       attempted = "typescript";
-      const result = await toNodeProjectWith(getJSDependencyMap)(addImports)(
+      const result = await toNodeProjectWith(fetchJSDependencyMap)(addImports)(
         exportedEndpoint()
       )(name)(files);
       converted = {
