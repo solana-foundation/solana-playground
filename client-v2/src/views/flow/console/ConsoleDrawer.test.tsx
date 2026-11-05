@@ -99,6 +99,7 @@ const flowState = (
   deployBeforeRun: null,
   stopped: null,
   hasProgram: true,
+  sourceChanged: false,
 });
 
 /** A flow before anything ran, in a project with no program */

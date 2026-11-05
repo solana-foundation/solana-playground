@@ -437,6 +437,7 @@ const reloadOnce = async (reopen: boolean): Promise<ReloadResult> => {
   }
   if (!changed.length) return "unchanged";
 
+  PgCommon.createAndDispatchCustomEvent(PgExplorer.events.ON_DID_RELOAD_FILES);
   await PgEditorModels.drop(changed);
   const open = PgExplorer.getCurrentFile();
   if (open && changed.includes(open.path)) {

@@ -52,6 +52,7 @@ const props = (
   onBuild: vi.fn(() => Promise.resolve()),
   onContinue: vi.fn(),
   hasIdl: false,
+  sourceChanged: false,
   onAsk: vi.fn(),
   onOpenFile: vi.fn(),
   onShowLog: vi.fn(),
@@ -193,7 +194,7 @@ describe("BaseBuild", () => {
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
-  // An edit after a build needs a new build, without the assistant or a command
+  // A new build without the assistant or a command, while the code is unchanged
   it("offers Build again as the outlined pill beside Deploy", () => {
     const p = props({ kind: "succeeded" });
     render(<BaseBuild {...p} />);
@@ -204,13 +205,70 @@ describe("BaseBuild", () => {
     expect(p.onBuild).toHaveBeenCalled();
   });
 
-  // Nothing is below to point at, and the app cannot tell an edit
+  // The screen has one brand action, and it steers away from an old build
+  describe("once the code changed after the build", () => {
+    const changed = () => {
+      const p = props({ kind: "succeeded" });
+      p.sourceChanged = true;
+      return p;
+    };
+
+    it("leads with Build again as the brand pill", () => {
+      const p = changed();
+      const { container } = render(<BaseBuild {...p} />);
+
+      const again = screen.getByRole("button", { name: "Build again" });
+      expect(again.getAttribute("data-slot")).toBe("brand-button");
+      expect(
+        container.querySelectorAll('[data-slot="brand-button"]').length
+      ).toBe(1);
+      fireEvent.click(again);
+      return vi.waitFor(() => expect(p.onBuild).toHaveBeenCalled());
+    });
+
+    it("steps Continue to Deploy down, still working", () => {
+      const p = changed();
+      render(<BaseBuild {...p} />);
+
+      const go = screen.getByRole("button", { name: "Continue to Deploy" });
+      expect(go.getAttribute("data-variant")).toBe("outline");
+      fireEvent.click(go);
+      expect(p.onContinue).toHaveBeenCalled();
+    });
+
+    it("says why", () => {
+      render(<BaseBuild {...changed()} />);
+
+      expect(
+        screen.getByText(
+          "Your code changed after the last build. Build again before you deploy."
+        )
+      ).toBeTruthy();
+    });
+
+    it("shows the rebuild running on the brand pill", () => {
+      const p = changed();
+      p.building = true;
+      render(<BaseBuild {...p} />);
+
+      const busy = screen.getByRole("button", { name: "Building…" });
+      expect(busy.getAttribute("data-slot")).toBe("brand-button");
+      expect((busy as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("waits offline, as every Build action does", () => {
+      const p = changed();
+      p.offline = true;
+      render(<BaseBuild {...p} />);
+
+      const again = screen.getByRole("button", { name: "Build again" });
+      expect((again as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
   it.each([
-    [
-      true,
-      "The program and its IDL are ready to deploy. Edited since? Build again first.",
-    ],
-    [false, "The program is ready to deploy. Edited since? Build again first."],
+    [true, "The program and its IDL are ready to deploy."],
+    [false, "The program is ready to deploy."],
   ])(
     "names the IDL in the success line only when there is one (%s)",
     (hasIdl, line) => {

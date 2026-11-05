@@ -78,6 +78,8 @@ export interface BaseBuildProps {
    * names it
    */
   hasIdl: boolean;
+  /** The code changed after the build on screen: Build again leads */
+  sourceChanged: boolean;
   /** Sends a prompt to the assistant: an error card's Explain or Fix */
   onAsk: (prompt: string) => void;
   onOpenFile: (path: string) => void;
@@ -188,10 +190,18 @@ const ContinueButton = ({ p }: { p: BaseBuildProps }) => (
   <BrandButton onClick={p.onContinue}>Continue to Deploy</BrandButton>
 );
 
+/** Continue to Deploy once the build on screen is older than the code */
+const OutlineContinueButton = ({ p }: { p: BaseBuildProps }) => (
+  <Button variant="outline" onClick={p.onContinue}>
+    Continue to Deploy
+  </Button>
+);
+
 /**
  * Build as the surface's brand pill: the first build, with the play mark,
- * and Try again after a build that never reached the compiler, which is
- * that surface's main action as Continue to Deploy is the success's. A
+ * Try again after a build that never reached the compiler, which is that
+ * surface's main action as Continue to Deploy is the success's, and Build again
+ * once the code changed after a success. A
  * `BrandButton` rather than `AsyncButton`, which is a `Button` and has no
  * brand look, so the busy state and the failure report are kept here.
  */
@@ -369,24 +379,37 @@ const Restored = (p: BaseBuildProps & { failed: boolean }) => (
   />
 );
 
+const successLine = ({ sourceChanged, hasIdl }: BaseBuildProps) => {
+  if (sourceChanged) {
+    return "Your code changed after the last build. Build again before you deploy.";
+  }
+  return hasIdl
+    ? "The program and its IDL are ready to deploy."
+    : "The program is ready to deploy.";
+};
+
 const Succeeded = (p: BaseBuildProps) => (
   <Surface
     icon={<CircleCheck className="text-success" />}
     title="Build succeeded"
     meta={p.ms === null ? null : `Built in ${msLabel(p.ms)}`}
-    // The app cannot tell an edit since the build, so the line asks
-    description={
-      p.hasIdl
-        ? "The program and its IDL are ready to deploy. Edited since? Build again first."
-        : "The program is ready to deploy. Edited since? Build again first."
-    }
+    description={successLine(p)}
     actions={
       <>
-        {/* What comes next: go on, or build again after an edit. Export
-            project is not here: it is a project action, in Settings and
-            the explorer, not a build result */}
-        <ContinueButton p={p} />
-        <BuildButton p={p} label="Build again" variant="outline" />
+        {/* What comes next: go on, or build again once the code moved on.
+            Export project is not here: it is a project action, in Settings
+            and the explorer, not a build result */}
+        {p.sourceChanged ? (
+          <>
+            <BrandBuildButton p={p} label="Build again" />
+            <OutlineContinueButton p={p} />
+          </>
+        ) : (
+          <>
+            <ContinueButton p={p} />
+            <BuildButton p={p} label="Build again" variant="outline" />
+          </>
+        )}
         {/* The stage's downloads, as links under the pills like
             Unreached's Show full log. Download IDL draws itself only while
             the app holds an IDL */}
