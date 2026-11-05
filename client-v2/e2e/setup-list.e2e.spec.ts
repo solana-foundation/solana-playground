@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 
 import {
   expect,
+  json,
   LONG,
   seedWorkspace,
   stubAiStatus,

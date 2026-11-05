@@ -64,7 +64,7 @@ test.describe("on a desktop window", () => {
 
     await expect(home(page)).toBeHidden(LONG);
     await expect(
-      page.getByRole("heading", { level: 2, name: "anchor-example" })
+      page.getByRole("heading", { level: 3, name: "Ask about anchor-example" })
     ).toBeVisible(LONG);
     await expect(
       page.getByRole("button", { name: "Continue to Deploy" })
@@ -75,7 +75,7 @@ test.describe("on a desktop window", () => {
     await page.reload();
     await expect(filesToggle(page)).toBeVisible(LONG);
     await expect(
-      page.getByRole("heading", { level: 2, name: "anchor-example" })
+      page.getByRole("heading", { level: 3, name: "Ask about anchor-example" })
     ).toBeVisible();
     // The tree stays closed, as a first visit leaves it
     await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");

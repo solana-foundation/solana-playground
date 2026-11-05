@@ -265,7 +265,11 @@ test("gist-sharing: A sign-in that cannot start", async ({ page }) => {
     .getByRole("button", { name: "Sign in with GitHub" })
     .click();
 
-  await expect(prompt(page).getByText("Could not start sign-in")).toBeVisible();
+  await expect(
+    prompt(page).getByText(
+      "Sign-in isn't available. Your work is saved in this browser."
+    )
+  ).toBeVisible();
   expect(requests).toHaveLength(0);
 });
 
