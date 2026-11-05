@@ -5,6 +5,7 @@ import {
   UnfoldHorizontal,
 } from "lucide-react";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
@@ -33,13 +34,14 @@ const THUMB = "max-md:size-11";
  * top read as one set. TODO(design-system): a bar icon size in the kit's
  * Button, then drop this and the bar's copy
  */
-const HEAD_CONTROL =
-  "size-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-[18px] [&_svg]:stroke-[1.6]";
+const HEAD_CONTROL = cn(
+  "size-8 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground data-[state=open]:bg-accent data-[state=open]:text-foreground dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-[18px] [&_svg]:stroke-[1.6]",
+  THUMB
+);
 
 /**
- * Forget key in More: `none` while no backend holding the user's key is
- * connected (the item is not shown), `busy` while a turn runs (shown
- * disabled, since the turn is using the key)
+ * Delete my key in More, by `KeyHold`: not shown at `none`, shown disabled at
+ * `busy`, since the turn is using the key
  */
 export type DeleteKey = KeyHold;
 
@@ -88,7 +90,7 @@ export interface BaseAssistantHeadProps {
 
 /**
  * The assistant's head: the model in use, the off status while no model can
- * answer, then More, Widen and Hide. Only
+ * answer, then Widen, Hide and More. Only
  * the model's name is cut when the column is narrow; the words around it
  * stay, and the cut name shows whole on hover (`OverflowTooltip`).
  *
@@ -138,6 +140,15 @@ export function BaseAssistantHead({
           </>
         )}
       </h2>
+      {off && (
+        <span
+          id="assistant-status"
+          className="inline-flex shrink-0 items-center gap-1.5 pr-1 text-caption text-muted-foreground"
+        >
+          <StatusDot variant={OFF_STATUS[off].dot} />
+          {OFF_STATUS[off].word}
+        </span>
+      )}
       {canWiden && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -173,7 +184,7 @@ export function BaseAssistantHead({
         <TooltipContent>Collapse assistant</TooltipContent>
       </Tooltip>
       {/* More last, at the edge, as the stage bar's and every toolbar's */}
-      <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+      <DropdownMenu open={more.open} onOpenChange={more.setOpen}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
