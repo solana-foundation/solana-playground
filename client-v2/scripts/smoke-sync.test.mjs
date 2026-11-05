@@ -10,13 +10,16 @@ const answer = (status, body) => async () =>
   new Response(typeof body === "string" ? body : JSON.stringify(body), {
     status,
   });
-const run = (fetchImpl, { attempts = 1, bypassSecret } = {}) =>
+const runWith = (attempts) => (bypassSecret) => (fetchImpl) =>
   smoke("https://x.vercel.app", {
     fetchImpl,
     attempts,
     delayMs: 0,
     bypassSecret,
   });
+const run = runWith(1)(undefined);
+const runWithSecret = runWith(1)("s3");
+const runThrice = runWith(3)(undefined);
 
 test("passes on enabled and db ok", async () => {
   const r = await run(answer(200, { enabled: true, db: "ok" }));
@@ -67,7 +70,7 @@ test("sends the bypass header only when given a secret", async () => {
   };
   await run(spy);
   assert.equal(seen["x-vercel-protection-bypass"], undefined);
-  await run(spy, { bypassSecret: "s3" });
+  await runWithSecret(spy);
   assert.equal(seen["x-vercel-protection-bypass"], "s3");
 });
 
@@ -79,7 +82,7 @@ test("retries and passes when a later attempt answers", async () => {
       ? new Response("down", { status: 503 })
       : new Response('{"enabled":true,"db":"ok"}');
   };
-  const r = await run(flaky, { attempts: 3 });
+  const r = await runThrice(flaky);
   assert.equal(r.ok, true);
   assert.equal(r.attempts, 2);
 });
@@ -103,7 +106,7 @@ test("reports the last result when every attempt fails", async () => {
     new Response("b", { status: 503 }),
     new Response('{"enabled":false,"db":"unreachable"}'),
   ];
-  const r = await run(async () => bodies[calls++], { attempts: 3 });
+  const r = await runThrice(async () => bodies[calls++]);
   assert.equal(calls, 3);
   assert.equal(r.ok, false);
   assert.equal(r.attempts, 3);
