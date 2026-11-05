@@ -141,6 +141,7 @@ jobs:
                   exit 1 ;;
               esac
             else
+              api_failures=0
               echo "no Production deployment of $SHA yet"
             fi
             sleep 20

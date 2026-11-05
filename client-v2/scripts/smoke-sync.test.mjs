@@ -10,12 +10,12 @@ const answer = (status, body) => async () =>
   new Response(typeof body === "string" ? body : JSON.stringify(body), {
     status,
   });
-const run = (fetchImpl, extra = {}) =>
+const run = (fetchImpl, { attempts = 1, bypassSecret } = {}) =>
   smoke("https://x.vercel.app", {
     fetchImpl,
-    attempts: 1,
+    attempts,
     delayMs: 0,
-    ...extra,
+    bypassSecret,
   });
 
 test("passes on enabled and db ok", async () => {
@@ -129,10 +129,16 @@ test("cuts a long body", async () => {
 // The workflow step reads only the exit code, so the entrypoint is run for
 // real: a guard that stopped matching would exit 0 without probing.
 const script = fileURLToPath(new URL("./smoke-sync.mjs", import.meta.url));
-const runScript = (args, env) =>
-  spawnSync(process.execPath, [script, ...args], {
+// The parent's environment with the retry delay removed, so a red case does not wait.
+const childEnv = () => {
+  const env = Object.assign({}, process.env);
+  env.SMOKE_RETRY_DELAY_MS = "0";
+  return env;
+};
+const runWithoutUrl = () =>
+  spawnSync(process.execPath, [script], {
     encoding: "utf8",
-    env: { ...process.env, SMOKE_RETRY_DELAY_MS: "0", ...env },
+    env: childEnv(),
   });
 const serve = (body) =>
   new Promise((resolve) => {
@@ -146,7 +152,7 @@ const runAgainst = async (body) => {
   try {
     // spawnSync would block the server's event loop, so use the async form.
     const child = spawn(process.execPath, [script, url], {
-      env: { ...process.env, SMOKE_RETRY_DELAY_MS: "0" },
+      env: childEnv(),
     });
     let err = "";
     child.stderr.on("data", (d) => (err += d));
@@ -158,7 +164,7 @@ const runAgainst = async (body) => {
 };
 
 test("exits 2 with usage when no URL is given", () => {
-  const r = runScript([], {});
+  const r = runWithoutUrl();
   assert.equal(r.status, 2);
   assert.match(r.stderr, /usage/);
 });

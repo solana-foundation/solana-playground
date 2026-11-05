@@ -28,7 +28,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  *
  * @param {string} baseUrl
  * @param {{ bypassSecret?: string, fetchImpl?: typeof fetch }} [options]
- * @returns {Promise<{ ok: boolean, status: number | null, body: string, reason: string }>}
+ * @returns {Promise<{ ok: boolean, status: number | undefined, body: string, reason: string }>}
  */
 export async function probe(baseUrl, options = {}) {
   const { bypassSecret, fetchImpl = fetch } = options;
@@ -51,7 +51,7 @@ export async function probe(baseUrl, options = {}) {
     const message = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
-      status: null,
+      status: undefined,
       body: message,
       reason: "no response",
     };
