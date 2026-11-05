@@ -206,12 +206,12 @@ export const BaseThreadItem = ({
     case "notice":
       return (
         <Callout role="status">
-          <CalloutDescription className="flex flex-wrap items-center justify-between gap-2">
-            {item.text}
-            {onRetry && (
+          <CalloutDescription>{item.text}</CalloutDescription>
+          {onRetry && (
+            <CalloutActions>
               <CalloutAction onClick={onRetry}>Try again</CalloutAction>
-            )}
-          </CalloutDescription>
+            </CalloutActions>
+          )}
         </Callout>
       );
 

@@ -17,7 +17,7 @@ export type AssistantEvents = {
   };
   /** The user changed the reasoning effort in the composer's menu. */
   assistant_effort_changed: { effort: Effort };
-  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist, the Change key button of a rejected key (or its Use hosted model when signed out), the composer's + menu, the off row's Add an API key or the status indicators' Connect a model (`widgets/status`). */
+  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist, the Change key button of a rejected key, its Use hosted model when signed out, the composer's + menu, the off row's Add an API key or the status indicators' Connect a model (`widgets/status`). */
   assistant_connect_opened: {
     via:
       | "menu"
@@ -26,6 +26,7 @@ export type AssistantEvents = {
       | "thread"
       | "setup"
       | "key-rejected"
+      | "use-hosted"
       | "add"
       | "ai-off"
       | "status";

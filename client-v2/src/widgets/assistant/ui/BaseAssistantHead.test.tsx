@@ -313,6 +313,13 @@ it("is the frame's 44 px column bar", () => {
   expect(head.className).toMatch(/\bborder-b\b/);
 });
 
+it("keeps its icon buttons 44 px on a phone", () => {
+  setup();
+  expect(
+    screen.getByRole("button", { name: "Collapse assistant" }).className
+  ).toContain("max-md:size-11");
+});
+
 describe("BaseAssistantHead, the off status", () => {
   const status = () => document.getElementById("assistant-status");
 

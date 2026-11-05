@@ -689,10 +689,55 @@ describe("Thread, a refused key", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
 
-    expect(openConnect).toHaveBeenCalledWith("key-rejected", {
+    expect(openConnect).toHaveBeenCalledWith("use-hosted", {
       provider: "default",
     });
     expect(PgAssistant.connection).toBeNull();
+  });
+
+  it("drops both buttons once the thread moved, so a pick counts once", async () => {
+    hosted();
+    await signIn();
+    refuse();
+    render(<Thread turn={withInput("", vi.fn())} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(
+      screen.queryByRole("button", { name: "Use hosted model" })
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change key" })).toBeNull();
+    expect(
+      tracked().filter(([name]) => name === "assistant_model_picked")
+    ).toHaveLength(1);
+  });
+
+  it("drops Change key once the thread moved to another key's backend", () => {
+    act(() =>
+      PgAssistant.connect({
+        id: "anthropic",
+        model: "claude-x",
+        apiKey: "sk-test",
+      } as Parameters<typeof PgAssistant.connect>[0])
+    );
+    refuse();
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(screen.queryByRole("button", { name: "Change key" })).toBeNull();
+  });
+
+  it("keeps Change key while the refused backend is still connected", () => {
+    act(() =>
+      PgAssistant.connect({
+        id: "openai",
+        model: "gpt-x",
+        apiKey: "sk-test",
+      } as Parameters<typeof PgAssistant.connect>[0])
+    );
+    refuse();
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(screen.getByRole("button", { name: "Change key" })).toBeTruthy();
   });
 
   it("offers nothing once a reply came after the error", () => {

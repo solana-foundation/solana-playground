@@ -240,9 +240,7 @@ const SyncBanner = () => {
       <Callout variant={prompt.variant}>
         <Icon />
         <CalloutTitle>{prompt.title}</CalloutTitle>
-        {/* The question, then its answers under it (the kit's CalloutActions).
-            Full opacity: the message is the point of the banner */}
-        <CalloutDescription className="min-w-0 opacity-100">
+        <CalloutDescription>
           <p className="m-0 text-foreground wrap-anywhere">
             {named && at >= 0 ? (
               <>
@@ -258,14 +256,6 @@ const SyncBanner = () => {
           </p>
         </CalloutDescription>
         <CalloutActions>
-          {resolvable && (
-            <CalloutAction
-              disabled={busy || !!resolving}
-              onClick={() => setResolving(shown.projectId)}
-            >
-              Resolve…
-            </CalloutAction>
-          )}
           {prompt.actions.map((action) => {
             const { run, failure } = pressOf(action);
             return (
@@ -282,6 +272,14 @@ const SyncBanner = () => {
               </CalloutAction>
             );
           })}
+          {resolvable && (
+            <CalloutAction
+              disabled={busy || !!resolving}
+              onClick={() => setResolving(shown.projectId)}
+            >
+              Resolve…
+            </CalloutAction>
+          )}
         </CalloutActions>
       </Callout>
     );

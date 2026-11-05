@@ -171,7 +171,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   /**
    * Opened on the backend already connected: its own key and choices. Not for
    * a preset, which says what to start from; one naming the connected backend
-   * comes from Enter key, after the provider refused that very key.
+   * comes from Change key, after the provider refused that very key.
    */
   const onCurrent = !preset && current?.id === startId ? current : null;
 

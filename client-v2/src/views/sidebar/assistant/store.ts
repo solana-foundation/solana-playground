@@ -160,7 +160,7 @@ export type ChatItem =
       kind: "error";
       text: string;
       /**
-       * The backend whose key the provider refused with a 401, for Enter key
+       * The backend whose key the provider refused with a 401, for Change key
        * to reopen Connect a model on it; a 403 keeps the provider's own
        * message (`isRejectedKey` in `use-turn`). Never the key.
        */
