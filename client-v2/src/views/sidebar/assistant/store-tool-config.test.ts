@@ -57,8 +57,7 @@ const reloadPage = () => {
 };
 
 const signIn = (id: string) =>
-  // eslint-disable-next-line unicorn/no-null -- the session's wire shape
-  PgSession.refreshWith({ id, name: id, image: null, login: null });
+  PgSession.refreshWith({ id, name: id, image: undefined, login: undefined });
 
 const DOCS = {
   id: "docs",
@@ -75,8 +74,7 @@ describe("PgAssistant tool config", () => {
 
   afterEach(async () => {
     await PgAssistant.whenPersisted();
-    // eslint-disable-next-line unicorn/no-null -- the session's wire shape
-    await PgSession.refreshWith(null);
+    await PgSession.refreshWith(undefined);
     vi.restoreAllMocks();
   });
 
