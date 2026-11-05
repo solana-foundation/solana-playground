@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Drop the PR databases on the preview instance that no open, labelled PR
+# still needs, for preview-sweep.yml. Only what list-preview-dbs lists is
+# considered, so the shared database and laptop databases are never touched.
+#
+# Kept: a PR carrying PREVIEW_LABEL, a database younger than MIN_AGE_MINUTES
+# (it may belong to a deploy that started after the PR list was read), and
+# one with no creation stamp. One failed drop does not stop the rest; the
+# script exits non-zero after the sweep if any failed. A failed listing fails
+# it before anything is dropped.
+#
+# Reads:
+#   PREVIEW_LABEL     the label that keeps a PR's database
+#   MIN_AGE_MINUTES   the age below which a database is kept
+#   DRY_RUN           `true` lists what would be dropped, and drops nothing
+#   GITHUB_STEP_SUMMARY  optional; the summary line is appended to it
+#
+#   sweep-preview-dbs <prs.json>
+#
+# prs.json is `gh pr list --json number,labels` of every open PR.
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+[ "$#" -eq 1 ] || { echo "usage: $(basename "$0") <prs.json>" >&2; exit 2; }
+prs=$1
+: "${PREVIEW_LABEL:?PREVIEW_LABEL is unset}"
+: "${MIN_AGE_MINUTES:?MIN_AGE_MINUTES is unset}"
+DRY_RUN=${DRY_RUN:-false}
+
+keep=$(jq -r --arg l "$PREVIEW_LABEL" '.[] | select(any(.labels[]; .name == $l)) | .number' "$prs")
+dbs=$(mktemp)
+trap 'rm -f "$dbs"' EXIT
+bash "$DB_SCRIPTS/cloud-sql/list-preview-dbs" > "$dbs"
+
+deleted=0 kept=0 failed=0
+while read -r pr age; do
+  name=solpg_preview_pr_$pr
+  # An age that is not a number (no creation stamp) is kept, never read as old.
+  if grep -qxF "$pr" <<<"$keep" || ! [[ "$age" =~ ^[0-9]+$ ]] || [ "$age" -lt "$MIN_AGE_MINUTES" ]; then
+    kept=$((kept + 1))
+    continue
+  fi
+  if [ "$DRY_RUN" = true ]; then
+    echo "would drop $name (age ${age}m)"
+  elif ! bash "$DB_SCRIPTS/cloud-sql/drop-preview-db" --pr "$pr"; then
+    # One failure must not stop the rest of the sweep.
+    echo "::warning::could not drop $name"
+    failed=$((failed + 1))
+    continue
+  fi
+  deleted=$((deleted + 1))
+done < "$dbs"
+
+verb=$([ "$DRY_RUN" = true ] && echo "Would drop" || echo "Dropped")
+echo "$verb $deleted preview databases, kept $kept, failed $failed; $(wc -l < "$dbs" | tr -d ' ') PR databases on the instance before the sweep." |
+  tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
+[ "$failed" -eq 0 ]

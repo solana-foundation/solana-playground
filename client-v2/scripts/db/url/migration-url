@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# The URL dbmate migrates through: the Neon branch's direct (unpooled)
+# endpoint, since the pooled one carries `channel_binding`, which dbmate's
+# driver cannot parse.
+#
+#   migration-url (--pr <number> | --branch <name>) [-- <command>...]
+#
+# With a command, runs it with DATABASE_URL set to the URL; without, prints it.
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+split_command "$@"
+parse_target "" ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"}
+
+case "$TARGET_KIND" in
+  pr) url=$(bash "$NEON_SH" uri "$(neon_branch)") ;;
+  branch) url=$(PREVIEW_GIT_BRANCH=$TARGET "$NEON_PREVIEW_BRANCH") ;;
+esac
+
+if [ "${#COMMAND[@]}" -eq 0 ]; then
+  printf '%s\n' "$url"
+else
+  DATABASE_URL=$url exec "${COMMAND[@]}"
+fi

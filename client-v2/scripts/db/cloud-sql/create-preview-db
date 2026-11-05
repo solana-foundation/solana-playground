@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+# Create (or reuse) a preview's database on the preview instance, copied from
+# the shared preview database and owned by the application's user, and print
+# what its deployment needs, one KEY=VALUE per line.
+#
+# The copy carries the shared database's schema, rows and `schema_migrations`,
+# which are master's, so dbmate then applies only the PR's own migrations, on
+# top of the rows previews have written: a migration meets existing data as it
+# will in production. Sessions stay behind (SESSION_TABLE), so no sign-in made
+# on another preview is valid on this one.
+#
+# A copy, not `CREATE DATABASE ... TEMPLATE`: Postgres refuses to clone a
+# database while any session is connected to it, and every preview is. pg_dump
+# reads one consistent snapshot while they stay connected; it must be at least
+# the server's major version.
+#
+# The login user needs CREATEDB and membership of CLOUD_SQL_USER's role (the
+# OWNER clause, and read access to the shared database); see docs/cloud-sql.md.
+#
+#   create-preview-db --pr <number> | --branch <name>
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+parse_target "" "$@"
+name=$(preview_db_name)
+. "$DB_SCRIPTS/cloud-sql/proxy.sh"
+
+command -v pg_dump >/dev/null 2>&1 || { echo "pg_dump required, at the instance's major version or later" >&2; exit 1; }
+
+start_proxy
+trap stop_proxy EXIT
+
+# The database's comment says whether its copy finished: `copying:<epoch>`
+# while it runs, `created-at:<epoch>` once it is complete. A run cancelled
+# mid-copy leaves the first, and the next run starts over rather than deploy
+# on half the rows.
+state() {
+  admin_sql "select coalesce(shobj_description(oid, 'pg_database'), '') from pg_database where datname = '$name'"
+}
+stamp() {
+  admin_sql "comment on database \"$name\" is '$1:$(date +%s)'"
+}
+
+# Checked on its own line: a failure inside `case "$(...)"` is not caught by
+# `set -e`, and an empty state would drop a database that exists
+current=$(state)
+case "$current" in
+  created-at:*)
+    echo "reusing database $name on $CLOUD_SQL_INSTANCE" >&2
+    ;;
+  *)
+    # Absent, or left by an unfinished copy
+    admin_sql "drop database if exists \"$name\" with (force)"
+    admin_sql "create database \"$name\" owner \"$CLOUD_SQL_USER\""
+    stamp copying
+    # As the application's role on both ends: it may read the shared
+    # database, and owns what the copy creates
+    from=$(proxy_url "$SHARED_PREVIEW_DB" "$CLOUD_SQL_USER")
+    to=$(proxy_url "$name" "$CLOUD_SQL_USER")
+    pg_dump --no-owner --no-privileges --exclude-table-data="$SESSION_TABLE" "$from" |
+      psql -v ON_ERROR_STOP=1 -qX -o /dev/null "$to"
+    stamp created-at
+    echo "created database $name on $CLOUD_SQL_INSTANCE from $SHARED_PREVIEW_DB" >&2
+    ;;
+esac
+
+printf 'DB_PROVIDER=cloud-sql\n'
+printf 'CLOUD_SQL_DATABASE=%s\n' "$name"

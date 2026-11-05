@@ -1,0 +1,88 @@
+name: preview-shared-db
+
+# Keeps the preview instance's shared database, `solpg_preview`, at master's
+# migrations. Once PREVIEW_DB_PROVIDER is `cloud-sql`, the previews the Vercel
+# Git integration builds read it, and preview.yml copies it into a labelled
+# PR's own database (client-v2/docs/preview-databases.md).
+#
+# Only from master, by convention, enforced by review of workflow changes. A
+# `push` run reads this workflow and the migrations from the commit pushed to
+# master, which a reviewer has seen; a `pull_request` run reads them from the
+# PR's merge commit, so a PR that migrated the shared
+# database would impose its schema on every other preview. A PR that needs its
+# migrations in its preview takes the `preview` label instead.
+#
+# Runs where PREVIEW_REPOSITORY names this repository and PREVIEW_DB_PROVIDER
+# is `cloud-sql`, with the same Cloud SQL variables as preview.yml. A failed
+# run leaves the database behind master until a manual dispatch succeeds; a
+# labelled PR's copy still applies what it lacks.
+on:
+  push:
+    branches: [master]
+    paths:
+      - client-v2/db/migrations/**
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    # Explicit, for pipefail: the implicit default runs `bash -e` without it.
+    shell: bash
+
+# One at a time, and never cancelled: dbmate runs each migration in a
+# transaction, but a cancelled run leaves the rest of master's unapplied.
+concurrency:
+  group: preview-shared-db
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: migrate the shared preview database
+    # A manual run may pick any branch; only master's migrations go here (a
+    # branch's copy could drop this check, so review of workflow changes keeps it)
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      vars.PREVIEW_DB_PROVIDER == 'cloud-sql' && github.repository == vars.PREVIEW_REPOSITORY
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CLOUD_SQL_INSTANCE: ${{ vars.PREVIEW_CLOUD_SQL_INSTANCE }}
+      CLOUD_SQL_USER: ${{ vars.PREVIEW_CLOUD_SQL_USER }}
+      CLOUD_SQL_LOGIN_USER: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          sparse-checkout: |
+            .github/scripts
+            client-v2/db
+            client-v2/scripts/db
+
+      - name: Check configuration
+        run: |
+          : "${CLOUD_SQL_INSTANCE:?PREVIEW_CLOUD_SQL_INSTANCE variable is unset}"
+          : "${CLOUD_SQL_USER:?PREVIEW_CLOUD_SQL_USER variable is unset}"
+          : "${CLOUD_SQL_LOGIN_USER:?GCP_CI_SERVICE_ACCOUNT variable is unset}"
+
+      - name: Google Cloud credentials
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Install the Cloud SQL Auth Proxy
+        run: bash .github/scripts/install-cloud-sql-proxy.sh
+
+      # Same pinned version as preview.yml and client-v2.yml.
+      - name: Install dbmate
+        run: |
+          curl -fsSL -o /usr/local/bin/dbmate \
+            https://github.com/amacneil/dbmate/releases/download/v2.35.1/dbmate-linux-amd64
+          chmod +x /usr/local/bin/dbmate
+
+      - name: Migrate solpg_preview
+        working-directory: client-v2
+        run: bash scripts/db/cloud-sql/migration-url shared -- dbmate --wait --wait-timeout 60s --no-dump-schema up

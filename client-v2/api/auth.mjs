@@ -51,7 +51,24 @@ export const restorePath = (req) => {
  */
 async function handler(req, res) {
   warnAboutMissingObservabilityIds();
-  const auth = getAuth();
+  let auth;
+  try {
+    auth = await getAuth();
+  } catch (e) {
+    // The pool could not be built: the Cloud SQL gate refused, or the token
+    // exchange or the connector failed. The cause is in the function log
+    // only; the body says nothing, since it may name the infrastructure
+    // eslint-disable-next-line no-console -- server-side: Vercel's function log is where this goes
+    console.error("auth: the database is unavailable", {
+      message: e instanceof Error ? e.message : String(e),
+    });
+    res.statusCode = 503;
+    res.setHeader("content-type", "application/json");
+    res.setHeader("cache-control", "no-store");
+    return res.end(
+      JSON.stringify({ error: "Authentication is temporarily unavailable" })
+    );
+  }
   if (!auth) {
     // `missing` names the variables this deployment lacks. Every deployment
     // carries its own environment and none of it is visible from the outside,

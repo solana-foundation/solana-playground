@@ -1,5 +1,9 @@
 # Neon preview databases
 
+> The Neon path of the `preview` label, used while the repository variable `PREVIEW_DB_PROVIDER` is unset, and of
+> laptop deploys with `DB_PROVIDER=url`. Previews move to Cloud SQL ([Preview databases](preview-databases.md)), and
+> this path, with this document, goes in a follow-up.
+
 A PR labelled `preview`, whatever its base branch, in the repository the `PREVIEW_REPOSITORY` variable names, gets a
 preview deployment with its own Neon branch, `preview/pr-<number>`, cut from `main`, the default branch of the preview
 Neon project. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production's database is in a Neon

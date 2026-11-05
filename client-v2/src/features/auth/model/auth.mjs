@@ -16,7 +16,7 @@ import { oAuthProxy } from "better-auth/plugins";
 import { authEnv } from "../../../shared/config/server-env.mjs";
 import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
 // TODO(ui-migration 1.4): a feature importing a feature; the auth database adapter needs persistence's pool
-import { getPool, isConfigured } from "../../persistence/server.mjs";
+import { getPool, missingDatabaseEnv } from "../../persistence/server.mjs";
 import { SIGN_IN_ENV } from "../config.mjs";
 
 const log = createServerLogger("auth:session");
@@ -197,9 +197,12 @@ export const isAllowedOrigin = (req) => {
  */
 export const missingConfig = () => {
   const env = authEnv();
-  // `DATABASE_URL` is read by the persistence slice, the rest by `authEnv`
+  // The database's variables depend on `DB_PROVIDER` and belong to the
+  // persistence slice. An unknown `DB_PROVIDER` is reported as `DB_PROVIDER`:
+  // the pool still refuses it by name for sync, but sign-in answers 503
+  // naming the setting rather than failing on the pool
+  const database = missingDatabaseEnv((name) => !!process.env[name]);
   const present = {
-    DATABASE_URL: isConfigured(),
     GITHUB_CLIENT_ID: !!env.GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET: !!env.GITHUB_CLIENT_SECRET,
     // Signs the session cookie; a deployment must never fall back to a default
@@ -209,6 +212,7 @@ export const missingConfig = () => {
   // half-set or malformed proxy is reported
   const proxyURL = env.AUTH_OAUTH_PROXY_URL;
   return [
+    ...database,
     ...SIGN_IN_ENV.filter((name) => !present[name]),
     // A proxy URL alone leaves the proxy off, and the preview then sends GitHub
     // its own callback, which GitHub rejects with nothing said here
@@ -243,12 +247,15 @@ export const mapGithubProfile = (profile) => {
 /**
  * The auth instance, created on first use.
  *
- * @returns {ReturnType<typeof betterAuth> | null} the instance, or `null` when
- * the database or the GitHub credentials are missing
+ * Async because the pool is: a provider may need a network round trip before
+ * it has one, and rejects when it cannot build one.
+ *
+ * @returns {Promise<ReturnType<typeof betterAuth> | null>} the instance, or
+ * `null` when the database or the GitHub credentials are missing
  */
-export const getAuth = () => {
+export const getAuth = async () => {
   if (missingConfig().length) return null;
-  const pool = getPool();
+  const pool = await getPool();
 
   if (!instance) {
     const env = authEnv();
@@ -324,7 +331,7 @@ export const readSession = async (req) => {
   try {
     // Inside the `try`: building the instance opens the pool, and a route such
     // as `/api/mcp` must keep serving signed-out callers when that throws
-    const auth = getAuth();
+    const auth = await getAuth();
     if (!auth) return { status: "unconfigured" };
 
     const { fromNodeHeaders } = await import("better-auth/node");

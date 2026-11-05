@@ -1,6 +1,6 @@
 # Deploy the client to Vercel
 
-Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, and `master-production`, `scope/*`, `integration/*` and `new-face-polish-<n>` to a preview. Every other branch is skipped by `vercel.json`'s `ignoreCommand` (`scripts/vercel-ignore-build.mjs`); a ticket branch gets a preview from the `preview` label or a local deploy. `preview.yml` and the Makefile also deploy previews, built outside Vercel (on a runner, or wherever `make` runs), each with a Neon branch of its own ([Neon preview databases](neon.md)). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
+Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, and `master-production`, `scope/*`, `integration/*` and `new-face-polish-<n>` to a preview. Every other branch is skipped by `vercel.json`'s `ignoreCommand` (`scripts/vercel-ignore-build.mjs`); a ticket branch gets a preview from the `preview` label or a local deploy. A Git-integration preview reads the shared preview database its Preview environment names; `preview.yml` and the Makefile also deploy previews, built outside Vercel (on a runner, or wherever `make` runs), each with a database of its own ([Preview databases](preview-databases.md), and [Neon preview databases](neon.md) while the Neon path remains). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
 
 ## Release checklist: `client-v2` to production
 
@@ -16,7 +16,10 @@ as soon as the Root Directory points at `client-v2`.
    [Conversation and project sync](#conversation-and-project-sync):
    - `DATABASE_URL` — the pooled URL of production's Neon database, the same one
      `migrate-production-db` migrates. It is in a Neon project of its own,
-     never the preview project ([Neon preview databases](neon.md)).
+     never the preview project ([Neon preview databases](neon.md)). After the
+     move to Cloud SQL, `DB_PROVIDER=cloud-sql` and the `CLOUD_SQL_*` and
+     `GCP_*` variables replace it ([Cloud SQL for client-v2](cloud-sql.md),
+     steps 6 and 7).
    - `AUTH_OAUTH_PROXY_SECRET` — the same value as on Preview, and never equal
      to either `AUTH_SECRET` ([Sign-in on previews](#sign-in-on-previews)).
    - `SYNC_ENABLED=true`.
@@ -71,7 +74,7 @@ Rolling back the deployment (`vercel promote <previous-url> --prod`) does not
 roll back the schema. Migrations are additive so far, so the previous build
 runs against the newer schema; revisit this once one is not.
 
-`installCommand` = `bash scripts/vercel-install.sh` (rustup + `wasm/build.sh` + `yarn install`); `buildCommand` = `yarn build:bundle`, not `yarn build`, which would compile the wasm packages a second time and miss the install step's cache. Wasm must precede `yarn install` because `client-v2/package.json` has `file://../wasm/*/pkg` deps that don't exist until `wasm-pack` runs.
+`installCommand` = `bash scripts/vercel-install.sh` (rustup + `wasm/build.sh` + `yarn install`); `buildCommand` = `bash scripts/vercel-build.sh` (the environment checks, `yarn build:bundle`, then the check that the bundle carries no wasm stub; a script because Vercel rejects a `buildCommand` over 256 characters). It runs `yarn build:bundle`, not `yarn build`, which would compile the wasm packages a second time and miss the install step's cache. Wasm must precede `yarn install` because `client-v2/package.json` has `file://../wasm/*/pkg` deps that don't exist until `wasm-pack` runs.
 
 ## Verified Vercel project settings
 
@@ -238,7 +241,7 @@ infrastructure, authenticated through the GitHub app connection.
 chat-completions turn to it and the route forwards that upstream with a key the
 browser never sees. The key enables the Default backend; without one the option reports itself
 unconfigured and the panel falls back to bring-your-own-key. A Vercel build
-without the key fails: `vercel.json`'s `buildCommand` runs
+without the key fails: `vercel.json`'s `buildCommand` (`scripts/vercel-build.sh`) runs
 `scripts/check-agent-env.mjs` first, so set the key for Production and Preview
 alike. Store it as a Secret. A production build also fails when the key is set
 without sign-in's variables or without a parseable `AUTH_BASE_URL`. On Vercel's

@@ -236,7 +236,7 @@ describe("oauthProxyPlugins", () => {
     async () => {
       asPreview();
       const { getAuth } = await load();
-      const res = await signIn(getAuth(), PREVIEW);
+      const res = await signIn(await getAuth(), PREVIEW);
       assert.equal(res.status, 200);
 
       const github = new URL((await res.json()).url);
@@ -260,7 +260,7 @@ describe("oauthProxyPlugins", () => {
       async () => {
         asPreview();
         const { getAuth } = await load();
-        const res = await signIn(getAuth(), origin);
+        const res = await signIn(await getAuth(), origin);
         assert.equal(res.status, 200);
         assert.equal((await returnURL(res)).origin, origin);
       }
@@ -274,7 +274,7 @@ describe("oauthProxyPlugins", () => {
     test(`refuses sign-in ${label}`, { skip: needsDatabase }, async () => {
       asPreview();
       const { getAuth } = await load();
-      const res = await signIn(getAuth(), origin, from);
+      const res = await signIn(await getAuth(), origin, from);
       assert.equal(res.status, 403);
     });
   }
@@ -301,7 +301,7 @@ describe("oauthProxyPlugins", () => {
     async () => {
       asPreview();
       const { getAuth } = await load();
-      const res = await complete(getAuth(), PREVIEW);
+      const res = await complete(await getAuth(), PREVIEW);
       assert.notEqual(res.status, 404);
     }
   );
@@ -312,7 +312,7 @@ describe("oauthProxyPlugins", () => {
     async () => {
       asHost();
       const { getAuth } = await load();
-      const res = await complete(getAuth(), HOST);
+      const res = await complete(await getAuth(), HOST);
       assert.equal(res.status, 404);
     }
   );

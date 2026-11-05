@@ -6,6 +6,7 @@ import {
   getAuth,
   isAllowedOrigin,
   mapGithubProfile,
+  missingConfig,
   readSession,
 } from "./auth.mjs";
 
@@ -68,7 +69,7 @@ describe("readSession", () => {
   ]) {
     // eslint-disable-next-line jest/valid-title -- a table test, titled by its row
     test(label, async () => {
-      mock.method(getAuth().api, "getSession", getSession);
+      mock.method((await getAuth()).api, "getSession", getSession);
       mock.method(console, "error", () => {});
       assert.deepEqual(await readSession(req()), expected);
     });
@@ -127,9 +128,9 @@ describe("GitHub profile fields", () => {
 
   // Better Auth runs the mapped profile through this before creating the user,
   // and drops every field declared `input: false`: `login` was never stored
-  test("survives Better Auth's parsing into the created user", () => {
+  test("survives Better Auth's parsing into the created user", async () => {
     const created = parseAdditionalUserInputFromProviderProfile(
-      getAuth().options,
+      (await getAuth()).options,
       mapGithubProfile(PROFILE),
       "create"
     );
@@ -140,7 +141,9 @@ describe("GitHub profile fields", () => {
   // `input: true` above is safe only while no endpoint lets a user write their
   // own fields: `githubCreatedAt` decides their spend on `/api/agent`
   test("answers 404 to update-user, so a user cannot set their own fields", async () => {
-    const res = await getAuth().handler(
+    const res = await (
+      await getAuth()
+    ).handler(
       new Request("http://localhost:3000/api/auth/update-user", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -148,5 +151,53 @@ describe("GitHub profile fields", () => {
       })
     );
     assert.equal(res.status, 404);
+  });
+});
+
+describe("missingConfig", () => {
+  /** Sign-in's own variables, with the database left to each case */
+  const GITHUB = {
+    GITHUB_CLIENT_ID: "id",
+    GITHUB_CLIENT_SECRET: "secret",
+    AUTH_SECRET: "a-test-secret-of-at-least-32-bytes!",
+  };
+
+  /** A complete `cloud-sql` production, without DATABASE_URL */
+  const CLOUD_SQL = {
+    DB_PROVIDER: "cloud-sql",
+    DATABASE_URL: undefined,
+    CLOUD_SQL_INSTANCE: "project:region:solpg",
+    CLOUD_SQL_DATABASE: "solpg",
+    CLOUD_SQL_USER: "vercel-production@project.iam",
+    GCP_PROJECT_NUMBER: "123",
+    GCP_WORKLOAD_IDENTITY_POOL_ID: "vercel",
+    GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID: "vercel",
+    GCP_SERVICE_ACCOUNT_EMAIL:
+      "vercel-production@project.iam.gserviceaccount.com",
+  };
+
+  const restores = [];
+  /** Applies `vars` for the current case, undone after it */
+  const set = (vars) => restores.push(withEnv(vars));
+  beforeEach(() => set(GITHUB));
+  afterEach(() => {
+    while (restores.length) restores.pop()();
+  });
+
+  test("names a missing Cloud SQL variable, and not DATABASE_URL", () => {
+    set(CLOUD_SQL);
+    set({ CLOUD_SQL_USER: undefined });
+    assert.deepEqual(missingConfig(), ["CLOUD_SQL_USER"]);
+  });
+
+  test("names no database variable for a complete Cloud SQL deployment", () => {
+    set(CLOUD_SQL);
+    assert.deepEqual(missingConfig(), []);
+  });
+
+  test("names DB_PROVIDER when it names no provider", () => {
+    // A stray DATABASE_URL beside it must not make sign-in look configured
+    set({ DB_PROVIDER: "cloudsql", DATABASE_URL: "postgres://x/y" });
+    assert.deepEqual(missingConfig(), ["DB_PROVIDER"]);
   });
 });

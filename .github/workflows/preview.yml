@@ -1,14 +1,32 @@
 name: preview
 
-# A preview deployment of client-v2, with its own Neon database, for a PR that
-# carries the `preview` label, and only for that PR. The Neon project caps its
-# branch count, so the Vercel integration's branch-per-deployment option is
-# off (see client-v2/docs/neon.md) and this workflow owns the branch instead:
+# A preview deployment of client-v2 with a database of its own, for a PR that
+# carries the `preview` label, and only for that PR. The Vercel Git
+# integration builds a preview only of an integration branch
+# (`isIntegrationBranch` in client-v2/scripts/vercel-ignore-build.mjs), which
+# reads the database the Preview environment names: the shared `solpg_preview`
+# once PREVIEW_DB_PROVIDER is `cloud-sql` (client-v2/docs/preview-databases.md).
+# This workflow is for a PR whose preview needs its own schema or rows.
+#
+# The repository variable PREVIEW_DB_PROVIDER says where that database lives:
+#
+# - `cloud-sql`: `solpg_preview_pr_<number>` on the preview Cloud SQL
+#   instance, a copy of the shared `solpg_preview` without its sessions,
+#   reached as the
+#   `github-ci` service account through Workload Identity Federation;
+# - unset: the Neon branch `preview/pr-<number>` cut from `main`, until a
+#   follow-up removes Neon. The Neon project caps its branch count, so the
+#   Vercel integration's branch-per-deployment option is off
+#   (client-v2/docs/neon.md).
 #
 # - labelled, opened/reopened or pushed to while labelled: create (or reuse)
-#   `preview/pr-<number>` from `main`, migrate it, build, deploy with it
-#   as DATABASE_URL, and post the URL on the PR;
-# - label removed, or PR closed or merged: delete the branch.
+#   the database, migrate it, build, deploy with it, and post the URL on the
+#   PR;
+# - label removed, or PR closed or merged: drop the database;
+# - unlabelled, from an integration branch, and changing
+#   client-v2/db/migrations, on Cloud SQL: say on the PR that the Git
+#   integration's preview runs on the shared database without those
+#   migrations, and suggest the label.
 #
 # Previews follow the label on a PR into any branch of the repository the
 # PREVIEW_REPOSITORY variable names. A labelled PR on another repository or
@@ -17,15 +35,17 @@ name: preview
 # PREVIEW_REPOSITORY holds a repository name, not a boolean, so set at
 # organisation level it still enables one repository, not all of them. The
 # `deploy` and `teardown` jobs run only where PREVIEW_REPOSITORY names this
-# repository and the NEON_PROJECT_ID variable is set. Enabling previews on a
-# repository also needs the NEON_API_KEY secret there; `deploy` needs the
-# VERCEL_TOKEN secret and the VERCEL_ORG_ID and VERCEL_PROJECT_ID variables
-# too, while `teardown` and preview-sweep.yml need only the Neon ones
-# (client-v2/docs/neon.md, "Configuration").
+# repository and either PREVIEW_DB_PROVIDER is `cloud-sql` or the
+# NEON_PROJECT_ID variable is set. `deploy` needs the VERCEL_TOKEN secret and
+# the VERCEL_ORG_ID and VERCEL_PROJECT_ID variables. On Cloud SQL every job
+# needs the PREVIEW_CLOUD_SQL_INSTANCE, PREVIEW_CLOUD_SQL_USER,
+# GCP_CI_WORKLOAD_IDENTITY_PROVIDER, and GCP_CI_SERVICE_ACCOUNT variables
+# (client-v2/docs/preview-databases.md, "Configuration"); on Neon, the
+# NEON_API_KEY secret (client-v2/docs/neon.md, "Configuration").
 #
 # What this misses is a teardown that fails or is cancelled.
-# preview-sweep.yml's daily run deletes `preview/pr-<number>` once its PR is
-# closed or unlabelled; a manual run with scope `all-preview` deletes
+# preview-sweep.yml's daily run deletes `solpg_preview_pr_<number>` or
+# `preview/pr-<number>` once its PR is closed or unlabelled; a manual run with scope `all-preview` deletes
 # `preview/<head branch>` once its PR is closed.
 #
 # The label name is spelled out in the `if:`s below because job conditions
@@ -50,6 +70,13 @@ env:
   # given per step instead, to keep it from `vercel build`, which runs the PR's
   # code.
   NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+  PREVIEW_DB_PROVIDER: ${{ vars.PREVIEW_DB_PROVIDER }}
+  # The preview instance and the user the application connects as, read by
+  # client-v2/scripts/db/cloud-sql/*; the proxy logs in as github-ci, whose
+  # IAM database user is its e-mail without `.gserviceaccount.com`.
+  CLOUD_SQL_INSTANCE: ${{ vars.PREVIEW_CLOUD_SQL_INSTANCE }}
+  CLOUD_SQL_USER: ${{ vars.PREVIEW_CLOUD_SQL_USER }}
+  CLOUD_SQL_LOGIN_USER: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
 
 jobs:
   deploy:
@@ -58,10 +85,11 @@ jobs:
     # secrets. A Dependabot PR never deploys, even labelled by a human: the
     # run would build its code with the deploy secrets. Unrelated label
     # changes do not redeploy.
-    # Runs only where PREVIEW_REPOSITORY names this repository and
-    # NEON_PROJECT_ID is set (see the header).
+    # Runs only where PREVIEW_REPOSITORY names this repository and a provider
+    # is configured (see the header).
     if: >-
-      vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY &&
+      (vars.PREVIEW_DB_PROVIDER == 'cloud-sql' || vars.NEON_PROJECT_ID != '') &&
+      github.repository == vars.PREVIEW_REPOSITORY &&
       github.actor != 'dependabot[bot]' &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -80,6 +108,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      # The GitHub OIDC token google-github-actions/auth exchanges on Cloud SQL
+      id-token: write
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
@@ -95,13 +125,13 @@ jobs:
       # The head commit, not the merge commit `pull_request` checks out by
       # default: the preview shows the branch as pushed. Submodule with full
       # history, as in client-v2.yml: update-static dates tutorials from it.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           submodules: true
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client-v2/.nvmrc
 
@@ -110,8 +140,29 @@ jobs:
           : "${VERCEL_TOKEN:?VERCEL_TOKEN secret is unset}"
           : "${VERCEL_ORG_ID:?VERCEL_ORG_ID variable is unset}"
           : "${VERCEL_PROJECT_ID:?VERCEL_PROJECT_ID variable is unset}"
+          case "$PREVIEW_DB_PROVIDER" in
+            cloud-sql)
+              : "${CLOUD_SQL_INSTANCE:?PREVIEW_CLOUD_SQL_INSTANCE variable is unset}"
+              : "${CLOUD_SQL_USER:?PREVIEW_CLOUD_SQL_USER variable is unset}"
+              : "${CLOUD_SQL_LOGIN_USER:?GCP_CI_SERVICE_ACCOUNT variable is unset}"
+              ;;
+            "") ;;
+            *) echo "::error::PREVIEW_DB_PROVIDER is \"$PREVIEW_DB_PROVIDER\"; expected cloud-sql or unset"; exit 1 ;;
+          esac
+
+      - name: Google Cloud credentials
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Install the Cloud SQL Auth Proxy and pg_dump
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        run: bash .github/scripts/install-cloud-sql-proxy.sh --with-pg-dump
 
       - name: Neon branch
+        if: env.PREVIEW_DB_PROVIDER != 'cloud-sql'
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
         run: bash .github/scripts/neon.sh ensure "$BRANCH" >/dev/null
@@ -123,10 +174,26 @@ jobs:
             https://github.com/amacneil/dbmate/releases/download/v2.35.1/dbmate-linux-amd64
           chmod +x /usr/local/bin/dbmate
 
+      # Copied from the shared database on the first run, reused after, so a
+      # migration below meets the rows previews have written. Prints
+      # DB_PROVIDER and CLOUD_SQL_DATABASE, which become this step's outputs.
+      - name: Cloud SQL database
+        id: cloud-sql
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        run: bash client-v2/scripts/db/cloud-sql/create-preview-db --pr "$PR" >> "$GITHUB_OUTPUT"
+
+      # Every run, not only the first: a push may add a migration. As the
+      # application's role, so it owns what a migration creates.
+      - name: Migrate the Cloud SQL database
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        working-directory: client-v2
+        run: bash scripts/db/cloud-sql/migration-url --pr "$PR" -- dbmate --wait --wait-timeout 60s --no-dump-schema up
+
       # Direct connection, not the PgBouncer endpoint, and without
       # `channel_binding`, which dbmate's driver cannot parse. Every run, not
       # only the first: a push may add a migration.
-      - name: Migrate the preview database
+      - name: Migrate the Neon branch
+        if: env.PREVIEW_DB_PROVIDER != 'cloud-sql'
         working-directory: client-v2
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
@@ -142,21 +209,35 @@ jobs:
       # The same chain as Makefile.vercel's deploy-client-to-vercel-preview,
       # with its CLI version: pull, pin the Root Directory, build here, deploy
       # the prebuilt output. The Git integration deploys an integration
-      # branch's push on its own and skips a ticket branch's
-      # (client-v2/scripts/vercel-ignore-build.mjs); this deployment differs in
-      # its DATABASE_URL, the PR's Neon branch, and is a ticket branch's only
-      # preview. A prebuilt deploy never runs the ignore step.
+      # branch's push on its own, on the shared database, and skips a ticket
+      # branch's (client-v2/scripts/vercel-ignore-build.mjs); this deployment
+      # differs in its database, the PR's own, and is a ticket branch's only
+      # preview. A prebuilt deploy never runs the ignore step. DB_PROVIDER is
+      # given on both paths, so the Preview environment's cannot pair one
+      # provider with the other's database.
       - name: Build and deploy
         id: deploy
         env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          CLOUD_SQL_DATABASE: ${{ steps.cloud-sql.outputs.CLOUD_SQL_DATABASE }}
         run: |
           cli=$(sed -n 's/^VERCEL_CLI := //p' client-v2/Makefile.vercel)
           [ -n "$cli" ] || { echo "::error::no VERCEL_CLI in client-v2/Makefile.vercel"; exit 1; }
-          db=$(bash .github/scripts/neon.sh uri "$BRANCH" pooled)
-          echo "::add-mask::$db"
-          # Nothing below needs it, and `vercel build` runs the PR's code.
-          unset NEON_API_KEY
+          if [ "$PREVIEW_DB_PROVIDER" = cloud-sql ]; then
+            : "${CLOUD_SQL_DATABASE:?create-preview-db printed no CLOUD_SQL_DATABASE}"
+            db_env=(-e DB_PROVIDER=cloud-sql -e CLOUD_SQL_DATABASE="$CLOUD_SQL_DATABASE")
+          else
+            db=$(bash .github/scripts/neon.sh uri "$BRANCH" pooled)
+            echo "::add-mask::$db"
+            db_env=(-e DB_PROVIDER=url -e DATABASE_URL="$db")
+          fi
+          # Nothing below needs them, and `vercel build` runs the PR's code:
+          # the Neon key, the Google credentials file, and what would mint a
+          # new GitHub OIDC token.
+          [ -z "${GOOGLE_GHA_CREDS_PATH:-}" ] || rm -f "$GOOGLE_GHA_CREDS_PATH"
+          unset NEON_API_KEY GOOGLE_APPLICATION_CREDENTIALS GOOGLE_GHA_CREDS_PATH \
+            CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            ACTIONS_ID_TOKEN_REQUEST_URL
           npx --yes "$cli" pull --yes --environment=preview --token="$VERCEL_TOKEN"
           jq '.settings.rootDirectory = "client-v2"' .vercel/project.json > .vercel/project.json.next
           mv .vercel/project.json.next .vercel/project.json
@@ -172,7 +253,7 @@ jobs:
           [ -z "$tests" ] || { echo "::error::test files deployed as functions: $tests"; exit 1; }
           # --archive=tgz: the prebuilt output is over the upload API's 15000-file cap.
           url=$(npx --yes "$cli" deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN" \
-            -e DATABASE_URL="$db" --meta githubPrId="$PR" --meta githubCommitSha="$SHA")
+            "${db_env[@]}" --meta githubPrId="$PR" --meta githubCommitSha="$SHA")
           [ -n "$url" ] || { echo "::error::vercel deploy printed no URL"; exit 1; }
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "### Preview: $url" >> "$GITHUB_STEP_SUMMARY"
@@ -180,10 +261,16 @@ jobs:
       - name: Comment on the PR
         env:
           URL: ${{ steps.deploy.outputs.url }}
+          CLOUD_SQL_DATABASE: ${{ steps.cloud-sql.outputs.CLOUD_SQL_DATABASE }}
         run: |
+          if [ "$PREVIEW_DB_PROVIDER" = cloud-sql ]; then
+            db="Cloud SQL database \`$CLOUD_SQL_DATABASE\` on the preview instance"
+          else
+            db="Neon branch \`$BRANCH\`"
+          fi
           bash .github/scripts/preview-comment.sh "$PR" "**Preview:** $URL
 
-          Commit \`${SHA::7}\`, database: Neon branch \`$BRANCH\`, migrated. Remove the \`$PREVIEW_LABEL\` label or close the PR to drop the database."
+          Commit \`${SHA::7}\`, database: $db, migrated. Remove the \`$PREVIEW_LABEL\` label or close the PR to drop the database."
 
       # Not on cancel: a newer push's run or the teardown writes the comment.
       - name: Report the failure on the PR
@@ -195,11 +282,12 @@ jobs:
 
   teardown:
     name: drop preview database
-    # Runs only where PREVIEW_REPOSITORY names this repository and
-    # NEON_PROJECT_ID is set (see the header). Not for a run Dependabot
-    # triggers: it gets no NEON_API_KEY.
+    # Runs only where PREVIEW_REPOSITORY names this repository and a provider
+    # is configured (see the header). Not for a run Dependabot triggers: it
+    # gets no NEON_API_KEY, and no OIDC token.
     if: >-
-      vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY &&
+      (vars.PREVIEW_DB_PROVIDER == 'cloud-sql' || vars.NEON_PROJECT_ID != '') &&
+      github.repository == vars.PREVIEW_REPOSITORY &&
       github.actor != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action == 'closed' ||
@@ -215,16 +303,41 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      id-token: write
     env:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
     steps:
-      # Sparse: only the scripts, not the submodule.
-      - uses: actions/checkout@v6
+      # Sparse: only the scripts, not the submodule. The runner's own Node
+      # runs preview-name.mjs.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            client-v2/scripts/db
+
+      - name: Google Cloud credentials
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Install the Cloud SQL Auth Proxy
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        run: bash .github/scripts/install-cloud-sql-proxy.sh
+
+      # `with (force)` ends the sessions of the deployment still using it.
+      # `name` is what the comments below call the database.
+      - name: Drop the Cloud SQL database
+        id: drop
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        run: |
+          name=$(node client-v2/scripts/db/preview-name.mjs --pr "$PR")
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          bash client-v2/scripts/db/cloud-sql/drop-preview-db --pr "$PR"
 
       # `preview/<head branch>` is the name the Vercel integration gave a branch
       # before this workflow existed, and the one neon-preview-branch.sh (`make
@@ -235,6 +348,7 @@ jobs:
       # fails; `failed` names the branches left, for the failure report.
       - name: Delete the Neon branches
         id: delete
+        if: env.PREVIEW_DB_PROVIDER != 'cloud-sql'
         run: |
           failed=""
           bash .github/scripts/neon.sh delete "$BRANCH" || failed="\`$BRANCH\`"
@@ -250,8 +364,10 @@ jobs:
       # `--edit-only`: a PR that never had a preview gets no comment. Runs only
       # on success, so a failed delete gets the failure report instead.
       - name: Update the PR comment
+        env:
+          DROPPED: ${{ steps.drop.outputs.name }}
         run: |
-          bash .github/scripts/preview-comment.sh --edit-only "$PR" "Preview database \`$BRANCH\` deleted. The last deployment still loads but has no database; add the \`$PREVIEW_LABEL\` label again to redeploy."
+          bash .github/scripts/preview-comment.sh --edit-only "$PR" "Preview database \`${DROPPED:-$BRANCH}\` deleted. The last deployment still loads but has no database; add the \`$PREVIEW_LABEL\` label again to redeploy."
 
       # Not on cancel: a newer run for the same PR cancels this one through
       # the concurrency group and writes the comment itself, which a report
@@ -261,8 +377,21 @@ jobs:
         if: failure()
         env:
           DELETE_OUTCOME: ${{ steps.delete.outcome }}
+          DROP_OUTCOME: ${{ steps.drop.outcome }}
+          DROP_NAME: ${{ steps.drop.outputs.name }}
           FAILED: ${{ steps.delete.outputs.failed }}
         run: |
+          if [ "$PREVIEW_DB_PROVIDER" = cloud-sql ]; then
+            case "$DROP_OUTCOME" in
+              success) detail="The database was dropped; a later step failed." ;;
+              failure) detail="Not dropped: \`${DROP_NAME:-solpg_preview_pr_$PR}\`. Re-run the failed job; the daily preview-sweep.yml run also drops it once the PR is closed or unlabelled." ;;
+              *) detail="The run failed before the drop, so nothing was dropped. Re-run the failed job; the daily preview-sweep.yml run also drops it once the PR is closed or unlabelled." ;;
+            esac
+            bash .github/scripts/preview-comment.sh "$PR" "**Preview teardown failed**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+          $detail"
+            exit 0
+          fi
           remedy="Re-run the failed job. Once the PR is closed, a manual preview-sweep.yml run with scope \`all-preview\` and \`dry_run\` unticked (\"List what would be deleted, delete nothing\") also deletes \`preview/<head branch>\`; the daily sweep deletes \`$BRANCH\` on its own."
           case "$DELETE_OUTCOME" in
             success) detail="The Neon branches were deleted; a later step failed." ;;
@@ -277,7 +406,8 @@ jobs:
   configuration:
     name: check preview configuration
     if: >-
-      vars.NEON_PROJECT_ID != '' && github.repository != vars.PREVIEW_REPOSITORY &&
+      (vars.PREVIEW_DB_PROVIDER == 'cloud-sql' || vars.NEON_PROJECT_ID != '') &&
+      github.repository != vars.PREVIEW_REPOSITORY &&
       contains(github.event.pull_request.labels.*.name, 'preview') &&
       (contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action) ||
        (github.event.action == 'labeled' && github.event.label.name == 'preview'))
@@ -285,4 +415,81 @@ jobs:
     timeout-minutes: 1
     permissions: {}
     steps:
-      - run: echo "::warning::Previews are half-configured; NEON_PROJECT_ID is set, but PREVIEW_REPOSITORY is unset or names another repository (client-v2/docs/neon.md, \"Configuration\")."
+      - run: echo "::warning::Previews are half-configured; PREVIEW_DB_PROVIDER or NEON_PROJECT_ID is set, but PREVIEW_REPOSITORY is unset or names another repository (client-v2/docs/preview-databases.md, \"Configuration\")."
+
+  # The Git integration's preview of an integration branch reads the shared
+  # database, which carries only the migrations on master
+  # (preview-shared-db.yml). A PR from one that changes a migration is told
+  # so, with the label as the remedy; a ticket branch gets no such preview,
+  # so nothing to warn about. The label's deploy
+  # then overwrites this comment. Fork and Dependabot PRs get a read-only
+  # token, so the notice goes to the job summary instead.
+  migration-notice:
+    name: check for migrations
+    if: >-
+      vars.PREVIEW_DB_PROVIDER == 'cloud-sql' && github.repository == vars.PREVIEW_REPOSITORY &&
+      !contains(github.event.pull_request.labels.*.name, 'preview') &&
+      contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+      READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          sparse-checkout: |
+            .github/scripts
+            client-v2/scripts
+
+      # Asks vercel.json's ignoreCommand itself, so the rule lives in one
+      # place: it exits 0 to skip a branch. Any other exit, a crash included,
+      # reads as an integration branch and runs the check.
+      - name: Is the head an integration branch
+        id: integration
+        run: |
+          if VERCEL_GIT_COMMIT_REF=$HEAD_REF VERCEL_ENV=preview node client-v2/scripts/vercel-ignore-build.mjs; then
+            echo "The Git integration builds no preview of $HEAD_REF; nothing reads the shared database for it."
+            echo "integration=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "integration=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Look for migrations
+        if: steps.integration.outputs.integration == 'true'
+        env:
+          # How the notice starts, so a later run can tell it from the
+          # deploy's and the teardown's comments
+          NOTICE: "**This PR changes migrations.**"
+        run: |
+          # The REST list pages to 3000 files; `gh pr view --json files` stops at 100.
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          migrations=$(grep '^client-v2/db/migrations/' <<<"$files" || true)
+          if [ -z "$migrations" ]; then
+            echo "No file under client-v2/db/migrations changed."
+            # A notice from an earlier push no longer holds; any other
+            # comment is left as it is
+            [ "$READ_ONLY" = true ] ||
+              bash .github/scripts/preview-comment.sh --replace-if "$NOTICE" "$PR" \
+                "This PR no longer changes migrations, so its automatic preview on the shared database \`solpg_preview\` has the schema it expects."
+            exit 0
+          fi
+          # Literal backticks, one Markdown list item per path
+          # shellcheck disable=SC2001,SC2016
+          list=$(sed 's/.*/- `&`/' <<<"$migrations")
+          body="$NOTICE Its automatic preview reads the shared preview database \`solpg_preview\`, which has only the migrations on \`master\`, so it may fail where the PR's code expects these:
+
+          $list
+
+          Add the \`$PREVIEW_LABEL\` label for a preview with a database of its own, migrated on every push and dropped when the label goes or the PR closes."
+          if [ "$READ_ONLY" = true ]; then
+            echo "::warning::This PR changes migrations; its automatic preview runs on the shared database without them. Ask a maintainer for the $PREVIEW_LABEL label."
+            printf '%s\n' "$body" >> "$GITHUB_STEP_SUMMARY"
+          else
+            bash .github/scripts/preview-comment.sh "$PR" "$body"
+          fi

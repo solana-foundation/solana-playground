@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Drop a preview's database on the preview instance. Absence is a pass.
+# `with (force)` ends the deployment's own sessions, which the login user may
+# do as a member of CLOUD_SQL_USER's role.
+#
+#   drop-preview-db --pr <number> | --branch <name>
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+parse_target "" "$@"
+name=$(preview_db_name)
+. "$DB_SCRIPTS/cloud-sql/proxy.sh"
+
+start_proxy
+trap stop_proxy EXIT
+
+admin_sql "drop database if exists \"$name\" with (force)"
+echo "dropped database $name on $CLOUD_SQL_INSTANCE, if it existed"

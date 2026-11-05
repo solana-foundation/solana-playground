@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
+
+import { connector } from "./providers/cloud-sql.mjs";
 
 const load = async () => {
   // Fresh module per case: the pool is memoised at module scope
@@ -8,18 +10,221 @@ const load = async () => {
   return import(url.href);
 };
 
+/** A `cloud-sql` deployment with every variable set, for a case to adjust */
+const CLOUD_SQL = {
+  DB_PROVIDER: "cloud-sql",
+  CLOUD_SQL_INSTANCE: "project:region:solpg-preview",
+  CLOUD_SQL_DATABASE: "solpg_preview_pr_42",
+  CLOUD_SQL_USER: "vercel-preview@project.iam",
+  GCP_PROJECT_NUMBER: "123",
+  GCP_WORKLOAD_IDENTITY_POOL_ID: "vercel",
+  GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID: "vercel",
+  GCP_SERVICE_ACCOUNT_EMAIL: "vercel-preview@project.iam.gserviceaccount.com",
+  VERCEL_ENV: "preview",
+};
+
+/** Sets the `cloud-sql` variables, then each override; `undefined` unsets */
+const asCloudSql = (overrides = {}) => {
+  Object.assign(process.env, CLOUD_SQL);
+  for (const [name, value] of Object.entries(overrides)) {
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+  }
+};
+
+/** Stands in for the connector, so no case reaches Google */
+const stubConnector = () =>
+  mock.method(connector, "options", async () => ({ stream: () => null }));
+
 describe("db", () => {
   // Cleared before each case, not after: `yarn test-api` loads `.env`, so the
   // environment these cases assert is absent would otherwise be present.
   beforeEach(() => {
-    delete process.env.DATABASE_URL;
-    delete process.env.SYNC_ENABLED;
+    const names = ["DATABASE_URL", "SYNC_ENABLED"].concat(
+      Object.keys(CLOUD_SQL)
+    );
+    for (const name of names) {
+      delete process.env[name];
+    }
   });
+  afterEach(() => mock.restoreAll());
 
   it("reports unconfigured when DATABASE_URL is absent", async () => {
     const db = await load();
     assert.equal(db.isConfigured(), false);
-    assert.equal(db.getPool(), null);
+    assert.equal(await db.getPool(), null);
+  });
+
+  it("defaults to the url provider", async () => {
+    process.env.DATABASE_URL = "postgres://x/y";
+    const db = await load();
+    assert.equal(db.isConfigured(), true);
+    assert.equal(
+      (await db.getPool()).options.connectionString,
+      "postgres://x/y"
+    );
+  });
+
+  it("refuses an unknown provider rather than falling back", async () => {
+    // A misspelling beside a stray DATABASE_URL must not quietly connect
+    // through it: the deployment reads as configured-but-broken, and every
+    // attempt names the value
+    process.env.DB_PROVIDER = "cloudsql";
+    process.env.DATABASE_URL = "postgres://x/y";
+    const db = await load();
+    assert.equal(db.isConfigured(), true);
+    await assert.rejects(() => db.getPool(), /"cloudsql"/);
+    await assert.rejects(() => db.query("select 1"), /"cloudsql"/);
+  });
+
+  it("retries a pool that failed to build", async () => {
+    // A transient token exchange or certificate failure on a warm instance
+    // must not be cached for the life of that instance
+    asCloudSql();
+    let calls = 0;
+    mock.method(connector, "options", async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("certificate fetch failed");
+      return { stream: () => null };
+    });
+    const db = await load();
+    await assert.rejects(() => db.getPool(), /certificate fetch failed/);
+    const pool = await db.getPool();
+    assert.equal(pool.options.database, "solpg_preview_pr_42");
+    assert.equal(calls, 2);
+    // Built once it succeeds: the next call reuses it
+    assert.equal(await db.getPool(), pool);
+    assert.equal(calls, 2);
+  });
+
+  it("reports unconfigured when a Cloud SQL variable is missing", async () => {
+    asCloudSql({ CLOUD_SQL_USER: undefined });
+    const options = stubConnector();
+    const db = await load();
+    assert.equal(db.isConfigured(), false);
+    assert.equal(await db.getPool(), null);
+    assert.equal(options.mock.callCount(), 0);
+  });
+
+  it("refuses the production database outside production", async () => {
+    // Unset as well as `preview`: a laptop or CI run is not production either
+    for (const VERCEL_ENV of ["preview", "development", undefined]) {
+      asCloudSql({ CLOUD_SQL_DATABASE: "solpg", VERCEL_ENV });
+      const options = stubConnector();
+      mock.method(console, "error", () => {});
+      const db = await load();
+      assert.equal(db.isConfigured(), true);
+      await assert.rejects(() => db.getPool(), /refusing database "solpg"/);
+      // Before the token exchange: nothing reached Google
+      assert.equal(options.mock.callCount(), 0);
+      mock.restoreAll();
+    }
+  });
+
+  /**
+   * Asserts the gate refuses the deployment `overrides` describe, naming
+   * `reason`, before anything reaches Google
+   */
+  const assertRefused = async (overrides, reason) => {
+    asCloudSql(overrides);
+    const options = stubConnector();
+    mock.method(console, "error", () => {});
+    const db = await load();
+    assert.equal(db.isConfigured(), true);
+    await assert.rejects(() => db.getPool(), reason);
+    assert.equal(options.mock.callCount(), 0);
+    mock.restoreAll();
+  };
+
+  it("refuses the production instance outside production", async () => {
+    // Any database on it: only IAM would stand between a preview and production
+    for (const CLOUD_SQL_DATABASE of ["solpg_preview_pr_42", "postgres"]) {
+      await assertRefused(
+        { CLOUD_SQL_INSTANCE: "project:region:solpg", CLOUD_SQL_DATABASE },
+        /refusing instance "solpg" outside production/
+      );
+    }
+  });
+
+  it("refuses a database outside the preview allowlist outside production", async () => {
+    for (const CLOUD_SQL_DATABASE of [
+      "postgres",
+      "solpg_preview_pr_",
+      "solpg_previews",
+    ]) {
+      await assertRefused(
+        { CLOUD_SQL_DATABASE },
+        /refusing database ".*" outside production: not a preview database/
+      );
+    }
+  });
+
+  it("refuses the preview instance in production", async () => {
+    // Production traffic must never land in a preview database unnoticed
+    await assertRefused(
+      { VERCEL_ENV: "production", CLOUD_SQL_DATABASE: "solpg" },
+      /refusing instance "solpg-preview" in production/
+    );
+  });
+
+  it("refuses a preview database on the production instance in production", async () => {
+    for (const CLOUD_SQL_DATABASE of ["solpg_preview", "solpg_preview_pr_42"]) {
+      await assertRefused(
+        {
+          VERCEL_ENV: "production",
+          CLOUD_SQL_INSTANCE: "project:region:solpg",
+          CLOUD_SQL_DATABASE,
+        },
+        /refusing database "solpg_preview.*" in production/
+      );
+    }
+  });
+
+  it("refuses an instance that is not project:region:instance", async () => {
+    for (const CLOUD_SQL_INSTANCE of ["solpg-preview", "p:r:solpg:x", "p::x"]) {
+      await assertRefused({ CLOUD_SQL_INSTANCE }, /refusing instance/);
+    }
+  });
+
+  it("opens the production database on the production instance in production", async () => {
+    asCloudSql({
+      VERCEL_ENV: "production",
+      CLOUD_SQL_INSTANCE: "project:region:solpg",
+      CLOUD_SQL_DATABASE: "solpg",
+      CLOUD_SQL_USER: "vercel-production@project.iam",
+    });
+    const options = stubConnector();
+    const db = await load();
+    const pool = await db.getPool();
+    assert.equal(options.mock.callCount(), 1);
+    assert.equal(pool.options.database, "solpg");
+    assert.equal(pool.options.user, "vercel-production@project.iam");
+  });
+
+  it("allows the shared and branch preview databases outside production", async () => {
+    for (const CLOUD_SQL_DATABASE of [
+      "solpg_preview",
+      "solpg_preview_br_fix_a_b_0123abcd",
+    ]) {
+      asCloudSql({ CLOUD_SQL_DATABASE });
+      stubConnector();
+      const db = await load();
+      assert.equal((await db.getPool()).options.database, CLOUD_SQL_DATABASE);
+      mock.restoreAll();
+    }
+  });
+
+  it("allows a preview database outside production", async () => {
+    asCloudSql();
+    const options = stubConnector();
+    const db = await load();
+    const pool = await db.getPool();
+    assert.equal(options.mock.callCount(), 1);
+    assert.equal(pool.options.database, "solpg_preview_pr_42");
+    assert.equal(pool.options.user, "vercel-preview@project.iam");
+    // No password and no URL: the connector's stream and IAM carry the login
+    assert.equal(pool.options.password, undefined);
+    assert.equal(pool.options.connectionString, undefined);
   });
 
   it("is disabled unless SYNC_ENABLED is exactly true", async () => {
@@ -44,7 +249,9 @@ describe("db", () => {
     // local container opts out.
     process.env.DATABASE_URL = "postgres://x/y";
     const db = await load();
-    assert.deepEqual(db.getPool().options.ssl, { rejectUnauthorized: true });
+    assert.deepEqual((await db.getPool()).options.ssl, {
+      rejectUnauthorized: true,
+    });
   });
 
   /**
@@ -64,7 +271,7 @@ describe("db", () => {
       },
       release: (err) => released.push(err),
     };
-    db.getPool().connect = async () => client;
+    (await db.getPool()).connect = async () => client;
     return { db, released };
   };
 

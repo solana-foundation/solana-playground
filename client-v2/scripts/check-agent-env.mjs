@@ -5,10 +5,14 @@
 // refuse every turn or check origins against a per-deployment hostname, and
 // any build whose SOURCES the gateway or the skills route would reject. A
 // preview may run without either: GET /api/agent then reports no backend.
-// Only vercel.json's buildCommand runs it: local, CI and e2e builds need no key.
-// The constants file, not `server.mjs`: that one loads Better Auth and the pool
+// Only vercel.json's buildCommand (scripts/vercel-build.sh) runs it: local, CI and e2e builds need no key.
+// The constants files, not `server.mjs`: those load Better Auth and the pool
 import { SIGN_IN_ENV } from "../src/features/auth/config.mjs";
 import { composeServers } from "../src/features/mcp/server.mjs";
+import {
+  DATABASE_ENV,
+  missingDatabaseEnv,
+} from "../src/features/persistence/config.mjs";
 import { composeSkills } from "../src/features/skills/server.mjs";
 import {
   agentVariableName,
@@ -52,7 +56,12 @@ if (!isSet(KEY)) {
   );
 }
 
-const missing = SIGN_IN_ENV.filter((name) => !isSet(name));
+// The database's variables first, chosen by DB_PROVIDER: a production on
+// Cloud SQL has no DATABASE_URL, and an unknown provider is reported as one
+const missing = [
+  ...missingDatabaseEnv(isSet),
+  ...SIGN_IN_ENV.filter((name) => !isSet(name)),
+];
 if (missing.length) {
   const message =
     `${KEY} is set but sign-in is not: ${missing.join(", ")} unset ` +
@@ -95,9 +104,12 @@ if (process.env.SOURCES) {
   }
 }
 
-const empty = [KEY, ...SIGN_IN_ENV, "AUTH_BASE_URL"].filter(
-  (name) => process.env[name] === ""
-);
+const empty = [
+  KEY,
+  ...new Set(Object.values(DATABASE_ENV).flat()),
+  ...SIGN_IN_ENV,
+  "AUTH_BASE_URL",
+].filter((name) => process.env[name] === "");
 if (!onVercel && empty.length) {
   console.warn(
     `check-agent-env: ${empty.join(", ")} empty here. A local \`vercel ` +
