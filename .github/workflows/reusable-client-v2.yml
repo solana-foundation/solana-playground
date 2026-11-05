@@ -422,7 +422,9 @@ jobs:
     # and the slowest of four shards holds about 7 minutes of tests. By run
     # 41803972945 (2026-11-04, about 350 tests) four shards took 11 to 15
     # minutes each and the slowest hit `globalTimeout` with every test
-    # passing, so the suite runs on six. The
+    # passing, so the suite ran on six. On run 42103726526 (2026-11-06, the
+    # users-work landing, about 430 tests) shard 6 hit it again at 15 minutes
+    # with 80 tests passed and the rest unrun, so the suite runs on seven. The
     # steps before `Browser tests` vary far more than the tests: on run
     # 40379245789 the apt downloads of `install-deps` took 11 minutes on one
     # shard and 20 seconds on another. This limit holds that variance;
@@ -439,7 +441,7 @@ jobs:
       # index the matrix skips is a slice nobody runs while this job stays
       # green. `e2e-report` fails on the gap.
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7]
 
     defaults:
       run:
