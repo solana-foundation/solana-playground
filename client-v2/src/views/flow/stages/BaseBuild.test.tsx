@@ -511,18 +511,25 @@ describe("BaseBuild", () => {
     expect(fault?.textContent).toContain("Wrong type");
   });
 
-  it("keeps the brand button for the first error only", () => {
+  it("gives every error the same outline Explain and Fix", () => {
     const { container } = render(
       <BaseBuild
         {...props(failed([typeError("first", "a"), typeError("second", "b")]))}
       />
     );
 
-    expect(brandButtons(container)).toHaveLength(1);
-    expect(screen.getAllByRole("button", { name: "Explain" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Fix" })).toHaveLength(2);
-    // The brand one is the first card's Explain (Spec 08 BUILD-01)
-    expect(brandButtons(container)[0].textContent).toBe("Explain");
+    // Slava, 3 Nov: no card's Explain stands out; each reads the same
+    const cards = container.querySelectorAll('[data-slot="diagnostic"]');
+    expect(cards).toHaveLength(2);
+    cards.forEach((card) => {
+      expect(brandButtons(card as HTMLElement)).toHaveLength(0);
+    });
+    const explains = screen.getAllByRole("button", { name: "Explain" });
+    const fixes = screen.getAllByRole("button", { name: "Fix" });
+    expect(explains).toHaveLength(2);
+    expect(fixes).toHaveLength(2);
+    expect(explains[0].className).toBe(explains[1].className);
+    expect(explains[0].className).toBe(fixes[0].className);
   });
 
   it("shows rustc's excerpt when the source cannot be read", () => {

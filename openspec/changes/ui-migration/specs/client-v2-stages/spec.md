@@ -15,7 +15,9 @@ The Build stage SHALL show each compiler error as a diagnostic
 (`data-slot="diagnostic"`) with its error code, a plain explanation and the
 source lines around it, the faulty line marked (`data-fault`) with the
 compiler's label, and SHALL offer Explain and Fix on it, each sending the
-error to the assistant. The stage keeps `flow-stage-panel-build`.
+error to the assistant. Every diagnostic's Explain and Fix SHALL be the same
+outline buttons: no card's action stands out as the screen's brand action.
+The stage keeps `flow-stage-panel-build`.
 
 #### Scenario: A failed build marks the faulty line
 
