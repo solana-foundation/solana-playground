@@ -226,9 +226,11 @@ test.describe("client-v2-stages: Interact", () => {
     const form = panel.getByRole("region", { name: `${longName} form` });
     const chipBox = await chip.boundingBox();
     const formBox = await form.boundingBox();
-    expect(chipBox && formBox).toBeTruthy();
-    expect(chipBox!.x + chipBox!.width).toBeLessThanOrEqual(
-      formBox!.x + formBox!.width + 0.5
+    if (!chipBox || !formBox) {
+      throw new Error("the instruction chip or its form has no box");
+    }
+    expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(
+      formBox.x + formBox.width + 0.5
     );
   });
 });

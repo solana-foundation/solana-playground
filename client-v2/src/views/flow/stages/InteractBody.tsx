@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { cn } from "@/shared/lib/utils";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 
-import { clusterName } from "../../../constants";
+import { clusterName, UNKNOWN_NETWORK } from "../../../constants";
 import { useBalance, useBlockExplorer, useWallet } from "../../../hooks";
 import { PgProgramInfo } from "../../../utils";
 import { Idl, PgProgramInteraction } from "../../../utils/program-interaction";
@@ -60,7 +60,7 @@ const InteractBody = ({
   const outcome = last?.target === target ? last.outcome : undefined;
   const history = useCallHistory(programId, cluster);
   const callInFlight = useCallInFlight();
-  const network = clusterName(cluster) ?? "the network";
+  const network = clusterName(cluster) ?? UNKNOWN_NETWORK;
   const explorer = useBlockExplorer();
   const txUrl = (sig: string) => explorer.getTxUrl?.(sig) ?? "";
 
