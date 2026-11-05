@@ -1,3 +1,4 @@
+import { cva } from "class-variance-authority";
 import type { ReactElement, ReactNode } from "react";
 import { useRef, useState } from "react";
 
@@ -70,8 +71,17 @@ const ALTERNATIVES = PROVIDERS.filter((p) => p.id !== "default");
 /** The prototype's field label: small, grey, in sentence case, untracked */
 const FIELD_LABEL = "text-[0.7rem] font-normal text-muted-foreground";
 
-const MUTED = "text-[0.7rem] text-[var(--text-secondary)]";
-const NOTE = cn(MUTED, "pt-[0.875rem] leading-[1.6]");
+/** The form's small grey print, by what it does there */
+const smallPrint = cva("text-[0.7rem] text-[var(--text-secondary)]", {
+  variants: {
+    role: {
+      label: "block pb-[0.4375rem]",
+      note: "pt-[0.875rem] leading-[1.6]",
+      capability: "flex gap-[0.5625rem] leading-[1.55]",
+      footnote: "mt-auto pt-5 text-center",
+    },
+  },
+});
 
 /**
  * The backend, and maybe its model, base URL and effort, Connect a model opens
@@ -370,7 +380,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         )}
       </div>
 
-      <div className={cn(MUTED, "block pb-[0.4375rem]")}>Backend</div>
+      <div className={cn(smallPrint({ role: "label" }))}>Backend</div>
       <div className="flex flex-col gap-1.5 pb-4">
         <RadioGroup
           aria-label="Backend"
@@ -401,7 +411,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
           <button
             type="button"
             className={cn(
-              MUTED,
+              smallPrint(),
               "flex cursor-pointer items-center gap-1.5 self-start border-none bg-transparent py-0.5 hover:text-[var(--text-primary)] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary"
             )}
             aria-expanded={showAlternatives}
@@ -565,7 +575,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
       )}
 
       {provider.needsKey && (
-        <div className={NOTE}>
+        <div className={cn(smallPrint({ role: "note" }))}>
           Kept in this tab&apos;s memory only, until you reload or close it or
           press Delete my key. Sent only to{" "}
           {provider.endpoint ? "the endpoint above" : provider.name}, never to
@@ -576,10 +586,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
       {!current && (
         <div className="flex flex-col gap-2 pt-5">
           {CAPABILITIES.map(({ tag, text }, i) => (
-            <div
-              key={text}
-              className={cn(MUTED, "flex gap-[0.5625rem] leading-[1.55]")}
-            >
+            <div key={text} className={cn(smallPrint({ role: "capability" }))}>
               {/* One tag per run of rows sharing it, so it reads as a group */}
               <span className="w-[3.25rem] shrink-0 tracking-[0.06em] text-primary">
                 {tag === CAPABILITIES[i - 1]?.tag ? "" : tag}
@@ -591,7 +598,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
       )}
 
       {provider.keyUrl && (
-        <div className={cn(MUTED, "mt-auto pt-5 text-center")}>
+        <div className={cn(smallPrint({ role: "footnote" }))}>
           No key? <Link href={provider.keyUrl}>Create one</Link>
         </div>
       )}

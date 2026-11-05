@@ -1,3 +1,7 @@
+import {
+  unknownCommandIn,
+  unknownCommandTelemetry,
+} from "@/features/unknown-command";
 import { createLogger } from "@/shared/lib/logger";
 
 import { PgCommon } from "./common";
@@ -6,7 +10,6 @@ import {
   TerminalLineError,
   TonedLineError,
   toneWith,
-  unknownCommandIn,
   watchSlowRun,
 } from "./terminal";
 import type { Arrayable, Disposable, Getable, SyncOrAsync } from "./types";
@@ -352,6 +355,9 @@ export class PgCommandManager {
         const answer = unknownCommandIn(PgCommandManager.getNames())(
           inputCmdName
         );
+        unknownCommandTelemetry.track("unknown_command_answered", {
+          kind: answer.kind,
+        });
         if (answer.kind === "suggestion") {
           // Up then Enter runs the suggestion (Spec 13, "Not found"). Only a
           // convenience: failing to offer it must not hide the line

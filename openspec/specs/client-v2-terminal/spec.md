@@ -22,6 +22,9 @@ shown as typed:
   them.";
 - otherwise: "`<typed>` is not a command. Type `help` to see commands."
 
+Each answer SHALL report `unknown_command_answered` with which of the three it
+was, never the typed word.
+
 After a suggestion, Up at the empty prompt SHALL bring back the suggested
 command, so Enter runs it. The terminal SHALL take new input at once.
 

@@ -75,7 +75,7 @@ export const unknownCommandIn =
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
-  describe("utils/terminal/unknown-command", () => {
+  describe("features/unknown-command/model/unknown-command", () => {
     const NAMES = ["build", "deploy", "run", "test", "help", "clear"];
 
     it("suggests build for biuld, a swap", () => {

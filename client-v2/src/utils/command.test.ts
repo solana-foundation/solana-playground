@@ -5,6 +5,8 @@
 // and the terminal it runs through is stubbed here.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { unknownCommandTelemetry } from "@/features/unknown-command";
+
 import { PgCommandManager } from "./command";
 import { isStopped, StoppedError } from "./stopped";
 import { PgTerminal, TerminalLineError } from "./terminal";
@@ -216,6 +218,7 @@ describe("PgCommandManager.stop", () => {
 
 describe("PgCommandManager.execute, an unknown command", () => {
   it("suggests the closest command and offers it to Up", async () => {
+    const track = vi.spyOn(unknownCommandTelemetry, "track");
     install({ handle: vi.fn() });
     const offerFromHistory = vi.fn();
     vi.spyOn(PgTerminal, "get").mockResolvedValue({
@@ -228,6 +231,9 @@ describe("PgCommandManager.execute, an unknown command", () => {
     await expect(run).rejects.toThrow(
       "`prboe` is not a command. Did you mean `probe`?"
     );
+    expect(track).toHaveBeenCalledWith("unknown_command_answered", {
+      kind: "suggestion",
+    });
     expect(offerFromHistory).toHaveBeenCalledWith("probe");
   });
 
