@@ -106,11 +106,20 @@ soon as a program file is added and leave when the last one is removed.
 On a phone, the "Preview the build" button SHALL bring such a project's
 Preview page (the region named "Preview") into view and keep it there while
 the stage stays Write, with the label "Client project" and the console in
-the viewport; the open console SHALL take the page below the bar. Before
+the viewport; entering that page SHALL open the console, and the open
+console SHALL take the page below the bar. Before
 anything has run, the console strip SHALL read "Run the client to see its
 output here." A client run (the `run` command) in such a project SHALL open
 the console at every width, and on a phone SHALL also bring the Preview page
 into view.
+
+The terminal's welcome SHALL name what such a project has: "Output from
+your client and your commands shows here." in place of "Output from Build,
+Deploy and your commands shows here.", followed by the line naming `help`.
+The welcome SHALL follow whether the project has a program: when that answer
+arrives or a project switch changes it, the welcome SHALL be reprinted with
+the right wording until something is printed to the terminal, and SHALL be
+left alone after that.
 
 #### Scenario: An imported TypeScript project
 - **WHEN** the user opens a project that holds only `client/` and
@@ -131,6 +140,28 @@ into view.
   project" and the console strip reading "Run the client to see its output
   here." are in the viewport, and the Work page is not
 
+#### Scenario: Entering the Preview opens the console (manual)
+- **WHEN** a project with no program is open at 390x844 with the console
+  folded and the user taps "Preview the build"
+- **THEN** the console is open, reported by `layout_panel_toggled` with
+  `via: "auto"`
+
+#### Scenario: The terminal's welcome in a project with no program (manual)
+- **WHEN** a project with no program is open and nothing has been printed to
+  the terminal
+- **THEN** the terminal reads "Output from your client and your commands
+  shows here." and no line names Build or Deploy
+
+#### Scenario: The welcome follows the program answer (manual)
+- **WHEN** nothing has been printed to the terminal and the user switches
+  between a project with a program and one with none
+- **THEN** the terminal holds only the welcome worded for the open project
+
+#### Scenario: The welcome is left alone after output (manual)
+- **WHEN** something has been printed to the terminal and the user switches
+  between a project with a program and one with none
+- **THEN** the printed text stays and the welcome is not reprinted
+
 #### Scenario: A program is added
 - **WHEN** the user creates `src/lib.rs` in a project with no program
 - **THEN** the Build, Deploy and Interact tabs appear and the "Client
@@ -139,3 +170,20 @@ into view.
 #### Scenario: A project with a program
 - **WHEN** the user opens a project whose `src/` holds `lib.rs`
 - **THEN** the stepper shows Write, Build, Deploy and Interact as before
+
+### Requirement: Kbd hides under a coarse pointer
+
+The design system's key hint (`Kbd`) SHALL not be displayed when the
+primary pointer is coarse (`pointer: coarse`), wherever it is used: a touch
+screen has no keys to press, and the hint takes room on a narrow strip.
+Where a fine pointer is primary, the hint SHALL show as before. Menu shortcuts
+(`DropdownMenuShortcut`) are not `Kbd` and this requirement does not cover them.
+
+#### Scenario: The console strip on a phone (manual)
+- **WHEN** the console strip is shown on a device whose primary pointer is
+  coarse
+- **THEN** no key hint is displayed beside it
+
+#### Scenario: A desktop with a mouse (manual)
+- **WHEN** the same strip is shown with a fine primary pointer
+- **THEN** its key hint is displayed
