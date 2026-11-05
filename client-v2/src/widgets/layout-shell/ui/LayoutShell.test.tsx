@@ -1251,7 +1251,7 @@ describe("on a phone", () => {
   it("opens the console on a request, for the visit and unsaved", () => {
     phoneShell();
     act(() => requestConsole());
-    expect(consoleBox().classList.contains("h-2/5")).toBe(true);
+    expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
   });
 

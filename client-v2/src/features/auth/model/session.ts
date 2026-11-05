@@ -1292,8 +1292,7 @@ if (import.meta.vitest) {
         await PgSession.refreshWith({
           id: "u1",
           name: "Ada",
-          // eslint-disable-next-line unicorn/no-null -- `SessionUser.image` is `null` for an account without an avatar
-          image: null,
+          image: undefined,
           login: "ada",
         });
         const users: Array<string | undefined> = [];
@@ -1493,7 +1492,7 @@ if (import.meta.vitest) {
         await expect(pending).rejects.toThrow(/cancelled/i);
         expect(open).not.toHaveBeenCalled();
         expect(request).toHaveBeenCalledTimes(1);
-        expect(PgSession.get()).toBeNull();
+        expect(PgSession.get()).toBeUndefined();
         expect(PgSession.signInState()).toEqual({
           status: "failed",
           reason: "cancelled",
@@ -1561,7 +1560,8 @@ if (import.meta.vitest) {
         expect(PgSession.signInState()).toEqual({
           status: "failed",
           reason: "request-failed",
-          message: "Failed to fetch",
+          message:
+            "Sign-in isn't available. Your work is saved in this browser.",
         });
       });
 
@@ -1677,7 +1677,7 @@ if (import.meta.vitest) {
         const popup = heldPopup();
         expect(PgSession.signingInFrom).toBeUndefined();
 
-        const pending = PgSession.signIn({ from: "assistant" });
+        const pending = PgSession.signInWith({ from: "assistant" });
         expect(PgSession.signingInFrom).toBe("assistant");
         await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
         popup.cancel();
