@@ -437,6 +437,15 @@ describe("with a page over the work", () => {
     expect(screen.getByTestId("stage-probe")).toBeTruthy();
   });
 
+  it("draws no name and no rule for a page with its own large title", () => {
+    renderPager({ cover, title: "" });
+    const bar = within(
+      screen.getByRole("region", { name: "Work" })
+    ).getByTestId("phone-bar");
+    expect(bar.className).not.toContain("border-b");
+    expect(within(bar).getByRole("button", { name: "Menu" })).toBeTruthy();
+  });
+
   it("stands in Home's place", () => {
     renderPager({ home: { content: <div>home slot</div> }, cover });
     expect(screen.getByText("page slot")).toBeTruthy();

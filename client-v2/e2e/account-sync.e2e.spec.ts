@@ -17,7 +17,6 @@ import {
   projectMenu,
   projectRow,
   settled,
-  startTutorialFromAbout,
   workspaceIdOf,
 } from "./fixtures";
 
@@ -844,7 +843,8 @@ test("a started tutorial hands over its keypair and progress", async ({
   await homeRegion(page)
     .getByRole("button", { name: "Open Hello Anchor" })
     .click();
-  await startTutorialFromAbout(page);
+  // Opening it creates its workspace: a tutorial with a definition has no
+  // About page to Start from
   // The thread id is the conversation's own, not the workspace's: a project
   // may hold several. What matters here is that opening the lesson opened a
   // conversation at all.

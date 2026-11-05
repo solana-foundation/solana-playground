@@ -135,8 +135,8 @@
   --surface-raised: #27272b;
   --surface-hover: #2c2c31;
   --surface-well: #0b0b0c;
-  /* the bars that float over the stage: the stepper rail, the console
-     strip, the objective band. Used with backdrop blur, see .frosted */
+  /* the bars that float over the stage: the stepper rail and the console
+     strip. Used with backdrop blur, see .frosted */
   --frosted: rgb(16 16 17 / 0.82);
   --text-primary: #e4e4e7;
   --text-secondary: #a1a1aa;
@@ -182,8 +182,8 @@
     #8845da 56%,
     #8e4be0 100%
   );
-  /* The product's own: Solana's two colours, for the stepper's thumb, the
-     brand ring and a lesson's meter (views/flow/components/gradient.ts) */
+  /* The product's own: Solana's two colours, for the stepper's thumb and the
+     brand ring */
   --gradient-product: linear-gradient(120deg, #9945ff, #14f195);
   --gradient-product-flat: linear-gradient(90deg, #9945ff, #14f195);
   /* The letter trail's ramp, nearest the letter first */

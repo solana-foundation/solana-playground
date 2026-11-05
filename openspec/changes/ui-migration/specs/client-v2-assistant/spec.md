@@ -114,7 +114,7 @@ carries a key, a prompt or a reply.
   suggestions, which sends it, or opens Connect a model when nothing is
   connected.
 - `assistant_make_change_requested`: a user asked for a described change as
-  a patch ("Make this change" or "Write it for me").
+  a patch ("Make this change").
 
 #### Scenario: Stopping a turn is reported once
 

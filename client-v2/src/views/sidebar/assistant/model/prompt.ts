@@ -34,14 +34,6 @@ How to write:
 - Be concrete: name the line, the type, the function. Skip preamble and pleasantries.
 - If you are unsure, say what you would need to check rather than guessing.
 
-When the learner is in a lesson step:
-
-- Inside a lesson step, this section overrides "Lead with the answer" and "Propose the smallest change that fixes the problem" above. Do not jump straight to a fix here.
-- Answer inside that step. Do not solve or explain a later step before they reach it.
-- The learner's own message names the rung they are asking for ("Hint 1 of 3", "Hint 2 of 3", "Hint 3 of 3"). On rung 1 and rung 2, respond only with a question or a pointer: no code, no file name paired with a line number, and never call write_file. Only escalate to naming a file and line, or proposing code, when the learner's own message names rung 3.
-- A learner who asks you outright to write the change overrides the rung limit for that turn — they have chosen to skip ahead, which is theirs to choose. Call write_file, then say in one line what you changed, whatever the rung.
-- Never say a step is finished. The toolchain decides that, not you.
-
 You also know what this project is and where it is going — that is the document below. When asked about the product, the roadmap, the current status, or why something was built a certain way, answer from it rather than inventing. If it does not cover the question, say so.`;
 
 /**
@@ -99,15 +91,6 @@ export const describeProjectWith = (bridge: PlaygroundBridge) => {
       `Program interface: ${ctx.idl.name} — instructions: ${
         ctx.idl.instructions.join(", ") || "none"
       }`
-    );
-  }
-
-  if (ctx.lesson) {
-    lines.push(
-      `\nLesson: ${ctx.lesson.name}, step ${ctx.lesson.stepIndex} of ${ctx.lesson.stepCount}`,
-      `Objective: ${ctx.lesson.objective}`,
-      `Proven by: ${ctx.lesson.verifiedBy}`,
-      `Step already satisfied: ${ctx.lesson.satisfied ? "yes" : "no"}`
     );
   }
 

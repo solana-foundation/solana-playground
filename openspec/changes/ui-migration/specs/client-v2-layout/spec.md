@@ -60,12 +60,6 @@ Folding a panel SHALL hide it without discarding what it holds.
 - **THEN** the folder is still open, the current file is still selected and
   the tree is scrolled where it was
 
-#### Scenario: A lesson's column keeps its tab
-
-- **WHEN** a user in a lesson picks the Files tab, hides the column and
-  shows it again
-- **THEN** the Files tab is still selected
-
 #### Scenario: Folding the navigation
 
 - **WHEN** a user presses ⌘B with the navigation open, then again

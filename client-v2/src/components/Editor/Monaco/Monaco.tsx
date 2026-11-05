@@ -35,6 +35,8 @@ import { editorBuffersOf } from "./editor-buffers";
 import { initLanguages } from "./languages";
 import { createMountOpen } from "./mount-open";
 import { leavesFocusElsewhere } from "./open-focus";
+import { rewritePythonProgramId, rewriteRustProgramId } from "./program-id";
+import { revealAtThird } from "./reveal-line";
 
 const log = createLogger("editor:monaco");
 
@@ -318,6 +320,17 @@ const Monaco = () => {
     }
   }, [editor, keybinding]);
 
+  // Refuse typing while a caller asks, as the tutorial's intro card does
+  // for its preview of the finished program
+  useEffect(() => {
+    if (!editor) return;
+
+    const apply = () => editor.updateOptions({ readOnly: PgEditor.readOnly });
+    apply();
+    document.addEventListener(PgEditor.events.READ_ONLY, apply);
+    return () => document.removeEventListener(PgEditor.events.READ_ONLY, apply);
+  }, [editor]);
+
   // Set other settings
   useEffect(() => {
     if (!editor) return;
@@ -466,10 +479,10 @@ const Monaco = () => {
 
       // An open the user did not start -- a late mount's, sync re-opening
       // the workspace -- leaves focus in a field they are typing in; the
-      // file opens, focus stays. So does any open while the editor is off the
-      // screen, since focus would scroll it back. One started from the
-      // explorer's tree (creating a file) still ends in the editor; see
-      // `leavesFocusElsewhere`.
+      // file opens, focus stays, as it does in an open dialog or popover. So
+      // does any open while the editor is off the screen, since focus would
+      // scroll it back. One started from the explorer's tree (creating a file)
+      // still ends in the editor; see `leavesFocusElsewhere`.
       const open = isMountOpen ? "mount" : "later";
       if (
         leavesFocusElsewhere({
@@ -603,9 +616,23 @@ const Monaco = () => {
       if (!editor.hasTextFocus()) editor.focus();
     };
 
+    // A line asked for by name, as the tutorial's feed does: only when it is
+    // in the file this editor shows
+    const handleRevealLine = (e: Event) => {
+      const { path, line } =
+        (e as CustomEvent<{ path: string; line: number }>).detail ?? {};
+      if (editor.getModel()?.uri.path !== path) return;
+      revealAtThird(editor, line);
+    };
+
     document.addEventListener(PgEditor.events.FOCUS, handleFocus);
+    document.addEventListener(PgEditor.events.REVEAL_LINE, handleRevealLine);
     return () => {
       document.removeEventListener(PgEditor.events.FOCUS, handleFocus);
+      document.removeEventListener(
+        PgEditor.events.REVEAL_LINE,
+        handleRevealLine
+      );
     };
   }, [editor]);
 
@@ -882,21 +909,10 @@ const Monaco = () => {
   useEffect(() => {
     if (!editor) return;
 
-    const getProgramIdStartAndEndIndex = (
-      content: string,
-      isPython: boolean
-    ) => {
-      const findText = isPython ? "declare_id" : "declare_id!";
-      const findTextIndex = content.indexOf(findText);
-      if (!content || !findTextIndex || findTextIndex === -1) return;
-      const quoteStartIndex = findTextIndex + findText.length + 1;
-      const quoteChar = content[quoteStartIndex];
-      const quoteEndIndex = content.indexOf(quoteChar, quoteStartIndex + 1);
-
-      return [quoteStartIndex, quoteEndIndex];
-    };
-
     const updateId = async () => {
+      // The tutorial's intro preview: a file nobody writes to until Start
+      if (PgEditor.readOnly) return;
+
       const programPkStr = PgProgramInfo.getPkStr();
       if (!programPkStr) return;
 
@@ -906,26 +922,15 @@ const Monaco = () => {
       const isPython = currentLang?.name === "Python";
       if (!isRust && !isPython) return;
 
-      const editorContent = editor.getValue();
-      const indices = getProgramIdStartAndEndIndex(editorContent, isPython);
-      if (!indices) return;
-      const [quoteStartIndex, quoteEndIndex] = indices;
-
       const model = editor.getModel();
       if (!model) return;
-
-      const startPos = model.getPositionAt(quoteStartIndex + 1);
-      const endPos = model.getPositionAt(quoteEndIndex);
-      const range = monaco.Range.fromPositions(startPos, endPos);
 
       // Reported: a program id left unwritten builds the old id, and the
       // deploy that then fails has no other clue
       try {
-        if (!editor.executeEdits(null, [{ range, text: programPkStr }])) {
-          log.error(new Error("The editor refused the program id edit"), {
-            report: true,
-          });
-        }
+        (isPython ? rewritePythonProgramId : rewriteRustProgramId)(
+          programPkStr
+        )(model);
       } catch (error) {
         log.error(error, { report: true, context: { edit: "program id" } });
       }

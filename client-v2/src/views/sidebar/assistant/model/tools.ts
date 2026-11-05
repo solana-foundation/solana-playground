@@ -2,12 +2,15 @@ import { solOn, UNKNOWN_NETWORK } from "@/constants";
 import { bindToolFor } from "@/entities/agent-tools";
 import { formatSol } from "@/features/deploy";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
 
 import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
 import { PgPatchUndo } from "../patch-undo";
-import { PgAssistant, wroteOutcome } from "../store";
+import { type AssistantMode, PgAssistant, wroteOutcome } from "../store";
 import { createMcpTools } from "./mcp-tools";
 import { createSkillTools } from "./skill-tools";
+
+const log = createLogger("assistant:tools");
 
 /** The project's name, as the approval cards name the program */
 const programName = (bridge: PlaygroundBridge) =>
@@ -45,12 +48,46 @@ export const notInContext = (path: string) =>
  * come from `entities/agent-tools`, which server code can import through its
  * `server.mjs`; this file only says what each one does in the tab.
  *
+ * A mode's own tools (below) run as the mode defines them, without
+ * `requestApproval`: the mode answers for what they change.
+ *
+ * With a mode set (`PgAssistant.setMode`), a tool the mode does not allow
+ * stays offered but only answers with a refusal, so the model is told why
+ * rather than calling a tool that is not there; the mode's own tools join.
+ *
  * @param bridge the playground to act on
+ * @param mode the surface narrowing the assistant, if any
  * @returns vendor-neutral tool definitions
  */
 export const createTools = (
-  bridge: PlaygroundBridge = realBridge
-): ToolDefinition[] => [
+  // eslint-disable-next-line layers/curry-order -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  bridge: PlaygroundBridge = realBridge,
+  // eslint-disable-next-line layers/curry-order -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  mode: AssistantMode | null = PgAssistant.mode
+): ToolDefinition[] => {
+  const own = projectTools(bridge);
+  if (!mode) return own;
+  return [
+    ...own.map((tool) => (mode.allows(tool.name) ? tool : refused(tool, mode))),
+    ...mode.tools,
+  ];
+};
+
+/** A tool the mode does not allow: offered as it was, refusing to run */
+const refused = (
+  tool: ToolDefinition,
+  mode: AssistantMode
+): ToolDefinition => ({
+  name: tool.name,
+  description: `Not available in this ${mode.name}. ${tool.description}`,
+  schema: tool.schema,
+  run: () => {
+    log.info(`refused ${tool.name} in the ${mode.name} mode`);
+    return `${tool.name} is not available in this ${mode.name}. ${mode.refusal}`;
+  },
+});
+
+const projectTools = (bridge: PlaygroundBridge): ToolDefinition[] => [
   ...createSkillTools(),
   ...createMcpTools(),
 

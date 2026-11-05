@@ -198,6 +198,19 @@ export type TurnPhase =
   | "stopping"
   | "waiting";
 
+/** What became of a message handed to `send` */
+export type SendOutcome =
+  /** Its turn started: the assistant has it */
+  | "sent"
+  /** Nothing connected: it waits in the composer, with Connect a model open */
+  | "connecting"
+  /** Another send was under way, or another project opened while it waited */
+  | "refused"
+  /** It failed before its turn started; the failure is already reported */
+  | "failed"
+  /** Nothing but whitespace */
+  | "empty";
+
 /**
  * One assistant turn at a time, shared by the thread and the composer.
  *
@@ -206,7 +219,7 @@ export type TurnPhase =
  */
 export interface Turn {
   /** Send a prompt; with nothing connected, connect the default or open Connect */
-  send(text: string): Promise<void>;
+  send(text: string): Promise<SendOutcome>;
   /** Abort the turn in flight and deny whatever it is waiting on, or end a busy wait */
   stop(): void;
   /**
@@ -480,14 +493,14 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     PgAssistant.status !== "idle";
 
   /**
-   * @returns `false` when the send was refused because another one is under
-   * way, or because another project opened while it waited on the default
-   * backend, so a caller holding text the user never typed can keep it
+   * @returns `refused` when another send is under way, or another project
+   * opened while it waited on the default backend, so a caller holding text
+   * the user never typed can keep it
    */
-  const start = async (text: string): Promise<boolean> => {
+  const start = async (text: string): Promise<SendOutcome> => {
     const trimmed = text.trim();
-    if (!trimmed) return true;
-    if (occupied()) return false;
+    if (!trimmed) return "empty";
+    if (occupied()) return "refused";
 
     // Only a send with nothing connected waits, so a connected one has started
     // its turn by the time it first yields
@@ -497,7 +510,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       if (backend.kind === "ask") {
         setInput(text);
         openConnect(backend.via, backend.preset);
-        return true;
+        return "connecting";
       }
     }
     // Nothing connected: the thread's own backend, or the default. Connected
@@ -508,7 +521,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       if (backend.kind === "ask") {
         setInput(text);
         openConnect(backend.via, backend.preset);
-        return true;
+        return "connecting";
       }
       const project = PgExplorer.currentWorkspaceId;
       starting.current = true;
@@ -521,7 +534,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       // opened another project: the prompt was written for the one it left,
       // and would land in the new one's conversation with its files
       if (occupied() || PgExplorer.currentWorkspaceId !== project) {
-        return false;
+        return "refused";
       }
     }
     if (!current) {
@@ -529,7 +542,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       // a backend is connected
       setInput(text);
       openConnect("send");
-      return true;
+      return "connecting";
     }
 
     // One provider per connection and conversation; it owns the history.
@@ -572,7 +585,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // typed text where the user can send it again
     setInput("");
     await runTurn({ text: trimmed, attempt: 0 });
-    return true;
+    return "sent";
   };
   /**
    * One request for a message already in the thread, on the provider `start`
@@ -775,9 +788,11 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   // `start` answers its own failures once a turn runs; one before that (the
   // store throwing on the new message) would be an unhandled rejection with
   // nothing on screen
-  const send = async (text: string) => {
-    await start(text).catch(reportButtonFailure("send your message"));
-  };
+  const send = (text: string): Promise<SendOutcome> =>
+    start(text).catch((e: unknown) => {
+      reportButtonFailure("send your message")(e);
+      return "failed" as const;
+    });
   // Bridges `onDidRequestPrompt`, which subscribes once, to this render's `start`
   const startRef = useRef(start);
   startRef.current = start;
@@ -837,8 +852,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         return;
       }
       startRef.current(text).then(
-        (started) => {
-          if (!started) place(text);
+        (outcome) => {
+          if (outcome === "refused") place(text);
         },
         (e) => {
           place(text);

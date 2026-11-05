@@ -1,5 +1,5 @@
-// The connected thread: the store's items, the lesson's next move, the
-// turn's send, and what is reported when the user acts on them.
+// The connected thread: the store's items, the turn's send, and what is
+// reported when the user acts on them.
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,47 +34,8 @@ vi.mock("../model/default-backend", () => ({
   useDefaultBackend: () => backend,
 }));
 
-/** The open lesson as the thread sees it; no lesson unless a test opens one */
-const lesson = vi.hoisted(() => ({
-  open: false,
-  stage: "build" as "build" | "deploy",
-  attempted: false,
-  canPass: false,
-  pass: vi.fn(),
-  execute: vi.fn(() => Promise.resolve()),
-}));
-
-// The runtime's commands reach the utils barrel, which needs the build's
-// globals; what is under test is which command the reply's button runs
-vi.mock("../../../utils/command", () => ({
-  PgCommand: {
-    build: { execute: lesson.execute },
-    deploy: { execute: lesson.execute },
-  },
-}));
-// The lesson store reaches the same barrel. Its folds stand in for a lesson
-// whose current step is verified by `lesson.stage`.
-vi.mock("../../../views/flow/lessons", () => ({
-  INITIAL_LESSON_STATE: { path: null, record: [] },
-  PgLesson: {
-    onDidChange: (cb: (state: unknown) => void) => {
-      cb(lesson.open ? { path: {}, record: [] } : { path: null, record: [] });
-      return { dispose: () => {} };
-    },
-    canPass: () => lesson.canPass,
-    pass: lesson.pass,
-  },
-  foldRecord: () => ({}),
-  cursorStep: () => ({ id: "step-1", verify: {} }),
-  verifyingStage: () => lesson.stage,
-  attempted: () => lesson.attempted,
-}));
-vi.mock("../../../views/sidebar/assistant/bridge/lesson-context", () => ({
-  describeLesson: (state: { path: unknown }) =>
-    state.path ? { verifiedBy: "A build proves this step" } : null,
-}));
 // Undo reads and writes the project through the real bridge, which reaches
-// the same barrel; the thread only decides when to offer it and what to report
+// the utils barrel; the thread only decides when to offer it and what to report
 const undo = vi.hoisted(() => ({
   can: vi.fn(() => false),
   original: vi.fn((): string | undefined => undefined),
@@ -127,10 +88,6 @@ const appliedPatchThenReply = () => {
 beforeEach(() => {
   events = memoryTelemetry();
   initTelemetry({ providers: [events] });
-  lesson.open = false;
-  lesson.stage = "build";
-  lesson.attempted = false;
-  lesson.canPass = false;
   PgAssistant.clear();
 });
 
@@ -785,26 +742,6 @@ describe("Thread, sending", () => {
     expect(tracked()).toEqual([["assistant_suggestion_picked", {}]]);
   });
 
-  it("offers the lesson's questions while a lesson is open", () => {
-    lesson.open = true;
-    const send = vi.fn().mockResolvedValue(undefined);
-    render(<Thread turn={stubTurn(false, send)} project="Hello Anchor" />);
-    for (const name of [
-      "Explain this step",
-      "Give me a hint",
-      "Why did my build fail?",
-    ]) {
-      expect(screen.getByRole("button", { name })).toBeTruthy();
-    }
-    expect(
-      screen.queryByRole("button", { name: "What does this program do?" })
-    ).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Give me a hint" }));
-    expect(send).toHaveBeenCalledWith("Give me a hint");
-    expect(tracked()).toEqual([["assistant_suggestion_picked", {}]]);
-  });
-
   it("make this change asks for a patch and is reported", () => {
     act(() => finishedReply("Add a field to the account."));
     const send = vi.fn().mockResolvedValue(undefined);
@@ -842,67 +779,5 @@ describe("Thread, sending", () => {
     expect(
       screen.queryByRole("button", { name: "Make this change" })
     ).toBeNull();
-  });
-});
-
-describe("Thread, inside a lesson", () => {
-  it("make-change is offered as a last resort", () => {
-    lesson.open = true;
-    act(() => finishedReply("Here is a hint."));
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-    expect(
-      screen.getByRole("button", { name: "Write it for me" })
-    ).toBeTruthy();
-  });
-
-  it("after an applied patch the move is the step's build", async () => {
-    lesson.open = true;
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-
-    // Async: Build is an AsyncButton, which settles once the command resolves
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Build" }));
-    });
-
-    expect(lesson.execute).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "Skip this step" })).toBeNull();
-  });
-
-  it("a step verified by a deploy offers Deploy", () => {
-    lesson.open = true;
-    lesson.stage = "deploy";
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-    expect(screen.getByRole("button", { name: "Deploy" })).toBeTruthy();
-  });
-
-  it("an attempted step that can pass offers the skip, and only that", () => {
-    lesson.open = true;
-    lesson.attempted = true;
-    lesson.canPass = true;
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
-
-    expect(lesson.pass).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "Build" })).toBeNull();
-  });
-
-  it("an attempted step that cannot pass offers neither", () => {
-    lesson.open = true;
-    lesson.attempted = true;
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-    expect(screen.queryByRole("button", { name: "Skip this step" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Build" })).toBeNull();
-  });
-
-  it("no lesson move while a turn runs", () => {
-    lesson.open = true;
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(true)} project="Counter" />);
-    expect(screen.queryByRole("button", { name: "Build" })).toBeNull();
   });
 });

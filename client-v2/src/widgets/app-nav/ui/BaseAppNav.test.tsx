@@ -157,3 +157,29 @@ it("draws the way to a computer only on a phone, in its own group above Get set 
   rerender(nav(false));
   expect(screen.queryByText("handoff")).toBeNull();
 });
+
+it("puts the pin in the open head only", () => {
+  const drawPinned = (collapsed: boolean) =>
+    render(
+      <TooltipProvider>
+        <SidebarProvider>
+          <BaseAppNav
+            collapsed={collapsed}
+            onToggle={vi.fn()}
+            onOpen={vi.fn()}
+            logo={<span>logo</span>}
+            projects={<span>projects</span>}
+            footer={<span>footer</span>}
+            railFooter={<span>rail footer</span>}
+            setup={<span>setup</span>}
+            pin={<button type="button">Keep open</button>}
+          />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+  const open = drawPinned(false);
+  expect(screen.getByRole("button", { name: "Keep open" })).toBeTruthy();
+  open.unmount();
+  drawPinned(true);
+  expect(screen.queryByRole("button", { name: "Keep open" })).toBeNull();
+});

@@ -180,10 +180,8 @@ test.describe("on a phone", () => {
 
     const cards = dialog(page).locator('[data-slot="action-card"]');
     await expect(cards.first()).toBeVisible();
-    // A tutorial's card keeps its one button, drawn as the chevron: the
-    // corner square is a wide screen's
-    await expect(cards.first().locator("[data-card-chevron]")).toBeVisible();
-    await expect(cards.first().locator("[data-card-corner]")).toBeHidden();
+    // A tutorial's card keeps its one button, drawn as the corner square
+    await expect(cards.first().locator("[data-card-corner]")).toBeVisible();
     await expect(
       cards.first().getByRole("button", { name: /^Open / })
     ).toBeVisible();

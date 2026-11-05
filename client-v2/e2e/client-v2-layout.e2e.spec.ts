@@ -8,14 +8,11 @@ import {
   filesToggle,
   HELP_TAIL,
   home,
-  homeRegion,
   json,
   leaveEditor,
-  openFiles,
   projectRow,
   runInTerminal,
   seedWorkspace,
-  startTutorialFromAbout,
   stubSignedIn,
   test,
 } from "./fixtures";
@@ -35,22 +32,6 @@ const onlyLineOf = async (page: Page, lines: string[], name: string) => {
   );
   expect(all).toHaveLength(1);
   return all[0];
-};
-
-/**
- * Starts Hello Anchor's first lesson from Home's tutorial card, on a profile
- * with no project, which opens on Home
- */
-const startTutorial = async (page: Page) => {
-  await expect(home(page)).toBeVisible({ timeout: 20_000 });
-  await homeRegion(page)
-    .getByRole("button", { name: "Open Hello Anchor" })
-    .click();
-  // `exact`: Connect a model's dialog has a "Start" of its own
-  await startTutorialFromAbout(page);
-  // The lesson's switch is in the tree; open it whatever the saved layout
-  await openFiles(page);
-  await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 
 const assistantPanel = (page: Page) => page.locator("#assistant[data-panel]");
@@ -467,26 +448,6 @@ test("client-v2-layout: The files column keeps its tree", async ({
         .toBe(scrolled);
     });
   }
-});
-
-test("client-v2-layout: A lesson's column keeps its tab", async ({ page }) => {
-  // Opening a tutorial boots the dev server's tutorial chunk and imports it
-  test.setTimeout(120_000);
-  await page.goto("/");
-  await startTutorial(page);
-
-  const filesTab = page.getByRole("radio", { name: "Files" });
-  await filesTab.click();
-  await expect(filesTab).toHaveAttribute("aria-checked", "true");
-
-  await filesToggle(page).click();
-  await expect(filesPanel(page)).toHaveCount(0);
-  await filesToggle(page).click();
-
-  await expect(page.getByRole("radio", { name: "Files" })).toHaveAttribute(
-    "aria-checked",
-    "true"
-  );
 });
 
 test("client-v2-layout: Folding the navigation", async ({
@@ -937,8 +898,9 @@ test("client-v2-layout: The navigation on a narrow window", async ({
   await navigation
     .getByRole("button", { name: "Tutorials", exact: true })
     .click();
+  // A phone folds the field to its glass
   await expect(
-    page.getByRole("searchbox", { name: "Search tutorials" })
+    page.getByRole("button", { name: "Search tutorials" })
   ).toBeVisible();
 });
 

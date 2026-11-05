@@ -898,7 +898,7 @@ const keptLamportsOn =
  * @param checkConfirmation only confirm the transaction if this callback returns truthy
  * @returns the transaction signature
  */
-const sendAndConfirmTxWithRetriesFor =
+export const sendAndConfirmTxWithRetriesFor =
   (connection: PgWeb3.Connection) =>
   async (
     sendTx: () => Promise<string>,

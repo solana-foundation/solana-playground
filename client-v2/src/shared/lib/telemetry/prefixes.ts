@@ -28,6 +28,9 @@ export const EVENT_PREFIXES = {
   skills: "skills",
   status: "status",
   "unknown-command": "unknown_command",
+  tutorial: "tutorial",
+  "tutorial-frame": "tutorial_frame",
+  "tutorial-workspace": "tutorial_workspace",
 } as const;
 
 export type EventPrefix = typeof EVENT_PREFIXES[keyof typeof EVENT_PREFIXES];

@@ -79,6 +79,13 @@ const LISTING = Array.from({ length: 34 }, (_, i) => ({
 beforeEach(() => {
   utils.PgTutorial.all = [
     {
+      name: "Hello Seahorse",
+      description: "d",
+      level: "Beginner",
+      framework: "Seahorse",
+      thumbnail: "/s.png",
+    },
+    {
       name: "Hello Anchor",
       description: "d",
       level: "Beginner",
@@ -157,6 +164,16 @@ it("opens the Tutorials page from the tile and from All", async () => {
   fireEvent.click(home.getByRole("button", { name: "All 1" }));
   expect(onOpenPage.mock.calls).toEqual([["tutorials"], ["tutorials"]]);
   expect(utils.PgView.setModal).not.toHaveBeenCalled();
+});
+
+it("offers only the start's tutorials, leaving the others out", async () => {
+  const { home } = draw();
+  await home.findByText("34 real programs");
+  expect(home.getByRole("button", { name: "Open Hello Anchor" })).toBeTruthy();
+  expect(
+    home.queryByRole("button", { name: "Open Hello Seahorse" })
+  ).toBeNull();
+  expect(home.getByText("1 guided paths")).toBeTruthy();
 });
 
 it("reports New project and unfolds the scratch options", async () => {

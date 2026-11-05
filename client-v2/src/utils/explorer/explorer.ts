@@ -1044,8 +1044,15 @@ export class PgExplorer {
       PgCommon.appendSlash(workspaceName)
     );
 
-    // Delete from `indexedDB`
-    await this.deleteItem(workspacePath);
+    // Delete from `indexedDB`. A folder already gone (a delete that removed
+    // the files and failed before saving, or a workspace another build listed)
+    // is no reason to keep its name: the name is what the user asked to drop
+    try {
+      await this.deleteItem(workspacePath);
+    } catch (e) {
+      if (!isMissing(e)) throw e;
+      report("delete a workspace whose folder is gone", e);
+    }
 
     // Delete from state
     workspace.delete(workspaceName);

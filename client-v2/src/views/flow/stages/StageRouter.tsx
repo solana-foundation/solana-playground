@@ -15,6 +15,11 @@ interface StageRouterProps {
   stage: Stage;
   /** Opens Settings on the network choice, for Deploy's network chip */
   onChangeNetwork: () => void;
+  /**
+   * The stage tabs label the panels. Where none are drawn (a tutorial's
+   * frame, or before Start), the panel is no tab panel (default true)
+   */
+  tabs?: boolean;
 }
 
 /**
@@ -28,6 +33,7 @@ interface StageRouterProps {
 const StageRouter: FC<React.PropsWithChildren<StageRouterProps>> = ({
   stage,
   onChangeNetwork,
+  tabs = true,
 }) => (
   <>
     <div
@@ -40,8 +46,8 @@ const StageRouter: FC<React.PropsWithChildren<StageRouterProps>> = ({
         stage === "write" ? "opacity-100" : "hidden opacity-0"
       )}
       id="flow-stage-panel-write"
-      role="tabpanel"
-      aria-labelledby="flow-stage-tab-write"
+      role={tabs ? "tabpanel" : undefined}
+      aria-labelledby={tabs ? "flow-stage-tab-write" : undefined}
     >
       <Write />
     </div>
