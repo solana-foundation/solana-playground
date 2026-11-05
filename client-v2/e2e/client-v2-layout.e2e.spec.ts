@@ -2089,6 +2089,17 @@ test.describe("the settings page", () => {
     await expect
       .poll(() => lines.filter((l) => l.includes("settings_closed")).at(-1))
       .toContain("via: back");
+
+    // The Deploy stage's own Change counts as the stage, not the status row
+    await page.locator("#flow-stage-tab-deploy").click();
+    await page
+      .locator("#flow-stage-panel-deploy")
+      .getByRole("button", { name: "Change", exact: true })
+      .click({ timeout: 15_000 });
+    await expect(settingsPage(page)).toBeVisible();
+    await expect
+      .poll(() => lines.filter((l) => l.includes("settings_opened")).at(-1))
+      .toContain("from: stage");
   });
 
   test("client-v2-layout: A menu open at ⌘, closes as the settings open", async ({

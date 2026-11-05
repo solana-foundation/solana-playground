@@ -437,7 +437,7 @@ const FlowFrame = () => {
                 stage={state.stage}
                 onOpenNetwork={() =>
                   toggleSettings(closeNavSheet.current)({
-                    from: "cluster",
+                    from: "stage",
                     focus: "network",
                   })
                 }
@@ -451,10 +451,10 @@ const FlowFrame = () => {
               <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                 <StageRouter
                   stage={state.stage}
-                  // As the cluster row in the footer opens it
+                  // On the network choice, as the cluster row opens it
                   onChangeNetwork={() =>
                     toggleSettings(closeNavSheet.current)({
-                      from: "cluster",
+                      from: "stage",
                       focus: "network",
                     })
                   }

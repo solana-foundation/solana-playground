@@ -507,7 +507,9 @@ the page.
 ### Requirement: The settings page is measured
 
 The product SHALL send `settings_opened` with where it was opened from
-(`cluster`, `rail`, `menu` or `key`), `settings_closed` with how it was
+(`cluster` for the status row's network indicator, `rail` for the rail's
+network dot, `menu` for the account menu, `key` for ⌘, and `stage` for a
+stage's own network action: the Deploy stage's Change and the stage notice), `settings_closed` with how it was
 closed (`back`, `escape`, `key`, or `import` when a project imported from
 the page closed it), and `settings_section_picked` with the
 section, each time a user picks one in the section list.
