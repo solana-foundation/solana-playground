@@ -179,16 +179,22 @@ const SessionItems = ({
   );
 };
 
-/** Spec 02's words on the sign-in item: off while offline, a retry after a failure */
+/**
+ * Spec 02's words on the sign-in item: off while offline, a retry after a
+ * failure; Almaz's "Sign in again" after a session ended
+ */
 const signInLabel = (account: AccountView) => {
   if (!account.online) return "You're offline";
   if (failureOf(account)) return "Try again";
+  if (account.session.status === "expired") return "Sign in again";
   return "Sign in with GitHub";
 };
 
-/** Whether the page's foot offers signing in: signed out, no sign-in under way */
+/** Whether the page's foot offers signing in: nobody signed in, no sign-in under way */
 const signsIn = (account: AccountView) =>
-  account.session.status === "idle" || account.session.status === "failed";
+  account.session.status === "idle" ||
+  account.session.status === "expired" ||
+  account.session.status === "failed";
 
 /**
  * The sign-out question, in place of the menu's items (Spec 02, "Sign-out
@@ -357,9 +363,11 @@ const BaseAccountMenu = ({
         <SessionItems account={account} onPick={pick} page={page} />
         {/* Signed out, a page's sign-in is its foot: nothing to rule off,
           unless a failure is said above */}
-        {!(page && account.session.status === "idle") && (
-          <DropdownMenuSeparator />
-        )}
+        {!(
+          page &&
+          (account.session.status === "idle" ||
+            account.session.status === "expired")
+        ) && <DropdownMenuSeparator />}
         <DropdownMenuItem
           {...settingsTrigger}
           onSelect={() => pick("settings")}

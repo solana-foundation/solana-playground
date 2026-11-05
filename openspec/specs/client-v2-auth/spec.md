@@ -21,6 +21,8 @@ listed:
   user closed the popup), `rejected` (a reply arrived that did not match this
   sign-in), `expired` (no reply arrived in time).
 - `auth_signed_out`: the server accepted the user's sign-out. No parameters.
+- `auth_session_expired`: a session read found that a session ended without a
+  sign-out; once per tab when that state starts. No parameters.
 
 #### Scenario: A completed sign-in
 
@@ -49,3 +51,7 @@ listed:
 - **WHEN** the sign-out request is refused or does not reach the server
 - **THEN** `auth_signed_out` is not tracked, the user stays signed in, and the
   error reaches the caller
+
+#### Scenario: A session expires (manual)
+- **WHEN** a session read finds that the session ended without a sign-out
+- **THEN** `auth_session_expired` is tracked once, however many reads follow
