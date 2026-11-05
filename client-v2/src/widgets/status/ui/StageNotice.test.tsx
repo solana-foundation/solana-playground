@@ -80,7 +80,7 @@ describe("BaseStageNotice", () => {
   it("draws nothing without a notice", () => {
     const { container } = render(
       <BaseStageNotice
-        notice={null}
+        notice={undefined}
         onRetry={vi.fn()}
         onChangeNetwork={vi.fn()}
         onDismiss={vi.fn()}

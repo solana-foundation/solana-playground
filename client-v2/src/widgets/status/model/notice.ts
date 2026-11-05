@@ -29,19 +29,19 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export const noticeCondition = (
   network: NetworkInput,
   online: boolean
-): NoticeCondition | null => {
+): NoticeCondition | undefined => {
   if (!online) return "offline";
   return networkIndicator(network, online).state === "not-ready"
     ? "cluster-down"
-    : null;
+    : undefined;
 };
 
-/** The line `stage` shows for `condition`, or null when it shows none */
+/** The line `stage` shows for `condition`, or undefined when it shows none */
 export const stageNotice = (
-  condition: NoticeCondition | null,
+  condition: NoticeCondition | undefined,
   name: string,
   stage: Stage
-): StageNoticeView | null => {
+): StageNoticeView | undefined => {
   if (condition === "offline") return { kind: "offline", text: OFFLINE_LINE };
   if (condition === "cluster-down" && WAITS_FOR_CLUSTER.has(stage)) {
     return {
@@ -51,7 +51,7 @@ export const stageNotice = (
       )} is not responding. Try again, or change the network.`,
     };
   }
-  return null;
+  return undefined;
 };
 
 if (import.meta.vitest) {
@@ -90,8 +90,8 @@ if (import.meta.vitest) {
     });
 
     it("has nothing to say while the cluster answers or still connects", () => {
-      expect(noticeCondition(UP, true)).toBeNull();
-      expect(noticeCondition(CONNECTING, true)).toBeNull();
+      expect(noticeCondition(UP, true)).toBeUndefined();
+      expect(noticeCondition(CONNECTING, true)).toBeUndefined();
     });
 
     it("shows the offline line on every stage", () => {
@@ -109,12 +109,12 @@ if (import.meta.vitest) {
       expect(stageNotice("cluster-down", "testnet", "interact")?.text).toBe(
         "Testnet is not responding. Try again, or change the network."
       );
-      expect(stageNotice("cluster-down", "devnet", "write")).toBeNull();
-      expect(stageNotice("cluster-down", "devnet", "build")).toBeNull();
+      expect(stageNotice("cluster-down", "devnet", "write")).toBeUndefined();
+      expect(stageNotice("cluster-down", "devnet", "build")).toBeUndefined();
     });
 
     it("shows nothing with nothing wrong", () => {
-      expect(stageNotice(null, "devnet", "deploy")).toBeNull();
+      expect(stageNotice(undefined, "devnet", "deploy")).toBeUndefined();
     });
   });
 }

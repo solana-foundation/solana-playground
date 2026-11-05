@@ -11,12 +11,12 @@ export interface ProjectEntry {
   isLesson: boolean;
   pinned: boolean;
   /** Where its work lives, when not in the account (`syncMarkerOf`) */
-  marker: SyncMarker | null;
+  marker: SyncMarker | undefined;
   /**
-   * A lesson's page or its completion. `null` means show nothing: a project,
+   * A lesson's page or its completion. `undefined` means show nothing: a project,
    * or a lesson whose progress is not read yet
    */
-  progress: LessonProgress | null;
+  progress: LessonProgress | undefined;
 }
 
 /**
@@ -34,7 +34,7 @@ export const listProjects = (
     idOf: (name: string) => string | undefined;
     isLesson: (name: string) => boolean;
     /** The last marker read for the workspace, by name */
-    markerOf: (name: string) => SyncMarker | null;
+    markerOf: (name: string) => SyncMarker | undefined;
     /** A tutorial's progress, by its name, which is its workspace's */
     progressOf: (name: string) => TutorialProgress;
   },
@@ -43,14 +43,14 @@ export const listProjects = (
   const projects = names.map((name): ProjectEntry => {
     const id = deps.idOf(name) ?? null;
     const isLesson = deps.isLesson(name);
-    const progress = isLesson ? deps.progressOf(name) : null;
+    const progress = isLesson ? deps.progressOf(name) : undefined;
     return {
       name,
       id,
       isLesson,
       pinned: id !== null && pins.includes(id),
       marker: deps.markerOf(name),
-      progress: progress && progress.state !== "new" ? progress : null,
+      progress: progress && progress.state !== "new" ? progress : undefined,
     };
   });
   return pinnedFirst(projects);
@@ -73,8 +73,8 @@ if (import.meta.vitest) {
     const deps = {
       idOf: (name: string) => ids[name],
       isLesson: (name: string) => name.startsWith("Hello "),
-      markerOf: (name: string): SyncMarker | null =>
-        name === "beta" ? "this-browser" : null,
+      markerOf: (name: string): SyncMarker | undefined =>
+        name === "beta" ? "this-browser" : undefined,
       progressOf: (name: string): TutorialProgress =>
         name === "Hello Anchor"
           ? { state: "started", page: 3, pages: 5 }
@@ -110,8 +110,8 @@ if (import.meta.vitest) {
           id: null,
           isLesson: false,
           pinned: false,
-          marker: null,
-          progress: null,
+          marker: undefined,
+          progress: undefined,
         });
       });
 
@@ -129,10 +129,10 @@ if (import.meta.vitest) {
           []
         );
         expect(projects.map((p) => [p.name, p.progress])).toEqual([
-          ["beta", null],
+          ["beta", undefined],
           ["Hello Anchor", { state: "started", page: 3, pages: 5 }],
           // Not read yet: nothing to show rather than a guess
-          ["Hello Native", null],
+          ["Hello Native", undefined],
         ]);
       });
 
@@ -140,7 +140,7 @@ if (import.meta.vitest) {
         const projects = listProjects(["beta", "alpha"], deps, []);
         expect(projects.map((p) => [p.name, p.marker])).toEqual([
           ["beta", "this-browser"],
-          ["alpha", null],
+          ["alpha", undefined],
         ]);
       });
 

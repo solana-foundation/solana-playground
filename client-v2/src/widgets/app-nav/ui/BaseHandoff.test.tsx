@@ -24,7 +24,7 @@ const SIGNED_OUT: HandoffAccount = {
   error: undefined,
 };
 
-const props = (over: Partial<BaseHandoffProps> = {}): BaseHandoffProps => ({
+const props = (over: Partial<BaseHandoffProps>): BaseHandoffProps => ({
   open: over.open ?? true,
   onOpenChange: over.onOpenChange ?? vi.fn(),
   link: over.link ?? LINK,
@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 // The row is a menu button of the stock Sidebar, which needs its provider
-const sheet = (over: Partial<BaseHandoffProps> = {}) => (
+const sheet = (over: Partial<BaseHandoffProps>) => (
   <SidebarProvider>
     <BaseHandoff {...props(over)} />
   </SidebarProvider>
@@ -57,7 +57,7 @@ it("opens from the row named Continue on a computer", () => {
 });
 
 it("signed in, says the project is in the account and names the login", () => {
-  render(sheet());
+  render(sheet({}));
   expect(
     screen.getByRole("dialog", { name: "Continue on a computer" })
   ).toBeTruthy();
@@ -138,7 +138,7 @@ it("says why the last sign-in failed, under its button", () => {
 });
 
 it("shows the whole link in its well", () => {
-  render(sheet());
+  render(sheet({}));
   expect(screen.getByTestId("handoff-link").textContent).toBe(LINK);
 });
 

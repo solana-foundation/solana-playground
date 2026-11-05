@@ -26,16 +26,20 @@ export const StageNotice = ({ stage, onOpenNetwork }: StageNoticeProps) => {
 
   // Put away for this episode only: once the condition ends or turns into
   // another, the next one shows again
-  const [dismissed, setDismissed] = useState<NoticeCondition | null>(null);
-  if (dismissed !== null && dismissed !== condition) setDismissed(null);
+  const [dismissed, setDismissed] = useState<NoticeCondition | undefined>(
+    undefined
+  );
+  if (dismissed !== undefined && dismissed !== condition) {
+    setDismissed(undefined);
+  }
 
   // Once per onset of a condition, when it first shows: a stage switch that
   // hides and shows the same condition again is not a new one
-  const told = useRef<NoticeCondition | null>(null);
-  const shown = notice?.kind ?? null;
+  const told = useRef<NoticeCondition | undefined>(undefined);
+  const shown = notice?.kind;
   useEffect(() => {
-    if (condition === null) told.current = null;
-    else if (shown !== null && told.current !== shown) {
+    if (condition === undefined) told.current = undefined;
+    else if (shown !== undefined && told.current !== shown) {
       told.current = shown;
       statusTelemetry.track("status_notice_shown", { notice: shown });
     }
@@ -43,7 +47,7 @@ export const StageNotice = ({ stage, onOpenNetwork }: StageNoticeProps) => {
 
   return (
     <BaseStageNotice
-      notice={dismissed === condition ? null : notice}
+      notice={dismissed === condition ? undefined : notice}
       onDismiss={() => {
         if (!notice) return;
         statusTelemetry.track("status_notice_dismissed", {

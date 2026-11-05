@@ -4,7 +4,7 @@ import type { Disposable } from "../../../../../../utils";
 
 /**
  * Where the Rust analyzer's start is, for the status indicator. Set only by
- * `trackStart`; "taking longer" is the reader's call, from `since`.
+ * `trackStartWith`; "taking longer" is the reader's call, from `since`.
  */
 export type AnalyzerState =
   /** No Rust file has started it yet */
@@ -45,34 +45,34 @@ const log = createLogger("rust-analyzer:start");
  * the page cannot run it, `starting` while `start` runs, then `ready`, or
  * `failed` with the error logged and rethrown
  *
- * @param isolated `window.crossOriginIsolated`, which the worker needs
+ * @param start what starts the analyzer
+ * @returns a function taking `window.crossOriginIsolated`, which the worker needs
  */
-export const trackStart = async (
-  isolated: boolean,
-  start: () => Promise<Disposable>
-): Promise<Disposable> => {
-  if (!isolated) {
-    PgAnalyzerStatus.set({ kind: "off" });
-    return { dispose: () => {} };
-  }
-  PgAnalyzerStatus.set({ kind: "starting", since: Date.now() });
-  let started: Disposable;
-  try {
-    started = await start();
-  } catch (e) {
-    // Reported here: `Monaco`'s language init rethrows it from a listener
-    // nobody awaits, which reaches no error tracking
-    log.error(e instanceof Error ? e : new Error(String(e)), {
-      report: true,
-      context: { what: "start the Rust analyzer" },
-    });
-    PgAnalyzerStatus.set({ kind: "failed" });
-    throw e;
-  }
-  // Outside the `try`: a subscriber that throws is not a failed start
-  PgAnalyzerStatus.set({ kind: "ready" });
-  return started;
-};
+export const trackStartWith =
+  (start: () => Promise<Disposable>) =>
+  async (isolated: boolean): Promise<Disposable> => {
+    if (!isolated) {
+      PgAnalyzerStatus.set({ kind: "off" });
+      return { dispose: () => {} };
+    }
+    PgAnalyzerStatus.set({ kind: "starting", since: Date.now() });
+    let started: Disposable;
+    try {
+      started = await start();
+    } catch (e) {
+      // Reported here: `Monaco`'s language init rethrows it from a listener
+      // nobody awaits, which reaches no error tracking
+      log.error(e instanceof Error ? e : new Error(String(e)), {
+        report: true,
+        context: { what: "start the Rust analyzer" },
+      });
+      PgAnalyzerStatus.set({ kind: "failed" });
+      throw e;
+    }
+    // Outside the `try`: a subscriber that throws is not a failed start
+    PgAnalyzerStatus.set({ kind: "ready" });
+    return started;
+  };
 
 if (import.meta.vitest) {
   const { describe, it, expect, vi, afterEach } = import.meta.vitest;
@@ -99,7 +99,7 @@ if (import.meta.vitest) {
 
     it("is off, and never starts, where the page is not isolated", async () => {
       const start = vi.fn();
-      await trackStart(false, start);
+      await trackStartWith(start)(false);
       expect(start).not.toHaveBeenCalled();
       expect(PgAnalyzerStatus.get()).toEqual({ kind: "off" });
     });
@@ -110,16 +110,16 @@ if (import.meta.vitest) {
         seen.push(s.kind)
       );
       const started = { dispose: vi.fn() };
-      expect(await trackStart(true, async () => started)).toBe(started);
+      expect(await trackStartWith(async () => started)(true)).toBe(started);
       dispose();
       expect(seen).toEqual(["idle", "starting", "ready"]);
     });
 
     it("is failed when the start throws, and rethrows", async () => {
       const boom = new Error("worker");
-      await expect(trackStart(true, () => Promise.reject(boom))).rejects.toBe(
-        boom
-      );
+      await expect(
+        trackStartWith(() => Promise.reject(boom))(true)
+      ).rejects.toBe(boom);
       expect(PgAnalyzerStatus.get()).toEqual({ kind: "failed" });
     });
 

@@ -43,13 +43,13 @@ export const useSessionRetry = (active: boolean): SessionRetry => {
   // Bumped when a read settles or a timed wake could not read, so the timer
   // re-arms: one that fired while a read was in flight, or offline, is spent
   const [rearm, setRearm] = useState(0);
-  const reading = useRef<Promise<void> | null>(null);
+  const reading = useRef<Promise<void> | undefined>(undefined);
 
   /** Starts a read, or joins the one this hook has in flight; whether it started one */
   const reread = useCallback(() => {
     if (reading.current) return { started: false, done: reading.current };
     const done = PgSession.refresh().finally(() => {
-      reading.current = null;
+      reading.current = undefined;
       setRearm((n) => n + 1);
     });
     reading.current = done;

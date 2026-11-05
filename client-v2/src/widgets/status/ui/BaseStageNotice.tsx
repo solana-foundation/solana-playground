@@ -13,7 +13,7 @@ import {
 import type { StageNoticeView } from "../model/notice";
 
 export interface BaseStageNoticeProps {
-  notice: StageNoticeView | null;
+  notice: StageNoticeView | undefined;
   /** Asks the cluster again; the button is busy until it resolves */
   onRetry: () => Promise<unknown>;
   /** Opens the settings with the network field focused */

@@ -189,7 +189,7 @@ const ProjectList = ({
     {
       idOf: (name) => PgExplorer.workspaceIdOf(name),
       isLesson: (name) => PgTutorial.isWorkspaceTutorial(name),
-      markerOf: (name) => markers.get(name) ?? null,
+      markerOf: (name) => markers.get(name),
       progressOf,
     },
     livePins

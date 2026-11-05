@@ -6,7 +6,7 @@ import {
   TerminalLineError,
   TonedLineError,
   toneWith,
-  unknownCommand,
+  unknownCommandIn,
   watchSlowRun,
 } from "./terminal";
 import type { Arrayable, Disposable, Getable, SyncOrAsync } from "./types";
@@ -349,9 +349,8 @@ export class PgCommandManager {
         (cmd) => cmd.name === inputCmdName
       );
       if (!topCmd) {
-        const answer = unknownCommand(
-          inputCmdName,
-          PgCommandManager.getNames()
+        const answer = unknownCommandIn(PgCommandManager.getNames())(
+          inputCmdName
         );
         if (answer.kind === "suggestion") {
           // Up then Enter runs the suggestion (Spec 13, "Not found"). Only a

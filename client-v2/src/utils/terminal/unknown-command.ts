@@ -36,43 +36,41 @@ export type UnknownCommand =
 /**
  * The line for an unknown command (Spec 13, "Unknown commands").
  *
- * @param typed the word the person typed
  * @param names every command's name, in `help`'s order, which breaks a tie
- * @returns the line, and the command it suggests when one is close
+ * @returns a function taking the word the person typed, which gives the line, and the command it suggests when one is close
  */
-export const unknownCommand = (
-  typed: string,
-  names: readonly string[]
-): UnknownCommand => {
-  // Matched in lower case, shown as typed
-  const word = typed.toLowerCase();
-  if (SHELL_HABITS.includes(word)) {
-    return {
-      kind: "shell",
-      line: "This terminal runs Playground commands, not a system shell. Type `help` to see them.",
-    };
-  }
-
-  let best: { name: string; edits: number } | undefined;
-  for (const name of names) {
-    const edits = editDistance(word, name);
-    if (edits <= MAX_EDITS && (!best || edits < best.edits)) {
-      best = { name, edits };
+export const unknownCommandIn =
+  (names: readonly string[]) =>
+  (typed: string): UnknownCommand => {
+    // Matched in lower case, shown as typed
+    const word = typed.toLowerCase();
+    if (SHELL_HABITS.includes(word)) {
+      return {
+        kind: "shell",
+        line: "This terminal runs Playground commands, not a system shell. Type `help` to see them.",
+      };
     }
-  }
-  if (best) {
-    return {
-      kind: "suggestion",
-      line: `\`${typed}\` is not a command. Did you mean \`${best.name}\`?`,
-      suggestion: best.name,
-    };
-  }
 
-  return {
-    kind: "none",
-    line: `\`${typed}\` is not a command. Type \`help\` to see commands.`,
+    let best: { name: string; edits: number } | undefined;
+    for (const name of names) {
+      const edits = editDistance(word, name);
+      if (edits <= MAX_EDITS && (!best || edits < best.edits)) {
+        best = { name, edits };
+      }
+    }
+    if (best) {
+      return {
+        kind: "suggestion",
+        line: `\`${typed}\` is not a command. Did you mean \`${best.name}\`?`,
+        suggestion: best.name,
+      };
+    }
+
+    return {
+      kind: "none",
+      line: `\`${typed}\` is not a command. Type \`help\` to see commands.`,
+    };
   };
-};
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -81,7 +79,7 @@ if (import.meta.vitest) {
     const NAMES = ["build", "deploy", "run", "test", "help", "clear"];
 
     it("suggests build for biuld, a swap", () => {
-      expect(unknownCommand("biuld", NAMES)).toEqual({
+      expect(unknownCommandIn(NAMES)("biuld")).toEqual({
         kind: "suggestion",
         line: "`biuld` is not a command. Did you mean `build`?",
         suggestion: "build",
@@ -89,40 +87,40 @@ if (import.meta.vitest) {
     });
 
     it("suggests a command two edits away", () => {
-      expect(unknownCommand("dploi", NAMES)).toMatchObject({
+      expect(unknownCommandIn(NAMES)("dploi")).toMatchObject({
         suggestion: "deploy",
       });
     });
 
     it("takes the earlier command on a tie", () => {
       // `tun` is one edit from both
-      expect(unknownCommand("tun", ["run", "tut"])).toMatchObject({
+      expect(unknownCommandIn(["run", "tut"])("tun")).toMatchObject({
         suggestion: "run",
       });
     });
 
     it("prefers the closer command over the earlier one", () => {
-      expect(unknownCommand("tesr", ["run", "test"])).toMatchObject({
+      expect(unknownCommandIn(["run", "test"])("tesr")).toMatchObject({
         suggestion: "test",
       });
     });
 
     it("answers a shell habit with the shell line", () => {
-      expect(unknownCommand("ls", NAMES)).toEqual({
+      expect(unknownCommandIn(NAMES)("ls")).toEqual({
         kind: "shell",
         line: "This terminal runs Playground commands, not a system shell. Type `help` to see them.",
       });
     });
 
     it("matches in any case and shows the word as typed", () => {
-      expect(unknownCommand("BUILD", NAMES)).toMatchObject({
+      expect(unknownCommandIn(NAMES)("BUILD")).toMatchObject({
         line: "`BUILD` is not a command. Did you mean `build`?",
       });
-      expect(unknownCommand("Ls", NAMES)).toMatchObject({ kind: "shell" });
+      expect(unknownCommandIn(NAMES)("Ls")).toMatchObject({ kind: "shell" });
     });
 
     it("points to help when nothing is close", () => {
-      expect(unknownCommand("xyzzy", NAMES)).toEqual({
+      expect(unknownCommandIn(NAMES)("xyzzy")).toEqual({
         kind: "none",
         line: "`xyzzy` is not a command. Type `help` to see commands.",
       });

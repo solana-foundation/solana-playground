@@ -11,7 +11,7 @@ import {
   PgExplorer,
 } from "../../../../../../utils";
 import { importTypes } from "../../common";
-import { trackStart } from "./status";
+import { trackStartWith } from "./status";
 
 const log = createLogger("editor:rust-analyzer");
 
@@ -55,7 +55,7 @@ export const initRustAnalyzer = (): Promise<Disposable> => {
   // TODO(HOO-2483): a start that throws after the worker came up leaves the
   // worker and the listeners made so far running; the indicator's Reload is
   // the recovery until the start can be torn down step by step
-  return trackStart(window.crossOriginIsolated, startRustAnalyzer);
+  return trackStartWith(startRustAnalyzer)(window.crossOriginIsolated);
 };
 
 /** Everything `initRustAnalyzer` does once the page can run the analyzer */

@@ -70,11 +70,11 @@ export const useTutorialProgress = (): ((name: string) => TutorialProgress) => {
  * on to another lesson before the explorer switched reads its file instead,
  * the guard `PgTutorial`'s own storage keeps
  */
-const liveMetadata = (name: string): TutorialMetadata | null => {
-  if (PgTutorial.current?.name !== name) return null;
-  if (PgExplorer.currentWorkspaceName !== name) return null;
+const liveMetadata = (name: string): TutorialMetadata | undefined => {
+  if (PgTutorial.current?.name !== name) return undefined;
+  if (PgExplorer.currentWorkspaceName !== name) return undefined;
   const { pageNumber, completed } = PgTutorial;
-  if (pageNumber === null || completed === null) return null;
+  if (pageNumber === null || completed === null) return undefined;
   return { pageNumber, completed };
 };
 

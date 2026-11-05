@@ -28,24 +28,24 @@ afterAll(() => {
 const project = (
   name: string,
   pinned = false,
-  marker: ProjectEntry["marker"] = null
+  marker: ProjectEntry["marker"] = undefined
 ): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: false,
   pinned,
   marker,
-  progress: null,
+  progress: undefined,
 });
 const lesson = (
   name: string,
-  progress: ProjectEntry["progress"] = null
+  progress: ProjectEntry["progress"] = undefined
 ): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: true,
   pinned: false,
-  marker: null,
+  marker: undefined,
   progress,
 });
 

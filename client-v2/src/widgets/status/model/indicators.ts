@@ -35,10 +35,10 @@ export interface StatusIndicator {
    * with the state said even where the row leaves it out ("Devnet · Ready"),
    * because the rail shows no words beside its dot */
   tip: string;
-  /** What it means when not ready, for the panel and the sheet; null when
+  /** What it means when not ready, for the panel and the sheet; undefined when
    * there is nothing to add to the words */
-  detail: string | null;
-  action: StatusAction | null;
+  detail: string | undefined;
+  action: StatusAction | undefined;
 }
 
 /** The phone chip: the worst state of the three, in words; one that failed
@@ -84,8 +84,8 @@ export const networkIndicator = (
   const shown = capitalize(name);
   const view = (
     state: StatusState,
-    suffix: string | null,
-    detail: string | null
+    suffix: string | undefined,
+    detail: string | undefined
   ): StatusIndicator => {
     // Only a state that is not ready joins the name: "connecting" is every
     // first load, and the settings' focus return and its tests look the
@@ -121,10 +121,10 @@ export const networkIndicator = (
   // Playnet is not asked until it has started (`PgConnection.getIsConnected`),
   // so its `null` can last: grey, not a pulse that never ends
   if (isConnected == null && name === "playnet") {
-    return view("idle", null, "Playnet starts when a command needs it.");
+    return view("idle", undefined, "Playnet starts when a command needs it.");
   }
-  if (isConnected == null) return view("working", "connecting", null);
-  return view("ready", null, null);
+  if (isConnected == null) return view("working", "connecting", undefined);
+  return view("ready", undefined, undefined);
 };
 
 export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
@@ -138,7 +138,7 @@ export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
       railLabel: "AI, offline",
       tip: "AI · Offline",
       detail: OFFLINE_LINE,
-      action: null,
+      action: undefined,
     };
   }
   if (ai.kind === "ready") {
@@ -151,7 +151,7 @@ export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
       label: "AI, ready",
       railLabel: "AI, ready",
       tip: `AI · Ready (${ai.model})`,
-      detail: null,
+      detail: undefined,
       action: { kind: "ai", text: "Change model" },
     };
   }
@@ -182,10 +182,10 @@ export const analyzerIndicator = (
 ): StatusIndicator => {
   const view = (
     state: StatusState,
-    word: string | null,
+    word: string | undefined,
     spoken: string,
-    detail: string | null,
-    action: StatusAction | null
+    detail: string | undefined,
+    action: StatusAction | undefined
   ): StatusIndicator => ({
     id: "rust",
     name: "Rust analyzer",
@@ -202,16 +202,16 @@ export const analyzerIndicator = (
   // Offline reads the same on all three (Spec 06, "Offline"); a reload would
   // not get far
   if (!online) {
-    return view("not-ready", "Offline", "offline", OFFLINE_LINE, null);
+    return view("not-ready", "Offline", "offline", OFFLINE_LINE, undefined);
   }
   switch (analyzer.kind) {
     case "idle":
       return view(
         "idle",
-        null,
+        undefined,
         "not started",
         "It starts when you open a Rust file.",
-        null
+        undefined
       );
     case "off":
       return view(
@@ -219,7 +219,7 @@ export const analyzerIndicator = (
         "Off",
         "off",
         "This browser cannot run it on this page. Code builds as normal.",
-        null
+        undefined
       );
     case "ready":
       return view(
@@ -227,7 +227,7 @@ export const analyzerIndicator = (
         "Ready",
         "ready",
         "Hints and errors show in the editor as you type.",
-        null
+        undefined
       );
     case "failed":
       return view(
@@ -256,7 +256,7 @@ export const analyzerIndicator = (
         `Starting ${seconds} s`,
         `starting, ${seconds} seconds`,
         ANALYZER_WAITING,
-        null
+        undefined
       );
     }
   }
@@ -419,7 +419,7 @@ if (import.meta.vitest) {
           "working",
           "Rust · Starting 12 s",
           "Rust analyzer, starting, 12 seconds",
-          null,
+          undefined,
         ]);
       });
 
@@ -466,7 +466,7 @@ if (import.meta.vitest) {
         expect([r.state, r.words, r.action]).toEqual([
           "not-ready",
           "Rust · Offline",
-          null,
+          undefined,
         ]);
       });
     });
