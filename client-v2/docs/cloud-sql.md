@@ -5,8 +5,10 @@ Cloud project, a Vercel project, and a GitHub repository. The design is the Open
 ([proposal](../../openspec/changes/cloud-sql/proposal.md), [design](../../openspec/changes/cloud-sql/design.md));
 how previews use their databases is in [Preview databases](preview-databases.md).
 
-Production comes first: steps 1 to 7 set up and cut over the production database and need none of the preview
-steps. Steps 8 to 16 move previews to Cloud SQL after the launch; they reuse steps 1 to 4.
+Production comes first: steps 1 to 7 set up, cut over, and release the production database and need none of the
+preview steps. Steps 8 to 16 move previews to Cloud SQL after the launch; they reuse steps 1 to 4. The
+[production runbook](production-runbook.md) puts the production steps in order with the Vercel and Firewall work
+around them.
 
 > **Not yet run end to end.** The steps below come from the change's design and Google's and Vercel's
 > documentation. The steps marked _unverified_ are the ones whose outcome on Cloud SQL for PostgreSQL 17 the
@@ -66,7 +68,7 @@ PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectN
 REGION=<region of the production instance, for example us-central1>
 TEAM_SLUG=<vercel team slug, the path in the team's URL>
 VERCEL_PROJECT=<vercel project name>
-REPO=<owner>/<name>   # the GitHub repository whose workflows reach the preview instance
+REPO=<owner>/<name>   # the GitHub repository whose workflows reach the preview instance; previews only
 OPERATOR=<operator's google account e-mail, lower case>
 
 PREVIEW_SA=vercel-preview@$PROJECT_ID.iam.gserviceaccount.com
@@ -144,8 +146,10 @@ grant() { # member instance
 
 ## 5. Google Cloud: the production instance
 
-`solpg` exists. List its flags first: `--database-flags` replaces the whole set, so every flag already set goes
-into the command with the new one. Changing flags may restart the instance.
+`solpg` exists, with a public IP and no authorised network: the application's connector asks for the public IP
+(`ipType: "PUBLIC"` in `src/features/persistence/model/providers/cloud-sql.mjs`), and connector enforcement below
+admits only the connector front end on it. List its flags first: `--database-flags` replaces the whole set, so every
+flag already set goes into the command with the new one. Changing flags may restart the instance.
 
 The operator who runs this step gets the `cloudsqlsuperuser` role, so the setup needs no password for the built-in
 `postgres` user. An operator added later needs only membership of the production user's role ([Adding an
@@ -153,6 +157,7 @@ operator](#adding-an-operator)).
 
 ```sh
 gcloud sql instances describe solpg --format='value(settings.databaseFlags)'
+# Append every flag the line above printed: --database-flags=cloudsql.iam_authentication=on,<name>=<value>,...
 gcloud sql instances patch solpg --database-flags=cloudsql.iam_authentication=on \
   --connector-enforcement=REQUIRED --ssl-mode=ENCRYPTED_ONLY
 grant "serviceAccount:$PRODUCTION_SA" solpg
@@ -201,8 +206,19 @@ npx vercel@62.7.0 deploy --prebuilt --archive=tgz --prod --skip-domain \
   -e GCP_SERVICE_ACCOUNT_EMAIL="$PRODUCTION_SA" -e SYNC_ENABLED=false
 ```
 
+`vercel build --prod` runs the production build checks (`scripts/vercel-build.sh`), so Production must already
+hold what a production build requires: the variables `scripts/check-agent-env.mjs` names and `SENTRY_AUTH_TOKEN`
+(`scripts/upload-sourcemaps.mjs`). The `-e` values apply to this deployment only; the project's variables are
+unchanged.
+
 Its `GET /api/sync` answers `{ "enabled": false, "db": "ok" }`, and the instance's log shows the production IAM
-user logging in. This proves the production identity's whole path before any data depends on it.
+user logging in. This proves the production identity's whole path before any data depends on it. The deployment
+has no domain, so its own URL (the one `deploy` prints) is behind Deployment Protection; send Vercel's Protection
+Bypass for Automation secret (Settings → Deployment Protection) with the request:
+
+```sh
+curl -s -H "x-vercel-protection-bypass: <bypass secret>" https://<deployment url>/api/sync
+```
 
 ## 7. Cutover
 
@@ -215,15 +231,24 @@ freeze is needed, and this guide does not give it.
    ```sh
    cd client-v2
    CLOUD_SQL_INSTANCE="$PROJECT_ID:$REGION:solpg" CLOUD_SQL_USER="$PRODUCTION_DB_USER" \
-     CLOUD_SQL_DATABASE=solpg scripts/db/cloud-sql/migration-url production -- dbmate --no-dump-schema up
+     CLOUD_SQL_DATABASE=solpg scripts/db/cloud-sql/migration-url production -- dbmate --no-dump-schema migrate
    ```
 
+   `migrate`, not `up`: `up` creates a missing database, owned by the operator instead of the production user, so
+   a wrong database name would succeed quietly. `migrate` fails on it. Return to the repository root with `cd ..`:
+   the items below need the `.vercel/` link there.
+
 3. `\dt` on `solpg` shows every table owned by the production user.
-4. On Production, set the variables of step 6 (without `SYNC_ENABLED=false`), with `vercel env add <name>
-   production`, and remove `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
+4. On Production, set the variables of step 6 (without `SYNC_ENABLED=false`), each with
+   `printf %s '<value>' | npx vercel@62.7.0 env add <name> production --no-sensitive --force`, and set
+   `SYNC_ENABLED` to `true` the same way. Not Sensitive: `migrate-production-db` reads them from a pull, which
+   holds a Sensitive value as empty, and none of them is a secret. Then remove `DATABASE_URL` and
+   `DATABASE_URL_UNPOOLED`. The rollback below restores those two, so first make sure their values can be had
+   again: from the Neon console, or from the Neon store in the Vercel project's Storage tab if the Vercel
+   integration manages them.
 5. Redeploy production. `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, and a sign-in and a project
    edit on the production domain write a row to `solpg`.
-6. Return to the repository root with `cd ..`, then run `make -f client-v2/Makefile.vercel migrate-production-db`. It names `solpg` and reports nothing to apply.
+6. `make -f client-v2/Makefile.vercel migrate-production-db`. It names `solpg` and reports nothing to apply.
 
 From then on, `migrate-production-db` migrates `solpg`: it reads `DB_PROVIDER` and the `CLOUD_SQL_*` variables from
 the Production environment it pulls, prints the database and instance, starts the proxy as `gcloud`'s active
@@ -233,6 +258,36 @@ needs `cloud-sql-proxy` and `psql` installed and `gcloud` logged in as an operat
 
 **Rollback:** restore `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and `DB_PROVIDER=url` on Production and redeploy.
 The Neon project was not written to after the switch; rows written to `solpg` in between are lost.
+
+### Release: an empty `solpg` on the custom domain
+
+When the cutover above ran on the project's `vercel.app` domain and was tested there, the release starts the custom
+domain on an empty database: the test accounts, sessions, and rows go with the old one. In this order:
+
+1. Set the GitHub OAuth app's callback URL to `https://<custom domain>/api/auth/callback/github`. From then on a
+   sign-in on the `vercel.app` domain is refused at GitHub, so no new account is written while the database is
+   replaced.
+2. Through the proxy as an operator, as in step 5, on database `postgres`:
+
+   ```sql
+   -- FORCE ends the deployment's open connections; Postgres 13 and later
+   DROP DATABASE solpg WITH (FORCE);
+   CREATE DATABASE solpg OWNER "vercel-production@<project id>.iam";
+   REVOKE CONNECT ON DATABASE solpg FROM PUBLIC;
+   ```
+
+   Stop the proxy. The role memberships of step 5 belong to the instance, not the database, and stay.
+3. From the repository root, `make -f client-v2/Makefile.vercel migrate-production-db`. It names `solpg`, lists
+   every migration as pending, and applies them after a typed `yes`.
+4. Through the proxy, on `solpg`: `\dt` shows every table owned by the production user, and
+   `select count(*) from "user";` answers `0`.
+5. On Production, set `AUTH_BASE_URL` to `https://<custom domain>`. Attach the domain to the project (Settings →
+   Domains) and redeploy production.
+6. Before anyone signs in, `select count(*) from "user";` still answers `0`. Then step 7's checks hold on the custom
+   domain.
+
+Rollback of the release: point the OAuth callback and `AUTH_BASE_URL` back at the `vercel.app` domain (and
+Preview's `AUTH_OAUTH_PROXY_URL`, if it was moved), remove the domain, and redeploy. The rows of the old `solpg` are gone either way; they were test data.
 
 ## 8. Google Cloud: the preview instance
 
@@ -431,8 +486,21 @@ done
 ```
 
 Gate 2, only the production user connects to `solpg`: on `solpg` through the proxy, `\l solpg` shows `CONNECT`
-for `vercel-production@<project id>.iam` and no entry for `PUBLIC`, and `\du` shows no member of that role other
-than the operators.
+(`c`) for `vercel-production@<project id>.iam` and none for `PUBLIC`, and `\drg` (`\du` before psql 16, which
+moved role memberships out of it) shows no member of that role other than the operators. `PUBLIC`'s entry is the one with no name before the `=`; after the `REVOKE` it still holds
+`TEMPORARY` and reads `=T/"vercel-production@<project id>.iam"`, with no `c`.
+
+The instance settings of step 5:
+
+```sh
+gcloud sql instances describe solpg \
+  --format='yaml(settings.databaseFlags,settings.connectorEnforcement,settings.ipConfiguration.sslMode)'
+```
+
+It shows `cloudsql.iam_authentication` with value `on`, `connectorEnforcement: REQUIRED`, and
+`sslMode: ENCRYPTED_ONLY`.
 
 The port is closed: `psql "host=<instance public ip> port=5432 user=postgres sslmode=require"` is refused, since
-connector enforcement admits only the connector front end.
+connector enforcement admits only the connector front end. The address is
+`gcloud sql instances describe solpg --format='value(ipAddresses[0].ipAddress)'`. Which error psql prints is
+_unverified_; the check passes when it never asks for a password.
