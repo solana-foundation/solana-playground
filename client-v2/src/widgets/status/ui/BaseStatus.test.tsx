@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
@@ -274,4 +274,34 @@ it("folds the three into one chip whose sheet names what is down", async () => {
   );
   expect(onAction).toHaveBeenCalledExactlyOnceWith(AI_OFF);
   expect(sheet.querySelectorAll("[data-status]")).toHaveLength(3);
+});
+
+it("opens the analyzer panel over the line on a phone, beside the navigation on a desk", async () => {
+  const width = window.innerWidth;
+  const panelFor = async (px: number) => {
+    Object.defineProperty(window, "innerWidth", {
+      value: px,
+      configurable: true,
+    });
+    drawRow([UP, AI_OFF, STARTING]);
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Rust analyzer, starting/ })
+    );
+    const panel = await screen.findByRole("dialog");
+    const placed = [
+      panel.getAttribute("data-side"),
+      panel.getAttribute("data-align"),
+    ];
+    cleanup();
+    return placed;
+  };
+
+  // Beside the line on a phone it opened about 296 px off the screen
+  expect(await panelFor(390)).toEqual(["top", "start"]);
+  expect(await panelFor(1280)).toEqual(["right", "end"]);
+
+  Object.defineProperty(window, "innerWidth", {
+    value: width,
+    configurable: true,
+  });
 });
