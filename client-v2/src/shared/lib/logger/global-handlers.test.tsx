@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import { LoggerErrorBoundary } from "./error-boundary";
-import { installGlobalHandlers, markShown } from "./global-handlers";
+import { installGlobalHandlers, markExpected } from "./global-handlers";
 import { initLogger, resetLogger } from "./logger";
 import { memoryProvider } from "./providers/memory";
 
@@ -42,21 +42,41 @@ describe("installGlobalHandlers", () => {
     ]);
   });
 
-  it("should leave a warning, not a panic, for a rejection the user was shown", () => {
-    const reason = new Error("Command `nope` not found.");
-    markShown(reason);
+  /** An unhandled rejection of `reason`, as the browser raises it */
+  const reject = (reason: unknown) => {
     const event = new Event("unhandledrejection") as PromiseRejectionEvent;
     Object.defineProperty(event, "reason", { value: reason });
-
     globalThis.dispatchEvent(event);
+  };
+
+  it("should leave a warning naming only the error for an expected failure", () => {
+    const reason = new Error("Command `nope` not found: Program log: secret");
+    markExpected(reason);
+
+    reject(reason);
 
     expect(logged.entries).toEqual([
       expect.objectContaining({
         ns: "logger:global",
         level: "warn",
-        message: "Shown to the user: Error: Command `nope` not found.",
+        message: "Expected failure: Error",
         report: false,
       }),
+    ]);
+  });
+
+  it.each([
+    ["a TypeError", () => new TypeError("x is undefined")],
+    ["a RangeError", () => new RangeError("bad length")],
+    ["a wasm RuntimeError", () => new WebAssembly.RuntimeError("unreachable")],
+  ])("should still panic for %s, marked or not", (_, make) => {
+    const reason = make();
+    markExpected(reason);
+
+    reject(reason);
+
+    expect(logged.entries).toEqual([
+      expect.objectContaining({ level: "panic", report: true, error: reason }),
     ]);
   });
 

@@ -26,11 +26,19 @@ command failure the terminal has already printed is also reported as a
     argument is the logger's tag (user output can start with one too);
     scrubbing at each call site (the user's output never passes through our
     code); a list of event fields to scrub (every field left off is a leak).
-    A command typed in the terminal that fails is no bug: `PgTerm.process`
-    prints it and rethrows, and the Enter key leaves that rejection unhandled.
-    So `process` marks the error with `markShown`, and the global handler logs
-    a marked rejection at `warn`, a breadcrumb. _Rejected:_ catching at the
-    Enter key (a caller of `execute` still needs the rejection, and any other
-    unawaited caller would still panic); reusing `markFailureShown` (it marks
-    only while the console is open, for the button toast, and lives above the
-    logger).
+    A command typed in the terminal that fails as expected (an unknown
+    command, a bad option, a declined question, a stop) is no bug:
+    `PgTerm.process` prints it and rethrows, and the Enter key leaves that
+    rejection unhandled. So `process` marks the error with `markExpected`, and
+    the global handler logs a marked rejection at `warn` under its name only, a
+    breadcrumb. A fault (`TypeError`, `ReferenceError`, `RangeError`,
+    `SyntaxError`, `EvalError`, `URIError`, a WebAssembly error) is never
+    marked and stays a `panic`. The trade-off: a plain `Error` that a bug
+    throws in a command is logged at `warn` too, since nothing tells it from
+    an outcome; marking each expected throw at its source instead would leave
+    every unmarked one (wallet adapters, the server) a `panic`. _Rejected:_
+    catching at the Enter key (a caller of `execute` still needs the
+    rejection, and any other unawaited caller would still panic); reusing
+    `markFailureShown` (it records whether the user saw a failure, for the
+    button toast, and so depends on the console being open; whether a failure
+    is a bug does not, and it lives above the logger).

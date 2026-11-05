@@ -2,7 +2,7 @@ import { ITerminalOptions, ITheme, Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
 
-import { createLogger, markShown } from "@/shared/lib/logger";
+import { createLogger, markExpected } from "@/shared/lib/logger";
 import {
   markFailureShown,
   markUnavailableHere,
@@ -720,8 +720,9 @@ export class PgTerm {
         this.println(tone ? toneWith(tone)(msg) : msg);
       }
 
-      // The user has seen it: an unknown command or a declined question is not a bug to report
-      markShown(e);
+      // An unknown command, a bad option or a declined question is an outcome,
+      // not a bug; a fault such as a `TypeError` is left unmarked and reported
+      markExpected(e);
       throw e;
     } finally {
       this.enable();

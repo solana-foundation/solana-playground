@@ -63,16 +63,21 @@ capture them through any other path. There are two exceptions. The
 browser's `ResizeObserver loop completed with undelivered notifications.`
 error event, which carries no `error`, is dropped before it is logged; an
 event with any other message, or with an `error`, is logged (HOO-2125). A
-rejection the terminal has already printed for the user (its "Process error"
-line, or the line a stop prints) is marked as shown and logged at `warn`, a
-breadcrumb only (HOO-1800); an unmarked rejection is a `panic`. Only an
-object can be marked: a thrown string or other primitive stays a `panic`
-even when the terminal printed it.
+rejection the terminal has printed as an expected outcome (its "Process
+error" line for an unknown command, a bad option or a declined wallet
+question, or the line a stop prints) is marked as expected and logged at
+`warn` under its error's name only, a breadcrumb (HOO-1800); an unmarked
+rejection is a `panic`. A fault is never marked, so a `TypeError`,
+`ReferenceError`, `RangeError`, `SyntaxError`, `EvalError`, `URIError` or
+WebAssembly error in a command stays a `panic` though the terminal printed
+it; a plain `Error` a bug throws is the price of this rule, and is logged at
+`warn`. Only an object can be marked: a thrown string or other primitive
+stays a `panic` even when the terminal printed it.
 
 #### Scenario: An unhandled rejection
 
-- **WHEN** a promise rejects, nothing handles it, and the terminal has not
-  printed it
+- **WHEN** a promise rejects, nothing handles it, and it is not marked as
+  expected
 - **THEN** the memory provider records a `panic` entry with namespace
   `logger:global`, and Sentry receives exactly one event for it, marked
   unhandled
@@ -87,11 +92,12 @@ even when the terminal printed it.
 
 #### Scenario: A terminal command fails as expected (manual)
 
-- **WHEN** a terminal command fails with an `Error` in a way the user is shown
-  (an unknown command, a declined wallet question, any "Process error" line, a
-  stop) and the rejection reaches the global handler
-- **THEN** the memory provider records a `warn` entry with namespace
-  `logger:global`, not reported, and Sentry receives no event for it
+- **WHEN** a terminal command fails as expected (an unknown command, a bad
+  option, a declined wallet question, a stop) and the rejection reaches the
+  global handler, on a preview with a DSN
+- **THEN** the browser console shows a `warn` line under `logger:global` that
+  names only the error, such as `Expected failure: Error`, and Sentry receives
+  no event for it
 
 #### Scenario: A component throws while rendering
 
@@ -109,14 +115,20 @@ output or a secret key. Sentry's `Console` integration SHALL be off and every
 `console` breadcrumb dropped; the logger's own trail SHALL reach Sentry as
 breadcrumbs the reporter adds, one per entry at `warn` or above. In every
 value of an error event and of a breadcrumb, a hex or base58 run of 64 or more
-characters, a list of 32 or more numbers from 0 to 255 (bracketed, bare,
-or as an index-keyed object), and a typed array of 32 or more bytes, SHALL be
-replaced with `[redacted]`, in keys as in values.
-An event that cannot be scrubbed SHALL be replaced by one that says it was
-withheld. Public keys (32 to 44 base58 characters) SHALL be kept. A feedback
-SHALL be sent as the user wrote it: it is text they chose to send. The
-scenarios below are automated by `reporter/sentry.integration.test.ts`, which
-runs the real SDK, and checked by hand on a preview with a DSN.
+characters, a base64 run of 86 or more, a list of 32 or more numbers from 0
+to 255 (bracketed, bare, as an index-keyed object, or as the text
+`JSON.stringify` makes of one), and a typed array of 32 or more bytes, SHALL
+be replaced with `[redacted]`, in keys as in values. An object with `toJSON`
+SHALL be scrubbed as what `toJSON` returns, and an `Error` as its name,
+message and stack. An event that cannot be scrubbed SHALL be replaced by one
+that says it was withheld, keeps its release, environment and exception type,
+and groups by namespace. Base58 text of 32 to 44 characters SHALL be kept, so
+a public key in base58 stays, and so does a 32-byte seed written in base58 or
+base64, which cannot be told from one; any 32-byte value in hex or as bytes,
+a public key included, is redacted. A feedback SHALL be sent as the user
+wrote it: it is text they chose to send. Unit and integration tests
+(`reporter/scrub.ts`, `reporter/sentry.integration.test.ts`) support these
+rules; the scenarios are checked by hand on a preview with a DSN.
 
 #### Scenario: The user's test prints to the console (manual)
 

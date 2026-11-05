@@ -120,7 +120,7 @@ it.each([
     text: "TypeError: push rejected",
   },
 ] as const)(
-  "should leave $name as a breadcrumb in its namespace, reported or not",
+  "should leave $name that is not reported as a breadcrumb in its namespace",
   ({ level, message, error, severity, text }) => {
     vi.mocked(Sentry.addBreadcrumb).mockClear();
 
@@ -142,6 +142,24 @@ it.each([
     });
   }
 );
+
+it("should leave a reported entry as a breadcrumb only after its report", () => {
+  vi.mocked(Sentry.addBreadcrumb).mockClear();
+  vi.mocked(Sentry.captureException).mockClear();
+  const error = new Error("push rejected");
+
+  sentryProvider({ dsn: DSN }).log(
+    entry({ level: "error", report: true, error })
+  );
+
+  expect(Sentry.addBreadcrumb).toHaveBeenCalledWith(
+    expect.objectContaining({ message: "Error: push rejected" })
+  );
+  // Before it, each report would carry itself as its own last breadcrumb
+  expect(
+    vi.mocked(Sentry.captureException).mock.invocationCallOrder[0]
+  ).toBeLessThan(vi.mocked(Sentry.addBreadcrumb).mock.invocationCallOrder[0]);
+});
 
 it("should leave no breadcrumb for an entry below warn", () => {
   vi.mocked(Sentry.addBreadcrumb).mockClear();

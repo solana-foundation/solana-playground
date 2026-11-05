@@ -253,12 +253,12 @@ describe("PgTerm.process", () => {
       _tty: { getLine: () => undefined },
     }) as PgTerm;
 
-  it("leaves a warning, never a panic, for a command failure the terminal printed", async () => {
+  /** Runs a command that throws `failure` and leaves its rejection unhandled */
+  const runFailing = async (failure: Error) => {
     const logged = memoryProvider();
     initLogger({ providers: [logged] });
     const uninstall = installGlobalHandlers();
     const term = fakeTerm();
-    const failure = new Error("Command `nope` not found.");
 
     const reason = await term
       .process(() => {
@@ -270,11 +270,30 @@ describe("PgTerm.process", () => {
     globalThis.dispatchEvent(event);
     uninstall();
 
+    return { reason, term, logged };
+  };
+
+  it("leaves a warning, never a panic, for a command failure the terminal printed", async () => {
+    const failure = new Error("Command `nope` not found.");
+
+    const { reason, term, logged } = await runFailing(failure);
+
     expect(reason).toBe(failure);
     expect(term.println).toHaveBeenCalledWith(
       "Process error: Command `nope` not found."
     );
     expect(logged.entries.map((entry) => entry.level)).toEqual(["warn"]);
     expect(logged.entries[0].report).toBe(false);
+  });
+
+  it("still reports a fault in a command, though the terminal printed it", async () => {
+    const failure = new TypeError(
+      "Cannot read properties of undefined (reading 'deploy')"
+    );
+
+    const { logged } = await runFailing(failure);
+
+    expect(logged.entries.map((entry) => entry.level)).toEqual(["panic"]);
+    expect(logged.entries[0].report).toBe(true);
   });
 });

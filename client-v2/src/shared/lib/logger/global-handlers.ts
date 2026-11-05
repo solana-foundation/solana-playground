@@ -2,22 +2,47 @@ import { createLogger } from "./logger";
 
 const log = createLogger("logger:global");
 
-const shown = new WeakSet<object>();
+const expected = new WeakSet<object>();
 
 /**
- * Marks a failure the user was already shown, such as the terminal's "Process
- * error" line for an unknown command or a declined wallet question: an
- * expected outcome, so if nothing catches it the global handler leaves a
- * breadcrumb instead of a report. A thrown primitive cannot be marked.
+ * The built-in errors a fault in the code throws, never an outcome a command
+ * means: a failure of one of these is reported even when it is marked
  */
-export const markShown = (error: unknown) => {
-  if (typeof error === "object" && error !== null) shown.add(error);
+const FAULTS = [
+  TypeError,
+  ReferenceError,
+  RangeError,
+  SyntaxError,
+  EvalError,
+  URIError,
+  WebAssembly.RuntimeError,
+  WebAssembly.CompileError,
+  WebAssembly.LinkError,
+];
+
+const isFault = (error: object) => FAULTS.some((type) => error instanceof type);
+
+/**
+ * Marks a failure as an expected outcome, not a bug: the terminal's "Process
+ * error" line for an unknown command, a bad option or a declined wallet
+ * question, or a stop. If nothing catches it, the global handler leaves a
+ * breadcrumb instead of a report. A fault (`TypeError`, a wasm
+ * `RuntimeError` and the like) is never marked, so a regression that throws
+ * one in a command is still reported; nor is a thrown primitive.
+ *
+ * Not `markFailureShown` (`shared/lib/report-button-failure`): that one says
+ * whether the user saw the failure, for the button toast, and depends on the
+ * console being open; this one says whether the failure is a bug.
+ */
+export const markExpected = (error: unknown) => {
+  if (typeof error === "object" && error !== null && !isFault(error)) {
+    expected.add(error);
+  }
 };
 
-const summary = (reason: object) =>
-  reason instanceof Error
-    ? `${reason.name}: ${reason.message}`
-    : String(reason);
+/** Only the name: the message can quote the user's program output */
+const nameOf = (reason: object) =>
+  reason instanceof Error ? reason.name : "a non-Error object";
 
 const RESIZE_OBSERVER_LOOP_NOTICE =
   "ResizeObserver loop completed with undelivered notifications.";
@@ -35,7 +60,7 @@ const isResizeObserverLoopNotice = (event: ErrorEvent) =>
 /**
  * Sends uncaught errors and unhandled rejections to `panic`, except the
  * ResizeObserver loop notice, which is dropped, and a rejection marked with
- * `markShown`, which is logged at `warn`; returns the uninstaller
+ * `markExpected`, which is logged at `warn`; returns the uninstaller
  */
 export const installGlobalHandlers = () => {
   const onError = (event: ErrorEvent) => {
@@ -45,8 +70,8 @@ export const installGlobalHandlers = () => {
   };
   const onRejection = (event: PromiseRejectionEvent) => {
     const { reason } = event;
-    if (typeof reason === "object" && reason !== null && shown.has(reason)) {
-      log.warn(`Shown to the user: ${summary(reason)}`);
+    if (typeof reason === "object" && reason !== null && expected.has(reason)) {
+      log.warn(`Expected failure: ${nameOf(reason)}`);
     } else {
       log.panic(reason, { unhandled: true });
     }

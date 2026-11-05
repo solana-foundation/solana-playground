@@ -14,16 +14,29 @@ const BYTE = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
 /** `MIN_KEY_BYTES` or more bytes separated by commas */
 const BYTE_LIST = `(?:${BYTE}\\s*,\\s*){${MIN_KEY_BYTES - 1},}${BYTE}`;
 
+/** `MIN_KEY_BYTES` or more `"i": byte` pairs: `JSON.stringify` of a typed array */
+const INDEXED_BYTES = `\\{\\s*"0"\\s*:\\s*${BYTE}(?:\\s*,\\s*"\\d+"\\s*:\\s*${BYTE}){${
+  MIN_KEY_BYTES - 1
+},}\\s*\\}`;
+
 /**
- * A secret key written out: a hex or base58 run of 64+ characters (public keys
- * are 32 to 44, so they stay), or a list of 32+ bytes, bracketed or not. Hex
- * goes first: base58 has no `0`, so it would take a hex key only up to its
- * first zero. A transaction signature looks like a secret key in base58 and is
- * redacted too.
+ * A secret key written out: a hex run of 64+ characters (32+ bytes), a base64
+ * run of 86+ (a 64-byte key), a base58 run of 64+, or 32+ bytes as a list,
+ * bracketed or not, or as `JSON.stringify` of a typed array. Base58 text of 32
+ * to 44 characters stays, so a public key in base58 is kept, and so is a
+ * 32-byte seed written in base58 or base64 (43 or 44 characters), which cannot
+ * be told from one. Any 32-byte value in hex or as bytes, a public key
+ * included, is redacted. Hex goes first: base58 has no `0`, so it would take a
+ * hex key only up to its first zero; base64 goes before base58, whose alphabet
+ * lacks `0`, `O`, `I`, `l`, `+` and `/` and would cut a base64 key into
+ * shorter runs. A transaction signature looks like a secret key in base58 and
+ * is redacted too.
  */
 const SECRET_PATTERNS: [RegExp, string][] = [
   [/[0-9a-fA-F]{64,}/g, REDACTED],
+  [/[0-9A-Za-z+/]{86,}={0,2}/g, REDACTED],
   [/[1-9A-HJ-NP-Za-km-z]{64,}/g, REDACTED],
+  [new RegExp(INDEXED_BYTES, "g"), REDACTED],
   [new RegExp(`\\[\\s*${BYTE_LIST}\\s*\\]`, "g"), REDACTED],
   // The edge is captured, not looked behind: older Safari cannot parse a lookbehind
   [new RegExp(`(^|[^\\d.])${BYTE_LIST}(?![\\d.])`, "g"), `$1${REDACTED}`],
@@ -62,6 +75,21 @@ const isKeyBytes = (value: unknown) => {
   return items.length >= MIN_KEY_BYTES && items.every(isByte);
 };
 
+/**
+ * What an object says it holds, as `JSON.stringify` and Sentry's normalising
+ * would read it: `toJSON()` when it has one (a `PublicKey` gives its base58
+ * text), and an `Error`'s `name`, `message` and `stack`, which are not its own
+ * enumerable fields. Breadcrumb data reaches the scrub before Sentry
+ * normalises it, so walking only `Object.entries` would send `{}` for either.
+ */
+const dataOf = (value: object): unknown => {
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message, stack: value.stack };
+  }
+  const { toJSON } = value as { toJSON?: unknown };
+  return typeof toJSON === "function" ? toJSON.call(value) : value;
+};
+
 /** `ancestors` holds the objects above `value`, so only a cycle is cut, not a shared object */
 const walkWith =
   (ancestors: object[]) =>
@@ -74,6 +102,9 @@ const walkWith =
     }
     // Not `concat`: it would spread an array's items in as ancestors
     const walkBelow = walkWith([...ancestors, value]);
+    const data = dataOf(value);
+    // One level down, so a `toJSON` that returns a fresh object each time still ends
+    if (data !== value) return walkBelow(data);
     if (Array.isArray(value)) return value.map((item) => walkBelow(item));
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
@@ -88,9 +119,23 @@ const redact = walkWith([]);
 
 interface Breadcrumb {
   category?: string;
+  level?: string;
+  timestamp?: number;
   message?: string;
   data?: Record<string, unknown>;
 }
+
+/** `read()`, or `undefined` if it throws: what a withheld copy keeps of a hostile value */
+const attempt = <T>(read: () => T): T | undefined => {
+  try {
+    return read();
+  } catch {
+    return undefined;
+  }
+};
+
+const textOf = (value: unknown) =>
+  typeof value === "string" ? redactText(value) : undefined;
 
 /**
  * A breadcrumb fit to send, or `null` to drop it. Every `console` breadcrumb
@@ -98,32 +143,72 @@ interface Breadcrumb {
  * a console call tells their output from ours. The logger's own trail arrives
  * as breadcrumbs the reporter adds (`trail` in `reporter/sentry.ts`).
  */
-export const scrubBreadcrumb = <B extends Breadcrumb>(crumb: B): B | null =>
-  // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeBreadcrumb` drops a crumb only on `null`
-  crumb.category === "console" ? null : (redact(crumb) as B);
+export const scrubBreadcrumb = <B extends Breadcrumb>(crumb: B): B | null => {
+  try {
+    // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeBreadcrumb` drops a crumb only on `null`
+    return crumb.category === "console" ? null : (redact(crumb) as B);
+  } catch {
+    // A throwing getter or `toJSON` in its data: keep where and when, not what
+    return {
+      category: attempt(() => textOf(crumb.category)),
+      level: attempt(() => textOf(crumb.level)),
+      timestamp: attempt(() => crumb.timestamp),
+      message: "Breadcrumb withheld: scrubbing it failed",
+    } as B;
+  }
+};
 
 interface ScrubbableEvent {
   event_id?: string;
   message?: string;
   timestamp?: number;
   level?: string;
+  release?: string;
+  environment?: string;
+  dist?: string;
+  platform?: string;
+  sdk?: unknown;
   tags?: Record<string, unknown>;
+  exception?: { values?: { type?: unknown }[] };
   breadcrumbs?: Breadcrumb[];
 }
 
 /**
- * Sent in place of an event the rules could not walk (a throwing getter in a
- * context, say): Sentry drops an event whose `beforeSend` throws, without a
- * word, so the team at least learns that a report from `ns` was withheld.
+ * Sent in place of an event the rules could not walk (a throwing getter in an
+ * exception or a tag, say): Sentry drops an event whose `beforeSend` throws,
+ * without a word, so the team at least learns that a report from `ns` was
+ * withheld. It keeps what tells deploys and failures apart (release,
+ * environment, the exception's type, the name of what the scrub threw), never
+ * a message, which could hold the secret, and groups by `ns` rather than by
+ * its one shared message.
  */
-const withheld = <E extends ScrubbableEvent>(event: E): E => {
-  const ns = event.tags?.ns;
+const withheld = <E extends ScrubbableEvent>(event: E, failure: unknown): E => {
+  const ns = attempt(() => textOf(event.tags?.ns));
+  const types = attempt(() =>
+    event.exception?.values
+      ?.map((value) => textOf(value.type))
+      .filter(Boolean)
+      .join(", ")
+  );
+  const thrown = attempt(() =>
+    failure instanceof Error ? textOf(failure.name) : typeof failure
+  );
+  const tags: Record<string, string> = {};
+  if (ns) tags.ns = ns;
+  if (types) tags.exception_type = types;
+  if (thrown) tags.scrub_error = thrown;
   // Every field of Sentry's event is optional, so this reduced copy is still one
   return {
-    event_id: event.event_id,
-    timestamp: event.timestamp,
-    level: event.level,
-    tags: typeof ns === "string" ? { ns: redactText(ns) } : {},
+    event_id: attempt(() => textOf(event.event_id)),
+    timestamp: attempt(() => event.timestamp),
+    level: attempt(() => textOf(event.level)),
+    release: attempt(() => textOf(event.release)),
+    environment: attempt(() => textOf(event.environment)),
+    dist: attempt(() => textOf(event.dist)),
+    platform: attempt(() => textOf(event.platform)),
+    sdk: attempt(() => redact(event.sdk)),
+    tags,
+    fingerprint: ["scrub-withheld", ns ?? "unknown"],
     message: "Report withheld: scrubbing it failed",
   } as unknown as E;
 };
@@ -137,9 +222,9 @@ export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
     const scrubbed = redact(event) as E;
     if (breadcrumbs !== undefined) scrubbed.breadcrumbs = breadcrumbs;
     return scrubbed;
-  } catch {
+  } catch (failure) {
     // Not logged: the logger reports through this reporter, and would loop
-    return withheld(event);
+    return withheld(event, failure);
   }
 };
 
@@ -248,7 +333,103 @@ if (import.meta.vitest) {
         const cyclic: Record<string, unknown> = { key: KEY };
         cyclic.self = cyclic;
 
-        expect(redact(cyclic)).toMatchObject({ key: "[redacted]" });
+        expect(redact(cyclic)).toEqual({
+          key: "[redacted]",
+          self: "[redacted]",
+        });
+      });
+
+      // Each row sits at a threshold, so moving one by a step fails a row
+      it.each(
+        [
+          ["a text list of 32 bytes", bytes(32).join(", "), "[redacted]"],
+          [
+            "a text list of 31 bytes",
+            bytes(31).join(", "),
+            bytes(31).join(", "),
+          ],
+          ["a bracketed list of 32 bytes", `[${bytes(32)}]`, "[redacted]"],
+          [
+            "a spaced list of 32 bytes",
+            `[ ${bytes(32).join(" , ")} ]`,
+            "[redacted]",
+          ],
+          ["a bare list of 32 bytes", bytes(32).join(","), "[redacted]"],
+          ["64 hex characters with zeros", "0a".repeat(32), "[redacted]"],
+          ["63 hex characters", "0a".repeat(31) + "0", "0a".repeat(31) + "0"],
+          ["64 base58 characters", "3Xz9".repeat(16), "[redacted]"],
+          [
+            "63 base58 characters",
+            "3Xz9".repeat(15) + "3Xz",
+            "3Xz9".repeat(15) + "3Xz",
+          ],
+          ["an 88-character base64 key", "aO0+/lI1".repeat(11), "[redacted]"],
+          [
+            "a padded base64 key",
+            `${"aO0+/lI1".repeat(10)}aO0+/l==`,
+            "[redacted]",
+          ],
+          [
+            "a 44-character base64 seed",
+            "aO0+/lI1".repeat(5) + "aO0=",
+            "aO0+/lI1".repeat(5) + "aO0=",
+          ],
+          [
+            "a stringified Uint8Array of 32 bytes",
+            JSON.stringify(new Uint8Array(32)),
+            "[redacted]",
+          ],
+          [
+            "a stringified Uint8Array of 31 bytes",
+            JSON.stringify(new Uint8Array(31)),
+            JSON.stringify(new Uint8Array(31)),
+          ],
+        ].map(([name, text, scrubbed]) => ({ name, text, scrubbed }))
+      )("should handle $name in text", ({ text, scrubbed }) => {
+        expect(redact(`k ${text} end`)).toBe(`k ${scrubbed} end`);
+      });
+
+      it.each(
+        [
+          ["a number array", bytes(32), bytes(31)],
+          ["a Uint8Array", new Uint8Array(32), new Uint8Array(31)],
+          [
+            "an index-keyed object",
+            Object.assign({}, bytes(32)),
+            Object.assign({}, bytes(31)),
+          ],
+        ].map(([name, at, below]) => ({ name, at, below }))
+      )(
+        "should redact $name of 32 bytes and keep one of 31",
+        ({ at, below }) => {
+          expect(redact(at)).toBe("[redacted]");
+          expect(redact(below)).not.toBe("[redacted]");
+        }
+      );
+
+      it("should walk what toJSON gives, as Sentry would", () => {
+        const publicKey = { _bn: { words: [1, 2] }, toJSON: () => PUBKEY };
+
+        expect(redact({ owner: publicKey })).toEqual({ owner: PUBKEY });
+      });
+
+      it("should keep an Error's name, message and stack, redacted", () => {
+        const error = new Error(`bad ${KEY}`);
+        error.stack = "Error: bad\n    at push";
+
+        expect(redact({ error })).toEqual({
+          error: {
+            name: "Error",
+            message: "bad [redacted]",
+            stack: "Error: bad\n    at push",
+          },
+        });
+      });
+
+      it("should end at depth when toJSON returns a fresh object each time", () => {
+        const endless = (): object => ({ toJSON: endless });
+
+        expect(redact(endless())).toBe("[redacted]");
       });
 
       it("should leave numbers, booleans and null as they are", () => {
@@ -287,6 +468,51 @@ if (import.meta.vitest) {
           category: "persistence:sync",
           message: "push rejected [redacted]",
           data: { projectId: "p1", kp: "[redacted]" },
+        });
+      });
+
+      it("should keep a logged context's Error and public key", () => {
+        const error = new Error("push slow");
+        error.stack = "Error: push slow";
+
+        expect(
+          scrubBreadcrumb({
+            category: "persistence:sync",
+            data: { error, owner: { toJSON: () => PUBKEY } },
+          })
+        ).toEqual({
+          category: "persistence:sync",
+          data: {
+            error: {
+              name: "Error",
+              message: "push slow",
+              stack: "Error: push slow",
+            },
+            owner: PUBKEY,
+          },
+        });
+      });
+
+      it("should withhold a breadcrumb it cannot walk, keeping where and when", () => {
+        const hostile = {
+          toJSON: () => {
+            throw new Error(`getter ${KEY}`);
+          },
+        };
+
+        expect(
+          scrubBreadcrumb({
+            category: "persistence:sync",
+            level: "warning",
+            timestamp: 2,
+            message: `push ${KEY}`,
+            data: { hostile },
+          })
+        ).toEqual({
+          category: "persistence:sync",
+          level: "warning",
+          timestamp: 2,
+          message: "Breadcrumb withheld: scrubbing it failed",
         });
       });
 
@@ -345,30 +571,77 @@ if (import.meta.vitest) {
         });
       });
 
-      it("should withhold an event it cannot scrub rather than lose or leak it", () => {
-        const hostile = {
-          get boom(): string {
-            throw new Error("getter");
-          },
-        };
+      // `exception`, `tags` and `request` reach `beforeSend` as they were made; Sentry has
+      // normalised `extra`, `contexts`, `user` and breadcrumb data before it
+      const hostile = {
+        get boom(): string {
+          throw new TypeError(`getter ${KEY}`);
+        },
+      };
 
-        expect(
-          scrubEvent({
+      const TAGS = { ns: "wallet:connect" };
+      const EXCEPTION = { values: [{ type: "TypeError" }] };
+
+      it.each([
+        {
+          name: "an exception",
+          exception: { values: [{ type: "Error", hostile }] },
+          tags: TAGS,
+          request: undefined,
+          type: "Error",
+        },
+        {
+          name: "a tag",
+          exception: EXCEPTION,
+          tags: { ns: "wallet:connect", hostile },
+          request: undefined,
+          type: "TypeError",
+        },
+        {
+          name: "the request",
+          exception: EXCEPTION,
+          tags: TAGS,
+          request: { headers: hostile },
+          type: "TypeError",
+        },
+      ])(
+        "should withhold an event with a throwing getter in $name rather than lose or leak it",
+        ({ exception, tags, request, type }) => {
+          const scrubbed = scrubEvent({
             event_id: "e1",
             timestamp: 1,
             level: "error",
+            release: "abc123",
+            environment: "preview",
+            dist: "d1",
+            platform: "javascript",
+            sdk: { name: "sentry.javascript.react", version: "9" },
             message: `msg ${KEY}`,
-            tags: { ns: "wallet:connect" },
-            extra: { hostile },
-          })
-        ).toEqual({
-          event_id: "e1",
-          timestamp: 1,
-          level: "error",
-          tags: { ns: "wallet:connect" },
-          message: "Report withheld: scrubbing it failed",
-        });
-      });
+            tags,
+            exception,
+            request,
+          });
+
+          expect(scrubbed).toEqual({
+            event_id: "e1",
+            timestamp: 1,
+            level: "error",
+            release: "abc123",
+            environment: "preview",
+            dist: "d1",
+            platform: "javascript",
+            sdk: { name: "sentry.javascript.react", version: "9" },
+            tags: {
+              ns: "wallet:connect",
+              exception_type: type,
+              scrub_error: "TypeError",
+            },
+            fingerprint: ["scrub-withheld", "wallet:connect"],
+            message: "Report withheld: scrubbing it failed",
+          });
+          expect(JSON.stringify(scrubbed)).not.toContain(KEY);
+        }
+      );
     });
   });
 }
