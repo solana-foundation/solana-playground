@@ -51,8 +51,13 @@ const pathOf = (userId: string, projectId: string) =>
 const projectIdOf = (fileName: string) =>
   decodeURIComponent(fileName.slice(0, -SUFFIX.length));
 
-/** Who the marks belong to, or `null` when nobody is signed in */
-const currentUserId = () => PgSession.get()?.id ?? null;
+/**
+ * Who the marks belong to, or `null` when nobody is signed in. A session that
+ * ended keeps its account's: without that `markDirty` did nothing, and an edit
+ * made meanwhile was skipped by reconcile's cheap path after the next sign-in.
+ */
+const currentUserId = () =>
+  PgSession.get()?.id ?? PgSession.expiredUser?.id ?? null;
 
 /**
  * The first sync client's mark: one hash of the whole snapshot, none per file.
@@ -234,7 +239,7 @@ export class PgSyncMark {
   }
 
   /**
-   * Fires after a mark of the signed-in account is written, flagged dirty or
+   * Fires after a mark of the current account (`currentUserId`) is written, flagged dirty or
    * removed (or found already gone), with which; never for a write or removal
    * that failed. In this tab only. Read-only listeners: the project list's markers
    * (`sync-marker.ts`) re-read on it, and must never write a mark back.
@@ -328,7 +333,7 @@ export class PgSyncMark {
 
   /**
    * Whether this device has any record of syncing this project for the
-   * signed-in account -- in any shape, readable or not.
+   * current account (`currentUserId`) -- in any shape, readable or not.
    *
    * The question `projectIds` answers per project. A mark `read` cannot use
    * is still the difference between "deleted elsewhere" and "never uploaded".
@@ -378,7 +383,7 @@ export class PgSyncMark {
   }
 
   /**
-   * Every project this device has ever synced for the signed-in account.
+   * Every project this device has ever synced for the current account (`currentUserId`).
    *
    * Reconcile needs this to spot the projects the server *no longer* lists: a
    * mark with no server row is a project deleted on another device, which is a
@@ -472,6 +477,42 @@ if (import.meta.vitest) {
           name: undefined,
           image: undefined,
           login: undefined,
+        });
+      });
+
+      describe("after a session ended", () => {
+        const MARK = {
+          files: { "a.ts": "h1" },
+          name: "one",
+          updatedAt: "t1",
+          dirty: false,
+        };
+
+        const expire = async () => {
+          vi.spyOn(globalThis, "fetch").mockResolvedValue({
+            ok: true,
+            json: async () => ({}),
+          } as Response);
+          await PgSession.refresh();
+          vi.restoreAllMocks();
+        };
+
+        it("still reads and flags the account's mark, so an edit made meanwhile uploads later", async () => {
+          await PgSyncMark.write("p1", MARK);
+          await expire();
+          expect(PgSession.get()).toBeUndefined();
+
+          await PgSyncMark.markDirty("p1");
+
+          expect((await PgSyncMark.read("p1"))?.dirty).toBe(true);
+        });
+
+        it("reads nothing once nobody is remembered", async () => {
+          await PgSyncMark.write("p1", MARK);
+          await PgSession.refreshWith(undefined);
+          localStorage.clear();
+
+          expect(await PgSyncMark.read("p1")).toBeNull();
         });
       });
 

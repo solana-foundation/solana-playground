@@ -13,9 +13,9 @@ import { Spinner } from "@/shared/ui/spinner";
 
 import type { AccountLine, AccountView } from "../model/account";
 import {
+  accountImage,
   accountLabel,
   accountLines,
-  accountUser,
   lineText,
 } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
@@ -26,6 +26,7 @@ const LINE_STYLE: Record<AccountLine["kind"], string> = {
   failed: "text-destructive",
   login: "text-muted-foreground",
   offline: "text-muted-foreground",
+  "session-ended": "text-warning-ink",
 };
 
 export interface BaseSessionFooterProps {
@@ -74,7 +75,7 @@ const BaseSessionFooter = ({
                 aria-busy={account.sending || undefined}
               >
                 <AccountAvatar
-                  image={accountUser(account)?.image}
+                  image={accountImage(account)}
                   sending={account.sending}
                 />
                 <span className="flex min-w-0 flex-col leading-tight">
@@ -83,8 +84,13 @@ const BaseSessionFooter = ({
                   </span>
                   {line && (
                     <span
-                      // A failure is announced; its reason is in full in the menu
-                      role={line.kind === "failed" ? "status" : undefined}
+                      // A failure or a session's end is announced; a failure's
+                      // reason is in full in the menu
+                      role={
+                        line.kind === "failed" || line.kind === "session-ended"
+                          ? "status"
+                          : undefined
+                      }
                       title={line.kind === "failed" ? line.message : undefined}
                       className={cn("truncate text-xs", LINE_STYLE[line.kind])}
                     >

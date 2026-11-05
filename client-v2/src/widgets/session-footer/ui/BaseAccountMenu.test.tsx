@@ -110,6 +110,28 @@ it("says why a sign-in failed above Sign in with GitHub, for the rail too", asyn
   expect(items()[0]).toBe("Tryagain");
 });
 
+const ENDED = { status: "expired", user: TESTER } as const;
+
+it("offers Sign in again first after a session ended", async () => {
+  const onPick = await open(view({ session: ENDED }));
+  expect(items()[0]).toBe("Signinagain");
+  expect(screen.queryByRole("menuitem", { name: "Sign out" })).toBeNull();
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Sign in again" })
+  );
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("sign-in");
+});
+
+it("says offline over Sign in again, and turns it off", async () => {
+  await open(view({ session: ENDED, online: false }));
+  expect(items()[0]).toBe("You'reoffline");
+  expect(
+    screen
+      .getByRole("menuitem", { name: "You're offline" })
+      .getAttribute("aria-disabled")
+  ).toBe("true");
+});
+
 it("retries a failed sign-in from Try again", async () => {
   const onPick = await open(
     view({
@@ -369,6 +391,15 @@ it("as a phone's page, signed out, pins Sign in with GitHub at its foot with wha
   const signIns = screen.getAllByRole("menuitem", {
     name: "Sign in with GitHub",
   });
+  expect(signIns).toHaveLength(1);
+  expect(signIns[0].closest("[data-account-foot]")).toBeTruthy();
+  await userEvent.click(signIns[0]);
+  expect(onPick).toHaveBeenCalledWith("sign-in");
+});
+
+it("as a phone's page, after a session ended, pins Sign in again at its foot", async () => {
+  const onPick = await openPage(view({ session: ENDED }));
+  const signIns = screen.getAllByRole("menuitem", { name: "Sign in again" });
   expect(signIns).toHaveLength(1);
   expect(signIns[0].closest("[data-account-foot]")).toBeTruthy();
   await userEvent.click(signIns[0]);
