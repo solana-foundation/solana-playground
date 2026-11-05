@@ -210,12 +210,6 @@ test.describe("on a 1440 px window", () => {
       lines.filter((line) =>
         line.startsWith("[telemetry:event] status_notice_shown ")
       );
-    // Deploy's code is loaded while online: offline, a stage not yet opened
-    // cannot load its chunk (sent to Lead as intake, 3 Nov)
-    await page.locator("#flow-stage-tab-deploy").click();
-    await expect(
-      page.locator("#flow-stage-panel-deploy").getByRole("heading").first()
-    ).toBeVisible();
     await page.locator("#flow-stage-tab-build").click();
     await page.context().setOffline(true);
     await expect(notice(page)).toBeVisible();
@@ -225,6 +219,54 @@ test.describe("on a 1440 px window", () => {
     await expect.poll(() => shown().length).toBe(1);
     expect(shown()[0]).toContain("{notice: offline}");
     await page.context().setOffline(false);
+  });
+
+  test("client-v2-status: Offline, a stage not loaded yet keeps the app up", async ({
+    seededPage: page,
+  }) => {
+    await page.context().setOffline(true);
+    await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE_LINE);
+    await page.locator("#flow-stage-tab-deploy").click();
+
+    const panel = page.locator("#flow-stage-panel-deploy");
+    await expect(panel.getByText("Deploy needs a connection")).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Try again" })
+    ).toBeVisible();
+
+    // The editor is still there, and the stage loads when the network returns
+    await page.locator("#flow-stage-tab-write").click();
+    await expect(page.locator("#flow-stage-panel-write")).toBeVisible();
+    await page.locator("#flow-stage-tab-deploy").click();
+    await expect(panel.getByText("Deploy needs a connection")).toBeVisible();
+    await page.context().setOffline(false);
+    await expect(panel.getByText("Deploy needs a connection")).toHaveCount(0);
+    await expect(panel.getByRole("heading").first()).toBeVisible();
+  });
+
+  test("client-v2-status: A stage whose code is gone points to a reload", async ({
+    seededPage: page,
+  }) => {
+    // A new release removes the old hashed files: the chunk answers 404
+    const chunks = "**/static/js/*.js";
+    await page.route(chunks, (route) => route.fulfill({ status: 404 }));
+    await page.locator("#flow-stage-tab-deploy").click();
+
+    const panel = page.locator("#flow-stage-panel-deploy");
+    await expect(panel.getByText("Deploy couldn't load")).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Reload page" })
+    ).toBeVisible();
+
+    await panel.getByRole("button", { name: "Try again" }).click();
+    await expect(
+      panel.getByText("Reload the page to get the latest version.")
+    ).toBeVisible();
+
+    await page.unroute(chunks);
+    await panel.getByRole("button", { name: "Try again" }).click();
+    await expect(panel.getByText("Deploy couldn't load")).toHaveCount(0);
+    await expect(panel.getByRole("heading").first()).toBeVisible();
   });
 
   test("client-v2-status: A cluster that does not answer on Deploy", async ({
