@@ -384,11 +384,12 @@ const LayoutShell = ({
    * visit's on a phone, else saved. Not under Home or a page, which show no
    * console to open.
    */
-  const openConsole = (via: "auto" | "button" = "auto") => {
+  const openConsoleVia = (via: "auto" | "button") => () => {
     if (isCovered(screenNow.current)) return;
     if (phone) setPhoneConsoleOpen(true, via);
     else setOpen("console", { open: true, via });
   };
+  const openConsole = openConsoleVia("auto");
   /**
    * A script run opens the console: its output is the run's result. A phone
    * with no program also moves to the preview, the page whose bar holds Run
@@ -472,8 +473,8 @@ const LayoutShell = ({
     // `onDidChange` replays the current state first; that one is the baseline
     let prevDeploy: StageStatus | undefined;
     const subs = [
-      PgCommand.deploy.onDidStart(() => openConsole()),
-      onDidRequestConsole(() => openConsole("button")),
+      PgCommand.deploy.onDidStart(openConsole),
+      onDidRequestConsole(openConsoleVia("button")),
       PgCommand.run.onDidStart(showClientRun),
       PgClientRun.onDidChange((runState) => {
         if (runState.kind === "funding") showFunding();
