@@ -69,7 +69,7 @@ test("refuses a stopped version", () => {
 });
 
 for (const bad of ["A-1", "a b", "a;rm", "$(x)", "-a"]) {
-  test(`malformed version ${JSON.stringify(bad)} is refused`, () => {
+  test(`refuses the malformed version ${JSON.stringify(bad)}`, () => {
     assert.throws(() => selectTarget(LIVE_B, bad), /Malformed version/);
   });
 }
