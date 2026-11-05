@@ -36,12 +36,15 @@ const createCommonArgs = (parentPath: string) =>
           ];
         }
 
-        return PgExplorer.getAllFiles()
-          .map(([path]) => path)
-          .filter(PgLanguage.getIsPathJsLike)
-          .map(PgExplorer.getRelativePath)
-          .filter((path) => path.startsWith(parentPath))
-          .map((path) => path.replace(PgCommon.appendSlash(parentPath), ""));
+        return (
+          PgExplorer.getAllFiles()
+            .map(([path]) => path)
+            .filter(PgLanguage.getIsPathJsLike)
+            // Called on `PgExplorer`: the method reads `this`
+            .map((path) => PgExplorer.getRelativePath(path))
+            .filter((path) => path.startsWith(parentPath))
+            .map((path) => path.replace(PgCommon.appendSlash(parentPath), ""))
+        );
       },
     },
   ]);
