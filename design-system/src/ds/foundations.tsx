@@ -80,6 +80,7 @@ function Colour() {
           ["--syntax-string", "String"],
           ["--syntax-number", "Number"],
           ["--syntax-comment", "Comment"],
+          ["--syntax-plain", "Plain"],
         ]}
       />
       <SwatchGrid
