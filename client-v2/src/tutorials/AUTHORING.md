@@ -81,7 +81,7 @@ The schema describes every field. The parts that need judgement:
   it. The check does not look for the file, but the card shows a broken
   image without it, so the pull request must carry it.
 - `intro.promise` says what the learner ends with. `intro.log` is the log
-  line from question 2. `intro.files` is the finished program, shown read
+  line from question 2, as the log shows it: `Program log: Echo: gm`. `intro.files` is the finished program, shown read
   only before Start, usually the last step's `target`.
 - Ids never change once published: saved progress names them. They are
   lower case letters, digits, `.` and `-`. A step's id
@@ -471,11 +471,20 @@ the failure. `onFail` holds the beats after the learner presses Explain: a
   your own `msg!` prints, and use `.+` where the learner's input goes. Leave
   `log` out when the instruction prints nothing; Anchor's automatic
   `Instruction: ...` lines are not a goal. `$` anchors to the line's end
-  (`Count: 1$` refuses `Count: 10`); the line starts with `Program log:`,
+  (`Echo: gm$` refuses `Echo: gmail`); the line starts with `Program log:`,
   so `^` needs it (`^Program log: Count`) or is better left out. `args` is
   optional too; each named argument needs a value that is not blank. A step
   with several calls passes on the first one that meets its goal, in
-  whatever order they run.
+  whatever order they run. Accounts live on devnet, so a learner who calls
+  again, or comes back to the step, may find the account an earlier call
+  made: a counter prints `Counter is now 2` the second time, so its goal's
+  `log` is `"Counter is now \\d+"` in JSON, not `1`. Make the goal the
+  call that works on every run (`increment`), never a one-time call
+  (`initialize`), which Anchor's `init` refuses once the account exists.
+  Put the one-time call in a `call` act before the goal's; a learner
+  whose account already exists gets that refusal, and the step does not
+  move on from it yet, so keep one-time calls to the step that creates the
+  account.
 - `{ "kind": "refused", "instruction": "chop_tree", "error": { "name": "NotEnoughEnergy", "code": 6000 } }`:
   the program refused a call of the instruction with this error. Give the
   error's `name` (the variant of your `#[error_code]` enum), its `code`
@@ -496,8 +505,8 @@ compiles"), `line` says what that means. A headline, like a step's
 `objective`, carries no closing period. `callPanelLine` replaces `line`
 when the learner passed the step from the Call panel; `"extra": "openTest"`
 adds an "Open Call" button. No values that only a live run knows (a program
-id, a fee, a time); a value the program always gives, like `Count: 1`, is
-fine.
+id, a fee, a time, a counter that grows on every call); a value the program
+prints the same on every call, like `Hello, World!`, is fine.
 
 `explain` answers "Explain this step": what the step does and how, in two to
 four sentences.
@@ -811,14 +820,18 @@ git submodule update --init ../client/public
 yarn install --frozen-lockfile
 yarn generate-fast
 yarn tutorial:check <slug>
-yarn dev
+yarn dev:with-stubs
 ```
 
+`stub-packages.sh` stands in for the Rust-built WASM packages, which take
+about an hour to compile and are not needed to check or open a tutorial;
+plain `yarn dev` refuses to start on them, so use `yarn dev:with-stubs`
+(it runs `yarn generate-fast` first, which picks up a new folder).
+
 Open `http://localhost:3000/tutorials`: the card shows under its level with
-its thumbnail and its level and framework. Opening it runs the conversation
-once the conversation view is in the branch you run (it is being built in
-November 2026); until then, the check and the pull request's review are the
-gate.
+its thumbnail and its level and framework. Opening it starts the
+conversation on its intro card. The deploy, call and Call panel cards are
+not all built yet, so a run may stop there; until they land, the check and the pull request's review are the gate.
 
 ## The pull request
 
