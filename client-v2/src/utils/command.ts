@@ -697,7 +697,10 @@ Available subcommands: ${cmd.subcommands
     const why = runs.some((run) => run.stoppability === "step")
       ? "This step can't be stopped."
       : `\`${last.name}\` can't be stopped.`;
-    PgTerminal.println(`^C\n${why} Wait for it to finish.`);
+    PgTerminal.println(
+      `^C\n${PgTerminal.warning(`${why} Wait for it to finish.`)}`,
+      { noColor: true }
+    );
     return false;
   }
 
