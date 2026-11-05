@@ -15,7 +15,7 @@ import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Input } from "@/shared/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
 
-import { MANIFEST_NAME } from "../lib/format";
+import { MANIFEST_NAME, titleFileName } from "../lib/format";
 import type { ExportFailure } from "../model/export";
 import type { GistVisibility } from "../model/telemetry";
 
@@ -236,7 +236,13 @@ const WhoCanOpen = ({
  * control, at controls' size; what stays is a note under it, at the size of
  * supporting text, so it holds one line
  */
-const WhatGoes = ({ files }: { files: ShareFiles | undefined }) => {
+const WhatGoes = ({
+  name,
+  files,
+}: {
+  name: string;
+  files: ShareFiles | undefined;
+}) => {
   const [open, setOpen] = useState(false);
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-border">
@@ -268,7 +274,8 @@ const WhatGoes = ({ files }: { files: ShareFiles | undefined }) => {
         />
       </button>
       {/* The paths sit under the row's words, past its icon (12 + 16 + 10),
-          and the manifest is named, so no file on GitHub comes unannounced */}
+          and the title and manifest are named, so no file on GitHub comes
+          unannounced */}
       {open && files && (
         <ul className="flex max-h-40 list-none flex-col gap-1 overflow-y-auto border-t border-border py-2.5 pr-3 pl-[2.375rem] text-caption">
           {files.paths.map((path) => (
@@ -277,8 +284,10 @@ const WhatGoes = ({ files }: { files: ShareFiles | undefined }) => {
             </li>
           ))}
           <li className="mt-1 font-read text-muted-foreground">
-            plus <span className="font-mono">{MANIFEST_NAME}</span>, so
-            Playground can open the gist again
+            plus <span className="font-mono">{titleFileName(name)}</span>, which
+            titles the gist, and{" "}
+            <span className="font-mono">{MANIFEST_NAME}</span>, so Playground
+            can open it again
           </li>
         </ul>
       )}
@@ -423,7 +432,7 @@ const BaseShareGist = ({
         onChange={onVisibilityChange}
         locked={busy || state.step === "waiting"}
       />
-      <WhatGoes files={files} />
+      <WhatGoes name={name} files={files} />
       {notice && (
         <p role="status" className="text-body font-read text-muted-foreground">
           {notice}

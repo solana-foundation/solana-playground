@@ -38,8 +38,8 @@ type GistEvents = {
   /**
    * The share dialog started an export: the user pressed create, or the
    * export resumed after a sign-in or a grant of gist access. `files` counts
-   * the gist's files: the manifest and empty files (listed only in the
-   * manifest) left out. `source` says where the dialog was opened.
+   * the gist's files: the manifest, the title and empty files (listed only
+   * in the manifest) left out. `source` says where the dialog was opened.
    */
   gist_export_started: {
     files: number;

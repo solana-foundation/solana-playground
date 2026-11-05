@@ -471,6 +471,7 @@ it("lists what goes to the gist, folded, with the manifest named", async () => {
   expect(screen.getByText("client/client.ts")).toBeTruthy();
   expect(screen.getByText("src/lib.rs")).toBeTruthy();
   expect(screen.getByText(".playground.json")).toBeTruthy();
+  expect(screen.getByText("!counter")).toBeTruthy();
 });
 
 it("says so when the browser blocks the sign-in popup", async () => {
