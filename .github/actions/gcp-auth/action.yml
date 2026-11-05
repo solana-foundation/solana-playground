@@ -30,6 +30,18 @@ runs:
         service_account: ${{ inputs.workload_identity_provider != '' && inputs.service_account || '' }}
         credentials_json: ${{ inputs.workload_identity_provider == '' && inputs.credentials_json || '' }}
 
+    # The run does not otherwise say which path it took, and a cleared variable falls back to the key without an error
+    - name: Say how this run signed in
+      shell: bash
+      env:
+        PROVIDER: ${{ inputs.workload_identity_provider }}
+      run: |
+        if [ -n "$PROVIDER" ]; then
+          echo "::notice::GCP sign-in: Workload Identity Federation"
+        else
+          echo "::notice::GCP sign-in: service-account key"
+        fi
+
     - name: Set up Cloud SDK
       uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
 

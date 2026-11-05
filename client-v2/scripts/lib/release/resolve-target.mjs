@@ -93,6 +93,18 @@ export function assertLive(versions, target) {
   }
 }
 
+/**
+ * @param {unknown[]} versions `gcloud app versions list --format=json`
+ * @returns {string} one summary line per version receiving traffic, with its share
+ * @throws {Error} on an unreadable list
+ */
+export function describeTraffic(versions) {
+  return readList(versions)
+    .filter(({ split }) => split > 0)
+    .map(({ id, split }) => `- \`${id}\`: ${split}`)
+    .join("\n");
+}
+
 function main(mode) {
   let versions;
   try {
@@ -102,6 +114,10 @@ function main(mode) {
   }
   if (mode === "verify") {
     assertLive(versions, process.env.TARGET_VERSION ?? "");
+    return;
+  }
+  if (mode === "traffic") {
+    console.log(describeTraffic(versions));
     return;
   }
   if (mode !== "select") throw new Error(`Unknown mode ${mode}`);

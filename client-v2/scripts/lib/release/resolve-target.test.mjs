@@ -6,7 +6,11 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { assertLive, selectTarget } from "./resolve-target.mjs";
+import {
+  assertLive,
+  describeTraffic,
+  selectTarget,
+} from "./resolve-target.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./resolve-target.mjs", import.meta.url));
 
@@ -248,6 +252,61 @@ test("exits from verify by whether the target holds all traffic", () => {
   assert.equal(run("verify", { TARGET_VERSION: "b" }).status, 0);
   assert.equal(run("verify", { TARGET_VERSION: "a" }).status, 1);
   assert.equal(run("verify", { TARGET_VERSION: "" }).status, 1);
+});
+
+test("names the refusal when verify fails", () => {
+  assert.match(
+    run("verify", { TARGET_VERSION: "a" }).stderr,
+    /^::error::Version "a" does not hold all traffic/
+  );
+});
+
+test("refuses a list verify cannot read", () => {
+  for (const [input, message] of [
+    ["not json", /^::error::Unreadable version list/],
+    ["{}", /^::error::Unreadable version list/],
+    ["[]", /^::error::No versions/],
+  ]) {
+    const { status, stdout, stderr } = spawnSync(
+      process.execPath,
+      [SCRIPT, "verify"],
+      { encoding: "utf8", input, env: { TARGET_VERSION: "a" } }
+    );
+    assert.equal(status, 1);
+    assert.equal(stdout, "");
+    assert.match(stderr, message);
+  }
+});
+
+test("refuses an unknown or missing mode", () => {
+  for (const args of [["verfy"], []]) {
+    const { status, stdout, stderr } = spawnSync(
+      process.execPath,
+      [SCRIPT, ...args],
+      { encoding: "utf8", input: JSON.stringify(LIVE_B), env: {} }
+    );
+    assert.equal(status, 1);
+    assert.equal(stdout, "");
+    assert.match(stderr, /^::error::Unknown mode/);
+  }
+});
+
+test("describes only the versions receiving traffic", () => {
+  assert.equal(describeTraffic(LIVE_B), "- `b`: 1");
+  assert.equal(
+    describeTraffic([half("a", 1), half("b", 2), parked("c", 3)]),
+    "- `a`: 0.5\n- `b`: 0.5"
+  );
+});
+
+test("prints the traffic in traffic mode", () => {
+  const { status, stdout } = run("traffic", {});
+  assert.equal(status, 0);
+  assert.equal(stdout, "- `b`: 1\n");
+});
+
+test("refuses a traffic report on an unreadable list", () => {
+  assert.throws(() => describeTraffic({}), /Unreadable version list/);
 });
 
 test("checks in verify when reached through a symlink", () => {

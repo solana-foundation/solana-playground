@@ -69,6 +69,14 @@ A run SHALL write the version before and the target to its job summary before mo
 - **WHEN** the target does not hold all traffic after the move
 - **THEN** the run fails and the job summary still names the version before
 
+#### Scenario: Split traffic before the move (manual)
+- **WHEN** a run moves traffic that was split between versions
+- **THEN** the job summary lists those versions with their shares before traffic moves
+
+#### Scenario: The move fails (manual)
+- **WHEN** a step fails after the target was chosen
+- **THEN** the run fails and the job summary lists where traffic is now
+
 ### Requirement: Runs only from the default branch
 The promote and rollback workflow SHALL run only on `master`.
 
