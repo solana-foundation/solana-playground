@@ -2,6 +2,7 @@ import { XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
   Composer,
@@ -141,7 +142,7 @@ export function BaseAssistantComposer({
                   {/* The quietest text in the box: what it reads, not what to do */}
                   <ComposerChip
                     tabIndex={0}
-                    className={`${CHIP_TARGET} text-subtle`}
+                    className={cn(CHIP_TARGET, "text-subtle")}
                   >
                     {/* The short label is for the eye; a screen reader
                         reads what is sent, in full */}
