@@ -68,6 +68,10 @@ jobs:
         run: |
           if [ "$CHANGED" = "true" ]; then
             echo "playground-server: \`$CURRENT_VERSION\` before, \`$TARGET_VERSION\` target." >> "$GITHUB_STEP_SUMMARY"
+            # The word alone could not restore the shares
+            if [ "$CURRENT_VERSION" = "split" ]; then
+              node client-v2/scripts/lib/release/resolve-target.mjs traffic < "$RUNNER_TEMP/versions.json" >> "$GITHUB_STEP_SUMMARY"
+            fi
           else
             echo "playground-server: \`$TARGET_VERSION\` was already live; traffic not changed." >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -85,3 +89,11 @@ jobs:
           gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/after.json"
           node client-v2/scripts/lib/release/resolve-target.mjs verify < "$RUNNER_TEMP/after.json"
           echo "Checked: \`$TARGET_VERSION\` holds all traffic." >> "$GITHUB_STEP_SUMMARY"
+
+      # gcloud can fail after App Engine accepted the split, so a red move alone does not say where traffic is
+      - name: Report the traffic after a failure
+        if: "!success() && steps.select.outcome == 'success'"
+        run: |
+          gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/failed.json"
+          echo "Traffic after the failure:" >> "$GITHUB_STEP_SUMMARY"
+          node client-v2/scripts/lib/release/resolve-target.mjs traffic < "$RUNNER_TEMP/failed.json" >> "$GITHUB_STEP_SUMMARY"
