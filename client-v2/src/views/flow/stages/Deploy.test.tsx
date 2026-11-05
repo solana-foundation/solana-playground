@@ -462,6 +462,22 @@ describe("Deploy stage", () => {
     expect(failed?.params).toEqual({ cluster: "devnet", step: "write" });
   });
 
+  it("reports a success on the network the deploy ran on", async () => {
+    // The run deployed to testnet; devnet is selected by the time it ends
+    mocks.execute.mockResolvedValue({
+      signature: "sig",
+      cost: 1,
+      upgraded: false,
+      cluster: "testnet",
+    });
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    const succeeded = sent.events.find((e) => e.name === "deploy_succeeded");
+    expect(succeeded?.params).toEqual({ cluster: "testnet", redeploy: false });
+  });
+
   it("saves the keypair from the backup line, and keeps the line when the save fails", async () => {
     // A wallet of its own: the page remembers answers given earlier
     mocks.wallet.current = {

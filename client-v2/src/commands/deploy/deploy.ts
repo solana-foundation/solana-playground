@@ -79,6 +79,26 @@ export const deploy = createCmd({
   },
 });
 
+/**
+ * The network `connection` points at. Read from its own endpoint:
+ * `PgConnection.cluster` is derived asynchronously and can still name the
+ * previous network right after a switch.
+ */
+async function clusterOf(
+  connection: typeof PgConnection.current
+): Promise<DeployResult["cluster"]> {
+  try {
+    return await PgConnection.getCluster(connection.rpcEndpoint);
+  } catch (error) {
+    // A custom endpoint whose genesis hash cannot be read: the deploy itself
+    // goes on, and its record takes the network selected now
+    log.warn("could not read the deploy's cluster", {
+      context: { error: String(error) },
+    });
+    return PgConnection.cluster;
+  }
+}
+
 /** Check whether the state is valid for deployment. */
 async function checkProgram() {
   if (!PgProgramInfo.uuid && !PgProgramInfo.importedProgram?.bytes.length) {
@@ -183,11 +203,12 @@ const processDeploy = async (
   // Decide whether it's an initial deployment or an upgrade and calculate
   // how much SOL user needs before creating the buffer.
   const connection = PgConnection.current;
-  const [userBalance, bufferBalance] = await Promise.all([
+  const [userBalance, bufferBalance, cluster] = await Promise.all([
     connection.getBalance(wallet.publicKey),
     connection.getMinimumBalanceForRentExemption(
       PgWeb3.BpfLoaderUpgradeableProgram.getBufferAccountSize(programLen)
     ),
+    clusterOf(connection),
   ]);
 
   // Nothing is sent yet; a stop here leaves nothing behind
@@ -514,7 +535,12 @@ const processDeploy = async (
       context: { error: String(e) },
     });
   }
-  return { signature: signature ?? undefined, cost, upgraded: programExists };
+  return {
+    signature: signature ?? undefined,
+    cost,
+    upgraded: programExists,
+    cluster,
+  };
 
   function deployNew() {
     return sendAndConfirmTxWithRetries(

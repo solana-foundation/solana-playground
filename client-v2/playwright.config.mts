@@ -201,8 +201,10 @@ export default defineConfig({
   // Under the `e2e` shard job's `timeout-minutes` (client-v2.yml), so
   // Playwright itself ends a hung shard and still prints its summary; a
   // GitHub cancel keeps the traces but not the line saying which test was
-  // running.
-  globalTimeout: process.env.CI ? 15 * 60_000 : 0,
+  // running. 25 minutes, not 15, while scope/users-work-2 keeps four shards:
+  // its shards outgrew 15 (#377). It goes back when the branch rebases onto
+  // master, which splits the suite into more shards.
+  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every page starts as a visitor who left the file tree open: a first

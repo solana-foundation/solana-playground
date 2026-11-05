@@ -197,8 +197,14 @@ export class PgStageDeploy {
       }
       PgStageDeploy._set({ phase: "done", backupFor });
       try {
-        if (cluster) {
-          deployTelemetry.track("deploy_succeeded", { cluster, redeploy });
+        // The network the run deployed to, which the user may have changed
+        // since it started
+        const ranOn = result.cluster ?? cluster;
+        if (ranOn) {
+          deployTelemetry.track("deploy_succeeded", {
+            cluster: ranOn,
+            redeploy,
+          });
         }
         if (backupFor) deployTelemetry.track("deploy_backup_shown", {});
       } catch (error) {
