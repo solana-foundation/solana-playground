@@ -65,11 +65,11 @@ export type HomeStart =
 
 export interface BaseHomeProps {
   /**
-   * `null` while the visit is unknown (the project list or the session not
+   * `undefined` while the visit is unknown (the project list or the session not
    * read, a signed-in account's list not read, or a failed read still inside
    * its automatic re-reads; see `visitOf`); `retry` once those are spent
    */
-  start: HomeStart | null;
+  start: HomeStart | undefined;
   /** All of them: the first four are shown, the tiles count them all */
   tutorials: readonly HomeTutorial[];
   /** `null` while loading */
@@ -80,8 +80,8 @@ export interface BaseHomeProps {
   /** Reported; the unfold is this component's own state */
   onNewProject: () => void;
   onTutorial: (name: string) => Promise<void>;
-  /** The last tutorial that failed to open, or `null` */
-  tutorialError: TutorialFailure | null;
+  /** The last tutorial that failed to open, or `undefined` */
+  tutorialError: TutorialFailure | undefined;
   onAllTutorials: () => void;
   onAsk: () => void;
 }

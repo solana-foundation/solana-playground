@@ -56,7 +56,7 @@ const openRecentWith =
  * once there are projects, "Try again" once a failed session check has
  * spent its automatic re-reads, and nothing while the visit is unknown
  */
-const useStart = (onContinue: () => void): HomeStart | null => {
+const useStart = (onContinue: () => void): HomeStart | undefined => {
   const visit = useVisit();
   const progressOf = useTutorialProgress();
   const names = PgExplorer.allWorkspaceNames;
@@ -73,7 +73,7 @@ const useStart = (onContinue: () => void): HomeStart | null => {
       },
     };
   }
-  if (visit === "unknown" || !names) return null;
+  if (visit === "unknown" || !names) return undefined;
   if (visit === "first") {
     return {
       kind: "example",
@@ -101,9 +101,9 @@ const useStart = (onContinue: () => void): HomeStart | null => {
 const Home = ({ onAsk, onContinue, onOpenPage }: HomeProps) => {
   const programCount = useProgramCount();
   const start = useStart(onContinue);
-  const [tutorialError, setTutorialError] = useState<TutorialFailure | null>(
-    null
-  );
+  const [tutorialError, setTutorialError] = useState<
+    TutorialFailure | undefined
+  >(undefined);
 
   const openTile = (tile: PageTile) => {
     homeTelemetry.track("home_tile_opened", { tile });
@@ -122,7 +122,7 @@ const Home = ({ onAsk, onContinue, onOpenPage }: HomeProps) => {
       }
       tutorialError={tutorialError}
       onTutorial={async (name) => {
-        setTutorialError(null);
+        setTutorialError(undefined);
         try {
           await PgTutorial.open(name);
         } catch (e) {

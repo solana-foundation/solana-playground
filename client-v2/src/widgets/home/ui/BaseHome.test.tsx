@@ -25,14 +25,14 @@ const tutorial = (name: string): HomeTutorial => ({
   level: "Beginner",
   framework: "Anchor",
 });
-const props = (start: BaseHomeProps["start"] = null): BaseHomeProps => ({
+const props = (start: BaseHomeProps["start"]): BaseHomeProps => ({
   tutorials: ["Hello Anchor", "B", "C", "D", "E", "F"].map(tutorial),
   programCount: 34,
   scratch: <div data-testid="scratch" />,
   onTile: vi.fn(),
   onNewProject: vi.fn(),
   onTutorial: vi.fn().mockResolvedValue(undefined),
-  tutorialError: null,
+  tutorialError: undefined,
   onAllTutorials: vi.fn(),
   onAsk: vi.fn(),
   start,
@@ -43,7 +43,7 @@ const draw = (p: BaseHomeProps) => {
 };
 
 it("asks the question and offers the assistant", () => {
-  const home = draw(props());
+  const home = draw(props(undefined));
   expect(
     home.getByRole("heading", { level: 1, name: "Where should we begin?" })
   ).toBeTruthy();
@@ -51,7 +51,7 @@ it("asks the question and offers the assistant", () => {
 });
 
 it("shows the three tiles with their counts", () => {
-  const home = draw(props());
+  const home = draw(props(undefined));
   expect(home.getByRole("button", { name: "New project" })).toBeTruthy();
   expect(home.getByRole("button", { name: "Follow a tutorial" })).toBeTruthy();
   expect(home.getByRole("button", { name: "Open a program" })).toBeTruthy();
@@ -60,14 +60,14 @@ it("shows the three tiles with their counts", () => {
 });
 
 it("shows an ellipsis while the program count loads", () => {
-  const p = props();
+  const p = props(undefined);
   p.programCount = null;
   const home = draw(p);
   expect(home.getByText("… real programs")).toBeTruthy();
 });
 
 it("shows four of the tutorials and links to all of them", () => {
-  const p = props();
+  const p = props(undefined);
   const home = draw(p);
   expect(home.getAllByRole("button", { name: /^Open [A-Z]/ }).length).toBe(4);
   expect(home.queryByRole("button", { name: "Open E" })).toBeNull();
@@ -76,7 +76,7 @@ it("shows four of the tutorials and links to all of them", () => {
 });
 
 it("draws a tutorial's brand cover with the lesson's icon", () => {
-  const home = draw(props());
+  const home = draw(props(undefined));
   const media = home
     .getByRole("button", { name: "Hello Anchor" })
     .closest<HTMLElement>("[data-slot=action-card]")
@@ -88,7 +88,7 @@ it("draws a tutorial's brand cover with the lesson's icon", () => {
 });
 
 it("writes a tutorial's level and framework as one plain line", () => {
-  const home = draw(props());
+  const home = draw(props(undefined));
   const card = home
     .getByRole("button", { name: "Hello Anchor" })
     .closest<HTMLElement>("[data-slot=action-card]");
@@ -98,7 +98,7 @@ it("writes a tutorial's level and framework as one plain line", () => {
 });
 
 it("writes the level alone for a tutorial with no framework", () => {
-  const p = props();
+  const p = props(undefined);
   p.tutorials = [
     {
       name: "Bare",
@@ -116,7 +116,7 @@ it("writes the level alone for a tutorial with no framework", () => {
 });
 
 it("draws the tiles' icons bare, with no tile behind them", () => {
-  const home = draw(props());
+  const home = draw(props(undefined));
   for (const name of ["New project", "Follow a tutorial", "Open a program"]) {
     const media = home
       .getByRole("button", { name })
@@ -127,7 +127,7 @@ it("draws the tiles' icons bare, with no tile behind them", () => {
 });
 
 it("unfolds and folds the scratch options under New project", () => {
-  const p = props();
+  const p = props(undefined);
   const home = draw(p);
   const tile = home.getByRole("button", { name: "New project" });
   expect(tile.getAttribute("aria-expanded")).toBe("false");
@@ -142,7 +142,7 @@ it("unfolds and folds the scratch options under New project", () => {
 });
 
 it("reports the other tiles", () => {
-  const p = props();
+  const p = props(undefined);
   const home = draw(p);
   fireEvent.click(home.getByRole("button", { name: "Open a program" }));
   expect(p.onTile).toHaveBeenCalledWith("programs");
@@ -151,7 +151,7 @@ it("reports the other tiles", () => {
 });
 
 it("opens a tutorial by name", async () => {
-  const p = props();
+  const p = props(undefined);
   const home = draw(p);
   // Async: Open is an AsyncButton, which settles once `onTutorial` resolves
   await act(async () => {
@@ -161,21 +161,21 @@ it("opens a tutorial by name", async () => {
 });
 
 it("opens a tutorial from its card, where the Open button is hidden below md", () => {
-  const p = props();
+  const p = props(undefined);
   const home = draw(p);
   fireEvent.click(home.getByRole("button", { name: "Hello Anchor" }));
   expect(p.onTutorial).toHaveBeenCalledWith("Hello Anchor");
 });
 
 it("opens the assistant from the composer", () => {
-  const p = props();
+  const p = props(undefined);
   const home = draw(p);
   fireEvent.click(home.getByRole("button", { name: "Ask the assistant" }));
   expect(p.onAsk).toHaveBeenCalledTimes(1);
 });
 
 it("lays out the prototype's 736 px column, 20 px apart, with its send", () => {
-  draw(props());
+  draw(props(undefined));
   const home = screen.getByRole("region", { name: "Home" });
   // min(50rem, 100%) less 2rem a side
   expect(home.className).toMatch(/\bmax-w-\[50rem\]/);
@@ -185,7 +185,7 @@ it("lays out the prototype's 736 px column, 20 px apart, with its send", () => {
 });
 
 it("lets its send open the assistant too", () => {
-  const p = props();
+  const p = props(undefined);
   const home = draw(p);
   fireEvent.click(home.getByRole("button", { name: "Send" }));
   expect(p.onAsk).toHaveBeenCalledTimes(1);
@@ -239,7 +239,7 @@ it("lists recent work on a return visit, and opens a row", async () => {
 });
 
 it("shows neither section when there is nothing to offer", () => {
-  const home = draw(props());
+  const home = draw(props(undefined));
   expect(home.queryByRole("region", { name: "Try an example" })).toBeNull();
   expect(
     home.queryByRole("region", { name: "Pick up where you left off" })
