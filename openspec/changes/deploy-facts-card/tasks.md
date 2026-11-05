@@ -6,4 +6,4 @@
 
 ## 2. Count stage opens of the settings as their own
 
-- [x] 2.1 `settings_opened` takes `from: "stage"` for the Deploy stage's Change and the stage notice's network action (`SettingsEntry` in `shared/lib/settings-request.ts`, `views/flow/Flow.tsx`), and `ui-migration`'s `client-v2-layout` delta lists the value. Ticket: none (SF#76). Depends on nothing. Verify: a Flow test asserts the event through the memory provider with `from: "stage"`.
+- [x] 2.1 `settings_opened` takes `from: "stage"` for the Deploy stage's Change and the stage notice's network action (`SettingsEntry` in `shared/lib/settings-request.ts`, `views/flow/Flow.tsx`), and `ui-migration`'s `client-v2-layout` delta lists the value. Ticket: none (SF#76). Depends on nothing. Verify: `client-v2-layout: Opening and closing the settings is counted` (e2e) presses the Deploy stage's Change and reads `settings_opened` with `from: stage`; the requirement lives in `ui-migration`'s delta, which this task edits.
