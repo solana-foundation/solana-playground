@@ -10,7 +10,7 @@ import {
 import { recheckWhileBad } from "@/shared/lib/backoff-recheck";
 import { createLogger } from "@/shared/lib/logger";
 
-import { askAgain, onAskAgain } from "./ask-again";
+import { askAgain, hasAnsweredAgain, onAskAgain } from "./ask-again";
 import { PgCommon } from "./common";
 import {
   createDerivable,
@@ -363,7 +363,8 @@ class _PgConnection {
    * too and awaited, which keeps the button busy for as long as the slower
    * one, the stall check, takes.
    *
-   * @returns whether the cluster answered with a moving slot
+   * @returns whether the cluster answered and its slot is not stalled
+   * (`hasAnsweredAgain`)
    */
   static async recheck(): Promise<boolean> {
     askAgain();
@@ -371,7 +372,7 @@ class _PgConnection {
       _PgConnection.getIsConnected(),
       _PgConnection.getIsClusterDown(),
     ]);
-    return connected === true && stalled === false;
+    return hasAnsweredAgain(connected, stalled);
   }
 
   /**

@@ -20,7 +20,7 @@ import { Pattern } from "@/shared/ui/pattern";
 import { Tag } from "@/shared/ui/tag";
 import { PgCommon, PgExplorer, PgTutorial, PgView } from "@/utils";
 import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
-import { Assistant, useTurn } from "@/widgets/assistant";
+import { Assistant, probeDefaultBackend, useTurn } from "@/widgets/assistant";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { homeSlot, useStartView } from "@/widgets/home";
 import { CONSOLE_KEY, keyLabel, LayoutShell } from "@/widgets/layout-shell";
@@ -62,6 +62,10 @@ import type { FlowState } from "./state/stage";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
 import { useStagesOffered } from "./use-stages-offered";
 import { useViewPath } from "./use-view-path";
+
+/** The status's Try again on the hosted model: whether the deployment answered */
+const retryHostedModel = async () =>
+  (await probeDefaultBackend()).state !== "unreachable";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
@@ -448,6 +452,7 @@ const FlowFrame = () => {
                 })
               }
               onConnectAi={() => openConnectDialog("status")}
+              onRetryAi={retryHostedModel}
             />
           }
           home={homeSlot(
@@ -531,6 +536,7 @@ const FlowFrame = () => {
                           })
                         }
                         onConnectAi={() => openConnectDialog("status")}
+                        onRetryAi={retryHostedModel}
                       />
                     }
                     onToggleSettings={toggleSettings(closeSheet)}
@@ -548,6 +554,7 @@ const FlowFrame = () => {
                           })
                         }
                         onConnectAi={() => openConnectDialog("status")}
+                        onRetryAi={retryHostedModel}
                       />
                     }
                     onToggleSettings={toggleSettings(closeSheet)}

@@ -2,14 +2,6 @@ import type { ComponentType } from "react";
 
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/shared/ui/popover";
-import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -18,7 +10,7 @@ import { StatusDot } from "@/shared/ui/status-dot";
 
 import type { IndicatorId } from "../model/indicators";
 import type { BaseStatusRowProps } from "./BaseStatusRow";
-import { DOT, stateWords, StatusDetail } from "./parts";
+import { DOT, StatusPanel } from "./parts";
 import type { GlyphProps } from "./rail-glyphs";
 import { RailBrace, RailGlobe, RailStar } from "./rail-glyphs";
 
@@ -32,8 +24,8 @@ const ICONS: Record<IndicatorId, ComponentType<GlyphProps>> = {
 /**
  * The status row on the rail: an icon per indicator with its state dot on
  * the icon's corner, one button each, doing what their indicators do in the
- * row (the network opens the settings, the AI Connect a model, the analyzer
- * its panel). The rail has no room for words, and a touch screen shows no
+ * row (a panel where the indicator has one, else the settings or Connect a
+ * model). The rail has no room for words, and a touch screen shows no
  * tooltip, so the icon says which indicator it is; the tooltip, on hover and
  * on focus, says the indicator and its state in the row's words.
  */
@@ -41,6 +33,7 @@ const BaseStatusRail = ({
   indicators,
   onPick,
   onAction,
+  onRetry,
   settingsOpen,
 }: BaseStatusRowProps) => (
   <SidebarMenu data-testid="status-rail">
@@ -74,23 +67,27 @@ const BaseStatusRail = ({
         tooltip: indicator.tip,
       };
 
-      if (indicator.id === "rust") {
+      if (indicator.panel) {
         return (
           <SidebarMenuItem key={indicator.id}>
-            <Popover onOpenChange={(open) => open && onPick(indicator)}>
-              <PopoverTrigger asChild>
-                <SidebarMenuButton {...common}>{glyph}</SidebarMenuButton>
-              </PopoverTrigger>
-              <PopoverContent side="right" align="end" className="w-72">
-                <PopoverHeader>
-                  <PopoverTitle>{indicator.name}</PopoverTitle>
-                  <PopoverDescription>
-                    {stateWords(indicator)}
-                  </PopoverDescription>
-                </PopoverHeader>
-                <StatusDetail indicator={indicator} onAction={onAction} />
-              </PopoverContent>
-            </Popover>
+            <StatusPanel
+              indicator={indicator}
+              trigger={
+                <SidebarMenuButton
+                  {...common}
+                  {...(indicator.id === "network" && {
+                    [SETTINGS_TRIGGER_ATTR]: "",
+                  })}
+                >
+                  {glyph}
+                </SidebarMenuButton>
+              }
+              side="right"
+              align="end"
+              onPick={onPick}
+              onAction={onAction}
+              onRetry={onRetry}
+            />
           </SidebarMenuItem>
         );
       }

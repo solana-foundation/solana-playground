@@ -169,8 +169,11 @@ Done:
   columns with no header. From the left: the navigation (Home, New project,
   Tutorials, Programs, the project list under them, and its session
   footer: a status row of three indicators, each a dot and words (the
-  network, which opens the settings on the cluster; the AI, which opens
-  Connect a model; the Rust analyzer, which opens a short panel), and an
+  network, which opens the settings on the cluster, or a short panel with
+  Try again and Change network while the cluster does not answer; the AI,
+  which opens Connect a model, and opens a short panel at "AI · Limit
+  reached" (the free daily limit is used) or "AI · Not responding"; the Rust
+  analyzer, which opens a short panel), and an
   account row whose menu holds sign-in, Settings (Cmd+,), Docs, the feedback
   entries and the wallet; Cmd+B folds it to a rail of icons, whose footer
   keeps the three status dots and an Account button that opens the same

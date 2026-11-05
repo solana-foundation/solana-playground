@@ -44,9 +44,15 @@ const useRunUnderWay = (): RunUnderWay | undefined => {
 /** The AI as the indicator reads it, from the live connection and session */
 const aiInput = (): AiInput => {
   const connection = PgAssistant.connection;
+  // Only with nothing connected: a connected backend is asked by its turns
+  if (!connection && PgAssistant.defaultProbe === "unreachable") {
+    return { kind: "unreachable" };
+  }
   if (!connection || PgAssistant.needsSignIn) {
     return { kind: "off", needsSignIn: PgAssistant.needsSignIn };
   }
+  const until = PgAssistant.limitReachedUntil;
+  if (until !== undefined) return { kind: "limit", until };
   const model =
     connection.endpoint?.model ?? connection.settings?.model ?? connection.id;
   return { kind: "ready", model: displayModelName(model) };

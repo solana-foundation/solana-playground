@@ -3,29 +3,24 @@ import type { ComponentProps } from "react";
 import { useIsMobile } from "@/shared/lib/hooks/use-mobile";
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/shared/ui/popover";
-import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/shared/ui/sidebar";
 
 import type { StatusIndicator } from "../model/indicators";
-import { IndicatorDot, stateWords, StatusDetail } from "./parts";
+import { IndicatorDot, StatusPanel } from "./parts";
 
 export interface BaseStatusRowProps {
   /** Network, AI, Rust analyzer, in that order */
   indicators: readonly StatusIndicator[];
-  /** An indicator was clicked; the network and the AI act on it at once */
+  /** An indicator was clicked: one without a panel acts on it at once, one
+   * with a panel has just opened it */
   onPick: (indicator: StatusIndicator) => void;
-  /** The analyzer panel's action */
+  /** A panel's action */
   onAction: (indicator: StatusIndicator) => void;
+  /** A panel's Try again; busy until it settles */
+  onRetry: (indicator: StatusIndicator) => Promise<unknown>;
   /** Whether the settings are open: the network indicator opens them */
   settingsOpen: boolean;
 }
@@ -36,15 +31,17 @@ const settingsTrigger = { [SETTINGS_TRIGGER_ATTR]: "" };
 /**
  * The navigation foot's status row: the three indicators where the
  * prototype draws "● Devnet", one per line, on Get set up's grid above
- * them. The network and the AI go straight to where they are fixed;
- * the analyzer, which has no settings, opens a panel beside the navigation,
- * or over its line on a phone, where the navigation fills the screen and
- * beside it is off the edge.
+ * them. An indicator with something to add (`panel`: the analyzer, a cluster
+ * that does not answer, the AI's limit or failure) opens a panel beside the
+ * navigation, or over its line on a phone, where the navigation fills the
+ * screen and beside it is off the edge; the rest go straight to where they
+ * are fixed.
  */
 const BaseStatusRow = ({
   indicators,
   onPick,
   onAction,
+  onRetry,
   settingsOpen,
 }: BaseStatusRowProps) => {
   const isMobile = useIsMobile();
@@ -73,39 +70,36 @@ const BaseStatusRow = ({
             </SidebarMenuButton>
           );
 
-          if (indicator.id === "network") {
-            return button({
-              "aria-expanded": settingsOpen,
-              ...settingsTrigger,
-              onClick: () => onPick(indicator),
-            });
-          }
-          if (indicator.id === "ai") {
+          if (!indicator.panel) {
+            if (indicator.id === "network") {
+              return button({
+                "aria-expanded": settingsOpen,
+                ...settingsTrigger,
+                onClick: () => onPick(indicator),
+              });
+            }
             return button({ onClick: () => onPick(indicator) });
           }
           return (
-            <Popover
+            <StatusPanel
               key={indicator.id}
-              onOpenChange={(open) => open && onPick(indicator)}
-            >
-              <PopoverTrigger asChild>{button({})}</PopoverTrigger>
-              {/* Beside the navigation, level with the line's foot: 16 px off
-                the full-width line clears the sidebar's edge by 7 px */}
-              <PopoverContent
-                side={isMobile ? "top" : "right"}
-                align={isMobile ? "start" : "end"}
-                sideOffset={isMobile ? 8 : 16}
-                className="w-72"
-              >
-                <PopoverHeader>
-                  <PopoverTitle>{indicator.name}</PopoverTitle>
-                  <PopoverDescription>
-                    {stateWords(indicator)}
-                  </PopoverDescription>
-                </PopoverHeader>
-                <StatusDetail indicator={indicator} onAction={onAction} />
-              </PopoverContent>
-            </Popover>
+              indicator={indicator}
+              // The settings' focus return still finds the network's trigger
+              // when Change network opens them from the panel
+              trigger={button({
+                type: "button",
+                ...(indicator.id === "network" && settingsTrigger),
+              })}
+              // Beside the navigation, level with the line's foot: 16 px off
+              // the full-width line clears the sidebar's edge by 7 px. Over
+              // the line on a phone, where beside it is off the screen
+              side={isMobile ? "top" : "right"}
+              align={isMobile ? "start" : "end"}
+              sideOffset={isMobile ? 8 : 16}
+              onPick={onPick}
+              onAction={onAction}
+              onRetry={onRetry}
+            />
           );
         })}
       </SidebarMenuItem>
