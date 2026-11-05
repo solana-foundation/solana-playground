@@ -56,6 +56,7 @@ const props = (
   onAsk: vi.fn(),
   onOpenFile: vi.fn(),
   onShowLog: vi.fn(),
+  onStop: vi.fn(),
   idlActions: null,
 });
 
@@ -132,6 +133,115 @@ describe("BaseBuild", () => {
     expect(
       container.querySelector('[data-slot="stage-empty-progress"]')
     ).not.toBeNull();
+  });
+
+  // HOO-2648: a hung server must not leave an endless bar with no way out
+  it("offers Stop and the full log while a first build runs", () => {
+    const p = props({ kind: "empty" }, true);
+    const { container } = render(<BaseBuild {...p} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(p.onStop).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Show full log" }));
+    expect(p.onShowLog).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /^Build/ })).toBeNull();
+    expect(brandButtons(container)).toHaveLength(0);
+    expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  // The region is in place before the run, so the change is announced
+  it("announces a first build through a polite region already on screen", () => {
+    const p = props({ kind: "empty" });
+    const { rerender } = render(<BaseBuild {...p} />);
+    const region = screen.getByRole("status");
+    expect(region.textContent).toMatch(/^Build compiles your program/);
+
+    rerender(<BaseBuild {...p} building />);
+
+    expect(screen.getByRole("status")).toBe(region);
+    expect(region.textContent).toMatch(/^Compiling on the build server\./);
+  });
+
+  describe("keeps focus in the stage", () => {
+    it("moves it from Build to Stop when the run starts, to the title when it ends", () => {
+      const p = props({ kind: "empty" });
+      const { rerender } = render(<BaseBuild {...p} />);
+      screen.getByRole("button", { name: /^Build/ }).focus();
+
+      rerender(<BaseBuild {...p} building />);
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Stop" })
+      );
+
+      rerender(<BaseBuild {...p} surface={{ kind: "succeeded" }} />);
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Build succeeded" })
+      );
+    });
+
+    it("puts it back on the title after a stop", () => {
+      const p = props({ kind: "empty" }, true);
+      const { rerender } = render(<BaseBuild {...p} />);
+      screen.getByRole("button", { name: "Stop" }).focus();
+
+      rerender(<BaseBuild {...p} building={false} />);
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Nothing built yet" })
+      );
+    });
+
+    // A press on the page, on nothing focusable, lets go of the stage too
+    it("leaves focus alone after a press outside the stage", () => {
+      const p = props({ kind: "empty" }, true);
+      const { rerender } = render(<BaseBuild {...p} />);
+      const stop = screen.getByRole("button", { name: "Stop" });
+      stop.focus();
+      fireEvent.pointerDown(document.body);
+      stop.blur();
+
+      rerender(
+        <BaseBuild {...p} building={false} surface={{ kind: "succeeded" }} />
+      );
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it("lands on the title when a rebuild from a failed build succeeds", () => {
+      const p = props(failed([typeError("a", "expected u32")]));
+      const { rerender } = render(<BaseBuild {...p} />);
+      screen.getByRole("button", { name: "Try again" }).focus();
+
+      rerender(<BaseBuild {...p} surface={{ kind: "succeeded" }} />);
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Build succeeded" })
+      );
+    });
+
+    // A finished build never pulls anyone out of their typing
+    it("leaves focus that is outside the stage alone", () => {
+      const p = props({ kind: "empty" }, true);
+      const { rerender } = render(
+        <>
+          <input aria-label="editor" />
+          <BaseBuild {...p} />
+        </>
+      );
+      screen.getByRole("button", { name: "Stop" }).focus();
+      screen.getByRole("textbox", { name: "editor" }).focus();
+
+      rerender(
+        <>
+          <input aria-label="editor" />
+          <BaseBuild {...p} building={false} surface={{ kind: "succeeded" }} />
+        </>
+      );
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "editor" })
+      );
+    });
   });
 
   it.each([
