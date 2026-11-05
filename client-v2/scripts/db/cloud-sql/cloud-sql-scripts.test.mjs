@@ -70,16 +70,19 @@ afterEach(() => {
 const runWith = (env) => (script, args) =>
   spawnSync("bash", [join(HERE, script), ...args], {
     encoding: "utf8",
-    env: {
-      PATH: `${dir}:${process.env.PATH}`,
-      HOME: process.env.HOME,
-      CLOUD_SQL_INSTANCE: "proj:region:solpg-preview",
-      CLOUD_SQL_USER: "app-user",
-      CLOUD_SQL_LOGIN_USER: "ci@proj.iam.gserviceaccount.com",
-      CLOUD_SQL_PROXY_PORT: "5499",
-      STUB_LOG: log,
-      ...env,
-    },
+    // A case's variables override the defaults; assigned, not spread, as AGENTS.md asks of test fixtures
+    env: Object.assign(
+      {
+        PATH: `${dir}:${process.env.PATH}`,
+        HOME: process.env.HOME,
+        CLOUD_SQL_INSTANCE: "proj:region:solpg-preview",
+        CLOUD_SQL_USER: "app-user",
+        CLOUD_SQL_LOGIN_USER: "ci@proj.iam.gserviceaccount.com",
+        CLOUD_SQL_PROXY_PORT: "5499",
+        STUB_LOG: log,
+      },
+      env
+    ),
   });
 
 const readLog = () => readFileSync(log, "utf8");
@@ -151,12 +154,12 @@ describe("cloud-sql/sweep-preview-dbs", () => {
         { number: 2, headRefName: "b", labels: [{ name: "other" }] },
       ])
     );
-    return runWith({
-      PREVIEW_LABEL: "preview",
-      MIN_AGE_MINUTES: "60",
-      STUB_ROWS: rows,
-      ...env,
-    })("sweep-preview-dbs", [prs]);
+    return runWith(
+      Object.assign(
+        { PREVIEW_LABEL: "preview", MIN_AGE_MINUTES: "60", STUB_ROWS: rows },
+        env
+      )
+    )("sweep-preview-dbs", [prs]);
   };
   const drops = () =>
     readLog()

@@ -186,10 +186,15 @@ Stop the proxy (`kill %1`). `github-ci` and `vercel-preview` get nothing here.
 
 ## 6. Vercel: the Production environment, staged
 
-Set the variables on Production while it still reads Neon, and check them on a deployment that takes no domain:
+Set the variables on Production while it still reads Neon, and check them on a deployment that takes no domain.
+Build locally and deploy the output: a Vercel build with no cache does not finish inside the build time limit
+([Deploy](deploy-client-vercel.md#deploy)). From the repository root, with the CLI version pinned as `VERCEL_CLI` in
+`client-v2/Makefile.vercel`:
 
 ```sh
-npx vercel deploy --prod --skip-domain \
+make -f client-v2/Makefile.vercel vercel-link-production
+npx vercel@62.7.0 build --prod
+npx vercel@62.7.0 deploy --prebuilt --archive=tgz --prod --skip-domain \
   -e DB_PROVIDER=cloud-sql -e CLOUD_SQL_INSTANCE="$PROJECT_ID:$REGION:solpg" -e CLOUD_SQL_DATABASE=solpg \
   -e CLOUD_SQL_USER="$PRODUCTION_DB_USER" -e GCP_PROJECT_NUMBER="$PROJECT_NUMBER" \
   -e GCP_WORKLOAD_IDENTITY_POOL_ID=vercel -e GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID=vercel \
