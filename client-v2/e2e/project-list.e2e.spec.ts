@@ -311,38 +311,29 @@ for (const [layout, viewport] of [
   ["desk", { width: 1280, height: 800 }],
   ["phone", { width: 390, height: 844 }],
 ] as const) {
-  // HOO-2546: the "⋮" and the pin sit on the row's middle at both row heights
-  test(`centres a project row's menu and pin (${layout})`, async ({ page }) => {
+  // HOO-2546: the "⋮" sits on the row's middle at both row heights. The pin
+  // is no longer measured: it moved into the name's line, on its baseline
+  // beside the sync marker (design sync 4.21)
+  test(`centres a project row's menu (${layout})`, async ({ page }) => {
     await seedWorkspace(page, "alpha");
     await startAnotherProject(page, "beta");
-    const menu = await projectMenu(page, "alpha");
-    await menu.getByRole("menuitem", { name: "Pin" }).click();
-    await expect(menu).toBeHidden();
 
     await page.setViewportSize(viewport);
     if (layout === "phone") {
       await page.getByRole("button", { name: "Menu", exact: true }).click();
     }
-    // The pin hides while its row is hovered or holds focus: park both away
-    await page.mouse.move(viewport.width - 1, viewport.height - 1);
-    await page.evaluate(() =>
-      (document.activeElement as HTMLElement | null)?.blur()
-    );
-    const item = projectRow(page, "alpha").locator("..");
-    await expect(item.getByTitle("Pinned")).toBeVisible();
 
     const offMiddle = await projectRow(page, "alpha").evaluate((button) => {
       const middle = (element: Element | null | undefined) => {
-        if (!element) throw new Error("the row lacks its pin or menu");
+        if (!element) throw new Error("the row lacks its menu");
         const box = element.getBoundingClientRect();
         return box.top + box.height / 2;
       };
-      const row = button.parentElement;
-      return [
-        row?.querySelector('[data-sidebar="menu-action"]'),
-        row?.querySelector('[title="Pinned"]'),
-      ].map((element) => Math.abs(middle(element) - middle(button)));
+      const menu = button.parentElement?.querySelector(
+        '[data-sidebar="menu-action"]'
+      );
+      return Math.abs(middle(menu) - middle(button));
     });
-    expect(Math.max(...offMiddle)).toBeLessThanOrEqual(1);
+    expect(offMiddle).toBeLessThanOrEqual(1);
   });
 }
