@@ -1,11 +1,21 @@
 import type { Page } from "@playwright/test";
 
+// The agent feature's other public entry: Playwright compiles `index.ts` as
+// CommonJS, and the telemetry it re-exports holds `import.meta.vitest` blocks
+import {
+  DAILY_CAP_REASON,
+  REFUSAL_MESSAGES,
+  REFUSAL_STATUS,
+} from "../src/features/agent/server.mjs";
 import {
   consoleTrigger,
   expect,
   json,
+  LONG,
   runInTerminal,
   seedWorkspace,
+  startProject,
+  stubSession,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -98,15 +108,62 @@ test.describe("on a 1440 px window", () => {
       "warning"
     );
     const lines = linesOn(page);
+    // A cluster that does not answer opens a panel that can ask it again
     await down.click();
+    const panel = page.getByRole("dialog");
+    await expect(panel.getByText("Network", { exact: true })).toBeVisible();
+    await expect(
+      panel.getByRole("button", { name: "Try again" })
+    ).toBeVisible();
+    await panel.getByRole("button", { name: "Change network" }).click();
     await expect
       .poll(() => lineOf(lines, "settings_opened"))
       .toContain("{from: cluster}");
+    const networks = page
+      .getByRole("region", { name: "Settings" })
+      .getByRole("radiogroup", { name: "Network" });
+    await expect(networks).toBeVisible();
+    // The closing panel's focus return does not take it back from the field
+    await expect(networks.getByRole("radio", { checked: true })).toBeFocused();
+  });
+
+  test("client-v2-status: The hosted model does not answer", async ({
+    seededPage: page,
+  }) => {
+    let failing = true;
+    await page.route("**/api/agent", (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      if (failing) return route.fulfill({ status: 500, body: "down" });
+      return json(route, { configured: false });
+    });
+    await page.reload();
+
+    const down = row(page).getByRole("button", { name: "AI, not responding" });
+    await expect(down).toHaveText("AI · Not responding", LONG);
+    await expect(down.locator('[data-slot="status-dot"]')).toHaveAttribute(
+      "data-variant",
+      "error"
+    );
+    const lines = linesOn(page);
+    await down.click();
+    const panel = page.getByRole("dialog");
     await expect(
-      page
-        .getByRole("region", { name: "Settings" })
-        .getByRole("radiogroup", { name: "Network" })
+      panel.getByRole("button", { name: "Add an API key" })
     ).toBeVisible();
+    // Still down: the press says so, and the panel stays to press it again
+    await panel.getByRole("button", { name: "Try again" }).click();
+    await expect(
+      page.getByText("Could not reach the hosted model.")
+    ).toBeVisible();
+    await expect
+      .poll(() => lineOf(lines, "status_retried"))
+      .toContain("{indicator: ai, from: row, answered: false}");
+    failing = false;
+    await panel.getByRole("button", { name: "Try again" }).click();
+    await expect(ai(page)).toHaveText("AI · Off");
+    await expect
+      .poll(() => lines.join("\n"))
+      .toContain("{indicator: ai, from: row, answered: true}");
   });
 
   test("client-v2-status: Going offline and back", async ({
@@ -309,6 +366,53 @@ test("client-v2-status: The rail's dots", async ({ page }) => {
   await expect
     .poll(() => lineOf(lines, "settings_opened"))
     .toContain("{from: rail}");
+});
+
+test("client-v2-status: The free daily limit is used", async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.route("**/api/agent", (route) => {
+    if (route.request().method() === "GET") {
+      return json(route, { configured: true, model: "test-model" });
+    }
+    return route.fulfill({
+      status: REFUSAL_STATUS[DAILY_CAP_REASON],
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: REFUSAL_MESSAGES[DAILY_CAP_REASON],
+        reason: DAILY_CAP_REASON,
+        tier: "newcomer",
+      }),
+    });
+  });
+  await stubSession(page);
+  await page.goto("/");
+  await startProject(page, "status-limit", LONG);
+  const composer = page.getByRole("textbox", { name: "Message the assistant" });
+  await expect(composer).toBeVisible(LONG);
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+  const connect = page.getByRole("dialog", { name: "Connect a model" });
+  await connect.getByRole("button", { name: "Start", exact: true }).click(LONG);
+  await expect(connect).toBeHidden(LONG);
+
+  await composer.fill("a question");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page.getByText(REFUSAL_MESSAGES[DAILY_CAP_REASON])).toBeVisible(
+    LONG
+  );
+
+  const limited = row(page).getByRole("button", { name: "AI, limit reached" });
+  await expect(limited).toHaveText("AI · Limit reached");
+  await limited.click();
+  const panel = page.getByRole("dialog", { name: "AI" });
+  await expect(
+    panel.getByText(
+      /^The free daily limit is used\. It comes back at \d\d:\d\d,/
+    )
+  ).toBeVisible();
+  await panel.getByRole("button", { name: "Add an API key" }).click();
+  await expect(connect).toBeVisible();
 });
 
 test.describe("on a phone", () => {

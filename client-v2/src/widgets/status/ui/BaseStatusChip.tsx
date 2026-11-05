@@ -10,7 +10,12 @@ import {
 import { StatusDot } from "@/shared/ui/status-dot";
 
 import type { ChipView, StatusIndicator } from "../model/indicators";
-import { DOT, IndicatorDot, stateWords } from "./parts";
+import { DOT, IndicatorDot, RetryButton, stateWords } from "./parts";
+
+/** Centred on the name and the state; 28 px to the eye, a fingertip tall to the
+ * touch (Spec 06, "Accessibility") */
+const ROW_BUTTON =
+  "relative after:absolute after:inset-x-0 after:-inset-y-2 after:content-['']";
 
 export interface BaseStatusChipProps {
   chip: ChipView;
@@ -20,6 +25,8 @@ export interface BaseStatusChipProps {
   onOpenChange: (open: boolean) => void;
   /** A row's action was picked; the sheet closes first */
   onAction: (indicator: StatusIndicator) => void;
+  /** A row's Try again; the sheet stays open to show what it found */
+  onRetry: (indicator: StatusIndicator) => Promise<unknown>;
 }
 
 /**
@@ -37,6 +44,7 @@ const BaseStatusChip = ({
   open,
   onOpenChange,
   onAction,
+  onRetry,
 }: BaseStatusChipProps) => (
   <Sheet open={open} onOpenChange={onOpenChange}>
     <SheetTrigger asChild>
@@ -75,26 +83,31 @@ const BaseStatusChip = ({
           >
             <IndicatorDot state={indicator.state} />
             <span className="font-act text-foreground">{indicator.name}</span>
-            {indicator.action ? (
-              <Button
-                variant="outline"
-                size="sm"
-                // Centred on the name and the state; 28 px to the eye, a
-                // fingertip tall to the touch (Spec 06, "Accessibility")
-                className="relative row-span-2 after:absolute after:inset-x-0 after:-inset-y-2 after:content-['']"
-                // The row names what changes, so the button shows the verb
-                // alone and leaves the state its line; the name keeps it all
-                aria-label={indicator.action.text}
-                onClick={() => {
-                  onOpenChange(false);
-                  onAction(indicator);
-                }}
-              >
-                {indicator.action.text.split(" ")[0]}
-              </Button>
-            ) : (
-              <span />
-            )}
+            <div className="row-span-2 flex items-center gap-2">
+              {indicator.panel?.retry && (
+                <RetryButton
+                  indicator={indicator}
+                  onRetry={onRetry}
+                  className={ROW_BUTTON}
+                />
+              )}
+              {indicator.action && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={ROW_BUTTON}
+                  // The row names what changes, so the button shows the verb
+                  // alone and leaves the state its line; the name keeps it all
+                  aria-label={indicator.action.text}
+                  onClick={() => {
+                    onOpenChange(false);
+                    onAction(indicator);
+                  }}
+                >
+                  {indicator.action.text.split(" ")[0]}
+                </Button>
+              )}
+            </div>
             <span className="col-start-2 text-sm text-muted-foreground">
               {stateWords(indicator)}
             </span>

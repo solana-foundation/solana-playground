@@ -35,6 +35,11 @@ const DOWN = networkIndicator(
   true
 );
 const AI_OFF = aiIndicator({ kind: "off", needsSignIn: false }, true);
+const AI_LIMIT = aiIndicator(
+  { kind: "limit", until: new Date(2026, 10, 5, 5, 0).getTime() },
+  true
+);
+const AI_DOWN = aiIndicator({ kind: "unreachable" }, true);
 const STARTING = analyzerIndicator(
   { kind: "starting", since: 0 },
   12_000,
@@ -50,6 +55,7 @@ const dotOf = (el: HTMLElement) =>
 const drawRow = (indicators: StatusIndicator[]) => {
   const onPick = vi.fn();
   const onAction = vi.fn();
+  const onRetry = vi.fn(() => Promise.resolve());
   render(
     <TooltipProvider>
       <SidebarProvider>
@@ -57,12 +63,13 @@ const drawRow = (indicators: StatusIndicator[]) => {
           indicators={indicators}
           onPick={onPick}
           onAction={onAction}
+          onRetry={onRetry}
           settingsOpen={false}
         />
       </SidebarProvider>
     </TooltipProvider>
   );
-  return { onPick, onAction };
+  return { onPick, onAction, onRetry };
 };
 
 it("draws the three indicators as buttons with a dot and words, the AI off grey", () => {
@@ -150,6 +157,7 @@ it("says the open settings on the network indicator", () => {
           indicators={[UP, AI_OFF, STARTING]}
           onPick={vi.fn()}
           onAction={vi.fn()}
+          onRetry={vi.fn()}
           settingsOpen
         />
       </SidebarProvider>
@@ -171,6 +179,7 @@ it("draws three dots on the rail, named as their indicators", async () => {
           indicators={[UP, AI_OFF, STARTING]}
           onPick={onPick}
           onAction={vi.fn()}
+          onRetry={vi.fn()}
           settingsOpen={false}
         />
       </SidebarProvider>
@@ -194,6 +203,7 @@ it("labels each rail dot with its state in the row's words, on focus", async () 
           indicators={[UP, AI_OFF, STARTING]}
           onPick={vi.fn()}
           onAction={vi.fn()}
+          onRetry={vi.fn()}
           settingsOpen={false}
         />
       </SidebarProvider>
@@ -220,6 +230,7 @@ it("opens the analyzer's panel from its rail dot, as the row does", async () => 
           indicators={[UP, AI_OFF, SLOW]}
           onPick={onPick}
           onAction={vi.fn()}
+          onRetry={vi.fn()}
           settingsOpen={false}
         />
       </SidebarProvider>
@@ -243,6 +254,7 @@ it("reads Ready on the chip with only the AI off", () => {
       open={false}
       onOpenChange={vi.fn()}
       onAction={vi.fn()}
+      onRetry={vi.fn()}
     />
   );
   const chip = screen.getByRole("button", { name: "Status, ready" });
@@ -259,6 +271,7 @@ it("folds the three into one chip whose sheet names what is down", async () => {
       open={open}
       onOpenChange={vi.fn()}
       onAction={onAction}
+      onRetry={vi.fn()}
     />
   );
   const { rerender } = render(draw(false));
@@ -306,4 +319,189 @@ it("opens the analyzer panel over the line on a phone, beside the navigation on 
       configurable: true,
     });
   }
+});
+
+it.each([
+  { reading: "not responding", ai: AI_DOWN, retries: true },
+  { reading: "at its limit", ai: AI_LIMIT, retries: false },
+])(
+  "gives the sheet's AI row its buttons while the AI is $reading",
+  async ({ ai, retries }) => {
+    const indicators = [UP, ai, STARTING];
+    render(
+      <BaseStatusChip
+        chip={chipOf(indicators, true)}
+        indicators={indicators}
+        open
+        onOpenChange={vi.fn()}
+        onAction={vi.fn()}
+        onRetry={vi.fn()}
+      />
+    );
+    const sheet = await screen.findByRole("dialog", { name: "Status" });
+    const row = sheet.querySelector('[data-status="ai"]') as HTMLElement;
+    expect(
+      within(row).getByRole("button", { name: "Add an API key" })
+    ).toBeTruthy();
+    expect(
+      within(row).queryByRole("button", { name: "Try again" }) !== null
+    ).toBe(retries);
+  }
+);
+
+it("opens a panel on a cluster that does not answer, with Try again and Change network", async () => {
+  const { onPick, onAction, onRetry } = drawRow([DOWN, AI_OFF, STARTING]);
+  const network = screen.getByRole("button", {
+    name: "Change cluster, currently devnet, not responding",
+  });
+  // The settings' focus return still finds it when Change network opens them
+  expect(network.hasAttribute("data-settings-trigger")).toBe(true);
+  await userEvent.click(network);
+  const panel = await screen.findByRole("dialog");
+  expect(within(panel).getByText("Network")).toBeTruthy();
+  expect(within(panel).getByText(/The cluster is not responding/)).toBeTruthy();
+  expect(onPick).toHaveBeenCalledExactlyOnceWith(DOWN);
+
+  await userEvent.click(
+    within(panel).getByRole("button", { name: "Try again" })
+  );
+  expect(onRetry).toHaveBeenCalledExactlyOnceWith(DOWN);
+  await userEvent.click(
+    within(panel).getByRole("button", { name: "Change network" })
+  );
+  expect(onAction).toHaveBeenCalledExactlyOnceWith(DOWN);
+});
+
+it("busies Try again while it asks", async () => {
+  let answer: () => void = () => {};
+  const onRetry = vi.fn(
+    () => new Promise<void>((resolve) => (answer = resolve))
+  );
+  render(
+    <TooltipProvider>
+      <SidebarProvider>
+        <BaseStatusRow
+          indicators={[DOWN, AI_OFF, STARTING]}
+          onPick={vi.fn()}
+          onAction={vi.fn()}
+          onRetry={onRetry}
+          settingsOpen={false}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: /^Change cluster, currently devnet,/ })
+  );
+  const panel = await screen.findByRole("dialog");
+  await userEvent.click(
+    within(panel).getByRole("button", { name: "Try again" })
+  );
+  expect(await within(panel).findByText("Trying…")).toBeTruthy();
+  answer();
+  expect(
+    await within(panel).findByRole("button", { name: "Try again" })
+  ).toBeTruthy();
+});
+
+it("opens a panel on the AI's limit, whose Add an API key opens Connect a model", async () => {
+  const { onPick, onAction } = drawRow([UP, AI_LIMIT, STARTING]);
+  const ai = screen.getByRole("button", { name: "AI, limit reached" });
+  expect([ai.textContent, dotOf(ai)]).toEqual([
+    "AI · Limit reached",
+    "warning",
+  ]);
+  await userEvent.click(ai);
+  // Named by its title, so a reader of the page finds it as the AI's panel
+  const panel = await screen.findByRole("dialog", { name: "AI" });
+  expect(
+    within(panel).getByText(
+      "The free daily limit is used. It comes back at 05:00, or add a key of your own to keep going."
+    )
+  ).toBeTruthy();
+  expect(within(panel).queryByRole("button", { name: "Try again" })).toBeNull();
+  expect(onPick).toHaveBeenCalledExactlyOnceWith(AI_LIMIT);
+  await userEvent.click(
+    within(panel).getByRole("button", { name: "Add an API key" })
+  );
+  expect(onAction).toHaveBeenCalledExactlyOnceWith(AI_LIMIT);
+});
+
+it("reads a hosted model that does not answer red, with Try again", async () => {
+  const { onRetry } = drawRow([UP, AI_DOWN, STARTING]);
+  const ai = screen.getByRole("button", { name: "AI, not responding" });
+  expect([ai.textContent, dotOf(ai)]).toEqual(["AI · Not responding", "error"]);
+  await userEvent.click(ai);
+  const panel = await screen.findByRole("dialog");
+  await userEvent.click(
+    within(panel).getByRole("button", { name: "Try again" })
+  );
+  expect(onRetry).toHaveBeenCalledExactlyOnceWith(AI_DOWN);
+  expect(
+    within(panel).getByRole("button", { name: "Add an API key" })
+  ).toBeTruthy();
+});
+
+it("opens the down network's panel from its rail dot too", async () => {
+  render(
+    <TooltipProvider>
+      <SidebarProvider defaultOpen={false}>
+        <BaseStatusRail
+          indicators={[DOWN, AI_OFF, STARTING]}
+          onPick={vi.fn()}
+          onAction={vi.fn()}
+          onRetry={vi.fn()}
+          settingsOpen={false}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  const dot = screen.getByRole("button", {
+    name: "Cluster: devnet, not responding",
+  });
+  expect(dot.hasAttribute("data-settings-trigger")).toBe(true);
+  await userEvent.click(dot);
+  const panel = await screen.findByRole("dialog");
+  expect(within(panel).getByRole("button", { name: "Try again" })).toBeTruthy();
+  expect(
+    within(panel).getByRole("button", { name: "Change network" })
+  ).toBeTruthy();
+});
+
+it("puts Try again and Change network on the sheet's network row, and keeps the sheet open on Try again", async () => {
+  const indicators = [DOWN, AI_OFF, STARTING];
+  const onOpenChange = vi.fn();
+  const onRetry = vi.fn(() => Promise.resolve());
+  render(
+    <BaseStatusChip
+      chip={chipOf(indicators, true)}
+      indicators={indicators}
+      open
+      onOpenChange={onOpenChange}
+      onAction={vi.fn()}
+      onRetry={onRetry}
+    />
+  );
+  const sheet = await screen.findByRole("dialog", { name: "Status" });
+  const network = sheet.querySelector('[data-status="network"]') as HTMLElement;
+  expect(
+    within(network).getByRole("button", { name: "Change network" })
+  ).toBeTruthy();
+  await userEvent.click(
+    within(network).getByRole("button", { name: "Try again" })
+  );
+  expect(onRetry).toHaveBeenCalledExactlyOnceWith(DOWN);
+  expect(onOpenChange).not.toHaveBeenCalledWith(false);
+});
+
+it("closes the panel when its action is picked", async () => {
+  drawRow([DOWN, AI_OFF, STARTING]);
+  await userEvent.click(
+    screen.getByRole("button", { name: /^Change cluster, currently devnet,/ })
+  );
+  const panel = await screen.findByRole("dialog");
+  await userEvent.click(
+    within(panel).getByRole("button", { name: "Change network" })
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
