@@ -683,9 +683,8 @@ describe("AssistantComposer, the off row", () => {
 
   it("offers sign-in or a key to a signed-out user, and signs in from the assistant", async () => {
     backend = { state: "present", model: "m" };
-    const signIn = vi
-      .spyOn(PgSession, "signInWith")
-      .mockResolvedValue(undefined);
+    const signIn = vi.fn().mockResolvedValue(undefined);
+    const signInFor = vi.spyOn(PgSession, "signInFor").mockReturnValue(signIn);
     render(<Harness />);
     expect((await shownRow()).textContent).toContain(
       "Sign in with GitHub to use the hosted model, or add a key of your own."
@@ -694,7 +693,8 @@ describe("AssistantComposer, the off row", () => {
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Sign in with GitHub" }));
-    expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+    expect(signInFor).toHaveBeenCalledWith("assistant");
+    expect(signIn).toHaveBeenCalledWith([]);
     expect(tracked()).toEqual([
       ["assistant_ai_off_shown", { reason: "signed-out" }],
     ]);
@@ -702,7 +702,9 @@ describe("AssistantComposer, the off row", () => {
 
   it("says a failed sign-in in the row", async () => {
     backend = { state: "present", model: "m" };
-    vi.spyOn(PgSession, "signInWith").mockRejectedValue(new Error("boom"));
+    vi.spyOn(PgSession, "signInFor").mockReturnValue(
+      vi.fn().mockRejectedValue(new Error("boom"))
+    );
     render(<Harness />);
     await shownRow();
     await userEvent

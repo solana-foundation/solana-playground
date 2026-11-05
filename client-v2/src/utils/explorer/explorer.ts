@@ -136,12 +136,12 @@ export class PgExplorer {
   }
 
   /**
-   * Get names of all workspaces, reading them from the store when a
+   * Read the names of all workspaces, from the store when a
    * temporary view left none in memory.
    *
    * @returns the stored workspaces' names
    */
-  static async getAllWorkspaceNames() {
+  static async readAllWorkspaceNames() {
     if (!this._workspace) await this._initWorkspaces();
     if (!this._workspace) throw new Error("The workspaces were not read.");
     return this._workspace.allNames;

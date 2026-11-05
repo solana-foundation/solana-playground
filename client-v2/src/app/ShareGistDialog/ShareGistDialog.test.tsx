@@ -103,6 +103,13 @@ const gistRequests = () =>
 
 const reported = () => logs.entries.filter((entry) => entry.report);
 
+/** The share dialog's sign-in, `PgSession.signInFor("share")`, runs `run` */
+const shareSignIn = (run: () => Promise<void>) => {
+  const signIn = vi.fn<(scopes: string[]) => Promise<void>>(run);
+  vi.spyOn(PgSession, "signInFor").mockReturnValue(signIn);
+  return signIn;
+};
+
 describe("app/ShareGistDialog", () => {
   it("gist-sharing: Signed out, the prompt comes first", async () => {
     await open();
@@ -118,15 +125,15 @@ describe("app/ShareGistDialog", () => {
   });
 
   it("gist-sharing: Signed out, then signed in", async () => {
-    const signIn = vi
-      .spyOn(PgSession, "signIn")
-      .mockImplementation(() => PgSession.refreshWith(USER));
+    const signIn = shareSignIn(() => PgSession.refreshWith(USER));
     await open();
 
     const cancel = vi.spyOn(PgSession, "cancelSignIn");
     await press("Sign in with GitHub");
 
     expect(cancel).not.toHaveBeenCalled();
+    // From the share origin, so the session effect keeps the open project
+    expect(PgSession.signInFor).toHaveBeenCalledWith("share");
     expect(signIn).toHaveBeenCalledTimes(1);
     expect(
       screen.getByRole("heading", { name: "Share counter as a gist" })
@@ -148,6 +155,130 @@ describe("app/ShareGistDialog", () => {
     expect(
       screen.queryByRole("heading", { name: "Sign in to share" })
     ).toBeNull();
+  });
+
+  it("asks for gist access from the share origin", async () => {
+    await PgSession.refreshWith(USER);
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ reason: "needs-gist-scope" }),
+    } as Response);
+    const signIn = shareSignIn(() => Promise.resolve());
+    await open();
+
+    await press("Create secret gist");
+    await press("Allow gists on GitHub");
+
+    // The body's sign-ins keep the open project as the prompt's does
+    expect(PgSession.signInFor).toHaveBeenCalledWith("share");
+    expect(signIn).toHaveBeenCalledWith(["gist"]);
+  });
+
+  it("reports a grant that fails unexpectedly, beside saying so", async () => {
+    await PgSession.refreshWith(USER);
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({ reason: "needs-gist-scope" }),
+    } as Response);
+    shareSignIn(() => Promise.reject(new Error("boom")));
+    await open();
+
+    await press("Create secret gist");
+    await press("Allow gists on GitHub");
+
+    expect(screen.getByText("boom")).toBeTruthy();
+    expect(reported()).toHaveLength(1);
+  });
+
+  it("reports nothing for a grant the user cancelled", async () => {
+    await PgSession.refreshWith(USER);
+    fetchSpy.mockImplementation(async (url: unknown) =>
+      String(url).includes("/api/gists")
+        ? ({
+            ok: false,
+            status: 403,
+            json: async () => ({ reason: "needs-gist-scope" }),
+          } as Response)
+        : ({ ok: true, json: async () => ({ url: "https://x/" }) } as Response)
+    );
+    PgSession.setOpenChannel(() => ({
+      receive: async () => ({
+        delivered: false as const,
+        reason: "cancelled" as const,
+      }),
+      cancel: () => {},
+    }));
+    await open();
+
+    await press("Create secret gist");
+    await press("Allow gists on GitHub");
+
+    expectQuietCancel();
+    expect(reported()).toEqual([]);
+  });
+
+  it("reports an unreadable project and says so in a toast", async () => {
+    await PgSession.refreshWith(USER);
+    const setToast = vi.spyOn(PgView, "setToast").mockImplementation(vi.fn());
+    readFiles
+      .mockRejectedValueOnce(new Error("store unreadable"))
+      .mockRejectedValueOnce(new Error("store unreadable"));
+    await open();
+
+    await press("Create secret gist");
+
+    expect(reported()).toHaveLength(1);
+    expect(setToast).toHaveBeenCalledTimes(1);
+    expect(gistRequests()).toEqual([]);
+  });
+
+  it("makes a sign-in already waiting the share's, so it keeps the open project", async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: "https://x/" }),
+    } as Response);
+    PgSession.setOpenChannel(() => ({
+      receive: () => new Promise<never>(() => {}),
+      cancel: () => {},
+    }));
+    // The account menu's sign-in, its popup still open
+    void PgSession.signIn().catch(() => {});
+
+    await open();
+
+    expect(PgSession.signingInFrom).toBe("share");
+    // Still the account menu's to end
+    expect(
+      screen.getByRole<HTMLButtonElement>("button", {
+        name: /Waiting for GitHub/,
+      }).disabled
+    ).toBe(true);
+  });
+
+  it("reports a grant whose sign-in could not start", async () => {
+    await PgSession.refreshWith(USER);
+    fetchSpy.mockImplementation(async (url: unknown) =>
+      String(url).includes("/api/gists")
+        ? ({
+            ok: false,
+            status: 403,
+            json: async () => ({ reason: "needs-gist-scope" }),
+          } as Response)
+        : ({ ok: false, status: 500, json: async () => ({}) } as Response)
+    );
+    await open();
+
+    await press("Create secret gist");
+    await press("Allow gists on GitHub");
+
+    expect(
+      screen.getByText(
+        "Sign-in isn't available. Your work is saved in this browser."
+      )
+    ).toBeTruthy();
+    expect(reported()).toHaveLength(1);
   });
 
   it("shows why a sign-in ended, and keeps the prompt", async () => {
@@ -318,7 +449,7 @@ describe("app/ShareGistDialog", () => {
   });
 
   it("gist-sharing: Cancel leaves without signing in", async () => {
-    const signIn = vi.spyOn(PgSession, "signIn");
+    const signIn = vi.spyOn(PgSession, "signInFor");
     await open();
 
     await press("Cancel");
@@ -328,7 +459,7 @@ describe("app/ShareGistDialog", () => {
   });
 
   it("shows and reports a sign-in error that is not a known failure", async () => {
-    vi.spyOn(PgSession, "signIn").mockRejectedValue(new Error("boom"));
+    shareSignIn(() => Promise.reject(new Error("boom")));
     await open();
 
     await press("Sign in with GitHub");
@@ -338,7 +469,7 @@ describe("app/ShareGistDialog", () => {
   });
 
   it("says it could not sign in when the failure carries no words", async () => {
-    vi.spyOn(PgSession, "signIn").mockRejectedValue(new Error(""));
+    shareSignIn(() => Promise.reject(new Error("")));
     await open();
 
     await press("Sign in with GitHub");
@@ -383,9 +514,7 @@ describe("app/ShareGistDialog", () => {
     await press("Sign in with GitHub");
     expectQuietCancel();
 
-    vi.spyOn(PgSession, "signIn").mockImplementation(() =>
-      PgSession.refreshWith(USER)
-    );
+    shareSignIn(() => PgSession.refreshWith(USER));
     await press("Sign in with GitHub");
 
     expect(screen.queryByText("Sign-in cancelled.")).toBeNull();

@@ -373,7 +373,8 @@ The `gist` slice SHALL send these events under the prefix `gist`:
 - `gist_export_succeeded` with `files` and `visibility` when the gist is made
 - `gist_export_failed` with `visibility` and a `reason`, one of `too-large`,
   `signed-out`, `sign-in-failed`, `needs-gist-scope`, `github-unauthorized`,
-  `rate-limited`, `rejected`, `request-failed`
+  `rate-limited`, `rejected`, `request-failed`, `read-failed` (the project
+  could not be read, so no `gist_export_started` came before it)
 - `gist_link_copied` when a copy of the Playground link in the shared state
   succeeds, with `copied: "playground"`
 

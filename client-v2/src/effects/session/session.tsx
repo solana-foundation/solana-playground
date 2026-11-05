@@ -282,9 +282,10 @@ export const session = (): Disposable => {
         PgProjectSync.holdPushes();
       }
       // A sign-in with an origin happens mid-task on the open project: a prompt
-      // written for it, or the deploy the funding card runs next
-      const midTask = PgSession.signingInFrom !== undefined;
-      void adopt({ openLatest: !restoring && !midTask }).catch((e) =>
+      // the assistant panel holds, the deploy the funding card runs next, or
+      // the files the share dialog posts
+      const isMidTask = PgSession.signingInFrom !== undefined;
+      void adopt({ openLatest: !restoring && !isMidTask }).catch((e) =>
         report("adopt", e)
       );
     }

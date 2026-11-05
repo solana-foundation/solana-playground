@@ -16,7 +16,7 @@ import { fetchGistFiles, GistImportError, importGist } from "./import";
 
 const utils = vi.hoisted(() => ({
   PgExplorer: {
-    getAllWorkspaceNames: vi.fn(),
+    readAllWorkspaceNames: vi.fn(),
     createWorkspace: vi.fn(),
     switchWorkspace: vi.fn(),
   },
@@ -82,7 +82,7 @@ let sent: ReturnType<typeof memoryProvider>;
 beforeEach(() => {
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
-  utils.PgExplorer.getAllWorkspaceNames.mockReset().mockResolvedValue([]);
+  utils.PgExplorer.readAllWorkspaceNames.mockReset().mockResolvedValue([]);
   utils.PgExplorer.createWorkspace.mockReset();
   utils.PgExplorer.switchWorkspace.mockReset();
   utils.PgFramework.getFromFiles.mockReset().mockResolvedValue({});
@@ -150,7 +150,7 @@ describe("importGist", () => {
 
   it("opens the project of a gist already imported, without a request", async () => {
     const fetch = answers({});
-    utils.PgExplorer.getAllWorkspaceNames.mockResolvedValue([
+    utils.PgExplorer.readAllWorkspaceNames.mockResolvedValue([
       `gist-alice/${ID}`,
     ]);
 
@@ -165,7 +165,7 @@ describe("importGist", () => {
 
   it("opens an existing project once the API names the owner", async () => {
     answers({ [API]: ok(gist({ "lib.rs": { content: LIB } })) });
-    utils.PgExplorer.getAllWorkspaceNames.mockResolvedValue([
+    utils.PgExplorer.readAllWorkspaceNames.mockResolvedValue([
       `gist-alice/${ID}`,
     ]);
 
@@ -179,7 +179,7 @@ describe("importGist", () => {
 
   it("opens a pinned revision imported before, without a request", async () => {
     const fetch = answers({});
-    utils.PgExplorer.getAllWorkspaceNames.mockResolvedValue([
+    utils.PgExplorer.readAllWorkspaceNames.mockResolvedValue([
       `gist-alice/${ID}`,
       `gist-alice/${ID}@9f8e7d`,
     ]);

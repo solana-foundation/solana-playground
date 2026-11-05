@@ -619,7 +619,7 @@ describe("creating a workspace from a temporary view", () => {
   it("leaves the temporary view when it switches to a stored workspace", async () => {
     await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
     await PgExplorer.init({ files: [["/src/lib.rs", "temporary"]] });
-    await PgExplorer.getAllWorkspaceNames();
+    await PgExplorer.readAllWorkspaceNames();
 
     await PgExplorer.switchWorkspace("alpha");
 
@@ -633,7 +633,7 @@ describe("creating a workspace from a temporary view", () => {
     await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
     await PgExplorer.init({ files: [["/src/lib.rs", "temporary"]] });
 
-    expect(await PgExplorer.getAllWorkspaceNames()).toEqual(["alpha"]);
+    expect(await PgExplorer.readAllWorkspaceNames()).toEqual(["alpha"]);
     expect(PgExplorer.isTemporary).toBe(true);
   });
 });
