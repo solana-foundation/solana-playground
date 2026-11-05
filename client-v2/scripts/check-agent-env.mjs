@@ -5,7 +5,7 @@
 // refuse every turn or check origins against a per-deployment hostname, and
 // any build whose SOURCES the gateway or the skills route would reject. A
 // preview may run without either: GET /api/agent then reports no backend.
-// Only vercel.json's buildCommand runs it: local, CI and e2e builds need no key.
+// Only vercel.json's buildCommand (scripts/vercel-build.sh) runs it: local, CI and e2e builds need no key.
 // The constants files, not `server.mjs`: those load Better Auth and the pool
 import { SIGN_IN_ENV } from "../src/features/auth/config.mjs";
 import { composeServers } from "../src/features/mcp/server.mjs";

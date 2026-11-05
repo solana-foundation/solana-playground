@@ -399,7 +399,7 @@ jobs:
       - name: Build tests
         run: yarn test-build
 
-      # The deploy's own post-build check (`buildCommand` in `vercel.json`).
+      # The deploy's own post-build check (`scripts/vercel-build.sh`, `vercel.json`'s `buildCommand`).
       - name: Check the bundle carries the real wasm packages
         if: ${{ !inputs.use-wasm-stubs }}
         run: node scripts/wasm-stubs.mjs check-build build

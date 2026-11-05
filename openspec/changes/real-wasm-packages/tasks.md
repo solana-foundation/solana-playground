@@ -25,7 +25,8 @@ group 5 depends on all of them.
       `make -f Makefile.vercel` prod-fast refuses it too (HOO-2167)
 - [ ] 2.2 Verify "A bundle built on a stub": the `bundleProblems` table in
       `scripts/wasm-stubs.test.mjs` passes under `yarn test-api`, and
-      `vercel.json` `buildCommand` ends with `check-build build` (HOO-2167)
+      `scripts/vercel-build.sh`, `vercel.json`'s `buildCommand`, ends with
+      `check-build build` (HOO-2167)
 
 ## 3. The stub opt-in
 
