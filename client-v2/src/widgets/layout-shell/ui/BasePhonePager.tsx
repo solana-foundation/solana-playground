@@ -465,7 +465,9 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
               >
                 {PHONE_ICONS.back}
               </BarButton>
-              <div className="min-w-0 flex-1 overflow-x-auto">
+              {/* `py-1` keeps the tabs' 48 px tap inside the strip, which
+                  clips both ways once it scrolls sideways */}
+              <div className="min-w-0 flex-1 overflow-x-auto py-1">
                 {props.stageBar}
               </div>
             </PhoneBar>
