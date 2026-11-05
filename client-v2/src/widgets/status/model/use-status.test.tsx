@@ -145,6 +145,6 @@ it("keeps the analyzer's Reload away from a first build under way", () => {
   flow.state = { build: "running", deploy: "upcoming" };
   act(() => PgAnalyzerStatus.set({ kind: "failed" }));
   const { result } = renderHook(() => useStatus());
-  expect(result.current[2]?.action).toBeNull();
+  expect(result.current[2]?.action).toBeUndefined();
   flow.state = { build: "done", deploy: "active" };
 });

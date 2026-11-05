@@ -187,7 +187,7 @@ export const probeDefaultBackend = (): Promise<DefaultBackend> => {
       // is not offered, and every reader says so
       broadcast({ state: "unreachable" });
       throw error;
-    },
+    }
   );
   probe = current;
   return current;
@@ -229,7 +229,7 @@ export const useDefaultBackend = (): DefaultBackend => {
         // without an answer the default is not offered
         log.error(error, { report: true, context: { reason: "hook" } });
         take({ state: "unreachable" });
-      },
+      }
     );
     return () => {
       live = false;

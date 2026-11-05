@@ -18,6 +18,17 @@ export class TerminalLineError extends Error {
  */
 export type LineTone = "error" | "warning" | "info";
 
+/** A `TerminalLineError` the terminal prints in one of those variants */
+export class TonedLineError extends TerminalLineError {
+  /**
+   * @param tone how the terminal colours the line
+   * @param message the line, plain: the assistant and button toasts read it
+   */
+  constructor(readonly tone: LineTone, message: string) {
+    super(message);
+  }
+}
+
 /** The codes behind `PgTerminal.error`, `.warning` and `.info` */
 const TONES: Record<LineTone, (text: string) => string> = {
   error: (text) => `\x1b[1;31m${text}\x1b[0m`,

@@ -356,7 +356,7 @@ describe("useDefaultBackend", () => {
 
 describe("the probe's state for the status", () => {
   it("goes from checking to answered, whatever the answer", async () => {
-    answer({ configured: false });
+    answer({ key: "own" });
     const asked = probeDefaultBackend();
     expect(PgAssistant.defaultProbe).toBe("checking");
     await asked;
@@ -388,7 +388,7 @@ describe("the probe's state for the status", () => {
     answer({}, 500);
     await probeDefaultBackend();
 
-    answer({ configured: false });
+    answer({ key: "own" });
     const again = probeDefaultBackend();
     expect(PgAssistant.defaultProbe).toBe("unreachable");
     await again;
@@ -414,7 +414,7 @@ describe("the probe's state for the status", () => {
     settle({
       ok: true,
       status: 200,
-      json: async () => ({ configured: false }),
+      json: async () => ({ key: "own" }),
     } as Response);
     await old;
     expect(PgAssistant.defaultProbe).toBe("unasked");
