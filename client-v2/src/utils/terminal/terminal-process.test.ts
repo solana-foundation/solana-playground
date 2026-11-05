@@ -12,7 +12,7 @@ import {
 } from "@/shared/lib/report-button-failure";
 
 import { StoppedError } from "../stopped";
-import { TerminalLineError, TonedLineError } from "./line-error";
+import { TerminalLineError, TonedLineError, toneWith } from "./line-error";
 import { PgShell } from "./shell";
 import { SLOW_RUN_LINE, SLOW_RUN_MS, watchSlowRun } from "./slow-run";
 import { isTerminalUnmounted, PgTerm, PgTerminal } from "./terminal";
@@ -317,8 +317,10 @@ describe("PgTerm.process", () => {
     const { reason, term, logged } = await runFailing(failure);
 
     expect(reason).toBe(failure);
+    // The line carries its own tone, so the terminal adds no colour of its own
     expect(term.println).toHaveBeenCalledWith(
-      "Process error: Command `nope` not found."
+      toneWith("error")("Process error: Command `nope` not found."),
+      { noColor: true }
     );
     expect(logged.entries.map((entry) => entry.level)).toEqual(["warn"]);
     expect(logged.entries[0].report).toBe(false);
