@@ -178,6 +178,22 @@ describe("SyncBanner wording", () => {
     ).toEqual(["Keep this version", "Take the other version"]);
   });
 
+  it("draws the message and the answers at full strength, in the callout's hover", async () => {
+    await messageFor([open("src/lib.rs")]);
+    const description = requireFor("the banner's description")(
+      container.querySelector('[data-slot="callout-description"]')
+    );
+    expect(description.className).toContain("opacity-100");
+    expect(description.className).not.toContain("opacity-90");
+
+    const keep = requireFor("the answer")(
+      Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent === "Keep this version"
+      )
+    );
+    expect(keep.className).not.toMatch(/hover:bg-muted|hover:text-foreground/);
+  });
+
   it("names only the files still in conflict as changed in the same place", async () => {
     expect(await messageFor([open("src/lib.rs"), open("Cargo.toml")])).toBe(
       "src/lib.rs and 1 other file changed on another device and on this one, in the same place. Everything else was merged."
