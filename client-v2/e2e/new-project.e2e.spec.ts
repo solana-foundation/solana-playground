@@ -13,6 +13,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE } from "./viewports";
 
 /** The New project dialog, by its title */
 const dialog = (page: Page) =>
@@ -43,7 +44,7 @@ test("client-v2-layout: Starting an Anchor project from New project", async ({
 test("client-v2-layout: New project's controls line up and its list shows it scrolls", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await openGallery(page);
   await expect(dialog(page)).toBeVisible();
 
@@ -139,7 +140,7 @@ test("client-v2-layout: Starting a project is measured", async ({
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   // `seededPage` makes its project through the desktop Home's row, which a
   // phone does not draw; New project needs no project open

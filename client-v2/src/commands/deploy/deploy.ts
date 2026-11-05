@@ -351,7 +351,10 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
           : {
               state: "kept",
               address: bufferKp.publicKey.toBase58(),
-              lamports,
+              sol:
+                lamports === undefined
+                  ? undefined
+                  : PgWeb3.lamportsToSol(lamports),
             };
     }
     return new StoppedError(deployStoppedLine(left));

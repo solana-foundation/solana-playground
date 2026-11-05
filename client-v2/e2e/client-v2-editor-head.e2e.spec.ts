@@ -10,6 +10,7 @@ import {
   startProject,
   test,
 } from "./fixtures";
+import { DESK, PHONE, WIDE_DESK } from "./viewports";
 
 /**
  * The editor head (the `client-v2-editor-head` capability): the tab
@@ -40,7 +41,7 @@ const boxOf = async (page: Page, selector: string) => {
 };
 
 test.describe("at 1440", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+  test.use({ viewport: WIDE_DESK });
 
   test("client-v2-editor-head: The head at 1440", async ({ page }) => {
     await firstVisit(page);
@@ -213,14 +214,14 @@ test.describe("at 1440", () => {
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   test("client-v2-editor-head: A phone", async ({ page }) => {
     // Home's New project tile is on the desktop's page; the window is
     // narrowed once the project is open, as client-v2-layout's phone does
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await firstVisit(page);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
     await expect(head(page)).toHaveCount(0);
     await page.getByRole("button", { name: /^Files, .* open$/ }).click();
     const files = page.getByRole("dialog", { name: "Files" });
@@ -229,7 +230,7 @@ test.describe("on a phone", () => {
     await expect(files).toBeHidden();
 
     // Back over the phone's line, a new head takes the tab row again
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize(WIDE_DESK);
     await expect(head(page).locator("#tabs")).toBeVisible(LONG);
     await expect(head(page).locator("#tabs")).toContainText("lib.rs");
   });

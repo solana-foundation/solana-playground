@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, test } from "./fixtures";
+import { DESK } from "./viewports";
 
 /**
  * The composer's input after the assistant is folded and opened again. Flow
@@ -14,7 +15,7 @@ const input = (page: Page) =>
 const heightOf = (page: Page) =>
   input(page).evaluate((el) => el.getBoundingClientRect().height);
 
-test.use({ viewport: { width: 1280, height: 800 } });
+test.use({ viewport: DESK });
 
 test("the composer's input is one line after the assistant is reopened by key", async ({
   seededPage: page,

@@ -10,6 +10,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { PHONE } from "./viewports";
 
 /**
  * The navigation's item of this name, not Home's tile of the same words, nor
@@ -162,7 +163,7 @@ test("client-v2-layout: Searching tutorials", async ({ seededPage: page }) => {
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   test("client-v2-layout: The pages on a phone", async ({ page }) => {
     await page.goto("/");

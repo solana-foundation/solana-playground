@@ -12,6 +12,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { PHONE } from "./viewports";
 
 /**
  * The navigation's project list (HOO-2069), one test per scenario of the
@@ -104,7 +105,7 @@ test("renames the open project in place", async ({ page }) => {
 test("the list is on a phone's menu page", async ({ page }) => {
   test.setTimeout(120_000);
   await twoProjects(page);
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(PHONE);
 
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(projectRow(page, "alpha")).toBeVisible();

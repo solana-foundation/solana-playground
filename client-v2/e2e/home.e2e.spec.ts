@@ -12,9 +12,10 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE } from "./viewports";
 
 test.describe("on a desktop window", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: DESK });
 
   test("client-v2-layout: An empty install", async ({ page }) => {
     await page.goto("/");
@@ -143,7 +144,7 @@ const firstLine = (page: Page) =>
   page.locator(".monaco-editor .view-line").first();
 
 test.describe("from an open project", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: DESK });
 
   test("client-v2-layout: Home from an open project and back", async ({
     page,
@@ -218,7 +219,7 @@ test.describe("from an open project", () => {
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   test("client-v2-layout: Home on a phone", async ({ page }) => {
     await page.goto("/");

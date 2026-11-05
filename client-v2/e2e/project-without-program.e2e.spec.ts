@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, json, LONG, test } from "./fixtures";
+import { PHONE } from "./viewports";
 
 const OWNER = "alice";
 const REPO = "ts-client";
@@ -243,7 +244,7 @@ test("project-without-program: A project with no program on a phone", async ({
   await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1, LONG);
   await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
 
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(PHONE);
 
   // The phone's stepper leaves Write out, so nothing is left to draw
   await expect(
@@ -261,7 +262,7 @@ test("project-without-program: The preview of a project with no program on a pho
   await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1, LONG);
   await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
 
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(PHONE);
   await page.getByRole("button", { name: "Preview the build" }).click();
 
   // In the viewport, not only present: the pager used to bounce back to Code

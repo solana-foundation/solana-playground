@@ -11,6 +11,7 @@ import {
   TEST_USER,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { PHONE } from "./viewports";
 
 /**
  * Sharing a project as a gist, against stubs: `/api/gists` answers as
@@ -589,7 +590,7 @@ test("gist-sharing: No header Share on a phone", async ({ page }) => {
   await seedWorkspace(page);
   await expect(page.locator("#flow-share")).toBeVisible();
 
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(PHONE);
 
   await expect(page.locator("#flow-share")).toHaveCount(0);
 });

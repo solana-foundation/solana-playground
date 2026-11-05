@@ -12,6 +12,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE } from "./viewports";
 
 /**
  * The assistant's composer: the model it names, sending without a key,
@@ -21,7 +22,6 @@ import { lineOf, linesOn } from "./telemetry";
  */
 
 const DEFAULT_MODEL = "z-ai/glm-5.3-flash:US";
-const PHONE = { width: 390, height: 844 };
 const ANSWER =
   'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n';
 
@@ -302,7 +302,7 @@ test.describe("Connect a model", () => {
   test.setTimeout(120_000);
 
   test.describe("on a desktop", () => {
-    test.use({ viewport: { width: 1280, height: 800 } });
+    test.use({ viewport: DESK });
 
     test("client-v2-assistant: Connecting on a desktop", async ({ page }) => {
       await stubAgent(page, { configured: false, model: null }, answer);
@@ -337,7 +337,7 @@ test.describe("Connect a model", () => {
       await stubAgent(page, { configured: false, model: null }, answer);
       // The project opens from Home on a desktop-sized page; a phone
       // shows the assistant on the pager's Work page, through Show: Chat
-      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.setViewportSize(DESK);
       await openProject(page, "connect-phone");
       await page.setViewportSize(PHONE);
       await page.getByRole("radio", { name: "Chat" }).click();
@@ -455,7 +455,7 @@ const proposePatch = async (page: Page, lines: number) => {
 
 /** Opens a project at desktop size, then shows the chat at phone size */
 const openOnPhone = async (page: Page, name: string) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await openProject(page, name);
   await page.setViewportSize(PHONE);
   await page.getByRole("radio", { name: "Chat" }).click();

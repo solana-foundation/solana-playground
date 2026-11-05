@@ -1,7 +1,8 @@
 import { consoleTrigger, expect, test } from "./fixtures";
+import { WIDE_DESK } from "./viewports";
 
 test.describe("on a 1440 px window", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+  test.use({ viewport: WIDE_DESK });
 
   test("client-v2-failure-states: An unmapped build failure opens the log", async ({
     seededPage: page,

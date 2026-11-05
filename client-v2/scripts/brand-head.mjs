@@ -70,23 +70,71 @@ export const BRAND_HEAD = [
   ...CARD,
 ];
 
+/** A tag's text, lower-cased, with one space between attributes and `=` tight */
+const normalize = (tag) =>
+  tag
+    .toLowerCase()
+    .replaceAll("'", '"')
+    .replace(/\s+/g, " ")
+    .replaceAll(" = ", "=")
+    .replaceAll("= ", "=")
+    .replaceAll(" =", "=");
+
+/** An attribute's value in a normalized tag, quoted or not */
+const valueOf = (tag, name) => {
+  const key = ` ${name}=`;
+  const at = tag.indexOf(key);
+  if (at === -1) return undefined;
+  const rest = tag.slice(at + key.length);
+  if (rest.startsWith('"')) return rest.slice(1, rest.indexOf('"', 1));
+  return rest.split(" ")[0];
+};
+
 /**
- * A whole line holding one icon link, theme colour or card tag, whatever its
- * attributes. A card key counts under either attribute, `name` or `property`:
- * pages use both, and crawlers read both.
+ * An icon link, the theme colour or a card tag. A card key counts under either
+ * attribute, `name` or `property`: pages use both, and crawlers read both.
  */
-const REPLACED =
-  /^[ \t]*<(?:link\b[^>]*\brel\s*=\s*(?:["'][^"']*\bicon\b[^"']*["']|[^\s"'>]*\bicon\b)[^>]*|meta\b[^>]*\b(?:name\s*=\s*["']?theme-color\b|(?:name|property)\s*=\s*["']?(?:og|twitter):)[^>]*)>[ \t]*\r?\n/gim;
+const isBrandTag = (tag) => {
+  const text = normalize(tag);
+  if (text.startsWith("<link ")) {
+    return valueOf(text, "rel")?.includes("icon") ?? false;
+  }
+  if (!text.startsWith("<meta ")) return false;
+  const key = valueOf(text, "name") ?? valueOf(text, "property") ?? "";
+  return (
+    key === "theme-color" || key.startsWith("og:") || key.startsWith("twitter:")
+  );
+};
 
-/** Any icon link, theme colour or card tag, wherever it sits, to check none survived */
-const ICON_TAG =
-  /<link\b[^>]*\brel\s*=\s*(?:["'][^"']*\bicon\b|[^\s"'>]*\bicon\b)/gi;
-const THEME_TAG = /<meta\b[^>]*\bname\s*=\s*["']?theme-color\b/gi;
-const CARD_TAG = /<meta\b[^>]*\b(?:name|property)\s*=\s*["']?(?:og|twitter):/gi;
+/** Every tag of the page with where it sits, a tag split over lines included */
+const tagsOf = (html) => {
+  const tags = [];
+  let start = html.indexOf("<");
+  while (start !== -1) {
+    const end = html.indexOf(">", start) + 1;
+    if (end === 0) break;
+    tags.push({ text: html.slice(start, end), start, end });
+    start = html.indexOf("<", end);
+  }
+  return tags;
+};
 
-const CHARSET = /^([ \t]*)<meta charset="[^"]*"\s*\/?>[ \t]*\r?\n/m;
-
-const count = (html, re) => html.match(re)?.length ?? 0;
+/** The page without each brand tag that has its lines to itself */
+const stripBrandTags = (html) => {
+  let kept = "";
+  let from = 0;
+  for (const { text, start, end } of tagsOf(html)) {
+    if (!isBrandTag(text)) continue;
+    const lineStart = html.lastIndexOf("\n", start) + 1;
+    const lineEnd = html.indexOf("\n", end) + 1 || html.length;
+    const hasCompany =
+      html.slice(lineStart, start).trim() || html.slice(end, lineEnd).trim();
+    if (hasCompany) continue;
+    kept += html.slice(from, lineStart);
+    from = lineEnd;
+  }
+  return kept + html.slice(from);
+};
 
 /**
  * Idempotent: a second run strips the brand block and puts it back.
@@ -95,32 +143,36 @@ const count = (html, re) => html.match(re)?.length ?? 0;
  * @returns {string} the page with the brand's icon and card block after its
  *   charset
  * @throws when the page has no `<meta charset>` line or no `</head>`, or when
- *   an icon link, theme colour or card tag the line-wise strip missed (one
- *   sharing a line) survives beside the brand's, so a restructured upstream
- *   page fails the build instead of shipping a mixed head
+ *   an icon link, theme colour or card tag the strip left (one sharing a line)
+ *   survives beside the brand's, so a restructured upstream page fails the
+ *   build instead of shipping a mixed head
  */
 export const brandHead = (html) => {
   if (!html.includes("</head>")) {
     throw new Error("index.html has no </head>; cannot place the brand head");
   }
-  const stripped = html.replace(REPLACED, "");
-  const charset = stripped.match(CHARSET);
-  if (!charset) {
+  const stripped = stripBrandTags(html);
+  const charset = stripped
+    .split("\n")
+    .find((line) => line.trim().startsWith("<meta charset="));
+  if (charset === undefined) {
     throw new Error(
       "index.html has no <meta charset> line; cannot place the brand head"
     );
   }
-  const [line, indent] = charset;
+  const indent = charset.slice(0, charset.length - charset.trimStart().length);
   const block = BRAND_HEAD.map((tag) => `${indent}${tag}\n`).join("");
-  const branded = stripped.replace(line, () => line + block);
+  const branded = stripped.replace(
+    `${charset}\n`,
+    () => `${charset}\n${block}`
+  );
   if (
-    count(branded, ICON_TAG) !== count(block, ICON_TAG) ||
-    count(branded, THEME_TAG) !== count(block, THEME_TAG) ||
-    count(branded, CARD_TAG) !== count(block, CARD_TAG)
+    tagsOf(branded).filter(({ text }) => isBrandTag(text)).length !==
+    BRAND_HEAD.length
   ) {
     throw new Error(
       "index.html keeps an icon link, theme-color or card tag the rewrite did not remove; " +
-        "update REPLACED in scripts/brand-head.mjs for upstream's new markup"
+        "update isBrandTag in scripts/brand-head.mjs for upstream's new markup"
     );
   }
   return branded;

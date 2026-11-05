@@ -20,6 +20,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
 
 /**
  * The one event line with this name: waits for it, then a moment more, so a
@@ -109,7 +110,7 @@ const seedThenResize = async (
   page: Page,
   size: { width: number; height: number }
 ) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await seedWorkspace(page);
   await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
   await page.setViewportSize(size);
@@ -208,7 +209,7 @@ test("a visit that moves nothing leaves the saved layout alone", async ({
 test("a window resize does not pin the panels' sizes", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   await page.reload();
   await expect(assistantPanel(page)).toBeVisible();
   // The suite's profile holds open flags and no sizes (`playwright.config`)
@@ -217,7 +218,7 @@ test("a window resize does not pin the panels' sizes", async ({
 
   await page.setViewportSize({ width: 1920, height: 900 });
   await expect.poll(() => widthOf(page)).toBeGreaterThan(300);
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   await page.waitForTimeout(300);
   expect(await savedLayout(page)).toBe(before);
 });
@@ -233,7 +234,7 @@ test("a restored width the library would fold opens the assistant, and changes n
     open: { nav: true, files: true, assistant: true, console: false },
     h: { assistant: 10, work: 90 },
   });
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   await page.evaluate((value) => localStorage.setItem("layout", value), saved);
   await page.reload();
   await expect(
@@ -472,12 +473,11 @@ test("client-v2-layout: Folding the navigation", async ({
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   // The seed runs on a desktop-sized page, as the fixture waits on the tree
   // a phone keeps in a closed Sheet; the window is narrowed afterwards
-  const seedThenNarrow = (page: Page) =>
-    seedThenResize(page, { width: 390, height: 844 });
+  const seedThenNarrow = (page: Page) => seedThenResize(page, PHONE);
 
   test("the account is a page of its own on a phone", async ({ page }) => {
     await seedThenNarrow(page);
@@ -613,7 +613,7 @@ test.describe("on a phone", () => {
   });
 
   test("client-v2-layout: Turning a phone across 768 px", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     // The editor focuses itself when it opens the first file; landing after
     // the click below, it would take the typed command away from the terminal
@@ -696,7 +696,7 @@ test.describe("on a phone", () => {
   test("client-v2-layout: A project started from the phone's menu", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     for (const width of [393, 740]) {
       await page.setViewportSize({ width, height: 852 });
@@ -815,7 +815,7 @@ test.describe("on a phone", () => {
 test("client-v2-layout: The navigation on a narrow window", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await seedWorkspace(page);
   // The editor focuses itself when it opens the first file; landing after
   // the menu opened, it would bring Work back
@@ -884,7 +884,7 @@ test.describe("on an iPhone", () => {
   // Monaco mounts its keyboard button only where it reads iOS: an iPhone's
   // user agent on a touch screen. Without both the button is never there
   test.use({
-    viewport: { width: 390, height: 844 },
+    viewport: PHONE,
     userAgent:
       "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
     hasTouch: true,
@@ -894,9 +894,9 @@ test.describe("on an iPhone", () => {
     page,
   }) => {
     // A project is started from the desktop's Home, as "on a phone" does
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
     const lines = page.locator(".monaco-editor .view-lines");
     await expect(lines).toContainText("use anchor_lang");
     // A tap on the code does not always raise the keyboard on an iPhone, so
@@ -1069,7 +1069,7 @@ test.describe("the layout_viewport event", () => {
   const widthClassAt = async (page: Page, width: number) => {
     // Seeded on a desktop-sized page, as the phone test is: the project
     // tree lives in a closed Sheet on a phone, which the fixture waits on
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await page.setViewportSize({ width, height: 800 });
     const lines = linesOn(page);
@@ -1148,7 +1148,7 @@ test("a toggle on a wide window works after a trip through the compact Sheet", a
   await page.setViewportSize({ width: 800, height: 900 });
   await page.getByRole("button", { name: "Expand assistant" }).click();
   await expect(page.locator('[data-slot="sheet-content"]')).toBeVisible();
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   await expect(assistantPanel(page)).toBeVisible();
   await page.keyboard.press("ControlOrMeta+r");
   await expect.poll(() => widthOf(page)).toBeLessThan(40);
@@ -1190,7 +1190,7 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) =>
   );
 
 test("client-v2-layout: A wide window", async ({ seededPage: page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
   await expect(stagePanel(page)).toBeVisible();
   await expect(assistantPanel(page)).toBeVisible();
@@ -1227,7 +1227,7 @@ test("client-v2-layout: A wide window", async ({ seededPage: page }) => {
 test("client-v2-layout: Everything the header did", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   const current = currentProject(page);
   await expect(current).toHaveText("e2e-project");
 
@@ -1263,7 +1263,7 @@ test("client-v2-layout: Everything the header did", async ({
 });
 
 test.describe("on a tablet", () => {
-  test.use({ viewport: { width: 834, height: 1112 } });
+  test.use({ viewport: TABLET });
 
   test("client-v2-layout: A tablet", async ({ seededPage: page }) => {
     await expect(navColumn(page)).toHaveJSProperty("offsetWidth", 52);
@@ -1429,7 +1429,7 @@ const barOf = async (locator: ReturnType<Page["locator"]>) => {
 };
 
 test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   // Flush: the navigation starts at the window's edge, the bars at its top
   await expect
     .poll(
@@ -1477,7 +1477,7 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
 test("client-v2-layout: Hiding the assistant from the stage bar", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   const before = await widthOf(page);
   const stageBar = page.locator('[data-slot="stage-bar"]');
   await expect(stageBar).not.toContainText("e2e-project");
@@ -1519,7 +1519,7 @@ test("client-v2-layout: A layout saved before the column bars", async ({
 test("client-v2-layout: Widening the assistant", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   const lines = linesOn(page);
   await page.getByRole("button", { name: "Widen the assistant" }).click();
   await expect(
@@ -1550,7 +1550,7 @@ test("dragging at a hidden files column's edge moves only the assistant", async 
 test("a widened assistant, hidden and shown, opens at the width it had before", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   const before = await widthOf(page);
   await page.getByRole("button", { name: "Widen the assistant" }).click();
   await expect.poll(() => widthOf(page)).toBeGreaterThan(before + 100);
@@ -1915,7 +1915,7 @@ const SECTIONS = [
 ];
 
 test.describe("the settings page", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: DESK });
 
   test("client-v2-layout: A wide window's settings page", async ({
     seededPage: page,
@@ -2021,7 +2021,7 @@ test.describe("the settings page", () => {
     seededPage: page,
   }) => {
     // The rail's tooltips name its buttons, and portal to `body` too
-    await page.setViewportSize({ width: 834, height: 1112 });
+    await page.setViewportSize(TABLET);
     await nav(page)
       .locator('[data-slot="sidebar-footer"]')
       .getByRole("button", { name: /^Cluster: / })
@@ -2060,7 +2060,7 @@ test.describe("the settings page", () => {
 // HOO-2059 saw the stage tabs' "Interact" draw over the old overlay's title,
 // and HOO-2058 a grey block over the editor, both at 1440 by 900
 test.describe("the settings page at 1440 by 900", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+  test.use({ viewport: WIDE_DESK });
 
   test("client-v2-layout: Nothing draws over the settings", async ({
     seededPage: page,
@@ -2113,7 +2113,7 @@ test.describe("the settings page at 1440 by 900", () => {
 });
 
 test("client-v2-layout: The settings page on a phone", async ({ page }) => {
-  await seedThenResize(page, { width: 390, height: 844 });
+  await seedThenResize(page, PHONE);
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page
     .getByRole("region", { name: "Navigation" })

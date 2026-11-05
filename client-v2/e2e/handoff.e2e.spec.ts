@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { expect, home, LONG, stubSession, test } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE } from "./viewports";
 
 const TITLE = "Continue on a computer";
 
@@ -21,7 +22,7 @@ const sheet = (page: Page) => page.getByRole("dialog", { name: TITLE });
 const ADA = { id: "u1", name: "Ada", image: null, login: "ada" };
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   test("client-v2-handoff: The phone's menu page offers it", async ({
     page,
@@ -107,7 +108,7 @@ test.describe("on a phone", () => {
 });
 
 test("client-v2-handoff: The frame does not", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await page.goto("/");
   await expect(home(page)).toBeVisible(LONG);
   await expect(page.getByRole("button", { name: TITLE })).toHaveCount(0);

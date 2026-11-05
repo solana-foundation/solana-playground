@@ -23,7 +23,7 @@ describe("commands/deploy/stopped", () => {
       deployStoppedLine({
         state: "kept",
         address: "Buf1111",
-        lamports: 1_421_676_960,
+        sol: 1.42167696,
       })
     ).toBe(
       "Stopped. The program was not deployed. Its buffer Buf1111 " +
@@ -36,7 +36,7 @@ describe("commands/deploy/stopped", () => {
       deployStoppedLine({
         state: "kept",
         address: "Buf1111",
-        lamports: 890_880,
+        sol: 0.00089088,
       })
     ).toContain("still holds less than 0.01 SOL.");
   });
@@ -46,7 +46,7 @@ describe("commands/deploy/stopped", () => {
       deployStoppedLine({
         state: "kept",
         address: "Buf1111",
-        lamports: undefined,
+        sol: undefined,
       })
     ).toBe(
       "Stopped. The program was not deployed. Its buffer Buf1111 " +
@@ -59,7 +59,7 @@ describe("commands/deploy/stopped", () => {
       deployStoppedLine({
         state: "kept",
         address: "Buf1111",
-        lamports: 5_000_000,
+        sol: 0.005,
       })
     ).toContain("still holds 0.01 SOL.");
   });

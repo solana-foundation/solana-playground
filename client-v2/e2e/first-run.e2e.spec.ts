@@ -9,6 +9,7 @@ import {
   seedWorkspace,
   test,
 } from "./fixtures";
+import { DESK, PHONE } from "./viewports";
 
 /** The navigation's Home, which brings Home back over an open project */
 const navHome = (page: Page) =>
@@ -32,7 +33,7 @@ const countBuilds = async (page: Page) => {
 };
 
 test.describe("on a desktop window", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: DESK });
 
   test("client-v2-first-run: First visit on desktop", async ({ page }) => {
     await page.goto("/");
@@ -122,7 +123,7 @@ test.describe("on a desktop window", () => {
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   test("client-v2-first-run: Phone, first visit", async ({ page }) => {
     await page.goto("/");
@@ -139,7 +140,7 @@ test.describe("on a phone", () => {
 });
 
 test.describe("when the account check fails", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: DESK });
 
   test("client-v2-first-run: Session read failed", async ({ page }) => {
     let failing = true;

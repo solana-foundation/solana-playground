@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { hunkLineClass } from "../src/features/persistence/ui/merge-editor/hunk-class";
 import { requireFor } from "../src/test-utils/require-for";
 import { applyWrite, json, LONG, makeLocalProject, settled } from "./fixtures";
+import { PHONE } from "./viewports";
 
 /**
  * The resolve view, against an account stubbed as `account-sync` stubs it.
@@ -757,7 +758,6 @@ const barGap = async (pane: Locator) => {
 };
 
 /** The phone's width, as the spec's manual scenario has it */
-const PHONE = { width: 390, height: 844 };
 
 test("a phone's hunk bar sits under a whole-file conflict, not over its lines", async ({
   page,

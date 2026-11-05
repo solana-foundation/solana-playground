@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, LONG, test } from "./fixtures";
+import { DESK, TABLET } from "./viewports";
 
 /**
  * The document never scrolls; only the app's own panes do. On iPad Safari a
@@ -8,11 +9,7 @@ import { expect, LONG, test } from "./fixtures";
  * Chromium has no Safari toolbar, so this guards the rule, not Safari itself:
  * after load, the page is no taller than the window, and it has not moved.
  */
-const SIZES = [
-  { width: 1280, height: 800 },
-  { width: 834, height: 1112 },
-  { width: 393, height: 852 },
-] as const;
+const SIZES = [DESK, TABLET, { width: 393, height: 852 }] as const;
 
 const documentFits = (page: Page) =>
   page.evaluate(() => {

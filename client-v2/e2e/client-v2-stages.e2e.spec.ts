@@ -9,6 +9,7 @@ import {
   seedWorkspace,
   test,
 } from "./fixtures";
+import { DESK, PHONE } from "./viewports";
 
 /**
  * The scenarios of `client-v2-stages`: what the Build, Deploy and Interact
@@ -205,9 +206,9 @@ test.describe("client-v2-stages on a phone", () => {
   }) => {
     // The project tree lives in a closed Sheet on a phone, which the seeding
     // waits on, so seed on a desktop-sized page and narrow it afterwards
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
 
     await page.locator("#flow-stage-tab-build").click();
     const panel = page.locator("#flow-stage-panel-build");
@@ -232,7 +233,7 @@ test.describe("client-v2-stages on a phone", () => {
   test("client-v2-stages: The Deploy action at the foot on a phone", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await page.evaluate(
       ([programId, at]) =>
@@ -253,7 +254,7 @@ test.describe("client-v2-stages on a phone", () => {
     );
     await page.reload();
     await expect(page.locator("#root-dir")).toBeAttached(LONG);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
 
     await page.locator("#flow-stage-tab-deploy").click();
     const panel = page.locator("#flow-stage-panel-deploy");
@@ -278,10 +279,10 @@ test.describe("client-v2-stages on a phone", () => {
   test("client-v2-stages: The Interact action at the foot on a phone", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await stubProgramAccount(page, null);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
 
     const panel = await buildThenInteract(page);
     const actions = panel.locator('[data-slot="stage-empty-actions"]');

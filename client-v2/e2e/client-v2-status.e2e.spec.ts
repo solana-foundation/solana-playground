@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { expect, json, seedWorkspace, test } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
 
 /** The stock Sidebar, which holds the navigation and its foot */
 const nav = (page: Page) => page.locator('[data-slot="sidebar"]');
@@ -32,7 +33,7 @@ const stallDevnet = (page: Page) =>
   });
 
 test.describe("on a 1440 px window", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+  test.use({ viewport: WIDE_DESK });
 
   test("client-v2-status: Three indicators in one pattern", async ({
     seededPage: page,
@@ -221,9 +222,9 @@ test.describe("on a 1440 px window", () => {
 });
 
 test("client-v2-status: The rail's dots", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await seedWorkspace(page);
-  await page.setViewportSize({ width: 834, height: 1112 });
+  await page.setViewportSize(TABLET);
   const rail = nav(page).getByTestId("status-rail");
   await expect(
     rail.getByRole("button", { name: /^Cluster: devnet/ })
@@ -243,7 +244,7 @@ test("client-v2-status: The rail's dots", async ({ page }) => {
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   test("client-v2-status: The phone chip names what is down", async ({
     page,
@@ -252,9 +253,9 @@ test.describe("on a phone", () => {
     // be down for the chip to name it
     await stallDevnet(page);
     // The seed waits on the tree a phone keeps in a closed Sheet
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
 
     const chip = page.getByTestId("status-chip");
     await expect(chip).toHaveAccessibleName("Status, 1 not ready", {
@@ -277,9 +278,9 @@ test.describe("on a phone", () => {
   });
 
   test("client-v2-status: The phone chip reads Offline", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
 
     await page.context().setOffline(true);
     const chip = page.getByTestId("status-chip");

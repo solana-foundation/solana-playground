@@ -1,11 +1,12 @@
 import { STEPPER_FULL_WIDTH_PX } from "../src/views/flow/header/stepper-width";
 import { expect, seedWorkspace, test } from "./fixtures";
+import { DESK } from "./viewports";
 
 /** What a check or dot beside a label adds to the list, in px */
 const MARK_PX = 18;
 
 test("the full-label stepper fits the width it folds at", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await seedWorkspace(page);
   const list = page.locator('[data-slot="stepper-list"]');
   await expect(list).toHaveAttribute("data-compact", "false");
