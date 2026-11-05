@@ -159,7 +159,12 @@ const Group = ({
         {list.loading &&
           SKELETON_ROWS.map((row) => (
             <SidebarMenuItem key={row}>
-              <SidebarMenuSkeleton showIcon />
+              {/* The rows' own height, inset and glyph, so the list does not
+                  jump when the names arrive: 28 px, and 52 px on a phone */}
+              <SidebarMenuSkeleton
+                showIcon
+                className="h-7 max-md:h-13 max-md:gap-3 max-md:px-3 max-md:[&>[data-sidebar=menu-skeleton-icon]]:size-5"
+              />
             </SidebarMenuItem>
           ))}
         {!list.loading &&
