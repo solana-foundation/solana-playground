@@ -345,17 +345,16 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
       const lamports = await keptLamportsOn(connection)(bufferKp.publicKey);
       // A live buffer is rent-exempt, so an empty one is gone: the close
       // landed and only its confirmation failed
-      left =
-        lamports === 0
-          ? { state: "closed" }
-          : {
-              state: "kept",
-              address: bufferKp.publicKey.toBase58(),
-              sol:
-                lamports === undefined
-                  ? undefined
-                  : PgWeb3.lamportsToSol(lamports),
-            };
+      if (lamports === 0) {
+        left = { state: "closed" };
+      } else {
+        left = {
+          state: "kept",
+          address: bufferKp.publicKey.toBase58(),
+          sol:
+            lamports === undefined ? undefined : PgWeb3.lamportsToSol(lamports),
+        };
+      }
     }
     return new StoppedError(deployStoppedLine(left));
   };
