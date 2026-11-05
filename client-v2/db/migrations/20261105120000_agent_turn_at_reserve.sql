@@ -35,6 +35,9 @@ update agent_turn set settled_at = at;
 -- applied ("migrate first, then merge"): its `settle` inserts a settled row
 -- without `settled_at`, which would otherwise fail `agent_turn_settled_check`
 -- and leave the turn's reservation spent. `reserve` writes null explicitly.
+-- TODO(HOO-2396): drop the default in a later migration once no deployment
+-- runs the settle-time insert; until then a writer that omits `settled_at`
+-- gets a settled row instead of a check failure.
 alter table agent_turn alter column settled_at set default now();
 
 alter table agent_turn
