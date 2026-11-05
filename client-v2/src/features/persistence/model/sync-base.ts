@@ -177,7 +177,12 @@ if (import.meta.vitest) {
       (PgFs as unknown as { __files: Map<string, string> }).__files;
 
     const signedIn = () =>
-      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null });
+      PgSession.refreshWith({
+        id: "u1",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      });
 
     describe("PgSyncBase", () => {
       beforeEach(async () => {

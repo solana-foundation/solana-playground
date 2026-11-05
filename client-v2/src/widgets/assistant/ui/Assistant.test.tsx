@@ -165,8 +165,7 @@ describe("Assistant", () => {
 
   it("says Off to a signed-out user, and clears it once they sign in", async () => {
     deployment.backend = { state: "present", model: "m" };
-    // eslint-disable-next-line unicorn/no-null -- `PgSession.refreshWith(null)` is a signed-out session
-    await PgSession.refreshWith(null);
+    await PgSession.refreshWith(undefined);
     setup();
     await waitFor(() =>
       expect(document.getElementById("assistant-status")?.textContent).toBe(
@@ -174,8 +173,12 @@ describe("Assistant", () => {
       )
     );
     await act(() =>
-      // eslint-disable-next-line unicorn/no-null -- `SessionUser` types these fields `| null`
-      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+      PgSession.refreshWith({
+        id: "u1",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      })
     );
     expect(document.getElementById("assistant-status")).toBeNull();
   });
@@ -228,7 +231,12 @@ describe("Assistant", () => {
   it("asks the gateway again when the account changes", async () => {
     setup();
     await act(() =>
-      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+      PgSession.refreshWith({
+        id: "u1",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      })
     );
     expect(PgAssistant.initMcp).toHaveBeenCalledTimes(2);
   });

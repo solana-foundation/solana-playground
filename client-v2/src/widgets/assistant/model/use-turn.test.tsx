@@ -94,7 +94,7 @@ const untilAborted = (_: string, turn: SendTurn) =>
     turn?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
   });
 
-const USER = { id: "u1", name: null, image: null, login: null };
+const USER = { id: "u1", name: undefined, image: undefined, login: undefined };
 
 beforeEach(() => {
   // The default backend answers only a signed-in user; a test about the
@@ -1216,7 +1216,7 @@ describe("useTurn when the key is gone", () => {
 });
 
 describe("useTurn without a session", () => {
-  beforeEach(() => PgSession.refreshWith(null));
+  beforeEach(() => PgSession.refreshWith(undefined));
 
   it("opens Connect and keeps the text for a send the default cannot take", async () => {
     defaultBackend(true);
@@ -1279,7 +1279,7 @@ describe("useTurn without a session", () => {
     await PgSession.refreshWith(USER);
     PgAssistant.connect({ id: "default", apiKey: "" });
     const { result } = renderHook(() => useTestTurn());
-    await act(() => PgSession.refreshWith(null));
+    await act(() => PgSession.refreshWith(undefined));
 
     await act(() => result.current.send("hi"));
 

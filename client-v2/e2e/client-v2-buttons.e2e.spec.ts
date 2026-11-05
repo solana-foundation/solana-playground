@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, seedWorkspace, test } from "./fixtures";
+import { consoleTrigger, expect, seedWorkspace, test } from "./fixtures";
 
 type AssistantWindow = Window & {
   __pgAssistant?: {
@@ -154,7 +154,7 @@ test.describe("client-v2-buttons", () => {
     const logged: string[] = [];
     page.on("console", (message) => logged.push(message.text()));
 
-    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+    const drawer = consoleTrigger(page);
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
       await drawer.click();
     }
@@ -183,7 +183,7 @@ test.describe("client-v2-buttons", () => {
     // The build server never answers: Spec 08's BUILD-04
     await page.route("**/build", (route) => route.abort("connectionrefused"));
 
-    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+    const drawer = consoleTrigger(page);
     if ((await drawer.getAttribute("aria-expanded")) === "true") {
       await drawer.click();
     }
@@ -218,11 +218,20 @@ test.describe("client-v2-buttons", () => {
     await page.locator("#flow-stage-tab-build").click();
     await page.getByRole("button", { name: "Build", exact: true }).click();
 
-    // The surface keeps its button while the run is in flight, now busy
-    const busy = page.getByRole("button", { name: /Building/ });
-    await expect(busy).toBeDisabled();
-    await expect(busy).toHaveAttribute("aria-busy", "true");
-    await busy.click({ force: true });
+    // While the run is in flight the surface shows its progress in the
+    // button's place (DES-199), so nothing on it can start a second build
+    await expect(
+      page.getByRole("heading", { name: "Building…" })
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-slot="stage-empty-progress"]')
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Build", exact: true })
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Building…", exact: true })
+    ).toHaveCount(0);
 
     release();
     await expect(page.getByText("Build succeeded")).toBeVisible();

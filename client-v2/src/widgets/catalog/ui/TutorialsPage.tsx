@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { TutorialCover } from "@/entities/tutorial";
 import { PgTutorial } from "@/utils";
 
 import { useCardOpen } from "../model/use-card-open";
@@ -11,12 +12,12 @@ import BaseCatalogPage from "./BaseCatalogPage";
 
 // TODO(HOO-2254, tutorials-gallery-stand task 3): the page draws the
 // tutorial card with its level groups; until then it keeps the catalog card
-/** A tutorial as the catalog card draws it, with upstream's thumbnail */
+/** A tutorial as the catalog card draws it, with the brand cover */
 const asCatalogCard = (t: TutorialItem): CatalogCard => ({
   id: t.id,
   title: t.title,
   description: t.description,
-  media: PgTutorial.all.find((d) => d.name === t.id)?.thumbnail ?? "",
+  media: <TutorialCover name={t.title} framework={t.framework} />,
   tags: [{ label: t.level }, ...(t.framework ? [{ label: t.framework }] : [])],
   open: t.open,
 });

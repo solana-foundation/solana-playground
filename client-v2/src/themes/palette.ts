@@ -81,7 +81,9 @@ const PALETTE: ThemeParam = {
     editor: {
       default: {
         bg: "transparent",
-        activeLine: { borderColor: BORDER },
+        // A faint fill rather than an outline: two rules round the line read
+        // as a box under a notice or a selection
+        activeLine: { bg: BG_HOVER, borderColor: BG_HOVER },
       },
       gutter: {
         bg: "transparent",

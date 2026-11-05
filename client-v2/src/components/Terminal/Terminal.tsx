@@ -1,17 +1,12 @@
 import "xterm/css/xterm.css";
 
 import { FC, useEffect, useMemo, useRef } from "react";
-import styled, { css, useTheme } from "styled-components";
+
+import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 
 import { useExposeStatic, useKeybind } from "../../hooks";
 import { resolveColor } from "../../shared/lib/css-color";
-import {
-  CommandManager,
-  PgCommon,
-  PgTerm,
-  PgTerminal,
-  PgTheme,
-} from "../../utils";
+import { CommandManager, PgCommon, PgTerm, PgTerminal } from "../../utils";
 import type { FlowState } from "../../views/flow/state/stage";
 import { PgFlow } from "../../views/flow/state/stage";
 import { xtermTheme } from "./terminal-theme";
@@ -37,7 +32,7 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
 }) => {
   const terminalRef = useRef<HTMLDivElement>(null);
 
-  const theme = useTheme();
+  const theme = usePgTheme();
 
   // Create xterm
   const term = useMemo(() => {
@@ -120,26 +115,14 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
     [term]
   );
 
-  return <Wrapper ref={terminalRef} />;
+  // Same ground as xterm's background, so the padding around the rows
+  // matches the screen
+  return (
+    <div
+      ref={terminalRef}
+      className="bg-surface-well [&_.xterm]:p-3 [&_.xterm-viewport]:w-full! [&_.xterm-viewport]:bg-inherit!"
+    />
+  );
 };
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.terminal.default)};
-
-    /* Same ground as xterm's background, so the padding around the rows
-       matches the screen */
-    background: var(--surface-well);
-
-    & .xterm {
-      padding: 0.75rem;
-    }
-
-    & .xterm-viewport {
-      background: inherit !important;
-      width: 100% !important;
-    }
-  `}
-`;
 
 export default Terminal;

@@ -7,7 +7,7 @@ import { useIsMobile } from "@/shared/lib/hooks/use-mobile";
 import { RAIL_WIDTH } from "@/shared/lib/hooks/use-viewport";
 import { uuid } from "@/shared/lib/ids";
 import { createLogger } from "@/shared/lib/logger";
-import { Toaster } from "@/shared/ui/sonner";
+import { Toaster, ToastProgress } from "@/shared/ui/sonner";
 import type { Elementable } from "@/utils/types";
 import type { ToastId, ToastOptions, ToastRequest } from "@/utils/view";
 import { PgView } from "@/utils/view";
@@ -105,12 +105,18 @@ export const ToastHost = () => {
     // A random small int could repeat and silently replace a live toast
     const id = options?.id ?? uuid();
 
+    const duration = durationOf(name, options?.duration);
     // The component gets the toast's id, so it can close itself
     toast(
       <ToastBoundary id={id} name={name}>
         {PgView.normalizeElement(elementable, { ...props?.componentProps, id })}
+        {/* Keyed per show: a toast shown again by its id restarts Sonner's
+            timer, so its bar starts again from full */}
+        {Number.isFinite(duration) && (
+          <ToastProgress key={uuid()} duration={duration} />
+        )}
       </ToastBoundary>,
-      { id, duration: durationOf(name, options?.duration) }
+      { id, duration }
     );
     overlayTelemetry.track("overlay_toast_shown", { name });
   }, []);

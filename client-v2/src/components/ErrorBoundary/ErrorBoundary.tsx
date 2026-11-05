@@ -1,6 +1,6 @@
 import { Component, type JSX, ReactNode } from "react";
-import styled, { css } from "styled-components";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
@@ -120,14 +120,21 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-const Wrapper = styled.div<{ iconOnly?: boolean }>`
-  ${({ iconOnly }) => css`
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: ${iconOnly ? "row-reverse" : "column"};
-    gap: ${iconOnly ? "0.25rem" : "1rem"};
-  `}
-`;
+const Wrapper = ({
+  iconOnly,
+  children,
+}: {
+  iconOnly?: boolean;
+  children: ReactNode;
+}) => (
+  <div
+    className={cn(
+      "flex items-center justify-center",
+      iconOnly ? "flex-row-reverse gap-1" : "flex-col gap-4"
+    )}
+  >
+    {children}
+  </div>
+);
 
 export default ErrorBoundary;

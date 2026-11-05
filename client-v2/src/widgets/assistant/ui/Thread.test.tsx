@@ -425,8 +425,12 @@ describe("Thread, a refused key", () => {
   };
   const signIn = () =>
     act(() =>
-      // eslint-disable-next-line unicorn/no-null -- a session user's fields are `null` when GitHub gave none
-      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+      PgSession.refreshWith({
+        id: "u1",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      })
     );
 
   it("offers Change key on the error, opening Connect on that backend", () => {

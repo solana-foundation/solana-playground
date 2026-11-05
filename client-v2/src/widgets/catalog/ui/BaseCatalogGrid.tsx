@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import type { ReactElement } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
@@ -13,7 +14,8 @@ import {
 } from "@/shared/ui/action-card";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
-import { Empty, EmptyDescription } from "@/shared/ui/empty";
+
+import BaseNoMatch from "./BaseNoMatch";
 
 /** One fact on a card's eyebrow: a level, a framework, a category */
 export interface CatalogTag {
@@ -26,8 +28,8 @@ export interface CatalogCard {
   id: string;
   title: string;
   description: string;
-  /** The thumbnail or icon */
-  media: string;
+  /** The icon's URL, or what to draw in its place (a tutorial's cover) */
+  media: string | ReactElement;
   tags: CatalogTag[];
   /** This card's Open, while it runs or once it failed; none otherwise */
   open?: CardOpen;
@@ -48,6 +50,8 @@ export interface BaseCatalogGridProps {
   /** The list's things, plural and lowercase: "tutorials", "programs" */
   label: string;
   query: string;
+  /** Empties the search, from the no-match state's "Clear search" */
+  onClear: () => void;
   /** The cards matching `query`, once the list is read */
   list: CatalogList;
   /** An Open runs: every card's Open and title wait for it */
@@ -69,6 +73,7 @@ export interface BaseCatalogGridProps {
 const BaseCatalogGrid = ({
   label,
   query,
+  onClear,
   list,
   busy,
   onOpen,
@@ -89,19 +94,23 @@ const BaseCatalogGrid = ({
     );
   }
   if (list.cards.length === 0) {
-    return (
-      <Empty className="p-0">
-        <EmptyDescription>{`No ${label} match “${query}”.`}</EmptyDescription>
-      </Empty>
-    );
+    return <BaseNoMatch label={label} query={query} onClear={onClear} />;
   }
 
   return (
     <div className="grid grid-cols-1 gap-3 min-[720px]:grid-cols-2">
       {list.cards.map((c) => (
         <ActionCard key={c.id}>
-          <ActionCardMedia variant="image">
-            <img src={c.media} alt="" />
+          {/* An icon keeps the image tile; a tutorial's cover is square */}
+          <ActionCardMedia
+            variant="image"
+            className={typeof c.media === "string" ? undefined : "h-14"}
+          >
+            {typeof c.media === "string" ? (
+              <img src={c.media} alt="" />
+            ) : (
+              c.media
+            )}
           </ActionCardMedia>
           <ActionCardContent>
             {/* Plain text, as the prototype writes it: level · framework, or

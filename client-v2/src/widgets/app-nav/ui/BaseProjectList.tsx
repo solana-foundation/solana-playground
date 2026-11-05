@@ -1,18 +1,23 @@
 import {
+  Check,
   Copy,
   CornerDownLeft,
   Download,
   EllipsisVertical,
   Folder,
+  GraduationCap,
   Pencil,
   Pin,
   PinOff,
+  Plus,
   Share2,
   Trash2,
 } from "lucide-react";
 import type { ComponentType, KeyboardEvent } from "react";
 import { useId, useRef, useState } from "react";
 
+import type { SyncMarker } from "@/features/persistence";
+import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +26,13 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/shared/ui/empty";
 import { Input } from "@/shared/ui/input";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 import {
@@ -30,27 +42,36 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
 } from "@/shared/ui/sidebar";
+import { StatusDot } from "@/shared/ui/status-dot";
 
 import type { ProjectAction } from "../model/project-action";
-import type { ProjectEntry } from "../model/project-entries";
+import type { LessonProgress, ProjectEntry } from "../model/project-entries";
 
 type Via = "click" | "key";
 
 export interface BaseProjectListProps {
   /** Projects and started lessons, in one list as the prototype draws it */
   projects: ProjectEntry[];
-  /** The open workspace's name, or `null` when none is open */
-  current: string | null;
-  /** The entry whose row is the rename field, or `null` */
-  renaming: string | null;
-  /** What is wrong with the name typed into the rename field, or `null` */
-  renameError: string | null;
+  /** The names are still being read from browser storage: skeleton rows, no entries */
+  loading: boolean;
+  /** The open workspace's name, or `undefined` when none is open */
+  current: string | undefined;
+  /** The entry whose row is the rename field, or `undefined` */
+  renaming: string | undefined;
+  /** What is wrong with the name typed into the rename field, or `undefined` */
+  renameError: string | undefined;
   onAction: (entry: ProjectEntry, action: ProjectAction, via: Via) => void;
   /** The rename field changed; lets the owner clear a stale error */
   onRenameChange: (value: string) => void;
   onRenameCommit: (entry: ProjectEntry, value: string) => void;
   onRenameCancel: () => void;
+  /**
+   * The ways in once every project is gone (Spec 08's EMPTY-01); without
+   * it an empty list draws nothing, as a preview's does
+   */
+  empty?: { onStartProject: () => void; onOpenTutorials: () => void };
 }
 
 /** The prototype's key for each item; `pin` stands for Pin or Unpin */
@@ -90,16 +111,20 @@ const pinAction = (entry: ProjectEntry): ProjectAction =>
 
 /**
  * The navigation's projects, lessons among them, as the prototype draws
- * them: a row per workspace with the folder glyph, the open one marked,
- * pinned ones with a pin, and a menu of its actions whose letters work while
- * it is open. A lesson differs only in its menu. Draws only what it is
- * given; `ProjectList` connects it.
+ * them: a row per workspace with the folder glyph (a lesson's with the
+ * tutorial glyph, Spec 11), the open one marked, pinned ones with a pin, and
+ * a menu of its actions whose letters work while it is open. Three skeleton
+ * rows stand in while the names load, so no empty list flashes first. Draws
+ * only what it is given; `ProjectList` connects it.
  */
 const BaseProjectList = (props: BaseProjectListProps) => (
   <Group label="Projects" entries={props.projects} list={props} />
 );
 
 export default BaseProjectList;
+
+/** Keys for the loading rows, three as Spec 11's "List loading" state draws */
+const SKELETON_ROWS = ["first", "second", "third"];
 
 const Group = ({
   label,
@@ -124,19 +149,85 @@ const Group = ({
         {label}
       </SidebarGroupLabel>
       <SidebarMenu className="gap-px">
-        {entries.map((entry) => (
-          <SidebarMenuItem key={entry.name}>
-            {list.renaming === entry.name ? (
-              <RenameField entry={entry} list={list} />
-            ) : (
-              <Row entry={entry} list={list} />
-            )}
-          </SidebarMenuItem>
-        ))}
+        {list.loading &&
+          SKELETON_ROWS.map((row) => (
+            <SidebarMenuItem key={row}>
+              <SidebarMenuSkeleton showIcon />
+            </SidebarMenuItem>
+          ))}
+        {!list.loading &&
+          entries.map((entry) => (
+            <SidebarMenuItem key={entry.name}>
+              {list.renaming === entry.name ? (
+                <RenameField entry={entry} list={list} />
+              ) : (
+                <Row entry={entry} list={list} />
+              )}
+            </SidebarMenuItem>
+          ))}
       </SidebarMenu>
+      {!list.loading && entries.length === 0 && list.empty && (
+        <NoProjects {...list.empty} />
+      )}
     </SidebarGroup>
   );
 };
+
+/**
+ * Spec 08's EMPTY-01 in the column: a quiet note the width of the rows, as
+ * sidebars set an empty section (v0's Recent Chats, AirOps' Recents), not a
+ * StageEmpty, whose display title and pill are for a stage. Its two ways in
+ * are compact rows under the line, the text in line with it, the first in
+ * the text's colour and the second quieter.
+ */
+const NoProjects = ({
+  onStartProject,
+  onOpenTutorials,
+}: {
+  onStartProject: () => void;
+  onOpenTutorials: () => void;
+}) => (
+  // Three steps of type: the title the strongest (14 px, the text's colour),
+  // the line a step below it, the actions the quietest (12 px) and set off
+  // by a wider gap. The ghost rows carry their own padding, so the frame's
+  // foot is shorter and the note reads evenly inset.
+  <Empty className="items-stretch gap-2.5 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 pt-3 pb-1.5 text-left">
+    <EmptyHeader className="max-w-none items-start gap-1">
+      <EmptyTitle
+        role="heading"
+        aria-level={3}
+        className="text-sm text-sidebar-foreground"
+      >
+        No projects
+      </EmptyTitle>
+      <EmptyDescription className="text-xs/normal font-read">
+        Start from a template, or follow a tutorial.
+      </EmptyDescription>
+    </EmptyHeader>
+    {/* One row on a phone's menu page, which has the width for both; a
+        column in the desk's narrower sidebar, where they do not fit */}
+    <EmptyContent className="max-w-none items-start gap-0 max-md:flex-row max-md:gap-4">
+      <Button
+        size="sm"
+        variant="ghost"
+        className="-ml-2 text-xs pointer-coarse:h-11"
+        onClick={onStartProject}
+      >
+        <Plus data-icon="inline-start" />
+        Start a project
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="-ml-2 text-xs text-muted-foreground pointer-coarse:h-11"
+        onClick={onOpenTutorials}
+      >
+        <GraduationCap data-icon="inline-start" />
+        Open tutorials
+      </Button>
+    </EmptyContent>
+  </Empty>
+);
 
 const Row = ({
   entry,
@@ -149,7 +240,16 @@ const Row = ({
   // Rename swaps the row for a field that takes focus; the menu handing
   // focus back to its trigger on close would blur the field at once
   const keepFocus = useRef(false);
+  const markerId = useId();
+  const progressId = useId();
+  // The marker and the progress describe the row and leave its name alone:
+  // the row is found by its name
+  const describedBy =
+    [entry.marker && markerId, entry.progress && progressId]
+      .filter(Boolean)
+      .join(" ") || undefined;
   const isCurrent = entry.name === list.current;
+  const Glyph = entry.isLesson ? GraduationCap : Folder;
 
   const run = (action: ProjectAction, via: Via) => {
     if (!isAllowedFor(isCurrent)(entry, action)) return;
@@ -175,21 +275,39 @@ const Row = ({
       <SidebarMenuButton
         isActive={isCurrent}
         aria-current={isCurrent ? "page" : undefined}
+        aria-describedby={describedBy}
         onClick={() => list.onAction(entry, "open", "click")}
       >
-        <Folder
+        <Glyph
           aria-hidden
+          data-glyph={entry.isLesson ? "lesson" : "project"}
           className={isCurrent ? "text-primary" : undefined}
         />
-        <span>{entry.name}</span>
-      </SidebarMenuButton>
-      {entry.pinned && (
-        <span className="pointer-events-none absolute top-1.5 right-7 flex items-center gap-1 text-xs text-muted-foreground group-focus-within/menu-item:hidden group-hover/menu-item:hidden">
-          <span title="Pinned">
-            <Pin aria-hidden className="size-3" />
-          </span>
+        {/* The name and what follows it share one line and one baseline. The
+            name truncates only against what is shown: under the pointer the
+            marker steps aside (design sync 4.21) and the name takes its room */}
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="min-w-0 truncate">{entry.name}</span>
+          {(entry.pinned || entry.marker || entry.progress) && (
+            // Hidden from the row's name, which is the project's name alone;
+            // `aria-describedby` reads the marker and the progress by id
+            <span
+              aria-hidden
+              className="ml-auto flex shrink-0 items-baseline gap-2 text-xs font-normal text-muted-foreground group-hover/menu-item:hidden"
+            >
+              {entry.marker && <Marker id={markerId} marker={entry.marker} />}
+              {entry.progress && (
+                <Progress id={progressId} progress={entry.progress} />
+              )}
+              {entry.pinned && (
+                <span title="Pinned" className="self-center">
+                  <Pin aria-hidden className="size-3" />
+                </span>
+              )}
+            </span>
+          )}
         </span>
-      )}
+      </SidebarMenuButton>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           {/* The open project's stays in view, as the prototype draws it;
@@ -275,6 +393,67 @@ const Row = ({
         </DropdownMenuContent>
       </DropdownMenu>
     </>
+  );
+};
+
+/** Spec 02's words for each marker */
+const MARKER_TEXT: Record<SyncMarker, string> = {
+  "this-browser": "This browser",
+  "not-synced": "Not synced",
+};
+
+/**
+ * Where a project's work lives, when the account does not hold it. Spec 02
+ * names the words, not the look: quiet caption text where the pin sits, so the
+ * row's action keeps its place, and "Not synced" with a warning dot
+ */
+const Marker = ({ id, marker }: { id: string; marker: SyncMarker }) => (
+  <span
+    id={id}
+    data-sync-marker={marker}
+    className="flex items-baseline gap-1.5 whitespace-nowrap text-subtle"
+  >
+    {marker === "not-synced" && (
+      <StatusDot variant="warning" className="self-center" />
+    )}
+    {MARKER_TEXT[marker]}
+  </span>
+);
+
+/**
+ * A lesson's place as "3 of 5", the way the tutorial list and the catalogue
+ * card write it, or a check once it is finished. The digits and
+ * the check are for the eye and hidden from screen readers; the words beside
+ * them carry the id that describes the row, so the row keeps its name
+ */
+const Progress = ({
+  id,
+  progress,
+}: {
+  id: string;
+  progress: LessonProgress;
+}) => {
+  if (progress.state === "completed") {
+    return (
+      <span
+        data-lesson-progress="completed"
+        title="Completed"
+        className="self-center"
+      >
+        <Check aria-hidden className="size-3" />
+        <span id={id} className="sr-only">
+          Completed
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span data-lesson-progress="started" className="tabular-nums">
+      <span aria-hidden>{`${progress.page} of ${progress.pages}`}</span>
+      <span id={id} className="sr-only">
+        {`Page ${progress.page} of ${progress.pages}`}
+      </span>
+    </span>
   );
 };
 

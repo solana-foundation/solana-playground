@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, seedWorkspace, test } from "./fixtures";
+import { DESK } from "./viewports";
 
 const ISSUES = "https://github.com/solana-foundation/solana-playground/issues";
 
@@ -89,7 +90,7 @@ test("the account menu opens from the rail on a narrow window", async ({
 }) => {
   // Seeded on a desktop-sized page, as the other narrow-window tests are, and
   // narrowed afterwards, where the navigation starts as a rail on every load
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await seedWorkspace(page);
   await page.setViewportSize({ width: 800, height: 812 });
   // The editor focuses itself when it opens the first file; landing after the

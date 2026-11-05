@@ -1,7 +1,15 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { requireFor } from "../src/test-utils/require-for";
-import { expect, home, homeRegion, stubAiStatus, test } from "./fixtures";
+import {
+  expect,
+  home,
+  homeRegion,
+  startTutorialFromAbout,
+  stubAiStatus,
+  test,
+} from "./fixtures";
+import { DESK, WIDE_DESK } from "./viewports";
 
 const FIRST = "Define the hello instruction and log a message";
 
@@ -29,7 +37,7 @@ const startHelloAnchor = async (page: Page) => {
     })
     .click();
   await expect(home(page)).toBeHidden();
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await startTutorialFromAbout(page);
   await expect(bandOrFold(page)).toBeVisible();
 };
 
@@ -55,7 +63,7 @@ test.describe("client-v2-lessons", () => {
   test("client-v2-lessons: The objective band over the editor", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize(WIDE_DESK);
     await startHelloAnchor(page);
 
     const b = band(page);
@@ -88,14 +96,15 @@ test.describe("client-v2-lessons", () => {
     const bandBox = requireFor("the band's bounding box")(
       await b.boundingBox()
     );
+    // The stage under the band: the tab row sits in the editor head above it
     const editorBox = requireFor("the editor's bounding box")(
-      await page.locator("#tabs").boundingBox()
+      await page.locator("#flow-stage-panel-write").boundingBox()
     );
     expect(bandBox.y + bandBox.height).toBeLessThanOrEqual(editorBox.y + 1);
   });
 
   test("client-v2-lessons: Steps beside the files", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await startHelloAnchor(page);
 
     await expect(page.getByRole("radio", { name: "Steps" })).toHaveAttribute(
@@ -114,7 +123,7 @@ test.describe("client-v2-lessons", () => {
   test("client-v2-lessons: Skipping marks the step skipped", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await startHelloAnchor(page);
     await landsOnCode(page);
 
@@ -127,7 +136,7 @@ test.describe("client-v2-lessons", () => {
   test("client-v2-lessons: Re-entering lands on the same step", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await startHelloAnchor(page);
     await landsOnCode(page);
     await skipStep(page).click();
@@ -153,7 +162,7 @@ test.describe("client-v2-lessons", () => {
   test("client-v2-lessons: The page opens beside the band, not over it", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await startHelloAnchor(page);
     await landsOnCode(page);
 
@@ -175,8 +184,9 @@ test.describe("client-v2-lessons", () => {
     const bandBox = requireFor("the band's bounding box")(
       await band(page).boundingBox()
     );
+    // The stage under the band: the tab row sits in the editor head above it
     const editorBox = requireFor("the editor's bounding box")(
-      await page.locator("#tabs").boundingBox()
+      await page.locator("#flow-stage-panel-write").boundingBox()
     );
     expect(readerBox.y).toBeGreaterThanOrEqual(bandBox.y + bandBox.height - 1);
     expect(readerBox.y).toBeLessThanOrEqual(editorBox.y + 1);
@@ -208,7 +218,7 @@ test.describe("client-v2-lessons", () => {
   test("client-v2-lessons: Starting a tutorial lands on the code", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize(WIDE_DESK);
     await startHelloAnchor(page);
     await landsOnCode(page);
     await expect(page.locator(".monaco-editor")).toBeVisible();
@@ -218,7 +228,7 @@ test.describe("client-v2-lessons", () => {
   });
 
   test("client-v2-lessons: The page has no footer", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize(WIDE_DESK);
     await startHelloAnchor(page);
     await band(page).getByRole("button", { name: "Read the page" }).click();
     const reader = page.getByRole("dialog", { name: /hello instruction/i });
@@ -259,7 +269,7 @@ test.describe("client-v2-lessons", () => {
   }
 
   test("client-v2-lessons: How the step is checked", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize(WIDE_DESK);
     await startHelloAnchor(page);
     const check = band(page).getByRole("button", {
       name: "How this step is checked",
@@ -275,7 +285,7 @@ test.describe("client-v2-lessons", () => {
   });
 
   test("client-v2-lessons: Statuses on entry", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize(WIDE_DESK);
     await startHelloAnchor(page);
     await expect(rows(page).nth(0)).toContainText("aiming at build");
     for (const i of [1, 2, 3]) {
@@ -284,7 +294,7 @@ test.describe("client-v2-lessons", () => {
   });
 
   test("client-v2-lessons: Suggestions in a lesson", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.setViewportSize(WIDE_DESK);
     await startHelloAnchor(page);
     for (const name of [
       "Explain this step",

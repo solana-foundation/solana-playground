@@ -30,7 +30,7 @@ const props = (
     onPick?: BaseInteractProps["onPick"];
   } = {}
 ): BaseInteractProps => ({
-  meta: "no deployments yet",
+  meta: "",
   deployments: over.deployments ?? [],
   selected: over.deployments?.[0]?.id ?? null,
   onPick: over.onPick ?? vi.fn(),
@@ -91,7 +91,11 @@ describe("BaseInteract", () => {
       expect(
         screen.getAllByRole("button", { name: "Upload IDL" })
       ).toHaveLength(1);
-      if (surface === "no-idl") {
+      if (
+        surface === "no-idl" ||
+        surface === "not-built" ||
+        surface === "not-deployed"
+      ) {
         expect(
           within(actions(container)).getByRole("button", {
             name: "Upload IDL",
@@ -136,11 +140,11 @@ describe("BaseInteract", () => {
     expect(onPick).toHaveBeenCalledWith("b");
   });
 
-  it("with no deployments the select is off and says none yet", () => {
+  it("with no deployments the select is off and says None yet", () => {
     render(<BaseInteract {...props("not-deployed")} />);
     const select = screen.getByLabelText("Deployment") as HTMLSelectElement;
     expect(select.disabled).toBe(true);
-    expect(select.textContent).toBe("none yet");
+    expect(select.textContent).toBe("None yet");
   });
 
   it("without a program id it offers Go to Build", () => {

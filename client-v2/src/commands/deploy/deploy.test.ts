@@ -8,6 +8,10 @@ import { isStopped } from "../../utils/stopped";
 const env = vi.hoisted(() => ({
   controller: new AbortController(),
   balance: 0,
+  /** The buffer account's balance, read when a stop could not close it */
+  bufferBalance: (async () => 0) as () => Promise<number>,
+  /** The user has switched network since the deploy began */
+  switchedNetwork: false,
   waitForInput: (async () => true) as (msg: string) => Promise<unknown>,
   executeFromStr: (async () => undefined) as (cmd: string) => Promise<unknown>,
 }));
@@ -18,12 +22,26 @@ const closeBuffer = vi.hoisted(() => vi.fn(async () => "sig"));
 
 vi.mock("../../utils", () => ({
   PgCommand: { airdrop: { execute: airdrop }, build: { execute: vi.fn() } },
-  PgCommon: { formatSeconds: String, makePlural: String, sleep: vi.fn() },
+  PgCommon: {
+    formatSeconds: String,
+    makePlural: String,
+    sleep: vi.fn(),
+    timeout: <R>(promisable: Promise<R>) => promisable,
+  },
   PgConnection: {
-    current: {
-      getBalance: async () => env.balance,
-      getMinimumBalanceForRentExemption: async () => 2_000_000_000,
-      getAccountInfo: async () => null,
+    get current() {
+      // A connection stays on the network it was taken for: on another one
+      // the buffer does not exist, and its balance reads 0
+      const switched = env.switchedNetwork;
+      return {
+        // The buffer's key is the only one with `toBase58` (`Keypair.generate`)
+        getBalance: async (key: { toBase58?: unknown }) => {
+          if (!key?.toBase58) return env.balance;
+          return switched ? 0 : env.bufferBalance();
+        },
+        getMinimumBalanceForRentExemption: async () => 2_000_000_000,
+        getAccountInfo: async () => null,
+      };
     },
     getAirdropAmount: () => 5,
   },
@@ -96,12 +114,15 @@ describe("commands/deploy", () => {
   beforeEach(() => {
     env.controller = new AbortController();
     env.balance = 0;
+    env.bufferBalance = async () => 0;
+    env.switchedNetwork = false;
     env.waitForInput = async () => true;
     env.executeFromStr = async () => undefined;
     airdrop.mockClear();
     send.mockClear();
     loadBuffer.mockReset();
-    closeBuffer.mockClear();
+    closeBuffer.mockReset();
+    closeBuffer.mockImplementation(async () => "sig");
   });
 
   it("asks for nothing more once stopped during the airdrop question", async () => {
@@ -149,6 +170,70 @@ describe("commands/deploy", () => {
 
     expect(isStopped(failure)).toBe(true);
     expect(closeBuffer).toHaveBeenCalledTimes(1);
+    expect((failure as Error).message).toContain("buffer account was closed");
+  });
+
+  /** A stop whose buffer close fails every retry, so the buffer is kept */
+  const stopKeepingTheBuffer = () => {
+    env.balance = 10_000_000_000;
+    loadBuffer.mockImplementation(async () => {
+      env.controller.abort();
+      throw new Error("the segment was aborted");
+    });
+    closeBuffer.mockImplementation(async () => {
+      throw new Error("blockhash not found");
+    });
+  };
+
+  it("names the SOL a buffer it could not close still holds", async () => {
+    stopKeepingTheBuffer();
+    env.bufferBalance = async () => 1_421_676_960;
+
+    const failure = await runDeploy();
+
+    expect(isStopped(failure)).toBe(true);
+    expect((failure as Error).message).toContain(
+      "Its buffer Buf1111 still holds 1.42 SOL."
+    );
+  });
+
+  it("reads a kept buffer on the deploy's network, not one chosen since", async () => {
+    stopKeepingTheBuffer();
+    env.bufferBalance = async () => 1_421_676_960;
+    closeBuffer.mockImplementation(async () => {
+      env.switchedNetwork = true;
+      throw new Error("blockhash not found");
+    });
+
+    const failure = await runDeploy();
+
+    expect((failure as Error).message).toContain(
+      "Its buffer Buf1111 still holds 1.42 SOL."
+    );
+  });
+
+  it('keeps "its SOL" when the kept buffer\'s balance cannot be read', async () => {
+    stopKeepingTheBuffer();
+    env.bufferBalance = async () => {
+      throw new Error("429 Too Many Requests");
+    };
+
+    const failure = await runDeploy();
+
+    expect(isStopped(failure)).toBe(true);
+    expect((failure as Error).message).toContain(
+      "Its buffer Buf1111 still holds its SOL."
+    );
+  });
+
+  it("calls a buffer that reads empty closed: the close landed unconfirmed", async () => {
+    stopKeepingTheBuffer();
+    // A missing account's balance is 0; a live buffer is rent-exempt
+    env.bufferBalance = async () => 0;
+
+    const failure = await runDeploy();
+
+    expect(isStopped(failure)).toBe(true);
     expect((failure as Error).message).toContain("buffer account was closed");
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import { useTheme } from "styled-components";
+
+import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 
 import { isTransparent } from "../shared/lib/css-color";
 import { PgTheme } from "../utils";
@@ -16,7 +17,7 @@ export const useDifferentBackground = <T extends HTMLElement = HTMLDivElement>(
 ) => {
   const ref = useRef<T>(null);
 
-  const theme = useTheme();
+  const theme = usePgTheme();
 
   useEffect(() => {
     const id = setTimeout(() => {

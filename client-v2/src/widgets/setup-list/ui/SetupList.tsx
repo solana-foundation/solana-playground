@@ -9,7 +9,7 @@ import { PgCommand, PgConnection, PgView } from "@/utils";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
 import type { StepView, TodoStep } from "../model/steps";
-import { SETUP_STEPS } from "../model/steps";
+import { counts, SETUP_STEPS } from "../model/steps";
 import { setupMarks, useSetupMarks } from "../model/storage";
 import { setupTelemetry } from "../model/telemetry";
 import BaseSetupList from "./BaseSetupList";
@@ -42,7 +42,8 @@ export interface SetupListProps {
 /**
  * "Get set up": the four steps' live state, and their actions. Folded as the
  * user last left it on this device; gone for good on it once dismissed, or
- * once all four were done together.
+ * once all four were done together (a network that does not answer counts in
+ * "n of 4" but is not done).
  */
 const SetupList = ({
   onConnectAssistant,
@@ -50,6 +51,8 @@ const SetupList = ({
 }: SetupListProps) => {
   const marks = useSetupMarks();
   const cluster = useRenderOnChange(PgConnection.onDidChangeCluster);
+  const isConnected = useRenderOnChange(PgConnection.onDidChangeIsConnected);
+  const slotStalled = useRenderOnChange(PgConnection.onDidChangeIsClusterDown);
   useRenderOnChange(PgSession.onDidChange);
   useRenderOnChange(PgAssistant.onDidChange);
   const wallet = useWallet();
@@ -65,15 +68,28 @@ const SetupList = ({
     },
   };
   const steps: StepView[] = SETUP_STEPS.map((step): StepView => {
-    // A network is always chosen: Devnet until the user picks another
+    // A network is always chosen: Devnet until the user picks another. One
+    // that does not answer, or whose slot stalls, warns instead of ticking,
+    // read as the status row's network indicator and the stage notice read it
     if (step === "network") {
-      return { step, done: true, value: cluster ?? undefined };
+      const value = cluster ?? undefined;
+      if (isConnected === false || slotStalled === true) {
+        return {
+          step,
+          done: false,
+          warn: `${cluster ?? "The network"} is not responding`,
+          value,
+        };
+      }
+      return { step, done: true, value };
     }
     const { done, value } = states[step];
     return done ? { step, done, value } : { step, done };
   });
-  const done = steps.filter((s) => s.done).length;
-  const allDone = done === steps.length;
+  const done = steps.filter(counts).length;
+  // Every step done, not every step counted: a warning network counts in
+  // "n of 4" but needs the user still, and completing hides the list for good
+  const allDone = steps.every((view) => view.done);
 
   useEffect(() => {
     if (!allDone || setupMarks.get().completed) return;

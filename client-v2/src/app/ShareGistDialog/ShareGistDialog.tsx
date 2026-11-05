@@ -15,13 +15,13 @@ import {
   useShareGist,
 } from "@/features/gist";
 import { useRenderOnChange } from "@/hooks";
+import { GithubMark } from "@/shared/lib/github-mark";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Spinner } from "@/shared/ui/spinner";
 import { PgView } from "@/utils/view";
 import { ModalFrame } from "@/widgets/overlays";
-import { GithubMark } from "@/widgets/session-footer";
 
 const log = createLogger("app:share-gist");
 

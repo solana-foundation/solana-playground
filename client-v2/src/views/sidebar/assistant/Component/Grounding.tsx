@@ -1,5 +1,4 @@
 import { useState } from "react";
-import styled, { css } from "styled-components";
 
 import type { McpServerEntry } from "@/features/mcp";
 import {
@@ -7,6 +6,7 @@ import {
   parseServers,
   serializeServers,
 } from "@/features/mcp";
+import { cn } from "@/shared/lib/utils";
 import { Checkbox } from "@/shared/ui/checkbox";
 import {
   Collapsible,
@@ -41,6 +41,11 @@ const ENTRY_FORMAT_DOC = {
   mcpServer: `${ENTRY_FORMAT_DOC_URL}#mcp-server-entries`,
   skill: `${ENTRY_FORMAT_DOC_URL}#skill-entries`,
 };
+
+const MUTED = "text-[0.7rem] text-[var(--text-secondary)]";
+
+const ACTION =
+  "cursor-pointer rounded-panel border border-border bg-transparent px-2.5 py-[0.3125rem] text-[0.7rem] text-[var(--text-secondary)] hover:enabled:bg-surface-hover hover:enabled:text-[var(--text-primary)] disabled:cursor-default disabled:opacity-45";
 
 const EMPTY_LIST = "[]";
 
@@ -197,7 +202,7 @@ const Grounding = () => {
   };
 
   return (
-    <Wrapper>
+    <div className="flex min-h-0 grow flex-col gap-7 overflow-y-auto px-4 py-5">
       {!takesTools && (
         <FieldSet>
           <FieldLegend>Skills and MCP servers</FieldLegend>
@@ -231,9 +236,12 @@ const Grounding = () => {
           </FieldDescription>
 
           {PgAssistant.skills.length === 0 && (
-            <Active role="status">
+            <div
+              role="status"
+              className={cn(MUTED, "pb-[0.4375rem] leading-[1.6]")}
+            >
               The server reported no skills, so the assistant has none to load.
-            </Active>
+            </div>
           )}
 
           <FieldGroup data-slot="checkbox-group">
@@ -337,11 +345,11 @@ const Grounding = () => {
           </FieldGroup>
 
           {servers.length === 0 && (
-            <Active>
+            <div className={cn(MUTED, "pb-[0.4375rem] leading-[1.6]")}>
               No servers. The gateway reports which ones it serves, so an empty
               list means it is not running (use <code>yarn dev</code>) or has
               none configured.
-            </Active>
+            </div>
           )}
 
           <Collapsible
@@ -381,14 +389,19 @@ const Grounding = () => {
               </FieldDescription>
 
               {PgAssistant.shadowedMcpServers.map((server) => (
-                <Active key={server.id} role="status">
+                <div
+                  key={server.id}
+                  role="status"
+                  className={cn(MUTED, "pb-[0.4375rem] leading-[1.6]")}
+                >
                   Not used: the gateway serves a server with the id{" "}
                   <code>{server.id}</code>, which replaces this entry. Rename
                   the entry to use both.
-                </Active>
+                </div>
               ))}
 
-              <Json
+              <textarea
+                className="w-full resize-y rounded-panel border border-border bg-surface-base px-2.5 py-2 font-pg-code text-[0.75rem] leading-normal text-[var(--text-primary)] [tab-size:2] focus-visible:-outline-offset-1 focus-visible:outline-1 focus-visible:outline-primary"
                 value={draft}
                 onChange={(ev) => setDraft(ev.target.value)}
                 spellCheck={false}
@@ -396,98 +409,29 @@ const Grounding = () => {
                 aria-label="MCP server configuration"
               />
 
-              {error && <ErrorText role="alert">{error}</ErrorText>}
+              {error && (
+                <div
+                  role="alert"
+                  className="pt-[0.4375rem] text-[0.7rem] leading-normal text-error"
+                >
+                  {error}
+                </div>
+              )}
 
-              <Actions>
-                <Action onClick={apply} disabled={!dirty}>
+              <div className="flex gap-1.5 pt-2.5">
+                <button className={ACTION} onClick={apply} disabled={!dirty}>
                   {dirty ? "Apply" : "Applied"}
-                </Action>
-                <Action onClick={reset}>Reset to defaults</Action>
-              </Actions>
+                </button>
+                <button className={ACTION} onClick={reset}>
+                  Reset to defaults
+                </button>
+              </div>
             </CollapsibleContent>
           </Collapsible>
         </FieldSet>
       )}
-    </Wrapper>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-  min-height: 0;
-  overflow-y: auto;
-  gap: 1.75rem;
-  padding: 1.25rem 1rem;
-`;
-
-const Active = styled.div`
-  ${({ theme }) => css`
-    padding-bottom: 0.4375rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.6;
-  `}
-`;
-
-const Json = styled.textarea`
-  ${({ theme }) => css`
-    width: 100%;
-    resize: vertical;
-    padding: 0.5rem 0.625rem;
-    background: ${theme.colors.default.bgPrimary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.code.size.small};
-    line-height: 1.5;
-    tab-size: 2;
-
-    &:focus-visible {
-      outline: 1px solid ${theme.colors.default.primary};
-      outline-offset: -1px;
-    }
-  `}
-`;
-
-const ErrorText = styled.div`
-  ${({ theme }) => css`
-    padding-top: 0.4375rem;
-    color: ${theme.colors.state.error.color};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.5;
-  `}
-`;
-
-const Actions = styled.div`
-  display: flex;
-  gap: 0.375rem;
-  padding-top: 0.625rem;
-`;
-
-const Action = styled.button`
-  ${({ theme }) => css`
-    padding: 0.3125rem 0.625rem;
-    background: transparent;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textSecondary};
-    font: inherit;
-    font-size: ${theme.font.code.size.xsmall};
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      background: ${theme.colors.state.hover.bg};
-      color: ${theme.colors.default.textPrimary};
-    }
-
-    &:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-  `}
-`;
 
 export default Grounding;

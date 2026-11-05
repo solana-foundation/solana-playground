@@ -12,6 +12,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-edge: var(--primary-edge);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -120,6 +121,7 @@
   --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
   --animate-caret: caret 1.1s step-end infinite;
   --animate-menu-in: menu-in var(--duration-menu) var(--ease-menu-value) both;
+  --animate-indeterminate: indeterminate 1.6s ease-in-out infinite;
 
   @keyframes pulse-dot {
     0%, 100% { opacity: 1; transform: scale(1); }
@@ -147,6 +149,11 @@
   @keyframes toast-progress {
     from { transform: scaleX(1); }
     to { transform: scaleX(0); }
+  }
+  /* A run with no known end (StageEmptyProgress): a short stretch crosses the track and starts over */
+  @keyframes indeterminate {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(250%); }
   }
 }
 
@@ -257,5 +264,15 @@
 @layer base {
   svg.lucide[stroke-width="2"] {
     stroke-width: 1.5;
+  }
+  /* A border with no colour of its own takes the hairline, as shadcn's base
+     sets it. The site's index.css had this rule, but the registry ships this
+     file and not that one, so in the product Tailwind 4's default,
+     currentColor, drew the edges of sheets, dialog footers, cards and tables
+     in the text's white */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
   }
 }

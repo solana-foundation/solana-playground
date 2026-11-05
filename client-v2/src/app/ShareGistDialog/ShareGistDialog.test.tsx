@@ -26,10 +26,6 @@ vi.mock("@/hooks", async () => ({
     .useRenderOnChange,
 }));
 vi.mock("@/utils", () => ({}));
-// The account widget's entry draws the whole footer; the dialog takes its mark
-vi.mock("@/widgets/session-footer", async () => ({
-  GithubMark: (await import("@/widgets/session-footer/ui/GithubMark")).default,
-}));
 
 /** A cancel the user made is a quiet line, never an error callout */
 const expectQuietCancel = () => {
@@ -40,8 +36,7 @@ const expectQuietCancel = () => {
 const USER: SessionUser = {
   id: "u1",
   name: "Ada",
-  // eslint-disable-next-line unicorn/no-null -- `SessionUser.image` is `null` for an account without an avatar
-  image: null,
+  image: undefined,
   login: "ada",
 };
 
@@ -363,7 +358,11 @@ describe("app/ShareGistDialog", () => {
 
     await press("Sign in with GitHub");
 
-    expect(screen.getByText("Could not start sign-in")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Sign-in isn't available. Your work is saved in this browser."
+      )
+    ).toBeTruthy();
     expect(reported()).toHaveLength(1);
   });
 
@@ -400,8 +399,7 @@ describe("app/ShareGistDialog", () => {
     await open();
 
     await act(async () => {
-      // eslint-disable-next-line unicorn/no-null -- `refreshWith` takes `null` for "signed out"
-      await PgSession.refreshWith(null);
+      await PgSession.refreshWith(undefined);
     });
 
     expect(

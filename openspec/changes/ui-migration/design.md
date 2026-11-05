@@ -174,8 +174,9 @@ not the OS. `PgTheme.set` toggles `dark` on `<html>` next to `colorScheme`.
   `yarn run check` and in CI, and fails on any hex colour or colour function
   (`rgb()`, `hsl()`, `color(srgb ...)` and the like) outside the installed
   token files, `shared/lib/css-color`, the third-party logo colours in
-  `languages/`, and `app/favicon.svg`, which the browser draws outside the
-  page, where no token reaches (HOO-2241). Named colours (`white`, `red`) are not caught: the words are
+  `languages/`, and the tutorial covers' brand art in
+  `widgets/catalog/ui/art/`, whose grounds no token describes. The brand
+  icons live outside `src/` (`client-v2/static/`, HOO-2568). Named colours (`white`, `red`) are not caught: the words are
   too common in code to tell from a colour without parsing CSS. Sidebar icons colour through a CSS mask over the
   text colour, which reaches the rail's raster icons too.
 
@@ -690,7 +691,7 @@ styled-component.
 | `components/Text` (a callout) | `Callout`, with a lucide icon per kind | 26 call sites: modals, the wallet, the explorer, Interact, the not-found page, the gallery lists |
 | `components/Tag` (level, framework, languages) | `Tag`, `levelVariant` for the level colours; the framework image and `LangIcon` stay inside it | tutorial and program cards, tutorial details |
 | `components/Checkbox` | `Checkbox` and `Label`; a boolean setting is a toggle, so it takes `Switch` | the assistant's skills, the build flags; the settings panel |
-| `components/Foldable` | `Collapsible`, a chevron that turns 90° | settings groups, the wallet's Send, Interact's Args, Accounts and Result |
+| `components/Foldable` | `Collapsible`, a chevron that turns 90° | settings groups, the wallet's Send, Interact's Result (its Arguments and Accounts are fixed headings since #272) |
 | `components/ProgressBar` | nothing: no call site uses it | removed |
 | hand-built chips, counts, empty states, key hints, status dots, the avatar, the logo mark | `Badge`, `Tag`, `Empty`, `Kbd`, `StatusDot`, `Avatar`, `Logo` | `views/flow` and the assistant panel |
 
@@ -826,7 +827,7 @@ the workspace's own report:
 | `empty` | no build yet, or the first one running | "Nothing built yet" / "Building...", Build |
 | `unreached` | a build settled in this session with no report from the compiler | Spec 08 BUILD-04: "Build did not start", Try again; the build server and the raw error behind Show details |
 | `restored` | a verdict kept from before a reload, and no build settled since (a rebuild in flight keeps it) | "Built earlier" / "Last build failed", Build |
-| `succeeded` | the report has no error | "Build succeeded", Continue to Deploy, Download IDL, Export project |
+| `succeeded` | the report has no error | "Build succeeded", Continue to Deploy and Build again, then a Download IDL link only while the project holds an IDL, the build's or an uploaded one (#281; Export project is a project action in Settings and the explorer) |
 | `failed` | the report has errors | one `Diagnostic` per error, the compiler's output behind a toggle, Rebuild |
 
 A diagnostic carries the rustc code, the plain explanation from `humanize`,
@@ -977,13 +978,19 @@ the stage column's colour below `md`, and 5.11's `--surface-panel` drew a band.
 **The form** (`ready`). Instructions, Accounts and Events are headed
 sections; each item is a `Collapsible` card (border, `rounded-xl`,
 `bg-surface-panel`) instead of the striped rows. An input's label is its name
-in mono with `Tag`s for the type (in its own case), `mut` and `signer`.
+in mono, its type in quiet mono beside it, then `mut` and `signer` as
+neutral `Tag`s (#272).
 Fetched accounts and received events show as JSON in the design system's
 `code-block`, titled "JSON", with a `CopyButton`; the JSON is not highlighted
-any more, which the legacy `CodeBlock` did. Test, Fill
-and Reset keep their variants and behaviour, left-aligned at the card's foot;
-none is the brand button, since every instruction has a Test. Account inference, Fill and the submission flow do not
-change.
+any more, which the legacy `CodeBlock` did. Since #272 an instruction card's
+head counts its inputs ("1 arg · 2 accounts"), its inputs sit under fixed
+"Arguments" and "Accounts" headings rather than folding groups, and Copy sits
+inside the field. Test is the card's one action, left-aligned at its foot, with
+"Fill with Random" and Reset quiet beside it and a line saying why a held Test
+waits ("Connect a wallet to test", "Fill every field to test"); none is the
+brand button, since every instruction has a Test. Account inference, Fill with
+Random and the submission flow do not change. Spec:
+`openspec/specs/client-v2-stages`.
 
 **No `Table`** (Slava, 2026-10-20): the prototype shows none on this screen,
 and what the stage returns is nested JSON, not rows.

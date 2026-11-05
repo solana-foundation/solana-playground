@@ -622,8 +622,9 @@ here and on the pages, SHALL be one target that ends in a chevron.
 #### Scenario: New project's controls line up and its list shows it scrolls
 
 - **WHEN** a user opens New project at 1280 px
-- **THEN** the framework chips, the name field and Start share one height
-  and centre line, and a fade at the dialog's foot shows the list runs on
+- **THEN** the framework chips, the name field and Start share one height,
+  the name field and Start share a centre line under the framework row, and a
+  fade at the dialog's foot shows the list runs on
 
 #### Scenario: New project on a phone is a page
 
@@ -765,8 +766,8 @@ items.
 
 From 768 px wide, and on a phone's menu page, the navigation SHALL list the
 user's projects under "Projects", started lessons among them with the same
-folder glyph and no step count (lesson-prototype-polish), pinned ones first,
-with the open one marked. Each row's "Actions for <name>" SHALL
+folder glyph and their progress (client-components-after-des-194), pinned
+ones first, with the open one marked. Each row's "Actions for <name>" SHALL
 open a menu of Open (`O`), Pin or Unpin (`P`), Rename (`R`), Duplicate
 (`D`), Export as zip (`E`) and Delete (`⌫`); while it is open, the letter,
 or Backspace or Delete, SHALL run that item. A lesson's menu SHALL have no

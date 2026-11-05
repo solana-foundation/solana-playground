@@ -1,3 +1,4 @@
+import type { NoParams } from "@/shared/lib/telemetry";
 import { createTracker } from "@/shared/lib/telemetry";
 
 import type { NavItem } from "./nav-item";
@@ -27,6 +28,15 @@ type NavEvents = {
    * dialog is that dialog's to report.
    */
   nav_project_action_failed: { action: ProjectAction };
+  /**
+   * The phone's "Continue on a computer" sheet opened from the menu page;
+   * `signedIn` is whether account sync carries the project to the computer.
+   */
+  nav_handoff_opened: { signedIn: boolean };
+  /** The sheet's link reached the clipboard ("Copy link" read "Copied") */
+  nav_handoff_link_copied: NoParams;
+  /** The browser's share sheet took the link; a share the user closed is not sent */
+  nav_handoff_link_shared: NoParams;
 };
 
 export const navTelemetry = createTracker<NavEvents>();

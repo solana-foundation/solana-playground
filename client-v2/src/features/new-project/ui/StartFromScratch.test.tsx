@@ -100,7 +100,9 @@ it("refuses an invalid name and makes nothing until it is edited", async () => {
 
   await act(async () => fireEvent.click(start()));
 
-  expect(screen.getByRole("alert").textContent).toBe("Invalid project name");
+  expect(screen.getByRole("alert").textContent).toBe(
+    "Use letters, numbers, spaces, - or _."
+  );
   expect(start()).toHaveProperty("disabled", true);
   expect(utils.PgExplorer.createWorkspace).not.toHaveBeenCalled();
   expect(named("new_project_start_failed")).toEqual([]);

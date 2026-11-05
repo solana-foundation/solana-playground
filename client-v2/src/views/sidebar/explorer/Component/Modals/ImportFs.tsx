@@ -1,6 +1,5 @@
 import { InfoIcon } from "lucide-react";
 import { FC, useState } from "react";
-import styled from "styled-components";
 
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { ModalFrame } from "@/widgets/overlays";
@@ -82,9 +81,9 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
         disabled: !files || !!nameError || !!importError,
       }}
     >
-      <Content>
-        <ProjectNameWrapper>
-          <MainText>Project name</MainText>
+      <div className="flex flex-col justify-center">
+        <div className="mb-1">
+          <div className="mb-2 font-bold">Project name</div>
           <Input
             autoFocus
             value={name}
@@ -94,16 +93,16 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
             setError={setNameError}
             placeholder="my local project..."
           />
-        </ProjectNameWrapper>
+        </div>
 
-        <UploadAreaWrapper>
+        <div className="mt-4">
           <UploadArea
             onDrop={onDrop}
             error={importError}
             filesLength={files?.length}
             text="Drop a program or a workspace"
           />
-        </UploadAreaWrapper>
+        </div>
 
         <Callout variant="info" className="mt-4">
           <InfoIcon />
@@ -111,26 +110,7 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
             You can drag & drop a Cargo workspace directory.
           </CalloutDescription>
         </Callout>
-      </Content>
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-`;
-
-const ProjectNameWrapper = styled.div`
-  margin-bottom: 0.25rem;
-`;
-
-const MainText = styled.div`
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-`;
-
-const UploadAreaWrapper = styled.div`
-  margin-top: 1rem;
-`;

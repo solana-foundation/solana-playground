@@ -11,6 +11,7 @@ import {
   TEST_USER,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { PHONE } from "./viewports";
 
 /**
  * Sharing a project as a gist, against stubs: `/api/gists` answers as
@@ -265,7 +266,11 @@ test("gist-sharing: A sign-in that cannot start", async ({ page }) => {
     .getByRole("button", { name: "Sign in with GitHub" })
     .click();
 
-  await expect(prompt(page).getByText("Could not start sign-in")).toBeVisible();
+  await expect(
+    prompt(page).getByText(
+      "Sign-in isn't available. Your work is saved in this browser."
+    )
+  ).toBeVisible();
   expect(requests).toHaveLength(0);
 });
 
@@ -585,7 +590,7 @@ test("gist-sharing: No header Share on a phone", async ({ page }) => {
   await seedWorkspace(page);
   await expect(page.locator("#flow-share")).toBeVisible();
 
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(PHONE);
 
   await expect(page.locator("#flow-share")).toHaveCount(0);
 });

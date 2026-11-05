@@ -1,20 +1,11 @@
-import styled from "styled-components";
-
 import { Editor } from "../Editor";
 import { Tabs } from "../Tabs";
 
 const EditorWithTabs = () => (
-  <Wrapper>
+  <div className="flex h-full w-full flex-col">
     <Tabs />
     <Editor />
-  </Wrapper>
+  </div>
 );
-
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  height: 100%;
-`;
 
 export default EditorWithTabs;

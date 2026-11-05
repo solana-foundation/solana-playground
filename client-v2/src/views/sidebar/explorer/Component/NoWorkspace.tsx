@@ -1,5 +1,3 @@
-import styled from "styled-components";
-
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
@@ -12,7 +10,7 @@ const NoWorkspace = () => {
   const createWorkspace = () => PgView.setModal(CreateWorkspace);
 
   return (
-    <Wrapper>
+    <div className="flex flex-col justify-center px-4 py-6 [&>button]:mt-4">
       <Callout>
         <CalloutDescription>
           Start by creating a new project.
@@ -27,19 +25,8 @@ const NoWorkspace = () => {
         <Plus data-icon="inline-start" />
         Create a new project
       </AsyncButton>
-    </Wrapper>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  padding: 1.5rem 1rem;
-  display: flex;
-  justify-content: center;
-  flex-direction: column;
-
-  & > button {
-    margin-top: 1rem;
-  }
-`;
 
 export default NoWorkspace;

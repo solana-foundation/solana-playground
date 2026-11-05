@@ -1,6 +1,7 @@
 import { PgCommon } from "../common";
 import { PgAutocomplete } from "./autocomplete";
 import { PgHistory } from "./history";
+import { noteAnswer, noteQuestion } from "./slow-run";
 import { PgTerminal } from "./terminal";
 import { PgTty } from "./tty";
 import type {
@@ -116,10 +117,13 @@ export class PgShell {
           handleInput
         );
         this._waitingForInput = false;
+        noteAnswer();
         res(this._tty.input);
       };
       document.addEventListener(PgShell._TERMINAL_WAIT_FOR_INPUT, handleInput);
       this._waitingForInput = true;
+      // The person's time to answer is not the command's (Spec 13, TRM-52)
+      noteQuestion();
 
       this._tty.clearLine();
       this._tty.println(

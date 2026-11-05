@@ -12,7 +12,7 @@ export interface ClusterStatus {
 }
 
 /**
- * The cluster status the footer's row and the rail's dot show,
+ * The cluster status the account menu's warning reads,
  * re-rendering when any part changes
  */
 export const useClusterStatus = (): ClusterStatus => {

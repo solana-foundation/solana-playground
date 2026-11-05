@@ -45,17 +45,25 @@ project without `src/lib.rs` builds as before.
 ### Requirement: A slow build says so
 
 While a build runs, the Build stage SHALL keep a polite status region, and
-SHALL put "This build is taking longer than usual." in it once the run has
+SHALL put "This build is taking longer than usual. The server may be busy. It keeps running." in it once the run has
 lasted 60 seconds, counted from the run's own start so a remount does not
-restart the clock. The line is never in a warning colour.
+restart the clock. The line is never in a warning colour. A first build, on
+the "Nothing built yet" surface, leaves the region empty: it says it is slow
+in the words of `client-v2-first-run`, and the stage never shows both lines.
 
 #### Scenario: A build past 60 seconds (manual)
 
 - **WHEN** a build has run for more than 60 seconds, the Build stage
   remounting once on the way
-- **THEN** the stage shows "This build is taking longer than usual." in muted
+- **THEN** the stage shows "This build is taking longer than usual. The server may be busy. It keeps running." in muted
   text under the build's progress, and a screen reader announces it once
 - **AND** the line is gone when the build ends
+
+#### Scenario: A first build past 60 seconds (manual)
+
+- **WHEN** the first build of a project has run for more than 60 seconds
+- **THEN** the stage shows "First builds take longer. This one is running."
+  and not "This build is taking longer than usual. The server may be busy. It keeps running."
 
 ### Requirement: The Deploy stage shows the latest deployment
 

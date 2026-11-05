@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** What the mocked explorer and lesson report; each test sets its own */
@@ -14,6 +13,8 @@ const given = vi.hoisted(() => ({
   listener: null as ((state: unknown) => void) | null,
   /** How many times the tree mounted */
   treeMounts: 0,
+  /** The editor's "Show files" listeners, to fire an ask */
+  filesAsks: [] as (() => void)[],
 }));
 
 // The utils barrel needs build-time globals the unit runner does not define.
@@ -21,6 +22,16 @@ vi.mock("../../../utils", () => ({
   PgExplorer: {
     get currentWorkspaceId() {
       return given.workspace;
+    },
+  },
+  PgView: {
+    onDidRequestFiles: (cb: () => void) => {
+      given.filesAsks.push(cb);
+      return {
+        dispose: () => {
+          given.filesAsks = given.filesAsks.filter((f) => f !== cb);
+        },
+      };
     },
   },
 }));
@@ -67,24 +78,8 @@ import { requireFor } from "../../../test-utils/require-for";
 import { forgetColumn } from "./kept-column";
 import LeftPanel, { isLessonTab } from "./LeftPanel";
 
-// A theme that answers every key: the styles are not under test, and the
-// real theme's module needs the utils barrel.
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
-
-const draw = (collapsed: boolean, onHide?: () => void) =>
-  render(
-    <ThemeProvider theme={anyTheme}>
-      <LeftPanel collapsed={collapsed} onHide={onHide} />
-    </ThemeProvider>
-  );
+const draw = (collapsed: boolean) =>
+  render(<LeftPanel collapsed={collapsed} />);
 
 /** A lesson the panel shows its Steps and Files tabs for */
 const inLesson = () => {
@@ -131,21 +126,19 @@ describe("LeftPanel in a lesson", () => {
     expect(tab("files").getAttribute("data-state")).toBe("off");
   });
 
+  it("keeps the switch at the column's top, with no Hide button", () => {
+    draw(false);
+    expect(document.querySelector('[data-slot="segmented"]')).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide files" })).toBeNull();
+  });
+
   it("opens on the tab it is told to, over the kept one", () => {
-    render(
-      <ThemeProvider theme={anyTheme}>
-        <LeftPanel collapsed={false} startOn="files" />
-      </ThemeProvider>
-    );
+    render(<LeftPanel collapsed={false} startOn="files" />);
     expect(tab("files").getAttribute("data-state")).toBe("on");
   });
 
   it("keeps no tab from a column told where to open", () => {
-    const told = render(
-      <ThemeProvider theme={anyTheme}>
-        <LeftPanel collapsed={false} startOn="files" />
-      </ThemeProvider>
-    );
+    const told = render(<LeftPanel collapsed={false} startOn="files" />);
     told.unmount();
     draw(false);
     expect(tab("steps").getAttribute("data-state")).toBe("on");
@@ -173,6 +166,18 @@ describe("LeftPanel in a lesson", () => {
     fireEvent.click(requireFor("the Skip button")(skip()));
     expect(given.pass).toHaveBeenCalledTimes(1);
   });
+
+  // Its sides and foot are the column dividers' and the window's, not its own
+  it("draws Skip this step with a top line only", () => {
+    draw(false);
+    given.canPass = true;
+    act(() => given.listener?.({ path: { id: "lesson" }, record: [] }));
+    const classes = screen
+      .getByRole("button", { name: "Skip this step" })
+      .className.split(" ");
+    expect(classes).toContain("border-0");
+    expect(classes).toContain("border-t");
+  });
 });
 
 describe("isLessonTab", () => {
@@ -187,12 +192,10 @@ describe("isLessonTab", () => {
 
 describe("LeftPanel in the flush frame", () => {
   it.each([false, true])(
-    "has no fold strip of its own (collapsed: %s): the stage bar folds it",
+    "has no fold strip of its own (collapsed: %s): the editor head folds it",
     (collapsed) => {
       draw(collapsed);
-      expect(
-        screen.queryByRole("button", { name: /project panel/ })
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /files/i })).toBeNull();
       expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
     }
   );
@@ -208,19 +211,11 @@ describe("LeftPanel in the flush frame", () => {
     expect(document.getElementById("flow-left-tab-files")).toBeNull();
   });
 
-  /** The prototype's head: "Files" and a way to hide the column */
-  it("hides the column from its own head, named with its key", () => {
-    const onHide = vi.fn();
-    draw(false, onHide);
-    const hide = screen.getByRole("button", { name: "Hide files" });
-    expect(hide.getAttribute("title")).toBe("Hide files (\u2318E)");
-    fireEvent.click(hide);
-    expect(onHide).toHaveBeenCalledOnce();
-  });
-
-  it("draws no hide button where nothing can hide it", () => {
+  // The editor head names the column and hides it (DES-205)
+  it("has no head of its own outside a lesson", () => {
     draw(false);
     expect(screen.queryByRole("button", { name: "Hide files" })).toBeNull();
+    expect(screen.queryByText("Files", { exact: true })).toBeNull();
   });
 
   it("draws nothing while hidden", () => {
@@ -255,16 +250,8 @@ describe("LeftPanel across an unmount", () => {
     const panel = draw(false);
     body().scrollTop = 120;
     fireEvent.scroll(body());
-    panel.rerender(
-      <ThemeProvider theme={anyTheme}>
-        <LeftPanel collapsed />
-      </ThemeProvider>
-    );
-    panel.rerender(
-      <ThemeProvider theme={anyTheme}>
-        <LeftPanel collapsed={false} />
-      </ThemeProvider>
-    );
+    panel.rerender(<LeftPanel collapsed />);
+    panel.rerender(<LeftPanel collapsed={false} />);
     expect(body().scrollTop).toBe(120);
   });
 
@@ -277,6 +264,21 @@ describe("LeftPanel across an unmount", () => {
 
     draw(false);
     expect(body().scrollTop).toBe(120);
+  });
+
+  it("turns to Files when the editor asks for files", () => {
+    inLesson();
+    draw(false);
+    act(() => given.filesAsks.forEach((ask) => ask()));
+    expect(tab("files").getAttribute("data-state")).toBe("on");
+  });
+
+  it("opens on Files when the editor asked while it was hidden", () => {
+    inLesson();
+    draw(false).unmount();
+    act(() => given.filesAsks.forEach((ask) => ask()));
+    draw(false);
+    expect(tab("files").getAttribute("data-state")).toBe("on");
   });
 
   it("keeps the Files tab across an unmount", () => {

@@ -4,7 +4,7 @@ import { cn } from "@/shared/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 
 interface AccountAvatarProps {
-  image: string | null;
+  image: string | undefined;
   /** A feedback send is in flight: a halo pulses behind the avatar */
   sending: boolean;
   className?: string;
@@ -20,10 +20,17 @@ const AccountAvatar = ({ image, sending, className }: AccountAvatarProps) => (
         className="pointer-events-none absolute -inset-1 rounded-full bg-primary/40 motion-safe:animate-ping"
       />
     )}
-    <Avatar className={cn("size-6", className)}>
-      <AvatarImage src={image ?? undefined} alt="" />
-      {/* The prototype's signed-out avatar: a small glyph on a filled disc */}
-      <AvatarFallback className="bg-accent text-muted-foreground [&>svg]:size-3.5">
+    {/* The photo's ring goes with the photo: the glyph has a circle of its own */}
+    <Avatar
+      className={cn(
+        "size-6 has-[[data-slot=avatar-fallback]]:after:hidden",
+        className
+      )}
+    >
+      <AvatarImage src={image} alt="" />
+      {/* Signed out: the user glyph as the avatar's own outline, as wide as
+          a photo would be, with no disc behind it */}
+      <AvatarFallback className="bg-transparent text-muted-foreground [&>svg]:size-full [&>svg]:stroke-[1.5]">
         <CircleUserRound aria-hidden />
       </AvatarFallback>
     </Avatar>

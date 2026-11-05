@@ -4,7 +4,7 @@ export const SETTINGS_TRIGGER_ATTR = "data-settings-trigger";
 /** Which control the settings page puts focus on when it opens */
 export type SettingsFocus = "page" | "network";
 
-/** What opened the settings: the cluster row, the rail's dot, the account menu or ⌘, */
+/** What opened the settings: the status row's network indicator, the rail's network dot, the account menu or ⌘, */
 export type SettingsEntry = "cluster" | "rail" | "menu" | "key";
 
 /**

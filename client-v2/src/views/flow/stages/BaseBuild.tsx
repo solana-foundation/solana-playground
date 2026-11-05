@@ -7,7 +7,6 @@ import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import {
   Collapsible,
   CollapsibleChevron,
@@ -30,7 +29,7 @@ import {
   StageEmptyDescription,
   StageEmptyMedia,
   StageEmptyMeta,
-  StageEmptyNotice,
+  StageEmptyProgress,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
 
@@ -48,6 +47,7 @@ import {
   STAGE_FRAME,
   STAGE_REPORT,
 } from "./stage-layout";
+import { SLOW_BUILD_MS } from "./use-slow-build";
 
 /** A Build surface with what it draws: the failed one carries its errors */
 export type BuildSurfaceView =
@@ -66,13 +66,24 @@ export interface BaseBuildProps {
   serverUrl: string;
   /** The last build's duration, `null` while unknown */
   ms: number | null;
+  /** How long the running build has run, `null` while none runs */
+  elapsedMs: number | undefined;
+  /** The browser has no network: Build waits, and the notice over the stage
+   * says why (Spec 08 NET-01) */
+  offline: boolean;
   onBuild: () => unknown;
   onContinue: () => void;
-  onExport: () => unknown;
+  /**
+   * The app holds an IDL, the build's or an uploaded one: the success line
+   * names it and the Download IDL row is drawn
+   */
+  hasIdl: boolean;
   /** Sends a prompt to the assistant: an error card's Explain or Fix */
   onAsk: (prompt: string) => void;
   onOpenFile: (path: string) => void;
-  /** Download IDL, shown with a successful build */
+  /** Opens the console, where the terminal holds the whole output */
+  onShowLog: () => void;
+  /** Download IDL, a link under Build succeeded's pills, drawn only with `hasIdl` */
   idlActions: ReactNode;
 }
 
@@ -89,29 +100,52 @@ const Surface = ({
   children,
   actions,
   progress,
+  running = false,
   report = false,
+  alert = false,
 }: {
   icon?: ReactNode;
   title: string;
   meta?: string | null;
   description?: ReactNode;
   children?: ReactNode;
-  actions: ReactNode;
+  /** None while `running`: the bar says the run goes on */
+  actions?: ReactNode;
   /** The run behind the surface's Build button, for the slow line */
   progress?: Pick<BaseBuildProps, "building" | "slow">;
+  /** A run in flight: a moving bar under the meta */
+  running?: boolean;
   report?: boolean;
+  /**
+   * The description is why the stage stopped, so it is announced the moment
+   * it shows, as the error callout it replaced was (Spec 08)
+   */
+  alert?: boolean;
 }) => (
   <div className={STAGE_FRAME}>
-    <StageEmpty className={cn(STAGE_BODY, report && STAGE_REPORT)}>
+    <StageEmpty
+      className={cn(
+        STAGE_BODY,
+        report && STAGE_REPORT,
+        // No action row to push to the foot on a phone: the words take the
+        // middle, not the foot
+        !actions && "max-md:[&>:last-child]:mb-auto"
+      )}
+    >
       {icon && <StageEmptyMedia>{icon}</StageEmptyMedia>}
       <StageEmptyTitle>{title}</StageEmptyTitle>
       {meta && <StageEmptyMeta>{meta}</StageEmptyMeta>}
+      {running && <StageEmptyProgress />}
       {description && (
-        <StageEmptyDescription>{description}</StageEmptyDescription>
+        <StageEmptyDescription role={alert ? "alert" : undefined}>
+          {description}
+        </StageEmptyDescription>
       )}
       {children}
       {progress?.building && <SlowLine slow={progress.slow} />}
-      <StageEmptyActions className={STAGE_FOOT}>{actions}</StageEmptyActions>
+      {actions && (
+        <StageEmptyActions className={STAGE_FOOT}>{actions}</StageEmptyActions>
+      )}
     </StageEmpty>
   </div>
 );
@@ -122,7 +156,9 @@ const Surface = ({
  */
 const SlowLine = ({ slow }: { slow: boolean }) => (
   <p role="status" className="text-sm text-muted-foreground">
-    {slow ? "This build is taking longer than usual." : ""}
+    {slow
+      ? "This build is taking longer than usual. The server may be busy. It keeps running."
+      : ""}
   </p>
 );
 
@@ -140,6 +176,7 @@ const BuildButton = ({
     variant={variant}
     loading={p.building}
     loadingText="Building…"
+    disabled={p.offline}
     onClick={p.onBuild}
     onError={reportButtonFailure("build")}
   >
@@ -152,47 +189,78 @@ const ContinueButton = ({ p }: { p: BaseBuildProps }) => (
 );
 
 /**
- * The first build: the prototype's brand pill with the play mark. A
+ * Build as the surface's brand pill: the first build, with the play mark,
+ * and Try again after a build that never reached the compiler, which is
+ * that surface's main action as Continue to Deploy is the success's. A
  * `BrandButton` rather than `AsyncButton`, which is a `Button` and has no
  * brand look, so the busy state and the failure report are kept here.
  */
-const FirstBuildButton = ({ p }: { p: BaseBuildProps }) => (
+const BrandBuildButton = ({
+  p,
+  label,
+  icon = false,
+}: {
+  p: BaseBuildProps;
+  label: string;
+  icon?: boolean;
+}) => (
   <BrandButton
-    disabled={p.building}
+    disabled={p.building || p.offline}
     aria-busy={p.building || undefined}
     onClick={() => {
       // Through `then`, so a synchronous throw is caught as well
       Promise.resolve().then(p.onBuild).catch(reportButtonFailure("build"));
     }}
   >
-    {p.building ? "Building…" : "Build"}
-    {!p.building && <BrandButtonIcon />}
+    {p.building ? "Building…" : label}
+    {icon && !p.building && <BrandButtonIcon />}
   </BrandButton>
 );
+
+/**
+ * What "Nothing built yet" says. A run in flight says where it compiles, not
+ * the server's host name, which tells a learner nothing. The Foundation's
+ * server took 381s on a cold first build and 2.9s on the next one (measured
+ * 2026-09-21); from `SLOW_BUILD_MS` the same paragraph adds that the first
+ * build is the slow one, so nothing warns about the wait before it is long.
+ */
+const emptyDescription = (p: BaseBuildProps) => {
+  if (!p.building) {
+    return "Build compiles your program on the server. Only the source leaves your browser.";
+  }
+  if ((p.elapsedMs ?? 0) < SLOW_BUILD_MS) {
+    return "Compiling on the build server.";
+  }
+  return "Compiling on the build server. First builds take longer. This one is running.";
+};
 
 const Empty = (p: BaseBuildProps) => (
   <Surface
     title={p.building ? "Building…" : "Nothing built yet"}
-    description={
-      // A run in flight names the server and warns about the wait. The
-      // Foundation's server took 381s on a cold first build and 2.9s on the
-      // next one (measured 2026-09-21); six unexplained minutes read as a
-      // hang, so say the first build is the slow one.
-      p.building
-        ? `Compiling on ${p.host}. A first build there can take several minutes.`
-        : "Build compiles your program on the server. Nothing leaves your browser except the source."
+    meta={
+      p.building && p.elapsedMs !== undefined
+        ? `${Math.floor(p.elapsedMs / 1000)} s`
+        : null
     }
-    actions={<FirstBuildButton p={p} />}
-    progress={p}
+    description={emptyDescription(p)}
+    // The bar takes the button's place while it runs: a disabled
+    // "Building…" only repeated the title, and Stop is the console's
+    running={p.building}
+    actions={
+      p.building ? undefined : <BrandBuildButton p={p} label="Build" icon />
+    }
+    // A first build says it is slow in its own words (Spec 06), so Spec
+    // 08's line stays empty here: two lines would say it twice
+    progress={{ building: p.building, slow: false }}
   />
 );
 
 /**
  * A build that never reached the compiler. A build server that never replied
  * is Spec 08's BUILD-04; an empty program file the build refused to send is
- * Spec 09's, drawn by `EmptySource`; anything else is Spec 08's ANY-00. The server
- * and the raw error sit behind "Show details"; the terminal has the full
- * text.
+ * Spec 09's, drawn by `EmptySource`; anything else is Spec 08's ANY-00.
+ * BUILD-04 keeps the server and the raw error behind "Show details"; ANY-00
+ * offers "Show full log", the console, where the terminal has the whole text.
  */
 const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
   if (p.failure?.kind === "empty-source") {
@@ -200,23 +268,38 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
   }
   const noAnswer = p.failure?.kind === "no-answer";
   return (
+    // No duration: a build that never ran took no time worth naming. The
+    // reason is the description, as on every other surface: the red icon
+    // already says it failed, so a red box under it would say it twice
     <Surface
       icon={<CircleX className="text-error" />}
       title={noAnswer ? "Build did not start" : "Could not build"}
-      meta={msLabel(p.ms)}
-      actions={<BuildButton p={p} label="Try again" />}
+      alert
+      description={
+        noAnswer
+          ? "The Playground server did not answer. Your code is unchanged."
+          : "The full log has the details."
+      }
+      actions={
+        <>
+          <BrandBuildButton p={p} label="Try again" />
+          {!noAnswer && (
+            // A link under the pill, as Deploy's Upload IDL: the log is
+            // there if wanted, Try again is the way on. Full width, so the
+            // row wraps and the link takes a line of its own
+            <div className="flex w-full justify-center">
+              <Button variant="link" onClick={p.onShowLog}>
+                Show full log
+              </Button>
+            </div>
+          )}
+        </>
+      }
       progress={p}
     >
-      <StageEmptyNotice>
-        <Callout variant="error">
-          <CalloutDescription>
-            {noAnswer
-              ? "The Playground server did not answer. Your code is unchanged."
-              : "The full log has the details."}
-          </CalloutDescription>
-        </Callout>
-      </StageEmptyNotice>
-      <Details serverUrl={p.serverUrl} failure={p.failure?.message ?? null} />
+      {noAnswer && (
+        <Details serverUrl={p.serverUrl} failure={p.failure?.message ?? null} />
+      )}
     </Surface>
   );
 };
@@ -244,7 +327,7 @@ const EmptySource = (p: BaseBuildProps & { file: string }) => {
   );
 };
 
-/** What a build that never started keeps out of its first line: the server and the raw error */
+/** What BUILD-04 keeps out of its first line: the server and the raw error */
 const Details = ({
   serverUrl,
   failure,
@@ -291,18 +374,24 @@ const Succeeded = (p: BaseBuildProps) => (
     icon={<CircleCheck className="text-success" />}
     title="Build succeeded"
     meta={p.ms === null ? null : `Built in ${msLabel(p.ms)}`}
-    description="The IDL below reflects this build. Deploy when ready."
+    // The app cannot tell an edit since the build, so the line asks
+    description={
+      p.hasIdl
+        ? "The program and its IDL are ready to deploy. Edited since? Build again first."
+        : "The program is ready to deploy. Edited since? Build again first."
+    }
     actions={
       <>
+        {/* What comes next: go on, or build again after an edit. Export
+            project is not here: it is a project action, in Settings and
+            the explorer, not a build result */}
         <ContinueButton p={p} />
-        {p.idlActions}
-        <AsyncButton
-          variant="outline"
-          onClick={p.onExport}
-          onError={reportButtonFailure("export the project")}
-        >
-          Export project
-        </AsyncButton>
+        <BuildButton p={p} label="Build again" variant="outline" />
+        {/* The one place to download the IDL: a link under the pills, as
+            Unreached's Show full log and Deploy's Upload IDL */}
+        {p.hasIdl && (
+          <div className="flex w-full justify-center">{p.idlActions}</div>
+        )}
       </>
     }
     progress={p}

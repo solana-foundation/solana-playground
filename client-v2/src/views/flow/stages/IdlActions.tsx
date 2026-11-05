@@ -33,18 +33,23 @@ const parseIdl = (text: string) => {
   return parsed;
 };
 
-/** Saves the IDL the last build produced */
-const DownloadIdl = () => {
+/**
+ * How an IDL action looks: an outlined button where it is the way in
+ * (Interact's toolbar and its no-IDL stage), a link where it is a side door
+ * (under Deploy's pill, and Build succeeded's take-away row)
+ */
+type IdlLook = "outline" | "link";
+
+/**
+ * Saves the IDL the last build produced. Nothing while there is none: a
+ * disabled Download IDL under "Build succeeded" read as a broken promise
+ */
+const DownloadIdl = ({ look }: { look: IdlLook }) => {
   const idl = useRenderOnChange(PgProgramInfo.onDidChangeIdl);
-  if (!idl) {
-    return (
-      <Button variant="outline" disabled title="Build successfully first">
-        Download IDL
-      </Button>
-    );
-  }
+  // eslint-disable-next-line unicorn/no-null -- a component renders nothing as null
+  if (!idl) return null;
   return (
-    <Button asChild variant="outline">
+    <Button asChild variant={look}>
       <a href={PgCommon.getDataUrl(idl)} download="idl.json">
         Download IDL
       </a>
@@ -53,7 +58,7 @@ const DownloadIdl = () => {
 };
 
 /** Loads an IDL file into this browser, picked through a button */
-const UploadIdl = () => {
+const UploadIdl = ({ look }: { look: IdlLook }) => {
   const [note, setNote] = useState<Note | null>(null);
 
   /** Refuses a file that is not an IDL; a throw after that is ours */
@@ -99,6 +104,7 @@ const UploadIdl = () => {
     <>
       <ImportButton
         accept=".json"
+        variant={look}
         title={LOAD_HINT}
         onImport={(ev) => {
           const file = ev.target.files?.[0];
@@ -118,7 +124,10 @@ const UploadIdl = () => {
  * saves what the build already produced, "Upload IDL" replaces the IDL
  * this app uses -- neither touches the chain.
  */
-const IdlActions: FC<{ mode: IdlActionsMode }> = ({ mode }) =>
-  mode === "download" ? <DownloadIdl /> : <UploadIdl />;
+const IdlActions: FC<{ mode: IdlActionsMode; look?: IdlLook }> = ({
+  mode,
+  look = "outline",
+}) =>
+  mode === "download" ? <DownloadIdl look={look} /> : <UploadIdl look={look} />;
 
 export default IdlActions;

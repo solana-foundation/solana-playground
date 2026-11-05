@@ -21,6 +21,7 @@ it("ends every card in a chevron for a phone, hidden from readers", () => {
     <BaseCatalogGrid
       label="tutorials"
       query=""
+      onClear={vi.fn()}
       list={{ state: "ready", cards: [card("Hello Anchor"), card("Escrow")] }}
       busy={false}
       onOpen={vi.fn(async () => {})}
@@ -42,6 +43,7 @@ it("reports an Open from the card's title that rejects, as its button would", as
     <BaseCatalogGrid
       label="tutorials"
       query=""
+      onClear={vi.fn()}
       list={{ state: "ready", cards: [card("Hello Anchor")] }}
       busy={false}
       onOpen={vi.fn(async () => {
@@ -55,4 +57,23 @@ it("reports an Open from the card's title that rejects, as its button would", as
   await waitFor(() =>
     expect(logged.entries.map((e) => e.ns)).toEqual(["ui:button"])
   );
+});
+
+it("offers Clear search when nothing matches", () => {
+  const onClear = vi.fn();
+  render(
+    <BaseCatalogGrid
+      label="programs"
+      query="zzzz"
+      onClear={onClear}
+      list={{ state: "ready", cards: [] }}
+      busy={false}
+      onOpen={vi.fn(async () => {})}
+    />
+  );
+
+  expect(screen.getByText("No programs match “zzzz”")).toBeTruthy();
+  expect(screen.getByText("Try a shorter word.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(onClear).toHaveBeenCalledTimes(1);
 });

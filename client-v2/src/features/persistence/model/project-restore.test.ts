@@ -3,6 +3,7 @@ import { PgSession } from "@/features/auth";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
+import { PgAccountList } from "./account-list";
 import { clearFailures, getFailures } from "./diagnostics";
 import { reconcile, releaseLocalProjects } from "./project-restore";
 import type { ServerProject } from "./project-sync";
@@ -36,7 +37,12 @@ const storedFiles = () =>
   (PgFs as unknown as { __files: Map<string, string> }).__files;
 
 const signedIn = () =>
-  PgSession.refreshWith({ id: "u1", name: null, image: null, login: null });
+  PgSession.refreshWith({
+    id: "u1",
+    name: undefined,
+    image: undefined,
+    login: undefined,
+  });
 
 /** Pretend the explorer holds these workspaces, name -> id */
 const withLocal = (local: Record<string, string>) => {
@@ -384,6 +390,33 @@ describe("reconcile", () => {
     expect(await PgSyncMark.read("p1")).not.toBeNull();
   });
 
+  describe("publishing what the account holds, for Home's first visit", () => {
+    afterEach(() => PgAccountList.forget());
+
+    it("marks an account with no projects empty", async () => {
+      withLocal({});
+      serverHas([]);
+      await reconcile();
+      expect(PgAccountList.state).toBe("empty");
+    });
+
+    it("marks an account with projects as holding them", async () => {
+      withLocal({ alpha: "p1" });
+      withFiles("alpha", { "src/lib.rs": "same" });
+      await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+      serverHas([project("p1", "alpha", "t1")]);
+      await reconcile();
+      expect(PgAccountList.state).toBe("holds");
+    });
+
+    it("leaves it unknown when the list could not be read", async () => {
+      withLocal({});
+      vi.spyOn(PgProjectSync, "list").mockResolvedValue(null);
+      await reconcile();
+      expect(PgAccountList.state).toBe("unknown");
+    });
+  });
+
   it("asks before finishing a delete over unsaved work", async () => {
     withLocal({ alpha: "p1" });
     withFiles("alpha", { "src/lib.rs": "work that never uploaded" });
@@ -480,9 +513,9 @@ describe("reconcile", () => {
     });
     await PgSession.refreshWith({
       id: "u2",
-      name: null,
-      image: null,
-      login: null,
+      name: undefined,
+      image: undefined,
+      login: undefined,
     });
     const push = vi.spyOn(PgProjectSync, "push").mockResolvedValue("ok");
     serverHas([]);
@@ -505,9 +538,9 @@ describe("reconcile", () => {
     });
     await PgSession.refreshWith({
       id: "u2",
-      name: null,
-      image: null,
-      login: null,
+      name: undefined,
+      image: undefined,
+      login: undefined,
     });
   };
 

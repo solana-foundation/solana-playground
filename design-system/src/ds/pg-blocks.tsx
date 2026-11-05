@@ -1,11 +1,14 @@
 import {
   BookOpen,
+  ChevronRight,
   CircleAlert,
   Coins,
   Copy,
   ExternalLink,
   FileCode2,
   FileJson,
+  Folder,
+  GraduationCap,
   Hammer,
   Info,
   KeyRound,
@@ -28,11 +31,13 @@ import {
   ActionCardContent,
   ActionCardDescription,
   ActionCardEyebrow,
+  ActionCardGroup,
   ActionCardLink,
   ActionCardMedia,
   ActionCardTitle,
 } from "@/components/ui/action-card"
 import { AsyncButton } from "@/components/ui/async-button"
+import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { BrandButton, BrandButtonIcon } from "@/components/ui/brand-button"
 import { Button } from "@/components/ui/button"
@@ -79,7 +84,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { EditorTab, EditorTabClose, EditorTabLabel, EditorTabs, EditorTabTrigger } from "@/components/ui/editor-tabs"
-import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Field, FieldContent, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { HelpTip } from "@/components/ui/help-tip"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
@@ -155,9 +160,11 @@ import {
   StageEmpty,
   StageEmptyActions,
   StageEmptyDescription,
+  StageEmptyEyebrow,
   StageEmptyFooter,
   StageEmptyMedia,
   StageEmptyMeta,
+  StageEmptyProgress,
   StageEmptyTitle,
 } from "@/components/ui/stage-empty"
 import { StatusDot } from "@/components/ui/status-dot"
@@ -812,7 +819,7 @@ function PlaygroundComponents() {
         ))}
       </Block>
 
-      <Block id="action-card" title="Action card" source="playground" registry="action-card" note="A card you open: a tutorial, a sample, a program. Its link covers the whole card, so the card is one target and its text stays selectable. frame is the older card's lift and ring. The glyph media variant is the icon alone, with no tile behind it, for a vertical card." className="grid gap-3 md:grid-cols-2">
+      <Block id="action-card" title="Action card" source="playground" registry="action-card" note="A card you open: a tutorial, a sample, a program. Its link covers the whole card, so the card is one target and its text stays selectable. frame is the older card's lift and ring. The glyph media variant is the icon alone, with no tile behind it, for a vertical card. ActionCardGroup puts cards in one frame as rows of a list, a line between them." className="grid gap-3 md:grid-cols-2">
         <ActionCard>
           <ActionCardMedia><Coins /></ActionCardMedia>
           <ActionCardContent>
@@ -837,6 +844,29 @@ function PlaygroundComponents() {
             <ActionCardDescription>One wallet, one vote, counted on chain.</ActionCardDescription>
           </ActionCardContent>
         </ActionCard>
+        <ActionCardGroup>
+          <li>
+            <ActionCard>
+              <ActionCardMedia><Folder /></ActionCardMedia>
+              <ActionCardContent>
+                <ActionCardTitle><ActionCardLink href="#c-action-card">escrow</ActionCardLink></ActionCardTitle>
+                <ActionCardDescription>Project</ActionCardDescription>
+              </ActionCardContent>
+              <Badge variant="secondary">Open now</Badge>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </ActionCard>
+          </li>
+          <li>
+            <ActionCard>
+              <ActionCardMedia><GraduationCap /></ActionCardMedia>
+              <ActionCardContent>
+                <ActionCardTitle><ActionCardLink href="#c-action-card">Hello Anchor</ActionCardLink></ActionCardTitle>
+                <ActionCardDescription>Tutorial · 2 of 4</ActionCardDescription>
+              </ActionCardContent>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </ActionCard>
+          </li>
+        </ActionCardGroup>
       </Block>
 
       <Block id="setup-list" title="Setup list" source="playground" registry="setup-list" note="The few things a new workspace needs, in the sidebar. It folds when you want it out of the way. It goes once every step is done.">
@@ -923,17 +953,26 @@ function PlaygroundComponents() {
         </div>
       </Block>
 
-      <Block id="stage-empty" title="Stage empty" source="playground" registry="stage-empty" note="What a stage says before there is anything on it: what it is for, what it needs and the one thing to do. It sits on the stage's own ground. On a phone the actions pin to the foot." className="block">
+      <Block id="stage-empty" title="Stage empty" source="playground" registry="stage-empty" note="What a stage says before there is anything on it: what it is for, what it needs and the one thing to do. The eyebrow above the title names where it acts, such as the network. It sits on the stage's own ground. On a phone the actions pin to the foot. While a run with no known end goes on, StageEmptyProgress sits under the meta instead of a disabled button." className="block">
         <StageEmpty className="px-0">
           <StageEmptyMedia><Rocket /></StageEmptyMedia>
+          <StageEmptyEyebrow><StatusDot />Devnet</StageEmptyEyebrow>
           <StageEmptyTitle>Nothing deployed yet</StageEmptyTitle>
-          <StageEmptyMeta>hello_anchor · 184 KB · devnet</StageEmptyMeta>
+          <StageEmptyMeta>hello_anchor · 184 KB</StageEmptyMeta>
           <StageEmptyDescription>Build your program, then deploy it. Kora pays for devnet, so it needs no SOL.</StageEmptyDescription>
           <StageEmptyActions>
             <BrandButton>Deploy to devnet<BrandButtonIcon /></BrandButton>
             <Button variant="ghost">Choose a network</Button>
           </StageEmptyActions>
           <StageEmptyFooter>Programs close after 7 days without use.</StageEmptyFooter>
+        </StageEmpty>
+        {/* A run in flight: the progress bar under the meta takes the place of a disabled button */}
+        <StageEmpty className="px-0">
+          <StageEmptyTitle>Building…</StageEmptyTitle>
+          <StageEmptyMeta>62 s</StageEmptyMeta>
+          <StageEmptyProgress />
+          <StageEmptyDescription>Compiling on the build server.</StageEmptyDescription>
+          <StageEmptyDescription>First builds take longer. This one is running.</StageEmptyDescription>
         </StageEmpty>
       </Block>
 
@@ -1122,24 +1161,33 @@ function PlaygroundBlocks() {
         ))}
       </Block>
 
-      <Block id="block-start" title="Start from scratch" source="block" note="A new program in three choices: a framework, a name, then Start. The framework is the choice that matters, so it gets the gradient ring." className="block">
-        <div className="flex max-w-xl flex-col gap-4 rounded-2xl border border-border bg-surface-panel p-5">
-          <div className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-[10px] bg-surface-raised text-muted-foreground"><Plus className="size-5" /></span>
-            <div>
-              <div className="text-control font-act text-foreground">Start from scratch</div>
-              <div className="text-caption font-read text-muted-foreground">An empty program, ready to build.</div>
-            </div>
-          </div>
-          <Segmented variant="gradient" defaultValue="anchor" aria-label="Framework">
-            <SegmentedItem value="anchor">Anchor</SegmentedItem>
-            <SegmentedItem value="native">Native</SegmentedItem>
-            <SegmentedItem value="seahorse">Seahorse</SegmentedItem>
-          </Segmented>
-          <div className="flex flex-wrap gap-2">
-            <Input aria-label="Program name" defaultValue="my_program" className="w-48" />
-            <BrandButton variant="accent">Start</BrandButton>
-          </div>
+      <Block id="block-sync-conflict" title="Sync conflict" source="block" note="The banner over the stage when this project changed on another device and here too. It says what happened in one sentence and asks for one answer: CalloutAction buttons of equal weight in the callout's tone, Resolve… first when the changed lines are known, then the expected answer. Buttons under the text." className="block">
+        <div className="flex w-full flex-col gap-3">
+          <Callout variant="warning">
+            <TriangleAlert />
+            <CalloutDescription className="text-foreground opacity-100">This project changed on another device, and this one has unsaved changes.</CalloutDescription>
+            <CalloutActions>
+              <CalloutAction>Resolve…</CalloutAction>
+              <CalloutAction>Keep this version</CalloutAction>
+              <CalloutAction>Take the other version</CalloutAction>
+            </CalloutActions>
+          </Callout>
+          <Callout variant="warning">
+            <TriangleAlert />
+            <CalloutDescription className="text-foreground opacity-100">This project was deleted on another device, but this one has unsaved changes.</CalloutDescription>
+            <CalloutActions>
+              <CalloutAction>Keep a copy</CalloutAction>
+              <CalloutAction>Delete anyway</CalloutAction>
+            </CalloutActions>
+          </Callout>
+        </div>
+      </Block>
+
+      <Block id="block-start" title="Start from scratch" source="block" note="A new program as a short form: a title, then two labelled rows, the framework and the name with Start at its end. The framework is the choice that matters, so it gets the gradient ring. The name's message goes under the field and says the rule that was broken; nothing moves, the form only grows at its foot. A name that passes the format check gets the success edge (data-state=valid on Input). No icon or eyebrow: the New project tile above it says what it is." className="block">
+        <div className="flex w-full flex-col gap-3">
+          <ScratchCard name="" placeholder="anchor-project" />
+          <ScratchCard name="my.project" error={NAME_RULE} />
+          <ScratchCard name="my-project" valid />
         </div>
       </Block>
 
@@ -1211,3 +1259,46 @@ function PlaygroundBlocks() {
 }
 
 export { PlaygroundBlocks, PlaygroundComponents }
+
+
+/** What the name check says when a name breaks it: the rule itself, so the fix is in the message */
+const NAME_RULE = "Use letters, numbers, spaces, - or _"
+
+/**
+ * The product's Start from scratch card in one of its states, as
+ * features/new-project draws it: a title, then two labelled rows whose labels
+ * share a column from md and sit over their controls below it
+ */
+function ScratchCard({ name, placeholder, error, valid = false }: { name: string; placeholder?: string; error?: string; valid?: boolean }) {
+  return (
+    <div className="flex flex-col gap-4 rounded-2xl border border-border bg-surface-panel p-4 md:p-5">
+      <div className="min-w-0">
+        <div className="text-control font-act text-foreground">Start from scratch</div>
+        <div className="text-caption font-read text-muted-foreground">A working starter you shape with the assistant.</div>
+      </div>
+      <div className="grid gap-x-4 gap-y-3 md:grid-cols-[5.5rem_minmax(0,1fr)] md:items-start">
+        <span aria-hidden="true" className="text-caption text-muted-foreground md:leading-8">Framework</span>
+        <Segmented variant="gradient" defaultValue="anchor" aria-label="Framework" className="md:justify-self-start">
+          <SegmentedItem value="anchor">Anchor</SegmentedItem>
+          <SegmentedItem value="native">Native</SegmentedItem>
+          <SegmentedItem value="seahorse">Seahorse</SegmentedItem>
+        </Segmented>
+        <span aria-hidden="true" className="text-caption text-muted-foreground md:leading-8">Name</span>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <div className="flex gap-2">
+            <Input
+              aria-label="Project name"
+              aria-invalid={error ? true : undefined}
+              data-state={valid && !error ? "valid" : undefined}
+              defaultValue={name}
+              placeholder={placeholder}
+              className="min-w-0 flex-1 md:max-w-80"
+            />
+            <BrandButton variant="accent" className="h-8" disabled={!!error}>Start &rarr;</BrandButton>
+          </div>
+          {error && <FieldError>{error}</FieldError>}
+        </div>
+      </div>
+    </div>
+  )
+}

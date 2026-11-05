@@ -58,10 +58,12 @@ Functions to add:
 
 Telemetry: every control on the four screens that performs an action emits
 its own event, so a user's path through the flow can be rebuilt. Events added
-(the specs give the parameters); none is renamed or removed:
+(the specs give the parameters); none that shipped is renamed or removed:
 
 - Build: `build_started`, `build_succeeded`, `build_failed`,
-  `build_idl_downloaded`, `build_project_exported`, `build_fix_requested`.
+  `build_idl_downloaded`, `build_fix_requested`. (Build again on Build succeeded
+  is the Build control and emits `build_started`; Export project is a project
+  action in Settings and the explorer, not a Build screen control.)
 - Deploy: `deploy_started`, `deploy_succeeded`, `deploy_failed`,
   `deploy_paused`, `deploy_resumed`, `deploy_cancelled`,
   `deploy_buffer_close_answered`, `deploy_stale_warned`,

@@ -23,9 +23,9 @@ export interface BaseNewProjectProps {
   query: string;
   onQuery: (query: string) => void;
   /** The tutorials, drawn on the Tutorials tab */
-  tutorials: Omit<BaseTutorialGridProps, "query">;
+  tutorials: Omit<BaseTutorialGridProps, "query" | "onClear">;
   /** The programs' cards, drawn on the Programs tab */
-  grid: Omit<BaseCatalogGridProps, "label" | "query">;
+  grid: Omit<BaseCatalogGridProps, "label" | "query" | "onClear">;
 }
 
 const COUNT_TEXT: Record<"loading" | "failed", string> = {
@@ -96,9 +96,18 @@ const BaseNewProject = ({
     </div>
 
     {tab === "tutorials" ? (
-      <BaseTutorialGrid query={query} {...tutorials} />
+      <BaseTutorialGrid
+        query={query}
+        onClear={() => onQuery("")}
+        {...tutorials}
+      />
     ) : (
-      <BaseCatalogGrid label={tab} query={query} {...grid} />
+      <BaseCatalogGrid
+        label={tab}
+        query={query}
+        onClear={() => onQuery("")}
+        {...grid}
+      />
     )}
 
     {/* Sticks to the foot of the dialog's scroll area while the list runs

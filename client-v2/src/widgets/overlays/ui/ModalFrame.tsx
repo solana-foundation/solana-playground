@@ -66,12 +66,28 @@ export class SubmitCancelled extends Error {
   }
 }
 
-const UNKNOWN_ERROR = "Something went wrong";
+/**
+ * Spec 08's fallback (ANY-00, in its 29 Oct wording) for a submit that threw
+ * nothing to show: "Could not {action}.", never a generic error. The action is
+ * the submit's label without its closing punctuation, its first letter
+ * lower-cased ("Delete…" reads "delete") unless the label opens on an acronym;
+ * a label with nothing left of it reads "do that".
+ * A dialog has no log to point at, so it ends on the retry its button offers.
+ */
+const unknownError = (action: string) => {
+  const verb = action.replace(/[\s.…?!:]+$/u, "");
+  if (!verb) return "Could not do that. Try again.";
+  // An acronym or a name that opens the label ("API key", "SOL transfer") keeps its case
+  const what = /^[A-Z][a-z]/.test(verb)
+    ? verb.charAt(0).toLowerCase() + verb.slice(1)
+    : verb;
+  return `Could not ${what}. Try again.`;
+};
 
-/** The message to show for whatever a submit threw; never empty */
-const messageOf = (error: unknown) => {
+/** The message to show for whatever the `action` submit threw; never empty */
+const messageOf = (error: unknown, action: string) => {
   // TODO: carry failures as a Result (ok | err) so a non-Error never reaches here
-  if (typeof error === "string") return error || UNKNOWN_ERROR;
+  if (typeof error === "string") return error || unknownError(action);
   // An `Error`, or a plain `{ message }`
   if (
     typeof error === "object" &&
@@ -82,7 +98,7 @@ const messageOf = (error: unknown) => {
   ) {
     return error.message;
   }
-  return UNKNOWN_ERROR;
+  return unknownError(action);
 };
 
 /**
@@ -169,7 +185,7 @@ export const ModalFrame = ({
       // pattern of failing dialogs shows up
       log.error(e, { report: true, context: { name } });
       overlayTelemetry.track("overlay_modal_submit_failed", { name });
-      if (mounted.current) setError(messageOf(e));
+      if (mounted.current) setError(messageOf(e, buttonProps.text));
     } finally {
       submitting.current = false;
       if (mounted.current) setBusy(false);

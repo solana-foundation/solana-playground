@@ -8,9 +8,11 @@ import {
   projectRow,
   seedWorkspace,
   startAnotherProject,
+  startTutorialFromAbout,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { PHONE } from "./viewports";
 
 /**
  * The navigation's project list (HOO-2069), one test per scenario of the
@@ -69,7 +71,7 @@ test("client-v2-layout: Renaming in place", async ({ page }) => {
   // Monaco keeps alert regions of its own; the field's is in the navigation
   await expect(
     page.locator('[data-slot="sidebar"]').getByRole("alert")
-  ).toHaveText("A project named beta already exists.");
+  ).toHaveText("A project already has that name.");
 
   await field.fill("gamma");
   await field.press("Enter");
@@ -103,7 +105,7 @@ test("renames the open project in place", async ({ page }) => {
 test("the list is on a phone's menu page", async ({ page }) => {
   test.setTimeout(120_000);
   await twoProjects(page);
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(PHONE);
 
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(projectRow(page, "alpha")).toBeVisible();
@@ -165,7 +167,7 @@ test("client-v2-layout: Deleting from the list", async ({ page }) => {
   await menu.getByRole("menuitem", { name: "Delete alpha" }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: /^delete$/i })
+    .getByRole("button", { name: "Delete project" })
     .click();
 
   await expect(projectRow(page, "alpha")).toHaveCount(0, LONG);
@@ -207,7 +209,7 @@ test("client-v2-layout: A lesson's menu", async ({ seededPage: page }) => {
   await page.getByRole("button", { name: "Open Hello Anchor" }).click();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/, LONG);
   // A lesson is a workspace only once it is started
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await startTutorialFromAbout(page);
 
   // A started lesson is a row among the projects, as the prototype lists it
   const projects = page.getByRole("group", { name: "Projects" });

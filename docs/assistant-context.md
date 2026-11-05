@@ -170,17 +170,23 @@ Done:
   Flow is the only layout, a frame of four
   columns with no header. From the left: the navigation (Home, New project,
   Tutorials, Programs, the project list under them, and its session
-  footer: a cluster row, which opens the settings on the cluster, and an
+  footer: a status row of three indicators, each a dot and words (the
+  network, which opens the settings on the cluster; the AI, which opens
+  Connect a model; the Rust analyzer, which opens a short panel), and an
   account row whose menu holds sign-in, Settings (Cmd+,), Docs, the feedback
   entries and the wallet; Cmd+B folds it to a rail of icons, whose footer
-  keeps the cluster's status dot and an Account button that opens the same
-  menu), the
+  keeps the three status dots and an Account button that opens the same
+  menu; on a phone the three fold into one status chip in the top bar that
+  opens a sheet), the
   assistant, then the work area. Across the top of the work area runs the
-  stage bar, with the stepper (Write → Build → Deploy →
-  Interact, state derived from real build/deploy events); under it sit the
-  Files column (Cmd+E folds it; on a Mac not while the editor has focus,
-  where the editor takes the key; the column's own button always works)
-  and the stage, with the terminal in a console
+  stage bar (the project's name while the assistant is hidden, the
+  assistant's toggle, Docs); under it the stepper (Write → Build → Deploy →
+  Interact, state derived from real build/deploy events); under that the
+  editor head, with the open files' tabs on the left and two toggles on the
+  right, Files and Terminal; under the head sit the Files column (closed on
+  a first visit; Files in the head opens and closes it and always works,
+  Cmd+E too, on a Mac not while the editor has focus, where the editor takes
+  the key) and the stage, with the terminal in a console
   drawer under the stage (Cmd+J). The assistant is a resizable panel on
   screens 1024 px and wider and a side Sheet from 768 to 1023 px, where the
   navigation starts as a rail. Below 768 px the app is three swiped
@@ -199,8 +205,9 @@ Done:
   `/programs` links) open pages with a search field and cards, over the open
   project, which comes back as it was; opening a card opens the tutorial or
   imports the program. The New Workspace gallery (New project) starts a
-  project from scratch, 34 upstream programs or 16 tutorials. The cluster
-  row, the account menu's Settings or Cmd+, open Settings as a page of its
+  project from scratch, from one of 11 programs that build on the default
+  server, or from one of 16 tutorials. The cluster row, the account menu's
+  Settings or Cmd+, open Settings as a page of its
   own over the whole window: a list of sections (Network, Project, Block
   Explorer, Build, Connection, Editor, Notification, Server, Test UI, UI,
   Wallet, Experimental) built from the existing settings registry, and "Back

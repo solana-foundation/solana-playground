@@ -1,8 +1,8 @@
 import * as monaco from "monaco-editor";
 import { useEffect, useRef, useState } from "react";
-import styled, { useTheme } from "styled-components";
 
 import { editorFont } from "@/shared/lib/editor-font";
+import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
 
@@ -49,6 +49,29 @@ const resolveEditorColors = (colors: Record<string, string>) =>
     ])
   );
 
+/** Monaco's own scrollbar sizes, which the desktop keeps */
+const DESK_SCROLLBAR = {
+  verticalScrollbarSize: 14,
+  horizontalScrollbarSize: 10,
+  verticalSliderSize: 14,
+  horizontalSliderSize: 10,
+  useShadows: true,
+};
+
+/**
+ * iOS's: a 3 px slider centred in a 9 px track, so it sits 3 px in, shown
+ * only while the code moves (`auto` fades it out once it stops)
+ */
+const PHONE_SCROLLBAR = {
+  vertical: "auto" as const,
+  horizontal: "auto" as const,
+  verticalScrollbarSize: 9,
+  horizontalScrollbarSize: 9,
+  verticalSliderSize: 3,
+  horizontalSliderSize: 3,
+  useShadows: false,
+};
+
 const Monaco = () => {
   const [editor, setEditor] = useState<monaco.editor.IStandaloneCodeEditor>();
   const [isThemeSet, setIsThemeSet] = useState(false);
@@ -84,7 +107,7 @@ const Monaco = () => {
     });
   }, []);
 
-  const theme = useTheme();
+  const theme = usePgTheme();
 
   // Set theme
   useAsyncEffect(async () => {
@@ -213,7 +236,7 @@ const Monaco = () => {
         automaticLayout: true,
         fontLigatures: true,
         // Hovers and suggestions escape the stage panel that holds the
-        // editor, which clips the editor's own overflow at the tab row
+        // editor, which clips the editor's own overflow at its edges
         fixedOverflowWidgets: true,
       })
     );
@@ -224,7 +247,12 @@ const Monaco = () => {
     if (editor) return () => editor.dispose();
   }, [editor]);
 
-  // Set font: a step up on a phone (`editorFont`)
+  // Set font: a step up on a phone (`editorFont`). A phone has no minimap:
+  // at its width the map is unreadable, takes the code's room and draws a
+  // band beside the lines. Its scrollbar is the phone's own: a 3 px pill 3 px
+  // from the edge that shows while the code moves and fades when it stops
+  // (the pill's look is `.pg-monaco[data-phone]` in index.css), no shadow
+  // under the head and no overview ruler, whose border read as a stray line
   const phone = useViewport() === "phone";
   useEffect(() => {
     if (!editor) return;
@@ -232,6 +260,12 @@ const Monaco = () => {
     editor.updateOptions({
       fontFamily: theme.components.editor.default.fontFamily,
       ...editorFont({ phone }),
+      minimap: { enabled: !phone },
+      scrollbar: phone ? PHONE_SCROLLBAR : DESK_SCROLLBAR,
+      overviewRulerLanes: phone ? 0 : 3,
+      overviewRulerBorder: !phone,
+      hideCursorInOverviewRuler: phone,
+      smoothScrolling: phone,
     });
   }, [editor, theme, phone]);
 
@@ -377,8 +411,10 @@ const Monaco = () => {
 
       // An open the user did not start -- a late mount's, sync re-opening
       // the workspace -- leaves focus in a field they are typing in; the
-      // file opens, focus stays. One started from the explorer's tree
-      // (creating a file) still ends in the editor; see `leavesFocusElsewhere`.
+      // file opens, focus stays. So does any open while the editor is off the
+      // screen, since focus would scroll it back. One started from the
+      // explorer's tree (creating a file) still ends in the editor; see
+      // `leavesFocusElsewhere`.
       const open = isMountOpen ? "mount" : "later";
       if (
         leavesFocusElsewhere({
@@ -387,7 +423,7 @@ const Monaco = () => {
           tree: document.getElementById(PgView.ids.ROOT_DIR),
         })
       ) {
-        log.debug("Left focus in a field the user is typing in", {
+        log.debug("Left focus where it was", {
           context: { path: curFile.path, open },
         });
       } else {
@@ -828,20 +864,13 @@ const Monaco = () => {
 
   return (
     <SpinnerWithBg loading={!isThemeSet} size="2rem">
-      <Wrapper ref={monacoRef} />
+      <div
+        ref={monacoRef}
+        className="pg-monaco h-full w-full"
+        data-phone={phone || undefined}
+      />
     </SpinnerWithBg>
   );
 };
-
-const Wrapper = styled.div`
-  width: 100%;
-  height: 100%;
-
-  /** Inlay hints */
-  & span[class^="dyn-rule"],
-  span[class*=" dyn-rule"] {
-    font-size: 12px;
-  }
-`;
 
 export default Monaco;

@@ -42,6 +42,7 @@ const BaseCatalogPage = ({
     <BaseCatalogGrid
       label={label}
       query={query}
+      onClear={() => onQuery("")}
       list={list}
       busy={busy}
       onOpen={onOpen}

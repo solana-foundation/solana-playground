@@ -7,3 +7,7 @@ export {
   toToolCallRecordWith,
   type ToolCallRecord,
 } from "./model/tool-call";
+export { PgAccountList } from "./model/account-list";
+export type { AccountList } from "./model/account-list";
+export { onDidChangeSyncMarkers, syncMarkerOf } from "./model/sync-marker";
+export type { SyncMarker } from "./model/sync-marker";

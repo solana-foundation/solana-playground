@@ -10,10 +10,16 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { PHONE } from "./viewports";
 
-/** The navigation's item of this name, not Home's tile of the same words */
+/**
+ * The navigation's item of this name, not Home's tile of the same words, nor
+ * the empty project list's Open tutorials
+ */
 const navItem = (page: Page, name: string) =>
-  page.locator('[data-slot="sidebar"]').getByRole("button", { name });
+  page
+    .locator('[data-slot="sidebar"]')
+    .getByRole("button", { name, exact: true });
 
 const search = (page: Page, label: "tutorials" | "programs") =>
   page.getByRole("searchbox", { name: `Search ${label}` });
@@ -144,7 +150,7 @@ test("client-v2-layout: Searching tutorials", async ({ seededPage: page }) => {
   await navItem(page, "Tutorials").click();
   await search(page, "tutorials").pressSequentially("zzz");
 
-  await expect(page.getByText("No tutorials match “zzz”.")).toBeVisible();
+  await expect(page.getByText("No tutorials match “zzz”")).toBeVisible();
   await expect
     .poll(() => lineOf(lines, "catalog_searched"))
     .toContain("empty: true");
@@ -157,7 +163,7 @@ test("client-v2-layout: Searching tutorials", async ({ seededPage: page }) => {
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   test("client-v2-layout: The pages on a phone", async ({ page }) => {
     await page.goto("/");
@@ -167,7 +173,8 @@ test.describe("on a phone", () => {
     await work.getByRole("button", { name: "Menu" }).click();
     await page
       .getByRole("region", { name: "Navigation" })
-      .getByRole("button", { name: "Tutorials" })
+      // Exact: with no project the list offers Open tutorials too
+      .getByRole("button", { name: "Tutorials", exact: true })
       .click();
 
     await expect(work.getByTestId("phone-bar")).toContainText("Tutorials");

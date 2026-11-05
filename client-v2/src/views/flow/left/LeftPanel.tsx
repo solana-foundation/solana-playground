@@ -1,12 +1,11 @@
-import { PanelLeft } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import styled, { css } from "styled-components";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 
-import { PgExplorer } from "../../../utils";
+import { PgExplorer, PgView } from "../../../utils";
 import Explorer from "../../sidebar/explorer/Component";
 import { useCreateItem } from "../../sidebar/explorer/Component/useCreateItem";
 import { cursorStep, foldRecord, PgLesson } from "../lessons";
@@ -14,22 +13,26 @@ import StepRail from "../lessons/StepRail";
 import { BOTTOM_BAR_HEIGHT } from "../tokens";
 import { keepColumn, keptColumn, type Tab } from "./kept-column";
 
+// The editor's "Show files" asks for the tree, not just the column: in a
+// lesson the column would otherwise open on Steps. A hidden column is
+// unmounted, so the ask is written to its memory, which it opens from
+PgView.onDidRequestFiles(() => {
+  const workspace = PgExplorer.currentWorkspaceId;
+  if (!workspace) return;
+  const scrollTop = keptColumn(workspace)?.scrollTop ?? 0;
+  keepColumn({ workspace, tab: "files", scrollTop });
+});
+
 /** Narrows the Segmented's plain string to a tab */
 export const isLessonTab = (value: string): value is Tab =>
   value === "steps" || value === "files";
 
 interface LeftPanelProps {
   /**
-   * Hidden by the stage bar's toggle or ⌘E: the column takes no width
+   * Hidden by the editor head's Files or ⌘E: the column takes no width
    * (design.md, "Frame chrome (5.25)"), so it draws nothing
    */
   collapsed: boolean;
-  /**
-   * Hides the column, as ⌘E does; its button sits in the column's head, as
-   * the prototype draws it. Absent where nothing can hide the column (the
-   * phone's Files sheet has its own close).
-   */
-  onHide?: () => void;
   /**
    * The tab to open on, over the kept one. The phone's Files sheet opens
    * from the files row, so in a lesson it lands on Files, with Steps one
@@ -37,21 +40,6 @@ interface LeftPanelProps {
    */
   startOn?: Tab;
 }
-
-/** The head's way to hide the column */
-const HideButton = ({ onHide }: { onHide: () => void }) => (
-  <Button
-    type="button"
-    variant="ghost"
-    size="icon-sm"
-    aria-label="Hide files"
-    title="Hide files (⌘E)"
-    className="ml-auto text-muted-foreground"
-    onClick={onHide}
-  >
-    <PanelLeft />
-  </Button>
-);
 
 /**
  * Where you are inside the current project. Which project you are in is
@@ -61,7 +49,6 @@ const HideButton = ({ onHide }: { onHide: () => void }) => (
  */
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   collapsed,
-  onHide,
   startOn,
 }) => {
   // From the first commit, not from the subscription's first call: a commit
@@ -85,6 +72,8 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   useLayoutEffect(() => {
     kept.current.tab = tab;
   }, [tab]);
+  // An open column takes the same ask in place
+  useEffect(() => PgView.onDidRequestFiles(() => setTab("files")).dispose, []);
   const bodyRef = useRef<HTMLDivElement>(null);
   // A layout effect: the tree, a child, has reopened its folders by now
   // (`useHandleItemState`), so the scroll lands where it was rather than on
@@ -133,7 +122,13 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   if (collapsed) return null;
 
   return (
-    <Wrapper>
+    // A column of the flush frame like Center and Right (design.md, "Frame
+    // chrome (5.25)"): no card edges, the page's background. Width comes from
+    // the layout shell (`PANEL_SIZES.files`, or the phone's Files Sheet), so
+    // the panel fills whatever it is given. `h-full` is explicit: the resize
+    // wrapper it sits inside is a plain block, so without it the panel ends at
+    // its content and stops short of the editor beside it
+    <aside className="flex h-full w-full flex-col overflow-hidden bg-surface-base">
       <>
         {inLesson && (
           <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
@@ -151,20 +146,15 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
                 Files
               </SegmentedItem>
             </Segmented>
-            {onHide && <HideButton onHide={onHide} />}
           </div>
         )}
-        {/* The prototype's head: the column's name and a way to hide it */}
-        {!inLesson && (
-          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-            <span className="truncate text-[0.8125rem] font-medium text-muted-foreground">
-              Files
-            </span>
-            {onHide && <HideButton onHide={onHide} />}
-          </div>
-        )}
-        <Body
+        {/* Outside a lesson the tree starts at the column's top: the editor
+          head over it names the column with its Files toggle (DES-205) */}
+        <div
           ref={bodyRef}
+          // File names are never shortened, so a name wider than the panel
+          // scrolls here rather than being clipped
+          className="min-h-0 flex-1 overflow-auto"
           onScroll={(e) => {
             kept.current.scrollTop = e.currentTarget.scrollTop;
           }}
@@ -174,22 +164,24 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
             <StepRail state={lesson} />
           ) : (
             <>
-              <ExplorerContainer>
+              <div className={EXPLORER_CONTAINER}>
                 <Explorer />
-              </ExplorerContainer>
+              </div>
             </>
           )}
-        </Body>
+        </div>
         {/* Pinned below the rail for the same reason as the files footer:
               a way out that scrolls away is not a way out. */}
         {showSteps && frontierStep && (
           // The prototype's `SkipFooter`: a full-width row under the rail,
-          // underlined from the phone width up, plain and thumb-sized below
+          // underlined from the phone width up, plain and thumb-sized below.
+          // Only its top edge is a line: Button's own border on the other
+          // three doubled the column dividers and drew one under the foot
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 w-full shrink-0 rounded-none border-t border-border px-3.5 text-[0.8125rem] font-normal text-muted-foreground underline max-md:h-auto max-md:min-h-[calc(3.25rem+env(safe-area-inset-bottom,0px))] max-md:px-5 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:text-control max-md:font-act max-md:no-underline"
+            className="h-7 w-full shrink-0 rounded-none border-0 border-t border-border px-3.5 text-[0.8125rem] font-normal text-muted-foreground underline max-md:h-auto max-md:min-h-[calc(3.25rem+env(safe-area-inset-bottom,0px))] max-md:px-5 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:text-control max-md:font-act max-md:no-underline"
             title={`Nothing has proved this step yet — ${frontierStep.verifiedBy}. Moving on now is recorded as a skip, and clears itself if you come back and prove it.`}
             onClick={() => PgLesson.pass()}
           >
@@ -197,160 +189,97 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
           </Button>
         )}
         {!showSteps && (
-          <Footer type="button" onClick={createItem}>
+          // Quiet, full-width footer button pinned below the scrollable tree (a
+          // sibling of the body, not inside it, so it never scrolls away).
+          // Reuses `createItem` from `useCreateItem` -- the exact upstream
+          // create-item flow, not a re-implementation.
+          <button
+            type="button"
+            className="flex w-full shrink-0 cursor-pointer items-center border-t border-border bg-transparent px-3 text-left font-[inherit] text-[var(--text-secondary)] hover:bg-surface-base hover:text-[var(--text-primary)] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary"
+            style={{ height: BOTTOM_BAR_HEIGHT }}
+            onClick={createItem}
+          >
             + New file
-          </Footer>
+          </button>
         )}
       </>
-    </Wrapper>
+    </aside>
   );
 };
 
 export default LeftPanel;
 
-// A column of the flush frame like Center and Right (design.md, "Frame
-// chrome (5.25)"): no card edges, the page's background.
-// Width comes from the layout shell (`PANEL_SIZES.files`, or the phone's
-// Files Sheet), so the panel fills whatever it is given.
-const Wrapper = styled.aside`
-  ${({ theme }) => css`
-    width: 100%;
-    // Explicit rather than inherited: as a grid item this stretched on its
-    // own, but the resize wrapper it sits inside is a plain block, so
-    // without this the panel ends at its content and stops short of the
-    // editor beside it
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    background: ${theme.colors.default.bgPrimary};
-    overflow: hidden;
-  `}
-`;
-
-const Body = styled.div`
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  // File names are never shortened, so a name wider than the panel scrolls
-  // here rather than being clipped
-  overflow-x: auto;
-`;
-
-// Quiet, full-width footer button pinned below the scrollable tree (a
-// sibling of `Body`, not inside it, so it never scrolls away). Reuses
-// `createItem` from `useCreateItem` -- the exact upstream create-item flow,
-// not a re-implementation.
-const Footer = styled.button`
-  ${({ theme }) => css`
-    flex-shrink: 0;
-    width: 100%;
-    height: ${BOTTOM_BAR_HEIGHT};
-    padding: 0 0.75rem;
-    display: flex;
-    align-items: center;
-    border: none;
-    border-top: 1px solid ${theme.colors.default.border};
-    background: transparent;
-    color: ${theme.colors.default.textSecondary};
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    &:hover {
-      color: ${theme.colors.default.textPrimary};
-      background: ${theme.colors.default.bgPrimary};
-    }
-    &:focus-visible {
-      outline: 2px solid ${theme.colors.default.primary};
-      outline-offset: -2px;
-    }
-  `}
-`;
-
 /**
  * Quiets the upstream explorer down to the bare tree the board shows
  * (`src`, `client`, `tests` -- no workspace picker, no icon toolbar, no
  * per-section action buttons or labels): the stage bar's stepper already
- * owns Build/Deploy/Run/Test, and the footer `Footer` button above already
+ * owns Build/Deploy/Run/Test, and the footer button above already
  * owns "new file".
  *
  * Every rule here is structural (`nth-child`), anchored either on
  * `#root-dir` (`PgView.ids.ROOT_DIR`, a stable id upstream itself relies
  * on) or on this wrapper's own DOM position, because none of the elements
  * being hidden carry a stable `id`/`class` of their own -- their generated
- * styled-components class names are build-dependent, and
+ * class names are build-dependent, and
  * `SectionHeader`/`SectionButton` carry no `title`/`aria-label` that would
  * differ between "Build" and "Deploy" etc. Verified against the live DOM
  * (not just the source) via the running dev server.
+ *
+ * Each rule is an arbitrary variant with `!`: the explorer's own elements
+ * set their `display` with utilities of the same layer, and which of two
+ * utilities wins then depends on their order in the built sheet.
  */
-const ExplorerContainer = styled.div`
-  /* Workspaces row (project select + "Projects" label) and the icon
-   * toolbar (new file/folder, collapse, share, ...) are the 1st and 2nd
-   * children of Explorer's own root <div> -- true whether Explorer renders
-   * its normal tree or the "temporary project" warning in Workspaces's
-   * place (both are a single root <div>, so the position holds either
-   * way). Anchor: positional, scoped under this wrapper's single child
-   * (Explorer's own root). Failure mode: if the current project has *no*
-   * workspaces at all, Explorer renders a single-branch "create a
-   * project" empty state instead (a different component, not Workspaces +
-   * Folders) -- its own first two children (an intro line and a "Create a
-   * new project" button) would be hidden by the same rule. Flow only
-   * mounts once a project is open, so this state should not occur in
-   * practice, but it is a real gap if it ever does.
-   */
-  & > div > div:nth-child(1),
-  & > div > div:nth-child(2) {
-    display: none;
-  }
-
-  /* Program section (#root-dir's own first child): hides the "Program"
-   * label and the Build/Deploy buttons, keeps a lone "+" (add-program,
-   * shown only when the project has no \`src\` yet -- \`addProgram\`
-   * scaffolds a real \`lib.rs\`, which the footer's plain \`createItem\`
-   * does not, so it stays reachable). \`nth-child(2):nth-last-child(2)\`
-   * only matches the first of *two* button siblings (Build);
-   * \`nth-child(3)\` only exists when there is a second (Deploy); the lone
-   * "+" is \`nth-child(2)\` with no \`nth-child(3)\`, so neither matches it.
-   * Anchor: \`#root-dir\` (stable). Safe guard: \`:has(> button)\` ensures
-   * the selector only matches a section header row (which contains direct
-   * \`<button>\` children), never a folder/file row (no direct \`<button>\`
-   * children). Failure mode: none -- always safe.
-   */
-  #root-dir > div:has(> button):first-child > div:first-child,
-  #root-dir
-    > div:has(> button):first-child
-    > button:nth-child(2):nth-last-child(2),
-  #root-dir > div:has(> button):first-child > button:nth-child(3) {
-    display: none;
-  }
-
-  /* Client section ("Client" label + Run/Test, or their "Add client"/"Add
-   * tests" fallbacks): always exactly 2 buttons, so no lone-button case to
-   * preserve. Safe guard: \`:has(> button)\` ensures the selector only
-   * matches a section header row (which contains direct \`<button>\`
-   * children), never a folder/file row (no direct \`<button>\` children).
-   * Position: normally \`#root-dir > div:nth-child(3)\` when the Program
-   * row's own FolderGroup (the \`src\` tree) renders; shifts to
-   * \`nth-child(2)\` when no \`src\` exists. When \`src\` is absent, the
-   * Run/Test buttons (the "Add client"/"Add tests" fallbacks) simply stay
-   * VISIBLE, which is acceptable degradation -- the empty-state fallbacks
-   * are worth reaching. Folder rows are never matched because they contain
-   * no direct \`<button>\` children.
-   */
-  #root-dir > div:has(> button):nth-child(3) > div:first-child,
-  #root-dir > div:has(> button):nth-child(3) > button:nth-child(2),
-  #root-dir > div:has(> button):nth-child(3) > button:nth-child(3) {
-    display: none;
-  }
-
-  /* With their labels and buttons hidden, the section tops above are only
-   * their margins: 16 over Client and 4 under each, a blank 20 px between
-   * \`src\` and \`client\` and none between \`client\` and \`tests\`. The
-   * tree reads as one list, so they take none. The rule reaches every
-   * section, so a label that stays visible ("Other", or Client before \`src\`
-   * exists) sits right under the row above it.
-   */
-  #root-dir > div[data-section] {
-    margin-top: 0;
-    margin-bottom: 0;
-  }
-`;
+const EXPLORER_CONTAINER = cn(
+  // Workspaces row (project select + "Projects" label) and the icon
+  // toolbar (new file/folder, collapse, share, ...) are the 1st and 2nd
+  // children of Explorer's own root <div> -- true whether Explorer renders
+  // its normal tree or the "temporary project" warning in Workspaces's
+  // place (both are a single root <div>, so the position holds either
+  // way). Anchor: positional, scoped under this wrapper's single child
+  // (Explorer's own root). Failure mode: if the current project has *no*
+  // workspaces at all, Explorer renders a single-branch "create a
+  // project" empty state instead (a different component, not Workspaces +
+  // Folders) -- its own first two children (an intro line and a "Create a
+  // new project" button) would be hidden by the same rule. Flow only
+  // mounts once a project is open, so this state should not occur in
+  // practice, but it is a real gap if it ever does.
+  "[&>div>div:nth-child(1)]:hidden!",
+  "[&>div>div:nth-child(2)]:hidden!",
+  // Program section (#root-dir's own first child): hides the "Program"
+  // label and the Build/Deploy buttons, keeps a lone "+" (add-program,
+  // shown only when the project has no `src` yet -- `addProgram`
+  // scaffolds a real `lib.rs`, which the footer's plain `createItem`
+  // does not, so it stays reachable). `nth-child(2):nth-last-child(2)`
+  // only matches the first of *two* button siblings (Build);
+  // `nth-child(3)` only exists when there is a second (Deploy); the lone
+  // "+" is `nth-child(2)` with no `nth-child(3)`, so neither matches it.
+  // Anchor: `#root-dir` (stable). Safe guard: `:has(> button)` ensures
+  // the selector only matches a section header row (which contains direct
+  // `<button>` children), never a folder/file row (no direct `<button>`
+  // children). Failure mode: none -- always safe.
+  "[&_#root-dir>div:has(>button):first-child>div:first-child]:hidden!",
+  "[&_#root-dir>div:has(>button):first-child>button:nth-child(2):nth-last-child(2)]:hidden!",
+  "[&_#root-dir>div:has(>button):first-child>button:nth-child(3)]:hidden!",
+  // Client section ("Client" label + Run/Test, or their "Add client"/"Add
+  // tests" fallbacks): always exactly 2 buttons, so no lone-button case to
+  // preserve. Safe guard: `:has(> button)` ensures the selector only
+  // matches a section header row (which contains direct `<button>`
+  // children), never a folder/file row (no direct `<button>` children).
+  // Position: normally `#root-dir > div:nth-child(3)` when the Program
+  // row's own FolderGroup (the `src` tree) renders; shifts to
+  // `nth-child(2)` when no `src` exists. When `src` is absent, the
+  // Run/Test buttons (the "Add client"/"Add tests" fallbacks) simply stay
+  // VISIBLE, which is acceptable degradation -- the empty-state fallbacks
+  // are worth reaching. Folder rows are never matched because they contain
+  // no direct `<button>` children.
+  "[&_#root-dir>div:has(>button):nth-child(3)>div:first-child]:hidden!",
+  "[&_#root-dir>div:has(>button):nth-child(3)>button:nth-child(2)]:hidden!",
+  "[&_#root-dir>div:has(>button):nth-child(3)>button:nth-child(3)]:hidden!",
+  // With their labels and buttons hidden, the section tops above are only
+  // their margins: 16 over Client and 4 under each, a blank 20 px between
+  // `src` and `client` and none between `client` and `tests`. The tree reads
+  // as one list, so they take none. The rule reaches every section, so a
+  // label that stays visible ("Other", or Client before `src` exists) sits
+  // right under the row above it.
+  "[&_#root-dir>div[data-section]]:my-0!"
+);

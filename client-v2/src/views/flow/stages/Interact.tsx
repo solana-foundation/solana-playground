@@ -99,7 +99,8 @@ const Interact = () => {
       ]
         .filter(Boolean)
         .join(" \u00b7 ")
-    : "no deployments yet";
+    : // The picker already says None yet, and the stage what is missing
+      "";
 
   return (
     <BaseInteract

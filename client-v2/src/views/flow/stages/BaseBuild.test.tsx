@@ -37,19 +37,24 @@ const failed = (diagnostics: DiagnosticView[]): BuildSurfaceView => ({
 const props = (
   surface: BuildSurfaceView,
   building = false,
-  slow = false
+  slow = false,
+  elapsedMs?: number,
+  offline = false
 ): BaseBuildProps => ({
   surface,
   building,
   slow,
+  elapsedMs,
+  offline,
   host: "api.solpg.io",
   serverUrl: "https://api.solpg.io",
   ms: 2900,
   onBuild: vi.fn(() => Promise.resolve()),
   onContinue: vi.fn(),
-  onExport: vi.fn(() => Promise.resolve()),
+  hasIdl: false,
   onAsk: vi.fn(),
   onOpenFile: vi.fn(),
+  onShowLog: vi.fn(),
   idlActions: null,
 });
 
@@ -71,6 +76,12 @@ describe("BaseBuild", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing built yet" })
     ).toBeTruthy();
+    // Spec 08 EMPTY-02
+    expect(
+      screen.getByText(
+        "Build compiles your program on the server. Only the source leaves your browser."
+      )
+    ).toBeTruthy();
     // Async: Build is an AsyncButton, which settles once `onBuild` resolves
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Build" }));
@@ -83,14 +94,60 @@ describe("BaseBuild", () => {
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
-  it("says where a first build runs while it runs", () => {
-    render(<BaseBuild {...props({ kind: "empty" }, true)} />);
+  it("says a first build runs on the build server, with a bar in place of the button", () => {
+    const { container } = render(
+      <BaseBuild {...props({ kind: "empty" }, true)} />
+    );
 
     expect(screen.getByRole("heading", { name: "Building…" })).toBeTruthy();
-    expect(screen.getByText(/Compiling on api\.solpg\.io/)).toBeTruthy();
-    const busy = screen.getByRole("button", { name: /Building/ });
-    expect(busy).toHaveProperty("disabled", true);
-    expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByText(/^Compiling on the build server\./)).toBeTruthy();
+    expect(screen.queryByText(/api\.solpg\.io/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Building/ })).toBeNull();
+    expect(
+      container.querySelector('[data-slot="stage-empty-progress"]')
+    ).not.toBeNull();
+  });
+
+  it.each([
+    [59_999, false],
+    [60_000, true],
+  ])("at %i ms the slow line shows: %s", (elapsedMs, shown) => {
+    render(<BaseBuild {...props({ kind: "empty" }, true, false, elapsedMs)} />);
+
+    expect(
+      screen.queryByText(/First builds take longer\. This one is running\./) !==
+        null
+    ).toBe(shown);
+  });
+
+  it("counts the seconds of a first build, under a minute without the slow line", () => {
+    render(<BaseBuild {...props({ kind: "empty" }, true, false, 12_400)} />);
+
+    expect(screen.getByText("12 s")).toBeTruthy();
+    expect(screen.getByText(/^Compiling on the build server\./)).toBeTruthy();
+    expect(
+      screen.queryByText(/First builds take longer\. This one is running\./)
+    ).toBeNull();
+  });
+
+  it("adds that a first build past a minute is still running", () => {
+    render(<BaseBuild {...props({ kind: "empty" }, true, false, 61_000)} />);
+
+    expect(screen.getByRole("heading", { name: "Building…" })).toBeTruthy();
+    expect(screen.getByText("61 s")).toBeTruthy();
+    expect(screen.getByText(/^Compiling on the build server\./)).toBeTruthy();
+    expect(
+      screen.getByText(/First builds take longer\. This one is running\./)
+    ).toBeTruthy();
+  });
+
+  it("gives a slow first build Spec 06's line only, never Spec 08's too", () => {
+    render(<BaseBuild {...props({ kind: "empty" }, true, true, 61_000)} />);
+
+    expect(
+      screen.getByText(/First builds take longer\. This one is running\./)
+    ).toBeTruthy();
+    expect(screen.queryByText(/taking longer than usual/)).toBeNull();
   });
 
   it("offers Deploy as the one brand button after a build", () => {
@@ -101,11 +158,58 @@ describe("BaseBuild", () => {
       screen.getByRole("heading", { name: "Build succeeded" })
     ).toBeTruthy();
     expect(screen.getByText("Built in 2.9 s")).toBeTruthy();
+    // Only a build that never ran announces itself
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(brandButtons(container)).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Continue to Deploy" }));
     expect(p.onContinue).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Export project" })).toBeTruthy();
+    // A project action, in Settings and the explorer, not a build result
+    expect(screen.queryByRole("button", { name: "Export project" })).toBeNull();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  // An edit after a build needs a new build, without the assistant or a command
+  it("offers Build again as the outlined pill beside Deploy", () => {
+    const p = props({ kind: "succeeded" });
+    render(<BaseBuild {...p} />);
+
+    const again = screen.getByRole("button", { name: "Build again" });
+    expect(again.getAttribute("data-variant")).toBe("outline");
+    fireEvent.click(again);
+    expect(p.onBuild).toHaveBeenCalled();
+  });
+
+  // Nothing is below to point at, and the app cannot tell an edit
+  it.each([
+    [
+      true,
+      "The program and its IDL are ready to deploy. Edited since? Build again first.",
+    ],
+    [false, "The program is ready to deploy. Edited since? Build again first."],
+  ])(
+    "names the IDL in the success line only when there is one (%s)",
+    (hasIdl, line) => {
+      const p = props({ kind: "succeeded" });
+      p.hasIdl = hasIdl;
+      render(<BaseBuild {...p} />);
+
+      expect(screen.getByText(line)).toBeTruthy();
+    }
+  );
+
+  // Without an IDL the take-away row would be an empty gap under the pills
+  it.each([
+    [true, 1],
+    [false, 0],
+  ])("draws the IDL row only when there is an IDL (%s)", (hasIdl, rows) => {
+    const p = props({ kind: "succeeded" });
+    p.hasIdl = hasIdl;
+    p.idlActions = <a href="#idl">Download IDL</a>;
+    render(<BaseBuild {...p} />);
+
+    expect(
+      screen.queryAllByRole("link", { name: "Download IDL" })
+    ).toHaveLength(rows);
   });
 
   it("says a build that never reached the compiler did not start (BUILD-04)", async () => {
@@ -142,15 +246,125 @@ describe("BaseBuild", () => {
       kind: "unreached",
       failure: { kind: "other", message: "Server request failed: boom" },
     });
-    render(<BaseBuild {...p} />);
+    const { container } = render(<BaseBuild {...p} />);
 
     expect(
       screen.getByRole("heading", { name: "Could not build" })
     ).toBeTruthy();
+    // Spec 08 ANY-00: what happened, then where the details are
     expect(screen.getByText("The full log has the details.")).toBeTruthy();
     expect(screen.queryByText(/did not answer/)).toBeNull();
+    // The whole output is in the terminal: Spec 08 ANY-00's secondary
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show full log" }));
+    expect(p.onShowLog).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  /** The red icon says it failed; the reason reads as any other description */
+  it.each([
+    ["ANY-00", { kind: "other", message: "boom" }],
+    ["BUILD-04", { kind: "no-answer", message: "Failed to fetch" }],
+  ] as const)(
+    "gives a build that never ran (%s) its reason as the description, with no duration",
+    (_, failure) => {
+      const { container } = render(
+        <BaseBuild {...props({ kind: "unreached", failure })} />
+      );
+
+      expect(container.querySelector('[data-slot="callout"]')).toBeNull();
+      expect(
+        container.querySelector('[data-slot="stage-empty-description"]')
+      ).toBeTruthy();
+      expect(
+        container.querySelector('[data-slot="stage-empty-meta"]')
+      ).toBeNull();
+      expect(screen.queryByText(/2\.9 s/)).toBeNull();
+    }
+  );
+
+  // Spec 08: the reason was an error callout's, announced as an alert; out
+  // of the callout it is still announced, with the description's look
+  it.each([
+    ["ANY-00", { kind: "other", message: "boom" }],
+    ["BUILD-04", { kind: "no-answer", message: "Failed to fetch" }],
+  ] as const)(
+    "announces the reason of a build that never ran (%s)",
+    (_, failure) => {
+      render(<BaseBuild {...props({ kind: "unreached", failure })} />);
+
+      const alert = screen.getByRole("alert");
+      expect(alert.getAttribute("data-slot")).toBe("stage-empty-description");
+      expect(alert.textContent).toMatch(
+        /did not answer|full log has the details/
+      );
+    }
+  );
+
+  /** Try again is the surface's main action, the same pill as Continue to Deploy */
+  it("offers Try again as the brand pill, the full log a link under it", async () => {
+    const p = props({
+      kind: "unreached",
+      failure: { kind: "other", message: "boom" },
+    });
+    const { container } = render(<BaseBuild {...p} />);
+
+    const brand = brandButtons(container);
+    expect(brand).toHaveLength(1);
+    expect(brand[0].textContent).toBe("Try again");
+    expect(brand[0].getAttribute("data-variant")).toBe("ring");
+    expect(brand[0].getAttribute("data-size")).toBe("default");
+    expect(
+      screen
+        .getByRole("button", { name: "Show full log" })
+        .getAttribute("data-variant")
+    ).toBe("link");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    });
+    expect(p.onBuild).toHaveBeenCalled();
+  });
+
+  it("keeps BUILD-04 on its details, with no full log", () => {
+    render(
+      <BaseBuild
+        {...props({
+          kind: "unreached",
+          failure: { kind: "no-answer", message: "Failed to fetch" },
+        })}
+      />
+    );
+    expect(
+      screen.getByRole("heading", { name: "Build did not start" })
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show full log" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show details" }));
-    expect(screen.getByText(/Server request failed: boom/)).toBeTruthy();
+    expect(
+      screen.getByText(/Build server: https:\/\/api\.solpg\.io/)
+    ).toBeTruthy();
+  });
+
+  // Spec 08 ERR-23: offline, Build waits; the line over the stage says why
+  it.each([
+    ["the first build", { kind: "empty" }, "Build"],
+    [
+      "a failed one",
+      { kind: "unreached", failure: { kind: "other", message: "x" } },
+      "Try again",
+    ],
+    ["a compiler failure", "failed", "Try again"],
+    ["one from before the reload", { kind: "restored", failed: true }, "Build"],
+  ] as const)("disables Build offline, on %s", (_, surface, label) => {
+    const view =
+      surface === "failed"
+        ? failed([typeError("a", null)])
+        : (surface as BuildSurfaceView);
+    render(<BaseBuild {...props(view, false, false, undefined, true)} />);
+    expect(
+      (screen.getByRole("button", { name: label }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
   });
 
   it("says a failed build happened before the reload", () => {
@@ -330,19 +544,22 @@ describe("BaseBuild", () => {
     expect(screen.queryByText(/The assistant is answering/)).toBeNull();
   });
 
-  // Spec 08 BUILD-05: a slow build is not a broken one
-  it.each([
-    ["the first build", { kind: "empty" } as BuildSurfaceView],
-    ["a rebuild", { kind: "succeeded" } as BuildSurfaceView],
-  ])("says %s is taking longer than usual once it is slow", (_, surface) => {
-    const { rerender } = render(<BaseBuild {...props(surface, true)} />);
-    expect(screen.queryByText(/taking longer than usual/)).toBeNull();
+  // Spec 08 BUILD-05: a slow build is not a broken one. A first build has
+  // Spec 06's line instead (the test above)
+  it.each([["a rebuild", { kind: "succeeded" } as BuildSurfaceView]])(
+    "says %s is taking longer than usual once it is slow",
+    (_, surface) => {
+      const { rerender } = render(<BaseBuild {...props(surface, true)} />);
+      expect(screen.queryByText(/taking longer than usual/)).toBeNull();
 
-    rerender(<BaseBuild {...props(surface, true, true)} />);
-    expect(
-      screen.getByText("This build is taking longer than usual.")
-    ).toBeTruthy();
-  });
+      rerender(<BaseBuild {...props(surface, true, true)} />);
+      expect(
+        screen.getByText(
+          "This build is taking longer than usual. The server may be busy. It keeps running."
+        )
+      ).toBeTruthy();
+    }
+  );
 
   it("drops the slow line once the build is over", () => {
     render(<BaseBuild {...props({ kind: "succeeded" }, false, true)} />);

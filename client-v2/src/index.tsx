@@ -3,13 +3,11 @@ import "./index.css";
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-import App, { applyFavicon } from "./app";
+import App, { CrashFallback } from "./app";
 import { observabilityEnv } from "./shared/config/client-env";
 import { Observability } from "./widgets/observability";
 
 const env = observabilityEnv();
-
-applyFavicon();
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
@@ -20,7 +18,7 @@ createRoot(document.getElementById("root")!).render(
         environment: env.VERCEL_ENV,
       }}
       googleAnalytics={{ measurementId: env.GA_MEASUREMENT_ID }}
-      fallback={<p role="alert">Something went wrong. Reload the page.</p>}
+      fallback={<CrashFallback />}
     >
       <App />
     </Observability>

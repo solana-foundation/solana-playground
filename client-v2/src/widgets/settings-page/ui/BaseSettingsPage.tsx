@@ -97,7 +97,7 @@ const BaseSettingsPage = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order, phone]);
 
-  // On open only: the checked network for the cluster row, the rail's dot and
+  // On open only: the checked network for the network indicator, the rail's dot and
   // the account menu's cluster warning (the first one when the endpoint is one no chip lists, such as a custom
   // URL), the heading otherwise
   useEffect(() => {

@@ -280,20 +280,54 @@ it("should send overlay_modal_opened once under StrictMode", () => {
   expect(events("overlay_modal_opened")).toEqual([{ name: "rename-item" }]);
 });
 
-it("should show a message for an Error without one", async () => {
+// Spec 08, ANY-00: name the action that stopped, never a generic error
+it.each([
+  ["an Error without a message", new Error()],
+  ["an empty string", ""],
+  ["a value that is not an error", 42],
+  ["a bare object with an empty message", { message: "" }],
+])("should name the action that stopped for %s", async (_, thrown) => {
   renderFrame({
     title: "Rename",
     buttonProps: {
       text: "Rename",
       onSubmit: async () => {
-        throw new Error();
+        throw thrown;
       },
     },
   });
 
   await submit("Rename");
 
-  expect(screen.getByRole("alert").textContent).toBe("Something went wrong");
+  expect(screen.getByRole("alert").textContent).toBe(
+    "Could not rename. Try again."
+  );
+});
+
+it.each([
+  ["Delete…", "delete"],
+  ["Save...", "save"],
+  ["Remove?", "remove"],
+  ["Delete project…", "delete project"],
+  ["Sign in with GitHub", "sign in with GitHub"],
+  ["API key", "API key"],
+  ["…", "do that"],
+])("should name the action of the label %s as %s", async (label, action) => {
+  renderFrame({
+    title: "Delete",
+    buttonProps: {
+      text: label,
+      onSubmit: async () => {
+        throw new Error();
+      },
+    },
+  });
+
+  await submit(label);
+
+  expect(screen.getByRole("alert").textContent).toBe(
+    `Could not ${action}. Try again.`
+  );
 });
 
 it("should stay open and quiet when the user cancels the submit", async () => {

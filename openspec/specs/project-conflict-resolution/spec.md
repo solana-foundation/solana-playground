@@ -277,3 +277,18 @@ phone layout.
 - **WHEN** a reviewer opens the catalogue's Merge block
 - **THEN** it shows the three panes, a fold, the ribbons and each hunk state
   in the design system's dark and light palettes, and the phone layout
+
+### Requirement: The banner's answers sit under its question
+
+The sync banner SHALL show its message first and its buttons ("Resolve…" when
+offered, and the answers) in a row under it (`data-slot="callout-actions"`),
+never beside it. Below 768 px the buttons SHALL be 44 px tall and wrap in that
+row. They are filled in the warning's tone, with no edge of their own, and the
+first is the answer the banner expects.
+
+#### Scenario: The banner on a phone
+
+- **WHEN** a divergent conflict that names its files shows the banner on a
+  390 px wide screen
+- **THEN** "Resolve…", "Keep this version" and "Take the other version" sit
+  under the message, wrapping in a row, each 44 px tall

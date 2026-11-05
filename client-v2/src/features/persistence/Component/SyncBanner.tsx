@@ -6,6 +6,7 @@ import { AsyncButton } from "@/shared/ui/async-button";
 import {
   Callout,
   CalloutAction,
+  CalloutActions,
   CalloutDescription,
 } from "@/shared/ui/callout";
 
@@ -195,10 +196,10 @@ const SyncBanner = () => {
     return (
       <Callout variant="warning">
         <TriangleAlertIcon />
-        {/* Message left, buttons right; the buttons drop below when it gets
-            narrow. Full opacity: the message is the point of the banner */}
-        <CalloutDescription className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 opacity-100">
-          <p className="m-0 flex-[1_1_20rem] text-foreground wrap-anywhere">
+        {/* The question, then its answers under it (the kit's CalloutActions).
+            Full opacity: the message is the point of the banner */}
+        <CalloutDescription className="min-w-0 opacity-100">
+          <p className="m-0 text-foreground wrap-anywhere">
             {named && at >= 0 ? (
               <>
                 {message.slice(0, at)}
@@ -211,30 +212,30 @@ const SyncBanner = () => {
               message
             )}
           </p>
-          <div className="flex flex-wrap gap-2">
-            {resolvable && (
-              <CalloutAction
-                disabled={busy || !!resolving}
-                onClick={() => setResolving(shown.projectId)}
-              >
-                Resolve…
-              </CalloutAction>
-            )}
-            {prompt.actions.map((action) => (
-              <CalloutAction key={action.resolution} asChild>
-                <AsyncButton
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => answer(action.resolution)}
-                  onError={reportButtonFailure("apply your choice")}
-                >
-                  {action.label}
-                </AsyncButton>
-              </CalloutAction>
-            ))}
-          </div>
         </CalloutDescription>
+        <CalloutActions>
+          {resolvable && (
+            <CalloutAction
+              disabled={busy || !!resolving}
+              onClick={() => setResolving(shown.projectId)}
+            >
+              Resolve…
+            </CalloutAction>
+          )}
+          {prompt.actions.map((action) => (
+            <CalloutAction key={action.resolution} asChild>
+              <AsyncButton
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                onClick={() => answer(action.resolution)}
+                onError={reportButtonFailure("apply your choice")}
+              >
+                {action.label}
+              </AsyncButton>
+            </CalloutAction>
+          ))}
+        </CalloutActions>
       </Callout>
     );
   };

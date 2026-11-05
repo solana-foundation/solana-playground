@@ -42,10 +42,11 @@ const app = vi.hoisted(() => {
     return { dispose: () => listeners.delete(cb) };
   };
   const state = {
-    names: [] as string[],
+    names: [] as string[] | undefined,
     ids: {} as Record<string, string>,
-    current: null as string | null,
+    current: undefined as string | undefined,
     lessons: [] as string[],
+    temporary: false,
   };
   return {
     state,
@@ -53,6 +54,9 @@ const app = vi.hoisted(() => {
     PgExplorer: {
       get allWorkspaceNames() {
         return state.names;
+      },
+      get isTemporary() {
+        return state.temporary;
       },
       get currentWorkspaceName() {
         return state.current;
@@ -99,6 +103,22 @@ vi.mock("../model/workspace-files", async (importOriginal) => ({
 }));
 
 import { requireFor } from "@/test-utils/require-for";
+// The markers' reading is `use-sync-markers.test.tsx`'s; here, only where
+// they land
+const syncMarkers = vi.hoisted(() => ({
+  current: new Map<string, "this-browser" | "not-synced">(),
+}));
+vi.mock("./use-sync-markers", () => ({
+  useSyncMarkers: () => syncMarkers.current,
+}));
+
+// Each tutorial's progress, by name; its reading is
+// `use-tutorial-progress.test.tsx`'s, here only where it lands
+const progress = vi.hoisted(() => new Map<string, unknown>());
+vi.mock("@/entities/tutorial", () => ({
+  useTutorialProgress: () => (name: string) =>
+    progress.get(name) ?? { state: "new" },
+}));
 
 import { PINS_KEY } from "../model/pins";
 import ProjectList from "./ProjectList";
@@ -127,6 +147,7 @@ beforeEach(() => {
   app.state.ids = { alpha: "id-a", beta: "id-b", "Hello Anchor": "id-h" };
   app.state.current = "beta";
   app.state.lessons = ["Hello Anchor"];
+  app.state.temporary = false;
   vi.clearAllMocks();
   app.PgExplorer.renameWorkspace.mockResolvedValue(undefined);
   app.PgExplorer.createWorkspace.mockResolvedValue(undefined);
@@ -139,9 +160,11 @@ beforeEach(() => {
   initLogger({ providers: [logged] });
 });
 afterEach(() => {
+  progress.clear();
   localStorage.clear();
   resetTelemetry();
   resetLogger();
+  syncMarkers.current = new Map();
 });
 
 const onPickCurrent = vi.fn();
@@ -176,6 +199,80 @@ const toasts = () =>
   );
 
 describe("ProjectList", () => {
+  it("puts each workspace's sync marker on its own row, by name", () => {
+    syncMarkers.current = new Map([["alpha", "this-browser"]]);
+    draw();
+    const projects = screen.getByRole("group", { name: "Projects" });
+    const describedBy = (name: string) =>
+      within(projects)
+        .getByRole("button", { name })
+        .getAttribute("aria-describedby");
+    expect(
+      document.getElementById(describedBy("alpha") ?? "")?.textContent
+    ).toBe("This browser");
+    expect(describedBy("beta")).toBeNull();
+  });
+
+  it("shows no skeleton rows once the names are read and there are none", () => {
+    app.state.names = [];
+    draw();
+    expect(
+      document.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(0);
+  });
+
+  it("shows no skeleton rows in a preview, which has no workspaces to read", () => {
+    app.state.names = undefined;
+    app.state.temporary = true;
+    draw();
+    expect(
+      document.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(0);
+  });
+
+  it("offers the ways in once the explorer holds no project", () => {
+    app.state.names = [];
+    render(
+      <TooltipProvider>
+        <SidebarProvider>
+          <ProjectList
+            empty={{ onStartProject: vi.fn(), onOpenTutorials: vi.fn() }}
+          />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+    expect(screen.getByText("No projects")).toBeTruthy();
+  });
+
+  it("says nothing of projects in a preview, which has none of its own", () => {
+    app.state.names = [];
+    app.state.temporary = true;
+    render(
+      <TooltipProvider>
+        <SidebarProvider>
+          <ProjectList
+            empty={{ onStartProject: vi.fn(), onOpenTutorials: vi.fn() }}
+          />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+    expect(screen.queryByText("No projects")).toBeNull();
+  });
+
+  it("shows skeleton rows until the explorer has read the names", () => {
+    app.state.names = undefined;
+    draw();
+    expect(
+      document.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(3);
+    app.state.names = ["alpha"];
+    act(() => app.emit());
+    expect(
+      document.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "alpha" })).toBeTruthy();
+  });
+
   it("pins by key, keeps the pin by id, and lists the pinned first", () => {
     draw();
     expect(projectNames()).toEqual(["alpha", "beta"]);
@@ -223,9 +320,9 @@ describe("ProjectList", () => {
   });
 
   it.each([
-    ["beta", "A project named beta already exists."],
-    ["bad/name", "Use letters, digits, spaces, - and _."],
-    ["   ", "Use letters, digits, spaces, - and _."],
+    ["beta", "A project already has that name."],
+    ["bad/name", "Use letters, numbers, spaces, - or _."],
+    ["   ", "Use letters, numbers, spaces, - or _."],
   ])("keeps the field open for %j and says why", (value, message) => {
     draw();
     fireEvent.keyDown(menuOf("alpha"), { key: "r" });
@@ -281,6 +378,14 @@ describe("ProjectList", () => {
       "alpha",
       app.PgExplorer.fs
     );
+  });
+
+  it("shows a started lesson's page on its row, and none on a project's", () => {
+    progress.set("Hello Anchor", { state: "started", page: 3, pages: 5 });
+    progress.set("alpha", { state: "completed" });
+    draw();
+    expect(screen.getByText("3 of 5")).toBeTruthy();
+    expect(document.querySelectorAll("[data-lesson-progress]")).toHaveLength(1);
   });
 
   it("opens a project by switching, a lesson through the tutorial", async () => {
@@ -398,7 +503,7 @@ describe("ProjectList", () => {
 
   it.each([
     ["Workspace not found", "alpha is no longer in your projects."],
-    ["Already exists", "A project named gamma already exists."],
+    ["Already exists", "A project already has that name."],
   ])(
     "says in the field, unreported, why a rename was refused: %s",
     async (refusal, message) => {

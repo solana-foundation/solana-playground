@@ -78,13 +78,35 @@ it("starts on Enter in the name field", () => {
   expect(on.onStart).toHaveBeenCalledTimes(1);
 });
 
-it("shows an error under the field", () => {
+it("shows an error under the field, describing it", () => {
   draw({ start: { state: "invalid", error: "Invalid project name" } });
 
-  expect(screen.getByRole("alert").textContent).toBe("Invalid project name");
+  const alert = screen.getByRole("alert");
+  const field = screen.getByLabelText("Project name");
+  expect(alert.textContent).toBe("Invalid project name");
+  expect(field.getAttribute("aria-invalid")).toBe("true");
+  expect(field.getAttribute("aria-describedby")).toBe(alert.id);
+  // Under: the message follows the field, so showing it moves nothing before it
   expect(
-    screen.getByLabelText("Project name").getAttribute("aria-invalid")
-  ).toBe("true");
+    alert.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_PRECEDING
+  ).toBeTruthy();
+});
+
+it("gives a well-formed name that Start refused the invalid edge only", () => {
+  draw({
+    name: "my-project",
+    start: { state: "failed", error: "A project named my-project exists" },
+  });
+
+  const field = screen.getByLabelText("Project name");
+  expect(field.getAttribute("aria-invalid")).toBe("true");
+});
+
+it("gives an empty name neither edge", () => {
+  draw();
+
+  const field = screen.getByLabelText("Project name");
+  expect(field.getAttribute("aria-invalid")).toBeNull();
 });
 
 it("keeps Start usable after a failed start, for a retry", () => {

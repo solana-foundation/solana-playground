@@ -7,17 +7,20 @@ import { Slot } from "radix-ui"
    of Solana's two colours that fills with them on hover. Its label takes the
    theme's text colour at rest (the fill is the surface, light in the light
    theme) and white over the gradient. accent is the flat purple, for where
-   the ring would be too loud. */
+   the ring would be too loud; in dark it carries a lighter inset edge
+   (--primary-edge), as the fill alone is under 3:1 on raised surfaces. A label alone sits in even padding; the
+   trailing mark (BrandButtonIcon) brings its own air, so the right side
+   gives up 4 px only when it is there. */
 const brandButtonVariants = cva(
   "group/brand-button inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap outline-none select-none transition-[transform,filter,opacity] duration-200 ease-[cubic-bezier(0.22,0.61,0.36,1)] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         ring: "rounded-full brand-action text-foreground [--stroke-fill:var(--surface-hover)] hover:not-disabled:-translate-y-px hover:not-disabled:text-white active:not-disabled:text-white",
-        accent: "rounded-lg bg-primary text-white font-act hover:brightness-[1.12]",
+        accent: "rounded-lg bg-primary text-white font-act hover:brightness-[1.12] dark:not-disabled:not-aria-disabled:inset-ring dark:inset-ring-primary-edge",
       },
       size: {
-        default: "h-10 pr-4 pl-5 font-heading text-[0.9375rem] [&_svg:not([class*='size-'])]:size-[1.15em]",
+        default: "h-10 px-5 has-data-[slot=brand-button-icon]:pr-4 font-heading text-[0.9375rem] [&_svg:not([class*='size-'])]:size-[1.15em]",
         sm: "h-[1.625rem] px-3 text-xs [&_svg:not([class*='size-'])]:size-3.5",
         icon: "size-8 [&_svg:not([class*='size-'])]:size-4",
       },

@@ -27,10 +27,10 @@ export const STAGE_REPORT =
 
 /**
  * The action row, on `StageEmptyActions`: below `md` it is pushed to the
- * stage's foot, and its buttons are a fingertip tall (48 px) in the phone's
- * 16 px type, as the prototype's phone pill. Its fade is left to the part,
+ * stage's foot, and its buttons and links (a `Button asChild` is an `a`) are
+ * a fingertip tall (48 px) in the phone's 16 px type, as the prototype's phone pill. Its fade is left to the part,
  * which starts it from `--background`, the colour the stage column shows
  * below `md`.
  */
 export const STAGE_FOOT =
-  "max-md:mt-auto max-md:[&_button]:h-12 max-md:[&_button]:text-base";
+  "max-md:mt-auto max-md:[&_a]:h-12 max-md:[&_a]:text-base max-md:[&_button]:h-12 max-md:[&_button]:text-base";

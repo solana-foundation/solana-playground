@@ -31,6 +31,21 @@ export const startProject = async (page: Page, name: string, timeout = {}) => {
   await expect(home(page)).toBeHidden(timeout);
 };
 
+/** The editor head's Files toggle (client-v2-editor-head) */
+export const filesToggle = (page: Page) => page.locator("#editor-head-files");
+
+/**
+ * The About page's Start, which begins a tutorial. The page draws it only once
+ * the tutorial's lazy chunk loads, which a cold dev server compiles in more
+ * than an action's 10 s: the wait names the button if it never comes. `exact`
+ * keeps it off Connect a model's own Start.
+ */
+export const startTutorialFromAbout = async (page: Page) => {
+  const start = page.getByRole("button", { name: "Start", exact: true });
+  await expect(start).toBeVisible(LONG);
+  await start.click();
+};
+
 /**
  * A browser with one project already created.
  *
@@ -46,8 +61,32 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
   await startProject(page, name);
 
   // `PgExplorer.createWorkspace` hands the work over, then the explorer
-  // re-initializes -- wait for the tree, not just Home going away.
-  await expect(page.locator("#root-dir")).toBeVisible();
+  // re-initializes -- wait for the work, not just Home going away: its
+  // editor head, and the tree when the layout has it open. A spec that
+  // clears the tree-open seed (playwright.config's `storageState`) gets a
+  // closed tree, which `openFiles` opens.
+  const toggle = filesToggle(page);
+  await expect(toggle).toBeVisible();
+  if ((await toggle.getAttribute("aria-pressed")) === "true") {
+    await expect(page.locator("#root-dir")).toBeVisible();
+  }
+};
+
+/**
+ * The console bar's own "Terminal" button; the editor head's toggle has the
+ * same name (`#editor-head-terminal`), so a role lookup finds both
+ */
+export const consoleTrigger = (page: Page) =>
+  page.locator('[data-slot="console-drawer-trigger"]');
+
+/** Opens the file tree from the editor head, if it is not open already */
+export const openFiles = async (page: Page) => {
+  const toggle = filesToggle(page);
+  await expect(toggle).toBeVisible(LONG);
+  if ((await toggle.getAttribute("aria-pressed")) !== "true") {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 };
 
 /**
@@ -170,9 +209,9 @@ export const applyWrite = (
   held: { files: Record<string, string> } | undefined,
   body: WriteBody
 ) => {
-  const files = body.files
-    ? { ...body.files }
-    : { ...(held?.files ?? {}), ...(body.changed ?? {}) };
+  const files: Record<string, string> = {};
+  if (body.files) Object.assign(files, body.files);
+  else Object.assign(files, held?.files, body.changed);
   for (const path of body.removed ?? []) delete files[path];
   return { files };
 };

@@ -216,6 +216,15 @@ export class PgTheme {
       ._views()
       ._components();
 
+    // The code font is the user's choice, so CSS reads it from a variable
+    // (`font-pg-code` in index.css) instead of the design system's
+    // `--font-code`. `_theme_fonts` has just set it, so a miss is a bug
+    const codeFamily = this._theme.font?.code?.family;
+    if (codeFamily === undefined) {
+      throw new Error(`Theme "${this._theme.name}" has no code font family`);
+    }
+    document.documentElement.style.setProperty("--pg-font-code", codeFamily);
+
     // Save to storage
     localStorage.setItem(this._THEME_KEY, this._theme.name);
     localStorage.setItem(this._FONT_KEY, this._font.family);

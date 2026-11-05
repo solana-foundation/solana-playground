@@ -1,10 +1,13 @@
+import type { ReactNode } from "react";
+
 import type { SettingsRequest } from "@/shared/lib/settings-request";
 
 import BaseSessionFooter from "./BaseSessionFooter";
 import { useAccount } from "./use-account";
 
 interface SessionFooterProps {
-  settingsOpen: boolean;
+  /** The status row (`widgets/status`) */
+  status: ReactNode;
   onToggleSettings: (request: SettingsRequest) => void;
   /** On the phone's menu page: the account menu is a page of its own */
   page?: boolean;
@@ -14,28 +17,26 @@ interface SessionFooterProps {
 
 /** `BaseSessionFooter` on the live cluster, session, wallet and feedback */
 const SessionFooter = ({
-  settingsOpen,
+  status,
   onToggleSettings,
   page,
   closeSheet,
 }: SessionFooterProps) => {
-  const { account, pick, menu, dialog, onMenuOpenChange, accountRef } =
-    useAccount({ from: "footer", onToggleSettings, page, closeSheet });
+  const { account, pick, menu, onMenuOpenChange, accountRef } = useAccount({
+    from: "footer",
+    onToggleSettings,
+    page,
+    closeSheet,
+  });
   return (
-    <>
-      <BaseSessionFooter
-        account={account}
-        settingsOpen={settingsOpen}
-        onOpenCluster={() =>
-          onToggleSettings({ from: "cluster", focus: "network" })
-        }
-        onCancelSignIn={() => pick("cancel-sign-in")}
-        menu={menu}
-        onMenuOpenChange={onMenuOpenChange}
-        accountRef={accountRef}
-      />
-      {dialog}
-    </>
+    <BaseSessionFooter
+      account={account}
+      status={status}
+      onCancelSignIn={() => pick("cancel-sign-in")}
+      menu={menu}
+      onMenuOpenChange={onMenuOpenChange}
+      accountRef={accountRef}
+    />
   );
 };
 

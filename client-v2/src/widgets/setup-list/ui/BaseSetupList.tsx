@@ -13,6 +13,7 @@ import {
 } from "@/shared/ui/setup-list";
 
 import type { SetupStep, StepView, TodoStep } from "../model/steps";
+import { counts } from "../model/steps";
 
 const STEP_LABELS: Record<SetupStep, string> = {
   assistant: "Connect the assistant",
@@ -46,17 +47,28 @@ const BaseSetupList = ({
     className="px-2 pb-2"
   >
     <SetupListHeader>
-      <SetupListTrigger
-        done={steps.filter((s) => s.done).length}
-        total={steps.length}
-      >
+      <SetupListTrigger done={steps.filter(counts).length} total={steps.length}>
         Get set up
       </SetupListTrigger>
       <SetupListDismiss onClick={onDismiss} />
     </SetupListHeader>
     <SetupListContent>
-      {steps.map((view) =>
-        view.done ? (
+      {steps.map((view) => {
+        if ("warn" in view) {
+          // Not a step to do: the network is chosen, it does not answer. The
+          // reason is in the title and read after the label
+          return (
+            <SetupListItem key={view.step} status="warn" title={view.warn}>
+              <SetupListIndicator />
+              <SetupListLabel>
+                {STEP_LABELS[view.step]}
+                <span className="sr-only">, {view.warn}</span>
+              </SetupListLabel>
+              {view.value && <SetupListValue>{view.value}</SetupListValue>}
+            </SetupListItem>
+          );
+        }
+        return view.done ? (
           <SetupListItem key={view.step} status="done">
             <SetupListIndicator />
             <SetupListLabel>
@@ -80,8 +92,8 @@ const BaseSetupList = ({
               </SetupListValue>
             </button>
           </SetupListItem>
-        )
-      )}
+        );
+      })}
     </SetupListContent>
   </SetupList>
 );

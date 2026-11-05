@@ -110,6 +110,12 @@ function App() {
   const groups = useNav()
   const ids = React.useMemo(() => groups.flatMap((g) => g.entries.map((e) => e.id)), [groups])
   const current = useCurrent(ids)
+  // A link to a block (#c-sonner) arrives before the blocks are drawn, so the
+  // browser's own jump finds nothing: jump once the nav has read them
+  React.useEffect(() => {
+    if (!groups.length || !location.hash) return
+    document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView()
+  }, [groups.length])
   const [menuOpen, setMenuOpen] = React.useState(false)
 
   React.useEffect(() => {
@@ -242,7 +248,7 @@ function App() {
             </Group>
           </main>
         </div>
-        <Toaster theme={theme} position="bottom-center" />
+        <Toaster theme={theme} position="bottom-center" closeButton />
       </TooltipProvider>
     </ThemeVersion.Provider>
   )

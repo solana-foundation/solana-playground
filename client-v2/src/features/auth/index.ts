@@ -8,7 +8,7 @@ export {
   PgSession,
   SIGN_IN_FAILED_UNKNOWN,
 } from "./model/session";
-export type { SessionUser, SignInState } from "./model/session";
+export type { ReadState, SessionUser, SignInState } from "./model/session";
 export type { SignInFailure } from "./model/telemetry";
 export { SIGNED_OUT_REASON } from "./config.mjs";
 
@@ -40,7 +40,7 @@ if (import.meta.vitest) {
         await PgSession.refreshWith({
           id: "u1",
           name: "Ada",
-          image: null,
+          image: undefined,
           login: "ada",
         });
 

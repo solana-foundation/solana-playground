@@ -59,6 +59,23 @@ describe("IdlActions", () => {
     );
   });
 
+  /** Outlined where it is the way in; under Deploy's pill, a link */
+  it("draws Upload IDL outlined, or as a link when asked", () => {
+    const { rerender } = render(<IdlActions mode="upload" />);
+    expect(
+      screen
+        .getByRole("button", { name: "Upload IDL" })
+        .getAttribute("data-variant")
+    ).toBe("outline");
+
+    rerender(<IdlActions mode="upload" look="link" />);
+    expect(
+      screen
+        .getByRole("button", { name: "Upload IDL" })
+        .getAttribute("data-variant")
+    ).toBe("link");
+  });
+
   it("uses an IDL picked through it", async () => {
     const { container } = render(<IdlActions mode="upload" />);
 
@@ -90,12 +107,18 @@ describe("IdlActions", () => {
     expect(mocks.warn).toHaveBeenCalled();
   });
 
-  it("holds Download IDL until a build produced one", () => {
-    render(<IdlActions mode="download" />);
+  it("offers no Download IDL until a build produced one", () => {
+    const { container } = render(<IdlActions mode="download" />);
 
-    const button = screen.getByRole("button", { name: "Download IDL" });
-    expect(button).toHaveProperty("disabled", true);
-    expect(button.getAttribute("title")).toBe("Build successfully first");
+    expect(container.textContent).toBe("");
+  });
+
+  it("draws Download IDL as a link where asked", () => {
+    mocks.idl = { name: "counter", instructions: [] };
+    render(<IdlActions mode="download" look="link" />);
+
+    const link = screen.getByRole("link", { name: "Download IDL" });
+    expect(link.getAttribute("data-variant")).toBe("link");
   });
 
   it("downloads the IDL a build produced", () => {

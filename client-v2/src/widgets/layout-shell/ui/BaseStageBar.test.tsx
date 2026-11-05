@@ -21,55 +21,20 @@ afterEach(() => vi.unstubAllGlobals());
 const draw = (props: BaseStageBarProps) =>
   render(
     <TooltipProvider>
-      <BaseStageBar
-        title={props.title}
-        files={props.files}
-        assistant={props.assistant}
-      />
+      <BaseStageBar title={props.title} assistant={props.assistant} />
     </TooltipProvider>
   );
-
-it("names the files toggle by what it does", async () => {
-  const onToggle = vi.fn();
-  const { rerender } = draw({
-    title: null,
-    files: { open: true, onToggle },
-    assistant: { open: true, onToggle: vi.fn() },
-  });
-  const collapse = screen.getByRole("button", {
-    name: "Collapse project panel",
-  });
-  expect(collapse.getAttribute("aria-expanded")).toBe("true");
-  await userEvent.click(collapse);
-  expect(onToggle).toHaveBeenCalledTimes(1);
-
-  rerender(
-    <TooltipProvider>
-      <BaseStageBar
-        title={null}
-        files={{ open: false, onToggle }}
-        assistant={{ open: true, onToggle: vi.fn() }}
-      />
-    </TooltipProvider>
-  );
-  expect(
-    screen
-      .getByRole("button", { name: "Expand project panel" })
-      .getAttribute("aria-expanded")
-  ).toBe("false");
-});
 
 it("names the assistant toggle by what it does", async () => {
   const onToggle = vi.fn();
   const { rerender } = draw({
     title: null,
-    files: null,
     assistant: { open: true, onToggle },
   });
   const hide = screen.getByRole("button", { name: "Hide the assistant" });
   // The label says what a click does, so no pressed state on top ("Hide the
-  // assistant, pressed"); whether the pane is open is `aria-expanded`, as on
-  // the files toggle, which also draws the button filled
+  // assistant, pressed"); whether the pane is open is `aria-expanded`, which
+  // also draws the button filled
   expect(hide.hasAttribute("aria-pressed")).toBe(false);
   expect(hide.getAttribute("aria-expanded")).toBe("true");
   await userEvent.click(hide);
@@ -77,11 +42,7 @@ it("names the assistant toggle by what it does", async () => {
 
   rerender(
     <TooltipProvider>
-      <BaseStageBar
-        title={null}
-        files={null}
-        assistant={{ open: false, onToggle }}
-      />
+      <BaseStageBar title={null} assistant={{ open: false, onToggle }} />
     </TooltipProvider>
   );
   expect(
@@ -91,13 +52,12 @@ it("names the assistant toggle by what it does", async () => {
   ).toBe("false");
 });
 
-it("draws no files toggle where it is not handed, and always the documentation behind More", async () => {
+it("draws no files toggle, which is the editor head's, and always the documentation behind More", async () => {
   draw({
     title: null,
-    files: null,
     assistant: { open: true, onToggle: vi.fn() },
   });
-  expect(screen.queryByRole("button", { name: /project panel/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /files/i })).toBeNull();
   await userEvent.click(screen.getByRole("button", { name: "More options" }));
   const docs = screen.getByRole("menuitem", { name: "Documentation" });
   expect(docs.getAttribute("href")).toBe(DOCS_URL);
@@ -106,7 +66,7 @@ it("draws no files toggle where it is not handed, and always the documentation b
 });
 
 it("draws no assistant toggle where none is handed, as over a page", () => {
-  draw({ title: "Tutorials", files: null, assistant: null });
+  draw({ title: "Tutorials", assistant: null });
   expect(screen.queryByRole("button", { name: /assistant/i })).toBeNull();
   expect(screen.getByText("Tutorials")).toBeTruthy();
 });
@@ -114,7 +74,6 @@ it("draws no assistant toggle where none is handed, as over a page", () => {
 it("shows the project's name only when given one", () => {
   const { rerender } = draw({
     title: "Counter",
-    files: null,
     assistant: { open: true, onToggle: vi.fn() },
   });
   expect(screen.getByText("Counter")).toBeTruthy();
@@ -122,7 +81,6 @@ it("shows the project's name only when given one", () => {
     <TooltipProvider>
       <BaseStageBar
         title={null}
-        files={null}
         assistant={{ open: true, onToggle: vi.fn() }}
       />
     </TooltipProvider>
@@ -133,7 +91,6 @@ it("shows the project's name only when given one", () => {
 it("is the 44 px column bar with a bottom line", () => {
   const { container } = draw({
     title: null,
-    files: null,
     assistant: { open: true, onToggle: vi.fn() },
   });
   const bar = requireFor("the stage bar")(
@@ -146,7 +103,6 @@ it("is the 44 px column bar with a bottom line", () => {
 it("names Ctrl+R in the assistant's hint, and no key when told none", async () => {
   const { unmount } = draw({
     title: null,
-    files: null,
     assistant: { open: false, onToggle: vi.fn() },
   });
   await userEvent.tab();
@@ -159,7 +115,6 @@ it("names Ctrl+R in the assistant's hint, and no key when told none", async () =
     <TooltipProvider>
       <BaseStageBar
         title="Home"
-        files={null}
         assistant={{ open: false, onToggle: vi.fn() }}
         assistantKey={null}
       />
@@ -171,21 +126,9 @@ it("names Ctrl+R in the assistant's hint, and no key when told none", async () =
   );
 });
 
-it("draws the files toggle as an icon, its name the tooltip", () => {
-  draw({
-    title: null,
-    files: { open: true, onToggle: vi.fn() },
-    assistant: { open: true, onToggle: vi.fn() },
-  });
-  const files = screen.getByRole("button", { name: "Collapse project panel" });
-  expect(files.textContent).toBe("");
-  expect(files.querySelector("svg")).toBeTruthy();
-});
-
 it("draws the title muted and the controls as 32 px squares", () => {
   const { container } = draw({
     title: "Counter",
-    files: { open: true, onToggle: vi.fn() },
     assistant: { open: false, onToggle: vi.fn() },
   });
   expect(screen.getByText("Counter").className).toMatch(
@@ -205,7 +148,6 @@ it("draws the title muted and the controls as 32 px squares", () => {
 it("puts More last, after the toggles", () => {
   draw({
     title: null,
-    files: { open: true, onToggle: vi.fn() },
     assistant: { open: true, onToggle: vi.fn() },
   });
   const names = screen
@@ -219,7 +161,6 @@ it("draws the page's actions before the toggles", () => {
     <TooltipProvider>
       <BaseStageBar
         title="counter"
-        files={{ open: true, onToggle: vi.fn() }}
         // eslint-disable-next-line unicorn/no-null -- `BaseStageBarProps.assistant` takes `null` for "no toggle"
         assistant={null}
         actions={<button type="button">Share counter</button>}
@@ -229,8 +170,5 @@ it("draws the page's actions before the toggles", () => {
   const names = screen
     .getAllByRole("button")
     .map((button) => button.getAttribute("aria-label") ?? button.textContent);
-  expect(names.slice(0, 2)).toEqual([
-    "Share counter",
-    "Collapse project panel",
-  ]);
+  expect(names[0]).toBe("Share counter");
 });

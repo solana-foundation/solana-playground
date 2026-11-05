@@ -890,7 +890,7 @@
       "name": "stage-empty",
       "type": "registry:ui",
       "title": "Stage empty",
-      "description": "What a stage says before it has anything: media, title, meta, description, notice, actions, footer.",
+      "description": "What a stage says before it has anything: media, eyebrow, title, meta, description, notice, actions, footer.",
       "registryDependencies": [
         "@playground/playground-tokens",
         "@playground/utils"

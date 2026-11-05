@@ -1,19 +1,18 @@
-import styled, { css } from "styled-components";
+import { ComponentPropsWithoutRef, forwardRef } from "react";
 
-import { PgTheme } from "../../utils";
+import { cn } from "@/shared/lib/utils";
 
-const Topbar = styled.div`
-  ${({ theme }) => css`
-    position: sticky;
-    top: 0;
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid ${theme.colors.default.border};
-
-    ${PgTheme.convertToCSS(theme.components.topbar)};
-  `}
-`;
+const Topbar = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<"div">>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(
+        "sticky top-0 flex w-full items-center justify-between border-b border-border bg-surface-base font-sans shadow-none",
+        className
+      )}
+      {...props}
+    />
+  )
+);
 
 export default Topbar;

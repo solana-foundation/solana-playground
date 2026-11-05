@@ -40,6 +40,12 @@ export interface BaseAppNavProps {
   logo: ReactNode;
   /** The project list, under the items; the rail has no room for it */
   projects: ReactNode;
+  /**
+   * The way to a computer, a menu row in its own group above `setup`: drawn
+   * on the phone's menu page only, since from `LAYOUT_BREAKPOINTS.phone` up
+   * this is the computer
+   */
+  handoff?: ReactNode;
   footer: ReactNode;
   /** The footer's few icons the 52 px rail has room for, in its place */
   railFooter: ReactNode;
@@ -56,6 +62,7 @@ const BaseAppNav = ({
   onToggle,
   logo,
   projects,
+  handoff,
   footer,
   railFooter,
   setup,
@@ -123,7 +130,18 @@ const BaseAppNav = ({
         </SidebarMenu>
         {!collapsed && projects}
       </SidebarGroup>
-      {!collapsed && <div className="mt-auto">{setup}</div>}
+      <div className="mt-auto">
+        {/* A group of its own at the foot, above Get set up: under the
+            project list it read as one of the projects */}
+        {phone && handoff && (
+          <SidebarGroup>
+            <SidebarMenu>
+              <SidebarMenuItem>{handoff}</SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
+        {!collapsed && setup}
+      </div>
     </SidebarContent>
     {/* Swapped, not hidden, on the rail: what the full footer holds keeps
         its state above it (`FeedbackHost`, `PgSession`), as it must anyway

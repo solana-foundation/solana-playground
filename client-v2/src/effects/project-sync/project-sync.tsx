@@ -1,3 +1,4 @@
+import { PgAccountList } from "../../features/persistence/model/account-list";
 import { report } from "../../features/persistence/model/diagnostics";
 import { reconcile } from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
@@ -234,8 +235,15 @@ export const projectSync = (): Disposable => {
    * project here deleted that one too -- on the server, chat included.
    * Not by re-reading the list here: that is the reload's to do, inside its
    * own queue, where nothing is half-way through when the list changes.
+   *
+   * Once every delete reached an account whose list was read, a browser left
+   * with no workspace marks that list empty (`PgAccountList`), which is what
+   * lets Home offer the example to a signed-in account again.
    */
   const settleLocalDeletes = async () => {
+    // Whether every delete below reached the account; one that did not leaves
+    // the project alive there
+    let allReached = true;
     try {
       for (const projectId of await PgSyncMark.projectIds()) {
         if (PgExplorer.workspaceNameOf(projectId)) continue;
@@ -243,7 +251,7 @@ export const projectSync = (): Disposable => {
         // known to be
         if ((await PgWorkspaceRegistry.lists(projectId)) !== false) continue;
 
-        await PgProjectSync.remove(projectId);
+        if (!(await PgProjectSync.remove(projectId))) allReached = false;
         await PgSyncMark.remove(projectId);
         // A tutorial's id is derived from its name, so deleting and restarting
         // one produces the same id -- and without this the previous run's
@@ -262,6 +270,20 @@ export const projectSync = (): Disposable => {
         if (PgExplorer.workspaceNameOf(projectId)) continue;
         if ((await PgWorkspaceRegistry.lists(projectId)) !== false) continue;
         await PgSyncClaim.forget(projectId);
+      }
+
+      // Every delete above reached the account and this browser has no project
+      // left, so the account may be empty: Home would offer the example again.
+      // Asked, not assumed: a project whose download failed is in the account
+      // and was never here. An unread list stays unread, and a list that
+      // cannot be read now changes nothing
+      if (
+        allReached &&
+        PgAccountList.state === "holds" &&
+        PgExplorer.allWorkspaceNames?.length === 0
+      ) {
+        const server = await PgProjectSync.list();
+        if (server) PgAccountList.listed(server.length);
       }
     } catch (e) {
       report("settle local deletes", e);

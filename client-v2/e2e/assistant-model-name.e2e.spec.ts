@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, LONG, startProject, stubAiStatus, test } from "./fixtures";
+import { PHONE } from "./viewports";
 
 /**
  * A long model name in the composer, laid out by a real browser: unit tests
@@ -8,7 +9,6 @@ import { expect, LONG, startProject, stubAiStatus, test } from "./fixtures";
  */
 
 const LONG_ID = "deepseek/deepseek-chat-v3.1-terminus-instruct:free";
-const PHONE = { width: 390, height: 844 };
 
 /** The deployment serves no default backend, so the composer names the connection */
 const stubNoDefault = (page: Page) => stubAiStatus(page, "own");

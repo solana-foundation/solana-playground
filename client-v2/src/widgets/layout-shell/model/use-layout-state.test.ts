@@ -60,6 +60,35 @@ it("should write and send nothing for a toggle to the value it already has", () 
   expect(stored()).toEqual(DRAGGED);
 });
 
+it("should open a first visit with the files column closed", () => {
+  const { result } = renderHook(() => useLayoutState());
+  expect(result.current.state.open.files).toBe(false);
+});
+
+it("should keep a saved open files column open", () => {
+  localStorage.setItem(
+    LAYOUT_STORAGE_KEY,
+    JSON.stringify({
+      v: 2,
+      open: { nav: true, files: true, assistant: true, console: false },
+    })
+  );
+  const { result } = renderHook(() => useLayoutState());
+  expect(result.current.state.open.files).toBe(true);
+});
+
+it("should keep a saved closed files column closed", () => {
+  localStorage.setItem(
+    LAYOUT_STORAGE_KEY,
+    JSON.stringify({
+      v: 2,
+      open: { nav: true, files: false, assistant: true, console: false },
+    })
+  );
+  const { result } = renderHook(() => useLayoutState());
+  expect(result.current.state.open.files).toBe(false);
+});
+
 it("should keep both of two updates made in one tick", () => {
   const { result } = renderHook(() => useLayoutState());
   act(() => {
@@ -138,6 +167,8 @@ it("should write nothing on mount", () => {
 
 it("should save the files and center sizes", () => {
   const { result } = renderHook(() => useLayoutState());
+  // A first visit opens the column closed, and a folded column keeps no sizes
+  act(() => result.current.setOpen("files", { open: true, via: "button" }));
   act(() => result.current.setWork({ files: 30, center: 70 }));
   expect(result.current.state.w).toEqual({ files: 30, center: 70 });
   expect(stored().w).toEqual({ files: 30, center: 70 });

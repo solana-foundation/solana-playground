@@ -10,7 +10,9 @@ import type { StageStatus } from "@/views/flow/state/stage";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
-import { CONSOLE_KEY } from "../model/keys";
+import { onDidRequestConsole } from "../model/console-request";
+import { editorHeadHost } from "../model/editor-head-host";
+import { CONSOLE_KEY, FILES_KEY, keyLabel } from "../model/keys";
 import type {
   PageSource,
   PhonePage,
@@ -28,6 +30,7 @@ import { homeOf, isCovered, screenOf } from "../model/screen";
 import type { ToggleSource } from "../model/telemetry";
 import { layoutTelemetry } from "../model/telemetry";
 import { useLayoutState } from "../model/use-layout-state";
+import BaseEditorHead from "./BaseEditorHead";
 import type { AssistantWide } from "./BaseLayoutShell";
 import BaseLayoutShell from "./BaseLayoutShell";
 import BaseStageBar from "./BaseStageBar";
@@ -55,6 +58,11 @@ export interface LayoutShellProps {
    */
   stageTabs: ReactNode;
   /**
+   * Whether the editor head shows the editor's tab row: the Write stage's
+   * only; the head's Files and Terminal show on every stage. Default true.
+   */
+  showTabs?: boolean;
+  /**
    * The files column. `collapsed` is never true in the phone's Files Sheet;
    * `phone` says the column is in that Sheet, where `toggle` closes it.
    */
@@ -78,7 +86,7 @@ export interface LayoutShellProps {
   /**
    * Home, in place of the assistant and the work: the navigation stays, the
    * stage, its tabs and the console are not rendered, the column bar over
-   * Home reads "Home" with no files toggle, and the phone's work page shows
+   * Home reads "Home", and the phone's work page shows
    * Home under the title "Home". A slot that renders nothing (the start is
    * still pending) holds Home's place with no title. `openAssistant`, like
    * the bar's assistant toggle, opens the assistant as a right Sheet, at
@@ -111,6 +119,8 @@ export interface LayoutShellProps {
    * offers it for the open project
    */
   onShare?: (project: string) => void;
+  /** The phone's status chip, in the work page's bar */
+  phoneStatus?: ReactNode;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -130,6 +140,7 @@ const isEditable = (target: EventTarget | null) =>
 const LayoutShell = ({
   nav,
   stageTabs,
+  showTabs = true,
   files,
   stage,
   console,
@@ -139,6 +150,7 @@ const LayoutShell = ({
   keepWork,
   stageBarActions,
   onShare,
+  phoneStatus,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -334,6 +346,19 @@ const LayoutShell = ({
     return () => subs.forEach((sub) => sub.dispose());
   }, [phone]);
 
+  // The editor's "Show files", from inside the work: opens, never folds, and
+  // like Ctrl+E means nothing under Home or a page
+  useEffect(() => {
+    const sub = PgView.onDidRequestFiles(() => {
+      if (isCovered(screenNow.current)) return;
+      if (phone) setPhoneFiles(true, "button");
+      else setOpen("files", { open: true, via: "button" });
+    });
+    return () => sub.dispose();
+    // `setPhoneFiles` reads only refs and stable setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone, setOpen]);
+
   const wideOrSheet = viewport === "wide" ? state.open.assistant : sheetOpen;
   const pagerOrFrame = phone ? view === "chat" : wideOrSheet;
   const assistantShown = homeShown ? homeSheetOpen : pagerOrFrame;
@@ -355,14 +380,16 @@ const LayoutShell = ({
     else setSheet(open, via);
   };
   /**
-   * The console opening on its own: the visit's on a phone, else saved. Not
-   * under Home or a page, which show no console to open.
+   * The console opening on its own (`auto`), or from a stage's button: the
+   * visit's on a phone, else saved. Not under Home or a page, which show no
+   * console to open.
    */
-  const openConsole = () => {
+  const openConsoleVia = (via: "auto" | "button") => () => {
     if (isCovered(screenNow.current)) return;
-    if (phone) setPhoneConsoleOpen(true, "auto");
-    else setOpen("console", { open: true, via: "auto" });
+    if (phone) setPhoneConsoleOpen(true, via);
+    else setOpen("console", { open: true, via });
   };
+  const openConsole = openConsoleVia("auto");
   /**
    * A script run opens the console: its output is the run's result. A phone
    * with no program also moves to the preview, the page whose bar holds Run
@@ -415,7 +442,7 @@ const LayoutShell = ({
   // everywhere there, Monaco included.
   // On a phone the key toggles the pager's own Files Sheet.
   useKeybind(
-    "Ctrl+E",
+    FILES_KEY,
     {
       handle: (ev) => {
         // Before `preventDefault`: under Home or a page the key is not the shell's
@@ -447,6 +474,7 @@ const LayoutShell = ({
     let prevDeploy: StageStatus | undefined;
     const subs = [
       PgCommand.deploy.onDidStart(openConsole),
+      onDidRequestConsole(openConsoleVia("button")),
       PgCommand.run.onDidStart(showClientRun),
       PgClientRun.onDidChange((runState) => {
         if (runState.kind === "funding") showFunding();
@@ -549,6 +577,7 @@ const LayoutShell = ({
     <BaseLayoutShell
       viewport={viewport}
       keepWork={keepWork}
+      phoneStatus={phoneStatus}
       navOpen={navOpen}
       onNavOpenChange={onNavOpenChange}
       assistantState={{
@@ -624,19 +653,6 @@ const LayoutShell = ({
       stageBar={
         <BaseStageBar
           title={barTitle}
-          // Under Home there is no files column to toggle
-          files={
-            homeShown
-              ? null
-              : {
-                  open: state.open.files,
-                  onToggle: () =>
-                    setOpen("files", {
-                      open: !state.open.files,
-                      via: "button",
-                    }),
-                }
-          }
           // The panel's toggle on a wide window; below it, and at every width
           // under Home, what opens the Sheet
           assistant={{
@@ -649,6 +665,24 @@ const LayoutShell = ({
         />
       }
       stageTabs={stageTabs}
+      workHead={
+        <BaseEditorHead
+          files={{
+            open: state.open.files,
+            onToggle: () =>
+              setOpen("files", { open: !state.open.files, via: "button" }),
+          }}
+          terminal={{
+            open: state.open.console,
+            onToggle: () =>
+              setOpen("console", { open: !state.open.console, via: "button" }),
+          }}
+          showTabs={showTabs}
+          hostRef={editorHeadHost}
+          filesKey={keyLabel(FILES_KEY, PgCommon.getOS())}
+          terminalKey={keyLabel(CONSOLE_KEY, PgCommon.getOS())}
+        />
+      }
       stage={stage()}
       console={console({
         open: phone ? phoneConsole : state.open.console,
@@ -679,7 +713,6 @@ const LayoutShell = ({
           bar: (
             <BaseStageBar
               title={cover.title}
-              files={null}
               assistant={null}
               assistantKey={null}
             />

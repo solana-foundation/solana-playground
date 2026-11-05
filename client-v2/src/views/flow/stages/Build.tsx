@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 
-import { PgCommand, PgExplorer, PgFramework, PgSettings } from "../../../utils";
+import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
+import { useOnline } from "@/shared/lib/hooks/use-online";
+import { requestConsole } from "@/widgets/layout-shell";
+
+import { useRenderOnChange } from "../../../hooks";
+import {
+  PgCommand,
+  PgExplorer,
+  PgProgramInfo,
+  PgSettings,
+} from "../../../utils";
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { PgAssistant } from "../../sidebar/assistant/store";
@@ -44,8 +54,13 @@ const Build = () => {
 
   const building = flow.build === "running";
   const slow = useSlowBuild(building, flow.buildStartedAt);
+  const elapsedMs = useElapsed(
+    building ? flow.buildStartedAt ?? undefined : undefined
+  );
+  const online = useOnline();
   const own = ownOutput(out, PgExplorer.currentWorkspaceName ?? null);
   const surface = buildSurface({ flow, own });
+  const idl = useRenderOnChange(PgProgramInfo.onDidChangeIdl);
 
   return (
     <BaseBuild
@@ -66,13 +81,16 @@ const Build = () => {
       host={serverHost()}
       serverUrl={PgSettings.server.endpoint}
       ms={flow.buildMs}
+      elapsedMs={elapsedMs}
+      offline={!online}
       // The stage's catch rethrows; BaseBuild's buttons report what is left
       onBuild={() => PgCommand.build.execute().catch(toldByStage("build"))}
       onContinue={() => PgFlow.setStage("deploy")}
-      onExport={() => PgFramework.exportWorkspace()}
+      hasIdl={!!idl}
       onAsk={(prompt) => PgAssistant.requestPrompt(prompt)}
       onOpenFile={(path) => PgExplorer.openFile(path)}
-      idlActions={<IdlActions mode="download" />}
+      onShowLog={requestConsole}
+      idlActions={<IdlActions mode="download" look="link" />}
     />
   );
 };

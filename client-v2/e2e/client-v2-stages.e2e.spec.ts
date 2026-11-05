@@ -9,6 +9,7 @@ import {
   seedWorkspace,
   test,
 } from "./fixtures";
+import { DESK, PHONE } from "./viewports";
 
 /**
  * The scenarios of `client-v2-stages`: what the Build, Deploy and Interact
@@ -205,9 +206,9 @@ test.describe("client-v2-stages on a phone", () => {
   }) => {
     // The project tree lives in a closed Sheet on a phone, which the seeding
     // waits on, so seed on a desktop-sized page and narrow it afterwards
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
 
     await page.locator("#flow-stage-tab-build").click();
     const panel = page.locator("#flow-stage-panel-build");
@@ -232,7 +233,7 @@ test.describe("client-v2-stages on a phone", () => {
   test("client-v2-stages: The Deploy action at the foot on a phone", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await page.evaluate(
       ([programId, at]) =>
@@ -253,13 +254,14 @@ test.describe("client-v2-stages on a phone", () => {
     );
     await page.reload();
     await expect(page.locator("#root-dir")).toBeAttached(LONG);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
 
     await page.locator("#flow-stage-tab-deploy").click();
     const panel = page.locator("#flow-stage-panel-deploy");
     const actions = panel.locator('[data-slot="stage-empty-actions"]');
+    // Nothing is built in this page, so the pill is Go to Build
     await expect(
-      actions.getByRole("button", { name: /Redeploy to devnet/ })
+      actions.getByRole("button", { name: "Go to Build" })
     ).toBeVisible(LONG);
 
     const panelBox = requireFor("the panel's bounding box")(
@@ -277,10 +279,10 @@ test.describe("client-v2-stages on a phone", () => {
   test("client-v2-stages: The Interact action at the foot on a phone", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await stubProgramAccount(page, null);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
 
     const panel = await buildThenInteract(page);
     const actions = panel.locator('[data-slot="stage-empty-actions"]');
@@ -333,10 +335,10 @@ test.describe("client-v2-search-field", () => {
     // Reached by its id: `updateRefs` (InstructionInput) finds dependent
     // inputs by it, so SearchBar must keep it
     const amount = panel.locator("#initializeargsamount");
-    await amount.click();
-    await page
-      .locator('[data-slot="command"]')
-      .getByRole("option", { name: "Random" })
+    // A number's one pick is Random, a button in the field with no list
+    await amount
+      .locator("xpath=..")
+      .getByRole("button", { name: "Random" })
       .click();
     await expect(amount).toHaveValue(/^\d+$/);
   });

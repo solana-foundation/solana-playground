@@ -1,6 +1,7 @@
 import { ArrowUpRight, Check, ChevronRight } from "lucide-react";
 
 import type { TutorialProgress } from "@/entities/tutorial";
+import { TutorialCover } from "@/entities/tutorial";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -12,7 +13,6 @@ import {
   ActionCardTitle,
 } from "@/shared/ui/action-card";
 
-import TutorialCover from "./art/TutorialCover";
 import type { CardOpen } from "./BaseCatalogGrid";
 
 export interface BaseTutorialCardProps {
@@ -62,7 +62,7 @@ const BaseTutorialCard = ({
   const completed = progress.state === "completed";
   return (
     <ActionCard className="gap-3.5">
-      <ActionCardMedia variant="image">
+      <ActionCardMedia variant="image" className="h-14">
         <TutorialCover name={title} framework={framework} />
       </ActionCardMedia>
       <ActionCardContent>

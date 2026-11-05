@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { Outlet } from "@/shared/lib/outlet";
+import { pagerAttrs } from "@/shared/lib/pager";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
@@ -51,6 +52,8 @@ export interface PhonePagerSlots {
   stageNode: HTMLDivElement;
   consoleNode: HTMLDivElement;
   sheetFont?: CSSProperties;
+  /** The status chip (`widgets/status`), after the title in the work page's bar */
+  status?: ReactNode;
   /**
    * Home, in place of the work: the work page shows it under "Menu" and the
    * title, with no Chat | Code and no Preview, and there is no preview page
@@ -301,6 +304,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
     <div
       ref={ref}
       data-testid="phone-pager"
+      {...pagerAttrs}
       onScroll={armSettle}
       className="flex h-full w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden motion-safe:scroll-smooth [scrollbar-width:none]"
     >
@@ -330,9 +334,14 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
           >
             {PHONE_ICONS.menu}
           </BarButton>
-          <span className="min-w-0 flex-1 truncate pl-0.5 text-title font-act text-foreground">
+          {/* The name keeps at least six characters, and the status chip
+              gives way first, down to its dot. Ten pushed the bar 17px past a
+              390 screen and Run off its edge: menu, chip, Chat and Code and
+              Run leave the name about 80px there */}
+          <span className="min-w-[6ch] flex-1 truncate pl-0.5 text-title font-act text-foreground">
             {props.title}
           </span>
+          {props.status}
           {!covered && (
             <>
               {/* Two views of one session, one filled: the prototype's

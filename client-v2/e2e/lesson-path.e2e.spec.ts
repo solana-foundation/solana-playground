@@ -3,6 +3,7 @@ import {
   home,
   homeRegion,
   startProject,
+  startTutorialFromAbout,
   stubAiStatus,
   test,
 } from "./fixtures";
@@ -80,7 +81,7 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // flips `LessonRoute` over to the lesson chrome. `exact` keeps the
   // locator off any other name holding "Start", such as Connect a model's
   // own Start while that dialog is open.
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await startTutorialFromAbout(page);
 
   // The rail switches to the lesson's steps, and the band names step 1.
   // `hello-anchor.ts` has four steps, so this is also a count check.

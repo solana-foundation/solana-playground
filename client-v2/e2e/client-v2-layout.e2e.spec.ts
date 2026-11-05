@@ -2,20 +2,25 @@ import type { Page } from "@playwright/test";
 
 import { requireFor } from "../src/test-utils/require-for";
 import {
+  consoleTrigger,
   currentProject,
   expect,
+  filesToggle,
   HELP_TAIL,
   home,
   homeRegion,
   json,
   leaveEditor,
+  openFiles,
   projectRow,
   runInTerminal,
   seedWorkspace,
+  startTutorialFromAbout,
   stubSignedIn,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
 
 /**
  * The one event line with this name: waits for it, then a moment more, so a
@@ -33,8 +38,8 @@ const onlyLineOf = async (page: Page, lines: string[], name: string) => {
 };
 
 /**
- * Starts Hello Anchor's first lesson on a fresh profile, which opens on Home,
- * from Home's tutorial card
+ * Starts Hello Anchor's first lesson from Home's tutorial card, on a profile
+ * with no project, which opens on Home
  */
 const startTutorial = async (page: Page) => {
   await expect(home(page)).toBeVisible({ timeout: 20_000 });
@@ -42,13 +47,14 @@ const startTutorial = async (page: Page) => {
     .getByRole("button", { name: "Open Hello Anchor" })
     .click();
   // `exact`: Connect a model's dialog has a "Start" of its own
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await startTutorialFromAbout(page);
+  // The lesson's switch is in the tree; open it whatever the saved layout
+  await openFiles(page);
   await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 
 const assistantPanel = (page: Page) => page.locator("#assistant[data-panel]");
-const consoleHandle = (page: Page) =>
-  page.getByRole("button", { name: "Terminal" });
+const consoleHandle = (page: Page) => consoleTrigger(page);
 // A separator controls the panel before it: the assistant's is right of it
 const assistantHandle = (page: Page) =>
   page.locator('[data-slot="resizable-handle"][aria-controls="assistant"]');
@@ -90,6 +96,24 @@ const drag = async (
   await page.mouse.down();
   await page.mouse.move(x + dx, y + dy, { steps: 8 });
   await page.mouse.up();
+};
+
+/**
+ * A project open at 1280, then the window at `size`. The editor focuses itself
+ * when it opens the first file; that is waited for before the resize, so it
+ * cannot land later, over a page the test opened. The resize keeps the same
+ * editor (it is not mounted again): below 768 px moving it into the pager
+ * drops that focus to the document, and nothing takes it back; at a wider
+ * width it keeps it.
+ */
+const seedThenResize = async (
+  page: Page,
+  size: { width: number; height: number }
+) => {
+  await page.setViewportSize(DESK);
+  await seedWorkspace(page);
+  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await page.setViewportSize(size);
 };
 
 test("client-v2-layout: A resized assistant and an open console", async ({
@@ -185,16 +209,18 @@ test("a visit that moves nothing leaves the saved layout alone", async ({
 test("a window resize does not pin the panels' sizes", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   await page.reload();
   await expect(assistantPanel(page)).toBeVisible();
-  expect(await savedLayout(page)).toBeNull();
+  // The suite's profile holds open flags and no sizes (`playwright.config`)
+  const before = await savedLayout(page);
+  expect(JSON.parse(before ?? "{}")).not.toHaveProperty("h");
 
   await page.setViewportSize({ width: 1920, height: 900 });
   await expect.poll(() => widthOf(page)).toBeGreaterThan(300);
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   await page.waitForTimeout(300);
-  expect(await savedLayout(page)).toBeNull();
+  expect(await savedLayout(page)).toBe(before);
 });
 
 test("a restored width the library would fold opens the assistant, and changes nothing", async ({
@@ -208,7 +234,7 @@ test("a restored width the library would fold opens the assistant, and changes n
     open: { nav: true, files: true, assistant: true, console: false },
     h: { assistant: 10, work: 90 },
   });
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   await page.evaluate((value) => localStorage.setItem("layout", value), saved);
   await page.reload();
   await expect(
@@ -265,9 +291,8 @@ test("client-v2-layout: An unreadable saved layout", async ({
 }) => {
   await page.evaluate(() => localStorage.setItem("layout", "{"));
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Collapse project panel" })
-  ).toBeVisible();
+  // A first visit's layout: the tree closed under the head
+  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".monaco-editor")).toBeVisible();
 });
 
@@ -328,7 +353,7 @@ test("client-v2-layout: Folding the project panel", async ({
   // The fold is kept over a reload
   await page.reload();
   await expect(files).toHaveCount(0);
-  await page.getByRole("button", { name: "Expand project panel" }).click();
+  await filesToggle(page).click();
   await expect(files).toHaveJSProperty("offsetWidth", 240);
   await expect(files.locator("#root-dir")).toBeVisible();
 });
@@ -372,12 +397,10 @@ test("client-v2-layout: The files column keeps its tree", async ({
       await expect(files).toHaveCount(0);
       await page.keyboard.press("ControlOrMeta+e");
     },
-    "the stage bar": async () => {
-      await page
-        .getByRole("button", { name: "Collapse project panel" })
-        .click();
+    "the editor head": async () => {
+      await filesToggle(page).click();
       await expect(files).toHaveCount(0);
-      await page.getByRole("button", { name: "Expand project panel" }).click();
+      await filesToggle(page).click();
     },
   };
   for (const [via, toggle] of Object.entries(hideAndShow)) {
@@ -407,9 +430,9 @@ test("client-v2-layout: A lesson's column keeps its tab", async ({ page }) => {
   await filesTab.click();
   await expect(filesTab).toHaveAttribute("aria-checked", "true");
 
-  await page.getByRole("button", { name: "Collapse project panel" }).click();
+  await filesToggle(page).click();
   await expect(filesPanel(page)).toHaveCount(0);
-  await page.getByRole("button", { name: "Expand project panel" }).click();
+  await filesToggle(page).click();
 
   await expect(page.getByRole("radio", { name: "Files" })).toHaveAttribute(
     "aria-checked",
@@ -450,15 +473,11 @@ test("client-v2-layout: Folding the navigation", async ({
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   // The seed runs on a desktop-sized page, as the fixture waits on the tree
   // a phone keeps in a closed Sheet; the window is narrowed afterwards
-  const seedThenNarrow = async (page: Page) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await seedWorkspace(page);
-    await page.setViewportSize({ width: 390, height: 844 });
-  };
+  const seedThenNarrow = (page: Page) => seedThenResize(page, PHONE);
 
   test("the account is a page of its own on a phone", async ({ page }) => {
     await seedThenNarrow(page);
@@ -594,7 +613,7 @@ test.describe("on a phone", () => {
   });
 
   test("client-v2-layout: Turning a phone across 768 px", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     // The editor focuses itself when it opens the first file; landing after
     // the click below, it would take the typed command away from the terminal
@@ -632,11 +651,6 @@ test.describe("on a phone", () => {
 
   test("client-v2-layout: Settings on a phone", async ({ page }) => {
     await seedThenNarrow(page);
-    // The editor focuses itself when it opens the first file; landing after
-    // the menu opened, it would take focus from the settings
-    await expect(
-      page.locator(".monaco-editor textarea.inputarea")
-    ).toBeFocused();
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page
       .getByRole("region", { name: "Navigation" })
@@ -662,9 +676,6 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await seedThenNarrow(page);
-    await expect(
-      page.locator(".monaco-editor textarea.inputarea")
-    ).toBeFocused();
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page
       .getByRole("region", { name: "Navigation" })
@@ -685,7 +696,7 @@ test.describe("on a phone", () => {
   test("client-v2-layout: A project started from the phone's menu", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     for (const width of [393, 740]) {
       await page.setViewportSize({ width, height: 852 });
@@ -736,6 +747,44 @@ test.describe("on a phone", () => {
     expect(shown[0]).toContain("page: preview");
   });
 
+  // A held finger keeps the swipe from settling, so the work page is still not
+  // inert when the editor opens its file: focus there would scroll the pager
+  // back under the finger. The editor's chunk waits for the swipe, so the open
+  // always comes after it.
+  test("leaves the pager where it is when a file opens under a swipe", async ({
+    page,
+  }) => {
+    await seedThenNarrow(page);
+    let release = () => {};
+    const swiped = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(/src_components_Editor_Monaco_index_ts/, async (route) => {
+      await swiped;
+      await route.continue();
+    });
+    // Not "load": the held chunk is what the page's load waits for
+    await page.reload({ waitUntil: "commit" });
+    const pager = page.getByTestId("phone-pager");
+    const pageAt = () => pager.evaluate((el) => el.scrollLeft / el.clientWidth);
+    await expect
+      .poll(() => pager.evaluate((el) => el.scrollWidth / el.clientWidth))
+      .toBeGreaterThanOrEqual(3);
+    await pager.evaluate((el) => {
+      el.dispatchEvent(new Event("touchstart"));
+      el.scrollTo({ left: 2 * el.clientWidth, behavior: "instant" });
+    });
+    await expect.poll(pageAt).toBeCloseTo(2, 1);
+
+    release();
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      "use anchor_lang"
+    );
+    // A focus would have started its smooth scroll back by now
+    await page.waitForTimeout(500);
+    expect(await pageAt()).toBeCloseTo(2, 1);
+  });
+
   test("client-v2-layout: Opening the preview on a phone", async ({ page }) => {
     await seedThenNarrow(page);
     const lines = linesOn(page);
@@ -766,7 +815,7 @@ test.describe("on a phone", () => {
 test("client-v2-layout: The navigation on a narrow window", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await seedWorkspace(page);
   // The editor focuses itself when it opens the first file; landing after
   // the menu opened, it would bring Work back
@@ -799,10 +848,7 @@ test("client-v2-layout: The navigation on a narrow window", async ({
 // The key has no way of its own to leave the menu page, so it takes the one
 // the navigation handed over, and the settings show over Work
 test("⌘, opens the settings from the phone's menu page", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await seedWorkspace(page);
-  await page.setViewportSize({ width: 740, height: 812 });
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await seedThenResize(page, { width: 740, height: 812 });
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Navigation" })
@@ -838,7 +884,7 @@ test.describe("on an iPhone", () => {
   // Monaco mounts its keyboard button only where it reads iOS: an iPhone's
   // user agent on a touch screen. Without both the button is never there
   test.use({
-    viewport: { width: 390, height: 844 },
+    viewport: PHONE,
     userAgent:
       "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
     hasTouch: true,
@@ -848,9 +894,9 @@ test.describe("on an iPhone", () => {
     page,
   }) => {
     // A project is started from the desktop's Home, as "on a phone" does
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize(PHONE);
     const lines = page.locator(".monaco-editor .view-lines");
     await expect(lines).toContainText("use anchor_lang");
     // A tap on the code does not always raise the keyboard on an iPhone, so
@@ -944,9 +990,7 @@ test("client-v2-layout: A corrupt saved layout is reported", async ({
   await page.evaluate(() => localStorage.setItem("layout", "{"));
   const lines = linesOn(page);
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Collapse project panel" })
-  ).toBeVisible();
+  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect.poll(() => lineOf(lines, "layout_restore_failed")).toBeTruthy();
   expect(lineOf(lines, "layout_restore_failed")).toContain("reason: corrupt");
 });
@@ -957,11 +1001,11 @@ test("client-v2-layout: A corrupt saved layout is reported", async ({
 test("the wallet window's close button is clickable at the top of the work area", async ({
   seededPage: page,
 }) => {
-  // Connected from the account menu; the account row then shows the wallet
+  // Connected from the account menu; the menu's wallet group then shows it
   await account(page).click();
   await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(account(page)).toContainText("SOL");
+  await expectWalletInMenu(page, /SOL/);
   // The window is opened by the editor tab bar's "Wallet" button. Its icon's
   // alt text joins its accessible name ("Wallet Wallet"), so it is found by
   // its text, which is the label alone.
@@ -1025,7 +1069,7 @@ test.describe("the layout_viewport event", () => {
   const widthClassAt = async (page: Page, width: number) => {
     // Seeded on a desktop-sized page, as the phone test is: the project
     // tree lives in a closed Sheet on a phone, which the fixture waits on
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await page.setViewportSize({ width, height: 800 });
     const lines = linesOn(page);
@@ -1104,7 +1148,7 @@ test("a toggle on a wide window works after a trip through the compact Sheet", a
   await page.setViewportSize({ width: 800, height: 900 });
   await page.getByRole("button", { name: "Expand assistant" }).click();
   await expect(page.locator('[data-slot="sheet-content"]')).toBeVisible();
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   await expect(assistantPanel(page)).toBeVisible();
   await page.keyboard.press("ControlOrMeta+r");
   await expect.poll(() => widthOf(page)).toBeLessThan(40);
@@ -1125,9 +1169,7 @@ test("client-v2-layout: A layout saved before the four columns", async ({
   );
   await page.reload();
   await expect(filesPanel(page)).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Expand project panel" })
-  ).toBeVisible();
+  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect(consoleHandle(page)).toHaveAttribute("aria-expanded", "true");
   await expect(navColumn(page)).toHaveJSProperty("offsetWidth", 232);
   await expect(
@@ -1148,7 +1190,7 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) =>
   );
 
 test("client-v2-layout: A wide window", async ({ seededPage: page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
   await expect(stagePanel(page)).toBeVisible();
   await expect(assistantPanel(page)).toBeVisible();
@@ -1185,7 +1227,7 @@ test("client-v2-layout: A wide window", async ({ seededPage: page }) => {
 test("client-v2-layout: Everything the header did", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   const current = currentProject(page);
   await expect(current).toHaveText("e2e-project");
 
@@ -1221,7 +1263,7 @@ test("client-v2-layout: Everything the header did", async ({
 });
 
 test.describe("on a tablet", () => {
-  test.use({ viewport: { width: 834, height: 1112 } });
+  test.use({ viewport: TABLET });
 
   test("client-v2-layout: A tablet", async ({ seededPage: page }) => {
     await expect(navColumn(page)).toHaveJSProperty("offsetWidth", 52);
@@ -1387,7 +1429,7 @@ const barOf = async (locator: ReturnType<Page["locator"]>) => {
 };
 
 test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   // Flush: the navigation starts at the window's edge, the bars at its top
   await expect
     .poll(
@@ -1435,7 +1477,7 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
 test("client-v2-layout: Hiding the assistant from the stage bar", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   const before = await widthOf(page);
   const stageBar = page.locator('[data-slot="stage-bar"]');
   await expect(stageBar).not.toContainText("e2e-project");
@@ -1477,7 +1519,7 @@ test("client-v2-layout: A layout saved before the column bars", async ({
 test("client-v2-layout: Widening the assistant", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   const lines = linesOn(page);
   await page.getByRole("button", { name: "Widen the assistant" }).click();
   await expect(
@@ -1490,11 +1532,11 @@ test("client-v2-layout: Widening the assistant", async ({
 // A hidden files column takes no width, so a handle of its own would sit 1 px
 // from the assistant's, and the library takes every separator within reach of
 // the pointer: one drag resized both. Hidden, the column has no handle; the
-// stage bar and ⌘E bring it back, and a drag there moves the assistant alone.
+// editor head's Files and ⌘E bring it back, and a drag there moves the assistant alone.
 test("dragging at a hidden files column's edge moves only the assistant", async ({
   seededPage: page,
 }) => {
-  await page.getByRole("button", { name: "Collapse project panel" }).click();
+  await filesToggle(page).click();
   await expect(filesPanel(page)).toHaveCount(0);
   await expect(filesHandle(page)).toHaveCount(0);
   const before = await widthOf(page);
@@ -1508,7 +1550,7 @@ test("dragging at a hidden files column's edge moves only the assistant", async 
 test("a widened assistant, hidden and shown, opens at the width it had before", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.setViewportSize(WIDE_DESK);
   const before = await widthOf(page);
   await page.getByRole("button", { name: "Widen the assistant" }).click();
   await expect.poll(() => widthOf(page)).toBeGreaterThan(before + 100);
@@ -1534,7 +1576,8 @@ test("client-v2-layout: Signing in from the account menu", async ({
   await page.getByRole("menuitem", { name: "Sign in with GitHub" }).click();
 
   const footer = nav(page).locator('[data-slot="sidebar-footer"]');
-  await expect(footer.getByText("Signing in...")).toBeVisible();
+  await expect(footer.getByText("Signing in…")).toBeVisible();
+  await expect(footer.getByText("Waiting for GitHub…")).toBeVisible();
   await expect(footer.getByRole("button", { name: "Cancel" })).toBeVisible();
   release();
   await expect(account(page)).toContainText("Sign in");
@@ -1551,17 +1594,25 @@ test("client-v2-layout: Signing out asks first", async ({ page }) => {
   });
   await expect(account(page)).toHaveAccessibleName("Account: t");
 
+  const menu = page.getByRole("menu", { name: "Account" });
+  const question = menu.getByText("Sign out of Playground?");
   await account(page).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
-  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toBeHidden();
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(question).toBeVisible();
+  // Asked in place, Cancel first in line
+  await expect(menu.getByRole("menuitem", { name: "Cancel" })).toBeFocused();
+  await menu.getByRole("menuitem", { name: "Cancel" }).click();
+  await expect(question).toBeHidden();
+  // The menu's items are back, and nothing was signed out
+  await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
   expect(signedOut).toBe(false);
-  await expect(account(page)).toHaveAccessibleName("Account: t");
 
-  await account(page).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await dialog.getByRole("button", { name: "Sign out" }).click();
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(question).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
+  // The menu stays open, signed out; the page behind it is read once it closes
+  await expect(question).toBeHidden();
+  await page.keyboard.press("Escape");
   await expect(account(page)).toHaveAccessibleName("Account, signed out");
   expect(signedOut).toBe(true);
 });
@@ -1593,8 +1644,12 @@ test("client-v2-layout: The wallet in the menu", async ({
   await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
 
-  await expect(account(page)).toContainText(/\w{4}…\w{4} · /);
+  // In the menu's wallet group, not on the account row (Spec 02)
+  await expect(account(page)).not.toContainText(/\w{4}…\w{4}/);
   await account(page).click();
+  await expect(
+    page.getByRole("menuitem", { name: /\w{4}…\w{4}.*SOL/ })
+  ).toBeVisible();
   await expect(
     page.getByRole("menuitem", { name: "Disconnect wallet" })
   ).toBeVisible();
@@ -1617,7 +1672,7 @@ test("client-v2-layout: A cluster that is down", async ({
   await page.reload();
 
   const row = nav(page).getByRole("button", {
-    name: "Change cluster, currently devnet, not answering",
+    name: "Change cluster, currently devnet, not responding",
   });
   await expect(row).toBeVisible({ timeout: 15_000 });
   await account(page).click();
@@ -1625,7 +1680,7 @@ test("client-v2-layout: A cluster that is down", async ({
     .getByRole("menu", { name: "Account" })
     .getByRole("menuitem")
     .first();
-  await expect(first).toContainText("devnet is not answering");
+  await expect(first).toContainText("devnet is not responding");
   await first.click();
   const network = page
     .getByRole("region", { name: "Settings" })
@@ -1659,7 +1714,18 @@ const createWallet = async (page: Page) => {
 
 const connectWallet = async (page: Page) => {
   await createWallet(page);
-  await expect(account(page)).toContainText(/\w{4}…\w{4}/);
+  await expectWalletInMenu(page);
+};
+
+/**
+ * The connected wallet, read from the account menu's wallet group: Spec 02
+ * keeps the wallet off the account row. Closes the menu again.
+ */
+const expectWalletInMenu = async (page: Page, pattern = /\w{4}…\w{4}/) => {
+  await account(page).click();
+  await expect(page.getByRole("menuitem", { name: pattern })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Account" })).toBeHidden();
 };
 
 // An unreachable cluster leaves `PgConnection.isClusterDown` at `null`, not
@@ -1671,7 +1737,7 @@ test("a cluster that does not answer is down", async ({ seededPage: page }) => {
 
   await expect(
     nav(page).getByRole("button", {
-      name: "Change cluster, currently devnet, not answering",
+      name: "Change cluster, currently devnet, not responding",
     })
   ).toBeVisible({ timeout: 15_000 });
 });
@@ -1694,7 +1760,7 @@ test("a stalled cluster that moves again is not down", async ({
   });
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, not answering",
+    "Change cluster, currently devnet, not responding",
     { timeout: 15_000 }
   );
 
@@ -1711,7 +1777,7 @@ test("a cluster that answers again is not down", async ({
   await refuseCluster(page);
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, not answering",
+    "Change cluster, currently devnet, not responding",
     { timeout: 15_000 }
   );
 
@@ -1750,7 +1816,7 @@ test("the wallet asks about the validator when localnet does not answer", async 
   await expect(howTo).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
   await expect(howTo).toBeHidden();
-  await expect(account(page)).toContainText(/\w{4}…\w{4}/);
+  await expectWalletInMenu(page);
 
   await page.locator("#tabs").getByRole("button", { name: "Wallet" }).click();
   await expect(
@@ -1787,8 +1853,12 @@ test("the tab row keeps its height with a wallet connected", async ({
   const icon = row.getByRole("button", { name: "Wallet" }).locator("img");
   await expect(icon).toBeVisible();
   expect((await icon.boundingBox())?.height).toBeLessThanOrEqual(16);
-  // The row is 40 px tall (`h-10`), plus its bottom border's rounding
-  expect((await row.boundingBox())?.height).toBeLessThanOrEqual(41);
+  // The row fills the 44 px editor head, whose bottom line it sits above
+  const head = await page.locator("#editor-head").boundingBox();
+  if (!head) throw new Error("#editor-head has no box");
+  expect((await row.boundingBox())?.height).toBeLessThanOrEqual(
+    head.height - 1
+  );
   await expect(row.getByRole("tab").first()).toBeInViewport({ ratio: 1 });
 });
 
@@ -1803,10 +1873,7 @@ test("a sign-in outlives the rail folding on a narrow window", async ({
     await held;
     await route.fulfill({ status: 500, body: "" });
   });
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await seedWorkspace(page);
-  await page.setViewportSize({ width: 800, height: 812 });
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await seedThenResize(page, { width: 800, height: 812 });
   const navigation = page.locator('[data-slot="sidebar"]');
   const accountButton = navigation.getByRole("button", { name: /^Account/ });
 
@@ -1817,7 +1884,7 @@ test("a sign-in outlives the rail folding on a narrow window", async ({
   await page.getByRole("button", { name: "Collapse navigation" }).click();
 
   await page.getByRole("button", { name: "Expand navigation" }).click();
-  await expect(navigation.getByText("Signing in...")).toBeVisible();
+  await expect(navigation.getByText("Signing in…")).toBeVisible();
   await expect(
     navigation.getByRole("button", { name: "Cancel" })
   ).toBeVisible();
@@ -1848,7 +1915,7 @@ const SECTIONS = [
 ];
 
 test.describe("the settings page", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: DESK });
 
   test("client-v2-layout: A wide window's settings page", async ({
     seededPage: page,
@@ -1954,7 +2021,7 @@ test.describe("the settings page", () => {
     seededPage: page,
   }) => {
     // The rail's tooltips name its buttons, and portal to `body` too
-    await page.setViewportSize({ width: 834, height: 1112 });
+    await page.setViewportSize(TABLET);
     await nav(page)
       .locator('[data-slot="sidebar-footer"]')
       .getByRole("button", { name: /^Cluster: / })
@@ -1993,7 +2060,7 @@ test.describe("the settings page", () => {
 // HOO-2059 saw the stage tabs' "Interact" draw over the old overlay's title,
 // and HOO-2058 a grey block over the editor, both at 1440 by 900
 test.describe("the settings page at 1440 by 900", () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+  test.use({ viewport: WIDE_DESK });
 
   test("client-v2-layout: Nothing draws over the settings", async ({
     seededPage: page,
@@ -2046,12 +2113,7 @@ test.describe("the settings page at 1440 by 900", () => {
 });
 
 test("client-v2-layout: The settings page on a phone", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await seedWorkspace(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  // The editor focuses itself when it opens the first file; landing after
-  // the page opened, it would take focus from it
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await seedThenResize(page, PHONE);
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page
     .getByRole("region", { name: "Navigation" })

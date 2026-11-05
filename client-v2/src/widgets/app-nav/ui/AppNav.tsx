@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { PgView } from "@/utils";
 import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
 
@@ -5,11 +7,20 @@ import type { NavItem } from "../model/nav-item";
 import { navTelemetry } from "../model/telemetry";
 import type { BaseAppNavProps } from "./BaseAppNav";
 import BaseAppNav from "./BaseAppNav";
+import Handoff from "./Handoff";
 
 /** The items that open a page of their own */
 export type NavPage = Extract<NavItem, "tutorials" | "programs">;
 
-export type AppNavProps = Omit<BaseAppNavProps, "onOpen" | "current"> & {
+export type AppNavProps = Omit<
+  BaseAppNavProps,
+  "onOpen" | "current" | "projects"
+> & {
+  /**
+   * The project list, given the items' own open, so the empty list's ways
+   * in (EMPTY-01) go where New project and Tutorials go
+   */
+  projects: (open: (item: NavItem) => void) => ReactNode;
   /** Home was picked; the page decides what that does where it is */
   onHome: () => void;
   /** The page shown, if any; its item is marked current */
@@ -39,6 +50,7 @@ const AppNav = ({
   onOpenPage,
   onClosePage,
   closeSheet,
+  projects,
   ...props
 }: AppNavProps) => {
   const open = (item: NavItem) => {
@@ -61,7 +73,15 @@ const AppNav = ({
   };
 
   const marked = current ?? (homeShown ? "home" : undefined);
-  return <BaseAppNav {...props} current={marked} onOpen={open} />;
+  return (
+    <BaseAppNav
+      {...props}
+      projects={projects(open)}
+      handoff={props.phone ? <Handoff /> : undefined}
+      current={marked}
+      onOpen={open}
+    />
+  );
 };
 
 export default AppNav;

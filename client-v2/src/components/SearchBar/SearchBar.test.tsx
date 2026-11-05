@@ -292,9 +292,85 @@ describe("components/SearchBar", () => {
     expect(document.activeElement).toBe(input());
   });
 
-  it("the search button opens the list", async () => {
-    render(<Harness items={["a"]} />);
-    await userEvent.click(screen.getByRole("button", { name: "Search" }));
-    expect(optionNames()).toEqual(["a"]);
+  it("a value field shows no icon", () => {
+    render(<Harness />);
+    expect(screen.queryByRole("button", { name: "Search" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show options" })).toBeNull();
+  });
+
+  it("an inline item is a button in the field, not a row", async () => {
+    render(
+      <Harness
+        items={[{ label: "Random", value: () => "7" }, "Custom"]}
+        inlineItem={{ label: "Random" }}
+      />
+    );
+    const chevron = screen.getByRole("button", { name: "Show options" });
+    // A field with picks offers the chevron, never a magnifier
+    expect(screen.queryByRole("button", { name: "Search" })).toBeNull();
+    await userEvent.click(chevron);
+    expect(optionNames()).toEqual(["Custom"]);
+    await userEvent.click(chevron);
+
+    await userEvent.click(screen.getByRole("button", { name: "Random" }));
+    expect(input().value).toBe("7");
+  });
+
+  it("an inline pick during a nested choice selects the inline item alone", async () => {
+    const setSelectedItems = vi.fn();
+    render(
+      <Harness
+        items={[
+          { label: "Arguments", items: ["count"] },
+          { label: "Random", value: () => "7" },
+        ]}
+        inlineItem={{ label: "Random" }}
+        setSelectedItems={setSelectedItems}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Show options" }));
+    await userEvent.click(option("Arguments"));
+    await userEvent.click(screen.getByRole("button", { name: "Random" }));
+    expect(lastLabels(setSelectedItems)).toEqual(["Random"]);
+    expect(input().value).toBe("7");
+  });
+
+  it("a value field whose one pick is inline has no list", async () => {
+    render(
+      <Harness
+        items={[
+          { label: "Custom", value: { current: true }, onlyShowIfValid: true },
+          { label: "Random", value: () => "7" },
+        ]}
+        inlineItem={{ label: "Random" }}
+        restoreIfNotSelected
+      />
+    );
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show options" })).toBeNull();
+
+    await userEvent.type(input(), "42");
+    await userEvent.keyboard("{ArrowDown}{Escape}");
+    expect(screen.queryByRole("option")).toBeNull();
+    // What was typed stays: there was no list to pick it from
+    expect(input().value).toBe("42");
+  });
+
+  it("a field with picks has a chevron that toggles the list", async () => {
+    render(<Harness items={["Random", "Custom"]} />);
+    expect(screen.queryByRole("button", { name: "Search" })).toBeNull();
+    const chevron = screen.getByRole("button", { name: "Show options" });
+    const icon = () => chevron.querySelector("svg")!;
+    expect(icon().getAttribute("class")).not.toContain("rotate-180");
+
+    await userEvent.click(chevron);
+    expect(optionNames()).toEqual(["Random", "Custom"]);
+    // Focus is back in the field, so typing filters at once
+    expect(document.activeElement).toBe(input());
+    expect(icon().getAttribute("class")).toContain("rotate-180");
+
+    await userEvent.click(chevron);
+    expect(screen.queryByRole("option")).toBeNull();
+    expect(icon().getAttribute("class")).not.toContain("rotate-180");
   });
 });

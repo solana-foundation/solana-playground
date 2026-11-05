@@ -25,33 +25,51 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-const project = (name: string, pinned = false): ProjectEntry => ({
+const project = (
+  name: string,
+  pinned = false,
+  marker: ProjectEntry["marker"] = undefined
+): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: false,
   pinned,
+  marker,
+  progress: undefined,
 });
-const lesson = (name: string): ProjectEntry => ({
+const lesson = (
+  name: string,
+  progress: ProjectEntry["progress"] = undefined
+): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: true,
   pinned: false,
+  marker: undefined,
+  progress,
 });
 
 const alpha = project("alpha");
 const beta = project("beta", true);
 const hello = lesson("Hello Anchor");
+const local = project("local", false, "this-browser");
+const behind = project("behind", true, "not-synced");
 
 type Handlers = Pick<
   BaseProjectListProps,
   "onAction" | "onRenameChange" | "onRenameCommit" | "onRenameCancel"
 >;
 
-const draw = (overrides: {
-  renaming?: string;
-  renameError?: string;
-  current?: string;
-}): Handlers => {
+const draw = (
+  overrides: {
+    renaming?: string;
+    renameError?: string;
+    projects?: ProjectEntry[];
+    loading?: boolean;
+    current?: string;
+    empty?: BaseProjectListProps["empty"];
+  } = {}
+): Handlers => {
   const handlers: Handlers = {
     onAction: vi.fn(),
     onRenameChange: vi.fn(),
@@ -62,14 +80,16 @@ const draw = (overrides: {
     <TooltipProvider>
       <SidebarProvider>
         <BaseProjectList
-          projects={[beta, alpha, hello]}
+          projects={overrides.projects ?? [beta, alpha, hello]}
+          loading={overrides.loading ?? false}
           current={overrides.current ?? "alpha"}
-          renaming={overrides.renaming ?? null}
-          renameError={overrides.renameError ?? null}
+          renaming={overrides.renaming}
+          renameError={overrides.renameError}
           onAction={handlers.onAction}
           onRenameChange={handlers.onRenameChange}
           onRenameCommit={handlers.onRenameCommit}
           onRenameCancel={handlers.onRenameCancel}
+          empty={overrides.empty}
         />
       </SidebarProvider>
     </TooltipProvider>
@@ -86,8 +106,28 @@ const openMenu = (name: string) => {
 };
 
 describe("BaseProjectList", () => {
-  it("lists lessons among the projects, with no count, the open one marked", () => {
-    draw({});
+  it("marks a lesson's row with the tutorial glyph and a project's with the folder", () => {
+    draw();
+    const glyphOf = (name: string) =>
+      screen
+        .getByRole("button", { name })
+        .querySelector("[data-glyph]")
+        ?.getAttribute("data-glyph");
+    expect(glyphOf("Hello Anchor")).toBe("lesson");
+    expect(glyphOf("alpha")).toBe("project");
+  });
+
+  it("shows three skeleton rows and no project while loading", () => {
+    draw({ loading: true });
+    const group = screen.getByRole("group", { name: "Projects" });
+    expect(
+      group.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(3);
+    expect(within(group).queryByRole("button", { name: "alpha" })).toBeNull();
+  });
+
+  it("lists lessons among the projects, the open one marked", () => {
+    draw();
     const projects = screen.getByRole("group", { name: "Projects" });
     expect(screen.queryByRole("group", { name: "Lessons" })).toBeNull();
     expect(
@@ -95,7 +135,6 @@ describe("BaseProjectList", () => {
         .getAllByRole("button", { name: /^(alpha|beta|Hello Anchor)$/ })
         .map((b) => b.textContent)
     ).toEqual(["beta", "alpha", "Hello Anchor"]);
-    expect(within(projects).queryByText(/of 4/)).toBeNull();
     expect(
       within(projects)
         .getByRole("button", { name: "alpha" })
@@ -112,6 +151,120 @@ describe("BaseProjectList", () => {
         .className.includes("md:opacity-0");
     expect(hidden("alpha")).toBe(false);
     expect(hidden("beta")).toBe(true);
+  });
+
+  it("says where a project's work lives when it is not in the account", () => {
+    draw({ projects: [behind, local, alpha] });
+    const projects = screen.getByRole("group", { name: "Projects" });
+    expect(within(projects).getByText("This browser")).toBeTruthy();
+    expect(within(projects).getByText("Not synced")).toBeTruthy();
+    // The row keeps its name; the marker is its description
+    const description = (name: string) => {
+      const id = within(projects)
+        .getByRole("button", { name })
+        .getAttribute("aria-describedby");
+      return id ? document.getElementById(id)?.textContent : null;
+    };
+    expect(description("local")).toBe("This browser");
+    expect(description("behind")).toBe("Not synced");
+    expect(description("alpha")).toBeNull();
+  });
+
+  it("shows a started lesson's page, describing its row by it", () => {
+    draw({
+      projects: [
+        lesson("Hello Anchor", { state: "started", page: 3, pages: 5 }),
+      ],
+    });
+    const row = screen.getByRole("button", { name: "Hello Anchor" });
+    expect(screen.getByText("3 of 5")).toBeTruthy();
+    const id = row.getAttribute("aria-describedby") ?? "";
+    expect(
+      id
+        .split(" ")
+        .map((part) => document.getElementById(part)?.textContent)
+        .join(" ")
+    ).toContain("Page 3 of 5");
+  });
+
+  it("shows a finished lesson's check, describing its row as completed", () => {
+    draw({ projects: [lesson("Hello Anchor", { state: "completed" })] });
+    const row = screen.getByRole("button", { name: "Hello Anchor" });
+    expect(
+      document.querySelector('[data-lesson-progress="completed"]')
+    ).toBeTruthy();
+    const id = row.getAttribute("aria-describedby") ?? "";
+    expect(document.getElementById(id)?.textContent).toBe("Completed");
+  });
+
+  it("shows no progress on a project, nor on a lesson not read yet", () => {
+    draw({ projects: [alpha, hello] });
+    expect(document.querySelector("[data-lesson-progress]")).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Hello Anchor" })
+        .getAttribute("aria-describedby")
+    ).toBeNull();
+  });
+
+  it("describes a lesson by its progress and its marker together", () => {
+    const both: ProjectEntry = {
+      name: "Hello Anchor",
+      id: "id-Hello Anchor",
+      isLesson: true,
+      pinned: false,
+      marker: "this-browser",
+      progress: { state: "started", page: 2, pages: 4 },
+    };
+    draw({ projects: [both] });
+    const ids = screen
+      .getByRole("button", { name: "Hello Anchor" })
+      .getAttribute("aria-describedby")
+      ?.split(" ");
+    expect(ids?.map((id) => document.getElementById(id)?.textContent)).toEqual([
+      "This browser",
+      "Page 2 of 4",
+    ]);
+  });
+
+  it("keeps a long name clear of the marker, the page and the pin together", () => {
+    const crowded: ProjectEntry = {
+      name: "A lesson with a long name",
+      id: "id-crowded",
+      isLesson: true,
+      pinned: true,
+      marker: "not-synced",
+      progress: { state: "started", page: 12, pages: 12 },
+    };
+    draw({ projects: [crowded] });
+    const row = screen.getByRole("button", {
+      name: "A lesson with a long name",
+    });
+    // In the row's line after the name, so the name truncates against them
+    // and takes their room when they step aside
+    expect(row.querySelector("[data-sync-marker]")).not.toBeNull();
+    expect(row.querySelector("[data-lesson-progress]")).not.toBeNull();
+    expect(row.querySelector('[title="Pinned"]')).not.toBeNull();
+    expect(screen.getByText("A lesson with a long name").classList).toContain(
+      "truncate"
+    );
+  });
+
+  it("draws Not synced with a warning dot, beside the pin", () => {
+    draw({ projects: [behind] });
+    const marker = screen.getByText("Not synced").closest("[data-sync-marker]");
+    expect(marker?.getAttribute("data-sync-marker")).toBe("not-synced");
+    expect(
+      marker
+        ?.querySelector('[data-slot="status-dot"]')
+        ?.getAttribute("data-variant")
+    ).toBe("warning");
+    expect(screen.getAllByTitle("Pinned")).toHaveLength(1);
+  });
+
+  it("marks no row that the account holds", () => {
+    draw();
+    expect(document.querySelector("[data-sync-marker]")).toBeNull();
   });
 
   it("marks a pinned row, whose menu offers Unpin", () => {
@@ -234,11 +387,40 @@ describe("BaseProjectList", () => {
   });
 
   it("shows a rename error in place", () => {
-    draw({ renaming: "alpha", renameError: "A project named beta exists." });
+    draw({
+      renaming: "alpha",
+      renameError: "A project already has that name.",
+    });
     const field = screen.getByRole("textbox", { name: "Rename alpha" });
     expect(field.getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByRole("alert").textContent).toBe(
-      "A project named beta exists."
+      "A project already has that name."
     );
+  });
+
+  it("offers a project and the tutorials once every project is gone", () => {
+    const empty = { onStartProject: vi.fn(), onOpenTutorials: vi.fn() };
+    draw({ projects: [], empty });
+    const group = screen.getByRole("group", { name: "Projects" });
+    expect(
+      within(group).getByRole("heading", { name: "No projects" })
+    ).toBeTruthy();
+    expect(
+      within(group).getByText("Start from a template, or follow a tutorial.")
+    ).toBeTruthy();
+    fireEvent.click(
+      within(group).getByRole("button", { name: "Start a project" })
+    );
+    fireEvent.click(
+      within(group).getByRole("button", { name: "Open tutorials" })
+    );
+    expect(empty.onStartProject).toHaveBeenCalledTimes(1);
+    expect(empty.onOpenTutorials).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing of an empty list while it loads", () => {
+    const empty = { onStartProject: vi.fn(), onOpenTutorials: vi.fn() };
+    draw({ projects: [], loading: true, empty });
+    expect(screen.queryByText("No projects")).toBeNull();
   });
 });

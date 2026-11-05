@@ -20,7 +20,7 @@ import { useAirdrop } from "./useAirdrop";
 
 describe("useAirdrop", () => {
   beforeEach(() => {
-    vi.mocked(PgSession.get).mockReturnValue(null);
+    vi.mocked(PgSession.get).mockReturnValue(undefined);
   });
 
   // The caller tells the user; printed to a folded console, or to none under

@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 
 import {
   expect,
+  json,
   LONG,
   seedWorkspace,
   stubAiStatus,
@@ -9,6 +10,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE } from "./viewports";
 
 /**
  * The navigation's Get set up checklist. Every test stubs `/api/ai/status` with
@@ -32,6 +34,24 @@ const stubNoDefaultBackend = async (context: BrowserContext) => {
   await context.route("**/api/agent", (route) => route.abort());
 };
 
+/**
+ * Devnet answers `getSlot` with a slot that moves, so the network step ticks
+ * whatever the public endpoint does: it warns while the cluster does not
+ * answer (Spec 08 NET-02), and a rate-limited CI runner must not flip it
+ */
+const answeringDevnet = (context: BrowserContext) => {
+  let slot = 1_000;
+  return context.route("https://api.devnet.solana.com/**", (route) => {
+    const body = route.request().postDataJSON() as {
+      id?: unknown;
+      method?: string;
+    } | null;
+    if (body?.method !== "getSlot") return route.continue();
+    slot += 1;
+    return json(route, { jsonrpc: "2.0", result: slot, id: body.id });
+  });
+};
+
 /** Through the step itself: the Playground wallet's setup, then Continue */
 const connectWallet = async (page: Page) => {
   await step(page, "Connect a wallet").click();
@@ -44,6 +64,7 @@ const connectWallet = async (page: Page) => {
 
 test.beforeEach(async ({ context }) => {
   await stubNoDefaultBackend(context);
+  await answeringDevnet(context);
 });
 
 test("client-v2-layout: Counting the steps", async ({ page }) => {
@@ -93,9 +114,9 @@ test("client-v2-layout: A step opens its action", async ({ page }) => {
 test("client-v2-layout: The checklist on a phone's menu page", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setViewportSize(DESK);
   await seedWorkspace(page);
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize(PHONE);
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(title(page)).toHaveText("Get set up· 1 of 4");
   // Folded to its one line on a phone, as the prototype keeps it

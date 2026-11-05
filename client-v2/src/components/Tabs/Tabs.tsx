@@ -1,8 +1,10 @@
 import { SetStateAction, useCallback } from "react";
-import styled, { css } from "styled-components";
+import { createPortal } from "react-dom";
 
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
+import { useEditorHeadHost } from "@/widgets/layout-shell";
 
 import {
   useExplorer,
@@ -45,9 +47,14 @@ export const Tabs = () => {
   // the others (`BasePhonePager`'s file picker), as the prototype draws it.
   // The row's wallet toggle goes with it; the account menu opens the wallet
   const phone = useViewport() === "phone";
+  // From 768 px the row sits in the frame's editor head, over the files
+  // column and the stage; it stays mounted here, so its contexts are the
+  // stage's. With no head (a phone returns above; Home, a unit test) it
+  // draws in place.
+  const host = useEditorHeadHost();
   if (phone || !explorer.tabs.length) return null;
 
-  return (
+  const row = (
     <BaseEditorTabs
       id={PgView.ids.TABS}
       current={explorer.currentFilePath ?? undefined}
@@ -62,6 +69,7 @@ export const Tabs = () => {
       />
     </BaseEditorTabs>
   );
+  return host ? createPortal(row, host) : row;
 };
 
 const Wallet = () => {
@@ -69,7 +77,15 @@ const Wallet = () => {
   if (!wallet) return null;
 
   return (
-    <WalletWrapper>
+    <div
+      className={cn(
+        "flex items-center",
+        // The picture is greyed at rest and full strength on hover, light
+        // or dark
+        "[&>button_img]:mr-1.5 [&>button_img]:invert-50",
+        "[&>button:hover_img]:invert-0 dark:[&>button:hover_img]:invert-100"
+      )}
+    >
       <Button
         onClick={() => (PgWallet.show = !PgWallet.show)}
         variant="ghost"
@@ -85,24 +101,6 @@ const Wallet = () => {
         />
         Wallet
       </Button>
-    </WalletWrapper>
+    </div>
   );
 };
-
-const WalletWrapper = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: center;
-
-    & > button {
-      & img {
-        filter: invert(0.5);
-        margin-right: 0.375rem;
-      }
-
-      &:hover img {
-        filter: invert(${theme.isDark ? 1 : 0});
-      }
-    }
-  `}
-`;

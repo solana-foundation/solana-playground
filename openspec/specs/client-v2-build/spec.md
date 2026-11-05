@@ -178,3 +178,70 @@ serve it.
 
 - **WHEN** the production build runs on `master`
 - **THEN** `scripts/bundle-modules.build-test.mjs` passes
+
+### Requirement: The served page names the brand icons without running script
+
+The `index.html` that `client-v2` serves SHALL name the brand icons and the
+brand theme colour in its markup, so a browser, a crawler or a home screen
+reads them without running the bundle. `manifest.json` SHALL list the brand
+app icons. No script SHALL replace the page icon at runtime.
+
+#### Scenario: The generated head (manual)
+
+- **WHEN** `scripts/update-static.mjs` has run
+- **THEN** `public/index.html` has `<link rel="icon">` for `/favicon.ico`
+  (`sizes="32x32"`), `/favicon.svg` (`type="image/svg+xml"`) and
+  `/favicon-96x96.png`, `<link rel="apple-touch-icon">` for
+  `/apple-touch-icon.png`, and `<meta name="theme-color" content="#101011">`,
+  and no other icon link or theme colour
+
+#### Scenario: Served icon files are the brand renders (manual)
+
+- **WHEN** `scripts/update-static.mjs` has run
+- **THEN** each icon file and `manifest.json` in `public/` is byte-identical
+  to its copy under `client-v2/static/`
+
+#### Scenario: The manifest (manual)
+
+- **WHEN** DevTools > Application > Manifest reads `/manifest.json`
+- **THEN** it names the app "Solana Playground" (short name "Playground"),
+  lists `icon-192.png` and `icon-512.png` with purpose `any` and
+  `icon-maskable-512.png` with purpose `maskable`, and has `theme_color` and
+  `background_color` `#101011`
+
+#### Scenario: A hard reload (manual)
+
+- **WHEN** the page is hard-reloaded
+- **THEN** the tab shows the brand icon from first paint and no upstream icon
+
+### Requirement: A shared link unfurls as the brand card
+
+The `index.html` that `client-v2` serves SHALL carry Open Graph and Twitter
+card tags in its markup, so a link preview reads them without running the
+bundle. Every URL in them SHALL be absolute. The share image SHALL be served
+from the site root.
+
+#### Scenario: The generated card tags (manual)
+
+- **WHEN** `scripts/update-static.mjs` has run
+- **THEN** `public/index.html` has `og:type` `website`, `og:site_name` and
+  `og:title` "Solana Playground", `og:description` "Write, build and deploy
+  Solana programs in your browser.", `og:url` the production base,
+  `og:image` the production base's `/og.png` with `og:image:type`
+  `image/png`, `og:image:width` `1200`, `og:image:height` `630` and an
+  `og:image:alt`, and `twitter:card` `summary_large_image` with
+  `twitter:title`, `twitter:description`, `twitter:image` and
+  `twitter:image:alt` matching the Open Graph ones, each tag exactly once
+
+#### Scenario: The share image is served (manual)
+
+- **WHEN** `scripts/update-static.mjs` has run
+- **THEN** `public/og.png` is byte-identical to `client-v2/static/og.png`, a
+  1200×630 PNG
+
+#### Scenario: A link preview (manual)
+
+- **WHEN** the deployed page's URL is checked in a card validator or pasted
+  into Slack
+- **THEN** the preview shows the share image, the title "Solana Playground"
+  and the description

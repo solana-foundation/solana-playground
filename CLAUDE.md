@@ -189,6 +189,10 @@ Asked to build something in the client, look in `openspec/changes/` first.
   commit in `client-v2/scripts/assets-commit.txt` and sets `ASSETS_DIR`. A
   submodule bump updates that file too; `scripts/assets-commit.test.mjs`
   (`yarn test-api`) fails until it does and prints the command.
+  Files under
+  `client-v2/static/` (the curated program gallery,
+  `static/programs/programs.json`) are copied over that mirror afterwards and
+  win; edit those, never `public/`.
 - **`docs/assistant-context.md` is the in-product assistant's context**, not
   Claude Code's. It is the source of truth; `yarn sync-assistant-context` copies
   it into `client-v2/src/views/sidebar/assistant/content/`. Edit the `docs/` copy.

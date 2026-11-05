@@ -19,6 +19,7 @@ import { emptySourceError, isEmptyProgram, PROGRAM_FILE } from "./empty-source";
 export const build = createCmd({
   name: "build",
   description: "Build your program",
+  needsConnection: true,
   stoppable: true,
   handle: async ({ signal }) => {
     // Spec 09: an empty program file is named and nothing is sent. The

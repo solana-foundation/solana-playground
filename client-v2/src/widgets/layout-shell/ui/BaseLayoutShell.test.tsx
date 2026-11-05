@@ -178,6 +178,7 @@ const props = (
     files: choice.files ?? (() => <aside>files slot</aside>),
     stageBar: <header>stage bar</header>,
     stageTabs: <nav>stage tabs</nav>,
+    workHead: <div>work head</div>,
     stage: choice.stage ?? <main>stage slot</main>,
     console: choice.console ?? <div className="xterm">console slot</div>,
     assistant: choice.assistant ?? (() => <section>assistant slot</section>),
@@ -233,6 +234,37 @@ it("should lay out the navigation, the assistant, then the work area on a wide s
   ).toHaveLength(3);
   expect(document.querySelector('[data-slot="sidebar"]')).not.toBeNull();
   expect(screen.queryByRole("button", { name: "Expand assistant" })).toBeNull();
+});
+
+it.each(["wide", "compact"] as const)(
+  "draws the work head under the stage tabs, over the files column and the stage, on a %s window",
+  (viewport) => {
+    render(<BaseLayoutShell {...props(viewport)} />);
+    const order = ["stage tabs", "work head", "files slot", "stage slot"].map(
+      (slot) => screen.getByText(slot)
+    );
+    order.slice(1).forEach((element, index) => {
+      expect(
+        order[index].compareDocumentPosition(element) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+    // Outside the files/center group, so opening the column moves nothing in it
+    expect(
+      screen.getByText("files slot").closest("#layout-work")
+    ).not.toBeNull();
+    expect(screen.getByText("work head").closest("#layout-work")).toBeNull();
+  }
+);
+
+it("draws no work head on a phone", () => {
+  render(<BaseLayoutShell {...props("phone")} />);
+  expect(screen.queryByText("work head")).toBeNull();
+});
+
+it("draws no work head under Home", () => {
+  render(<BaseLayoutShell {...props("wide", { home: <div>home</div> })} />);
+  expect(screen.queryByText("work head")).toBeNull();
 });
 
 it("should hand the navigation the stock toggle and whether it is a rail", () => {

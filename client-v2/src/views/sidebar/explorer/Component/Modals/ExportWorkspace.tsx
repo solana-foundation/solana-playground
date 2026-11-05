@@ -1,6 +1,5 @@
 import { InfoIcon } from "lucide-react";
 import { FC, useEffect, useState } from "react";
-import styled, { css } from "styled-components";
 
 import type { ProjectKind } from "@/features/project-export";
 import {
@@ -136,18 +135,18 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
       // No field to land on, so Radix would ring the header's Close on open
       openFocus="dialog"
     >
-      <Content>
+      <div className="max-w-[26rem]">
         {kind === "no-program" ? (
           <>
-            <Question>Make it a Node project?</Question>
+            <p className="font-bold">Make it a Node project?</p>
 
-            <Description>
+            <p className="mt-4 text-[0.75rem] text-[color:var(--text-secondary)]">
               Playground runs <code>client/</code> and <code>tests/</code> in
               the browser, where it provides <code>pg.connection</code> and{" "}
               <code>pg.wallet</code>.
-            </Description>
+            </p>
 
-            <Description>
+            <p className="mt-4 text-[0.75rem] text-[color:var(--text-secondary)]">
               Converting adds <code>package.json</code>,{" "}
               <code>tsconfig.json</code> and run scripts.{" "}
               <code>pg.connection</code> connects to{" "}
@@ -155,21 +154,21 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
               <code>{exportedEndpoint()}</code>, and <code>pg.wallet</code>{" "}
               reads <code>{KEYPAIR_VARIABLE}</code>, or{" "}
               <code>{DEFAULT_KEYPAIR_PATH}</code>.
-            </Description>
+            </p>
           </>
         ) : (
           <>
-            <Question>Convert the project layout?</Question>
+            <p className="font-bold">Convert the project layout?</p>
 
-            <Description>
+            <p className="mt-4 text-[0.75rem] text-[color:var(--text-secondary)]">
               Playground uses a different layout than the framework's default
               layout.
-            </Description>
+            </p>
 
-            <Description>
+            <p className="mt-4 text-[0.75rem] text-[color:var(--text-secondary)]">
               To make the project work locally, playground can make the
               necessary conversion before exporting.
-            </Description>
+            </p>
           </>
         )}
 
@@ -181,7 +180,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
           </CalloutDescription>
         </Callout>
 
-        <ButtonsWrapper>
+        <div className="mt-4 flex [&>*]:mr-4">
           <AsyncButton
             type="button"
             onClick={convertAndExport}
@@ -199,36 +198,11 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
             Export without changes
             <ExportFile data-icon="inline-end" />
           </AsyncButton>
-        </ButtonsWrapper>
-      </Content>
+        </div>
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  max-width: 26rem;
-`;
-
-const Question = styled.p`
-  font-weight: bold;
-`;
-
-const Description = styled.p`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.small};
-    margin-top: 1rem;
-  `}
-`;
-
-const ButtonsWrapper = styled.div`
-  display: flex;
-  margin-top: 1rem;
-
-  & > * {
-    margin-right: 1rem;
-  }
-`;
 
 type ReadmeProps = ModalPageProps & {
   /** Markdown text */

@@ -1,4 +1,5 @@
 import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgAccountList } from "./account-list";
 import { report } from "./diagnostics";
 import type { Conflict, ServerProject } from "./project-sync";
 import {
@@ -212,6 +213,9 @@ const passUnlocked = async (): Promise<SyncResult> => {
   // Everything below decides on absence, so without the list there is nothing
   // it can safely decide; the next reconcile will have one.
   if (!server) return result;
+  // Home waits on this to tell a signed-in account with nothing in it from a
+  // browser this pass has not filled yet
+  PgAccountList.listed(server.length);
   const serverIds = new Set(server.map((project) => project.id));
 
   // Newest first. The server orders its answer this way already; sorting here

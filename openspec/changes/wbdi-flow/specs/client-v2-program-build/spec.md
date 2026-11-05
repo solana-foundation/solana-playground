@@ -77,7 +77,9 @@ say so before the user deploys them.
 ### Requirement: The IDL can be downloaded
 
 After a build that produced an IDL, the user SHALL be able to download it as a
-JSON file.
+JSON file from a Download IDL link under Build succeeded's Continue to Deploy
+and Build again, shown only while the project holds an IDL (the build's or an
+uploaded one); without one there is no Download IDL.
 
 #### Scenario: Download the IDL
 
@@ -101,10 +103,16 @@ The build SHALL emit `build_started { framework }` when a build is sent,
 ### Requirement: Every Build action emits an event
 
 Every control on the Build screen that performs an action SHALL emit its own
-event when used, separate from the outcome events: Build emits
-`build_started`, Download IDL `build_idl_downloaded`, Export project
-`build_project_exported` and Fix with assistant `build_fix_requested`, the
-last three with no parameters. A control without its event fails review.
+event when used, separate from the outcome events: Build, and Build again on
+Build succeeded, emit `build_started`, Download IDL `build_idl_downloaded` and
+Fix with assistant `build_fix_requested`, the last two with no parameters.
+Continue to Deploy only switches the stage. A control without its event fails
+review.
+
+#### Scenario: Build again is tracked as a build
+
+- **WHEN** the user picks Build again on Build succeeded
+- **THEN** the memory provider records `build_started`
 
 #### Scenario: Fix with assistant is tracked
 

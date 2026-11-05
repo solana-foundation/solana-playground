@@ -90,3 +90,31 @@ it("shows only its title while folded, and asks to unfold from it", async () => 
   await userEvent.click(title);
   expect(onFold).toHaveBeenCalledExactlyOnceWith(false);
 });
+
+// Spec 08 NET-02 and the prototype's setup steps: a chosen network that does
+// not answer loses its tick and warns, so the list never contradicts the
+// notice over the stage
+it("warns on a network that does not answer, with no tick and no button", () => {
+  renderList([
+    todo("assistant"),
+    {
+      step: "network",
+      done: false,
+      warn: "devnet is not responding",
+      value: "devnet",
+    },
+    done("github", "octocat"),
+    todo("wallet"),
+  ]);
+  const row = screen.getAllByRole("listitem")[1];
+  expect(row.getAttribute("data-status")).toBe("warn");
+  expect(row.getAttribute("title")).toBe("devnet is not responding");
+  expect(row.textContent).toBe(
+    "Choose a network, devnet is not respondingdevnet"
+  );
+  expect(screen.queryByRole("button", { name: /Choose a network/ })).toBeNull();
+  // The warning network still counts: it is chosen, only not answering
+  expect(screen.getByRole("button", { name: /^Get set up/ }).textContent).toBe(
+    "Get set up· 2 of 4"
+  );
+});

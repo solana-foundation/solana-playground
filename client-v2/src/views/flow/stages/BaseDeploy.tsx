@@ -12,6 +12,7 @@ import {
   StageEmpty,
   StageEmptyActions,
   StageEmptyDescription,
+  StageEmptyEyebrow,
   StageEmptyMedia,
   StageEmptyMeta,
   StageEmptyTitle,
@@ -19,6 +20,7 @@ import {
 import { StatusDot } from "@/shared/ui/status-dot";
 
 import type { DeployRecord } from "../state/deploy-history";
+import { clusterTitle } from "./cluster-title";
 import {
   STAGE_BODY,
   STAGE_FOOT,
@@ -58,19 +60,28 @@ export interface BaseDeployProps {
   txUrl: (signature: string) => string;
   onDeploy: () => void;
   onInteract: () => void;
-  /** The secondary "Upload IDL" action (`IdlActions mode="upload"`) */
+  /** Opens the Build stage, offered while the program is not built */
+  onGoToBuild: () => void;
+  /** Opens the console, where the terminal has a failed deploy's whole log */
+  onShowLog: () => void;
+  /** The "Upload IDL" action, an outline beside the pill (`IdlActions mode="upload"`) */
   idlUpload: ReactNode;
 }
 
 /** Why the Deploy button is off, for its tooltip; undefined when it is on */
-const deployBlockedReason = (p: BaseDeployProps) => {
-  if (!p.built) return "Build successfully first";
-  if (p.deploy === "running") return "A deploy is already running";
-  return undefined;
-};
+const deployBlockedReason = (p: BaseDeployProps) =>
+  p.deploy === "running" ? "A deploy is already running" : undefined;
+
+/**
+ * A failed deploy of a built program: the stage maps no failure to a named
+ * state (Spec 08 ANY-00), so the pill runs the deploy again and says so. With
+ * no build the pill is Go to Build instead (Spec 03 DEP-07).
+ */
+const offersRetry = (p: BaseDeployProps) => p.built && p.deploy === "failed";
 
 const deployLabel = (p: BaseDeployProps, redeploy: boolean) => {
   if (p.deploy === "running") return redeploy ? "Upgrading..." : "Deploying...";
+  if (offersRetry(p)) return "Try again";
   const where = clusterName(p);
   return redeploy ? `Redeploy to ${where}` : `Deploy to ${where}`;
 };
@@ -80,7 +91,7 @@ const clusterName = (p: BaseDeployProps) => p.cluster ?? "the network";
 
 const description = (p: BaseDeployProps, latest: DeployRecord | null) => {
   if (!p.built) {
-    return "Build the program first \u2014 the stepper unlocks Deploy once it compiles cleanly.";
+    return "Build the program first.";
   }
   if (latest) {
     return "The program id stays constant across deploys; redeploying upgrades it in place.";
@@ -214,16 +225,13 @@ const History = ({ p }: { p: BaseDeployProps }) => (
 
 /**
  * The Deploy stage, drawn from props alone; `Deploy` connects it. Before the
- * first deploy it is the prototype's empty stage: centred, the pill and
- * "Upload IDL" under it, no history yet. After one it shows the result and
- * the history, read from the left.
+ * first deploy it is the prototype's empty stage: centred, the network over
+ * the title, the pill and "Upload IDL" under it, no history yet. After one it
+ * shows the result and the history, read from the left.
  */
 const BaseDeploy = (p: BaseDeployProps) => {
   const latest = p.history[0] ?? null;
   const n = p.history.length;
-  const meta = [p.cluster, latest && `${n} deployment${n === 1 ? "" : "s"}`]
-    .filter(Boolean)
-    .join(" · ");
   const running = p.deploy === "running";
 
   return (
@@ -234,10 +242,22 @@ const BaseDeploy = (p: BaseDeployProps) => {
             <Rocket />
           </StageEmptyMedia>
         )}
+        {p.cluster && (
+          <StageEmptyEyebrow>
+            {/* Idle: the stage does not know whether the cluster answers;
+                the status row does, and says it */}
+            <StatusDot />
+            {clusterTitle(p.cluster)}
+          </StageEmptyEyebrow>
+        )}
         <StageEmptyTitle>
           {latest ? "Deploy" : "Nothing deployed yet"}
         </StageEmptyTitle>
-        {meta && <StageEmptyMeta>{meta}</StageEmptyMeta>}
+        {latest && (
+          <StageEmptyMeta>{`${n} deployment${
+            n === 1 ? "" : "s"
+          }`}</StageEmptyMeta>
+        )}
         <StageEmptyDescription>{description(p, latest)}</StageEmptyDescription>
         {p.built && !latest && p.programId && (
           <p className="text-caption text-muted-foreground">
@@ -247,26 +267,44 @@ const BaseDeploy = (p: BaseDeployProps) => {
         {p.deploy === "failed" && (
           <Callout variant="error" role="alert">
             <CalloutDescription>
-              Deploy failed — see the terminal.
+              Could not deploy. The full log has the details.
             </CalloutDescription>
           </Callout>
         )}
         {latest && <DeployResult latest={latest} p={p} />}
         {latest && <History p={p} />}
-        <StageEmptyActions className={cn(STAGE_FOOT, !latest && "flex-col")}>
-          <BrandButton
-            disabled={!p.built || running}
-            aria-busy={running || undefined}
-            title={deployBlockedReason(p)}
-            onClick={p.onDeploy}
-          >
-            {deployLabel(p, latest !== null)}
-            {!running && <BrandButtonIcon />}
-          </BrandButton>
-          {/* Before the first deploy, centred under the pill on a desk and
-              above it on a phone, where the row stretches the pill to the
-              screen's width; after one, beside the pill */}
-          <div className="flex justify-center">{p.idlUpload}</div>
+        <StageEmptyActions className={STAGE_FOOT}>
+          {/* One pill, the way on: Go to Build until there is a build, then
+              the deploy. A faded Deploy beside a link read as three kinds of
+              button for two steps */}
+          {p.built ? (
+            <BrandButton
+              disabled={running}
+              aria-busy={running || undefined}
+              title={deployBlockedReason(p)}
+              onClick={p.onDeploy}
+            >
+              {deployLabel(p, latest !== null)}
+              {!running && <BrandButtonIcon />}
+            </BrandButton>
+          ) : (
+            <BrandButton onClick={p.onGoToBuild}>
+              Go to Build
+              <BrandButtonIcon />
+            </BrandButton>
+          )}
+          {/* Every other way on is an outline in the pill's height and shape,
+              so the pill keeps the focus: Show full log after a failure
+              (Spec 08 ANY-00), then Upload IDL. Above the pill on a phone,
+              where the pill keeps the foot */}
+          <div className="flex flex-wrap items-center justify-center gap-2 [&_[data-variant=outline]]:h-10 [&_[data-variant=outline]]:rounded-full [&_[data-variant=outline]]:px-5 max-md:[&_[data-variant=outline]]:w-full max-md:[&>div]:w-full">
+            {offersRetry(p) && (
+              <Button variant="outline" onClick={p.onShowLog}>
+                Show full log
+              </Button>
+            )}
+            {p.idlUpload}
+          </div>
         </StageEmptyActions>
       </StageEmpty>
     </div>

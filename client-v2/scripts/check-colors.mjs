@@ -24,11 +24,9 @@ const ALLOWED = [
   /^shared\/lib\/css-color\//,
   // Third-party logos keep their own colours on every ground
   /^languages\//,
-  // The page icon, drawn by the browser outside the page, where no token reaches
-  /^app\/favicon\.svg$/,
   // Brand art: a tutorial cover's grounds are the brand deck's own colours,
   // the same on every theme, and no token describes them
-  /^widgets\/catalog\/ui\/art\//,
+  /^entities\/tutorial\/ui\/art\//,
 ];
 
 const EXTENSIONS = new Set([

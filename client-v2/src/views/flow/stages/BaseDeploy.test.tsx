@@ -54,6 +54,8 @@ const props = (state: {
   txUrl: (sig) => `https://explorer.test/tx/${sig}`,
   onDeploy: vi.fn(),
   onInteract: vi.fn(),
+  onGoToBuild: vi.fn(),
+  onShowLog: vi.fn(),
   idlUpload: <button>Upload IDL</button>,
 });
 
@@ -78,7 +80,7 @@ const lastIsActions = (container: HTMLElement) =>
     ?.lastElementChild?.getAttribute("data-slot");
 
 describe("BaseDeploy", () => {
-  it("holds Deploy until a build succeeded", () => {
+  it("offers no Deploy until a build succeeded", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: false, deploy: "idle", history: [] })} />
     );
@@ -86,10 +88,36 @@ describe("BaseDeploy", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing deployed yet" })
     ).toBeTruthy();
-    const deploy = screen.getByRole("button", { name: "Deploy to devnet" });
-    expect(deploy).toHaveProperty("disabled", true);
-    expect(deploy.getAttribute("title")).toBe("Build successfully first");
+    expect(
+      screen.queryByRole("button", { name: "Deploy to devnet" })
+    ).toBeNull();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  it("offers Go to Build, before Upload IDL, while nothing is built (Spec 03 DEP-07)", () => {
+    const p = props({ built: false, deploy: "idle", history: [] });
+    const { container } = render(<BaseDeploy {...p} />);
+
+    expect(screen.getByText("Build the program first.")).toBeTruthy();
+    const goToBuild = screen.getByRole("button", { name: "Go to Build" });
+    fireEvent.click(goToBuild);
+    expect(p.onGoToBuild).toHaveBeenCalled();
+    // The pill itself, the only one
+    expect(brandButtons(container)).toHaveLength(1);
+    expect(brandButtons(container)[0]).toBe(goToBuild);
+    expect(
+      goToBuild.compareDocumentPosition(
+        screen.getByRole("button", { name: "Upload IDL" })
+      ) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("offers no Go to Build once the program is built", () => {
+    render(
+      <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
+    );
+
+    expect(screen.queryByRole("button", { name: "Go to Build" })).toBeNull();
   });
 
   it("deploys a built program and names its id", () => {
@@ -132,8 +160,38 @@ describe("BaseDeploy", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Deploy failed — see the terminal."
+      "Could not deploy. The full log has the details."
     );
+  });
+
+  it("offers Try again and Show full log after a failed deploy (Spec 08 ANY-00)", () => {
+    const p = props({
+      built: true,
+      deploy: "failed",
+      history: [record("a", null)],
+    });
+    const { container } = render(<BaseDeploy {...p} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(p.onDeploy).toHaveBeenCalled();
+    const showLog = screen.getByRole("button", { name: "Show full log" });
+    fireEvent.click(showLog);
+    expect(p.onShowLog).toHaveBeenCalled();
+    // An outline beside the pill, as Upload IDL is
+    expect(showLog.getAttribute("data-variant")).toBe("outline");
+    expect(brandButtons(container)).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "Redeploy to devnet" })
+    ).toBeNull();
+  });
+
+  it("offers no Show full log while no deploy failed", () => {
+    render(
+      <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
+    );
+
+    expect(screen.queryByRole("button", { name: "Show full log" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("shows the latest deployment's program id to copy", () => {
@@ -222,7 +280,7 @@ describe("BaseDeploy", () => {
     ).toHaveLength(2);
   });
 
-  /** The prototype's first deploy: the pill, and Upload IDL under it */
+  /** Before the first deploy: the pill, and Upload IDL beside it */
   it("before the first deploy it has no history, only Upload IDL", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
@@ -259,16 +317,75 @@ describe("BaseDeploy", () => {
     ).toBeTruthy();
   });
 
-  it("writes a dash, not two hyphens", () => {
+  it("asks for a build first, without naming the stepper", () => {
     render(
       <BaseDeploy {...props({ built: false, deploy: "idle", history: [] })} />
     );
 
+    expect(screen.getByText("Build the program first.")).toBeTruthy();
+  });
+
+  /** The network is a quiet eyebrow over the title, not a mono line under it */
+  it("names the network above the title", () => {
+    const { container } = render(
+      <BaseDeploy {...props({ built: false, deploy: "idle", history: [] })} />
+    );
+
+    const eyebrow = container.querySelector(
+      '[data-slot="stage-empty-eyebrow"]'
+    );
+    expect(eyebrow?.textContent).toBe("Devnet");
+    expect(eyebrow?.querySelector('[data-slot="status-dot"]')).toBeTruthy();
+    expect(eyebrow?.nextElementSibling?.getAttribute("data-slot")).toBe(
+      "stage-empty-title"
+    );
     expect(
-      screen.getByText(
-        "Build the program first \u2014 the stepper unlocks Deploy once it compiles cleanly."
-      )
-    ).toBeTruthy();
+      container.querySelector('[data-slot="stage-empty-meta"]')
+    ).toBeNull();
+  });
+
+  it("counts the deployments under the title once there are some", () => {
+    const { container } = render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          history: [record("a", null), record("b", null)],
+        })}
+      />
+    );
+
+    expect(
+      container.querySelector('[data-slot="stage-empty-eyebrow"]')?.textContent
+    ).toBe("Devnet");
+    expect(
+      container.querySelector('[data-slot="stage-empty-meta"]')?.textContent
+    ).toBe("2 deployments");
+  });
+
+  it("names no network until the endpoint has been read", () => {
+    const p = props({ built: false, deploy: "idle", history: [] });
+    const { container } = render(
+      <BaseDeploy
+        cluster={null}
+        built={p.built}
+        deploy={p.deploy}
+        programId={p.programId}
+        details={p.details}
+        history={p.history}
+        addressUrl={p.addressUrl}
+        txUrl={p.txUrl}
+        onDeploy={p.onDeploy}
+        onInteract={p.onInteract}
+        onGoToBuild={p.onGoToBuild}
+        onShowLog={p.onShowLog}
+        idlUpload={p.idlUpload}
+      />
+    );
+
+    expect(
+      container.querySelector('[data-slot="stage-empty-eyebrow"]')
+    ).toBeNull();
   });
 
   it("says nothing deployed once", () => {
@@ -296,5 +413,17 @@ describe("BaseDeploy", () => {
         .getByRole("button", { name: "Interact" })
         .getAttribute("data-variant")
     ).toBe("outline");
+  });
+
+  it("offers Go to Build, not Try again, when a failed deploy's build is gone", () => {
+    render(
+      <BaseDeploy {...props({ built: false, deploy: "failed", history: [] })} />
+    );
+
+    expect(screen.getByRole("button", { name: "Go to Build" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show full log" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Deploy to devnet" })
+    ).toBeNull();
   });
 });

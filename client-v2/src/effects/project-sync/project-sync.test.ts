@@ -1,5 +1,6 @@
 import type { MockInstance } from "vitest";
 
+import { PgAccountList } from "../../features/persistence/model/account-list";
 import * as restore from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import * as snapshot from "../../features/persistence/model/snapshot";
@@ -500,6 +501,80 @@ describe("deleting a workspace here", () => {
     // so removing by the project's id removed nothing.
     expect(forget).toHaveBeenCalledWith("tut:hello");
     expect(forget).not.toHaveBeenCalledWith("still-here");
+  });
+
+  it("marks the account empty once deleting its last project here leaves none", async () => {
+    vi.spyOn(PgSyncMark, "projectIds").mockResolvedValue(["last"]);
+    vi.spyOn(PgSyncMark, "remove").mockResolvedValue(undefined);
+    vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "allWorkspaceNames", "get").mockReturnValue([]);
+    vi.spyOn(PgProjectSync, "remove").mockResolvedValue(true as never);
+    vi.spyOn(PgThreadIndex, "forget").mockResolvedValue(true);
+    registered([]);
+    vi.spyOn(PgProjectSync, "list").mockResolvedValue([]);
+    PgAccountList.listed(1);
+
+    effect = projectSync();
+    dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
+    await vi.waitFor(() => expect(PgAccountList.state).toBe("empty"));
+    PgAccountList.forget();
+  });
+
+  it("keeps the account holding a project this browser never downloaded", async () => {
+    vi.spyOn(PgSyncMark, "projectIds").mockResolvedValue(["last"]);
+    vi.spyOn(PgSyncMark, "remove").mockResolvedValue(undefined);
+    vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "allWorkspaceNames", "get").mockReturnValue([]);
+    vi.spyOn(PgProjectSync, "remove").mockResolvedValue(true as never);
+    vi.spyOn(PgThreadIndex, "forget").mockResolvedValue(true);
+    const list = vi
+      .spyOn(PgProjectSync, "list")
+      .mockResolvedValue([{ id: "skipped" }] as never);
+    registered([]);
+    PgAccountList.listed(2);
+
+    effect = projectSync();
+    dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
+    await vi.waitFor(() => expect(list).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(PgAccountList.state).toBe("holds");
+    PgAccountList.forget();
+  });
+
+  it("leaves an unread account list unread, whatever is deleted here", async () => {
+    vi.spyOn(PgSyncMark, "projectIds").mockResolvedValue(["local-only"]);
+    vi.spyOn(PgSyncMark, "remove").mockResolvedValue(undefined);
+    vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "allWorkspaceNames", "get").mockReturnValue([]);
+    vi.spyOn(PgProjectSync, "remove").mockResolvedValue(true as never);
+    vi.spyOn(PgThreadIndex, "forget").mockResolvedValue(true);
+    registered([]);
+    PgAccountList.forget();
+
+    effect = projectSync();
+    dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(PgAccountList.state).toBe("unknown");
+  });
+
+  it("keeps the account's list as it was when the delete did not reach it", async () => {
+    vi.spyOn(PgSyncMark, "projectIds").mockResolvedValue(["last"]);
+    vi.spyOn(PgSyncMark, "remove").mockResolvedValue(undefined);
+    vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "allWorkspaceNames", "get").mockReturnValue([]);
+    vi.spyOn(PgProjectSync, "remove").mockResolvedValue(false as never);
+    vi.spyOn(PgThreadIndex, "forget").mockResolvedValue(true);
+    registered([]);
+    PgAccountList.listed(1);
+
+    effect = projectSync();
+    dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(PgAccountList.state).toBe("holds");
+    PgAccountList.forget();
   });
 
   it("leaves a project another tab created that this tab has not listed", async () => {

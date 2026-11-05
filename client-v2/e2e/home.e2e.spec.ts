@@ -8,12 +8,14 @@ import {
   projectMenu,
   projectRow,
   startProject,
+  startTutorialFromAbout,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
+import { DESK, PHONE } from "./viewports";
 
 test.describe("on a desktop window", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: DESK });
 
   test("client-v2-layout: An empty install", async ({ page }) => {
     await page.goto("/");
@@ -76,10 +78,10 @@ test.describe("on a desktop window", () => {
     // that was never started shows (see lesson-path.e2e.spec.ts)
     await expect(
       page.getByRole("button", { name: "Start", exact: true })
-    ).toBeVisible();
+    ).toBeVisible(LONG);
     await expect(home(page)).toBeHidden();
 
-    await page.getByRole("button", { name: "Start", exact: true }).click();
+    await startTutorialFromAbout(page);
     // The lesson panel's Steps | Files switch is a Segmented: its items are
     // radios (5.19)
     await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
@@ -142,7 +144,7 @@ const firstLine = (page: Page) =>
   page.locator(".monaco-editor .view-line").first();
 
 test.describe("from an open project", () => {
-  test.use({ viewport: { width: 1280, height: 800 } });
+  test.use({ viewport: DESK });
 
   test("client-v2-layout: Home from an open project and back", async ({
     page,
@@ -202,7 +204,7 @@ test.describe("from an open project", () => {
     await menu.getByRole("menuitem", { name: "Delete alpha" }).click();
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: /^delete$/i })
+      .getByRole("button", { name: "Delete project" })
       .click();
 
     await expect(home(page)).toBeVisible(LONG);
@@ -217,7 +219,7 @@ test.describe("from an open project", () => {
 });
 
 test.describe("on a phone", () => {
-  test.use({ viewport: { width: 390, height: 844 } });
+  test.use({ viewport: PHONE });
 
   test("client-v2-layout: Home on a phone", async ({ page }) => {
     await page.goto("/");
