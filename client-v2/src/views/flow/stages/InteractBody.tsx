@@ -8,6 +8,7 @@ import { clusterName, UNKNOWN_NETWORK } from "../../../constants";
 import { useBalance, useBlockExplorer, useWallet } from "../../../hooks";
 import { PgProgramInfo } from "../../../utils";
 import { Idl, PgProgramInteraction } from "../../../utils/program-interaction";
+import { PgAssistant } from "../../sidebar/assistant/store";
 import Account from "../../sidebar/test/Component/Account";
 import Event from "../../sidebar/test/Component/Event";
 import IdlProvider from "../../sidebar/test/Component/IdlProvider";
@@ -17,6 +18,7 @@ import { PgCallHistory } from "../state/call-history";
 import BaseCallHistory from "./BaseCallHistory";
 import BaseCallResult from "./BaseCallResult";
 import type { CallOutcome } from "./call-outcome";
+import { explainPrompt } from "./call-outcome";
 import { runCall, useCallInFlight } from "./run-call";
 
 export interface InteractBodyProps {
@@ -118,6 +120,9 @@ const InteractBody = ({
                   outcome={outcome}
                   cluster={network}
                   txUrl={txUrl}
+                  onExplain={(failed) =>
+                    PgAssistant.requestPrompt(explainPrompt(failed))
+                  }
                 />
               )}
             </div>

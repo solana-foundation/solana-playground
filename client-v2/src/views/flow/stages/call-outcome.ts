@@ -25,10 +25,58 @@ export const failingLineWith =
   (logs: string[]): string =>
     failingLine(logs) ?? message;
 
+/** Spec 04's "Explain this failure": the failing line and the logs, quoted */
+export const explainPrompt = (outcome: CallOutcome) =>
+  [
+    `Explain why this call to \`${outcome.instruction}\` failed: name the failing instruction and the likely cause.`,
+    ...(outcome.failingLine ? [outcome.failingLine] : []),
+    ...(outcome.logs.length
+      ? ["Program logs:", "```", ...outcome.logs, "```"]
+      : []),
+  ].join("\n");
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("views/flow/stages/call-outcome", () => {
+    describe("explainPrompt", () => {
+      it("quotes the failing line and the logs", () => {
+        expect(
+          explainPrompt({
+            instruction: "increment",
+            ok: false,
+            signature: undefined,
+            logs: ["Program X invoke [1]", "custom program error: 0x1"],
+            failingLine: "custom program error: 0x1",
+          })
+        ).toBe(
+          [
+            "Explain why this call to `increment` failed: name the failing instruction and the likely cause.",
+            "custom program error: 0x1",
+            "Program logs:",
+            "```",
+            "Program X invoke [1]",
+            "custom program error: 0x1",
+            "```",
+          ].join("\n")
+        );
+      });
+
+      it("leaves the logs out when the cluster sent none", () => {
+        expect(
+          explainPrompt({
+            instruction: "increment",
+            ok: false,
+            signature: undefined,
+            logs: [],
+            failingLine: "Wallet not connected",
+          })
+        ).toBe(
+          "Explain why this call to `increment` failed: name the failing instruction and the likely cause.\nWallet not connected"
+        );
+      });
+    });
+
     describe("failingLine", () => {
       it("picks the line with the program's error code", () => {
         expect(

@@ -28,6 +28,7 @@ import {
   PgView,
   resolveTextMateTheme,
 } from "../../../utils";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { SpinnerWithBg } from "../../Loading";
 import { createAutosave } from "./autosave";
 import { editorBuffersOf } from "./editor-buffers";
@@ -327,6 +328,59 @@ const Monaco = () => {
       }),
     ];
     return () => disposables.forEach(({ dispose }) => dispose());
+  }, [editor]);
+
+  // Spec 04: Explain selection and Fix selection in the context menu, which
+  // a long press opens on a phone. `precondition` also hides them with no
+  // selection, since Monaco makes it the menu item's `when`
+  useEffect(() => {
+    if (!editor) return;
+
+    const askFor = (verb: "Explain" | "Fix") => () => {
+      const model = editor.getModel();
+      const selection = editor.getSelection();
+      const path = PgExplorer.currentFilePath;
+      if (!model || !selection || selection.isEmpty() || !path) return;
+      PgAssistant.requestPrompt(
+        selectionPrompt(verb, {
+          path: PgExplorer.getRelativePath(path),
+          from: selection.startLineNumber,
+          to: selection.endLineNumber,
+          language: model.getLanguageId(),
+          text: model.getValueInRange(selection),
+        })
+      );
+    };
+
+    const disposables = [
+      editor.addAction({
+        id: "assistant.explain-selection",
+        label: "Explain selection",
+        contextMenuGroupId: "0_assistant",
+        contextMenuOrder: 1,
+        precondition: "editorHasSelection",
+        run: askFor("Explain"),
+      }),
+      editor.addAction({
+        id: "assistant.fix-selection",
+        label: "Fix selection",
+        contextMenuGroupId: "0_assistant",
+        contextMenuOrder: 2,
+        precondition: "editorHasSelection",
+        run: askFor("Fix"),
+      }),
+    ];
+    // Unmounting disposes the editor first (the effect above), which takes
+    // its actions with it; disposing them again throws inside Monaco
+    let isEditorDisposed = false;
+    const watch = editor.onDidDispose(() => {
+      isEditorDisposed = true;
+    });
+    return () => {
+      if (isEditorDisposed) return;
+      watch.dispose();
+      disposables.forEach(({ dispose }) => dispose());
+    };
   }, [editor]);
 
   // Set editor state
@@ -894,6 +948,26 @@ const Monaco = () => {
       />
     </SpinnerWithBg>
   );
+};
+
+/** A selection the editor menu sends, with the file and lines it came from */
+interface SelectionAsk {
+  path: string;
+  from: number;
+  to: number;
+  language: string;
+  text: string;
+}
+
+/** What Explain selection and Fix selection send to the assistant (Spec 04) */
+const selectionPrompt = (verb: "Explain" | "Fix", ask: SelectionAsk) => {
+  const lines =
+    ask.from === ask.to ? `line ${ask.from}` : `lines ${ask.from} to ${ask.to}`;
+  const what =
+    verb === "Explain"
+      ? `Explain ${lines} of ${ask.path} in plain words:`
+      : `Fix ${lines} of ${ask.path}:`;
+  return [what, "```" + ask.language, ask.text, "```"].join("\n");
 };
 
 export default Monaco;

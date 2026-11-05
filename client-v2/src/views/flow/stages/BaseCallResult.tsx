@@ -18,10 +18,17 @@ export interface BaseCallResultProps {
   /** The network the call went to, named in the Explorer link */
   cluster: string;
   txUrl: (signature: string) => string;
+  /** Asks the assistant why a failed call failed (Spec 04's "Explain this failure") */
+  onExplain: (outcome: CallOutcome) => void;
 }
 
 /** The last call's result under the form: how it went, its signature, its logs */
-const BaseCallResult = ({ outcome, cluster, txUrl }: BaseCallResultProps) => (
+const BaseCallResult = ({
+  outcome,
+  cluster,
+  txUrl,
+  onExplain,
+}: BaseCallResultProps) => (
   <section
     aria-label="Call result"
     aria-live="polite"
@@ -41,6 +48,14 @@ const BaseCallResult = ({ outcome, cluster, txUrl }: BaseCallResultProps) => (
       <p className="m-0 rounded-lg border border-error/20 bg-error/[0.07] px-3 py-2 font-mono text-xs break-words text-foreground">
         {outcome.failingLine}
       </p>
+    )}
+
+    {!outcome.ok && (
+      <div>
+        <Button size="sm" variant="outline" onClick={() => onExplain(outcome)}>
+          Explain this failure
+        </Button>
+      </div>
     )}
 
     {outcome.signature && (

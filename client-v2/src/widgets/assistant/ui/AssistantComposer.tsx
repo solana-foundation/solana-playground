@@ -22,7 +22,7 @@ import type { AiOffInput, AiOffReason } from "../model/ai-off";
 import { aiOff } from "../model/ai-off";
 import type { ModelOption } from "../model/choice";
 import { modelOptions, modelShown } from "../model/choice";
-import { connectLabel, DEFAULT_CONNECTION } from "../model/connection";
+import { DEFAULT_CONNECTION } from "../model/connection";
 import {
   retryDefaultBackend,
   useDefaultBackend,
@@ -351,8 +351,6 @@ export function AssistantComposer({
         effort={effort}
         focusRequest={turn.focusRequest}
         onSources={onSources}
-        onConnect={() => turn.openConnect("add")}
-        connectLabel={connectLabel(connection)}
         focusPicked={focusPicked}
         // While no model can answer this user, Send waits with the reason
         // and the off row above names the way in

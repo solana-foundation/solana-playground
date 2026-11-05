@@ -60,9 +60,10 @@ const REMOVE_TARGET =
  *
  * The input stays editable during a turn; the design system's `Composer`
  * refuses to submit while `busy`, so typing ahead cannot start a second turn.
- * The + (`ComposerAdd`) adds a file to the context (`addable`), or opens
- * Sources and tools or Connect a model: the same Sources and Connect entries
- * as the head's More, with the same keys.
+ * The + (`ComposerAdd`) adds to what the assistant reads: a file to the
+ * context (`addable`), or Sources and tools, the head's More entry with the
+ * same key. Connect a model is the head's More's and the model button's, not
+ * the +'s (Spec 04, "Send is disabled with no model").
  */
 export function BaseAssistantComposer({
   chips,
@@ -77,8 +78,6 @@ export function BaseAssistantComposer({
   focusRequest = 0,
   sendBlocked = null,
   onSources,
-  onConnect,
-  connectLabel,
   addable,
   focusPicked,
 }: {
@@ -104,10 +103,6 @@ export function BaseAssistantComposer({
   sendBlocked?: string | null;
   /** Opens Sources and tools in place of the conversation */
   onSources(): void;
-  /** Opens Connect a model */
-  onConnect(): void;
-  /** "Connect a model…" with nothing connected, "Connection and key…" once connected */
-  connectLabel: string;
   /** The project files outside the context, for + › Add a file */
   addable: ComposerAddableFile[];
   /** Gives focus to what a pick from + opened; `false` when nothing took it */
@@ -119,7 +114,7 @@ export function BaseAssistantComposer({
   const reasonId = useId();
   // During a turn Send is Stop, which nothing blocks
   const blocked = busy ? null : sendBlocked;
-  const add = usePickedMenu(focusPicked, { s: onSources, k: onConnect });
+  const add = usePickedMenu(focusPicked, { s: onSources });
   useEffect(() => {
     if (focusRequest === 0) return;
     form.current?.querySelector("textarea")?.focus();
@@ -216,7 +211,7 @@ export function BaseAssistantComposer({
                 <DropdownMenuSubContent
                   className="max-h-80 overflow-y-auto"
                   // A letter typed here is the list's typeahead; it must not
-                  // reach the + menu's S and K through the portal
+                  // reach the + menu's S through the portal
                   onKeyDown={(e) => e.stopPropagation()}
                 >
                   {addable.length === 0 ? (
@@ -237,12 +232,6 @@ export function BaseAssistantComposer({
                 <MenuItemText>Sources and tools</MenuItemText>
                 <DropdownMenuShortcut className={KEY_HINT}>
                   S
-                </DropdownMenuShortcut>
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => add.pick(onConnect)}>
-                <MenuItemText>{connectLabel}</MenuItemText>
-                <DropdownMenuShortcut className={KEY_HINT}>
-                  K
                 </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>

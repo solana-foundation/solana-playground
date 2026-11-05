@@ -28,7 +28,14 @@ describe("BaseCallResult", () => {
       logs: ["Program log: Instruction: Increment"],
       failingLine: undefined,
     };
-    render(<BaseCallResult outcome={outcome} cluster="devnet" txUrl={txUrl} />);
+    render(
+      <BaseCallResult
+        outcome={outcome}
+        cluster="devnet"
+        txUrl={txUrl}
+        onExplain={vi.fn()}
+      />
+    );
 
     const region = screen.getByRole("region", { name: "Call result" });
     expect(region.textContent).toContain("Succeeded");
@@ -48,7 +55,14 @@ describe("BaseCallResult", () => {
       logs: ["Program X invoke [1]", ERROR_LINE],
       failingLine: ERROR_LINE,
     };
-    render(<BaseCallResult outcome={outcome} cluster="devnet" txUrl={txUrl} />);
+    render(
+      <BaseCallResult
+        outcome={outcome}
+        cluster="devnet"
+        txUrl={txUrl}
+        onExplain={vi.fn()}
+      />
+    );
 
     const region = screen.getByRole("region", { name: "Call result" });
     expect(region.textContent).toContain("Failed");
@@ -59,6 +73,50 @@ describe("BaseCallResult", () => {
     expect(screen.getByText(/Program X invoke/)).toBeTruthy();
   });
 
+  it("offers Explain this failure on a failed call only, with its outcome", () => {
+    const failed: CallOutcome = {
+      instruction: "increment",
+      ok: false,
+      signature: "5sig",
+      logs: [ERROR_LINE],
+      failingLine: ERROR_LINE,
+    };
+    const onExplain = vi.fn();
+    const { rerender } = render(
+      <BaseCallResult
+        outcome={failed}
+        cluster="devnet"
+        txUrl={txUrl}
+        onExplain={onExplain}
+      />
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Explain this failure" })
+    );
+    expect(onExplain).toHaveBeenCalledWith(failed);
+
+    rerender(
+      <TooltipProvider>
+        <BaseCallResult
+          outcome={{
+            instruction: "increment",
+            ok: true,
+            signature: "5sig",
+            logs: [],
+            failingLine: undefined,
+          }}
+          cluster="devnet"
+          txUrl={txUrl}
+          onExplain={onExplain}
+        />
+      </TooltipProvider>
+    );
+    expect(
+      screen.queryByRole("button", { name: "Explain this failure" })
+    ).toBeNull();
+  });
+
   it("offers no Explorer link for a call that never reached the network", () => {
     const outcome: CallOutcome = {
       instruction: "increment",
@@ -67,7 +125,14 @@ describe("BaseCallResult", () => {
       logs: [],
       failingLine: "Wallet not connected",
     };
-    render(<BaseCallResult outcome={outcome} cluster="devnet" txUrl={txUrl} />);
+    render(
+      <BaseCallResult
+        outcome={outcome}
+        cluster="devnet"
+        txUrl={txUrl}
+        onExplain={vi.fn()}
+      />
+    );
 
     expect(screen.getByText("Wallet not connected")).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();

@@ -12,21 +12,6 @@ Every chip over the composer SHALL have an accessible name that says what is sen
 - **WHEN** `src/lib.rs` is an open tab in the context
 - **THEN** its chip's accessible name is "Sent with this message: lib.rs, in full"
 
-### Requirement: The composer's + menu
-The composer SHALL show a button named "Add context" that opens a menu with "Add a file" (a submenu, see "Add a file from the + menu"), "Sources and tools" (shortcut S) and, with nothing connected, "Connect a model…" or, once connected, "Connection and key…" (shortcut K), the last two doing what the same entries in the head's More do; More SHALL name its entry the same way. Opening Connect a model from it SHALL send `assistant_connect_opened` with `via: "add"`.
-
-#### Scenario: Sources and tools from the + menu (manual)
-- **WHEN** the person opens "Add context" and picks "Sources and tools"
-- **THEN** Sources and tools replaces the conversation and focus is on "Back"
-
-#### Scenario: Connect a model from the + menu
-- **WHEN** nothing is connected and the person opens "Add context" and picks "Connect a model…"
-- **THEN** Connect a model opens and `assistant_connect_opened` is sent with `via: "add"`
-
-#### Scenario: Once connected (manual)
-- **WHEN** a model is connected and the person opens "Add context" or More
-- **THEN** the entry reads "Connection and key…"
-
 ### Requirement: A placed prompt takes focus in the composer
 When `PgAssistant.requestPrompt` leaves a prompt in the composer for the person to look at (`send: false`), the composer's input SHALL have focus, including when the panel mounts to take the prompt or leaves Sources and tools to show it. Such a prompt sends nothing, so it SHALL NOT open Connect a model or ask for a backend.
 
@@ -87,3 +72,18 @@ Files added and files removed SHALL apply to the project they were chosen in, an
 
 - **WHEN** the person removed `secret.rs` in project A, added a file in project B, then returns to A
 - **THEN** B's chips were B's open tabs plus its added file, and in A `secret.rs` is still out of the context
+
+### Requirement: The composer's + menu holds context
+The composer SHALL show a button named "Add context" that opens a menu with "Add a file" (a submenu, see "Add a file from the + menu") and "Sources and tools" (shortcut S), the second doing what the same entry in the head's More does. The menu SHALL NOT offer "Connect a model…" or "Connection and key…": those stay on the model button and in the head's More, which names its entry "Connect a model…" with nothing connected and "Connection and key…" once connected.
+
+#### Scenario: Sources and tools from the + menu (manual)
+- **WHEN** the person opens "Add context" and picks "Sources and tools"
+- **THEN** Sources and tools replaces the conversation and focus is on "Back"
+
+#### Scenario: The + menu holds context only
+- **WHEN** nothing is connected and the person opens "Add context"
+- **THEN** the menu lists "Add a file" and "Sources and tools", and no entry starting "Connect"
+
+#### Scenario: Once connected (manual)
+- **WHEN** a model is connected and the person opens More
+- **THEN** the entry reads "Connection and key…"
