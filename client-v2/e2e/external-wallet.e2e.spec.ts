@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { installFakeWallet } from "./fake-wallet";
+import { accountMenuText, installFakeWallet } from "./fake-wallet";
 import { expect, LONG, runInTerminal, test } from "./fixtures";
 
 // Wallets are found through ConnectorKit (`entities/external-wallet`); these
@@ -41,7 +41,7 @@ const setUpPlaygroundWallet = async (page: Page) => {
   await account(page).click();
   await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(account(page)).toContainText("SOL", LONG);
+  await expect.poll(() => accountMenuText(page), LONG).toContain("SOL");
 };
 
 test("client-v2-external-wallet: An installed wallet is offered", async ({
@@ -120,7 +120,7 @@ test("client-v2-external-wallet: Connect from the terminal", async ({
   await run(page, "connect phantom");
 
   await expect(terminal(page)).toContainText("Connected to Phantom.", LONG);
-  await expect(account(page)).toContainText(phantom.short);
+  await expect.poll(() => accountMenuText(page), LONG).toContain(phantom.short);
 });
 
 test("client-v2-external-wallet: Reload after connecting", async ({
@@ -132,11 +132,11 @@ test("client-v2-external-wallet: Reload after connecting", async ({
   await reloadSettled(page);
   await setUpPlaygroundWallet(page);
   await run(page, "connect phantom");
-  await expect(account(page)).toContainText(phantom.short, LONG);
+  await expect.poll(() => accountMenuText(page), LONG).toContain(phantom.short);
 
   await reloadSettled(page);
 
-  await expect(account(page)).toContainText(phantom.short, LONG);
+  await expect.poll(() => accountMenuText(page), LONG).toContain(phantom.short);
   await account(page).click();
   await expect(
     page.getByRole("menuitem", { name: "Disconnect Phantom" })
@@ -152,13 +152,17 @@ test("client-v2-external-wallet: Reload after disconnecting", async ({
   await reloadSettled(page);
   await setUpPlaygroundWallet(page);
   await run(page, "connect phantom");
-  await expect(account(page)).toContainText(phantom.short, LONG);
+  await expect.poll(() => accountMenuText(page), LONG).toContain(phantom.short);
   await account(page).click();
   await page.getByRole("menuitem", { name: "Disconnect Phantom" }).click();
-  await expect(account(page)).not.toContainText(phantom.short, LONG);
+  await expect
+    .poll(() => accountMenuText(page), LONG)
+    .not.toContain(phantom.short);
 
   await reloadSettled(page);
 
-  await expect(account(page)).toContainText("SOL", LONG);
-  await expect(account(page)).not.toContainText(phantom.short);
+  await expect.poll(() => accountMenuText(page), LONG).toContain("SOL");
+  await expect
+    .poll(() => accountMenuText(page), LONG)
+    .not.toContain(phantom.short);
 });

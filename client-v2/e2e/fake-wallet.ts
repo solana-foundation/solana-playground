@@ -190,3 +190,20 @@ export const installFakeWallet = async (
       ),
   };
 };
+
+/**
+ * The account menu's text, for the wallet it lists: the footer row names the
+ * session only, so the wallet (address, balance, Disconnect) is read from the
+ * menu, which is closed again before the next step
+ */
+export const accountMenuText = async (page: Page) => {
+  await page
+    .locator('[data-slot="sidebar"] [data-slot="sidebar-footer"]')
+    .getByRole("button", { name: /^Account/ })
+    .click();
+  const menu = page.getByRole("menu", { name: "Account" });
+  const text = await menu.innerText();
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "hidden" });
+  return text;
+};

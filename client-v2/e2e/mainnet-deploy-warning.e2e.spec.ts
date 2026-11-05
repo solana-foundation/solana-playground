@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, LONG, test } from "./fixtures";
+import { expect, json, LONG, test } from "./fixtures";
 
 /**
  * The scenarios of `mainnet-deploy-warning`: the Deploy stage warns about
@@ -26,6 +26,22 @@ const reloadOn = async (page: Page, option: string) => {
   await expect(page.locator("#root-dir")).toBeVisible(LONG);
 };
 
+/**
+ * Builds the project as a user does, the build server's answer stubbed (CI
+ * has none): the Deploy pill reads Go to Build until there is a build
+ */
+const build = async (page: Page) => {
+  await page.route("**/build", (route) =>
+    json(route, { stderr: "", uuid: null, idl: null })
+  );
+  await page.locator("#flow-stage-tab-build").click();
+  const panel = page.locator("#flow-stage-panel-build");
+  await panel.getByRole("button", { name: /^Build$/ }).click();
+  await expect(
+    panel.getByRole("heading", { name: "Build succeeded" })
+  ).toBeVisible(LONG);
+};
+
 const openDeploy = async (page: Page) => {
   await page.locator("#flow-stage-tab-deploy").click();
   const panel = page.locator("#flow-stage-panel-deploy");
@@ -37,6 +53,7 @@ test("mainnet-deploy-warning: Deploy stage on mainnet shows the warning", async 
   seededPage: page,
 }) => {
   await reloadOn(page, "mainnet-beta");
+  await build(page);
   const panel = await openDeploy(page);
 
   const warning = panel.getByRole("alert", { name: "Mainnet deploy warning" });
@@ -51,6 +68,7 @@ test("mainnet-deploy-warning: Deploy stage on mainnet shows the warning", async 
 test("mainnet-deploy-warning: Deploy stage on devnet shows no warning", async ({
   seededPage: page,
 }) => {
+  await build(page);
   const panel = await openDeploy(page);
 
   // The stage names its cluster once the endpoint is read; only then is
@@ -69,6 +87,7 @@ test("mainnet-deploy-warning: Mainnet picked in Settings", async ({
   await page.route("https://api.mainnet-beta.solana.com/**", (route) =>
     route.abort("connectionrefused")
   );
+  await build(page);
   const settings = page.getByRole("region", { name: "Settings" });
   const pick = async (name: string) => {
     await page.getByRole("button", { name: /^Change cluster/ }).click();

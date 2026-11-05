@@ -93,7 +93,8 @@ const LONG_NAME = "github-drift-labs-protocol-v2-programs-drift";
 /** Where a pinned row's name, pin and "⋮" sit, in page pixels */
 const pinnedRowGeometry = (page: Page, name: string) =>
   projectRow(page, name).evaluate((button) => {
-    const label = button.querySelector(":scope > span");
+    // The name truncates in its own span, beside the pin in one line
+    const label = button.querySelector(":scope > span > span");
     const item = button.parentElement;
     const pin = item?.querySelector('[title="Pinned"]');
     const actions = item?.querySelector('[data-sidebar="menu-action"]');

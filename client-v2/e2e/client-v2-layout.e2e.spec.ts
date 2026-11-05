@@ -763,7 +763,11 @@ test.describe("on a phone", () => {
       await held;
       await route.continue();
     });
-    await seedThenNarrow(page);
+    // Not `seedThenNarrow`: it waits for the editor's focus, which the held
+    // chunk never gives
+    await page.setViewportSize(DESK);
+    await seedWorkspace(page);
+    await page.setViewportSize(PHONE);
     const pager = page.getByTestId("phone-pager");
     await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
     await pager.evaluate((el) => {

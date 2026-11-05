@@ -6,7 +6,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 
-import { installFakeWallet } from "./fake-wallet";
+import { accountMenuText, installFakeWallet } from "./fake-wallet";
 import { expect, LONG, runInTerminal, test } from "./fixtures";
 
 // Funding the Playground wallet from the user's own wallet
@@ -44,7 +44,7 @@ const setUpPlaygroundWallet = async (page: Page) => {
   await account(page).click();
   await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(account(page)).toContainText("SOL", LONG);
+  await expect.poll(() => accountMenuText(page), LONG).toContain("SOL");
 };
 
 const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
@@ -324,7 +324,7 @@ test("client-v2-external-wallet: A payer beside the current extension", async ({
   if ((await drawer.getAttribute("aria-expanded")) !== "true")
     await drawer.click();
   await runInTerminal(page, "connect phantom");
-  await expect(account(page)).toContainText(phantom.short, LONG);
+  await expect.poll(() => accountMenuText(page), LONG).toContain(phantom.short);
 
   await account(page).click();
   await fundItem(page).click();
@@ -333,7 +333,7 @@ test("client-v2-external-wallet: A payer beside the current extension", async ({
 
   await page.keyboard.press("Escape");
   // Phantom stays the current wallet, and both stay connected
-  await expect(account(page)).toContainText(phantom.short);
+  await expect.poll(() => accountMenuText(page), LONG).toContain(phantom.short);
   await page
     .locator("#tabs")
     .getByRole("button")
