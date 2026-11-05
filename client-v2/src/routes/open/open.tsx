@@ -36,18 +36,29 @@ export const open = PgRouter.create({
       docsLinkTelemetry.track("docs_link_failed", { reason: decoded.reason });
       PgDocsLink.markBroken();
       const backHref = backToDocsHref(decoded.from, document.referrer);
+      // Opening a saved project from the frame stays on `/open`, and it does
+      // have something to run. The route's own explorer init also switches, to
+      // the last project, before the view is asked for: that one is not a leave
+      let isShown = false;
+      const leave = PgExplorer.onDidSwitchWorkspace(() => {
+        if (isShown) PgDocsLink.clear();
+      });
       const route = handleRoute({
-        main: async () => (
-          <BaseBrokenLink
-            backHref={backHref}
-            onHome={() => PgRouter.navigate("/")}
-          />
-        ),
+        main: async () => {
+          isShown = true;
+          return (
+            <BaseBrokenLink
+              backHref={backHref}
+              onHome={() => PgRouter.navigate("/")}
+            />
+          );
+        },
       });
       return {
         dispose: () => {
           route.dispose();
           reopen.dispose();
+          leave.dispose();
           PgDocsLink.clear();
         },
       };

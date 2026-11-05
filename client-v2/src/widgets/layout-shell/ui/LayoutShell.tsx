@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "styled-components";
 
+import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
@@ -372,6 +373,15 @@ const LayoutShell = ({
     if (phone && isPreviewAtWrite(PgFlow.state)) showPage("preview", "auto");
     openConsole();
   };
+  /**
+   * The funding card sits above the code, and Run stops at it: on a phone,
+   * where Run is tapped on the preview, the card has to come into view.
+   */
+  const showFunding = () => {
+    if (!phone || isCovered(screenNow.current)) return;
+    showPage("work", "auto");
+    showView("code", "auto");
+  };
 
   // The handlers read what they toggle, so they are renewed with it
   useKeybind(
@@ -438,6 +448,9 @@ const LayoutShell = ({
     const subs = [
       PgCommand.deploy.onDidStart(openConsole),
       PgCommand.run.onDidStart(showClientRun),
+      PgClientRun.onDidChange((runState) => {
+        if (runState.kind === "funding") showFunding();
+      }),
       PgFlow.onDidChange((flow) => {
         if (
           prevDeploy !== undefined &&
@@ -451,8 +464,8 @@ const LayoutShell = ({
       PgAssistant.onDidRequestPrompt(() => setAssistant(true, "auto")),
     ];
     return () => subs.forEach((sub) => sub.dispose());
-    // `setOpen` is stable; `setAssistant`, `openConsole` and `showClientRun`
-    // change only with the viewport
+    // `setOpen` is stable; `setAssistant`, `openConsole`, `showClientRun` and
+    // `showFunding` change only with the viewport
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewport]);
 

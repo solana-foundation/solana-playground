@@ -2,7 +2,12 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireFor } from "../../../test-utils/require-for";
-import { PgCommandManager, PgCommon, PgTerminal } from "../../../utils";
+import {
+  PgCommandManager,
+  PgCommon,
+  PgExplorer,
+  PgTerminal,
+} from "../../../utils";
 import type { FlowState, StageStatus } from "../state/stage";
 import BaseConsoleDrawer, { CONSOLE_BODY_ID } from "./BaseConsoleDrawer";
 import ConsoleDrawer from "./ConsoleDrawer";
@@ -40,6 +45,9 @@ vi.mock("../../../shared/lib/logger", () => ({
 vi.mock("@/utils", () => ({
   PgTerminal: { clear: vi.fn(), setConsoleOpen: vi.fn() },
   PgCommon: { getOS: vi.fn(() => "MacOS") },
+  PgExplorer: {
+    onDidSwitchWorkspace: vi.fn(() => ({ dispose: () => {} })),
+  },
   PgCommandManager: {
     stop: vi.fn(),
     onDidStart: vi.fn(() => ({ dispose: () => {} })),
@@ -135,6 +143,22 @@ it("should drop the client run hint once a client run starts", () => {
   expect(
     screen.queryByText("Run the client to see its output here.")
   ).toBeNull();
+});
+
+it("should bring the client run hint back when another project opens", () => {
+  flow.state = noProgram();
+  render(<ConsoleDrawer open={false} onToggle={vi.fn()} />);
+  const started = vi.mocked(PgCommandManager.onDidStart).mock.lastCall;
+  const switched = vi.mocked(PgExplorer.onDidSwitchWorkspace).mock.lastCall;
+  if (!started || !switched) throw new Error("The drawer did not listen");
+  act(() => started[1]("run"));
+  expect(
+    screen.queryByText("Run the client to see its output here.")
+  ).toBeNull();
+  act(() => switched[0]());
+  expect(
+    screen.queryByText("Run the client to see its output here.")
+  ).not.toBeNull();
 });
 
 it("should report itself expanded when open", () => {

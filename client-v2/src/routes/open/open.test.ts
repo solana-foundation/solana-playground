@@ -115,6 +115,26 @@ describe("/open", () => {
     expect(PgDocsLink.state).toEqual({ kind: "none" });
   });
 
+  it("keeps the broken state through the route's own explorer init", () => {
+    visit("v=1&name=a.ts");
+    explorer.switched.forEach((cb) => cb());
+    expect(PgDocsLink.state).toEqual({ kind: "broken" });
+  });
+
+  it("clears the broken state once another project opens over the view", async () => {
+    visit("v=1&name=a.ts");
+    await routeArg().main?.();
+    explorer.switched.forEach((cb) => cb());
+    expect(PgDocsLink.state).toEqual({ kind: "none" });
+  });
+
+  it("stops listening for a project once the broken route closes", async () => {
+    const route = visit("v=1&name=a.ts");
+    await routeArg().main?.();
+    route.dispose();
+    expect(explorer.switched).toEqual([]);
+  });
+
   it("names no host for a link without a source", () => {
     visit(encodeDocsLink({ name: "hello.ts", code: "console.log(1)" }));
     initArg();

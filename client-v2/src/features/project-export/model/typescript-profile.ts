@@ -526,9 +526,8 @@ export const toNodeProjectWith =
     const scripts: Record<string, string> = {};
     const isClientShellSafe = client === undefined || isShellSafe(client);
     if (client) {
-      scripts.client = isClientShellSafe
-        ? `tsx ${client.includes(" ") ? `"${client}"` : client}`
-        : CLIENT_FROM_CONFIG;
+      const quoted = client.includes(" ") ? `"${client}"` : client;
+      scripts.client = isClientShellSafe ? `tsx ${quoted}` : CLIENT_FROM_CONFIG;
     }
     if (hasTests) {
       scripts.test =

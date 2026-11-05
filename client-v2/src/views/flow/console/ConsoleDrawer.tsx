@@ -2,7 +2,12 @@ import type { FC } from "react";
 import { useEffect, useReducer, useState } from "react";
 
 import { createLogger } from "../../../shared/lib/logger";
-import { PgCommandManager, PgCommon, PgTerminal } from "../../../utils";
+import {
+  PgCommandManager,
+  PgCommon,
+  PgExplorer,
+  PgTerminal,
+} from "../../../utils";
 import { CONSOLE_KEY, keyLabel } from "../../../widgets/layout-shell";
 import Terminal from "../../main/secondary/terminal/Component/Terminal";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
@@ -61,8 +66,12 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
 
   const [hasClientRun, setHasClientRun] = useState(false);
   useEffect(() => {
-    const sub = PgCommandManager.onDidStart("run", () => setHasClientRun(true));
-    return () => sub.dispose();
+    const subs = [
+      PgCommandManager.onDidStart("run", () => setHasClientRun(true)),
+      // The drawer outlives the project: a run in one says nothing of the next
+      PgExplorer.onDidSwitchWorkspace(() => setHasClientRun(false)),
+    ];
+    return () => subs.forEach((sub) => sub.dispose());
   }, []);
 
   useEffect(() => {

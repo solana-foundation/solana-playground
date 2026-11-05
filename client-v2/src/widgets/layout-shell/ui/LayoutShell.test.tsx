@@ -28,6 +28,18 @@ const deploy = vi.hoisted(() => ({
 const run = vi.hoisted(() => ({
   starts: new Set<(input: string | null) => void>(),
 }));
+// The run store the phone follows to the funding card
+const clientRun = vi.hoisted(() => ({
+  listeners: new Set<(state: { kind: string }) => void>(),
+}));
+vi.mock("@/features/docs-link", () => ({
+  PgClientRun: {
+    onDidChange: (cb: (state: { kind: string }) => void) => {
+      clientRun.listeners.add(cb);
+      return { dispose: () => clientRun.listeners.delete(cb) };
+    },
+  },
+}));
 // The open file and project the phone's bar and picker name, and the listeners
 // the Files sheet closes on
 const explorer = vi.hoisted(() => ({
@@ -1005,6 +1017,26 @@ describe("on a phone", () => {
       { page: "preview", via: "auto" },
     ]);
     expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("shows the code when Run stops at the funding card", () => {
+    PgFlow["_dispatch"]({ type: "program", has: false });
+    phoneShell();
+    act(startRun);
+    act(() => clientRun.listeners.forEach((cb) => cb({ kind: "funding" })));
+    expect(events("layout_page_shown").at(-1)).toEqual({
+      page: "work",
+      via: "auto",
+    });
+    expect(isChecked("Code")).toBe("true");
+  });
+
+  it("stays on its page for any other run state", () => {
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    const before = events("layout_page_shown").length;
+    act(() => clientRun.listeners.forEach((cb) => cb({ kind: "done" })));
+    expect(events("layout_page_shown")).toHaveLength(before);
   });
 
   it("stays on its page and opens the console when a client run starts beside a program", () => {
