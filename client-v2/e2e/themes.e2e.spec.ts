@@ -131,6 +131,50 @@ test.describe("client-v2-themes", () => {
     await expect(page.getByText(/theme was removed/)).toHaveCount(0);
   });
 
+  test("the editor's brackets and active line follow the theme, not Monaco", async ({
+    seededPage: page,
+  }) => {
+    // What a token computes to now, in the same form as a computed colour
+    const token = (name: string) =>
+      page.evaluate((n) => {
+        const probe = document.createElement("span");
+        probe.style.color = `var(${n})`;
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      }, name);
+
+    const expectOnTokens = async () => {
+      const expected: [string, string][] = [
+        [".bracket-highlighting-0", "--text-secondary"],
+        [".bracket-highlighting-1", "--syntax-number"],
+        [".bracket-highlighting-2", "--syntax-type"],
+        [".active-line-number", "--text-secondary"],
+      ];
+      for (const [selector, name] of expected) {
+        await expect
+          .poll(() => computed(page, `.monaco-editor ${selector}`, "color"))
+          .toBe(await token(name));
+      }
+    };
+
+    await expectOnTokens();
+
+    // Monaco's own find match is orange, in both themes
+    await page.keyboard.press("ControlOrMeta+f");
+    await page.keyboard.type("data");
+    await expect
+      .poll(() =>
+        computed(page, ".monaco-editor .findMatch", "backgroundColor")
+      )
+      .not.toBe("rgba(234, 92, 0, 0.33)");
+    await page.keyboard.press("Escape");
+
+    await pickTheme(page, "Light");
+    await expectOnTokens();
+  });
+
   test("code blocks in Markdown keep their syntax colours", async ({
     page,
   }) => {

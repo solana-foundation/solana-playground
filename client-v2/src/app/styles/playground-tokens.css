@@ -81,6 +81,15 @@
   /* ── the two tracks ─────────────────────────────────────────────────── */
   --track-brand: #00a36c;
   --track-product: #9945ff;
+
+  /* ── syntax: VS Code's six roles and plain text, dark enough for paper */
+  --syntax-keyword: #be185d;
+  --syntax-type: #0369a1;
+  --syntax-function: #047857;
+  --syntax-string: #ad4f08;
+  --syntax-number: #6d28d9;
+  --syntax-comment: #6b6b72;
+  --syntax-plain: #27272a;
 }
 
 .dark {
@@ -157,6 +166,16 @@
 
   --track-brand: #14f195;
   --track-product: #ae7bff;
+
+  /* ── syntax: VS Code's six roles and plain text, in the product's palette */
+  /* plain and comment follow the dark ramp's primary and tertiary text */
+  --syntax-keyword: #ec4899;
+  --syntax-type: #38bdf8;
+  --syntax-function: #14f195;
+  --syntax-string: #f59e0b;
+  --syntax-number: #8b5cf6;
+  --syntax-comment: #93939c;
+  --syntax-plain: #e4e4e7;
 }
 
 /* Tokens that read the same on both grounds */
@@ -191,16 +210,6 @@
   --trail-2: #2dcea9;
   --trail-3: #9945ff;
   --trail-4: #5a3fd9;
-
-  /* ── syntax: VS Code's six roles, pulled into the product's palette ── */
-  /* plain and comment follow the dark ramp's primary and tertiary text */
-  --syntax-keyword: #ec4899;
-  --syntax-type: #38bdf8;
-  --syntax-function: #14f195;
-  --syntax-string: #f59e0b;
-  --syntax-number: #8b5cf6;
-  --syntax-comment: #93939c;
-  --syntax-plain: #e4e4e7;
 
   /* ── type ───────────────────────────────────────────────────────────── */
   --font-headline: "Stack Sans Headline", "Manrope", -apple-system,
