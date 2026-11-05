@@ -413,6 +413,76 @@ it("busies Try again while it asks", async () => {
   ).toBeTruthy();
 });
 
+it.each([
+  ["row", BaseStatusRow],
+  ["rail", BaseStatusRail],
+] as const)(
+  "puts focus back on the indicator in the %s when Try again answers and its panel goes",
+  async (_, Base) => {
+    const draw = (indicators: StatusIndicator[]) => (
+      <TooltipProvider>
+        <SidebarProvider>
+          <Base
+            indicators={indicators}
+            onPick={vi.fn()}
+            onAction={vi.fn()}
+            onRetry={() => Promise.resolve()}
+            settingsOpen={false}
+          />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+    const { rerender } = render(draw([DOWN, AI_OFF, STARTING]));
+    const network = document.querySelector(
+      '[data-status="network"]'
+    ) as HTMLElement;
+    network.focus();
+    await userEvent.keyboard("{Enter}");
+    const panel = await screen.findByRole("dialog");
+    within(panel).getByRole("button", { name: "Try again" }).focus();
+    await userEvent.keyboard("{Enter}");
+
+    // The retry answered: the cluster is up, so the indicator has no panel
+    rerender(draw([UP, AI_OFF, STARTING]));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(
+      document.querySelector('[data-status="network"]')
+    );
+  }
+);
+
+it("leaves focus where the user put it while Try again was asking", async () => {
+  let answer: () => void = () => {};
+  const draw = (indicators: StatusIndicator[]) => (
+    <TooltipProvider>
+      <SidebarProvider>
+        <BaseStatusRow
+          indicators={indicators}
+          onPick={vi.fn()}
+          onAction={vi.fn()}
+          onRetry={() => new Promise<void>((resolve) => (answer = resolve))}
+          settingsOpen={false}
+        />
+      </SidebarProvider>
+      <input aria-label="Elsewhere" />
+    </TooltipProvider>
+  );
+  const { rerender } = render(draw([DOWN, AI_OFF, STARTING]));
+  (document.querySelector('[data-status="network"]') as HTMLElement).focus();
+  await userEvent.keyboard("{Enter}");
+  const panel = await screen.findByRole("dialog");
+  within(panel).getByRole("button", { name: "Try again" }).focus();
+  await userEvent.keyboard("{Enter}");
+  const elsewhere = screen.getByRole("textbox", { name: "Elsewhere" });
+  elsewhere.focus();
+
+  answer();
+  rerender(draw([UP, AI_OFF, STARTING]));
+
+  expect(document.activeElement).toBe(elsewhere);
+});
+
 it("opens a panel on the AI's limit, whose Add an API key opens Connect a model", async () => {
   const { onPick, onAction } = drawRow([UP, AI_LIMIT, STARTING]);
   const ai = screen.getByRole("button", { name: "AI, limit reached" });

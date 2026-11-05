@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { useId, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
@@ -140,7 +140,8 @@ export const IndicatorDot = ({
  * line and buttons. It closes when an action is picked, since the action goes
  * elsewhere (the settings, Connect a model). Try again keeps it open while it
  * asks and when the answer is still down; once it is answered the indicator
- * has no panel any more, so the panel goes with it.
+ * has no panel any more, so the panel goes with it, and `onGone` hands focus
+ * back to the indicator (see `useFocusAfterPanel`).
  */
 export const StatusPanel = ({
   indicator,
@@ -151,6 +152,7 @@ export const StatusPanel = ({
   onPick,
   onAction,
   onRetry,
+  onGone,
 }: {
   indicator: StatusIndicator;
   /** The indicator's button, which the panel hangs from */
@@ -162,8 +164,24 @@ export const StatusPanel = ({
   onPick: (indicator: StatusIndicator) => void;
   onAction: (indicator: StatusIndicator) => void;
   onRetry: (indicator: StatusIndicator) => Promise<unknown>;
+  /** The panel unmounted while open, usually because its indicator no
+   * longer has one (Try again answered) */
+  onGone: (indicator: StatusIndicator) => void;
 }) => {
   const [open, setOpen] = useState(false);
+  // Read when the panel goes, so the cleanup sees the last committed state,
+  // not the first
+  const last = useRef({ open, indicator, onGone });
+  useLayoutEffect(() => {
+    last.current = { open, indicator, onGone };
+  });
+  useEffect(
+    () => () => {
+      const panel = last.current;
+      if (panel.open) panel.onGone(panel.indicator);
+    },
+    []
+  );
   // The installed title is a plain element, so the panel names itself by it
   const titleId = useId();
   return (
@@ -197,4 +215,35 @@ export const StatusPanel = ({
       </PopoverContent>
     </Popover>
   );
+};
+
+/** Marks an indicator's button in the row and on the rail, which
+ * `useFocusAfterPanel` looks up by it */
+const INDICATOR_ATTR = "data-status";
+export const indicatorMark = (id: IndicatorId) => ({ [INDICATOR_ATTR]: id });
+
+/**
+ * When an open panel unmounts because Try again was answered, focus falls to
+ * the body with the panel's buttons. This moves it to that indicator's button,
+ * whose name now says the new state. The panel's cleanup runs before the
+ * row's effects, so the row's effect finds the plain button already committed
+ * in the trigger's place. Focus that is anywhere but the body stays put.
+ */
+export const useFocusAfterPanel = <T extends HTMLElement>() => {
+  const ref = useRef<T>(null);
+  const gone = useRef<IndicatorId>(undefined);
+  useEffect(() => {
+    const id = gone.current;
+    if (!id) return;
+    gone.current = undefined;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    ref.current
+      ?.querySelector<HTMLElement>(`[${INDICATOR_ATTR}="${id}"]`)
+      ?.focus();
+  });
+  const handleGone = (indicator: StatusIndicator) => {
+    gone.current = indicator.id;
+  };
+  return { ref, handleGone };
 };
