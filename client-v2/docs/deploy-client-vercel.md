@@ -35,6 +35,11 @@ as soon as the Root Directory points at `client-v2`.
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `SENTRY_AUTH_TOKEN`: a production build fails without it
+     (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
+     Sensitive variable as an empty value, which fails the same way, so a
+     production built locally needs it stored as a variable that is not
+     Sensitive.
    - `PG_AI_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
      `GITHUB_CLIENT_SECRET`, `DATABASE_URL`) and the [firewall](firewall.md)
      rules. `/api/agent` answers only signed-in users, and a production build

@@ -3,6 +3,7 @@
 | Doc | What it covers |
 | --- | --- |
 | [Deploy the client to Vercel](deploy-client-vercel.md) | Release checklist, Vercel project settings, deploy targets, build cache, env vars, migrations |
+| [Production runbook](production-runbook.md) | The production launch on Cloud SQL in order, for the team that runs the infrastructure: setup, the staged deployment, the Firewall, the environment, the cutover and the release, each with its check and rollback |
 | [Cloud SQL for client-v2](cloud-sql.md) | The design of the Cloud SQL databases and their identities, and every setup step in Google Cloud, GitHub, and Vercel, through the production cutover and rollback |
 | [Preview databases](preview-databases.md) | The shared Cloud SQL database every preview reads, a database of its own by the `preview` label, the sweep, and their configuration |
 | [Neon preview databases](neon.md) | Neon keys and project ID, a database branch per git branch, and their cleanup on merge |
