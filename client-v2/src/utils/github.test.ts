@@ -1,3 +1,4 @@
+import { PgFramework } from "./framework";
 import type { ImportProgress } from "./github";
 import { filterRepoFiles, ImportCancelledError, PgGithub } from "./github";
 
@@ -5,7 +6,10 @@ import { filterRepoFiles, ImportCancelledError, PgGithub } from "./github";
 vi.mock("./explorer", () => ({ PgExplorer: {} }));
 
 vi.mock("./framework", () => ({
-  PgFramework: { convertToPlaygroundLayout: (files: unknown) => files },
+  noProgramCode: (source: string) => `No program code found in ${source}.`,
+  PgFramework: {
+    convertToPlaygroundLayoutWith: vi.fn(() => (files: unknown) => files),
+  },
 }));
 
 const mockSetModal = vi.fn();
@@ -132,6 +136,23 @@ describe("PgGithub.getFiles", () => {
     );
   });
 
+  it("hands the imported folder and where it came from to the layout", async () => {
+    mockFetch((url) =>
+      url.startsWith("https://api.github.com/")
+        ? treeResponse(["program/client.ts"])
+        : { body: "x" }
+    );
+
+    await PgGithub.getFiles(
+      "https://github.com/solana-labs/example/tree/master/program"
+    );
+
+    expect(PgFramework.convertToPlaygroundLayoutWith).toHaveBeenLastCalledWith({
+      root: "program",
+      source: "program in solana-labs/example",
+    });
+  });
+
   it("reports progress from the layout request to the last file", async () => {
     mockFetch((url) => {
       if (url.startsWith("https://api.github.com/")) {
@@ -200,14 +221,14 @@ describe("PgGithub.getFiles", () => {
     ).rejects.toThrow(/too large to import/);
   });
 
-  it("reports a path that holds no source files", async () => {
+  it("reports a path that holds no program code", async () => {
     mockFetch(() => treeResponse(["docs/logo.png"]));
 
     await expect(
       PgGithub.getFiles(
         "https://github.com/solana-labs/example/tree/master/docs"
       )
-    ).rejects.toThrow(/No source files found in "docs"/);
+    ).rejects.toThrow("No program code found in docs in solana-labs/example.");
   });
 
   it("asks which program to import before downloading anything", async () => {

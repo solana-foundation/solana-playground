@@ -1,3 +1,4 @@
+import { Share } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
@@ -33,8 +34,11 @@ export interface PhonePagerState {
   onFilesOpenChange: (open: boolean) => void;
   /** The stage shows on the work page (Code) at `write`, else on the preview */
   stageOn: StagePage;
-  /** The console's height on the preview: open, or its folded bar */
+  /** The console's height on the preview: open (beside the stage, or the
+   * whole page when the stage stays on Code), or its folded bar */
   consoleOpen: boolean;
+  /** Shares the open project as a gist; absent with no project open */
+  onShare?: () => void;
 }
 
 /** The content and the outlets' nodes the pager lays out */
@@ -64,6 +68,10 @@ export interface PhonePagerSlots {
 }
 
 export type BasePhonePagerProps = PhonePagerState & PhonePagerSlots;
+
+/** The open console's height on the preview: beside the stage, or alone */
+const openConsoleClass = (stageOn: StagePage) =>
+  stageOn === "preview" ? "h-2/5" : "flex-1";
 
 /** A Chat or Code option, the prototype's `PaneOption`: filled when it shows */
 const PANE_OPTION =
@@ -385,21 +393,36 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
                   file={props.file}
                   onOpen={() => props.onFilesOpenChange(true)}
                 />
-                <Button
-                  asChild
-                  variant="ghost"
-                  size="icon"
-                  className={HEAD_BUTTON}
-                >
-                  <a
-                    href="https://solana.com/docs"
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Documentation"
+                {/* The two icons touch: their 48 px targets stay, and the
+                    icons read as one pair, not two far apart */}
+                <div className="flex items-center">
+                  {props.onShare && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={HEAD_BUTTON}
+                      aria-label="Share as a gist"
+                      onClick={props.onShare}
+                    >
+                      <Share aria-hidden="true" />
+                    </Button>
+                  )}
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    className={HEAD_BUTTON}
                   >
-                    {PHONE_ICONS.help}
-                  </a>
-                </Button>
+                    <a
+                      href="https://solana.com/docs"
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label="Documentation"
+                    >
+                      {PHONE_ICONS.help}
+                    </a>
+                  </Button>
+                </div>
               </CodeHead>
               {props.stageOn === "work" && (
                 <Outlet
@@ -442,10 +465,14 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
             <Outlet
               node={props.consoleNode}
               // Closed, the console is its bar: the body stays mounted (the
-              // terminal keeps its buffer) and is clipped, as on wide
+              // terminal keeps its buffer) and is clipped, as on wide. Open
+              // with the stage on Code, it takes the page: the preview of a
+              // project with no program, the only one shown at `write`
               className={cn(
                 "flex min-h-0 flex-col",
-                props.consoleOpen ? "h-2/5" : "overflow-hidden"
+                props.consoleOpen
+                  ? openConsoleClass(props.stageOn)
+                  : "overflow-hidden"
               )}
               style={props.consoleOpen ? undefined : { height: BOTTOM_BAR_PX }}
             />

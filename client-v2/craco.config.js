@@ -48,6 +48,9 @@ class GoogleTagPlugin {
 const { DEV_SERVER_ROOT_HEADER } = require("./scripts/dev-server-owner.mjs");
 const { serveApiRoute } = require("./scripts/api-route.mjs");
 const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
+const {
+  readSupportedPackages,
+} = require("./scripts/lib/supported-packages.cjs");
 const { sourcemapsEnabled } = require("./scripts/sourcemap-gate.mjs");
 
 const { esbuildMinifyOptions } = require("./scripts/esbuild-minify.mjs");
@@ -376,10 +379,7 @@ module.exports = {
           }),
 
           /** Supported packages(TypeScript) */
-          PACKAGES: fs.readFileSync(
-            path.join("..", "supported-packages.json"),
-            "utf8"
-          ),
+          PACKAGES: JSON.stringify(readSupportedPackages()),
 
           /** Array of all markdown tutorial data */
           MARKDOWN_TUTORIALS: defineFromPublicDir(

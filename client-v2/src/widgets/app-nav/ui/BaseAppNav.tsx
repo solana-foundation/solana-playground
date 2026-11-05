@@ -82,7 +82,9 @@ const BaseAppNav = ({
         </Button>
       </SidebarHeader>
     ) : (
-      <SidebarHeader>
+      // 6 above, not the kit's 8, so the logo and the toggle centre on the
+      // 44 px bars beside the nav. TODO(design-system): the kit's header
+      <SidebarHeader className="pt-1.5">
         <div className="flex items-center justify-between gap-2">
           {!collapsed && logo}
           <Button
@@ -90,8 +92,10 @@ const BaseAppNav = ({
             size="icon"
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
             onClick={onToggle}
+            // As the stage bar's icons: a 32 px square, 18 px at 1.6
+            className="size-8 rounded-lg text-muted-foreground hover:text-foreground"
           >
-            <PanelLeft />
+            <PanelLeft className="size-[18px]" strokeWidth={1.6} />
           </Button>
         </div>
       </SidebarHeader>

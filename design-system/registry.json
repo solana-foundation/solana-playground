@@ -1038,7 +1038,7 @@
       "name": "sonner",
       "type": "registry:ui",
       "title": "Sonner",
-      "description": "Stock shadcn sonner, as the design system ships it.",
+      "description": "Shadcn sonner with Close inside the toast at its end, and ToastProgress, the accent bar a timed toast drains over its duration.",
       "files": [
         {
           "path": "src/components/ui/sonner.tsx",

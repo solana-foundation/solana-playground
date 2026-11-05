@@ -1,6 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import * as mocha from "mocha/browser-entry";
-import { ScriptTarget, transpile } from "typescript";
+import { transpile } from "typescript";
 import * as util from "util";
 
 import { PgCommon } from "../common";
@@ -11,6 +11,13 @@ import { PgTerminal } from "../terminal";
 import type { MergeUnion, OrString } from "../types";
 import { PgWallet, Wallet } from "../wallet";
 import type { PgWeb3 } from "../web3";
+import {
+  pgSignerFromFileWith,
+  reasonMessage,
+  showBigInts,
+  TRANSPILE_OPTIONS,
+  wrapScriptWith,
+} from "./kit";
 import { JsRuntimePackageName, PgJsRuntimePackage } from "./package";
 
 /** Options to use when running a script/test */
@@ -42,13 +49,21 @@ const BDD_GLOBALS = [
   "xspecify",
 ] as const;
 
+/** How a script run ended: the first uncaught error, if any */
+export type RunResult = { ok: true } | { ok: false; error: string };
+
 export class PgJsRuntime {
   /**
    * Run or test JS/TS code.
    *
    * @param params client parameters
    */
-  static async execute({ fileName, code, isTest }: ExecuteParams) {
+  static async execute({
+    fileName,
+    code,
+    isTest,
+  }: ExecuteParams): Promise<RunResult> {
+    let result: RunResult = { ok: true };
     await this._executeBlocking(
       async () => {
         PgTerminal.println(`  ${fileName}:`);
@@ -67,6 +82,12 @@ export class PgJsRuntime {
 
         // Get globals
         const { globals, endCode } = await this._getGlobals({ isTest });
+        const fail: NonNullable<IframeGlobals["__fail"]> = (reason) => {
+          const error = reasonMessage(reason);
+          if (result.ok) result = { ok: false, error };
+          return error;
+        };
+        globals.push(["__fail", fail]);
 
         // Handle imports
         const importResult = await this._getImports(code);
@@ -97,28 +118,10 @@ export class PgJsRuntime {
           }
         }
 
-        // Handle globals to set `undefined` to
-        for (const keyword of UNDEFINED_GLOBALS) {
-          code = `${keyword} = undefined;` + code;
-        }
-
-        // This approach:
-        // 1- Wraps the code in a class to block window access from `this`
-        // 2- Allows top-level async
-        // 3- Helps detecting when tests finish
-        code = `(async () => {
-  class __Pg { async __run() {\n${code}\n} }
-  const __pg = new __Pg();
-  try { await __pg.__run(); }
-  catch (e) { console.log("Uncaught error:", e?.message ?? e); }
-  finally { ${endCode} }
-})()`;
+        code = wrapScriptWith(endCode)(code);
 
         // Transpile the code
-        code = transpile(code, {
-          target: ScriptTarget.ES5,
-          removeComments: true,
-        });
+        code = transpile(code, TRANSPILE_OPTIONS);
 
         // Create script element in the iframe
         const iframeDocument = iframeWindow.document;
@@ -152,6 +155,10 @@ export class PgJsRuntime {
       },
       { isTest }
     );
+    // The run has ended: a rejection it left behind may print, but it no
+    // longer changes this result
+    delete (this._getIframeWindow() as IframeGlobals).__fail;
+    return result;
   }
 
   /**
@@ -199,8 +206,11 @@ export class PgJsRuntime {
     if (!iframeWindow) throw new Error("No iframe window");
 
     // Non runtime errors e.g. syntax
+    // TODO(docs-link follow-up, run ids): an error thrown from a script's
+    // timer lands here too and ends its run early
     iframeWindow.addEventListener("error", (ev) => {
       PgTerminal.println(`    ${ev.message}`);
+      (iframeWindow as IframeGlobals).__fail?.(ev.message);
 
       // This kind of error requires custom event dispatch to indicate the
       // client has finished running, otherwise client will stay in the running
@@ -210,7 +220,13 @@ export class PgJsRuntime {
 
     // Promise/async errors
     iframeWindow.addEventListener("unhandledrejection", (ev) => {
-      PgTerminal.println(`    ${`Uncaught error: ${ev.reason.message}`}`);
+      const message = reasonMessage(ev.reason);
+      PgTerminal.println(`    Uncaught error: ${message}`);
+      // TODO(docs-link follow-up, run ids): a rejection that lands after its
+      // script ended is printed but cannot turn that run red, and one that
+      // lands while the next run goes turns the next one red. `execute`
+      // clears `__fail` when a run ends, so only the second case remains
+      (iframeWindow as IframeGlobals).__fail?.(message);
       // Does not require custom event dispatch to indicate running has finished
     });
 
@@ -229,9 +245,8 @@ export class PgJsRuntime {
     // Redefine console inside the iframe to log in the terminal
     const log = (cb?: (text: string) => string) => {
       return (...args: any[]) => {
-        return PgTerminal.println(
-          "    " + (cb ? cb(util.format(...args)) : util.format(...args))
-        );
+        const text = util.format(...showBigInts(args));
+        return PgTerminal.println("    " + (cb ? cb(text) : text));
       };
     };
     const iframeConsole = {
@@ -421,6 +436,21 @@ export class PgJsRuntime {
     name: OrString<JsRuntimePackageName>,
     pkg: any
   ) {
+    // Kit: a docs script's `signerFromFile("wallet.json")` is the
+    // Playground wallet, since there is no file system to read a keypair from
+    if (name === "@solana/kit-plugin-signer") {
+      return {
+        ...pkg,
+        signerFromFile: pgSignerFromFileWith({
+          createKeyPairSignerFromBytes: async (bytes) => {
+            const kit = await import("@solana/kit");
+            return kit.createKeyPairSignerFromBytes(bytes);
+          },
+          signer: pkg.signer,
+        })(() => PgWallet.current),
+      };
+    }
+
     // Anchor
     if (name === "@coral-xyz/anchor" || name === "@project-serum/anchor") {
       // Fix `Cannot assign to property 'workspace' of [object Module]`
@@ -551,6 +581,9 @@ export class PgJsRuntime {
   private static _IframeWindow: Window;
 }
 
+/** What a running script's iframe holds besides the window's own */
+type IframeGlobals = Window & { __fail?: (reason: unknown) => string };
+
 /** Keywords that are not allowed to be in the user code */
 const BLACKLISTED_GLOBALS = [
   "window",
@@ -560,9 +593,6 @@ const BLACKLISTED_GLOBALS = [
   "top",
   "chrome",
 ];
-
-/** Globals that will be set to `undefined` */
-const UNDEFINED_GLOBALS = ["eval", "Function"];
 
 /** Event name that will be dispatched when client code completes executing */
 const CLIENT_ON_DID_FINISH_RUNNING = "clientondidfinishrunning";

@@ -63,7 +63,7 @@ const renderConnect = (props: Omit<ConnectProps, "frame">) =>
   );
 
 /**
- * A real known-step failure ("Allow popups for this site to sign in."): the
+ * A real known-step failure ("Allow pop-ups for this site to sign in with GitHub."): the
  * popup is blocked. Made once per test, before the spy replaces `signIn`.
  */
 const blockedPopup = async () => {
@@ -151,7 +151,7 @@ describe("Connect", () => {
     });
 
     it("signs in from the assistant when the action is pressed", async () => {
-      const signIn = vi.spyOn(PgSession, "signIn").mockResolvedValue();
+      const signIn = vi.spyOn(PgSession, "signInWith").mockResolvedValue();
       renderConnect({ defaultBackend: "present" });
 
       await act(async () => connect());
@@ -162,20 +162,20 @@ describe("Connect", () => {
 
     it("shows why a sign-in failed", async () => {
       const failure = await blockedPopup();
-      vi.spyOn(PgSession, "signIn").mockRejectedValue(failure);
+      vi.spyOn(PgSession, "signInWith").mockRejectedValue(failure);
       renderConnect({ defaultBackend: "present" });
 
       await act(async () => connect());
 
       expect((await screen.findByRole("alert")).textContent).toBe(
-        "Allow popups for this site to sign in."
+        "Allow pop-ups for this site to sign in with GitHub."
       );
     });
 
     it("reports a sign-in that failed for a reason it does not know", async () => {
       const logged = memoryProvider();
       initLogger({ providers: [logged] });
-      vi.spyOn(PgSession, "signIn").mockRejectedValue(
+      vi.spyOn(PgSession, "signInWith").mockRejectedValue(
         new TypeError("Failed to fetch")
       );
       renderConnect({ defaultBackend: "present" });
@@ -203,7 +203,7 @@ describe("Connect", () => {
 
     it("clears the failure when the next sign-in starts", async () => {
       const failure = await blockedPopup();
-      vi.spyOn(PgSession, "signIn")
+      vi.spyOn(PgSession, "signInWith")
         .mockRejectedValueOnce(failure)
         .mockReturnValueOnce(new Promise(() => {}));
       renderConnect({ defaultBackend: "present" });

@@ -32,6 +32,22 @@ export const readWorkspaceFiles = async (name: string, fs: Fs) => {
   return files;
 };
 
+/**
+ * A workspace's files keyed by path relative to its root, as a share reads
+ * them; `.workspace/` is left out as {@link readWorkspaceFiles} leaves it.
+ */
+export const readProjectFiles = async (name: string, fs: Fs) => {
+  const root = `/${name}/`;
+  // `Object.fromEntries` makes own keys, where an assignment to `__proto__`
+  // would set the prototype and lose a file of that name
+  return Object.fromEntries(
+    (await readWorkspaceFiles(name, fs)).map(([path, content]) => [
+      path.slice(root.length),
+      content,
+    ])
+  );
+};
+
 /** The same files under another workspace's folder */
 export const rebaseFiles = (
   files: TupleFiles,
@@ -85,6 +101,34 @@ if (import.meta.vitest) {
           ["/alpha/Cargo.toml", "[package]"],
           ["/alpha/src/lib.rs", "fn main() {}"],
         ]);
+      });
+    });
+
+    describe("readProjectFiles", () => {
+      beforeEach(reset);
+
+      it("keys a workspace's files by their path inside it", async () => {
+        await PgExplorer.createWorkspace("alpha", {
+          files: [
+            ["/alpha/src/lib.rs", "fn main() {}"],
+            ["/alpha/.workspace/program-info.json", '{"kp":[1]}'],
+          ],
+        });
+
+        expect(await readProjectFiles("alpha", PgExplorer.fs)).toEqual({
+          "src/lib.rs": "fn main() {}",
+        });
+      });
+
+      it("keeps a file named __proto__ as a file", async () => {
+        await PgExplorer.createWorkspace("alpha", {
+          files: [["/alpha/__proto__", "kept"]],
+        });
+
+        const files = await readProjectFiles("alpha", PgExplorer.fs);
+
+        expect(Object.hasOwn(files, "__proto__")).toBe(true);
+        expect(Object.getPrototypeOf(files)).toBe(Object.prototype);
       });
     });
 

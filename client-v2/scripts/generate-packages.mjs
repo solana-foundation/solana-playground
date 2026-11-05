@@ -1,20 +1,13 @@
 // Generate TypeScript declarations for the supported packages.
 
 import fs from "fs/promises";
+import { createRequire } from "module";
 import pathModule from "path";
 
-import {
-  CLIENT_PATH,
-  exists,
-  readJSON,
-  REPO_ROOT_PATH,
-  resetDir,
-} from "./utils.mjs";
+import { CLIENT_PATH, exists, readJSON, resetDir } from "./utils.mjs";
 
-/** Supported packages path */
-const SUPPORTED_PACKAGES_PATH = pathModule.join(
-  REPO_ROOT_PATH,
-  "supported-packages.json"
+const { readSupportedPackages } = createRequire(import.meta.url)(
+  "./lib/supported-packages.cjs"
 );
 
 /** Packages output directory path */
@@ -26,8 +19,8 @@ const DEFAULT_INDEX_FILENAME = "index.d.ts";
 /** Renamed index type declaration file name(for re-exporting) */
 const OLD_INDEX_FILENAME = "old-index.d.ts";
 
-/** All supported packages */
-const packages = await readJSON(SUPPORTED_PACKAGES_PATH);
+/** All supported packages: upstream's list and client-v2's own */
+const packages = readSupportedPackages();
 
 /** Generated packages cache */
 const generatedCache = new Set();

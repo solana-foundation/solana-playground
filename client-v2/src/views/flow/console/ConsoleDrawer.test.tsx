@@ -2,7 +2,12 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireFor } from "../../../test-utils/require-for";
-import { PgCommandManager, PgCommon, PgTerminal } from "../../../utils";
+import {
+  PgCommandManager,
+  PgCommon,
+  PgExplorer,
+  PgTerminal,
+} from "../../../utils";
 import type { FlowState, StageStatus } from "../state/stage";
 import BaseConsoleDrawer, { CONSOLE_BODY_ID } from "./BaseConsoleDrawer";
 import ConsoleDrawer from "./ConsoleDrawer";
@@ -40,7 +45,13 @@ vi.mock("../../../shared/lib/logger", () => ({
 vi.mock("@/utils", () => ({
   PgTerminal: { clear: vi.fn(), setConsoleOpen: vi.fn() },
   PgCommon: { getOS: vi.fn(() => "MacOS") },
-  PgCommandManager: { stop: vi.fn() },
+  PgExplorer: {
+    onDidSwitchWorkspace: vi.fn(() => ({ dispose: () => {} })),
+  },
+  PgCommandManager: {
+    stop: vi.fn(),
+    onDidStart: vi.fn(() => ({ dispose: () => {} })),
+  },
 }));
 
 /** The flow's state and its one listener, which a test drives by hand */
@@ -87,7 +98,16 @@ const flowState = (
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  hasProgram: true,
 });
+
+/** A flow before anything ran, in a project with no program */
+const noProgram = (): FlowState => {
+  const state = flowState("upcoming");
+  state.stage = "write";
+  state.hasProgram = false;
+  return state;
+};
 
 beforeEach(() => {
   flow.state = flowState("upcoming");
@@ -108,6 +128,37 @@ it("should show what it is told and ask to toggle", () => {
   ).not.toBeNull();
   fireEvent.click(handle);
   expect(onToggle).toHaveBeenCalledTimes(1);
+});
+
+it("should drop the client run hint once a client run starts", () => {
+  flow.state = noProgram();
+  render(<ConsoleDrawer open={false} onToggle={vi.fn()} />);
+  expect(
+    screen.queryByText("Run the client to see its output here.")
+  ).not.toBeNull();
+  const call = vi.mocked(PgCommandManager.onDidStart).mock.lastCall;
+  if (!call) throw new Error("The drawer did not listen for a run");
+  expect(call[0]).toBe("run");
+  act(() => call[1]("run"));
+  expect(
+    screen.queryByText("Run the client to see its output here.")
+  ).toBeNull();
+});
+
+it("should bring the client run hint back when another project opens", () => {
+  flow.state = noProgram();
+  render(<ConsoleDrawer open={false} onToggle={vi.fn()} />);
+  const started = vi.mocked(PgCommandManager.onDidStart).mock.lastCall;
+  const switched = vi.mocked(PgExplorer.onDidSwitchWorkspace).mock.lastCall;
+  if (!started || !switched) throw new Error("The drawer did not listen");
+  act(() => started[1]("run"));
+  expect(
+    screen.queryByText("Run the client to see its output here.")
+  ).toBeNull();
+  act(() => switched[0]());
+  expect(
+    screen.queryByText("Run the client to see its output here.")
+  ).not.toBeNull();
 });
 
 it("should report itself expanded when open", () => {

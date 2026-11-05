@@ -200,7 +200,7 @@ export function AssistantComposer({
   /** The off row's sign-in: Connect a model's, which keeps the open project */
   const signIn = () => {
     setSignInError(undefined);
-    PgSession.signIn({ from: "assistant" }).catch((error: unknown) => {
+    PgSession.signInWith({ from: "assistant" }).catch((error: unknown) => {
       if (isSignInFailure(error)) {
         // Not reported: a blocked popup or a cancelled sign-in is expected,
         // and its message says what to do

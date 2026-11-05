@@ -256,7 +256,7 @@ it("shows a signed-in user, not a sign-in that failed before the session arrived
   vi.spyOn(PgSession, "signInState").mockReturnValue({
     status: "failed",
     reason: "popup-blocked",
-    message: "Allow popups for this site to sign in.",
+    message: "Allow pop-ups for this site to sign in with GitHub.",
   });
   await signInAsTester();
   draw("footer");

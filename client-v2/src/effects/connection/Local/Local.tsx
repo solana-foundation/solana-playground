@@ -26,7 +26,12 @@ export const Local = () => {
   }, [id]);
 
   return (
-    <ModalFrame name="localnet-unreachable" title="Connect to localnet">
+    <ModalFrame
+      name="localnet-unreachable"
+      title="Connect to localnet"
+      // No field to land on, so Radix would ring the header's Close on open
+      openFocus="dialog"
+    >
       <Callout variant="error">
         <FrownIcon />
         <CalloutDescription>Unable to connect to localnet</CalloutDescription>

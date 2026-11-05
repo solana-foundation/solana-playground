@@ -1,0 +1,361 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+import { createHandler, NoGithubGrant, readGithubToken } from "./gists.mjs";
+
+const TOKEN = "gho_secret";
+const FILES = { "src__lib.rs": { content: "x" } };
+
+/** Minimal stand-in for the platform's response object */
+const makeRes = () => ({
+  statusCode: 0,
+  headers: {},
+  body: "",
+  setHeader(k, v) {
+    this.headers[k] = v;
+  },
+  end(b) {
+    this.body = b ?? "";
+  },
+});
+
+/** A request whose body the platform already parsed, as Vercel's is */
+const requestWith = (method) => (body) => ({
+  method,
+  url: "/api/gists",
+  headers: {},
+  body,
+});
+
+const post = requestWith("POST");
+const validBody = { description: "p", files: FILES };
+
+/** Every dependency answering as for a signed-in user whose token works */
+const deps = (over) => {
+  const calls = { createGist: [], getAccessToken: [] };
+  const all = {
+    isAllowedOrigin: () => true,
+    readSession: async () => ({ status: "signed-in", user: { id: "u1" } }),
+    getAccessToken: async (userId) => {
+      calls.getAccessToken.push(userId);
+      return TOKEN;
+    },
+    createGist: async (args) => {
+      calls.createGist.push(args);
+      return {
+        status: 201,
+        body: { url: "https://gist.github.com/a/b", id: "b" },
+      };
+    },
+  };
+  for (const [name, fn] of Object.entries(over)) all[name] = fn;
+  return { deps: all, calls };
+};
+
+const call = async (req, d) => {
+  const res = makeRes();
+  await createHandler(d)(req, res);
+  return { status: res.statusCode, body: JSON.parse(res.body || "null"), res };
+};
+
+describe("/api/gists", () => {
+  it("creates the gist with the user's token and answers 201", async () => {
+    const { deps: d, calls } = deps({});
+
+    const { status, body, res } = await call(post(validBody), d);
+
+    assert.equal(status, 201);
+    assert.deepEqual(body, { url: "https://gist.github.com/a/b", id: "b" });
+    assert.deepEqual(calls.getAccessToken, ["u1"]);
+    assert.equal(calls.createGist[0].token, TOKEN);
+    assert.equal(calls.createGist[0].description, "p");
+    assert.deepEqual(calls.createGist[0].files, FILES);
+    assert.equal(res.headers["cache-control"], "no-store");
+    assert.ok(!res.body.includes(TOKEN));
+  });
+
+  it("creates a secret gist when the body names no visibility", async () => {
+    const { deps: d, calls } = deps({});
+
+    await call(post(validBody), d);
+
+    assert.equal(calls.createGist[0].public, false);
+  });
+
+  it("passes the body's visibility to GitHub", async () => {
+    for (const visibility of [true, false]) {
+      const { deps: d, calls } = deps({});
+
+      await call(
+        post({ description: "p", files: FILES, public: visibility }),
+        d
+      );
+
+      assert.equal(calls.createGist[0].public, visibility);
+    }
+  });
+
+  it("400s a visibility that is not a boolean and never calls GitHub", async () => {
+    const { deps: d, calls } = deps({});
+    // eslint-disable-next-line unicorn/no-null -- a JSON body can carry null, which the route must refuse
+    for (const visibility of ["yes", "false", 0, 1, null, {}, []]) {
+      const { status } = await call(
+        post({ description: "p", files: FILES, public: visibility }),
+        d
+      );
+      assert.equal(status, 400, JSON.stringify(visibility));
+    }
+    assert.equal(calls.createGist.length, 0);
+  });
+
+  it("405s anything but a POST", async () => {
+    const { deps: d } = deps({});
+    assert.equal((await call(requestWith("GET")(validBody), d)).status, 405);
+  });
+
+  it("403s another origin before reading the session", async () => {
+    let read = false;
+    const { deps: d } = deps({
+      isAllowedOrigin: () => false,
+      readSession: async () => {
+        read = true;
+        return { status: "signed-in", user: { id: "u1" } };
+      },
+    });
+
+    assert.equal((await call(post(validBody), d)).status, 403);
+    assert.equal(read, false);
+  });
+
+  it("401s a signed-out request and never calls GitHub", async () => {
+    const { deps: d, calls } = deps({
+      readSession: async () => ({ status: "signed-out" }),
+    });
+
+    const { status, body } = await call(post(validBody), d);
+
+    assert.equal(status, 401);
+    assert.equal(body.reason, "signed-out");
+    assert.equal(calls.createGist.length, 0);
+  });
+
+  it("503s when sign-in is unconfigured or the lookup failed", async () => {
+    for (const session of ["unconfigured", "unavailable"]) {
+      const { deps: d } = deps({
+        readSession: async () => ({ status: session }),
+      });
+      assert.equal((await call(post(validBody), d)).status, 503, session);
+    }
+  });
+
+  it("400s a malformed body", async () => {
+    const { deps: d, calls } = deps({});
+    const bodies = [
+      "not json",
+      { files: FILES },
+      { description: "p" },
+      { description: "p", files: [] },
+      { description: "p", files: {} },
+      { description: "p", files: { "a.rs": "x" } },
+      { description: "p", files: { "a/b.rs": { content: "x" } } },
+      { description: 3, files: FILES },
+    ];
+    for (const body of bodies) {
+      const { status } = await call(post(body), d);
+      assert.equal(status, 400, JSON.stringify(body));
+    }
+    assert.equal(calls.createGist.length, 0);
+  });
+
+  it("413s a gist over the size or file limit", async () => {
+    const { deps: d, calls } = deps({});
+    const big = { "a.rs": { content: "x".repeat(4 * 1024 * 1024 + 1) } };
+    const many = {};
+    for (let i = 0; i < 302; i++) many[`f${i}.rs`] = { content: "x" };
+
+    for (const files of [big, many]) {
+      const { status } = await call(post({ description: "p", files }), d);
+      assert.equal(status, 413);
+    }
+    assert.equal(calls.createGist.length, 0);
+  });
+
+  it("401s github-unauthorized when the user has no GitHub grant", async () => {
+    const { deps: d, calls } = deps({
+      getAccessToken: async () => {
+        throw new NoGithubGrant("ACCOUNT_NOT_FOUND");
+      },
+    });
+
+    const { status, body } = await call(post(validBody), d);
+
+    assert.equal(status, 401);
+    assert.equal(body.reason, "github-unauthorized");
+    assert.equal(calls.createGist.length, 0);
+  });
+
+  it("503s when the token cannot be read for a reason of ours", async () => {
+    const { deps: d, calls } = deps({
+      getAccessToken: async () => {
+        throw new Error("connection refused");
+      },
+    });
+
+    const { status, body } = await call(post(validBody), d);
+
+    assert.equal(status, 503);
+    assert.equal(body.reason, undefined);
+    assert.equal(calls.createGist.length, 0);
+  });
+
+  it("takes a gist at the limits: 300 files with the manifest, 4 MB of multibyte text", async () => {
+    const { deps: d, calls } = deps({});
+    const many = { ".playground.json": { content: "{}" } };
+    for (let i = 0; i < 299; i++) many[`f${i}.rs`] = { content: "x" };
+    // 2 bytes each: 2 MB of characters is the whole 4 MB
+    const wide = {
+      "a.rs": { content: "é".repeat((4 * 1024 * 1024) / 2) },
+    };
+
+    for (const files of [many, wide]) {
+      const { status } = await call(post({ description: "p", files }), d);
+      assert.equal(status, 201);
+    }
+    const over = {
+      "a.rs": { content: "é".repeat((4 * 1024 * 1024) / 2) + "x" },
+    };
+    // GitHub would list only 300 of these, and the gist would not open again
+    const crowded = { ".playground.json": { content: "{}" } };
+    for (let i = 0; i < 300; i++) crowded[`f${i}.rs`] = { content: "x" };
+    for (const files of [over, crowded]) {
+      const { status } = await call(post({ description: "p", files }), d);
+      assert.equal(status, 413);
+    }
+    assert.equal(calls.createGist.length, 2);
+  });
+
+  it("400s a description over 200 characters", async () => {
+    const { deps: d } = deps({});
+    const { status } = await call(
+      post({ description: "x".repeat(201), files: FILES }),
+      d
+    );
+    assert.equal(status, 400);
+  });
+
+  it("passes GitHub's verdict through as createGist mapped it", async () => {
+    for (const [status, reason] of [
+      [403, "needs-gist-scope"],
+      [401, "github-unauthorized"],
+      [429, "rate-limited"],
+      [422, "rejected"],
+      [502, "request-failed"],
+    ]) {
+      const { deps: d } = deps({
+        createGist: async () => ({ status, body: { reason } }),
+      });
+      const answer = await call(post(validBody), d);
+      assert.equal(answer.status, status);
+      assert.equal(answer.body.reason, reason);
+    }
+  });
+});
+
+/**
+ * Better Auth 1.7's `/get-access-token` takes `{accountId, userId?}` or
+ * `{useAccountCookie: true, userId?}` and nothing else (`accountSelectionSchema`,
+ * a strict union); this stand-in refuses any other body the same way.
+ */
+const fakeAuth = ({ accounts, token, fail }) => {
+  const calls = [];
+  return {
+    calls,
+    $context: Promise.resolve({
+      internalAdapter: { findAccounts: async () => accounts },
+    }),
+    api: {
+      getAccessToken: async ({ body }) => {
+        calls.push(body);
+        const keys = Object.keys(body).sort().join(",");
+        if (keys !== "accountId,userId" && keys !== "accountId") {
+          throw Object.assign(new Error("[body] Invalid input"), {
+            body: { code: "VALIDATION_ERROR" },
+          });
+        }
+        if (fail)
+          throw Object.assign(new Error(fail), { body: { code: fail } });
+        return { accessToken: token };
+      },
+    },
+  };
+};
+
+describe("readGithubToken", () => {
+  it("selects the user's GitHub account by its row id", async () => {
+    const auth = fakeAuth({
+      accounts: [
+        { id: "a0", providerId: "credential" },
+        { id: "a1", providerId: "github" },
+      ],
+      token: TOKEN,
+    });
+    assert.equal(await readGithubToken(auth, "u1"), TOKEN);
+    assert.deepEqual(auth.calls, [{ accountId: "a1", userId: "u1" }]);
+  });
+
+  it("throws NoGithubGrant when the user has no GitHub account", async () => {
+    const auth = fakeAuth({
+      accounts: [{ id: "a0", providerId: "credential" }],
+      token: TOKEN,
+    });
+    await assert.rejects(readGithubToken(auth, "u1"), NoGithubGrant);
+    assert.deepEqual(auth.calls, []);
+  });
+
+  it("throws NoGithubGrant when Better Auth cannot produce a token", async () => {
+    const auth = fakeAuth({
+      accounts: [{ id: "a1", providerId: "github" }],
+      token: TOKEN,
+      fail: "FAILED_TO_GET_ACCESS_TOKEN",
+    });
+    await assert.rejects(readGithubToken(auth, "u1"), NoGithubGrant);
+  });
+
+  it("throws NoGithubGrant when the stored token is empty", async () => {
+    const auth = fakeAuth({
+      accounts: [{ id: "a1", providerId: "github" }],
+      token: "",
+    });
+    await assert.rejects(readGithubToken(auth, "u1"), NoGithubGrant);
+  });
+});
+
+describe("readGithubToken against Better Auth itself", () => {
+  // The fakes above mirror Better Auth's schema; this runs the real endpoint,
+  // so a future change to how it selects an account fails here, not in Share
+  it("reads the token stored for the user's GitHub account", async () => {
+    const { betterAuth } = await import("better-auth");
+    const { memoryAdapter } = await import("better-auth/adapters/memory");
+    const db = { user: [], session: [], account: [], verification: [] };
+    const auth = betterAuth({
+      secret: "test-secret-".repeat(4),
+      baseURL: "http://localhost:3000",
+      database: memoryAdapter(db),
+      socialProviders: { github: { clientId: "c", clientSecret: "s" } },
+      logger: { disabled: true },
+    });
+    const ctx = await auth.$context;
+    const user = await ctx.internalAdapter.createUser({
+      email: "a@example.com",
+      name: "a",
+      emailVerified: true,
+    });
+    await ctx.internalAdapter.createAccount({
+      userId: user.id,
+      providerId: "github",
+      accountId: "123",
+      accessToken: TOKEN,
+    });
+    assert.equal(await readGithubToken(auth, user.id), TOKEN);
+  });
+});

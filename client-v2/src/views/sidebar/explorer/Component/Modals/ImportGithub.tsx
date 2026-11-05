@@ -2,6 +2,7 @@ import { InfoIcon } from "lucide-react";
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { importGist, isGistUrl } from "@/features/gist";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
@@ -36,7 +37,9 @@ export const ImportGithub = () => {
         text: "Import",
         onSubmit: async () => {
           try {
-            await PgCommon.transition(PgGithub.import(url));
+            await PgCommon.transition(
+              isGistUrl(url) ? importGist(url, "dialog") : PgGithub.import(url)
+            );
             return IMPORTED;
           } catch (e) {
             // Closing the program choice is the user changing their mind,
@@ -50,20 +53,21 @@ export const ImportGithub = () => {
     >
       <Wrapper>
         <GithubUrlWrapper>
-          <GithubUrlInputLabel>GitHub URL</GithubUrlInputLabel>
+          <GithubUrlInputLabel>GitHub or gist URL</GithubUrlInputLabel>
           <Input
             autoFocus
             value={url}
             onChange={(ev) => setUrl(ev.target.value)}
-            validator={PgGithub.isValidUrl}
+            validator={isImportableUrl}
             error={error}
             setError={setError}
-            placeholder="https://github.com/..."
+            placeholder="https://github.com/... or https://gist.github.com/..."
           />
         </GithubUrlWrapper>
 
         <Description>
-          Projects can be imported or viewed from their GitHub URL.
+          Projects can be imported or viewed from their GitHub URL, or from the
+          URL of a gist.
         </Description>
 
         <ExamplesSectionWrapper>
@@ -93,6 +97,10 @@ export const ImportGithub = () => {
     </ModalFrame>
   );
 };
+
+/** A repository URL goes to repository import, a gist URL to gist import */
+const isImportableUrl = (url: string) =>
+  PgGithub.isValidUrl(url) || isGistUrl(url);
 
 const GITHUB_PROGRAM_URL =
   "https://github.com/solana-developers/program-examples/tree/main/basics/create-account/anchor";

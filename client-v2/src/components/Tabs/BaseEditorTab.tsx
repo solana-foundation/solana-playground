@@ -64,9 +64,11 @@ export const BaseEditorTab = forwardRef<HTMLDivElement, BaseEditorTabProps>(
         menuOpen={menuOpen}
         data-drag={drag}
         // The trigger takes the tab's left padding and the gap before close,
-        // so a click anywhere up to the close button selects the tab
+        // so a click anywhere up to the close button selects the tab. The
+        // open tab's edge in the text colour, not the brand: colour is kept for
+        // focus. TODO(design-system): the kit's EditorTab, then drop it
         className={cn(
-          "gap-0 pl-0 data-[drag=source]:opacity-60 data-[drag=overlay]:bg-surface data-[drag=overlay]:text-foreground data-[drag=overlay]:shadow-lg data-[drag=overlay]:ring-1 data-[drag=overlay]:ring-border",
+          "gap-0 pl-0 before:bg-foreground/80 data-[drag=source]:opacity-60 data-[drag=overlay]:bg-surface data-[drag=overlay]:text-foreground data-[drag=overlay]:shadow-lg data-[drag=overlay]:ring-1 data-[drag=overlay]:ring-border",
           className
         )}
         {...props}

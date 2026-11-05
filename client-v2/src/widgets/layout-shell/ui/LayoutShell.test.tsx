@@ -20,10 +20,25 @@ import { requireFor } from "@/test-utils/require-for";
 // The `@/utils` barrel reaches generated globals (`GLOBAL_SETTINGS`) that
 // exist only in a booted app, so the test builds it from the pieces the shell
 // uses: the real keybinds, editor events and view (so a modal opens through
-// `PgView.setModal`, the event the shell listens to) and a deploy command it
-// can start.
+// `PgView.setModal`, the event the shell listens to) and the deploy and run
+// commands it can start.
 const deploy = vi.hoisted(() => ({
   starts: new Set<(input: string | null) => void>(),
+}));
+const run = vi.hoisted(() => ({
+  starts: new Set<(input: string | null) => void>(),
+}));
+// The run store the phone follows to the funding card
+const clientRun = vi.hoisted(() => ({
+  listeners: new Set<(state: { kind: string }) => void>(),
+}));
+vi.mock("@/features/docs-link", () => ({
+  PgClientRun: {
+    onDidChange: (cb: (state: { kind: string }) => void) => {
+      clientRun.listeners.add(cb);
+      return { dispose: () => clientRun.listeners.delete(cb) };
+    },
+  },
 }));
 // The open file and project the phone's bar and picker name, and the listeners
 // the Files sheet closes on
@@ -62,6 +77,12 @@ vi.mock("@/utils", async () => {
         onDidStart: (cb: (input: string | null) => void) => {
           deploy.starts.add(cb);
           return { dispose: () => deploy.starts.delete(cb) };
+        },
+      },
+      run: {
+        onDidStart: (cb: (input: string | null) => void) => {
+          run.starts.add(cb);
+          return { dispose: () => run.starts.delete(cb) };
         },
       },
     },
@@ -152,6 +173,7 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", NoopResizeObserver);
   localStorage.clear();
   PgFlow["_dispatch"]({ type: "workspace-change" });
+  PgFlow["_dispatch"]({ type: "program", has: true });
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
 });
@@ -173,6 +195,8 @@ const toggled = () =>
     .map((event) => event.params);
 
 const consoleButton = () => screen.getByRole("button", { name: "Console" });
+/** Starts a client run, as `run` typed in the terminal reports one */
+const startRun = () => run.starts.forEach((cb) => cb("run"));
 
 // `PgKeybind` listens on `document` and reads Ctrl or Meta as "Ctrl"; the
 // stock Sidebar listens on `window`, which an event on `document` reaches.
@@ -699,6 +723,13 @@ it("should open the console when a deploy starts, as auto", () => {
   expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
 });
 
+it("should open the console when a script run starts, as auto", () => {
+  shell();
+  act(startRun);
+  expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+  expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
+});
+
 it("should open the console once when a deploy fails, not for one already failed", () => {
   // The reducer is the only way to set a deploy's status without a deploy
   const dispatch = (ev: Parameters<typeof PgFlow.reduce>[1]) =>
@@ -911,7 +942,10 @@ describe("on a phone", () => {
     requireFor("the outlet's box")(el.closest("div[class*='flex']"));
   const consoleBox = () =>
     requireFor("the console's box")(
-      consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']")
+      consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']") ??
+        // Open beside no stage, the outlet's box is `flex-1`, as is the node
+        // inside it: the box is the node's parent
+        consoleButton().closest("[class~='flex-1']")?.parentElement
     );
 
   it("hands the navigation the menu page, whose toggle brings the work back", () => {
@@ -943,6 +977,80 @@ describe("on a phone", () => {
     expect(PgFlow.state.stage).toBe("write");
     fireEvent.click(button("Preview the build"));
     expect(PgFlow.state.stage).toBe("deploy");
+  });
+
+  it("opens the preview at write for a project with no program, and stays there", () => {
+    PgFlow["_dispatch"]({ type: "program", has: false });
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    expect(PgFlow.state.stage).toBe("write");
+    expect(events("layout_page_shown")).toEqual([
+      { page: "preview", via: "button" },
+    ]);
+    // The console is the page's only content, so it opens with it
+    expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+    expect(events("layout_panel_toggled")).toEqual([
+      { panel: "console", open: true, via: "auto" },
+    ]);
+    expect(
+      screen.getByRole("region", { name: "Preview" }).hasAttribute("inert")
+    ).toBe(false);
+  });
+
+  it("stays on a no-program preview when its workspace re-opens", () => {
+    PgFlow["_dispatch"]({ type: "program", has: false });
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    // A sync adopt or another tab re-opens the project: the flow resets
+    // before the explorer answers again
+    act(() => PgFlow["_dispatch"]({ type: "workspace-change" }));
+    expect(events("layout_page_shown")).toEqual([
+      { page: "preview", via: "button" },
+    ]);
+  });
+
+  it("moves to the preview with the console open when a client run starts with no program", () => {
+    PgFlow["_dispatch"]({ type: "program", has: false });
+    phoneShell();
+    act(startRun);
+    expect(events("layout_page_shown")).toEqual([
+      { page: "preview", via: "auto" },
+    ]);
+    expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("shows the code when Run stops at the funding card", () => {
+    PgFlow["_dispatch"]({ type: "program", has: false });
+    phoneShell();
+    act(startRun);
+    act(() => clientRun.listeners.forEach((cb) => cb({ kind: "funding" })));
+    expect(events("layout_page_shown").at(-1)).toEqual({
+      page: "work",
+      via: "auto",
+    });
+    expect(isChecked("Code")).toBe("true");
+  });
+
+  it("stays on its page for any other run state", () => {
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    const before = events("layout_page_shown").length;
+    act(() => clientRun.listeners.forEach((cb) => cb({ kind: "done" })));
+    expect(events("layout_page_shown")).toHaveLength(before);
+  });
+
+  it("stays on its page and opens the console when a client run starts beside a program", () => {
+    phoneShell();
+    act(startRun);
+    expect(events("layout_page_shown")).toEqual([]);
+    expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("leaves the console folded when a program's preview opens", () => {
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    expect(PgFlow.state.stage).toBe("build");
+    expect(consoleButton().getAttribute("aria-expanded")).toBe("false");
   });
 
   it("follows a stage set from elsewhere to its page", () => {
@@ -1025,6 +1133,7 @@ describe("on a phone", () => {
     phoneShell();
     expect(consoleBox().classList.contains("h-2/5")).toBe(false);
     expect((consoleBox() as HTMLElement).style.height).toBe("28px");
+    act(() => PgFlow.setStage("build"));
     act(() => deploy.starts.forEach((cb) => cb(null)));
     expect(consoleBox().classList.contains("h-2/5")).toBe(true);
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
@@ -1149,8 +1258,17 @@ describe("on a phone", () => {
     expect((consoleBox() as HTMLElement).style.height).toBe("28px");
     expect(consoleBox().classList.contains("overflow-hidden")).toBe(true);
     fireEvent.click(consoleButton());
+    act(() => PgFlow.setStage("build"));
     expect(consoleBox().classList.contains("h-2/5")).toBe(true);
     expect((consoleBox() as HTMLElement).style.height).toBe("");
+  });
+
+  it("gives the open console the whole preview when no stage shows there", () => {
+    PgFlow["_dispatch"]({ type: "program", has: false });
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    expect(consoleBox().classList.contains("flex-1")).toBe(true);
+    expect(consoleBox().classList.contains("h-2/5")).toBe(false);
   });
 
   it("brings Work into view when Ctrl+R switches the view from the preview", () => {

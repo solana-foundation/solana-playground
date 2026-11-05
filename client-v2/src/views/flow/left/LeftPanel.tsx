@@ -341,4 +341,16 @@ const ExplorerContainer = styled.div`
   #root-dir > div:has(> button):nth-child(3) > button:nth-child(3) {
     display: none;
   }
+
+  /* With their labels and buttons hidden, the section tops above are only
+   * their margins: 16 over Client and 4 under each, a blank 20 px between
+   * \`src\` and \`client\` and none between \`client\` and \`tests\`. The
+   * tree reads as one list, so they take none. The rule reaches every
+   * section, so a label that stays visible ("Other", or Client before \`src\`
+   * exists) sits right under the row above it.
+   */
+  #root-dir > div[data-section] {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
 `;

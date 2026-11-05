@@ -347,7 +347,7 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
   const theme = useTheme();
   const overStyle: CSSProperties = useMemo(
     () => ({
-      background: PgTheme.alpha(theme.colors.default.primary, "low"),
+      background: PgTheme.alpha(theme.colors.default.textPrimary, "low"),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [theme.name]
@@ -445,17 +445,20 @@ const RootWrapper = styled.div`
     font-size: ${theme.font.code.size.small};
 
     &.${PgView.classNames.SELECTED} {
-      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
+      background: ${PgTheme.alpha(theme.colors.default.textPrimary, "low")};
     }
 
     &.${PgView.classNames.CTX_SELECTED} {
-      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
-      border-color: ${PgTheme.alpha(theme.colors.default.primary, "medium")};
+      background: ${PgTheme.alpha(theme.colors.default.textPrimary, "low")};
+      border-color: ${PgTheme.alpha(
+        theme.colors.default.textPrimary,
+        "medium"
+      )};
       border-radius: ${theme.default.borderRadius};
     }
 
     &:hover {
-      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
+      background: ${PgTheme.alpha(theme.colors.default.textPrimary, "low")};
     }
 
     /*
@@ -512,10 +515,16 @@ const FolderInsideWrapper = styled.div`
   }
 `;
 
+/*
+ * The tree in greys, the brand colour kept for focus: purple names, a purple
+ * hover and a purple selection made a column of colour next to the code.
+ * Folders a step under the files, so the files read first.
+ * TODO(design-system): the kit's tree, then drop this
+ */
 const StyledFolder = styled(Folder)`
   ${({ theme }) => css`
     & span {
-      color: ${theme.colors.default.primary};
+      color: ${theme.colors.default.textSecondary};
       margin-left: 0.5rem;
     }
 
@@ -543,8 +552,12 @@ const StyledFile = styled(File)`
   }
 `;
 
+/**
+ * A level's indent: a folder's chevron (14) and the gap after it (8), so a
+ * child's icon starts under its parent's name, not 6 px left of it
+ */
 const PaddingLeft = styled.div<{ depth: number }>`
-  width: ${({ depth }) => depth}rem;
+  width: ${({ depth }) => depth * 1.375}rem;
   height: 100%;
 `;
 

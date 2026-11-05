@@ -712,7 +712,9 @@ describe("AssistantComposer, the off row", () => {
 
   it("offers sign-in or a key to a signed-out user, and signs in from the assistant", async () => {
     backend = { state: "present", model: "m" };
-    const signIn = vi.spyOn(PgSession, "signIn").mockResolvedValue(undefined);
+    const signIn = vi
+      .spyOn(PgSession, "signInWith")
+      .mockResolvedValue(undefined);
     render(<Harness />);
     expect((await shownRow()).textContent).toContain(
       "Sign in with GitHub to use the hosted model, or add a key of your own."
@@ -729,7 +731,7 @@ describe("AssistantComposer, the off row", () => {
 
   it("says a failed sign-in in the row", async () => {
     backend = { state: "present", model: "m" };
-    vi.spyOn(PgSession, "signIn").mockRejectedValue(new Error("boom"));
+    vi.spyOn(PgSession, "signInWith").mockRejectedValue(new Error("boom"));
     render(<Harness />);
     await shownRow();
     await userEvent

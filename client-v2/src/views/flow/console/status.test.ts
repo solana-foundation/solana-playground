@@ -36,6 +36,7 @@ const DEFAULT_STATE: FlowState = {
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  hasProgram: true,
 };
 
 const state = (overrides: Partial<FlowState>): FlowState => ({
@@ -51,6 +52,13 @@ describe("describeConsoleStatus", () => {
   it("is blank before the first build", () => {
     expect(describeConsoleStatus(state({}))).toEqual({
       text: "",
+      tone: "idle",
+    });
+  });
+
+  it("asks for a run before the first one in a project with no program", () => {
+    expect(describeConsoleStatus(state({ hasProgram: false }))).toEqual({
+      text: "Run the client to see its output here.",
       tone: "idle",
     });
   });

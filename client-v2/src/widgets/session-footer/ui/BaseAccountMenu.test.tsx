@@ -85,12 +85,12 @@ it("says why a sign-in failed above Sign in with GitHub, for the rail too", asyn
       session: {
         status: "failed",
         reason: "popup-blocked",
-        message: "Allow popups for this site to sign in.",
+        message: "Allow pop-ups for this site to sign in with GitHub.",
       },
     })
   );
   expect(
-    screen.getByText("Allow popups for this site to sign in.")
+    screen.getByText("Allow pop-ups for this site to sign in with GitHub.")
   ).toBeTruthy();
   expect(items()[0]).toBe("SigninwithGitHub");
 });

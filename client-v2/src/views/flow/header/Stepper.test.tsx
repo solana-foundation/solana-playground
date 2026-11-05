@@ -23,6 +23,7 @@ const failedBuild: FlowState = {
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  hasProgram: true,
 };
 
 /** Every element a `ResizeObserver` watches (the fold's stepper root, the
@@ -91,6 +92,30 @@ describe("Stepper", () => {
     expect(
       screen.getByRole("tab", { name }).getAttribute("aria-selected")
     ).toBe("true");
+  });
+
+  it("shows only Write for a project with no program", () => {
+    const noProgram: FlowState = {
+      stage: "write",
+      build: "upcoming",
+      buildSettled: "upcoming",
+      deploy: "upcoming",
+      interact: "upcoming",
+      buildErrorCount: 0,
+      /* eslint-disable unicorn/no-null -- `FlowState` types these fields `| null` */
+      buildMs: null,
+      buildStartedAt: null,
+      buildStartedBefore: null,
+      buildFailure: null,
+      deployBeforeRun: null,
+      stopped: null,
+      /* eslint-enable unicorn/no-null */
+      hasProgram: false,
+    };
+    render(<Stepper state={noProgram} onSelect={vi.fn()} />);
+    expect(screen.getAllByRole("tab").map((tab) => tab.id)).toEqual([
+      "flow-stage-tab-write",
+    ]);
   });
 
   it("selects a stage on click", async () => {
@@ -172,6 +197,63 @@ describe("phone", () => {
     resizeTo(STEPPER_FULL_WIDTH_PX - 1);
     expect(screen.getByRole("tablist").getAttribute("data-compact")).toBe(
       "false"
+    );
+  });
+
+  it("draws no tablist for a project with no program, whose one stage is Write", () => {
+    const noProgram: FlowState = {
+      stage: "write",
+      build: "upcoming",
+      buildSettled: "upcoming",
+      deploy: "upcoming",
+      interact: "upcoming",
+      buildErrorCount: 0,
+      /* eslint-disable unicorn/no-null -- `FlowState` types these fields `| null` */
+      buildMs: null,
+      buildStartedAt: null,
+      buildStartedBefore: null,
+      buildFailure: null,
+      deployBeforeRun: null,
+      stopped: null,
+      /* eslint-enable unicorn/no-null */
+      hasProgram: false,
+    };
+    render(<Stepper state={noProgram} onSelect={vi.fn()} phone />);
+    expect(
+      screen.queryByRole("tablist", { name: "Development loop" })
+    ).toBeNull();
+    expect(screen.queryAllByRole("tab")).toEqual([]);
+  });
+
+  it("measures its room once it has tabs again, after drawing nothing", () => {
+    const { rerender } = render(
+      <Stepper state={INITIAL_FLOW_STATE} onSelect={vi.fn()} phone />
+    );
+    const noProgram: FlowState = {
+      stage: "write",
+      build: "upcoming",
+      buildSettled: "upcoming",
+      deploy: "upcoming",
+      interact: "upcoming",
+      buildErrorCount: 0,
+      /* eslint-disable unicorn/no-null -- `FlowState` types these fields `| null` */
+      buildMs: null,
+      buildStartedAt: null,
+      buildStartedBefore: null,
+      buildFailure: null,
+      deployBeforeRun: null,
+      stopped: null,
+      /* eslint-enable unicorn/no-null */
+      hasProgram: false,
+    };
+    rerender(<Stepper state={noProgram} onSelect={vi.fn()} phone />);
+    // The window widens past the phone breakpoint with the stepper mounted
+    rerender(<Stepper state={noProgram} onSelect={vi.fn()} />);
+
+    resizeTo(STEPPER_FULL_WIDTH_PX - 1);
+
+    expect(screen.getByRole("tablist").getAttribute("data-compact")).toBe(
+      "true"
     );
   });
 });

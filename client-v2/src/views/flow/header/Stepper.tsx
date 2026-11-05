@@ -9,7 +9,7 @@ import {
 } from "@/shared/ui/stepper";
 
 import type { FlowState, Stage, StageStatus } from "../state/stage";
-import { STAGES } from "../state/stage";
+import { stagesOf } from "../state/stage";
 import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
 
 const LABEL: Record<Stage, string> = {
@@ -67,7 +67,8 @@ const DS_STATUS: Record<StageStatus, StepperStatus> = {
 };
 
 /**
- * The write -> build -> deploy -> interact loop, drawn with the design
+ * The stages `stagesOf(state)` offers -- the write -> build -> deploy ->
+ * interact loop, or Write alone for a project with no program -- drawn with the design
  * system's stepper. Each stage's status is carried by glyph shape as well as
  * color, so the sequence reads correctly without color vision.
  */
@@ -87,6 +88,11 @@ const Stepper: FC<StepperProps> = ({
   // the last real width stands.
   const ref = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState<number | null>(null);
+  const offered = stagesOf(state);
+  const stages = phone ? offered.filter((stage) => stage !== "write") : offered;
+  const empty = !stages.length;
+  // Re-attached when the root comes back: drawn empty first (below), it had
+  // no node to observe
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -98,9 +104,12 @@ const Stepper: FC<StepperProps> = ({
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [empty]);
   const compact = !phone && room !== null && room < STEPPER_FULL_WIDTH_PX;
-  const stages = phone ? STAGES.filter((stage) => stage !== "write") : STAGES;
+  // A phone leaves Write out, so a project with no program has no tab left,
+  // and an empty "Development loop" would be a list of nothing
+  // eslint-disable-next-line unicorn/no-null -- a component that draws nothing returns `null`; React's types refuse `undefined`
+  if (empty) return null;
   return (
     <DsStepper
       ref={ref}

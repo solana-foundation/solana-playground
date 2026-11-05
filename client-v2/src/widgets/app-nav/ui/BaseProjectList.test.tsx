@@ -47,9 +47,11 @@ type Handlers = Pick<
   "onAction" | "onRenameChange" | "onRenameCommit" | "onRenameCancel"
 >;
 
-const draw = (
-  overrides: { renaming?: string; renameError?: string } = {}
-): Handlers => {
+const draw = (overrides: {
+  renaming?: string;
+  renameError?: string;
+  current?: string;
+}): Handlers => {
   const handlers: Handlers = {
     onAction: vi.fn(),
     onRenameChange: vi.fn(),
@@ -61,7 +63,7 @@ const draw = (
       <SidebarProvider>
         <BaseProjectList
           projects={[beta, alpha, hello]}
-          current="alpha"
+          current={overrides.current ?? "alpha"}
           renaming={overrides.renaming ?? null}
           renameError={overrides.renameError ?? null}
           onAction={handlers.onAction}
@@ -85,7 +87,7 @@ const openMenu = (name: string) => {
 
 describe("BaseProjectList", () => {
   it("lists lessons among the projects, with no count, the open one marked", () => {
-    draw();
+    draw({});
     const projects = screen.getByRole("group", { name: "Projects" });
     expect(screen.queryByRole("group", { name: "Lessons" })).toBeNull();
     expect(
@@ -103,7 +105,7 @@ describe("BaseProjectList", () => {
 
   /** The prototype keeps the open project's "⋮" in view, not on hover only */
   it("shows the open project's actions without a hover", () => {
-    draw();
+    draw({});
     const hidden = (name: string) =>
       screen
         .getByRole("button", { name: `Actions for ${name}` })
@@ -113,7 +115,7 @@ describe("BaseProjectList", () => {
   });
 
   it("marks a pinned row, whose menu offers Unpin", () => {
-    draw();
+    draw({});
     const projects = screen.getByRole("group", { name: "Projects" });
     expect(within(projects).getAllByTitle("Pinned")).toHaveLength(1);
     const menu = openMenu("beta");
@@ -121,7 +123,7 @@ describe("BaseProjectList", () => {
   });
 
   it("runs an item by its letter while the menu is open", () => {
-    const { onAction } = draw();
+    const { onAction } = draw({});
     fireEvent.keyDown(openMenu("alpha"), { key: "d" });
     expect(onAction).toHaveBeenLastCalledWith(alpha, "duplicate", "key");
   });
@@ -131,28 +133,29 @@ describe("BaseProjectList", () => {
     ["p", "pin"],
     ["r", "rename"],
     ["e", "export"],
+    ["g", "share-gist"],
     ["Backspace", "delete"],
     ["Delete", "delete"],
   ])("maps %s to %s", (key, action) => {
-    const { onAction } = draw();
+    const { onAction } = draw({});
     fireEvent.keyDown(openMenu("alpha"), { key });
     expect(onAction).toHaveBeenLastCalledWith(alpha, action, "key");
   });
 
   it("takes the letter whatever its case: Shift or Caps Lock gives D", () => {
-    const { onAction } = draw();
+    const { onAction } = draw({});
     fireEvent.keyDown(openMenu("alpha"), { key: "D", shiftKey: true });
     expect(onAction).toHaveBeenLastCalledWith(alpha, "duplicate", "key");
   });
 
   it("unpins a pinned row by P", () => {
-    const { onAction } = draw();
+    const { onAction } = draw({});
     fireEvent.keyDown(openMenu("beta"), { key: "p" });
     expect(onAction).toHaveBeenLastCalledWith(beta, "unpin", "key");
   });
 
   it("runs a clicked item", () => {
-    const { onAction } = draw();
+    const { onAction } = draw({});
     const menu = openMenu("alpha");
     fireEvent.click(
       within(menu).getByRole("menuitem", { name: "Rename alpha" })
@@ -161,7 +164,7 @@ describe("BaseProjectList", () => {
   });
 
   it("gives a lesson no Rename and no Duplicate, by click or key", () => {
-    const { onAction } = draw();
+    const { onAction } = draw({});
     const menu = openMenu("Hello Anchor");
     expect(
       within(menu).queryByRole("menuitem", { name: /rename/i })
@@ -172,6 +175,28 @@ describe("BaseProjectList", () => {
     fireEvent.keyDown(menu, { key: "d" });
     fireEvent.keyDown(menu, { key: "r" });
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("offers Share on the open project's row, by click or key", () => {
+    const { onAction } = draw({});
+    fireEvent.click(
+      within(openMenu("alpha")).getByRole("menuitem", { name: "Share alpha" })
+    );
+    expect(onAction).toHaveBeenLastCalledWith(alpha, "share-gist", "click");
+  });
+
+  it("offers no Share on a row that is not open, and G does nothing there", () => {
+    const { onAction } = draw({});
+    const menu = openMenu("beta");
+    expect(within(menu).queryByRole("menuitem", { name: /share/i })).toBeNull();
+    fireEvent.keyDown(menu, { key: "g" });
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("offers Share on an open lesson's row too", () => {
+    const { onAction } = draw({ current: "Hello Anchor" });
+    fireEvent.keyDown(openMenu("Hello Anchor"), { key: "g" });
+    expect(onAction).toHaveBeenLastCalledWith(hello, "share-gist", "key");
   });
 
   it("renames in the row: Enter commits, letters type", () => {

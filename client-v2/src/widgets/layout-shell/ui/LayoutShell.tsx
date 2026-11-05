@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "styled-components";
 
+import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
@@ -17,7 +18,12 @@ import type {
   WorkView,
   WorkViewSource,
 } from "../model/phone-pages";
-import { pageForStage, stageForPage, stagePageOf } from "../model/phone-pages";
+import {
+  isPreviewAtWrite,
+  pageForStage,
+  stageForPage,
+  stagePageOf,
+} from "../model/phone-pages";
 import { homeOf, isCovered, screenOf } from "../model/screen";
 import type { ToggleSource } from "../model/telemetry";
 import { layoutTelemetry } from "../model/telemetry";
@@ -94,6 +100,17 @@ export interface LayoutShellProps {
   cover?: { title: string; content: ReactNode; onClose: () => void };
   /** While Home shows, keep the work mounted (`BaseLayoutShellProps.keepWork`) */
   keepWork?: boolean;
+  /**
+   * Actions for the open project in the desktop stage bar, as the header's
+   * Share; not drawn under Home or over a page
+   */
+  stageBarActions?: ReactNode;
+  /**
+   * Shares a project as a gist, from the phone's Code head. The dialog is the
+   * app's, which a widget may not import, so the app hands it in; the head
+   * offers it for the open project
+   */
+  onShare?: (project: string) => void;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -120,6 +137,8 @@ const LayoutShell = ({
   home,
   cover,
   keepWork,
+  stageBarActions,
+  onShare,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -250,8 +269,13 @@ const LayoutShell = ({
     pageRef.current = next;
     setPage(next);
     layoutTelemetry.track("layout_page_shown", { page: next, via });
-    const toStage = stageForPage(next, PgFlow.state.stage, lastPreview.current);
+    const toStage = stageForPage(next, PgFlow.state, lastPreview.current);
     if (toStage) PgFlow.setStage(toStage);
+    // Without a program the console is all the preview shows: folded, the
+    // page would be its strip over an empty screen
+    if (next === "preview" && isPreviewAtWrite(PgFlow.state)) {
+      setPhoneConsoleOpen(true, "auto");
+    }
   };
   // The phone's Files sheet and console are the visit's: reported, never saved
   const setPhoneFiles = (open: boolean, via: ToggleSource) => {
@@ -290,7 +314,7 @@ const LayoutShell = ({
       if (flow.stage !== "write") lastPreview.current = flow.stage;
       // Home and a page have no preview page to move to
       if (!phone || isCovered(screenNow.current)) return;
-      const next = pageForStage(flow.stage, pageRef.current);
+      const next = pageForStage(flow, pageRef.current);
       if (next) showPage(next, "auto");
     });
     return () => sub.dispose();
@@ -338,6 +362,25 @@ const LayoutShell = ({
     if (isCovered(screenNow.current)) return;
     if (phone) setPhoneConsoleOpen(true, "auto");
     else setOpen("console", { open: true, via: "auto" });
+  };
+  /**
+   * A script run opens the console: its output is the run's result. A phone
+   * with no program also moves to the preview, the page whose bar holds Run
+   * and the console, so the output is in view wherever Run was tapped.
+   */
+  const showClientRun = () => {
+    if (isCovered(screenNow.current)) return;
+    if (phone && isPreviewAtWrite(PgFlow.state)) showPage("preview", "auto");
+    openConsole();
+  };
+  /**
+   * The funding card sits above the code, and Run stops at it: on a phone,
+   * where Run is tapped on the preview, the card has to come into view.
+   */
+  const showFunding = () => {
+    if (!phone || isCovered(screenNow.current)) return;
+    showPage("work", "auto");
+    showView("code", "auto");
   };
 
   // The handlers read what they toggle, so they are renewed with it
@@ -404,6 +447,10 @@ const LayoutShell = ({
     let prevDeploy: StageStatus | undefined;
     const subs = [
       PgCommand.deploy.onDidStart(openConsole),
+      PgCommand.run.onDidStart(showClientRun),
+      PgClientRun.onDidChange((runState) => {
+        if (runState.kind === "funding") showFunding();
+      }),
       PgFlow.onDidChange((flow) => {
         if (
           prevDeploy !== undefined &&
@@ -417,8 +464,8 @@ const LayoutShell = ({
       PgAssistant.onDidRequestPrompt(() => setAssistant(true, "auto")),
     ];
     return () => subs.forEach((sub) => sub.dispose());
-    // `setOpen` is stable; `setAssistant` and `openConsole` change only with
-    // the viewport
+    // `setOpen` is stable; `setAssistant`, `openConsole`, `showClientRun` and
+    // `showFunding` change only with the viewport
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewport]);
 
@@ -484,6 +531,13 @@ const LayoutShell = ({
   let phoneTitle = PgExplorer.currentWorkspaceName ?? "";
   if (screen.kind === "home") phoneTitle = homeTitle ?? "";
   if (screen.kind === "page") phoneTitle = screen.cover.title;
+
+  // Share acts on the open project, so none is offered over Home or a page
+  const shareName = PgExplorer.currentWorkspaceName;
+  const phoneShare =
+    onShare && shareName && screen.kind !== "home" && screen.kind !== "page"
+      ? () => onShare(shareName)
+      : undefined;
 
   // The bar names the project while the assistant is out of view, since its
   // head cannot; under Home it names Home, as the phone's bar does
@@ -565,6 +619,7 @@ const LayoutShell = ({
         onFilesOpenChange: (open) => setPhoneFiles(open, lastInput.current),
         stageOn: stagePageOf(flowStage),
         consoleOpen: phoneConsole,
+        onShare: phoneShare,
       }}
       stageBar={
         <BaseStageBar
@@ -590,6 +645,7 @@ const LayoutShell = ({
           }}
           // Under Home Ctrl+R does nothing, so the hint names no key
           assistantKey={homeShown ? null : "Ctrl+R"}
+          actions={homeShown ? undefined : stageBarActions}
         />
       }
       stageTabs={stageTabs}

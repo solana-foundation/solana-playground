@@ -30,9 +30,17 @@ export type ModalSubmit = {
   onSubmit?: () => unknown | Promise<unknown>;
   /** Keep the dialog open after a successful submit */
   noCloseOnSubmit?: boolean;
+  /**
+   * No Cancel beside the submit: for a dialog whose work is already done
+   * (a share made, its link to copy), where Cancel would read as an undo.
+   * Close in the head stays
+   */
+  noCancel?: boolean;
   disabled?: boolean;
   /** `brand` for the view's one call to action; see `SubmitVariant` */
   variant?: SubmitVariant;
+  /** Drawn before the label, at the button's icon size; the spinner takes its place while busy */
+  icon?: ReactNode;
 };
 
 export type ModalFrameProps = {
@@ -200,10 +208,12 @@ export const ModalFrame = ({
           text: buttonProps.text,
           status,
           variant: buttonProps.variant ?? "default",
+          icon: buttonProps.icon,
           onSubmit: submit,
-          onCancel: buttonProps.onSubmit
-            ? () => PgView.closeModal(null, id)
-            : undefined,
+          onCancel:
+            buttonProps.onSubmit && !buttonProps.noCancel
+              ? () => PgView.closeModal(null, id)
+              : undefined,
         }
       }
       size={size}

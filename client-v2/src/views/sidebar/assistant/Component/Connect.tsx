@@ -249,7 +249,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
 
   const signIn = () => {
     setSignInError(null);
-    PgSession.signIn({ from: "assistant" }).catch((error: unknown) => {
+    PgSession.signInWith({ from: "assistant" }).catch((error: unknown) => {
       if (isSignInFailure(error)) {
         // Not reported: a blocked popup or a cancelled sign-in is expected,
         // and its message says what to do

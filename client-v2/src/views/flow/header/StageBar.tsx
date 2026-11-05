@@ -2,7 +2,9 @@ import type { FC } from "react";
 import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { PgClientRun, RunButton } from "@/features/docs-link";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { Badge } from "@/shared/ui/badge";
 
 import { useKeybind } from "../../../hooks";
 import type { LessonState } from "../lessons";
@@ -14,21 +16,27 @@ import {
   targetStage,
 } from "../lessons";
 import type { FlowState } from "../state/stage";
-import { INITIAL_FLOW_STATE, PgFlow, STAGES } from "../state/stage";
+import { INITIAL_FLOW_STATE, PgFlow, STAGES, stagesOf } from "../state/stage";
 import Stepper from "./Stepper";
 
 /**
  * The dev-loop stepper: in the frame, a full-width row of stage tabs under the
  * stage bar, across the files column and the stage (`LayoutShell`'s
  * `stageTabs`, design.md "Frame chrome (5.25)"); on a phone, across the
- * preview page's bar, without Write, which is the code's own page there. It owns the Ctrl+1..4 stage keys and
- * points the stepper at the stage the current lesson step is graded on. The
+ * preview page's bar, without Write, which is the code's own page there. It
+ * owns the Ctrl+1..4 stage keys and points the stepper at the stage the
+ * current lesson step is graded on. A project with no program offers only
+ * Write, so the other keys do nothing, and the row labels it "Client
+ * project" and carries its Run; on a phone, where Write is the code's own
+ * page, it has no stepper at all, only the label and Run. The
  * project list and the session footer live in the navigation (`AppNav`),
  * not here.
  */
 const StageBar: FC = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
   useEffect(() => PgFlow.onDidChange(setState).dispose, []);
+  // Every run is shown and measured, in a project with a program too
+  useEffect(() => PgClientRun.follow(), []);
 
   const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
   useEffect(() => PgLesson.onDidChange(setLesson).dispose, []);
@@ -44,6 +52,8 @@ const StageBar: FC = () => {
     STAGES.map((stage, i) => ({
       keybind: `Ctrl+${i + 1}`,
       handle: () => {
+        // A stage the open project does not offer has no tab to go to
+        if (!stagesOf(PgFlow.state).includes(stage)) return;
         PgFlow.setStage(stage);
         // Focus follows the shortcut, so the keyboard user lands on the tab
         // they just selected rather than being left wherever they were
@@ -63,6 +73,14 @@ const StageBar: FC = () => {
         fill={row}
         phone={!row}
       />
+      {!state.hasProgram && (
+        <>
+          <Badge variant="outline" id="flow-client-project">
+            Client project
+          </Badge>
+          <RunButton />
+        </>
+      )}
     </Bar>
   );
 };
@@ -77,6 +95,7 @@ const Bar = styled.div<{ $row: boolean }>`
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 0.5rem;
     min-width: 0;
     background: transparent;
     font-family: ${theme.font.other.family};

@@ -91,14 +91,15 @@ it("names the assistant toggle by what it does", async () => {
   ).toBe("false");
 });
 
-it("draws no files toggle where it is not handed, and always the documentation", () => {
+it("draws no files toggle where it is not handed, and always the documentation behind More", async () => {
   draw({
     title: null,
     files: null,
     assistant: { open: true, onToggle: vi.fn() },
   });
   expect(screen.queryByRole("button", { name: /project panel/ })).toBeNull();
-  const docs = screen.getByRole("link", { name: "Documentation" });
+  await userEvent.click(screen.getByRole("button", { name: "More options" }));
+  const docs = screen.getByRole("menuitem", { name: "Documentation" });
   expect(docs.getAttribute("href")).toBe(DOCS_URL);
   expect(docs.getAttribute("target")).toBe("_blank");
   expect(docs.getAttribute("rel")).toContain("noreferrer");
@@ -170,17 +171,18 @@ it("names Ctrl+R in the assistant's hint, and no key when told none", async () =
   );
 });
 
-it("labels the files toggle 'Files' in text, as the prototype's head does", () => {
+it("draws the files toggle as an icon, its name the tooltip", () => {
   draw({
     title: null,
     files: { open: true, onToggle: vi.fn() },
     assistant: { open: true, onToggle: vi.fn() },
   });
   const files = screen.getByRole("button", { name: "Collapse project panel" });
-  expect(files.textContent).toBe("Files");
+  expect(files.textContent).toBe("");
+  expect(files.querySelector("svg")).toBeTruthy();
 });
 
-it("draws the title muted and the controls as 30 px squares", () => {
+it("draws the title muted and the controls as 32 px squares", () => {
   const { container } = draw({
     title: "Counter",
     files: { open: true, onToggle: vi.fn() },
@@ -192,21 +194,43 @@ it("draws the title muted and the controls as 30 px squares", () => {
   for (const control of container.querySelectorAll(
     '[data-slot="stage-bar"] [data-slot="button"]'
   )) {
-    expect(control.className).toMatch(/\bh-7\.5\b/);
+    expect(control.className).toMatch(/\bh-8\b/);
     expect(control.className).toMatch(/\brounded-lg\b/);
   }
   expect(
     screen.getByRole("button", { name: "Expand assistant" }).className
-  ).toMatch(/\bsize-7\.5\b/);
+  ).toMatch(/\bsize-8\b/);
 });
 
-it("parts the documentation from the toggles with a rule", () => {
-  const { container } = draw({
+it("puts More last, after the toggles", () => {
+  draw({
     title: null,
-    files: null,
+    files: { open: true, onToggle: vi.fn() },
     assistant: { open: true, onToggle: vi.fn() },
   });
-  expect(
-    container.querySelector('[data-slot="stage-bar"] [data-slot="separator"]')
-  ).not.toBeNull();
+  const names = screen
+    .getAllByRole("button")
+    .map((button) => button.getAttribute("aria-label"));
+  expect(names.at(-1)).toBe("More options");
+});
+
+it("draws the page's actions before the toggles", () => {
+  render(
+    <TooltipProvider>
+      <BaseStageBar
+        title="counter"
+        files={{ open: true, onToggle: vi.fn() }}
+        // eslint-disable-next-line unicorn/no-null -- `BaseStageBarProps.assistant` takes `null` for "no toggle"
+        assistant={null}
+        actions={<button type="button">Share counter</button>}
+      />
+    </TooltipProvider>
+  );
+  const names = screen
+    .getAllByRole("button")
+    .map((button) => button.getAttribute("aria-label") ?? button.textContent);
+  expect(names.slice(0, 2)).toEqual([
+    "Share counter",
+    "Collapse project panel",
+  ]);
 });

@@ -134,6 +134,18 @@ export class PgExplorer {
     return this._workspace?.allNames;
   }
 
+  /**
+   * Get names of all workspaces, reading them from the store when a
+   * temporary view left none in memory.
+   *
+   * @returns the stored workspaces' names
+   */
+  static async getAllWorkspaceNames() {
+    if (!this._workspace) await this._initWorkspaces();
+    if (!this._workspace) throw new Error("The workspaces were not read.");
+    return this._workspace.allNames;
+  }
+
   /* ---------------------------- Public methods ---------------------------- */
 
   /**
@@ -572,10 +584,15 @@ export class PgExplorer {
       return;
     }
 
+    // A temporary view (a repository or gist link) holds no workspace list;
+    // a new workspace is added to the stored ones and leaves the view
+    if (!this._workspace && this.isTemporary) await this._initWorkspaces();
     if (!this._workspace) throw new Error(PgWorkspace.errors.NOT_FOUND);
 
     // Create a new workspace in state
     this._workspace.create(name, opts?.id);
+    // Only once the create held, as for `fromTemporary` above
+    this._isTemporary = false;
 
     // Create files
     if (opts?.files) {
@@ -610,6 +627,10 @@ export class PgExplorer {
   ) {
     // Save metadata before changing the workspace to never lose data
     await this.saveMeta();
+
+    // A stored workspace is never a temporary view: a repository or gist link
+    // that opens an already saved project must not go on skipping its writes
+    this._isTemporary = false;
 
     // Set the workspace
     this.setWorkspaceName(name);
