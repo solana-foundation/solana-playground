@@ -124,6 +124,7 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
     quickstarts.push({
       id: "tutorial",
       name: tutorial.name,
+      framework: tutorial.framework,
       title: tutorial.name,
       description: "Beginner tutorial",
     });

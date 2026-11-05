@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { TutorialCover } from "@/entities/tutorial";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
@@ -21,7 +22,7 @@ export type QuickstartTarget =
   | { id: "example" }
   | { id: "continue"; workspace: string }
   | { id: "new"; framework: FrameworkName }
-  | { id: "tutorial"; name: string };
+  | { id: "tutorial"; name: string; framework?: FrameworkName };
 
 export type PhoneQuickstart = QuickstartTarget & {
   title: string;
@@ -92,13 +93,22 @@ const BasePhoneHome = ({
           onError={reportButtonFailure("open the quick start")}
           className="h-auto min-h-15.5 w-full justify-start gap-3 rounded-2xl bg-surface-panel py-2.5 pr-3 pl-2.5 text-left"
         >
-          <span
-            className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
-              TILE_TINTS[q.id]
-            }`}
-          >
-            {ICONS[q.id]}
-          </span>
+          {/* A tutorial shows its cover, at the other tiles' size */}
+          {q.id === "tutorial" ? (
+            <TutorialCover
+              name={q.name}
+              framework={q.framework}
+              className="size-10 rounded-lg"
+            />
+          ) : (
+            <span
+              className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
+                TILE_TINTS[q.id]
+              }`}
+            >
+              {ICONS[q.id]}
+            </span>
+          )}
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-body font-act text-foreground">
               {q.title}

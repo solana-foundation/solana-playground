@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
+import { TutorialCover } from "@/entities/tutorial";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   ActionCard,
@@ -26,7 +27,7 @@ import HomeComposer from "./HomeComposer";
 /** What a tutorial's card shows: the tutorial model's own fields */
 export type HomeTutorial = Pick<
   TutorialData,
-  "name" | "description" | "level" | "framework" | "thumbnail"
+  "name" | "description" | "level" | "framework"
 >;
 
 /** Why a tutorial failed to open, shown on that tutorial's card */
@@ -304,8 +305,8 @@ const BaseHome = ({
       <div className="grid grid-cols-2 gap-3 max-lg:grid-cols-1">
         {tutorials.slice(0, SHOWN_TUTORIALS).map((t) => (
           <ActionCard key={t.name}>
-            <ActionCardMedia variant="image">
-              <img src={t.thumbnail} alt="" />
+            <ActionCardMedia variant="image" className="h-14">
+              <TutorialCover name={t.name} framework={t.framework} />
             </ActionCardMedia>
             <ActionCardContent>
               {/* One plain line, as the catalog's cards write it */}

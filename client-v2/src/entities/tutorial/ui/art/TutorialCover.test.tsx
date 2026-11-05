@@ -39,11 +39,17 @@ describe("TutorialCover", () => {
     expect(tile(container).style.backgroundImage).toContain("radial-gradient");
   });
 
-  it("places the mark the same way for one name every time", () => {
-    const viewBox = () =>
-      render(<TutorialCover name="Hello Anchor" framework="Anchor" />)
-        .container.querySelector("svg")
-        ?.getAttribute("viewBox");
-    expect(viewBox()).toBe(viewBox());
+  it("draws the lesson's icon in its middle", () => {
+    const { container } = render(
+      <TutorialCover name="Lumberjack" framework="Anchor" />
+    );
+    expect(container.querySelector("svg")?.classList).toContain("lucide-axe");
+  });
+
+  it("draws the cap for a tutorial it has no icon for", () => {
+    const { container } = render(<TutorialCover name="Something New" />);
+    expect(container.querySelector("svg")?.classList).toContain(
+      "lucide-graduation-cap"
+    );
   });
 });

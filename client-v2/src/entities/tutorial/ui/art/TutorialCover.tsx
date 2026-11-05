@@ -1,9 +1,29 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  Anchor,
+  Axe,
+  Coins,
+  Compass,
+  Droplet,
+  GraduationCap,
+  Grid3x3,
+  Hand,
+  Hash,
+  Landmark,
+  ListChecks,
+  MapIcon,
+  MemoryStick,
+  Receipt,
+  Swords,
+  Vault,
+  Waves,
+} from "lucide-react";
+
 import { cn } from "@/shared/lib/utils";
 
 /* Brand art, kept here rather than as design-system tokens: the brand
-   deck's four colour grounds with their fields, and the Playground mark's
-   outline, copied from the design stand. Only a tutorial's cover draws them,
-   the same on every theme */
+   deck's four colour grounds with their fields, copied from the design
+   stand. Only a tutorial's cover draws them, the same on every theme */
 
 type Ground = "haze" | "deep" | "explore" | "violet";
 
@@ -79,7 +99,7 @@ const FALLOFF: [alpha: number, at: number][] = [
 const FIELD_OPACITY = 0.94;
 
 /**
- * One field as a background layer of a 4:3 tile: a disc as wide as the
+ * One field as a background layer of a square tile: a disc as wide as the
  * tile times its scale, centred on its place. A layer, not an element: a
  * field sits partly past the edge, and an element there would make the tile
  * report content wider than itself even while clipped.
@@ -91,13 +111,10 @@ const fieldLayer = (f: Field) => {
         alpha * FIELD_OPACITY * 100
       )}%, transparent) ${at}%`
   ).join(", ");
-  return `radial-gradient(${50 * f.s}% ${((50 * f.s * 4) / 3).toFixed(2)}% at ${
-    f.x
-  }% ${f.y}%, ${stops})`;
+  return `radial-gradient(${50 * f.s}% ${50 * f.s}% at ${f.x}% ${
+    f.y
+  }%, ${stops})`;
 };
-
-const MARK_PATH =
-  "M169.068 0C171.744 8.28719e-06 174.308 1.07233 176.187 2.97656L396.895 226.644C402.571 232.396 412.476 229.392 414.488 221.565C445.766 99.8968 556.196 9.98638 687.625 9.98633C843.369 9.98633 969.625 136.242 969.625 291.986C969.625 447.731 843.369 573.986 687.625 573.986C546.531 573.986 429.639 470.366 408.897 335.073C407.595 326.586 396.984 322.749 390.952 328.861L166.358 556.468C164.478 558.372 161.915 559.444 159.239 559.444H35.3097C34.8665 559.444 34.4341 559.417 34.0138 559.365C33.2106 559.266 32.4071 559.144 31.5978 559.144H10.0001C4.4593 559.144 -0.0253355 554.638 0.000107729 549.098L2.34288 43.1279C2.38427 34.2415 13.1304 29.8197 19.4142 36.1035L107.001 123.69C108.891 125.58 109.945 128.147 109.93 130.819L108.307 411.274C108.239 423.118 103.503 434.458 95.128 442.833L11.215 526.747C10.4339 527.528 10.4339 528.795 11.215 529.576L23.9425 542.304C24.7235 543.085 25.9896 543.085 26.7706 542.304L122.402 446.671C123.322 445.752 124.364 444.958 125.277 444.032L142.842 426.231L193.117 375.957C193.764 375.31 194.048 374.339 194.69 373.688L272.207 295.134C274.086 293.23 276.65 292.157 279.325 292.157H403.255C403.928 292.157 404.577 292.218 405.196 292.335C405.417 292.376 405.625 292.211 405.625 291.986C405.625 287.353 405.738 282.746 405.959 278.167C406.242 272.31 401.652 267.287 395.788 267.287H289.153C286.478 267.287 283.914 266.215 282.035 264.311L38.0206 17.0244C31.7856 10.7058 36.2618 -1.18154e-06 45.1388 0H169.068ZM687.625 119.986C592.632 119.986 515.625 196.993 515.625 291.986C515.625 386.979 592.632 463.986 687.625 463.986C782.618 463.986 859.625 386.979 859.625 291.986C859.625 196.993 782.618 119.986 687.625 119.986Z";
 
 /* One ground per framework: what a tutorial is built with reads before its
    title does */
@@ -107,20 +124,26 @@ const GROUND_BY_FRAMEWORK: Record<FrameworkName, Ground> = {
   Seahorse: "violet",
 };
 
-/* Where the mark sits: white, never cut by the edge, centred, about 60% of
-   the tile's height. Either the play triangle alone or the whole mark, each
-   a viewBox into the mark's own 970 × 574 box in a thumbnail's 4:3 */
-const PLACES: { box: string; play: boolean }[] = [
-  { box: "-428 -191 1275 956", play: true },
-  { box: "-152 -191 1275 956", play: false },
-];
-
-/** Where the triangle ends and the O begins, in the mark's box */
-const PLAY_WIDTH = 418;
-
-/** A stable number from the name, so a cover never changes on reload */
-const hash = (s: string) =>
-  [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+/* What each lesson is about, drawn in the middle of its cover. A tutorial
+   with no icon here, a new one, gets the cap */
+const ICONS: Record<string, LucideIcon> = {
+  "Hello Anchor": Anchor,
+  "Hello Seahorse": Waves,
+  "Hello Solana": Hand,
+  "Bank Simulator": Landmark,
+  "Battle Coins": Coins,
+  "Boss Battle": Swords,
+  "Counter PDA Tutorial": Hash,
+  "Expense Tracker": Receipt,
+  "Faucet Seahorse": Droplet,
+  Lumberjack: Axe,
+  "Spl Token Vault": Vault,
+  "Tictactoe Seahorse": Grid3x3,
+  "Tiny Adventure": MapIcon,
+  "Tiny Adventure Two": Compass,
+  "Todo App Seahorse": ListChecks,
+  "Zero Copy": MemoryStick,
+};
 
 export interface TutorialCoverProps {
   name: string;
@@ -129,15 +152,15 @@ export interface TutorialCoverProps {
 }
 
 /**
- * A tutorial's cover in the brand, in place of upstream's thumbnail: one of
- * four grounds with its fields held still, and the mark in white on it. The
- * ground says the framework; where the mark sits comes from the name, so a
- * wall of covers reads as one family and each still differs. Decorative: the
- * card's own text names the tutorial.
+ * A tutorial's cover in the brand, in place of upstream's thumbnail: a
+ * square of one of four grounds with its fields held still, and the
+ * lesson's icon in white in its middle. The ground says the framework, the
+ * icon the lesson, so a wall of covers reads as one family and each still
+ * differs. Decorative: the card's own text names the tutorial.
  */
 const TutorialCover = ({ name, framework, className }: TutorialCoverProps) => {
   const ground = framework ? GROUND_BY_FRAMEWORK[framework] : "haze";
-  const place = PLACES[hash(name) % PLACES.length];
+  const Icon = ICONS[name] ?? GraduationCap;
   return (
     <span
       aria-hidden="true"
@@ -154,23 +177,8 @@ const TutorialCover = ({ name, framework, className }: TutorialCoverProps) => {
           .join(", "),
       }}
     >
-      <svg
-        viewBox={place.box}
-        preserveAspectRatio="xMidYMid meet"
-        className="absolute inset-0 size-full"
-      >
-        {place.play ? (
-          <svg x="0" y="-20" width={PLAY_WIDTH} height="620" overflow="hidden">
-            <path
-              d={MARK_PATH}
-              fill="currentColor"
-              transform="translate(0 20)"
-            />
-          </svg>
-        ) : (
-          <path d={MARK_PATH} fill="currentColor" />
-        )}
-      </svg>
+      {/* Half the tile, a touch lighter than lucide's stroke of 2 */}
+      <Icon strokeWidth={1.75} className="absolute inset-1/4 size-1/2" />
     </span>
   );
 };

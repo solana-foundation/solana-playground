@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import type { ReactElement } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
@@ -26,8 +27,8 @@ export interface CatalogCard {
   id: string;
   title: string;
   description: string;
-  /** The thumbnail or icon */
-  media: string;
+  /** The icon's URL, or what to draw in its place (a tutorial's cover) */
+  media: string | ReactElement;
   tags: CatalogTag[];
   /** This card's Open, while it runs or once it failed; none otherwise */
   open?: CardOpen;
@@ -100,8 +101,16 @@ const BaseCatalogGrid = ({
     <div className="grid grid-cols-1 gap-3 min-[720px]:grid-cols-2">
       {list.cards.map((c) => (
         <ActionCard key={c.id}>
-          <ActionCardMedia variant="image">
-            <img src={c.media} alt="" />
+          {/* An icon keeps the image tile; a tutorial's cover is square */}
+          <ActionCardMedia
+            variant="image"
+            className={typeof c.media === "string" ? undefined : "h-14"}
+          >
+            {typeof c.media === "string" ? (
+              <img src={c.media} alt="" />
+            ) : (
+              c.media
+            )}
           </ActionCardMedia>
           <ActionCardContent>
             {/* Plain text, as the prototype writes it: level · framework, or

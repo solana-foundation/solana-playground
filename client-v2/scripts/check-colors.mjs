@@ -26,7 +26,7 @@ const ALLOWED = [
   /^languages\//,
   // Brand art: a tutorial cover's grounds are the brand deck's own colours,
   // the same on every theme, and no token describes them
-  /^widgets\/catalog\/ui\/art\//,
+  /^entities\/tutorial\/ui\/art\//,
 ];
 
 const EXTENSIONS = new Set([

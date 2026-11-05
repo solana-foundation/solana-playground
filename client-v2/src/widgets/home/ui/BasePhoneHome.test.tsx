@@ -4,6 +4,12 @@ import { expect, it, vi } from "vitest";
 import type { BasePhoneHomeProps } from "./BasePhoneHome";
 import BasePhoneHome from "./BasePhoneHome";
 
+// The entity's entry reaches the store; these tests need only its cover
+vi.mock("@/entities/tutorial", async () => ({
+  TutorialCover: (await import("@/entities/tutorial/ui/art/TutorialCover"))
+    .default,
+}));
+
 const props = (): BasePhoneHomeProps => ({
   quickstarts: [
     {
@@ -21,6 +27,7 @@ const props = (): BasePhoneHomeProps => ({
     {
       id: "tutorial",
       name: "Hello Anchor",
+      framework: "Anchor",
       title: "Hello Anchor",
       description: "Beginner tutorial",
     },
@@ -55,6 +62,18 @@ it("shows the quick starts in order, each with its title and description", () =>
     "New Anchor projectA working starter",
     "Hello AnchorBeginner tutorial",
   ]);
+});
+
+it("leads the tutorial's quick start with its cover, the rest with a tile", () => {
+  const home = draw(props());
+  const nav = within(home.getByRole("navigation", { name: "Quick start" }));
+  const [project, , tutorial] = nav.getAllByRole("button");
+  const cover = tutorial.firstElementChild as HTMLElement;
+  expect(cover.getAttribute("aria-hidden")).toBe("true");
+  expect(cover.querySelector("svg")?.classList).toContain("lucide-anchor");
+  expect((project.firstElementChild as HTMLElement).style.backgroundColor).toBe(
+    ""
+  );
 });
 
 it("keeps an ellipsis while the program count loads", () => {

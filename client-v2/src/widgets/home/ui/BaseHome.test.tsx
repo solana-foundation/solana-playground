@@ -11,12 +11,17 @@ import { expect, it, vi } from "vitest";
 import type { BaseHomeProps, HomeTutorial } from "./BaseHome";
 import BaseHome from "./BaseHome";
 
+// The entity's entry reaches the store; these tests need only its cover
+vi.mock("@/entities/tutorial", async () => ({
+  TutorialCover: (await import("@/entities/tutorial/ui/art/TutorialCover"))
+    .default,
+}));
+
 const tutorial = (name: string): HomeTutorial => ({
   name,
   description: `${name} description`,
   level: "Beginner",
   framework: "Anchor",
-  thumbnail: "/t.png",
 });
 const props = (start: BaseHomeProps["start"] = null): BaseHomeProps => ({
   tutorials: ["Hello Anchor", "B", "C", "D", "E", "F"].map(tutorial),
@@ -68,6 +73,18 @@ it("shows four of the tutorials and links to all of them", () => {
   expect(p.onAllTutorials).toHaveBeenCalledTimes(1);
 });
 
+it("draws a tutorial's brand cover with the lesson's icon", () => {
+  const home = draw(props());
+  const media = home
+    .getByRole("button", { name: "Hello Anchor" })
+    .closest<HTMLElement>("[data-slot=action-card]")
+    ?.querySelector<HTMLElement>("[data-slot=action-card-media]");
+  expect(media?.querySelector("img")).toBeNull();
+  const cover = media?.firstElementChild as HTMLElement | null;
+  expect(cover?.getAttribute("aria-hidden")).toBe("true");
+  expect(cover?.querySelector("svg")?.classList).toContain("lucide-anchor");
+});
+
 it("writes a tutorial's level and framework as one plain line", () => {
   const home = draw(props());
   const card = home
@@ -86,7 +103,6 @@ it("writes the level alone for a tutorial with no framework", () => {
       description: "Bare description",
       level: "Beginner",
       framework: undefined,
-      thumbnail: "/t.png",
     },
   ];
   const home = draw(p);
