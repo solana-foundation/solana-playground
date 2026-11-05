@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { Keypair } from "@solana/web3.js";
 
-import { expect, LONG, test } from "./fixtures";
+import { DEVNET_RPC, expect, LONG, test } from "./fixtures";
 
 /**
  * The browser scenarios of `client-v2-program-keypair`: the Deploy stage's
@@ -11,13 +11,31 @@ import { expect, LONG, test } from "./fixtures";
  */
 
 /**
- * A custom id no account holds on devnet: the block counts an id with an
- * account as deployed, and a deployed program shows no mismatch. From a fixed
- * seed, so every run checks the same id
+ * A custom id with no account: the block counts an id with an account as
+ * deployed, and a deployed program shows no mismatch. From a fixed seed, so
+ * every run checks the same id, and devnet is stubbed below to hold no
+ * account for it (the real devnet does hold one at this address)
  */
 const OTHER_ID = Keypair.fromSeed(
   new Uint8Array(32).fill(7)
 ).publicKey.toBase58();
+
+// Every program account read answers "no account": a real devnet answer
+// depends on what someone deployed there, which made the mismatch flaky
+test.beforeEach(async ({ page }) => {
+  await page.route(DEVNET_RPC, async (route) => {
+    const body = route.request().postDataJSON();
+    if (body?.method !== "getAccountInfo") return route.fallback();
+    return route.fulfill({
+      json: {
+        jsonrpc: "2.0",
+        id: body.id,
+        // eslint-disable-next-line unicorn/no-null -- JSON-RPC answers a missing account as `value: null`
+        result: { context: { slot: 1 }, value: null },
+      },
+    });
+  });
+});
 
 const block = (page: Page) =>
   page
