@@ -29,7 +29,7 @@ const reloadSettled = async (page: Page) => {
 
 /** Runs `command` in the console's terminal, opening the drawer first */
 const run = async (page: Page, command: string) => {
-  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  const drawer = page.locator('[data-slot="console-drawer-trigger"]');
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }

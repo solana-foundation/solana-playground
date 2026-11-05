@@ -110,7 +110,6 @@ const pinnedRowGeometry = (page: Page, name: string) =>
       isTruncated: label.scrollWidth > label.clientWidth,
       nameOverPin: nameBox.right - pinBox.left,
       nameOverActions: nameBox.right - actionsBox.left,
-      pinOffMiddle: Math.abs(middle(pinBox) - middle(row)),
       actionsOffMiddle: Math.abs(middle(actionsBox) - middle(row)),
     };
   });
@@ -150,7 +149,8 @@ for (const [layout, viewport] of [
     expect(geometry.nameOverPin).toBeLessThanOrEqual(0);
     expect(geometry.nameOverActions).toBeLessThanOrEqual(0);
     if (layout === "phone") {
-      expect(geometry.pinOffMiddle).toBeLessThanOrEqual(1);
+      // The pin sits in the name's line, not centred on the row: only the
+      // "⋮" is drawn over the row
       expect(geometry.actionsOffMiddle).toBeLessThanOrEqual(1);
     }
   });

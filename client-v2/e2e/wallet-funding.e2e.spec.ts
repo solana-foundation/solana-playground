@@ -320,7 +320,7 @@ test("client-v2-external-wallet: A payer beside the current extension", async ({
   await stubDevnet(page, solflare.address);
   await reloadSettled(page);
   await setUpPlaygroundWallet(page);
-  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  const drawer = page.locator('[data-slot="console-drawer-trigger"]');
   if ((await drawer.getAttribute("aria-expanded")) !== "true")
     await drawer.click();
   await runInTerminal(page, "connect phantom");
