@@ -723,6 +723,42 @@ if (import.meta.vitest) {
         resetLogger();
       });
 
+      it.each<[string, () => Promise<unknown>]>([
+        [
+          "a read answers",
+          () => {
+            vi.spyOn(globalThis, "fetch").mockImplementation(
+              signedIn({ id: "u1", name: "Ada", image: undefined })
+            );
+            return PgSession.refresh();
+          },
+        ],
+        [
+          "a read fails",
+          () => {
+            vi.spyOn(globalThis, "fetch").mockRejectedValue(
+              new Error("offline")
+            );
+            return PgSession.refresh();
+          },
+        ],
+        ["the test seam sets a user", () => PgSession.refreshWith(undefined)],
+      ])("afterFirstRead waits until %s", async (_, settle) => {
+        const request = vi.spyOn(globalThis, "fetch");
+        let settled = false;
+        const waited = PgSession.afterFirstRead().then(() => (settled = true));
+
+        await Promise.resolve();
+        expect(settled).toBe(false);
+        expect(request).not.toHaveBeenCalled();
+
+        await settle();
+        await waited;
+        expect(settled).toBe(true);
+        // Once settled, a later caller does not wait
+        await PgSession.afterFirstRead();
+      });
+
       it("waits on the read in flight instead of reading again", async () => {
         let answer!: (user: unknown) => void;
         const request = vi.spyOn(globalThis, "fetch").mockReturnValue(

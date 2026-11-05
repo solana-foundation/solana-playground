@@ -18,15 +18,17 @@ const hasFiles = () => PgExplorer.getAllFiles().length > 0;
  * (`useCreateItem`) once the column is drawn.
  */
 const NoFileOpen = () => {
-  const [files, setFiles] = useState(hasFiles);
+  const [hasAnyFile, setHasAnyFile] = useState(hasFiles);
   const { createItem } = useCreateItem();
 
   useEffect(() => {
-    const { dispose } = PgExplorer.onNeedRender(() => setFiles(hasFiles()));
+    const { dispose } = PgExplorer.onNeedRender(() =>
+      setHasAnyFile(hasFiles())
+    );
     return dispose;
   }, []);
 
-  if (files) return <BaseNoFileOpen onShowFiles={PgView.showFiles} />;
+  if (hasAnyFile) return <BaseNoFileOpen onShowFiles={PgView.showFiles} />;
   return (
     <BaseNoFiles
       onAddFile={async () => {

@@ -296,12 +296,14 @@ it("opens the analyzer panel over the line on a phone, beside the navigation on 
     return placed;
   };
 
-  // Beside the line on a phone it opened about 296 px off the screen
-  expect(await panelFor(390)).toEqual(["top", "start"]);
-  expect(await panelFor(1280)).toEqual(["right", "end"]);
-
-  Object.defineProperty(window, "innerWidth", {
-    value: width,
-    configurable: true,
-  });
+  try {
+    // Beside the line on a phone it opened about 296 px off the screen
+    expect(await panelFor(390)).toEqual(["top", "start"]);
+    expect(await panelFor(1280)).toEqual(["right", "end"]);
+  } finally {
+    Object.defineProperty(window, "innerWidth", {
+      value: width,
+      configurable: true,
+    });
+  }
 });

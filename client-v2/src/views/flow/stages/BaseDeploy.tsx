@@ -69,11 +69,8 @@ export interface BaseDeployProps {
 }
 
 /** Why the Deploy button is off, for its tooltip; undefined when it is on */
-const deployBlockedReason = (p: BaseDeployProps) => {
-  if (!p.built) return "Build successfully first";
-  if (p.deploy === "running") return "A deploy is already running";
-  return undefined;
-};
+const deployBlockedReason = (p: BaseDeployProps) =>
+  p.deploy === "running" ? "A deploy is already running" : undefined;
 
 /**
  * A failed deploy of a built program: the stage maps no failure to a named
