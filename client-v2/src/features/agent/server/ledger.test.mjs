@@ -211,10 +211,8 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
         tier: "newcomer",
         model: MODEL,
         outcome: "started",
-        /* eslint-disable unicorn/no-null -- `agent_turn` columns: no usage is SQL `NULL` */
-        prompt_tokens: null,
-        completion_tokens: null,
-        /* eslint-enable unicorn/no-null */
+        prompt_tokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        completion_tokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
         charged: 5000,
         settled: false,
       },
@@ -342,10 +340,8 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
         tier: "newcomer",
         model: MODEL,
         outcome: "unfinished",
-        /* eslint-disable unicorn/no-null -- `agent_turn` columns: no usage is SQL `NULL` */
-        prompt_tokens: null,
-        completion_tokens: null,
-        /* eslint-enable unicorn/no-null */
+        prompt_tokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        completion_tokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
         charged: 5000,
         settled: true,
       },

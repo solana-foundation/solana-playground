@@ -119,10 +119,8 @@ const db = vi.hoisted(() => {
         tier,
         model,
         outcome: "started",
-        /* eslint-disable unicorn/no-null -- `agent_turn` columns: no usage is SQL `NULL` */
-        promptTokens: null,
-        completionTokens: null,
-        /* eslint-enable unicorn/no-null */
+        promptTokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        completionTokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
         charged: amount,
       });
       return { rows: [{ tier, dated, turn_id: id }] };
@@ -1578,10 +1576,8 @@ describe("POST /api/agent spend gate", () => {
         tier: "established",
         model: "test-model",
         outcome: turn.outcome,
-        /* eslint-disable unicorn/no-null -- the `agent_turn` row: no usage is SQL `NULL` */
-        promptTokens: turn.tokens?.[0] ?? null,
-        completionTokens: turn.tokens?.[1] ?? null,
-        /* eslint-enable unicorn/no-null */
+        promptTokens: turn.tokens?.[0] ?? null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        completionTokens: turn.tokens?.[1] ?? null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
         charged: turn.charged,
       },
     ];
