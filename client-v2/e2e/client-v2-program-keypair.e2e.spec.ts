@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { Keypair } from "@solana/web3.js";
 
-import { DEVNET_RPC, expect, LONG, test } from "./fixtures";
+import { DEVNET_RPC, expect, isStored, LONG, test } from "./fixtures";
 
 /**
  * The browser scenarios of `client-v2-program-keypair`: the Deploy stage's
@@ -213,7 +213,10 @@ test("client-v2-program-keypair: Open on a mismatch", async ({
     block(page).getByText(/This program id does not match the program keypair/)
   ).toBeVisible();
 
-  // A fresh load opens the fold by itself: the mismatch blocks a first deploy
+  // A fresh load opens the fold by itself: the mismatch blocks a first deploy.
+  // The id is in the store before the reload, which would otherwise race the
+  // write on a slow runner
+  await expect.poll(() => isStored(page, OTHER_ID), LONG).toBe(true);
   await page.reload();
   await openDeploy(page);
   await expect(field(page)).toHaveValue(OTHER_ID, LONG);

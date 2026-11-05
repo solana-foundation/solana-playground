@@ -556,3 +556,48 @@ export const stubPrograms = async (page: Page) => {
     r.fulfill({ status: 200, contentType: "text/plain", body: LIB_RS })
   );
 };
+
+/**
+ * Whether any value in the page's IndexedDB holds `needle` as text: a file
+ * the app wrote has reached the store, so a reload reads it. Values are
+ * tried whole, as `workspaceIdOf` does, since files are kept by inode.
+ */
+export const isStored = (page: Page, needle: string) =>
+  page.evaluate(async (text) => {
+    const dbs: Array<{ name?: string }> = await (
+      indexedDB as unknown as {
+        databases: () => Promise<Array<{ name?: string }>>;
+      }
+    ).databases();
+    for (const { name: dbName } of dbs) {
+      if (!dbName) continue;
+      const db: IDBDatabase = await new Promise((resolve, reject) => {
+        const request = indexedDB.open(dbName);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      for (const store of Array.from(db.objectStoreNames)) {
+        const values: unknown[] = await new Promise((resolve) => {
+          const request = db
+            .transaction(store, "readonly")
+            .objectStore(store)
+            .getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => resolve([]);
+        });
+        for (const value of values) {
+          let decoded = "";
+          if (typeof value === "string") decoded = value;
+          else if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+            decoded = new TextDecoder().decode(value as ArrayBuffer);
+          }
+          if (decoded.includes(text)) {
+            db.close();
+            return true;
+          }
+        }
+      }
+      db.close();
+    }
+    return false;
+  }, needle);
