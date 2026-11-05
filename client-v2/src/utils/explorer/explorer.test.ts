@@ -1,7 +1,15 @@
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import nodePath from "path";
+
 import {
   clearFailures,
   getFailures,
 } from "../../features/persistence/model/diagnostics";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "../../shared/lib/telemetry";
 import { requireFor } from "../../test-utils/require-for";
 import { PgExplorer } from "./explorer";
 import { PgWorkspace } from "./workspace";
@@ -656,6 +664,359 @@ describe("PgExplorer.getElFromPath", () => {
       expect(PgExplorer.getElFromPath(path)).toBe(el);
     });
   }
+});
+
+describe("writes past a project limit", () => {
+  const storedFiles = () =>
+    (PgExplorer.fs as unknown as { __files: Map<string, string> }).__files;
+  let sent: ReturnType<typeof memoryProvider>;
+
+  /** `count` small files under `/name/src/`, `f0.rs` onward */
+  const many = (name: string, count: number): Array<[string, string]> =>
+    Array.from({ length: count }, (_, i) => [`/${name}/src/f${i}.rs`, "x"]);
+
+  const refusals = () =>
+    sent.events.filter(({ name }) => name === "explorer_limit_refused");
+
+  beforeEach(async () => {
+    await reset();
+    sent = memoryProvider();
+    initTelemetry({ providers: [sent] });
+  });
+  afterEach(() => resetTelemetry());
+
+  describe("creating a file", () => {
+    it("refuses the 51st file and writes nothing", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 50) });
+
+      await expect(PgExplorer.createItem("src/extra.rs")).rejects.toThrow(
+        "A project can have at most 50 files."
+      );
+      expect(storedFiles().has("/alpha/src/extra.rs")).toBe(false);
+      expect(PgExplorer.files["/alpha/src/extra.rs"]).toBeUndefined();
+      expect(refusals()).toEqual([
+        {
+          name: "explorer_limit_refused",
+          params: { action: "create", limit: "count" },
+        },
+      ]);
+    });
+
+    it("creates a folder, which is not a file", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 50) });
+
+      await PgExplorer.createItem("src/more/");
+      expect(PgExplorer.files["/alpha/src/more/"]).toEqual({});
+      expect(refusals()).toEqual([]);
+    });
+
+    it("keeps a file's content when an overwrite is over the size limit", async () => {
+      // What the assistant's file write does: `createItem` with `override`
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", "before"]],
+      });
+
+      await expect(
+        PgExplorer.createItem("src/lib.rs", "a".repeat(200_000), {
+          override: true,
+        })
+      ).rejects.toThrow("A file can be at most 128 KB.");
+      expect(storedFiles().get("/alpha/src/lib.rs")).toBe("before");
+      expect(PgExplorer.files["/alpha/src/lib.rs"].content).toBe("before");
+      expect(refusals()[0].params).toEqual({
+        action: "create",
+        limit: "size",
+      });
+    });
+
+    it("refuses another file in a project restored over the limit", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 1) });
+      // A restore is not refused, so a project stored before the limits
+      // arrives whole
+      await PgExplorer.replaceWorkspaceFiles(
+        "alpha",
+        Object.fromEntries(
+          Array.from({ length: 60 }, (_, i) => [`src/f${i}.rs`, "x"])
+        )
+      );
+      await PgExplorer.switchWorkspace("alpha");
+
+      await expect(PgExplorer.createItem("src/extra.rs")).rejects.toThrow(
+        "A project can have at most 50 files."
+      );
+      expect(storedFiles().has("/alpha/src/extra.rs")).toBe(false);
+    });
+
+    it("refuses an edit to an existing file in a project restored over the limit", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 1) });
+      await PgExplorer.replaceWorkspaceFiles(
+        "alpha",
+        Object.fromEntries(
+          Array.from({ length: 60 }, (_, i) => [`src/f${i}.rs`, "x"])
+        )
+      );
+      await PgExplorer.switchWorkspace("alpha");
+
+      // What the assistant's file write does: `createItem` with `override`
+      await expect(
+        PgExplorer.createItem("src/f1.rs", "y", { override: true })
+      ).rejects.toThrow("A project can have at most 50 files.");
+      expect(storedFiles().get("/alpha/src/f1.rs")).toBe("x");
+    });
+
+    it("creates a small file beside another file over the size limit", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", ""]],
+      });
+      // Pasted in the editor, which is not refused
+      await PgExplorer.replaceWorkspaceFiles("alpha", {
+        "src/lib.rs": "a".repeat(150_000),
+      });
+      await PgExplorer.switchWorkspace("alpha");
+
+      await PgExplorer.createItem("notes.md");
+      expect(storedFiles().has("/alpha/notes.md")).toBe(true);
+    });
+
+    it("refuses an overwrite that leaves a project over the size limit", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", ""]],
+      });
+      await PgExplorer.replaceWorkspaceFiles(
+        "alpha",
+        Object.fromEntries(
+          Array.from({ length: 5 }, (_, i) => [
+            `src/f${i}.rs`,
+            "a".repeat(110_000),
+          ])
+        )
+      );
+      await PgExplorer.switchWorkspace("alpha");
+
+      await expect(
+        PgExplorer.createItem("src/f0.rs", "a".repeat(110_001), {
+          override: true,
+        })
+      ).rejects.toThrow("A project can be at most 512 KB.");
+      // 540,000 bytes: smaller, still over
+      await expect(
+        PgExplorer.createItem("src/f0.rs", "a".repeat(100_000), {
+          override: true,
+        })
+      ).rejects.toThrow("A project can be at most 512 KB.");
+      // 441,000 bytes: back under
+      await PgExplorer.createItem("src/f0.rs", "a".repeat(1_000), {
+        override: true,
+      });
+      expect(storedFiles().get("/alpha/src/f0.rs")).toHaveLength(1_000);
+    });
+
+    it("counts the generated files sync carries toward the project size", async () => {
+      // 524,000 bytes of user files: 288 bytes under the limit
+      await PgExplorer.createWorkspace("alpha", {
+        files: Array.from({ length: 4 }, (_, i) => [
+          `/alpha/src/f${i}.rs`,
+          "a".repeat(131_000),
+        ]),
+      });
+      // Written straight to the store, as `PgProgramInfo` does, so the
+      // explorer's file map never holds it
+      await PgExplorer.fs.writeFile(
+        "/alpha/.workspace/program-info.json",
+        "a".repeat(200),
+        { createParents: true }
+      );
+
+      await expect(
+        PgExplorer.createItem("notes.md", "a".repeat(100))
+      ).rejects.toThrow("A project can be at most 512 KB.");
+      expect(storedFiles().has("/alpha/notes.md")).toBe(false);
+    });
+  });
+
+  describe("renaming", () => {
+    it("refuses a folder rename that pushes a file path over 256 characters", async () => {
+      // `dir/` + 242 + `.rs` is 250 code points
+      const file = `${"n".repeat(242)}.rs`;
+      await PgExplorer.createWorkspace("alpha", {
+        files: [
+          ["/alpha/src/lib.rs", ""],
+          [`/alpha/dir/${file}`, "x"],
+        ],
+      });
+
+      await expect(
+        PgExplorer.renameItem("/alpha/dir/", `/alpha/${"d".repeat(13)}`)
+      ).rejects.toThrow("A file path can be at most 256 characters.");
+      expect(storedFiles().get(`/alpha/dir/${file}`)).toBe("x");
+      expect(PgExplorer.files[`/alpha/dir/${file}`]).toBeDefined();
+      expect(refusals()[0].params).toEqual({
+        action: "rename",
+        limit: "path",
+      });
+    });
+
+    it("renames the open workspace whatever its name's length", async () => {
+      // A workspace's name is not part of any path sync carries: a file 250
+      // code points from the root stays 250 under a 20-character name
+      const file = `${"n".repeat(243)}.rs`;
+      await PgExplorer.createWorkspace("alpha", {
+        files: [
+          ["/alpha/src/lib.rs", ""],
+          [`/alpha/src/${file}`, "x"],
+        ],
+      });
+      const renamed = "r".repeat(20);
+
+      await PgExplorer.renameWorkspace(renamed);
+      expect(storedFiles().get(`/${renamed}/src/${file}`)).toBe("x");
+      expect(refusals()).toEqual([]);
+    });
+
+    it("renames in a project over another limit", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 1) });
+      await PgExplorer.replaceWorkspaceFiles(
+        "alpha",
+        Object.fromEntries(
+          Array.from({ length: 60 }, (_, i) => [`src/f${i}.rs`, "x"])
+        )
+      );
+      await PgExplorer.switchWorkspace("alpha");
+
+      await PgExplorer.renameItem("/alpha/src/f1.rs", "/alpha/src/g1.rs");
+      expect(storedFiles().has("/alpha/src/g1.rs")).toBe(true);
+    });
+  });
+
+  describe("importing", () => {
+    it("creates no workspace from a folder of 64 files", async () => {
+      await expect(
+        PgExplorer.createWorkspace("big", { files: many("big", 64) })
+      ).rejects.toThrow(
+        "This project has 64 files. A project can have at most 50."
+      );
+      expect(PgExplorer.allWorkspaceNames).not.toContain("big");
+      expect([...storedFiles().keys()].some((k) => k.startsWith("/big/"))).toBe(
+        false
+      );
+      expect(refusals()[0].params).toEqual({
+        action: "import",
+        limit: "count",
+      });
+    });
+
+    it("names a large file the way the import dialog shows it", async () => {
+      await expect(
+        PgExplorer.createWorkspace("github-x", {
+          files: [
+            ["src/lib.rs", "x"],
+            ["src/data.rs", "a".repeat(143_360)],
+          ],
+        })
+      ).rejects.toThrow("src/data.rs is 140 KB. A file can be at most 128 KB.");
+    });
+
+    it("measures the project size of an import", async () => {
+      const imported = Array.from(
+        { length: 6 },
+        (_, i) => [`src/f${i}.rs`, "a".repeat(100_000)] as [string, string]
+      );
+      await expect(
+        PgExplorer.createWorkspace("big", { files: imported })
+      ).rejects.toThrow(
+        "This project is 586 KB. A project can be at most 512 KB."
+      );
+      expect(refusals()[0].params).toEqual({
+        action: "import",
+        limit: "project",
+      });
+    });
+
+    it("refuses a temporary project over a limit and keeps it temporary", async () => {
+      const temporary = Array.from(
+        { length: 51 },
+        (_, i) => [`/src/f${i}.rs`, "x"] as [string, string]
+      );
+      await PgExplorer.init({ files: temporary });
+
+      await expect(
+        PgExplorer.createWorkspace("kept", { fromTemporary: true })
+      ).rejects.toThrow("This project has 51 files.");
+      expect(PgExplorer.isTemporary).toBe(true);
+    });
+  });
+
+  describe("every bundled template and tutorial", () => {
+    // `client-v2/`
+    const root = nodePath.join(__dirname, "../../..");
+
+    /** Every file under `dir`, relative to it, `.raw` dropped */
+    const read = (dir: string, prefix = ""): Array<[string, string]> =>
+      readdirSync(dir).flatMap((name) => {
+        const full = nodePath.join(dir, name);
+        const rel = prefix + name;
+        if (statSync(full).isDirectory()) return read(full, `${rel}/`);
+        return [[rel.replace(/\.raw$/, ""), readFileSync(full, "utf8")]];
+      });
+
+    /** Directories holding a template's or a tutorial's starting files */
+    const sources = () => {
+      const found: Array<[string, string]> = [];
+      for (const base of ["src/frameworks", "src/tutorials"]) {
+        for (const name of readdirSync(nodePath.join(root, base))) {
+          const filesDir = nodePath.join(root, base, name, "files");
+          if (existsSync(filesDir)) found.push([`${base}/${name}`, filesDir]);
+        }
+      }
+      // Markdown tutorials ship from `public/`, which `yarn generate-fast`
+      // copies out of `client/public`
+      const pub = nodePath.join(root, "public/tutorials");
+      for (const name of readdirSync(pub)) {
+        const filesDir = nodePath.join(pub, name, "files");
+        if (existsSync(filesDir))
+          found.push([`public/tutorials/${name}`, filesDir]);
+      }
+      return found;
+    };
+
+    it("creates a workspace from each without a refusal", async () => {
+      const all = sources();
+      expect(all.length).toBeGreaterThan(10);
+      for (const [i, [source, dir]] of all.entries()) {
+        const workspaceFiles = read(dir)
+          .filter(([p]) => p !== "index.ts")
+          .map(([p, content]): [string, string] => [`/w${i}/${p}`, content]);
+        await expect(
+          PgExplorer.createWorkspace(`w${i}`, { files: workspaceFiles }),
+          source
+        ).resolves.toBeUndefined();
+      }
+      expect(refusals()).toEqual([]);
+    });
+  });
+
+  describe("writes that are not refused", () => {
+    it("saves the editor's content over the size limit", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", "x"]],
+      });
+      const big = "a".repeat(150_000);
+
+      PgExplorer.saveFileToState("src/lib.rs", big);
+      expect(PgExplorer.files["/alpha/src/lib.rs"].content).toBe(big);
+    });
+
+    it("writes a restored file over the size limit", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", "x"]],
+      });
+      const big = "a".repeat(150_000);
+
+      await PgExplorer.replaceWorkspaceFiles("alpha", { "src/lib.rs": big });
+      expect(storedFiles().get("/alpha/src/lib.rs")).toBe(big);
+      expect(refusals()).toEqual([]);
+    });
+  });
 });
 
 /**

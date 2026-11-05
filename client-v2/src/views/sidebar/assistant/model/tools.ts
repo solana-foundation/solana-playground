@@ -122,8 +122,10 @@ export const createTools = (
       PgAssistant.setApprovalOutcome(approvalId, wroteOutcome(path));
       return `Wrote ${path}.`;
     } catch (e) {
+      // TODO(HOO-2603): log an error that is not an `ExplorerLimitError`
+      // with `report: true`; a storage failure reaches no logger here
       const message = e instanceof Error ? e.message : String(e);
-      PgAssistant.setApprovalOutcome(approvalId, "write failed");
+      PgAssistant.setApprovalFailure(approvalId, `not written: ${message}`);
       return `Could not write ${path}: ${message}`;
     }
   }),
@@ -141,16 +143,20 @@ export const createTools = (
     try {
       await bridge.build();
       const { buildError } = bridge.getProjectContext();
-      PgAssistant.setApprovalOutcome(
-        approvalId,
-        buildError ? "build failed" : "build succeeded"
-      );
-      return buildError
-        ? `The build failed:\n\n${buildError}`
-        : "The build succeeded.";
+      if (buildError) {
+        PgAssistant.setApprovalFailure(approvalId, "build failed");
+        return `The build failed:\n\n${buildError}`;
+      }
+      PgAssistant.setApprovalOutcome(approvalId, "build succeeded");
+      return "The build succeeded.";
     } catch (e) {
+      // TODO(HOO-2603): log the error with `report: true`; a build that
+      // could not run reaches no logger here
       const message = e instanceof Error ? e.message : String(e);
-      PgAssistant.setApprovalOutcome(approvalId, "build errored");
+      PgAssistant.setApprovalFailure(
+        approvalId,
+        `build could not run: ${message}`
+      );
       return `The build could not run: ${message}`;
     }
   }),
@@ -178,7 +184,10 @@ export const createTools = (
     // The card named the network it was asked on; a switch while it waited
     // would spend SOL somewhere the user never approved
     if (bridge.getProjectContext().cluster !== cluster) {
-      PgAssistant.setApprovalOutcome(approvalId, "network changed");
+      PgAssistant.setApprovalFailure(
+        approvalId,
+        "not deployed: network changed"
+      );
       return (
         "The network changed while the approval waited, so nothing was " +
         "deployed. Ask the user whether to deploy to the network now selected."
@@ -197,8 +206,10 @@ export const createTools = (
         `a markdown link.`
       );
     } catch (e) {
+      // TODO(HOO-2603): log the error with `report: true`; a failed deploy
+      // reaches no logger here
       const message = e instanceof Error ? e.message : String(e);
-      PgAssistant.setApprovalOutcome(approvalId, "deploy failed");
+      PgAssistant.setApprovalFailure(approvalId, `deploy failed: ${message}`);
       return `The deployment failed: ${message}`;
     }
   }),

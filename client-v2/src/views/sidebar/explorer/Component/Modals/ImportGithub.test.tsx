@@ -29,8 +29,11 @@ import { ModalLayerContext } from "@/widgets/overlays/ui/modal-layer";
 // and its icons' `Svg` reads `PgTheme` for styles that do not matter here
 const utils = vi.hoisted(() => {
   class ImportCancelledError extends Error {}
+  // The dialog's limit guard reads it: a refusal other than a limit passes on
+  class ExplorerLimitError extends Error {}
   return {
     ImportCancelledError,
+    ExplorerLimitError,
     PgCommon: { transition: <T,>(p: Promise<T>) => p },
     PgFramework: {
       all: [

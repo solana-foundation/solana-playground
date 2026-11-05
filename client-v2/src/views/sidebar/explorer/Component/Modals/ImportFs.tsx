@@ -2,6 +2,7 @@ import { InfoIcon } from "lucide-react";
 import { FC, useState } from "react";
 
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { FieldError } from "@/shared/ui/field";
 import { ModalFrame } from "@/widgets/overlays";
 
 import Input from "../../../../../components/Input";
@@ -14,6 +15,7 @@ import {
   TupleFiles,
 } from "../../../../../utils";
 import { IMPORTED } from "./imported";
+import { useLimitRefusal } from "./useLimitRefusal";
 
 interface ImportFsProps {
   name?: string;
@@ -27,6 +29,7 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
   const [files, setFiles] = useState(props.files);
   const [nameError, setNameError] = useState("");
   const [importError, setImportError] = useState(props.importError ?? "");
+  const { limitError, guard } = useLimitRefusal();
 
   const mounted = useMounted();
 
@@ -73,14 +76,17 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
       title="Import project"
       buttonProps={{
         text: "Import",
-        onSubmit: async () => {
+        onSubmit: guard(async () => {
           await PgExplorer.createWorkspace(name, { files });
           return IMPORTED;
-        },
+        }),
         disabled: !files || !!nameError || !!importError,
       }}
     >
       <div className="flex flex-col justify-center">
+        <FieldError data-testid="explorer-limit-error" className="mb-2">
+          {limitError}
+        </FieldError>
         <div className="mb-1">
           <div className="mb-2 font-bold">Project name</div>
           <Input

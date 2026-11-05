@@ -89,6 +89,23 @@ describe("write_file", () => {
     ]);
   });
 
+  it("marks the card failed with the explorer's reason when the write is refused", async () => {
+    const b = bridge("old");
+    vi.mocked(b.applyPatch).mockRejectedValue(
+      new Error("A file can be at most 128 KB.")
+    );
+    const pending = writeFile(b).run({ path: "src/lib.rs", content: "new" });
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), true);
+
+    expect(await pending).toBe(
+      "Could not write src/lib.rs: A file can be at most 128 KB."
+    );
+    expect(PgAssistant.items[0]).toMatchObject({
+      status: "failed",
+      outcome: "not written: A file can be at most 128 KB.",
+    });
+  });
   it("leaves an applied patch undoable, and a failed or rejected one not", async () => {
     const file = { content: "old" };
     const b = {
@@ -217,6 +234,82 @@ describe("read_file", () => {
   });
 });
 
+describe("build and deploy", () => {
+  const commandBridge = (
+    over: Partial<Record<"build" | "deploy", () => Promise<unknown>>>,
+    buildError: string | null = null
+  ): PlaygroundBridge =>
+    ({
+      build: over.build ?? vi.fn(async () => {}),
+      deploy: over.deploy ?? vi.fn(async () => null),
+      quoteDeploy: vi.fn(async () => ({
+        network: "devnet",
+        cost: null,
+        playground: false,
+      })),
+      getProjectContext: () => ({ buildError, cluster: "devnet" }),
+    } as unknown as PlaygroundBridge);
+
+  /** Runs a command tool, allows its card, and returns the card it left */
+  const allowed = async (b: PlaygroundBridge, name: "build" | "deploy") => {
+    const pending = createTools(b)
+      .find((tool) => tool.name === name)!
+      .run({});
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), true);
+    const result = await pending;
+    return { result, card: PgAssistant.items[0] };
+  };
+
+  it("marks a build with compile errors failed", async () => {
+    const { result, card } = await allowed(
+      commandBridge({}, "error[E0425]: cannot find value"),
+      "build"
+    );
+    expect(result).toContain("The build failed");
+    expect(card).toMatchObject({ status: "failed", outcome: "build failed" });
+  });
+
+  it("marks a build that could not run failed with the reason", async () => {
+    const { card } = await allowed(
+      commandBridge({
+        build: vi.fn(async () => {
+          throw new Error("build server unreachable");
+        }),
+      }),
+      "build"
+    );
+    expect(card).toMatchObject({
+      status: "failed",
+      outcome: "build could not run: build server unreachable",
+    });
+  });
+
+  it("leaves a successful build applied", async () => {
+    const { card } = await allowed(commandBridge({}), "build");
+    expect(card).toMatchObject({
+      status: "allowed",
+      outcome: "build succeeded",
+    });
+  });
+
+  it("marks a failed deploy failed with the reason", async () => {
+    const { result, card } = await allowed(
+      commandBridge({
+        deploy: vi.fn(async () => {
+          throw new Error("insufficient funds");
+        }),
+      }),
+      "deploy"
+    );
+    expect(result).toBe("The deployment failed: insufficient funds");
+    expect(card).toMatchObject({
+      status: "failed",
+      outcome: "deploy failed: insufficient funds",
+    });
+  });
+});
+
 describe("build and deploy approvals", () => {
   type Quote = Awaited<ReturnType<PlaygroundBridge["quoteDeploy"]>>;
   const PRICED: Quote = {
@@ -328,6 +421,10 @@ describe("build and deploy approvals", () => {
 
     expect(await run).toContain("nothing was deployed");
     expect(deploy).not.toHaveBeenCalled();
+    expect(PgAssistant.items[0]).toMatchObject({
+      status: "failed",
+      outcome: "not deployed: network changed",
+    });
   });
 
   it("asks whether to build the program", async () => {

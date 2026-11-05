@@ -2,6 +2,7 @@ import { FC, useCallback, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 
 import { createLogger } from "@/shared/lib/logger";
+import { FieldError } from "@/shared/ui/field";
 
 import Input from "../../../../../components/Input";
 import LangIcon from "../../../../../components/LangIcon";
@@ -10,9 +11,28 @@ import {
   useOnClickOutside,
   useSetStatic,
 } from "../../../../../hooks";
-import { Fn, PgCommon, PgExplorer, PgView } from "../../../../../utils";
+import {
+  ExplorerLimitError,
+  Fn,
+  PgCommon,
+  PgExplorer,
+  PgView,
+} from "../../../../../utils";
 
 const log = createLogger("explorer:create-item");
+
+/**
+ * What the input shows for a failed create: a limit's rule, or one of the
+ * explorer's own refusals ("Already exists", "Invalid name"). Anything else
+ * was not expected, so it is reported and the input only turns red.
+ */
+const describeCreateFailure = (e: unknown) => {
+  if (e instanceof ExplorerLimitError) return e.message;
+  const message = e instanceof Error ? e.message : "";
+  if (Object.values(PgExplorer.errors).includes(message)) return message;
+  log.error(e, { report: true });
+  return "";
+};
 
 export const CreateItem = () => {
   const [El, setEl] = useState<Element | null>(null);
@@ -37,6 +57,8 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
 }) => {
   const [itemName, setItemName] = useState("");
   const [error, setError] = useState(false);
+  // A refusal's message (`describeCreateFailure`); empty while there is none
+  const [refusal, setRefusal] = useState("");
 
   const newFileRef = useRef<HTMLDivElement>(null);
 
@@ -51,6 +73,7 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
           if (!itemName) return;
 
           setError(false);
+          setRefusal("");
 
           // Check if the command is coming from context menu
           const selected =
@@ -75,8 +98,8 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
             // Select new file
             const newEl = PgExplorer.getElFromPath(itemPath);
             if (newEl) PgExplorer.setSelectedEl(newEl);
-          } catch (e: any) {
-            log.warn(e.message);
+          } catch (e) {
+            setRefusal(describeCreateFailure(e));
             setError(true);
           }
         },
@@ -111,22 +134,30 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
   }, [El]);
 
   return (
-    <div
-      ref={newFileRef}
-      className="flex items-center py-1 [&>input]:ml-1.5 [&>input]:h-6!"
-      // The same step as the tree rows' indent (indentOf in Folders.tsx),
-      // so the input lines up with its siblings
-      style={{ paddingLeft: `${depth * 1.375}rem` }}
-    >
-      <LangIcon path={itemName} />
-      <Input
-        autoFocus
-        value={itemName}
-        onChange={(ev) => setItemName(ev.target.value)}
-        error={error}
-        setError={setError}
-        validator={PgExplorer.isItemNameValid}
-      />
-    </div>
+    <>
+      <div
+        ref={newFileRef}
+        className="flex items-center py-1 [&>input]:ml-1.5 [&>input]:h-6!"
+        // The same step as the tree rows' indent (indentOf in Folders.tsx),
+        // so the input lines up with its siblings
+        style={{ paddingLeft: `${depth * 1.375}rem` }}
+      >
+        <LangIcon path={itemName} />
+        <Input
+          autoFocus
+          value={itemName}
+          onChange={(ev) => {
+            setRefusal("");
+            setItemName(ev.target.value);
+          }}
+          error={error}
+          setError={setError}
+          validator={PgExplorer.isItemNameValid}
+        />
+      </div>
+      <FieldError data-testid="explorer-limit-error" className="mb-2">
+        {refusal}
+      </FieldError>
+    </>
   );
 };

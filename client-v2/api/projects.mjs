@@ -7,7 +7,14 @@
  * is cheaper than a shared module. `isAllowedOrigin` comes from the auth slice,
  * because every route acting for a signed-in user needs it and its reasoning is
  * long.
+ *
+ * TODO(HOO-2604): the JSDoc types here are declared, not checked: `api/` is
+ * outside the tsconfig's `include`.
  */
+import {
+  checkProjectLimits,
+  isSyncedPath,
+} from "../src/entities/project/server.mjs";
 import {
   warnAboutMissingObservabilityIds,
   withObservability,
@@ -26,6 +33,9 @@ import {
 import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
 
 const log = createServerLogger("api:projects");
+
+/** `describeWrite`'s refusal of a file sync does not carry */
+const UNSYNCED_ERROR = "A path under .workspace/ is not synced";
 
 /** Matches `projects_kind_check`, so a bad kind is a 400 and not a 500 */
 const KINDS = ["project", "tutorial"];
@@ -91,6 +101,18 @@ const refuse = (error, status = 400) => ({ error, status });
  * two devices' copies are merged on the client, so every write is either a
  * create or a swap against the row the caller read.
  *
+ * A body whose own files are over a limit is refused as `limit`, before the
+ * database is touched: whatever is stored, the project those files land in is
+ * over it too. The count and the total size of a patch's result depend on
+ * rows already stored, so `writeProject` measures every limit over the stored
+ * project after its writes.
+ *
+ * A file sync does not carry (`.workspace/metadata.json` and the rest of
+ * `.workspace/` but `SYNCED_WORKSPACE_FILES`) is refused as a bad request:
+ * the client never sends one, the limits do not measure one, and stored it
+ * would sit in the project unchecked. Removing one is allowed, so a row stored
+ * before this check can still go.
+ *
  * A tab left open across the hoodieshq/solana-playground#40 deploy still runs the client from before it,
  * and keeps doing so until reloaded. That client sends `{snapshot: {files},
  * baseUpdatedAt, force: false}` on every push and files every refusal except
@@ -106,6 +128,7 @@ const refuse = (error, status = 400) => ({ error, status });
  *
  * @returns {{files: Record<string, string>}
  *   | {changed: Record<string, string>, removed: string[]}
+ *   | {limit: import("../src/entities/project/limits.mjs").LimitExceeded}
  *   | {error: string, status: 400 | 409}}
  */
 export const describeWrite = (body) => {
@@ -124,9 +147,12 @@ export const describeWrite = (body) => {
 
   if (old || full) {
     const files = old ? body.snapshot?.files : body.files;
-    return isFileMap(files) && Object.keys(files).length
-      ? { files }
-      : refuse("files must be a non-empty map of paths to strings");
+    if (!isFileMap(files) || !Object.keys(files).length) {
+      return refuse("files must be a non-empty map of paths to strings");
+    }
+    if (!Object.keys(files).every(isSyncedPath)) return refuse(UNSYNCED_ERROR);
+    const limit = checkProjectLimits(files);
+    return limit ? { limit } : { files };
   }
 
   if (!body.baseUpdatedAt) {
@@ -146,7 +172,15 @@ export const describeWrite = (body) => {
   if (removed.some((path) => path in changed)) {
     return refuse("A path cannot be both changed and removed");
   }
-  return { changed, removed };
+  if (!Object.keys(changed).every(isSyncedPath)) {
+    return refuse(UNSYNCED_ERROR);
+  }
+  // Every changed file is in the project the patch produces, so their count
+  // and size are a floor under its own. Answered here, without a database
+  // round trip, so the 413 names the request's files only; a stored row also
+  // over a limit is named by `writeProject` on the next write.
+  const limit = checkProjectLimits(changed);
+  return limit ? { limit } : { changed, removed };
 };
 
 /**
@@ -182,6 +216,31 @@ const sendJson = (res, status, body) => {
   res.setHeader("content-type", "application/json");
   res.setHeader("cache-control", "no-store");
   res.end(JSON.stringify(body));
+};
+
+/**
+ * The status and body a write is answered with, from `describeWrite`'s limit
+ * or `saveProject`'s outcome. A limit is 413 with its `reason` and measure at
+ * the top level, so the client raises the same banner from this body as from
+ * its own check (the account cap has no client check; its banner comes from
+ * this body only); every other outcome is `describeSaved`'s. Both sources come
+ * through here so neither can reach a 200 with a limit.
+ *
+ * Exported for `api/projects.test.mjs`: the handler is behind the auth gate.
+ *
+ * @param {{limit: import("../src/entities/project/limits.mjs").LimitExceeded}
+ *   | {refused: string} | {conflict: true} | {updatedAt: string}} outcome
+ * @returns {{status: number, body: object}}
+ */
+export const answerWrite = (outcome) => {
+  if ("limit" in outcome) {
+    const error =
+      outcome.limit.reason === "too-many-projects"
+        ? "The account syncs as many projects as it can"
+        : "The project is over a sync limit";
+    return { status: 413, body: { error, ...outcome.limit } };
+  }
+  return describeSaved(outcome);
 };
 
 /**
@@ -254,6 +313,75 @@ export const describeDriverError = (e) => {
 };
 
 /**
+ * The status and body for a signed-in user's `PUT` of a parsed body.
+ *
+ * A body whose own files are over a limit is answered 413 here, without a
+ * database round trip; `writeProject` measures every limit again over the
+ * stored project. Exported for `api/projects.test.mjs`: the handler is behind
+ * the auth gate.
+ *
+ * @param {string} userId
+ * @param {Record<string, unknown>} body
+ * @returns {Promise<{status: number, body: object}>}
+ */
+export const putProject = async (userId, body) => {
+  const project = describeProject(body);
+  if (project.error) return { status: 400, body: { error: project.error } };
+
+  const write = describeWrite(body);
+  if (write.error)
+    return { status: write.status, body: { error: write.error } };
+  if (write.limit) return answerWrite(write);
+
+  // Reaches SQL as a timestamptz. Unchecked, a malformed one is a cast
+  // error from the driver, which is a 500 for what is really a bad request.
+  if (
+    body.baseUpdatedAt !== undefined &&
+    (typeof body.baseUpdatedAt !== "string" ||
+      Number.isNaN(Date.parse(body.baseUpdatedAt)))
+  ) {
+    return {
+      status: 400,
+      body: { error: "baseUpdatedAt must be a timestamp" },
+    };
+  }
+
+  // Named fields rather than the body passed through, so nothing a client
+  // adds reaches the write without this handler having checked it
+  const result = await saveProject(userId, {
+    ...project,
+    baseUpdatedAt: body.baseUpdatedAt,
+    ...write,
+  });
+  // The one refusal that says something reached a state it should not
+  // have: a row already empty, or a client building patches wrongly. Ids
+  // only; file contents never travel to the logs.
+  if (result.refused) {
+    log.warn("write refused", {
+      context: {
+        userId,
+        projectId: project.id,
+        reason: result.refused,
+      },
+    });
+  }
+  // The account cap: the only record on the server of who meets it, since
+  // the client's event can be blocked. Ids and figures only.
+  if (result.limit?.reason === "too-many-projects") {
+    log.warn("account cap", {
+      context: {
+        userId,
+        projectId: project.id,
+        kind: result.limit.kind,
+        count: result.limit.count,
+        limit: result.limit.limit,
+      },
+    });
+  }
+  return answerWrite(result);
+};
+
+/**
  * @param {import("node:http").IncomingMessage} req
  * @param {import("node:http").ServerResponse} res
  */
@@ -303,48 +431,7 @@ async function handler(req, res) {
         });
       }
       if (read.error) return sendJson(res, 400, { error: "Body must be JSON" });
-      const { body } = read;
-
-      const project = describeProject(body);
-      if (project.error) return sendJson(res, 400, { error: project.error });
-
-      const write = describeWrite(body);
-      if (write.error) {
-        return sendJson(res, write.status, { error: write.error });
-      }
-
-      // Reaches SQL as a timestamptz. Unchecked, a malformed one is a cast
-      // error from the driver, which is a 500 for what is really a bad request.
-      if (
-        body.baseUpdatedAt !== undefined &&
-        (typeof body.baseUpdatedAt !== "string" ||
-          Number.isNaN(Date.parse(body.baseUpdatedAt)))
-      ) {
-        return sendJson(res, 400, {
-          error: "baseUpdatedAt must be a timestamp",
-        });
-      }
-
-      // Named fields rather than the body passed through, so nothing a client
-      // adds reaches the write without this handler having checked it
-      const result = await saveProject(user.id, {
-        ...project,
-        baseUpdatedAt: body.baseUpdatedAt,
-        ...write,
-      });
-      const answer = describeSaved(result);
-      // The one refusal that says something reached a state it should not
-      // have: a row already empty, or a client building patches wrongly. Ids
-      // only; file contents never travel to the logs.
-      if (result.refused) {
-        log.warn("write refused", {
-          context: {
-            userId: user.id,
-            projectId: project.id,
-            reason: result.refused,
-          },
-        });
-      }
+      const answer = await putProject(user.id, read.body);
       return sendJson(res, answer.status, answer.body);
     }
 

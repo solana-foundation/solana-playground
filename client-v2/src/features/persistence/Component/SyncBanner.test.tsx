@@ -17,6 +17,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import type { LimitExceeded } from "@/entities/project";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   initTelemetry,
@@ -224,7 +225,7 @@ describe("SyncBanner wording", () => {
     });
     await act(async () => root.render(<SyncBanner />));
     expect(container.querySelector('[role="alert"] p')?.textContent).toBe(
-      "This project is over 4 MB. Remove or shrink its largest files, then try again."
+      "This project is over 1 MiB. Remove or shrink its largest files, then try again."
     );
   });
 
@@ -377,5 +378,132 @@ describe("SyncBanner titles and actions", () => {
   it("offers only Try again when the project is too large", async () => {
     await mount("too-large");
     expect(buttonLabels()).toEqual(["Try again"]);
+  });
+});
+
+describe("SyncBanner limit wording", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  /** The banner's text, and its one button, for a `too-large` conflict */
+  const bannerFor = async (limit?: LimitExceeded) => {
+    vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue(
+      limit
+        ? { projectId: "p1", kind: "too-large", limit }
+        : { projectId: "p1", kind: "too-large" }
+    );
+    act(() => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<SyncBanner />));
+    const banner = requireFor("the sync banner")(
+      container.querySelector('[data-testid="sync-banner"]')
+    );
+    expect(banner.getAttribute("role")).toBe("alert");
+    return {
+      text: banner.querySelector("p")?.textContent,
+      buttons: Array.from(banner.querySelectorAll("button")).map((b) =>
+        b.textContent?.trim()
+      ),
+    };
+  };
+
+  beforeEach(() => {
+    vi.spyOn(PgExplorer, "currentWorkspaceId", "get").mockReturnValue("p1");
+    vi.spyOn(PgExplorer, "onDidSwitchWorkspace").mockReturnValue({
+      dispose: () => undefined,
+    });
+    vi.spyOn(PgProjectSync, "onDidChangeConflicts").mockReturnValue({
+      dispose: () => undefined,
+    });
+    container = document.body.appendChild(document.createElement("div"));
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+  });
+
+  it("names one file over the file size limit", async () => {
+    expect(
+      await bannerFor({
+        reason: "file-too-large",
+        limit: 131_072,
+        paths: ["src/lib.rs"],
+        sizes: { "src/lib.rs": 143_360 },
+      })
+    ).toEqual({
+      text: "src/lib.rs is 140 KB. A file can be at most 128 KB. Shrink or remove it, then try again.",
+      buttons: ["Try again"],
+    });
+  });
+
+  it("names the first three of several files over it", async () => {
+    const paths = ["a.rs", "b.rs", "c.rs", "d.rs", "e.rs"];
+    const { text } = await bannerFor({
+      reason: "file-too-large",
+      limit: 131_072,
+      paths,
+      sizes: Object.fromEntries(paths.map((p) => [p, 200_000])),
+    });
+    expect(text).toBe(
+      "a.rs, b.rs, c.rs and 2 more are over 128 KB. A file can be at most 128 KB. Shrink or remove them, then try again."
+    );
+  });
+
+  it("cuts a path over the path limit to 60 characters", async () => {
+    const path = `src/${"n".repeat(300)}.rs`;
+    const { text } = await bannerFor({
+      reason: "path-too-long",
+      limit: 256,
+      paths: [path],
+    });
+    expect(text).toBe(
+      `A file path is longer than 256 characters: ${path.slice(
+        0,
+        60
+      )}…. A file path can be at most 256 characters. Rename or move it, then try again.`
+    );
+  });
+
+  it("names too many files", async () => {
+    const { text } = await bannerFor({
+      reason: "too-many-files",
+      limit: 50,
+      count: 64,
+    });
+    expect(text).toBe(
+      "This project has 64 files. A project can have at most 50. Remove some, then try again."
+    );
+  });
+
+  it("names a project over the size limit", async () => {
+    const { text } = await bannerFor({
+      reason: "project-too-large",
+      limit: 524_288,
+      size: 614_400,
+    });
+    expect(text).toBe(
+      "This project is 600 KB. A project can be at most 512 KB. Remove or shrink some files, then try again."
+    );
+  });
+
+  it("names the account cap and says the project stays", async () => {
+    const { text } = await bannerFor({
+      reason: "too-many-projects",
+      kind: "project",
+      limit: 10,
+      count: 11,
+    });
+    expect(text).toBe(
+      "An account can sync at most 10 projects. This one stays in this browser and is not synced. Delete a synced project you no longer need, then try again."
+    );
+  });
+
+  it("names the body cap when the refusal names no limit", async () => {
+    expect((await bannerFor()).text).toBe(
+      "This project is over 1 MiB. Remove or shrink its largest files, then try again."
+    );
   });
 });
