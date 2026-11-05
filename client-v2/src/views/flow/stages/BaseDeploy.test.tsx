@@ -80,7 +80,7 @@ const lastIsActions = (container: HTMLElement) =>
     ?.lastElementChild?.getAttribute("data-slot");
 
 describe("BaseDeploy", () => {
-  it("holds Deploy until a build succeeded", () => {
+  it("offers no Deploy until a build succeeded", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: false, deploy: "idle", history: [] })} />
     );
@@ -88,9 +88,9 @@ describe("BaseDeploy", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing deployed yet" })
     ).toBeTruthy();
-    const deploy = screen.getByRole("button", { name: "Deploy to devnet" });
-    expect(deploy).toHaveProperty("disabled", true);
-    expect(deploy.getAttribute("title")).toBe("Build successfully first");
+    expect(
+      screen.queryByRole("button", { name: "Deploy to devnet" })
+    ).toBeNull();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
@@ -102,8 +102,9 @@ describe("BaseDeploy", () => {
     const goToBuild = screen.getByRole("button", { name: "Go to Build" });
     fireEvent.click(goToBuild);
     expect(p.onGoToBuild).toHaveBeenCalled();
-    // A link under the faded pill, never a second pill
+    // The pill itself, the only one
     expect(brandButtons(container)).toHaveLength(1);
+    expect(brandButtons(container)[0]).toBe(goToBuild);
     expect(
       goToBuild.compareDocumentPosition(
         screen.getByRole("button", { name: "Upload IDL" })
@@ -173,8 +174,11 @@ describe("BaseDeploy", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(p.onDeploy).toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Show full log" }));
+    const showLog = screen.getByRole("button", { name: "Show full log" });
+    fireEvent.click(showLog);
     expect(p.onShowLog).toHaveBeenCalled();
+    // An outline beside the pill, as Upload IDL is
+    expect(showLog.getAttribute("data-variant")).toBe("outline");
     expect(brandButtons(container)).toHaveLength(1);
     expect(
       screen.queryByRole("button", { name: "Redeploy to devnet" })
@@ -276,7 +280,7 @@ describe("BaseDeploy", () => {
     ).toHaveLength(2);
   });
 
-  /** The prototype's first deploy: the pill, and Upload IDL under it */
+  /** Before the first deploy: the pill, and Upload IDL beside it */
   it("before the first deploy it has no history, only Upload IDL", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
@@ -419,7 +423,7 @@ describe("BaseDeploy", () => {
     expect(screen.getByRole("button", { name: "Go to Build" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Show full log" })).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Deploy to devnet" })
-    ).toHaveProperty("disabled", true);
+      screen.queryByRole("button", { name: "Deploy to devnet" })
+    ).toBeNull();
   });
 });

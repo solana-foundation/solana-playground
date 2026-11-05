@@ -26,6 +26,7 @@ import {
   readWorkspaceFiles,
   rebaseFiles,
 } from "../model/workspace-files";
+import type { BaseProjectListProps } from "./BaseProjectList";
 import BaseProjectList from "./BaseProjectList";
 import { useSyncMarkers } from "./use-sync-markers";
 
@@ -96,6 +97,8 @@ export type ProjectListProps = {
     readFiles: () => Promise<Record<string, string>>,
     name: string
   ) => Promise<unknown>;
+  /** EMPTY-01's ways in, drawn once the explorer holds no project */
+  empty?: BaseProjectListProps["empty"];
 };
 
 /**
@@ -108,6 +111,7 @@ const ProjectList = ({
   onPickCurrent,
   onPicked,
   onShareGist,
+  empty,
 }: ProjectListProps) => {
   const [, refresh] = useReducer((n: number) => n + 1, 0);
   const [pins, setPins] = useState(readPins);
@@ -342,6 +346,8 @@ const ProjectList = ({
         setRenaming(undefined);
         setRenameError(undefined);
       }}
+      // A preview has no workspaces of its own, which is not "no projects"
+      empty={PgExplorer.isTemporary ? undefined : empty}
     />
   );
 };

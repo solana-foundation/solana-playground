@@ -327,7 +327,7 @@ const FlowFrame = () => {
                 collapsed={collapsed}
                 onToggle={toggle}
                 logo={<LogoLockup aria-hidden="true" />}
-                projects={
+                projects={(open) => (
                   <ProjectList
                     onPicked={catalogPage.close}
                     onShareGist={openShareGistDialogFor("project_menu")}
@@ -335,8 +335,12 @@ const FlowFrame = () => {
                       page.leaveHome("current-project");
                       closeSheet();
                     }}
+                    empty={{
+                      onStartProject: () => open("new-project"),
+                      onOpenTutorials: () => open("tutorials"),
+                    }}
                   />
-                }
+                )}
                 footer={
                   <SessionFooter
                     page={menuPage}

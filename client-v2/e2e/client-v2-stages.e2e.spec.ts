@@ -258,8 +258,9 @@ test.describe("client-v2-stages on a phone", () => {
     await page.locator("#flow-stage-tab-deploy").click();
     const panel = page.locator("#flow-stage-panel-deploy");
     const actions = panel.locator('[data-slot="stage-empty-actions"]');
+    // Nothing is built in this page, so the pill is Go to Build
     await expect(
-      actions.getByRole("button", { name: /Redeploy to devnet/ })
+      actions.getByRole("button", { name: "Go to Build" })
     ).toBeVisible(LONG);
 
     const panelBox = requireFor("the panel's bounding box")(

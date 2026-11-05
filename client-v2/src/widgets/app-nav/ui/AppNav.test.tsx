@@ -82,7 +82,7 @@ const draw = (current?: "tutorials" | "programs", homeShown = false) =>
           collapsed={false}
           onToggle={() => {}}
           logo={null}
-          projects={null}
+          projects={() => null}
           footer={null}
           railFooter={null}
           setup={null}

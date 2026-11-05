@@ -1,13 +1,15 @@
 import { Button } from "@/shared/ui/button";
-import { Empty, EmptyDescription } from "@/shared/ui/empty";
 
 import { tutorialCaption } from "../lib/tutorial-caption";
 import type { TutorialItem } from "../model/use-tutorial-list";
 import type { CatalogList } from "./BaseCatalogGrid";
+import BaseNoMatch from "./BaseNoMatch";
 import BaseTutorialCard from "./BaseTutorialCard";
 
 export interface BaseTutorialGridProps {
   query: string;
+  /** Empties the search, from the no-match state's "Clear search" */
+  onClear: () => void;
   /** The tutorials matching `query`, once the list is read */
   items: CatalogList<TutorialItem>;
   /** An Open runs: every card waits for it */
@@ -27,6 +29,7 @@ export interface BaseTutorialGridProps {
  */
 const BaseTutorialGrid = ({
   query,
+  onClear,
   items,
   busy,
   onOpen,
@@ -47,11 +50,7 @@ const BaseTutorialGrid = ({
     );
   }
   if (items.cards.length === 0) {
-    return (
-      <Empty className="p-0">
-        <EmptyDescription>{`No tutorials match “${query}”.`}</EmptyDescription>
-      </Empty>
-    );
+    return <BaseNoMatch label="tutorials" query={query} onClear={onClear} />;
   }
 
   return (

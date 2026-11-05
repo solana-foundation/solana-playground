@@ -100,7 +100,7 @@ const Deploy = () => {
       onInteract={() => PgFlow.setStage("interact")}
       onGoToBuild={() => PgFlow.setStage("build")}
       onShowLog={requestConsole}
-      idlUpload={<IdlActions mode="upload" look="link" />}
+      idlUpload={<IdlActions mode="upload" look="outline" />}
     />
   );
 };

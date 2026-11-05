@@ -109,7 +109,16 @@ it("offers no second Open while one runs, from any card", () => {
 it("says so when nothing matches the query", () => {
   draw({ list: ready(), query: "zzz" });
 
-  expect(screen.getByText("No tutorials match “zzz”.")).toBeTruthy();
+  expect(screen.getByText("No tutorials match “zzz”")).toBeTruthy();
+  expect(screen.getByText("Try a shorter word.")).toBeTruthy();
+});
+
+it("empties the search from Clear search", () => {
+  const onQuery = vi.fn();
+  draw({ list: ready(), query: "zzz", onQuery });
+
+  fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+  expect(onQuery).toHaveBeenCalledWith("");
 });
 
 it("shows that the list is loading", () => {

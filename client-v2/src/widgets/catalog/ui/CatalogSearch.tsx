@@ -25,7 +25,8 @@ const CatalogSearch = ({
   className,
   icon = true,
 }: CatalogSearchProps) => (
-  <InputGroup className={cn("max-w-80", className)}>
+  // The width of the page below `md`, as the cards under it are
+  <InputGroup className={cn("max-w-80 max-md:max-w-none", className)}>
     {icon ? (
       <InputGroupAddon>
         <Search aria-hidden="true" />

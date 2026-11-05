@@ -9,6 +9,7 @@ import {
   Pencil,
   Pin,
   PinOff,
+  Plus,
   Share2,
   Trash2,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import type { ComponentType, KeyboardEvent } from "react";
 import { useId, useRef, useState } from "react";
 
 import type { SyncMarker } from "@/features/persistence";
+import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +26,13 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/shared/ui/empty";
 import { Input } from "@/shared/ui/input";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 import {
@@ -58,6 +67,11 @@ export interface BaseProjectListProps {
   onRenameChange: (value: string) => void;
   onRenameCommit: (entry: ProjectEntry, value: string) => void;
   onRenameCancel: () => void;
+  /**
+   * The ways in once every project is gone (Spec 08's EMPTY-01); without
+   * it an empty list draws nothing, as a preview's does
+   */
+  empty?: { onStartProject: () => void; onOpenTutorials: () => void };
 }
 
 /** The prototype's key for each item; `pin` stands for Pin or Unpin */
@@ -152,9 +166,68 @@ const Group = ({
             </SidebarMenuItem>
           ))}
       </SidebarMenu>
+      {!list.loading && entries.length === 0 && list.empty && (
+        <NoProjects {...list.empty} />
+      )}
     </SidebarGroup>
   );
 };
+
+/**
+ * Spec 08's EMPTY-01 in the column: a quiet note the width of the rows, as
+ * sidebars set an empty section (v0's Recent Chats, AirOps' Recents), not a
+ * StageEmpty, whose display title and pill are for a stage. Its two ways in
+ * are compact rows under the line, the text in line with it, the first in
+ * the text's colour and the second quieter.
+ */
+const NoProjects = ({
+  onStartProject,
+  onOpenTutorials,
+}: {
+  onStartProject: () => void;
+  onOpenTutorials: () => void;
+}) => (
+  // Three steps of type: the title the strongest (14 px, the text's colour),
+  // the line a step below it, the actions the quietest (12 px) and set off
+  // by a wider gap. The ghost rows carry their own padding, so the frame's
+  // foot is shorter and the note reads evenly inset.
+  <Empty className="items-stretch gap-2.5 rounded-lg border border-sidebar-border bg-sidebar-accent/40 px-3 pt-3 pb-1.5 text-left">
+    <EmptyHeader className="max-w-none items-start gap-1">
+      <EmptyTitle
+        role="heading"
+        aria-level={3}
+        className="text-sm text-sidebar-foreground"
+      >
+        No projects
+      </EmptyTitle>
+      <EmptyDescription className="text-xs/normal font-read">
+        Start from a template, or follow a tutorial.
+      </EmptyDescription>
+    </EmptyHeader>
+    {/* One row on a phone's menu page, which has the width for both; a
+        column in the desk's narrower sidebar, where they do not fit */}
+    <EmptyContent className="max-w-none items-start gap-0 max-md:flex-row max-md:gap-4">
+      <Button
+        size="sm"
+        variant="ghost"
+        className="-ml-2 text-xs pointer-coarse:h-11"
+        onClick={onStartProject}
+      >
+        <Plus data-icon="inline-start" />
+        Start a project
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="-ml-2 text-xs text-muted-foreground pointer-coarse:h-11"
+        onClick={onOpenTutorials}
+      >
+        <GraduationCap data-icon="inline-start" />
+        Open tutorials
+      </Button>
+    </EmptyContent>
+  </Empty>
+);
 
 const Row = ({
   entry,

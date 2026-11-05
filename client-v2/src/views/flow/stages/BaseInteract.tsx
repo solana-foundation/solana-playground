@@ -7,11 +7,14 @@ import {
   StageEmpty,
   StageEmptyActions,
   StageEmptyDescription,
+  StageEmptyEyebrow,
   StageEmptyNotice,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
+import { StatusDot } from "@/shared/ui/status-dot";
 
 import type { Stage } from "../state/stage";
+import { clusterTitle } from "./cluster-title";
 import type { InteractSurface } from "./interact-surface";
 import { STAGE_BODY, STAGE_FOOT, STAGE_FRAME } from "./stage-layout";
 
@@ -92,6 +95,14 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
   "not-deployed": NOTHING_TO_CALL,
 };
 
+/**
+ * Before a deploy, Upload IDL sits in the stage's foot beside Go to Deploy,
+ * as it sits beside Deploy's pill, rather than in the toolbar: it is the
+ * other way to something to call, a program deployed elsewhere
+ */
+const isNothingToCall = (surface: InteractSurface) =>
+  surface === "not-built" || surface === "not-deployed";
+
 /** The step that supplies what an empty surface lacks, if there is one */
 const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
   if (surface === "no-program-id") {
@@ -102,12 +113,19 @@ const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
       </BrandButton>
     );
   }
-  if (surface === "not-built" || surface === "not-deployed") {
+  if (isNothingToCall(surface)) {
     return (
-      <BrandButton onClick={() => p.onGoTo("deploy")}>
-        Go to Deploy
-        <BrandButtonIcon />
-      </BrandButton>
+      <>
+        <BrandButton onClick={() => p.onGoTo("deploy")}>
+          Go to Deploy
+          <BrandButtonIcon />
+        </BrandButton>
+        {/* An outline in the pill's height and shape, so the pill keeps the
+            focus, as Deploy's Upload IDL */}
+        <div className="flex justify-center [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:rounded-full [&_[data-slot=button]]:px-5 max-md:[&_[data-slot=button]]:w-full max-md:[&>div]:w-full">
+          {p.idlLoad}
+        </div>
+      </>
     );
   }
   if (surface === "no-idl") return p.idlLoad;
@@ -125,6 +143,13 @@ const Empty = ({
   const act = action(p, surface);
   return (
     <StageEmpty className={STAGE_BODY}>
+      {isNothingToCall(surface) && p.cluster && (
+        // The network nothing is deployed on, as Deploy's stage names it
+        <StageEmptyEyebrow>
+          <StatusDot />
+          {clusterTitle(p.cluster)}
+        </StageEmptyEyebrow>
+      )}
       <StageEmptyTitle>{copy.title}</StageEmptyTitle>
       {copy.description && (
         <StageEmptyDescription>
@@ -174,7 +199,7 @@ const BaseInteract = (p: BaseInteractProps) => (
             disabled={p.deployments.length === 0}
           >
             {p.deployments.length === 0 && (
-              <NativeSelectOption value="">none yet</NativeSelectOption>
+              <NativeSelectOption value="">None yet</NativeSelectOption>
             )}
             {p.deployments.map((d) => (
               <NativeSelectOption key={d.id} value={d.id}>
@@ -183,8 +208,8 @@ const BaseInteract = (p: BaseInteractProps) => (
             ))}
           </NativeSelect>
         </label>
-        {/* In `no-idl` the stage's own foot offers it */}
-        {p.surface !== "no-idl" && p.idlLoad}
+        {/* In `no-idl` and before a deploy the stage's own foot offers it */}
+        {p.surface !== "no-idl" && !isNothingToCall(p.surface) && p.idlLoad}
       </div>
     </div>
     <div className={STAGE_FRAME}>

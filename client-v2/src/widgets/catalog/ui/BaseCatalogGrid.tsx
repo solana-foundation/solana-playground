@@ -14,7 +14,8 @@ import {
 } from "@/shared/ui/action-card";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
-import { Empty, EmptyDescription } from "@/shared/ui/empty";
+
+import BaseNoMatch from "./BaseNoMatch";
 
 /** One fact on a card's eyebrow: a level, a framework, a category */
 export interface CatalogTag {
@@ -49,6 +50,8 @@ export interface BaseCatalogGridProps {
   /** The list's things, plural and lowercase: "tutorials", "programs" */
   label: string;
   query: string;
+  /** Empties the search, from the no-match state's "Clear search" */
+  onClear: () => void;
   /** The cards matching `query`, once the list is read */
   list: CatalogList;
   /** An Open runs: every card's Open and title wait for it */
@@ -70,6 +73,7 @@ export interface BaseCatalogGridProps {
 const BaseCatalogGrid = ({
   label,
   query,
+  onClear,
   list,
   busy,
   onOpen,
@@ -90,11 +94,7 @@ const BaseCatalogGrid = ({
     );
   }
   if (list.cards.length === 0) {
-    return (
-      <Empty className="p-0">
-        <EmptyDescription>{`No ${label} match “${query}”.`}</EmptyDescription>
-      </Empty>
-    );
+    return <BaseNoMatch label={label} query={query} onClear={onClear} />;
   }
 
   return (

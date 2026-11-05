@@ -20,6 +20,7 @@ import {
 import { StatusDot } from "@/shared/ui/status-dot";
 
 import type { DeployRecord } from "../state/deploy-history";
+import { clusterTitle } from "./cluster-title";
 import {
   STAGE_BODY,
   STAGE_FOOT,
@@ -63,7 +64,7 @@ export interface BaseDeployProps {
   onGoToBuild: () => void;
   /** Opens the console, where the terminal has a failed deploy's whole log */
   onShowLog: () => void;
-  /** The rare "Upload IDL" action, a link under the pill (`IdlActions mode="upload"`) */
+  /** The "Upload IDL" action, an outline beside the pill (`IdlActions mode="upload"`) */
   idlUpload: ReactNode;
 }
 
@@ -77,8 +78,7 @@ const deployBlockedReason = (p: BaseDeployProps) => {
 /**
  * A failed deploy of a built program: the stage maps no failure to a named
  * state (Spec 08 ANY-00), so the pill runs the deploy again and says so. With
- * no build the pill is faded, keeps naming where the deploy would go, and Go
- * to Build is the way on instead.
+ * no build the pill is Go to Build instead (Spec 03 DEP-07).
  */
 const offersRetry = (p: BaseDeployProps) => p.built && p.deploy === "failed";
 
@@ -91,10 +91,6 @@ const deployLabel = (p: BaseDeployProps, redeploy: boolean) => {
 
 /** The cluster for prose; "the network" until the endpoint has been read */
 const clusterName = (p: BaseDeployProps) => p.cluster ?? "the network";
-
-/** The cluster as the status row names it: "devnet" reads "Devnet" */
-const clusterTitle = (cluster: string) =>
-  cluster.charAt(0).toUpperCase() + cluster.slice(1);
 
 const description = (p: BaseDeployProps, latest: DeployRecord | null) => {
   if (!p.built) {
@@ -280,30 +276,33 @@ const BaseDeploy = (p: BaseDeployProps) => {
         )}
         {latest && <DeployResult latest={latest} p={p} />}
         {latest && <History p={p} />}
-        <StageEmptyActions className={cn(STAGE_FOOT, !latest && "flex-col")}>
-          <BrandButton
-            disabled={!p.built || running}
-            aria-busy={running || undefined}
-            title={deployBlockedReason(p)}
-            onClick={p.onDeploy}
-          >
-            {deployLabel(p, latest !== null)}
-            {!running && <BrandButtonIcon />}
-          </BrandButton>
-          {/* Links, not second pills: the stage has one way on. Go to Build
-              (Spec 03 DEP-07) while the pill is faded, Show full log (Spec 08
-              ANY-00) after a failure, then Upload IDL, loaded by hand
-              rarely. Before the first deploy, centred under the pill on a
-              desk and above it on a phone, where the pill keeps the foot;
-              after one, beside the pill */}
-          <div className="flex flex-wrap justify-center">
-            {!p.built && (
-              <Button variant="link" onClick={p.onGoToBuild}>
-                Go to Build
-              </Button>
-            )}
+        <StageEmptyActions className={STAGE_FOOT}>
+          {/* One pill, the way on: Go to Build until there is a build, then
+              the deploy. A faded Deploy beside a link read as three kinds of
+              button for two steps */}
+          {p.built ? (
+            <BrandButton
+              disabled={running}
+              aria-busy={running || undefined}
+              title={deployBlockedReason(p)}
+              onClick={p.onDeploy}
+            >
+              {deployLabel(p, latest !== null)}
+              {!running && <BrandButtonIcon />}
+            </BrandButton>
+          ) : (
+            <BrandButton onClick={p.onGoToBuild}>
+              Go to Build
+              <BrandButtonIcon />
+            </BrandButton>
+          )}
+          {/* Every other way on is an outline in the pill's height and shape,
+              so the pill keeps the focus: Show full log after a failure
+              (Spec 08 ANY-00), then Upload IDL. Above the pill on a phone,
+              where the pill keeps the foot */}
+          <div className="flex flex-wrap items-center justify-center gap-2 [&_[data-variant=outline]]:h-10 [&_[data-variant=outline]]:rounded-full [&_[data-variant=outline]]:px-5 max-md:[&_[data-variant=outline]]:w-full max-md:[&>div]:w-full">
             {offersRetry(p) && (
-              <Button variant="link" onClick={p.onShowLog}>
+              <Button variant="outline" onClick={p.onShowLog}>
                 Show full log
               </Button>
             )}

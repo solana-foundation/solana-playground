@@ -230,6 +230,35 @@ describe("ProjectList", () => {
     ).toHaveLength(0);
   });
 
+  it("offers the ways in once the explorer holds no project", () => {
+    app.state.names = [];
+    render(
+      <TooltipProvider>
+        <SidebarProvider>
+          <ProjectList
+            empty={{ onStartProject: vi.fn(), onOpenTutorials: vi.fn() }}
+          />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+    expect(screen.getByText("No projects")).toBeTruthy();
+  });
+
+  it("says nothing of projects in a preview, which has none of its own", () => {
+    app.state.names = [];
+    app.state.temporary = true;
+    render(
+      <TooltipProvider>
+        <SidebarProvider>
+          <ProjectList
+            empty={{ onStartProject: vi.fn(), onOpenTutorials: vi.fn() }}
+          />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+    expect(screen.queryByText("No projects")).toBeNull();
+  });
+
   it("shows skeleton rows until the explorer has read the names", () => {
     app.state.names = undefined;
     draw();

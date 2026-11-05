@@ -67,6 +67,7 @@ const draw = (
     projects?: ProjectEntry[];
     loading?: boolean;
     current?: string;
+    empty?: BaseProjectListProps["empty"];
   } = {}
 ): Handlers => {
   const handlers: Handlers = {
@@ -88,6 +89,7 @@ const draw = (
           onRenameChange={handlers.onRenameChange}
           onRenameCommit={handlers.onRenameCommit}
           onRenameCancel={handlers.onRenameCancel}
+          empty={overrides.empty}
         />
       </SidebarProvider>
     </TooltipProvider>
@@ -394,5 +396,31 @@ describe("BaseProjectList", () => {
     expect(screen.getByRole("alert").textContent).toBe(
       "A project already has that name."
     );
+  });
+
+  it("offers a project and the tutorials once every project is gone", () => {
+    const empty = { onStartProject: vi.fn(), onOpenTutorials: vi.fn() };
+    draw({ projects: [], empty });
+    const group = screen.getByRole("group", { name: "Projects" });
+    expect(
+      within(group).getByRole("heading", { name: "No projects" })
+    ).toBeTruthy();
+    expect(
+      within(group).getByText("Start from a template, or follow a tutorial.")
+    ).toBeTruthy();
+    fireEvent.click(
+      within(group).getByRole("button", { name: "Start a project" })
+    );
+    fireEvent.click(
+      within(group).getByRole("button", { name: "Open tutorials" })
+    );
+    expect(empty.onStartProject).toHaveBeenCalledTimes(1);
+    expect(empty.onOpenTutorials).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing of an empty list while it loads", () => {
+    const empty = { onStartProject: vi.fn(), onOpenTutorials: vi.fn() };
+    draw({ projects: [], loading: true, empty });
+    expect(screen.queryByText("No projects")).toBeNull();
   });
 });
