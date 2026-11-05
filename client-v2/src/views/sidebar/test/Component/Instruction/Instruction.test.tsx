@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 
+const network = vi.hoisted(() => ({ hold: undefined as string | undefined }));
+vi.mock("@/widgets/status", () => ({ useNetworkHold: () => network.hold }));
+
 // The utils barrel reads build-time globals jsdom lacks, and the inputs need
 // a connected program; the form under test needs none of it.
 vi.mock("../../../../../utils", () => ({
@@ -195,3 +198,17 @@ it("leaves the reason to the stage when the caller blocks Call", () => {
 
 const callButtonOf = (name: string) =>
   screen.getByRole("button", { name: `Call ${name}` }) as HTMLButtonElement;
+
+afterEach(() => {
+  network.hold = undefined;
+});
+
+it("holds Call while the network is down, and says why first", () => {
+  network.hold = "Devnet is not responding";
+  stored.amount = { value: "", error: false };
+  render(<Instruction idlInstruction={FORM_IX} onCall={vi.fn()} />);
+
+  expect(callButton().disabled).toBe(true);
+  expect(screen.getByText("Devnet is not responding")).toBeTruthy();
+  expect(screen.queryByText("Fill every field to call")).toBeNull();
+});

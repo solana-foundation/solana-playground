@@ -29,6 +29,7 @@ import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
 import { SetupList } from "@/widgets/setup-list";
 import {
   StageNotice,
+  StatusAnnouncer,
   StatusChip,
   StatusRail,
   StatusRow,
@@ -283,6 +284,10 @@ const FlowFrame = () => {
         lit={0.07}
         fade={1}
         className="-z-10 will-change-transform"
+      />
+      {/* Outside the part that goes inert, so it still speaks over the settings */}
+      <StatusAnnouncer
+        stage={page.view === "work" && !catalog ? state.stage : undefined}
       />
       {/* The app stays mounted under the settings page, invisible and inert
           (design.md, "Settings as a full page (5.20)"): `Write` must never

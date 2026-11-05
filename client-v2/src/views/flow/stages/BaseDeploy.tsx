@@ -110,6 +110,9 @@ export interface BaseDeployProps {
   onShowNetwork: (cluster: string) => void;
   /** The IDL in use, by its program's name; undefined while there is none */
   idlName: string | undefined;
+  /** Why the network holds a deploy, while it does; the notice over the stage
+   * says it too */
+  networkHold?: string;
   /** The secondary "Upload IDL" action (`IdlActions mode="upload-button"`) */
   idlUpload: ReactNode;
   /**
@@ -124,7 +127,7 @@ export interface BaseDeployProps {
 
 /** Why the Deploy button is off, for its tooltip; undefined when it is on */
 const deployBlockedReason = (p: BaseDeployProps) =>
-  p.view.kind === "running" ? "A deploy is already running" : undefined;
+  p.view.kind === "running" ? "A deploy is already running" : p.networkHold;
 
 /**
  * A failed deploy of a built program: the stage maps no failure to a named
@@ -641,7 +644,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
               button for two steps */}
           {p.built ? (
             <BrandButton
-              disabled={running}
+              disabled={deployBlockedReason(p) !== undefined}
               aria-busy={running || undefined}
               title={deployBlockedReason(p)}
               onClick={p.onDeploy}

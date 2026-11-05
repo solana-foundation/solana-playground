@@ -167,6 +167,18 @@ describe("PgFlow.reduce", () => {
     expect(s.stage).toBe("write");
   });
 
+  it("deploy-refused leaves a deployed program as it was, not failed", () => {
+    const deployed = PgFlow.reduce(
+      PgFlow.reduce(INITIAL_FLOW_STATE, { type: "deploy-start" }),
+      { type: "deploy-finish", ok: true }
+    );
+    const s = PgFlow.reduce(PgFlow.reduce(deployed, { type: "deploy-start" }), {
+      type: "deploy-refused",
+    });
+    expect(s.deploy).toBe("done");
+    expect(s.stopped).toBeNull();
+  });
+
   it("deploy-finish ok marks deploy done and interact active", () => {
     const built = PgFlow.reduce(INITIAL_FLOW_STATE, {
       type: "build-finish",

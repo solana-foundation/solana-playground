@@ -1,8 +1,9 @@
 // A file of its own: `src/commands/` is a runtime module the UI move rule
 // never touches, so its tests stay out of the modules (AGENTS.md)
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isStopped } from "../../utils/stopped";
+import { NetworkRefusedError } from "./network-refused";
 
 /** What each test sets: the run's stop, the wallet's balance, the terminal */
 const env = vi.hoisted(() => ({
@@ -14,6 +15,9 @@ const env = vi.hoisted(() => ({
   switchedNetwork: false,
   waitForInput: (async () => true) as (msg: string) => Promise<unknown>,
   executeFromStr: (async () => undefined) as (cmd: string) => Promise<unknown>,
+  isConnected: true as boolean | undefined,
+  isClusterDown: false as boolean | undefined,
+  deployState: "ready",
 }));
 const airdrop = vi.hoisted(() => vi.fn());
 const send = vi.hoisted(() => vi.fn(async () => "sig"));
@@ -28,7 +32,15 @@ vi.mock("../../utils", () => ({
     sleep: vi.fn(),
     timeout: <R>(promisable: Promise<R>) => promisable,
   },
+  TerminalLineError: class extends Error {},
   PgConnection: {
+    cluster: "devnet",
+    get isConnected() {
+      return env.isConnected;
+    },
+    get isClusterDown() {
+      return env.isClusterDown;
+    },
     get current() {
       // A connection stays on the network it was taken for: on another one
       // the buffer does not exist, and its balance reads 0
@@ -46,7 +58,9 @@ vi.mock("../../utils", () => ({
     getAirdropAmount: () => 5,
   },
   PgGlobal: {
-    deployState: "ready",
+    get deployState() {
+      return env.deployState;
+    },
     update: vi.fn(),
     onDidChangeDeployState: () => ({ dispose: vi.fn() }),
   },
@@ -109,6 +123,54 @@ const runDeploy = async () => {
     .handle({ signal: env.controller.signal, lockStop: vi.fn() })
     .catch((e: unknown) => e);
 };
+
+describe("commands/deploy, while the network is down", () => {
+  let checkNetwork: () => void;
+
+  beforeEach(async () => {
+    const { deploy } = await import("./deploy");
+    [checkNetwork] = deploy.preChecks as [() => void];
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    env.isConnected = true;
+    env.isClusterDown = false;
+    env.deployState = "ready";
+    vi.restoreAllMocks();
+  });
+
+  it("starts with a cluster that answers, or still connects", () => {
+    expect(checkNetwork).not.toThrow();
+    env.isConnected = undefined;
+    expect(checkNetwork).not.toThrow();
+  });
+
+  it("refuses with a cluster that does not answer", () => {
+    env.isConnected = false;
+    expect(checkNetwork).toThrow(
+      "Devnet is not responding. Deploy waits for the network."
+    );
+  });
+
+  it("refuses a cluster whose slot stalled, as a refusal the stage can tell", () => {
+    env.isClusterDown = true;
+    expect(checkNetwork).toThrow(NetworkRefusedError);
+  });
+
+  it("refuses offline", () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    expect(checkNetwork).toThrow(
+      "You're offline. Deploy waits for the network."
+    );
+  });
+
+  it("still pauses a deploy under way", () => {
+    env.isConnected = false;
+    env.deployState = "loading";
+    expect(checkNetwork).not.toThrow();
+  });
+});
 
 describe("commands/deploy", () => {
   beforeEach(() => {
