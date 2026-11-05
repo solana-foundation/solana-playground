@@ -16,7 +16,6 @@ import type { ComponentType, KeyboardEvent } from "react";
 import { useId, useRef, useState } from "react";
 
 import type { SyncMarker } from "@/features/persistence";
-import { cn } from "@/shared/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -204,9 +203,6 @@ const Row = ({
         isActive={isCurrent}
         aria-current={isCurrent ? "page" : undefined}
         aria-describedby={describedBy}
-        // Room for the marker and the progress, so a long name truncates
-        // before them
-        className={roomFor(entry)}
         onClick={() => list.onAction(entry, "open", "click")}
       >
         <Glyph
@@ -214,29 +210,31 @@ const Row = ({
           data-glyph={entry.isLesson ? "lesson" : "project"}
           className={isCurrent ? "text-primary" : undefined}
         />
-        <span>{entry.name}</span>
-      </SidebarMenuButton>
-      {(entry.pinned || entry.marker || entry.progress) && (
-        <span
-          className={cn(
-            "pointer-events-none absolute top-1.5 right-7 flex items-center gap-1.5 text-xs text-muted-foreground group-focus-within/menu-item:hidden group-hover/menu-item:hidden",
-            // On a phone's taller rows what sits at the row's end keeps to
-            // the name's line
-            (entry.marker || entry.progress) &&
-              "max-md:top-1/2 max-md:-translate-y-1/2"
-          )}
-        >
-          {entry.marker && <Marker id={markerId} marker={entry.marker} />}
-          {entry.progress && (
-            <Progress id={progressId} progress={entry.progress} />
-          )}
-          {entry.pinned && (
-            <span title="Pinned">
-              <Pin aria-hidden className="size-3" />
+        {/* The name and what follows it share one line and one baseline. The
+            name truncates only against what is shown: under the pointer the
+            marker steps aside (design sync 4.21) and the name takes its room */}
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="min-w-0 truncate">{entry.name}</span>
+          {(entry.pinned || entry.marker || entry.progress) && (
+            // Hidden from the row's name, which is the project's name alone;
+            // `aria-describedby` reads the marker and the progress by id
+            <span
+              aria-hidden
+              className="ml-auto flex shrink-0 items-baseline gap-2 text-xs font-normal text-muted-foreground group-hover/menu-item:hidden"
+            >
+              {entry.marker && <Marker id={markerId} marker={entry.marker} />}
+              {entry.progress && (
+                <Progress id={progressId} progress={entry.progress} />
+              )}
+              {entry.pinned && (
+                <span title="Pinned" className="self-center">
+                  <Pin aria-hidden className="size-3" />
+                </span>
+              )}
             </span>
           )}
         </span>
-      )}
+      </SidebarMenuButton>
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
           {/* The open project's stays in view, as the prototype draws it;
@@ -340,9 +338,11 @@ const Marker = ({ id, marker }: { id: string; marker: SyncMarker }) => (
   <span
     id={id}
     data-sync-marker={marker}
-    className="flex items-center gap-1 whitespace-nowrap text-subtle"
+    className="flex items-baseline gap-1.5 whitespace-nowrap text-subtle"
   >
-    {marker === "not-synced" && <StatusDot variant="warning" />}
+    {marker === "not-synced" && (
+      <StatusDot variant="warning" className="self-center" />
+    )}
     {MARKER_TEXT[marker]}
   </span>
 );
@@ -362,7 +362,11 @@ const Progress = ({
 }) => {
   if (progress.state === "completed") {
     return (
-      <span data-lesson-progress="completed" title="Completed">
+      <span
+        data-lesson-progress="completed"
+        title="Completed"
+        className="self-center"
+      >
         <Check aria-hidden className="size-3" />
         <span id={id} className="sr-only">
           Completed
@@ -378,15 +382,6 @@ const Progress = ({
       </span>
     </span>
   );
-};
-
-/** Right padding for what sits at the row's end, so the name stops short */
-const roomFor = (entry: ProjectEntry) => {
-  // The marker, "12 of 12" and a pin side by side
-  if (entry.marker && entry.progress) return entry.pinned ? "pr-46" : "pr-42";
-  if (entry.marker) return "pr-24";
-  if (entry.progress) return entry.pinned ? "pr-26" : "pr-22";
-  return undefined;
 };
 
 const Item = ({

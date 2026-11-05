@@ -235,10 +235,17 @@ describe("BaseProjectList", () => {
       progress: { state: "started", page: 12, pages: 12 },
     };
     draw({ projects: [crowded] });
-    expect(
-      screen.getByRole("button", { name: "A lesson with a long name" })
-        .className
-    ).toContain("pr-46");
+    const row = screen.getByRole("button", {
+      name: "A lesson with a long name",
+    });
+    // In the row's line after the name, so the name truncates against them
+    // and takes their room when they step aside
+    expect(row.querySelector("[data-sync-marker]")).not.toBeNull();
+    expect(row.querySelector("[data-lesson-progress]")).not.toBeNull();
+    expect(row.querySelector('[title="Pinned"]')).not.toBeNull();
+    expect(screen.getByText("A lesson with a long name").classList).toContain(
+      "truncate"
+    );
   });
 
   it("draws Not synced with a warning dot, beside the pin", () => {
