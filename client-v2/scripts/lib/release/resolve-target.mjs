@@ -35,11 +35,11 @@ function readList(versions) {
 
 /**
  * Picks the version to send all traffic to: the requested one, or with none requested, the newest serving version created before
- * the live one. `current` is null when no single version holds all traffic. The list does not say which versions were ever live, so a
+ * the live one. `current` is undefined when no single version holds all traffic. The list does not say which versions were ever live, so a
  * parked version that never was counts as the one before.
  * @param {unknown[]} versions `gcloud app versions list --format=json`
  * @param {string} requested a version label or git tag, or empty to roll back
- * @returns {{ current: string | null, target: string, changed: boolean }}
+ * @returns {{ current: string | undefined, target: string, isChanged: boolean }}
  * @throws {Error} on a malformed request, an unreadable list, or no usable target; the message says why
  */
 export function selectTarget(versions, requested) {
@@ -48,7 +48,7 @@ export function selectTarget(versions, requested) {
   }
   const list = readList(versions);
   const live = list.find(({ split }) => split >= ALL_TRAFFIC);
-  const current = live?.id ?? null;
+  const current = live?.id;
 
   if (requested) {
     // The label a tag deploys under: cicd.yml replaces its periods with dashes
@@ -61,7 +61,7 @@ export function selectTarget(versions, requested) {
     if (named.status !== "SERVING") {
       throw new Error(`Version "${label}" is ${named.status}, not SERVING`);
     }
-    return { current, target: label, changed: label !== current };
+    return { current, target: label, isChanged: label !== current };
   }
 
   if (!live) {
@@ -78,7 +78,7 @@ export function selectTarget(versions, requested) {
       `Nothing to roll back to: no serving version before "${live.id}"`
     );
   }
-  return { current, target: previous.id, changed: true };
+  return { current, target: previous.id, isChanged: true };
 }
 
 /**
@@ -105,12 +105,12 @@ function main(mode) {
     return;
   }
   if (mode !== "select") throw new Error(`Unknown mode ${mode}`);
-  const { current, target, changed } = selectTarget(
+  const { current, target, isChanged } = selectTarget(
     versions,
     process.env.REQUESTED_VERSION ?? ""
   );
   console.log(
-    `current=${current ?? "split"}\ntarget=${target}\nchanged=${changed}`
+    `current=${current ?? "split"}\ntarget=${target}\nchanged=${isChanged}`
   );
 }
 
