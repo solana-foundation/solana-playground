@@ -151,7 +151,7 @@ const IN_NO_PROGRAM_FOLDER_REGEX = new RegExp(
 );
 
 /**
- * A leading folder `toNoProgramLayout` drops, since it puts the file back
+ * A leading folder `toNoProgramLayoutWith` drops, since it puts the file back
  * under `client/` or `tests/` itself; `test/` is read as `tests/`
  */
 const LEADING_FOLDER_REGEX = new RegExp(
@@ -197,51 +197,53 @@ const freePath = (path: string, taken: Set<string>) => {
  * files want one path, the one `placementRank` puts first gets it and the
  * other keeps its whole path, so nothing is overwritten.
  *
- * @param files repository files
  * @param root the imported folder, dropped from the front of every path
+ * @param files repository files
  * @returns the files in the playground layout, in the given order
  */
-const toNoProgramLayout = (files: TupleFiles, root: string): TupleFiles => {
-  const prefix = root.replace(/^\/+|\/+$/g, "");
-  const wanted = files
-    .map(([fullPath, content]) => {
-      const relative = fullPath.replace(/^\.?\/+/, "");
-      const path =
-        prefix && relative.startsWith(prefix + "/")
-          ? relative.slice(prefix.length + 1)
-          : relative;
-      const folder = LEADING_FOLDER_REGEX.exec(path)?.[1];
-      const rest = folder ? path.slice(folder.length + 1) : path;
-      const isTest =
-        folder === NO_PROGRAM_FOLDER.TESTS ||
-        folder === "test" ||
-        TEST_FILE_REGEX.test(rest);
-      const target = isTest
-        ? NO_PROGRAM_FOLDER.TESTS
-        : NO_PROGRAM_FOLDER.CLIENT;
-      return { path, content, folder, rest, target };
-    })
-    .filter(({ path }) => isNoProgramFile(path));
+const toNoProgramLayoutWith =
+  (root: string) =>
+  (files: TupleFiles): TupleFiles => {
+    const prefix = root.replace(/^\/+|\/+$/g, "");
+    const wanted = files
+      .map(([fullPath, content]) => {
+        const relative = fullPath.replace(/^\.?\/+/, "");
+        const path =
+          prefix && relative.startsWith(prefix + "/")
+            ? relative.slice(prefix.length + 1)
+            : relative;
+        const folder = LEADING_FOLDER_REGEX.exec(path)?.[1];
+        const rest = folder ? path.slice(folder.length + 1) : path;
+        const isTest =
+          folder === NO_PROGRAM_FOLDER.TESTS ||
+          folder === "test" ||
+          TEST_FILE_REGEX.test(rest);
+        const target = isTest
+          ? NO_PROGRAM_FOLDER.TESTS
+          : NO_PROGRAM_FOLDER.CLIENT;
+        return { path, content, folder, rest, target };
+      })
+      .filter(({ path }) => isNoProgramFile(path));
 
-  const taken = new Set<string>();
-  const placed = new Map<typeof wanted[number], string>();
-  [...wanted]
-    .sort((a, b) => placementRank(a.folder) - placementRank(b.folder))
-    .forEach((file) => {
-      const own = `${file.target}/${file.rest}`;
-      const path = taken.has(own)
-        ? freePath(`${file.target}/${file.path}`, taken)
-        : own;
-      taken.add(path);
-      placed.set(file, path);
+    const taken = new Set<string>();
+    const placed = new Map<typeof wanted[number], string>();
+    [...wanted]
+      .sort((a, b) => placementRank(a.folder) - placementRank(b.folder))
+      .forEach((file) => {
+        const own = `${file.target}/${file.rest}`;
+        const path = taken.has(own)
+          ? freePath(`${file.target}/${file.path}`, taken)
+          : own;
+        taken.add(path);
+        placed.set(file, path);
+      });
+
+    return wanted.map((file) => {
+      const path = placed.get(file);
+      if (path === undefined) throw new Error(`"${file.path}" was not placed.`);
+      return [path, file.content];
     });
-
-  return wanted.map((file) => {
-    const path = placed.get(file);
-    if (path === undefined) throw new Error(`"${file.path}" was not placed.`);
-    return [path, file.content];
-  });
-};
+  };
 
 export class PgFramework {
   /**
@@ -311,7 +313,7 @@ export class PgFramework {
    * no framework recognises are laid out as a project with no program when
    * they hold TypeScript or JavaScript and no Rust or Python: a program in a
    * layout no framework knows is refused, never imported without its source.
-   * Such a project keeps its JSON data too (`toNoProgramLayout`), but JSON
+   * Such a project keeps its JSON data too (`toNoProgramLayoutWith`), but JSON
    * alone is nothing to open.
    *
    * @param files framework files
@@ -351,7 +353,7 @@ export class PgFramework {
         if (files.some(([path]) => PROGRAM_SOURCE_REGEX.test(path))) {
           throw new Error(NOT_A_PROGRAM);
         }
-        const noProgramFiles = toNoProgramLayout(files, root);
+        const noProgramFiles = toNoProgramLayoutWith(root)(files);
         if (!noProgramFiles.some(([path]) => SCRIPT_FILE_REGEX.test(path))) {
           throw new Error(noProgramCode(source));
         }

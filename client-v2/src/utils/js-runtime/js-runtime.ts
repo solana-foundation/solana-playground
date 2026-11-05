@@ -16,7 +16,7 @@ import {
   reasonMessage,
   showBigInts,
   TRANSPILE_OPTIONS,
-  wrapScript,
+  wrapScriptWith,
 } from "./kit";
 import { JsRuntimePackageName, PgJsRuntimePackage } from "./package";
 
@@ -118,7 +118,7 @@ export class PgJsRuntime {
           }
         }
 
-        code = wrapScript(code, endCode);
+        code = wrapScriptWith(endCode)(code);
 
         // Transpile the code
         code = transpile(code, TRANSPILE_OPTIONS);

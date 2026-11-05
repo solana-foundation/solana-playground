@@ -25,14 +25,12 @@ const HIDDEN_GLOBALS = ["eval", "Function"];
  * since assigning to `eval` in a class body, which is strict code, is a
  * syntax error. Being in a class body also makes the script strict code.
  *
- * @param code the script, imports already taken out
  * @param endCode what signals the end of the run
+ * @param code the script, imports already taken out
  * @returns the code to transpile
  */
-export const wrapScript = (
-  code: string,
-  endCode: string
-) => `(async function (${HIDDEN_GLOBALS.join(", ")}) {
+export const wrapScriptWith = (endCode: string) => (code: string) =>
+  `(async function (${HIDDEN_GLOBALS.join(", ")}) {
   class __Pg { async __run() {\n${code}\n} }
   const __pg = new __Pg();
   try { await __pg.__run(); }

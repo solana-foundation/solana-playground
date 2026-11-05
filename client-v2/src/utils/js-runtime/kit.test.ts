@@ -12,7 +12,7 @@ import {
   showBigInts,
   SIGNER_NEEDS_PG_WALLET,
   TRANSPILE_OPTIONS,
-  wrapScript,
+  wrapScriptWith,
 } from "./kit";
 import { missingPackageMessage, missingPackageOf } from "./missing-package";
 
@@ -82,12 +82,15 @@ describe("showBigInts", () => {
   });
 });
 
-describe("wrapScript", () => {
+describe("wrapScriptWith", () => {
   /** Run a wrapped script; resolves with what it logged once it ends */
   const run = (script: string) =>
     new Promise<unknown[]>((resolve) => {
       const logged: unknown[] = [];
-      const code = transpile(wrapScript(script, "__end()"), TRANSPILE_OPTIONS);
+      const code = transpile(
+        wrapScriptWith("__end()")(script),
+        TRANSPILE_OPTIONS
+      );
       // eslint-disable-next-line no-new-func
       new Function("console", "__fail", "__end", code)(
         { log: (...args: unknown[]) => logged.push(args.join(" ")) },

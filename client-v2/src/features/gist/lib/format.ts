@@ -167,16 +167,15 @@ const parseManifest = (content: string): Manifest => {
 };
 
 /** Where a file of a hand-made gist goes, or `undefined` to leave it out */
-const looseTarget = (
-  isSupported: (path: string) => boolean,
-  name: string
-): string | undefined => {
-  if (!isSupported(name) || !isExportablePath(name)) return undefined;
-  if (/\.(test|spec)\.[jt]s$/.test(name)) return `tests/${name}`;
-  if (/\.(rs|py)$/.test(name)) return `src/${name}`;
-  if (/\.[jt]s$/.test(name)) return `client/${name}`;
-  return name;
-};
+const looseTargetWith =
+  (isSupported: (path: string) => boolean) =>
+  (name: string): string | undefined => {
+    if (!isSupported(name) || !isExportablePath(name)) return undefined;
+    if (/\.(test|spec)\.[jt]s$/.test(name)) return `tests/${name}`;
+    if (/\.(rs|py)$/.test(name)) return `src/${name}`;
+    if (/\.[jt]s$/.test(name)) return `client/${name}`;
+    return name;
+  };
 
 /**
  * Read a gist back into a project.
@@ -203,7 +202,7 @@ export const fromGistFilesWith =
     if (!manifestFile) {
       const placed = new Map<string, string>();
       for (const [name, { content }] of Object.entries(files)) {
-        const target = looseTarget(isSupported, name);
+        const target = looseTargetWith(isSupported)(name);
         if (target) placed.set(target, content);
       }
       if (!placed.size) {
