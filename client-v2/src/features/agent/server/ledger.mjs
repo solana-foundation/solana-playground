@@ -1,6 +1,7 @@
 /**
  * What a signed-in user may spend on `/api/agent` per UTC day, kept in
- * `agent_spend` (see its migration).
+ * `agent_spend` (see its migration), and each admitted turn, kept in
+ * `agent_turn`.
  *
  * A turn reserves its worst-case cost before the upstream is called and
  * settles to what it cost once the response has ended. Exact accounting is not
@@ -196,8 +197,9 @@ export const reserve = async (query, turn) => {
        returning 1
      ),
      started as (
-       insert into agent_turn (user_id, day, tier, model, outcome, charged)
-       select $1, $2::date, tier, $7, 'started', $4::bigint
+       insert into agent_turn
+         (user_id, day, tier, model, outcome, charged, settled_at)
+       select $1, $2::date, tier, $7, 'started', $4::bigint, null
          from limits
         where exists (select 1 from admitted)
        returning id
@@ -216,10 +218,13 @@ export const reserve = async (query, turn) => {
   );
   if (!rows.length) throw new Error(`agent: no user row for ${turn.userId}`);
   const [{ tier, dated, turn_id: turnId }] = rows;
-  // A turn row is written exactly when the reserve is admitted
-  return turnId === null
-    ? { tier, dated, admitted: false }
-    : { tier, dated, admitted: true, turnId };
+  // A turn row is written exactly when the reserve is admitted. Anything but
+  // an id or SQL `NULL` is a statement that changed shape: fail closed.
+  if (turnId === null) return { tier, dated, admitted: false };
+  if (typeof turnId !== "string" || !turnId) {
+    throw new Error(`agent: reserve returned no turn id (${typeof turnId})`);
+  }
+  return { tier, dated, admitted: true, turnId };
 };
 
 /**
@@ -229,46 +234,45 @@ export const reserve = async (query, turn) => {
  * Tokens the upstream reported that `agent_turn` cannot hold are recorded as
  * null rather than failing the settle.
  *
- * Only a row still `started` is settled, and `agent_spend` moves only with it:
- * settling a turn twice charges it once, and a turn whose row is gone changes
- * nothing. Its reservation then stays spent for the day, an overcharge, never
- * an undercharge.
+ * The reservation released is the one the row holds, so `agent_spend` gives
+ * back exactly what {@link reserve} took. Only a row still `started` is
+ * settled, and `agent_spend` moves only with it: settling a turn twice
+ * charges it once, and a turn with no `started` row changes nothing. A row
+ * removed on its own (not with its user, which removes the day too) leaves
+ * its reservation spent for the day, an overcharge, never an undercharge.
  *
  * @param {Query} query
- * @param {{
- *   turnId: string;
- *   reserved: number;
- *   charge: number;
- *   end: TurnEnd;
- * }} turn amounts in micro-USD; `turnId` the one {@link reserve} returned;
- *   `end` how the turn ended, whose usage is recorded for a `completed` turn
- *   only
+ * @param {{ turnId: string; charge: number; end: TurnEnd }} turn `turnId`
+ *   the one {@link reserve} returned; `charge` in micro-USD; `end` how the
+ *   turn ended, whose usage is recorded for a `completed` turn only
  * @returns {Promise<boolean>} whether a `started` turn was found and settled
  */
 export const settle = async (query, turn) => {
   const usage = turn.end.kind === "completed" ? turn.end.usage : {};
+  // `held` is the row as the statement found it: its `charged` is still the
+  // reservation, which RETURNING on `t` alone would give as the new charge
   const { rows } = await query(
     `with ended as (
-       update agent_turn
-          set outcome = $4,
-              prompt_tokens = $5::integer,
-              completion_tokens = $6::integer,
-              charged = $3::bigint,
+       update agent_turn t
+          set outcome = $3,
+              prompt_tokens = $4::integer,
+              completion_tokens = $5::integer,
+              charged = $2::bigint,
               settled_at = now()
-        where id = $1::bigint and outcome = 'started'
-       returning user_id, day
+         from agent_turn held
+        where t.id = $1::bigint and held.id = t.id and t.outcome = 'started'
+       returning t.user_id, t.day, held.charged as reserved
      ),
      settled as (
        update agent_spend s
-          set reserved = s.reserved - $2::bigint,
-              spent = s.spent + $3::bigint
+          set reserved = s.reserved - ended.reserved,
+              spent = s.spent + $2::bigint
          from ended
         where s.user_id = ended.user_id and s.day = ended.day
      )
      select count(*)::int as ended from ended`,
     [
       turn.turnId,
-      turn.reserved,
       turn.charge,
       turn.end.kind,
       tokenCount(usage.prompt_tokens),

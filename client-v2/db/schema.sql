@@ -74,10 +74,10 @@ CREATE TABLE public.agent_turn (
     completion_tokens integer,
     charged bigint DEFAULT 0 NOT NULL,
     model text,
-    settled_at timestamp with time zone,
+    settled_at timestamp with time zone DEFAULT now(),
     CONSTRAINT agent_turn_charged_check CHECK ((charged >= 0)),
     CONSTRAINT agent_turn_outcome_check CHECK ((outcome = ANY (ARRAY['started'::text, 'completed'::text, 'unfinished'::text, 'refused'::text, 'abandoned'::text]))),
-    CONSTRAINT agent_turn_settled_check CHECK (((outcome = 'started'::text) = (settled_at IS NULL))),
+    CONSTRAINT agent_turn_settled_check CHECK ((((outcome = 'started'::text) = (settled_at IS NULL)) AND (settled_at >= at))),
     CONSTRAINT agent_turn_tier_check CHECK ((tier = ANY (ARRAY['newcomer'::text, 'established'::text]))),
     CONSTRAINT agent_turn_tokens_check CHECK ((((prompt_tokens IS NULL) OR (prompt_tokens >= 0)) AND ((completion_tokens IS NULL) OR (completion_tokens >= 0)) AND ((outcome = 'completed'::text) OR ((prompt_tokens IS NULL) AND (completion_tokens IS NULL)))))
 );

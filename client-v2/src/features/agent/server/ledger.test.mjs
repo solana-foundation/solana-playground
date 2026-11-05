@@ -122,7 +122,6 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
   const closeOn = (run) => (turn) =>
     settle(run, {
       turnId: turn.turnId,
-      reserved: turn.reserved,
       charge: turn.charge,
       end: turn.end ?? { kind: "unfinished" },
     });
@@ -261,11 +260,51 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
     assert.deepEqual(both.map((gate) => gate.admitted).sort(), [false, true]);
     assert.equal((await row(NEW)).reserved, 60000);
+    assert.deepEqual(
+      (await turns(NEW)).map((turn) => turn.charged),
+      [60000]
+    );
+  });
+
+  it("settles a turn on the day it was reserved, not on another", async () => {
+    await take(NEW, 3000);
+    const { turnId } = await take(NEW, 5000, "2026-10-30");
+
+    await close({ turnId, charge: 1200 });
+
+    assert.deepEqual(await row(NEW, "2026-10-30"), {
+      reserved: 0,
+      spent: 1200,
+    });
+    assert.deepEqual(await row(NEW), { reserved: 3000, spent: 0 });
+  });
+
+  it("settles one of two parallel settles of a turn", async () => {
+    const { turnId } = await take(NEW, 5000);
+
+    const both = await Promise.all([
+      close({ turnId, charge: 1200 }),
+      close({ turnId, charge: 1200 }),
+    ]);
+
+    assert.deepEqual(both.sort(), [false, true]);
+    assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
+  });
+
+  // The code deployed while the migration is applied inserts settled rows
+  // with no `settled_at`; they must still pass `agent_turn_settled_check`
+  it("accepts a settled row written without a settled time", async () => {
+    await query(
+      `insert into agent_turn (user_id, day, tier, outcome, charged)
+       values ($1, $2, 'newcomer', 'completed', 5)`,
+      [NEW, DAY]
+    );
+    assert.equal((await turns(NEW))[0].settled, true);
   });
 
   it("settles a reservation to its charge", async () => {
     const { turnId } = await take(NEW, 5000);
-    assert.equal(await close({ turnId, reserved: 5000, charge: 1200 }), true);
+    assert.equal(await close({ turnId, charge: 1200 }), true);
     assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
   });
 
@@ -273,7 +312,6 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     const { turnId } = await take(OLD, 5000);
     await close({
       turnId,
-      reserved: 5000,
       charge: 1200,
       end: {
         kind: "completed",
@@ -297,7 +335,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("records an unfinished turn with no tokens, charged its reservation", async () => {
     const { turnId } = await take(NEW, 5000);
-    await close({ turnId, reserved: 5000, charge: 5000 });
+    await close({ turnId, charge: 5000 });
     assert.deepEqual(await turns(NEW), [
       {
         day: DAY,
@@ -316,9 +354,9 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("charges a turn once when it is settled twice", async () => {
     const { turnId } = await take(NEW, 5000);
-    await close({ turnId, reserved: 5000, charge: 1200 });
+    await close({ turnId, charge: 1200 });
 
-    assert.equal(await close({ turnId, reserved: 5000, charge: 1200 }), false);
+    assert.equal(await close({ turnId, charge: 1200 }), false);
     assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
     assert.equal((await turns(NEW))[0].charged, 1200);
   });
@@ -327,10 +365,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
   it("changes nothing for a turn with no started row", async () => {
     await take(NEW, 5000);
 
-    assert.equal(
-      await close({ turnId: "-1", reserved: 5000, charge: 0 }),
-      false
-    );
+    assert.equal(await close({ turnId: "-1", charge: 0 }), false);
     assert.deepEqual(await row(NEW), { reserved: 5000, spent: 0 });
     assert.equal((await turns(NEW))[0].outcome, "started");
   });
@@ -344,7 +379,6 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
       const { turnId } = await take(NEW, 5000);
       await close({
         turnId,
-        reserved: 5000,
         charge: 1200,
         end: {
           kind: "completed",
@@ -371,7 +405,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     );
   });
 
-  it("refuses a settled time on a started turn, and a settled turn without one", async () => {
+  it("refuses a settled time on a started turn, none on a settled one, or one before the reserve", async () => {
     await assert.rejects(
       query(
         `insert into agent_turn (user_id, day, tier, outcome, settled_at)
@@ -382,8 +416,16 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     );
     await assert.rejects(
       query(
-        `insert into agent_turn (user_id, day, tier, outcome)
-         values ($1, $2, 'newcomer', 'refused')`,
+        `insert into agent_turn (user_id, day, tier, outcome, settled_at)
+         values ($1, $2, 'newcomer', 'refused', null)`,
+        [NEW, DAY]
+      ),
+      /agent_turn_settled_check/
+    );
+    await assert.rejects(
+      query(
+        `insert into agent_turn (user_id, day, tier, outcome, settled_at)
+         values ($1, $2, 'newcomer', 'refused', now() - interval '1 second')`,
         [NEW, DAY]
       ),
       /agent_turn_settled_check/
@@ -408,7 +450,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("counts settled spend against the cap", async () => {
     const { turnId } = await take(NEW, 90000);
-    await close({ turnId, reserved: 90000, charge: 90000 });
+    await close({ turnId, charge: 90000 });
     assert.equal((await take(NEW, 20000)).admitted, false);
     assert.equal((await take(NEW, 10000)).admitted, true);
   });
@@ -433,7 +475,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
     const { turnId } = await take(NEW, 10, DAY, counted);
     assert.equal(count, 1);
-    await closeOn(counted)({ turnId, reserved: 10, charge: 5 });
+    await closeOn(counted)({ turnId, charge: 5 });
     assert.equal(count, 2);
   });
 

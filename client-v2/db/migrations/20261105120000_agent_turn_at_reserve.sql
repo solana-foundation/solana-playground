@@ -17,18 +17,25 @@
 -- - `outcome`: `started` from reserve until `settle` writes the ledger's
 --   `TurnEnd` kind. A row still `started` well after the function's
 --   `maxDuration` is a turn that never settled.
--- - `charged`: micro-USD. A `started` row holds the reservation, which is what
---   `agent_spend` keeps charged for a turn that never settles; `settle`
---   replaces it with the turn's charge.
+-- - `charged`: micro-USD. A `started` row holds the reservation, which
+--   `agent_spend` keeps in `reserved`, against the cap, for a turn that never
+--   settles; `settle` replaces it with the turn's charge.
 -- - `prompt_tokens`, `completion_tokens`: as before, null unless `completed`,
 --   so null on a `started` row too (`agent_turn_tokens_check`).
--- - `model`: the `PG_AI_MODEL` the route called, written at reserve. Null on
---   rows written before this migration.
+-- - `model`: the model the route asked the upstream for (`PG_AI_MODEL`, or
+--   its default), written at reserve. Null on rows written before this
+--   migration.
 alter table agent_turn
   add column model text,
   add column settled_at timestamptz;
 
 update agent_turn set settled_at = at;
+
+-- The default is for the code still deployed while this migration is
+-- applied ("migrate first, then merge"): its `settle` inserts a settled row
+-- without `settled_at`, which would otherwise fail `agent_turn_settled_check`
+-- and leave the turn's reservation spent. `reserve` writes null explicitly.
+alter table agent_turn alter column settled_at set default now();
 
 alter table agent_turn
   drop constraint agent_turn_outcome_check,
@@ -36,7 +43,7 @@ alter table agent_turn
     outcome in ('started', 'completed', 'unfinished', 'refused', 'abandoned')
   ),
   add constraint agent_turn_settled_check check (
-    (outcome = 'started') = (settled_at is null)
+    ((outcome = 'started') = (settled_at is null)) and settled_at >= at
   );
 
 -- migrate:down

@@ -17,9 +17,9 @@ non-negative integer that fits a Postgres `integer`. A `completed` turn whose
 usage holds such a count is charged its whole reservation, as one that
 reported no usage. A turn refused before the ledger (signed out,
 cross-origin, malformed, too large, ledger down) writes nothing. A settle that
-fails is logged as `agent: settling a turn failed` and leaves the row
+fails is reported as an error carrying the turn's id and leaves the row
 `started`. A settle that finds no `started` row changes nothing, charges
-nothing, and is logged as a warning.
+nothing, and is reported as the warning `settle found no started turn`.
 
 #### Scenario: A completed turn (manual)
 - **WHEN** a signed-in user's turn streams to its end and the upstream reports

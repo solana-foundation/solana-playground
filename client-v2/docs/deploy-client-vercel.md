@@ -419,9 +419,15 @@ What `POST /api/agent` answers past sign-in:
 A turn is charged its reported usage; a turn the caller abandoned, or one that
 ended without usage, its whole reservation; a turn the upstream refused,
 nothing. A function that dies between reserve and settle leaves the
-reservation spent for the day: the ledger may overcharge, never undercharge.
-Failures after the answer are logged as `agent: settling a turn failed`,
-`agent: counting a capped turn failed` and `agent: account age lookup failed`.
+reservation spent for the day and its `agent_turn` row `started`: the ledger
+may overcharge, never undercharge. Failures after the answer are logged as
+`agent: counting a capped turn failed` and `agent: account age lookup failed`;
+a settle that fails is reported as an `api:agent` error with the database's
+message, carrying the turn's `turnId`, `end`, `reserved` and `charge`. A
+settle that finds no
+`started` row for its turn is reported as the `api:agent` warning `settle
+found no started turn`, with the `userId`: harmless when that user was deleted
+mid-turn, a lost charge record otherwise.
 
 **After a week**, read:
 
@@ -438,19 +444,22 @@ Failures after the answer are logged as `agent: settling a turn failed`,
 
 - `agent_turn` for usage per account in any window (HOO-2396): one row per
   admitted turn, written when it is reserved, with its reserve `day`, its
-  reserve time `at`, its settle time `settled_at`, tier, the `model` it was
-  served by, outcome, reported tokens and charge, for example `select
+  reserve time `at`, its settle time `settled_at`, tier, the `model` the route
+  asked the upstream for (`PG_AI_MODEL` or its default), outcome, reported
+  tokens and charge, for example `select
   user_id, model, date_trunc('hour', at) as hour, count(*),
   sum(prompt_tokens), sum(completion_tokens), sum(charged) / 1e6 as usd from
   agent_turn group by 1, 2, 3 order by 3 desc`. A row still `started` long
   after the function's `maxDuration` is a turn that never settled, killed or
   with a failed settle; it is charged its reservation. `settled_at - at` is a
   turn's duration (rows from before the `model` column have `at` equal to
-  `settled_at`). Grouped by `day`, `charged` sums to `agent_spend.spent` plus
-  `agent_spend.reserved`. Turns the cap refused are counted in
-  `agent_spend.capped`, not logged. The migrations that add both run before
-  the code that writes them merges: until then every reserve fails and the
-  route answers 503.
+  `settled_at`). Grouped by `day`, on a day after the `model` migration has
+  deployed, `charged` sums to `agent_spend.spent` plus `agent_spend.reserved`.
+  Turns the cap refused are counted in `agent_spend.capped`, not logged. The
+  migrations that add both run before the code that writes them merges: until
+  then every reserve fails and the route answers 503. The code deployed
+  before the `model` migration keeps settling after it, as rows with no
+  `model`.
 
 Adjust the caps and budgets together: the sum of per-user caps a pool serves
 can exceed its budget, but the budget is what binds.

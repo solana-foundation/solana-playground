@@ -66,6 +66,8 @@ const db = vi.hoisted(() => {
     /** Every query and upstream call, in order */
     log: [] as string[],
     down: false,
+    /** The last `agent_turn.id` handed out: a serial, never reused */
+    lastTurnId: 0,
     /** Runs while a statement is in flight, before it answers */
     during: null as ((text: string) => void) | null,
   };
@@ -108,7 +110,8 @@ const db = vi.hoisted(() => {
         // eslint-disable-next-line unicorn/no-null -- a Postgres row: no turn is SQL `NULL`
         return { rows: [{ tier, dated, turn_id: null }] };
       }
-      const id = String(state.turns.length + 1);
+      state.lastTurnId += 1;
+      const id = String(state.lastTurnId);
       state.turns.push({
         id,
         userId,
@@ -125,19 +128,20 @@ const db = vi.hoisted(() => {
       return { rows: [{ tier, dated, turn_id: id }] };
     }
     if (text.includes("update agent_turn")) {
-      const [id, reserved, charge, outcome, promptTokens, completionTokens] =
-        params as [
-          string,
-          number,
-          number,
-          string,
-          number | null,
-          number | null
-        ];
+      // Checked before `update agent_spend`: this statement holds both
+      const [id, charge, outcome, promptTokens, completionTokens] = params as [
+        string,
+        number,
+        string,
+        number | null,
+        number | null
+      ];
       const turn = state.turns.find(
         (t) => t.id === id && t.outcome === "started"
       );
       if (!turn) return { rows: [{ ended: 0 }] };
+      // The reservation the row held, as the statement's `held` reads it
+      const reserved = turn.charged;
       turn.outcome = outcome;
       turn.promptTokens = promptTokens;
       turn.completionTokens = completionTokens;
@@ -206,6 +210,7 @@ beforeEach(() => {
   db.state.users.clear();
   db.state.spend.clear();
   db.state.turns.length = 0;
+  db.state.lastTurnId = 0;
   db.state.capped.clear();
   db.state.log.length = 0;
   db.state.down = false;
@@ -1670,7 +1675,13 @@ describe("POST /api/agent spend gate", () => {
         expect.objectContaining({
           level: "warn",
           message: "settle found no started turn",
-          context: { turnId: "1", end: "completed", day: today() },
+          report: true,
+          context: {
+            userId: "user-1",
+            turnId: "1",
+            end: "completed",
+            day: today(),
+          },
         })
       );
     });

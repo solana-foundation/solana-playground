@@ -32,7 +32,10 @@ See proposal.md for why the row moves.
   `user_id` and `day`). A second settle, or one whose row is gone, matches
   nothing and changes nothing. The reservation then stays held, which
   overcharges, as the ledger may. `settle` returns whether it ended a turn,
-  and the route logs a warning when it did not.
+  and the route reports a warning when it did not.
+- **`settle` releases the reservation the row holds**, read from the row as
+  the statement found it, not one the caller passes again. `agent_spend`
+  then gives back exactly what `reserve` took.
 - **`at` becomes the reserve time and `settled_at` is added**, rather than
   adding `started_at` and keeping `at` as the settle time. `at` stays
   `not null` and indexed with `user_id`, so a window query over `at` sees
@@ -43,7 +46,13 @@ See proposal.md for why the row moves.
   `agent_spend` holds for that turn until it settles, so summing `charged`
   over a day still matches `spent + reserved`.
 - **`agent_turn_settled_check`: `(outcome = 'started') = (settled_at is
-  null)`.** The token check already keeps tokens null on a `started` row.
+  null)`, and `settled_at >= at`.** The token check already keeps tokens null
+  on a `started` row.
+- **`settled_at` defaults to `now()`, and `reserve` writes null explicitly.**
+  Production migrates first, then merges, so the code deployed before this
+  change still settles against the new schema: its insert names no
+  `settled_at`, and without the default it would fail the check and leave
+  every turn in that window unsettled.
 - **The model is written at reserve**, from the configured `PG_AI_MODEL`,
   which the route knows before it calls the upstream.
 
@@ -52,6 +61,9 @@ See proposal.md for why the row moves.
 - [The code reaches production before the migration] → every reserve fails
   on the missing column and the route answers 503 rather than serving
   unrecorded turns. The runbook's "migrate first, then merge" covers it.
+- [The migration reaches production before the code, as the runbook
+  orders] → the old `settle` keeps working through the `settled_at`
+  default; its rows have no `model`, and their `at` is a settle time.
 - [Rolling the migration back] → `started` rows become `unfinished` at their
   reservation, which is what the old `settle` wrote for a turn with no usage;
   settled rows get their settle time back in `at`.
