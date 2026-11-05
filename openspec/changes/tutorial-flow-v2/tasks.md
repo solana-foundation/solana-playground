@@ -139,7 +139,7 @@ for; tasks with "after nothing" start at once.
       Hello Anchor's step 3 on devnet by hand (HOO-2357; fleet; M 1.5;
       after 3.1, 3.2; plan:
       [plans/4.3-client-run-and-call.md](plans/4.3-client-run-and-call.md))
-- [ ] 4.4 The Call panel from the deployed IDL: the Form | IDL switch, the
+- [x] 4.4 The Call panel from the deployed IDL: the Form | IDL switch, the
       program row with Explorer, one form with the instruction chips (the
       step's own picked, none for one instruction), "New" fields, one call
       button, the result naming its instruction, the latest result in the panel and the log in the terminal,
@@ -148,7 +148,7 @@ for; tasks with "after nothing" start at once.
       `TODO(tutorial-flow-v2 4.4)`).
       Verify: component tests for the upgrade adding
       `name`; a call passing step 3 (HOO-2358; fleet; M
-      1.5; after 2.2, 4.3)
+      1.5; after 2.2, 4.3; plan: [plans/4.4-call-panel.md](plans/4.4-call-panel.md))
 
 ## 5. Phone
 

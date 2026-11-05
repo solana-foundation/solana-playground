@@ -73,7 +73,10 @@ export interface RunPort {
    * The wire transaction's instructions to the program, decoded by its IDL;
    * `undecoded` when one of them could not be
    */
-  decode(encoded: string): { calls: DecodedCall[]; undecoded?: true };
+  decode(
+    encoded: string,
+    idl: RunInput["idl"]
+  ): { calls: DecodedCall[]; undecoded?: true };
   print(line: string): void;
   /** Logs a failure the team should hear of, with what was happening */
   report(error: unknown, stage: string): void;
@@ -194,7 +197,7 @@ const attempt = async (
   stage(RUN_STAGES.confirming);
   const sent: SentTx[] = [];
   for (const c of captured) {
-    const { calls, undecoded } = port.decode(c.encoded);
+    const { calls, undecoded } = port.decode(c.encoded, input.idl);
     if (c.kind === "refused") {
       sent.push({ kind: "refused", log: c.log, message: c.message, calls });
       continue;

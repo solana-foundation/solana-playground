@@ -10,7 +10,7 @@ import type { Disposable } from "../../../utils/types";
 import { PgView } from "../../../utils/view";
 import { judgeGoal } from "./goals";
 import { groundOf, insertBlock, typedKey, withOwnText } from "./landing";
-import type { Judge, Runner, Workspace } from "./ports";
+import type { Judge, RunInput, Runner, Workspace } from "./ports";
 import { failedResult } from "./ports";
 import type {
   ApplyFailure,
@@ -22,7 +22,13 @@ import type {
 import { freshProgress, parseProgress } from "./progress";
 import { WorkspaceMovedError } from "./real-workspace";
 import type { Action, Effect, EngineContext, EngineState } from "./reducer";
-import { actOf, INITIAL_ENGINE_STATE, reduce, stepOfBeat } from "./reducer";
+import {
+  actOf,
+  INITIAL_ENGINE_STATE,
+  panelInput,
+  reduce,
+  stepOfBeat,
+} from "./reducer";
 import { route } from "./route";
 import { tutorialTelemetry } from "./telemetry";
 import type { ConversationView } from "./view";
@@ -196,6 +202,42 @@ export class PgConversation {
   /** A step's goal met outside the feed: the Call panel or a client run */
   static passed(via: Exclude<PassedVia, "chat">, result: RunResult) {
     PgConversation._dispatch({ type: "passed", via, result, at: Date.now() });
+  }
+
+  /**
+   * A Call panel call, through the same runner as the call act, and into the
+   * engine as a `passed`: the result stays in the panel, and the feed shows
+   * only the win it may bring. Cards do not wait for it: one pressed mid-call
+   * reports the capture as busy and can be pressed again.
+   */
+  static async callFromPanel(
+    call: NonNullable<RunInput["call"]>
+  ): Promise<RunResult> {
+    const { context, engine } = PgConversation._state;
+    const ports = PgConversation._ports;
+    if (!context || !ports) {
+      return failedResult("call", "Open the tutorial's lesson first.");
+    }
+    let result: RunResult;
+    try {
+      result = await ports.runner.run(
+        "call",
+        panelInput(context.definition, engine.progress, call),
+        () => {}
+      );
+    } catch (e) {
+      log.error(e, { report: true });
+      result = failedResult("call", e instanceof Error ? e.message : String(e));
+    }
+    // Another tutorial opened, or this one started over: not its step's call
+    const now = PgConversation._state;
+    if (
+      now.context?.definition.name === context.definition.name &&
+      now.engine.progress.restartedAt === engine.progress.restartedAt
+    ) {
+      PgConversation.passed("call_panel", result);
+    }
+    return result;
   }
 
   static explain(beatId: string) {

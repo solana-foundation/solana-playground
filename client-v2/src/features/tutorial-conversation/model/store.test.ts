@@ -1,4 +1,5 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import type { Idl } from "@coral-xyz/anchor";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireFor } from "@/test-utils/require-for";
@@ -40,6 +41,7 @@ import { writeWorkspaceFile } from "../../../utils/explorer/workspace-file";
 import { PgTutorial } from "../../../utils/tutorial/tutorial";
 import type { Disposable } from "../../../utils/types";
 import { PgView } from "../../../utils/view";
+import { PgCallPanel } from "./call-panel";
 import { TICK_MS } from "./clock";
 import { judgeGoal } from "./goals";
 import type { Runner, Workspace } from "./ports";
@@ -51,6 +53,23 @@ import {
   PgConversation,
   STORAGE_KEY,
 } from "./store";
+
+/** What the Test form's defaults give an instruction's accounts */
+const formAccounts = vi.hoisted(() => ({
+  current: [] as {
+    name: string;
+    isSigner: boolean;
+    generator: { type: string; value?: string };
+  }[],
+}));
+vi.mock("../../../utils/program-interaction/instruction", () => ({
+  createGeneratableInstruction: () => ({
+    values: { accounts: formAccounts.current },
+  }),
+}));
+vi.mock("../../../utils/terminal", () => ({
+  PgTerminal: { println: vi.fn() },
+}));
 
 const NAME = "Hello Anchor";
 /** A clock past every turn the tests post */
@@ -1124,6 +1143,210 @@ describe("PgConversation", () => {
     expect(
       logged.entries.filter((e) => e.level === "error").length
     ).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("PgCallPanel", () => {
+  const helloIdl = (args: string[]) =>
+    ({
+      version: "0.1.0",
+      name: "hello_anchor",
+      instructions: [
+        {
+          name: "hello",
+          accounts: [],
+          args: args.map((name) => ({ name, type: "string" })),
+        },
+      ],
+    } as unknown as Idl);
+
+  /** A runner that deploys `idl` and answers every call with `hello` */
+  const runnerOf = (idl: Idl) => {
+    const run = vi.fn<Runner["run"]>(async (act) => {
+      if (act === "build") return OK_BUILD;
+      if (act === "deploy" || act === "buildDeploy") {
+        return {
+          act,
+          ok: true,
+          seconds: 1,
+          programId: "He11o",
+          signature: "dep",
+          upgraded: false,
+          lamports: 1,
+          instructions: ["hello"],
+          idl,
+        };
+      }
+      return {
+        act: "call",
+        ok: true,
+        seconds: 1,
+        signatures: ["sig"],
+        line: "Program log: Hello, World!",
+        called: [{ instruction: "hello", args: {} }],
+      };
+    });
+    return { run };
+  };
+
+  /** Hello Anchor up to its first deploy, landed, on step 2's win */
+  const toDeployed = async (idl = helloIdl([])) => {
+    const runner = runnerOf(idl);
+    open(NAME, { runner });
+    await settle();
+    PgConversation.start();
+    await settle();
+    PgConversation.pick("s1.q1", 1);
+    await settle();
+    PgConversation.act("s1.build");
+    await settle();
+    PgConversation.next();
+    await settle();
+    PgConversation.skip("s2.q2");
+    await settle();
+    PgConversation.act("s2.deploy");
+    await settle();
+    return runner;
+  };
+
+  it("has no panel to open before a deploy", async () => {
+    open(NAME);
+    await settle();
+    PgConversation.start();
+    await settle();
+    expect(PgCallPanel.callable).toBe(false);
+    expect(PgCallPanel.view).toBeUndefined();
+  });
+
+  it("is callable once a deploy lands, with the dot until it is opened", async () => {
+    await toDeployed();
+    expect(PgCallPanel.callable).toBe(true);
+    expect(PgCallPanel.dot).toBe(true);
+    PgCallPanel.show();
+    expect(PgCallPanel.dot).toBe(false);
+    PgCallPanel.close();
+    expect(PgCallPanel.dot).toBe(false);
+  });
+
+  it("keeps the form when the step moves on, and drops a call from before Start over", async () => {
+    const { run } = await toDeployed(helloIdl(["name"]));
+    PgCallPanel.show();
+    const picked = PgCallPanel.view?.instruction;
+    PgConversation.next();
+    await settle();
+    PgCallPanel.show();
+    expect(PgCallPanel.view?.instruction).toBe(picked);
+
+    let land: (r: RunResult) => void = () => {};
+    run.mockImplementationOnce(
+      () =>
+        new Promise<RunResult>((resolve) => {
+          land = resolve;
+        })
+    );
+    const calling = PgConversation.callFromPanel({
+      instruction: "hello",
+      args: {},
+    });
+    await settle();
+    PgConversation.startOver();
+    await settle();
+    land({
+      act: "call",
+      ok: true,
+      seconds: 1,
+      signatures: ["old"],
+      line: "Program log: Map created",
+      called: [{ instruction: "hello", args: {} }],
+      wrote: [{ name: "map", address: "Old" }],
+    });
+    await calling;
+    await settle();
+    expect(PgConversation.state.engine.progress.accounts).toEqual({});
+  });
+
+  it("calls on the address an earlier call wrote to, Call off until it is known", async () => {
+    formAccounts.current = [
+      {
+        name: "map",
+        isSigner: false,
+        generator: { type: "Custom", value: "" },
+      },
+    ];
+    try {
+      const { run } = await toDeployed();
+      PgConversation.next();
+      await settle();
+      PgCallPanel.show();
+      expect(PgCallPanel.view?.canCall).toBe(false);
+
+      run.mockResolvedValueOnce({
+        act: "call",
+        ok: true,
+        seconds: 1,
+        signatures: ["init"],
+        line: "Program log: Map created",
+        called: [{ instruction: "hello", args: {} }],
+        wrote: [{ name: "map", address: "Map1" }],
+      });
+      await PgConversation.callFromPanel({ instruction: "hello", args: {} });
+      await settle();
+      expect(PgCallPanel.view?.canCall).toBe(true);
+
+      await PgCallPanel.call();
+      await settle();
+      expect(run).toHaveBeenLastCalledWith(
+        "call",
+        expect.objectContaining({
+          call: {
+            instruction: "hello",
+            args: {},
+            accounts: { map: "Map1" },
+          },
+        }),
+        expect.any(Function)
+      );
+    } finally {
+      formAccounts.current = [];
+    }
+  });
+
+  it("passes step 3 from the panel, with the deployed IDL, and the win follows", async () => {
+    const idl = helloIdl([]);
+    const { run } = await toDeployed(idl);
+    PgConversation.next();
+    await settle();
+    expect(PgConversation.state.engine.progress.passed).not.toContain(
+      "call-client"
+    );
+    PgCallPanel.show();
+    await PgCallPanel.call();
+    await settle();
+    expect(run).toHaveBeenLastCalledWith(
+      "call",
+      expect.objectContaining({
+        call: { instruction: "hello", args: {} },
+        idl,
+        log: "Hello, World!",
+      }),
+      expect.any(Function)
+    );
+    const { progress } = PgConversation.state.engine;
+    expect(progress.passed).toContain("call-client");
+    expect(progress.times["call-client"].via).toBe("call_panel");
+    expect(PgCallPanel.view?.result?.ok).toBe(true);
+    expect(
+      events.events.filter((e) => e.name === "tutorial_step_passed").at(-1)
+        ?.params
+    ).toMatchObject({ via: "call_panel", step: 3 });
+  });
+
+  it("shows no new field for a build that was not deployed", async () => {
+    await toDeployed();
+    // A build changes `PgProgramInfo.idl`, which the panel never reads
+    PgCallPanel.show();
+    expect(PgCallPanel.view?.fields).toEqual([]);
+    expect(PgCallPanel.view?.signature).toBe("()");
   });
 });
 

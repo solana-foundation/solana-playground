@@ -91,7 +91,9 @@ const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
   // The IDL of the program the call went to, read before a switch can move it
   const idlErrors = getIdlErrors();
   try {
-    signature = await PgCommon.transition(PgProgramInteraction.test(ix));
+    signature = await PgCommon.transition(
+      PgProgramInteraction.test(ix, PgProgramInteraction.getAnchorProgram())
+    );
     const confirmed = await PgTx.confirm(signature, { connection });
     const logs = await readLogsWith(connection)(signature);
     const ok = !confirmed?.err;

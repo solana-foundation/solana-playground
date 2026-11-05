@@ -412,12 +412,7 @@ const BaseWorkspaceHead: FC<BaseWorkspaceHeadProps> = ({
         </DropdownMenu>
       )}
       <div className="ml-auto flex shrink-0 items-center gap-1.5 pr-2">
-        {call && (
-          <>
-            {call}
-            <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
-          </>
-        )}
+        {call}
         <Tool
           label="Files"
           keys={filesKey}

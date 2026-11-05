@@ -14,6 +14,7 @@ import {
   PgWallet,
   PgWeb3,
 } from "../../../../utils";
+import { createGeneratableInstruction } from "../../../../utils/program-interaction/instruction";
 import type { RunInput } from "../ports";
 import type { AccountData } from "./account-read";
 import { scalarsOf } from "./account-read";
@@ -155,10 +156,14 @@ const fetchOnDevnet = async (
 };
 
 /** The call act's instruction, through the Test form's sender */
-const sendCall = async (call: NonNullable<RunInput["call"]>) => {
-  const idlIx = PgProgramInfo.callableIdl()?.instructions.find(
-    (ix) => ix.name === call.instruction
-  );
+const sendCall = async (
+  call: NonNullable<RunInput["call"]>,
+  deployed: RunInput["idl"]
+) => {
+  // The program on chain answers to the IDL it was deployed with: a build
+  // since then must not change what is sent
+  const idl = deployed ?? PgProgramInfo.callableIdl();
+  const idlIx = idl?.instructions.find((ix) => ix.name === call.instruction);
   if (!idlIx) {
     throw new Error(
       `The deployed program has no \`${call.instruction}\`. Build and deploy it again.`
@@ -170,7 +175,8 @@ const sendCall = async (call: NonNullable<RunInput["call"]>) => {
   const { PgProgramInteraction } = await import(
     "../../../../utils/program-interaction"
   );
-  const ix = PgProgramInteraction.getOrCreateInstruction(idlIx);
+  // Fresh, not the Test form's saved copy: that one follows the last build
+  const ix = createGeneratableInstruction(idlIx);
   const values = {
     ...ix.values,
     accounts: fillRememberedWith(call.accounts ?? {})(ix.values.accounts),
@@ -179,7 +185,10 @@ const sendCall = async (call: NonNullable<RunInput["call"]>) => {
       generator: { type: "Custom" as const, value: call.args[arg.name] ?? "" },
     })),
   };
-  await PgProgramInteraction.test({ ...ix, values });
+  await PgProgramInteraction.test(
+    { ...ix, values },
+    PgProgramInteraction.getAnchorProgram({ idl: idl ?? undefined })
+  );
 };
 
 /** The run and call port over the editor's runner and devnet */
@@ -204,18 +213,22 @@ export const realRunPort = (
           return;
         }
         if (!input.call) throw new Error("The call act names no instruction");
-        await sendCall(input.call);
+        await sendCall(input.call, input.idl);
       }
     );
     return { captured, error };
   },
   landed: landedOnDevnet,
   fetchAccount: fetchOnDevnet,
-  decode: (encoded) => {
+  decode: (encoded, deployed) => {
     const programId = PgProgramInfo.pk?.toBase58();
     if (!programId) return { calls: [], undecoded: true };
     try {
-      return decodeCalls(encoded, programId, PgProgramInfo.idl as Idl | null);
+      return decodeCalls(
+        encoded,
+        programId,
+        (deployed ?? PgProgramInfo.idl) as Idl | null
+      );
     } catch (e) {
       // The result still lands; only its `called` is short, which fails a
       // call goal rather than passing it on a guess

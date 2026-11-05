@@ -32,6 +32,13 @@ export type {
   Runner,
   Workspace,
 } from "./model/ports";
+export { PgCallPanel } from "./model/call-panel";
+export type {
+  CallChip,
+  CallField,
+  CallPanelTab,
+  CallView,
+} from "./model/call-view";
 export { judgeGoal } from "./model/goals";
 export { actRunner } from "./model/runners/act-runner";
 export { DEPLOY_STAGES } from "./model/runners/deploy";

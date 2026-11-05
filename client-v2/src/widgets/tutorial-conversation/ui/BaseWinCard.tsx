@@ -56,7 +56,9 @@ const BaseWinCard = ({
   const fromPanel = via === "call_panel";
   const canNext = live && next !== null;
   // A navigation link: it stays on the record, as "Write it in client.ts" does
-  const openCall = win.extra === "openTest" ? onOpenCall : undefined;
+  // After a pass from the panel, the next thing is the code, not the panel
+  const openCall =
+    win.extra === "openTest" && !fromPanel ? onOpenCall : undefined;
 
   useEffect(() => {
     if (!canNext) return;
