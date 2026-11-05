@@ -15,6 +15,7 @@ import {
   runInTerminal,
   seedWorkspace,
   startProject,
+  stubAiStatus,
   stubSession,
   test,
 } from "./fixtures";
@@ -131,10 +132,11 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     let failing = true;
-    await page.route("**/api/agent", (route) => {
-      if (route.request().method() !== "GET") return route.continue();
+    await stubAiStatus(page, "own");
+    // Registered last, so it sees each request first and hands it to the stub
+    await page.route("**/api/ai/status", (route) => {
       if (failing) return route.fulfill({ status: 500, body: "down" });
-      return json(route, { configured: false });
+      return route.fallback();
     });
     await page.reload();
 
@@ -413,11 +415,9 @@ test("client-v2-status: The rail's dots", async ({ page }) => {
 test("client-v2-status: The free daily limit is used", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.route("**/api/agent", (route) => {
-    if (route.request().method() === "GET") {
-      return json(route, { configured: true, model: "test-model" });
-    }
-    return route.fulfill({
+  await stubAiStatus(page, "test-model");
+  await page.route("**/api/agent", (route) =>
+    route.fulfill({
       status: REFUSAL_STATUS[DAILY_CAP_REASON],
       contentType: "application/json",
       body: JSON.stringify({
@@ -425,8 +425,8 @@ test("client-v2-status: The free daily limit is used", async ({ page }) => {
         reason: DAILY_CAP_REASON,
         tier: "newcomer",
       }),
-    });
-  });
+    })
+  );
   await stubSession(page);
   await page.goto("/");
   await startProject(page, "status-limit", LONG);
