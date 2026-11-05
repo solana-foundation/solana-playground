@@ -9,7 +9,12 @@ import {
 } from "@/shared/ui/sidebar";
 
 import type { StatusIndicator } from "../model/indicators";
-import { IndicatorDot, StatusPanel } from "./parts";
+import {
+  IndicatorDot,
+  indicatorMark,
+  StatusPanel,
+  useFocusAfterPanel,
+} from "./parts";
 
 export interface BaseStatusRowProps {
   /** Network, AI, Rust analyzer, in that order */
@@ -45,8 +50,9 @@ const BaseStatusRow = ({
   settingsOpen,
 }: BaseStatusRowProps) => {
   const isMobile = useIsMobile();
+  const { ref, handleGone } = useFocusAfterPanel<HTMLUListElement>();
   return (
-    <SidebarMenu className="w-full">
+    <SidebarMenu ref={ref} className="w-full">
       <SidebarMenuItem
         data-testid="status-row"
         // A little more room before the account row than between the lines
@@ -58,7 +64,7 @@ const BaseStatusRow = ({
               key={indicator.id}
               aria-label={indicator.label}
               title={indicator.label}
-              data-status={indicator.id}
+              {...indicatorMark(indicator.id)}
               data-state-kind={indicator.state}
               // On Get set up's grid above: the dot in its circles' 14 px column
               // (centre 23 px), the words on its labels' edge (40 px)
@@ -99,6 +105,7 @@ const BaseStatusRow = ({
               onPick={onPick}
               onAction={onAction}
               onRetry={onRetry}
+              onGone={handleGone}
             />
           );
         })}
