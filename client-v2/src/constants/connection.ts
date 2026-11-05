@@ -45,7 +45,7 @@ export const UNKNOWN_NETWORK = "the network";
  * devnet SOL"), any other name (Surfpool) as it is, `undefined` while the cluster
  * is unknown, so a caller can drop the word ("Not enough SOL") rather than
  * print "the network SOL". Standalone labels such as pickers and chips keep
- * `networkName`.
+ * `clusterName`.
  */
 export const networkInSentence = (
   cluster: string | null | undefined

@@ -60,6 +60,9 @@ const ProgramKeypair = () => {
   const mismatch = isMismatch();
   const [open, setOpen] = useState(mismatch);
   const [confirming, setConfirming] = useState(false);
+  // A valid imported keypair waiting on the dialog, since it replaces one
+  const [pendingImport, setPendingImport] =
+    useState<InstanceType<typeof PgWeb3.Keypair>>();
   const [note, setNote] = useState<KeypairNote>(undefined);
 
   // A mismatch would stop a first deploy, so it opens the fold when it
@@ -109,11 +112,25 @@ const ProgramKeypair = () => {
       setNote("refused");
       return;
     }
+    // Ask first, as Generate does: the keypair it replaces may be the only
+    // copy, and the next push uploads the new one over the account's
+    if (PgProgramInfo.kp || PgProgramInfo.customPk) {
+      setPendingImport(read.kp);
+      setConfirming(true);
+      return;
+    }
+    applyImport(read.kp);
+  };
+
+  const applyImport = (kp: InstanceType<typeof PgWeb3.Keypair>) => {
+    if (deployRunning()) return;
     // An imported keypair names the program: a custom id would hide it
     // eslint-disable-next-line unicorn/no-null -- `null` clears the persisted custom id in program-info.json
-    PgProgramInfo.update({ kp: read.kp, customPk: null });
+    PgProgramInfo.update({ kp, customPk: null });
     programKeypairTelemetry.track("keypair_imported", {});
     setNote(undefined);
+    setPendingImport(undefined);
+    setConfirming(false);
   };
 
   const changeId = (text: string) => {
@@ -148,16 +165,22 @@ const ProgramKeypair = () => {
       open={open}
       onOpenChange={setOpen}
       confirming={confirming}
+      replacing={pendingImport ? "import" : "new"}
       held={deployRunning()}
       // Ask before anything is lost: an old keypair, or a custom id that
       // Generate removes
-      onNew={() =>
-        PgProgramInfo.kp || PgProgramInfo.customPk
-          ? setConfirming(true)
-          : generate()
+      onNew={() => {
+        setPendingImport(undefined);
+        if (PgProgramInfo.kp || PgProgramInfo.customPk) setConfirming(true);
+        else generate();
+      }}
+      onConfirmNew={() =>
+        pendingImport ? applyImport(pendingImport) : generate()
       }
-      onConfirmNew={generate}
-      onCancelNew={() => setConfirming(false)}
+      onCancelNew={() => {
+        setConfirming(false);
+        setPendingImport(undefined);
+      }}
       onSaveOld={() => exportFrom("dialog")}
       onImport={(file) => void importFile(file)}
       onExport={() => exportFrom("block")}

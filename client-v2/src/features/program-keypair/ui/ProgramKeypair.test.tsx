@@ -173,12 +173,39 @@ describe("features/program-keypair/ui/ProgramKeypair", () => {
     mocks.info.customPk = OTHER.publicKey;
     draw();
     await importText(JSON.stringify(Array.from(OTHER.secretKey)));
+    // A custom id is lost on import, so the import asks first
+    expect(mocks.updates).toEqual([]);
+    expect(screen.getByText("Replace the program keypair?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Replace" }));
 
     expect(mocks.updates).toHaveLength(1);
     expect(mocks.updates[0].kp?.publicKey.equals(OTHER.publicKey)).toBe(true);
     expect(mocks.updates[0].customPk).toBeNull();
     expect(field().value).toBe(OTHER.publicKey.toBase58());
     expect(events()).toEqual([["keypair_imported", {}]]);
+  });
+
+  it("imports at once when there is nothing to replace", async () => {
+    // eslint-disable-next-line unicorn/no-null -- no keypair reads null, as PgProgramInfo.kp does
+    mocks.info.kp = null;
+    draw();
+    openFold();
+    await importText(JSON.stringify(Array.from(OTHER.secretKey)));
+
+    expect(mocks.updates).toHaveLength(1);
+    expect(screen.queryByText("Replace the program keypair?")).toBeNull();
+  });
+
+  it("keeps the current keypair when the import is cancelled", async () => {
+    mocks.info.kp = KP;
+    draw();
+    openFold();
+    await importText(JSON.stringify(Array.from(OTHER.secretKey)));
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+
+    expect(mocks.updates).toEqual([]);
   });
 
   it("refuses a file that is not a keypair and keeps the old one", async () => {

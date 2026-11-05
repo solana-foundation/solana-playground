@@ -10,7 +10,7 @@ SHALL name the deployment and that network capitalised ("View deployment
 "Explorer (Devnet)"; on a phone it SHALL read "Explorer", since the row names
 its network. Records written without a signature or cost SHALL still list.
 
-#### Scenario: client-v2-deploy: A devnet record viewed on testnet
+#### Scenario: A devnet record viewed on testnet
 
 - **WHEN** the history holds a devnet record and the picked network is testnet
 - **THEN** that row's Explorer link reads "Explorer (Devnet)" and its address

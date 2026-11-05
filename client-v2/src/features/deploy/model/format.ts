@@ -19,7 +19,10 @@ export const formatSol = (lamports: number): string => {
 export const shortKey = (key: string): string =>
   key.length <= 12 ? key : `${key.slice(0, 4)}…${key.slice(-4)}`;
 
-/** The network's name in prose: "Mainnet" for mainnet-beta, "the network" while unknown */
+/**
+ * The network's standalone label, capitalised ("Mainnet" for mainnet-beta),
+ * "the network" while unknown; mid-sentence prose uses `networkInSentence`
+ */
 export const networkName = (cluster: string | null): string =>
   clusterName(cluster) ?? UNKNOWN_NETWORK;
 

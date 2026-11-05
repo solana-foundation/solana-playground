@@ -54,7 +54,7 @@ const renderThread = (
   overrides: {
     working?: boolean;
     unsaved?: boolean;
-    signIn?: { pending: boolean; onSignIn: () => void } | null;
+    signIn?: { pending: boolean; onSignIn: () => void };
     project?: string | null;
     onSuggestion?: (text: string) => void;
     retry?: BusyRetryView;
@@ -65,8 +65,7 @@ const renderThread = (
       items={items}
       working={overrides.working ?? false}
       unsaved={overrides.unsaved ?? false}
-      // eslint-disable-next-line unicorn/no-null -- `signIn` is `SignInOffer | null`, null meaning no offer
-      signIn={overrides.signIn ?? null}
+      signIn={overrides.signIn}
       project={overrides.project === undefined ? "Counter" : overrides.project}
       suggestions={SUGGESTIONS}
       onSuggestion={overrides.onSuggestion ?? vi.fn()}
@@ -94,8 +93,7 @@ const threadOf = (items: readonly ChatItem[], working: boolean) => (
     items={items}
     working={working}
     unsaved={false}
-    // eslint-disable-next-line unicorn/no-null -- no sign-in is offered
-    signIn={null}
+    signIn={undefined}
     project="Counter"
     suggestions={SUGGESTIONS}
     onSuggestion={vi.fn()}

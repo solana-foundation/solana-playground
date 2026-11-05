@@ -93,10 +93,11 @@ const nameOf = (name: string, url: string) =>
   name.trim().slice(0, RPC_NAME_MAX) || defaultName(url);
 
 /**
- * The stored list, keeping each valid RPC once. A dropped entry is reported:
- * the next write would lose it for good.
+ * The stored list, keeping each valid RPC once; `undefined` when the stored
+ * value cannot be read as a list, so no write lands over it. A dropped entry
+ * is reported: the next write would lose it for good.
  */
-const read = (): CustomRpc[] => {
+const readStored = (): CustomRpc[] | undefined => {
   let raw: string | null;
   try {
     raw = localStorage.getItem(KEY);
@@ -105,7 +106,7 @@ const read = (): CustomRpc[] => {
       report: true,
       context: { error: String(error) },
     });
-    return [];
+    return undefined;
   }
   if (raw === null) return [];
   let parsed: unknown;
@@ -115,13 +116,13 @@ const read = (): CustomRpc[] => {
     log.warn("the saved custom RPCs are not JSON; reading none", {
       report: true,
     });
-    return [];
+    return undefined;
   }
   if (!Array.isArray(parsed)) {
     log.warn("the saved custom RPCs are not a list; reading none", {
       report: true,
     });
-    return [];
+    return undefined;
   }
   const list: CustomRpc[] = [];
   for (const entry of parsed) {
@@ -147,6 +148,9 @@ const read = (): CustomRpc[] => {
   }
   return list;
 };
+
+/** The stored list to show; empty while it cannot be read */
+const read = (): CustomRpc[] => readStored() ?? [];
 
 const listeners = new Set<() => void>();
 
@@ -175,7 +179,10 @@ const put = (input: CustomRpc, replacing: string | undefined): SaveResult => {
 
   const network = OFFERED.get(check.url);
   if (network) return { ok: false, reason: "duplicate", name: network };
-  const list = read();
+  // A stored value that does not read as a list is left alone, never
+  // replaced by a list holding only this entry
+  const list = readStored();
+  if (!list) return { ok: false, reason: "storage" };
   const taken = list.find((r) => r.url === check.url && r.url !== replacing);
   if (taken) return { ok: false, reason: "duplicate", name: taken.name };
 
@@ -207,7 +214,8 @@ export const PgCustomRpcs = {
    * refused the write.
    */
   remove(url: string): { rpc: CustomRpc; index: number } | undefined {
-    const list = read();
+    const list = readStored();
+    if (!list) return undefined;
     const index = list.findIndex((r) => r.url === url);
     if (index === -1) return undefined;
     const [rpc] = list.splice(index, 1);
@@ -219,7 +227,9 @@ export const PgCustomRpcs = {
    * when the browser refused the write
    */
   restore(rpc: CustomRpc, index: number): boolean {
-    const list = read().filter((r) => r.url !== rpc.url);
+    const stored = readStored();
+    if (!stored) return false;
+    const list = stored.filter((r) => r.url !== rpc.url);
     list.splice(Math.min(index, list.length), 0, rpc);
     return write(list);
   },
@@ -234,7 +244,9 @@ export const PgCustomRpcs = {
   adopt(endpoint: string): string | undefined {
     const check = checkRpcUrl(endpoint);
     if (!check.ok || OFFERED.has(check.url)) return undefined;
-    const list = read();
+    // Opening Settings must not write over a list that does not read
+    const list = readStored();
+    if (!list) return undefined;
     if (list.some((r) => r.url === check.url)) return check.url;
     return write([...list, { name: defaultName(check.url), url: check.url }])
       ? check.url
@@ -409,6 +421,17 @@ if (import.meta.vitest) {
     ])("reads a stored %j as the valid entries only", (raw, list) => {
       localStorage.setItem("customRpcs", raw);
       expect(PgCustomRpcs.list()).toEqual(list);
+    });
+
+    describe("a stored list that does not read", () => {
+      it("is never written over, by an adopt or a save", () => {
+        localStorage.setItem(KEY, "not json");
+        expect(PgCustomRpcs.adopt("https://own.test")).toBeUndefined();
+        expect(
+          PgCustomRpcs.save({ name: "", url: "https://own.test" })
+        ).toEqual({ ok: false, reason: "storage" });
+        expect(localStorage.getItem(KEY)).toBe("not json");
+      });
     });
 
     describe("adopt", () => {

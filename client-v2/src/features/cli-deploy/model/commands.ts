@@ -6,7 +6,7 @@ export type CliCluster = "devnet" | "mainnet";
 
 /** The guide's cluster for Playground's, or `undefined` for one it has no line for */
 export const cliClusterOf = (
-  cluster: string | null
+  cluster: string | undefined
 ): CliCluster | undefined => {
   if (cluster === "devnet") return "devnet";
   if (cluster === "mainnet-beta") return "mainnet";
@@ -80,7 +80,7 @@ export const idlCommands = (p: {
   tool: CliTool;
   cluster: CliCluster;
   name: string;
-  programId: string | null;
+  programId: string | undefined;
 }): IdlCommand[] => {
   const idl = `${p.name}.json`;
   const id = p.programId ?? PROGRAM_ID_PLACEHOLDER;
@@ -179,8 +179,7 @@ if (import.meta.vitest) {
         tool: "anchor",
         cluster: "devnet",
         name: "hello",
-        // eslint-disable-next-line unicorn/no-null -- a project never deployed
-        programId: null,
+        programId: undefined,
       }).flatMap((c) => c.lines);
       expect(lines.every((l) => l.includes(" <program-id> "))).toBe(true);
     });
@@ -189,8 +188,7 @@ if (import.meta.vitest) {
       expect(cliClusterOf("devnet")).toBe("devnet");
       expect(cliClusterOf("mainnet-beta")).toBe("mainnet");
       expect(cliClusterOf("localnet")).toBeUndefined();
-      // eslint-disable-next-line unicorn/no-null -- the guide's cluster prop is `null` until read
-      expect(cliClusterOf(null)).toBeUndefined();
+      expect(cliClusterOf(undefined)).toBeUndefined();
     });
   });
 }

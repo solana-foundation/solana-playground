@@ -9,15 +9,15 @@ import DownloadIdl from "./DownloadIdl";
 import DownloadProgram, { useIdl, useProgramName } from "./DownloadProgram";
 
 export interface CliDeployGuideProps {
-  /** The control that opened the guide; `null` while it is closed */
-  from: GuideFrom | null;
+  /** The control that opened the guide; `undefined` while it is closed */
+  from: GuideFrom | undefined;
   onClose: () => void;
-  /** Playground's cluster, `null` until read */
-  cluster: string | null;
+  /** Playground's cluster, `undefined` until read */
+  cluster: string | undefined;
   /** The last build succeeded, so there is a binary to download */
   built: boolean;
-  /** The project's program id, `null` when it has none yet */
-  programId: string | null;
+  /** The project's program id, `undefined` when it has none yet */
+  programId: string | undefined;
 }
 
 /**
@@ -25,7 +25,10 @@ export interface CliDeployGuideProps {
  * one Playground is on, else Devnet. Localnet, testnet and custom endpoints
  * open on Devnet: the guide is for the two clusters people deploy to.
  */
-const openingCluster = (from: GuideFrom, cluster: string | null): CliCluster =>
+const openingCluster = (
+  from: GuideFrom,
+  cluster: string | undefined
+): CliCluster =>
   from === "mainnet-warning" ? "mainnet" : cliClusterOf(cluster) ?? "devnet";
 
 /** The CLI deploy guide, connected: the program's name, the download, events */
@@ -37,9 +40,8 @@ const CliDeployGuide = (p: CliDeployGuideProps) => {
   // the situation's, so each opening picks it again
   const [tool, setTool] = useState<CliTool>("solana");
   const [cluster, setCluster] = useState<CliCluster>("devnet");
-  // Mirrors the `from` prop, which is `null` while the guide is closed
-  // eslint-disable-next-line unicorn/no-null -- the prop's closed value
-  const [openedFrom, setOpenedFrom] = useState<GuideFrom | null>(null);
+  // Mirrors the `from` prop, which is `undefined` while the guide is closed
+  const [openedFrom, setOpenedFrom] = useState<GuideFrom | undefined>();
 
   const { from } = p;
   // Set while rendering, not in an effect, so the dialog's first frame
@@ -56,7 +58,7 @@ const CliDeployGuide = (p: CliDeployGuideProps) => {
 
   return (
     <BaseCliDeployGuide
-      open={from !== null}
+      open={from !== undefined}
       onOpenChange={(open) => {
         if (!open) p.onClose();
       }}

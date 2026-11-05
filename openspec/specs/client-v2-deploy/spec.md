@@ -136,7 +136,7 @@ record's network, whatever network is picked now, and its label SHALL name
 that network capitalised ("Explorer (Devnet)"). Records written without a
 signature or cost SHALL still list.
 
-#### Scenario: client-v2-deploy: A devnet record viewed on testnet
+#### Scenario: A devnet record viewed on testnet
 
 - **WHEN** the history holds a devnet record and the picked network is testnet
 - **THEN** that row's Explorer link reads "Explorer (Devnet)" and its address

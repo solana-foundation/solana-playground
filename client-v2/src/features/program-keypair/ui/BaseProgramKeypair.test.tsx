@@ -33,6 +33,7 @@ const props = (s: Shape): BaseProgramKeypairProps => ({
   open: s.open ?? true,
   onOpenChange: vi.fn(),
   confirming: s.confirming ?? false,
+  replacing: "new",
   held: s.held ?? false,
   onNew: vi.fn(),
   onConfirmNew: vi.fn(),

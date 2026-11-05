@@ -7,6 +7,10 @@ import { requireFor } from "../src/test-utils/require-for";
 /** For a step that waits on the explorer, sync or a reload */
 export const LONG = { timeout: 60_000 };
 
+/** Devnet's JSON-RPC and websocket endpoints, as a route matches them whole */
+export const DEVNET_RPC = /^https:\/\/api\.devnet\.solana\.com\/?$/;
+export const DEVNET_WS = /^wss:\/\/api\.devnet\.solana\.com\/?$/;
+
 /** Home, which a start with no project shows in place of the work */
 export const home = (page: Page) =>
   page.getByRole("heading", { name: "Where should we begin?" });

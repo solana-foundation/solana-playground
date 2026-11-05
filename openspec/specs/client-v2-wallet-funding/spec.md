@@ -26,11 +26,11 @@ account (its name and short address): the current wallet when it is a
 Playground wallet, otherwise the first Playground account, which is the one
 `deploy` pays from. Sending SHALL NOT change the current wallet.
 
-#### Scenario: Playground wallet is current
+#### Scenario: Playground wallet is current (manual)
 - **WHEN** "Wallet 2" is the current wallet and the user opens the dialog
 - **THEN** the dialog names "Wallet 2" and its short address as the receiver
 
-#### Scenario: An extension is current
+#### Scenario: An extension is current (manual)
 - **WHEN** Phantom is the current wallet and the user opens the dialog
 - **THEN** the dialog names the first Playground account as the receiver
 
@@ -43,7 +43,7 @@ while a wallet is asked to connect, its button SHALL read
 `Waiting for <wallet name>…`. A wallet connected here SHALL NOT
 become the current wallet.
 
-#### Scenario: Connect in the dialog
+#### Scenario: Connect in the dialog (manual)
 - **WHEN** the user presses `Connect Phantom` and approves in Phantom
 - **THEN** the dialog shows Phantom's short address and balance, and the current wallet is unchanged
 
@@ -67,11 +67,11 @@ to, and the balance SHALL be read again when that cluster changes.
 - **WHEN** the paying wallet holds 0.5 SOL and the user enters 1
 - **THEN** the send button is disabled and the field says the wallet holds 0.5 SOL
 
-#### Scenario: Not a number
+#### Scenario: Not a number (manual)
 - **WHEN** the user enters `abc`, `0` or `-1`
 - **THEN** the send button is disabled and the field asks for an amount above 0
 
-#### Scenario: Mainnet
+#### Scenario: Mainnet (manual)
 - **WHEN** the Playground is on mainnet-beta and a paying wallet is connected
 - **THEN** a warning Callout titled "Mainnet uses real SOL" shows above the send button
 
@@ -91,11 +91,11 @@ updates on its own.
 - **WHEN** the user rejects the signature request in the wallet
 - **THEN** nothing is sent, the dialog stays open with the amount kept, and it says "You declined in <wallet name>. Nothing was sent."
 
-#### Scenario: The transfer fails on the network
+#### Scenario: The transfer fails on the network (manual)
 - **WHEN** the transaction never reaches the cluster, or the cluster runs it and it fails
 - **THEN** the dialog stays open, shows "Could not send." with the reason, and the send button can be pressed again
 
-#### Scenario: The transfer is sent but not confirmed
+#### Scenario: The transfer is sent but not confirmed (manual)
 - **WHEN** the transaction was sent and its confirmation times out or fails
 - **THEN** the dialog shows "Sent, not confirmed yet." with the signature and "Check it in Explorer before you send again.", and the send button stays disabled so the SOL cannot be sent twice
 
@@ -111,10 +111,10 @@ transfer is confirmed; and
 SHALL carry `item: "fund-wallet"` when the menu item is picked. No event
 carries an address or an amount.
 
-#### Scenario: A confirmed transfer is counted
+#### Scenario: A confirmed transfer is counted (manual)
 - **WHEN** a transfer is confirmed on devnet
 - **THEN** `fund_sent` is emitted once with `cluster: "devnet"`
 
-#### Scenario: A declined signature is counted
+#### Scenario: A declined signature is counted (manual)
 - **WHEN** the user rejects the transfer in the wallet
 - **THEN** `fund_failed` is emitted once with `stage: "send"` and `reason: "rejected"`

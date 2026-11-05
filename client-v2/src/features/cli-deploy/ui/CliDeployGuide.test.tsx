@@ -59,7 +59,7 @@ afterEach(() => {
 
 const props = (p: {
   from: CliDeployGuideProps["from"];
-  cluster: string | null;
+  cluster: string | undefined;
   built: boolean;
 }): CliDeployGuideProps => ({
   from: p.from,
@@ -164,8 +164,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
           />
         </TooltipProvider>
       );
-    // eslint-disable-next-line unicorn/no-null -- the prop's closed value
-    again(null);
+    again(undefined);
     again("deploy-stage");
 
     expect(commands()[1]).toBe("anchor deploy --provider.cluster devnet");
@@ -226,8 +225,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
         onClose={vi.fn()}
         cluster="devnet"
         built
-        // eslint-disable-next-line unicorn/no-null -- the prop's value with no id
-        programId={null}
+        programId={undefined}
       />
     );
 
@@ -433,8 +431,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
   it("renders nothing while closed", () => {
     renderGuide(
       <CliDeployGuide
-        // eslint-disable-next-line unicorn/no-null -- the prop's closed value
-        {...props({ from: null, cluster: "devnet", built: true })}
+        {...props({ from: undefined, cluster: "devnet", built: true })}
       />
     );
 

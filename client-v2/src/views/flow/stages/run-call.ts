@@ -36,22 +36,24 @@ const LOGS_RETRY_MS = 1500;
  * just-confirmed transaction yet, so an empty answer is asked once more; a
  * failed read is logged and reads as no logs, which the result shows as such.
  */
-const readLogs = async (signature: string): Promise<string[]> => {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const tx = await PgConnection.current.getTransaction(signature, {
-        commitment: "confirmed",
-        maxSupportedTransactionVersion: 0,
-      });
-      if (tx?.meta?.logMessages) return tx.meta.logMessages;
-    } catch (e) {
-      log.warn("Could not read a call's logs", { context: { error: e } });
-      return [];
+const readLogsOn =
+  (connection: typeof PgConnection.current) =>
+  async (signature: string): Promise<string[]> => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const tx = await connection.getTransaction(signature, {
+          commitment: "confirmed",
+          maxSupportedTransactionVersion: 0,
+        });
+        if (tx?.meta?.logMessages) return tx.meta.logMessages;
+      } catch (e) {
+        log.warn("Could not read a call's logs", { context: { error: e } });
+        return [];
+      }
+      if (attempt === 0) await PgCommon.sleep(LOGS_RETRY_MS);
     }
-    if (attempt === 0) await PgCommon.sleep(LOGS_RETRY_MS);
-  }
-  return [];
-};
+    return [];
+  };
 
 /** A transaction error as text; JSON when it serialises, which a BigInt may not */
 const describe = (err: unknown) => {
@@ -71,10 +73,13 @@ const toStored = <T>(value: T | undefined) => value ?? null;
 
 const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
   let signature: string | undefined;
+  // The connection the call goes out on: a network switch while the wallet
+  // asks must not confirm a landed call on another cluster as failed
+  const connection = PgConnection.current;
   try {
     signature = await PgCommon.transition(PgProgramInteraction.test(ix));
-    const confirmed = await PgTx.confirm(signature);
-    const logs = await readLogs(signature);
+    const confirmed = await PgTx.confirm(signature, { connection });
+    const logs = await readLogsOn(connection)(signature);
     const ok = !confirmed?.err;
     return {
       instruction: ix.name,

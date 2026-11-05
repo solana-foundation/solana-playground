@@ -82,7 +82,7 @@ const refuse = (error, status = 400) => ({ error, status });
  * - `files`: the whole set. Refused when empty -- a full write replaces the
  *   file set, so an empty one would delete every file, and no editor ever has
  *   a reason to send it (the client's `push` refuses an empty snapshot).
- * - `snapshot.files`: the same, as the pre-#40 client spells it (below).
+ * - `snapshot.files`: the same, as the pre-hoodieshq/solana-playground#40 client spells it (below).
  * - `changed` + `removed`: a patch against the state `baseUpdatedAt` names.
  *   Without a token there is nothing for it to be relative to. Whether it
  *   leaves the project any files only the row can say: `saveProject` checks.
@@ -91,7 +91,7 @@ const refuse = (error, status = 400) => ({ error, status });
  * two devices' copies are merged on the client, so every write is either a
  * create or a swap against the row the caller read.
  *
- * A tab left open across the #40 deploy still runs the client from before it,
+ * A tab left open across the hoodieshq/solana-playground#40 deploy still runs the client from before it,
  * and keeps doing so until reloaded. That client sends `{snapshot: {files},
  * baseUpdatedAt, force: false}` on every push and files every refusal except
  * 409 and 413 under a silent "skipped". So `force: false` reads as absent and
@@ -154,7 +154,7 @@ export const describeWrite = (body) => {
  *
  * A write that would leave the project with no files is a 400 naming itself
  * in `reason`, not a 409. A 409 means "someone else wrote" to both clients:
- * the pre-#40 one would ask "keep this version?" about it, and the current one
+ * the pre-hoodieshq/solana-playground#40 one would ask "keep this version?" about it, and the current one
  * would merge against a row that holds nothing. The current client only sends
  * such a patch against a row that is already empty -- its patches are built
  * from a non-empty snapshot -- and answers the `reason` with its whole file

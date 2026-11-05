@@ -30,11 +30,11 @@ which is kept as a type), and defined types (structs with named or tuple
 fields, enums, aliases, generic types with their type and const arguments)
 SHALL encode as the program defines them.
 
-#### Scenario: An instruction with a struct and an enum argument
+#### Scenario: An instruction with a struct and an enum argument (manual)
 - **WHEN** a 1.x instruction takes a struct and an enum argument
 - **THEN** the encoded data equals the instruction's discriminator followed by the borsh bytes of both arguments
 
-#### Scenario: A generic type argument
+#### Scenario: A generic type argument (manual)
 - **WHEN** a 1.x instruction takes `GenericType<u32, u64, 10>`
 - **THEN** the argument encodes with `u32`, `u64` and arrays of length 10 in place of `T`, `U` and `N`
 
@@ -45,7 +45,7 @@ SHALL be refused with a reason naming it. Where the client cannot call it
 from a script, the error SHALL carry that reason instead of "IDL not found". A
 refused IDL SHALL never be called.
 
-#### Scenario: A custom discriminator
+#### Scenario: A custom discriminator (manual)
 - **WHEN** a 1.x instruction's discriminator differs from the first eight bytes of `sha256("global:<name>")`
 - **THEN** the IDL is refused with a reason naming the instruction and "custom discriminator"
 

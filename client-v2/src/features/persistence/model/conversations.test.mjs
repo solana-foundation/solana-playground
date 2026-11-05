@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { before, beforeEach, describe, it } from "node:test";
 
 import {
@@ -411,5 +412,42 @@ describe("conversations", { skip: !DB && "DATABASE_URL not set" }, () => {
 
     assert.equal((await listMessages(userId, thread(1))).length, 1);
     assert.equal((await listMessages(other, thread(2))).length, 1);
+  });
+  // The one-off backfill erases what tombstoned conversations said and must
+  // leave every live one whole: a predicate gone wrong would erase live
+  // history for every account, and its `migrate:down` restores nothing
+  it("the erase migration clears tombstoned conversations only", async () => {
+    const sql = readFileSync(
+      new URL(
+        "../../../../db/migrations/20261028000000_erase_deleted_chat_history.sql",
+        import.meta.url
+      ),
+      "utf8"
+    );
+    const up = sql.split("-- migrate:up")[1].split("-- migrate:down")[0];
+    await appendMessages(userId, on(1), [item(1), item(2)]);
+    await appendMessages(userId, on(2, { projectId: "p2" }), [item(3)]);
+    await query("update conversations set title = 'kept' where id = $1", [
+      thread(1),
+    ]);
+    await query(
+      "update conversations set title = 'gone', deleted_at = now() where id = $1",
+      [thread(2)]
+    );
+
+    await query(up);
+
+    assert.equal((await listMessages(userId, thread(1))).length, 2);
+    const rows = await query(
+      "select id, title, (select count(*)::int from messages where conversation_id = c.id) as n from conversations c where id = any($1) order by id",
+      [[thread(1), thread(2)]]
+    );
+    assert.deepEqual(
+      rows.rows.map((r) => [r.title, r.n]),
+      [
+        ["kept", 2],
+        [null, 0],
+      ]
+    );
   });
 });

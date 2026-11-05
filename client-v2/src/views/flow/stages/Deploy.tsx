@@ -182,8 +182,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
   const built =
     flow.build === "done" ||
     (flow.build === "failed" && Boolean(programInfo.uuid));
-  // eslint-disable-next-line unicorn/no-null -- `CliDeployGuide` takes `programId: string | null`
-  const programId = programInfo.pk?.toBase58() ?? null;
+  const programId = programInfo.pk?.toBase58();
 
   return (
     <>
@@ -211,9 +210,11 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         onDeploy={() =>
           void PgStageDeploy.start((error) =>
             markIfToldByStage("deploy", error)
-          )
+          ).catch(reportButtonFailure("deploy"))
         }
-        onSignIn={() => void signInThenDeploy()}
+        onSignIn={() =>
+          void signInThenDeploy().catch(reportButtonFailure("deploy"))
+        }
         onSaveKeypair={saveKeypair}
         onDismissBackup={() => PgStageDeploy.answerBackup(false)}
         onStaleBuildAnswer={(answer) => PgStageDeploy.answerStaleBuild(answer)}
@@ -235,10 +236,9 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         onOpenCliGuide={setGuide}
       />
       <CliDeployGuide
-        // eslint-disable-next-line unicorn/no-null -- `CliDeployGuide`'s `from` is `GuideFrom | null`
-        from={guide ?? null}
+        from={guide}
         onClose={() => setGuide(undefined)}
-        cluster={PgConnection.cluster}
+        cluster={PgConnection.cluster ?? undefined}
         built={built}
         programId={programId}
       />

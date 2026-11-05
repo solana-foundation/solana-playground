@@ -99,10 +99,20 @@ export class PgCallHistory {
       if (!Array.isArray(parsed)) throw new Error("Not a list");
       return parsed.filter(isCallRecord);
     } catch (e) {
-      log.warn("The call history does not parse", { context: { error: e } });
+      // Left alone rather than overwritten, so every add stops here; the
+      // team hears of it once a session, not on every render
+      if (!PgCallHistory._reportedUnreadable) {
+        PgCallHistory._reportedUnreadable = true;
+        log.error("The call history does not parse; new calls are not kept", {
+          context: { error: String(e) },
+          report: true,
+        });
+      }
       return undefined;
     }
   }
+
+  private static _reportedUnreadable = false;
 
   private static _seq = 0;
   private static readonly _listeners = new Set<() => void>();

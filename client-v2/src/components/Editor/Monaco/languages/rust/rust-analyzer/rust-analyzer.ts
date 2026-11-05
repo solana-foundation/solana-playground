@@ -59,25 +59,42 @@ export const initRustAnalyzer = (): Promise<Disposable> => {
   return trackStartWith(startRustAnalyzer)(window.crossOriginIsolated);
 };
 
+/** Loads of the default crates before Rust Analyzer gives up for the session */
+const DEFAULT_CRATES_ATTEMPTS = 3;
+const DEFAULT_CRATES_RETRY_MS = 2000;
+
 /** Everything `initRustAnalyzer` does once the page can run the analyzer */
 const startRustAnalyzer = async (): Promise<Disposable> => {
   // Fetched before the worker, so a checkout that never generated them (no
   // Rust toolchain, see `generate-default-crates`) spawns no 9MB worker
-  let defaultCrates: string[];
-  try {
-    defaultCrates = await Promise.all([
-      PgCommon.fetchText("/crates/core.rs"),
-      PgCommon.fetchText("/crates/alloc.rs"),
-      PgCommon.fetchText("/crates/std.rs"),
-    ]);
-  } catch (e) {
-    log.warn(
-      PgCommon.isFileMissing(e)
-        ? "Rust Analyzer disabled: the default crates are missing (`yarn generate-default-crates`)"
-        : "Rust Analyzer disabled: the default crates did not load",
-      { context: { error: e } }
-    );
-    return { dispose: () => {} };
+  let defaultCrates: string[] | undefined;
+  // A missing file is a checkout without them, for good; anything else (a
+  // 5xx, a dropped connection) gets two more tries before the session goes
+  // without the analyzer, and is reported
+  for (let attempt = 1; defaultCrates === undefined; attempt++) {
+    try {
+      defaultCrates = await Promise.all([
+        PgCommon.fetchText("/crates/core.rs"),
+        PgCommon.fetchText("/crates/alloc.rs"),
+        PgCommon.fetchText("/crates/std.rs"),
+      ]);
+    } catch (e) {
+      if (PgCommon.isFileMissing(e)) {
+        log.warn(
+          "Rust Analyzer disabled: the default crates are missing (`yarn generate-default-crates`)",
+          { context: { error: e } }
+        );
+        return { dispose: () => {} };
+      }
+      if (attempt === DEFAULT_CRATES_ATTEMPTS) {
+        log.error("Rust Analyzer disabled: the default crates did not load", {
+          context: { error: e },
+          report: true,
+        });
+        return { dispose: () => {} };
+      }
+      await PgCommon.sleep(DEFAULT_CRATES_RETRY_MS);
+    }
   }
 
   // Creating thread pool with `wasm-bindgen-rayon` sometimes hangs forever for

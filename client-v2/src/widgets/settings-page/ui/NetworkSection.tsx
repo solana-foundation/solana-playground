@@ -5,9 +5,10 @@ import type { CustomRpc, SaveResult } from "@/entities/custom-rpc";
 import { PgCustomRpcs } from "@/entities/custom-rpc";
 import { useRenderOnChange } from "@/hooks";
 import { Button } from "@/shared/ui/button";
-import { PgSettings, PgView } from "@/utils";
+import { PgGlobal, PgSettings, PgView } from "@/utils";
 import type { ToastChildProps } from "@/utils/view";
 
+import { canSwitchNetwork } from "../model/network-hold";
 import { settingsTelemetry } from "../model/telemetry";
 import type { CustomRpcSaveAnswer } from "./BaseCustomRpcs";
 import BaseCustomRpcs from "./BaseCustomRpcs";
@@ -26,6 +27,13 @@ const refusal = (result: Exclude<SaveResult, { ok: true }>): string => {
 };
 
 const pick = (url: string) => {
+  if (!canSwitchNetwork(PgGlobal.deployState)) {
+    PgView.setToast(
+      () => <span>A deploy is running. Change the network when it ends.</span>,
+      { options: { name: "network-held-by-deploy" } }
+    );
+    return;
+  }
   PgSettings.connection.endpoint = url;
 };
 

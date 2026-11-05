@@ -483,6 +483,8 @@ const BeforeDeploySummary = ({
             // The value's own type and line, no edge, on the row's baseline;
             // the link's colour, so the action reads apart from the fact
             className="ml-2 h-auto border-0 px-1 py-0 text-[length:inherit] leading-[inherit]"
+            // A deploy keeps the network it started on
+            disabled={running}
             onClick={p.onChangeNetwork}
           >
             Change

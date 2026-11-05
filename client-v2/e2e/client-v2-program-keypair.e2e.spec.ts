@@ -12,9 +12,12 @@ import { expect, LONG, test } from "./fixtures";
 
 /**
  * A custom id no account holds on devnet: the block counts an id with an
- * account as deployed, and a deployed program shows no mismatch
+ * account as deployed, and a deployed program shows no mismatch. From a fixed
+ * seed, so every run checks the same id
  */
-const OTHER_ID = Keypair.generate().publicKey.toBase58();
+const OTHER_ID = Keypair.fromSeed(
+  new Uint8Array(32).fill(7)
+).publicKey.toBase58();
 
 const block = (page: Page) =>
   page
@@ -135,6 +138,11 @@ test("client-v2-program-keypair: Round trip", async ({ seededPage: page }) => {
   await expect(field(page)).not.toHaveValue(exported);
 
   await importFile(page, text);
+  // The import replaces a keypair, so it asks first
+  const dialog = page.getByRole("dialog", {
+    name: "Replace the program keypair?",
+  });
+  await dialog.getByRole("button", { name: "Replace" }).click();
   await expect(field(page)).toHaveValue(exported);
 });
 

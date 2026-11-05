@@ -36,8 +36,8 @@ export interface BaseCliDeployGuideProps {
   onClusterChange: (cluster: CliCluster) => void;
   /** The program's file name without extension */
   name: string;
-  /** The project's program id, `null` when it has none yet */
-  programId: string | null;
+  /** The project's program id, `undefined` when it has none yet */
+  programId: string | undefined;
   /** The last build succeeded, so there is a binary to download */
   built: boolean;
   /** The binary download, shown once `built` */

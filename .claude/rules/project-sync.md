@@ -186,7 +186,7 @@ when a session reads a file matching the `paths` in the frontmatter.
   with `reason: "no-files"` (`NO_FILES_REASON`), never a 409; the browser
   only meets it against a row emptied before the server checked, and answers
   with its whole file set once (`_push`, `whole`).
-- **`/api/projects` still takes the pre-#40 client's body.** A tab open
+- **`/api/projects` still takes the pre-hoodieshq/solana-playground#40 client's body.** A tab open
   across that deploy sends `{snapshot: {files}, baseUpdatedAt, force: false}`
   and drops every status but 409 and 413 silently, so `describeWrite` reads
   `snapshot` as `files`, `force: false` as absent, and answers `force: true`

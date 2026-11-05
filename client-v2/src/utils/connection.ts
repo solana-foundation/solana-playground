@@ -247,7 +247,15 @@ class _PgConnection {
     try {
       cluster = await _PgConnection.getCluster(endpoint);
     } catch (e) {
-      if (!hasEndpointChanged()) throw e;
+      if (!hasEndpointChanged()) {
+        // The derivable that calls this swallows the throw; without this line
+        // a custom RPC that is down leaves no trace while `clusterIsStale`
+        // stays true for it
+        log.warn("could not read the selected endpoint's cluster", {
+          context: { error: String(e) },
+        });
+        throw e;
+      }
       log.info(
         "a previous endpoint's cluster read failed, reading the current",
         {

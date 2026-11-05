@@ -1,21 +1,27 @@
 import type { Page } from "@playwright/test";
 import {
   Keypair,
+  LAMPORTS_PER_SOL,
   SystemInstruction,
   SystemProgram,
   Transaction,
 } from "@solana/web3.js";
 
 import { accountMenuText, installFakeWallet } from "./fake-wallet";
-import { expect, LONG, runInTerminal, test } from "./fixtures";
+import {
+  DEVNET_RPC,
+  DEVNET_WS,
+  expect,
+  LONG,
+  runInTerminal,
+  test,
+} from "./fixtures";
 
 // Funding the Playground wallet from the user's own wallet
 // (`features/fund-wallet`). The cluster is stubbed: devnet's JSON-RPC answers
 // for the two accounts involved, and its websocket confirms what was sent.
 
-const DEVNET = /^https:\/\/api\.devnet\.solana\.com\/?$/;
-const DEVNET_WS = /^wss:\/\/api\.devnet\.solana\.com\/?$/;
-const SOL = 1_000_000_000;
+const SOL = LAMPORTS_PER_SOL;
 
 const nav = (page: Page) => page.locator('[data-slot="sidebar"]');
 const account = (page: Page) =>
@@ -130,7 +136,7 @@ const stubDevnetFor =
       }
     };
 
-    await page.route(DEVNET, async (route) => {
+    await page.route(DEVNET_RPC, async (route) => {
       const body = route.request().postDataJSON() as {
         id: number;
         method: string;

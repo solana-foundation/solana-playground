@@ -209,6 +209,31 @@ describe("SyncBanner wording", () => {
     expect(labels).toContain("Keep a copy");
     expect(labels).toContain("Delete anyway");
   });
+
+  it.each([
+    ["Keep a copy", "keep-as-new"],
+    ["Delete anyway", "delete-local"],
+  ])(
+    "answers a project deleted elsewhere with %s as %s",
+    async (label, resolution) => {
+      vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue({
+        projectId: "p1",
+        kind: "deleted-elsewhere",
+      });
+      const resolve = vi
+        .spyOn(PgProjectSync, "resolve")
+        .mockResolvedValue(true);
+      await act(async () => root.render(<SyncBanner />));
+      const button = requireFor(`the "${label}" button`)(
+        Array.from(container.querySelectorAll("button")).find(
+          (b) => b.textContent?.trim() === label
+        )
+      );
+      await act(async () => button.click());
+
+      expect(resolve).toHaveBeenCalledWith("p1", resolution);
+    }
+  );
 });
 
 describe("SyncBanner titles and actions", () => {

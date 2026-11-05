@@ -13,19 +13,19 @@ every assistant conversation under that project: all of its messages and its
 title. Only a marker that the conversation existed and was deleted with its
 project SHALL remain.
 
-#### Scenario: Messages of a deleted project are gone
+#### Scenario: Messages of a deleted project are gone (manual)
 
 - **WHEN** a signed-in user deletes a project whose conversation holds messages
 - **THEN** the account's database holds no message of that conversation and no
   title for it
 
-#### Scenario: Another project's history is untouched
+#### Scenario: Another project's history is untouched (manual)
 
 - **WHEN** a signed-in user deletes one of two projects that each hold a
   conversation
 - **THEN** the other project's conversation keeps every message and its title
 
-#### Scenario: Another user's history is untouched
+#### Scenario: Another user's history is untouched (manual)
 
 - **WHEN** a user deletes a project whose id another account also uses
 - **THEN** the other account's conversation under that id keeps every message
@@ -36,7 +36,7 @@ After a project's history is erased, a write to one of its conversations SHALL
 still be refused as deleted with the project, never accepted and never treated
 as a thread that does not exist.
 
-#### Scenario: Pushing to an erased thread
+#### Scenario: Pushing to an erased thread (manual)
 
 - **WHEN** a device that still holds a deleted project's thread pushes a message
   to it
@@ -48,7 +48,7 @@ as a thread that does not exist.
 Conversations that were marked deleted before this behaviour existed SHALL have
 their messages and titles erased once, when the database is migrated.
 
-#### Scenario: An earlier delete
+#### Scenario: An earlier delete (manual)
 
 - **WHEN** the database holds a conversation marked deleted that still has
   messages, and the migration runs

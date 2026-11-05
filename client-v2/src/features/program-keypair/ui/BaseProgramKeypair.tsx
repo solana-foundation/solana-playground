@@ -46,8 +46,10 @@ export interface BaseProgramKeypairProps {
   note: KeypairNote;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The New keypair dialog is open */
+  /** The dialog that asks before the keypair is replaced is open */
   confirming: boolean;
+  /** What the dialog asks about: a new keypair, or an imported file's */
+  replacing: "new" | "import";
   /** A deploy is running and reads the keypair again for its last transaction */
   held: boolean;
   onNew: () => void;
@@ -225,9 +227,15 @@ const BaseProgramKeypair = (p: BaseProgramKeypairProps) => {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create a new program keypair?</DialogTitle>
+            <DialogTitle>
+              {p.replacing === "import"
+                ? "Replace the program keypair?"
+                : "Create a new program keypair?"}
+            </DialogTitle>
             <DialogDescription>
-              This will create a brand new keypair for your program.
+              {p.replacing === "import"
+                ? "The keypair from the file takes this program's place."
+                : "This will create a brand new keypair for your program."}
               {p.customId && " It also removes the custom program id."}
             </DialogDescription>
           </DialogHeader>
@@ -243,7 +251,9 @@ const BaseProgramKeypair = (p: BaseProgramKeypairProps) => {
                 Save keypair
               </Button>
             )}
-            <Button onClick={p.onConfirmNew}>Generate</Button>
+            <Button onClick={p.onConfirmNew}>
+              {p.replacing === "import" ? "Replace" : "Generate"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

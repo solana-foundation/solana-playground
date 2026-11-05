@@ -77,8 +77,8 @@ export const BaseThread = ({
   working: boolean;
   /** The open thread could not be read, so nothing typed into it is saved */
   unsaved: boolean;
-  /** The line a signed-out thread ends in, or `null` when it is not shown */
-  signIn: SignInOffer | null;
+  /** The line a signed-out thread ends in, or `undefined` when it is not shown */
+  signIn: SignInOffer | undefined;
   /** The open project's name, or `null` when there is none */
   project: string | null;
   suggestions: readonly string[];

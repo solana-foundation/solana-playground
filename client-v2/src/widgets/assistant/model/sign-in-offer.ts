@@ -24,8 +24,8 @@ type Session = "unread" | { signedOut: boolean; pending: boolean };
 
 /**
  * `assistant-sign-out-history` (from the designers' Spec 08): a signed-out thread with something in it
- * ends in an offer to sign in and keep it on other devices. Returns `null`
- * when the line is not shown.
+ * ends in an offer to sign in and keep it on other devices. Returns
+ * `undefined` when the line is not shown.
  *
  * Only where the deployment syncs: without a database, signing in keeps
  * nothing anywhere, and the line would say it does. Sync is asked once per
@@ -36,7 +36,7 @@ export const useSignInOffer = ({
 }: {
   /** The open thread holds anything: an empty one has nothing to keep */
   hasItems: boolean;
-}): SignInOffer | null => {
+}): SignInOffer | undefined => {
   const [session, setSession] = useState<Session>("unread");
   const [syncs, setSyncs] = useState(false);
 
@@ -70,8 +70,7 @@ export const useSignInOffer = ({
   }, []);
 
   if (session === "unread" || !session.signedOut || !syncs || !hasItems) {
-    // eslint-disable-next-line unicorn/no-null -- `BaseThread`'s `signIn` prop is `SignInOffer | null`
-    return null;
+    return undefined;
   }
   return { pending: session.pending, onSignIn: signIn };
 };
