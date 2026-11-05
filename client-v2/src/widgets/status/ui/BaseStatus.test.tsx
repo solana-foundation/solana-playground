@@ -229,7 +229,7 @@ it("opens the analyzer's panel from its rail dot, as the row does", async () => 
     screen.getByRole("button", { name: /^Rust analyzer, taking longer/ })
   );
   const panel = await screen.findByRole("dialog");
-  expect(within(panel).getByText("Rust · Taking longer")).toBeTruthy();
+  expect(within(panel).getByText("Taking longer")).toBeTruthy();
   expect(within(panel).getByRole("button", { name: "Reload" })).toBeTruthy();
   expect(onPick).toHaveBeenCalledExactlyOnceWith(SLOW);
 });
@@ -268,7 +268,7 @@ it("folds the three into one chip whose sheet names what is down", async () => {
   rerender(draw(true));
   const sheet = await screen.findByRole("dialog", { name: "Status" });
   const ai = sheet.querySelector('[data-status="ai"]') as HTMLElement;
-  expect(within(ai).getByText("AI · Off")).toBeTruthy();
+  expect(within(ai).getByText("Off")).toBeTruthy();
   await userEvent.click(
     within(ai).getByRole("button", { name: "Connect a model" })
   );

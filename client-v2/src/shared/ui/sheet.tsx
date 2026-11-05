@@ -68,10 +68,12 @@ function SheetContent({
         {children}
         {showCloseButton && (
           <SheetPrimitive.Close data-slot="sheet-close" asChild>
+            {/* A fingertip square whose 20 px glyph sits on the title's line
+                (16 px padding, 24 px line) and ends at the content's 16 px edge */}
             <Button
               variant="ghost"
-              className="absolute top-3 right-3"
-              size="icon-sm"
+              className="absolute top-1.5 right-1 size-11 [&_svg:not([class*='size-'])]:size-5"
+              size="icon"
             >
               <XIcon />
               <span className="sr-only">Close</span>

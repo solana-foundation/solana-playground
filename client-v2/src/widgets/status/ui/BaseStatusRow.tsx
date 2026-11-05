@@ -16,7 +16,7 @@ import {
 } from "@/shared/ui/sidebar";
 
 import type { StatusIndicator } from "../model/indicators";
-import { IndicatorDot, StatusDetail } from "./parts";
+import { IndicatorDot, stateWords, StatusDetail } from "./parts";
 
 export interface BaseStatusRowProps {
   /** Network, AI, Rust analyzer, in that order */
@@ -34,9 +34,9 @@ const settingsTrigger = { [SETTINGS_TRIGGER_ATTR]: "" };
 
 /**
  * The navigation foot's status row: the three indicators where the
- * prototype draws "● Devnet", wrapping onto a second line when a state is
- * long rather than cutting its words. The network and the AI go straight to
- * where they are fixed; the analyzer, which has no settings, opens a panel.
+ * prototype draws "● Devnet", one per line, on Get set up's grid above
+ * them. The network and the AI go straight to where they are fixed;
+ * the analyzer, which has no settings, opens a panel beside the navigation.
  */
 const BaseStatusRow = ({
   indicators,
@@ -47,7 +47,8 @@ const BaseStatusRow = ({
   <SidebarMenu className="w-full">
     <SidebarMenuItem
       data-testid="status-row"
-      className="flex flex-wrap items-center"
+      // A little more room before the account row than between the lines
+      className="flex flex-col pb-2"
     >
       {indicators.map((indicator) => {
         const button = (props: ComponentProps<typeof SidebarMenuButton>) => (
@@ -57,11 +58,12 @@ const BaseStatusRow = ({
             title={indicator.label}
             data-status={indicator.id}
             data-state-kind={indicator.state}
-            // Tight, so a row of ready states fits the navigation on one line
-            className="w-auto max-w-full min-w-0 gap-1.5 px-1"
+            // On Get set up's grid above: the dot in its circles' 14 px column
+            // (centre 23 px), the words on its labels' edge (40 px)
+            className="w-full min-w-0 gap-2.5 px-2"
             {...props}
           >
-            <IndicatorDot state={indicator.state} />
+            <IndicatorDot state={indicator.state} className="size-3.5" />
             <span className="truncate">{indicator.words}</span>
           </SidebarMenuButton>
         );
@@ -82,10 +84,17 @@ const BaseStatusRow = ({
             onOpenChange={(open) => open && onPick(indicator)}
           >
             <PopoverTrigger asChild>{button({})}</PopoverTrigger>
-            <PopoverContent side="top" align="start" className="w-72">
+            {/* Beside the navigation, level with the line's foot: 16 px off
+                the full-width line clears the sidebar's edge by 7 px */}
+            <PopoverContent
+              side="right"
+              align="end"
+              sideOffset={16}
+              className="w-72"
+            >
               <PopoverHeader>
                 <PopoverTitle>{indicator.name}</PopoverTitle>
-                <PopoverDescription>{indicator.words}</PopoverDescription>
+                <PopoverDescription>{stateWords(indicator)}</PopoverDescription>
               </PopoverHeader>
               <StatusDetail indicator={indicator} onAction={onAction} />
             </PopoverContent>

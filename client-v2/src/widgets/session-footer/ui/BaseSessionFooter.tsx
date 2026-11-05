@@ -65,9 +65,11 @@ const BaseSessionFooter = ({
               <SidebarMenuButton
                 ref={accountRef}
                 size="lg"
-                // The prototype's 40 px account row, under the 28 px rows; on
-                // a phone a fingertip tall in the body type, its avatar at 32
-                className="h-10 text-[0.8125rem] max-md:h-12 max-md:gap-3 max-md:text-body max-md:[&_[data-slot=avatar]]:size-8 max-md:[&_[data-slot=avatar-fallback]_svg]:size-4"
+                // The prototype's 40 px account row, under the 28 px rows: an
+                // 22 px avatar centred on the status dots and Get set up's
+                // circles (23 px), the name at 40 px with their words; on a
+                // phone a fingertip tall in the body type, its avatar at 32
+                className="h-10 gap-1.5 pl-1 text-[0.8125rem] [&_[data-slot=avatar]]:size-5.5 max-md:h-12 max-md:gap-3 max-md:pl-2 max-md:text-body max-md:[&_[data-slot=avatar]]:size-8"
                 aria-label={accountLabel(account)}
                 aria-busy={account.sending || undefined}
               >

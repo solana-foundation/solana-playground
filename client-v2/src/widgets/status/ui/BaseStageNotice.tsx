@@ -37,7 +37,7 @@ const BaseStageNotice = ({
 }: BaseStageNoticeProps) => {
   if (!notice) return null;
   return (
-    <div className="shrink-0 px-4 pt-3" data-testid="stage-notice">
+    <div className="shrink-0 px-4 py-3" data-testid="stage-notice">
       {/* A third column holds the close at the end of the first line, where
           a toast has its own */}
       <Callout

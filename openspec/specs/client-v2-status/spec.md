@@ -134,7 +134,7 @@ row's action and the sheet's close SHALL be at least 44 px tall.
 - **WHEN** a user on a 390 px wide screen with no model connected, whose
   cluster does not answer, taps the status chip
 - **THEN** the chip reads "1 not ready" (the cluster; the AI off is not
-  counted), and the sheet lists Network, AI and Rust analyzer, with "AI · Off"
+  counted), and the sheet lists Network, AI and Rust analyzer, with "Off"
   and "Connect a model" on the AI row
 
 #### Scenario: The phone chip reads Offline

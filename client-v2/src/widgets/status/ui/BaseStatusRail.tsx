@@ -15,7 +15,7 @@ import {
 import { StatusDot } from "@/shared/ui/status-dot";
 
 import type { BaseStatusRowProps } from "./BaseStatusRow";
-import { DOT, StatusDetail } from "./parts";
+import { DOT, stateWords, StatusDetail } from "./parts";
 
 /**
  * The status row on the rail: the three dots, one button each, doing what
@@ -56,7 +56,9 @@ const BaseStatusRail = ({
               <PopoverContent side="right" align="end" className="w-72">
                 <PopoverHeader>
                   <PopoverTitle>{indicator.name}</PopoverTitle>
-                  <PopoverDescription>{indicator.words}</PopoverDescription>
+                  <PopoverDescription>
+                    {stateWords(indicator)}
+                  </PopoverDescription>
                 </PopoverHeader>
                 <StatusDetail indicator={indicator} onAction={onAction} />
               </PopoverContent>

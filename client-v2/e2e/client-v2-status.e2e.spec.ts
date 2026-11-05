@@ -269,7 +269,7 @@ test.describe("on a phone", () => {
       await expect(sheet.getByText(name, { exact: true })).toBeVisible();
     }
     const aiRow = sheet.locator('[data-status="ai"]');
-    await expect(aiRow).toContainText("AI · Off");
+    await expect(aiRow.getByText("Off", { exact: true })).toBeVisible();
     await aiRow.getByRole("button", { name: "Connect a model" }).click();
     await expect(
       page.getByRole("dialog", { name: "Connect a model" })

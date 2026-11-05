@@ -72,10 +72,10 @@ const StageBar: FC = () => {
         // the work area (the wallet, z-index 1), which the full-width row
         // reaches
         "isolate flex min-w-0 shrink-0 items-center justify-center gap-2 bg-transparent font-sans",
-        // In the frame, a 38 px row with the columns' bottom line, as the
-        // prototype draws the stage tabs; on a phone, across the preview
-        // page's bar
-        row ? "h-[38px] border-b border-border px-2" : "flex-1"
+        // In the frame, a 48 px row with the columns' bottom line: the 34 px
+        // stepper keeps 7 px from the bar above and the editor tabs below;
+        // on a phone, across the preview page's bar
+        row ? "h-12 border-b border-border px-2" : "flex-1"
       )}
     >
       <Stepper

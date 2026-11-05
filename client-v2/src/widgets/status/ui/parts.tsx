@@ -1,3 +1,4 @@
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { StatusDot } from "@/shared/ui/status-dot";
 
@@ -45,9 +46,30 @@ export const StatusDetail = ({
   </>
 );
 
+const after = (words: string) => words.split(" · ").slice(1).join(" · ");
+
+/**
+ * The state under an indicator's name, where the name is already shown: the
+ * AI's and the analyzer's words lose their short name ("AI · Off" reads
+ * "Off"), the network keeps the cluster's
+ */
+export const stateWords = (indicator: StatusIndicator) => {
+  if (indicator.id === "network") return indicator.words;
+  const rest = after(indicator.words);
+  if (rest) return rest;
+  // "gpt-5-mini" is the state itself; "Rust" alone, not started, says it in its tip
+  return indicator.state === "ready" ? indicator.words : after(indicator.tip);
+};
+
 /** A dot sized for the 16 px glyph box every navigation row's icon has */
-export const IndicatorDot = ({ state }: { state: StatusState }) => (
-  <span className="grid size-4 shrink-0 place-items-center">
+export const IndicatorDot = ({
+  state,
+  className,
+}: {
+  state: StatusState;
+  className?: string;
+}) => (
+  <span className={cn("grid size-4 shrink-0 place-items-center", className)}>
     <StatusDot variant={DOT[state]} size="lg" />
   </span>
 );
