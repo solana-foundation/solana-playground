@@ -1146,6 +1146,15 @@ describe("BaseWinCard", () => {
     expect(onOpenCall).toHaveBeenCalledTimes(1);
   });
 
+  it("offers client.ts, not the panel again, after a pass from the panel", () => {
+    const i = steps.findIndex((s) => s.win.callPanelLine);
+    win(i, { via: "call_panel", onOpenCall: vi.fn() });
+    expect(screen.queryByRole("button", { name: "Open Call" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Write it in client.ts/ })
+    ).toBeTruthy();
+  });
+
   it("reads its own line after a chat pass, and offers no client.ts", () => {
     const i = steps.findIndex((s) => s.win.callPanelLine);
     win(i, { via: "chat" });

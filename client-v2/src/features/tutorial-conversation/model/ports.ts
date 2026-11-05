@@ -1,4 +1,6 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import type { Idl } from "@coral-xyz/anchor";
+
 import type { Act, Goal } from "@/entities/tutorial";
 
 import type { RunResult } from "./progress";
@@ -41,6 +43,11 @@ export interface RunInput {
     args: Record<string, string>;
     accounts?: Record<string, string>;
   };
+  /**
+   * The IDL of the deployed program, which a call is encoded with and every
+   * transaction is decoded by. Absent before a deploy: the last build's then.
+   */
+  idl?: Idl;
   /**
    * The step's `call` goal's log pattern: a run or call picks its card's
    * large line with it, so the line the card shows is the one the goal

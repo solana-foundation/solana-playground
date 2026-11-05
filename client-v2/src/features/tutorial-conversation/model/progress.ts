@@ -1,4 +1,5 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import type { Idl } from "@coral-xyz/anchor";
 import { z } from "zod";
 
 import type {
@@ -7,6 +8,9 @@ import type {
   QuestionResult,
 } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
+
+import type { DeployedIdl } from "./deployed-idl";
+import { parseDeployed } from "./deployed-idl";
 
 const log = createLogger("tutorial-conversation:progress");
 
@@ -55,6 +59,12 @@ export interface ConversationProgress extends ConversationSave {
    * step's own create call replaces what it wrote.
    */
   accounts: Record<string, string>;
+  /**
+   * The IDL the last landed deploy was built from, for the Call panel; absent
+   * before any deploy. Added after version 1 shipped, like `said`. Only a deploy
+   * card writes it: one from the terminal moves nothing until the card runs.
+   */
+  deployed?: DeployedIdl;
 }
 
 /**
@@ -335,6 +345,11 @@ export type RunResult =
        */
       lamports: number | null;
       instructions: string[];
+      /**
+       * The IDL this deploy put on chain. The engine moves it to the save's
+       * `deployed` rather than keep a copy in every run's record.
+       */
+      idl?: Idl;
     }
   | {
       act: "deploy" | "buildDeploy";
@@ -877,6 +892,8 @@ export const parseProgress = (
   if (!isMsOrNull(saved.restartedAt)) return null;
   const restartedAt = saved.restartedAt;
 
+  const deployed = parseDeployed(saved.deployed);
+  if (saved.deployed !== undefined && !deployed) onDrop("deployed");
   return {
     version: 1,
     passed: Array.from(new Set(saved.passed)),
@@ -900,6 +917,7 @@ export const parseProgress = (
       onDrop,
       "accounts"
     ),
+    ...(deployed ? { deployed } : {}),
   };
 };
 
@@ -957,6 +975,22 @@ if (import.meta.vitest) {
       expect(parseProgress(saved)?.accounts).toEqual({ map: "Map1" });
       delete saved.accounts;
       expect(parseProgress(saved)?.accounts).toEqual({});
+    });
+
+    it("keeps the deployed IDL across a reload, and drops one it cannot read", () => {
+      const idl = { instructions: [{ name: "hello", accounts: [], args: [] }] };
+      const dropped: string[] = [];
+      const saved = JSON.parse(JSON.stringify(freshProgress()));
+      saved.deployed = { idl, added: ["hello"] };
+      expect(parseProgress(saved)?.deployed).toEqual({
+        idl,
+        added: ["hello"],
+      });
+      saved.deployed = { idl: {} };
+      expect(parseProgress(saved, (k) => dropped.push(k))?.deployed).toBe(
+        undefined
+      );
+      expect(dropped).toEqual(["deployed"]);
     });
 
     it("drops a remembered account it cannot read, by its key", () => {

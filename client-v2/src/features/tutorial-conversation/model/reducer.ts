@@ -1,4 +1,6 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import type { Idl } from "@coral-xyz/anchor";
+
 import type {
   Act,
   ActBeat,
@@ -11,9 +13,11 @@ import type {
   TutorialDefinition,
   TutorialEvents,
 } from "@/entities/tutorial";
+import { sameIdlName } from "@/shared/lib/idl-name";
 
 import { isPlannedLog } from "./build-error";
 import { TICK_MS } from "./clock";
+import { nextDeployed } from "./deployed-idl";
 import { holds, keyOf, typedKey } from "./landing";
 import type { Judge, RunInput } from "./ports";
 import type {
@@ -316,14 +320,15 @@ const outcomeOf = (result: RunResult): ActionRunParams["outcome"] => {
 /** The `tutorial_action_run` event of one run */
 const actionRunOf = (
   run: { slug: string; step: number; act: Act; took: number },
-  outcome: ActionRunParams["outcome"]
+  outcome: ActionRunParams["outcome"],
+  action: ActionRunParams["action"] = ACTION_OF[run.act]
 ): Effect => ({
   kind: "event",
   name: "tutorial_action_run",
   params: {
     tutorial: run.slug,
     step: run.step,
-    action: ACTION_OF[run.act],
+    action,
     outcome,
     // Two devices' clocks can disagree; a run never takes negative time
     seconds: Math.max(0, Math.round(run.took / 1000)),
@@ -451,8 +456,48 @@ const hasMetUntil = (ctx: EngineContext, beat: ActBeat, result: RunResult) =>
     result
   );
 
-/** Whether a run is in flight: acts never run two at once */
-const running = (p: ConversationProgress) =>
+/**
+ * The instruction the live step's goal names, which the Call panel picks on
+ * open, or undefined on a step whose goal names none (a build, a deploy, the win's
+ * intro or the finish)
+ */
+export const liveInstruction = (
+  definition: TutorialDefinition,
+  cursor: Cursor
+): string | undefined => {
+  const goal = stepAt(definition, cursor)?.goal;
+  return goal?.kind === "call" || goal?.kind === "refused"
+    ? goal.instruction
+    : undefined;
+};
+
+/**
+ * A Call panel call's input: the deployed IDL, and the live goal's log
+ * pattern when the call is of the goal's instruction, so the result's line is
+ * the one the goal judges.
+ */
+export const panelInput = (
+  definition: TutorialDefinition,
+  p: ConversationProgress,
+  call: NonNullable<RunInput["call"]>
+): RunInput => {
+  const goal = stepAt(definition, p.cursor)?.goal;
+  return {
+    beatId: "call-panel",
+    call: Object.keys(p.accounts).length
+      ? { ...call, accounts: p.accounts }
+      : call,
+    ...(p.deployed ? { idl: p.deployed.idl } : {}),
+    ...(goal?.kind === "call" &&
+    goal.log !== undefined &&
+    sameIdlName(goal.instruction, call.instruction)
+      ? { log: goal.log }
+      : {}),
+  };
+};
+
+/** A run in flight on an act card: the panel waits for it */
+export const running = (p: ConversationProgress) =>
   Object.values(p.runs).some((rs) => rs.at(-1)?.status === "started");
 
 const isAsk = (b: Beat): b is Ask => b.kind === "ask";
@@ -821,12 +866,43 @@ const settledEvents = (
   return [];
 };
 
+/** A landed deploy's IDL, out of the result that goes on into the record */
+const takeDeployedIdl = (action: Action): { action: Action; idl?: Idl } => {
+  if (action.type !== "ended" && action.type !== "recognised")
+    return { action };
+  const { result } = action;
+  if (
+    !result.ok ||
+    (result.act !== "deploy" && result.act !== "buildDeploy") ||
+    !result.idl
+  ) {
+    return { action };
+  }
+  const { idl, ...rest } = result;
+  return { action: { ...action, result: rest }, idl };
+};
+
 export const reduce = (
   ctx: EngineContext,
   state: EngineState,
   action: Action
 ): Reduced => {
-  const reduced = reduceAction(ctx, state, action);
+  const { action: plain, idl } = takeDeployedIdl(action);
+  const raw = reduceAction(ctx, state, plain);
+  // Kept only if the engine took the run: a result it dropped landed nothing
+  const reduced =
+    idl && raw.state.progress !== state.progress
+      ? {
+          ...raw,
+          state: {
+            ...raw.state,
+            progress: {
+              ...raw.state.progress,
+              deployed: nextDeployed(state.progress.deployed, idl),
+            },
+          },
+        }
+      : raw;
   if (reduced.state.progress === state.progress) return reduced;
   const answered = answeredEvents(ctx, state.progress, reduced.state.progress);
   return answered.length
@@ -1021,6 +1097,7 @@ const reduceAction = (
       // its result may have failed the goal (a call before the upgrade)
       const input: RunInput = { beatId: beat.id };
       if (beat.account) input.account = beat.account.name;
+      if (p.deployed) input.idl = p.deployed.idl;
       if (step.goal.kind === "call" && step.goal.log !== undefined) {
         input.log = step.goal.log;
       }
@@ -1229,10 +1306,29 @@ const reduceAction = (
     case "passed": {
       const known = remembering(p, action.result);
       const step = stepAt(definition, p.cursor);
-      if (!step || passed(p, step) || !ctx.judge(step.goal, action.result)) {
-        return known === p ? same(state) : withProgress(state, known);
-      }
-      return passStep(ctx, state, known, step, action.at, action.via);
+      const unmoved = known === p ? same(state) : withProgress(state, known);
+      const reduced =
+        !step || passed(p, step) || !ctx.judge(step.goal, action.result)
+          ? unmoved
+          : passStep(ctx, state, known, step, action.at, action.via);
+      if (action.via !== "call_panel") return reduced;
+      // Every call from the panel counts, one that passes nothing too
+      return withEffect(
+        reduced,
+        actionRunOf(
+          {
+            slug: ctx.slug,
+            // On a win or the finish: the last step the learner reached
+            step: step
+              ? definition.steps.indexOf(step) + 1
+              : definition.steps.length,
+            act: "call",
+            took: action.result.seconds * 1000,
+          },
+          outcomeOf(action.result),
+          "call_panel"
+        )
+      );
     }
 
     case "explain": {
@@ -2249,6 +2345,92 @@ if (import.meta.vitest) {
           { type: "passed", via: "client", result: OK_BUILD, at: 4000 },
         ]).effects;
         expect(answered(client)).toEqual([event("skipped", 1)]);
+      });
+
+      it("measures every Call panel call, one that passes nothing too", () => {
+        const failed: RunResult = {
+          act: "call",
+          ok: false,
+          seconds: 2,
+          message: "no",
+          log: "",
+        };
+        const { effects } = play([
+          start,
+          { type: "passed", via: "call_panel", result: failed, at: 4000 },
+        ]);
+        expect(effects).toContainEqual({
+          kind: "event",
+          name: "tutorial_action_run",
+          params: {
+            tutorial: expect.any(String),
+            step: 1,
+            action: "call_panel",
+            outcome: "failed",
+            seconds: 2,
+          },
+        });
+      });
+
+      it("keeps a landed deploy's IDL in the save, out of the run's record", () => {
+        const idlWith = (args: string[]) =>
+          ({
+            version: "0.1.0",
+            name: "hello_anchor",
+            instructions: [
+              {
+                name: "hello",
+                accounts: [],
+                args: args.map((name) => ({ name, type: "string" })),
+              },
+            ],
+          } as Idl);
+        const deploy = (idl: Idl): RunResult => ({
+          act: "deploy",
+          ok: true,
+          seconds: 3,
+          programId: "p",
+          signature: "s",
+          upgraded: false,
+          lamports: 1,
+          instructions: ["hello"],
+          idl,
+        });
+        const toDeploy: Action[] = [
+          start,
+          rightPick,
+          build(7000),
+          { type: "ended", beatId: "s1.build", result: OK_BUILD, at: 8600 },
+          { type: "next", at: 9000 },
+          { type: "skip", beatId: "s2.q2", at: 9100 },
+          { type: "act", beatId: "s2.deploy", at: 9200 },
+        ];
+        const landed = play(
+          toDeploy.concat({
+            type: "ended",
+            beatId: "s2.deploy",
+            result: deploy(idlWith([])),
+            at: 9900,
+          })
+        ).state.progress;
+        expect(landed.deployed).toEqual({ idl: idlWith([]), added: [] });
+        const record = landed.runs["s2.deploy"].at(-1);
+        expect(record && "result" in record && "idl" in record.result).toBe(
+          false
+        );
+
+        const upgraded = reduce(
+          ctx(),
+          { progress: landed, stage: null },
+          {
+            type: "ended",
+            beatId: "s2.deploy",
+            result: deploy(idlWith(["name"])),
+            at: 9950,
+          }
+        );
+        // No such run in flight: the engine dropped it, and keeps no IDL
+        expect(upgraded.state.progress.deployed).toEqual(landed.deployed);
       });
 
       it("counts a question once, whatever comes after it resolved", () => {

@@ -12,11 +12,13 @@ import type { ConversationState } from "@/features/tutorial-conversation";
 import {
   isUnreachable,
   judgeGoal,
+  PgCallPanel,
   PgConversation,
   realWorkspace,
   stepOfBeat,
   tutorialRunner,
 } from "@/features/tutorial-conversation";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
 import {
   markUnavailableHere,
@@ -470,9 +472,7 @@ const handlers: Omit<
   restartStep: () => PgConversation.restartStep(),
   showLine,
   revealError: showLineWithCaret,
-  // TODO(tutorial-flow-v2 4.4): the Call panel's opener; until it exists the
-  // win card shows no "Open Call"
-  openCall: undefined,
+  openCall: () => PgCallPanel.show(),
   copyFailed: (error) => copyFailed(error),
   apply: (id) => PgConversation.apply(id),
   keep: (id) => PgConversation.keep(id),
@@ -596,9 +596,12 @@ export const TutorialConversation = ({
   const next = context?.definition.finish.next ?? null;
   // Read each render: the tutorial list is the app's, not this component's
   const nextTutorial = nextTutorialOf(next);
+  const viewport = useViewport();
   const on = useMemo<TurnHandlers>(
     () => ({
       ...handlers,
+      // The panel lives in the desktop's workspace; the phone has no opener yet
+      openCall: viewport === "wide" ? handlers.openCall : undefined,
       openNextTutorial: () => {
         const slug = PgConversation.state.context?.slug;
         if (!nextTutorial || !next || !slug) {
@@ -631,7 +634,7 @@ export const TutorialConversation = ({
         }
       },
     }),
-    [next, nextTutorial, onAllTutorials, onOpenMenu]
+    [next, nextTutorial, onAllTutorials, onOpenMenu, viewport]
   );
 
   if (!context || !view) {

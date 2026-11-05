@@ -6,6 +6,7 @@ import { flushSync } from "react-dom";
 import { EditorTabsShown } from "@/components/EditorWithTabs";
 import type { Doc } from "@/entities/tutorial";
 import { onCodeRequest, onDocRequest } from "@/entities/tutorial";
+import { PgCallPanel } from "@/features/tutorial-conversation";
 import { useRenderOnChange } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
 import { PgCommon, PgExplorer, PgTutorial } from "@/utils";
@@ -28,6 +29,7 @@ import { createdIn, tabsOf, treeRows, tutorialFiles } from "../model/tree";
 import BaseDockedTree from "./BaseDockedTree";
 import BaseDocPage from "./BaseDocPage";
 import BaseWorkspaceHead from "./BaseWorkspaceHead";
+import { CallButton, CallPanel } from "./CallPanel";
 import { useEditorLines } from "./use-editor-lines";
 import { useLogRequests } from "./use-log-requests";
 import { pickedDiagnostic } from "./use-terminal-facts";
@@ -98,8 +100,6 @@ export interface TutorialWorkspaceProps {
    * 3.3) and the question card; none until they pass it
    */
   marks?: (file: string) => Partial<LineMarks>;
-  /** The Call button, once the program is deployed (task 4.4) */
-  call?: ReactNode;
   /** The stage: the editor, under the head and beside the docked tree */
   children: ReactNode;
 }
@@ -115,7 +115,6 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
   console: terminal,
   keys,
   marks,
-  call,
   children,
 }) => {
   useRenderOnChange(PgTutorial.onDidChange);
@@ -208,6 +207,8 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
   };
   const openFile = (path: string, via: "tab" | "tree") => {
     setTreeOpen(false);
+    // A press on a tab leaves the panel, also on the file under it
+    PgCallPanel.close();
     // The file comes back in front of the page, which keeps its tab; at once,
     // so the editor is no longer inert when `pickFocus` asks for it
     if (front === undefined) setDoc(undefined);
@@ -246,6 +247,8 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
       setOpenDocs(next);
       writeOpenDocs(name, next);
     }
+    // A page opened leaves the panel, as a file does
+    PgCallPanel.close();
     if (file === front) return true;
     setDoc(file);
     writeFrontDoc(name, file);
@@ -358,6 +361,14 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
 
   useLogRequests(active, terminalNow, box);
 
+  // A file opened from anywhere (the feed's "Show in lib.rs") is to be seen
+  useEffect(() => {
+    if (!active) return;
+    const sub = PgExplorer.onDidOpenFile(() => PgCallPanel.close());
+    return () => sub.dispose();
+  }, [active]);
+  useRenderOnChange(PgCallPanel.onDidChange);
+
   // The line states of the open file. A failed build's output lands a
   // moment after its event, and the squiggle reads it
   useRenderOnChange(PgFlow.onDidChange);
@@ -387,11 +398,11 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
       {active && (
         <BaseWorkspaceHead
           tabs={tabsOf(files, present)}
-          active={open}
+          active={PgCallPanel.isOpen ? null : open}
           onOpen={(path) => openFile(path, "tab")}
           docs={{
             tabs: docTabs,
-            active: front,
+            active: PgCallPanel.isOpen ? undefined : front,
             onOpen: (file) => showDoc(file, "tab"),
             onClose: closeDoc,
           }}
@@ -406,7 +417,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
             onPickDoc: (file) => showDoc(file, "tree"),
             onDock: () => dock(true),
           }}
-          call={call}
+          call={<CallButton />}
           terminal={{
             open: terminal.open,
             onToggle: () => terminal.setOpen(!terminal.open, "button"),
@@ -449,6 +460,8 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
               />
             </div>
           )}
+          {/* Over the editor, which must never unmount */}
+          {active && <CallPanel />}
         </div>
       </div>
     </div>

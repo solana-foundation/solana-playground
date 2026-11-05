@@ -316,6 +316,20 @@ const buildFailureOf = (r: Extract<RunResult, { act: "build"; ok: false }>) => {
   return `The build failed: ${e.code ? `${e.code} ` : ""}${e.message}${where}`;
 };
 
+/**
+ * A landed deploy with the IDL it put on chain, which the engine keeps. Only
+ * an IDL a call can be sent through (`callableIdl`); one that cannot is
+ * left out
+ */
+const withIdl = (result: RunResult): RunResult => {
+  const idl = PgProgramInfo.callableIdl();
+  return result.ok &&
+    (result.act === "deploy" || result.act === "buildDeploy") &&
+    idl
+    ? { ...result, idl }
+    : result;
+};
+
 /** The deploy act and the build-and-deploy act, on devnet */
 export const runDeployOnDevnet: ActRun = async (act, _input, onStage) => {
   const result = await runDeploy(
@@ -330,7 +344,7 @@ export const runDeployOnDevnet: ActRun = async (act, _input, onStage) => {
       context: { message: result.message },
     });
   }
-  return result;
+  return withIdl(result);
 };
 
 /**
@@ -348,7 +362,7 @@ export const tutorialRunner = actRunner(
   async (act, startedAtMs) => {
     if (act !== "deploy" && act !== "buildDeploy") return null;
     if (PgConnection.cluster !== "devnet") return null;
-    return recogniseDeploy({
+    const recognised = await recogniseDeploy({
       act,
       programId: PgProgramInfo.pk?.toBase58() ?? null,
       startedAtMs,
@@ -359,5 +373,6 @@ export const tutorialRunner = actRunner(
         (ix) => ix.name
       ),
     });
+    return recognised && withIdl(recognised);
   }
 );
