@@ -94,14 +94,18 @@ describe("BaseBuild", () => {
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
-  it("says where a first build runs while it runs", () => {
-    render(<BaseBuild {...props({ kind: "empty" }, true)} />);
+  it("says a first build runs on the build server, with a bar in place of the button", () => {
+    const { container } = render(
+      <BaseBuild {...props({ kind: "empty" }, true)} />
+    );
 
     expect(screen.getByRole("heading", { name: "Building…" })).toBeTruthy();
-    expect(screen.getByText(/Compiling on api\.solpg\.io/)).toBeTruthy();
-    const busy = screen.getByRole("button", { name: /Building/ });
-    expect(busy).toHaveProperty("disabled", true);
-    expect(busy.getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByText(/^Compiling on the build server\./)).toBeTruthy();
+    expect(screen.queryByText(/api\.solpg\.io/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Building/ })).toBeNull();
+    expect(
+      container.querySelector('[data-slot="stage-empty-progress"]')
+    ).not.toBeNull();
   });
 
   it.each([
@@ -111,7 +115,7 @@ describe("BaseBuild", () => {
     render(<BaseBuild {...props({ kind: "empty" }, true, false, elapsedMs)} />);
 
     expect(
-      screen.queryByText("First builds take longer. This one is running.") !==
+      screen.queryByText(/First builds take longer\. This one is running\./) !==
         null
     ).toBe(shown);
   });
@@ -120,9 +124,9 @@ describe("BaseBuild", () => {
     render(<BaseBuild {...props({ kind: "empty" }, true, false, 12_400)} />);
 
     expect(screen.getByText("12 s")).toBeTruthy();
-    expect(screen.getByText(/Compiling on api\.solpg\.io/)).toBeTruthy();
+    expect(screen.getByText(/^Compiling on the build server\./)).toBeTruthy();
     expect(
-      screen.queryByText("First builds take longer. This one is running.")
+      screen.queryByText(/First builds take longer\. This one is running\./)
     ).toBeNull();
   });
 
@@ -131,9 +135,9 @@ describe("BaseBuild", () => {
 
     expect(screen.getByRole("heading", { name: "Building…" })).toBeTruthy();
     expect(screen.getByText("61 s")).toBeTruthy();
-    expect(screen.getByText(/Compiling on api\.solpg\.io/)).toBeTruthy();
+    expect(screen.getByText(/^Compiling on the build server\./)).toBeTruthy();
     expect(
-      screen.getByText("First builds take longer. This one is running.")
+      screen.getByText(/First builds take longer\. This one is running\./)
     ).toBeTruthy();
   });
 
@@ -141,7 +145,7 @@ describe("BaseBuild", () => {
     render(<BaseBuild {...props({ kind: "empty" }, true, true, 61_000)} />);
 
     expect(
-      screen.getByText("First builds take longer. This one is running.")
+      screen.getByText(/First builds take longer\. This one is running\./)
     ).toBeTruthy();
     expect(screen.queryByText(/taking longer than usual/)).toBeNull();
   });

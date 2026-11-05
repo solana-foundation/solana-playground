@@ -29,6 +29,7 @@ import {
   StageEmptyDescription,
   StageEmptyMedia,
   StageEmptyMeta,
+  StageEmptyProgress,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
 
@@ -99,6 +100,7 @@ const Surface = ({
   children,
   actions,
   progress,
+  running = false,
   report = false,
   alert = false,
 }: {
@@ -107,9 +109,12 @@ const Surface = ({
   meta?: string | null;
   description?: ReactNode;
   children?: ReactNode;
-  actions: ReactNode;
+  /** None while `running`: the bar says the run goes on */
+  actions?: ReactNode;
   /** The run behind the surface's Build button, for the slow line */
   progress?: Pick<BaseBuildProps, "building" | "slow">;
+  /** A run in flight: a moving bar under the meta */
+  running?: boolean;
   report?: boolean;
   /**
    * The description is why the stage stopped, so it is announced the moment
@@ -118,10 +123,19 @@ const Surface = ({
   alert?: boolean;
 }) => (
   <div className={STAGE_FRAME}>
-    <StageEmpty className={cn(STAGE_BODY, report && STAGE_REPORT)}>
+    <StageEmpty
+      className={cn(
+        STAGE_BODY,
+        report && STAGE_REPORT,
+        // No action row to push to the foot on a phone: the words take the
+        // middle, not the foot
+        !actions && "max-md:[&>:last-child]:mb-auto"
+      )}
+    >
       {icon && <StageEmptyMedia>{icon}</StageEmptyMedia>}
       <StageEmptyTitle>{title}</StageEmptyTitle>
       {meta && <StageEmptyMeta>{meta}</StageEmptyMeta>}
+      {running && <StageEmptyProgress />}
       {description && (
         <StageEmptyDescription role={alert ? "alert" : undefined}>
           {description}
@@ -129,7 +143,9 @@ const Surface = ({
       )}
       {children}
       {progress?.building && <SlowLine slow={progress.slow} />}
-      <StageEmptyActions className={STAGE_FOOT}>{actions}</StageEmptyActions>
+      {actions && (
+        <StageEmptyActions className={STAGE_FOOT}>{actions}</StageEmptyActions>
+      )}
     </StageEmpty>
   </div>
 );
@@ -201,6 +217,23 @@ const BrandBuildButton = ({
   </BrandButton>
 );
 
+/**
+ * What "Nothing built yet" says. A run in flight says where it compiles, not
+ * the server's host name, which tells a learner nothing. The Foundation's
+ * server took 381s on a cold first build and 2.9s on the next one (measured
+ * 2026-09-21); from `SLOW_BUILD_MS` the same paragraph adds that the first
+ * build is the slow one, so nothing warns about the wait before it is long.
+ */
+const emptyDescription = (p: BaseBuildProps) => {
+  if (!p.building) {
+    return "Build compiles your program on the server. Only the source leaves your browser.";
+  }
+  if ((p.elapsedMs ?? 0) < SLOW_BUILD_MS) {
+    return "Compiling on the build server.";
+  }
+  return "Compiling on the build server. First builds take longer. This one is running.";
+};
+
 const Empty = (p: BaseBuildProps) => (
   <Surface
     title={p.building ? "Building…" : "Nothing built yet"}
@@ -209,27 +242,17 @@ const Empty = (p: BaseBuildProps) => (
         ? `${Math.floor(p.elapsedMs / 1000)} s`
         : null
     }
-    description={
-      // A run in flight names the server and warns about the wait. The
-      // Foundation's server took 381s on a cold first build and 2.9s on the
-      // next one (measured 2026-09-21); six unexplained minutes read as a
-      // hang, so say the first build is the slow one; from `SLOW_BUILD_MS`
-      // a second line below adds that this one is still running.
-      p.building
-        ? `Compiling on ${p.host}. A first build there can take several minutes.`
-        : "Build compiles your program on the server. Only the source leaves your browser."
+    description={emptyDescription(p)}
+    // The bar takes the button's place while it runs: a disabled
+    // "Building…" only repeated the title, and Stop is the console's
+    running={p.building}
+    actions={
+      p.building ? undefined : <BrandBuildButton p={p} label="Build" icon />
     }
-    actions={<BrandBuildButton p={p} label="Build" icon />}
-    // A first build says it is slow in its own words below (Spec 06), so
-    // Spec 08's line stays empty here: two lines would say it twice
+    // A first build says it is slow in its own words (Spec 06), so Spec
+    // 08's line stays empty here: two lines would say it twice
     progress={{ building: p.building, slow: false }}
-  >
-    {p.building && (p.elapsedMs ?? 0) >= SLOW_BUILD_MS && (
-      <StageEmptyDescription>
-        First builds take longer. This one is running.
-      </StageEmptyDescription>
-    )}
-  </Surface>
+  />
 );
 
 /**

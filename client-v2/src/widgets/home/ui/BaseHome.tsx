@@ -1,7 +1,13 @@
-import { ChevronRight } from "lucide-react";
+import {
+  ChevronRight,
+  FlaskConical,
+  Folder,
+  GraduationCap,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 
+import type { TutorialProgress } from "@/entities/tutorial";
 import { TutorialCover } from "@/entities/tutorial";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
@@ -10,11 +16,13 @@ import {
   ActionCardContent,
   ActionCardDescription,
   ActionCardEyebrow,
+  ActionCardGroup,
   ActionCardLink,
   ActionCardMedia,
   ActionCardTitle,
 } from "@/shared/ui/action-card";
 import { AsyncButton } from "@/shared/ui/async-button";
+import { Badge } from "@/shared/ui/badge";
 import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { BrandIcon } from "@/shared/ui/brand-icon";
 import { Button } from "@/shared/ui/button";
@@ -50,6 +58,8 @@ export type HomeStart =
   | {
       kind: "recent";
       entries: readonly RecentEntry[];
+      /** How far a tutorial row has got, for its line under the name */
+      progressOf: (name: string) => TutorialProgress;
       onOpen: (entry: RecentEntry) => Promise<void>;
     };
 
@@ -107,10 +117,16 @@ const RunButton = ({ onRun }: { onRun: () => Promise<void> }) => {
 
 const Example = ({ onRun }: { onRun: () => Promise<void> }) => (
   <section aria-label="Try an example">
-    <ActionCard>
+    {/* The phone's flask tile, so the entry looks the same on both, and a
+        faint green from the left to set it apart from the cards below */}
+    <ActionCard className="items-center bg-linear-to-r from-brand-green/5 to-transparent to-45%">
+      <ActionCardMedia className="bg-brand-green/15 text-brand-green">
+        <FlaskConical aria-hidden="true" />
+      </ActionCardMedia>
       <ActionCardContent>
-        <ActionCardEyebrow>Try an example</ActionCardEyebrow>
-        <ActionCardTitle>Anchor starter</ActionCardTitle>
+        {/* Two lines, a title and its line: the title says what to do, so
+            no eyebrow above it */}
+        <ActionCardTitle>Try the Anchor starter</ActionCardTitle>
         <ActionCardDescription>{EXAMPLE_LINE}</ActionCardDescription>
       </ActionCardContent>
       {/* Not `ActionCardAction`, which hides below md: here the button is
@@ -143,30 +159,53 @@ export const RetryLine = ({ onRetry }: { onRetry: () => Promise<void> }) => (
   </div>
 );
 
-const RECENT_KIND: Record<RecentEntry["kind"], string> = {
-  project: "Project",
-  tutorial: "Tutorial",
+/** A row's tile: what it is, in the phone's tints */
+const RECENT_TILE: Record<
+  RecentEntry["kind"],
+  { icon: ReactNode; tint?: string }
+> = {
+  project: { icon: <Folder aria-hidden="true" /> },
+  tutorial: {
+    icon: <GraduationCap aria-hidden="true" />,
+    tint: "bg-brand-purple/15 text-brand-purple",
+  },
 };
 
+/** The line under a row's name: what it is, and a tutorial's page as the project list writes it */
+const recentMeta = (entry: RecentEntry, progress: TutorialProgress) => {
+  if (entry.kind === "project") return "Project";
+  if (progress.state === "started") {
+    return `Tutorial · ${progress.page} of ${progress.pages}`;
+  }
+  if (progress.state === "completed") return "Tutorial · Completed";
+  return "Tutorial";
+};
+
+/**
+ * One list in one frame: three rows take less height than three cards, so
+ * the composer stays above the fold
+ */
 const Recent = ({
   entries,
+  progressOf,
   onOpen,
 }: {
   entries: readonly RecentEntry[];
+  progressOf: (name: string) => TutorialProgress;
   onOpen: (entry: RecentEntry) => Promise<void>;
 }) => (
   <section aria-labelledby="home-recent" className="flex flex-col gap-2">
     <h2 id="home-recent" className="text-caption text-muted-foreground">
       Pick up where you left off
     </h2>
-    <ul className="flex flex-col gap-2">
+    <ActionCardGroup>
       {entries.map((entry) => (
         <li key={entry.name}>
           <ActionCard>
+            <ActionCardMedia className={RECENT_TILE[entry.kind].tint}>
+              {RECENT_TILE[entry.kind].icon}
+            </ActionCardMedia>
             <ActionCardContent>
-              <ActionCardEyebrow>
-                {entry.current ? "Open now" : RECENT_KIND[entry.kind]}
-              </ActionCardEyebrow>
               <ActionCardTitle>
                 {/* The whole row is the one target */}
                 <ActionCardLink asChild>
@@ -183,15 +222,19 @@ const Recent = ({
                   </button>
                 </ActionCardLink>
               </ActionCardTitle>
+              <ActionCardDescription>
+                {recentMeta(entry, progressOf(entry.name))}
+              </ActionCardDescription>
             </ActionCardContent>
+            {entry.current && <Badge variant="secondary">Open now</Badge>}
             <ChevronRight
               aria-hidden="true"
-              className="shrink-0 self-center text-muted-foreground"
+              className="size-4 shrink-0 text-muted-foreground"
             />
           </ActionCard>
         </li>
       ))}
-    </ul>
+    </ActionCardGroup>
   </section>
 );
 
@@ -223,7 +266,11 @@ const BaseHome = ({
       {start?.kind === "example" && <Example onRun={start.onRun} />}
       {start?.kind === "retry" && <RetryLine onRetry={start.onRetry} />}
       {start?.kind === "recent" && (
-        <Recent entries={start.entries} onOpen={start.onOpen} />
+        <Recent
+          entries={start.entries}
+          progressOf={start.progressOf}
+          onOpen={start.onOpen}
+        />
       )}
       <HomeComposer onAsk={onAsk} />
 

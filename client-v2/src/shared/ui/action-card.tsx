@@ -7,10 +7,12 @@ import { cn } from "@/shared/lib/utils";
 /* A card you open: a tutorial, a sample, a program. The link inside it
    covers the whole card, so the card is one target and the text stays
    selectable. default takes a brighter edge on hover. frame is the older
-   card's: a ring of the brand's colours fades in and the card lifts. */
+   card's: a ring of the brand's colours fades in and the card lifts.
+   Inside an ActionCardGroup a card is a row: it drops its own frame,
+   centres its parts, and lights its ground on hover instead. */
 
 const actionCardVariants = cva(
-  "group/action-card relative flex min-w-0 gap-3 rounded-xl border border-border bg-surface-panel p-3.5 transition-[border-color,transform,background-color] duration-150 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+  "group/action-card relative flex min-w-0 gap-3 rounded-xl border border-border bg-surface-panel p-3.5 transition-[border-color,transform,background-color] duration-150 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring in-data-[slot=action-card-group]:items-center in-data-[slot=action-card-group]:rounded-none in-data-[slot=action-card-group]:border-0 in-data-[slot=action-card-group]:py-2.5 in-data-[slot=action-card-group]:ring-inset in-data-[slot=action-card-group]:hover:bg-surface-hover",
   {
     variants: {
       variant: {
@@ -65,7 +67,8 @@ function ActionCardMedia({
       className={cn(
         "grid shrink-0 place-items-center text-muted-foreground",
         variant !== "glyph" && "overflow-hidden rounded-lg bg-surface-raised",
-        variant === "icon" && "size-11 [&_svg:not([class*='size-'])]:size-5",
+        variant === "icon" &&
+          "size-11 in-data-[slot=action-card-group]:size-9 [&_svg:not([class*='size-'])]:size-5",
         variant === "image" && "h-[2.625rem] w-14 *:size-full *:object-cover",
         variant === "glyph" && "mb-1 size-[1.125rem] *:size-full",
         className
@@ -120,6 +123,9 @@ function ActionCardTitle({
   );
 }
 
+/* A card's line under its title, at the label weight (380) on every screen,
+   as the phone's quick starts set it: the read weight steps up to 400 from
+   md and made it as heavy as the title next to it */
 function ActionCardDescription({
   className,
   ...props
@@ -128,7 +134,23 @@ function ActionCardDescription({
     <p
       data-slot="action-card-description"
       className={cn(
-        "line-clamp-2 text-caption font-read text-muted-foreground",
+        "line-clamp-2 text-caption font-label text-muted-foreground",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
+/* Cards that read as one list, such as the work to pick up on Home: one
+   frame, a line between rows, each row still a whole target. Put each
+   ActionCard in an li */
+function ActionCardGroup({ className, ...props }: React.ComponentProps<"ul">) {
+  return (
+    <ul
+      data-slot="action-card-group"
+      className={cn(
+        "flex flex-col divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface-panel",
         className
       )}
       {...props}
@@ -179,6 +201,7 @@ export {
   ActionCardContent,
   ActionCardDescription,
   ActionCardEyebrow,
+  ActionCardGroup,
   ActionCardLink,
   ActionCardMedia,
   ActionCardTitle,

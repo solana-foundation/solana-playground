@@ -8,6 +8,8 @@ import {
 } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
+import type { TutorialProgress } from "@/entities/tutorial";
+
 import type { BaseHomeProps, HomeTutorial } from "./BaseHome";
 import BaseHome from "./BaseHome";
 
@@ -219,13 +221,19 @@ it("lists recent work on a return visit, and opens a row", async () => {
     { name: "a", kind: "project" as const, current: true },
     { name: "Hello Anchor", kind: "tutorial" as const, current: false },
   ];
-  const home = draw(props({ kind: "recent", entries, onOpen }));
+  const progressOf = (): TutorialProgress => ({
+    state: "started",
+    page: 2,
+    pages: 4,
+  });
+  const home = draw(props({ kind: "recent", entries, progressOf, onOpen }));
   expect(home.queryByRole("region", { name: "Try an example" })).toBeNull();
   const recent = within(
     home.getByRole("region", { name: "Pick up where you left off" })
   );
   expect(recent.getByText("Open now")).toBeTruthy();
-  expect(recent.getByText("Tutorial")).toBeTruthy();
+  expect(recent.getByText("Project")).toBeTruthy();
+  expect(recent.getByText("Tutorial · 2 of 4")).toBeTruthy();
   fireEvent.click(recent.getByRole("button", { name: "Open Hello Anchor" }));
   await waitFor(() => expect(onOpen).toHaveBeenCalledWith(entries[1]));
 });

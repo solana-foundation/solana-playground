@@ -117,7 +117,7 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
       id: "new",
       framework: framework.name,
       title: `New ${framework.name} project`,
-      description: "A working starter you shape with the assistant",
+      description: "A working starter to change",
     });
   }
   if (tutorial) {

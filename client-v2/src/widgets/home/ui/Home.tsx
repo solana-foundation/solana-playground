@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { useTutorialProgress } from "@/entities/tutorial";
 import { PgSession } from "@/features/auth";
 import { StartFromScratch } from "@/features/new-project";
 import { createLogger } from "@/shared/lib/logger";
@@ -57,6 +58,7 @@ const openRecentWith =
  */
 const useStart = (onContinue: () => void): HomeStart | null => {
   const visit = useVisit();
+  const progressOf = useTutorialProgress();
   const names = PgExplorer.allWorkspaceNames;
   // A failed session check with no project hangs the visit: retry it, and
   // never fall back to the example, whose build could start for someone
@@ -88,6 +90,7 @@ const useStart = (onContinue: () => void): HomeStart | null => {
       names,
       PgExplorer.currentWorkspaceName
     ),
+    progressOf,
     onOpen: async (entry) => {
       const kind = await openRecentWith(onContinue)(entry);
       homeTelemetry.track("home_recent_opened", { kind });

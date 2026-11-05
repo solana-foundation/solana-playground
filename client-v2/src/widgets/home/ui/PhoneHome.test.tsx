@@ -137,7 +137,7 @@ it("leads with the example on a first visit, then a new Anchor project and the f
   await home.findByText("3 tutorials, 34 programs");
   expect(titles(home)).toEqual([
     "Try an exampleThe Anchor starter, built for you",
-    "New Anchor projectA working starter you shape with the assistant",
+    "New Anchor projectA working starter to change",
     "Hello AnchorBeginner tutorial",
   ]);
 });
@@ -301,9 +301,7 @@ it.each([
   session.whenRead.mockReturnValue(new Promise(() => {}));
   const { home } = draw();
   await home.findByText("3 tutorials, 34 programs");
-  expect(titles(home)[0]).toBe(
-    "New Anchor projectA working starter you shape with the assistant"
-  );
+  expect(titles(home)[0]).toBe("New Anchor projectA working starter to change");
 });
 
 it("offers the example to a signed-in account with no projects", async () => {
@@ -367,7 +365,7 @@ it("offers Try again above the quick starts once a failed check has spent its re
     const { home } = draw();
     await home.findByText("3 tutorials, 34 programs");
     expect(titles(home)[0]).toBe(
-      "New Anchor projectA working starter you shape with the assistant"
+      "New Anchor projectA working starter to change"
     );
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);

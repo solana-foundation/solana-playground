@@ -1,11 +1,14 @@
 import {
   BookOpen,
+  ChevronRight,
   CircleAlert,
   Coins,
   Copy,
   ExternalLink,
   FileCode2,
   FileJson,
+  Folder,
+  GraduationCap,
   Hammer,
   Info,
   KeyRound,
@@ -28,11 +31,13 @@ import {
   ActionCardContent,
   ActionCardDescription,
   ActionCardEyebrow,
+  ActionCardGroup,
   ActionCardLink,
   ActionCardMedia,
   ActionCardTitle,
 } from "@/components/ui/action-card"
 import { AsyncButton } from "@/components/ui/async-button"
+import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { BrandButton, BrandButtonIcon } from "@/components/ui/brand-button"
 import { Button } from "@/components/ui/button"
@@ -159,6 +164,7 @@ import {
   StageEmptyFooter,
   StageEmptyMedia,
   StageEmptyMeta,
+  StageEmptyProgress,
   StageEmptyTitle,
 } from "@/components/ui/stage-empty"
 import { StatusDot } from "@/components/ui/status-dot"
@@ -813,7 +819,7 @@ function PlaygroundComponents() {
         ))}
       </Block>
 
-      <Block id="action-card" title="Action card" source="playground" registry="action-card" note="A card you open: a tutorial, a sample, a program. Its link covers the whole card, so the card is one target and its text stays selectable. frame is the older card's lift and ring. The glyph media variant is the icon alone, with no tile behind it, for a vertical card." className="grid gap-3 md:grid-cols-2">
+      <Block id="action-card" title="Action card" source="playground" registry="action-card" note="A card you open: a tutorial, a sample, a program. Its link covers the whole card, so the card is one target and its text stays selectable. frame is the older card's lift and ring. The glyph media variant is the icon alone, with no tile behind it, for a vertical card. ActionCardGroup puts cards in one frame as rows of a list, a line between them." className="grid gap-3 md:grid-cols-2">
         <ActionCard>
           <ActionCardMedia><Coins /></ActionCardMedia>
           <ActionCardContent>
@@ -838,6 +844,29 @@ function PlaygroundComponents() {
             <ActionCardDescription>One wallet, one vote, counted on chain.</ActionCardDescription>
           </ActionCardContent>
         </ActionCard>
+        <ActionCardGroup>
+          <li>
+            <ActionCard>
+              <ActionCardMedia><Folder /></ActionCardMedia>
+              <ActionCardContent>
+                <ActionCardTitle><ActionCardLink href="#c-action-card">escrow</ActionCardLink></ActionCardTitle>
+                <ActionCardDescription>Project</ActionCardDescription>
+              </ActionCardContent>
+              <Badge variant="secondary">Open now</Badge>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </ActionCard>
+          </li>
+          <li>
+            <ActionCard>
+              <ActionCardMedia><GraduationCap /></ActionCardMedia>
+              <ActionCardContent>
+                <ActionCardTitle><ActionCardLink href="#c-action-card">Hello Anchor</ActionCardLink></ActionCardTitle>
+                <ActionCardDescription>Tutorial · 2 of 4</ActionCardDescription>
+              </ActionCardContent>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+            </ActionCard>
+          </li>
+        </ActionCardGroup>
       </Block>
 
       <Block id="setup-list" title="Setup list" source="playground" registry="setup-list" note="The few things a new workspace needs, in the sidebar. It folds when you want it out of the way. It goes once every step is done.">
@@ -924,7 +953,7 @@ function PlaygroundComponents() {
         </div>
       </Block>
 
-      <Block id="stage-empty" title="Stage empty" source="playground" registry="stage-empty" note="What a stage says before there is anything on it: what it is for, what it needs and the one thing to do. The eyebrow above the title names where it acts, such as the network. It sits on the stage's own ground. On a phone the actions pin to the foot." className="block">
+      <Block id="stage-empty" title="Stage empty" source="playground" registry="stage-empty" note="What a stage says before there is anything on it: what it is for, what it needs and the one thing to do. The eyebrow above the title names where it acts, such as the network. It sits on the stage's own ground. On a phone the actions pin to the foot. While a run with no known end goes on, StageEmptyProgress sits under the meta instead of a disabled button." className="block">
         <StageEmpty className="px-0">
           <StageEmptyMedia><Rocket /></StageEmptyMedia>
           <StageEmptyEyebrow><StatusDot />Devnet</StageEmptyEyebrow>
@@ -936,6 +965,14 @@ function PlaygroundComponents() {
             <Button variant="ghost">Choose a network</Button>
           </StageEmptyActions>
           <StageEmptyFooter>Programs close after 7 days without use.</StageEmptyFooter>
+        </StageEmpty>
+        {/* A run in flight: the progress bar under the meta takes the place of a disabled button */}
+        <StageEmpty className="px-0">
+          <StageEmptyTitle>Building…</StageEmptyTitle>
+          <StageEmptyMeta>62 s</StageEmptyMeta>
+          <StageEmptyProgress />
+          <StageEmptyDescription>Compiling on the build server.</StageEmptyDescription>
+          <StageEmptyDescription>First builds take longer. This one is running.</StageEmptyDescription>
         </StageEmpty>
       </Block>
 

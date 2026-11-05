@@ -81,6 +81,29 @@ function StageEmptyMeta({ className, ...props }: React.ComponentProps<"p">) {
   );
 }
 
+/* A run with no end to count to, under the title and its meta: a thin
+   track a short brand stretch keeps crossing, so the wait reads as alive
+   without a disabled button repeating the title. Still, at full width and
+   faint, under reduced motion. For the eye only: the title says it runs. */
+function StageEmptyProgress({
+  className,
+  ...props
+}: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="stage-empty-progress"
+      aria-hidden="true"
+      className={cn(
+        "relative h-0.75 w-60 max-w-full overflow-hidden rounded-full bg-surface-raised",
+        className
+      )}
+      {...props}
+    >
+      <span className="absolute inset-y-0 left-0 w-2/5 animate-indeterminate bg-linear-to-r from-transparent via-brand-purple to-transparent motion-reduce:w-full motion-reduce:animate-none motion-reduce:opacity-40" />
+    </div>
+  );
+}
+
 /* Balanced, as a centred line of two should be: left to wrap on its own it
    dropped one word onto the second line ("passes.") */
 function StageEmptyDescription({
@@ -154,5 +177,6 @@ export {
   StageEmptyMedia,
   StageEmptyMeta,
   StageEmptyNotice,
+  StageEmptyProgress,
   StageEmptyTitle,
 };

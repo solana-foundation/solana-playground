@@ -29,7 +29,7 @@ succeeded or failed.
 #### Scenario: Build cannot be started twice
 
 - **WHEN** a user presses Build and the build is still running
-- **THEN** the Build button is disabled and busy, and a second press starts nothing
+- **THEN** the Build button gives way to the build's progress until the build ends, and nothing on the stage starts a second build
 
 ### Requirement: Copy says it copied
 

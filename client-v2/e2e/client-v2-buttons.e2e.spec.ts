@@ -218,11 +218,20 @@ test.describe("client-v2-buttons", () => {
     await page.locator("#flow-stage-tab-build").click();
     await page.getByRole("button", { name: "Build", exact: true }).click();
 
-    // The surface keeps its button while the run is in flight, now busy
-    const busy = page.getByRole("button", { name: /Building/ });
-    await expect(busy).toBeDisabled();
-    await expect(busy).toHaveAttribute("aria-busy", "true");
-    await busy.click({ force: true });
+    // While the run is in flight the surface shows its progress in the
+    // button's place (DES-199), so nothing on it can start a second build
+    await expect(
+      page.getByRole("heading", { name: "Building…" })
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-slot="stage-empty-progress"]')
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Build", exact: true })
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Building…", exact: true })
+    ).toHaveCount(0);
 
     release();
     await expect(page.getByText("Build succeeded")).toBeVisible();
