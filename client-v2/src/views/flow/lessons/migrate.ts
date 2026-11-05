@@ -178,7 +178,7 @@ if (import.meta.vitest) {
         {
           id: "deploy",
           objective: "Deploy it",
-          verifiedBy: "it is on devnet",
+          verifiedBy: "it is on Devnet",
           verify: { kind: "deployed" },
           hints,
         },

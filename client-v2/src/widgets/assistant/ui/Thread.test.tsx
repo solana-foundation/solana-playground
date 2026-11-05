@@ -3,7 +3,14 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SessionUser } from "@/features/auth";
 import { PgSession } from "@/features/auth";
+import { PgSyncClient } from "@/features/persistence";
+import {
+  initLogger,
+  memoryProvider as logMemory,
+  resetLogger,
+} from "@/shared/lib/logger";
 import * as reportModule from "@/shared/lib/report-button-failure";
 import {
   initTelemetry,
@@ -144,6 +151,197 @@ describe("Thread, an unreadable thread", () => {
     vi.spyOn(PgAssistant, "unsaved", "get").mockReturnValue(true);
     render(<Thread turn={stubTurn(false)} project="Counter" />);
     expect(screen.getByRole("status").textContent).toBe(THREAD_NOT_SAVED);
+  });
+});
+
+describe("Thread, signed out", () => {
+  const SIGN_IN_TO_KEEP =
+    "Sign in to keep this conversation on your other devices.";
+  const USER = { id: "u1", name: "Ada" } as unknown as SessionUser;
+  const SIGNED_OUT: SessionUser | undefined = undefined;
+
+  /** Who is signed in, and a way to change it the way `PgSession` would */
+  const session = (initial: SessionUser | undefined) => {
+    let user = initial;
+    const listeners = new Set<() => void>();
+    vi.spyOn(PgSession, "get").mockImplementation(() => user);
+    vi.spyOn(PgSession, "afterFirstRead").mockResolvedValue(undefined);
+    vi.spyOn(PgSession, "onDidChange").mockImplementation((cb) => {
+      listeners.add(cb as () => void);
+      return { dispose: () => listeners.delete(cb as () => void) };
+    });
+    return (next: SessionUser | undefined) => {
+      user = next;
+      listeners.forEach((cb) => cb());
+    };
+  };
+
+  const syncs = (available: boolean) =>
+    vi.spyOn(PgSyncClient, "available").mockResolvedValue(available);
+
+  it("a conversation ends in an offer to sign in", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(await screen.findByText(SIGN_IN_TO_KEEP)).toBeTruthy();
+  });
+
+  it("signing in from the offer stays in the project and is reported", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    const signIn = vi.spyOn(PgSession, "signInWith").mockResolvedValue();
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Sign in with GitHub" })
+    );
+    expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+    expect(tracked()).toEqual([["assistant_sign_in_offered_clicked", {}]]);
+  });
+
+  it("a session that ends shows the offer", async () => {
+    const setUser = session(USER);
+    syncs(true);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await act(async () => {});
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+
+    act(() => setUser(SIGNED_OUT));
+    expect(await screen.findByText(SIGN_IN_TO_KEEP)).toBeTruthy();
+  });
+
+  // The session effect's own read is what tells it the account signed in; a
+  // read started by the panel, which can mount first, hid that from it
+  it("never starts the session read itself", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    const whenRead = vi.spyOn(PgSession, "whenRead");
+    const refresh = vi.spyOn(PgSession, "refresh");
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await screen.findByText(SIGN_IN_TO_KEEP);
+    expect(whenRead).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("waits for the session read before offering anything", async () => {
+    session(USER);
+    syncs(true);
+    let answer!: () => void;
+    vi.spyOn(PgSession, "afterFirstRead").mockReturnValue(
+      new Promise<void>((resolve) => (answer = resolve))
+    );
+    // Before the read `get()` is `undefined` for everyone
+    vi.spyOn(PgSession, "get").mockReturnValue(SIGNED_OUT);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await act(async () => {});
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+
+    vi.spyOn(PgSession, "get").mockReturnValue(USER);
+    await act(async () => answer());
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+  });
+
+  it("a sign-in under way holds the button, and its end frees it", async () => {
+    const setUser = session(SIGNED_OUT);
+    syncs(true);
+    const state = vi
+      .spyOn(PgSession, "signInState")
+      .mockReturnValue({ status: "pending" });
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    const button = (await screen.findByRole("button", {
+      name: "Sign in with GitHub",
+    })) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+
+    state.mockReturnValue({ status: "idle" });
+    act(() => setUser(SIGNED_OUT));
+    expect(button.disabled).toBe(false);
+  });
+
+  it("signing in takes the offer away", async () => {
+    const setUser = session(SIGNED_OUT);
+    syncs(true);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await screen.findByText(SIGN_IN_TO_KEEP);
+
+    act(() => setUser(USER));
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+  });
+
+  it("a cancelled sign-in is logged, anything else reported", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    const logged = logMemory();
+    initLogger({ providers: [logged] });
+    // A real failure at a known step: the server refuses to start the sign-in
+    const refused = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({ ok: false } as Response);
+    const cancelled = await PgSession.signIn().catch((e: unknown) => e);
+    refused.mockRestore();
+    const broken = new Error("popup threw");
+    vi.spyOn(PgSession, "signInWith")
+      .mockRejectedValueOnce(cancelled)
+      .mockRejectedValueOnce(broken);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    const button = await screen.findByRole("button", {
+      name: "Sign in with GitHub",
+    });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await act(async () => {});
+
+    const mine = logged.entries.filter(
+      (e) => e.ns === "assistant:sign-in-offer"
+    );
+    expect(mine).toEqual([
+      expect.objectContaining({ level: "info" }),
+      expect.objectContaining({ level: "error", error: broken, report: true }),
+    ]);
+    resetLogger();
+  });
+
+  it("an empty thread has nothing to keep", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await act(async () => {});
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+  });
+
+  it("a deployment without sync offers nothing", async () => {
+    session(SIGNED_OUT);
+    syncs(false);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await act(async () => {});
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
   });
 });
 

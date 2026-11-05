@@ -21,6 +21,12 @@ type TransactionSendOptions = {
   computeUnitLimit?: number;
   /** Do not use the cached blockhash */
   forceFetchLatestBlockhash?: boolean;
+  /**
+   * Connection to send on, instead of the current one. A caller that confirms
+   * afterwards passes the same one to `confirm`, so a cluster change while
+   * the wallet asks for approval cannot split the two.
+   */
+  connection?: PgWeb3.Connection;
 } & WalletOption;
 
 type Transactionable =
@@ -100,9 +106,9 @@ export class PgTx {
    */
   static async confirm(
     txHash: string,
-    opts?: { commitment?: PgWeb3.Commitment }
+    opts?: { commitment?: PgWeb3.Commitment; connection?: PgWeb3.Connection }
   ) {
-    const connection = PgConnection.current;
+    const connection = opts?.connection ?? PgConnection.current;
     const result = await connection.confirmTransaction(
       txHash,
       opts?.commitment
@@ -133,7 +139,7 @@ export class PgTx {
     const wallet = opts?.wallet ?? PgWallet.current;
     if (!wallet) throw new Error("Wallet not connected");
 
-    const connection = PgConnection.current;
+    const connection = opts?.connection ?? PgConnection.current;
 
     // Set priority fees if the transaction doesn't already have it
     const existingSetComputeUnitPriceIx = tx.instructions.find(

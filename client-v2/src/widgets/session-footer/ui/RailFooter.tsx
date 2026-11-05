@@ -13,18 +13,22 @@ interface RailFooterProps {
 
 /** `BaseRailFooter` on the live cluster, session, wallet and feedback */
 const RailFooter = ({ status, onToggleSettings }: RailFooterProps) => {
-  const { account, menu, onMenuOpenChange, accountRef } = useAccount({
+  const { account, menu, dialog, onMenuOpenChange, accountRef } = useAccount({
     from: "rail",
     onToggleSettings,
   });
+  // The funding dialog sits beside the footer, so it outlives the menu
   return (
-    <BaseRailFooter
-      account={account}
-      status={status}
-      menu={menu}
-      onMenuOpenChange={onMenuOpenChange}
-      accountRef={accountRef}
-    />
+    <>
+      <BaseRailFooter
+        account={account}
+        status={status}
+        menu={menu}
+        onMenuOpenChange={onMenuOpenChange}
+        accountRef={accountRef}
+      />
+      {dialog}
+    </>
   );
 };
 

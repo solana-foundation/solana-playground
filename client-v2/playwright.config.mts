@@ -229,8 +229,10 @@ export default defineConfig({
     launchOptions: { slowMo: Number(process.env.SLOWMO ?? 0) },
   },
   webServer: {
-    // `dev` runs `generate-fast`: still syncs public/, but skips
-    // `generate-crates`, which shells out to cargo and dominates the runtime
+    // `dev` runs `generate-fast`, then `generate-dev-crates`, which skips on
+    // the stubs and on CI finds the restored crates current by key. A machine's
+    // first local run generates them for about ten minutes, longer than the
+    // local timeout below: run `yarn generate-dev-crates` once first
     command: "yarn dev",
     url: origin,
     // Only this worktree's own dev server is reused. Any other server on the
@@ -249,6 +251,14 @@ export default defineConfig({
     // early".
     stdout: "pipe",
     stderr: "pipe",
-    env: { BROWSER: "none", PORT: String(port) },
+    // Blank, not unset: dotenv keeps a variable already set, so the platform
+    // RPC URLs from `.env` stay out and Devnet and Mainnet fall back to the
+    // public endpoints the specs stub
+    env: {
+      BROWSER: "none",
+      PORT: String(port),
+      REACT_APP_DEVNET_RPC_URL: "",
+      REACT_APP_MAINNET_RPC_URL: "",
+    },
   },
 });

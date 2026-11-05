@@ -86,4 +86,45 @@ describe("describeProject", () => {
     } as unknown as PlaygroundBridge;
     expect(describeProjectWith(removed)).not.toContain("src/lib.rs");
   });
+
+  /** A project whose context carries `idl` and no files */
+  const withIdl = (idl: unknown) =>
+    ({
+      /* eslint-disable unicorn/no-null -- `ProjectContext` types these fields `| null` */
+      getProjectContext: () => ({
+        workspaceName: "p",
+        cluster: "devnet",
+        walletConnected: false,
+        contextFiles: [],
+        programId: null,
+        idl,
+        lesson: null,
+        currentFilePath: null,
+        buildError: null,
+      }),
+      /* eslint-enable unicorn/no-null */
+    } as unknown as PlaygroundBridge);
+
+  it("names why the Playground cannot call a refused IDL", () => {
+    expect(
+      describeProjectWith(
+        withIdl({
+          name: "counter",
+          instructions: [],
+          accounts: [],
+          refused: "a custom discriminator on initialize",
+        })
+      )
+    ).toContain(
+      "Program interface: counter — the Playground cannot call it: a custom discriminator on initialize"
+    );
+  });
+
+  it("lists a callable IDL's instructions", () => {
+    expect(
+      describeProjectWith(
+        withIdl({ name: "counter", instructions: ["increment"], accounts: [] })
+      )
+    ).toContain("Program interface: counter — instructions: increment");
+  });
 });

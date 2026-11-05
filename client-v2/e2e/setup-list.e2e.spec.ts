@@ -75,7 +75,7 @@ test("client-v2-layout: Counting the steps", async ({ page }) => {
   // A user who comes back with the wallet still connected
   await page.reload();
   await expect(title(page)).toHaveText("Get set up· 2 of 4", LONG);
-  await expect(doneStep(page, "Choose a network")).toContainText("devnet");
+  await expect(doneStep(page, "Choose a network")).toContainText("Devnet");
   await expect(doneStep(page, "Connect a wallet")).toContainText(/\w{4}…\w{4}/);
   await expect(step(page, "Sign in with GitHub")).toBeVisible();
   await expect(step(page, "Connect the assistant")).toBeVisible();
@@ -84,7 +84,7 @@ test("client-v2-layout: Counting the steps", async ({ page }) => {
 test("client-v2-layout: The default network counts", async ({ page }) => {
   await seedWorkspace(page);
   await expect(title(page)).toHaveText("Get set up· 1 of 4", LONG);
-  await expect(doneStep(page, "Choose a network")).toContainText("devnet");
+  await expect(doneStep(page, "Choose a network")).toContainText("Devnet");
   await expect(step(page, "Choose a network")).toHaveCount(0);
 });
 

@@ -57,7 +57,7 @@ const draw = (props: { name?: string; isLesson?: boolean } = {}) =>
   );
 
 const FILES_LINE =
-  "Its files and its program keypair are deleted from this browser.";
+  "Its files, its program keypair and its assistant chat are deleted from this browser.";
 const LESSON_LINE = "Your progress in this tutorial is lost.";
 const ACCOUNT_LINE =
   "It's also deleted from your account and your other devices.";

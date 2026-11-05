@@ -26,6 +26,7 @@ import {
 } from "../../../views/sidebar/assistant/store";
 import { DEFAULT_CONNECTION } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
+import { useSignInOffer } from "../model/sign-in-offer";
 import { assistantTelemetry } from "../model/telemetry";
 import type { Turn } from "../model/use-turn";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
@@ -80,6 +81,7 @@ export const Thread = ({
 
   const items = PgAssistant.items;
   const status = PgAssistant.status;
+  const signIn = useSignInOffer({ hasItems: items.length > 0 });
   const { busy } = turn;
   const lesson = describeLesson(lessonState);
 
@@ -271,6 +273,7 @@ export const Thread = ({
       // From state, not a stored item: it must survive a render reset
       // (`clear`) and must never be saved or synced with the thread
       unsaved={PgAssistant.unsaved}
+      signIn={signIn}
       project={project}
       suggestions={lesson ? SUGGESTIONS.lesson : SUGGESTIONS.project}
       onSuggestion={(text) => {

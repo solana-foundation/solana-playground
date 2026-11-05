@@ -57,9 +57,15 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
     [isDefault, initialSeedsLength, seeds.length]
   );
 
-  // Default to instruction program ID but create a new object in order to
-  // avoid accidentally updating the instruction program ID
-  const programId = useRef({ ...values.programId });
+  // The seed program the account already derives with, which the IDL may name;
+  // else the instruction's program. A new object either way, in order to avoid
+  // accidentally updating the instruction program ID
+  const account = values.accounts.find((acc) => acc.name === name);
+  const programId = useRef(
+    account?.generator.type === "From seed"
+      ? { ...account.generator.programId }
+      : { ...values.programId }
+  );
 
   const generate = () => {
     try {
@@ -181,7 +187,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
           updateGenerator(programId.current);
         }}
         searchBarProps={{ items: getProgramIdItems() }}
-        {...values.programId}
+        {...programId.current}
       />
 
       <div className="flex flex-col gap-2">

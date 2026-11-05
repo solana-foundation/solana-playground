@@ -19,6 +19,9 @@ class FilePickerCancelledError extends Error {
   }
 }
 
+/** The file a request named is not there: a 404, or the app shell in its place */
+class FileMissingError extends Error {}
+
 export class PgCommon {
   /**
    * @param ms amount of time to sleep in ms
@@ -226,21 +229,44 @@ export class PgCommon {
   /**
    * Fetch the response from the given URL and return the text response.
    *
-   * A dev server answers an unknown path with the SPA shell, so without the
-   * status check callers get HTML that parses as a valid file -- which is how
-   * a missing `public/crates` asset reached Rust Analyzer's WASM and panicked
-   * it mid-borrow, leaving every later call to report recursive use.
+   * A missing file must fail here: HTML handed on as a file's content parses
+   * as a valid file, which is how a missing `public/crates` asset reached Rust
+   * Analyzer's WASM and panicked it. It can arrive as a 404's body, or as a 200
+   * with the app shell: CRA's history fallback (`disableDotRule`) treats
+   * fetch's wildcard `Accept` as a page request and answers every unknown path,
+   * dotted ones included, with `index.html`.
    *
    * @param url URL
-   * @throws if the response status is not ok
+   * @throws if the response status is not ok, or is the app shell for a URL
+   * that does not name an HTML file
    * @returns the text response
    */
   static async fetchText(url: string) {
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`Request failed (${response.status}): ${url}`);
+      const message = `Request failed (${response.status}): ${url}`;
+      throw response.status === 404
+        ? new FileMissingError(message)
+        : new Error(message);
+    }
+    const isHtml = response.headers
+      .get("content-type")
+      ?.toLowerCase()
+      .startsWith("text/html");
+    if (isHtml && !/\.html?$/i.test(new URL(url, "http://x").pathname)) {
+      throw new FileMissingError(
+        `Request failed (${response.status}, the app shell): ${url}`
+      );
     }
     return await response.text();
+  }
+
+  /**
+   * @returns whether the error is `fetchText` saying the file is not there, as
+   * opposed to a failure that may pass on a later request
+   */
+  static isFileMissing(err: unknown) {
+    return err instanceof FileMissingError;
   }
 
   /**
@@ -1375,10 +1401,16 @@ if (import.meta.vitest) {
       ok?: boolean;
       status?: number;
       body?: string;
+      contentType?: string;
     }) => {
       mockFetch.mockResolvedValue({
         ok: over.ok ?? true,
         status: over.status ?? 200,
+        headers: new Headers(
+          over.contentType === undefined
+            ? {}
+            : { "content-type": over.contentType }
+        ),
         text: async () => over.body ?? "",
       });
     };
@@ -1454,6 +1486,54 @@ if (import.meta.vitest) {
         await expect(PgCommon.fetchText("/crates/core.rs")).rejects.toThrow(
           "Request failed (404): /crates/core.rs"
         );
+      });
+
+      // CRA's history fallback (`disableDotRule`) treats fetch's `Accept: */*`
+      // as a page request, so a missing `/crates/x.rs` comes back 200 with
+      // `index.html`
+      it("throws when an ok response is the app shell", async () => {
+        respond({
+          body: "<!doctype html><html>",
+          contentType: "text/html; charset=utf-8",
+        });
+
+        await expect(PgCommon.fetchText("/crates/core.rs")).rejects.toThrow(
+          "Request failed (200, the app shell): /crates/core.rs"
+        );
+      });
+
+      it("checks the path, not the query, for an HTML file", async () => {
+        respond({ body: "<p>hi</p>", contentType: "Text/HTML" });
+        await expect(PgCommon.fetchText("/docs/Page.HTML?x=1")).resolves.toBe(
+          "<p>hi</p>"
+        );
+        await expect(PgCommon.fetchText("/crates/core.rs?v=1")).rejects.toThrow(
+          "the app shell"
+        );
+      });
+
+      it("returns an HTML file it asked for", async () => {
+        respond({ body: "<p>hi</p>", contentType: "text/html" });
+        await expect(PgCommon.fetchText("/docs/page.html")).resolves.toBe(
+          "<p>hi</p>"
+        );
+      });
+
+      it("tells a missing file from a failure that may pass", async () => {
+        const failureOf = (url: string) =>
+          PgCommon.fetchText(url).catch((e: unknown) => e);
+
+        respond({ ok: false, status: 404 });
+        expect(PgCommon.isFileMissing(await failureOf("/a.rs"))).toBe(true);
+
+        respond({ body: "<html>", contentType: "text/html" });
+        expect(PgCommon.isFileMissing(await failureOf("/a.rs"))).toBe(true);
+
+        respond({ ok: false, status: 503 });
+        expect(PgCommon.isFileMissing(await failureOf("/a.rs"))).toBe(false);
+
+        mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+        expect(PgCommon.isFileMissing(await failureOf("/a.rs"))).toBe(false);
       });
 
       it("names the status it got", async () => {

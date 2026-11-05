@@ -90,7 +90,11 @@ export const describeProjectWith = (bridge: PlaygroundBridge) => {
   }
 
   if (ctx.programId) lines.push(`Program id: ${ctx.programId}`);
-  if (ctx.idl) {
+  if (ctx.idl?.refused) {
+    lines.push(
+      `Program interface: ${ctx.idl.name} — the Playground cannot call it: ${ctx.idl.refused}`
+    );
+  } else if (ctx.idl) {
     lines.push(
       `Program interface: ${ctx.idl.name} — instructions: ${
         ctx.idl.instructions.join(", ") || "none"

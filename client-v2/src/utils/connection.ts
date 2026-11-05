@@ -1,6 +1,7 @@
 import { recheckWhileBad } from "@/shared/lib/backoff-recheck";
+import { createLogger } from "@/shared/lib/logger";
 
-import { PLATFORM_ENDPOINTS } from "../constants";
+import { NETWORKS } from "../constants";
 import { askAgain, onAskAgain } from "./ask-again";
 import { PgCommon } from "./common";
 import { createDerivable, declareDecorator, derivable } from "./decorators";
@@ -109,7 +110,7 @@ const derive = () => ({
 
   /** Current cluster name based on the current endpoint */
   cluster: createDerivable({
-    derive: _PgConnection.getCluster,
+    derive: () => _PgConnection.readCluster(),
     onChange: PgSettings.onDidChangeConnectionEndpoint,
   }),
 
@@ -138,6 +139,23 @@ const recheckWhileStalled = (cb: () => void): Disposable =>
     minMs: 5000,
     maxMs: 60000,
   });
+
+const log = createLogger("connection:cluster");
+
+/** Hosts a local validator answers on */
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+
+/** Whether `endpoint` points at this machine; an unparsable URL is not local */
+const isLocalEndpoint = (endpoint: string) => {
+  try {
+    return LOCAL_HOSTS.has(new URL(endpoint).hostname);
+  } catch {
+    // Not a URL, so not local: `getCluster` goes on to the genesis hash,
+    // which fails loudly with the endpoint
+    log.debug("endpoint is not a URL; not read as local");
+    return false;
+  }
+};
 
 @derivable(derive)
 class _PgConnection {
@@ -202,6 +220,47 @@ class _PgConnection {
     }
   }
 
+  /** The endpoint `cluster` was last read from */
+  private static _clusterEndpoint: string | undefined;
+
+  /**
+   * Whether `cluster` still names the previous endpoint's network: a custom
+   * RPC takes a genesis-hash round trip to read. Anything spending a faucet on
+   * that name waits, as a Localnet name would ask a public RPC for 100 SOL.
+   */
+  static get clusterIsStale() {
+    return _PgConnection._clusterEndpoint !== PgSettings.connection.endpoint;
+  }
+
+  /**
+   * Read the selected endpoint's cluster, remembering which endpoint it was.
+   *
+   * @returns the cluster name
+   */
+  static async readCluster(): Promise<Cluster> {
+    const endpoint = PgSettings.connection.endpoint;
+    // A read of an endpoint no longer selected may finish last, and what it
+    // returns is what `cluster` keeps: it answers for the selected one instead
+    const hasEndpointChanged = () =>
+      endpoint !== PgSettings.connection.endpoint;
+    let cluster: Cluster;
+    try {
+      cluster = await _PgConnection.getCluster(endpoint);
+    } catch (e) {
+      if (!hasEndpointChanged()) throw e;
+      log.info(
+        "a previous endpoint's cluster read failed, reading the current",
+        {
+          context: { error: String(e) },
+        }
+      );
+      return _PgConnection.readCluster();
+    }
+    if (hasEndpointChanged()) return _PgConnection.readCluster();
+    _PgConnection._clusterEndpoint = endpoint;
+    return cluster;
+  }
+
   /**
    * Get the cluster name from the given `endpoint`.
    *
@@ -214,10 +273,10 @@ class _PgConnection {
     // Playnet
     if (PgPlaynet.isUrlPlaynet(endpoint)) return "playnet";
 
-    // Local
-    if (endpoint.includes("localhost") || endpoint.includes("127.0.0.1")) {
-      return "localnet";
-    }
+    // Local: Localnet and Surfpool, on any port. The host is compared, not
+    // the URL text, since a local endpoint opens the airdrop's sign-in gate
+    // (`isAirdropSignInGated`) and `https://localhost.example.com` is remote
+    if (isLocalEndpoint(endpoint)) return "localnet";
 
     // Public
     //
@@ -232,10 +291,10 @@ class _PgConnection {
         return "mainnet-beta";
     }
 
-    // Platform endpoints declare their cluster, so resolve them without
+    // The offered networks declare their cluster, so resolve them without
     // paying for the genesis hash round trip below.
-    const platform = PLATFORM_ENDPOINTS.find((e) => e.value === endpoint);
-    if (platform) return platform.cluster;
+    const network = NETWORKS.find((e) => e.value === endpoint);
+    if (network) return network.cluster;
 
     // Decide custom endpoints from the genesis hash of the cluster
     const genesisHash = await PgConnection.create({

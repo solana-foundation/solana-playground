@@ -75,7 +75,7 @@ export interface BaseBuildProps {
   onContinue: () => void;
   /**
    * The app holds an IDL, the build's or an uploaded one: the success line
-   * names it and the Download IDL row is drawn
+   * names it
    */
   hasIdl: boolean;
   /** Sends a prompt to the assistant: an error card's Explain or Fix */
@@ -83,7 +83,7 @@ export interface BaseBuildProps {
   onOpenFile: (path: string) => void;
   /** Opens the console, where the terminal holds the whole output */
   onShowLog: () => void;
-  /** Download IDL, a link under Build succeeded's pills, drawn only with `hasIdl` */
+  /** The build's downloads (IDL, program binary), links under Build succeeded's pills */
   idlActions: ReactNode;
 }
 
@@ -387,11 +387,12 @@ const Succeeded = (p: BaseBuildProps) => (
             the explorer, not a build result */}
         <ContinueButton p={p} />
         <BuildButton p={p} label="Build again" variant="outline" />
-        {/* The one place to download the IDL: a link under the pills, as
-            Unreached's Show full log and Deploy's Upload IDL */}
-        {p.hasIdl && (
-          <div className="flex w-full justify-center">{p.idlActions}</div>
-        )}
+        {/* The stage's downloads, as links under the pills like
+            Unreached's Show full log. Download IDL draws itself only while
+            the app holds an IDL */}
+        <div className="flex w-full flex-wrap justify-center gap-2">
+          {p.idlActions}
+        </div>
       </>
     }
     progress={p}

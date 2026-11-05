@@ -6,16 +6,12 @@ export const FOUNDATION_ENDPOINT =
   "https://playground-server-dot-analytics-324114.de.r.appspot.com";
 
 /**
- * Upstream's original backend. Reachable on purpose and never a default:
- * Solana serves its users from infrastructure it operates, so a user who
- * picks this one accepts that it is Acheron's capacity, not Solana's, and
- * the label says which one it is.
- */
-export const SOLPG_ENDPOINT = "https://api.solpg.io";
-
-/**
  * What the picker offers, in this order -- the default first. The custom
  * URL field comes after these, from the setting itself.
+ *
+ * Upstream's own backend, `api.solpg.io`, is not offered: it is Acheron's
+ * capacity, not Solana's, and whoever needs it enters it as a
+ * custom server.
  */
 export const SERVER_ENDPOINT_OPTIONS: ReadonlyArray<{
   name: string;
@@ -23,7 +19,6 @@ export const SERVER_ENDPOINT_OPTIONS: ReadonlyArray<{
 }> = [
   { name: "Solana Foundation", value: FOUNDATION_ENDPOINT },
   { name: "Local", value: LOCAL_ENDPOINT },
-  { name: "SolPg (original backend)", value: SOLPG_ENDPOINT },
 ];
 
 /**
@@ -62,16 +57,11 @@ if (import.meta.vitest) {
         });
       });
 
-      it("offers api.solpg.io as a labelled choice, after Solana's", () => {
-        const names = SERVER_ENDPOINT_OPTIONS.map((o) => o.name);
-        const solpg = SERVER_ENDPOINT_OPTIONS.find(
-          (o) => o.value === SOLPG_ENDPOINT
-        );
-        expect(SOLPG_ENDPOINT).toBe("https://api.solpg.io");
-        expect(solpg?.name).toBe("SolPg (original backend)");
-        expect(names.indexOf("Solana Foundation")).toBeLessThan(
-          names.indexOf("SolPg (original backend)")
-        );
+      it("does not offer upstream's api.solpg.io", () => {
+        expect(SERVER_ENDPOINT_OPTIONS).toEqual([
+          { name: "Solana Foundation", value: FOUNDATION_ENDPOINT },
+          { name: "Local", value: LOCAL_ENDPOINT },
+        ]);
       });
 
       it("keeps a local server selectable", () => {
@@ -91,7 +81,9 @@ if (import.meta.vitest) {
 
       it("never defaults to api.solpg.io", () => {
         for (const NODE_ENV of ["production", "development", "test"]) {
-          expect(defaultServerEndpoint({ NODE_ENV })).not.toBe(SOLPG_ENDPOINT);
+          expect(defaultServerEndpoint({ NODE_ENV })).not.toBe(
+            "https://api.solpg.io"
+          );
         }
       });
 

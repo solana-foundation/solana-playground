@@ -256,6 +256,8 @@ describe("conversations", { skip: !DB && "DATABASE_URL not set" }, () => {
     // device could ever read back -- and a client deletes its own copy of a
     // thread on exactly that answer.
     it("refuses to add to it, and writes nothing", async () => {
+      // The delete erased the thread's messages; the project's tombstone
+      // refuses the push, and nothing is written back
       await appendMessages(userId, on(1), [item(1)]);
       await deleteProject(userId, "p1");
 
@@ -267,7 +269,7 @@ describe("conversations", { skip: !DB && "DATABASE_URL not set" }, () => {
         "select count(*)::int as n from messages where conversation_id = $1",
         [thread(1)]
       );
-      assert.equal(rows[0].n, 1);
+      assert.equal(rows[0].n, 0);
     });
 
     it("names the thread when only the thread is gone", async () => {

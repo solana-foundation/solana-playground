@@ -147,7 +147,7 @@ const doAllFour = async () => {
 it("counts the default network as done on a fresh device", () => {
   draw();
   expect(title()?.textContent).toBe("Get set up· 1 of 4");
-  expect(screen.getByText("devnet")).toBeTruthy();
+  expect(screen.getByText("Devnet")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Choose a network" })).toBeNull();
 });
 
@@ -352,7 +352,7 @@ describe("the network row", () => {
     health.slotStalled = reading.slotStalled;
     draw();
     expect(networkRow().getAttribute("data-status")).toBe("warn");
-    expect(networkRow().getAttribute("title")).toBe("devnet is not responding");
+    expect(networkRow().getAttribute("title")).toBe("Devnet is not responding");
   });
 
   it("keeps a network that does not answer in the count", () => {

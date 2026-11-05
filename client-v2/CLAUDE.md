@@ -91,6 +91,13 @@ adds or renames an event describes it in its spec delta too
 (`openspec/config.yaml`). Logs go through `shared/lib/logger`: a slice binds
 its own namespace with `createLogger("<slice>:<module>")`.
 
+**The funnel steps are measured wherever their code lives.** The table in
+`openspec/specs/client-v2-funnels/spec.md` (the `funnel-events` delta until it
+is archived) names each step's events and the code that sends them, legacy
+roots included; code there sends through the owning slice's tracker, without
+a scope. A change to that code keeps the step's events firing, or updates the
+table in the same change.
+
 The two existing features with a React folder, `auth` and `persistence`, keep
 `Component/` until the naming is settled; new slices use `ui/`.
 

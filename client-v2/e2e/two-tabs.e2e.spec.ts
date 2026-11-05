@@ -291,7 +291,9 @@ test("switching tabs mid-debounce raises no conflict", async ({ context }) => {
 
   await expect.poll(serverLib(row), LONG).toContain("// from A");
   await b.waitForTimeout(8000);
-  await expect(b.getByText("changed on another device")).toHaveCount(0);
+  await expect(
+    b.getByRole("alert").filter({ hasText: "Changed on another device" })
+  ).toHaveCount(0);
   expect(state.conflicts).toBe(0);
   await expect(editor(b)).toContainText("// from A");
 });
@@ -313,7 +315,9 @@ test("taking the other version replaces a file that is already open", async ({
   // merged under either answer, so only an overlap makes "Take the other
   // version" discard anything
   await retypeFirstLine(page, "// mine");
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
   await expect(banner).toBeVisible(LONG);
   state.rejectPuts = false;
 
@@ -357,7 +361,9 @@ test("a project deleted in one tab is not re-uploaded by the other", async ({
   await setVisible(b, true);
   await expect(currentProject(b)).not.toHaveText("Shared", LONG);
   await expect(currentProject(b)).toHaveText("Other");
-  await expect(b.getByText("changed on another device")).toHaveCount(0);
+  await expect(
+    b.getByRole("alert").filter({ hasText: "Changed on another device" })
+  ).toHaveCount(0);
   expect(state.putsAfterDelete).toBe(0);
 });
 

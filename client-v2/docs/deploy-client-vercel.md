@@ -559,6 +559,15 @@ included. A `context` passed with `report: true` reaches Sentry as the event's
 an event because they are only ever sent outbound, from the function's
 environment.
 
+**A project write is at most 4 MB of request body**
+(`MAX_PROJECT_BODY_BYTES` in `src/features/persistence/model/project-write.mjs`).
+Vercel refuses a Function request body over 4.5 MB with its own `413`
+([Functions limits](https://vercel.com/docs/functions/limitations)) on every
+plan, before the handler runs. The browser refuses a larger body before
+sending it and `PUT /api/projects` refuses it again, both as `too-large`, so the
+user reads the banner's "This project is over 4 MB. Remove or shrink its
+largest files, then try again." and never the platform's error.
+
 **Migrations are never applied by a function.** A preview from `preview.yml` or
 the Makefile gets its own Neon branch, so its schema is its own problem. A
 Git-triggered preview runs on the Preview-scoped `DATABASE_URL`, which nothing

@@ -544,7 +544,7 @@ if (import.meta.vitest) {
       });
 
       describe("carrying a conversation to a new workspace", () => {
-        // "Keep as a new project": the project was deleted on another device,
+        // "Keep a copy": the project was deleted on another device,
         // its conversation tombstoned with it, and the user keeps this device's
         // work under a new id -- chat included
         it("moves the items under a fresh thread id, and drops the old one", async () => {

@@ -97,34 +97,22 @@ const createAccountGenerator = (acc: IdlAccount): InstructionValueGenerator => {
   if (acc.pda) {
     return {
       type: "From seed",
-      seeds: acc.pda.seeds.map((seed) => {
-        switch (seed.kind) {
-          case "const":
-            return {
-              type: seed.type,
-              generator: { type: "Custom", value: seed.value },
-            };
-
-          case "arg":
-            return {
-              type: seed.type,
-              generator: { type: "Arguments", name: seed.path },
-            };
-
-          case "account":
-            return {
-              type: seed.type,
-              generator: { type: "Accounts", name: seed.path },
-            };
-
-          default:
-            throw new Error(`Unknown seed kind: \`${seed.kind}\``);
-        }
-      }),
-      // TODO: Handle `acc.pda.programId`
-      programId: { generator: { type: "Current program" } },
+      seeds: acc.pda.seeds.map((seed) => ({
+        type: seed.type,
+        generator: seedGenerator(seed),
+      })),
+      programId: {
+        generator: acc.pda.programId
+          ? seedGenerator(acc.pda.programId)
+          : { type: "Current program" },
+      },
     };
   }
+
+  // An account the IDL fixes (`address`, e.g. a program); a PDA above wins,
+  // since its seeds name the address, and the guesses below are only guesses
+  const address = (acc as IdlAccount & { address?: string }).address;
+  if (address) return { type: "Custom", value: address };
 
   // Set common wallet account names to current wallet
   const COMMON_WALLET_ACCOUNT_NAMES = ["authority", "owner", "payer", "signer"];
@@ -137,6 +125,43 @@ const createAccountGenerator = (acc: IdlAccount): InstructionValueGenerator => {
   if (knownProgram) return { type: "All programs", name: knownProgram.name };
 
   return { type: "Custom", value: getKnownAccountKey(acc.name) ?? "" };
+};
+
+/** What a seed of its kind must carry, or a throw naming what is missing */
+const seedField = (
+  seed: { kind: string; value?: string; path?: string },
+  field: "value" | "path"
+) => {
+  const value = seed[field];
+  if (value === undefined)
+    throw new Error(`Seed of kind \`${seed.kind}\` has no \`${field}\``);
+  return value;
+};
+
+/**
+ * The generator that fills one PDA seed (or the seed program) of an IDL.
+ * The 0.29 package types seeds as `any`; a `const` seed carries `value`, an
+ * `arg` or `account` seed carries `path`.
+ *
+ * @param seed IDL seed: a constant, or an argument or account by name
+ */
+const seedGenerator = (seed: {
+  kind: string;
+  value?: string;
+  path?: string;
+}):
+  | { type: "Custom"; value: string }
+  | { type: "Arguments" | "Accounts"; name: string } => {
+  switch (seed.kind) {
+    case "const":
+      return { type: "Custom", value: seedField(seed, "value") };
+    case "arg":
+      return { type: "Arguments", name: seedField(seed, "path") };
+    case "account":
+      return { type: "Accounts", name: seedField(seed, "path") };
+    default:
+      throw new Error(`Unknown seed kind: \`${seed.kind}\``);
+  }
 };
 
 /**

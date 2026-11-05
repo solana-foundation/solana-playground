@@ -2,6 +2,7 @@
 // legacy roots still import its modules by path until they move.
 export { report } from "./model/diagnostics";
 export { toReplayMessagesWith } from "./model/replay";
+export { PgSyncClient } from "./model/sync-client";
 export {
   isToolCallRecord,
   toToolCallRecordWith,

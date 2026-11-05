@@ -33,6 +33,7 @@ import { Spinner } from "@/shared/ui/spinner";
 
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
+import type { SignInOffer } from "../model/sign-in-offer";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
 import type { ReplyActions } from "./BaseThreadItem";
 import { BaseThreadItem } from "./BaseThreadItem";
@@ -59,6 +60,7 @@ export const BaseThread = ({
   items,
   working,
   unsaved,
+  signIn,
   project,
   suggestions,
   onSuggestion,
@@ -75,6 +77,8 @@ export const BaseThread = ({
   working: boolean;
   /** The open thread could not be read, so nothing typed into it is saved */
   unsaved: boolean;
+  /** The line a signed-out thread ends in, or `null` when it is not shown */
+  signIn: SignInOffer | null;
   /** The open project's name, or `null` when there is none */
   project: string | null;
   suggestions: readonly string[];
@@ -128,6 +132,21 @@ export const BaseThread = ({
             ))
           )}
           {retry && <BusyRetry retry={retry} />}
+          {signIn && (
+            <Callout role="status">
+              <CalloutDescription>
+                Sign in to keep this conversation on your other devices.
+              </CalloutDescription>
+              <CalloutActions>
+                <CalloutAction
+                  disabled={signIn.pending}
+                  onClick={signIn.onSignIn}
+                >
+                  Sign in with GitHub
+                </CalloutAction>
+              </CalloutActions>
+            </Callout>
+          )}
           {working && <Thinking />}
         </MessageScrollerContent>
       </MessageScrollerViewport>

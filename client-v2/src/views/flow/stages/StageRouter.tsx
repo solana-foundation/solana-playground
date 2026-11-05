@@ -13,6 +13,8 @@ const Interact = lazy(() => import("./Interact"));
 
 interface StageRouterProps {
   stage: Stage;
+  /** Opens Settings on the network choice, for Deploy's network chip */
+  onChangeNetwork: () => void;
 }
 
 /**
@@ -25,6 +27,7 @@ interface StageRouterProps {
  */
 const StageRouter: FC<React.PropsWithChildren<StageRouterProps>> = ({
   stage,
+  onChangeNetwork,
 }) => (
   <>
     <div
@@ -66,7 +69,7 @@ const StageRouter: FC<React.PropsWithChildren<StageRouterProps>> = ({
           role="tabpanel"
           aria-labelledby="flow-stage-tab-deploy"
         >
-          <Deploy />
+          <Deploy onChangeNetwork={onChangeNetwork} />
         </div>
       )}
       {stage === "interact" && (

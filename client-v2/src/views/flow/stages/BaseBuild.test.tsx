@@ -67,7 +67,32 @@ const lastIsActions = (container: HTMLElement) =>
     .querySelector('[data-slot="stage-empty"]')
     ?.lastElementChild?.getAttribute("data-slot");
 
+/** The props with the build's downloads in their slot */
+const withDownloads = (surface: BuildSurfaceView): BaseBuildProps => {
+  const p = props(surface);
+  p.idlActions = <button type="button">Download .so</button>;
+  return p;
+};
+
 describe("BaseBuild", () => {
+  it.each<BuildSurfaceView>([
+    failed([]),
+    { kind: "restored", failed: false },
+    // eslint-disable-next-line unicorn/no-null -- `BuildSurfaceView`'s `unreached.failure` is `BuildFailure | null`
+    { kind: "unreached", failure: null },
+    { kind: "empty" },
+  ])("offers no downloads on the $kind surface", (surface) => {
+    render(<BaseBuild {...withDownloads(surface)} />);
+
+    expect(screen.queryByRole("button", { name: "Download .so" })).toBeNull();
+  });
+
+  it("offers the downloads after a successful build", () => {
+    render(<BaseBuild {...withDownloads({ kind: "succeeded" })} />);
+
+    expect(screen.getByRole("button", { name: "Download .so" })).toBeTruthy();
+  });
+
   /** The prototype's empty stage: no icon tile, the brand pill to press */
   it("offers a first build as the brand pill", async () => {
     const p = props({ kind: "empty" });
@@ -197,11 +222,12 @@ describe("BaseBuild", () => {
     }
   );
 
-  // Without an IDL the take-away row would be an empty gap under the pills
+  // The row carries Download .so either way; Download IDL leaves itself out
+  // without an IDL (`IdlActions`), so the stage passes whatever it is given
   it.each([
     [true, 1],
-    [false, 0],
-  ])("draws the IDL row only when there is an IDL (%s)", (hasIdl, rows) => {
+    [false, 1],
+  ])("draws the downloads row with or without an IDL (%s)", (hasIdl, rows) => {
     const p = props({ kind: "succeeded" });
     p.hasIdl = hasIdl;
     p.idlActions = <a href="#idl">Download IDL</a>;

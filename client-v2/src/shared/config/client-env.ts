@@ -12,10 +12,9 @@ export const SERVER_URL = process.env.REACT_APP_SERVER_URL;
 /** Default of `experimental.unstable`; only `"true"` turns it on */
 export const SERVER_UNSTABLE = process.env.REACT_APP_SERVER_UNSTABLE;
 
-/** Platform RPC endpoints, one per cluster; unset adds no endpoint */
+/** Platform RPC endpoints for Devnet and Mainnet; unset falls back to the public one */
 export const PLATFORM_RPC_URLS = {
   devnet: process.env.REACT_APP_DEVNET_RPC_URL,
-  testnet: process.env.REACT_APP_TESTNET_RPC_URL,
   mainnet: process.env.REACT_APP_MAINNET_RPC_URL,
 };
 

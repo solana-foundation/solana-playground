@@ -19,6 +19,7 @@ import {
 import { useIdl } from "../IdlProvider";
 import Label from "../InputLabel";
 import FromSeed from "./FromSeed";
+import { hasInstructionErrors } from "./instruction-errors";
 import { useInstruction } from "./InstructionProvider";
 
 const log = createLogger("test:instruction-input");
@@ -123,10 +124,13 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
               // From seed
               if (
                 instructionValue.generator.type === "From seed" &&
-                instructionValue.generator.seeds.some(
-                  (seed) =>
-                    seed.generator.type === refGeneratorType &&
-                    seed.generator.name === data.name
+                [
+                  ...instructionValue.generator.seeds,
+                  instructionValue.generator.programId,
+                ].some(
+                  ({ generator: dependency }) =>
+                    dependency.type === refGeneratorType &&
+                    dependency.name === data.name
                 )
               ) {
                 const inputEl = document.getElementById(
@@ -141,19 +145,7 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
             }
           }
         },
-        checkErrors: () => {
-          return Object.values(current.values).reduce((acc, entry) => {
-            if (Array.isArray(entry)) {
-              acc ||= entry.some(
-                (v) =>
-                  v.error ||
-                  (v.generator.type === "Custom" && v.generator.value === "")
-              );
-            }
-
-            return acc;
-          }, false);
-        },
+        checkErrors: () => hasInstructionErrors(current.values),
       });
 
       return current;

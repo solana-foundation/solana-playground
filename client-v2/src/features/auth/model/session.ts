@@ -79,7 +79,7 @@ export interface SessionUser {
 }
 
 /** Where a sign-in started, when its listeners must tell it apart from the account footer's */
-export type SignInOrigin = "assistant";
+export type SignInOrigin = "assistant" | "deploy";
 
 /** Local cleanup that runs only after the server has ended the session */
 export type SignOutTeardown = () => Promise<void>;

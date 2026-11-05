@@ -86,6 +86,24 @@ const canTakeFocus = (el: HTMLElement) =>
   el.closest("[inert]") === null;
 
 /**
+ * Ends the `visibility` transitions under `root`. The shell's reveal starts
+ * one on every control with `transition-all` (the design system's `Button`),
+ * and until its first frame the control still computes `hidden`, where
+ * `focus()` does nothing: on a slow machine the refocus after the settings
+ * closed landed there, and focus stayed on the body (HOO-2290).
+ */
+const revealAtOnce = (root: Element) => {
+  for (const animation of root.getAnimations({ subtree: true })) {
+    if (
+      animation instanceof CSSTransition &&
+      animation.transitionProperty === "visibility"
+    ) {
+      animation.finish();
+    }
+  }
+};
+
+/**
  * Focuses `el` once it shows. The shell comes back from `invisible`, and a
  * control with `transition-all` (the design system's buttons) animates the
  * visibility it inherits, so for a frame or more it is still hidden and
@@ -158,7 +176,9 @@ const FlowFrame = () => {
   }, []);
 
   const openGallery = () => PgView.setModal(NewWorkspaceModal);
-  // Back to the control that opened them, once the shell is no longer inert,
+  const shell = useRef<HTMLDivElement>(null);
+  // Back to the control that opened them, once the shell is no longer inert
+  // and its reveal's `visibility` transitions are over (`revealAtOnce`),
   // or, when that is gone or out of reach, to `fallbackFocus`. Only when they
   // close: on load, with the settings never opened, focus stays where the
   // browser puts it, not on a trigger whose tooltip opens on focus (HOO-2240)
@@ -168,6 +188,7 @@ const FlowFrame = () => {
     const closed = wasOpen.current && !settings.open;
     wasOpen.current = settings.open;
     if (!closed) return;
+    if (shell.current) revealAtOnce(shell.current);
     const target =
       refocus.current && canTakeFocus(refocus.current)
         ? refocus.current
@@ -268,6 +289,7 @@ const FlowFrame = () => {
           unmount, and with `display: contents` and `visibility` the shell
           keeps its boxes, so no panel sees a resize and folds on its own */}
       <div
+        ref={shell}
         className={settings.open ? "contents invisible" : "contents"}
         inert={settings.open}
       >
@@ -427,7 +449,16 @@ const FlowFrame = () => {
                   `relative`: the lesson reader covers the stage, not the whole
                   layout */}
               <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-                <StageRouter stage={state.stage} />
+                <StageRouter
+                  stage={state.stage}
+                  // As the cluster row in the footer opens it
+                  onChangeNetwork={() =>
+                    toggleSettings(closeNavSheet.current)({
+                      from: "cluster",
+                      focus: "network",
+                    })
+                  }
+                />
                 {reading && described && (
                   <Reader
                     key={described.step.id}

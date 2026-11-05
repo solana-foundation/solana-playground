@@ -1,6 +1,7 @@
 import {
   ArrowUpRight,
   BookOpen,
+  HandCoins,
   LogOut,
   Settings,
   TriangleAlert,
@@ -395,6 +396,11 @@ const BaseAccountMenu = ({
         ) : (
           <DropdownMenuItem onSelect={() => pick("connect-wallet")}>
             <Wallet /> Connect wallet
+          </DropdownMenuItem>
+        )}
+        {account.canFund && (
+          <DropdownMenuItem onSelect={() => pick("fund-wallet")}>
+            <HandCoins /> Fund from a wallet…
           </DropdownMenuItem>
         )}
       </>
