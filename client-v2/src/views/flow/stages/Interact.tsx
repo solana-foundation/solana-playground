@@ -180,7 +180,7 @@ const Interact = () => {
             idl={callable}
             programId={programId}
             cluster={cluster}
-            callBlocked={!!short}
+            solNeededOn={short?.cluster}
           />
         )
       }
