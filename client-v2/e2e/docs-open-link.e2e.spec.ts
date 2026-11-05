@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { deflateRaw } from "pako";
 
-import { expect, json, LONG, test } from "./fixtures";
+import { DEVNET_WS, expect, json, LONG, test } from "./fixtures";
 
 /**
  * Builds a docs link as the docs site does. Written here rather than
@@ -61,6 +61,49 @@ const stubBalance = (lamports: () => number, page: Page) =>
       result: { context: { slot: 1 }, value: lamports() },
     });
   });
+
+/** What the stubbed devnet answers, by JSON-RPC method */
+const DEVNET_ANSWERS: Record<string, unknown> = {
+  getBalance: { context: { slot: 1 }, value: 1_000_000_000 },
+  getLatestBlockhash: {
+    context: { slot: 1 },
+    value: {
+      blockhash: "EETubP5AKHgjPAhzPAFcb8BAY1hMH639CWCFTqi3hq1k",
+      lastValidBlockHeight: 1000,
+    },
+  },
+  getGenesisHash: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  getSlot: 1,
+  getVersion: { "solana-core": "2.2.0", "feature-set": 0 },
+};
+
+/**
+ * Answers every devnet request here, so a client that reads the cluster
+ * never waits on the public RPC (HOO-2585): an answer from the table, else a
+ * JSON-RPC "method not found". The websocket is accepted and stays silent.
+ */
+const stubDevnet = async (page: Page) => {
+  await page.route("https://api.devnet.solana.com/**", async (route) => {
+    const body = route.request().postDataJSON() as {
+      id?: unknown;
+      method?: string;
+    } | null;
+    const method = body?.method ?? "";
+    if (method in DEVNET_ANSWERS) {
+      return json(route, {
+        jsonrpc: "2.0",
+        id: body?.id,
+        result: DEVNET_ANSWERS[method],
+      });
+    }
+    return json(route, {
+      jsonrpc: "2.0",
+      id: body?.id,
+      error: { code: -32601, message: `Method not found: ${method}` },
+    });
+  });
+  await page.routeWebSocket(DEVNET_WS, () => {});
+};
 
 /**
  * Presses Run. A fresh browser has no Playground wallet yet, so Run first
@@ -144,6 +187,7 @@ test.describe("client-run", () => {
   });
 
   test("client-run: The Quickstart's client", async ({ page }) => {
+    await stubDevnet(page);
     await page.goto(docsLink({ name: "quickstart.ts", code: QUICKSTART }));
     await run(page);
 
@@ -154,6 +198,7 @@ test.describe("client-run", () => {
   });
 
   test("client-run: Iterating a Map", async ({ page }) => {
+    await stubDevnet(page);
     await page.goto(docsLink({ name: "quickstart.ts", code: QUICKSTART }));
     await run(page);
     await expect(page.locator(".xterm-rows")).toContainText("map: a", LONG);
