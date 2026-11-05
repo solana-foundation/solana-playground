@@ -112,6 +112,7 @@ describe("Stepper", () => {
       stopped: null,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     render(<Stepper state={noProgram} onSelect={vi.fn()} />);
     expect(screen.getAllByRole("tab").map((tab) => tab.id)).toEqual([
@@ -218,6 +219,7 @@ describe("phone", () => {
       stopped: null,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     render(<Stepper state={noProgram} onSelect={vi.fn()} phone />);
     expect(
@@ -246,6 +248,7 @@ describe("phone", () => {
       stopped: null,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     rerender(<Stepper state={noProgram} onSelect={vi.fn()} phone />);
     // The window widens past the phone breakpoint with the stepper mounted

@@ -29,7 +29,6 @@ vi.mock("../../../utils", () => ({
     onDidRenameItem: vi.fn(() => ({ dispose: vi.fn() })),
     onDidReloadFiles: vi.fn(() => ({ dispose: vi.fn() })),
     isInitialized: true,
-    files: {},
     getRelativePath: (path: string) => path.replace(/^\/ws\//, ""),
   },
   PgFramework: {
