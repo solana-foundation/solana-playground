@@ -526,6 +526,39 @@ before this existed.
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
 
+### Sentry on the API functions
+
+The functions report to the same Sentry project as the browser, through
+`withObservability` (`src/features/api/server/with-observability.mjs`). They
+share the browser's `REACT_APP_SENTRY_DSN` and `SENTRY_PREVIEW_ENABLED`;
+`SENTRY_TRACES_SAMPLE_RATE` is theirs alone. All three are described in
+`.env.example`. A function loads `@sentry/node` and sends to Sentry only with a
+DSN and a Production deployment, or a Preview one with
+`SENTRY_PREVIEW_ENABLED=true`; otherwise it does neither.
+
+An error that escapes a handler is captured and rethrown, so the 500 is
+unchanged. A handler that answers a failure itself (a driver failure, a broken
+catalogue) reports it through the server logger, `log.error(e, { report: true })`
+(`src/shared/lib/logger/server.mjs`), whose Sentry provider `withObservability`
+installs once the SDK loads; a failure logged without `report: true` reaches
+only the function log. Each function flushes before it returns.
+
+An error event carries the stack, release, environment and the request's
+method. The route and the status are on the request's span, named
+`<METHOD> /api/<route>`. Nothing else from the request travels: the SDK is
+told to collect no bodies, cookies, headers, query strings, user or IP;
+`scrubEvent` removes them again from error events, together with the
+breadcrumbs (the server logger prints upstream bodies and every driver field
+to the console), and `scrubSpan` drops the query string from span URLs. Every
+error event, the logger's included, passes `scrubEvent`. A `pg` error is sent
+as its code and constraint, never its message, which echoes request values;
+the routes add its table, column and statement text, never its `detail`. Any
+other error is sent with its message as it is, a connection failure's host
+included. A `context` passed with `report: true` reaches Sentry as the event's
+`extra`, as it is, so a call site keeps values out of it. AI keys never reach
+an event because they are only ever sent outbound, from the function's
+environment.
+
 **Migrations are never applied by a function.** A preview from `preview.yml` or
 the Makefile gets its own Neon branch, so its schema is its own problem. A
 Git-triggered preview runs on the Preview-scoped `DATABASE_URL`, which nothing
