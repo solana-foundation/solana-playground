@@ -90,6 +90,13 @@ print its message and end the run.
 - **THEN** the terminal prints the error, and the command ends instead of
   hanging
 
+#### Scenario: An error thrown in a callback the code awaits ends the run
+
+- **WHEN** `run` executes a file that awaits a promise whose timer callback
+  throws
+- **THEN** the terminal prints "Uncaught error:", and the command ends
+  instead of hanging
+
 ### Requirement: RPC from the sandbox goes through the page
 
 Every RPC request a sandboxed script makes through `pg.connection`, or a

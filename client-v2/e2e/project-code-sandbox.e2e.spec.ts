@@ -66,6 +66,28 @@ test.describe("project-code-sandbox", () => {
     await expect(terminalRows(page)).toHaveText(/\$\s*$/, LONG);
   });
 
+  test("project-code-sandbox: An error thrown in a callback the code awaits ends the run", async ({
+    context,
+    page,
+  }) => {
+    const { writeClient } = await seedPlaynetProject(context, page);
+    await writeClient(
+      [
+        "await new Promise(() => {",
+        '  setTimeout(() => { throw new Error("boom"); }, 0);',
+        "});",
+      ].join("\n")
+    );
+
+    await runInTerminal(page, "run");
+
+    // The frame's opaque origin mutes the message of an error thrown by a
+    // timer's callback to "Script error."
+    await expect(terminalRows(page)).toContainText("Uncaught error:", LONG);
+    // The prompt is back: the command ended
+    await expect(terminalRows(page)).toHaveText(/\$\s*$/, LONG);
+  });
+
   test("project-code-sandbox: A failing test is reported", async ({
     context,
     page,
