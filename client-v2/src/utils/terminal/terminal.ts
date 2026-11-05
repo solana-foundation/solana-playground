@@ -60,7 +60,7 @@ export class PgTerminal {
   }
 
   static warning(text: string) {
-    return `\x1b[1;33m${text}\x1b[0m`;
+    return toneWith("warning")(text);
   }
 
   static info(text: string) {
@@ -737,8 +737,9 @@ export class PgTerm {
       // Compared plain: xterm's text carries no colour codes
       const previousLine = this._tty.getLine(1)?.translateToString().trim();
       if (previousLine !== msg) {
-        const tone = lineTone(e);
-        this.println(tone ? toneWith(tone)(msg) : msg);
+        // The highlighter reads a colour code's digits as words, and its own
+        // colours end this one early
+        this.println(toneWith(lineTone(e))(msg), { noColor: true });
       }
 
       // An unknown command, a bad option or a declined question is an outcome,

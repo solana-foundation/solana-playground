@@ -152,7 +152,9 @@ function checkNetwork() {
 /** Check whether the state is valid for deployment. */
 async function checkProgram() {
   if (!PgProgramInfo.uuid && !PgProgramInfo.importedProgram?.bytes.length) {
-    PgTerminal.println("Warning: Program is not built.");
+    PgTerminal.println(PgTerminal.warning("Warning: Program is not built."), {
+      noColor: true,
+    });
     await PgCommand.build.execute();
   }
 
@@ -171,7 +173,10 @@ async function checkProgram() {
       }
     } else {
       PgTerminal.println(
-        "Warning: Your last build failed. Deploying now will upload the last successful build, not the current sources."
+        PgTerminal.warning(
+          "Warning: Your last build failed. Deploying now will upload the last successful build, not the current sources."
+        ),
+        { noColor: true }
       );
       const term = await PgTerminal.get();
       const proceed = await term.waitForInput(
@@ -190,9 +195,7 @@ async function checkProgram() {
 
   if (!PgProgramInfo.onChain) {
     throw new Error(
-      `Could not fetch on-chain data. Try using a different RPC provider with '${PgTerminal.bold(
-        "solana config set -u <RPC_URL>"
-      )}' command.`
+      "Could not fetch on-chain data. Try using a different RPC provider with 'solana config set -u <RPC_URL>' command."
     );
   }
 
@@ -208,7 +211,7 @@ async function checkProgram() {
         `Entered program ID doesn't match the program ID derived from program's keypair.
 You can fix this in 3 different ways:
 
-1. Remove the custom program ID from ${PgTerminal.bold("Program ID")}
+1. Remove the custom program ID from Program ID
 2. Import the program keypair for the current program ID
 3. Create a new program keypair`
       );
@@ -286,7 +289,7 @@ const processDeploy = async (
   if (userBalance < requiredBalanceWithoutFees) {
     throwIfNetworkChanged(connection);
     const formatBalance = (lamports: number) => {
-      return PgTerminal.bold(PgWeb3.lamportsToSol(lamports).toFixed(2));
+      return PgWeb3.lamportsToSol(lamports).toFixed(2);
     };
 
     const msg = `${
@@ -326,11 +329,13 @@ const processDeploy = async (
       // Without automatic airdrop the stage stops at its funding card, and
       // only the card's "Request airdrop" press spends faucet quota
       if (!answers.airdrop) throw short("airdrop_off");
-      PgTerminal.println(`Warning: ${msg}`);
+      PgTerminal.println(PgTerminal.warning(`Warning: ${msg}`), {
+        noColor: true,
+      });
       throwIfStopped(signal, deployStoppedLine({ state: "none" }));
     } else {
       const term = await PgTerminal.get();
-      term.println(`Warning: ${msg}`);
+      term.println(PgTerminal.warning(`Warning: ${msg}`), { noColor: true });
       throwIfStopped(signal, deployStoppedLine({ state: "none" }));
       // A stop while the question is open answers it, as "no" would; the
       // check below then ends the deploy as stopped, before any SOL moves
@@ -687,19 +692,23 @@ const processDeploy = async (
         },
         onMissing: (missingCount) => {
           PgTerminal.println(
-            `Warning: ${PgTerminal.bold(
-              missingCount.toString()
-            )} ${PgCommon.makePlural(
-              "transaction",
-              missingCount
-            )} not confirmed, retrying...`
+            PgTerminal.warning(
+              `Warning: ${missingCount} ${PgCommon.makePlural(
+                "transaction",
+                missingCount
+              )} not confirmed, retrying...`
+            ),
+            { noColor: true }
           );
         },
         onRateLimit: (retryAfter, reason) => {
           PgTerminal.println(
-            `Warning: Reached rate-limits (${reason}), waiting (${PgCommon.formatSeconds(
-              retryAfter
-            )})...`
+            PgTerminal.warning(
+              `Warning: Reached rate-limits (${reason}), waiting (${PgCommon.formatSeconds(
+                retryAfter
+              )})...`
+            ),
+            { noColor: true }
           );
         },
       }
@@ -892,7 +901,9 @@ const loadBufferWithControl = (
       const term = await PgTerminal.get();
       // This load segment's stop; a pause ends the segment and removes it
       const stopLoad = () => {
-        term.println("Stopping after this step…");
+        term.println(PgTerminal.info("Stopping after this step…"), {
+          noColor: true,
+        });
         abortController.abort();
       };
       signal.addEventListener("abort", stopLoad, { once: true });
@@ -1046,9 +1057,7 @@ export const sendAndConfirmTxWithRetriesFor =
     }
 
     throw new Error(
-      `Exceeded maximum amount of retries (${PgTerminal.bold(
-        MAX_RETRIES.toString()
-      )}).
+      `Exceeded maximum amount of retries (${MAX_RETRIES}).
 This might be an RPC related issue. Consider changing the endpoint from the settings.
 ${err?.message ? `Reason: ${err.message}` : ""}`
     );

@@ -56,6 +56,7 @@ const standardWallet = vi.hoisted(() => ({
   publicKey: keyOf("Std1111"),
 }));
 const airdrop = vi.hoisted(() => vi.fn());
+const termPrintln = vi.hoisted(() => vi.fn());
 const send = vi.hoisted(() => vi.fn(async () => "sig"));
 const loadBuffer = vi.hoisted(() => vi.fn());
 const closeBuffer = vi.hoisted(() => vi.fn(async () => "sig"));
@@ -124,13 +125,16 @@ vi.mock("../../utils", () => ({
   PgServer: { deploy: vi.fn() },
   PgTerminal: {
     bold: String,
-    info: String,
+    info: (text: string) => `info: ${text}`,
     success: String,
     error: String,
-    warning: String,
+    warning: (text: string) => `warning: ${text}`,
     println: vi.fn(),
     get: async () => ({
-      println: (line: string) => env.termLines.push(line),
+      println: (line: string, ...rest: unknown[]) => {
+        env.termLines.push(line);
+        termPrintln(line, ...rest);
+      },
       waitForInput: (msg: string) => env.waitForInput(msg),
       executeFromStr: (cmd: string) => env.executeFromStr(cmd),
     }),
@@ -253,6 +257,7 @@ describe("commands/deploy", () => {
     env.termLines = [];
     env.readBuffer = undefined;
     airdrop.mockClear();
+    termPrintln.mockClear();
     send.mockClear();
     loadBuffer.mockReset();
     closeBuffer.mockReset();
@@ -267,6 +272,99 @@ describe("commands/deploy", () => {
     openBuffers.forget.mockReset();
     openBuffers.forget.mockImplementation(async () => undefined);
     vi.mocked(PgTerminal.println).mockClear();
+  });
+
+  it("prints the low balance notice as a warning", async () => {
+    env.waitForInput = async () => {
+      env.controller.abort();
+      return true;
+    };
+
+    await runDeploy();
+
+    expect(termPrintln).toHaveBeenCalledWith(
+      expect.stringMatching(/^warning: Warning: /),
+      { noColor: true }
+    );
+  });
+
+  it("prints the load's retry notices as warnings", async () => {
+    env.balance = 10_000_000_000;
+    loadBuffer.mockImplementation(
+      async (
+        ...args: [
+          key: unknown,
+          bytes: unknown,
+          opts: {
+            onMissing: (count: number) => void;
+            onRateLimit: (retryAfter: number) => void;
+          }
+        ]
+      ) => {
+        const opts = args[2];
+        opts.onMissing(2);
+        opts.onRateLimit(3);
+        env.controller.abort();
+        throw new Error("the segment was aborted");
+      }
+    );
+
+    await runDeploy();
+
+    expect(PgTerminal.println).toHaveBeenCalledWith(
+      expect.stringMatching(/^warning: Warning: 2 .* not confirmed/),
+      { noColor: true }
+    );
+    expect(PgTerminal.println).toHaveBeenCalledWith(
+      expect.stringMatching(/^warning: Warning: Reached rate-limits/),
+      { noColor: true }
+    );
+  });
+
+  describe("the program check", () => {
+    /** Deploy's last pre-check, with the program in the state a test gives */
+    const checkProgram = async (state: Record<string, unknown>) => {
+      const { PgProgramInfo } = await import("../../utils");
+      const { deploy } = await import("./deploy");
+      const { importedProgram } = PgProgramInfo;
+      Object.assign(PgProgramInfo, state);
+      try {
+        const { preChecks } = deploy as unknown as {
+          preChecks: Array<() => Promise<unknown>>;
+        };
+        // The stub has no keypair, so the check goes on to refuse after the
+        // notice these tests are about
+        await preChecks[2]().catch(() => undefined);
+      } finally {
+        Object.assign(PgProgramInfo, {
+          importedProgram,
+          uuid: undefined,
+          lastBuildFailed: undefined,
+        });
+      }
+    };
+
+    it("prints a program that is not built as a warning", async () => {
+      await checkProgram({ importedProgram: undefined, uuid: undefined });
+
+      expect(PgTerminal.println).toHaveBeenCalledWith(
+        "warning: Warning: Program is not built.",
+        { noColor: true }
+      );
+    });
+
+    it("prints a last build that failed as a warning", async () => {
+      await checkProgram({
+        importedProgram: undefined,
+        uuid: "uuid",
+        lastBuildFailed: true,
+      });
+
+      expect(PgTerminal.println).toHaveBeenCalledWith(
+        expect.stringMatching(/^warning: Warning: Your last build failed/),
+        { noColor: true }
+      );
+    });
   });
 
   it("asks for nothing more once stopped during the airdrop question", async () => {
@@ -320,6 +418,12 @@ describe("commands/deploy", () => {
     expect(closeBuffer).toHaveBeenCalledTimes(1);
     expect((failure as Error).message).toContain("buffer account was closed");
     expect(openBuffers.forget).toHaveBeenCalledWith("Buf1111");
+    expect(termPrintln).toHaveBeenCalledWith(
+      "info: Stopping after this step…",
+      {
+        noColor: true,
+      }
+    );
   });
 
   /** A load that fails without a stop */
