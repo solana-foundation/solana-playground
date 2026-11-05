@@ -243,8 +243,15 @@ const runMocha = (channel: SandboxChannel) =>
 export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
   const console = consoleFor(channel);
   const printUncaught = printUncaughtWith(console);
-  window.addEventListener("error", (event) =>
-    printUncaught(event.error ?? event.message)
+  // An error thrown outside the code's promise chain (a timer's callback)
+  // ends the run, as it did in the old runtime: the code may be awaiting that
+  // callback, and `finished` would then never settle. The sandbox is a fresh
+  // document per run, so one listener per run is all there is.
+  const thrownOutside = new Promise<void>((resolve) =>
+    window.addEventListener("error", (event) => {
+      printUncaught(event.error ?? event.message);
+      resolve();
+    })
   );
   window.addEventListener("unhandledrejection", (event) =>
     printUncaught(event.reason)
@@ -295,7 +302,7 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
       new Function(...globals.map(([name]) => name), run.code)(
         ...globals.map(([, value]) => value)
       );
-      await finished;
+      await Promise.race([finished, thrownOutside]);
     } catch (error) {
       if (error instanceof SyntaxError) {
         console.error(`SyntaxError: ${error.message}`);
