@@ -4,6 +4,7 @@ import {
   consoleTrigger,
   HELP_TAIL,
   home,
+  LONG,
   runInTerminal,
   test,
 } from "./fixtures";
@@ -134,15 +135,12 @@ test.describe("client-v2-themes", () => {
     page,
   }) => {
     // A tutorial page renders Markdown through the same CodeBlock as the
-    // assistant's answers, and needs no backend. A lesson lands on its code;
-    // the page opens from the band
-    await page.goto("/tutorials/hello-anchor/1");
-    await page
-      .locator('[data-slot="objective-band"]')
-      .getByRole("button", { name: "Read the page" })
-      .click();
+    // assistant's answers, and needs no backend. Upstream's pages stay;
+    // Hello Seahorse's first one holds code
+    await page.goto("/tutorials/hello-seahorse");
+    await page.getByRole("button", { name: "Start", exact: true }).click(LONG);
     const code = page.locator("pre.shiki").first();
-    await expect(code).toBeVisible();
+    await expect(code).toBeVisible(LONG);
 
     const colours = () =>
       code.evaluate(

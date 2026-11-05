@@ -63,14 +63,9 @@ vi.mock("../../../../utils", () => ({
 vi.mock("../../../../commands/deploy/estimate", () => ({
   estimateDeployCostWithin: async () => 1_420_000_000,
 }));
-vi.mock("../../../flow/lessons", () => ({ PgLesson: {} }));
 vi.mock("./build-output", () => ({
   PgBuildOutput: {},
   stripKnownNoise: (s: string) => s,
-}));
-vi.mock("./lesson-context", () => ({
-  // eslint-disable-next-line unicorn/no-null -- `describeLesson()` answers `null` with no lesson
-  describeLesson: () => null,
 }));
 
 import { realBridge } from "./playground-bridge";

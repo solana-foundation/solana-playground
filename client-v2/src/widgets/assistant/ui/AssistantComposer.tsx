@@ -11,10 +11,7 @@ import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgProgramInfo } from "../../../utils/program-info";
-import type { LessonState } from "../../../views/flow/lessons";
-import { INITIAL_LESSON_STATE, PgLesson } from "../../../views/flow/lessons";
 import { PgBuildOutput } from "../../../views/sidebar/assistant/bridge/build-output";
-import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
 import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-bridge";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
@@ -48,19 +45,17 @@ const sent = (what: string) => `Sent with this message: ${what}`;
 const workspace = () => PgExplorer.currentWorkspaceId;
 
 /**
- * What the assistant reads each turn, as chips over the input: the lesson
- * step, one chip per file in the context (each removable until it is added
- * back), the build error and the IDL.
+ * What the assistant reads each turn, as chips over the input: one chip per
+ * file in the context (each removable until it is added back), the build
+ * error and the IDL.
  *
  * Mirrors what `describeProject()` sends, so the row cannot claim less than
  * the model gets. Paths only, never file content: this runs on every render,
  * including every streamed token.
  */
 const contextChips = (
-  lessonState: LessonState,
   contextFiles: readonly string[]
 ): ComposerContextChip[] => {
-  const lesson = describeLesson(lessonState);
   const files = contextFiles.map((path): ComposerContextChip => {
     const name = PgExplorer.getItemNameFromPath(path);
     return {
@@ -76,18 +71,8 @@ const contextChips = (
       },
     };
   });
-  // Where you are, the files (tabs in tab order, then the added ones),
-  // then what else is sent
+  // The files (tabs in tab order, then the added ones), then what else is sent
   return [
-    lesson
-      ? {
-          label: `Step ${lesson.stepIndex} of ${lesson.stepCount}`,
-          title: lesson.objective,
-          spoken: sent(
-            `step ${lesson.stepIndex} of ${lesson.stepCount} and its goal`
-          ),
-        }
-      : null,
     ...files,
     PgBuildOutput.latest?.failed
       ? {
@@ -178,10 +163,6 @@ export function AssistantComposer({
     return () => subs.forEach((sub) => sub.dispose());
   }, []);
   const contextFiles = realBridge.listContextFiles();
-
-  const [lessonState, setLessonState] =
-    useState<LessonState>(INITIAL_LESSON_STATE);
-  useEffect(() => PgLesson.onDidChange(setLessonState).dispose, []);
 
   const defaultBackend = useDefaultBackend();
   const connection = PgAssistant.connection;
@@ -327,7 +308,7 @@ export function AssistantComposer({
         </Callout>
       )}
       <BaseAssistantComposer
-        chips={contextChips(lessonState, contextFiles)}
+        chips={contextChips(contextFiles)}
         addable={addableFiles(contextFiles)}
         value={turn.input}
         onValueChange={turn.setInput}

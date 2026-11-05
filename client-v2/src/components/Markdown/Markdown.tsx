@@ -17,6 +17,11 @@ interface MarkdownProps {
   children: string;
   /** Make all fonts the code font */
   codeFontOnly?: boolean;
+  /**
+   * Take the font and the text color from the parent, so the text reads as
+   * the prose around it does (the tutorial feed's assistant turns)
+   */
+  inheritFont?: boolean;
   /** Root for the `src` prop (defaults to the current path) */
   rootSrc?: string;
   /** Whether to support URL hashes `<URL>#<HASH>` */
@@ -30,6 +35,7 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
   rootSrc,
   linkable,
   codeFontOnly,
+  inheritFont,
   ...props
 }) => {
   // Scroll to section if it's linkable
@@ -68,7 +74,11 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
 
   return (
     <ReactMarkdown
-      className={cn("pg-markdown", codeFontOnly && "pg-markdown-code-font")}
+      className={cn(
+        "pg-markdown",
+        codeFontOnly && "pg-markdown-code-font",
+        inheritFont && "pg-markdown-inherit-font"
+      )}
       remarkPlugins={[remarkGfm]}
       components={{
         /** Links */
@@ -95,7 +105,8 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
         pre: (preProps) => {
           const codeProps = first((preProps as any).children).props;
           const lang = codeProps.className?.split("-")?.at(1);
-          const code = first(codeProps.children);
+          // A fence with no lines yet (an answer mid-stream) has no child
+          const code = first(codeProps.children) ?? "";
 
           return <CodeBlock lang={lang}>{code}</CodeBlock>;
         },

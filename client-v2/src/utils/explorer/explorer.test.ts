@@ -127,6 +127,33 @@ describe("deleting the current workspace", () => {
   });
 });
 
+describe("deleting a workspace that is not open", () => {
+  beforeEach(reset);
+
+  it("deletes it and leaves the open one current", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+
+    await PgExplorer.deleteWorkspace("alpha");
+
+    expect(PgExplorer.allWorkspaceNames).toEqual(["beta"]);
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+  });
+
+  it("drops one whose folder is already gone from storage", async () => {
+    // A workspace listed in the config with no files under its folder: made
+    // by another build, or a delete that removed the files and failed after
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    await PgExplorer.fs.removeDir("/alpha/", { recursive: true });
+
+    await PgExplorer.deleteWorkspace("alpha");
+
+    expect(PgExplorer.allWorkspaceNames).toEqual(["beta"]);
+  });
+});
+
 describe("init calls that overlap", () => {
   beforeEach(reset);
 

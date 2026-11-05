@@ -444,7 +444,24 @@ module.exports = {
                 if (thumbnailFileName)
                   acc[tutorialName].thumbnail = thumbnailFileName;
 
-                // Page count
+                // Page count: a conversation tutorial has no pages, its
+                // steps are in its definition
+                const definitionFile = path.join(
+                  "src",
+                  "tutorials",
+                  tutorialName,
+                  "tutorial.json"
+                );
+                if (fs.existsSync(definitionFile)) {
+                  const steps = JSON.parse(
+                    fs.readFileSync(definitionFile, "utf8")
+                  ).steps;
+                  if (!Array.isArray(steps)) {
+                    throw new Error(`${definitionFile} has no steps`);
+                  }
+                  acc[tutorialName].pageCount = steps.length;
+                  return acc;
+                }
                 const pagesDirs = [
                   path.join(tutorialDir, "pages"),
                   path.join("src", "tutorials", tutorialName, "pages"),

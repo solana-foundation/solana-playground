@@ -1,3 +1,4 @@
+import { startTutorials } from "@/entities/tutorial";
 import { PgSession } from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgFramework, PgTutorial } from "@/utils";
@@ -93,7 +94,9 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
   );
 
   const framework = newFramework();
-  const tutorial = PgTutorial.all.find((t) => t.level === "Beginner");
+  // The start offers only its ladder: Hello Anchor, Lumberjack, Zero Copy
+  const start = startTutorials(PgTutorial.all);
+  const tutorial = start.find((t) => t.level === "Beginner");
   const current = PgExplorer.currentWorkspaceName;
 
   const quickstarts: PhoneQuickstart[] = [];
@@ -134,7 +137,7 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
     <BasePhoneHome
       // One lead, New project and one tutorial: three, the spec's most
       quickstarts={quickstarts}
-      tutorialCount={PgTutorial.all.length}
+      tutorialCount={start.length}
       programCount={programCount}
       onQuickstart={async (quickstart) => {
         try {

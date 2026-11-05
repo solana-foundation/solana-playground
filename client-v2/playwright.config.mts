@@ -253,12 +253,17 @@ export default defineConfig({
     stderr: "pipe",
     // Blank, not unset: dotenv keeps a variable already set, so the platform
     // RPC URLs from `.env` stay out and Devnet and Mainnet fall back to the
-    // public endpoints the specs stub
+    // public endpoints the specs stub.
+    // `TUTORIAL_TEST_DOCS`: a tutorial that lists no doc pages of its own gets
+    // the test pages (`scripts/generate-tutorials.mjs`), so the doc tests
+    // still run should Hello Anchor's list go. Hello Anchor lists its own
+    // today, and the tests run on those
     env: {
       BROWSER: "none",
       PORT: String(port),
       REACT_APP_DEVNET_RPC_URL: "",
       REACT_APP_MAINNET_RPC_URL: "",
+      TUTORIAL_TEST_DOCS: "1",
     },
   },
 });

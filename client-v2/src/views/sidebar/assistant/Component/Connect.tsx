@@ -54,12 +54,6 @@ const CAPABILITIES = [
     tag: "KNOWS",
     text: "this project's roadmap, decisions and current status",
   },
-  {
-    tag: "KNOWS",
-    text:
-      "where you are in a lesson — the step, its objective and whether it " +
-      "is proven yet",
-  },
 ];
 
 const log = createLogger("assistant:connect");
