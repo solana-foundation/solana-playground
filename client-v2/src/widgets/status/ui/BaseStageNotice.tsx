@@ -3,7 +3,12 @@ import { TriangleAlertIcon, XIcon } from "lucide-react";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import {
+  Callout,
+  CalloutAction,
+  CalloutActions,
+  CalloutDescription,
+} from "@/shared/ui/callout";
 
 import type { StageNoticeView } from "../model/notice";
 
@@ -40,28 +45,8 @@ const BaseStageNotice = ({
         className="has-[>svg]:grid-cols-[auto_1fr_auto]"
       >
         <TriangleAlertIcon />
-        {/* Message left, buttons right; the buttons drop below when it gets
-            narrow, as the sync banner's do */}
-        <CalloutDescription className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 opacity-100">
-          <p className="m-0 flex-[1_1_20rem] text-pretty text-foreground">
-            {notice.text}
-          </p>
-          {notice.kind === "cluster-down" && (
-            <div className="flex flex-wrap gap-2">
-              <AsyncButton
-                size="sm"
-                variant="outline"
-                loadingText="Trying…"
-                onClick={onRetry}
-                onError={reportButtonFailure("reach the network")}
-              >
-                Try again
-              </AsyncButton>
-              <Button size="sm" variant="outline" onClick={onChangeNetwork}>
-                Change network
-              </Button>
-            </div>
-          )}
+        <CalloutDescription className="min-w-0 opacity-100">
+          <p className="m-0 text-pretty text-foreground">{notice.text}</p>
         </CalloutDescription>
         <Button
           variant="ghost"
@@ -74,6 +59,25 @@ const BaseStageNotice = ({
         >
           <XIcon />
         </Button>
+        {/* Under the text, as the sync banner's */}
+        {notice.kind === "cluster-down" && (
+          <CalloutActions>
+            <CalloutAction asChild>
+              <AsyncButton
+                variant="ghost"
+                size="sm"
+                loadingText="Trying…"
+                onClick={onRetry}
+                onError={reportButtonFailure("reach the network")}
+              >
+                Try again
+              </AsyncButton>
+            </CalloutAction>
+            <CalloutAction onClick={onChangeNetwork}>
+              Change network
+            </CalloutAction>
+          </CalloutActions>
+        )}
       </Callout>
     </div>
   );

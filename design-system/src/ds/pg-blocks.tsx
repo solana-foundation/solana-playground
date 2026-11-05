@@ -1124,23 +1124,23 @@ function PlaygroundBlocks() {
         ))}
       </Block>
 
-      <Block id="block-sync-conflict" title="Sync conflict" source="block" note="The banner over the stage when this project changed on another device and here too. It says what happened in one sentence and asks for one answer: the expected one filled, the others outlined, and Resolve… first when the changed lines are known. Buttons under the text, across the width on a phone." className="block">
+      <Block id="block-sync-conflict" title="Sync conflict" source="block" note="The banner over the stage when this project changed on another device and here too. It says what happened in one sentence and asks for one answer: CalloutAction buttons of equal weight in the callout's tone, Resolve… first when the changed lines are known, then the expected answer. Buttons under the text." className="block">
         <div className="flex w-full flex-col gap-3">
           <Callout variant="warning">
             <TriangleAlert />
             <CalloutDescription className="text-foreground opacity-100">This project changed on another device, and this one has unsaved changes.</CalloutDescription>
             <CalloutActions>
-              <Button variant="outline" size="sm">Resolve…</Button>
-              <Button size="sm">Keep this version</Button>
-              <Button variant="outline" size="sm">Take the other version</Button>
+              <CalloutAction>Resolve…</CalloutAction>
+              <CalloutAction>Keep this version</CalloutAction>
+              <CalloutAction>Take the other version</CalloutAction>
             </CalloutActions>
           </Callout>
           <Callout variant="warning">
             <TriangleAlert />
             <CalloutDescription className="text-foreground opacity-100">This project was deleted on another device, but this one has unsaved changes.</CalloutDescription>
             <CalloutActions>
-              <Button size="sm">Keep a copy</Button>
-              <Button variant="outline" size="sm">Delete anyway</Button>
+              <CalloutAction>Keep a copy</CalloutAction>
+              <CalloutAction>Delete anyway</CalloutAction>
             </CalloutActions>
           </Callout>
         </div>
