@@ -101,11 +101,14 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     ]);
   });
 
+  const MODEL = "openai/gpt-test";
+
   /** The turns recorded for `userId`, oldest first */
   const turns = async (userId) => {
     const { rows } = await query(
-      `select to_char(day, 'YYYY-MM-DD') as day, tier, outcome, prompt_tokens,
-            completion_tokens, charged::int
+      `select to_char(day, 'YYYY-MM-DD') as day, tier, model, outcome,
+            prompt_tokens, completion_tokens, charged::int,
+            settled_at is not null as settled
        from agent_turn where user_id = $1 order by id`,
       [userId]
     );
@@ -113,16 +116,14 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
   };
 
   /**
-   * A settle through `run` of a newcomer's turn that ended `unfinished`,
+   * A settle through `run` of the turn `turnId` names, ended `unfinished`
    * unless `turn` says otherwise
    */
   const closeOn = (run) => (turn) =>
     settle(run, {
-      userId: turn.userId,
-      day: DAY,
+      turnId: turn.turnId,
       reserved: turn.reserved,
       charge: turn.charge,
-      tier: turn.tier ?? "newcomer",
       end: turn.end ?? { kind: "unfinished" },
     });
   const close = closeOn(query);
@@ -138,7 +139,17 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   /** A reservation of `amount` for `userId` on `day` */
   const take = (userId, amount, day = DAY, run = query) =>
-    reserve(run, { userId, day, amount, newcomerAgeDays: 30, caps: CAPS });
+    reserve(run, {
+      userId,
+      day,
+      amount,
+      model: MODEL,
+      newcomerAgeDays: 30,
+      caps: CAPS,
+    });
+
+  /** The gate {@link reserve} returns, without the turn's id, which is serial */
+  const gateOf = ({ tier, dated, admitted }) => ({ tier, dated, admitted });
 
   const row = async (userId, day = DAY) => {
     const { rows } = await query(
@@ -150,7 +161,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
   };
 
   it("reads a missing creation date as a newcomer", async () => {
-    assert.deepEqual(await take(NEW, 1), {
+    assert.deepEqual(gateOf(await take(NEW, 1)), {
       tier: "newcomer",
       dated: false,
       admitted: true,
@@ -158,7 +169,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
   });
 
   it("reads an old creation date as established", async () => {
-    assert.deepEqual(await take(OLD, 1), {
+    assert.deepEqual(gateOf(await take(OLD, 1)), {
       tier: "established",
       dated: true,
       admitted: true,
@@ -191,6 +202,35 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     assert.equal(await row(NEW), undefined);
   });
 
+  it("records an admitted turn as started, at its reservation, with the model", async () => {
+    const gate = await take(NEW, 5000);
+
+    assert.equal(typeof gate.turnId, "string");
+    assert.deepEqual(await turns(NEW), [
+      {
+        day: DAY,
+        tier: "newcomer",
+        model: MODEL,
+        outcome: "started",
+        /* eslint-disable unicorn/no-null -- `agent_turn` columns: no usage is SQL `NULL` */
+        prompt_tokens: null,
+        completion_tokens: null,
+        /* eslint-enable unicorn/no-null */
+        charged: 5000,
+        settled: false,
+      },
+    ]);
+  });
+
+  it("writes no turn for a reserve the cap refuses", async () => {
+    await take(NEW, CAPS.newcomer);
+    const refused = await take(NEW, 1);
+
+    assert.equal(refused.admitted, false);
+    assert.equal("turnId" in refused, false);
+    assert.equal((await turns(NEW)).length, 1);
+  });
+
   it("admits one of two parallel reserves at the edge", async () => {
     await take(NEW, CAPS.newcomer - 600);
 
@@ -198,6 +238,11 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
     assert.deepEqual(both.map((gate) => gate.admitted).sort(), [false, true]);
     assert.equal((await row(NEW)).reserved, CAPS.newcomer - 100);
+    // The first reserve and the one parallel turn admitted, nothing for the other
+    assert.deepEqual(
+      (await turns(NEW)).map((turn) => turn.charged),
+      [CAPS.newcomer - 600, 500]
+    );
   });
 
   it("holds an established user to the established cap, not the newcomer's", async () => {
@@ -219,18 +264,17 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
   });
 
   it("settles a reservation to its charge", async () => {
-    await take(NEW, 5000);
-    await close({ userId: NEW, reserved: 5000, charge: 1200 });
+    const { turnId } = await take(NEW, 5000);
+    assert.equal(await close({ turnId, reserved: 5000, charge: 1200 }), true);
     assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
   });
 
-  it("records the settled turn with its tokens and charge", async () => {
-    await take(OLD, 5000);
+  it("settles the started turn in place with its tokens and charge", async () => {
+    const { turnId } = await take(OLD, 5000);
     await close({
-      userId: OLD,
+      turnId,
       reserved: 5000,
       charge: 1200,
-      tier: "established",
       end: {
         kind: "completed",
         usage: { prompt_tokens: 100, completion_tokens: 20 },
@@ -240,41 +284,55 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
       {
         day: DAY,
         tier: "established",
+        model: MODEL,
         outcome: "completed",
         prompt_tokens: 100,
         completion_tokens: 20,
         charged: 1200,
+        settled: true,
       },
     ]);
     assert.equal((await row(OLD)).spent, 1200);
   });
 
   it("records an unfinished turn with no tokens, charged its reservation", async () => {
-    await take(NEW, 5000);
-    await close({ userId: NEW, reserved: 5000, charge: 5000 });
+    const { turnId } = await take(NEW, 5000);
+    await close({ turnId, reserved: 5000, charge: 5000 });
     assert.deepEqual(await turns(NEW), [
       {
         day: DAY,
         tier: "newcomer",
+        model: MODEL,
         outcome: "unfinished",
         /* eslint-disable unicorn/no-null -- `agent_turn` columns: no usage is SQL `NULL` */
         prompt_tokens: null,
         completion_tokens: null,
         /* eslint-enable unicorn/no-null */
         charged: 5000,
+        settled: true,
       },
     ]);
   });
 
-  it("records the turn even when the day has no row to settle", async () => {
-    await close({
-      userId: NEW,
-      reserved: 10,
-      charge: 0,
-      end: { kind: "refused" },
-    });
-    assert.equal((await turns(NEW)).length, 1);
-    assert.equal(await row(NEW), undefined);
+  it("charges a turn once when it is settled twice", async () => {
+    const { turnId } = await take(NEW, 5000);
+    await close({ turnId, reserved: 5000, charge: 1200 });
+
+    assert.equal(await close({ turnId, reserved: 5000, charge: 1200 }), false);
+    assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
+    assert.equal((await turns(NEW))[0].charged, 1200);
+  });
+
+  // The reservation stays held: an overcharge, never an undercharge
+  it("changes nothing for a turn with no started row", async () => {
+    await take(NEW, 5000);
+
+    assert.equal(
+      await close({ turnId: "-1", reserved: 5000, charge: 0 }),
+      false
+    );
+    assert.deepEqual(await row(NEW), { reserved: 5000, spent: 0 });
+    assert.equal((await turns(NEW))[0].outcome, "started");
   });
 
   // The upstream's usage is not ours: a count `agent_turn` cannot hold must not
@@ -283,9 +341,9 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     it(`settles a turn whose upstream reported ${String(
       bad
     )} tokens`, async () => {
-      await take(NEW, 5000);
+      const { turnId } = await take(NEW, 5000);
       await close({
-        userId: NEW,
+        turnId,
         reserved: 5000,
         charge: 1200,
         end: {
@@ -304,11 +362,31 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
   it("refuses tokens on a turn that did not complete", async () => {
     await assert.rejects(
       query(
-        `insert into agent_turn (user_id, day, tier, outcome, prompt_tokens)
-         values ($1, $2, 'newcomer', 'refused', 5)`,
+        `insert into agent_turn
+           (user_id, day, tier, outcome, prompt_tokens, settled_at)
+         values ($1, $2, 'newcomer', 'refused', 5, now())`,
         [NEW, DAY]
       ),
       /agent_turn_tokens_check/
+    );
+  });
+
+  it("refuses a settled time on a started turn, and a settled turn without one", async () => {
+    await assert.rejects(
+      query(
+        `insert into agent_turn (user_id, day, tier, outcome, settled_at)
+         values ($1, $2, 'newcomer', 'started', now())`,
+        [NEW, DAY]
+      ),
+      /agent_turn_settled_check/
+    );
+    await assert.rejects(
+      query(
+        `insert into agent_turn (user_id, day, tier, outcome)
+         values ($1, $2, 'newcomer', 'refused')`,
+        [NEW, DAY]
+      ),
+      /agent_turn_settled_check/
     );
   });
 
@@ -318,7 +396,8 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     await recordCapped(query, { userId: NEW, day: DAY });
     assert.equal(await capped(NEW), 2);
     assert.deepEqual(await row(NEW), { reserved: CAPS.newcomer, spent: 0 });
-    assert.deepEqual(await turns(NEW), []);
+    // The one admitted turn's row, and none for the two capped ones
+    assert.equal((await turns(NEW)).length, 1);
   });
 
   it("counts a refusal on a day with no row yet", async () => {
@@ -328,8 +407,8 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
   });
 
   it("counts settled spend against the cap", async () => {
-    await take(NEW, 90000);
-    await close({ userId: NEW, reserved: 90000, charge: 90000 });
+    const { turnId } = await take(NEW, 90000);
+    await close({ turnId, reserved: 90000, charge: 90000 });
     assert.equal((await take(NEW, 20000)).admitted, false);
     assert.equal((await take(NEW, 10000)).admitted, true);
   });
@@ -352,9 +431,9 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
       return query(text, params);
     };
 
-    await take(NEW, 10, DAY, counted);
+    const { turnId } = await take(NEW, 10, DAY, counted);
     assert.equal(count, 1);
-    await closeOn(counted)({ userId: NEW, reserved: 10, charge: 5 });
+    await closeOn(counted)({ turnId, reserved: 10, charge: 5 });
     assert.equal(count, 2);
   });
 

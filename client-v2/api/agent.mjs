@@ -351,6 +351,7 @@ async function handler(req, res) {
       userId: turn.userId,
       day: turn.day,
       amount: turn.amount,
+      model: configured.model,
       newcomerAgeDays: configured.newcomerAgeDays,
       caps: configured.caps,
     });
@@ -381,26 +382,35 @@ async function handler(req, res) {
     // to tell.
     if (gate.admitted) {
       await settle(query, {
-        userId: turn.userId,
-        day: turn.day,
+        turnId: gate.turnId,
         reserved: turn.amount,
         charge: chargeFor(end, turn.amount, configured.prices),
-        tier: gate.tier,
         end,
-      }).catch((e) =>
-        // The reservation stays spent for the day: an overcharge, never an
-        // undercharge
-        log.error(e, {
-          report: true,
-          context: {
-            code: e?.code,
-            end: end.kind,
-            tier: gate.tier,
-            day: turn.day,
-            reserved: turn.amount,
-            charge: chargeFor(end, turn.amount, configured.prices),
-          },
-        })
+      }).then(
+        (ended) => {
+          // The turn's row was already settled or is gone (the user was
+          // deleted mid-turn): nothing was charged twice, and nothing to undo
+          if (!ended) {
+            log.warn("settle found no started turn", {
+              context: { turnId: gate.turnId, end: end.kind, day: turn.day },
+            });
+          }
+        },
+        (e) =>
+          // The reservation stays spent for the day, and the turn's row stays
+          // `started`: an overcharge, never an undercharge
+          log.error(e, {
+            report: true,
+            context: {
+              code: e?.code,
+              turnId: gate.turnId,
+              end: end.kind,
+              tier: gate.tier,
+              day: turn.day,
+              reserved: turn.amount,
+              charge: chargeFor(end, turn.amount, configured.prices),
+            },
+          })
       );
     } else {
       // Only the count is lost: the caller already has the 429

@@ -73,8 +73,11 @@ CREATE TABLE public.agent_turn (
     prompt_tokens integer,
     completion_tokens integer,
     charged bigint DEFAULT 0 NOT NULL,
+    model text,
+    settled_at timestamp with time zone,
     CONSTRAINT agent_turn_charged_check CHECK ((charged >= 0)),
-    CONSTRAINT agent_turn_outcome_check CHECK ((outcome = ANY (ARRAY['completed'::text, 'unfinished'::text, 'refused'::text, 'abandoned'::text]))),
+    CONSTRAINT agent_turn_outcome_check CHECK ((outcome = ANY (ARRAY['started'::text, 'completed'::text, 'unfinished'::text, 'refused'::text, 'abandoned'::text]))),
+    CONSTRAINT agent_turn_settled_check CHECK (((outcome = 'started'::text) = (settled_at IS NULL))),
     CONSTRAINT agent_turn_tier_check CHECK ((tier = ANY (ARRAY['newcomer'::text, 'established'::text]))),
     CONSTRAINT agent_turn_tokens_check CHECK ((((prompt_tokens IS NULL) OR (prompt_tokens >= 0)) AND ((completion_tokens IS NULL) OR (completion_tokens >= 0)) AND ((outcome = 'completed'::text) OR ((prompt_tokens IS NULL) AND (completion_tokens IS NULL)))))
 );
@@ -485,6 +488,7 @@ COPY public.schema_migrations (version) FROM stdin;
 20260929120000
 20261029120000
 20261102190000
+20261105120000
 \.
 
 

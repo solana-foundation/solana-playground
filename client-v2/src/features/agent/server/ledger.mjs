@@ -127,8 +127,17 @@ const isPriceable = (usage) =>
   );
 
 /**
- * Decide the caller's tier and reserve `amount` against their cap, in one
- * statement.
+ * What {@link reserve} decided. An admitted turn carries the id of its
+ * `agent_turn` row, which {@link settle} ends; a refused one has no row.
+ * `dated`: whether the account's creation date is stored.
+ *
+ * @typedef {{ tier: Tier; dated: boolean; admitted: true; turnId: string }
+ *   | { tier: Tier; dated: boolean; admitted: false }} Gate
+ */
+
+/**
+ * Decide the caller's tier, reserve `amount` against their cap and record an
+ * admitted turn as `started` in `agent_turn`, in one statement.
  *
  * The tier comes from `"user"."githubCreatedAt"`: `established` when it is set
  * and older than `newcomerAgeDays`, `newcomer` otherwise, including when it is
@@ -137,6 +146,11 @@ const isPriceable = (usage) =>
  * The row lock `on conflict` takes is what keeps two parallel turns from
  * passing the cap together: the second re-reads the row the first wrote.
  *
+ * The turn row is written only when the reserve was admitted, charged the
+ * reservation until {@link settle} replaces it, and names `model`. Writing it
+ * here rather than at settle keeps a turn whose function is killed before it
+ * settles: its row stays `started`.
+ *
  * The tier is returned for a refused turn too, because the refusal carries it.
  *
  * @param {Query} query
@@ -144,11 +158,12 @@ const isPriceable = (usage) =>
  *   userId: string;
  *   day: string;
  *   amount: number;
+ *   model: string;
  *   newcomerAgeDays: number;
  *   caps: Record<Tier, number>;
- * }} turn `amount` and `caps` in micro-USD; `day` from {@link utcDay}
- * @returns {Promise<{ tier: Tier; dated: boolean; admitted: boolean }>}
- *   `dated`: whether the account's creation date is stored
+ * }} turn `amount` and `caps` in micro-USD; `day` from {@link utcDay};
+ *   `model` the one the upstream is asked for
+ * @returns {Promise<Gate>}
  * @throws when the user has no row, or the database fails: the route answers
  *   503 and calls no upstream
  */
@@ -179,8 +194,15 @@ export const reserve = async (query, turn) => {
         where s.spent + s.reserved + excluded.reserved
               <= (select cap from limits)
        returning 1
+     ),
+     started as (
+       insert into agent_turn (user_id, day, tier, model, outcome, charged)
+       select $1, $2::date, tier, $7, 'started', $4::bigint
+         from limits
+        where exists (select 1 from admitted)
+       returning id
      )
-     select tier, dated, exists (select 1 from admitted) as admitted
+     select tier, dated, (select id::text from started) as turn_id
        from limits`,
     [
       turn.userId,
@@ -189,55 +211,71 @@ export const reserve = async (query, turn) => {
       turn.amount,
       turn.caps.newcomer,
       turn.caps.established,
+      turn.model,
     ]
   );
   if (!rows.length) throw new Error(`agent: no user row for ${turn.userId}`);
-  const [{ tier, dated, admitted }] = rows;
-  return { tier, dated, admitted };
+  const [{ tier, dated, turn_id: turnId }] = rows;
+  // A turn row is written exactly when the reserve is admitted
+  return turnId === null
+    ? { tier, dated, admitted: false }
+    : { tier, dated, admitted: true, turnId };
 };
 
 /**
- * Replace a turn's reservation with its charge, on the day it was reserved,
- * and record the turn in `agent_turn`, in one statement: the route makes one
- * round trip after the response. The turn is recorded even when the day has
- * no row to settle. Tokens the upstream reported that `agent_turn` cannot
- * hold are recorded as null rather than failing the settle.
+ * End a `started` turn: write how it ended to its `agent_turn` row and move
+ * its reservation into its charge on the `agent_spend` day the row names, in
+ * one statement, so the route makes one round trip after the response.
+ * Tokens the upstream reported that `agent_turn` cannot hold are recorded as
+ * null rather than failing the settle.
+ *
+ * Only a row still `started` is settled, and `agent_spend` moves only with it:
+ * settling a turn twice charges it once, and a turn whose row is gone changes
+ * nothing. Its reservation then stays spent for the day, an overcharge, never
+ * an undercharge.
  *
  * @param {Query} query
  * @param {{
- *   userId: string;
- *   day: string;
+ *   turnId: string;
  *   reserved: number;
  *   charge: number;
- *   tier: Tier;
  *   end: TurnEnd;
- * }} turn amounts in micro-USD; `day` the one {@link reserve} was given;
- *   `tier` the one it returned; `end` how the turn ended, whose usage is
- *   recorded for a `completed` turn only
+ * }} turn amounts in micro-USD; `turnId` the one {@link reserve} returned;
+ *   `end` how the turn ended, whose usage is recorded for a `completed` turn
+ *   only
+ * @returns {Promise<boolean>} whether a `started` turn was found and settled
  */
 export const settle = async (query, turn) => {
   const usage = turn.end.kind === "completed" ? turn.end.usage : {};
-  await query(
-    `with settled as (
-       update agent_spend
-          set reserved = reserved - $3::bigint,
-              spent = spent + $4::bigint
-        where user_id = $1 and day = $2::date
+  const { rows } = await query(
+    `with ended as (
+       update agent_turn
+          set outcome = $4,
+              prompt_tokens = $5::integer,
+              completion_tokens = $6::integer,
+              charged = $3::bigint,
+              settled_at = now()
+        where id = $1::bigint and outcome = 'started'
+       returning user_id, day
+     ),
+     settled as (
+       update agent_spend s
+          set reserved = s.reserved - $2::bigint,
+              spent = s.spent + $3::bigint
+         from ended
+        where s.user_id = ended.user_id and s.day = ended.day
      )
-     insert into agent_turn
-       (user_id, day, tier, outcome, prompt_tokens, completion_tokens, charged)
-     values ($1, $2::date, $5, $6, $7::integer, $8::integer, $4::bigint)`,
+     select count(*)::int as ended from ended`,
     [
-      turn.userId,
-      turn.day,
+      turn.turnId,
       turn.reserved,
       turn.charge,
-      turn.tier,
       turn.end.kind,
       tokenCount(usage.prompt_tokens),
       tokenCount(usage.completion_tokens),
     ]
   );
+  return rows[0].ended > 0;
 };
 
 /**
