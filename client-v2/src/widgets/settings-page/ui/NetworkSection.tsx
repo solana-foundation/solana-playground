@@ -43,7 +43,11 @@ const pick = (url: string) => {
  */
 const adoptEndpoint = (endpoint: string) => {
   const listed = PgCustomRpcs.adopt(endpoint);
-  if (listed && listed !== endpoint) pick(listed);
+  // A re-spelling of the same RPC waits for a running deploy silently: the
+  // user asked for nothing, so no toast
+  if (!listed || listed === endpoint) return;
+  if (!canSwitchNetwork(PgGlobal.deployState)) return;
+  PgSettings.connection.endpoint = listed;
 };
 
 /** The toast after a remove, with the Undo that puts the RPC back */

@@ -416,7 +416,7 @@ describe("conversations", { skip: !DB && "DATABASE_URL not set" }, () => {
   // The one-off backfill erases what tombstoned conversations said and must
   // leave every live one whole: a predicate gone wrong would erase live
   // history for every account, and its `migrate:down` restores nothing
-  it("the erase migration clears tombstoned conversations only", async () => {
+  it("clears tombstoned conversations only when the erase migration runs", async () => {
     const sql = readFileSync(
       new URL(
         "../../../../db/migrations/20261028000000_erase_deleted_chat_history.sql",

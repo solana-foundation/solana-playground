@@ -36,7 +36,7 @@ const LOGS_RETRY_MS = 1500;
  * just-confirmed transaction yet, so an empty answer is asked once more; a
  * failed read is logged and reads as no logs, which the result shows as such.
  */
-const readLogsOn =
+const readLogsWith =
   (connection: typeof PgConnection.current) =>
   async (signature: string): Promise<string[]> => {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -79,7 +79,7 @@ const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
   try {
     signature = await PgCommon.transition(PgProgramInteraction.test(ix));
     const confirmed = await PgTx.confirm(signature, { connection });
-    const logs = await readLogsOn(connection)(signature);
+    const logs = await readLogsWith(connection)(signature);
     const ok = !confirmed?.err;
     return {
       instruction: ix.name,
