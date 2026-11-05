@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  initLogger,
+  installGlobalHandlers,
+  memoryProvider,
+  resetLogger,
+} from "@/shared/lib/logger";
+import {
   unavailableHere,
   wasFailureShown,
 } from "@/shared/lib/report-button-failure";
@@ -231,5 +237,63 @@ describe("the terminal feeding the slow-run clock", () => {
 
     await vi.advanceTimersByTimeAsync(SLOW_RUN_MS);
     expect(printed).toEqual([SLOW_RUN_LINE]);
+  });
+});
+
+describe("PgTerm.process", () => {
+  afterEach(() => resetLogger());
+
+  /** The parts of a terminal `process` touches, without an xterm */
+  const fakeTerm = () =>
+    Object.assign(Object.create(PgTerm.prototype), {
+      disable: () => {},
+      enable: () => {},
+      scrollToBottom: () => {},
+      println: vi.fn(),
+      _tty: { getLine: () => undefined },
+    }) as PgTerm;
+
+  /** Runs a command that throws `failure` and leaves its rejection unhandled */
+  const runFailing = async (failure: Error) => {
+    const logged = memoryProvider();
+    initLogger({ providers: [logged] });
+    const uninstall = installGlobalHandlers();
+    const term = fakeTerm();
+
+    const reason = await term
+      .process(() => {
+        throw failure;
+      })
+      .catch((error: unknown) => error);
+    const event = new Event("unhandledrejection") as PromiseRejectionEvent;
+    Object.defineProperty(event, "reason", { value: reason });
+    globalThis.dispatchEvent(event);
+    uninstall();
+
+    return { reason, term, logged };
+  };
+
+  it("leaves a warning, never a panic, for a command failure the terminal printed", async () => {
+    const failure = new Error("Command `nope` not found.");
+
+    const { reason, term, logged } = await runFailing(failure);
+
+    expect(reason).toBe(failure);
+    expect(term.println).toHaveBeenCalledWith(
+      "Process error: Command `nope` not found."
+    );
+    expect(logged.entries.map((entry) => entry.level)).toEqual(["warn"]);
+    expect(logged.entries[0].report).toBe(false);
+  });
+
+  it("still reports a fault in a command, though the terminal printed it", async () => {
+    const failure = new TypeError(
+      "Cannot read properties of undefined (reading 'deploy')"
+    );
+
+    const { logged } = await runFailing(failure);
+
+    expect(logged.entries.map((entry) => entry.level)).toEqual(["panic"]);
+    expect(logged.entries[0].report).toBe(true);
   });
 });
