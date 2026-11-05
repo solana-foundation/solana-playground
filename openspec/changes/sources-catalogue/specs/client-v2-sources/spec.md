@@ -190,15 +190,16 @@ accessible name `MCP server configuration`.
 - **THEN** the prompt's catalogue names no `solana-dev`, and `load_skill` with `solana-dev` returns an error
   string naming the id
 
-### Requirement: The selection lives in memory
+### Requirement: The selection survives a reload
 
-The selection SHALL NOT be persisted: after a reload every listed source is on, and a user-added server is on or
-off as its `enabled` field says.
+The selection SHALL be kept as the capability `assistant-tool-config` says: after a reload a listed source the user
+switched off stays off, every other listed source is on, and a user-added server is on or off as its `enabled` field
+says.
 
 #### Scenario: A reload after switching a server off (manual)
 
 - **WHEN** the user unchecks `solana` and reloads the page
-- **THEN** `solana` is checked
+- **THEN** `solana` is unchecked
 
 ### Requirement: A model without tool support gets none
 

@@ -258,4 +258,57 @@ describe("Grounding", () => {
       expect(screen.queryAllByRole("checkbox")).toEqual([]);
     });
   });
+
+  it("names the credentials a restored server lost until the entry is applied changed", () => {
+    PgAssistant.setMcpServers([
+      {
+        id: "docs",
+        name: "Docs",
+        url: "https://docs.test/mcp",
+        enabled: true,
+      },
+    ]);
+    Reflect.set(
+      PgAssistant,
+      "_missingCredentials",
+      new Map([["docs", ["authToken", "url query"]]])
+    );
+
+    renderGrounding();
+    expect(screen.getByText(/Enter again for/).textContent).toBe(
+      "Enter again for docs: authToken, the query in url. Credentials aren't saved, so a reload clears them."
+    );
+
+    act(() =>
+      PgAssistant.setMcpServers([
+        {
+          id: "docs",
+          name: "Renamed",
+          url: "https://docs.test/mcp",
+          enabled: true,
+        },
+      ])
+    );
+    expect(screen.queryByText(/Enter again for/)).toBeNull();
+  });
+
+  it("moves a clean draft with the store and leaves a dirty one", () => {
+    const entry = (id: string) => ({
+      id,
+      name: id,
+      url: "https://docs.test/mcp",
+      enabled: true,
+    });
+    const editor = () =>
+      screen.getByLabelText<HTMLTextAreaElement>("MCP server configuration");
+    PgAssistant.setMcpServers([entry("first")]);
+    renderGrounding();
+
+    act(() => PgAssistant.setMcpServers([entry("restored")]));
+    expect(editor().value).toContain('"restored"');
+
+    fireEvent.change(editor(), { target: { value: "[ typing" } });
+    act(() => PgAssistant.setMcpServers([entry("later")]));
+    expect(editor().value).toBe("[ typing");
+  });
 });
