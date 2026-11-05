@@ -1,14 +1,21 @@
 # Deploy the client to Vercel
 
-Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, and `master-production`, `scope/*`, `integration/*` and `new-face-polish-<n>` to a preview. Every other branch is skipped by `vercel.json`'s `ignoreCommand` (`scripts/vercel-ignore-build.mjs`); a ticket branch gets a preview from the `preview` label or a local deploy. A Git-integration preview reads the shared preview database its Preview environment names; `preview.yml` and the Makefile also deploy previews, built outside Vercel (on a runner, or wherever `make` runs), each with a database of its own ([Preview databases](preview-databases.md), and [Neon preview databases](neon.md) while the Neon path remains). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
+Three things deploy `client-v2`:
+
+- **Vercel's Git integration** builds every push on Vercel, from the dashboard's Root Directory, `client-v2`. The Production Branch ([settings](#verified-vercel-project-settings)) goes to production; `master-production`, `scope/*`, `integration/*` and `new-face-polish-<n>` go to a preview. `vercel.json`'s `ignoreCommand` (`scripts/vercel-ignore-build.mjs`) skips a preview of any other branch; a production deployment, or one with no Git ref, always builds. Such a preview reads the shared preview database its Preview environment names ([Preview databases](preview-databases.md)).
+- **`preview.yml`** deploys a preview of a PR that carries the `preview` label, built on a GitHub runner, with a database of its own ([Preview databases](preview-databases.md), and [Neon preview databases](neon.md) while the Neon path remains). A ticket branch gets a preview this way or from a local `make` deploy.
+- **The `Makefile.vercel` targets** build wherever `make` runs, also with a database of its own per preview. They pin `client-v2` themselves, whatever the dashboard holds ([Which client gets deployed](#which-client-gets-deployed)).
 
 ## Release checklist: `client-v2` to production
 
-Nothing below has been run end to end yet — see [Known gaps](#known-gaps). The
-order is the point: each step assumes the ones above it, and steps 1–7 come
-**before** the first production build of `client-v2`. `master` already
-holds the persistence code, so any push to it — or a redeploy — ships that code
-as soon as the Root Directory points at `client-v2`.
+Production builds `client-v2` from `master`
+([settings](#verified-vercel-project-settings)), so every push to `master` is a
+release. Steps 1, 3, 4 and 7 are one-time setup for a new project. A release that
+brings a migration runs 5, 6, 8 and 9 in that order, with 5 and 6 from the
+branch being released, before it merges: the migrations come from the checkout,
+so `master` does not hold them yet. Step 2 is setup too, and repeats whenever a
+release brings a new variable: set it before step 8. Each step assumes the ones above it. The list has
+never been run end to end as one pass ([Known gaps](#known-gaps)).
 
 1. **One-time setup is done** — [below](#one-time-setup).
 2. **Production env vars**, scoped to Production —
@@ -44,18 +51,19 @@ as soon as the Root Directory points at `client-v2`.
    the host's, by the [OAuth proxy](#sign-in-on-previews).
 4. **Build server CORS.** `PG_CLIENT_URLS` on the build server includes the
    production origin.
-5. **Dry run on a preview**, from `master`:
+5. **Dry run on a preview**, from the branch being released:
 
    ```sh
    make -f client-v2/Makefile.vercel migrate-preview-db
    make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview
    ```
 
-   This uses the Neon branch `preview/master`, cut from the preview Neon
-   project, so the dry run runs on preview data. On the preview URL:
+   This uses that git branch's Neon branch, `preview/<git-branch>`, cut from
+   the preview Neon project, so the dry run runs on preview data. On the preview URL:
    `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in works, and a
    project edited in one browser shows up in a second.
-6. **Migrate production:**
+6. **Migrate production**, from the same checkout. The build serving production
+   keeps running until step 8, so the migration must work with that build too:
 
    ```sh
    make -f client-v2/Makefile.vercel migrate-production-db
@@ -64,17 +72,16 @@ as soon as the Root Directory points at `client-v2`.
    A deployment that ships ahead of its migration runs against a schema
    missing what it expects — and `/api/sync` still reports `db: "ok"`, because
    it checks reachability, not schema.
-7. **Dashboard settings.** Production Branch `master`; Root Directory →
-   `client-v2`.
-8. **Deploy.** Redeploy the latest `master` commit from the dashboard, or
-   push to `master`.
+7. **Dashboard settings.** Production Branch `master`; Root Directory
+   `client-v2`. Both are set already
+   ([settings](#verified-vercel-project-settings)); check them on a new project.
+8. **Deploy.** Merge to `master`. With nothing to merge, redeploy the latest
+   `master` commit from the dashboard.
 9. **Smoke test production** the same way as step 5.
 
 Rolling back the deployment (`vercel promote <previous-url> --prod`) does not
 roll back the schema. Migrations are additive so far, so the previous build
 runs against the newer schema; revisit this once one is not.
-
-`installCommand` = `bash scripts/vercel-install.sh` (rustup + `wasm/build.sh` + `yarn install`); `buildCommand` = `bash scripts/vercel-build.sh` (the environment checks, `yarn build:bundle`, then the check that the bundle carries no wasm stub; a script because Vercel rejects a `buildCommand` over 256 characters). It runs `yarn build:bundle`, not `yarn build`, which would compile the wasm packages a second time and miss the install step's cache. Wasm must precede `yarn install` because `client-v2/package.json` has `file://../wasm/*/pkg` deps that don't exist until `wasm-pack` runs.
 
 ## Verified Vercel project settings
 
@@ -88,6 +95,11 @@ runs against the newer schema; revisit this once one is not.
 
 The Production Branch row was confirmed on 2026-10-19.
 
+### Commands (`vercel.json`)
+
+- `installCommand`: `bash scripts/vercel-install.sh`, which installs rustup, runs `wasm/build.sh`, then `yarn install`. The wasm build comes first because `client-v2/package.json` depends on `file://../wasm/*/pkg`, and those directories exist only once `wasm-pack` has run.
+- `buildCommand`: `bash scripts/vercel-build.sh`, a script because Vercel rejects a `buildCommand` over 256 characters. It runs `scripts/check-agent-env.mjs` ([Assistant default backend](#assistant-default-backend)) and `scripts/check-unstable-env.mjs`, then `yarn build:bundle`, then `scripts/wasm-stubs.mjs check-build build`, which fails a build that carries the wasm stubs. `yarn build:bundle`, not `yarn build`, which would compile the wasm packages a second time and miss the install step's cache.
+
 ## How long a function may run
 
 `vercel.json` sets `functions."api/agent.mjs".maxDuration = 300`. That
@@ -95,40 +107,36 @@ route streams a model's answer, so it is the only one that can outlive a
 default; every other `api/*.mjs` handler answers in one round trip and
 keeps the platform default.
 
-**Why 300 and not less.** A value in `vercel.json` overrides the
-platform default in *both* directions, and which default applies depends
-on a project setting nobody has checked here:
+**Why 300.** A value in `vercel.json` replaces the platform default, up or
+down, and the default depends on the project's compute mode:
 
 | Compute mode | Default | Max (Enterprise) |
 | --- | --- | --- |
 | Fluid (on by default for projects created since ~2025-04) | 300 s | 800 s |
 | Legacy serverless | 15 s | 900 s |
 
-On legacy, 15 s cuts a long streamed answer off mid-sentence, which is
-what this setting exists to prevent. On Fluid, a smaller number would
-*lower* a limit that is already fine — a `maxDuration` of 60 would have
-introduced the very truncation it was meant to fix. 300 is the one value
-that is right under either reading: it raises the legacy default and
-matches the Fluid one.
+On legacy, 15 s cuts a long answer off mid-sentence. On Fluid, a smaller
+value lowers a limit that is already right: 60 would cause the truncation it
+was meant to fix. 300 is right in both modes.
 
-**Open, and needs the dashboard:** confirm whether this project runs
-Fluid compute (Settings → Functions). Once known, this number can be
-chosen on evidence rather than on the safe overlap.
+**Open:** nobody has checked which mode this project runs (Settings →
+Functions). Once someone does, the number can be chosen on that evidence.
 
-A cut-off stream is not silent on the client side either: `api/agent.mjs`
-aborts the upstream request when the browser goes away, and reports a
-failed stream as an SSE `error` event rather than ending quietly.
+A cut-off stream is not silent: `api/agent.mjs` aborts the upstream request
+when the browser goes away, and reports a failed stream as an SSE `error`
+event.
 
 ## Which client gets deployed
 
-Both paths build `client-v2`, each from its own setting:
+All three paths build `client-v2`, each from its own setting:
 
 | Path | Root Directory used | Deploys |
 | --- | --- | --- |
 | `git push` (Git integration) | dashboard: `client-v2` | the fork's client |
+| `preview.yml` | pinned to `client-v2` | the fork's client |
 | `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview` | pinned to `client-v2` | the fork's client |
 
-`vercel build` takes the built directory from `settings.rootDirectory` in `.vercel/project.json`, which `vercel pull` caches from the dashboard. `vercel.json` has no `rootDirectory` key, so the dashboard is the only source for the Git path. `vercel-link-preview` rewrites the cached value to `client-v2` after every pull, so the local targets build the fork whatever the dashboard holds.
+`vercel build` takes the built directory from `settings.rootDirectory` in `.vercel/project.json`, which `vercel pull` caches from the dashboard. `vercel.json` has no `rootDirectory` key, so the dashboard is the only source for the Git path. `preview.yml` and `vercel-link-preview` rewrite the cached value to `client-v2` after every pull, so they build the fork whatever the dashboard holds.
 
 ## One-time setup
 
@@ -213,27 +221,26 @@ credentials, and stop with the fix when they are rejected. Run
 `vercel-bootstrap` is the exception to both: it calls the REST API with `curl`,
 and a raw HTTP request has no stored login to fall back on.
 
-**A project-scoped token cannot drive the CLI.** Choosing a single project in
-Account Settings → Tokens creates one, and it denies every user-level request.
-The CLI calls `/v2/user` and `/v3/user/tokens/current` on startup and enumerates
-`/v9/projects?limit=100`, so it fails with a message that blames the wrong thing:
+**A project-scoped token cannot drive the CLI.**
+Choosing a single project in Account Settings → Tokens creates a
+project-scoped token, which Vercel refuses for every user-level request. The
+CLI calls `/v2/user` and `/v3/user/tokens/current` on startup and lists
+`/v9/projects?limit=100`, so it fails with a message that blames the link:
 
 ```text
 Error: Could not retrieve Project Settings. To link your Project, remove the `.vercel` directory and deploy again.
 ```
 
-The `.vercel` directory is fine. The tell is that the same token works for
-`vercel-bootstrap`, because `/v9/projects/<id>` is project-level — when `curl`
-succeeds and the CLI does not, suspect the scope, not the link.
+The `.vercel` directory is fine. When the same token works for
+`vercel-bootstrap` (`/v9/projects/<id>` is a project-level call) and the CLI
+fails, the token's scope is the cause. An All Projects token is team-scoped
+and works, at the cost of org-wide CLI access. Vercel's documented
+`--project` flag answers `projectId is not supported (400)`; project-scoped
+CLI support has been an open request since July 2025.
 
-Selecting **All Projects** creates a team-scoped token, which does work, at the
-cost of org-wide CLI access. Vercel has had project-scoped CLI support open since
-July 2025; the documented `--project` flag still answers `projectId is not
-supported (400)`.
-
-In CI, only `preview.yml` needs a Vercel token: it deploys with the
-`VERCEL_TOKEN` secret. Vercel's Git integration builds on Vercel's own
-infrastructure, authenticated through the GitHub app connection.
+In CI, only `preview.yml` needs a Vercel token: it deploys from a GitHub
+runner with the `VERCEL_TOKEN` secret. The Git integration builds on Vercel
+and authenticates through the GitHub app connection.
 
 ## Assistant default backend
 
@@ -582,27 +589,29 @@ make -f client-v2/Makefile.vercel migrate-production-db
 ```
 
 It pulls the **Production** environment's `DATABASE_URL_UNPOOLED` into
-`.vercel/.env.production.local` and migrates that — never the preview pull,
-which is resolved for the checked-out git branch and so can name a preview
-branch's database instead (it did: run from `master-2.0` it checked
-`preview/master-2.0` and reported nothing pending while `main` had no schema).
-It prints the target host first, then the pending migrations, then requires a
-typed `yes`. It skips the prompt entirely when nothing is pending, so the warning
-never becomes something to click through.
+`.vercel/.env.production.local` and migrates that. It never uses the preview
+pull: that one resolves for the checked-out git branch, so it can name a
+preview branch's database. Once it did: run from an integration branch, the target
+checked that branch's Neon branch and reported nothing pending while
+production's `main` had no schema at all. The target prints the host first,
+then the pending migrations, then asks for a typed `yes`. With nothing
+pending it does not ask, so the prompt never becomes something to click
+through.
 
 **Nothing migrates production automatically.** The only real databases CI
-migrates are labelled PRs' preview branches. Its `yarn db-migrate` in
-`client-v2.yml` runs against a throwaway service container, which proves the
-history replays from scratch but touches nothing real. The Git integration deploys `master` to production with no
-hook before or after it. Production is therefore migrated by a person running
-`migrate-production-db` from a laptop, and the ordering is theirs to get right:
-migrate first, then merge to `master`. A deployment that ships ahead of its migration runs
-against a schema missing the columns it expects.
+migrates are labelled PRs' preview branches. `yarn db-migrate` in
+`client-v2.yml` runs against a throwaway service container: it proves the
+history replays from scratch and touches nothing real. The Git integration
+deploys `master` to production with no hook before or after. A person runs
+`migrate-production-db` from a laptop, and the order is theirs to keep:
+migrate first, then merge to `master`. A deployment that ships ahead of its
+migration runs against a schema missing the columns it expects.
 
-A preview deployment pointed at a database that has not been migrated will
-answer `db: "unreachable"` from `/api/sync` and stay local, which is the
-intended failure rather than a broken app. Note the limit of that: it covers a
-database that cannot be reached, not one whose schema is merely out of date.
+`/api/sync` checks only that the database answers (`select 1`). A database it
+cannot reach answers `{"enabled":false,"db":"unreachable"}`, and the client
+stays local: the intended failure, not a broken app. A reachable database
+answers `db: "ok"` whatever its schema, so an unmigrated one still reports
+`ok`, and the requests that need the missing tables fail.
 
 ### Sign-in on previews
 
@@ -683,12 +692,12 @@ database behind it, use the per-commit URL `preview.yml` posts on the PR.
 
 ### Known gaps
 
-- **No signed-in end-to-end coverage.** The e2e suite runs signed out, so the
-  sync paths it exercises are the ones that decline to do anything. Two-browser
-  behaviour has only been checked by hand.
-- **`/api/agent` has no spend cap per user.** A signed-in user can spend the
-  key without limit apart from the firewall's request rate. See
-  [Assistant default backend](#assistant-default-backend).
+- **No end-to-end run against a real session and database.** The e2e specs
+  that sign in stub the session and the sync endpoints (`stubSignedIn` in
+  `e2e/fixtures.ts`), so they cover what the client does with the answers,
+  not the routes behind them. Two browsers on one deployment have only been
+  checked by hand.
+- **The release checklist has not been run end to end as one pass.**
 - The deployed-preview reachability of `DATABASE_URL` has not been verified;
   everything so far has run against a local container.
 - **A Git-triggered preview has no Neon branch of its own.** It runs with the
