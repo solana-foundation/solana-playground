@@ -77,6 +77,7 @@ jobs:
         with:
           sparse-checkout: |
             client-v2/scripts/smoke-sync.mjs
+            client-v2/scripts/wait-for-production-deployment.sh
             client-v2/.nvmrc
           sparse-checkout-cone-mode: false
 
@@ -85,10 +86,8 @@ jobs:
         with:
           node-version-file: client-v2/.nvmrc
 
-      # The newest status of the commit's `Production` deployment decides:
-      # `success` carries the URL; `failure`, `error` or `inactive` (superseded
-      # by a newer production deployment) ends the wait as a red run; anything
-      # else is a build still going.
+      # client-v2/scripts/wait-for-production-deployment.sh says which
+      # states end the wait and how; it writes the deployment's URL as `url`.
       - name: Wait for the commit's production deployment
         id: deployment
         if: steps.gate.outputs.armed == 'true'
@@ -96,59 +95,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.sha }}
-        run: |
-          deadline=$((SECONDS + 1800))
-          state=none
-          api_failures=0
-          while [ "$SECONDS" -lt "$deadline" ]; do
-            # A GitHub API error is retried, not fatal; three in a row end the wait.
-            if ! id=$(gh api "repos/$REPO/deployments?sha=$SHA&environment=Production" \
-              --jq 'map(select(.creator.login == "vercel[bot]")) | .[0].id // empty'); then
-              api_failures=$((api_failures + 1))
-              if [ "$api_failures" -ge 3 ]; then
-                echo "::error::the GitHub API failed three times in a row while looking for the production deployment of $SHA"
-                echo "### Smoke FAILED: the GitHub API failed three times in a row while looking for the production deployment of \`$SHA\`" >> "$GITHUB_STEP_SUMMARY"
-                exit 1
-              fi
-              sleep 20
-              continue
-            fi
-            if [ -n "$id" ]; then
-              # Unit separator, not a tab: tab is IFS whitespace, so an empty field would shift the next one left.
-              if ! row=$(gh api "repos/$REPO/deployments/$id/statuses" \
-                --jq '.[0] // {} | [(.state // "pending"), (.environment_url // .target_url // "-"), (.description // "-")] | join("\u001f")'); then
-                api_failures=$((api_failures + 1))
-                if [ "$api_failures" -ge 3 ]; then
-                  echo "::error::the GitHub API failed three times in a row while reading the status of deployment $id"
-                  echo "### Smoke FAILED: the GitHub API failed three times in a row while reading the status of deployment $id" >> "$GITHUB_STEP_SUMMARY"
-                  exit 1
-                fi
-                sleep 20
-                continue
-              fi
-              api_failures=0
-              IFS=$'\x1f' read -r state url description <<< "$row"
-              # Vercel's text goes into a workflow command: one line, no `::`.
-              description=$(printf '%s' "$description" | tr -d '\r\n' | sed 's/::/: :/g')
-              echo "deployment $id: $state"
-              case "$state" in
-                success)
-                  echo "url=$url" >> "$GITHUB_OUTPUT"
-                  exit 0 ;;
-                failure|error|inactive)
-                  echo "::error::Vercel's production deployment of $SHA ended as '$state' (a deployment problem, the database was not probed): $description ($url)"
-                  echo "### Smoke FAILED: Vercel's production deployment of \`$SHA\` ended as \`$state\` (a deployment problem, the database was not probed): $description ($url)" >> "$GITHUB_STEP_SUMMARY"
-                  exit 1 ;;
-              esac
-            else
-              api_failures=0
-              echo "no Production deployment of $SHA yet"
-            fi
-            sleep 20
-          done
-          echo "::error::no successful Vercel production deployment of $SHA within 30 minutes (last state: $state)"
-          echo "### Smoke FAILED: no successful Vercel production deployment of \`$SHA\` within 30 minutes (last state: \`$state\`)" >> "$GITHUB_STEP_SUMMARY"
-          exit 1
+        run: client-v2/scripts/wait-for-production-deployment.sh
 
       # Names the URL and the body in the log and the run summary.
       - name: Probe GET /api/sync
