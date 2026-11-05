@@ -5,6 +5,10 @@ import { PgAnalyzerStatus } from "@/components/Editor/Monaco/languages/rust/rust
 
 import { useStatus } from "./use-status";
 
+const flow = vi.hoisted(() => ({
+  state: { build: "upcoming", deploy: "upcoming" },
+}));
+
 const assistant = vi.hoisted(() => ({
   connection: null as null | {
     id: string;
@@ -22,6 +26,14 @@ vi.mock("@/entities/cluster", () => ({
     isConnected: true,
     isClusterDown: false,
   }),
+}));
+vi.mock("@/views/flow/state/stage", () => ({
+  PgFlow: {
+    get state() {
+      return flow.state;
+    },
+    onDidChange: () => ({ dispose: () => {} }),
+  },
 }));
 vi.mock("@/features/auth", () => ({
   PgSession: { onDidChange: () => ({ dispose: () => {} }) },
@@ -92,4 +104,12 @@ it("reads all three offline, and back", () => {
   });
   expect(result.current[0].words).toBe("Devnet");
   online.mockRestore();
+});
+
+it("keeps the analyzer's Reload away from a first build under way", () => {
+  flow.state = { build: "running", deploy: "upcoming" };
+  act(() => PgAnalyzerStatus.set({ kind: "failed" }));
+  const { result } = renderHook(() => useStatus());
+  expect(result.current[2]?.action).toBeNull();
+  flow.state = { build: "done", deploy: "active" };
 });

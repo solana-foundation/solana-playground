@@ -1,6 +1,13 @@
 import type { Page } from "@playwright/test";
 
-import { expect, json, seedWorkspace, test } from "./fixtures";
+import {
+  consoleTrigger,
+  expect,
+  json,
+  runInTerminal,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
 import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
 
@@ -14,6 +21,8 @@ const ai = (page: Page) => row(page).getByRole("button", { name: /^AI, / });
 const rust = (page: Page) =>
   row(page).getByRole("button", { name: /^Rust analyzer/ });
 const notice = (page: Page) => page.getByTestId("stage-notice");
+/** The live region's own element: other status regions sit in the page */
+const region = (page: Page) => page.locator("output.sr-only");
 
 const OFFLINE_LINE =
   "You're offline. Editing still works. Build, Deploy and the assistant need a connection.";
@@ -183,6 +192,65 @@ test.describe("on a 1440 px window", () => {
     await page.unrouteAll({ behavior: "ignoreErrors" });
     await notice(page).getByRole("button", { name: "Try again" }).click();
     await expect(notice(page)).toHaveCount(0, { timeout: 15_000 });
+  });
+
+  test("client-v2-status: The cluster does not answer", async ({
+    seededPage: page,
+  }) => {
+    await page.route("**/build", (route) =>
+      // eslint-disable-next-line unicorn/no-null -- the build server's own answer
+      json(route, { stderr: "", uuid: null, idl: null })
+    );
+    await page.locator("#flow-stage-tab-build").click();
+    const build = page.locator("#flow-stage-panel-build");
+    await build.getByRole("button", { name: /^Build$/ }).click();
+    await expect(
+      build.getByRole("heading", { name: "Build succeeded" })
+    ).toBeVisible({ timeout: 60_000 });
+
+    await stallDevnet(page);
+    await page.reload();
+    await expect(region(page)).toHaveText("Devnet, not responding", {
+      timeout: 15_000,
+    });
+    // On Deploy the notice says it, and the pill waits with the same reason
+    await page.locator("#flow-stage-tab-deploy").click();
+    await expect(notice(page).getByRole("alert")).toBeVisible();
+    const pill = page.getByRole("button", { name: /Deploy to devnet/ });
+    await expect(pill).toBeDisabled();
+    await expect(pill).toHaveAttribute("title", "Devnet is not responding");
+  });
+
+  test("client-v2-status: The notice says it already", async ({
+    seededPage: page,
+  }) => {
+    await page.locator("#flow-stage-tab-build").click();
+    await page.context().setOffline(true);
+    await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE_LINE);
+    await expect(region(page)).toHaveText("");
+    await page.context().setOffline(false);
+  });
+
+  test("client-v2-status: A deploy from elsewhere", async ({
+    seededPage: page,
+  }) => {
+    await stallDevnet(page);
+    await page.reload();
+    await expect(network(page)).toContainText("Not responding", {
+      timeout: 15_000,
+    });
+    const drawer = consoleTrigger(page);
+    if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+      await drawer.click();
+    }
+    await runInTerminal(page, "deploy");
+    await expect(page.locator(".xterm-rows").first()).toContainText(
+      "Devnet is not responding. Deploy waits for the network."
+    );
+    await expect(page.locator("#flow-stage-tab-deploy")).not.toHaveAttribute(
+      "aria-label",
+      /failed/
+    );
   });
 
   test("client-v2-status: The setup row warns while the cluster does not answer", async ({

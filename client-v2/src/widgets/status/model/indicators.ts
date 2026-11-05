@@ -35,6 +35,9 @@ export interface StatusIndicator {
    * with the state said even where the row leaves it out ("Devnet · Ready"),
    * because the rail shows no words beside its dot */
   tip: string;
+  /** What the live region says, where `label` names an action rather than
+   * the state: "Devnet, not responding"; `label` otherwise */
+  announced?: string;
   /** What it means when not ready, for the panel and the sheet; undefined when
    * there is nothing to add to the words */
   detail: string | undefined;
@@ -103,6 +106,7 @@ export const networkIndicator = (
       label: `Change cluster, currently ${name}${spoken}`,
       railLabel: `Cluster: ${name}${spoken}`,
       tip: `${shown} · ${capitalize(tipWord)}`,
+      announced: `${shown}${spoken}`,
       detail,
       action: NETWORK_ACTION,
     };
@@ -170,6 +174,23 @@ export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
     action: { kind: "ai", text: "Connect a model" },
   };
 };
+
+/** A run a reload of the page would throw away */
+export type RunUnderWay = "build" | "deploy";
+
+/** A reload would throw the run away, and a first build does not start again
+ * (Spec 06 RUN-33), so an indicator offering one says when it comes back */
+export const holdingReload = (
+  indicator: StatusIndicator,
+  run: RunUnderWay
+): StatusIndicator =>
+  indicator.action?.kind === "reload"
+    ? {
+        ...indicator,
+        detail: `${indicator.detail} Reload comes back when the ${run} ends.`,
+        action: undefined,
+      }
+    : indicator;
 
 const RELOAD: StatusAction = { kind: "reload", text: "Reload" };
 const ANALYZER_WAITING =
@@ -359,6 +380,14 @@ if (import.meta.vitest) {
         });
       });
 
+      it("announces the network by name and state", () => {
+        const n = networkIndicator(
+          { name: "devnet", isConnected: false, slotStalled: undefined },
+          true
+        );
+        expect(n.announced).toBe("Devnet, not responding");
+      });
+
       it("says offline over any other state", () => {
         const n = networkIndicator(UP, false);
         expect([n.state, n.words, n.detail]).toEqual([
@@ -459,6 +488,27 @@ if (import.meta.vitest) {
           ["idle", "Rust · Off", "Rust · Off"],
           ["idle", "Rust", "Rust · Not started"],
         ]);
+      });
+
+      it("keeps Reload away from a build or a deploy under way, and says so", () => {
+        const slow = { kind: "starting", since: 0 } as const;
+        const building = holdingReload(
+          analyzerIndicator(slow, SLOW_AFTER_MS, true),
+          "build"
+        );
+        expect(building.words).toBe("Rust · Taking longer");
+        expect(building.action).toBeUndefined();
+        expect(building.detail).toContain(
+          "Reload comes back when the build ends."
+        );
+        const failed = holdingReload(
+          analyzerIndicator({ kind: "failed" }, 0, true),
+          "deploy"
+        );
+        expect(failed.action).toBeUndefined();
+        expect(failed.detail).toContain(
+          "Reload comes back when the deploy ends."
+        );
       });
 
       it("reads Offline offline, with nothing to press", () => {
