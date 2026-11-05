@@ -25,6 +25,7 @@ const failedBuild: FlowState = {
   stopped: null,
   airdrops: 0,
   hasProgram: true,
+  sourceChanged: false,
 };
 
 /** Every element a `ResizeObserver` watches (the fold's stepper root, the

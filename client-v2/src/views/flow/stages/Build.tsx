@@ -88,6 +88,7 @@ const Build = () => {
       onBuild={() => PgCommand.build.execute().catch(toldByStage("build"))}
       onContinue={() => PgFlow.setStage("deploy")}
       hasIdl={!!idl}
+      sourceChanged={flow.sourceChanged}
       onAsk={(prompt) => PgAssistant.requestPrompt(prompt)}
       onOpenFile={(path) => PgExplorer.openFile(path)}
       onShowLog={requestConsole}

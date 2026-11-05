@@ -22,11 +22,16 @@ vi.mock("../../../utils", () => ({
     },
   },
   PgExplorer: {
+    currentWorkspaceName: "proj",
+    files: {},
+    getCurrentSrcPath: vi.fn(() => "/proj/src/"),
     onDidSwitchWorkspace: vi.fn(() => ({ dispose: vi.fn() })),
     onDidInit: vi.fn(() => ({ dispose: vi.fn() })),
+    onDidSaveFile: vi.fn(() => ({ dispose: vi.fn() })),
     onDidCreateItem: vi.fn(() => ({ dispose: vi.fn() })),
     onDidDeleteItem: vi.fn(() => ({ dispose: vi.fn() })),
     onDidRenameItem: vi.fn(() => ({ dispose: vi.fn() })),
+    onDidReloadFiles: vi.fn(() => ({ dispose: vi.fn() })),
     isInitialized: true,
     files: {},
     getRelativePath: (path: string) => path.replace(/^\/ws\//, ""),
@@ -53,6 +58,7 @@ import {
   countErrors,
   INITIAL_FLOW_STATE,
   PgFlow,
+  programSourceIn,
   STAGES,
   stagesOf,
 } from "./stage";
@@ -82,6 +88,7 @@ describe("PgFlow.reduce", () => {
       stopped: null,
       airdrops: 0,
       hasProgram: true,
+      sourceChanged: false,
     });
   });
 
@@ -1206,5 +1213,315 @@ describe("PgFlow, a deploy run outside the deploy command", () => {
     expect(PgFlow.state.stage).toBe("write");
     PgFlow.deployFinished(true);
     expect(PgFlow.state.stage).toBe("write");
+  });
+});
+
+describe("programSourceIn", () => {
+  const source = programSourceIn("/proj/src/");
+  const LIB = { content: "fn a() {}" };
+
+  it("holds the text of what a build sends, and nothing else", () => {
+    const base = source({ "/proj/src/lib.rs": LIB });
+
+    // A generated workspace file, a client script, an empty file, a folder
+    expect(
+      source({
+        "/proj/src/lib.rs": LIB,
+        "/proj/.workspace/program-info.json": { content: "{}" },
+        "/proj/client/client.ts": { content: "x" },
+        "/proj/src/empty.rs": { content: "" },
+        "/proj/src/folder/": {},
+      })
+    ).toBe(base);
+    expect(
+      source({ "/proj/src/lib.rs": LIB, "/proj/src/more.rs": { content: "x" } })
+    ).not.toBe(base);
+  });
+
+  // A build's start writes it into the open file, autosaved after the baseline
+  it.each([
+    ['declare_id!("1111")', 'declare_id!("9f3kQ")'],
+    ["declare_id('1111')", "declare_id('9f3kQ')"],
+  ])("does not hear the program id in %s", (before, after) => {
+    expect(source({ "/proj/src/lib.rs": { content: `a\n${before}\nb` } })).toBe(
+      source({ "/proj/src/lib.rs": { content: `a\n${after}\nb` } })
+    );
+  });
+
+  it("hears an edit beside the program id", () => {
+    expect(
+      source({ "/proj/src/lib.rs": { content: 'declare_id!("1")\na' } })
+    ).not.toBe(
+      source({ "/proj/src/lib.rs": { content: 'declare_id!("1")\nb' } })
+    );
+  });
+
+  it("does not hear a rename", () => {
+    expect(source({ "/proj/src/a.rs": { content: "x" } })).toBe(
+      source({ "/proj/src/b.rs": { content: "x" } })
+    );
+  });
+
+  // Joined naively, ["ab", "c"] and ["a", "bc"] would read as the same source
+  it("keeps files apart", () => {
+    expect(
+      source({
+        "/proj/src/1": { content: "ab" },
+        "/proj/src/2": { content: "c" },
+      })
+    ).not.toBe(
+      source({
+        "/proj/src/1": { content: "a" },
+        "/proj/src/2": { content: "bc" },
+      })
+    );
+  });
+});
+
+describe("PgFlow source tracking", () => {
+  const LIB = "/proj/src/lib.rs";
+  let workspaces = 0;
+
+  const wire = async () => {
+    const utils = await import("../../../utils");
+    const { PgCommand } = utils;
+    const PgExplorer = utils.PgExplorer as unknown as {
+      currentWorkspaceName: string;
+      files: Record<string, { content?: string }>;
+      onDidSaveFile: Mock;
+      onDidCreateItem: Mock;
+      onDidDeleteItem: Mock;
+      onDidRenameItem: Mock;
+      onDidReloadFiles: Mock;
+      onDidSwitchWorkspace: Mock;
+    };
+    const output = await mockedBuildOutput();
+    const box = <T>(mock: Mock) => {
+      const b: { cb?: T } = {};
+      mock.mockImplementationOnce((cb: T) => {
+        b.cb = cb;
+        return { dispose: vi.fn() };
+      });
+      return b;
+    };
+    const start = box<() => void>(vi.mocked(PgCommand.build.onDidStart));
+    const report = box<
+      (o: { failed: boolean; at: number; stderr: string }) => void
+    >(output.PgBuildOutput.onDidChange);
+    const finish = box<(r: { err: unknown }) => void>(
+      vi.mocked(PgCommand.build.onDidFinish)
+    );
+    const save = box<() => void>(PgExplorer.onDidSaveFile);
+    const swap = box<() => void>(PgExplorer.onDidSwitchWorkspace);
+    const treeEvents = {
+      create: box<() => void>(PgExplorer.onDidCreateItem),
+      delete: box<() => void>(PgExplorer.onDidDeleteItem),
+      rename: box<() => void>(PgExplorer.onDidRenameItem),
+      reload: box<() => void>(PgExplorer.onDidReloadFiles),
+    };
+
+    // The baseline is static, and follows its workspace by name
+    PgExplorer.currentWorkspaceName = `proj-${++workspaces}`;
+    PgExplorer.files = { [LIB]: { content: "v1" } };
+    const sub = PgFlow.init();
+    const need = requireFor("a listener PgFlow.init subscribed");
+    // Back to the initial state: `PgFlow` is one store across these tests
+    need(swap.cb)();
+    return {
+      PgExplorer,
+      sub,
+      buildStarts: () => need(start.cb)(),
+      buildReports: () =>
+        need(report.cb)({ failed: false, at: Date.now(), stderr: "" }),
+      buildFails: () =>
+        need(report.cb)({ failed: true, at: Date.now(), stderr: "" }),
+      olderReportReplays: () =>
+        need(report.cb)({ failed: false, at: 0, stderr: "" }),
+      edit: (content: string) => {
+        PgExplorer.files[LIB].content = content;
+        need(save.cb)();
+      },
+      stop: () => need(finish.cb)({ err: new StoppedError("Stopped.") }),
+      unreached: () => need(finish.cb)({ err: new Error("Failed to fetch") }),
+      fire: (event: keyof typeof treeEvents) => need(treeEvents[event].cb)(),
+      switchWorkspace: () => need(swap.cb)(),
+    };
+  };
+
+  it("hears an edit after a successful build, and its undo", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    expect(PgFlow.state.sourceChanged).toBe(false);
+
+    w.edit("v2");
+    expect(PgFlow.state.sourceChanged).toBe(true);
+
+    w.edit("v1");
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  it("says nothing before any build", async () => {
+    const w = await wire();
+    w.edit("v2");
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  // The build was given the text as it stood when it started
+  it("counts an edit made during the build", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.edit("v2");
+    w.buildReports();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it("settles on a rebuild", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.edit("v2");
+
+    w.buildStarts();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.buildReports();
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  // The binary on hand is still the old one
+  it.each([
+    ["failed", (w: Awaited<ReturnType<typeof wire>>) => w.buildFails()],
+    ["stopped", (w: Awaited<ReturnType<typeof wire>>) => w.stop()],
+    ["unreached", (w: Awaited<ReturnType<typeof wire>>) => w.unreached()],
+  ])("keeps the last success's baseline through a %s build", async (_, end) => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.edit("v2");
+
+    w.buildStarts();
+    end(w);
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.edit("v1");
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  // A remount subscribes again, with the report and the state still on screen
+  it("keeps the baseline through a remount of the layout", async () => {
+    const first = await wire();
+    first.buildStarts();
+    first.buildReports();
+    first.edit("v2");
+    const { currentWorkspaceName, files } = first.PgExplorer;
+    first.sub.dispose();
+
+    const second = await wire();
+    second.PgExplorer.currentWorkspaceName = currentWorkspaceName;
+    second.PgExplorer.files = files;
+    second.fire("reload");
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    second.sub.dispose();
+  });
+
+  // Subscribing mid-build replays the last run's report, not this run's
+  it("keeps the baseline when a remount replays an older report", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.edit("v2");
+
+    w.buildStarts();
+    w.olderReportReplays();
+    w.stop();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  // A replayed older report must not adopt a run that never reported
+  it("does not take an unreached run's text from a later report", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.edit("v2");
+    w.buildStarts();
+    w.unreached();
+    w.buildReports();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it.each<{
+    what: string;
+    event: "create" | "reload";
+    files: Record<string, { content?: string }>;
+  }>([
+    {
+      what: "creating a file",
+      event: "create",
+      files: {
+        [LIB]: { content: "v1" },
+        "/proj/src/new.rs": { content: "x" },
+      },
+    },
+    {
+      what: "another tab's edit",
+      event: "reload",
+      files: { [LIB]: { content: "theirs" } },
+    },
+  ])("hears $what", async ({ event, files }) => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.files = files;
+    w.fire(event);
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it("hears a deleted file", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.files = {};
+    w.fire("delete");
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it("does not hear a rename through its event", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.files = { "/proj/src/renamed.rs": { content: "v1" } };
+    w.fire("rename");
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  // Sync re-opens the workspace after a merge, which resets the flow
+  it("keeps hearing the change through a re-open of the same project", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.files[LIB].content = "merged";
+    w.switchWorkspace();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it("forgets the baseline in another project", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.currentWorkspaceName = "other";
+    w.PgExplorer.files = { "/other/src/lib.rs": { content: "else" } };
+    w.switchWorkspace();
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
   });
 });
