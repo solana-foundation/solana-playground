@@ -423,9 +423,10 @@ const Succeeded = (p: BaseBuildProps) => (
 );
 
 /**
- * One compiler error, with Spec 04's Explain and Fix. Every card's are
- * outlined: a brand action on the first card only read as a stray style among
- * equal ones. Neither moves focus: the answer arrives in the side panel.
+ * One compiler error, with Spec 04's Explain and Fix. Every card's are the
+ * same outline buttons (Slava, 3 Nov): a brand Explain on the first card read
+ * as that error mattering more. Neither moves focus: the answer arrives in the
+ * side panel.
  */
 const ErrorCard = ({
   view,

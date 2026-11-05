@@ -511,16 +511,25 @@ describe("BaseBuild", () => {
     expect(fault?.textContent).toContain("Wrong type");
   });
 
-  it("gives every error the same outlined fix", () => {
+  it("gives every error the same outline Explain and Fix", () => {
     const { container } = render(
       <BaseBuild
         {...props(failed([typeError("first", "a"), typeError("second", "b")]))}
       />
     );
 
-    expect(brandButtons(container)).toHaveLength(0);
-    expect(screen.getAllByRole("button", { name: "Explain" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Fix" })).toHaveLength(2);
+    // Slava, 3 Nov: no card's Explain stands out; each reads the same
+    const cards = container.querySelectorAll('[data-slot="diagnostic"]');
+    expect(cards).toHaveLength(2);
+    cards.forEach((card) => {
+      expect(brandButtons(card as HTMLElement)).toHaveLength(0);
+    });
+    const explains = screen.getAllByRole("button", { name: "Explain" });
+    const fixes = screen.getAllByRole("button", { name: "Fix" });
+    expect(explains).toHaveLength(2);
+    expect(fixes).toHaveLength(2);
+    expect(explains[0].className).toBe(explains[1].className);
+    expect(explains[0].className).toBe(fixes[0].className);
   });
 
   it("shows rustc's excerpt when the source cannot be read", () => {
