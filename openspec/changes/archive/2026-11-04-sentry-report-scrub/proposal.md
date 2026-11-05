@@ -18,8 +18,9 @@ as an unhandled `panic`, which buries real failures (HOO-1800).
 - `reporter/scrub.ts` walks every error event and breadcrumb and replaces
   secret-shaped values with `[redacted]`; an event it cannot walk is replaced
   by a "withheld" one. Public keys and feedback text are kept.
-- `PgTerm.process` marks a failure it printed as shown, and the global handler
-  logs a marked rejection at `warn`, a breadcrumb only.
+- `PgTerm.process` marks a failure it printed as expected (`markExpected`),
+  never a fault such as a `TypeError`, and the global handler logs a marked
+  rejection at `warn` under its name only, a breadcrumb.
 
 ## Capabilities
 

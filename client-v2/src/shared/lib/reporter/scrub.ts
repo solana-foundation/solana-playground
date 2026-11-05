@@ -130,6 +130,7 @@ const attempt = <T>(read: () => T): T | undefined => {
   try {
     return read();
   } catch {
+    // Not logged: the logger reports through this reporter, and would loop
     return undefined;
   }
 };
