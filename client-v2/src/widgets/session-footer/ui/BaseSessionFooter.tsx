@@ -79,7 +79,7 @@ const BaseSessionFooter = ({
                   sending={account.sending}
                 />
                 <span className="flex min-w-0 flex-col leading-tight">
-                  <span className="truncate font-medium text-foreground">
+                  <span className="truncate font-label text-foreground">
                     {primary}
                   </span>
                   {line && (

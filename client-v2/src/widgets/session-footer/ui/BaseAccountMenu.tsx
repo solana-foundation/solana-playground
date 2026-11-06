@@ -101,7 +101,7 @@ const SessionItems = ({
     const { user } = session;
     return (
       <>
-        <DropdownMenuLabel className="flex items-center gap-2 font-normal">
+        <DropdownMenuLabel className="flex items-center gap-2 font-read">
           <AccountAvatar
             image={user.image}
             sending={false}
@@ -147,7 +147,7 @@ const SessionItems = ({
   if (session.status === "pending") {
     return (
       <>
-        <DropdownMenuLabel className="font-normal text-muted-foreground">
+        <DropdownMenuLabel className="font-read text-muted-foreground">
           Waiting for GitHub…
         </DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => onPick("cancel-sign-in")}>
@@ -162,7 +162,7 @@ const SessionItems = ({
   return (
     <>
       {failure && (
-        <DropdownMenuLabel className="font-normal text-destructive">
+        <DropdownMenuLabel className="font-read text-destructive">
           {failure}
         </DropdownMenuLabel>
       )}

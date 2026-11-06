@@ -125,7 +125,7 @@ const BaseStageBar = ({
       className="flex h-11 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3"
     >
       <span
-        className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground"
+        className="min-w-0 flex-1 truncate text-sm font-headline text-muted-foreground"
         title={title ?? undefined}
       >
         {title}

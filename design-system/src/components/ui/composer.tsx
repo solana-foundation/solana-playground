@@ -43,7 +43,7 @@ function ComposerBanner({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="composer-banner"
-      className={cn("flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs text-muted-foreground max-md:text-control max-md:font-read", className)}
+      className={cn("flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs font-read text-muted-foreground max-md:text-control", className)}
       {...props}
     />
   )
@@ -121,7 +121,7 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
         }
       }}
       className={cn(
-        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-[350] text-foreground outline-none placeholder:text-subtle max-md:min-h-12 max-md:text-body max-md:font-read",
+        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-read text-foreground outline-none placeholder:text-subtle max-md:min-h-12 max-md:text-body",
         className
       )}
       {...props}

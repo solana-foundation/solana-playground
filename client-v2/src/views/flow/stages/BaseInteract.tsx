@@ -288,7 +288,7 @@ const BaseInteract = (p: BaseInteractProps) => (
     <div className="flex flex-col items-start gap-4 border-b border-border px-6 py-3 max-md:min-h-15 max-md:justify-center max-md:py-2 max-md:pr-2 max-md:pl-5">
       <div className="flex flex-col gap-1 max-md:hidden">
         <div className="flex flex-wrap items-baseline gap-2.5">
-          <h2 className="m-0 text-[1.75rem] leading-tight font-medium tracking-tight">
+          <h2 className="m-0 text-[1.75rem] leading-tight font-headline tracking-tight">
             Interact
           </h2>
           <span className="font-mono text-sm text-muted-foreground">
