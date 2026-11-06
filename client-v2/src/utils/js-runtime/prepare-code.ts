@@ -26,37 +26,64 @@ const IMPORT_REGEX =
   /import\s+(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["|'](.+)["|']/gm;
 
 /**
- * Rewrites each `import` into an awaited `__pgImport(path)`, which the
- * sandbox answers with its own copy of the package (`sandbox/runtime.ts`).
+ * The awaited `__pgImport(path)` an `import` statement becomes, which the
+ * sandbox answers with its own copy of the package (`sandbox/runtime.ts`)
+ */
+const importedFor = ({
+  namespace,
+  named,
+  defaultName,
+  path,
+}: {
+  /** `* as name` */
+  namespace: string | undefined;
+  /** `{ a, b as c }`, braces included */
+  named: string | undefined;
+  /** a default name */
+  defaultName: string | undefined;
+  path: string;
+}) => {
+  const imported = `await __pgImport(${JSON.stringify(path)})`;
+  if (namespace) return `const ${namespace} = ${imported};`;
+  if (named) {
+    const bindings = named
+      .slice(1, -1)
+      .split(",")
+      .map((binding) => binding.trim())
+      .filter(Boolean)
+      .map((binding) => {
+        const [name, , alias] = binding.split(/\s+/);
+        return alias ? `${name}: ${alias}` : name;
+      });
+    return `const { ${bindings.join(", ")} } = ${imported};`;
+  }
+  if (defaultName) {
+    return `const ${defaultName} = ((m) => m.default ?? m)(${imported});`;
+  }
+  return `${imported};`;
+};
+
+/**
+ * Moves every `import` to the start of the code, rewritten by
+ * `importedFor`, so each is loaded before any statement runs, as ES modules
+ * load theirs. The statements go on the first line and each `import` leaves
+ * its line breaks behind, so the code's line numbers stay as written.
  *
  * @param code project code
- * @returns the code without `import` statements
+ * @returns the code with its imports first
  */
-const rewriteImports = (code: string) =>
-  code.replace(
+const hoistImports = (code: string) => {
+  const hoisted: string[] = [];
+  const rest = code.replace(
     IMPORT_REGEX,
     // eslint-disable-next-line max-params -- `String.replace` hands every capture group
-    (_match, _clause, _ns, namespace, named, defaultName, path) => {
-      const imported = `await __pgImport(${JSON.stringify(path)})`;
-      if (namespace) return `const ${namespace} = ${imported};`;
-      if (named) {
-        const bindings = (named as string)
-          .slice(1, -1)
-          .split(",")
-          .map((binding) => binding.trim())
-          .filter(Boolean)
-          .map((binding) => {
-            const [name, , alias] = binding.split(/\s+/);
-            return alias ? `${name}: ${alias}` : name;
-          });
-        return `const { ${bindings.join(", ")} } = ${imported};`;
-      }
-      if (defaultName) {
-        return `const ${defaultName} = ((m) => m.default ?? m)(${imported});`;
-      }
-      return `${imported};`;
+    (match: string, _clause, _ns, namespace, named, defaultName, path) => {
+      hoisted.push(importedFor({ namespace, named, defaultName, path }));
+      return "\n".repeat(match.split("\n").length - 1);
     }
   );
+  return hoisted.length ? `${hoisted.join(" ")} ${rest}` : rest;
+};
 
 /** Lines the wrapper in `prepareCode` puts before the project's first line */
 const WRAPPER_LINES = 2;
@@ -80,7 +107,7 @@ const WRAPPER_LINES = 2;
 export const prepareCode = (code: string) => {
   const { outputText, diagnostics } = transpileModule(
     `__pgDone((async function (${HIDDEN_GLOBALS.join(", ")}) {
-  class __Pg { async __run() {\n${rewriteImports(code)}\n} }
+  class __Pg { async __run() {\n${hoistImports(code)}\n} }
   await new __Pg().__run();
 })());`,
     { compilerOptions: TRANSPILE_OPTIONS, reportDiagnostics: true }
@@ -143,6 +170,20 @@ if (import.meta.vitest) {
         }
       );
       expect(seen).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it("loads every import before the code runs, wherever it is written", async () => {
+      const seen = await runPrepared(
+        'seen.push(ns.x);\nimport * as ns from "a";',
+        { a: { x: 1 } }
+      );
+      expect(seen).toEqual([1]);
+    });
+
+    it("keeps the code's line numbers with its imports moved", () => {
+      expect(() =>
+        prepareCode('const a = 1;\nimport * as ns from "a";\nconst x = ;')
+      ).toThrow(/^Line 3: /);
     });
 
     it("runs TypeScript with top-level await", async () => {
