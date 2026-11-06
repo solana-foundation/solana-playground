@@ -70,7 +70,15 @@ export const connect = createCmd({
         await PgWallet.refresh();
         if (PgWallet.state === "unavailable")
           throw new WalletUnavailableError();
-        PgTerminal.println(PgTerminal.success("Wallet loaded."));
+        if (PgWallet.state === "pg" || PgWallet.state === "sol") {
+          PgTerminal.println(PgTerminal.success("Wallet loaded."));
+          break;
+        }
+        // Readable again but not connected: go on as `connect` from there
+        // (Setup, or connecting the loaded wallet)
+        const handle = connect.handle;
+        if (!handle) throw new Error("connect has no handler");
+        await handle(input);
         break;
       }
 
