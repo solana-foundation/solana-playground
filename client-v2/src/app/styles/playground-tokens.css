@@ -27,6 +27,9 @@
   --primary-foreground: #ffffff;
   /* never drawn in light: both buttons apply the edge under dark: only */
   --primary-edge: #8a3ff5;
+  /* purple words and icons: links, a picked option. The fill is 4.33:1 on
+     hover, so the ink is one step deeper (4.83 on hover, DES-125) */
+  --primary-ink: #7c3aed;
   --secondary: #f2f2f3;
   --secondary-foreground: #151515;
   --muted: #f2f2f3;
@@ -107,6 +110,9 @@
      would drop the white label under 4.5:1 (white on #b08cff is 2.61), so
      the edge carries the 3:1 and the fill keeps the label */
   --primary-edge: #b08cff;
+  /* the fill is 3.28:1 on panel as text, so words and icons take the
+     edge's lighter purple: 6.43 on panel, 5.32 on hover (DES-125) */
+  --primary-ink: #b08cff;
   --secondary: #27272b;
   --secondary-foreground: #e4e4e7;
   --muted: #27272b;
@@ -169,11 +175,11 @@
 
   /* ── syntax: VS Code's six roles and plain text, in the product's palette */
   /* plain and comment follow the dark ramp's primary and tertiary text */
-  --syntax-keyword: #ec4899;
+  --syntax-keyword: #f472b6;
   --syntax-type: #38bdf8;
   --syntax-function: #14f195;
   --syntax-string: #f59e0b;
-  --syntax-number: #8b5cf6;
+  --syntax-number: #a78bfa;
   --syntax-comment: #93939c;
   --syntax-plain: #e4e4e7;
 }

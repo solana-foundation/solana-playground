@@ -14,7 +14,7 @@ const WRAPPER_CLASSES = cn(
 );
 
 const TEXT_CLASSES =
-  "border-b border-transparent text-primary [transition:border-bottom-color_50ms_linear] hover:border-primary [&_svg]:ml-1";
+  "border-b border-transparent text-primary-ink [transition:border-bottom-color_50ms_linear] hover:border-primary-ink [&_svg]:ml-1";
 
 const Link = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => {
   // `Markdown` component may set `props.children` to an array

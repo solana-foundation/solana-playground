@@ -668,7 +668,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             first: it is the stage's one way on */}
         <div
           data-slot="deploy-outlines"
-          className="flex flex-wrap items-center justify-center gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:[&_[data-variant=outline]]:w-full max-md:[&_[data-variant=outline]]:px-3 max-md:[&_button]:text-sm! max-md:[&>span]:w-full max-md:[&>span>div]:w-full [&_[data-variant=outline]]:h-10 [&_[data-variant=outline]]:rounded-full [&_[data-variant=outline]]:px-5"
+          className="flex flex-wrap items-center justify-center gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:[&_[data-variant=outline]]:h-12 max-md:[&_[data-variant=outline]]:w-full max-md:[&_[data-variant=outline]]:px-3 max-md:[&_button]:text-sm! max-md:[&>span]:w-full max-md:[&>span>div]:w-full [&_[data-variant=outline]]:h-10 [&_[data-variant=outline]]:rounded-full [&_[data-variant=outline]]:px-5"
         >
           {offersRetry(p) && (
             <Button variant="outline" onClick={p.onShowLog}>

@@ -72,7 +72,7 @@ function EditorTabClose({ className, ...props }: React.ComponentProps<"button">)
       type="button"
       data-slot="editor-tab-close"
       className={cn(
-        "grid size-5 place-items-center rounded text-muted-foreground opacity-0 outline-none group-hover/editor-tab:opacity-100 group-data-active/editor-tab:opacity-100 hover:bg-surface-hover hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring [@media(hover:none)]:opacity-100",
+        "relative grid size-5 place-items-center rounded text-muted-foreground opacity-0 after:absolute after:-inset-0.5 outline-none group-hover/editor-tab:opacity-100 group-data-active/editor-tab:opacity-100 hover:bg-surface-hover hover:text-foreground focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring [@media(hover:none)]:opacity-100",
         className
       )}
       {...props}

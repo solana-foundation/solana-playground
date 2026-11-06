@@ -336,7 +336,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         <span
           className={cn(
             "flex items-center gap-2 text-sm",
-            selectedBar === p.id ? "text-primary" : "text-foreground"
+            selectedBar === p.id ? "text-primary-ink" : "text-foreground"
           )}
         >
           {p.name}
@@ -588,7 +588,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
           {CAPABILITIES.map(({ tag, text }, i) => (
             <div key={text} className={cn(smallPrint({ role: "capability" }))}>
               {/* One tag per run of rows sharing it, so it reads as a group */}
-              <span className="w-[3.25rem] shrink-0 tracking-[0.06em] text-primary">
+              <span className="w-[3.25rem] shrink-0 tracking-[0.06em] text-primary-ink">
                 {tag === CAPABILITIES[i - 1]?.tag ? "" : tag}
               </span>
               <span>{text}</span>
