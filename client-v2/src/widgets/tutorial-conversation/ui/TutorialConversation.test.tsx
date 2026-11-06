@@ -48,6 +48,7 @@ vi.mock("@/features/tutorial-conversation", async () => ({
   },
   judgeGoal: "judgeGoal",
   realDeployWatch: () => "realDeployWatch",
+  watchBuildSource: vi.fn(),
   watchDeploys: vi.fn(() => ({ dispose: vi.fn() })),
   isUnreachable: (r: { act: string; ok: boolean; reason?: string }) =>
     r.act === "build" && !r.ok && r.reason === "unreachable",

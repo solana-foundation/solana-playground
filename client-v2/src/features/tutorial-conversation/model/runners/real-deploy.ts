@@ -170,15 +170,22 @@ const programSource = () => {
 
 /**
  * The source of the last passing build, across every build the page sees.
- * Module scope, as the build command it listens to is: a tutorial frame
- * mounting twice must not lose the build its first mount saw.
+ * Started by `watchBuildSource` once the app's globals exist, never at import:
+ * `PgCommand.build` throws before the commands are registered, and the panel
+ * tree imports this module before they are. Kept for the page, as the build
+ * command it listens to is, so a frame mounting twice keeps what it saw.
  */
-const buildSource: BuildSource = trackBuildSource({
-  onDidStart: (cb) => PgCommand.build.onDidStart(() => cb()),
-  onDidFinish: (cb) => PgCommand.build.onDidFinish(cb),
-  source: programSource,
-  failed: () => !!PgProgramInfo.lastBuildFailed,
-});
+let buildSource: BuildSource | undefined;
+
+/** Start listening to builds, once per page; safe to call on every mount */
+export const watchBuildSource = () => {
+  buildSource ??= trackBuildSource({
+    onDidStart: (cb) => PgCommand.build.onDidStart(() => cb()),
+    onDidFinish: (cb) => PgCommand.build.onDidFinish(cb),
+    source: programSource,
+    failed: () => !!PgProgramInfo.lastBuildFailed,
+  });
+};
 
 /**
  * The deploy port over the editor's loader calls. A tutorial runs on devnet
@@ -206,7 +213,8 @@ export const realDeployPort = (): DeployPort => {
       stale:
         !PgProgramInfo.uuid ||
         !!PgProgramInfo.lastBuildFailed ||
-        !buildSource.isCurrent(),
+        // Not watching yet: no build was seen, so build
+        !buildSource?.isCurrent(),
       length: null,
     }),
     // The build act's own run, so a build-and-deploy names the same error
