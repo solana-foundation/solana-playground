@@ -209,3 +209,106 @@ describe("BaseActCard, repeating", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 });
+
+describe("BaseActCard, a deploy under way", () => {
+  const DEPLOY: ActBeat = {
+    kind: "act",
+    id: "s2.deploy",
+    act: "deploy",
+    title: "Deploy to devnet",
+    context: "From your Playground wallet · free devnet SOL",
+    button: "Deploy",
+  };
+
+  it("draws its progress under the title at any width, not beside it", () => {
+    render(
+      <BaseActCard
+        act={DEPLOY}
+        state="running"
+        presses={[]}
+        note={null}
+        stage={{
+          beatId: "s2.deploy",
+          label: "Writing buffer",
+          index: 1,
+          count: 3,
+        }}
+        took={null}
+        disabled={false}
+        onRun={() => {}}
+      />
+    );
+    const title = screen.getByText("Deploy to devnet");
+    const progress = screen.getByText("Writing buffer");
+    // The title's row holds the icon and the text only
+    const row = title.parentElement?.parentElement;
+    expect(row?.contains(progress)).toBe(false);
+    // A column, so the progress takes a line of its own under the title
+    expect(
+      screen.getByRole("form", { name: "Deploy to devnet" }).className
+    ).toContain("flex-col");
+    expect(screen.getByText("1 of 3")).toBeTruthy();
+  });
+});
+
+describe("BaseActCard, a call that takes a name", () => {
+  const HELLO: ActBeat = {
+    kind: "act",
+    id: "s3.hello",
+    act: "call",
+    title: "Say hello",
+    context: "Sends hello",
+    button: "Say hello",
+    call: { instruction: "hello", args: ["name"] },
+  };
+
+  it("does not give the button beside the field the narrow card's full width", () => {
+    render(
+      <BaseActCard
+        act={HELLO}
+        state="live"
+        presses={[]}
+        note={null}
+        stage={null}
+        took={null}
+        disabled={false}
+        onRun={() => {}}
+      />
+    );
+    const field = screen.getByRole("textbox", { name: "name" });
+    const button = screen.getByRole("button", { name: /Say hello/ });
+    // The row does not wrap: a full-width button would squeeze the field to
+    // nothing (jsdom draws no layout, so the class is what the test reads)
+    expect(field.parentElement?.contains(button)).toBe(true);
+    expect(button.className).not.toContain("w-full");
+  });
+});
+
+describe("BaseActCard, a lone action", () => {
+  const BUILD: ActBeat = {
+    kind: "act",
+    id: "s1.build",
+    act: "build",
+    title: "Build the program",
+    context: "Compiles on the build server",
+    button: "Build",
+  };
+
+  it("gives its button the narrow card's full width, so the title keeps its line", () => {
+    render(
+      <BaseActCard
+        act={BUILD}
+        state="live"
+        presses={[]}
+        note={null}
+        stage={null}
+        took={null}
+        disabled={false}
+        onRun={() => {}}
+      />
+    );
+    expect(screen.getByRole("button", { name: /Build/ }).className).toContain(
+      "@max-lg/act:w-full"
+    );
+  });
+});

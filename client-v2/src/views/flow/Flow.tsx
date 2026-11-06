@@ -17,6 +17,7 @@ import {
 } from "@/shared/lib/settings-request";
 import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
+import { Tag } from "@/shared/ui/tag";
 import { PgCommon, PgExplorer, PgTutorial, PgView } from "@/utils";
 import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
 import { Assistant, useTurn } from "@/widgets/assistant";
@@ -478,7 +479,18 @@ const FlowFrame = () => {
                 onToggle={toggle}
                 // The frame, and so its pin, shows on a wide window only
                 pin={viewport === "wide" ? tutorial.pin : undefined}
-                logo={<LogoLockup aria-hidden="true" />}
+                logo={
+                  // Beta beside the lockup, on the line of "Playground"
+                  <span className="flex items-end gap-2">
+                    <LogoLockup aria-hidden="true" />
+                    <Tag
+                      variant="neutral"
+                      className="mb-px h-4 px-1 text-[0.5625rem] text-foreground"
+                    >
+                      Beta
+                    </Tag>
+                  </span>
+                }
                 projects={(open) => (
                   <ProjectList
                     onPicked={catalogPage.close}

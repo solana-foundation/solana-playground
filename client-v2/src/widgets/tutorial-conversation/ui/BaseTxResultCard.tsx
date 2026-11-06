@@ -27,6 +27,7 @@ import {
 
 import BaseAccountView from "./BaseAccountView";
 import { formatSeconds, Prose, READ } from "./Prose";
+import WalletAddress from "./WalletAddress";
 
 type TxResult = Extract<RunResult, { act: "run" | "call" }>;
 type Landed = Extract<TxResult, { ok: true }>;
@@ -152,10 +153,6 @@ const FAUCET_URL = "https://faucet.solana.com";
 /** lamports as SOL, to at most four places */
 const solOf = (lamports: number) =>
   String(Math.round((lamports / 1e9) * 1e4) / 1e4);
-
-/** An address cut to its ends, as the wallet row shows it */
-const shortKey = (key: string) =>
-  key.length > 14 ? `${key.slice(0, 6)}…${key.slice(-6)}` : key;
 
 /** Copy for a value, reading "Copied" for a moment after it worked */
 const CopyText = ({
@@ -347,15 +344,19 @@ const FundsCard = ({
               cost
             )} SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself.`}
           </p>
-          <div className="flex items-center gap-3 text-caption">
+          {/* As the deploy's card: the whole address, Copy right after it */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
             <span className="shrink-0 text-muted-foreground">Your wallet</span>
-            <code
-              title={address}
-              className="min-w-0 flex-1 truncate font-mono text-foreground"
-            >
-              {shortKey(address)}
-            </code>
-            <CopyText value={address} label="Copy" what="copy the address" />
+            <WalletAddress address={address}>
+              {/* 44 px tall under a finger, without growing the row */}
+              <span className="ml-2 inline-block align-middle pointer-coarse:[&>button]:-my-3 pointer-coarse:[&>button]:min-h-11">
+                <CopyText
+                  value={address}
+                  label="Copy"
+                  what="copy the address"
+                />
+              </span>
+            </WalletAddress>
           </div>
           <div className="flex">
             <Button variant="secondary" asChild>

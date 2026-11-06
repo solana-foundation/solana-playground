@@ -482,7 +482,11 @@ describe("BaseResultCard", () => {
         "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
       )
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy();
+    // The whole address, with Copy right after it rather than at the row's end
+    expect(
+      screen.getByRole("button", { name: "Copy" }).parentElement?.parentElement
+        ?.parentElement?.textContent
+    ).toBe("Wa11etCopy");
     expect(
       screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
     ).toBe("https://faucet.solana.com");

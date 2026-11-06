@@ -41,6 +41,17 @@ const UNTIL_GAP_MS = 250;
 /** How many lines the live card shows: the latest, as the record shows them all */
 const LIVE_PRESSES = 3;
 
+/**
+ * Outside the phone layout the card can still be narrow (the chat beside the
+ * editor on a 1024 px tablet): under 32rem of card, where the title's line
+ * and the button no longer fit side by side, a lone button takes a line of
+ * its own, the card's width, so the title and its line keep theirs
+ */
+const NARROW_CTA = "@max-lg/act:w-full";
+
+/** The key hint, where there is no room for it or no keyboard to press it */
+const NARROW_HIDE = "@max-lg/act:hidden pointer-coarse:hidden";
+
 const ICONS: Record<Act, LucideIcon> = {
   build: Hammer,
   deploy: Rocket,
@@ -281,6 +292,8 @@ const BaseActCard = ({
   }
 
   const running = state === "running";
+  /** One action, no fields and no repeat: the button beside or under the text */
+  const single = !names.length && !act.repeat;
   const run = (e?: FormEvent) => {
     e?.preventDefault();
     if (disabled || running || missing) return;
@@ -288,7 +301,8 @@ const BaseActCard = ({
   };
 
   const button = running ? (
-    <span className="flex items-center gap-2">
+    // Wraps onto a second line where the card is narrow, "n of m" with it
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
       <Spinner className="size-4 text-brand-purple" />
       <span className="text-[0.8125rem] font-act text-foreground">
         {stage?.label ?? "Starting"}
@@ -302,14 +316,23 @@ const BaseActCard = ({
   ) : (
     <Button
       type="submit"
-      className={cn(ACTION, ACTION_FILL, PHONE_CTA, phoneCtaWidth(layout))}
+      className={cn(
+        ACTION,
+        ACTION_FILL,
+        PHONE_CTA,
+        // Off the phone, only a lone button (no field, no repeat) takes a
+        // narrow card's width: beside a name field it would squeeze the field
+        // to nothing, since that row never wraps, and a repeat's button keeps
+        // its own width beside the repeat toggle
+        phoneCtaWidth(layout) ?? (single ? NARROW_CTA : undefined)
+      )}
       disabled={disabled || missing}
     >
       {act.button}
       {!phone && (
         <Kbd
           aria-hidden="true"
-          className="bg-white/15 text-primary-foreground/80"
+          className={cn("bg-white/15 text-primary-foreground/80", NARROW_HIDE)}
         >
           ⌘↵
         </Kbd>
@@ -322,13 +345,13 @@ const BaseActCard = ({
       aria-label={act.title}
       onSubmit={run}
       className={cn(
-        "relative flex gap-3 overflow-hidden rounded-panel border border-border bg-surface-panel p-3",
-        names.length || act.repeat || phone
+        "@container/act relative flex gap-3 overflow-hidden rounded-panel border border-border bg-surface-panel p-3",
+        names.length || act.repeat || phone || running
           ? "flex-col items-stretch"
           : "items-center"
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
         <span
           aria-hidden="true"
           className={cn(
@@ -340,7 +363,7 @@ const BaseActCard = ({
         >
           <Icon className="size-4" />
         </span>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-[0.875rem] font-label text-foreground">
             {act.title}
           </p>
@@ -353,14 +376,16 @@ const BaseActCard = ({
             {note ?? (names.length && missing ? "Type any name" : act.context)}
           </p>
         </div>
-        {!names.length && !act.repeat && !phone && (
-          <div className="ml-auto shrink-0">{button}</div>
+        {single && !phone && !running && (
+          <div className="ml-auto shrink-0 @max-lg/act:basis-full">
+            {button}
+          </div>
         )}
       </div>
-      {/* On the phone the button sits under its text, under the thumb */}
-      {!names.length && !act.repeat && phone && (
-        <div className="flex">{button}</div>
-      )}
+      {/* On the phone the button sits under its text, under the thumb; a
+          run's progress sits there at every width, so its long line never
+          squeezes the title */}
+      {single && (phone || running) && <div className="flex">{button}</div>}
       {account && (
         <BaseAccountView
           account={account}

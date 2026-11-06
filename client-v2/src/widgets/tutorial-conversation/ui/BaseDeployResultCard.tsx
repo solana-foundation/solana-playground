@@ -24,6 +24,7 @@ import {
 import { CopyButton } from "@/shared/ui/copy-button";
 
 import { formatSeconds, Prose, READ } from "./Prose";
+import WalletAddress from "./WalletAddress";
 
 /** A deploy's or a build-and-deploy's result, landed or not */
 export type DeployResult = Extract<
@@ -115,19 +116,19 @@ const BaseDeployResultCard = ({
               result.cost
             )} SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself.`}
           </p>
-          <div className="flex w-full items-center gap-3 text-caption">
+          {/* The whole address, to check against a faucet's field: it
+              breaks across lines only where the card is too narrow for it */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
             <span className="shrink-0 text-muted-foreground">Your wallet</span>
-            <code
-              title={result.address}
-              className="min-w-0 flex-1 truncate font-mono text-[0.75rem] text-foreground"
-            >
-              {shortKey(result.address)}
-            </code>
-            <CopyButton
-              value={result.address}
-              label="Copy the wallet address"
-              onError={reportButtonFailure("copy the wallet address")}
-            />
+            <WalletAddress address={result.address}>
+              <CopyButton
+                value={result.address}
+                label="Copy the wallet address"
+                onError={reportButtonFailure("copy the wallet address")}
+                // 44 px under a finger, without growing the row
+                className="ml-1 align-middle pointer-coarse:-my-2.5 pointer-coarse:size-11"
+              />
+            </WalletAddress>
           </div>
           <div className="flex max-sm:flex-col max-sm:items-stretch">
             <Button asChild variant="ghost">

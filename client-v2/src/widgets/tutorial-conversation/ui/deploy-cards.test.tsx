@@ -135,7 +135,7 @@ describe("BaseDeployResultCard", () => {
     );
   });
 
-  it("says how short the wallet is, with its address and Open faucet; the retry is the act card under it", () => {
+  it("says how short the wallet is, with its whole address, Copy beside it and Open faucet; the retry is the act card under it", () => {
     card(noFunds);
     expect(screen.getByText("Not enough devnet SOL")).toBeTruthy();
     expect(
@@ -144,10 +144,11 @@ describe("BaseDeployResultCard", () => {
       )
     ).toBeTruthy();
     expect(screen.getByText("Your wallet")).toBeTruthy();
-    expect(screen.getByText("WaLLet…1111Qa")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Copy the wallet address" })
-    ).toBeTruthy();
+    // The whole address, with Copy right after it rather than at the row's end
+    const copy = screen.getByRole("button", {
+      name: "Copy the wallet address",
+    });
+    expect(copy.parentElement?.parentElement?.textContent).toBe(WALLET);
     const faucet = screen.getByRole("link", { name: /Open faucet/ });
     expect(faucet.getAttribute("href")).toBe("https://faucet.solana.com");
     expect(faucet.getAttribute("target")).toBe("_blank");
