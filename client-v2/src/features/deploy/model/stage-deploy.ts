@@ -109,82 +109,103 @@ export class PgStageDeploy {
    */
   static start(): Promise<void>;
   static start(onFailed: (error: unknown) => void): Promise<void>;
-  static async start(...handlers: [] | [onFailed: (error: unknown) => void]) {
-    const [onFailed] = handlers;
-    if (PgStageDeploy._running()) return;
-    // Loaded here, not at the top: the slice's parts and helpers render in
-    // places that never load the playground's runtime
-    const {
-      PgCommand,
-      PgConnection,
-      PgExplorer,
-      PgGlobal,
-      PgProgramInfo,
-      PgWallet,
-    } = await import("@/utils");
-    // Read again: another press may have started a run during the import
-    if (PgStageDeploy._running() || PgGlobal.deployState === "loading") return;
-    PgStageDeploy._set({ phase: "running", askingStaleBuild: false });
-
-    // The stage's state says "unknown" with `undefined`; the connection's `null` stays here
-    const cluster = PgConnection.cluster ?? undefined;
-    const workspace = PgExplorer.currentWorkspaceName;
-    const redeploy = PgProgramInfo.onChain?.deployed === true;
-    // A step recorded by an earlier run says nothing about this one, which
-    // may fail before it reaches the deploy command
-    let reachedRun = false;
-    let result: Awaited<ReturnType<typeof PgCommand.deploy.execute>>;
-    try {
-      if (cluster) {
-        deployTelemetry.track("deploy_started", { cluster, redeploy });
-      }
-      await ensurePlaygroundWallet(PgWallet);
-      reachedRun = true;
-      result = await PgDeployRun.runWith({
-        confirmStaleBuild: PgStageDeploy._askStaleBuild,
-      })(() => PgCommand.deploy.execute());
-    } catch (error) {
-      PgStageDeploy._failed(error, {
-        cluster,
-        workspace,
-        reachedRun,
-        onFailed,
-      });
-      return;
-    } finally {
-      // A question still open when the run ended can no longer be answered
-      PgStageDeploy._staleResolve?.(false);
-      PgStageDeploy._staleResolve = undefined;
-    }
-
-    // A press that only paused or resumed a run reports nothing
-    if (!result) {
-      PgStageDeploy._set({ phase: "idle" });
-      return;
-    }
-    let backupFor: string | undefined;
-    try {
-      const paidBy = PgWallet.current;
-      if (paidBy?.isPg) {
-        const address = paidBy.publicKey.toBase58();
-        if (!isBackupAnswered(address)) backupFor = address;
-      }
-    } catch (error) {
-      // The program is deployed; without the wallet's address only the
-      // backup line is lost, and the stage must still leave "running"
-      log.error(error, { report: true, context: { after: "deploy" } });
-    }
-    PgStageDeploy._set({ phase: "done", backupFor });
-    try {
-      if (cluster) {
-        deployTelemetry.track("deploy_succeeded", { cluster, redeploy });
-      }
-      if (backupFor) deployTelemetry.track("deploy_backup_shown", {});
-    } catch (error) {
-      // The program is deployed and the line shows; only an event is lost
-      log.error(error, { report: true, context: { after: "deploy" } });
-    }
+  static start(...handlers: [] | [onFailed: (error: unknown) => void]) {
+    return PgStageDeploy._startWith("setting")(...handlers);
   }
+
+  /**
+   * Deploy as `start` does, and request an airdrop if the wallet is short:
+   * the user pressed "Request airdrop" or signed in for the faucet
+   */
+  static startWithAirdrop(onFailed: (error: unknown) => void) {
+    return PgStageDeploy._startWith("airdrop")(onFailed);
+  }
+
+  /**
+   * Whether the run may airdrop: as `wallet.automaticAirdrop` says, or
+   * because the user asked for one
+   */
+  private static _startWith =
+    (funding: "setting" | "airdrop") =>
+    async (...handlers: [] | [onFailed: (error: unknown) => void]) => {
+      const [onFailed] = handlers;
+      if (PgStageDeploy._running()) return;
+      // Loaded here, not at the top: the slice's parts and helpers render in
+      // places that never load the playground's runtime
+      const {
+        PgCommand,
+        PgConnection,
+        PgExplorer,
+        PgGlobal,
+        PgProgramInfo,
+        PgSettings,
+        PgWallet,
+      } = await import("@/utils");
+      // Read again: another press may have started a run during the import
+      if (PgStageDeploy._running() || PgGlobal.deployState === "loading")
+        return;
+      PgStageDeploy._set({ phase: "running", askingStaleBuild: false });
+
+      // The stage's state says "unknown" with `undefined`; the connection's `null` stays here
+      const cluster = PgConnection.cluster ?? undefined;
+      const workspace = PgExplorer.currentWorkspaceName;
+      const redeploy = PgProgramInfo.onChain?.deployed === true;
+      // A step recorded by an earlier run says nothing about this one, which
+      // may fail before it reaches the deploy command
+      let reachedRun = false;
+      let result: Awaited<ReturnType<typeof PgCommand.deploy.execute>>;
+      try {
+        if (cluster) {
+          deployTelemetry.track("deploy_started", { cluster, redeploy });
+        }
+        await ensurePlaygroundWallet(PgWallet);
+        reachedRun = true;
+        result = await PgDeployRun.runWith({
+          confirmStaleBuild: PgStageDeploy._askStaleBuild,
+          airdrop: funding === "airdrop" || PgSettings.wallet.automaticAirdrop,
+        })(() => PgCommand.deploy.execute());
+      } catch (error) {
+        PgStageDeploy._failed(error, {
+          cluster,
+          workspace,
+          reachedRun,
+          onFailed,
+        });
+        return;
+      } finally {
+        // A question still open when the run ended can no longer be answered
+        PgStageDeploy._staleResolve?.(false);
+        PgStageDeploy._staleResolve = undefined;
+      }
+
+      // A press that only paused or resumed a run reports nothing
+      if (!result) {
+        PgStageDeploy._set({ phase: "idle" });
+        return;
+      }
+      let backupFor: string | undefined;
+      try {
+        const paidBy = PgWallet.current;
+        if (paidBy?.isPg) {
+          const address = paidBy.publicKey.toBase58();
+          if (!isBackupAnswered(address)) backupFor = address;
+        }
+      } catch (error) {
+        // The program is deployed; without the wallet's address only the
+        // backup line is lost, and the stage must still leave "running"
+        log.error(error, { report: true, context: { after: "deploy" } });
+      }
+      PgStageDeploy._set({ phase: "done", backupFor });
+      try {
+        if (cluster) {
+          deployTelemetry.track("deploy_succeeded", { cluster, redeploy });
+        }
+        if (backupFor) deployTelemetry.track("deploy_backup_shown", {});
+      } catch (error) {
+        // The program is deployed and the line shows; only an event is lost
+        log.error(error, { report: true, context: { after: "deploy" } });
+      }
+    };
 
   /** The user answered "The last build failed" */
   static answerStaleBuild(deploy: boolean) {

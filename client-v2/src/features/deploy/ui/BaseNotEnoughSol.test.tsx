@@ -11,6 +11,7 @@ const ADDRESS = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 
 const renderCard = (props: Partial<BaseNotEnoughSolProps>) => {
   const onRetry = vi.fn();
+  const onAirdrop = vi.fn();
   const onSignIn = vi.fn();
   render(
     <TooltipProvider>
@@ -23,12 +24,14 @@ const renderCard = (props: Partial<BaseNotEnoughSolProps>) => {
         // eslint-disable-next-line unicorn/no-null -- the prop's none value
         cause={props.cause ?? null}
         onRetry={onRetry}
+        onAirdrop={onAirdrop}
         onSignIn={onSignIn}
       />
     </TooltipProvider>
   );
   return {
     onRetry,
+    onAirdrop,
     onSignIn,
     card: screen.getByRole("alert", { name: "Not enough SOL" }),
   };
@@ -49,6 +52,20 @@ describe("BaseNotEnoughSol", () => {
     ).toBe(WEB_FAUCET_URL);
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it("offers Request airdrop in place of Try again while automatic airdrop is off", () => {
+    const { onAirdrop, onRetry } = renderCard({ reason: "airdrop_off" });
+
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(
+      screen.getByText(
+        "Request devnet SOL from the faucet, or send SOL to the wallet below."
+      )
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Request airdrop" }));
+    expect(onAirdrop).toHaveBeenCalledOnce();
+    expect(onRetry).not.toHaveBeenCalled();
   });
 
   it("offers sign-in in place of Try again when signed out", () => {

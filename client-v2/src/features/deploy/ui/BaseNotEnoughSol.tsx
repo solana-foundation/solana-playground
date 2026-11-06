@@ -28,6 +28,8 @@ export interface BaseNotEnoughSolProps {
   /** What the airdrop said when it refused */
   cause: string | null;
   onRetry: () => void;
+  /** Deploy again, requesting an airdrop; offered when automatic airdrop is off */
+  onAirdrop: () => void;
   onSignIn: () => void;
 }
 
@@ -35,9 +37,23 @@ const reasonLine = (reason: FundingFailure, network: string | undefined) => {
   const lines: Record<FundingFailure, string> = {
     signed_out: `Sign in with GitHub to request ${solOn(network)}.`,
     no_faucet: "This network has no faucet. Send SOL to the wallet below.",
+    airdrop_off: `Request ${solOn(
+      network
+    )} from the faucet, or send SOL to the wallet below.`,
     airdrop_failed: "The faucet did not send SOL.",
   };
   return lines[reason];
+};
+
+/** The card's first action: what moves this reason forward */
+const FundingAction = ({ p }: { p: BaseNotEnoughSolProps }) => {
+  if (p.reason === "signed_out") {
+    return <CalloutAction onClick={p.onSignIn}>Sign in</CalloutAction>;
+  }
+  if (p.reason === "airdrop_off") {
+    return <CalloutAction onClick={p.onAirdrop}>Request airdrop</CalloutAction>;
+  }
+  return <CalloutAction onClick={p.onRetry}>Try again</CalloutAction>;
 };
 
 /** The deploy stopped because the paying wallet holds too little SOL */
@@ -72,11 +88,7 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
         </span>
       </CalloutDescription>
       <CalloutActions>
-        {p.reason === "signed_out" ? (
-          <CalloutAction onClick={p.onSignIn}>Sign in</CalloutAction>
-        ) : (
-          <CalloutAction onClick={p.onRetry}>Try again</CalloutAction>
-        )}
+        <FundingAction p={p} />
         {hasWebFaucet && (
           <CalloutAction asChild>
             <a href={WEB_FAUCET_URL} target="_blank" rel="noopener noreferrer">

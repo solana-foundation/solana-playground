@@ -234,12 +234,16 @@ const processDeploy = async (
     }
 
     if (answers) {
-      // The stage funds without a question. Only a public faucet needs a
-      // session (`isAirdropSignInGated`, as the airdrop's own pre-check);
-      // the reason is read here, not from that check's message
+      // The stage asks nothing. Only a public faucet needs a session
+      // (`isAirdropSignInGated`, as the airdrop's own pre-check); the reason
+      // is read here, not from that check's message. Signing in from the
+      // card is the user's request for SOL, so it comes first.
       if (isAirdropSignInGated(PgConnection.cluster) && !PgSession.get()) {
         throw short("signed_out");
       }
+      // Without automatic airdrop the stage stops at its funding card, and
+      // only the card's "Request airdrop" press spends faucet quota
+      if (!answers.airdrop) throw short("airdrop_off");
       PgTerminal.println(`Warning: ${msg}`);
       throwIfStopped(signal, deployStoppedLine({ state: "none" }));
     } else {

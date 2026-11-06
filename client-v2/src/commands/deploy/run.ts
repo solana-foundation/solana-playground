@@ -28,15 +28,25 @@ export interface DeployResult {
 
 /**
  * Answers a caller gives the deploy in place of the terminal's questions.
- * Their presence also means the run funds the wallet without asking.
+ * Their presence also means the run asks nothing about funding: it airdrops
+ * or stops at the funding card, as `airdrop` says.
  */
 export interface DeployAnswers {
   /** The last build failed: deploy the last successful build anyway? */
   confirmStaleBuild(): Promise<boolean>;
+  /**
+   * The run may request an airdrop for a short wallet: the user turned on
+   * `wallet.automaticAirdrop` or pressed "Request airdrop"
+   */
+  airdrop: boolean;
 }
 
 /** Why a run could not fund its wallet */
-export type FundingFailure = "signed_out" | "no_faucet" | "airdrop_failed";
+export type FundingFailure =
+  | "signed_out"
+  | "no_faucet"
+  | "airdrop_off"
+  | "airdrop_failed";
 
 /** A run with answers stopped: the wallet holds too little SOL and could not be funded (`reason`) */
 export class DeployFundingError extends Error {

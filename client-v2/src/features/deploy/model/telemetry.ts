@@ -30,7 +30,7 @@ type DeployEvents = {
    */
   deploy_sol_needed_shown: {
     cluster: DeployCluster;
-    reason: "signed_out" | "no_faucet" | "airdrop_failed";
+    reason: "signed_out" | "no_faucet" | "airdrop_off" | "airdrop_failed";
   };
   /** The keypair backup line showed under a deploy result. */
   deploy_backup_shown: NoParams;

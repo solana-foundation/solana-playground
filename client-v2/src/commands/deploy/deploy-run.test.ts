@@ -92,6 +92,13 @@ vi.mock("../../utils", () => {
 
 const answers = (stale: boolean) => ({
   confirmStaleBuild: vi.fn(async () => stale),
+  airdrop: true,
+});
+
+/** The stage's answers with automatic airdrop off, the setting's default */
+const answersWithoutAirdrop = (stale: boolean) => ({
+  confirmStaleBuild: vi.fn(async () => stale),
+  airdrop: false,
 });
 
 const subscriptions: Array<{ dispose: () => void }> = [];
@@ -182,6 +189,18 @@ describe("deploy run", () => {
 
     expect(steps[0]).toBe("funding");
     expect(PgCommand.airdrop.execute).toHaveBeenCalledWith("1");
+    expect(waitForInput).not.toHaveBeenCalled();
+  });
+
+  it("stops at the funding card without requesting SOL when the stage may not airdrop", async () => {
+    balance.mockResolvedValueOnce(0);
+
+    const run = PgDeployRun.runWith(answersWithoutAirdrop(true))(handleDeploy);
+
+    await expect(run).rejects.toMatchObject({
+      detail: { reason: "airdrop_off", balance: 0, address: WALLET },
+    });
+    expect(PgCommand.airdrop.execute).not.toHaveBeenCalled();
     expect(waitForInput).not.toHaveBeenCalled();
   });
 

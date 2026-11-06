@@ -91,6 +91,8 @@ export interface BaseDeployProps {
   addressUrl: (programId: string, cluster: string) => string | undefined;
   txUrl: (signature: string, cluster: string) => string | undefined;
   onDeploy: () => void;
+  /** Deploy again, requesting an airdrop for the short wallet */
+  onAirdrop: () => void;
   onSignIn: () => void;
   onSaveKeypair: () => void;
   onDismissBackup: () => void;
@@ -586,6 +588,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             address={view.stop.address}
             cause={view.stop.cause}
             onRetry={p.onDeploy}
+            onAirdrop={p.onAirdrop}
             onSignIn={p.onSignIn}
           />
         )}

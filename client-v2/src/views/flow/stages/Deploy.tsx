@@ -69,7 +69,10 @@ const signInThenDeploy = async () => {
     log.info("the project or network changed during sign-in, deploy not run");
     return;
   }
-  await PgStageDeploy.start((error) => markIfToldByStage("deploy", error));
+  // Signing in from the card is the user's request for SOL
+  await PgStageDeploy.startWithAirdrop((error) =>
+    markIfToldByStage("deploy", error)
+  );
 };
 
 /**
@@ -180,6 +183,11 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         }
         onDeploy={() =>
           void PgStageDeploy.start((error) =>
+            markIfToldByStage("deploy", error)
+          ).catch(reportButtonFailure("deploy"))
+        }
+        onAirdrop={() =>
+          void PgStageDeploy.startWithAirdrop((error) =>
             markIfToldByStage("deploy", error)
           ).catch(reportButtonFailure("deploy"))
         }

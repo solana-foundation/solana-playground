@@ -47,6 +47,7 @@ const mocks = vi.hoisted(() => ({
   },
   walletListeners: new Set<(w: unknown) => void>(),
   signIn: vi.fn(),
+  automaticAirdrop: false,
 }));
 
 const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
@@ -67,6 +68,13 @@ vi.mock("../../../utils", () => ({
     },
   },
   PgProgramInfo: { update: mocks.update },
+  PgSettings: {
+    wallet: {
+      get automaticAirdrop() {
+        return mocks.automaticAirdrop;
+      },
+    },
+  },
   PgWallet: mocks.wallet,
 }));
 vi.mock("@/features/auth", () => ({
@@ -538,6 +546,93 @@ describe("Deploy stage", () => {
 
     expect(mocks.signIn).toHaveBeenCalledExactlyOnceWith({ from: "deploy" });
     expect(mocks.execute).toHaveBeenCalledTimes(2);
+  });
+
+  /** What the deploy run was told about airdrops, per run */
+  const airdropAnswers = () => {
+    const seen: Array<boolean | undefined> = [];
+    mocks.execute.mockImplementation(async () => {
+      seen.push(PgDeployRun.answers?.airdrop);
+      return undefined;
+    });
+    return seen;
+  };
+
+  const airdropOff = () =>
+    new DeployFundingError({
+      reason: "airdrop_off",
+      balance: 0,
+      needed: 1,
+      address: WALLET,
+      // eslint-disable-next-line unicorn/no-null -- `DeployFundingError`'s `cause` is `string | null`
+      cause: null,
+    });
+
+  it("deploys without an airdrop while automatic airdrop is off", async () => {
+    mocks.wallet.current = pgWallet();
+    const seen = airdropAnswers();
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    expect(seen).toEqual([false]);
+  });
+
+  it("deploys with an airdrop when automatic airdrop is on", async () => {
+    mocks.wallet.current = pgWallet();
+    mocks.automaticAirdrop = true;
+    const seen = airdropAnswers();
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    try {
+      await pressDeploy();
+    } finally {
+      mocks.automaticAirdrop = false;
+    }
+
+    expect(seen).toEqual([true]);
+  });
+
+  it("requests an airdrop only on the funding card's press", async () => {
+    mocks.wallet.current = pgWallet();
+    const seen = airdropAnswers();
+    mocks.execute.mockImplementationOnce(async () => {
+      seen.push(PgDeployRun.answers?.airdrop);
+      throw airdropOff();
+    });
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Request airdrop" }))
+    );
+
+    expect(seen).toEqual([false, true]);
+  });
+
+  it("requests an airdrop on the deploy that follows a sign-in from the card", async () => {
+    mocks.wallet.current = pgWallet();
+    const seen = airdropAnswers();
+    mocks.execute.mockImplementationOnce(async () => {
+      seen.push(PgDeployRun.answers?.airdrop);
+      throw new DeployFundingError({
+        reason: "signed_out",
+        balance: 0,
+        needed: 1,
+        address: WALLET,
+        // eslint-disable-next-line unicorn/no-null -- `DeployFundingError`'s `cause` is `string | null`
+        cause: null,
+      });
+    });
+    mocks.signIn.mockResolvedValue(undefined);
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
+    );
+
+    expect(seen).toEqual([false, true]);
   });
 
   it("does not deploy after a sign-in that ended on another project", async () => {

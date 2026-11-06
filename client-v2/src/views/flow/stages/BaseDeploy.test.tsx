@@ -82,6 +82,7 @@ const props = (state: {
   addressUrl: (id, cluster) => `https://explorer.test/${cluster}/address/${id}`,
   txUrl: (sig, cluster) => `https://explorer.test/${cluster}/tx/${sig}`,
   onDeploy: vi.fn(),
+  onAirdrop: vi.fn(),
   onSignIn: vi.fn(),
   onSaveKeypair: vi.fn(),
   onDismissBackup: vi.fn(),
