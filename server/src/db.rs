@@ -27,7 +27,7 @@ pub async fn init(uri: &str, name: String) -> Result<()> {
 pub async fn find_by_id(id: &str, collection: &str) -> Result<Option<Value>> {
     let id = ObjectId::parse_str(id)?;
     let value = get_collection(collection)
-        .find_one(doc! { "_id": id }, None)
+        .find_one(doc! { "_id": id })
         .await?;
     Ok(value)
 }
@@ -35,7 +35,7 @@ pub async fn find_by_id(id: &str, collection: &str) -> Result<Option<Value>> {
 /// Insert the value inside the given `collection`.
 pub async fn insert(value: Value, collection: &str) -> Result<String> {
     match get_collection(collection)
-        .insert_one(value, None)
+        .insert_one(value)
         .await?
         .inserted_id
     {
