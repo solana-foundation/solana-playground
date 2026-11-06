@@ -466,6 +466,12 @@ export const walletStorageWith =
         // A store that may hold a wallet, and no copy to fall back to: not
         // degraded, so the next read (Try again) asks the store again
         if (!fromLocal && !isIndexedDbMissing(error)) return UNAVAILABLE;
+        // A save while falling back rewrites `localStorage` without its
+        // damaged accounts, which may still hold key bytes: their text goes
+        // aside first, as when the store refuses the set-aside record
+        if (fromLocal && fromLocal.damaged.length > 0) {
+          keepUnreadable(fromLocal.text);
+        }
         isDegraded = true;
         return foundOrNone(fromLocal?.wallet);
       }
@@ -1404,6 +1410,25 @@ if (import.meta.vitest) {
     it("keeps the localStorage text aside when its damaged accounts cannot be set aside", async () => {
       const store = memoryStore(undefined);
       store.setAside.mockRejectedValueOnce(new Error("quota"));
+      const text = JSON.stringify({
+        state: "pg",
+        accounts: [account(1, "A"), damaged("B")],
+        currentIndex: 0,
+        standardName: NO_STANDARD,
+      });
+      const local = memoryLocal(text);
+      const storage = walletStorageWith(store)(local);
+
+      await storage.read();
+      // A save while falling back rewrites the wallet without them
+      await storage.write(walletOf([account(1, "A")]));
+
+      expect(local.items.get("wallet.unreadable")).toBe(text);
+    });
+
+    it("keeps the localStorage text aside when the store cannot be read and it has damaged accounts", async () => {
+      const store = memoryStore(undefined);
+      store.read.mockRejectedValue(new Error("blocked"));
       const text = JSON.stringify({
         state: "pg",
         accounts: [account(1, "A"), damaged("B")],
