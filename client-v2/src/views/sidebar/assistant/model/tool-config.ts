@@ -29,12 +29,26 @@ const CREDENTIAL_FIELDS: readonly CredentialField[] = [
   "url query",
 ];
 
-/** A login, a query or a fragment in a URL; the rest of it is the server's address */
-const URL_LOGIN = /^([a-z][a-z\d+.-]*:\/\/)[^/?#]*@/i;
-const URL_QUERY = /[?#].*$/;
+/** A path on the page's own origin, which stays relative when stored */
+const PATH_RELATIVE = /^\/(?![/\\])/;
 
-const bareUrl = (url: string) =>
-  url.replace(URL_LOGIN, "$1").replace(URL_QUERY, "");
+/**
+ * The server's address without its login, query or fragment, read by the URL
+ * parser `serverUrl` uses. Patterns missed what the parser accepts: a
+ * scheme-relative or space-led login, backslashes for slashes, a newline in
+ * the query. A URL holding none of them is kept as typed.
+ */
+const bareUrl = (url: string) => {
+  const parsed = new URL(url.trim(), window.location.origin);
+  if (!parsed.username && !parsed.password && !parsed.search && !parsed.hash) {
+    return url;
+  }
+  parsed.username = "";
+  parsed.password = "";
+  parsed.search = "";
+  parsed.hash = "";
+  return PATH_RELATIVE.test(url.trim()) ? parsed.pathname : parsed.href;
+};
 
 const isFilled = (map: Record<string, string> | undefined) =>
   !!map && Object.keys(map).length > 0;
@@ -295,6 +309,28 @@ if (import.meta.vitest) {
           ],
         },
       ]);
+    });
+
+    it.each([
+      ["a scheme-relative login", "//user:login-secret@mcp.test/mcp"],
+      ["a login after a space", " https://user:login-secret@mcp.test/mcp"],
+      [
+        "a login behind backslashes",
+        "https:\\\\user:login-secret@mcp.test/mcp",
+      ],
+      ["a query with a newline", "https://mcp.test/mcp?a=1\nkey=query-secret"],
+      ["a relative path's query", "/api/mcp?key=query-secret"],
+    ])("stores no credential from %s", (_, url) => {
+      const text = encodeToolConfig(state({ servers: [server({ url })] }));
+
+      expect(text).not.toMatch(/secret/);
+      expect(JSON.parse(text).mcpServers[0].missing).toEqual(["url query"]);
+    });
+
+    it("keeps a URL without a credential as it was typed", () => {
+      expect(
+        stored({ servers: [server({ url: "/api/mcp" })] }).mcpServers[0]
+      ).toEqual({ id: "mine", name: "Mine", url: "/api/mcp", enabled: true });
     });
 
     it("keeps naming a field the entry was not given again", () => {
