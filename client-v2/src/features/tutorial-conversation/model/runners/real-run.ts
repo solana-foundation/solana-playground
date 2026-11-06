@@ -8,6 +8,7 @@ import { createLogger } from "@/shared/lib/logger";
 import {
   PgCommand,
   PgConnection,
+  PgExplorer,
   PgProgramInfo,
   PgTerminal,
   PgTx,
@@ -24,6 +25,8 @@ import { captureSends } from "./capture";
 import type { FundingChain } from "./fund";
 import type { Landed, RunPort } from "./run-call";
 import { runOrCall } from "./run-call";
+import type { Target } from "./target";
+import { targetGuardFor } from "./target";
 import type { DecodedCall } from "./transactions";
 import { accountsWritten, fillRememberedWith } from "./transactions";
 
@@ -193,56 +196,67 @@ const sendCall = async (
   );
 };
 
-/** The run and call port over the editor's runner and devnet */
-export const realRunPort = (
-  funding: FundingChain,
-  capSol: number
-): RunPort => ({
-  refusal: () =>
-    PgConnection.cluster === "devnet"
-      ? null
-      : "Tutorials run on devnet. Switch the network to devnet in Settings and try again.",
-  wallet: () => PgWallet.current?.publicKey.toBase58() ?? null,
-  programId: () => PgProgramInfo.pk?.toBase58() ?? null,
-  funding,
-  capSol,
-  send: async (act, input) => {
-    const { error, captured } = await captureSends(
-      PgWeb3.Connection.prototype as unknown as Sender,
-      async () => {
-        if (act === "run") {
-          await PgCommand.run.execute(CLIENT_FILE);
-          return;
-        }
-        if (!input.call) throw new Error("The call act names no instruction");
-        await sendCall(input.call, input.idl);
-      }
-    );
-    return { captured, error };
-  },
-  landed: landedOnDevnet,
-  fetchAccount: fetchOnDevnet,
-  decode: (encoded, deployed) => {
-    const programId = PgProgramInfo.pk?.toBase58();
-    if (!programId) return { calls: [], undecoded: true };
-    try {
-      return decodeCalls(
-        encoded,
-        programId,
-        (deployed ?? PgProgramInfo.idl) as Idl | null
-      );
-    } catch (e) {
-      // The result still lands; only its `called` is short, which fails a
-      // call goal rather than passing it on a guess
-      log.error(e, { report: true, context: { stage: "Decoding a call" } });
-      return { calls: [], undecoded: true };
-    }
-  },
-  print: (line) => PgTerminal.println(line),
-  report: (error, stage) =>
-    log.error(error, { report: true, context: { stage } }),
-  now: () => Date.now(),
+/** The open project and the network, for a run's `targetGuardFor` */
+export const currentTarget = (): Target => ({
+  workspace: PgExplorer.currentWorkspaceName ?? undefined,
+  endpoint: PgConnection.current.rpcEndpoint,
+  cluster: PgConnection.cluster ?? undefined,
 });
+
+/** The run and call port over the editor's runner and devnet */
+export const realRunPort = (funding: FundingChain, capSol: number): RunPort => {
+  const target = targetGuardFor("the call")(currentTarget);
+  return {
+    refusal: () => {
+      if (PgConnection.cluster !== "devnet") {
+        return "Tutorials run on devnet. Switch the network to devnet in Settings and try again.";
+      }
+      target.capture();
+      return null;
+    },
+    wallet: () => PgWallet.current?.publicKey.toBase58() ?? null,
+    programId: () => PgProgramInfo.pk?.toBase58() ?? null,
+    funding,
+    capSol,
+    send: async (act, input) => {
+      target.ensure();
+      const { error, captured } = await captureSends(
+        PgWeb3.Connection.prototype as unknown as Sender,
+        async () => {
+          if (act === "run") {
+            await PgCommand.run.execute(CLIENT_FILE);
+            return;
+          }
+          if (!input.call) throw new Error("The call act names no instruction");
+          await sendCall(input.call, input.idl);
+        }
+      );
+      return { captured, error };
+    },
+    landed: landedOnDevnet,
+    fetchAccount: fetchOnDevnet,
+    decode: (encoded, deployed) => {
+      const programId = PgProgramInfo.pk?.toBase58();
+      if (!programId) return { calls: [], undecoded: true };
+      try {
+        return decodeCalls(
+          encoded,
+          programId,
+          (deployed ?? PgProgramInfo.idl) as Idl | null
+        );
+      } catch (e) {
+        // The result still lands; only its `called` is short, which fails a
+        // call goal rather than passing it on a guess
+        log.error(e, { report: true, context: { stage: "Decoding a call" } });
+        return { calls: [], undecoded: true };
+      }
+    },
+    print: (line) => PgTerminal.println(line),
+    report: (error, stage) =>
+      log.error(error, { report: true, context: { stage } }),
+    now: () => Date.now(),
+  };
+};
 
 /** The run act and the call act, on devnet */
 export const runOnDevnet =
