@@ -1,6 +1,7 @@
 /* eslint-disable unicorn/no-null -- the live step is null before Start, as the conversation hands it */
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -27,6 +28,18 @@ const STEPS: PhoneStep[] = [
 const UNREACHED = [0, 1, 2, 3].map((i) => step(i, "not_reached"));
 const DONE = [0, 1, 2, 3].map((i) => step(i, "done"));
 
+/** The head with its steps sheet held as Flow holds it */
+const Harness = (props: BaseTutorialPhoneHeadProps) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <BaseTutorialPhoneHead
+      {...props}
+      sheetOpen={open}
+      onSheetOpenChange={setOpen}
+    />
+  );
+};
+
 const draw = (over: Partial<BaseTutorialPhoneHeadProps>) => {
   const props: BaseTutorialPhoneHeadProps = {
     name: "Hello Anchor",
@@ -42,11 +55,11 @@ const draw = (over: Partial<BaseTutorialPhoneHeadProps>) => {
     onSpace: vi.fn(),
     onJump: vi.fn(),
     onStartOver: vi.fn(async () => {}),
+    sheetOpen: false,
+    onSheetOpenChange: vi.fn(),
   };
   Object.assign(props, over);
-  const { container, rerender, unmount } = render(
-    <BaseTutorialPhoneHead {...props} />
-  );
+  const { container, rerender, unmount } = render(<Harness {...props} />);
   return { container, rerender, unmount, props };
 };
 
@@ -70,20 +83,10 @@ describe("BaseTutorialPhoneHead", () => {
     });
     expect(screen.getByText("4 steps · 12 min")).toBeTruthy();
 
-    rerender(
-      <BaseTutorialPhoneHead {...props} started live={1} steps={STEPS} />
-    );
+    rerender(<Harness {...props} started live={1} steps={STEPS} />);
     expect(screen.getByText("Step 2 of 4 · Deploy")).toBeTruthy();
 
-    rerender(
-      <BaseTutorialPhoneHead
-        {...props}
-        started
-        finished
-        live={3}
-        steps={DONE}
-      />
-    );
+    rerender(<Harness {...props} started finished live={3} steps={DONE} />);
     expect(screen.getByText("Done · 4 of 4")).toBeTruthy();
   });
 
@@ -92,7 +95,7 @@ describe("BaseTutorialPhoneHead", () => {
     expect(container.querySelectorAll("[data-segment]")).toHaveLength(0);
     expect(container.querySelector("[data-hairline]")).toBeTruthy();
 
-    rerender(<BaseTutorialPhoneHead {...props} started live={1} />);
+    rerender(<Harness {...props} started live={1} />);
     const segments = container.querySelectorAll("[data-segment]");
     expect(segments).toHaveLength(4);
     expect(Array.from(segments).map((s) => s.getAttribute("data-lit"))).toEqual(
@@ -108,7 +111,7 @@ describe("BaseTutorialPhoneHead", () => {
     expect(screen.getByText("Code")).toBeTruthy();
     expect(props.onSpace).toHaveBeenCalledWith("code", "toggle");
 
-    rerender(<BaseTutorialPhoneHead {...props} space="code" />);
+    rerender(<Harness {...props} space="code" />);
     expect(screen.getByText("Chat")).toBeTruthy();
     await userEvent.click(
       screen.getByRole("button", { name: "Back to the chat" })
@@ -119,7 +122,7 @@ describe("BaseTutorialPhoneHead", () => {
   it("marks Code only while the assistant has written unseen lines", () => {
     const { container, rerender, props } = draw({});
     expect(container.querySelector("[data-dot]")).toBeNull();
-    rerender(<BaseTutorialPhoneHead {...props} dot />);
+    rerender(<Harness {...props} dot />);
     expect(container.querySelector("[data-dot]")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Show the code, new lines written" })
@@ -166,9 +169,7 @@ describe("BaseTutorialPhoneHead", () => {
     expect(screen.queryByRole("button", { name: "Start over…" })).toBeNull();
     await userEvent.keyboard("{Escape}");
 
-    rerender(
-      <BaseTutorialPhoneHead {...props} started live={1} steps={STEPS} />
-    );
+    rerender(<Harness {...props} started live={1} steps={STEPS} />);
     await openSteps();
     await userEvent.click(screen.getByRole("button", { name: "Start over…" }));
     const dialog = screen.getByRole("dialog", {
