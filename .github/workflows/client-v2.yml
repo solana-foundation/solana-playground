@@ -27,6 +27,84 @@ jobs:
     with:
       use-wasm-stubs: false
 
+  # After a push to `master`, fails unless that commit's production
+  # deployment answers `{ "enabled": true, "db": "ok" }` on `GET /api/sync`:
+  # a database production cannot reach otherwise leaves every user local with
+  # nobody told (HOO-2536). Not in `needs` of `client-v2` below:
+  # that job gates pull requests, where this one is skipped and a skipped
+  # needed job reads as red. A red `smoke` still turns the run on `master` red.
+  #
+  # The Vercel GitHub app records each deployment on the commit as a GitHub
+  # deployment (environment `Production`) with statuses, so the commit's
+  # deployment and its URL come from the GitHub API with the run's own token,
+  # and no Vercel token is needed. The per-deployment URL sits behind
+  # Deployment Protection (it answers a redirect or a 401 to the login page), so the probe
+  # sends Vercel's Protection Bypass for Automation secret, repository secret
+  # `VERCEL_AUTOMATION_BYPASS_SECRET`. Without it the job passes, but with a
+  # warning annotation and a summary entry saying production was not checked.
+  #
+  # `db: "ok"` is what `/api/sync` reports after `select 1`: this proves the
+  # connection, not that migrations were applied ("migrate first, then merge").
+  #
+  # The repository guard keeps the hoodieshq fork's pushes to its own `master`
+  # from waiting for a deployment that does not exist.
+  smoke:
+    name: smoke
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'solana-foundation/solana-playground'
+    runs-on: ubuntu-latest
+    # 30 minutes of waiting for the deployment, one for the probe. A build
+    # without a cache does not finish inside Vercel's own limit
+    # (deploy-client-vercel.md, "Deploy"), so the wait is generous.
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      deployments: read
+    steps:
+      - name: Check the bypass secret is set
+        id: gate
+        env:
+          SMOKE_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          if [ -n "$SMOKE_BYPASS_SECRET" ]; then
+            echo "armed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::smoke skipped: repository secret VERCEL_AUTOMATION_BYPASS_SECRET is not set, so production's database was NOT checked"
+            echo "### Smoke SKIPPED: VERCEL_AUTOMATION_BYPASS_SECRET is not set; production's database was not checked" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        if: steps.gate.outputs.armed == 'true'
+        with:
+          sparse-checkout: |
+            client-v2/scripts/smoke-sync.mjs
+            client-v2/scripts/wait-for-production-deployment.sh
+            client-v2/.nvmrc
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        if: steps.gate.outputs.armed == 'true'
+        with:
+          node-version-file: client-v2/.nvmrc
+
+      # client-v2/scripts/wait-for-production-deployment.sh says which
+      # states end the wait and how; it writes the deployment's URL as `url`.
+      - name: Wait for the commit's production deployment
+        id: deployment
+        if: steps.gate.outputs.armed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: client-v2/scripts/wait-for-production-deployment.sh
+
+      # Names the URL and the body in the log and the run summary.
+      - name: Probe GET /api/sync
+        if: steps.gate.outputs.armed == 'true'
+        run: node client-v2/scripts/smoke-sync.mjs "$DEPLOYMENT_URL"
+        env:
+          DEPLOYMENT_URL: ${{ steps.deployment.outputs.url }}
+          SMOKE_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
   # The status context the default branch's ruleset names (`client-v2`).
   # It sees only the called workflow's conclusion, which counts a skipped
   # job as success, so the `gate` job of `reusable-client-v2.yml` fails that

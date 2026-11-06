@@ -164,6 +164,10 @@ To pick up only changed **server-side** variables (anything `api/*.mjs` reads), 
 
 `--archive=tgz` is not optional. The prebuilt output is about 16k files and the upload API rejects more than 15000 (`files should NOT have more than 15000 items`), so the tree goes up as a single tarball.
 
+### Smoke test after a push to `master`
+
+The `smoke` job of `client-v2.yml` runs on every push to `master` in `solana-foundation/solana-playground` and fails unless that commit's production deployment answers `{"enabled":true,"db":"ok"}` on `GET /api/sync`, so a database production cannot reach is a red run, not users staying local unnoticed. It reads the commit's `Production` deployment from the GitHub deployments API, where the Vercel GitHub app records it (no Vercel token), waits up to 30 minutes for a `success` status, and probes that deployment's own URL with `scripts/smoke-sync.mjs <url>`, which you can run by hand against any URL (set `SMOKE_BYPASS_SECRET` for a protected one). A failed probe names the URL and the body in the log and the run summary; a failed or timed-out deployment names the commit and Vercel's log URL. The deployment's URL is behind Deployment Protection, so the job sends Vercel's Protection Bypass for Automation secret from the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`; without it the job passes with a warning and a summary entry saying production was not checked.
+
 ## Build cache
 
 Three caches, one per part of the install:
