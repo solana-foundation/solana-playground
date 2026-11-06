@@ -486,11 +486,15 @@ curl -s http://localhost:8080/deploy/<uuid> | head -c 4 | od -c
 
 Use a minimal native program for `lib.rs`: `solana_program::entrypoint!` with a handler that returns `Ok(())`.
 
+A server started with `PG_API_KEY` set refuses both requests, and every `/unstable` route, without the key: add `-H "x-api-key: $PG_API_KEY"` to
+each `curl` (HOO-2422). A local profile leaves it unset.
+
 Expect:
 
 - [ ] the build returns `200` with JSON: `uuid` is a string, `idl` is `null` (a native program), and `stderr` holds no
       `error`.
 - [ ] `/deploy/<uuid>` returns the program binary: its first bytes print as `177   E   L   F`.
+- [ ] with `PG_API_KEY` set, the same `curl` without the header returns `401`, and `/share/<id>` still answers.
 
 ## 4. Static assets: default `.rs` files and templates
 

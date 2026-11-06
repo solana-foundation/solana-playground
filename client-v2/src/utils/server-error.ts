@@ -1,3 +1,5 @@
+import { SIGNED_OUT_REASON } from "@/features/auth";
+
 /** `PgServerError.body` when the refusal's body could not be read */
 export const UNREADABLE_BODY = "<unreadable response body>";
 
@@ -8,6 +10,11 @@ interface PgServerErrorInit {
   status: number | undefined;
   body: string;
   cause?: unknown;
+  /**
+   * What `/api/build-server` said when it refused: the words to show, and
+   * why, e.g. `"signed-out"`. Absent for the build server's own errors.
+   */
+  refusal?: { error: string; reason?: string };
 }
 
 /**
@@ -21,16 +28,26 @@ export class PgServerError extends Error {
   readonly url: string;
   readonly status: number | undefined;
   readonly body: string;
+  /** Why `/api/build-server` refused, when it said, e.g. `"signed-out"` */
+  readonly reason?: string;
+  /**
+   * A refusal for sign-in names something the person can do, so the
+   * terminal prints it as a plain line rather than a process error
+   */
+  readonly isPlain: boolean;
 
   constructor(init: PgServerErrorInit) {
     super(
-      `Server request failed (${init.url}): ${init.body}`,
+      init.refusal?.error ??
+        `Server request failed (${init.url}): ${init.body}`,
       "cause" in init ? { cause: init.cause } : undefined
     );
     this.name = "PgServerError";
     this.url = init.url;
     this.status = init.status;
     this.body = init.body;
+    this.reason = init.refusal?.reason;
+    this.isPlain = this.reason === SIGNED_OUT_REASON;
   }
 
   /**

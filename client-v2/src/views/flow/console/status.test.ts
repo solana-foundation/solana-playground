@@ -50,6 +50,20 @@ describe("describeConsoleStatus", () => {
     buildOutput.PgBuildOutput.latest = null;
   });
 
+  it("asks for sign-in, in the normal colour, after a refused build", () => {
+    expect(
+      describeConsoleStatus(
+        state({
+          build: "upcoming",
+          buildFailure: {
+            kind: "signed-out",
+            message: "Sign in with GitHub to build.",
+          },
+        })
+      )
+    ).toEqual({ text: "Sign in to build", tone: "idle" });
+  });
+
   it("is blank before the first build", () => {
     expect(describeConsoleStatus(state({}))).toEqual({
       text: "",

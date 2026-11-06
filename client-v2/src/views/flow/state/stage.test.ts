@@ -52,6 +52,7 @@ import type { FlowEvent } from "./stage";
 import {
   countErrors,
   INITIAL_FLOW_STATE,
+  isSignInRefusal,
   PgFlow,
   STAGES,
   stagesOf,
@@ -289,6 +290,91 @@ describe("PgFlow.reduce, a stopped run", () => {
     expect(s.build).toBe("done");
     expect(s.buildMs).toBe(3000);
     expect(s.stopped).toBe("build");
+  });
+
+  // HOO-2422: a refusal to build for a signed-out user is not a failed build
+  it("a build refused for sign-in goes back to the last settled build", () => {
+    const rebuilding = PgFlow.reduce(builtOnce(), {
+      type: "build-start",
+      at: 9,
+    });
+
+    const s = PgFlow.reduce(rebuilding, {
+      type: "build-finish",
+      failed: true,
+      errorCount: 0,
+      ms: 40,
+      failure: { kind: "signed-out", message: "Sign in with GitHub to build." },
+    });
+
+    expect(s.build).toBe("done");
+    expect(s.buildSettled).toBe("done");
+    expect(s.buildMs).toBe(3000);
+    expect(s.buildFailure).toEqual({
+      kind: "signed-out",
+      message: "Sign in with GitHub to build.",
+    });
+  });
+
+  const refusedOnce = () =>
+    PgFlow.reduce(PgFlow.reduce(builtOnce(), { type: "build-start", at: 9 }), {
+      type: "build-finish",
+      failed: true,
+      errorCount: 0,
+      ms: 40,
+      failure: { kind: "signed-out", message: "Sign in with GitHub to build." },
+    });
+
+  it("a new build drops the sign-in refusal", () => {
+    const s = PgFlow.reduce(refusedOnce(), { type: "build-start", at: 20 });
+
+    expect(s.buildFailure).toBeNull();
+    expect(isSignInRefusal(s.buildFailure)).toBe(false);
+  });
+
+  it("signing in drops the sign-in refusal", () => {
+    const s = PgFlow.reduce(refusedOnce(), { type: "signed-in" });
+
+    expect(s.buildFailure).toBeNull();
+    expect(s.build).toBe("done");
+  });
+
+  it("signing in leaves any other failure alone", () => {
+    const failed = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "build-finish",
+      failed: true,
+      errorCount: 0,
+      ms: 1,
+      failure: { kind: "no-answer", message: "Failed to fetch" },
+    });
+
+    expect(PgFlow.reduce(failed, { type: "signed-in" })).toBe(failed);
+  });
+
+  it("a deploy whose build was refused for sign-in did not fail", () => {
+    const deploying = PgFlow.reduce(
+      PgFlow.reduce(builtOnce(), { type: "deploy-start" }),
+      {
+        type: "build-finish",
+        failed: true,
+        errorCount: 0,
+        ms: 40,
+        failure: {
+          kind: "signed-out",
+          message: "Sign in with GitHub to build.",
+        },
+      }
+    );
+
+    const s = PgFlow.reduce(deploying, {
+      type: "deploy-finish",
+      ok: false,
+      signInRefused: true,
+    });
+
+    expect(s.deploy).toBe("active");
+    expect(s.stage).toBe("build");
+    expect(isSignInRefusal(s.buildFailure)).toBe(true);
   });
 
   it("a stopped first build goes back to upcoming", () => {
@@ -1188,5 +1274,29 @@ describe("PgFlow, a deploy run outside the deploy command", () => {
     expect(PgFlow.state.stage).toBe("write");
     PgFlow.deployFinished(true);
     expect(PgFlow.state.stage).toBe("write");
+  });
+});
+
+describe("buildFailureOf", () => {
+  it("reads the route's sign-in refusal (HOO-2422)", async () => {
+    const { buildFailureOf } = await import("./stage");
+    expect(
+      buildFailureOf(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          answered: true,
+          reason: "signed-out",
+        })
+      )
+    ).toEqual({
+      kind: "signed-out",
+      message: "Sign in with GitHub to build.",
+    });
+  });
+
+  it("keeps any other answered failure as other", async () => {
+    const { buildFailureOf } = await import("./stage");
+    expect(
+      buildFailureOf(Object.assign(new Error("boom"), { answered: true }))
+    ).toEqual({ kind: "other", message: "boom" });
   });
 });

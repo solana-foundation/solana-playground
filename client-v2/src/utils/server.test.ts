@@ -49,6 +49,55 @@ describe("PgServer routes", () => {
     expect(Array.from(bytes)).toEqual([1, 2, 3]);
   });
 
+  it("sends the route the project a build belongs to", async () => {
+    settings.server.endpoint = "/api/build-server";
+    try {
+      respond({ stderr: "", uuid: "u" });
+      await PgServer.build({
+        files: [],
+        project: { id: "p1", name: "hello" },
+      });
+
+      expect(JSON.parse(requestInit().body as string).project).toEqual({
+        id: "p1",
+        name: "hello",
+      });
+    } finally {
+      settings.server.endpoint = "http://server.test";
+    }
+  });
+
+  it("keeps the project from a server other than the route", async () => {
+    respond({ stderr: "", uuid: "u" });
+    await PgServer.build({ files: [], project: { id: "p1", name: "hello" } });
+
+    expect(JSON.parse(requestInit().body as string)).not.toHaveProperty(
+      "project"
+    );
+  });
+
+  it("sends shares to the share server while builds go through the route", async () => {
+    settings.server.endpoint = "/api/build-server";
+    try {
+      respond("share-id");
+      await PgServer.shareNew({ explorer: { files: {} } });
+      expect(requestedUrl()).toBe("https://api.solpg.io/new");
+    } finally {
+      settings.server.endpoint = "http://server.test";
+    }
+  });
+
+  it("reaches a route on this origin given as a path", async () => {
+    settings.server.endpoint = "/api/build-server";
+    try {
+      respond({ stderr: "", uuid: "u" });
+      await PgServer.build({ files: [] });
+      expect(requestedUrl()).toBe("/api/build-server/build");
+    } finally {
+      settings.server.endpoint = "http://server.test";
+    }
+  });
+
   // The server in this tree has no such routes; a client that still asked
   // for them would be a scheduled break against any server built from it
   it("has no packages or types routes any more", () => {
@@ -133,5 +182,49 @@ describe("PgServer refusals with an unreadable body", () => {
 
     expect(error.cause).toBe(offline);
     expect(error.body).toBe("Failed to fetch");
+  });
+});
+
+describe("a refusal", () => {
+  const refuse = (status: number, text: string) =>
+    mockFetch.mockResolvedValue({ ok: false, status, text: async () => text });
+
+  it("carries the route's sign-in reason and words", async () => {
+    refuse(
+      401,
+      JSON.stringify({
+        error: "Sign in with GitHub to build.",
+        reason: "signed-out",
+      })
+    );
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(PgServerError);
+    expect(error).toMatchObject({
+      answered: true,
+      reason: "signed-out",
+      message: "Sign in with GitHub to build.",
+    });
+  });
+
+  it("shows the route's words for a refusal with no reason", async () => {
+    refuse(503, JSON.stringify({ error: "Sign-in is unavailable right now." }));
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error.message).toBe("Sign-in is unavailable right now.");
+    expect(error.reason).toBeUndefined();
+  });
+
+  it("keeps a plain-text error as it was, with no reason", async () => {
+    refuse(500, "Invalid UUID");
+
+    const error = await PgServer.build({ files: [] }).catch((e) => e);
+
+    expect(error.reason).toBeUndefined();
+    expect(error.message).toBe(
+      "Server request failed (http://server.test/build): Invalid UUID"
+    );
   });
 });

@@ -1,5 +1,6 @@
 import { markFailureShown } from "@/shared/lib/report-button-failure";
 
+import { isSignInRefusal } from "../state/sign-in-refusal";
 import { PgFlow } from "../state/stage";
 
 /**
@@ -34,4 +35,8 @@ export const markIfToldByStage = (
   error: unknown
 ) => {
   if (PgFlow.state[stage] === "failed") markFailureShown(error);
+  // A refusal for sign-in leaves Build as it was, and its surface says so
+  if (stage === "build" && isSignInRefusal(PgFlow.state.buildFailure)) {
+    markFailureShown(error);
+  }
 };
