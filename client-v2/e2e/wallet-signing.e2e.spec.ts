@@ -234,6 +234,31 @@ test.describe("wallet-signing in the sandbox", () => {
     await runFor(page)("run", /landed: true received: 1000000/);
   });
 
+  // The spl-token-vault tutorial's `keypairIdentity(pg.wallet.keypair)` and
+  // a Metaplex signer input; Playnet has no token program, so the system
+  // program stands in for the tutorial's token calls
+  test("wallet-signing: Metaplex with pg.wallet.keypair", async ({
+    context,
+    page,
+  }) => {
+    const { writeClient } = await seedPlaynetProject(context, page);
+    await writeClient(
+      [
+        'import { keypairIdentity, Metaplex, sol } from "@metaplex-foundation/js";',
+        clientWith([
+          "const metaplex = new Metaplex(pg.connection).use(keypairIdentity(pg.wallet.keypair));",
+          'console.log("identity:", metaplex.identity().publicKey.equals(pg.wallet.publicKey));',
+          "const { response } = await metaplex.system().transferSol({ from: pg.wallet.keypair, to, amount: sol(0.001) });",
+          "const sig = response.signature;",
+          REPORT,
+        ]),
+      ].join("\n")
+    );
+
+    await runFor(page)("run", /landed: true received: 1000000/);
+    await expect(terminalRows(page)).toContainText("identity: true");
+  });
+
   // Not on Playnet, whose `sendTransaction` reads legacy transactions only
   // (`PgSerde.serializeTx`): an RPC stub takes the bytes as they leave
   test("wallet-signing: A v0 transaction signed with pg.wallet.keypair", async ({
