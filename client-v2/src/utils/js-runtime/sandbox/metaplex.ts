@@ -11,6 +11,23 @@ const pageSignerFor = (sign: SignThroughPage) => (keypair: SandboxKeypair) => ({
   ...signerMethodsWith(sign)(keypair.publicKey),
 });
 
+/** How deep in an operation's input a sandbox keypair is looked for */
+const SWAP_DEPTH = 4;
+
+/** Whether a value is an object literal, not an instance of a class */
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (typeof value !== "object" || value === null) return false;
+  const proto: unknown = Object.getPrototypeOf(value);
+  // eslint-disable-next-line unicorn/no-null -- `getPrototypeOf` returns null for `Object.create(null)`
+  return proto === Object.prototype || proto === null;
+};
+
+/** Whether a value is Metaplex's `OperationClient` class */
+const isOperationClient = (value: unknown) =>
+  typeof value === "function" &&
+  typeof (value as { prototype?: { execute?: unknown } }).prototype?.execute ===
+    "function";
+
 /** Whether `OperationClient.prototype.execute` already swaps sandbox keypairs */
 const SWAPS_KEYPAIRS = Symbol("pg.swapsKeypairs");
 
@@ -21,8 +38,10 @@ const SWAPS_KEYPAIRS = Symbol("pg.swapsKeypairs");
  * keypair from a wallet by whether `secretKey` is set. So `keypairIdentity`
  * of a sandbox keypair is `walletAdapterIdentity` of a signer the page signs
  * for, and every operation's input and options get that signer in place of a
- * sandbox keypair, so it is signed for the way a wallet is. Keypairs that
- * hold their key, and reading `secretKey` directly, are left as they are.
+ * sandbox keypair, so it is signed for the way a wallet is, nested in
+ * arrays and object literals too (`creators: [{ authority }]`). Keypairs
+ * that hold their key, and reading `secretKey` directly, are left as they
+ * are.
  *
  * Covers `metaplex.<module>().<operation>(...)`; a transaction builder
  * signed outside `OperationClient.execute` is not covered.
@@ -32,18 +51,32 @@ const SWAPS_KEYPAIRS = Symbol("pg.swapsKeypairs");
  */
 export const metaplexFor =
   (sign: SignThroughPage) => (pkg: Record<string, unknown>) => {
-    const swap = (value: unknown) =>
-      isSandboxKeypair(value) ? pageSignerFor(sign)(value) : value;
-    const swapFields = (fields: unknown) => {
-      if (typeof fields !== "object" || fields === null) return fields;
-      return Object.fromEntries(
-        Object.entries(fields).map(([key, value]) => [
-          key,
-          Array.isArray(value) ? value.map(swap) : swap(value),
-        ])
-      );
-    };
+    /**
+     * The value with every sandbox keypair in it swapped, through arrays and
+     * plain objects (`creators: [{ authority }]`) to `depth` levels; class
+     * instances (a `PublicKey`, a `BN`) are left as they are
+     */
+    const swapWithin =
+      (depth: number) =>
+      (value: unknown): unknown => {
+        if (isSandboxKeypair(value)) return pageSignerFor(sign)(value);
+        if (depth === 0) return value;
+        if (Array.isArray(value)) return value.map(swapWithin(depth - 1));
+        if (!isPlainObject(value)) return value;
+        return Object.fromEntries(
+          Object.entries(value).map(([key, field]) => [
+            key,
+            swapWithin(depth - 1)(field),
+          ])
+        );
+      };
+    const swapFields = swapWithin(SWAP_DEPTH);
 
+    if (!isOperationClient(pkg.OperationClient)) {
+      throw new Error(
+        "Playground's Metaplex support does not know this @metaplex-foundation/js: it has no OperationClient"
+      );
+    }
     const { prototype } = pkg.OperationClient as {
       prototype: {
         execute: (
@@ -174,7 +207,9 @@ if (import.meta.vitest) {
       const input = await metaplex.operations().execute(
         operation({
           authority: keypair,
-          creators: [keypair],
+          creators: [
+            { address: keypair.publicKey, share: 100, authority: keypair },
+          ],
           other: real,
           amount: 1,
         })
@@ -182,12 +217,13 @@ if (import.meta.vitest) {
 
       const { authority, creators, other, amount } = input as {
         authority: Signer;
-        creators: Signer[];
+        creators: Array<{ authority: Signer; share: number }>;
         other: Signer;
         amount: number;
       };
       expect(isIdentitySigner(authority)).toBe(true);
-      expect(isIdentitySigner(creators[0])).toBe(true);
+      expect(isIdentitySigner(creators[0].authority)).toBe(true);
+      expect(creators[0].share).toBe(100);
       expect(isKeypairSigner(other)).toBe(true);
       expect(amount).toBe(1);
     });
