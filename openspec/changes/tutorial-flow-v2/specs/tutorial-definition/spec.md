@@ -60,7 +60,7 @@ Lumberjack's, is recognised too. Text fields SHALL accept the inline Markdown th
 conversation renders: inline code, emphasis and links. A text MAY carry a
 shorter phone variant.
 
-#### Scenario: Hello Anchor as the proof
+#### Scenario: Hello Anchor as the proof (manual)
 
 - **WHEN** `client-v2/src/tutorials/hello-anchor/tutorial.json` is loaded
 - **THEN** it validates against the schema
@@ -91,7 +91,7 @@ SHALL reject:
 
 `yarn run check` SHALL run it.
 
-#### Scenario: A missing reason
+#### Scenario: A missing reason (manual)
 
 - **WHEN** a definition's second step has a question whose option 2 is wrong
   and has no reason
@@ -99,7 +99,7 @@ SHALL reject:
   `steps[1].beats[3].why[2]: a wrong option needs a reason, found null`
 - **AND** it exits with code 1
 
-#### Scenario: A block the target does not hold
+#### Scenario: A block the target does not hold (manual)
 
 - **WHEN** a question's block is not part of its step's target file
 - **THEN** the check names the beat's path and the file, and exits with code 1
@@ -121,13 +121,13 @@ fails validation in a running app SHALL not be listed. It SHALL be reported
 once through the logger with its slug and its first error, and SHALL emit
 `tutorial_definition_rejected`.
 
-#### Scenario: Hello Anchor half done
+#### Scenario: Hello Anchor half done (manual)
 
 - **WHEN** the learner has passed two of Hello Anchor's four steps
 - **THEN** its card reads "2 of 4"
 - **AND** the Start here banner offers "Continue · Step 3 of 4"
 
-#### Scenario: A broken definition in a build
+#### Scenario: A broken definition in a build (manual)
 
 - **WHEN** a definition fails validation at load
 - **THEN** the catalog lists the other tutorials and not that one
@@ -158,7 +158,7 @@ admin panel and no upload service. It SHALL cover:
 A definition written by following it, and passing the check, SHALL open and
 run in the conversation with no code change.
 
-#### Scenario: A new definition needs no code
+#### Scenario: A new definition needs no code (manual)
 
 - **WHEN** an agent adds `client-v2/src/tutorials/<slug>/tutorial.json` and
   its files by the instruction, and the check passes
@@ -173,7 +173,7 @@ drops a definition. Its parameters:
 - `tutorial`: the slug;
 - `errors`: the number of errors, an integer from 1.
 
-#### Scenario: Counting a rejection
+#### Scenario: Counting a rejection (manual)
 
 - **WHEN** a definition with two schema errors is loaded
 - **THEN** one `tutorial_definition_rejected` reaches the memory provider
@@ -189,7 +189,7 @@ is drawn as a record. An act whose result card stands right under it is not
 drawn, as `tutorial-conversation` says, and its record line goes unseen. Without
 one the card SHALL read its default record.
 
-#### Scenario: Zero Copy's create card
+#### Scenario: Zero Copy's create card (manual)
 
 - **WHEN** the act `init_map` with record "Created your map · 10 KB" lands and
   another turn stands between it and its result

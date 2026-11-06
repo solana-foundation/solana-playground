@@ -23,13 +23,13 @@ myself". A refusal that does not meet the step's goal SHALL stay a failure,
 explained as any other. The call act, the client run and the Call panel SHALL
 pass the same goal, and a confirmed call SHALL pass no `refused` goal.
 
-#### Scenario: Out of energy
+#### Scenario: Out of energy (manual)
 
 - **WHEN** on Lumberjack's step 3 a chop is refused with `NotEnoughEnergy`
   6000
 - **THEN** step 3 passes and its win follows
 
-#### Scenario: Out of memory, not too big
+#### Scenario: Out of memory, not too big (manual)
 
 - **WHEN** on Zero Copy's step 2, whose goal is `refused` on `grow` with the
   pattern `out of memory`, a grow is refused because it added more than
@@ -42,12 +42,12 @@ pass the same goal, and a confirmed call SHALL pass no `refused` goal.
 
 After a run or call landed, the runner SHALL read the account the act's `account` names from among those the run wrote to, and save its address, size in bytes and scalar fields with the result. A read that fails SHALL be reported and leave the result without a reading; the run still landed.
 
-#### Scenario: A chop lands
+#### Scenario: A chop lands (manual)
 
 - **WHEN** a `chop_tree` act with a player view lands
 - **THEN** its result holds the player's address, size and `energy`, `wood` and `lastLogin` as strings
 
-#### Scenario: The read fails
+#### Scenario: The read fails (manual)
 
 - **WHEN** the chain does not answer the read
 - **THEN** the run's result is still ok and the failure is reported

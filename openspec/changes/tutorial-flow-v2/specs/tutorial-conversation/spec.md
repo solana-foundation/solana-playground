@@ -56,7 +56,7 @@ the feed, the Call panel (`tutorial-workspace`) and the editor are the only
 places that act: a call there, or the key line typed, can pass a step or
 resolve a question.
 
-#### Scenario: Records keep no buttons
+#### Scenario: Records keep no buttons (manual)
 
 - **WHEN** step 1 has passed and the learner scrolls back to it
 - **THEN** its result cards read "Build successful" with no button to run it
@@ -90,7 +90,7 @@ reads "Back to step n", or "Back to the start" before Start, with an arrow
 toward the card. A click SHALL scroll to the live card and focus its first
 control. After the finish there SHALL be no pill.
 
-#### Scenario: Jumping back from step 3
+#### Scenario: Jumping back from step 3 (manual)
 
 - **WHEN** the learner is on step 3 and clicks the step bar's first segment
 - **THEN** the feed lands on the "Step 1 of 4" divider, `lib.rs` opens at the
@@ -171,7 +171,7 @@ back as it was entered: its files as the step starts them, a file the step
 creates taken away, and its beats played again from the first, so the
 learner sees what they saw on entering it.
 
-#### Scenario: Created client.ts
+#### Scenario: Created client.ts (manual)
 
 - **WHEN** Hello Anchor's step 3 starts
 - **THEN** a wrote card reads "Created client/client.ts"
@@ -201,14 +201,14 @@ definition's label ("Deploy to devnet"), and "Build and deploy" when the
 program changed since the last build, in which case it builds first. "n of
 m" counts every stage the run shows.
 
-#### Scenario: Deploy stages
+#### Scenario: Deploy stages (manual)
 
 - **WHEN** the learner presses ⌘↵ on "Deploy to devnet"
 - **THEN** the card shows the deploy's stages in order with "1 of 4" to
   "4 of 4"
 - **AND** a result card follows when the deploy lands or fails
 
-#### Scenario: Funding and a build first
+#### Scenario: Funding and a build first (manual)
 
 - **WHEN** the wallet is short and `lib.rs` changed since the last build, and
   the learner presses "Build and deploy"
@@ -341,12 +341,12 @@ assistant MAY link one of the tutorial's doc pages in its answer (see
 `tutorial-workspace`). The feed SHALL be `role="log"` with
 `aria-live="polite"`.
 
-#### Scenario: A free question
+#### Scenario: A free question (manual)
 
 - **WHEN** in step 1 the learner types "what does declare_id do?"
 - **THEN** the assistant answers in the feed, and no file changes
 
-#### Scenario: A question before Start
+#### Scenario: A question before Start (manual)
 
 - **WHEN** a learner on the intro card types "what is a PDA?"
 - **THEN** the composer reads as at any other moment, with the placeholder
@@ -366,13 +366,13 @@ assistant MAY link one of the tutorial's doc pages in its answer (see
 - **THEN** the menu opens and the assistant's turn ends by inviting them to begin
 - **AND** the composer suggests starting, whether or not the assistant wrote it
 
-#### Scenario: Typed "I'm stuck"
+#### Scenario: Typed "I'm stuck" (manual)
 
 - **WHEN** a question is open and the learner types "I'm stuck"
 - **THEN** the assistant calls its Hint tool and the question's hint posts
 - **AND** the question stays open
 
-#### Scenario: Change what hello says
+#### Scenario: Change what hello says (manual)
 
 - **WHEN** after the finish the learner asks to make hello say "Once upon a
   time on devnet"
@@ -405,7 +405,7 @@ chat head's ⋯ menu SHALL confirm, then return to the intro card and the
 preview. The assistant's thread is kept, and the feed shows only the
 exchanges after the restart.
 
-#### Scenario: Reload in step 3
+#### Scenario: Reload in step 3 (manual)
 
 - **WHEN** the learner reloads on step 3 with the question open
 - **THEN** the feed opens on that question with every earlier card as its
@@ -478,13 +478,13 @@ The tutorial slice SHALL emit:
 
 The text of the question is never sent.
 
-#### Scenario: Counting a retry
+#### Scenario: Counting a retry (manual)
 
 - **WHEN** the learner picks a wrong option, then the right one
 - **THEN** one `tutorial_question_answered` reaches the memory provider with
   `result: "retry"` and `attempts: 2`
 
-#### Scenario: Counting a jump back
+#### Scenario: Counting a jump back (manual)
 
 - **WHEN** on step 3 the learner clicks the step bar's first segment, then
   the "Back to step 3" pill

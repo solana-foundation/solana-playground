@@ -28,7 +28,7 @@ SHALL show:
 Before Start, the "Start step 1" button SHALL take the composer's place, under
 the thumb.
 
-#### Scenario: Same path, same questions
+#### Scenario: Same path, same questions (manual)
 
 - **WHEN** Hello Anchor runs to step 3 on a 390 px phone and on a 1440 px
   desktop
@@ -61,7 +61,7 @@ Other differences from the desktop:
   of its own (Almaz's phone prototype, 2 Nov); the header then reads
   "Done · n of n" and Code's dot no longer shows.
 
-#### Scenario: The assistant wrote, seen from Chat
+#### Scenario: The assistant wrote, seen from Chat (manual)
 
 - **WHEN** a right pick writes lines while Chat is open
 - **THEN** the wrote card shows the first lines in the feed and Code gets its
@@ -76,7 +76,7 @@ it myself". A win card SHALL have no "Open Call". The Call panel SHALL open
 as a sheet over the code from Code's head, with the same form, results and
 step passing as the desktop's panel.
 
-#### Scenario: Passing step 3 on a phone
+#### Scenario: Passing step 3 on a phone (manual)
 
 - **WHEN** after the deploy the learner opens Call from Code and calls `hello`
 - **THEN** the sheet shows the result and the chat's step 3 win follows
@@ -93,7 +93,7 @@ the phone moves between its spaces, with `space` (`chat` or `code`) and `via`:
 - `doc`: a doc page opened from a link;
 - `step`: a step picked in the steps sheet.
 
-#### Scenario: Show in a file
+#### Scenario: Show in a file (manual)
 
 - **WHEN** the learner presses "Show in lib.rs" from Chat
 - **THEN** `tutorial_frame_space_changed` reaches the memory provider with

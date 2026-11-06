@@ -19,13 +19,13 @@ one of:
 error that has neither a name nor a code, an instruction no step's target
 defines, and a log pattern that is not a regular expression, each at its path.
 
-#### Scenario: Lumberjack's step 3 as a definition
+#### Scenario: Lumberjack's step 3 as a definition (manual)
 
 - **WHEN** a step's goal is `refused` with instruction `chop_tree` and error
   `NotEnoughEnergy` 6000
 - **THEN** `yarn tutorial:check` accepts it
 
-#### Scenario: A refused goal that says nothing
+#### Scenario: A refused goal that says nothing (manual)
 
 - **WHEN** a step's goal is `refused` with an instruction and no error and no
   log
@@ -45,14 +45,14 @@ Each argument of a call act SHALL be one of:
 `yarn tutorial:check` SHALL reject an argument named twice on one act and an
 amount to add on a value that is not a whole number.
 
-#### Scenario: Paint's fixed values
+#### Scenario: Paint's fixed values (manual)
 
 - **WHEN** a call act on `paint` gives `text` the value `"gm"` and `at` the
   value `35000`
 - **THEN** pressing it sends `text` = `gm` and `at` = `35000`, with no field
   on the card
 
-#### Scenario: Grow's growing size
+#### Scenario: Grow's growing size (manual)
 
 - **WHEN** a call act on `grow` gives `len` the value `20480` and adds `10240`
 - **THEN** its first run sends `20480`, and after that run lands the next
@@ -65,7 +65,7 @@ An act beat MAY carry its record line, which the card SHALL read once its run
 landed, before the time it took ("Created your map · 10 KB"). Without one the
 card SHALL read its default record.
 
-#### Scenario: Zero Copy's create card
+#### Scenario: Zero Copy's create card (manual)
 
 - **WHEN** the act `init_map` with record "Created your map · 10 KB" lands
 - **THEN** its record reads "Created your map · 10 KB" followed by its time
@@ -84,20 +84,20 @@ the step's target. A block absent from its `ref` SHALL fail at the block's
 path, and a block that appears in its `ref` more than once SHALL fail at the
 `ref`'s path.
 
-#### Scenario: Lumberjack's broken accounts struct
+#### Scenario: Lumberjack's broken accounts struct (manual)
 
 - **WHEN** a step's write gives `InitPlayer` without `system_program`, a
   block its step's target does not hold, with a `ref` that holds it once
 - **THEN** `yarn tutorial:check` accepts it
 - **AND** the block lands in `lib.rs` where the `ref` has it, not at the end
 
-#### Scenario: Zero Copy's fix replaces a broken line
+#### Scenario: Zero Copy's fix replaces a broken line (manual)
 
 - **WHEN** a question's write gives the boxed `board` field with `ref` the
   fixed file and `start` the broken build
 - **THEN** a right pick replaces the unboxed `board` line in place
 
-#### Scenario: A ref that holds the block twice
+#### Scenario: A ref that holds the block twice (manual)
 
 - **WHEN** a write's `ref` holds its block's lines twice
 - **THEN** `yarn tutorial:check` fails and names the write's `ref`
@@ -106,12 +106,12 @@ path, and a block that appears in its `ref` more than once SHALL fail at the
 
 A `run` or `call` act MAY carry `account`: a `player` view (`name`, `energy`, `wood`, `max`, optional `refill: { seconds, from }`) or a `memory` view (`name`, `capacity`, optional `zero`). `yarn tutorial:check` SHALL refuse `account` on any other act.
 
-#### Scenario: An account on a build
+#### Scenario: An account on a build (manual)
 
 - **WHEN** a `build` act carries `account`
 - **THEN** the check fails naming that act's path
 
-#### Scenario: A chop act with a player view
+#### Scenario: A chop act with a player view (manual)
 
 - **WHEN** a `call` act names `{ "kind": "player", "name": "player", "energy": "energy", "wood": "wood", "max": 5 }`
 - **THEN** the check passes

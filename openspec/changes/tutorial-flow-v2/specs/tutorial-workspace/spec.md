@@ -24,7 +24,7 @@ focused handle takes the arrow keys (16 px, 64 with Shift), Home and End, and
 a double click resets it. A picked width SHALL be kept on the device until
 it is reset. The column order SHALL not be swappable.
 
-#### Scenario: Widths at 1440
+#### Scenario: Widths at 1440 (manual)
 
 - **WHEN** a tutorial is open in a 1440 × 900 window
 - **THEN** the rail is 52 px, the chat column 421 px and the workspace fills
@@ -88,7 +88,7 @@ toggle, a chevron button with `aria-label="Files"` and `aria-expanded`. The
 Call button SHALL carry a dot on its first appearance, and again once when the
 IDL changes.
 
-#### Scenario: The head after step 3
+#### Scenario: The head after step 3 (manual)
 
 - **WHEN** step 3 has started
 - **THEN** the head shows the tabs `lib.rs` and `client.ts`, then Call, Files
@@ -138,7 +138,7 @@ Every file SHALL stay editable, except the intro preview and the files the
 definition marks read only. Under reduced motion the lines SHALL show at their
 resting state with no animation.
 
-#### Scenario: The landing line
+#### Scenario: The landing line (manual)
 
 - **WHEN** Hello Anchor's first question is open
 - **THEN** `lib.rs` line 5 shows "Your answer lands here" with the landing
@@ -160,7 +160,7 @@ popover, and Esc closes it and returns focus to the toggle. A pin SHALL dock
 the tree as a 220 px column left of the editor. The pin is hidden under
 1100 px of workspace, and the docked state is saved with the tutorial.
 
-#### Scenario: From client.ts back to lib.rs
+#### Scenario: From client.ts back to lib.rs (manual)
 
 - **WHEN** on step 3 the learner opens the tree from `client.ts` and picks
   `lib.rs`
@@ -183,7 +183,7 @@ from 120 px to 60 % of the workspace. The drawer SHALL open by itself on a
 failed build and the first deploy, and otherwise stay as the learner left it.
 The first client run SHALL open it too, once the run act lands (section 4).
 
-#### Scenario: The first deploy opens the terminal
+#### Scenario: The first deploy opens the terminal (manual)
 
 - **WHEN** the first deploy of a tutorial lands
 - **THEN** the drawer opens with the deploy's log
@@ -239,14 +239,14 @@ card in the feed: the step's win follows when the call passes a goal. A result
 SHALL hide once the IDL's shape changes. Before any deploy there SHALL be no
 Call button.
 
-#### Scenario: The upgrade adds a field
+#### Scenario: The upgrade adds a field (manual)
 
 - **WHEN** step 4's build and deploy lands
 - **THEN** the `hello` form shows `name string` with "New", and the Call
   button's dot shows once
 - **AND** typing `name: String` in `lib.rs` before that upgrade adds no field
 
-#### Scenario: A deploy outside the cards
+#### Scenario: A deploy outside the cards (manual)
 
 - **WHEN** the learner adds an argument, builds, and runs `deploy` in the
   terminal (or deploys from the explorer's menu or through the assistant), and
@@ -256,7 +256,7 @@ Call button.
 - **AND** a deploy that finished on another cluster, or after a switch to
   another workspace, leaves the panel as it was
 
-#### Scenario: Several instructions
+#### Scenario: Several instructions (manual)
 
 - **WHEN** a program has three instructions and the live step's goal calls
   the second, and the learner opens the Call panel
@@ -280,7 +280,7 @@ Call button.
 None of them SHALL fire while focus is in a text field, except ⌘B, ⌘E and
 ⌘J. Off a Mac, Ctrl E in the terminal SHALL stay the shell's end of line.
 
-#### Scenario: Typing a digit in the composer
+#### Scenario: Typing a digit in the composer (manual)
 
 - **WHEN** a question is open and the learner types "1" in the composer
 - **THEN** the composer holds "1" and no option is picked
