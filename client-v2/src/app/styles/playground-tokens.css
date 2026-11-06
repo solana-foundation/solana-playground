@@ -19,7 +19,7 @@
   /* ── shadcn semantic tokens, paper ─────────────────────────────────── */
   --background: #ffffff;
   --foreground: #151515;
-  --card: #f7f6f3;
+  --card: #f4f4f5;
   --card-foreground: #151515;
   --popover: #ffffff;
   --popover-foreground: #151515;
@@ -33,10 +33,12 @@
   --secondary: #f2f2f3;
   --secondary-foreground: #151515;
   --muted: #f2f2f3;
-  --muted-foreground: #6b6b72;
+  --muted-foreground: #52525b;
   --accent: #ececee;
   --accent-foreground: #151515;
-  --destructive: #dc2626;
+  /* destructive is words first (buttons, menus, field errors), so it
+     takes the error ink rather than the fill */
+  --destructive: #b42318;
   --border: #e4e4e7;
   --input: #d4d4d8;
   --ring: #9945ff;
@@ -58,28 +60,41 @@
   --sidebar-ring: #9945ff;
 
   /* ── Playground surfaces and text ──────────────────────────────────── */
+  /* every text tier reaches 4.5:1 on the grounds text sits on, base up to
+     raised (DES-130, 5 Nov 2026). Tertiary #6e6e76 is 4.52:1 on raised and
+     4.28 on hover, kept light so it stays a step below secondary; comment
+     stays a shade darker, since code is read on the well. muted-foreground
+     is secondary, as in the dark block. Card,
+     surface and well were a warm paper (#f7f6f3) among cool greys; they
+     take the cool ramp's step between panel and raised */
   --surface-base: #ffffff;
   --surface-panel: #fafafa;
-  --surface: #f7f6f3;
+  --surface: #f4f4f5;
   --surface-raised: #f2f2f3;
   --surface-hover: #ececee;
-  --surface-well: #f7f6f3;
+  --surface-well: #f4f4f5;
   --frosted: rgb(255 255 255 / 0.82);
   --text-primary: #151515;
-  --text-secondary: #5c5c63;
-  --text-tertiary: #8b8b93;
+  --text-secondary: #52525b;
+  --text-tertiary: #6e6e76;
   --border-strong: #d4d4d8;
 
   /* ── status ─────────────────────────────────────────────────────────── */
+  /* the fills stay bright for dots, checks and tints, which carry no words
+     (#00a36c is under 3:1 on surface, raised and hover). Words take the -ink shade, dark enough for 4.5:1 on the colour's own
+     /12 tint up to raised (DES-130, 5 Nov 2026) */
   --success: #00a36c;
   --success-foreground: #ffffff;
+  --success-ink: #067052;
   --warning: #b45309;
   --warning-foreground: #ffffff;
   --warning-ink: #92400e;
   --info: #0284c7;
   --info-foreground: #ffffff;
+  --info-ink: #036596;
   --error: #dc2626;
   --error-foreground: #ffffff;
+  --error-ink: #b42318;
 
   /* ── the two tracks ─────────────────────────────────────────────────── */
   --track-brand: #00a36c;
@@ -88,11 +103,21 @@
   /* ── syntax: VS Code's six roles and plain text, dark enough for paper */
   --syntax-keyword: #be185d;
   --syntax-type: #0369a1;
-  --syntax-function: #047857;
-  --syntax-string: #ad4f08;
+  --syntax-function: #046c4e;
+  --syntax-string: #a14a07;
   --syntax-number: #6d28d9;
-  --syntax-comment: #6b6b72;
+  --syntax-comment: #66666e;
   --syntax-plain: #27272a;
+
+  /* ── elevation on paper: the dark's black shadows read as smudges here,
+     so a soft cool grey at a fraction of their strength ─────────────── */
+  --shadow-panel-value: 0 8px 24px rgb(20 20 30 / 0.1),
+    0 1px 2px rgb(20 20 30 / 0.06);
+  --shadow-modal-value: 0 24px 56px rgb(20 20 30 / 0.16);
+  --shadow-thumb-value: 0 1px 2px rgb(20 20 30 / 0.16);
+  --shadow-sheet-value: 0 -12px 32px rgb(20 20 30 / 0.12);
+  --shadow-composer-value: 0 1px 2px rgb(20 20 30 / 0.05),
+    0 10px 30px -18px rgb(20 20 30 / 0.3);
 }
 
 .dark {
@@ -161,14 +186,17 @@
   /* ── status: Solana's green for success, and nothing else uses them ── */
   --success: #14f195;
   --success-foreground: #08080a;
+  --success-ink: #14f195;
   --warning: #facc15;
   --warning-foreground: #08080a;
   /* the warning's own yellow for its text too, as the tutorial draws it */
   --warning-ink: #facc15;
   --info: #38bdf8;
   --info-foreground: #08080a;
+  --info-ink: #38bdf8;
   --error: #f87171;
   --error-foreground: #08080a;
+  --error-ink: #f87171;
 
   --track-brand: #14f195;
   --track-product: #ae7bff;
@@ -182,6 +210,14 @@
   --syntax-number: #a78bfa;
   --syntax-comment: #93939c;
   --syntax-plain: #e4e4e7;
+
+  /* ── elevation ──────────────────────────────────────────────────────── */
+  --shadow-panel-value: 0 8px 28px rgb(0 0 0 / 0.45);
+  --shadow-modal-value: 0 24px 64px rgb(0 0 0 / 0.6);
+  --shadow-thumb-value: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-sheet-value: 0 -12px 40px rgb(0 0 0 / 0.45);
+  --shadow-composer-value: inset 0 1px 0 rgb(255 255 255 / 0.02),
+    0 10px 30px -18px rgb(0 0 0 / 0.8);
 }
 
 /* Tokens that read the same on both grounds */
@@ -240,14 +276,8 @@
   --phone-row: 52px;
   --target: 48px;
 
-  /* ── elevation ──────────────────────────────────────────────────────── */
-  --shadow-panel-value: 0 8px 28px rgb(0 0 0 / 0.45);
-  --shadow-modal-value: 0 24px 64px rgb(0 0 0 / 0.6);
+  /* ── elevation: the glow and the backdrop, the shadows sit per ground ─ */
   --shadow-glow-value: 0 0 0 10px rgb(153 69 255 / 0.12);
-  --shadow-thumb-value: 0 1px 2px rgb(0 0 0 / 0.3);
-  --shadow-sheet-value: 0 -12px 40px rgb(0 0 0 / 0.45);
-  --shadow-composer-value: inset 0 1px 0 rgb(255 255 255 / 0.02),
-    0 10px 30px -18px rgb(0 0 0 / 0.8);
   --backdrop: rgb(8 8 9 / 0.62);
 
   /* ── motion ─────────────────────────────────────────────────────────── */
