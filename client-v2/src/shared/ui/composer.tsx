@@ -165,8 +165,9 @@ function ComposerInput({
   );
 }
 
-/* The model, effort and Send. 8 px in, so a ghost button's icon (10 px in
-   its own padding) lands on the input's 18 px text edge */
+/* The +, the model, effort and Send. 8 px in, so a ghost button's icon (10 px
+   in its own padding) lands on the input's 18 px text edge; the +'s icon,
+   centred in its 32 px button, sits at 16 (24 in the 48 px phone button) */
 function ComposerToolbar({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
