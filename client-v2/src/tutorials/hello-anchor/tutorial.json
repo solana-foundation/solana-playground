@@ -124,7 +124,7 @@
             "block": "#[derive(Accounts)]\npub struct Hello {}"
           },
           "key": "struct Hello {}",
-          "typed": "That's the struct. `#[derive(Accounts)]` is what tells Anchor it lists accounts, so I've put it on the line above."
+          "typed": "That's the line that fixes it: `#[derive(Accounts)]` tells Anchor the struct under it lists accounts. I've put the empty `Hello` under it."
         },
         {
           "kind": "act",
@@ -152,7 +152,7 @@
       "title": "Build & Deploy",
       "short": "Deploy",
       "objective": "Deploy the program to devnet",
-      "learned": "Deploying a program to devnet from your wallet",
+      "learned": "Deploying with free devnet SOL",
       "file": "src/lib.rs",
       "start": {
         "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n"
@@ -164,7 +164,7 @@
         {
           "kind": "say",
           "id": "s2.why",
-          "text": "Right now your program is only a build: Playground compiled it, but nobody can call it yet. Deploying uploads it to devnet, Solana's public test network, where anyone can call it. Your Playground wallet pays in devnet SOL, which has no value. Before you press Deploy, a guess."
+          "text": "Right now your program is only a build: Playground compiled it, but nobody can call it yet. Deploying uploads it to devnet, Solana's public test network, where anyone can call it. It costs devnet SOL, test money with no value. When your wallet runs low, Playground asks the devnet faucet for more, and if the faucet is busy you can get some at faucet.solana.com. Before you press Deploy, a guess."
         },
         {
           "kind": "ask",
@@ -206,7 +206,7 @@
         "line": "Its IDL also gave you the Call panel: a form for every instruction. You'll use it in a moment.",
         "extra": "openTest"
       },
-      "explain": "Deploying puts your built program on devnet, Solana's public test network, at an address of its own: the program id. Your Playground wallet pays in devnet SOL. Press Deploy and wait for the id."
+      "explain": "Deploying puts your built program on devnet, Solana's public test network, at an address of its own: the program id. It's paid from your Playground wallet in free devnet SOL. Press Deploy and wait for the id."
     },
     {
       "id": "call-client",
@@ -267,7 +267,7 @@
           "act": "run",
           "say": "Run it and watch what comes back.",
           "title": "Run client.ts",
-          "context": "Sends one transaction to devnet from your wallet",
+          "context": "Sends one transaction to devnet · fee from your wallet",
           "button": "Run"
         }
       ],
@@ -347,7 +347,7 @@
           "act": "call",
           "say": "Now call it with your name. Here, or in the Call panel, where `name` just showed up.",
           "title": "Call hello",
-          "context": "Sends hello with your name from your wallet",
+          "context": "Sends hello with your name · fee from your wallet",
           "button": "Call hello",
           "call": {
             "instruction": "hello",
@@ -374,7 +374,7 @@
     "line": "Your greeting came back from devnet in a transaction your wallet signed.",
     "learned": [
       "Declaring a program and its instructions",
-      "Deploying a program to devnet from your wallet",
+      "Deploying with free devnet SOL",
       "Calling a program from TypeScript",
       "Passing arguments to an instruction"
     ],
@@ -387,6 +387,10 @@
         "label": "What should I build next?",
         "answer": "Counter PDA Tutorial is a good next one: it stores a number on chain and changes it, so you meet accounts for real.",
         "follow": "nextTutorial"
+      },
+      {
+        "label": "What is devnet SOL?",
+        "answer": "Devnet is Solana's public test network. Its SOL is free and worth nothing, so you can deploy and call as much as you like. When your wallet runs low, Playground asks the devnet faucet for more; if the faucet is busy, get some yourself at faucet.solana.com."
       }
     ],
     "next": "counter-pda-tutorial"

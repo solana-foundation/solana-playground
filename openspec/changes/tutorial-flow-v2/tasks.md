@@ -172,7 +172,10 @@ for; tasks with "after nothing" start at once.
 - [ ] 6.2 Hello Anchor on the real flow: the wallet copy of `tutorial-runs`,
       the log patterns and goals tuned on the build server and devnet, a full
       run by hand. Verify: the check passes and a full run lands every win
-      (HOO-2361; Natalia; S 1; after 1.2, 4.1, 4.2, 4.3)
+      (HOO-2361; Natalia; S 1; after 1.2, 4.1, 4.2, 4.3). The copy has landed;
+      the full run by hand and any tuning it calls for happen on
+      `scope/tutorial-flow`, which ticks this line (Slava, 6 Nov). Plan:
+      [plans/6.2-hello-anchor.md](plans/6.2-hello-anchor.md)
 - [ ] 6.3 Lumberjack (Intermediate) as a definition from Almaz's script.
       Verify: the check passes; a full run on devnet (HOO-2362; Natalia;
       M 1.5; after 1.2 and Almaz's script, due Fri 30 Oct)

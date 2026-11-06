@@ -3941,7 +3941,7 @@ if (import.meta.vitest) {
           },
         ]);
         expect(
-          reduce(ctx(), finished, { type: "chip", index: 2, at: 13000 }).state
+          reduce(ctx(), finished, { type: "chip", index: 3, at: 13000 }).state
         ).toBe(finished);
       });
 
