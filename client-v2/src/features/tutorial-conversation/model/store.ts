@@ -793,6 +793,10 @@ export class PgConversation {
         await carryOut(effect);
         continue;
       }
+      // In flight from the moment it is queued, not when it starts: a Keep it
+      // pressed while it waits behind another write would settle the card as
+      // kept and the Apply would still change the line
+      if (effect.kind === "apply") PgConversation._applying.add(effect.id);
       // One file effect at a time across actions: a restore queued by Start
       // over lands after a write already in flight, never under it
       await PgConversation._queueFileEffect(async () => {

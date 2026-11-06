@@ -1467,6 +1467,38 @@ describe("PgConversation's composer", () => {
     expect(named("tutorial_change_applied")).toHaveLength(1);
   });
 
+  it("ignores Keep it while an Apply waits behind another file write", async () => {
+    const files = memoryWorkspace({ "src/lib.rs": "a\nold\nc" });
+    let release: () => void = () => {};
+    let held = false;
+    const workspace: Workspace = {
+      // The first read is Start's scripted write: it waits for the test
+      read: async (path, name) => {
+        if (!held) {
+          held = true;
+          await new Promise<void>((r) => {
+            release = r;
+          });
+        }
+        return files.read(path, name);
+      },
+      write: files.write,
+      remove: files.remove,
+    };
+    open(NAME, { workspace });
+    await settle();
+    PgConversation.start();
+    await settle();
+    expect(held).toBe(true);
+    propose();
+    PgConversation.apply("p1");
+    PgConversation.keep("p1");
+    expect(proposal().state).toBe("open");
+    release();
+    await settle();
+    expect(proposal().state).not.toBe("kept");
+  });
+
   it("refuses an Apply once the learner changed the line, and writes nothing", async () => {
     const workspace = memoryWorkspace({ "src/lib.rs": "a\nmine\nc" });
     open(NAME, { workspace });
