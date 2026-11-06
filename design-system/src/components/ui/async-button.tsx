@@ -1,4 +1,5 @@
 import * as React from "react"
+import { cn } from "@/lib/utils"
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
@@ -18,6 +19,7 @@ function AsyncButton({
   loading: loadingProp,
   loadingText,
   disabled,
+  className,
   children,
   ...props
 }: Omit<
@@ -41,6 +43,8 @@ function AsyncButton({
       data-loading={loading || undefined}
       aria-busy={loading || undefined}
       disabled={disabled || loading}
+      /* Busy is not unavailable: it keeps its colour, the spinner says wait */
+      className={cn("data-loading:disabled:opacity-100", className)}
       onClick={async (event) => {
         try {
           const result = onClick?.(event)

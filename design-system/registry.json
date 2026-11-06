@@ -478,7 +478,8 @@
       "registryDependencies": [
         "@playground/button",
         "@playground/spinner",
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
