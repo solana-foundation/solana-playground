@@ -244,7 +244,9 @@ describe("app/ShareGistDialog", () => {
       cancel: () => {},
     }));
     // The account menu's sign-in, its popup still open
-    void PgSession.signIn().catch(() => {});
+    void PgSession.signIn().catch(() => {
+      // Never answered: the reset after the test drops the flow
+    });
 
     await open();
 
