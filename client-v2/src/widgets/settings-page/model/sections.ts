@@ -73,10 +73,11 @@ export interface RowCopy {
 /**
  * Every setting's designed row, in page order within its section (Spec 07,
  * "Settings copy"). The network itself is the Network section's chips, so
- * `connection.endpoint` has no row of its own.
+ * `connection.endpoint` has no row of its own: its key is present, its value
+ * `undefined`, as against a setting nobody designed, which has no key.
  */
-export const ROWS: Record<string, RowCopy | null> = {
-  "connection.endpoint": null,
+export const ROWS: Record<string, RowCopy | undefined> = {
+  "connection.endpoint": undefined,
   "blockExplorer.name": {
     section: "network",
     label: "Block explorer",
@@ -190,7 +191,7 @@ export const settingRows = <S extends Groupable>(
   const sorted = [...all].sort((a, b) => position(a.id) - position(b.id));
   for (const setting of sorted) {
     let copy = ROWS[setting.id];
-    if (copy === null) continue;
+    if (copy === undefined && setting.id in ROWS) continue;
     if (!copy) {
       if (!reported.has(setting.id)) {
         reported.add(setting.id);
