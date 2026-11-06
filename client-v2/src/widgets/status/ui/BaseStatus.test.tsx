@@ -573,6 +573,38 @@ it("puts Try again and Change network on the sheet's network row, and keeps the 
   expect(onOpenChange).not.toHaveBeenCalledWith(false);
 });
 
+it("keeps the focus on the sheet's row once its Try again is answered", async () => {
+  const props = {
+    open: true,
+    onOpenChange: vi.fn(),
+    onAction: vi.fn(),
+    onRetry: vi.fn(() => Promise.resolve()),
+  };
+  const before = [DOWN, AI_OFF, STARTING];
+  const { rerender } = render(
+    <BaseStatusChip
+      chip={chipOf(before, true)}
+      indicators={before}
+      {...props}
+    />
+  );
+  const sheet = await screen.findByRole("dialog", { name: "Status" });
+  const row = () =>
+    sheet.querySelector('[data-status="network"]') as HTMLElement;
+  await userEvent.click(
+    within(row()).getByRole("button", { name: "Try again" })
+  );
+
+  const after = [UP, AI_OFF, STARTING];
+  rerender(
+    <BaseStatusChip chip={chipOf(after, true)} indicators={after} {...props} />
+  );
+
+  await vi.waitFor(() =>
+    expect(row().contains(document.activeElement)).toBe(true)
+  );
+});
+
 it("closes the panel when its action is picked", async () => {
   drawRow([DOWN, AI_OFF, STARTING]);
   await userEvent.click(
