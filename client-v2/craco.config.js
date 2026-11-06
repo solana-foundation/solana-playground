@@ -520,17 +520,48 @@ module.exports = {
 
     // Serve `api/*.mjs` from the dev server itself, so local API work needs
     // neither `vercel dev` (which wants a login and team access) nor a second
-    // process. Wrapping CRA's hook rather than using `setupMiddlewares`:
-    // webpack-dev-server 4 throws if both are set, and CRA sets this one.
+    // process. Wrapping CRA's hook, which `toDevServer5` then translates.
     const onBefore = devServerConfig.onBeforeSetupMiddleware;
     devServerConfig.onBeforeSetupMiddleware = (devServer) => {
       onBefore?.(devServer);
       devServer.app.use("/api", serveApiRoute);
     };
 
-    return devServerConfig;
+    return toDevServer5(devServerConfig);
   },
 };
+
+/**
+ * CRA 5's webpack-dev-server 4 options, as the webpack-dev-server 5 the
+ * resolutions install accepts them (its schema rejects the 4-only keys).
+ */
+const toDevServer5 = ({
+  onBeforeSetupMiddleware,
+  onAfterSetupMiddleware,
+  https,
+  ...config
+}) => ({
+  ...config,
+  // 5 also overlays runtime errors, over the page, by default; CRA's 4.8 did not
+  client: {
+    ...config.client,
+    overlay: { ...config.client?.overlay, runtimeErrors: false },
+  },
+  server: https
+    ? { type: "https", options: https === true ? {} : https }
+    : "http",
+  setupMiddlewares: (middlewares, devServer) => {
+    // react-scripts' start.js stops the server with `close()`, which 5 renamed `stop()`
+    devServer.close = () => devServer.stop();
+    // `app.use` here runs before the built-in middlewares, as the 4 hook did
+    onBeforeSetupMiddleware?.(devServer);
+    // The 4 hook ran after them: its `app.use` calls join the end of the list
+    onAfterSetupMiddleware?.({
+      app: { use: (middleware) => middlewares.push(middleware) },
+    });
+    return middlewares;
+  },
+});
 
 /** Real asset-repo dates captured by `make update-static`; see that script */
 const TUTORIAL_TIMESTAMPS = (() => {
