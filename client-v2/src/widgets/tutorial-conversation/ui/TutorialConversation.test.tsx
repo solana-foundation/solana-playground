@@ -68,7 +68,9 @@ vi.mock("@/features/tutorial-conversation", async () => ({
 }));
 const session = vi.hoisted(() => ({
   user: undefined as { login: string } | undefined,
-  signIn: vi.fn(async () => {}),
+  signIn: vi.fn<(from: string, scopes: string[]) => Promise<void>>(
+    async () => {}
+  ),
   refresh: vi.fn(async () => {}),
 }));
 vi.mock("@/features/auth", () => ({
