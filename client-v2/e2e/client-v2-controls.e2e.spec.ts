@@ -92,11 +92,10 @@ test.describe("client-v2-controls", () => {
   test("client-v2-controls: A setting select", async ({ seededPage: page }) => {
     await editorTookFocus(page);
     await page.locator("[data-settings-trigger]").first().click();
-    const row = page
-      .locator('[aria-label="Settings"]')
-      .locator("span", { hasText: /^Theme$/ })
-      .locator("xpath=../..");
-    await row.getByRole("combobox").focus();
+    const theme = page
+      .getByRole("region", { name: "Settings" })
+      .getByRole("combobox", { name: "Theme" });
+    await theme.focus();
     await page.keyboard.press("ArrowDown");
 
     const light = page.getByRole("option", { name: "Light", exact: true });
@@ -116,7 +115,7 @@ test.describe("client-v2-controls", () => {
     await page.keyboard.press("Escape");
     await expect(light).toBeHidden();
     await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
-    await row.getByRole("combobox").focus();
+    await theme.focus();
     await page.keyboard.press("ArrowDown");
 
     // The list opens on the chosen theme, Dark; Light is the next option

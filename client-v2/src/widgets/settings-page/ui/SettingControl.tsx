@@ -1,7 +1,7 @@
 import { FC, useMemo } from "react";
 
 import { useRenderOnChange } from "@/hooks";
-import { Checkbox } from "@/shared/ui/checkbox";
+import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import {
   Select,
   SelectContent,
@@ -11,19 +11,67 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
+import { Switch } from "@/shared/ui/switch";
 import { PgCommon, PgView, RequiredKey, Setting as SettingType } from "@/utils";
 import { CustomSetting } from "@/views/flow/settings/CustomSetting";
 
-type SettingSetterProps = SettingType;
+type SettingSetterProps = SettingType & {
+  /** The control's id, which the row's label points at */
+  controlId?: string;
+  /** A few named choices side by side instead of a select */
+  segmented?: boolean;
+};
 
-/** The control that sets one setting: a select when it has values, else a checkbox */
+/**
+ * The control that sets one setting: a select when it has values (or a
+ * segmented control when asked), else a switch
+ */
 export const SettingControl: FC<
   React.PropsWithChildren<SettingSetterProps>
-> = ({ values, ...props }) => {
+> = ({ values, segmented, ...props }) => {
   useRenderOnChange(props.onChange);
+  if (values && segmented) {
+    return <SettingSetterSegmented values={values} {...props} />;
+  }
   if (values) return <SettingSetterSelect values={values} {...props} />;
-  return <SettingSetterCheckBox {...props} />;
+  return <SettingSetterSwitch {...props} />;
 };
+
+type SettingSetterSegmentedProps = RequiredKey<
+  Omit<SettingSetterProps, "segmented">,
+  "values"
+>;
+
+/** A setting with a few plain values, all in sight */
+const SettingSetterSegmented: FC<SettingSetterSegmentedProps> = ({
+  values,
+  name,
+  getValue,
+  setValue,
+}) => (
+  <Segmented
+    aria-label={name}
+    value={getValue()}
+    onValueChange={(v) => {
+      // A press on the current choice clears a toggle group; a setting keeps it
+      if (v) setValue(v);
+    }}
+  >
+    {PgCommon.callIfNeeded(values)
+      .map(convertValue)
+      .map((o) =>
+        isGroup(o) ? null : (
+          <SegmentedItem
+            key={o.value}
+            value={o.value}
+            className="max-md:h-11 max-md:px-4"
+          >
+            {o.label}
+          </SegmentedItem>
+        )
+      )}
+  </Segmented>
+);
 
 type SettingSetterSelectProps = RequiredKey<SettingSetterProps, "values">;
 
@@ -97,6 +145,7 @@ export const SettingSetterSelect: FC<
       }}
     >
       <SelectTrigger
+        id={setting.controlId}
         aria-label={setting.name}
         className="w-full max-md:text-body max-md:font-read max-md:data-[size=default]:h-12"
       >
@@ -152,14 +201,15 @@ const findOption = (entries: Entry[], v: unknown): Option | undefined => {
   }
 };
 
-type SettingSetterCheckBoxProps = Omit<SettingSetterProps, "values">;
+type SettingSetterSwitchProps = Omit<SettingSetterProps, "values">;
 
-const SettingSetterCheckBox: FC<
-  React.PropsWithChildren<SettingSetterCheckBoxProps>
-> = ({ name, getValue, setValue }) => (
-  <Checkbox
+const SettingSetterSwitch: FC<
+  React.PropsWithChildren<SettingSetterSwitchProps>
+> = ({ name, controlId, getValue, setValue }) => (
+  <Switch
+    id={controlId}
     aria-label={name}
     checked={getValue()}
-    onCheckedChange={(checked) => setValue(checked === true)}
+    onCheckedChange={setValue}
   />
 );

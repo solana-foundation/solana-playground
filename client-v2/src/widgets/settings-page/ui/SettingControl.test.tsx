@@ -146,7 +146,7 @@ describe("SettingSetterSelect", () => {
 });
 
 describe("an on/off setting", () => {
-  it("is a checkbox named by its setting, as the prototype draws it", async () => {
+  it("is a switch named by its setting", async () => {
     let on = true;
     const setValue = vi.fn((v: boolean) => {
       on = v;
@@ -162,9 +162,9 @@ describe("an on/off setting", () => {
       />
     );
 
-    const box = screen.getByRole("checkbox", { name: "Improve errors" });
+    const box = screen.getByRole("switch", { name: "Improve errors" });
     expect(box.getAttribute("aria-checked")).toBe("true");
-    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
     await userEvent.click(box);
     expect(setValue).toHaveBeenCalledWith(false);
   });

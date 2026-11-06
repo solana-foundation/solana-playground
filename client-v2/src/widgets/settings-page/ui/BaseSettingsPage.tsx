@@ -12,6 +12,10 @@ const log = createLogger("settings-page:frame");
 export interface SettingsSection {
   id: string;
   title: string;
+  /** One line under the title, on a wide window */
+  description?: string;
+  /** Beside the title in the section list */
+  icon?: ReactNode;
   content: ReactNode;
 }
 
@@ -134,7 +138,9 @@ const BaseSettingsPage = ({
       tabIndex={-1}
       className={cn(
         "text-foreground outline-none",
-        phone ? "text-base font-semibold" : "text-[1.375rem] font-medium"
+        phone
+          ? "text-title font-act"
+          : "mb-2 text-[1.375rem] leading-tight font-act"
       )}
     >
       Settings
@@ -152,11 +158,11 @@ const BaseSettingsPage = ({
     >
       {!phone && (
         <aside className="flex w-58 shrink-0 flex-col border-r border-border">
-          <div className="flex h-11 shrink-0 items-center border-b border-border px-2">
+          <div className="flex h-12 shrink-0 items-center border-b border-border px-3">
             <Button
               variant="ghost"
               size="sm"
-              className="font-sans text-caption font-normal text-muted-foreground"
+              className="-ml-1 font-sans text-caption font-normal text-muted-foreground hover:text-foreground"
               onClick={onBack}
             >
               <ChevronLeft data-icon="inline-start" />
@@ -165,17 +171,17 @@ const BaseSettingsPage = ({
           </div>
           <nav
             aria-label="Settings sections"
-            className="flex flex-col gap-0.5 overflow-y-auto p-2"
+            className="flex flex-col gap-px overflow-y-auto p-2"
           >
             {sections.map((s) => (
               <Button
                 key={s.id}
                 variant="ghost"
-                size="sm"
                 aria-current={s.id === current ? "true" : undefined}
-                className="justify-start font-sans text-caption font-normal text-muted-foreground aria-[current=true]:bg-accent aria-[current=true]:font-medium aria-[current=true]:text-accent-foreground"
+                className="group/nav justify-start gap-2.5 px-2.5 font-sans text-caption font-normal text-muted-foreground hover:bg-surface-hover hover:text-foreground aria-[current=true]:bg-surface-raised aria-[current=true]:font-act aria-[current=true]:text-foreground [&_svg]:text-subtle aria-[current=true]:[&_svg]:text-foreground"
                 onClick={() => pick(s.id)}
               >
+                {s.icon}
                 {s.title}
               </Button>
             ))}
@@ -210,8 +216,8 @@ const BaseSettingsPage = ({
         >
           <div
             className={cn(
-              "mx-auto flex max-w-xl flex-col",
-              phone ? "gap-8 px-5 py-6" : "gap-10 px-6 py-10"
+              "mx-auto flex w-full max-w-160 flex-col",
+              phone ? "gap-8 px-4 pt-4 pb-12" : "gap-12 px-6 pt-12 pb-24"
             )}
           >
             {!phone && title}
@@ -220,21 +226,28 @@ const BaseSettingsPage = ({
                 key={s.id}
                 data-section={s.id}
                 aria-labelledby={headingId(s.id)}
-                className="flex scroll-mt-6 flex-col gap-3"
+                className={cn(
+                  "flex scroll-mt-12 flex-col",
+                  phone ? "gap-2.5" : "gap-3"
+                )}
                 ref={(node) => {
                   if (node) nodes.current.set(s.id, node);
                   else nodes.current.delete(s.id);
                 }}
               >
-                <h2
-                  id={headingId(s.id)}
-                  className={cn(
-                    "border-b border-border pb-2 text-control font-medium text-foreground",
-                    phone && "text-title font-act"
+                <div className="flex flex-col gap-1">
+                  <h2
+                    id={headingId(s.id)}
+                    className="text-title font-act text-foreground"
+                  >
+                    {s.title}
+                  </h2>
+                  {!phone && s.description && (
+                    <p className="text-caption text-muted-foreground">
+                      {s.description}
+                    </p>
                   )}
-                >
-                  {s.title}
-                </h2>
+                </div>
                 {s.content}
               </section>
             ))}
