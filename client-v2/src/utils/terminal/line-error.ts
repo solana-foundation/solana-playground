@@ -54,6 +54,10 @@ export const lineTone = (error: unknown) =>
 const isTerminalLine = (error: unknown): error is TerminalLineError =>
   error instanceof TerminalLineError;
 
+/** An error that says it is its own line (`PgServerError.isPlain`) */
+const isPlainRefusal = (error: unknown): error is Error =>
+  error instanceof Error && (error as { isPlain?: unknown }).isPlain === true;
+
 /**
  * The line the terminal prints for a command that threw.
  *
@@ -63,6 +67,8 @@ const isTerminalLine = (error: unknown): error is TerminalLineError =>
  */
 export const processErrorLine = (error: unknown) => {
   if (isStopped(error) || isTerminalLine(error)) return error.message;
+  // A refusal the person can act on, such as signing in to build (HOO-2422)
+  if (isPlainRefusal(error)) return error.message;
   const message = error instanceof Error ? error.message : undefined;
   return `Process error: ${message || error}`;
 };
@@ -76,6 +82,15 @@ if (import.meta.vitest) {
       expect(processErrorLine(offline)).toBe("You're offline.");
       expect(lineTone(offline)).toBe("error");
       expect(offline).toBeInstanceOf(TerminalLineError);
+    });
+
+    it("prints a refusal that is its own line without the prefix", () => {
+      const refusal = Object.assign(
+        new Error("Sign in with GitHub to build."),
+        { isPlain: true }
+      );
+      expect(processErrorLine(refusal)).toBe("Sign in with GitHub to build.");
+      expect(processErrorLine(new Error("boom"))).toBe("Process error: boom");
     });
 
     it("gives any other failure no tone", () => {

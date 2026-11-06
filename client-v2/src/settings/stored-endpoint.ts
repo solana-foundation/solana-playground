@@ -4,7 +4,12 @@
 import type { Network } from "../constants/connection";
 import { Endpoint, NETWORKS } from "../constants/connection";
 import { SERVER_URL } from "../shared/config/client-env";
-import { FOUNDATION_ENDPOINT, LOCAL_ENDPOINT } from "./server/default-endpoint";
+import {
+  FOUNDATION_DIRECT_ENDPOINT,
+  FOUNDATION_ENDPOINT,
+  LOCAL_ENDPOINT,
+  throughRoute,
+} from "./server/default-endpoint";
 
 /** The settings whose value is an address */
 const ENDPOINT_SETTINGS = ["connection.endpoint", "server.endpoint"] as const;
@@ -70,7 +75,10 @@ export const buildEndpointOptions = (
   ],
 });
 
-const ENDPOINT_OPTIONS = buildEndpointOptions(NETWORKS, SERVER_URL);
+const ENDPOINT_OPTIONS = buildEndpointOptions(
+  NETWORKS,
+  throughRoute(SERVER_URL)
+);
 
 type State = Record<string, unknown>;
 
@@ -147,7 +155,9 @@ export const toStoredEndpoints = (
  * carry the user's own API token. Anything that is not an address (a
  * corrupted entry, a custom one whose URL does not parse) falls back to the
  * default too: the offered Devnet for the RPC, the default build server for
- * the server, so a broken profile still lands somewhere that works.
+ * the server, so a broken profile still lands somewhere that works. The
+ * Foundation's server's own host, which now refuses the browser, is read as
+ * the route in front of it, whether stored as a string or a custom address.
  *
  * @param stored the settings `localStorage` holds
  * @param defaults the default settings
@@ -161,15 +171,20 @@ export const fromStoredEndpoints = <T extends State>(
   ENDPOINT_SETTINGS.reduce(
     (acc, id) =>
       mapSetting(acc, id, (value) => {
+        const moved = (url: string) =>
+          id === "server.endpoint" ? throughRoute(url) : url;
         if (typeof value === "string") {
           // A plain string is either one of our addresses, read back as its
           // key resolves now (a public URL moves to the offered network), or
           // a custom one, kept as is when it parses as a URL
-          const ours = options[id].find((o) => o.url === value);
+          const url = moved(value);
+          const ours = options[id].find((o) => o.url === url);
           if (ours) {
-            return options[id].find((o) => o.key === ours.key)?.url ?? value;
+            return options[id].find((o) => o.key === ours.key)?.url ?? url;
           }
-          return isAddress(value) ? value : defaultOf(defaults, id);
+          return url !== value || isAddress(url)
+            ? url
+            : defaultOf(defaults, id);
         }
 
         const { option, url } = (isRecord(value) ? value : {}) as {
@@ -177,7 +192,7 @@ export const fromStoredEndpoints = <T extends State>(
           url?: unknown;
         };
         if (option === "custom") {
-          return isAddress(url) ? url : defaultOf(defaults, id);
+          return isAddress(url) ? moved(url) : defaultOf(defaults, id);
         }
 
         const known = options[id].find((o) => o.key === option);
@@ -434,6 +449,21 @@ if (import.meta.vitest) {
           option: "custom",
           url: "https://unknown.test/",
         });
+      });
+
+      it("moves the Foundation's own host, stored either way, onto the route", () => {
+        for (const value of [
+          FOUNDATION_DIRECT_ENDPOINT,
+          { option: "custom", url: `${FOUNDATION_DIRECT_ENDPOINT}/` },
+        ]) {
+          const stored = {
+            connection: defaults.connection,
+            server: { endpoint: value },
+            ui: defaults.ui,
+          };
+          const read = fromStoredEndpoints(stored, defaults, options);
+          expect(read.server.endpoint).toBe(FOUNDATION_ENDPOINT);
+        }
       });
 
       it("falls back to the default when a stored option is gone", () => {

@@ -10,6 +10,9 @@
   "functions": {
     "api/agent.mjs": {
       "maxDuration": 300
+    },
+    "api/build-server.mjs": {
+      "maxDuration": 300
     }
   },
   "headers": [
@@ -25,6 +28,10 @@
     {
       "source": "/api/auth/:authPath+",
       "destination": "/api/auth"
+    },
+    {
+      "source": "/api/build-server/:path+",
+      "destination": "/api/build-server"
     },
     {
       "source": "/api/ai/status",

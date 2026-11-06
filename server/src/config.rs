@@ -4,6 +4,8 @@ use anyhow::Result;
 use dotenv::dotenv;
 use solpg_server::SandboxLimits;
 
+use crate::middlewares::ApiKey;
+
 /// Server configuration
 #[derive(Debug)]
 pub struct Config {
@@ -21,6 +23,8 @@ pub struct Config {
     pub db_name: String,
     /// Maximum amount of concurrent builds
     pub build_concurrency: usize,
+    /// Key the build, deploy and unstable routes require in `x-api-key`, if any
+    pub api_key: Option<ApiKey>,
     /// Unstable build configuration
     pub unstable_build: BuildConfig,
     /// Unstable bundle configuration
@@ -49,6 +53,7 @@ impl Config {
             db_uri: get_env("DB_URI", "mongodb://localhost:27017"),
             db_name: get_env("DB_NAME", "solpg"),
             build_concurrency: get_env("BUILD_CONCURRENCY", 16usize),
+            api_key: get_env_raw("API_KEY").and_then(ApiKey::new),
             unstable_build: BuildConfig {
                 limits: Limits {
                     route: RouteLimits {

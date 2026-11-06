@@ -1,3 +1,4 @@
+import { PgSession, SIGNED_OUT_REASON } from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
 
 import { emptyFileOf } from "../../../commands/build/empty-source";
@@ -14,6 +15,7 @@ import {
   PgBuildOutput,
   stripKnownNoise,
 } from "../../sidebar/assistant/bridge/build-output";
+import { isSignInRefusal } from "./sign-in-refusal";
 
 const log = createLogger("flow:stage");
 
@@ -61,11 +63,14 @@ export interface FlowState {
 /**
  * A build that failed before the compiler said anything: `no-answer` when the
  * build server never replied (Spec 08's BUILD-04), `empty-source` when the
- * program file was empty and nothing was sent (Spec 09), `other` for anything
+ * program file was empty and nothing was sent (Spec 09), `signed-out` when
+ * `/api/build-server` asked for a GitHub sign-in (HOO-2422), `other` for anything
  * else (ANY-00). `message` is the command's own error, for the details.
  */
+export { isSignInRefusal } from "./sign-in-refusal";
+
 export type BuildFailure =
-  | { kind: "no-answer" | "other"; message: string }
+  | { kind: "no-answer" | "signed-out" | "other"; message: string }
   | { kind: "empty-source"; message: string; file: string };
 
 export type FlowEvent =
@@ -82,7 +87,14 @@ export type FlowEvent =
    * its settled status */
   | { type: "build-stop" }
   | { type: "deploy-start" }
-  | { type: "deploy-finish"; ok: boolean }
+  | {
+      type: "deploy-finish";
+      ok: boolean;
+      /** The build the deploy ran first was refused for sign-in (HOO-2422) */
+      signInRefused?: boolean;
+    }
+  /** Someone signed in: a refusal for sign-in no longer holds */
+  | { type: "signed-in" }
   /** The person stopped the deploy before its last step: the program on
    * chain is as it was, and the stage goes back to where it was */
   | { type: "deploy-stop" }
@@ -161,15 +173,18 @@ export const countErrors = (stderr: string) =>
  * PgServerError`: the flow's tests stand the utils barrel in with a
  * mock.
  */
-const buildFailureOf = (err: unknown): BuildFailure => {
-  const { answered, message } = (err ?? {}) as {
+export const buildFailureOf = (err: unknown): BuildFailure => {
+  const { answered, message, reason } = (err ?? {}) as {
     answered?: unknown;
     message?: unknown;
+    reason?: unknown;
   };
   const text = typeof message === "string" ? message : String(err);
   const emptyFile = emptyFileOf(err);
   if (emptyFile)
     return { kind: "empty-source", message: text, file: emptyFile };
+  if (reason === SIGNED_OUT_REASON)
+    return { kind: "signed-out", message: text };
   return { kind: answered === false ? "no-answer" : "other", message: text };
 };
 
@@ -211,6 +226,10 @@ export class PgFlow {
               ? state.buildStartedBefore
               : state.buildStartedAt,
           stopped: null,
+          // A refusal for sign-in is answered by this run, whatever it brings
+          buildFailure: isSignInRefusal(state.buildFailure)
+            ? INITIAL_FLOW_STATE.buildFailure
+            : state.buildFailure,
         };
       case "build-stop":
         if (state.build !== "running") return state;
@@ -221,6 +240,17 @@ export class PgFlow {
           stopped: "build",
         };
       case "build-finish":
+        // A refusal for sign-in is not a failed build: the stage goes back to
+        // where it was, as after a stop, and keeps the reason for the surface
+        if (isSignInRefusal(ev.failure)) {
+          return {
+            ...state,
+            stage: "build",
+            build: state.buildSettled,
+            buildStartedAt: state.buildStartedBefore,
+            buildFailure: ev.failure,
+          };
+        }
         return ev.failed
           ? {
               ...state,
@@ -263,6 +293,15 @@ export class PgFlow {
           stopped: state.stopped === "build" ? "build" : "deploy",
         };
       case "deploy-finish":
+        // The build it ran first asked for sign-in: the deploy never started,
+        // and Build, where the sign-in is, is where the person goes
+        if (ev.signInRefused) {
+          return {
+            ...state,
+            stage: "build",
+            deploy: state.deployBeforeRun ?? "active",
+          };
+        }
         return ev.ok
           ? {
               ...state,
@@ -275,6 +314,10 @@ export class PgFlow {
               stage: "deploy",
               deploy: "failed",
             };
+      case "signed-in":
+        return isSignInRefusal(state.buildFailure)
+          ? { ...state, buildFailure: INITIAL_FLOW_STATE.buildFailure }
+          : state;
       case "set-stage":
         return { ...state, stage: ev.stage };
       case "program":
@@ -378,7 +421,12 @@ export class PgFlow {
         PgFlow._dispatch({
           type: "deploy-finish",
           ok: !("err" in result),
+          signInRefused:
+            "err" in result && isSignInRefusal(buildFailureOf(result.err)),
         });
+      }),
+      PgSession.onDidChange(() => {
+        if (PgSession.get()) PgFlow._dispatch({ type: "signed-in" });
       }),
       PgExplorer.onDidSwitchWorkspace(() => {
         PgFlow._dispatch({ type: "workspace-change" });

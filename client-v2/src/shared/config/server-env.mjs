@@ -241,6 +241,28 @@ export const sourcesEnv = () => ({
 });
 
 /**
+ * The Solana Foundation's build server, which `/api/build-server` forwards to.
+ * The client's `FOUNDATION_DIRECT_ENDPOINT` names the same host; a test holds
+ * the two together.
+ */
+export const DEFAULT_BUILD_SERVER_URL =
+  "https://playground-server-dot-analytics-324114.de.r.appspot.com";
+
+/**
+ * Where `/api/build-server` forwards builds, and the key it proves itself
+ * with. The key is the build server's `PG_API_KEY`; unset, no header is sent,
+ * which a server without the check accepts.
+ */
+export const buildServerEnv = () => ({
+  URL: (read("PG_BUILD_SERVER_URL") || DEFAULT_BUILD_SERVER_URL).replace(
+    /\/+$/,
+    ""
+  ),
+  // A trailing newline pasted into a secret would never match the server's
+  API_KEY: read("PG_BUILD_SERVER_API_KEY")?.trim() || undefined,
+});
+
+/**
  * Postgres for sync, and its opt-in kill switch. `DB_PROVIDER` picks how the
  * pool is built (`model/providers/` in the persistence feature); each provider
  * reads only its own variables.

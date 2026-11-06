@@ -83,6 +83,8 @@ export interface BaseBuildProps {
   onOpenFile: (path: string) => void;
   /** Opens the console, where the terminal holds the whole output */
   onShowLog: () => void;
+  /** Signs in with GitHub, which the Foundation's server asks for, then builds */
+  onSignIn: () => unknown;
   /** The build's downloads (IDL, program binary), links under Build succeeded's pills */
   idlActions: ReactNode;
 }
@@ -266,6 +268,7 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
   if (p.failure?.kind === "empty-source") {
     return <EmptySource {...p} file={p.failure.file} />;
   }
+  if (p.failure?.kind === "signed-out") return <SignedOut {...p} />;
   const noAnswer = p.failure?.kind === "no-answer";
   return (
     // No duration: a build that never ran took no time worth naming. The
@@ -326,6 +329,30 @@ const EmptySource = (p: BaseBuildProps & { file: string }) => {
     />
   );
 };
+
+/**
+ * HOO-2422: the Solana Foundation's build server builds only for a signed-in
+ * GitHub user. Signing in is the one action, and builds again once it is
+ * done. Not a red error: nothing is wrong with the code.
+ */
+const SignedOut = (p: BaseBuildProps) => (
+  <Surface
+    title="Sign in with GitHub to build"
+    description="Builds run on Playground's build server, which needs a GitHub sign-in. Your code stays in this browser."
+    actions={
+      <BrandButton
+        onClick={() =>
+          Promise.resolve()
+            .then(p.onSignIn)
+            .catch(reportButtonFailure("sign in"))
+        }
+      >
+        Sign in with GitHub
+      </BrandButton>
+    }
+    progress={p}
+  />
+);
 
 /** What BUILD-04 keeps out of its first line: the server and the raw error */
 const Details = ({
