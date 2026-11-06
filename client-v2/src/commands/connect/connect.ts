@@ -64,8 +64,14 @@ export const connect = createCmd({
         break;
       }
 
-      case "unavailable":
-        throw new WalletUnavailableError();
+      case "unavailable": {
+        // Read it again, as Get set up's Try again does: once the list is
+        // dismissed or completed, this is the only way to retry
+        await PgWallet.refresh();
+        if (PgWallet.state === "unavailable") throw new WalletUnavailableError();
+        PgTerminal.println(PgTerminal.success("Wallet loaded."));
+        break;
+      }
 
       case "setup": {
         const { Setup } = await import("../../components/Wallet/Modals/Setup");
