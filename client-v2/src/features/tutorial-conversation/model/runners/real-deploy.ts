@@ -6,7 +6,10 @@ import { BpfLoaderUpgradeable } from "../../../../commands/deploy/bpf-loader-upg
 import { sendAndConfirmTxWithRetriesFor } from "../../../../commands/deploy/deploy";
 import type { Wallet } from "../../../../utils";
 import {
+  PgCommand,
   PgConnection,
+  PgExplorer,
+  PgGlobal,
   PgProgramInfo,
   PgServer,
   PgTerminal,
@@ -20,6 +23,7 @@ import { actRunner } from "./act-runner";
 import { runBuild } from "./build";
 import type { DeployPort, OnChain } from "./deploy";
 import { runDeploy } from "./deploy";
+import type { DeployWatchPort } from "./deploy-watch";
 import type { FundingChain } from "./fund";
 import { runOnDevnet } from "./real-run";
 import { deploySlotOf, landedDeploy, recogniseDeploy } from "./recognise";
@@ -382,3 +386,15 @@ export const tutorialRunner = actRunner(
     return recognised && withIdl(recognised);
   }
 );
+
+/** The deploy command and the open program, for `watchDeploys` */
+export const realDeployWatch = (): DeployWatchPort => ({
+  onDidStart: (cb) => PgCommand.deploy.onDidStart(() => cb()),
+  onDidFinish: (cb) => PgCommand.deploy.onDidFinish(cb),
+  // The command sets "ready" in its own `finally`, before `onDidFinish`
+  // fires; `PgDeployHistory.init` relies on the same order
+  isIdle: () => PgGlobal.deployState === "ready",
+  workspace: () => PgExplorer.currentWorkspaceName ?? undefined,
+  cluster: () => PgConnection.cluster ?? undefined,
+  idl: () => PgProgramInfo.idl ?? undefined,
+});

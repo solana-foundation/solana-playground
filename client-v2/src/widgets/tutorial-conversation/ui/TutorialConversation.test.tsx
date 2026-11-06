@@ -41,8 +41,11 @@ vi.mock("@/features/tutorial-conversation", async () => ({
     fixMyself: vi.fn(),
     next: vi.fn(),
     startOver: vi.fn(),
+    deployed: vi.fn(),
   },
   judgeGoal: "judgeGoal",
+  realDeployWatch: () => "realDeployWatch",
+  watchDeploys: vi.fn(() => ({ dispose: vi.fn() })),
   isUnreachable: (r: { act: string; ok: boolean; reason?: string }) =>
     r.act === "build" && !r.ok && r.reason === "unreachable",
   realWorkspace: "realWorkspace",
@@ -114,6 +117,7 @@ import { tutorialTelemetry } from "@/entities/tutorial/model/telemetry";
 import {
   PgConversation,
   tutorialRunner,
+  watchDeploys,
 } from "@/features/tutorial-conversation";
 import {
   markUnavailableHere,
@@ -298,6 +302,21 @@ describe("TutorialConversation", () => {
     });
     unmount();
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands a deploy from outside the cards to the engine, until it leaves", () => {
+    const stop = vi.fn();
+    vi.mocked(watchDeploys).mockReturnValueOnce({ dispose: stop });
+    const { unmount } = render(
+      <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+    );
+    const [onIdl, port] = vi.mocked(watchDeploys).mock.calls[0];
+    expect(port).toBe("realDeployWatch");
+    const idl = { version: "0.1.0", name: "p", instructions: [] };
+    onIdl(idl as never);
+    expect(PgConversation.deployed).toHaveBeenCalledWith(idl);
+    unmount();
+    expect(stop).toHaveBeenCalledTimes(1);
   });
 
   it("puts the live assistant in its tutorial mode while shown", () => {

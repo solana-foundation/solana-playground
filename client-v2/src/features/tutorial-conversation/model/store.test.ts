@@ -1228,6 +1228,25 @@ describe("PgCallPanel", () => {
     expect(PgCallPanel.dot).toBe(false);
   });
 
+  it("shows a terminal redeploy's instructions, and saves them", async () => {
+    await toDeployed();
+    PgCallPanel.show();
+    expect(PgCallPanel.view?.fields.map((f) => f.name)).toEqual([]);
+    PgCallPanel.close();
+
+    // The learner adds an argument, builds and types `deploy` in the terminal
+    PgConversation.deployed(helloIdl(["name"]));
+    await settle();
+    expect(PgCallPanel.dot).toBe(true);
+    PgCallPanel.show();
+    expect(PgCallPanel.view?.fields).toEqual([
+      expect.objectContaining({ name: "name", isNew: true }),
+    ]);
+    expect(
+      (file.conversation as { deployed?: { added: string[] } }).deployed?.added
+    ).toEqual(["hello.name"]);
+  });
+
   it("keeps the form when the step moves on, and drops a call from before Start over", async () => {
     const { run } = await toDeployed(helloIdl(["name"]));
     PgCallPanel.show();
