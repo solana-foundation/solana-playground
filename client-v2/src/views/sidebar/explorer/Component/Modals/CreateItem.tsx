@@ -114,8 +114,8 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
     <div
       ref={newFileRef}
       className="flex items-center py-1 [&>input]:ml-1.5 [&>input]:h-6!"
-      // The same step as the tree rows' indent (indentOf in Folders.tsx),
-      // so the input lines up with its siblings
+      // The tree rows' step (`indentOf` in Folders.tsx), so the input lines
+      // up with its siblings
       style={{ paddingLeft: `${depth * 1.375}rem` }}
     >
       <LangIcon path={itemName} />
