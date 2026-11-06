@@ -29,8 +29,8 @@ export interface BaseTutorialComposerProps {
   /** A chip pressed, by its index */
   onChip: (index: number) => void;
   /**
-   * Before Start: the box reads greyed until it takes focus, though it still
-   * takes a question or a start word
+   * Before Start: the box reads as at any other moment and takes a question
+   * or a start word; on the phone Start takes its place
    */
   waiting: boolean;
   /**
@@ -73,10 +73,10 @@ const usePressing = () => {
  * The chat column's one composer (spec "One composer; free questions go to
  * the live assistant"): never disabled, Enter sends, Shift+Enter breaks the
  * line, and ⌘↵ does nothing here, since in the column it presses the live
- * act. After the finish, the finish chips sit above it. Before Start it
- * reads greyed until focused, and once the assistant has answered, in
- * words or with a tool, it suggests starting, with "Start step 1"; both lift once the
- * lesson has begun (the designer's call, 3 Nov).
+ * act. After the finish, the finish chips sit above it. Before Start, once
+ * the assistant has answered, in words or with a tool, it suggests starting,
+ * with "Start step 1", and the suggestion lifts once the lesson has begun
+ * (the designer's call, 3 Nov; no grey before Start, Design alignment, 6 Nov).
  *
  * The prototype's chat field (`f7d42bf2e`, design audit of 3 Nov): one line
  * at rest, 44 px (46 below `md`) with a 22 px line and Send beside the words, so the lesson
@@ -168,10 +168,7 @@ const BaseTutorialComposer = ({
         }}
         data-open={open || undefined}
         data-waiting={waiting || undefined}
-        className={cn(
-          !open && "flex-row items-center",
-          waiting && "opacity-50 transition-opacity focus-within:opacity-100"
-        )}
+        className={cn(!open && "flex-row items-center")}
       >
         <ComposerInput
           // A 22 px line, not 15 × 1.5: 22.5 made the box half a pixel off.
