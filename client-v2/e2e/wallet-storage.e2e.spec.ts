@@ -4,6 +4,7 @@ import { Keypair } from "@solana/web3.js";
 import {
   expect,
   LONG,
+  openTerminal,
   runInTerminal,
   seedLocalWallet,
   seedWorkspace,
@@ -466,10 +467,7 @@ test("wallet-storage: The tab closes before a save lands", async ({
 
 /** Opens the console drawer and runs `connect`, which saves the wallet */
 const toggleConnection = async (page: Page) => {
-  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
-  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
-    await drawer.click();
-  }
+  await openTerminal(page);
   await runInTerminal(page, "connect");
 };
 
