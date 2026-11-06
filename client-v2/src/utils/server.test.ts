@@ -215,6 +215,7 @@ describe("a refusal", () => {
 
     expect(error.message).toBe("Sign-in is unavailable right now.");
     expect(error.reason).toBeUndefined();
+    expect(error.isPlain).toBe(false);
   });
 
   it("keeps a plain-text error as it was, with no reason", async () => {

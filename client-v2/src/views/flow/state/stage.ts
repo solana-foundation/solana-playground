@@ -17,6 +17,8 @@ import {
 } from "../../sidebar/assistant/bridge/build-output";
 import { isSignInRefusal } from "./sign-in-refusal";
 
+export { isSignInRefusal };
+
 const log = createLogger("flow:stage");
 
 export type Stage = "write" | "build" | "deploy" | "interact";
@@ -67,8 +69,6 @@ export interface FlowState {
  * `/api/build-server` asked for a GitHub sign-in (HOO-2422), `other` for anything
  * else (ANY-00). `message` is the command's own error, for the details.
  */
-export { isSignInRefusal } from "./sign-in-refusal";
-
 export type BuildFailure =
   | { kind: "no-answer" | "signed-out" | "other"; message: string }
   | { kind: "empty-source"; message: string; file: string };

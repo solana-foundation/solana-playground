@@ -5,7 +5,6 @@ import type { Network } from "../constants/connection";
 import { Endpoint, NETWORKS } from "../constants/connection";
 import { SERVER_URL } from "../shared/config/client-env";
 import {
-  FOUNDATION_DIRECT_ENDPOINT,
   FOUNDATION_ENDPOINT,
   LOCAL_ENDPOINT,
   throughRoute,
@@ -272,8 +271,11 @@ if (import.meta.vitest) {
   const { describe, it, expect, beforeAll } = import.meta.vitest;
   describe("settings/stored-endpoint", () => {
     let SERVER_ENDPOINT_OPTIONS: typeof import("./server/default-endpoint").SERVER_ENDPOINT_OPTIONS;
+    let FOUNDATION_DIRECT_ENDPOINT: typeof import("./server/default-endpoint").FOUNDATION_DIRECT_ENDPOINT;
     beforeAll(async () => {
-      ({ SERVER_ENDPOINT_OPTIONS } = await import("./server/default-endpoint"));
+      ({ SERVER_ENDPOINT_OPTIONS, FOUNDATION_DIRECT_ENDPOINT } = await import(
+        "./server/default-endpoint"
+      ));
     });
     const PLATFORM_DEVNET = "https://devnet.rpc.test/?api-key=old";
     const PLATFORM_MAINNET = "https://mainnet.rpc.test/?api-key=old";
