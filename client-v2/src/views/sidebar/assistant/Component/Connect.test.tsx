@@ -1,8 +1,8 @@
-// The footer link reaches the utils barrel, whose generated globals exist only
-// once the app has booted; what it draws is not under test
+// The key's link reaches the utils barrel, whose generated globals exist only
+// once the app has booted; a plain anchor stands in for it
 vi.mock("../../../../components/Link", () => ({
-  default: (props: { children: React.ReactNode }) => (
-    <span>{props.children}</span>
+  default: (props: { href: string; children: React.ReactNode }) => (
+    <a href={props.href}>{props.children}</a>
   ),
 }));
 
@@ -239,19 +239,29 @@ describe("Connect", () => {
     });
   });
 
-  it("offers no default the deployment does not serve, and falls back to a key", () => {
+  it("leaves out a default the deployment does not serve, and falls back to a key", () => {
     renderConnect({ defaultBackend: "absent" });
 
-    expect(screen.getByText(/Not configured on this deployment/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No built-in model on this deployment. Use your own key."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: /Default/ })).toBeNull();
     expect(checked()?.getAttribute("value")).toBe("anthropic");
+    // Nothing else to pick, so there is no toggle to hide the backends
+    expect(
+      screen.queryByRole("button", { name: "Hide other backends" })
+    ).toBeNull();
   });
 
   it("neither offers nor rules out the default while the probe is out", () => {
     renderConnect({ defaultBackend: "checking" });
 
+    expect(screen.getByText("Checking…")).toBeTruthy();
     expect(
-      screen.getByText("Checking this deployment for a default backend…")
-    ).toBeTruthy();
+      screen.getByRole("radio", { name: /Default/ }).hasAttribute("disabled")
+    ).toBe(true);
     expect(checked()).toBeUndefined();
   });
 
@@ -408,31 +418,56 @@ describe("Connect", () => {
     expect(screen.queryByText("Back to chat")).toBeNull();
   });
 
-  it("heads its lead with what the assistant is, as the prototype does", () => {
+  it("leads with one line on what the assistant does, and no heading", () => {
     renderConnect({ defaultBackend: "absent" });
 
     expect(
-      screen.getByRole("heading", {
-        name: "An assistant that can see your project",
-      })
+      screen.getByText(/The assistant reads your project and proposes fixes/)
     ).toBeTruthy();
+    expect(screen.queryByRole("heading")).toBeNull();
   });
 
-  it("heads the form Switch backend over a connection", () => {
+  it("drops the lead and the capabilities over a connection", () => {
     act(() => PgAssistant.connect(OWN));
     renderConnect({ defaultBackend: "present" });
 
+    expect(screen.queryByText(/The assistant reads your project/)).toBeNull();
     expect(
-      screen.getByRole("heading", { name: "Switch backend" })
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "What the assistant can access" })
+    ).toBeNull();
   });
 
-  it("draws each backend as a card, its radio circle kept for the keyboard only", () => {
+  it("keeps what the assistant can access folded until asked", async () => {
+    const user = userEvent.setup();
+    renderConnect({ defaultBackend: "absent" });
+
+    const toggle = screen.getByRole("button", {
+      name: "What the assistant can access",
+    });
+    expect(screen.queryByText("READS")).toBeNull();
+    await user.click(toggle);
+    expect(screen.getByText("READS")).toBeTruthy();
+  });
+
+  it("describes the key field with where the key goes and links to a new one", () => {
+    renderConnect({ defaultBackend: "absent" });
+
+    const field = screen.getByLabelText("API key");
+    expect(
+      document.getElementById(field.getAttribute("aria-describedby") ?? "")
+        ?.textContent
+    ).toMatch(/Sent only to Anthropic, never to our server/);
+    expect(
+      screen.getByRole("link", { name: /Get a key/ }).getAttribute("href")
+    ).toBe("https://console.anthropic.com/");
+  });
+
+  it("draws each backend as a row with its radio circle in view", () => {
     renderConnect({ defaultBackend: "absent" });
 
     for (const radio of screen.getAllByRole("radio")) {
-      expect(radio.classList.contains("opacity-0")).toBe(true);
-      expect(radio.classList.contains("size-full")).toBe(true);
+      expect(radio.classList.contains("opacity-0")).toBe(false);
+      expect(radio.closest("label")).toBeTruthy();
     }
   });
 

@@ -318,13 +318,13 @@ test.describe("Connect a model", () => {
 
       // With no default on the deployment, the form opens on Anthropic
       await dialog.locator("#assistant-api-key").fill("sk-ant-fake-key");
-      // The dialog's submit, drawn as the view's ring brand button
+      // The dialog's submit, a solid button so it reads as the call to action
       const connect = dialog.getByRole("button", {
         name: "Connect",
         exact: true,
       });
-      await expect(connect).toHaveAttribute("data-slot", "brand-button");
-      await expect(connect).toHaveAttribute("data-variant", "ring");
+      await expect(connect).toHaveAttribute("data-slot", "button");
+      await expect(connect).toHaveAttribute("data-variant", "default");
       await connect.click();
 
       await expect(dialog).toBeHidden(LONG);
@@ -365,13 +365,13 @@ test.describe("Connect a model", () => {
       await expect(connect).toBeInViewport({ ratio: 1 });
 
       // The longest form: an OpenAI-compatible backend with its key, base URL
-      // and model, and every other backend listed above it (a pick folds the
-      // list, so it is opened again)
+      // and model, and every other backend listed above it (with no default
+      // on the deployment the list stays open, with no toggle to fold it)
       await dialog.getByRole("radio", { name: /OpenAI-compatible/ }).click();
-      await dialog.getByRole("button", { name: "Bring your own key" }).click();
+      await expect(dialog.getByRole("radio")).toHaveCount(4);
       await expect(
         dialog.getByRole("button", { name: "Hide other backends" })
-      ).toHaveAttribute("aria-expanded", "true");
+      ).toHaveCount(0);
       await dialog.locator("#assistant-api-key").fill("sk-fake-key");
       await dialog
         .locator("#assistant-base-url")
