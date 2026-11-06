@@ -320,15 +320,15 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     expect(devnet.programs()).toHaveLength(1);
   });
 
-  // HOO-2358 (#357) brings the Call panel into scope/tutorial-flow; the
-  // body is the scenario, to be written against the panel once it lands
+  // The Call panel is on the branch (HOO-2358, #357); the scenario below is
+  // still to be written against it (HOO-2364)
   test.fixme(
     "tutorial-runs: Passing step 3 from the Call panel",
     {
       annotation: {
         type: "issue",
         description:
-          "HOO-2358 (#357): the Call panel is not in scope/tutorial-flow yet",
+          "HOO-2364: the scenario is not written against the Call panel yet",
       },
     },
     async () => {
