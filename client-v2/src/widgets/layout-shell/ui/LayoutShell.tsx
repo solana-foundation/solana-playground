@@ -689,6 +689,7 @@ const LayoutShell = ({
         stageOn: stagePageOf(flowStage),
         consoleOpen: phoneConsole,
         onShare: phoneShare,
+        onConsoleClose: (via) => setPhoneConsoleOpen(false, via),
       }}
       stageBar={
         <BaseStageBar

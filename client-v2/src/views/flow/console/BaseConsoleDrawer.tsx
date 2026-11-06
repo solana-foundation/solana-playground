@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from "react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
@@ -9,6 +10,7 @@ import {
   ConsoleDrawerContent,
   ConsoleDrawerStatus,
 } from "@/shared/ui/console-drawer";
+import { CopyButton } from "@/shared/ui/copy-button";
 import { Kbd } from "@/shared/ui/kbd";
 import { StatusDot } from "@/shared/ui/status-dot";
 
@@ -40,6 +42,8 @@ interface BaseConsoleDrawerProps {
   bare?: boolean;
   /** A line over the terminal before anything has run */
   empty?: string | null;
+  /** The terminal's text for Copy, read when the console opens and as a run moves */
+  log: string;
   children?: ReactNode;
 }
 
@@ -62,6 +66,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   bare = false,
   // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
   empty = null,
+  log,
   children,
 }) => (
   <ConsoleDrawer
@@ -69,9 +74,27 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     onOpenChange={onOpenChange}
     hotkey={null}
     contentId={CONSOLE_BODY_ID}
-    className="h-full bg-surface"
+    // On a phone the open console is a sheet (`BasePhonePager`): its bar
+    // rides on top as the sheet's head, under a grabber
+    className="h-full bg-surface max-md:flex-col"
   >
-    <ConsoleDrawerBar triggerLabel="Terminal" className="relative shrink-0">
+    {open && (
+      <div
+        aria-hidden
+        className="flex shrink-0 justify-center bg-surface-well pt-2 md:hidden"
+      >
+        <span className="h-1 w-9 rounded-full bg-border" />
+      </div>
+    )}
+    <ConsoleDrawerBar
+      triggerLabel="Terminal"
+      // A finger's 44 px on a phone, the bar and every control on it, with
+      // 20 px glyphs and 14 px words; the chevron is the drawer's own, so it
+      // is sized from here. Open, the bar is the sheet's head: one surface
+      // with the log under it, a hairline between them, and 12 px more under
+      // its row so the words sit as far from the hairline as from the edge
+      className="relative shrink-0 max-md:h-11 max-md:px-3 max-md:text-sm max-md:[&_[data-slot=console-drawer-trigger]]:size-11 max-md:[&_[data-slot=console-drawer-trigger]_svg]:size-5 max-md:group-data-[state=open]/console-drawer:h-14 max-md:group-data-[state=open]/console-drawer:pb-3 max-md:group-data-[state=open]/console-drawer:border-t-0 max-md:group-data-[state=open]/console-drawer:border-b max-md:group-data-[state=open]/console-drawer:bg-surface-well"
+    >
       {progress > 0 && (
         <div
           role="progressbar"
@@ -110,8 +133,22 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
           </span>
         )}
       </ConsoleDrawerStatus>
-      <ConsoleDrawerActions>
-        {shortcut && <Kbd aria-hidden>{shortcut}</Kbd>}
+      <ConsoleDrawerActions className="gap-2 max-md:gap-0">
+        {/* No keyboard on a phone to press it with */}
+        {shortcut && (
+          <Kbd aria-hidden className="max-md:hidden">
+            {shortcut}
+          </Kbd>
+        )}
+        {/* Spec 08: the full log comes with a Copy */}
+        {open && log && (
+          <CopyButton
+            value={log}
+            label="Copy log"
+            className="max-md:min-h-11 max-md:min-w-11 max-md:[&_svg]:size-5!"
+            onError={reportButtonFailure("copy the log")}
+          />
+        )}
         {/* Spec 13: while a build runs, Clear is off with Stop
             beside it; on a phone Stop takes Clear's place, a fingertip
             wide. Stop shows folded too: the strip is all a folded console
@@ -122,7 +159,11 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
             variant="ghost"
             size="xs"
             disabled={!!stop}
-            className={stop ? "max-md:hidden" : undefined}
+            className={
+              stop
+                ? "max-md:hidden"
+                : "max-md:min-h-11 max-md:min-w-11 max-md:text-sm"
+            }
             onClick={onClear}
           >
             Clear

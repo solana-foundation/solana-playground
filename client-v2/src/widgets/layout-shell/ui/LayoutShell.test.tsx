@@ -1066,13 +1066,12 @@ describe("on a phone", () => {
   /** The outlet's box, which carries the page's sizing classes */
   const boxOf = (el: Element) =>
     requireFor("the outlet's box")(el.closest("div[class*='flex']"));
+  /** The sheet the console rises in; its `data-state` says open or folded */
   const consoleBox = () =>
-    requireFor("the console's box")(
-      consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']") ??
-        // Open beside no stage, the outlet's box is `flex-1`, as is the node
-        // inside it: the box is the node's parent
-        consoleButton().closest("[class~='flex-1']")?.parentElement
+    requireFor("the console's sheet")(
+      consoleButton().closest("[data-slot='console-sheet']")
     );
+  const isSheetOpen = () => consoleBox().getAttribute("data-state") === "open";
 
   it("hands the navigation the menu page, whose toggle brings the work back", () => {
     phoneShell();
@@ -1257,18 +1256,19 @@ describe("on a phone", () => {
 
   it("opens the console on a deploy, for the visit and unsaved", () => {
     phoneShell();
-    expect(consoleBox().classList.contains("h-2/5")).toBe(false);
-    expect((consoleBox() as HTMLElement).style.height).toBe("28px");
+    expect(isSheetOpen()).toBe(false);
     act(() => PgFlow.setStage("build"));
     act(() => deploy.starts.forEach((cb) => cb(null)));
-    expect(consoleBox().classList.contains("h-2/5")).toBe(true);
+    expect(isSheetOpen()).toBe(true);
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
   });
 
   it("opens the console on a request, for the visit and unsaved", () => {
     phoneShell();
+    // "Show full log" sits on the stage, which the preview shows
+    fireEvent.click(button("Preview the build"));
     act(() => requestConsole());
-    expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+    expect(isSheetOpen()).toBe(true);
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
   });
 
@@ -1395,22 +1395,27 @@ describe("on a phone", () => {
     ).not.toBeNull();
   });
 
-  it("folds the console to its bar and opens it to a share of the page", () => {
+  it("folds the console to its bar and opens it as a sheet the scrim and Escape close", () => {
     phoneShell();
-    expect((consoleBox() as HTMLElement).style.height).toBe("28px");
-    expect(consoleBox().classList.contains("overflow-hidden")).toBe(true);
-    fireEvent.click(consoleButton());
-    act(() => PgFlow.setStage("build"));
-    expect(consoleBox().classList.contains("h-2/5")).toBe(true);
-    expect((consoleBox() as HTMLElement).style.height).toBe("");
-  });
-
-  it("gives the open console the whole preview when no stage shows there", () => {
-    PgFlow["_dispatch"]({ type: "program", has: false });
-    phoneShell();
+    // The bar is the preview's foot
     fireEvent.click(button("Preview the build"));
-    expect(consoleBox().classList.contains("flex-1")).toBe(true);
-    expect(consoleBox().classList.contains("h-2/5")).toBe(false);
+    const barSlot = () => consoleBox().parentElement as HTMLElement;
+    expect(barSlot().style.height).toBe("44px");
+    expect(isSheetOpen()).toBe(false);
+    fireEvent.click(consoleButton());
+    expect(isSheetOpen()).toBe(true);
+    expect(consoleBox().classList.contains("fixed")).toBe(true);
+    // The slot keeps the bar's height, so the stage does not move
+    expect(barSlot().style.height).toBe("44px");
+    fireEvent.click(
+      requireFor("the scrim")(
+        document.querySelector("[data-slot='console-sheet-scrim']")
+      )
+    );
+    expect(isSheetOpen()).toBe(false);
+    fireEvent.click(consoleButton());
+    fireEvent.keyDown(consoleButton(), { key: "Escape" });
+    expect(isSheetOpen()).toBe(false);
   });
 
   it("brings Work into view when Ctrl+R switches the view from the preview", () => {

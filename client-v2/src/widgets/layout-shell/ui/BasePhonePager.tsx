@@ -8,12 +8,14 @@ import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import { Sheet, SheetContent, SheetTitle } from "@/shared/ui/sheet";
-import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
 
 import type { PhonePage, StagePage, WorkView } from "../model/phone-pages";
 import { isWorkView, PHONE_PAGES } from "../model/phone-pages";
 import { isCovered, isWorkInFrame, screenOf } from "../model/screen";
 import { PHONE_ICONS } from "./phone-icons";
+
+/** The folded console's bar on a phone: a finger's 44 px, not the wide 28 */
+const PHONE_CONSOLE_BAR_PX = 44;
 
 /** How long a scroll must rest before it counts as a swipe that settled */
 export const SWIPE_SETTLE_MS = 120;
@@ -35,11 +37,12 @@ export interface PhonePagerState {
   onFilesOpenChange: (open: boolean) => void;
   /** The stage shows on the work page (Code) at `write`, else on the preview */
   stageOn: StagePage;
-  /** The console's height on the preview: open (beside the stage, or the
-   * whole page when the stage stays on Code), or its folded bar */
+  /** The console on the preview: open as a sheet, or its folded bar */
   consoleOpen: boolean;
   /** Shares the open project as a gist; absent with no project open */
   onShare?: () => void;
+  /** The sheet's scrim (a button) or Escape (a key) asked to fold the console */
+  onConsoleClose: (via: "button" | "key") => void;
 }
 
 /** The content and the outlets' nodes the pager lays out */
@@ -71,10 +74,6 @@ export interface PhonePagerSlots {
 }
 
 export type BasePhonePagerProps = PhonePagerState & PhonePagerSlots;
-
-/** The open console's height on the preview: beside the stage, or alone */
-const openConsoleClass = (stageOn: StagePage) =>
-  stageOn === "preview" ? "h-2/5" : "flex-1";
 
 /**
  * A Chat or Code option, the prototype's `PaneOption`: filled when it shows.
@@ -221,6 +220,29 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
   // Covered (Home or a page), the preview has no section: Work shows
   const page = pages.includes(props.page) ? props.page : "work";
   const index = pages.indexOf(page);
+  // The console's sheet is fixed to the window, so it rises only while the
+  // preview, the page that holds it, is the one shown: a run or a funding
+  // prompt can move to Work with the console still open, and the sheet would
+  // cover Work over an inert preview that no tap reaches
+  // TODO(intake: interface-2 carry review, PR 379): the sheet is hand-rolled, with no
+  // dialog role, focus trap or return, and its Escape also folds it under a
+  // dialog opened above it; the design system's Sheet (side="bottom") brings
+  // all of that
+  const sheetShown = props.consoleOpen && page === "preview";
+  // Escape folds the console's sheet before anything under it hears the key
+  // (Spec 08: Escape closes the log). The Files sheet opens over it and
+  // takes its own Escape.
+  const { filesOpen, onConsoleClose } = props;
+  useEffect(() => {
+    if (!sheetShown || filesOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      onConsoleClose("key");
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [sheetShown, filesOpen, onConsoleClose]);
   // Smooth by CSS (`motion-safe:scroll-smooth`: with reduced motion the page
   // changes at once, and the jump settles the same way). The scroll this
   // causes settles on the page given, so the settle finds the page already
@@ -486,20 +508,38 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
                 className="flex min-h-0 flex-1 flex-col"
               />
             )}
-            <Outlet
-              node={props.consoleNode}
-              // Closed, the console is its bar: the body stays mounted (the
-              // terminal keeps its buffer) and is clipped, as on wide. Open
-              // with the stage on Code, it takes the page: the preview of a
-              // project with no program, the only one shown at `write`
-              className={cn(
-                "flex min-h-0 flex-col",
-                props.consoleOpen
-                  ? openConsoleClass(props.stageOn)
-                  : "overflow-hidden"
+            {/* Closed, the console is its bar at the foot: the body stays
+                mounted (the terminal keeps its buffer) and is clipped, as on
+                wide. Open, the same outlet rises as a sheet over the stage
+                (Spec 08, "Show full log" opens a sheet below 768 px), so the
+                stage keeps its size under it; the slot keeps the bar's height
+                so nothing below moves. */}
+            <div className="shrink-0" style={{ height: PHONE_CONSOLE_BAR_PX }}>
+              {/* The Sheet's motion; the scrim darker than the Sheet's 10%,
+                  which does not read on the dark ground */}
+              {sheetShown && (
+                <div
+                  aria-hidden
+                  data-slot="console-sheet-scrim"
+                  onClick={() => props.onConsoleClose("button")}
+                  className="fixed inset-0 z-50 bg-black/60 duration-100 animate-in fade-in-0 supports-backdrop-filter:backdrop-blur-xs motion-reduce:animate-none"
+                />
               )}
-              style={props.consoleOpen ? undefined : { height: BOTTOM_BAR_PX }}
-            />
+              <div
+                data-slot="console-sheet"
+                data-state={sheetShown ? "open" : "closed"}
+                className={cn(
+                  "flex h-full min-h-0 flex-col overflow-hidden",
+                  sheetShown &&
+                    "fixed inset-x-0 bottom-0 z-50 h-[85dvh] rounded-t-2xl border border-b-0 border-border shadow-lg duration-200 animate-in fade-in-0 slide-in-from-bottom-10 motion-reduce:animate-none"
+                )}
+              >
+                <Outlet
+                  node={props.consoleNode}
+                  className="flex min-h-0 flex-1 flex-col"
+                />
+              </div>
+            </div>
           </section>
           <Sheet open={props.filesOpen} onOpenChange={props.onFilesOpenChange}>
             <SheetContent
