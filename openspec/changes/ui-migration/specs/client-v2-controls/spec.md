@@ -31,6 +31,8 @@ and a failed build SHALL say how many errors it has.
 Where the user picks one option out of a few shown at once, such as the
 network in settings, the options SHALL form one radio group: the group is
 one stop for the Tab key, and the arrow keys move the choice within it.
+An option that opens a dialog when chosen, such as the network's Custom,
+takes only the focus from an arrow key and is chosen by a press.
 
 #### Scenario: Network by keyboard
 

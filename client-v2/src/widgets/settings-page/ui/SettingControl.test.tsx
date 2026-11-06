@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // The utils barrel reads a build-time global and cannot load under vitest;
 // the real `PgCommon` is all the select needs besides a spy-able `PgView`
@@ -167,5 +167,90 @@ describe("an on/off setting", () => {
     expect(screen.queryByRole("checkbox")).toBeNull();
     await userEvent.click(box);
     expect(setValue).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("a setting of a few values, side by side", () => {
+  // Starts away from the default and the first option, so a test that finds
+  // the id on the current choice cannot pass by finding it on the first one
+  const keybinding = () => {
+    let value = "Vim";
+    return {
+      id: "editor.keybinding",
+      name: "Key bindings",
+      default: "None",
+      values: ["None", "Vim"],
+      getValue: () => value,
+      setValue: vi.fn((v: string) => {
+        value = v;
+      }),
+      onChange: () => ({ dispose: () => {} }),
+    };
+  };
+
+  beforeEach(() => {
+    // the group measures its items with one; jsdom has none
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+
+  it("puts the control id the row's label points at on the current choice", () => {
+    render(
+      <SettingControl
+        {...keybinding()}
+        segmented
+        controlId="setting-editor.keybinding"
+      />
+    );
+
+    // A label can target a button, never the group's div
+    expect(document.getElementById("setting-editor.keybinding")).toBe(
+      screen.getByRole("radio", { name: "Vim" })
+    );
+  });
+
+  it("moves the control id to the choice pressed", async () => {
+    const s = keybinding();
+    const { rerender } = render(
+      <SettingControl {...s} segmented controlId="setting-keys" />
+    );
+
+    await userEvent.click(screen.getByRole("radio", { name: "None" }));
+    rerender(<SettingControl {...s} segmented controlId="setting-keys" />);
+
+    expect(document.getElementById("setting-keys")).toBe(
+      screen.getByRole("radio", { name: "None" })
+    );
+  });
+
+  it("keeps each choice named by its own text beside the row's label", () => {
+    render(
+      <>
+        <label htmlFor="setting-keys">Key bindings</label>
+        <SettingControl {...keybinding()} segmented controlId="setting-keys" />
+      </>
+    );
+
+    // The row's label targets the current choice; without a name of its own
+    // a screen reader would read that chip as "Key bindings"
+    expect(
+      screen.getByRole("radiogroup", { name: "Key bindings" })
+    ).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Vim" }).id).toBe("setting-keys");
+  });
+
+  it("sets the value pressed", async () => {
+    const s = keybinding();
+    render(<SettingControl {...s} segmented controlId="setting-keys" />);
+
+    await userEvent.click(screen.getByRole("radio", { name: "None" }));
+
+    expect(s.setValue).toHaveBeenCalledWith("None");
   });
 });
