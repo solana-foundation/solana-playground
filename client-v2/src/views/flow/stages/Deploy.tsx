@@ -4,7 +4,6 @@ import { NETWORKS } from "@/constants";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import type { GuideFrom } from "@/features/cli-deploy";
 import { CliDeployGuide } from "@/features/cli-deploy";
-import type { StageDeployState } from "@/features/deploy";
 import { PgStageDeploy, useDeployRun, useStageDeploy } from "@/features/deploy";
 import { ProgramKeypair } from "@/features/program-keypair";
 import { createLogger } from "@/shared/lib/logger";
@@ -30,8 +29,9 @@ import type { DeployRecord } from "../state/deploy-history";
 import { PgDeployHistory } from "../state/deploy-history";
 import type { FlowState } from "../state/stage";
 import { PgFlow } from "../state/stage";
-import type { DeployDetails, DeployPayer, DeployStatus } from "./BaseDeploy";
+import type { DeployDetails, DeployPayer } from "./BaseDeploy";
 import BaseDeploy from "./BaseDeploy";
+import { deployViewFor } from "./deploy-view";
 import IdlActions, { useIdlName } from "./IdlActions";
 import { markIfToldByStage } from "./stage-failure";
 
@@ -40,38 +40,6 @@ const log = createLogger("flow:deploy");
 /** This workspace's deployments, newest first */
 const readHistory = () =>
   PgDeployHistory.list(PgExplorer.currentWorkspaceName ?? "");
-
-/**
- * A second click on Deploy while one is already running pauses it
- * (`deployState` becomes "paused") rather than starting a new one, which
- * upstream's sidebar exposes as an explicit "Continue"/pause toggle. Flow
- * does not offer that control, so the stage holds the button while a deploy
- * is starting or "running" instead. A run the user cancelled is not a
- * failure.
- */
-const deployStatusFor =
-  (flow: FlowState, stage: StageDeployState) =>
-  (deployState: unknown): DeployStatus => {
-    if (deployState === "loading" || stage.phase === "running")
-      return "running";
-    const cancelled =
-      stage.phase === "stopped" && stage.stop.kind === "cancelled";
-    if (flow.deploy === "failed" && !cancelled) return "failed";
-    return "idle";
-  };
-
-/** The funding stop's detail, when it ran on the project and network open now */
-const fundingHere = (stage: StageDeployState) => {
-  if (stage.phase !== "stopped" || stage.stop.kind !== "funding") {
-    return undefined;
-  }
-  const { stop } = stage;
-  const here =
-    stop.cluster === PgConnection.cluster &&
-    (stop.workspace ?? undefined) ===
-      (PgExplorer.currentWorkspaceName ?? undefined);
-  return here ? stop.detail : undefined;
-};
 
 /**
  * Sign in for the faucet, then run the deploy the funding card stopped. A
@@ -184,23 +152,26 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
     (flow.build === "failed" && Boolean(programInfo.uuid));
   const programId = programInfo.pk?.toBase58();
 
+  // A deploy typed in the terminal sets `deployState` to "loading" while the
+  // stage's phase stays where its last run left it; the view reads both, so
+  // either run holds the button (a second press would pause it, a toggle
+  // upstream's sidebar offers and Flow does not) and hides the last outcome
+  const view = deployViewFor({
+    cluster: PgConnection.cluster ?? undefined,
+    workspace: PgExplorer.currentWorkspaceName ?? undefined,
+    wallet: wallet?.publicKey.toBase58(),
+  })({ stage, deployState, flowDeploy: flow.deploy });
+
   return (
     <>
       <BaseDeploy
         cluster={PgConnection.cluster}
         built={built}
-        deploy={deployStatusFor(flow, stage)(deployState)}
+        view={view}
         details={details}
         history={history}
         payer={payer}
         run={run}
-        funding={fundingHere(stage)}
-        backup={
-          stage.phase === "done" &&
-          stage.backupFor !== null &&
-          stage.backupFor === wallet?.publicKey.toBase58()
-        }
-        staleBuild={stage.phase === "running" && stage.askingStaleBuild}
         addressUrl={(id, cluster) =>
           linkWith((c) => explorer.getAddressUrl(id, c))(cluster)
         }

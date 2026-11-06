@@ -1,7 +1,7 @@
 import { ExternalLink, Rocket, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { DeployFundingError, DeployRunState } from "@/commands/deploy/run";
+import type { DeployRunState } from "@/commands/deploy/run";
 import { UNKNOWN_NETWORK } from "@/constants";
 import type { GuideFrom } from "@/features/cli-deploy";
 import {
@@ -38,6 +38,7 @@ import {
   warnsOnDeploy,
 } from "../../../commands/deploy/mainnet-warning";
 import type { DeployRecord } from "../state/deploy-history";
+import type { DeployView } from "./deploy-view";
 import {
   STAGE_BODY,
   STAGE_FOOT,
@@ -55,9 +56,6 @@ export interface DeployDetails {
   programSize: number | undefined;
 }
 
-/** Where the project's last deploy stands */
-export type DeployStatus = "idle" | "running" | "failed";
-
 /** The wallet that pays for the deploy; `balance` is SOL, absent until read */
 export interface DeployPayer {
   address: string;
@@ -65,9 +63,6 @@ export interface DeployPayer {
   /** The Playground wallet, not a connected one such as Phantom */
   playground: boolean;
 }
-
-/** Why the last run could not fund its wallet */
-export type FundingStop = DeployFundingError["detail"];
 
 export interface BaseDeployProps {
   /** The cluster's name, `null` until the endpoint has been read */
@@ -78,10 +73,10 @@ export interface BaseDeployProps {
    */
   built: boolean;
   /**
-   * The last deploy's state. While one runs, a second press would pause it,
-   * so the button is held.
+   * What the stage shows, one at a time (`deployViewFor`). While a deploy runs,
+   * a second press would pause it, so the button is held.
    */
-  deploy: DeployStatus;
+  view: DeployView;
   details: DeployDetails;
   /** Every deployment of the project on any network, newest first; the stage reads the network picked from it */
   history: DeployRecord[];
@@ -89,12 +84,6 @@ export interface BaseDeployProps {
   payer: DeployPayer | undefined;
   /** The running deploy's steps */
   run: DeployRunState;
-  /** The last run stopped for lack of SOL */
-  funding: FundingStop | undefined;
-  /** Show the keypair backup line under the result */
-  backup: boolean;
-  /** Ask whether to deploy the last good build */
-  staleBuild: boolean;
   /**
    * An Explorer link that opens `cluster`, whatever network is selected;
    * `undefined` when the explorer cannot open it, and the link is left out
@@ -133,18 +122,18 @@ export interface BaseDeployProps {
 
 /** Why the Deploy button is off, for its tooltip; undefined when it is on */
 const deployBlockedReason = (p: BaseDeployProps) =>
-  p.deploy === "running" ? "A deploy is already running" : undefined;
+  p.view.kind === "running" ? "A deploy is already running" : undefined;
 
 /**
  * A failed deploy of a built program: the stage maps no failure to a named
  * state (Spec 08 ANY-00), so the pill runs the deploy again and says so. With
  * no build the pill is Go to Build instead (Spec 03 DEP-07).
  */
-const offersRetry = (p: BaseDeployProps) =>
-  p.built && p.deploy === "failed" && !p.funding;
+const offersRetry = (p: BaseDeployProps) => p.built && p.view.kind === "failed";
 
 const deployLabel = (p: BaseDeployProps, redeploy: boolean) => {
-  if (p.deploy === "running") return redeploy ? "Upgrading..." : "Deploying...";
+  if (p.view.kind === "running")
+    return redeploy ? "Upgrading..." : "Deploying...";
   if (offersRetry(p)) return "Try again";
   const where = deployNetwork(p);
   return redeploy ? `Redeploy to ${where}` : `Deploy to ${where}`;
@@ -232,7 +221,7 @@ const ElsewhereLine = ({
         <Button
           variant="link"
           className="inline h-auto p-0 align-baseline text-[length:inherit] text-foreground"
-          disabled={p.deploy === "running"}
+          disabled={p.view.kind === "running"}
           onClick={() => p.onShowNetwork(elsewhere.cluster)}
         >
           {`Show ${where}`}
@@ -354,7 +343,7 @@ const DeployResult = ({
           </ExplorerLink>
         )}
       </div>
-      {p.backup && (
+      {p.view.kind === "idle" && p.view.backup && (
         <BaseBackupLine
           cluster={latest.cluster}
           onSave={p.onSaveKeypair}
@@ -558,7 +547,8 @@ const BaseDeploy = (p: BaseDeployProps) => {
         .join(" · ")
     : "";
   const elsewhere = p.built ? deployedElsewhere(p, latest) : undefined;
-  const running = p.deploy === "running";
+  const { view } = p;
+  const running = view.kind === "running";
 
   return (
     <div className={STAGE_FRAME}>
@@ -587,19 +577,19 @@ const BaseDeploy = (p: BaseDeployProps) => {
           </p>
         )}
 
-        {p.funding && (
+        {view.kind === "funding" && (
           <BaseNotEnoughSol
             cluster={p.cluster ?? undefined}
-            reason={p.funding.reason}
-            balance={p.funding.balance}
-            needed={p.funding.needed}
-            address={p.funding.address}
-            cause={p.funding.cause}
+            reason={view.stop.reason}
+            balance={view.stop.balance}
+            needed={view.stop.needed}
+            address={view.stop.address}
+            cause={view.stop.cause}
             onRetry={p.onDeploy}
             onSignIn={p.onSignIn}
           />
         )}
-        {p.deploy === "failed" && !p.funding && (
+        {view.kind === "failed" && (
           <Callout variant="error" role="alert">
             <CalloutDescription>
               Could not deploy. The full log has the details.
@@ -630,32 +620,17 @@ const BaseDeploy = (p: BaseDeployProps) => {
           </div>
         )}
         <BaseStaleBuildDialog
-          open={p.staleBuild}
+          open={view.kind === "running" && view.askingStaleBuild}
           onAnswer={p.onStaleBuildAnswer}
         />
-        {/* The other ways on, one kind of button: outlines in the
-            pill's height and shape. On a desk they follow the pill (`order`);
-            on a phone they stay in the page, above the foot, and only the
-            pill is pinned, as review screens pin their one action */}
-        <div className="flex flex-wrap items-center justify-center gap-2 md:order-last max-md:grid max-md:w-full max-md:grid-cols-2 max-md:[&_[data-variant=outline]]:w-full max-md:[&_[data-variant=outline]]:px-3 max-md:[&_button]:text-sm! max-md:[&>span]:w-full max-md:[&>span>div]:w-full [&_[data-variant=outline]]:h-10 [&_[data-variant=outline]]:rounded-full [&_[data-variant=outline]]:px-5">
-          {offersRetry(p) && (
-            <Button variant="outline" onClick={p.onShowLog}>
-              Show full log
-            </Button>
-          )}
-          {p.idlUpload}
-          <Button
-            variant="outline"
-            onClick={() => p.onOpenCliGuide("deploy-stage")}
-          >
-            Deploy with the CLI
-          </Button>
-        </div>
         <StageEmptyActions
           // On a phone the foot is solid, so the history scrolling under it
           // never shows through; no rule, which over an empty stage only
           // cut the pill off from the page
-          className={cn(STAGE_FOOT, "max-md:bg-background max-md:bg-none")}
+          className={cn(
+            STAGE_FOOT,
+            "max-md:order-last max-md:bg-background max-md:bg-none"
+          )}
         >
           {running && p.run.step && <BaseDeployProgress state={p.run} />}
           {/* One pill, the way on: Go to Build until there is a build, then
@@ -678,6 +653,30 @@ const BaseDeploy = (p: BaseDeployProps) => {
             </BrandButton>
           )}
         </StageEmptyActions>
+        {/* The other ways on, one kind of button: outlines in the
+            pill's height and shape. They follow the pill in the page, so
+            focus reaches the pill first; on a desk they are drawn after it,
+            on a phone above the foot (the foot's `order-last`, which must
+            stay the last child drawn), and only the pill is pinned, as review
+            screens pin their one action. There focus still meets the pill
+            first: it is the stage's one way on */}
+        <div
+          data-slot="deploy-outlines"
+          className="flex flex-wrap items-center justify-center gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:[&_[data-variant=outline]]:w-full max-md:[&_[data-variant=outline]]:px-3 max-md:[&_button]:text-sm! max-md:[&>span]:w-full max-md:[&>span>div]:w-full [&_[data-variant=outline]]:h-10 [&_[data-variant=outline]]:rounded-full [&_[data-variant=outline]]:px-5"
+        >
+          {offersRetry(p) && (
+            <Button variant="outline" onClick={p.onShowLog}>
+              Show full log
+            </Button>
+          )}
+          {p.idlUpload}
+          <Button
+            variant="outline"
+            onClick={() => p.onOpenCliGuide("deploy-stage")}
+          >
+            Deploy with the CLI
+          </Button>
+        </div>
       </StageEmpty>
     </div>
   );

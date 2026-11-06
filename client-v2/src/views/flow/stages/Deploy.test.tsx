@@ -620,6 +620,36 @@ describe("Deploy stage", () => {
     }
   });
 
+  it("shows only the running deploy when the terminal deploys over a funding stop", async () => {
+    mocks.wallet.current = pgWallet();
+    mocks.execute.mockRejectedValue(
+      new DeployFundingError({
+        reason: "airdrop_failed",
+        balance: 0,
+        needed: 1,
+        address: WALLET,
+        cause: "429",
+      })
+    );
+    const view = render(<Deploy onChangeNetwork={() => {}} />);
+    await pressDeploy();
+    expect(screen.getByRole("alert", { name: "Not enough SOL" })).toBeTruthy();
+
+    mocks.deployState = "loading";
+    view.rerender(
+      <TooltipProvider>
+        <Deploy onChangeNetwork={() => {}} />
+      </TooltipProvider>
+    );
+
+    expect(screen.queryByRole("alert", { name: "Not enough SOL" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: "Deploying..." })).toHaveProperty(
+      "disabled",
+      true
+    );
+  });
+
   it("shows the funding card only on the project and network it ran on", async () => {
     const utils = (await import("../../../utils")) as unknown as {
       PgConnection: { cluster: string };
