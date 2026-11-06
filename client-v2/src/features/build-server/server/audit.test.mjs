@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 
-import { finishAudit, startAudit } from "./audit.mjs";
+import { finishAuditWith, startAuditWith } from "./audit.mjs";
 
-describe("startAudit", () => {
+describe("startAuditWith", () => {
   it("inserts one row and returns its id", async () => {
     const query = mock.fn(async () => ({ rows: [{ id: "7" }] }));
 
-    const id = await startAudit(query, {
+    const id = await startAuditWith(query)({
       userId: "u1",
       project: { id: "p1", name: "hello" },
       unstable: false,
@@ -27,7 +27,7 @@ describe("startAudit", () => {
       throw new Error("connection refused");
     };
     await assert.rejects(
-      startAudit(query, {
+      startAuditWith(query)({
         userId: "u1",
         project: {},
         unstable: false,
@@ -38,11 +38,11 @@ describe("startAudit", () => {
   });
 });
 
-describe("finishAudit", () => {
+describe("finishAuditWith", () => {
   it("records the outcome on the row", async () => {
     const query = mock.fn(async () => ({ rows: [] }));
 
-    await finishAudit(query, {
+    await finishAuditWith(query)({
       id: 7,
       programUuid: "abc",
       status: 200,
@@ -58,6 +58,6 @@ describe("finishAudit", () => {
     const query = async () => {
       throw new Error("gone");
     };
-    await finishAudit(query, { id: 7, status: 502, durationMs: 3 });
+    await finishAuditWith(query)({ id: 7, status: 502, durationMs: 3 });
   });
 });

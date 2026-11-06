@@ -5,7 +5,7 @@
  * the route with no build step. The audit's statements run on a `query` the
  * route passes in, so this feature imports no other.
  */
-export { finishAudit, startAudit } from "./server/audit.mjs";
+export { finishAuditWith, startAuditWith } from "./server/audit.mjs";
 export {
   MAX_PROJECT_FIELD,
   projectOf,

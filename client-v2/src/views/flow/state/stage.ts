@@ -70,7 +70,8 @@ export interface FlowState {
  * else (ANY-00). `message` is the command's own error, for the details.
  */
 export type BuildFailure =
-  | { kind: "no-answer" | "signed-out" | "other"; message: string }
+  | { kind: "no-answer" | "other"; message: string }
+  | { kind: "signed-out"; message: string }
   | { kind: "empty-source"; message: string; file: string };
 
 export type FlowEvent =
@@ -90,8 +91,9 @@ export type FlowEvent =
   | {
       type: "deploy-finish";
       ok: boolean;
-      /** The build the deploy ran first was refused for sign-in (HOO-2422) */
-      signInRefused?: boolean;
+      /** The deploy was refused for sign-in (HOO-2422): the build it ran
+       * first, or the download of a program built before */
+      refusal?: Extract<BuildFailure, { kind: "signed-out" }>;
     }
   /** Someone signed in: a refusal for sign-in no longer holds */
   | { type: "signed-in" }
@@ -173,7 +175,7 @@ export const countErrors = (stderr: string) =>
  * PgServerError`: the flow's tests stand the utils barrel in with a
  * mock.
  */
-export const buildFailureOf = (err: unknown): BuildFailure => {
+const buildFailureOf = (err: unknown): BuildFailure => {
   const { answered, message, reason } = (err ?? {}) as {
     answered?: unknown;
     message?: unknown;
@@ -293,13 +295,16 @@ export class PgFlow {
           stopped: state.stopped === "build" ? "build" : "deploy",
         };
       case "deploy-finish":
-        // The build it ran first asked for sign-in: the deploy never started,
-        // and Build, where the sign-in is, is where the person goes
-        if (ev.signInRefused) {
+        // The route asked for sign-in: the deploy never started, and Build,
+        // where the sign-in is, is where the person goes. The refusal is
+        // kept here too: a download refused for a program built before ran
+        // no build, so nothing else would put the sign-in on Build.
+        if (ev.refusal) {
           return {
             ...state,
             stage: "build",
             deploy: state.deployBeforeRun ?? "active",
+            buildFailure: ev.refusal,
           };
         }
         return ev.ok
@@ -418,11 +423,12 @@ export class PgFlow {
           PgFlow._dispatch({ type: "deploy-stop" });
           return;
         }
+        const failure =
+          "err" in result ? buildFailureOf(result.err) : undefined;
         PgFlow._dispatch({
           type: "deploy-finish",
           ok: !("err" in result),
-          signInRefused:
-            "err" in result && isSignInRefusal(buildFailureOf(result.err)),
+          refusal: isSignInRefusal(failure) ? failure : undefined,
         });
       }),
       PgSession.onDidChange(() => {
