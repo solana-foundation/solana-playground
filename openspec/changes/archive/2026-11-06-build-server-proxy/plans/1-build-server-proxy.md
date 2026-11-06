@@ -105,7 +105,7 @@ Order per request: resolve route → origin (`403`) → session (`signed-out` `4
 ### Task 6: Signed-out Build surface
 
 **Files:**
-- Modify: `client-v2/src/utils/server.ts` (`PgServerRequestError.reason?: string`, parsed from a JSON error body), `client-v2/src/views/flow/state/stage.ts` (`BuildFailure` gains `{ kind: "signed-out"; message: string }`, `buildFailureOf` maps `reason === "signed-out"`), `client-v2/src/views/flow/stages/BaseBuild.tsx` (`Unreached` shows the message and a `Sign in with GitHub` button, `onSignIn` prop), `Build.tsx` (wires `PgSession.signIn`), `e2e/client-v2-buttons.e2e.spec.ts` (one case: route `**/build` answers `401` signed-out JSON → the button shows).
+- Modify: `client-v2/src/utils/server.ts` (`PgServerError.reason?: string`, parsed from a JSON error body), `client-v2/src/views/flow/state/stage.ts` (`BuildFailure` gains `{ kind: "signed-out"; message: string }`, `buildFailureOf` maps `reason === "signed-out"`), `client-v2/src/views/flow/stages/BaseBuild.tsx` (`Unreached` shows the message and a `Sign in with GitHub` button, `onSignIn` prop), `Build.tsx` (wires `PgSession.signIn`), `e2e/client-v2-buttons.e2e.spec.ts` (one case: route `**/build` answers `401` signed-out JSON → the button shows).
 
 - [ ] **Step 1: Write failing tests:** `buildFailureOf` maps a `reason: "signed-out"` error; `BaseBuild` renders the button for that failure and calls `onSignIn`; the e2e case.
 - [ ] **Step 2: Run** the unit tests → fail.

@@ -9,7 +9,6 @@ import type {
 import { CLUSTERS, offeredOf } from "../entities/cluster/model/clusters";
 import { SERVER_URL } from "../shared/config/client-env";
 import {
-  FOUNDATION_DIRECT_ENDPOINT,
   FOUNDATION_ENDPOINT,
   LOCAL_ENDPOINT,
   throughRoute,
@@ -320,11 +319,14 @@ if (import.meta.vitest) {
   const { describe, it, expect, beforeAll } = import.meta.vitest;
   describe("settings/stored-endpoint", () => {
     let SERVER_ENDPOINT_OPTIONS: typeof import("./server/default-endpoint").SERVER_ENDPOINT_OPTIONS;
+    let FOUNDATION_DIRECT_ENDPOINT: typeof import("./server/default-endpoint").FOUNDATION_DIRECT_ENDPOINT;
     let clustersFor: typeof import("../entities/cluster/model/clusters").clustersFor;
     let options: EndpointOptions;
     let onPublicTestnet: EndpointOptions;
     beforeAll(async () => {
-      ({ SERVER_ENDPOINT_OPTIONS } = await import("./server/default-endpoint"));
+      ({ SERVER_ENDPOINT_OPTIONS, FOUNDATION_DIRECT_ENDPOINT } = await import(
+        "./server/default-endpoint"
+      ));
       ({ clustersFor } = await import("../entities/cluster/model/clusters"));
       options = buildEndpointOptions(
         networks({

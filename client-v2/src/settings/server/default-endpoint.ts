@@ -78,9 +78,16 @@ export const throughRoute = <T extends string | undefined>(url: T) =>
     : url) as T;
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
 
   describe("settings/server/default-endpoint", () => {
+    let DEFAULT_BUILD_SERVER_URL: typeof import("../../shared/config/server-env.mjs").DEFAULT_BUILD_SERVER_URL;
+    beforeAll(async () => {
+      ({ DEFAULT_BUILD_SERVER_URL } = await import(
+        "../../shared/config/server-env.mjs"
+      ));
+    });
+
     describe("SERVER_ENDPOINT_OPTIONS", () => {
       it("leads with the server the default points at", () => {
         expect(SERVER_ENDPOINT_OPTIONS[0]).toEqual({
@@ -111,10 +118,7 @@ if (import.meta.vitest) {
         }
       });
 
-      it("names the same host the route forwards to", async () => {
-        const { DEFAULT_BUILD_SERVER_URL } = await import(
-          "../../shared/config/server-env.mjs"
-        );
+      it("names the same host the route forwards to", () => {
         expect(FOUNDATION_DIRECT_ENDPOINT).toBe(DEFAULT_BUILD_SERVER_URL);
       });
 
