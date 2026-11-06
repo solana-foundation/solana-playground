@@ -14,7 +14,7 @@ import { StatusDot } from "@/shared/ui/status-dot";
 interface Chip {
   label: string;
   endpoint: string;
-  foot?: { line: string; realSol: boolean };
+  foot?: { line: string; isRealSol: boolean };
 }
 
 const NETWORKS: ReadonlyArray<Chip> = OFFERED.map(
@@ -23,8 +23,8 @@ const NETWORKS: ReadonlyArray<Chip> = OFFERED.map(
     endpoint: value,
     foot:
       cluster === "mainnet-beta"
-        ? { line: "Deploys with real SOL", realSol: true }
-        : { line: "Deploys with free devnet SOL", realSol: false },
+        ? { line: "Deploys with real SOL", isRealSol: true }
+        : { line: "Deploys with free devnet SOL", isRealSol: false },
   })
 );
 
@@ -85,7 +85,7 @@ const BaseNetworkChoice = ({
           id={footId}
           className="flex items-center gap-2 bg-surface-raised/50 px-4 py-2.5 text-xs text-muted-foreground max-md:text-caption max-md:font-read"
         >
-          <StatusDot variant={picked.foot.realSol ? "warning" : "success"} />
+          <StatusDot variant={picked.foot.isRealSol ? "warning" : "success"} />
           {picked.foot.line}
         </p>
       )}
