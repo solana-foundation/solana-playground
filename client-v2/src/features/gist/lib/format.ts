@@ -81,7 +81,7 @@ const withCounter = (name: string, n: number) => {
 const utf8 = new TextEncoder();
 
 /** Whether `a` comes before `b` in byte order, the order GitHub lists files in */
-const sortsBefore = (a: string, b: string) => {
+const isBefore = (a: string, b: string) => {
   const x = utf8.encode(a);
   const y = utf8.encode(b);
   for (let i = 0; i < Math.min(x.length, y.length); i++) {
@@ -136,7 +136,7 @@ export const toGistFiles = (project: {
     }
 
     const plain = path.replaceAll("/", "__");
-    const flat = sortsBefore(plain, title) ? `_${plain}` : plain;
+    const flat = isBefore(plain, title) ? `_${plain}` : plain;
     let name = flat;
     for (let n = 2; taken.has(name); n++) name = withCounter(flat, n);
     taken.add(name);
