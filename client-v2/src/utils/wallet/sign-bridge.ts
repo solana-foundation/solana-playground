@@ -76,9 +76,14 @@ export const signRequestWith =
   };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { beforeAll, describe, it, expect } = import.meta.vitest;
 
   describe("utils/wallet/sign-bridge", () => {
+    let kit: typeof import("@solana/kit");
+    beforeAll(async () => {
+      kit = await import("@solana/kit");
+    });
+
     const request = {
       publicKey: PgWeb3.Keypair.generate().publicKey.toBase58(),
       kind: "message" as const,
@@ -169,6 +174,45 @@ if (import.meta.vitest) {
       );
 
       expect("signature" in reply && reply.signature).toHaveLength(64);
+    });
+
+    it("signs the message bytes Kit compiles, as the sandbox's Kit signer sends them", async () => {
+      const message = kit.pipe(
+        kit.createTransactionMessage({ version: 0 }),
+        (m) =>
+          kit.setTransactionMessageFeePayer(
+            kit.address(keypair.publicKey.toBase58()),
+            m
+          ),
+        (m) =>
+          kit.setTransactionMessageLifetimeUsingBlockhash(
+            { blockhash: kit.blockhash(blockhash), lastValidBlockHeight: 1n },
+            m
+          )
+      );
+      // Kit brands its bytes as a read-only array this TypeScript lib does not
+      // see as array-like; they are a Uint8Array
+      const bytes = Uint8Array.from(
+        kit.compileTransaction(message)
+          .messageBytes as unknown as ArrayLike<number>
+      );
+      const wallet = walletWith(async (tx) => {
+        tx.sign([keypair]);
+        return tx;
+      });
+
+      const reply = await signRequestWith(() => [wallet])(
+        transactionRequest(bytes)
+      );
+
+      if (!("signature" in reply)) throw new Error(`refused: ${reply.error}`);
+      expect(
+        await ed25519.verify(
+          Uint8Array.from(reply.signature),
+          bytes,
+          keypair.publicKey.toBytes()
+        )
+      ).toBe(true);
     });
 
     it("answers with the reason when the page's wallets cannot be listed", async () => {
