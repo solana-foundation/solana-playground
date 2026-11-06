@@ -605,6 +605,35 @@ it("keeps the focus on the sheet's row once its Try again is answered", async ()
   );
 });
 
+it("leaves the focus where the user moved it while the sheet's Try again ran", async () => {
+  const props = {
+    open: true,
+    onOpenChange: vi.fn(),
+    onAction: vi.fn(),
+    onRetry: vi.fn(() => Promise.resolve()),
+  };
+  const before = [DOWN, AI_OFF, STARTING];
+  const { rerender } = render(
+    <BaseStatusChip
+      chip={chipOf(before, true)}
+      indicators={before}
+      {...props}
+    />
+  );
+  const sheet = await screen.findByRole("dialog", { name: "Status" });
+  const row = sheet.querySelector('[data-status="network"]') as HTMLElement;
+  await userEvent.click(within(row).getByRole("button", { name: "Try again" }));
+  const elsewhere = within(row).getByRole("button", { name: "Change network" });
+  elsewhere.focus();
+
+  const after = [UP, AI_OFF, STARTING];
+  rerender(
+    <BaseStatusChip chip={chipOf(after, true)} indicators={after} {...props} />
+  );
+
+  expect(document.activeElement).toBe(elsewhere);
+});
+
 it("closes the panel when its action is picked", async () => {
   drawRow([DOWN, AI_OFF, STARTING]);
   await userEvent.click(

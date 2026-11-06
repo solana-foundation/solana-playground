@@ -49,8 +49,8 @@ const BaseStatusChip = ({
   onRetry,
 }: BaseStatusChipProps) => {
   // A Try again that is answered takes its button away, and the sheet has no
-  // focus return as the row and the rail do: focus moves to that row's name,
-  // so a keyboard user keeps their place
+  // focus return as the row and the rail do: focus that the button held moves
+  // to that row's name, so a keyboard user keeps their place
   const retried = useRef<StatusIndicator["id"]>(undefined);
   const sheet = useRef<HTMLDivElement>(null);
   const retry = (indicator: StatusIndicator) => {
@@ -62,6 +62,11 @@ const BaseStatusChip = ({
     if (id === undefined) return;
     if (indicators.find((i) => i.id === id)?.panel?.retry) return;
     retried.current = undefined;
+    // Only when the removed button held the focus: it then falls to the body,
+    // or to the sheet the focus trap keeps it in. A user who moved on to
+    // another control while the retry ran keeps their place
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== sheet.current) return;
     sheet.current
       ?.querySelector<HTMLElement>(`[data-status="${id}"] [data-focus-return]`)
       ?.focus();
