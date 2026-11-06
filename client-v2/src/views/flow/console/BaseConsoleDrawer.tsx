@@ -115,7 +115,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
         {!bare && (
           <span
             data-console-label
-            className="font-semibold tracking-wide text-foreground"
+            className="font-label tracking-wide text-foreground"
           >
             Terminal
           </span>

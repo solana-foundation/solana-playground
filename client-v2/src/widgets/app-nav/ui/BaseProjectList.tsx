@@ -150,8 +150,8 @@ const Group = ({
       {/* The prototype's section heading: small, grey, sentence case */}
       <SidebarGroupLabel
         id={labelId}
-        // On a phone, the label type, lined up with the 52 px rows' text
-        className="mb-1 h-4 text-xs font-normal text-subtle max-md:mb-1.5 max-md:px-3 max-md:text-caption max-md:font-label"
+        // The label type; on a phone, lined up with the 52 px rows' text
+        className="mb-1 h-4 text-xs font-label text-subtle max-md:mb-1.5 max-md:px-3 max-md:text-caption"
       >
         {label}
       </SidebarGroupLabel>
@@ -305,7 +305,7 @@ const Row = ({
             // `aria-describedby` reads the marker and the progress by id
             <span
               aria-hidden
-              className="ml-auto flex shrink-0 items-baseline gap-2 text-xs font-normal text-muted-foreground group-hover/menu-item:hidden"
+              className="ml-auto flex shrink-0 items-baseline gap-2 text-xs font-label text-muted-foreground group-hover/menu-item:hidden"
             >
               {entry.marker && <Marker id={markerId} marker={entry.marker} />}
               {entry.progress && (

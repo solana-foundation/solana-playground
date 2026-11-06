@@ -120,7 +120,7 @@ export const BaseFeedbackForm = ({
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="feedback-contact">
                 X handle{" "}
-                <span className="font-normal text-muted-foreground">
+                <span className="font-read text-muted-foreground">
                   (optional)
                 </span>
               </Label>

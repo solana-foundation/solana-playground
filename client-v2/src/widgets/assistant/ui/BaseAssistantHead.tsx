@@ -121,7 +121,7 @@ export function BaseAssistantHead({
       {/* Named whole: the name is computed per span, and would lose the
           spaces between the parts */}
       <h2
-        className="flex min-w-0 flex-1 text-sm font-medium whitespace-pre text-foreground"
+        className="flex min-w-0 flex-1 text-sm font-headline whitespace-pre text-foreground"
         aria-label={headText(label)}
       >
         {label.kind === "plain" ? (
