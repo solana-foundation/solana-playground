@@ -32,7 +32,7 @@ with "Build couldn't start. The Playground server didn't answer. Your code is
 unchanged.", which offers "Try again". A failure the server's output cannot
 place on a line SHALL show the log, with no line link.
 
-#### Scenario: The planned failure is a real compiler error
+#### Scenario: The planned failure is a real compiler error (manual)
 
 - **WHEN** Hello Anchor's step 1 builds before the fixing question
 - **THEN** the build server answers with `error[E0412]: cannot find type `Hello` in this scope` at `src/lib.rs:9:32`, after an `E0432` macro symptom at line 5
@@ -105,7 +105,7 @@ In a receipt (the finish card's Transaction details), every address row SHALL
 carry Copy and an Explorer link. Every Explorer link SHALL open Solana
 Explorer on the devnet cluster in a new tab.
 
-#### Scenario: First deploy with an empty wallet
+#### Scenario: First deploy with an empty wallet (manual)
 
 - **WHEN** a learner with a new wallet and 0 SOL presses Deploy on Hello
   Anchor's step 2
@@ -122,7 +122,7 @@ Explorer on the devnet cluster in a new tab.
 - **AND** a deploy act card under it, "Try again", runs the deploy again, as
   typing "deploy" does
 
-#### Scenario: The upgrade keeps the address
+#### Scenario: The upgrade keeps the address (manual)
 
 - **WHEN** step 4's build and deploy lands
 - **THEN** the result reads "Upgraded" with the same program id as step 2
@@ -155,7 +155,7 @@ the chevron; the step SHALL not pass. A run that sent no transaction SHALL
 post "No transaction", "client.ts sent none · see the terminal", not red,
 and the step SHALL not pass.
 
-#### Scenario: Hello from devnet
+#### Scenario: Hello from devnet (manual)
 
 - **WHEN** the learner runs `client.ts` on step 3 with the picked line
 - **THEN** the result reads "Confirmed" with `hello` and "Program log:
@@ -188,7 +188,7 @@ and the transaction.
 
 There SHALL be no "Why 7 days?" chip.
 
-#### Scenario: No Kora left
+#### Scenario: No Kora left (manual)
 
 - **WHEN** Hello Anchor runs from the intro to the finish
 - **THEN** no card, chip, terminal line or receipt reads "Kora", "0 SOL" or
@@ -213,7 +213,7 @@ goal. A call outside a step's goal (on a win, after the finish) SHALL show its
 result and pass nothing. A passed step SHALL stay passed. No step SHALL pass on
 the learner's word alone.
 
-#### Scenario: Passing step 3 from the Call panel
+#### Scenario: Passing step 3 from the Call panel (manual)
 
 - **WHEN** with Hello Anchor's step 3 question still open the learner calls
   `hello` from the Call panel
@@ -231,7 +231,7 @@ and deploy" act, and the deploy step's segment gets an amber dot until a
 deploy lands. Further edits SHALL update that one nudge, never add another.
 The current step's goal SHALL stay as it is.
 
-#### Scenario: Editing lib.rs after the deploy
+#### Scenario: Editing lib.rs after the deploy (manual)
 
 - **WHEN** after step 2 the learner changes the `msg!` text in `lib.rs`
 - **THEN** one nudge with "Build and deploy" posts at the live point
@@ -245,7 +245,7 @@ confirmed before the reload SHALL be recognised from the chain. Its result
 then posts instead, so pressing Deploy again never deploys a second program
 for the same tutorial.
 
-#### Scenario: Reload mid-deploy
+#### Scenario: Reload mid-deploy (manual)
 
 - **WHEN** the learner reloads during "Deploying"
 - **THEN** the act card shows "Interrupted by a reload. Run it again."
@@ -268,7 +268,7 @@ parameters:
 Failures SHALL also be logged through the logger with the error, never with a
 key or the wallet's secret.
 
-#### Scenario: A refused airdrop
+#### Scenario: A refused airdrop (manual)
 
 - **WHEN** a deploy stops because the airdrop was refused
 - **THEN** `tutorial_action_run` reaches the memory provider with `action: "deploy"` and `outcome: "no_funds"`
