@@ -665,7 +665,8 @@ export const seedNativeWorkspace = async (page: Page) => {
 
 /** Opens the terminal drawer, if it is closed */
 export const openTerminal = async (page: Page) => {
-  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  // The console drawer's own toggle: the editor head has a "Terminal" button too
+  const drawer = page.locator('[data-slot="console-drawer-trigger"]');
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }
