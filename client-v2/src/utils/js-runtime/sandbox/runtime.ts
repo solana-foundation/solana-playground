@@ -92,6 +92,14 @@ const pgFor = (channel: SandboxChannel) => (run: RunMessage) => {
         anchor.AnchorProvider.defaultOptions()
       )
     );
+  } else if (run.isIdlRefused) {
+    // A script that reaches for the program learns why there is none; not
+    // enumerable, so code that walks `pg` does not trip on it
+    Object.defineProperty(pg, "program", {
+      get: () => {
+        throw new Error(run.noIdl);
+      },
+    });
   }
 
   return pg;
@@ -153,7 +161,8 @@ const anchorFor =
       return withPayer(provider as anchor.AnchorProvider);
     };
 
-    if (pg.program) {
+    // `run.idl` first: with a refused IDL, reading `pg.program` throws
+    if (run.idl && pg.program) {
       const workspace: Record<string, unknown> = {};
       for (const workspaceName of run.workspaceNames) {
         Object.defineProperty(workspace, workspaceName, {
@@ -167,6 +176,18 @@ const anchorFor =
               program.programId,
               getProvider()
             );
+          },
+        });
+      }
+      overridden.workspace = workspace;
+    } else if (run.isIdlRefused) {
+      // The program's names report why there is no program; every other key
+      // reads as on a plain object
+      const workspace: Record<string, unknown> = {};
+      for (const workspaceName of run.workspaceNames) {
+        Object.defineProperty(workspace, workspaceName, {
+          get: () => {
+            throw new Error(run.noIdl);
           },
         });
       }
@@ -186,9 +207,7 @@ const importerFor =
       if (!path.includes("target/types")) {
         throw new Error("File imports are not yet supported.");
       }
-      if (!run.idl) {
-        throw new Error("IDL not found, build the program to create the IDL.");
-      }
+      if (!run.idl) throw new Error(run.noIdl);
       return { IDL: run.idl };
     }
     const pkg = await PgJsRuntimePackage.import(path);

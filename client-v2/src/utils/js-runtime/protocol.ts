@@ -43,8 +43,15 @@ export type ToSandbox =
       code: string;
       /** Whether to run it as a mocha test */
       isTest: boolean;
-      /** The project's Anchor IDL, when built */
+      /** The project's Anchor IDL, when built and callable */
       idl?: object;
+      /** Why there is no callable IDL, worded for the user */
+      noIdl: string;
+      /**
+       * Whether the IDL was refused: then `pg.program` and the program's
+       * names under `anchor.workspace` throw `noIdl` instead of being absent
+       */
+      isIdlRefused: boolean;
       /** The names `anchor.workspace` lists the program under */
       workspaceNames: string[];
       /** Base58 program id, when the project has one */

@@ -159,6 +159,36 @@ test.describe("project-code-sandbox", () => {
     await expect(terminalRows(page)).toContainText("landed: true");
   });
 
+  test("project-code-sandbox: A refused IDL says why where the program would be", async ({
+    context,
+    page,
+  }) => {
+    test.slow();
+    const { writeClient } = await seedPlaynetProject(context, page);
+    await writeClient(
+      [
+        'import * as anchor from "@coral-xyz/anchor";',
+        'try { pg.program; } catch (e) { console.log("program:", e.message); }',
+        'try { anchor.workspace.helloAnchor; } catch (e) { console.log("workspace:", e.message); }',
+        'console.log("keys:", Object.keys(pg).includes("program"));',
+      ].join("\n")
+    );
+    // Names a program but is no Anchor IDL, so `readIdl` refuses it
+    await deployHelloWorldWith({
+      address: "x",
+      metadata: { name: "hello_anchor" },
+    })(page);
+
+    await runFor(page)("run", /keys: false/);
+
+    await expect(terminalRows(page)).toContainText(
+      "program: The program's IDL can't be called"
+    );
+    await expect(terminalRows(page)).toContainText(
+      "workspace: The program's IDL can't be called"
+    );
+  });
+
   test("project-code-sandbox: A script runs against Playnet", async ({
     context,
     page,

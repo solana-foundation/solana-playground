@@ -149,14 +149,24 @@ export class PgJsRuntime {
         )
       : -1;
 
-    const idl = PgProgramInfo.idl ?? undefined;
-    const workspaceNames = idl
+    const idl = PgProgramInfo.callableIdl() ?? undefined;
+    const isIdlRefused = PgProgramInfo.readIdl()?.kind === "refused";
+    // A refused IDL still names the program, so its names can say why
+    const refusedName = (
+      PgProgramInfo.idl as { metadata?: { name?: unknown } } | null
+    )?.metadata?.name;
+    const snakeCaseName =
+      idl?.name ??
+      (isIdlRefused && typeof refusedName === "string"
+        ? refusedName
+        : undefined);
+    const workspaceNames = snakeCaseName
       ? Array.from(
           new Set([
-            PgCommon.toPascalFromSnake(idl.name), // default before 0.29.0
-            PgCommon.toCamelFromSnake(idl.name),
-            PgCommon.toKebabFromSnake(idl.name),
-            idl.name,
+            PgCommon.toPascalFromSnake(snakeCaseName), // default before 0.29.0
+            PgCommon.toCamelFromSnake(snakeCaseName),
+            PgCommon.toKebabFromSnake(snakeCaseName),
+            snakeCaseName,
           ])
         )
       : [];
@@ -166,6 +176,8 @@ export class PgJsRuntime {
       code,
       isTest,
       idl,
+      noIdl: PgProgramInfo.noCallableIdlMessage(),
+      isIdlRefused,
       workspaceNames,
       programId: PgProgramInfo.pk?.toBase58(),
       endpoint: PgConnection.current.rpcEndpoint,
