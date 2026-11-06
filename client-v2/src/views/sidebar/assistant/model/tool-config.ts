@@ -47,7 +47,10 @@ const bareUrl = (url: string) => {
   parsed.password = "";
   parsed.search = "";
   parsed.hash = "";
-  return PATH_RELATIVE.test(url.trim()) ? parsed.pathname : parsed.href;
+  // A dot segment can leave `//host/...` as the path, which reads back as another host
+  return PATH_RELATIVE.test(url.trim()) && !parsed.pathname.startsWith("//")
+    ? parsed.pathname
+    : parsed.href;
 };
 
 const isFilled = (map: Record<string, string> | undefined) =>
@@ -325,6 +328,16 @@ if (import.meta.vitest) {
 
       expect(text).not.toMatch(/secret/);
       expect(JSON.parse(text).mcpServers[0].missing).toEqual(["url query"]);
+    });
+
+    it("keeps a stripped path on the page's own host", () => {
+      const url = "/api/..//mcp.test/mcp?key=query-secret";
+      const kept = stored({ servers: [server({ url })] }).mcpServers[0].url;
+
+      expect(kept).not.toMatch(/secret/);
+      expect(new URL(kept, window.location.origin).host).toBe(
+        window.location.host
+      );
     });
 
     it("keeps a URL without a credential as it was typed", () => {
