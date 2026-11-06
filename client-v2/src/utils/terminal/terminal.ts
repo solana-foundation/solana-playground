@@ -420,8 +420,15 @@ export class PgTerm {
     this._isUntouched = true;
   }
 
-  /** Fit terminal. */
+  /**
+   * Fit terminal, unless its container shows less than two rows. A collapsed
+   * console fits to one row, and growing back from it leaves xterm's view at
+   * the top, so new output lands below what shows; the terminal keeps its
+   * last size until there is room for it.
+   */
   fit() {
+    const dims = this._fitAddon.proposeDimensions();
+    if (!dims || dims.rows < 2) return;
     this._fitAddon.fit();
   }
 
