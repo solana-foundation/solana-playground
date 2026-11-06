@@ -78,6 +78,18 @@ const withCounter = (name: string, n: number) => {
   return `${name.slice(0, dot)}-${n}${name.slice(dot)}`;
 };
 
+const utf8 = new TextEncoder();
+
+/** Whether `a` comes before `b` in byte order, the order GitHub lists files in */
+const sortsBefore = (a: string, b: string) => {
+  const x = utf8.encode(a);
+  const y = utf8.encode(b);
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] !== y[i]) return x[i] < y[i];
+  }
+  return x.length < y.length;
+};
+
 /**
  * The file a gist's page is headed by. GitHub has no title field: it heads a
  * gist with its first file in byte order, which would be the manifest. `!`
@@ -94,7 +106,9 @@ export const titleFileName = (projectName: string) =>
  * manifest that reverses the flattening.
  *
  * Names are the path with `/` replaced by `__`, readable on the gist's page;
- * a name already taken (or the manifest's or the title's) gets a counter.
+ * a name that would sort before the title, and so head the gist, gets a `_`
+ * in front, and a name already taken (or the manifest's or the title's) gets
+ * a counter.
  * Paths are taken in sorted order so the same project always gets the same
  * names.
  *
@@ -121,7 +135,8 @@ export const toGistFiles = (project: {
       continue;
     }
 
-    const flat = path.replaceAll("/", "__");
+    const plain = path.replaceAll("/", "__");
+    const flat = sortsBefore(plain, title) ? `_${plain}` : plain;
     let name = flat;
     for (let n = 2; taken.has(name); n++) name = withCounter(flat, n);
     taken.add(name);
@@ -364,6 +379,19 @@ if (import.meta.vitest) {
       expect(titleFileName(" a ")).toBe("!a");
       expect(titleFileName("a".repeat(60))).toBe(`!${"a".repeat(60)}`);
       expect(Array.from(titleFileName("😀".repeat(100)))).toHaveLength(61);
+    });
+
+    it("a project file that would sort before the title is renamed", () => {
+      const files = { "!a.rs": "first", " b.rs": "spaced", "src/lib.rs": "x" };
+      const gist = toGistFiles({ name: "counter", files });
+
+      expect(Object.keys(gist).sort()[0]).toBe("!counter");
+      expect(manifestOf(gist).files).toEqual({
+        "_!a.rs": "!a.rs",
+        "_ b.rs": " b.rs",
+        "src__lib.rs": "src/lib.rs",
+      });
+      expect(fromGistFiles(gist).files).toEqual(files);
     });
 
     it("a project file named like the title gets a counter", () => {
