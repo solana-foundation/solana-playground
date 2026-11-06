@@ -113,7 +113,7 @@ function SetupListValue({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="setup-list-value"
-      className={cn("ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-warning [&_svg]:size-3", className)}
+      className={cn("ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-warning-ink [&_svg]:size-3", className)}
       {...props}
     />
   )

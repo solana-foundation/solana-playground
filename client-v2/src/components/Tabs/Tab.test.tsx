@@ -25,9 +25,8 @@ vi.mock("../../utils", () => ({
   },
 }));
 
-// The icons and the language icon are not what is under test.
+// The icons are not what is under test.
 vi.mock("../Icons", () => ({ Close: () => <svg aria-hidden /> }));
-vi.mock("../LangIcon", () => ({ default: () => null }));
 
 const TABS = ["/a.rs", "/b.rs", "/c.rs"];
 

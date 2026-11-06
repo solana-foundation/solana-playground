@@ -61,7 +61,7 @@ function CopyButton({
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        <span className={copied ? "text-success" : undefined}>
+        <span className={copied ? "text-success-ink" : undefined}>
           {copied ? "Copied" : label}
         </span>
       </TooltipContent>

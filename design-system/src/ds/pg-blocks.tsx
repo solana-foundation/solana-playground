@@ -1026,7 +1026,7 @@ function PlaygroundComponents() {
         </DropdownMenu>
       </Block>
 
-      <Block id="editor-tabs" title="Editor tabs" source="playground" registry="editor-tabs" note="The open files over the editor. The current one sits on the editor's ground with a purple line along its top. Close shows on hover and on the current tab." className="block">
+      <Block id="editor-tabs" title="Editor tabs" source="playground" registry="editor-tabs" note="The open files over the editor. The current one sits on the editor's ground, with no line of its own. Close shows on hover and on the current tab." className="block">
         <EditorTabs className="max-w-xl rounded-t-xl">
           <EditorTab active>
             <EditorTabTrigger><FileCode2 /><EditorTabLabel>lib.rs</EditorTabLabel></EditorTabTrigger>
@@ -1113,7 +1113,7 @@ function PlaygroundBlocks() {
             <StatusDot variant="success" size="lg" />
             Deployed to devnet
           </div>
-          <div className="flex items-center gap-2 rounded-lg bg-surface-base px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg bg-surface-well px-3 py-2">
             <span className="text-caption text-subtle">Program id</span>
             <code className="font-mono text-code text-foreground" title={PROGRAM_ID}>7Hq5…Xk2P</code>
             <CopyButton value={PROGRAM_ID} label="Copy the program id" className="ml-auto" />

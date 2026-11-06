@@ -4,7 +4,7 @@ import * as React from "react";
 import { cn } from "@/shared/lib/utils";
 
 /* The open files over the editor. The current one sits on the editor's own
-   ground with a purple line along its top. A tab whose menu is open keeps
+   ground, which is all that marks it. A tab whose menu is open keeps
    an edge while the menu is up. Dragging to reorder belongs to the app
    (client-v2 uses dnd-kit); this is how a tab looks and what it says. */
 
@@ -39,8 +39,7 @@ function EditorTab({
         data-menu-open={menuOpen || undefined}
         className={cn(
           "group/editor-tab relative flex shrink-0 items-center gap-1 border-r border-border pr-1.5 pl-3 text-[0.8125rem] text-muted-foreground transition-colors hover:text-foreground",
-          "before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-primary before:opacity-0",
-          "data-active:bg-surface data-active:text-foreground data-active:before:opacity-100",
+          "data-active:bg-surface data-active:text-foreground",
           "data-menu-open:ring-1 data-menu-open:ring-muted-foreground/40 data-menu-open:ring-inset",
           className
         )}

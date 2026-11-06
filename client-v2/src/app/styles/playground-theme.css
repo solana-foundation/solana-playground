@@ -52,6 +52,9 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-warning-ink: var(--warning-ink);
+  --color-success-ink: var(--success-ink);
+  --color-info-ink: var(--info-ink);
+  --color-error-ink: var(--error-ink);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
   --color-error: var(--error);

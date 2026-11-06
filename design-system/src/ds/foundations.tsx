@@ -70,6 +70,10 @@ function Colour() {
           ["--warning", "Warning"],
           ["--info", "Info"],
           ["--error", "Error"],
+          ["--success-ink", "Success, words"],
+          ["--warning-ink", "Warning, words"],
+          ["--info-ink", "Info, words"],
+          ["--error-ink", "Error, words"],
         ]}
       />
       <SwatchGrid
