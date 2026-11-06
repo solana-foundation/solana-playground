@@ -209,10 +209,10 @@ class StageLoadBoundary extends Component<BoundaryProps, { error?: Error }> {
  * @param stage the stage, which names it in the failed state
  * @returns the stage, to render inside a `Suspense`
  */
-export const lazyStage = (
-  load: () => Promise<{ default: ComponentType }>,
+export const lazyStage = <P extends object>(
+  load: () => Promise<{ default: ComponentType<P> }>,
   stage: LazyStageName
-): FC => {
+): FC<P> => {
   let current: Attempt = { why: "first" };
   let isReported = false;
 
@@ -233,7 +233,7 @@ export const lazyStage = (
       })
     );
   let Panel = attemptLoad();
-  const Current = () => <Panel />;
+  const Current = (props: P) => <Panel {...props} />;
 
   const reset = (why: Retry) => {
     if (!current.failed) return;
@@ -241,7 +241,7 @@ export const lazyStage = (
     Panel = attemptLoad();
   };
 
-  const LazyStage: FC = () => (
+  const LazyStage: FC<P> = (props) => (
     <StageLoadBoundary
       stage={stage}
       hasRetried={() => current.why === "user"}
@@ -254,7 +254,7 @@ export const lazyStage = (
         current = { ...current, isFailureShown: true };
       }}
     >
-      <Current />
+      <Current {...props} />
     </StageLoadBoundary>
   );
   return LazyStage;

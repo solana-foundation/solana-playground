@@ -141,7 +141,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           )}
           {faucet === "none" && (
             <DropdownMenuItem disabled>
-              <Airdrop />
+              <Icon name="airdrop" />
               <MenuItemText>{NO_FAUCET}</MenuItemText>
             </DropdownMenuItem>
           )}
