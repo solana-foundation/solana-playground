@@ -1,11 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ENDPOINT } from "@/constants";
 import { PgCustomRpcs } from "@/entities/custom-rpc";
-
-import NetworkSection from "./NetworkSection";
 
 // The real `@/utils` needs the app's build-time globals; the section only
 // reads the deploy state, the endpoint and the toast from it
@@ -42,7 +40,25 @@ vi.mock("@/utils", () => ({
 }));
 vi.mock("@/hooks", () => ({ useRenderOnChange: () => {} }));
 
-const HELIUS = { name: "Helius", url: "https://h.test/" };
+import NetworkSection from "./NetworkSection";
+
+const DEVNET = "https://api.devnet.solana.com/";
+
+const stubRpcAnswering = () =>
+  vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async () => new Response('{"result":"ok"}'));
+
+const stubRpcNotAnswering = () =>
+  vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new TypeError("Failed to fetch"));
+
+const addRpc = async (name: string, url: string) => {
+  await userEvent.click(screen.getByRole("button", { name: "Add custom RPC" }));
+  await userEvent.type(screen.getByLabelText("Name"), name);
+  await userEvent.type(screen.getByLabelText("RPC URL"), `${url}{Enter}`);
+};
 
 beforeEach(() => {
   // the chips measure themselves with one; jsdom has none
@@ -54,61 +70,151 @@ beforeEach(() => {
       disconnect() {}
     }
   );
-  localStorage.clear();
-  PgCustomRpcs.save(HELIUS);
-  state.deployState = "ready";
-  state.endpoint = HELIUS.url;
-  state.toasts = [];
 });
 
-afterEach(() => localStorage.clear());
+describe("NetworkSection", () => {
+  beforeEach(() => {
+    state.deployState = "ready";
+    state.toasts = [];
+    localStorage.clear();
+    state.endpoint = DEVNET;
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
-it("keeps the RPC in use while a deploy runs, rather than removing it", async () => {
-  state.deployState = "loading";
-  render(<NetworkSection />);
+  it("picks a new RPC whose URL answers", async () => {
+    stubRpcAnswering();
+    render(<NetworkSection />);
+    await addRpc("Triton", "https://t.test");
+    // Its chip and its row in the list
+    expect(await screen.findByRole("radio", { name: "Triton" })).toBeTruthy();
+    expect(state.endpoint).toBe("https://t.test/");
+  });
 
-  await userEvent.click(screen.getByRole("button", { name: "Remove Helius" }));
+  it("picks a new RPC saved through Use anyway, and not before", async () => {
+    stubRpcNotAnswering();
+    render(<NetworkSection />);
+    await addRpc("Dead", "https://dead.test");
+    await screen.findByText("This URL is not responding.");
+    expect(state.endpoint).toBe(DEVNET);
+    await userEvent.click(screen.getByRole("button", { name: "Use anyway" }));
+    expect(state.endpoint).toBe("https://dead.test/");
+  });
 
-  expect(PgCustomRpcs.list()).toEqual([HELIUS]);
-  expect(state.endpoint).toBe(HELIUS.url);
-  expect(state.toasts).toEqual(["network-held-by-deploy"]);
+  it("leaves the connection alone when an RPC not in use is edited", async () => {
+    localStorage.setItem(
+      "customRpcs",
+      JSON.stringify([{ name: "Other", url: "https://other.test/" }])
+    );
+    stubRpcAnswering();
+    render(<NetworkSection />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Other" }));
+    await userEvent.clear(screen.getByLabelText("RPC URL"));
+    await userEvent.type(
+      screen.getByLabelText("RPC URL"),
+      "https://other2.test{Enter}"
+    );
+    await screen.findByRole("radio", { name: "Other" });
+    await waitFor(() => expect(screen.queryByLabelText("RPC URL")).toBeNull());
+    expect(state.endpoint).toBe(DEVNET);
+  });
+
+  it("moves the connection with an edit of the RPC in use, through Use anyway", async () => {
+    localStorage.setItem(
+      "customRpcs",
+      JSON.stringify([{ name: "Mine", url: "https://mine.test/" }])
+    );
+    state.endpoint = "https://mine.test/";
+    stubRpcNotAnswering();
+    render(<NetworkSection />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Mine" }));
+    await userEvent.clear(screen.getByLabelText("RPC URL"));
+    await userEvent.type(
+      screen.getByLabelText("RPC URL"),
+      "https://mine2.test{Enter}"
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Use anyway" })
+    );
+    expect(state.endpoint).toBe("https://mine2.test/");
+  });
 });
 
-it("refuses a new URL for the RPC in use while a deploy runs", async () => {
-  state.deployState = "paused";
-  render(<NetworkSection />);
+describe("NetworkSection while a deploy runs", () => {
+  const HELIUS = { name: "Helius", url: "https://h.test/" };
 
-  await userEvent.click(screen.getByRole("button", { name: "Edit Helius" }));
-  const url = screen.getByLabelText("RPC URL");
-  await userEvent.clear(url);
-  await userEvent.type(url, "https://other.test{Enter}");
+  beforeEach(() => {
+    localStorage.clear();
+    PgCustomRpcs.save(HELIUS);
+    state.deployState = "ready";
+    state.endpoint = HELIUS.url;
+    state.toasts = [];
+  });
+  afterEach(() => {
+    localStorage.clear();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
-  expect(PgCustomRpcs.list()).toEqual([HELIUS]);
-  expect(state.endpoint).toBe(HELIUS.url);
-  expect(
-    screen.getByText("A deploy is running. Change the URL when it ends.")
-  ).toBeTruthy();
-});
+  it("keeps the RPC in use, rather than removing it", async () => {
+    state.deployState = "loading";
+    render(<NetworkSection />);
 
-it("renames the RPC in use while a deploy runs", async () => {
-  state.deployState = "loading";
-  render(<NetworkSection />);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove Helius" })
+    );
 
-  await userEvent.click(screen.getByRole("button", { name: "Edit Helius" }));
-  const name = screen.getByLabelText("Name");
-  await userEvent.clear(name);
-  await userEvent.type(name, "Mine{Enter}");
+    expect(PgCustomRpcs.list()).toEqual([HELIUS]);
+    expect(state.endpoint).toBe(HELIUS.url);
+    expect(state.toasts).toEqual(["network-held-by-deploy"]);
+  });
 
-  expect(PgCustomRpcs.list()).toEqual([{ name: "Mine", url: HELIUS.url }]);
-  expect(state.endpoint).toBe(HELIUS.url);
-});
+  it("refuses a new URL for the RPC in use, before any health check", async () => {
+    state.deployState = "paused";
+    const fetch = vi.spyOn(globalThis, "fetch");
+    render(<NetworkSection />);
 
-it("removes the RPC in use once no deploy runs, moving to Devnet", async () => {
-  render(<NetworkSection />);
+    await userEvent.click(screen.getByRole("button", { name: "Edit Helius" }));
+    const url = screen.getByLabelText("RPC URL");
+    await userEvent.clear(url);
+    await userEvent.type(url, "https://other.test{Enter}");
 
-  await userEvent.click(screen.getByRole("button", { name: "Remove Helius" }));
+    expect(
+      await screen.findByText(
+        "A deploy is running. Change the URL when it ends."
+      )
+    ).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(PgCustomRpcs.list()).toEqual([HELIUS]);
+    expect(state.endpoint).toBe(HELIUS.url);
+  });
 
-  expect(PgCustomRpcs.list()).toEqual([]);
-  expect(state.endpoint).toBe(DEFAULT_ENDPOINT);
-  expect(state.toasts).toEqual(["custom-rpc-removed"]);
+  it("renames the RPC in use", async () => {
+    state.deployState = "loading";
+    render(<NetworkSection />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Helius" }));
+    const name = screen.getByLabelText("Name");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Mine{Enter}");
+
+    await waitFor(() =>
+      expect(PgCustomRpcs.list()).toEqual([{ name: "Mine", url: HELIUS.url }])
+    );
+    expect(state.endpoint).toBe(HELIUS.url);
+  });
+
+  it("removes the RPC in use once no deploy runs, moving to Devnet", async () => {
+    render(<NetworkSection />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove Helius" })
+    );
+
+    expect(PgCustomRpcs.list()).toEqual([]);
+    expect(state.endpoint).toBe(DEFAULT_ENDPOINT);
+    expect(state.toasts).toEqual(["custom-rpc-removed"]);
+  });
 });

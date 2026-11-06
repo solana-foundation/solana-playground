@@ -54,13 +54,21 @@ export interface SettingGroup<S extends Groupable> {
   settings: S[];
 }
 
+/**
+ * Settings the Network section writes itself, through its chips and the
+ * custom RPC list. Spec 07 (SET-08) wants one network control, so the page
+ * draws no generic row for them; the settings themselves stay.
+ */
+const NETWORK_SECTION_SETTINGS = new Set(["connection.endpoint"]);
+
 const rank = (id: string) => {
   const at = (SECTION_ORDER as readonly string[]).indexOf(id);
   return at === -1 ? SECTION_ORDER.length : at;
 };
 
 /**
- * `PgSettings.all` grouped by the prefix of each id, in `SECTION_ORDER`, with
+ * `PgSettings.all`, without the settings the Network section draws, grouped
+ * by the prefix of each id, in `SECTION_ORDER`, with
  * selects before switches and then by name. A group the page does not list
  * comes last, and is reported once so that a new settings folder gets a place
  * in the order rather than going unnoticed.
@@ -70,6 +78,7 @@ export const groupSettings = <S extends Groupable>(
 ): SettingGroup<S>[] => {
   const groups = new Map<string, S[]>();
   for (const setting of all) {
+    if (NETWORK_SECTION_SETTINGS.has(setting.id)) continue;
     const id = setting.id.split(".")[0];
     groups.set(id, [...(groups.get(id) ?? []), setting]);
   }
@@ -114,7 +123,7 @@ if (import.meta.vitest) {
       const groups = groupSettings([
         setting("ui.theme", "Theme", ["dark", "light"]),
         setting("experimental.unstable", "Unstable"),
-        setting("connection.endpoint", "Endpoint", ["devnet"]),
+        setting("connection.commitment", "Commitment", ["confirmed"]),
         setting("build.improveErrors", "Improve errors"),
       ]);
       expect(groups.map((g) => g.id)).toEqual([
@@ -122,6 +131,16 @@ if (import.meta.vitest) {
         "connection",
         "ui",
         "experimental",
+      ]);
+    });
+
+    it("leaves the endpoint out of Connection: the Network row is the only network control", () => {
+      const [connection] = groupSettings([
+        setting("connection.endpoint", "Endpoint", ["devnet"]),
+        setting("connection.commitment", "Commitment", ["confirmed"]),
+      ]);
+      expect(connection.settings.map((s) => s.id)).toEqual([
+        "connection.commitment",
       ]);
     });
 

@@ -1,30 +1,25 @@
 import { useEffect, useState } from "react";
 
 import { DEFAULT_ENDPOINT } from "@/constants";
-import type { CustomRpc, SaveResult } from "@/entities/custom-rpc";
-import { checkRpcUrl, PgCustomRpcs } from "@/entities/custom-rpc";
+import type { CustomRpc } from "@/entities/custom-rpc";
+import {
+  checkRpcUrl,
+  fetchRpcHealth,
+  PgCustomRpcs,
+} from "@/entities/custom-rpc";
 import { useRenderOnChange } from "@/hooks";
 import { Button } from "@/shared/ui/button";
 import { PgGlobal, PgSettings, PgView } from "@/utils";
 import type { ToastChildProps } from "@/utils/view";
 
 import { canSwitchNetwork } from "../model/network-hold";
+import { answerFor, saveCheckedWith } from "../model/save-custom-rpc";
 import { settingsTelemetry } from "../model/telemetry";
-import type { CustomRpcSaveAnswer } from "./BaseCustomRpcs";
 import BaseCustomRpcs from "./BaseCustomRpcs";
 import BaseNetworkChoice from "./BaseNetworkChoice";
 
-/** The line under the URL field for a refused save (Spec 07's copy) */
-const refusal = (result: Exclude<SaveResult, { ok: true }>): string => {
-  switch (result.reason) {
-    case "format":
-      return "Enter a URL that starts with https://, or http:// for a local validator.";
-    case "duplicate":
-      return `Already saved as ${result.name}.`;
-    case "storage":
-      return "Could not save in this browser.";
-  }
-};
+/** Save a custom RPC once its URL answers one health request (Spec 07) */
+const saveChecked = saveCheckedWith(fetchRpcHealth);
 
 /** Say that a running deploy holds the network where it is */
 const toastNetworkHeld = () =>
@@ -89,8 +84,7 @@ const Removed = ({
  * each saved custom RPC, and the list that adds, edits and removes them.
  */
 const NetworkSection = () => {
-  // The chips follow an endpoint picked elsewhere too, such as the
-  // Connection section's Endpoint select
+  // The chips follow an endpoint picked elsewhere too, such as the terminal
   useRenderOnChange(PgSettings.onDidChangeConnectionEndpoint);
   const endpoint = PgSettings.connection.endpoint;
 
@@ -110,47 +104,33 @@ const NetworkSection = () => {
     };
   }, []);
 
-  /** Report a save's result; a refusal becomes the line under the field */
-  const answerFor =
-    (mode: "add" | "edit") =>
-    (result: SaveResult): CustomRpcSaveAnswer => {
-      if (!result.ok) {
-        settingsTelemetry.track("settings_custom_rpc_refused", {
-          reason: result.reason,
-        });
-        return { ok: false, error: refusal(result) };
-      }
-      settingsTelemetry.track("settings_custom_rpc_saved", { mode });
-      return { ok: true };
-    };
+  // A new RPC is picked at once, whether checked or saved through "Use anyway"
+  const handleAdd = async (input: CustomRpc) =>
+    answerFor((saved) => pick(saved.url))("add")(
+      await saveChecked(input, undefined)
+    );
 
-  // A new RPC is picked at once
-  const handleAdd = (input: CustomRpc) => {
-    const result = PgCustomRpcs.save(input);
-    if (result.ok) pick(result.rpc.url);
-    return answerFor("add")(result);
-  };
-
-  // An edited RPC keeps the connection on it when it was the one in use
-  const handleEdit = (rpc: CustomRpc, input: CustomRpc) => {
-    const wasPicked = PgSettings.connection.endpoint === rpc.url;
+  // An edited RPC keeps the connection on it when it is the one in use at
+  // the moment it saves
+  const handleEdit = async (rpc: CustomRpc, input: CustomRpc) => {
     // A new URL for the RPC in use would move the network, so a running
-    // deploy refuses it before the list changes; a rename still saves
-    const check = checkRpcUrl(input.url);
+    // deploy refuses it before the check and before the list changes; a
+    // rename still saves
+    const url = checkRpcUrl(input.url);
     if (
-      wasPicked &&
-      check.ok &&
-      check.url !== rpc.url &&
+      PgSettings.connection.endpoint === rpc.url &&
+      url.ok &&
+      url.url !== rpc.url &&
       !canSwitchNetwork(PgGlobal.deployState)
     ) {
       return {
-        ok: false as const,
+        kind: "refused" as const,
         error: "A deploy is running. Change the URL when it ends.",
       };
     }
-    const result = PgCustomRpcs.replace(rpc.url, input);
-    if (result.ok && wasPicked) pick(result.rpc.url);
-    return answerFor("edit")(result);
+    return answerFor((saved) => {
+      if (PgSettings.connection.endpoint === rpc.url) pick(saved.url);
+    })("edit")(await saveChecked(input, rpc.url));
   };
 
   const handleRemove = (rpc: CustomRpc) => {

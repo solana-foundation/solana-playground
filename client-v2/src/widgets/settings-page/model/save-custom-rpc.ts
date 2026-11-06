@@ -1,0 +1,386 @@
+import type {
+  CustomRpc,
+  Refused,
+  RpcHealth,
+  SaveResult,
+} from "@/entities/custom-rpc";
+import { PgCustomRpcs } from "@/entities/custom-rpc";
+
+import { settingsTelemetry } from "./telemetry";
+
+/** Why a URL went unchecked: no answer in time, or no request because offline */
+type Unchecked = Exclude<RpcHealth, "answered">;
+
+/** A save's last word: saved, or the line to show under the URL */
+export type SettledAnswer =
+  | { kind: "saved" }
+  | { kind: "refused"; error: string };
+
+/**
+ * What saving answers the form: settled, or, for a URL that could not be
+ * checked, the line with "Use anyway", which saves without the check
+ */
+export type CustomRpcSaveAnswer =
+  | SettledAnswer
+  | { kind: "unreachable"; error: string; useAnyway: () => SettledAnswer };
+
+/** How a save went once its URL was checked, or why it waits on the person */
+export type CheckedSave =
+  | {
+      kind: "saved";
+      rpc: CustomRpc;
+      /** `none`: an edit that kept its URL, so no request was sent */
+      check: "passed" | "none";
+    }
+  | { kind: "refused"; refusal: Refused }
+  | {
+      kind: "unreachable";
+      reason: Unchecked;
+      /** Save without the check: "Use anyway" */
+      useAnyway: () => SaveResult;
+    };
+
+/** A write's result as a checked save, under how its URL was checked */
+const writtenWith =
+  (check: "passed" | "none") =>
+  (result: SaveResult): CheckedSave =>
+    result.ok
+      ? { kind: "saved", rpc: result.rpc, check }
+      : { kind: "refused", refusal: result };
+
+/**
+ * Save `input` (over the RPC saved under `replacing`, or as a new one) once
+ * its URL answers `fetchHealth`. A value the list would refuse sends no
+ * request, and neither does an edit that keeps its URL. The write checks the
+ * list again, since another tab may change it during the wait.
+ */
+export const saveCheckedWith =
+  (fetchHealth: (url: string) => Promise<RpcHealth>) =>
+  async (
+    input: CustomRpc,
+    replacing: string | undefined
+  ): Promise<CheckedSave> => {
+    const write = () =>
+      replacing === undefined
+        ? PgCustomRpcs.save(input)
+        : PgCustomRpcs.replace(replacing, input);
+    const checked = PgCustomRpcs.check(input, replacing);
+    if (!checked.ok) return { kind: "refused", refusal: checked };
+    if (checked.url === replacing) return writtenWith("none")(write());
+    const health = await fetchHealth(checked.url);
+    if (health === "answered") return writtenWith("passed")(write());
+    return { kind: "unreachable", reason: health, useAnyway: write };
+  };
+
+/** The line under the URL field for a refused save (Spec 07's copy) */
+const refusalLine = (result: Refused): string => {
+  switch (result.reason) {
+    case "format":
+      return "Enter a URL that starts with https://, or http:// for a local validator.";
+    case "duplicate":
+      return `Already saved as ${result.name}.`;
+    case "storage":
+      return "Could not save in this browser.";
+  }
+};
+
+/** The line for a URL that could not be checked; "not responding" is the app's word */
+const UNCHECKED: Record<Unchecked, string> = {
+  no_answer: "This URL is not responding.",
+  offline: "You're offline, so this URL can't be checked.",
+};
+
+type SaveMode = "add" | "edit";
+
+/** Track a refusal and answer its line */
+const refuse = (result: Refused): SettledAnswer => {
+  settingsTelemetry.track("settings_custom_rpc_refused", {
+    reason: result.reason,
+  });
+  return { kind: "refused", error: refusalLine(result) };
+};
+
+/** Track a save, run `onSaved`, and answer it */
+const keepWith =
+  (onSaved: (rpc: CustomRpc) => void, mode: SaveMode) =>
+  (check: "passed" | "used_anyway" | "none", rpc: CustomRpc): SettledAnswer => {
+    settingsTelemetry.track("settings_custom_rpc_saved", { mode, check });
+    onSaved(rpc);
+    return { kind: "saved" };
+  };
+
+/**
+ * Turn a checked save into the form's answer, tracking each outcome:
+ * a refusal is the line under the field, an unchecked URL the line with
+ * "Use anyway", and a save calls `onSaved` with the stored RPC
+ */
+export const answerFor =
+  (onSaved: (rpc: CustomRpc) => void) =>
+  (mode: SaveMode) =>
+  (checked: CheckedSave): CustomRpcSaveAnswer => {
+    const keep = keepWith(onSaved, mode);
+    switch (checked.kind) {
+      case "saved":
+        return keep(checked.check, checked.rpc);
+      case "refused":
+        return refuse(checked.refusal);
+      case "unreachable":
+        settingsTelemetry.track("settings_custom_rpc_refused", {
+          reason: checked.reason,
+        });
+        return {
+          kind: "unreachable",
+          error: UNCHECKED[checked.reason],
+          useAnyway: () => {
+            const result = checked.useAnyway();
+            return result.ok ? keep("used_anyway", result.rpc) : refuse(result);
+          },
+        };
+    }
+  };
+
+if (import.meta.vitest) {
+  const { describe, it, expect, vi, beforeEach, afterEach, beforeAll } =
+    import.meta.vitest;
+
+  describe("widgets/settings-page/model/save-custom-rpc", () => {
+    let telemetry: typeof import("@/shared/lib/telemetry");
+    let events: ReturnType<typeof telemetry.memoryProvider>;
+    beforeAll(async () => {
+      telemetry = await import("@/shared/lib/telemetry");
+    });
+    beforeEach(() => {
+      localStorage.clear();
+      events = telemetry.memoryProvider();
+      telemetry.initTelemetry({ providers: [events] });
+    });
+    afterEach(() => {
+      telemetry.resetTelemetry();
+    });
+
+    const tracked = () => events.events.map((e) => [e.name, e.params]);
+    const healthOf = (health: RpcHealth) => vi.fn(async () => health);
+    const TRITON = { name: "Triton", url: "https://t.test" };
+    const SAVED_TRITON = { name: "Triton", url: "https://t.test/" };
+
+    describe("saveCheckedWith", () => {
+      it("saves a URL that answers, after one check of its normalised URL", async () => {
+        const health = healthOf("answered");
+        const checked = await saveCheckedWith(health)(TRITON, undefined);
+        expect(health).toHaveBeenCalledWith("https://t.test/");
+        expect(checked).toEqual({
+          kind: "saved",
+          rpc: SAVED_TRITON,
+          check: "passed",
+        });
+        expect(PgCustomRpcs.list()).toHaveLength(1);
+      });
+
+      it.each(["no_answer", "offline"] as const)(
+        "saves nothing on %s until Use anyway",
+        async (reason) => {
+          const checked = await saveCheckedWith(healthOf(reason))(
+            TRITON,
+            undefined
+          );
+          if (checked.kind !== "unreachable") throw new Error(checked.kind);
+          expect(checked.reason).toBe(reason);
+          expect(PgCustomRpcs.list()).toEqual([]);
+          expect(checked.useAnyway().ok).toBe(true);
+          expect(PgCustomRpcs.list()).toEqual([SAVED_TRITON]);
+        }
+      );
+
+      it("sends no request for a value the list refuses", async () => {
+        const health = healthOf("answered");
+        const checked = await saveCheckedWith(health)(
+          { name: "", url: "devnet" },
+          undefined
+        );
+        expect(health).not.toHaveBeenCalled();
+        expect(checked).toEqual({
+          kind: "refused",
+          refusal: { ok: false, reason: "format" },
+        });
+      });
+
+      it("sends no request for an edit that keeps its URL", async () => {
+        PgCustomRpcs.save(TRITON);
+        const health = healthOf("no_answer");
+        const checked = await saveCheckedWith(health)(
+          { name: "Triton 2", url: "https://T.test" },
+          "https://t.test/"
+        );
+        expect(health).not.toHaveBeenCalled();
+        expect(checked).toMatchObject({ kind: "saved", check: "none" });
+        expect(PgCustomRpcs.list()[0].name).toBe("Triton 2");
+      });
+
+      it("checks an edit that changes its URL, and replaces in place", async () => {
+        PgCustomRpcs.save(TRITON);
+        const health = healthOf("answered");
+        await saveCheckedWith(health)(
+          { name: "Triton", url: "https://t2.test" },
+          "https://t.test/"
+        );
+        expect(health).toHaveBeenCalledWith("https://t2.test/");
+        expect(PgCustomRpcs.list()).toEqual([
+          { name: "Triton", url: "https://t2.test/" },
+        ]);
+      });
+
+      it("refuses a URL another tab saved while it was being checked", async () => {
+        const health = vi.fn(async () => {
+          PgCustomRpcs.save({ name: "Elsewhere", url: TRITON.url });
+          return "answered" as const;
+        });
+        const checked = await saveCheckedWith(health)(TRITON, undefined);
+        expect(checked).toEqual({
+          kind: "refused",
+          refusal: { ok: false, reason: "duplicate", name: "Elsewhere" },
+        });
+      });
+
+      describe("when the browser refuses the write", () => {
+        beforeEach(() => {
+          vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+            throw new DOMException("full", "QuotaExceededError");
+          });
+        });
+        afterEach(() => {
+          vi.restoreAllMocks();
+        });
+
+        it("refuses a URL that answered", async () => {
+          expect(
+            await saveCheckedWith(healthOf("answered"))(TRITON, undefined)
+          ).toEqual({
+            kind: "refused",
+            refusal: { ok: false, reason: "storage" },
+          });
+        });
+
+        it("refuses through Use anyway", async () => {
+          const checked = await saveCheckedWith(healthOf("no_answer"))(
+            TRITON,
+            undefined
+          );
+          if (checked.kind !== "unreachable") throw new Error(checked.kind);
+          expect(checked.useAnyway()).toEqual({ ok: false, reason: "storage" });
+        });
+      });
+
+      it("refuses Use anyway for a URL another tab saved meanwhile", async () => {
+        const checked = await saveCheckedWith(healthOf("no_answer"))(
+          TRITON,
+          undefined
+        );
+        if (checked.kind !== "unreachable") throw new Error(checked.kind);
+        PgCustomRpcs.save({ name: "Elsewhere", url: TRITON.url });
+        expect(checked.useAnyway()).toEqual({
+          ok: false,
+          reason: "duplicate",
+          name: "Elsewhere",
+        });
+        expect(PgCustomRpcs.list()).toHaveLength(1);
+      });
+    });
+
+    describe("answerFor", () => {
+      it("tracks a checked save with check passed and calls onSaved", () => {
+        const onSaved = vi.fn();
+        const answer = answerFor(onSaved)("add")({
+          kind: "saved",
+          rpc: SAVED_TRITON,
+          check: "passed",
+        });
+        expect(answer).toEqual({ kind: "saved" });
+        expect(onSaved).toHaveBeenCalledWith(SAVED_TRITON);
+        expect(tracked()).toEqual([
+          ["settings_custom_rpc_saved", { mode: "add", check: "passed" }],
+        ]);
+      });
+
+      it("answers a refusal with Spec 07's line", () => {
+        const answer = answerFor(vi.fn())("edit")({
+          kind: "refused",
+          refusal: { ok: false, reason: "duplicate", name: "Helius" },
+        });
+        expect(answer).toEqual({
+          kind: "refused",
+          error: "Already saved as Helius.",
+        });
+        expect(tracked()).toEqual([
+          ["settings_custom_rpc_refused", { reason: "duplicate" }],
+        ]);
+      });
+
+      it.each([
+        ["no_answer", "This URL is not responding."],
+        ["offline", "You're offline, so this URL can't be checked."],
+      ] as const)(
+        "offers Use anyway on %s, and tracks it apart",
+        (reason, line) => {
+          const onSaved = vi.fn();
+          const answer = answerFor(onSaved)("add")({
+            kind: "unreachable",
+            reason,
+            useAnyway: () => ({ ok: true, rpc: SAVED_TRITON }),
+          });
+          if (answer.kind !== "unreachable") throw new Error(answer.kind);
+          expect(answer.error).toBe(line);
+          expect(onSaved).not.toHaveBeenCalled();
+          expect(answer.useAnyway()).toEqual({ kind: "saved" });
+          expect(onSaved).toHaveBeenCalledWith(SAVED_TRITON);
+          expect(tracked()).toEqual([
+            ["settings_custom_rpc_refused", { reason }],
+            [
+              "settings_custom_rpc_saved",
+              { mode: "add", check: "used_anyway" },
+            ],
+          ]);
+        }
+      );
+
+      it("tracks an edit that kept its URL with check none", () => {
+        answerFor(vi.fn())("edit")({
+          kind: "saved",
+          rpc: SAVED_TRITON,
+          check: "none",
+        });
+        expect(tracked()).toEqual([
+          ["settings_custom_rpc_saved", { mode: "edit", check: "none" }],
+        ]);
+      });
+
+      it("answers and tracks a Use anyway the list refuses", () => {
+        const onSaved = vi.fn();
+        const answer = answerFor(onSaved)("add")({
+          kind: "unreachable",
+          reason: "no_answer",
+          useAnyway: () => ({ ok: false, reason: "duplicate", name: "B" }),
+        });
+        if (answer.kind !== "unreachable") throw new Error(answer.kind);
+        expect(answer.useAnyway()).toEqual({
+          kind: "refused",
+          error: "Already saved as B.",
+        });
+        expect(onSaved).not.toHaveBeenCalled();
+        expect(tracked()).toEqual([
+          ["settings_custom_rpc_refused", { reason: "no_answer" }],
+          ["settings_custom_rpc_refused", { reason: "duplicate" }],
+        ]);
+      });
+
+      it("carries no URL, host or name in any event", () => {
+        const answer = answerFor(vi.fn())("add")({
+          kind: "unreachable",
+          reason: "no_answer",
+          useAnyway: () => ({ ok: true, rpc: SAVED_TRITON }),
+        });
+        if (answer.kind === "unreachable") answer.useAnyway();
+        expect(JSON.stringify(events.events)).not.toMatch(/t\.test|Triton/);
+      });
+    });
+  });
+}

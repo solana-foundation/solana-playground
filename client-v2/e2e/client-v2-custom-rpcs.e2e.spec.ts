@@ -17,7 +17,10 @@ const RESULTS: Record<string, unknown> = {
   getSlot: 1,
 };
 
-/** Answers every JSON-RPC call to `*.rpc.test`, and records the hosts asked */
+/**
+ * Answers every JSON-RPC call to `*.rpc.test` and the spec's `rpc.example.com`,
+ * and records the hosts asked
+ */
 const stubRpcs = async (page: Page) => {
   const asked: string[] = [];
   const answer = (call: { id?: unknown; method?: string }) => ({
@@ -27,7 +30,7 @@ const stubRpcs = async (page: Page) => {
     // eslint-disable-next-line unicorn/no-null -- the wire format's null
     result: RESULTS[call.method ?? ""] ?? null,
   });
-  await page.route("https://*.rpc.test/**", async (route: Route) => {
+  const handle = async (route: Route) => {
     asked.push(new URL(route.request().url()).host);
     const body = route.request().postDataJSON() ?? {};
     await route.fulfill({
@@ -36,7 +39,9 @@ const stubRpcs = async (page: Page) => {
         Array.isArray(body) ? body.map(answer) : answer(body)
       ),
     });
-  });
+  };
+  await page.route("https://*.rpc.test/**", handle);
+  await page.route("https://rpc.example.com/**", handle);
   return asked;
 };
 
@@ -157,7 +162,10 @@ test("client-v2-custom-rpcs: A local validator over plain HTTP is accepted", asy
   seededPage: page,
 }) => {
   await page.route("http://localhost:8899/**", (route) =>
-    route.abort("connectionrefused")
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, result: "ok" }),
+    })
   );
   await openSettings(page);
   await addRpc(page, { name: "Local", url: "http://localhost:8899" });
@@ -270,4 +278,119 @@ test("client-v2-custom-rpcs: Removing an RPC not in use keeps the network", asyn
   await expect(
     network(page).getByRole("radio", { name: "Triton" })
   ).toHaveAttribute("aria-checked", "true");
+});
+
+test("client-v2-custom-rpcs: No endpoint select in Connection", async ({
+  seededPage: page,
+}) => {
+  const settings = await openSettings(page);
+  await expect(
+    settings.getByRole("heading", { level: 2, name: "Connection" })
+  ).toBeVisible();
+  await expect(
+    settings.getByRole("combobox", { name: "Commitment" })
+  ).toHaveCount(1);
+  await expect(
+    settings.getByRole("combobox", { name: "Endpoint" })
+  ).toHaveCount(0);
+  await expect(settings.getByText("Endpoint", { exact: true })).toHaveCount(0);
+  await network(page).getByRole("radio", { name: "Mainnet" }).click();
+  await expect(
+    network(page).getByRole("radio", { name: "Mainnet" })
+  ).toHaveAttribute("aria-checked", "true");
+});
+
+test("client-v2-custom-rpcs: A URL that answers is saved", async ({
+  seededPage: page,
+}) => {
+  // Hold the health request, to see the form while it waits
+  let answer = () => {};
+  const answered = new Promise<void>((resolve) => {
+    answer = resolve;
+  });
+  await page.route("https://slow.rpc.test/**", async (route) => {
+    await answered;
+    await route.fallback();
+  });
+  const settings = await openSettings(page);
+  await addRpc(page, { name: "Slow", url: "https://slow.rpc.test/" });
+  const form = settings.getByRole("form", { name: "Add custom RPC" });
+  await expect(form.getByRole("button", { name: /Save/ })).toBeDisabled();
+  await expect(form.getByRole("status")).toBeVisible();
+  await expect(form.getByLabel("RPC URL")).not.toBeEditable();
+
+  answer();
+  await expect(
+    network(page).getByRole("radio", { name: "Slow" })
+  ).toHaveAttribute("aria-checked", "true");
+  await expect(settings.getByText("This URL is not responding.")).toHaveCount(
+    0
+  );
+});
+
+test("client-v2-custom-rpcs: A URL that does not answer offers Use anyway", async ({
+  seededPage: page,
+}) => {
+  await page.route("https://example.invalid/**", (route) =>
+    route.abort("namenotresolved")
+  );
+  const settings = await openSettings(page);
+  await addRpc(page, { name: "Dead", url: "https://example.invalid" });
+  await expect(settings.getByText("This URL is not responding.")).toBeVisible();
+  await expect(network(page).getByRole("radio", { name: "Dead" })).toHaveCount(
+    0
+  );
+
+  await settings.getByRole("button", { name: "Use anyway" }).click();
+  await expect(
+    network(page).getByRole("radio", { name: "Dead" })
+  ).toHaveAttribute("aria-checked", "true");
+});
+
+test("client-v2-custom-rpcs: Offline, nothing is sent", async ({
+  seededPage: page,
+  context,
+}) => {
+  const asked = await stubRpcs(page);
+  const settings = await openSettings(page);
+  await context.setOffline(true);
+  await addRpc(page, { name: "Far", url: "https://far.rpc.test/" });
+  await expect(
+    settings.getByText("You're offline, so this URL can't be checked.")
+  ).toBeVisible();
+  expect(asked).not.toContain("far.rpc.test");
+  await expect(network(page).getByRole("radio", { name: "Far" })).toHaveCount(
+    0
+  );
+
+  await settings.getByRole("button", { name: "Use anyway" }).click();
+  await expect(
+    network(page).getByRole("radio", { name: "Far" })
+  ).toHaveAttribute("aria-checked", "true");
+});
+
+test("client-v2-custom-rpcs: A rename sends no request", async ({
+  seededPage: page,
+}) => {
+  // Only the check asks for health; the connection's own polling does not
+  let checks = 0;
+  await page.route("https://helius.rpc.test/**", async (route) => {
+    if (route.request().postDataJSON()?.method === "getHealth") checks += 1;
+    await route.fallback();
+  });
+  const settings = await openSettings(page);
+  await addRpc(page, { name: "Helius", url: "https://helius.rpc.test/" });
+  await expect(
+    network(page).getByRole("radio", { name: "Helius" })
+  ).toBeVisible();
+  expect(checks).toBe(1);
+
+  await settings.getByRole("button", { name: "Edit Helius" }).click();
+  const form = settings.getByRole("form", { name: "Edit Helius" });
+  await form.getByLabel("Name").fill("Triton");
+  await form.getByLabel("Name").press("Enter");
+  await expect(
+    network(page).getByRole("radio", { name: "Triton" })
+  ).toBeVisible();
+  expect(checks).toBe(1);
 });
