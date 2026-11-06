@@ -316,11 +316,6 @@ const FlowFrame = () => {
       />
     ),
   });
-  // The live assistant's open_menu tool (3.6) opens the frame's navigation,
-  // which exists only once the frame is built from the body above
-  useEffect(() => {
-    openMenu.current = () => tutorial.frame?.nav.onOpenChange(true);
-  });
 
   // The frame's workspace (2.2): its head and tree over the stage, and its
   // own terminal line, on a wide window, where the frame shows
@@ -331,6 +326,16 @@ const FlowFrame = () => {
   // two spaces, the chat and the code, which the shell lays out. A tablet
   // gets the same screens, the chat centred (DES-160)
   const onPhone = tutorial.frame !== undefined && !inFrame;
+  // The live assistant's open_menu tool (3.6) opens the frame's navigation,
+  // which exists only once the frame is built from the body above. Below the
+  // frame's width that navigation is not drawn: the phone's steps sheet is
+  // the menu there
+  const [phoneSteps, setPhoneSteps] = useState(false);
+  useEffect(() => {
+    openMenu.current = onPhone
+      ? () => setPhoneSteps(true)
+      : () => tutorial.frame?.nav.onOpenChange(true);
+  });
   let workspaceLayout: WorkspaceLayout | undefined;
   if (onPhone) workspaceLayout = "phone";
   else if (inFrame) workspaceLayout = "frame";
@@ -360,8 +365,15 @@ const FlowFrame = () => {
           onSpace={space.setSpace}
           onJump={steps.jump}
           onStartOver={conversation.onStartOver}
+          sheetOpen={phoneSteps}
+          onSheetOpenChange={setPhoneSteps}
         />
       ),
+      // TODO(SF#94 review, Greptile "Layout changes lose chat controls"): a
+      // second chat, not the frame's moved: crossing the frame's width
+      // remounts `useTurn`, which drops the composer's draft and the Stop of
+      // an answer streaming. One mounted chat moved between the layouts, as
+      // the editor and terminal are, is the follow-up
       chat: (
         <TutorialChat
           onAllTutorials={() => catalogPage.open("tutorials", "nav")}

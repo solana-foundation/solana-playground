@@ -39,6 +39,12 @@ export interface BaseTutorialPhoneHeadProps {
   onJump: (index: number) => void;
   /** Clears the tutorial's progress; absent, the sheet has no "Start over…" */
   onStartOver?: () => Promise<void>;
+  /**
+   * The steps sheet, open or not. Held by the caller: the assistant's
+   * open_menu opens it on a phone, where the frame's navigation is not drawn
+   */
+  sheetOpen: boolean;
+  onSheetOpenChange: (open: boolean) => void;
 }
 
 /** The brand's progress fill: it starts purple and lands on green */
@@ -97,8 +103,8 @@ const toggleLabel = (onCode: boolean, dot: boolean) => {
  * The phone's tutorial header, 76 px (Almaz's `StepScreen`): back to the
  * tutorials, the name and where the learner is as one button that opens the
  * steps, the Chat | Code toggle with Code's dot, and the step track along the
- * bottom edge, which stands in for the header's rule. It owns the steps
- * sheet and Start over's question.
+ * bottom edge, which stands in for the header's rule. It draws the steps
+ * sheet its caller opens, and owns Start over's question.
  */
 const BaseTutorialPhoneHead = ({
   name,
@@ -114,8 +120,9 @@ const BaseTutorialPhoneHead = ({
   onSpace,
   onJump,
   onStartOver,
+  sheetOpen: sheet,
+  onSheetOpenChange: setSheet,
 }: BaseTutorialPhoneHeadProps) => {
-  const [sheet, setSheet] = useState(false);
   const [startOver, setStartOver] = useState(false);
   const where = whereOf({ steps, live, started, finished, minutes });
   const onCode = space === "code";
