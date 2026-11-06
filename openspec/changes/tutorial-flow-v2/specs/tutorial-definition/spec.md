@@ -114,7 +114,9 @@ For a conversation tutorial this replaces `tutorials-gallery-stand`'s caption
 Step n of m" where that change has "Page <n> of <m>". The card's progress SHALL read
 "<passed> of <m>" beside the name while it is started, and show a check once
 the finish card has shown. Opening a tutorial with a definition SHALL open the conversation. A
-tutorial without one SHALL open upstream's pages, unchanged. A definition that
+tutorial without one SHALL open upstream's pages, unchanged. A definition
+whose slug matches an upstream tutorial SHALL replace it: the catalog lists
+one card per slug. A definition that
 fails validation in a running app SHALL not be listed. It SHALL be reported
 once through the logger with its slug and its first error, and SHALL emit
 `tutorial_definition_rejected`.

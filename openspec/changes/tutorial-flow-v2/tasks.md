@@ -180,6 +180,7 @@ for; tasks with "after nothing" start at once.
       deploy and rent costs confirmed on devnet. Verify: the check passes; a
       full run on devnet (HOO-2363; Natalia; L 2.5; after 1.2 and
       Almaz's script, due Fri 30 Oct)
+      Plan: [plans/6.4-zero-copy.md](plans/6.4-zero-copy.md)
 - [ ] 6.5 e2e for the flow: Hello Anchor from intro to finish on desktop
       and at 390 px, in CI on a fake build server and devnet, with the real
       ones as the manual case T-1 in `docs/testing.md`; the wrong pick,

@@ -51,6 +51,20 @@ export const definitionTutorials = (others: TutorialData[]): TutorialData[] => {
   }));
 };
 
+/**
+ * Every tutorial the page lists: the conversation ones first, then `others`
+ * without those a definition replaces. A definition named like an upstream
+ * tutorial (Zero Copy, Markdown in `client/public`) is the one card of that
+ * slug; listing both would show the tutorial twice.
+ */
+export const listTutorials = (others: TutorialData[]): TutorialData[] => {
+  const conversation = definitionTutorials(others);
+  const replaced = new Set(conversation.map((t) => slugOf(t.name)));
+  return conversation.concat(
+    others.filter((t) => !replaced.has(slugOf(t.name)))
+  );
+};
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -104,10 +118,52 @@ if (import.meta.vitest) {
       ]);
     });
 
-    it("leaves out a definition whose next names no listed tutorial", () => {
+    it("leaves out a definition whose next names no listed tutorial, keeps one with none", () => {
       // Without Counter PDA Tutorial among the others, Hello Anchor's next
-      // names nothing
-      expect(definitionTutorials([]).map((t) => t.name)).toEqual([]);
+      // names nothing; Zero Copy's next is null, so it stays
+      const names = definitionTutorials([]).map((t) => t.name);
+      expect(names).not.toContain("Hello Anchor");
+      expect(names).toContain("Zero Copy");
+    });
+
+    it("lists Zero Copy under Advanced, in four steps", () => {
+      const zero = definitionTutorials([counterPda]).find(
+        (t) => t.name === "Zero Copy"
+      );
+      expect(zero?.level).toBe("Advanced");
+      expect(zero?.definition?.steps.map((s) => s.id)).toEqual([
+        "create",
+        "deploy",
+        "grow",
+        "zero-copy",
+      ]);
+    });
+
+    it("carries Zero Copy's doc pages with their Markdown", () => {
+      const zero = definitionTutorials([counterPda]).find(
+        (t) => t.name === "Zero Copy"
+      );
+      const docs = zero?.definition?.docs ?? [];
+      expect(docs.length).toBeGreaterThan(0);
+      for (const doc of docs) {
+        expect(zero?.docPages?.[doc.file]).toMatch(/^# /);
+      }
+    });
+
+    it("lists one card per slug: a definition replaces the tutorial of its name", () => {
+      // Cased apart from the definition's name: the match is by slug
+      const markdownZeroCopy = { name: "zero copy" } as TutorialData;
+      const listed = listTutorials([counterPda, markdownZeroCopy]);
+      const names = listed.map((t) => t.name);
+      expect(names).not.toContain("zero copy");
+      expect(
+        listed.find((t) => t.name === "Zero Copy")?.definition
+      ).toBeDefined();
+      // The conversation ones first, then the others
+      expect(names.at(-1)).toBe("Counter PDA Tutorial");
+      expect(names.indexOf("Zero Copy")).toBeLessThan(
+        names.indexOf("Counter PDA Tutorial")
+      );
     });
   });
 }
