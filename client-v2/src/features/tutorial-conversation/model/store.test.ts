@@ -1209,6 +1209,27 @@ describe("PgCallPanel", () => {
     return runner;
   };
 
+  beforeEach(() => sessionStorage.clear());
+
+  it("keeps the open panel, its chip and typed fields across a reload of the tab", async () => {
+    await toDeployed(helloIdl(["name"]));
+    PgCallPanel.show();
+    PgCallPanel.type("name", "Alex");
+    const picked = PgCallPanel.view?.instruction;
+
+    // A reload: the module's memory is gone, the tab's own store is not
+    (PgCallPanel as unknown as { _state: { tutorial: undefined } })._state = {
+      tutorial: undefined,
+    };
+
+    expect(PgCallPanel.isOpen).toBe(true);
+    expect(PgCallPanel.view?.instruction).toBe(picked);
+    expect(PgCallPanel.view?.fields).toEqual([
+      expect.objectContaining({ name: "name", value: "Alex" }),
+    ]);
+    PgCallPanel.close();
+  });
+
   it("has no panel to open before a deploy", async () => {
     open(NAME);
     await settle();
