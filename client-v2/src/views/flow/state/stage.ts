@@ -158,7 +158,7 @@ export const countErrors = (stderr: string) =>
 /**
  * What a `build` command's rejection says: about the server, or about an
  * empty program file it never sent. By shape, not `instanceof
- * PgServerRequestError`: the flow's tests stand the utils barrel in with a
+ * PgServerError`: the flow's tests stand the utils barrel in with a
  * mock.
  */
 const buildFailureOf = (err: unknown): BuildFailure => {

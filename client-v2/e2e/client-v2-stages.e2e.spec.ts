@@ -78,10 +78,10 @@ const stubProgramAccount = (page: Page, account: object | null) =>
  * Builds the project as a user does, which gives it a program id, with the
  * build server's answer stubbed to carry the IDL; then opens Interact
  */
-const buildThenInteract = async (page: Page) => {
+const buildThenInteract = async (page: Page, idl: object = IDL) => {
   // CI has no build server: the request is answered here
   await page.route("**/build", (route) =>
-    json(route, { stderr: "", uuid: null, idl: IDL })
+    json(route, { stderr: "", uuid: null, idl })
   );
   await page.locator("#flow-stage-tab-build").click();
   const build = page.locator("#flow-stage-panel-build");
@@ -161,7 +161,9 @@ test.describe("client-v2-stages", () => {
       .getByRole("status")
       .filter({ hasText: "Deployed to" });
     await expect(result).toContainText("Deployed to devnet", LONG);
-    await expect(result.locator("code")).toHaveText(PROGRAM_ID);
+    // Shortened in the middle, whole in its title
+    await expect(result.locator("code")).toHaveText("6PNd…AVkj");
+    await expect(result.locator("code")).toHaveAttribute("title", PROGRAM_ID);
     await expect(result.locator('[data-slot="copy-button"]')).toBeVisible();
   });
 });
@@ -189,14 +191,47 @@ test.describe("client-v2-stages: Interact", () => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
 
-    await expect(panel.getByText("Program: e2e_project")).toBeVisible(LONG);
     await expect(
-      panel.getByRole("heading", { name: "Instructions" })
-    ).toBeVisible();
+      panel.getByRole("button", { name: "Copy program id" })
+    ).toBeVisible(LONG);
     await expect(
-      panel.getByRole("button", { name: "initialize" })
+      panel
+        .getByRole("radiogroup", { name: "Instruction" })
+        .getByRole("radio", { name: "initialize" })
+    ).toBeChecked();
+    await expect(
+      panel.getByRole("button", { name: "Call initialize" })
     ).toBeVisible();
     await expect(panel.locator('[data-slot="stage-empty"]')).toHaveCount(0);
+  });
+
+  test("Interact keeps a long instruction name inside the form's column", async ({
+    seededPage: page,
+  }) => {
+    const longName = "initialize_".repeat(12) + "account";
+    await stubProgramAccount(page, DEPLOYED_ACCOUNT);
+    const panel = await buildThenInteract(page, {
+      version: IDL.version,
+      name: IDL.name,
+      instructions: [
+        { name: longName, accounts: [], args: [] },
+        { name: "increment", accounts: [], args: [] },
+      ],
+    });
+
+    const chip = panel
+      .getByRole("radiogroup", { name: "Instruction" })
+      .getByRole("radio", { name: longName });
+    await expect(chip).toBeVisible(LONG);
+    const form = panel.getByRole("region", { name: `${longName} form` });
+    const chipBox = await chip.boundingBox();
+    const formBox = await form.boundingBox();
+    if (!chipBox || !formBox) {
+      throw new Error("the instruction chip or its form has no box");
+    }
+    expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(
+      formBox.x + formBox.width + 0.5
+    );
   });
 });
 
@@ -330,7 +365,7 @@ test.describe("client-v2-search-field", () => {
   }) => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
-    await panel.getByRole("button", { name: "initialize" }).click();
+    await panel.getByRole("radio", { name: "initialize" }).click();
 
     // Reached by its id: `updateRefs` (InstructionInput) finds dependent
     // inputs by it, so SearchBar must keep it

@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { isSetupRejected } from "@/commands/connect/setup-rejected";
+import { clusterName } from "@/constants";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import { useRenderOnChange, useWallet } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
@@ -72,12 +73,12 @@ const SetupList = ({
     // that does not answer, or whose slot stalls, warns instead of ticking,
     // read as the status row's network indicator and the stage notice read it
     if (step === "network") {
-      const value = cluster ?? undefined;
+      const value = clusterName(cluster) ?? undefined;
       if (isConnected === false || slotStalled === true) {
         return {
           step,
           done: false,
-          warn: `${cluster ?? "The network"} is not responding`,
+          warn: `${value ?? "The network"} is not responding`,
           value,
         };
       }

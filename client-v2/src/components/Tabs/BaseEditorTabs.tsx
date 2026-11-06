@@ -50,6 +50,17 @@ const moveFocus = (ev: KeyboardEvent<HTMLDivElement>) => {
   triggers[move(from, triggers.length)].focus();
 };
 
+/** Scrolls `row` sideways by the least that brings `tab` into it, its start
+ * edge first when it is wider than the row. Not `scrollIntoView`: that
+ * scrolls every container around the row too, and on a phone one of them is
+ * the pager, which a swipe would then lose (HOO-2290). */
+const showInRow = (row: HTMLElement, tab: HTMLElement) => {
+  const bounds = row.getBoundingClientRect();
+  const { left, right } = tab.getBoundingClientRect();
+  if (left < bounds.left) row.scrollLeft += left - bounds.left;
+  else if (right > bounds.right) row.scrollLeft += right - bounds.right;
+};
+
 /** px per line of a wheel that counts in lines (Firefox's mouse wheel) */
 const LINE_PX = 16;
 
@@ -86,10 +97,11 @@ export const BaseEditorTabs = ({
   // The whole tab comes into view, its close button included, not only the
   // trigger.
   useEffect(() => {
-    listRef.current
+    const list = listRef.current;
+    const tab = list
       ?.querySelector(CURRENT)
-      ?.closest('[data-slot="editor-tab"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      ?.closest<HTMLElement>('[data-slot="editor-tab"]');
+    if (list && tab) showInRow(list, tab);
   }, [current]);
 
   // React's own wheel listener is passive and cannot stop the page scrolling

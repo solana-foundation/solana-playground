@@ -411,7 +411,7 @@ export class PgLesson {
         PgLesson._dispatch({
           type: "evaluate",
           flow,
-          idl: PgProgramInfo.idl ?? null,
+          idl: PgProgramInfo.callableIdl(),
           at: Date.now(),
         })
       ),

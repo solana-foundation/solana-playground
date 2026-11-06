@@ -216,3 +216,123 @@ describe("read_file", () => {
     );
   });
 });
+
+describe("build and deploy approvals", () => {
+  type Quote = Awaited<ReturnType<PlaygroundBridge["quoteDeploy"]>>;
+  const PRICED: Quote = {
+    network: "devnet",
+    cost: 1_420_000_000,
+    playground: true,
+  };
+  const CONNECTED_WALLET: Quote = {
+    network: "devnet",
+    cost: 1_420_000_000,
+    playground: false,
+  };
+  const NO_NETWORK: Quote = {
+    network: undefined,
+    cost: 1_420_000_000,
+    playground: true,
+  };
+  const NO_COST: Quote = {
+    network: "devnet",
+    // eslint-disable-next-line unicorn/no-null -- `quoteDeploy().cost` is `number | null`, null meaning no estimate
+    cost: null,
+    playground: true,
+  };
+  const NO_NETWORK_NO_COST: Quote = {
+    network: undefined,
+    // eslint-disable-next-line unicorn/no-null -- `quoteDeploy().cost` is `number | null`, null meaning no estimate
+    cost: null,
+    playground: true,
+  };
+
+  /** A bridge whose deploy quote is the one given */
+  const commandBridge = (quote: Quote): PlaygroundBridge =>
+    ({
+      getProjectContext: () => ({
+        workspaceName: "hello_anchor",
+        cluster: "https://api.devnet.solana.com",
+        // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
+        buildError: null,
+      }),
+      quoteDeploy: async () => quote,
+      build: vi.fn(async () => {}),
+      // eslint-disable-next-line unicorn/no-null -- `deploy()` answers `null` without a program id
+      deploy: vi.fn(async () => null),
+    } as unknown as PlaygroundBridge);
+
+  /** The question on the approval card a tool opened */
+  const askedWith = async (tool: "build" | "deploy", b: PlaygroundBridge) => {
+    const found = createTools(b).find((t) => t.name === tool);
+    if (!found) throw new Error(`createTools has no tool named ${tool}`);
+    const run = found.run({});
+    await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
+    const card = PgAssistant.items[0];
+    PgAssistant.resolveApproval(card.id, false);
+    await run;
+    return card.kind === "approval" && card.request.type === "command"
+      ? card.request.question
+      : undefined;
+  };
+
+  it("asks whether to deploy the program to the network, naming the cost", async () => {
+    expect(await askedWith("deploy", commandBridge(PRICED))).toBe(
+      "Deploy hello_anchor to devnet? It costs about 1.42 devnet SOL from your Playground wallet."
+    );
+  });
+
+  it("names a connected wallet as the payer when it is not the Playground's", async () => {
+    expect(await askedWith("deploy", commandBridge(CONNECTED_WALLET))).toBe(
+      "Deploy hello_anchor to devnet? It costs about 1.42 devnet SOL from your wallet."
+    );
+  });
+
+  it("names no network in the cost while the cluster is unknown", async () => {
+    expect(await askedWith("deploy", commandBridge(NO_NETWORK))).toBe(
+      "Deploy hello_anchor to the network? It costs about 1.42 SOL from your Playground wallet."
+    );
+  });
+
+  it("leaves the cost out when it cannot be estimated", async () => {
+    expect(await askedWith("deploy", commandBridge(NO_COST))).toBe(
+      "Deploy hello_anchor to devnet?"
+    );
+  });
+
+  it("names the network and leaves the cost out when neither is known", async () => {
+    expect(await askedWith("deploy", commandBridge(NO_NETWORK_NO_COST))).toBe(
+      "Deploy hello_anchor to the network?"
+    );
+  });
+
+  it("deploys nothing when the network changed while the approval waited", async () => {
+    let cluster = "https://api.devnet.solana.com";
+    const deploy = vi.fn(async () => {});
+    const b = {
+      getProjectContext: () => ({
+        workspaceName: "hello_anchor",
+        cluster,
+        // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
+        buildError: null,
+      }),
+      quoteDeploy: async () => PRICED,
+      deploy,
+    } as unknown as PlaygroundBridge;
+    const found = createTools(b).find((t) => t.name === "deploy");
+    if (!found) throw new Error("createTools has no tool named deploy");
+    const run = found.run({});
+    await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
+    cluster = "https://api.mainnet-beta.solana.com";
+    PgAssistant.resolveApproval(PgAssistant.items[0].id, true);
+
+    expect(await run).toContain("nothing was deployed");
+    expect(deploy).not.toHaveBeenCalled();
+  });
+
+  it("asks whether to build the program", async () => {
+    expect(await askedWith("build", commandBridge(NO_COST))).toBe(
+      "Build hello_anchor?"
+    );
+  });
+});

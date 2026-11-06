@@ -87,6 +87,75 @@ test("client-v2-layout: Renaming in place", async ({ page }) => {
   ).toHaveCount(1);
 });
 
+/** Long enough to truncate in the desk sidebar and the phone menu page alike */
+const LONG_NAME = "github-drift-labs-protocol-v2-programs-drift";
+
+/** Where a pinned row's name, pin and "⋮" sit, in page pixels */
+const pinnedRowGeometry = (page: Page, name: string) =>
+  projectRow(page, name).evaluate((button) => {
+    // The name truncates in its own span, beside the pin in one line
+    const label = button.querySelector(":scope > span > span");
+    const item = button.parentElement;
+    const pin = item?.querySelector('[title="Pinned"]');
+    const actions = item?.querySelector('[data-sidebar="menu-action"]');
+    if (!item || !label || !pin || !actions) {
+      throw new Error("the row has no name, pin or actions");
+    }
+    const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+    const row = button.getBoundingClientRect();
+    const nameBox = label.getBoundingClientRect();
+    const pinBox = pin.getBoundingClientRect();
+    const actionsBox = actions.getBoundingClientRect();
+    return {
+      isTruncated: label.scrollWidth > label.clientWidth,
+      nameOverPin: nameBox.right - pinBox.left,
+      nameOverActions: nameBox.right - actionsBox.left,
+      actionsOffMiddle: Math.abs(middle(actionsBox) - middle(row)),
+    };
+  });
+
+for (const [layout, viewport] of [
+  ["desk", { width: 1280, height: 800 }],
+  ["phone", { width: 390, height: 844 }],
+] as const) {
+  // HOO-2500: the pin is drawn over the row, so a pinned row's name must
+  // truncate before it and before the "⋮"
+  test(`keeps a pinned project's long name clear of its pin (${layout})`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await seedWorkspace(page, LONG_NAME);
+    await startAnotherProject(page, "beta");
+    const menu = await projectMenu(page, LONG_NAME);
+    await menu.getByRole("menuitem", { name: "Pin" }).click();
+    await expect(menu).toBeHidden();
+
+    await page.setViewportSize(viewport);
+    if (layout === "phone") {
+      await page.getByRole("button", { name: "Menu", exact: true }).click();
+    }
+    // The pin is hidden while its row is hovered or holds focus, and the
+    // menu hands focus back to the row's "⋮": park both elsewhere
+    await page.mouse.move(viewport.width - 1, viewport.height - 1);
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur()
+    );
+    const pin = projectRow(page, LONG_NAME).locator("..").getByTitle("Pinned");
+    await expect(pin).toBeVisible();
+
+    const geometry = await pinnedRowGeometry(page, LONG_NAME);
+    // A name that fits would clear the pin whatever the padding
+    expect(geometry.isTruncated).toBe(true);
+    expect(geometry.nameOverPin).toBeLessThanOrEqual(0);
+    expect(geometry.nameOverActions).toBeLessThanOrEqual(0);
+    if (layout === "phone") {
+      // The pin sits in the name's line, not centred on the row: only the
+      // "⋮" is drawn over the row
+      expect(geometry.actionsOffMiddle).toBeLessThanOrEqual(1);
+    }
+  });
+}
+
 test("renames the open project in place", async ({ page }) => {
   test.setTimeout(120_000);
   await twoProjects(page);

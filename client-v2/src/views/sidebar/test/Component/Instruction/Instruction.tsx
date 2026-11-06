@@ -1,40 +1,56 @@
-import { FC, useCallback, useEffect, useReducer, useState } from "react";
+import {
+  FC,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useReducer,
+  useState,
+} from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
 
-import { Emoji } from "../../../../../constants";
 import { useWallet } from "../../../../../hooks";
+import { PgCommon } from "../../../../../utils";
 import {
-  PgCommand,
-  PgCommon,
-  PgConnection,
-  PgSettings,
-  PgTerminal,
-  PgTx,
-} from "../../../../../utils";
-import {
+  GeneratableInstruction,
   IdlInstruction,
   PgProgramInteraction,
 } from "../../.././../../utils/program-interaction";
 import { useIdl } from "../IdlProvider";
-import Interaction from "../Interaction";
+import { hasInstructionErrors } from "./instruction-errors";
 import InstructionInput from "./InstructionInput";
 import InstructionProvider from "./InstructionProvider";
 
 interface InstructionProps {
   idlInstruction: IdlInstruction;
+  /** Sends the instruction; the form stays locked until it settles */
+  onCall: (ix: GeneratableInstruction) => Promise<unknown>;
+  /** Keeps Call off for a reason outside the form, such as too little SOL */
+  callBlocked?: boolean;
+  /** Who pays the fee, drawn above the actions */
+  feePayer?: ReactNode;
 }
 
-const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
+/** One instruction's form: its arguments, its accounts, and Call */
+const Instruction: FC<InstructionProps> = ({
   idlInstruction,
+  onCall,
+  callBlocked,
+  feePayer,
 }) => {
   const [instruction, setInstruction] = useState(() =>
     PgProgramInteraction.getOrCreateInstruction(idlInstruction)
   );
   const [disabled, setDisabled] = useState(true);
+  const [calling, setCalling] = useState(false);
   const [refreshCount, refreshFields] = useReducer((r) => r + 1, 0);
 
   const { idl } = useIdl();
@@ -44,13 +60,22 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
   // This is intentionally done in a `useEffect` instead of changing the
   // setting the default value of the `disabled`'s `useState` in order to:
   // - Enable the button when `idlInstruction` changes
-  // - Avoid flickering of the Test button i.e. the button renders as enabled
+  // - Avoid flickering of the Call button i.e. the button renders as enabled
   // and switches to disabled state after.
   useEffect(() => {
     if (!idlInstruction.args.length && !idlInstruction.accounts.length) {
       setDisabled(false);
     }
   }, [idlInstruction]);
+
+  // Check the values the instruction was restored with. The inputs report
+  // only what the user edits, so a valid form that comes back after a switch
+  // to another instruction would otherwise keep Call off until a field changes.
+  useEffect(() => {
+    setDisabled(hasInstructionErrors(instruction.values));
+    // Once, for the values the form mounted with
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Refresh instruction in order to pass the latest generators to
   // `InstructionInput`, otherwise the initial values are being generated
@@ -89,155 +114,132 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
     refreshFields();
   }, [idlInstruction]);
 
-  const handleTest = async () => {
-    const showLogTxHash = await PgTerminal.process(async () => {
-      PgTerminal.println(PgTerminal.info(`Testing \`${instruction.name}\`...`));
-
-      try {
-        const txHash = await PgCommon.transition(
-          PgProgramInteraction.test(instruction)
-        );
-        if (PgSettings.testUi.showTxDetailsInTerminal) return txHash;
-
-        const txResult = await PgTx.confirm(txHash);
-        if (txResult?.err) {
-          throw new Error(`${Emoji.CROSSMARK} Test failed: ${txResult.err}`);
-        }
-
-        PgTerminal.println(
-          `${Emoji.CHECKMARK_BUTTON} ${PgTerminal.success(`Test passed.`)}`
-        );
-      } catch (e: any) {
-        if (e.message) {
-          const ERRORS = [
-            ["unable to infer src variant", "Enum variant not found"],
-            [
-              "program.methods[txVals.name] is not a function",
-              "Test component is outdated",
-            ],
-          ];
-
-          for (const [before, after] of ERRORS) {
-            if (e.message === before) throw new Error(after);
-          }
-        }
-
-        throw e;
-      }
-    });
-
-    if (showLogTxHash) {
-      await PgCommon.sleep(
-        PgConnection.current.rpcEndpoint.startsWith("https") ? 1500 : 200
-      );
-      await PgCommand.solana.execute("confirm", showLogTxHash, "-v");
+  const call = async () => {
+    setCalling(true);
+    try {
+      await onCall(instruction);
+    } finally {
+      setCalling(false);
     }
   };
 
   const wallet = useWallet();
-  const { args, accounts } = instruction.values;
-  const hasInputs = args.length > 0 || accounts.length > 0;
-  const held = heldBecause({ wallet: !!wallet, filled: !disabled });
+  // A block from outside the form says itself, in the stage's callout
+  const held = callBlocked
+    ? undefined
+    : heldBecause({ wallet: !!wallet, filled: !disabled });
 
   return (
     <InstructionProvider
       instruction={instruction}
       setInstruction={setInstruction}
     >
-      <Interaction name={instruction.name} meta={inputsMeta(args, accounts)}>
-        <div className="flex flex-col gap-5">
-          {args.length > 0 && (
-            <Group title="Arguments">
-              {args.map((arg) => (
-                <InstructionInput
-                  key={arg.name + refreshCount}
-                  prefix="args"
-                  updateInstruction={({
-                    updateGenerator,
-                    updateRefs,
-                    checkErrors,
-                  }) => {
-                    updateGenerator(arg);
-                    updateRefs(arg, "Arguments");
-                    setDisabled(checkErrors());
-                    refresh();
-                  }}
-                  {...arg}
-                />
-              ))}
-            </Group>
-          )}
+      <fieldset
+        disabled={calling}
+        className="m-0 flex min-w-0 flex-col gap-4 border-0 p-0"
+      >
+        {instruction.values.args.length > 0 && (
+          <Collapsible defaultOpen>
+            <CollapsibleHeading>
+              <CollapsibleChevron />
+              Args
+            </CollapsibleHeading>
+            <CollapsibleContent className="mt-2">
+              <div className="flex flex-col gap-3 text-xs">
+                {instruction.values.args.map((arg) => (
+                  <InstructionInput
+                    key={arg.name + refreshCount}
+                    prefix="args"
+                    updateInstruction={({
+                      updateGenerator,
+                      updateRefs,
+                      checkErrors,
+                    }) => {
+                      updateGenerator(arg);
+                      updateRefs(arg, "Arguments");
+                      setDisabled(checkErrors());
+                      refresh();
+                    }}
+                    {...arg}
+                  />
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
 
-          {accounts.length > 0 && (
-            <Group title="Accounts">
-              {accounts.map((acc) => (
-                <InstructionInput
-                  key={acc.name + refreshCount}
-                  prefix="accounts"
-                  type="publicKey"
-                  updateInstruction={({
-                    updateGenerator,
-                    updateRefs,
-                    checkErrors,
-                  }) => {
-                    updateGenerator(acc);
-                    updateRefs(acc, "Accounts");
-                    setDisabled(checkErrors());
-                    refresh();
-                  }}
-                  {...acc}
-                />
-              ))}
-            </Group>
-          )}
-        </div>
+        {instruction.values.accounts.length > 0 && (
+          <Collapsible defaultOpen>
+            <CollapsibleHeading>
+              <CollapsibleChevron />
+              Accounts
+            </CollapsibleHeading>
+            <CollapsibleContent className="mt-2">
+              <div className="flex flex-col gap-3 text-xs">
+                {instruction.values.accounts.map((acc) => (
+                  <InstructionInput
+                    key={acc.name + refreshCount}
+                    prefix="accounts"
+                    type="publicKey"
+                    updateInstruction={({
+                      updateGenerator,
+                      updateRefs,
+                      checkErrors,
+                    }) => {
+                      updateGenerator(acc);
+                      updateRefs(acc, "Accounts");
+                      setDisabled(checkErrors());
+                      refresh();
+                    }}
+                    {...acc}
+                  />
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+      </fieldset>
 
-        {/* Test is the card's one action; filling and clearing the fields
-            are quiet beside it, and a held Test says what it waits for */}
-        <div
-          className={cn(
-            "flex flex-wrap items-center gap-x-2 gap-y-3",
-            hasInputs && "mt-5 border-t border-border pt-4"
-          )}
+      {feePayer}
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <AsyncButton
+          onClick={call}
+          onError={reportButtonFailure(`call ${instruction.name}`)}
+          disabled={!wallet || disabled || callBlocked}
+          loadingText="Calling…"
         >
-          <AsyncButton
-            onClick={handleTest}
-            onError={reportButtonFailure("run the test")}
-            disabled={!wallet || disabled}
-          >
-            Test
-          </AsyncButton>
+          Call {instruction.name}
+        </AsyncButton>
 
-          {hasInputs && (
-            <>
-              <Button variant="ghost" onClick={fillRandom}>
-                Fill with Random
-              </Button>
-              <Button variant="ghost" onClick={reset}>
-                Reset
-              </Button>
-            </>
-          )}
+        {(instruction.values.accounts.length > 0 ||
+          instruction.values.args.length > 0) && (
+          // When the row is too narrow for all three buttons, Fill and Reset
+          // wrap together under Call rather than leaving Reset alone
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={fillRandom} disabled={calling}>
+              Fill
+            </Button>
+            <Button variant="outline" onClick={reset} disabled={calling}>
+              Reset
+            </Button>
+          </div>
+        )}
 
-          {held && (
-            <p className="ml-auto text-caption text-muted-foreground">{held}</p>
-          )}
-        </div>
-      </Interaction>
+        {held && (
+          <p className="m-0 self-center text-caption text-muted-foreground">
+            {held}
+          </p>
+        )}
+      </div>
     </InstructionProvider>
   );
 };
 
-/** "1 arg · 2 accounts", or nothing for an instruction that takes none */
-const inputsMeta = (args: unknown[], accounts: unknown[]) =>
-  [plural(args.length, "arg"), plural(accounts.length, "account")]
-    .filter(Boolean)
-    .join(" · ") || undefined;
-
-const plural = (n: number, word: string) =>
-  n ? `${n} ${word}${n === 1 ? "" : "s"}` : "";
-
-/** Why Test is held, said beside it; nothing once it can run */
+/**
+ * Why Call is held, said beside it (`client-v2-stages`, "says what it waits
+ * for"); undefined once it can run
+ */
 const heldBecause = ({
   wallet,
   filled,
@@ -245,22 +247,9 @@ const heldBecause = ({
   wallet: boolean;
   filled: boolean;
 }) => {
-  if (!wallet) return "Connect a wallet to test";
-  if (!filled) return "Fill every field to test";
-  return null;
+  if (!wallet) return "Connect a wallet to call";
+  if (!filled) return "Fill every field to call";
+  return undefined;
 };
-
-/** One kind of input under the instruction, named once above its fields */
-const Group = ({
-  title,
-  children,
-}: React.PropsWithChildren<{ title: string }>) => (
-  <section className="flex flex-col gap-3">
-    <h4 className="m-0 text-caption font-medium text-muted-foreground">
-      {title}
-    </h4>
-    {children}
-  </section>
-);
 
 export default Instruction;

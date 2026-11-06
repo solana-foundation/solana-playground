@@ -2,12 +2,7 @@ import { useState, useSyncExternalStore } from "react";
 
 import { ExportFile, Github, ImportFile } from "@/components/Icons";
 import Link from "@/components/Link";
-import {
-  useBlockExplorer,
-  useProgramInfo,
-  useRenderOnChange,
-  useWallet,
-} from "@/hooks";
+import { useBlockExplorer, useProgramInfo, useWallet } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import type {
@@ -27,10 +22,10 @@ import type { SectionId } from "../model/sections";
 import { groupSettings, sectionTitle } from "../model/sections";
 import { settingsTelemetry } from "../model/telemetry";
 import AssistantKey from "./AssistantKey";
-import BaseNetworkChoice from "./BaseNetworkChoice";
 import BaseSettingRow from "./BaseSettingRow";
 import type { SettingsSection } from "./BaseSettingsPage";
 import BaseSettingsPage from "./BaseSettingsPage";
+import NetworkSection from "./NetworkSection";
 import { SettingControl } from "./SettingControl";
 import SettingsBoundary from "./SettingsBoundary";
 
@@ -66,20 +61,11 @@ const LiveSettingsPage = ({ focus, onClose }: SettingsPageProps) => {
     () => PgView.getOpenModals().length > 0
   );
 
-  // The chips follow an endpoint picked elsewhere too, such as the
-  // Connection section's Endpoint select
-  useRenderOnChange(PgSettings.onDidChangeConnectionEndpoint);
-
   const own: SettingsSection[] = [
     {
       id: NETWORK,
       title: "Network",
-      content: (
-        <BaseNetworkChoice
-          endpoint={PgSettings.connection.endpoint}
-          onPick={(endpoint) => (PgSettings.connection.endpoint = endpoint)}
-        />
-      ),
+      content: <NetworkSection />,
     },
     {
       id: ASSISTANT,

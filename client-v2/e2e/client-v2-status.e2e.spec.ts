@@ -197,7 +197,7 @@ test.describe("on a 1440 px window", () => {
     await expect(setupRow).toHaveAttribute("data-status", "warn", {
       timeout: 15_000,
     });
-    await expect(setupRow).toHaveAttribute("title", "devnet is not responding");
+    await expect(setupRow).toHaveAttribute("title", "Devnet is not responding");
   });
 
   test("client-v2-status: Change network from the notice", async ({

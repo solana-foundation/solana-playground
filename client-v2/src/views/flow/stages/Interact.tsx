@@ -1,21 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 
+import type { IdlReading } from "@/entities/idl";
 import { createLogger } from "@/shared/lib/logger";
 
-import { useExplorer, useProgramInfo } from "../../../hooks";
+import { useAirdrop } from "../../../components/Wallet/hooks/useAirdrop";
+import {
+  clusterName,
+  networkInSentence,
+  UNKNOWN_NETWORK,
+} from "../../../constants";
+import {
+  useBalance,
+  useExplorer,
+  useProgramInfo,
+  useRenderOnChange,
+  useWallet,
+} from "../../../hooks";
 import {
   PgConnection,
   PgExplorer,
   PgProgramInfo,
   PgWeb3,
 } from "../../../utils";
-import Test from "../../sidebar/test/Component/Test";
+import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
+import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import type { DeployRecord } from "../state/deploy-history";
 import { PgDeployHistory } from "../state/deploy-history";
 import { PgFlow } from "../state/stage";
 import BaseInteract from "./BaseInteract";
 import IdlActions from "./IdlActions";
+import { builtAfterDeploy, solNeeded } from "./interact-callouts";
 import { interactFacts, interactSurface } from "./interact-surface";
+import InteractBody from "./InteractBody";
 
 const log = createLogger("flow:interact");
 
@@ -46,9 +62,16 @@ const target = (record: DeployRecord) => {
 const Interact = () => {
   const [history, setHistory] = useState<DeployRecord[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  // Whether this component (not the project's own key) is the reason
-  // `PgProgramInfo.customPk` is set, so unmounting can hand control back.
-  const targetedRef = useRef(false);
+  // The project's target before this stage's first pick, so leaving hands it
+  // back: looking at another deployment must not cost the user a custom id
+  // they set in the Deploy stage, which a deploy goes to.
+  const heldRef = useRef<
+    | {
+        workspaceId: string | undefined;
+        customPk: typeof PgProgramInfo.customPk;
+      }
+    | undefined
+  >(undefined);
 
   useEffect(() => {
     const refresh = () => {
@@ -69,9 +92,11 @@ const Interact = () => {
     return () => {
       a.dispose();
       b.dispose();
-      if (targetedRef.current) {
-        PgProgramInfo.update({ customPk: null });
-        targetedRef.current = false;
+      const held = heldRef.current;
+      heldRef.current = undefined;
+      // Another project is open by now: its target is not this one's to set
+      if (held && held.workspaceId === PgExplorer.currentWorkspaceId) {
+        PgProgramInfo.update({ customPk: held.customPk });
       }
     };
   }, []);
@@ -80,21 +105,50 @@ const Interact = () => {
     setSelected(id);
     const record = history.find((r) => r.id === id);
     if (record) {
+      const workspaceId = PgExplorer.currentWorkspaceId;
+      if (heldRef.current?.workspaceId !== workspaceId) {
+        heldRef.current = { workspaceId, customPk: PgProgramInfo.customPk };
+      }
       target(record);
-      targetedRef.current = true;
     }
   };
 
   const programInfo = useProgramInfo();
+  const callable = PgProgramInfo.callableIdl();
   const explorer = useExplorer();
   const surface = interactSurface(interactFacts(explorer, programInfo));
+  useRenderOnChange(PgConnection.onDidChangeCluster);
+  const cluster = PgConnection.cluster;
+  const programId = PgProgramInfo.getPkStr();
+
+  // The deployed program is older than the code: this session's last green
+  // build of this project against its newest deploy on this network
+  const build = useLastBuild();
+  const buildAt =
+    build && !build.failed && build.workspace === explorer.currentWorkspaceName
+      ? build.at
+      : undefined;
+  const deployAt = history.find((r) => r.cluster === cluster)?.at;
+
+  // The fee payer cannot pay one fee (Spec 12): only with a wallet to pay
+  const wallet = useWallet();
+  const balance = useBalance();
+  const { airdrop, faucet } = useAirdrop();
+  const short =
+    wallet && typeof balance === "number" && solNeeded(balance) && cluster
+      ? {
+          balance: +balance.toFixed(4),
+          cluster: networkInSentence(cluster) ?? UNKNOWN_NETWORK,
+          airdrop: faucet === "available" ? airdrop : undefined,
+        }
+      : undefined;
 
   const selectedIndex = history.findIndex((r) => r.id === selected);
   const selectedRecord = selectedIndex >= 0 ? history[selectedIndex] : null;
   const meta = selectedRecord
     ? [
         selectedIndex === 0 ? "latest" : null,
-        selectedRecord.cluster,
+        clusterName(selectedRecord.cluster),
         `${selectedRecord.programId.slice(0, 4)}...`,
       ]
         .filter(Boolean)
@@ -112,19 +166,47 @@ const Interact = () => {
       selected={selected}
       onPick={pick}
       surface={surface}
-      cluster={PgConnection.cluster}
+      cluster={clusterName(cluster)}
+      network={networkInSentence(cluster)}
       onGoTo={(stage) => PgFlow.setStage(stage)}
       idlLoad={<IdlActions mode="upload" />}
-      form={programInfo.idl && <Test idl={programInfo.idl} />}
+      idlRefusal={idlRefusal(PgProgramInfo.readIdl())}
+      programId={programId ?? undefined}
+      builtAfterDeploy={builtAfterDeploy(buildAt, deployAt)}
+      solNeeded={short}
+      form={
+        callable && (
+          <InteractBody
+            idl={callable}
+            programId={programId}
+            cluster={cluster}
+            callBlocked={!!short}
+          />
+        )
+      }
     />
   );
 };
 
+/** The reason a 1.x IDL was refused, for the bad-IDL notice */
+const idlRefusal = (reading: IdlReading | null) =>
+  reading?.kind === "refused" && reading.version === "1"
+    ? reading.reason
+    : undefined;
+
+/** The session's last build, kept current */
+const useLastBuild = () => {
+  const [build, setBuild] = useState<BuildOutput | null>(PgBuildOutput.latest);
+  useEffect(() => PgBuildOutput.onDidChange(setBuild).dispose, []);
+  return build;
+};
+
 /** A deployment as the picker lists it: newest first, marked "latest" */
 const deploymentLabel = (r: DeployRecord, i: number) =>
-  `${i === 0 ? "latest \u00b7 " : ""}${r.cluster} \u00b7 ${r.programId.slice(
-    0,
-    6
-  )}\u2026 \u00b7 ${new Date(r.at).toLocaleTimeString()}`;
+  `${i === 0 ? "latest \u00b7 " : ""}${clusterName(
+    r.cluster
+  )} \u00b7 ${r.programId.slice(0, 6)}\u2026 \u00b7 ${new Date(
+    r.at
+  ).toLocaleTimeString()}`;
 
 export default Interact;

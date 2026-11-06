@@ -373,4 +373,158 @@ describe("components/SearchBar", () => {
     expect(screen.queryByRole("option")).toBeNull();
     expect(icon().getAttribute("class")).not.toContain("rotate-180");
   });
+
+  it("finds an entry inside a group by name and lists it under the group", async () => {
+    render(
+      <Harness
+        items={[
+          "Random",
+          { label: "All programs", items: ["System", "Token Metadata"] },
+        ]}
+      />
+    );
+    await userEvent.click(input());
+    await userEvent.type(input(), "metadata");
+
+    expect(optionNames()).toEqual(["Token Metadata"]);
+    const group = option("Token Metadata").closest(
+      '[data-slot="command-group"]'
+    );
+    expect(group?.textContent).toContain("All programs");
+  });
+
+  it("finds an entry inside a group by its address", async () => {
+    render(
+      <Harness
+        items={[
+          {
+            label: "Pyth",
+            items: [
+              {
+                label: "Crypto.BTC/USD",
+                value: "HovQMDrbAgAYPCmHVSrezcSmkMtXSSUsLDFANExrZh2J",
+              },
+              {
+                label: "Crypto.ETH/USD",
+                value: "EdVCmQ9FSPcVe5YySXDPCRmc8aDQLKJ9xvYBMZPie1Vw",
+              },
+            ],
+          },
+        ]}
+      />
+    );
+    await userEvent.click(input());
+    await userEvent.type(input(), "hovqm");
+    expect(optionNames()).toEqual(["Crypto.BTC/USD"]);
+  });
+
+  it("loads a group's list once to search it, and picks with the whole path", async () => {
+    const setSelectedItems = vi.fn();
+    const load = vi.fn(() =>
+      Promise.resolve([{ label: "Crypto.SOL/USD", value: "sol-feed" }])
+    );
+    render(
+      <Harness
+        items={[{ label: "Pyth", items: load }]}
+        setSelectedItems={setSelectedItems}
+      />
+    );
+    await userEvent.click(input());
+    await userEvent.type(input(), "sol");
+    expect(
+      await screen.findByRole("option", { name: "Crypto.SOL/USD" })
+    ).toBeTruthy();
+    expect(load).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(option("Crypto.SOL/USD"));
+    expect(input().value).toBe("sol-feed");
+    expect(lastLabels(setSelectedItems)).toEqual(["Pyth", "Crypto.SOL/USD"]);
+  });
+
+  it("skips a group that fails to load while typing, without reporting it", async () => {
+    failures.actions.length = 0;
+    render(
+      <Harness
+        items={[
+          "Random",
+          {
+            label: "Token accounts",
+            items: () => Promise.reject(new Error("rpc")),
+          },
+        ]}
+      />
+    );
+    await userEvent.click(input());
+    await userEvent.type(input(), "rand");
+    expect(optionNames()).toEqual(["Random"]);
+    expect(failures.actions).toEqual([]);
+  });
+
+  it("picks a nested match with its group on Enter", async () => {
+    const setSelectedItems = vi.fn();
+    render(
+      <Harness
+        items={[
+          "Token",
+          { label: "All programs", items: ["System", "Token Metadata"] },
+        ]}
+        setSelectedItems={setSelectedItems}
+      />
+    );
+    await userEvent.click(input());
+    await userEvent.type(input(), "token");
+    expect(optionNames()).toEqual(["Token", "Token Metadata"]);
+
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect(input().value).toBe("Token Metadata");
+    expect(lastLabels(setSelectedItems)).toEqual([
+      "All programs",
+      "Token Metadata",
+    ]);
+  });
+
+  it("lists nested matches alone, with no empty-list line", async () => {
+    render(
+      <Harness
+        items={["Random", { label: "Pyth", items: ["Crypto.BTC/USD"] }]}
+      />
+    );
+    await userEvent.click(input());
+    await userEvent.type(input(), "btc");
+    expect(optionNames()).toEqual(["Crypto.BTC/USD"]);
+    expect(screen.queryByText("No match")).toBeNull();
+  });
+
+  it("leaves out a group's entry that opens a list of its own", async () => {
+    render(
+      <Harness
+        items={[
+          {
+            label: "Signers",
+            items: [{ label: "wallet list", items: ["inner"] }, "wallet one"],
+          },
+        ]}
+      />
+    );
+    await userEvent.click(input());
+    await userEvent.type(input(), "wallet");
+    expect(optionNames()).toEqual(["wallet one"]);
+  });
+
+  it("loads a group's list again once the list was closed", async () => {
+    const load = vi.fn(() =>
+      Promise.resolve([{ label: "Crypto.SOL/USD", value: "sol-feed" }])
+    );
+    render(<Harness items={[{ label: "Pyth", items: load }]} />);
+    await userEvent.click(input());
+    await userEvent.type(input(), "sol");
+    await screen.findByRole("option", { name: "Crypto.SOL/USD" });
+
+    await userEvent.keyboard("{Escape}");
+    await userEvent.clear(input());
+    await userEvent.click(input());
+    await userEvent.type(input(), "sol");
+    await screen.findByRole("option", { name: "Crypto.SOL/USD" });
+    expect(load).toHaveBeenCalledTimes(2);
+  });
 });

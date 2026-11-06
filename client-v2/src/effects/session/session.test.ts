@@ -456,6 +456,17 @@ describe("the session effect", () => {
       }));
     });
 
+    it("keeps the open project when the sign-in started on the Deploy stage", async () => {
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signInWith({ from: "deploy" });
+      await settle();
+
+      // The funding card deploys this project once the sign-in settles
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
     it("keeps the open project when the sign-in started in the assistant panel", async () => {
       const effect = await signedOutAfterLoad();
 

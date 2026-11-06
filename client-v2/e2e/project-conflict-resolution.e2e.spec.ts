@@ -191,7 +191,8 @@ const looksOf = (pane: Locator, text: string) =>
       .filter((name) => name.startsWith("pg-merge-hunk-"));
   }, text);
 
-const banner = (page: Page) => page.getByText("changed on another device");
+const banner = (page: Page) =>
+  page.getByRole("alert").filter({ hasText: "Changed on another device" });
 
 /**
  * Every file this browser has stored whose text holds `marker`, read from

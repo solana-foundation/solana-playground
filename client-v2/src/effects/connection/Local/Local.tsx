@@ -27,19 +27,19 @@ export const Local = () => {
   return (
     <ModalFrame
       name="localnet-unreachable"
-      title="Connect to localnet"
+      title="Connect to Localnet"
       // No field to land on, so Radix would ring the header's Close on open
       openFocus="dialog"
     >
       <Callout variant="error">
         <FrownIcon />
-        <CalloutDescription>Unable to connect to localnet</CalloutDescription>
+        <CalloutDescription>Unable to connect to Localnet</CalloutDescription>
       </Callout>
 
       <div className="pt-4 pb-2">
         <div className="text-[0.875rem] font-bold">How to connect</div>
         <div className="mt-2 text-[0.75rem] text-[var(--text-secondary)]">
-          Here are the steps for connecting to localnet from playground.
+          Here are the steps for connecting to Localnet from playground.
         </div>
 
         {/* The markdown sheet resets its own margin, unlayered, so the gap

@@ -42,7 +42,7 @@ export const RenameWorkspace: FC<RenameWorkspaceProps> = ({ name }) => {
   return (
     <ModalFrame
       name="rename-workspace"
-      title={`Rename workspace '${workspaceName}'`}
+      title={`Rename project '${workspaceName}'`}
       buttonProps={{
         text: "Rename",
         onSubmit: renameWorkspace,

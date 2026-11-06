@@ -111,8 +111,9 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      # Rust Analyzer's crates in `public/crates`, which `yarn dev` skips (`generate-fast`) and the
-      # real analyzer panics without: the dev server answers a missing crate file with `index.html`.
+      # Rust Analyzer's crates in `public/crates`, which the real analyzer needs: the dev server
+      # answers a missing crate file with `index.html`. Restored into every e2e shard (not on stubs), where
+      # `yarn dev`'s `generate-dev-crates` then finds them current by key.
       # Generated with the runner's own rustup, outside `vercel-install.sh`'s Rust state.
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -221,7 +222,7 @@ jobs:
         if: ${{ !inputs.use-wasm-stubs }}
         run: yarn install --frozen-lockfile
 
-      # Same cheap chain as `yarn dev`: static assets, export barrels,
+      # Same cheap chain as `yarn dev`'s `generate-fast`: static assets, export barrels,
       # package and tutorial data, assistant context, so type-check and tests
       # see the generated files. The `build` job regenerates them in `build-fast`.
       - name: Generate
@@ -421,7 +422,9 @@ jobs:
     # and the slowest of four shards holds about 7 minutes of tests. By run
     # 41803972945 (2026-11-04, about 350 tests) four shards took 11 to 15
     # minutes each and the slowest hit `globalTimeout` with every test
-    # passing, so the suite runs on six. The
+    # passing, so the suite ran on six. On run 42103726526 (2026-11-06, the
+    # users-work landing, about 430 tests) shard 6 hit it again at 15 minutes
+    # with 80 tests passed and the rest unrun, so the suite runs on seven. The
     # steps before `Browser tests` vary far more than the tests: on run
     # 40379245789 the apt downloads of `install-deps` took 11 minutes on one
     # shard and 20 seconds on another. This limit holds that variance;
@@ -438,7 +441,7 @@ jobs:
       # index the matrix skips is a slice nobody runs while this job stays
       # green. `e2e-report` fails on the gap.
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7]
 
     defaults:
       run:
@@ -512,7 +515,8 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: yarn playwright install-deps chromium
 
-      # `yarn dev` runs `generate-fast` itself before `craco start`, and the
+      # `yarn dev` runs `generate-fast` and `generate-dev-crates` (current by key
+      # from the restored cache, skipped on stubs) itself before `craco start`, and the
       # config starts it (`webServer`), so there is no separate generate step.
       # On stubs the `@real-wasm` specs, which run the CLIs, are left out with
       # `--grep-invert`, not `test.skip`: a skip outside `e2e/known-skips.txt`

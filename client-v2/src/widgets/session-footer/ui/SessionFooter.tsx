@@ -22,21 +22,26 @@ const SessionFooter = ({
   page,
   closeSheet,
 }: SessionFooterProps) => {
-  const { account, pick, menu, onMenuOpenChange, accountRef } = useAccount({
-    from: "footer",
-    onToggleSettings,
-    page,
-    closeSheet,
-  });
+  const { account, pick, menu, dialog, onMenuOpenChange, accountRef } =
+    useAccount({
+      from: "footer",
+      onToggleSettings,
+      page,
+      closeSheet,
+    });
+  // The funding dialog sits beside the footer, so it outlives the menu
   return (
-    <BaseSessionFooter
-      account={account}
-      status={status}
-      onCancelSignIn={() => pick("cancel-sign-in")}
-      menu={menu}
-      onMenuOpenChange={onMenuOpenChange}
-      accountRef={accountRef}
-    />
+    <>
+      <BaseSessionFooter
+        account={account}
+        status={status}
+        onCancelSignIn={() => pick("cancel-sign-in")}
+        menu={menu}
+        onMenuOpenChange={onMenuOpenChange}
+        accountRef={accountRef}
+      />
+      {dialog}
+    </>
   );
 };
 

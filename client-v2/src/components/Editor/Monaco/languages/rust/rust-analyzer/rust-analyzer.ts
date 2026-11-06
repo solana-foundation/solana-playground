@@ -24,8 +24,9 @@ const LANGUAGE_ID = "rust";
  * - `full`: Crate has been fully loaded.
  * - `empty`: Crate has been loaded with no content to give intellisense for the crate name.
  * Full crate will be loaded when `crate_name::*` is used in the model content.
+ * - `missing`: Crate files did not load; loaded with no content and not asked for again.
  */
-const cachedNames: Map<string, "full" | "empty"> = new Map();
+const cachedNames: Map<string, "full" | "empty" | "missing"> = new Map();
 
 /** Rust Analyzer world state */
 let state: AsyncMethods<WorldState>;
@@ -58,8 +59,44 @@ export const initRustAnalyzer = (): Promise<Disposable> => {
   return trackStartWith(startRustAnalyzer)(window.crossOriginIsolated);
 };
 
+/** Loads of the default crates before Rust Analyzer gives up for the session */
+const DEFAULT_CRATES_ATTEMPTS = 3;
+const DEFAULT_CRATES_RETRY_MS = 2000;
+
 /** Everything `initRustAnalyzer` does once the page can run the analyzer */
 const startRustAnalyzer = async (): Promise<Disposable> => {
+  // Fetched before the worker, so a checkout that never generated them (no
+  // Rust toolchain, see `generate-default-crates`) spawns no 9MB worker
+  let defaultCrates: string[] | undefined;
+  // A missing file is a checkout without them, for good; anything else (a
+  // 5xx, a dropped connection) gets two more tries before the session goes
+  // without the analyzer, and is reported
+  for (let attempt = 1; defaultCrates === undefined; attempt++) {
+    try {
+      defaultCrates = await Promise.all([
+        PgCommon.fetchText("/crates/core.rs"),
+        PgCommon.fetchText("/crates/alloc.rs"),
+        PgCommon.fetchText("/crates/std.rs"),
+      ]);
+    } catch (e) {
+      if (PgCommon.isFileMissing(e)) {
+        log.warn(
+          "Rust Analyzer disabled: the default crates are missing (`yarn generate-default-crates`)",
+          { context: { error: e } }
+        );
+        return { dispose: () => {} };
+      }
+      if (attempt === DEFAULT_CRATES_ATTEMPTS) {
+        log.error("Rust Analyzer disabled: the default crates did not load", {
+          context: { error: e },
+          report: true,
+        });
+        return { dispose: () => {} };
+      }
+      await PgCommon.sleep(DEFAULT_CRATES_RETRY_MS);
+    }
+  }
+
   // Creating thread pool with `wasm-bindgen-rayon` sometimes hangs forever for
   // unknown reasons. Retry until success in order to mitigate this problem.
   // The try interval should take into account the initial download time of the
@@ -69,13 +106,7 @@ const startRustAnalyzer = async (): Promise<Disposable> => {
   transitiveCrates = await fetchTransitiveCrates();
 
   // Initialize and load the default crates
-  await state.loadDefaultCrates(
-    ...(await Promise.all([
-      PgCommon.fetchText("/crates/core.rs"),
-      PgCommon.fetchText("/crates/alloc.rs"),
-      PgCommon.fetchText("/crates/std.rs"),
-    ]))
-  );
+  await state.loadDefaultCrates(...defaultCrates);
 
   const { dispose: disposeUpdateCurrentCrate } = await PgCommon.executeInitial(
     (cb) => {
@@ -224,7 +255,7 @@ const update = async (model: monaco.editor.IModel) => {
   const crateImportPromises = CRATES.importable
     .map((crate) => {
       const status = cachedNames.get(crate);
-      if (status === "full") return null;
+      if (status === "full" || status === "missing") return null;
 
       if (new RegExp(`${crate}::`, "gm").test(model.getValue())) {
         return loadDependency(crate);
@@ -255,8 +286,9 @@ const loadDependency = async (
   name: string,
   opts?: { empty?: boolean; transitive?: boolean }
 ) => {
-  // Check if the crate is already loaded
-  if (cachedNames.get(name) === "full") return;
+  // Check if the crate is already loaded, or known to be missing
+  const status = cachedNames.get(name);
+  if (status === "full" || status === "missing") return;
 
   // Load empty crate
   if (opts?.empty) {
@@ -266,10 +298,28 @@ const loadDependency = async (
   }
 
   // Load full crate
-  const [code, manifest] = await Promise.all([
-    PgCommon.fetchText(`/crates/${name}.rs`),
-    PgCommon.fetchText(`/crates/${name}.toml`),
-  ]);
+  let code: string, manifest: string;
+  try {
+    [code, manifest] = await Promise.all([
+      PgCommon.fetchText(`/crates/${name}.rs`),
+      PgCommon.fetchText(`/crates/${name}.toml`),
+    ]);
+  } catch (e) {
+    // Only its name resolves then, as before its first use; a missing file
+    // must not reach the WASM, which panics on a manifest it cannot parse.
+    // A network failure or a 5xx is asked for again on its next use; a missing
+    // file is not.
+    const isMissing = PgCommon.isFileMissing(e);
+    log.warn(
+      isMissing
+        ? `Rust Analyzer: crate \`${name}\` is missing (\`yarn generate-crates\`)`
+        : `Rust Analyzer: crate \`${name}\` did not load, retried on its next use`,
+      { context: { error: e } }
+    );
+    if (status !== "empty") await state.loadDependency(name);
+    cachedNames.set(name, isMissing ? "missing" : "empty");
+    return;
+  }
 
   const neededCrates: string[] = await state.loadDependency(
     name,

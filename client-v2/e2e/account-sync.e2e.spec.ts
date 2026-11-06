@@ -234,7 +234,9 @@ test("reloading a project the account already has writes nothing", async ({
   await page.waitForTimeout(8000);
 
   expect(writes).toEqual([]);
-  await expect(page.getByText("changed on another device")).toHaveCount(0);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Changed on another device" })
+  ).toHaveCount(0);
 });
 
 /**
@@ -312,10 +314,9 @@ test("the other device's change arrives without asking", async ({ page }) => {
   await expect.poll(() => threadIdIsUuid(page), LONG).toBe(true);
 
   // Nothing to decide: this browser has no work of its own to weigh
-  await expect(page.getByText("changed on another device")).toHaveCount(
-    0,
-    LONG
-  );
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Changed on another device" })
+  ).toHaveCount(0, LONG);
 
   // The file tree is rendered from the explorer's *in-memory* state, so the
   // new file appearing in it is the proof that the workspace was re-read --
@@ -409,7 +410,9 @@ test("the other device's rename arrives, and the next edit keeps it", async ({
   writes.length = 0;
   await page.reload();
   await reopened(page, localId, "Renamed elsewhere");
-  await expect(page.getByText("changed on another device")).toHaveCount(0);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Changed on another device" })
+  ).toHaveCount(0);
 
   // An edit here goes up under the new name, not the old one
   const editor = page.locator(".monaco-editor .view-lines");
@@ -569,7 +572,9 @@ test("the other device can change it twice without ever asking", async ({
   await expect.poll(() => writes.length, LONG).toBeGreaterThanOrEqual(1);
   await settled(page, writes);
 
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
 
   /** The other device edits, and this one picks it up on the next load */
   const roundTrip = async (marker: string) => {
@@ -684,7 +689,9 @@ test("a divergent project asks about the overlap, and keeping this version uploa
 
   await page.reload();
 
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
   await expect(banner).toBeVisible(LONG);
   // Named: the question is about this file, not the whole project
   await expect(banner).toContainText("src/lib.rs");
@@ -788,7 +795,9 @@ test("a divergent project can take the other version instead", async ({
 
   await page.reload();
 
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
   await expect(banner).toBeVisible(LONG);
 
   await page.getByRole("button", { name: "Take the other version" }).click();
@@ -976,7 +985,9 @@ test("typing folded into the other device's copy still merges with its next chan
   holdRead = null;
 
   // Whichever comes first: the typing uploaded, or the question
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
   await expect
     .poll(
       async () =>

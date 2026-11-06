@@ -80,7 +80,7 @@ All commands run from `client-v2/`.
 ```sh
 yarn setup                 # REQUIRED first: real wasm/*/pkg, install, generate (see below)
 yarn setup:with-stubs      # the same with wasm stubs: USE_WASM_STUBS=true, opt-in only
-yarn dev                   # generate-fast + craco start; refuses unrequested stubs
+yarn dev                   # generate-fast + crates (skipped on stubs) + craco start; refuses unrequested stubs
 yarn dev:with-stubs        # yarn dev with USE_WASM_STUBS=true
 yarn build                 # the whole production build: setup-wasm.sh, build:bundle (~1h on a cold target)
 yarn build:bundle          # lint:layers + generate + craco build + source-map upload, over whatever wasm/*/pkg holds; Vercel runs this

@@ -105,6 +105,12 @@ const isAllowedFor =
   (isCurrent: boolean) => (entry: ProjectEntry, action: ProjectAction) =>
     (!entry.isLesson || LESSON_ACTIONS.has(action)) &&
     (action !== "share-gist" || isCurrent);
+/**
+ * Below `md` the row is taller than the fixed top offset the "⋮" uses on a
+ * desk, so it is centred on the row instead; `!` beats `SidebarMenuAction`'s
+ * own `peer-data-[size]` top.
+ */
+const ON_PHONE_ROW_MIDDLE = "max-md:top-1/2! max-md:-translate-y-1/2";
 
 const pinAction = (entry: ProjectEntry): ProjectAction =>
   entry.pinned ? "unpin" : "pin";
@@ -314,6 +320,7 @@ const Row = ({
               the others show on hover */}
           <SidebarMenuAction
             showOnHover={!isCurrent}
+            className={ON_PHONE_ROW_MIDDLE}
             aria-label={`Actions for ${entry.name}`}
           >
             <EllipsisVertical />

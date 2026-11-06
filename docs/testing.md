@@ -197,10 +197,11 @@ free slot port from "Slots" in
 server, no Postgres, and no default backend: every spec answers the account and model endpoints with `page.route`.
 `PG_AI_API_KEY=` on the command empties what `client-v2/.env` would set, so the dev server reports no default
 backend, as CI's does. With one configured, the panel opens with "Bring your own key" collapsed, and the specs that
-fill that form without expanding it fail. The platform RPC variables in `client-v2/.env.local`
-(`REACT_APP_DEVNET_RPC_URL` and the others) can stay set: the `test` fixture in
-[e2e/fixtures.ts](../client-v2/e2e/fixtures.ts) starts every fresh profile on the public devnet, the endpoint the
-specs stub, instead of the platform devnet those variables make the default.
+fill that form without expanding it fail. The platform RPC variables in `client-v2/.env`
+(`REACT_APP_DEVNET_RPC_URL` and `REACT_APP_MAINNET_RPC_URL`) can stay set: the suite's dev server blanks them
+([playwright.config.mts](../client-v2/playwright.config.mts)), so Devnet and Mainnet are the public endpoints the
+specs stub, and the `test` fixture in [e2e/fixtures.ts](../client-v2/e2e/fixtures.ts) starts every fresh profile on
+Devnet.
 
 ```sh
 k=5
@@ -509,10 +510,12 @@ when its key file there matches its inputs:
 | `yarn --cwd client-v2 generate` (`setup`, `build`, `start`) | `generate-default-crates.mjs` | `generate-crates.mjs` (`cargo fetch` first) |
 | Vercel build (S-6) | `vercel-install.sh`: Build Cache, then Remote Cache, else generated | `yarn generate` in every build, no cache |
 | Docker image build (S-7) | the crates step in `client-v2/Dockerfile` | the same step |
-| `yarn dev`, `build-fast` (`generate-fast`) | not generated | not generated |
+| `yarn dev`, `dev-vercel` (`generate-dev-crates`) | `generate-default-crates.mjs`, skipped on the stubs | `generate-crates.mjs`, skipped on the stubs |
+| `build-fast` (`generate-fast`) | not generated | not generated |
 
-Run S-1 to S-3 against a dev server only after `yarn --cwd client-v2 generate`: `yarn dev` serves whatever an earlier
-run left in `public/crates`.
+`yarn dev` generates the crates itself unless rust-analyzer is a stub; the first run takes minutes, later ones skip by
+key. Outside CI, without cargo or rustup it warns and starts anyway, and Rust Analyzer turns itself off (no default
+crates) or skips the crate (a missing supported crate) with a warning.
 
 ### S-1. rust-analyzer default crates
 

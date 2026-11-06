@@ -1,5 +1,6 @@
 import { createLogger } from "@/shared/lib/logger";
 
+import { PgSession } from "../../features/auth";
 import {
   PgCommand,
   PgCommon,
@@ -15,11 +16,15 @@ import {
   SyncOrAsync,
 } from "../../utils";
 import { StoppedError, throwIfStopped } from "../../utils/stopped";
+import { isAirdropSignInGated } from "../airdrop/sign-in-gate";
 import { checkWallet } from "../checks";
 import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
 import { airdropTopUp } from "./airdrop-top-up";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
+import { MAINNET_DEPLOY_WARNING, warnsOnDeploy } from "./mainnet-warning";
+import type { DeployResult, FundingFailure } from "./run";
+import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
 import type { StoppedBuffer } from "./stopped";
 import { deployStoppedLine } from "./stopped";
 
@@ -31,7 +36,7 @@ export const deploy = createCmd({
   needsConnection: true,
   preChecks: [checkWallet, checkProgram],
   stoppable: true,
-  handle: async ({ signal, lockStop }) => {
+  handle: async ({ signal, lockStop }): Promise<DeployResult | undefined> => {
     switch (PgGlobal.deployState) {
       case "ready":
         PgGlobal.update({ deployState: "loading" });
@@ -47,6 +52,9 @@ export const deploy = createCmd({
     }
 
     PgView.setMainSecondaryProgress(0.1);
+    if (warnsOnDeploy(PgConnection.cluster)) {
+      PgTerminal.println(PgTerminal.warning(MAINNET_DEPLOY_WARNING));
+    }
     PgTerminal.println(
       `${PgTerminal.info(
         "Deploying..."
@@ -55,15 +63,17 @@ export const deploy = createCmd({
 
     try {
       const startTime = performance.now();
-      await processDeploy(signal, lockStop);
+      const result = await processDeploy(lockStop, signal);
       const timePassed = (performance.now() - startTime) / 1000;
       PgTerminal.println(
         `${PgTerminal.success(
           "Deployment successful."
         )} Completed in ${PgCommon.formatSeconds(timePassed)}.`
       );
+      return result;
     } finally {
       PgView.setMainSecondaryProgress(0);
+      PgDeployRun.reset();
       PgGlobal.update({ deployState: "ready" });
     }
   },
@@ -83,20 +93,28 @@ async function checkProgram() {
     PgProgramInfo.lastBuildFailed &&
     !PgProgramInfo.importedProgram?.bytes.length
   ) {
-    PgTerminal.println(
-      "Warning: Your last build failed. Deploying now will upload the last successful build, not the current sources."
-    );
-    const term = await PgTerminal.get();
-    const proceed = await term.waitForInput(
-      "Deploy the previously built binary anyway?",
-      { confirm: true, default: "no" }
-    );
-    if (!proceed) throw new Error("Deployment cancelled: last build failed.");
+    // A caller with its own answers (the Deploy stage) asks in its own UI
+    const answers = PgDeployRun.answers;
+    if (answers) {
+      if (!(await answers.confirmStaleBuild())) {
+        throw new DeployCancelledError();
+      }
+    } else {
+      PgTerminal.println(
+        "Warning: Your last build failed. Deploying now will upload the last successful build, not the current sources."
+      );
+      const term = await PgTerminal.get();
+      const proceed = await term.waitForInput(
+        "Deploy the previously built binary anyway?",
+        { confirm: true, default: "no" }
+      );
+      if (!proceed) throw new DeployCancelledError();
+    }
   }
 
   if (!PgProgramInfo.pk) {
     throw new Error(
-      "Program ID not found. Go to 'Build & Deploy' tab and set the program ID."
+      "Program ID not found. Build the program first: the build creates its keypair."
     );
   }
 
@@ -143,12 +161,15 @@ Your address: ${PgWallet.current!.publicKey}`);
 /**
  * Deploy the current program.
  *
- * @param signal a stop ends the deploy while it funds the wallet or writes
- * the buffer (Spec 03's Cancel): at the next transaction, or between chunks
  * @param lockStop called once the final deploy or upgrade begins, which
  * cannot stop
+ * @param signal a stop ends the deploy while it funds the wallet or writes
+ * the buffer (Spec 03's Cancel): at the next transaction, or between chunks
  */
-const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
+const processDeploy = async (
+  lockStop: () => void,
+  signal: AbortSignal
+): Promise<DeployResult> => {
   const programBytes =
     PgProgramInfo.importedProgram?.bytes ??
     (await PgServer.deploy(PgProgramInfo.uuid!));
@@ -174,6 +195,7 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
 
   // Get the balance required to deploy/upgrade (without fees)
   const programExists = PgProgramInfo.onChain!.deployed;
+  PgDeployRun.update({ upgrade: programExists });
   const additionalLen = getAdditionalLen(programLen);
   const requiredBalanceWithoutFees =
     additionalLen > 0
@@ -195,30 +217,59 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
         : "This is the cost to store the program on-chain. You can reclaim the funds by closing the program later."
     }`;
     const airdropAmount = PgConnection.getAirdropAmount();
-    if (typeof airdropAmount !== "number") throw new Error(msg);
-
-    const term = await PgTerminal.get();
-    term.println(`Warning: ${msg}`);
-    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
-    // A stop while the question is open answers it, as "no" would; the
-    // check below then ends the deploy as stopped, before any SOL moves
-    const answerNo = () => {
-      term.executeFromStr("no").catch((e: unknown) => {
-        log.error(e, { context: { action: "answer the airdrop on stop" } });
+    const answers = PgDeployRun.answers;
+    const shortWith = (cause: string | null) => (reason: FundingFailure) =>
+      new DeployFundingError({
+        reason,
+        balance: userBalance,
+        needed: requiredBalanceWithoutFees,
+        address: wallet.publicKey.toBase58(),
+        cause,
       });
-    };
-    signal.addEventListener("abort", answerNo, { once: true });
-    let confirmed;
-    try {
-      confirmed = await term.waitForInput(
-        "You don't have enough SOL to complete the deployment. Would you like to request an airdrop?",
-        { confirm: true, default: "yes" }
-      );
-    } finally {
-      signal.removeEventListener("abort", answerNo);
+    // eslint-disable-next-line unicorn/no-null -- `detail.cause` is `null` when the faucet said nothing, as the funding card reads it
+    const short = shortWith(null);
+    if (typeof airdropAmount !== "number") {
+      if (answers) throw short("no_faucet");
+      throw new Error(msg);
     }
-    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
-    if (!confirmed) throw new Error("Insufficient balance");
+
+    if (answers) {
+      // The stage asks nothing. Only a public faucet needs a session
+      // (`isAirdropSignInGated`, as the airdrop's own pre-check); the reason
+      // is read here, not from that check's message. Signing in from the
+      // card is the user's request for SOL, so it comes first.
+      if (isAirdropSignInGated(PgConnection.cluster) && !PgSession.get()) {
+        throw short("signed_out");
+      }
+      // Without automatic airdrop the stage stops at its funding card, and
+      // only the card's "Request airdrop" press spends faucet quota
+      if (!answers.airdrop) throw short("airdrop_off");
+      PgTerminal.println(`Warning: ${msg}`);
+      throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+    } else {
+      const term = await PgTerminal.get();
+      term.println(`Warning: ${msg}`);
+      throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+      // A stop while the question is open answers it, as "no" would; the
+      // check below then ends the deploy as stopped, before any SOL moves
+      const answerNo = () => {
+        term.executeFromStr("no").catch((e: unknown) => {
+          log.error(e, { context: { action: "answer the airdrop on stop" } });
+        });
+      };
+      signal.addEventListener("abort", answerNo, { once: true });
+      let confirmed;
+      try {
+        confirmed = await term.waitForInput(
+          "You don't have enough SOL to complete the deployment. Would you like to request an airdrop?",
+          { confirm: true, default: "yes" }
+        );
+      } finally {
+        signal.removeEventListener("abort", answerNo);
+      }
+      throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+      if (!confirmed) throw new Error("Insufficient balance");
+    }
 
     // Request only what the deployment is missing, not the cluster's
     // full faucet default (100 SOL on localnet)
@@ -226,8 +277,34 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
       PgWeb3.lamportsToSol(requiredBalanceWithoutFees - userBalance),
       airdropAmount
     );
-    await PgCommand.airdrop.execute(amount.toString());
+    PgDeployRun.update({ funds: true, step: "funding" });
+    try {
+      await PgCommand.airdrop.execute(amount.toString());
+    } catch (e) {
+      if (!answers) throw e;
+      // The stage shows the faucet's answer on its card; the error and its
+      // stack go to the logs, where a faucet regression can be found
+      log.error(e, { report: true, context: { what: "stage deploy airdrop" } });
+      throw shortWith(e instanceof Error ? e.message : String(e))(
+        "airdrop_failed"
+      );
+    }
   }
+
+  // What the run costs is measured from here on, so an airdrop above is not
+  // counted as spent. A standard wallet hands SOL to the Playground wallet,
+  // which then pays: the cost is what both spent together.
+  const payers = standardWallet
+    ? [standardWallet.publicKey, pgWallet.publicKey]
+    : [wallet.publicKey];
+  const spendable = async () => {
+    const balances = await Promise.all(
+      payers.map((pk) => connection.getBalance(pk))
+    );
+    return balances.reduce((sum, b) => sum + b, 0);
+  };
+  const balanceBefore = await spendable();
+  PgDeployRun.update({ step: "buffer" });
 
   // If deploying from a standard wallet, transfer the required lamports for
   // deployment to the first playground wallet, which allows to deploy without
@@ -295,6 +372,7 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
   );
 
   // Load buffer
+  PgDeployRun.update({ step: "write", percent: 0 });
   const loadBufferResult = await loadBufferWithControl(
     signal,
     bufferKp.publicKey,
@@ -302,7 +380,9 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
     {
       wallet: pgWallet,
       onWrite: (current, total) => {
-        PgView.setMainSecondaryProgress((current / total) * 100);
+        const percent = (current / total) * 100;
+        PgView.setMainSecondaryProgress(percent);
+        PgDeployRun.update({ percent: Math.floor(percent) });
       },
       onMissing: (missingCount) => {
         PgTerminal.println(
@@ -422,8 +502,22 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
   }
 
   // Deploy
-  if (!programExists) {
-    return await sendAndConfirmTxWithRetries(
+  PgDeployRun.update({ step: "deploy" });
+  const signature = await (programExists ? upgrade() : deployNew());
+  // The program is on chain by now: a failed balance read costs the run its
+  // cost figure, never its success, or a retry would pay for an upgrade
+  let cost: number | undefined;
+  try {
+    cost = Math.max(0, balanceBefore - (await spendable()));
+  } catch (e) {
+    log.warn("could not read the balance after the deploy", {
+      context: { error: String(e) },
+    });
+  }
+  return { signature: signature ?? undefined, cost, upgraded: programExists };
+
+  function deployNew() {
+    return sendAndConfirmTxWithRetries(
       async () => {
         return await BpfLoaderUpgradeable.deployProgram(
           PgProgramInfo.kp!,
@@ -438,19 +532,22 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
     );
   }
 
-  // Upgrade
-  return await sendAndConfirmTxWithRetries(
-    async () => {
-      return await BpfLoaderUpgradeable.upgradeProgram(
-        PgProgramInfo.pk!,
-        bufferKp.publicKey
-      );
-    },
-    async () => {
-      const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
-      return !bufferAcc;
-    }
-  );
+  function upgrade() {
+    return sendAndConfirmTxWithRetries(
+      async () => {
+        const programPk = PgProgramInfo.pk;
+        if (!programPk) throw new Error("The program ID was not found");
+        return await BpfLoaderUpgradeable.upgradeProgram(
+          programPk,
+          bufferKp.publicKey
+        );
+      },
+      async () => {
+        const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
+        return !bufferAcc;
+      }
+    );
+  }
 };
 
 /** {@link additionalProgramLen} for the current program */
@@ -650,6 +747,6 @@ const sendAndConfirmTxWithRetries = async (
       MAX_RETRIES.toString()
     )}).
 This might be an RPC related issue. Consider changing the endpoint from the settings.
-${err.message ? `Reason: ${err.message}` : ""}`
+${err?.message ? `Reason: ${err.message}` : ""}`
   );
 };

@@ -1,4 +1,6 @@
+import { solOn, UNKNOWN_NETWORK } from "@/constants";
 import { bindToolFor } from "@/entities/agent-tools";
+import { formatSol } from "@/features/deploy";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
@@ -6,6 +8,10 @@ import { PgPatchUndo } from "../patch-undo";
 import { PgAssistant, wroteOutcome } from "../store";
 import { createMcpTools } from "./mcp-tools";
 import { createSkillTools } from "./skill-tools";
+
+/** The project's name, as the approval cards name the program */
+const programName = (bridge: PlaygroundBridge) =>
+  bridge.getProjectContext().workspaceName ?? "the program";
 
 /** Read a required string argument the model supplied */
 const str = (input: ToolInput, key: string) => {
@@ -128,6 +134,7 @@ export const createTools = (
       name: "build",
       effect:
         "Sends src/ to the build server and replaces the compiled program.",
+      question: `Build ${programName(bridge)}?`,
     });
     if (!allowed) return "The user declined to build.";
 
@@ -150,12 +157,33 @@ export const createTools = (
 
   bindToolFor("deploy")(async () => {
     const { cluster } = bridge.getProjectContext();
+    const quote = await bridge.quoteDeploy();
+    const cost =
+      quote.cost === null
+        ? ""
+        : ` It costs about ${formatSol(quote.cost)} ${solOn(
+            quote.network
+          )} from ${
+            quote.playground ? "your Playground wallet" : "your wallet"
+          }.`;
     const { id: approvalId, allowed } = await PgAssistant.requestApproval({
       type: "command",
       name: "deploy",
       effect: `Sends a transaction to ${cluster} and spends SOL from the connected wallet.`,
+      question: `Deploy ${programName(bridge)} to ${
+        quote.network ?? UNKNOWN_NETWORK
+      }?${cost}`,
     });
     if (!allowed) return "The user declined to deploy.";
+    // The card named the network it was asked on; a switch while it waited
+    // would spend SOL somewhere the user never approved
+    if (bridge.getProjectContext().cluster !== cluster) {
+      PgAssistant.setApprovalOutcome(approvalId, "network changed");
+      return (
+        "The network changed while the approval waited, so nothing was " +
+        "deployed. Ask the user whether to deploy to the network now selected."
+      );
+    }
 
     try {
       const deployed = await bridge.deploy();

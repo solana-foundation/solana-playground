@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { DownloadProgram } from "@/features/cli-deploy";
 import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { requestConsole } from "@/widgets/layout-shell";
@@ -90,7 +91,12 @@ const Build = () => {
       onAsk={(prompt) => PgAssistant.requestPrompt(prompt)}
       onOpenFile={(path) => PgExplorer.openFile(path)}
       onShowLog={requestConsole}
-      idlActions={<IdlActions mode="download" look="link" />}
+      idlActions={
+        <>
+          <IdlActions mode="download" look="link" />
+          <DownloadProgram from="build-stage" look="link" />
+        </>
+      }
     />
   );
 };

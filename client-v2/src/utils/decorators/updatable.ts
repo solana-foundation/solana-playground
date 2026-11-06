@@ -168,7 +168,11 @@ export function updatable<T extends Record<string, any>>(params: {
           let value;
           try {
             value = PgCommon.getValue(state, migration.from);
-            if (value === undefined) continue;
+            const fallback = PgCommon.getValue(
+              params.defaultState,
+              migration.to
+            );
+            if (!canMigrate(fallback, value)) continue;
           } catch {
             // The value has already been migrated
             continue;
@@ -252,6 +256,17 @@ export function updatable<T extends Record<string, any>>(params: {
     };
   };
 }
+
+/**
+ * Whether a stored value may move to a new id with this default. Anything else
+ * is no value to carry over, so the new id keeps its own value or takes its
+ * default: `setMissingDefaults` throws on a `null` and writes the characters of
+ * a string default onto an object. A `null` default accepts any type.
+ */
+const canMigrate = (fallback: unknown, value: unknown) => {
+  if (value === undefined || value === null) return false;
+  return fallback === null || typeof value === typeof fallback;
+};
 
 /** Define proxy setters for properties recursively. */
 const recursivelyDefineSetters = (sClass: any, accessor: string[]) => {
@@ -365,3 +380,69 @@ type PropertiesToUnionOfTuples<T, Acc extends string[] = []> = {
       : [[...Acc, K], T[K]]
     : never;
 }[keyof T];
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("utils/decorators/updatable", () => {
+    /** A settings-shaped class whose storage holds `stored`. */
+    const settingsWith = (stored: Record<string, unknown>) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the decorator adds its methods at runtime, untyped
+      const sClass: any = class {};
+      updatable<{ blockExplorer: { name: string } }>({
+        defaultState: { blockExplorer: { name: "Solana Explorer" } },
+        storage: { read: () => stored as never, write: () => {} },
+        recursive: true,
+        migrate: () => [
+          { from: "other.blockExplorer", to: "blockExplorer.name" },
+        ],
+      })(sClass);
+      return sClass;
+    };
+
+    it("loads without throwing when the old id holds null", async () => {
+      // eslint-disable-next-line unicorn/no-null -- the stored JSON under test holds null
+      const sClass = settingsWith({ other: { blockExplorer: null } });
+
+      await sClass[PROPS.REFRESH]();
+
+      expect(sClass[PROPS.INTERNAL_STATE]).toEqual({
+        blockExplorer: { name: "Solana Explorer" },
+      });
+    });
+
+    it("keeps the value under the new id when the old id holds null", async () => {
+      const sClass = settingsWith({
+        // eslint-disable-next-line unicorn/no-null -- the stored JSON under test holds null
+        other: { blockExplorer: null },
+        blockExplorer: { name: "Solscan" },
+      });
+
+      await sClass[PROPS.REFRESH]();
+
+      expect(sClass[PROPS.INTERNAL_STATE]).toEqual({
+        blockExplorer: { name: "Solscan" },
+      });
+    });
+
+    it("loads the default when the old id holds an object", async () => {
+      const sClass = settingsWith({ other: { blockExplorer: {} } });
+
+      await sClass[PROPS.REFRESH]();
+
+      expect(sClass[PROPS.INTERNAL_STATE]).toEqual({
+        blockExplorer: { name: "Solana Explorer" },
+      });
+    });
+
+    it("migrates a stored value from its old id", async () => {
+      const sClass = settingsWith({ other: { blockExplorer: "Solscan" } });
+
+      await sClass[PROPS.REFRESH]();
+
+      expect(sClass[PROPS.INTERNAL_STATE]).toEqual({
+        blockExplorer: { name: "Solscan" },
+      });
+    });
+  });
+}

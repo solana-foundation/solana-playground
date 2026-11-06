@@ -2,7 +2,10 @@ import type { Idl } from "@coral-xyz/anchor";
 
 import { PgCommon } from "./common";
 import type { TupleFiles } from "./explorer";
+import { PgServerError, UNREADABLE_BODY } from "./server-error";
 import { PgSettings } from "./settings";
+
+export { PgServerError };
 
 /** Rust `Option` type */
 type Option<T> = T | null;
@@ -142,33 +145,28 @@ export class PgServer {
       : PgSettings.server.endpoint;
     if (opts?.unstable) path = PgCommon.joinPaths("unstable", path);
     const requestUrl = PgCommon.joinPaths(serverUrl, path);
-    let answered = false;
+    let response: Response;
     try {
-      const response = await fetch(requestUrl, requestInit);
-      answered = true;
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message);
-      }
-
-      return response;
+      response = await fetch(requestUrl, requestInit);
     } catch (e: any) {
-      throw new PgServerRequestError(
-        `Server request failed (${requestUrl}): ${e?.message}`,
-        answered
-      );
+      throw new PgServerError({
+        url: requestUrl,
+        status: undefined,
+        body: e?.message || String(e),
+        cause: e,
+      });
     }
-  }
-}
+    if (!response.ok) {
+      // A body cut off mid-read still leaves the status to report; the
+      // placeholder says in the error's message that the body was lost
+      const body = await response.text().catch(() => UNREADABLE_BODY);
+      throw new PgServerError({
+        url: requestUrl,
+        status: response.status,
+        body,
+      });
+    }
 
-/**
- * A request to the Playground server that failed. `answered` tells a server
- * that never replied (Spec 08's BUILD-04, "did not answer") from one that
- * replied with an error.
- */
-export class PgServerRequestError extends Error {
-  constructor(message: string, readonly answered: boolean) {
-    super(message);
-    this.name = "PgServerRequestError";
+    return response;
   }
 }

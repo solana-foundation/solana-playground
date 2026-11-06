@@ -62,7 +62,12 @@ vi.mock("../../../utils/explorer/explorer", () => ({
   },
 }));
 vi.mock("../../../utils/program-info", () => ({
-  PgProgramInfo: { idl: null },
+  PgProgramInfo: {
+    // eslint-disable-next-line unicorn/no-null -- the real `idl` and `callableIdl` answer `null` without an IDL
+    idl: null,
+    // eslint-disable-next-line unicorn/no-null -- same
+    callableIdl: () => null,
+  },
 }));
 // The bridge's context from the real store, over a fixed project
 const FILES = ["src/lib.rs", "tests/anchor.test.ts", "secret/other.rs"];

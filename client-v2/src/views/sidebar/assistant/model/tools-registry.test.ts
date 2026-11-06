@@ -26,6 +26,12 @@ const recordingBridge = () => {
     applyPatch: async () => void changes.push("applyPatch"),
     build: async () => void changes.push("build"),
     deploy: async () => void changes.push("deploy"),
+    // eslint-disable-next-line unicorn/no-null -- `quoteDeploy`'s `cost` is `number | null`
+    quoteDeploy: async () => ({
+      cost: null,
+      network: "devnet",
+      playground: true,
+    }),
   } as unknown as PlaygroundBridge;
   return { bridge, changes };
 };

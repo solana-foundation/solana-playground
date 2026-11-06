@@ -1,6 +1,7 @@
 /**
- * Where a Build, Deploy or Interact stage's action sits. The action row is the last
- * element of the stage; below `md` the stage is at least as tall as its
+ * Where a Build, Deploy or Interact stage's action sits. The action row is drawn
+ * last in the stage (Deploy puts its outline buttons after it in the page, for
+ * focus order, and draws its foot last on a phone with `order-last`); below `md` the stage is at least as tall as its
  * frame and the row is pushed to the foot (`mt-auto`), where
  * `StageEmptyActions`' own `sticky bottom-0` keeps it when the content is
  * taller than the screen. The stage drops its own bottom padding there: the

@@ -5,7 +5,8 @@ vi.mock("../../../utils", () => ({
     onDidSwitchWorkspace: vi.fn(() => ({ dispose: vi.fn() })),
     fs: { exists: vi.fn(async () => false) },
   },
-  PgProgramInfo: { idl: null },
+  // eslint-disable-next-line unicorn/no-null -- the real `idl` and `callableIdl()` answer `null` without an IDL
+  PgProgramInfo: { idl: null, callableIdl: () => null },
   PgTutorial: { getStorage: vi.fn() },
   PgView: { setToast: vi.fn() },
 }));
