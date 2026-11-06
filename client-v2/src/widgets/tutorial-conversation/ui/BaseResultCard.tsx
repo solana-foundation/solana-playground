@@ -187,7 +187,8 @@ const BaseResultCard = ({
         aria-hidden="true"
         className={cn("size-4 shrink-0", iconTone(result.ok, signedOut))}
       />
-      <span className="text-[0.8125rem] font-label text-foreground">
+      {/* One line: the meta beside it gives way, truncated */}
+      <span className="shrink-0 text-[0.8125rem] font-label whitespace-nowrap text-foreground">
         {title}
       </span>
       {meta && (

@@ -299,6 +299,7 @@ describe("BaseFeed", () => {
     expect(
       segment(/^Step 3 of 4, Client, current$/).getAttribute("aria-current")
     ).toBe("step");
+    act(() => observed?.([{ isIntersecting: false }]));
     expect(screen.getByRole("button", { name: "Back to step 3" })).toBeTruthy();
   });
 
@@ -340,6 +341,7 @@ describe("BaseFeed", () => {
     const onBack = vi.fn();
     feed({ onBack });
     await userEvent.click(segment(/^Step 1 of 4, Program, done$/));
+    act(() => observed?.([{ isIntersecting: false }]));
     vi.mocked(Element.prototype.scrollIntoView).mockClear();
 
     await userEvent.click(
@@ -424,6 +426,7 @@ describe("BaseFeed", () => {
     expect(
       segment(/^Step 2 of 4, .*, done$/).getAttribute("aria-current")
     ).toBe("location");
+    act(() => observed?.([{ isIntersecting: false }]));
     expect(screen.getByRole("button", { name: "Back to step 3" })).toBeTruthy();
   });
 
@@ -438,6 +441,23 @@ describe("BaseFeed", () => {
     expect(
       screen.getByRole("button", { name: "Back to the start" })
     ).toBeTruthy();
+  });
+
+  it("keeps the pill away while any of the live card is on screen, though the feed reads another step", async () => {
+    feed();
+    await userEvent.click(segment(/^Step 1 of 4, Program, done$/));
+    act(() => observed?.([{ isIntersecting: true }]));
+    expect(screen.queryByRole("button", { name: /^Back to/ })).toBeNull();
+    act(() => observed?.([{ isIntersecting: false }]));
+    expect(screen.getByRole("button", { name: "Back to step 3" })).toBeTruthy();
+  });
+
+  it("falls back to the step the feed reads where the browser cannot watch the live card", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    feed();
+    expect(screen.queryByRole("button", { name: /^Back to/ })).toBeNull();
+    await userEvent.click(segment(/^Step 1 of 4, Program, done$/));
+    expect(screen.getByRole("button", { name: "Back to step 3" })).toBeTruthy();
   });
 
   it("has no pill after the finish", async () => {
@@ -460,6 +480,7 @@ describe("BaseFeed", () => {
       expect.objectContaining({ top: 500 - 22 })
     );
     expect(onJump).toHaveBeenCalledWith(1, 2, "menu");
+    act(() => observed?.([{ isIntersecting: false }]));
     expect(screen.getByRole("button", { name: "Back to step 3" })).toBeTruthy();
   });
 

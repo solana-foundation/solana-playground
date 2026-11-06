@@ -98,3 +98,11 @@ it("shows a send in flight on Account, with the labelled spinner", () => {
       .getAttribute("aria-busy")
   ).toBe("true");
 });
+
+it("draws a signed out account as a plain user glyph, with no circle around it", () => {
+  draw({ account: view({}) });
+  const glyph = screen
+    .getByRole("button", { name: "Account, signed out" })
+    .querySelector("svg");
+  expect(glyph?.getAttribute("data-glyph")).toBe("user");
+});

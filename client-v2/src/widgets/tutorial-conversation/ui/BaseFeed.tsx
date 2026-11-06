@@ -78,7 +78,11 @@ const BaseFeed = ({
   const [viewing, setViewing] = useState<number | null>(null);
   /** Until when the feed's scroll is a jump's, in ms since the epoch */
   const jumping = useRef(0);
-  const [liveOffScreen, setLiveOffScreen] = useState(false);
+  /** Whether no part of the live card is on screen; undefined where the
+   * browser cannot tell (no IntersectionObserver) */
+  const [liveOffScreen, setLiveOffScreen] = useState<boolean | undefined>(
+    false
+  );
   const liveIndex = liveStepIndex(steps);
 
   const jump = (index: number, via: StepJumpVia) => {
@@ -162,8 +166,12 @@ const BaseFeed = ({
   // Whether the live card is on screen, for the pill
   useEffect(() => {
     const card = liveCard.current;
+    if (typeof IntersectionObserver === "undefined") {
+      setLiveOffScreen(undefined);
+      return;
+    }
     setLiveOffScreen(false);
-    if (!card || typeof IntersectionObserver === "undefined") return;
+    if (!card) return;
     const observer = new IntersectionObserver(
       ([entry]) => setLiveOffScreen(!entry.isIntersecting),
       { root: scroller.current }
@@ -219,7 +227,9 @@ const BaseFeed = ({
     onBack(liveIndex);
   };
 
-  const showPill = live !== null && (liveOffScreen || viewing !== null);
+  // Only once the live card is wholly off screen, even while the feed reads
+  // another step: over a card still in sight the pill lands on its button
+  const showPill = live !== null && (liveOffScreen ?? viewing !== null);
   const pillLabel =
     live?.kind === "intro" || liveIndex === null
       ? "Back to the start"
