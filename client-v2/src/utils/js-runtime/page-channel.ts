@@ -1,5 +1,6 @@
 // @vitest-environment node -- a MessageChannel clones bytes into Node's realm, which jsdom's `Uint8Array` does not match
 
+import { reasonMessage } from "./kit";
 import {
   type FromSandbox,
   isFromSandbox,
@@ -31,10 +32,6 @@ const isAnswerable = (data: unknown): data is Answerable =>
   ((data as { type?: unknown }).type === "sign" ||
     (data as { type?: unknown }).type === "rpc") &&
   typeof (data as { id?: unknown }).id === "number";
-
-/** The reason a handler failed, as the sandbox is told it */
-const reasonOf = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 /**
  * Serves one run on the page's side of the port: prints output, answers sign
@@ -80,7 +77,7 @@ export const serveSandboxWith =
               .then((answer) =>
                 reply({ type: "sign", id: data.id, reply: answer })
               )
-              .catch((error: unknown) => refuse(data)(reasonOf(error)));
+              .catch((error: unknown) => refuse(data)(reasonMessage(error)));
             return;
           case "rpc":
             handlers
@@ -88,7 +85,7 @@ export const serveSandboxWith =
               .then((answer) =>
                 reply({ type: "rpc", id: data.id, reply: answer })
               )
-              .catch((error: unknown) => refuse(data)(reasonOf(error)));
+              .catch((error: unknown) => refuse(data)(reasonMessage(error)));
             return;
         }
       };
