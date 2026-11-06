@@ -7,9 +7,10 @@ import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Icon } from "@/shared/ui/icon";
 import { ModalFrame, SubmitCancelled, useModalId } from "@/widgets/overlays";
 
-import { Eye, Github, ImportWorkspace } from "../../../../../components/Icons";
+import { Github } from "../../../../../components/Icons";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
@@ -142,7 +143,7 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
           onError={reportButtonFailure("import the program")}
         >
           Import
-          <ImportWorkspace data-icon="inline-end" />
+          <Icon name="import" data-icon="inline-end" />
         </AsyncButton>
 
         <Button
@@ -154,7 +155,7 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
           }}
         >
           Open
-          <Eye data-icon="inline-end" />
+          <Icon name="show" data-icon="inline-end" />
         </Button>
 
         <Button asChild variant="outline">

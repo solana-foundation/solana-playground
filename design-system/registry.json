@@ -432,6 +432,24 @@
       ]
     },
     {
+      "name": "icon",
+      "type": "registry:ui",
+      "title": "Icon",
+      "description": "The product's one line icon set: the four stages, the status glyphs and the core actions, on a 24 grid at stroke 1.5, in 16, 20 and 24 px.",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/icon.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "status-dot",
       "type": "registry:ui",
       "title": "Status dot",
