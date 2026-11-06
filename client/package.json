@@ -92,7 +92,14 @@
     "serialize-javascript": "^7.0.3",
     "react-scripts/@svgr/webpack": "^8.1.0",
     "react-scripts/resolve-url-loader": "^5.0.0",
-    "**/webpack-dev-server/webpack-dev-middleware": "^7.4.6"
+    "**/webpack-dev-server/webpack-dev-middleware": "^7.4.6",
+    "react-scripts/webpack-dev-server": "^5.2.6",
+    "**/ethjs-unit/bn.js": "^4.12.3",
+    "**/number-to-bn/bn.js": "^4.12.3",
+    "**/near-api-js/bn.js": "^5.2.3",
+    "**/@solana/web3.js/jayson": "^5.0.0",
+    "**/sockjs/uuid": "^11.1.1",
+    "**/http-proxy-agent/@tootallnate/once": "^2.0.1"
   },
   "engines": {
     "node": "^22.23.4"

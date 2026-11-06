@@ -26,6 +26,10 @@
   },
   "resolutions": {
     "**/@ethersproject/providers/ws": "^7.5.11",
+    "**/@solana/web3.js/jayson": "^5.0.0",
+    "**/ethjs-unit/bn.js": "^4.12.3",
+    "**/near-api-js/bn.js": "^5.2.3",
+    "**/number-to-bn/bn.js": "^4.12.3",
     "@solana/buffer-layout": "^4.0.0",
     "axios": "^0.34.0",
     "crypto-js": "^4.2.0",
