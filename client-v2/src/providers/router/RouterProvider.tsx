@@ -1,5 +1,5 @@
 import { FC, useEffect } from "react";
-import { BrowserRouter, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, useLocation, useNavigate } from "react-router";
 
 import { useGetStatic } from "../../hooks";
 import { PgCommon, PgRouter } from "../../utils";
