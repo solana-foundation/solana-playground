@@ -85,6 +85,12 @@ print its message and end the run.
 - **THEN** the reply still reaches the callback, and what it prints shows in
   the terminal, until the next run replaces the sandbox
 
+#### Scenario: An error after the run ended says so
+
+- **WHEN** a callback the code did not await throws after the run ended
+- **THEN** the terminal prints "Uncaught error after the run ended:" with its
+  message, and the run's result stays as it was
+
 #### Scenario: A failing test is reported
 
 - **WHEN** `test` runs a file with one passing and one failing test
