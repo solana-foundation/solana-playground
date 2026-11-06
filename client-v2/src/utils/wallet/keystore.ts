@@ -51,7 +51,8 @@ const SET_ASIDE_KEY = "set-aside";
 
 /** Run one request in its own transaction and resolve with its result */
 const requestWith =
-  (db: IDBDatabase, mode: IDBTransactionMode) =>
+  (db: IDBDatabase) =>
+  (mode: IDBTransactionMode) =>
   <T>(run: (store: IDBObjectStore) => IDBRequest<T>) =>
     new Promise<T>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, mode);
@@ -158,18 +159,16 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
     },
     async read() {
       const db = await open();
-      const value = await requestWith(
-        db,
-        "readonly"
-      )<SerializedWalletState | undefined>((store) => store.get(RECORD_KEY));
+      const value = await requestWith(db)("readonly")<
+        SerializedWalletState | undefined
+      >((store) => store.get(RECORD_KEY));
       return value;
     },
     async write(state) {
       const db = await open();
-      await requestWith(
-        db,
-        "readwrite"
-      )((store) => store.put(state, RECORD_KEY));
+      await requestWith(db)("readwrite")((store) =>
+        store.put(state, RECORD_KEY)
+      );
     },
     async setAside(accounts) {
       const db = await open();

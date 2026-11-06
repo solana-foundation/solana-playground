@@ -107,17 +107,15 @@ if (import.meta.vitest) {
     const refuse = async () => ({ error: "not in this test" });
 
     /** The sandbox's port, with the page serving it with these handlers */
-    const sandboxPortFor = (
-      sign: SandboxHandlers["sign"],
-      rpc: SandboxHandlers["rpc"]
-    ) => {
-      const channel = new MessageChannel();
-      channels.push(channel);
-      void serveSandboxWith({ print: () => undefined, sign, rpc })(
-        channel.port2
-      );
-      return channel.port1;
-    };
+    const sandboxPortFor =
+      (sign: SandboxHandlers["sign"]) => (rpc: SandboxHandlers["rpc"]) => {
+        const channel = new MessageChannel();
+        channels.push(channel);
+        void serveSandboxWith({ print: () => undefined, sign, rpc })(
+          channel.port2
+        );
+        return channel.port1;
+      };
 
     /** The next message the page posts on the sandbox's port */
     const nextReply = (port: MessagePort) =>
@@ -126,7 +124,7 @@ if (import.meta.vitest) {
       });
 
     it("answers a sign request without its bytes with an error under its id", async () => {
-      const port = sandboxPortFor(refuse, refuse);
+      const port = sandboxPortFor(refuse)(refuse);
       const reply = nextReply(port);
       port.postMessage({
         type: "sign",
@@ -143,7 +141,7 @@ if (import.meta.vitest) {
     });
 
     it("answers an RPC request without its fields with an error under its id", async () => {
-      const port = sandboxPortFor(refuse, refuse);
+      const port = sandboxPortFor(refuse)(refuse);
       const reply = nextReply(port);
       port.postMessage({ type: "rpc", id: 3, url: "http://a" });
       expect(await reply).toEqual({
@@ -156,7 +154,7 @@ if (import.meta.vitest) {
     it("answers with the reason when the sign handler rejects", async () => {
       const port = sandboxPortFor(async () => {
         throw new Error("wallet gone");
-      }, refuse);
+      })(refuse);
       const reply = nextReply(port);
       port.postMessage({
         type: "sign",
@@ -189,7 +187,7 @@ if (import.meta.vitest) {
     });
 
     it("answers with the reason when the RPC handler rejects", async () => {
-      const port = sandboxPortFor(refuse, async () => {
+      const port = sandboxPortFor(refuse)(async () => {
         throw new Error("relay broke");
       });
       const reply = nextReply(port);

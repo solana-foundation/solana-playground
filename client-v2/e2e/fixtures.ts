@@ -680,8 +680,10 @@ export const openTerminal = async (page: Page) => {
  * `Monaco.tsx`), since `run` and `test` read the saved file.
  */
 export const replaceFile =
-  (context: BrowserContext, page: Page) =>
-  (folder: string, file: string) =>
+  (context: BrowserContext) =>
+  (page: Page) =>
+  (folder: string) =>
+  (file: string) =>
   async (code: string) => {
     await page.getByRole("button", { name: folder, exact: true }).click();
     await page.getByRole("button", { name: file, exact: true }).click();
@@ -781,9 +783,9 @@ export const seedPlaynetProject = async (
     keypair,
     address: keypair.publicKey.toBase58(),
     writeClient: (code: string) =>
-      replaceFile(context, page)("client", "client.ts")(code),
+      replaceFile(context)(page)("client")("client.ts")(code),
     writeTest: (code: string) =>
-      replaceFile(context, page)("tests", "native.test.ts")(code),
+      replaceFile(context)(page)("tests")("native.test.ts")(code),
   };
 };
 
