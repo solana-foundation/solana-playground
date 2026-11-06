@@ -1,3 +1,4 @@
+import { Icon, type IconName } from "@/components/ui/icon"
 import { Section, SwatchGrid, TokenRow } from "./parts"
 
 function Colour() {
@@ -212,6 +213,72 @@ function Shape() {
   )
 }
 
+const ICON_GROUPS: [string, IconName[]][] = [
+  ["Stages", ["write", "build", "deploy", "interact"]],
+  ["State", ["idle", "running", "success", "warning", "error", "info"]],
+  [
+    "Actions",
+    [
+      "add", "close", "check", "copy", "edit", "delete", "more", "more-vertical", "search", "share", "link",
+      "external", "download", "upload", "import", "export", "refresh", "clear", "run", "stop", "test", "fix",
+      "airdrop", "pin", "unpin", "show",
+    ],
+  ],
+  ["Direction", ["back", "forward", "chevron-left", "chevron-right", "chevron-up", "chevron-down"]],
+  [
+    "Places and things",
+    [
+      "menu", "sidebar", "file", "files", "folder", "new-file", "new-folder", "terminal", "assistant", "wallet",
+      "account", "settings", "help", "history", "time", "lock", "sign-out",
+    ],
+  ],
+]
+
+function Icons() {
+  return (
+    <Section
+      id="icons"
+      title="Icons"
+      note="One line set on a 24 grid: a 2 px margin, stroke 1.5 with round ends and joins, inner corners of 2. The stroke scales with the size, so it is 1 px at 16, the size most icons sit at beside 13 to 15 px text. 20 goes with 16 and 17 px text, 24 stands alone. The nav keeps its brand-cut glyphs, and Anchor, Seahorse and GitHub keep their own marks."
+    >
+      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        {([16, 20, 24] as const).map((size) => (
+          <div key={size} className="rounded-card border border-border p-5">
+            <div className="mb-3 flex items-baseline justify-between">
+              <span className="text-control font-act">{size} px</span>
+              <code className="font-mono text-[11px] text-subtle">stroke {size / 16}</code>
+            </div>
+            <div className="flex items-center gap-3 text-foreground">
+              {(["write", "build", "deploy", "interact"] as const).map((n) => (
+                <Icon key={n} name={n} size={size} />
+              ))}
+            </div>
+            <div className="mt-3 flex items-center gap-2 text-caption font-read text-muted-foreground">
+              <Icon name="success" size={size} className="text-success" />
+              {size === 16 ? "Built 12 s ago" : size === 20 ? "Deployed" : "Ready"}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="rounded-card border border-border px-6">
+        {ICON_GROUPS.map(([title, names]) => (
+          <div key={title} className="border-b border-border py-5 last:border-b-0">
+            <div className="mb-3 text-caption font-label text-subtle">{title}</div>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-x-2 gap-y-4">
+              {names.map((n) => (
+                <div key={n} className="flex flex-col items-center gap-2 text-foreground">
+                  <Icon name={n} size={20} />
+                  <code className="font-mono text-[11px] text-subtle">{n}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Section>
+  )
+}
+
 function Motion() {
   return (
     <Section
@@ -246,4 +313,4 @@ function Motion() {
   )
 }
 
-export { Colour, Motion, Shape, Type }
+export { Colour, Icons, Motion, Shape, Type }

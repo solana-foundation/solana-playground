@@ -2,8 +2,7 @@ import { ComponentPropsWithoutRef, forwardRef } from "react";
 import { Link as RouterLink } from "react-router";
 
 import { cn } from "@/shared/lib/utils";
-
-import { External } from "../Icons";
+import { Icon } from "@/shared/ui/icon";
 
 export interface LinkProps extends ComponentPropsWithoutRef<"a"> {
   href: RoutePath;
@@ -42,7 +41,13 @@ const Link = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => {
     >
       {props.children}
 
-      {!isWrapper && <External />}
+      {!isWrapper && (
+        <Icon
+          name="external"
+          size={16}
+          className="inline-block align-[-0.2em]"
+        />
+      )}
     </a>
   );
 });

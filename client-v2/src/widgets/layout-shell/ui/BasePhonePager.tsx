@@ -166,7 +166,7 @@ const FilePicker = ({
     onClick={onOpen}
     className={cn(
       HEAD_BUTTON,
-      "mr-auto min-w-0 shrink pr-2.5 pl-3 text-foreground [&>svg:first-child]:mr-0.5 [&>svg:first-child]:text-muted-foreground [&>svg:last-child]:ml-0.5 [&>svg:last-child]:size-4.5 [&>svg:last-child]:text-muted-foreground"
+      "mr-auto min-w-0 shrink pr-2.5 pl-3 text-foreground [&>svg:first-child]:mr-0.5 [&>svg:first-child]:text-muted-foreground [&>svg:last-child]:ml-0.5 [&>svg:last-child]:size-4 [&>svg:last-child]:text-muted-foreground"
     )}
   >
     {PHONE_ICONS.files}

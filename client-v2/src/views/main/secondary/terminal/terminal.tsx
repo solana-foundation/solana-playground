@@ -1,4 +1,5 @@
-import { Clear } from "../../../../components/Icons";
+import { Icon } from "@/shared/ui/icon";
+
 import { PgTerminal } from "../../../../utils";
 import { createMainSecondaryPage } from "../create";
 
@@ -11,7 +12,7 @@ export const terminal = createMainSecondaryPage({
     {
       name: "Clear",
       keybind: "Ctrl+L",
-      icon: <Clear />,
+      icon: <Icon name="clear" size={16} />,
       run: PgTerminal.clear,
     },
   ],
