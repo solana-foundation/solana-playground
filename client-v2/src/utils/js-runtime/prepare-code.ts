@@ -1,6 +1,14 @@
-import type { CompilerOptions } from "typescript";
+import type {
+  CompilerOptions,
+  ImportDeclaration,
+  StringLiteral,
+} from "typescript";
 import {
+  createSourceFile,
   flattenDiagnosticMessageText,
+  isImportDeclaration,
+  isNamespaceImport,
+  ScriptKind,
   ScriptTarget,
   transpileModule,
 } from "typescript";
@@ -19,72 +27,80 @@ const TRANSPILE_OPTIONS: CompilerOptions = {
 const HIDDEN_GLOBALS = ["eval", "Function"];
 
 /**
- * `import` statements of project code: `* as name`, `{ a, b as c }`, a
- * default name, or none (side effect only). Only one that starts a line or
- * follows a `;`: an `import` in a comment or a string is not a statement,
- * and hoisting it would run it.
+ * What an import declaration becomes: its package, awaited from the sandbox
+ * (`__pgImport`, answered with the sandbox's own copy, `sandbox/runtime.ts`),
+ * bound to the names it imports. A type-only import binds nothing at run time
+ * and becomes nothing.
+ *
+ * @param index the declaration's place among the code's imports, which names
+ * its module's binding
+ * @returns a function of the declaration
  */
-const IMPORT_REGEX =
-  /(?<=^|;)[ \t]*import\s+(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["']([^"']+)["']/gm;
-
-/**
- * The awaited `__pgImport(path)` an `import` statement becomes, which the
- * sandbox answers with its own copy of the package (`sandbox/runtime.ts`)
- */
-const importedFor = ({
-  namespace,
-  named,
-  defaultName,
-  path,
-}: {
-  /** `* as name` */
-  namespace: string | undefined;
-  /** `{ a, b as c }`, braces included */
-  named: string | undefined;
-  /** a default name */
-  defaultName: string | undefined;
-  path: string;
-}) => {
+const importedFor = (index: number) => (declaration: ImportDeclaration) => {
+  const path = (declaration.moduleSpecifier as StringLiteral).text;
   const imported = `await __pgImport(${JSON.stringify(path)})`;
-  if (namespace) return `const ${namespace} = ${imported};`;
-  if (named) {
-    const bindings = named
-      .slice(1, -1)
-      .split(",")
-      .map((binding) => binding.trim())
-      .filter(Boolean)
-      .map((binding) => {
-        const [name, , alias] = binding.split(/\s+/);
-        return alias ? `${name}: ${alias}` : name;
-      });
-    return `const { ${bindings.join(", ")} } = ${imported};`;
+  const clause = declaration.importClause;
+  if (!clause) return `${imported};`;
+  if (clause.isTypeOnly) return "";
+  const module = `__pgModule${index}`;
+  const statements = [`const ${module} = ${imported};`];
+  if (clause.name) {
+    statements.push(
+      `const ${clause.name.text} = ${module}.default ?? ${module};`
+    );
   }
-  if (defaultName) {
-    return `const ${defaultName} = ((m) => m.default ?? m)(${imported});`;
+  const bindings = clause.namedBindings;
+  if (bindings && isNamespaceImport(bindings)) {
+    statements.push(`const ${bindings.name.text} = ${module};`);
+  } else if (bindings) {
+    const names = bindings.elements
+      .filter((element) => !element.isTypeOnly)
+      .map((element) =>
+        element.propertyName
+          ? `${element.propertyName.text}: ${element.name.text}`
+          : element.name.text
+      );
+    if (names.length)
+      statements.push(`const { ${names.join(", ")} } = ${module};`);
   }
-  return `${imported};`;
+  return statements.join(" ");
 };
 
 /**
- * Moves every `import` to the start of the code, rewritten by
- * `importedFor`, so each is loaded before any statement runs, as ES modules
- * load theirs. The statements go on the first line and each `import` leaves
- * its line breaks behind, so the code's line numbers stay as written.
+ * Moves every import declaration to the start of the code, as `importedFor`
+ * rewrites it, so each is loaded before any statement runs, as ES modules
+ * load theirs. Declarations are found by TypeScript's parser, so an `import`
+ * in a comment or a string is left alone and a comment before one does not
+ * hide it. The rewritten imports go on the first line and each declaration
+ * leaves its line breaks behind, so the code's line numbers stay as written.
  *
  * @param code project code
  * @returns the code with its imports first
  */
 const hoistImports = (code: string) => {
-  const hoisted: string[] = [];
-  const rest = code.replace(
-    IMPORT_REGEX,
-    // eslint-disable-next-line max-params -- `String.replace` hands every capture group
-    (match: string, _clause, _ns, namespace, named, defaultName, path) => {
-      hoisted.push(importedFor({ namespace, named, defaultName, path }));
-      return "\n".repeat(match.split("\n").length - 1);
-    }
+  const source = createSourceFile(
+    "project.ts",
+    code,
+    ScriptTarget.ES2020,
+    true,
+    ScriptKind.TS
   );
-  return hoisted.length ? `${hoisted.join(" ")} ${rest}` : rest;
+  const declarations = source.statements.filter(isImportDeclaration);
+  if (!declarations.length) return code;
+  const hoisted = declarations.map((declaration, index) =>
+    importedFor(index)(declaration)
+  );
+  let rest = code;
+  // From the last, so earlier positions stay valid
+  for (const declaration of [...declarations].reverse()) {
+    const start = declaration.getStart(source);
+    const text = rest.slice(start, declaration.end);
+    rest =
+      rest.slice(0, start) +
+      "\n".repeat(text.split("\n").length - 1) +
+      rest.slice(declaration.end);
+  }
+  return `${hoisted.join(" ")} ${rest}`;
 };
 
 /** Lines the wrapper in `prepareCode` puts before the project's first line */
@@ -189,6 +205,22 @@ if (import.meta.vitest) {
         { a: { x: 1 }, b: { x: 2 } }
       );
       expect(seen).toEqual([1, 2]);
+    });
+
+    it("loads an import that a block comment precedes on its line", async () => {
+      const seen = await runPrepared(
+        '/* note */ import * as a from "a";\nseen.push(a.x);',
+        { a: { x: 1 } }
+      );
+      expect(seen).toEqual([1]);
+    });
+
+    it("binds a default and named imports from one declaration, and drops a type-only one", async () => {
+      const seen = await runPrepared(
+        'import type { T } from "t";\nimport def, { one } from "c";\nseen.push(def, one);',
+        { c: { default: 4, one: 1 } }
+      );
+      expect(seen).toEqual([4, 1]);
     });
 
     it("leaves an import in a comment where it is, unrun", () => {
