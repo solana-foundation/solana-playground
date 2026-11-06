@@ -24,6 +24,7 @@ import {
   realWorkspace,
   stepOfBeat,
   tutorialRunner,
+  watchBuildSource,
   watchDeploys,
 } from "@/features/tutorial-conversation";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
@@ -589,6 +590,9 @@ export const TutorialConversation = ({
       }).dispose,
     []
   );
+  // Every build's source, so a deploy can tell an edit since the last
+  // passing build (`watchBuildSource`); once the globals exist
+  useEffect(() => watchBuildSource(), []);
   // A deploy outside the cards, through the deploy command, is the program
   // the Call panel and the call acts talk to (`watchDeploys`)
   useEffect(
