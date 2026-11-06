@@ -54,23 +54,20 @@ jobs:
       - resolve_version
       - checks
     if: needs.resolve_version.outputs.version_tag != ''
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Cloud SDK authentication
-        uses: google-github-actions/auth@v2
+      - name: Sign in to GCP
+        uses: ./.github/actions/gcp-auth
         with:
-          token_format: "access_token"
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
           credentials_json: ${{ secrets.GCP_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure GCloud
-        run: |-
-          gcloud config set account ${{ secrets.SERVICE_ACCOUNT }}
-          gcloud config set project ${{ secrets.PROJECT_ID }}
+          project_id: ${{ secrets.PROJECT_ID }}
 
       - name: Deploy to App Engine with specific version (no promote)
         working-directory: server
