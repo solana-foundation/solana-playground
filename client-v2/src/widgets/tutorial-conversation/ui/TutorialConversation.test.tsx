@@ -115,8 +115,20 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
 vi.mock("@/components/Markdown", () => ({
   default: ({ children }: { children: string }) => <p>{children}</p>,
 }));
+/** The editor's read-only holds: how many were taken, how many still held */
+const { editorHolds } = vi.hoisted(() => ({
+  editorHolds: { taken: 0, held: 0 },
+}));
 vi.mock("@/utils/editor", () => ({
-  PgEditor: { revealLine: vi.fn(), setReadOnly: vi.fn(), focus: vi.fn() },
+  PgEditor: {
+    revealLine: vi.fn(),
+    focus: vi.fn(),
+    holdReadOnly: () => {
+      editorHolds.taken += 1;
+      editorHolds.held += 1;
+      return { dispose: () => (editorHolds.held -= 1) };
+    },
+  },
 }));
 vi.mock("@/entities/tutorial", async () => {
   const docs = await import("@/entities/tutorial/model/docs");
@@ -308,6 +320,8 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  editorHolds.taken = 0;
+  editorHolds.held = 0;
   Element.prototype.scrollTo = vi.fn();
   Element.prototype.scrollIntoView = vi.fn();
   store.state = loaded();
@@ -543,13 +557,13 @@ describe("TutorialConversation", () => {
     render(
       <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
     );
-    expect(PgEditor.setReadOnly).toHaveBeenLastCalledWith(true);
+    expect(editorHolds.held).toBe(1);
 
     const started = loaded();
     started.context = intro.context;
     store.state = started;
     act(() => notify(started));
-    expect(PgEditor.setReadOnly).toHaveBeenLastCalledWith(false);
+    expect(editorHolds.held).toBe(0);
   });
 
   it("frees the editor when the tutorial closes on its intro card", () => {
@@ -560,14 +574,14 @@ describe("TutorialConversation", () => {
       <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
     );
     unmount();
-    expect(PgEditor.setReadOnly).toHaveBeenLastCalledWith(false);
+    expect(editorHolds.held).toBe(0);
   });
 
   it("never locks the editor on a step", () => {
     render(
       <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
     );
-    expect(PgEditor.setReadOnly).not.toHaveBeenCalled();
+    expect(editorHolds.taken).toBe(0);
   });
 
   it("draws a turn that arrives on its own, when the store re-announces the same state", () => {
@@ -1341,12 +1355,12 @@ describe("TutorialConversation on the phone", () => {
   it("keeps Code read only on the phone after Start, and not on the desktop", () => {
     play(toStep3);
     const desk = drawAt(1440);
-    expect(PgEditor.setReadOnly).not.toHaveBeenCalled();
+    expect(editorHolds.taken).toBe(0);
     desk.unmount();
     const phone = drawAt(390);
-    expect(PgEditor.setReadOnly).toHaveBeenLastCalledWith(true);
+    expect(editorHolds.held).toBe(1);
     phone.unmount();
-    expect(PgEditor.setReadOnly).toHaveBeenLastCalledWith(false);
+    expect(editorHolds.held).toBe(0);
   });
 
   it("leaves the step bar to the phone's header", () => {

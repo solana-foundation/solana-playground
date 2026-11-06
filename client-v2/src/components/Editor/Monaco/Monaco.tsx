@@ -910,8 +910,9 @@ const Monaco = () => {
     if (!editor) return;
 
     const updateId = async () => {
-      // The tutorial's intro preview: a file nobody writes to until Start
-      if (PgEditor.readOnly) return;
+      // The tutorial's intro preview: a file nobody writes to until Start.
+      // An act's lock does not stop it: a build needs the id written
+      if (PgEditor.isReadOnlyFor("preview")) return;
 
       const programPkStr = PgProgramInfo.getPkStr();
       if (!programPkStr) return;
