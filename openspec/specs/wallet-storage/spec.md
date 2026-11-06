@@ -183,6 +183,15 @@ read) or `unavailable` (it still could not be).
 - **THEN** the stored wallet loads and the step shows its address
 - **AND** `setup_wallet_retried` is recorded with `outcome: loaded`
 
+#### Scenario: connect reads an unavailable wallet again
+
+- **WHEN** the wallet is unavailable and the setup list is dismissed or
+  completed, so its "Try again" is not shown
+- **AND** the user runs `connect`
+- **THEN** the wallet is read again; while it still cannot be read, `connect`
+  fails with "Run connect to try again", and once the store answers it
+  prints "Wallet loaded."
+
 #### Scenario: A browser without IndexedDB gets Setup
 
 - **WHEN** IndexedDB does not exist in this browser and `localStorage` holds

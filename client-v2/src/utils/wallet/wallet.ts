@@ -385,7 +385,7 @@ const migrate = () => {
 const refuseWhileUnavailable = () => {
   if (PgWallet.state === "unavailable") {
     throw new Error(
-      "Wallet unavailable: it could not be read, so no account can be added. Try again from Get set up."
+      "Wallet unavailable: it could not be read, so no account can be added. Run connect to try again."
     );
   }
 };
