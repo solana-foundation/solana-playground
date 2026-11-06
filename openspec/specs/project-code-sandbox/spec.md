@@ -91,6 +91,13 @@ print its message and end the run.
 - **THEN** the terminal prints "Uncaught error after the run ended:" with its
   message, and the run's result stays as it was
 
+#### Scenario: A refused IDL says why where the program would be
+
+- **WHEN** the project's IDL is refused (`readIdl`) and project code reads
+  `pg.program` or the program's name under `anchor.workspace`
+- **THEN** the read throws "The program's IDL can't be called: <reason>.",
+  and `pg.program` is not among `pg`'s keys
+
 #### Scenario: A failing test is reported
 
 - **WHEN** `test` runs a file with one passing and one failing test
