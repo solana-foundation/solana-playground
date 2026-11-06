@@ -30,6 +30,7 @@ vi.mock("./bpf-loader-upgradeable", () => ({
       }
     ),
     deployProgram: vi.fn(async () => "sig-deploy"),
+    extendProgram: vi.fn(async () => "sig-extend"),
     upgradeProgram: vi.fn(async () => "sig-upgrade"),
   },
 }));
@@ -74,11 +75,15 @@ vi.mock("../../utils", () => {
       get: async () => ({ waitForInput, println: vi.fn() }),
     },
     // eslint-disable-next-line unicorn/no-null -- an RPC confirmation's `err` is `null` on success
-    PgTx: { confirm: async () => ({ err: null }) },
+    PgTx: { confirm: vi.fn(async () => ({ err: null })) },
     PgView: { setMainSecondaryProgress: vi.fn() },
     PgWallet: { current: { publicKey: pk, isPg: true } },
     PgWeb3: {
       Keypair: { generate: () => ({ publicKey: pk }) },
+      // Holds the bytes it was made from, so a stubbed read can tell accounts apart
+      PublicKey: class {
+        constructor(readonly bytes: Uint8Array) {}
+      },
       BpfLoaderUpgradeableProgram: {
         getBufferAccountSize: (n: number) => n,
         getProgramDataAccountSize: (n: number) => n + 45,
@@ -197,6 +202,112 @@ describe("deploy run", () => {
     const result = await handleDeploy();
 
     expect(result?.cluster).toBe("testnet");
+  });
+
+  /**
+   * Change the network while the run's first balance read is in flight, as a
+   * pick in Settings or the Deploy stage's network chip can
+   */
+  const switchNetworkOnFirstRead = async (lamports: number) => {
+    const { PgConnection } = await import("../../utils");
+    const start = PgConnection.current;
+    const switched = {
+      getBalance: start.getBalance,
+      getMinimumBalanceForRentExemption:
+        start.getMinimumBalanceForRentExemption,
+      getAccountInfo: start.getAccountInfo,
+      rpcEndpoint: "https://api.testnet.solana.com",
+    };
+    balance.mockImplementationOnce(async () => {
+      Object.assign(PgConnection, { current: switched });
+      return lamports;
+    });
+    return {
+      start,
+      restore: () => Object.assign(PgConnection, { current: start }),
+    };
+  };
+
+  it.each([
+    { verb: "deploys", deployed: false, last: "deployProgram" },
+    { verb: "upgrades", deployed: true, last: "upgradeProgram" },
+  ] as const)(
+    "sends and confirms on the connection it started on when the network changes as it $verb",
+    async ({ deployed, last }) => {
+      const { PgTx } = await import("../../utils");
+      const { BpfLoaderUpgradeable } = await import("./bpf-loader-upgradeable");
+      Object.assign(PgProgramInfo, {
+        onChain: { deployed, upgradable: true, programDataLen: 1000 },
+      });
+      const { start, restore } = await switchNetworkOnFirstRead(10_000_000_000);
+
+      try {
+        await handleDeploy();
+      } finally {
+        restore();
+      }
+
+      const lastArg = (calls: unknown[][]) => calls[0]?.at(-1);
+      for (const opts of [
+        lastArg(vi.mocked(BpfLoaderUpgradeable.createBuffer).mock.calls),
+        lastArg(vi.mocked(BpfLoaderUpgradeable.loadBuffer).mock.calls),
+        lastArg(vi.mocked(BpfLoaderUpgradeable[last]).mock.calls),
+      ]) {
+        expect(opts).toMatchObject({ connection: start });
+      }
+      const confirms = vi.mocked(PgTx.confirm).mock.calls as unknown[][];
+      expect(confirms.length).toBeGreaterThan(0);
+      for (const [, opts] of confirms) {
+        expect(opts).toMatchObject({ connection: start });
+      }
+    }
+  );
+
+  it("takes an extend as confirmed from the program data on its own network, not the one picked", async () => {
+    const { PgTx } = await import("../../utils");
+    const { BpfLoaderUpgradeable } = await import("./bpf-loader-upgradeable");
+    // The picked network's program info still says the program needs room
+    Object.assign(PgProgramInfo, {
+      onChain: { deployed: true, upgradable: true, programDataLen: 10 },
+    });
+    const { start, restore } = await switchNetworkOnFirstRead(10_000_000_000);
+    // On the run's own network the extend landed: the program data has room
+    const programDataPk = new Uint8Array(32).fill(7);
+    const program = { data: Buffer.concat([Buffer.alloc(4), programDataPk]) };
+    const extended = { data: Buffer.alloc(1000) };
+    const read = start.getAccountInfo;
+    Object.assign(start, {
+      getAccountInfo: async (key: { bytes?: Uint8Array }) =>
+        key?.bytes ? extended : program,
+    });
+    // The extend's confirmation reports an error, so the probe decides
+    vi.mocked(PgTx.confirm).mockResolvedValueOnce({ err: "timeout" } as never);
+
+    let result;
+    try {
+      result = await handleDeploy();
+    } finally {
+      restore();
+      Object.assign(start, { getAccountInfo: read });
+    }
+
+    expect(BpfLoaderUpgradeable.extendProgram).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ signature: "sig-upgrade", upgraded: true });
+  });
+
+  it("asks no faucet when the network changed since the run started", async () => {
+    const { restore } = await switchNetworkOnFirstRead(0);
+
+    const run = PgDeployRun.runWith(answers(true))(handleDeploy);
+
+    try {
+      await expect(run).rejects.toThrow(
+        "The network changed during the deploy"
+      );
+    } finally {
+      restore();
+    }
+    expect(PgCommand.airdrop.execute).not.toHaveBeenCalled();
   });
 
   it("reports the selected network when the connection's cannot be read", async () => {

@@ -659,22 +659,24 @@ test("project-sync-limits: The client check is bypassed", async ({ page }) => {
 
 /* ---------------------------- The account cap --------------------------- */
 
+/** The server's answer to a new project's first write past the account's cap */
+const projectCapRefusal = (r: Route) =>
+  r.fulfill({
+    status: 413,
+    contentType: "application/json",
+    body: JSON.stringify({
+      error: "The account syncs as many projects as it can",
+      reason: "too-many-projects",
+      kind: "project",
+      limit: 10,
+      count: 11,
+    }),
+  });
+
 test("project-sync-limits: The account is at the project cap", async ({
   page,
 }) => {
-  const account = await stubAccount(page, [], (r) =>
-    r.fulfill({
-      status: 413,
-      contentType: "application/json",
-      body: JSON.stringify({
-        error: "The account syncs as many projects as it can",
-        reason: "too-many-projects",
-        kind: "project",
-        limit: 10,
-        count: 11,
-      }),
-    })
-  );
+  const account = await stubAccount(page, [], projectCapRefusal);
   await page.goto("/");
   await startProject(page, "eleventh", LONG);
   await expect(editor(page)).toContainText("declare_id", LONG);
@@ -802,6 +804,23 @@ test("project-sync-limits: sync_files_count_limit_exceeded", async ({
   expect(line).toContain("sync_files_count_limit_exceeded");
   expect(line).toMatch(/by\W+client/);
   expect(line).toMatch(/files\W+64\b/);
+});
+
+test("project-sync-limits: sync_projects_count_limit_exceeded", async ({
+  page,
+}) => {
+  const lines = linesOn(page);
+  await stubAccount(page, [], projectCapRefusal);
+  await page.goto("/");
+  await startProject(page, "eleventh", LONG);
+
+  await expect(banner(page)).toBeVisible(LONG);
+  await expect.poll(() => limitEvents(lines)).toHaveLength(1);
+  const [line] = limitEvents(lines);
+  expect(line).toContain("sync_projects_count_limit_exceeded");
+  expect(line).toMatch(/by\W+server/);
+  expect(line).toMatch(/kind\W+project/);
+  expect(line).toMatch(/projects\W+11\b/);
 });
 
 test("project-sync-limits: A banner already up sends nothing more", async ({

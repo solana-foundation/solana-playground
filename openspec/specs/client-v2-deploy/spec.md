@@ -248,7 +248,8 @@ the network is known, SHALL title itself "Nothing on {network}" and SHALL say
 "This project has deploys on {other network}." with "Show {other network}" as a
 link when the settings offer that network. Pressing the link SHALL switch the
 connection to that network. The link SHALL be off while a deploy runs, because
-the running deploy's record takes the network read when it ends.
+a deploy stays on the network it started on (see "A deploy stays on the network
+it started on") and the stage would then show another one.
 
 #### Scenario: Deployed on devnet, mainnet picked (manual)
 
@@ -261,3 +262,25 @@ the running deploy's record takes the network read when it ends.
 
 - **WHEN** a deploy runs on the network picked
 - **THEN** "Show {other network}" is disabled
+
+### Requirement: A deploy stays on the network it started on
+
+A deploy SHALL send, simulate and confirm every transaction of its run on the
+connection it took when it started, and its record and `deploy_succeeded`
+SHALL name that connection's network, whatever network is picked while it runs.
+The airdrop is the exception: the faucet funds the network picked now, so a
+deploy that needs SOL SHALL end with "The network changed during the deploy,
+so an airdrop would fund another network. Deploy again." when the endpoint
+changed since it started, before it asks the faucet. Both scenarios are held by
+unit tests (`deploy-run.test.ts`, `bpf-loader-upgradeable.test.ts`).
+
+#### Scenario: The network changes during the first reads (manual)
+
+- **WHEN** the endpoint changes while a deploy reads its balance
+- **THEN** the buffer, its writes and the deploy or upgrade are sent and
+  confirmed on the starting network, and the record names it
+
+#### Scenario: The network changes before an airdrop (manual)
+
+- **WHEN** a deploy that needs SOL finds the endpoint changed since it started
+- **THEN** it ends with the network-changed error and requests no airdrop

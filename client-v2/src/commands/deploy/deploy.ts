@@ -80,6 +80,20 @@ export const deploy = createCmd({
 });
 
 /**
+ * End a deploy before it asks the faucet, when the network changed since it
+ * started: the airdrop funds the network selected now, while the run sends
+ * on its own
+ */
+function throwIfNetworkChanged(connection: typeof PgConnection.current) {
+  // A commitment change makes a new connection to the same endpoint
+  if (PgConnection.current.rpcEndpoint !== connection.rpcEndpoint) {
+    throw new Error(
+      "The network changed during the deploy, so an airdrop would fund another network. Deploy again."
+    );
+  }
+}
+
+/**
  * The network `connection` points at. Read from its own endpoint:
  * `PgConnection.cluster` is derived asynchronously and can still name the
  * previous network right after a switch.
@@ -201,8 +215,16 @@ const processDeploy = async (
     : [PgWallet.create(PgWallet.accounts[0]), wallet];
 
   // Decide whether it's an initial deployment or an upgrade and calculate
-  // how much SOL user needs before creating the buffer.
+  // how much SOL user needs before creating the buffer. The run keeps this
+  // connection and what the program info says about its network: a network
+  // change from here on must not split it across two networks.
   const connection = PgConnection.current;
+  const onChain = PgProgramInfo.onChain;
+  if (!onChain) throw new Error("Failed to get on-chain program info");
+  const programExists = onChain.deployed;
+  const additionalLen = getAdditionalLen(programLen);
+  const sendAndConfirmTxWithRetries =
+    sendAndConfirmTxWithRetriesFor(connection);
   const [userBalance, bufferBalance, cluster] = await Promise.all([
     connection.getBalance(wallet.publicKey),
     connection.getMinimumBalanceForRentExemption(
@@ -215,15 +237,14 @@ const processDeploy = async (
   throwIfStopped(signal, deployStoppedLine({ state: "none" }));
 
   // Get the balance required to deploy/upgrade (without fees)
-  const programExists = PgProgramInfo.onChain!.deployed;
   PgDeployRun.update({ upgrade: programExists });
-  const additionalLen = getAdditionalLen(programLen);
   const requiredBalanceWithoutFees =
     additionalLen > 0
       ? bufferBalance +
         (await connection.getMinimumBalanceForRentExemption(additionalLen))
       : bufferBalance;
   if (userBalance < requiredBalanceWithoutFees) {
+    throwIfNetworkChanged(connection);
     const formatBalance = (lamports: number) => {
       return PgTerminal.bold(PgWeb3.lamportsToSol(lamports).toFixed(2));
     };
@@ -298,6 +319,8 @@ const processDeploy = async (
       PgWeb3.lamportsToSol(requiredBalanceWithoutFees - userBalance),
       airdropAmount
     );
+    // The questions above may have waited for an answer
+    throwIfNetworkChanged(connection);
     PgDeployRun.update({ funds: true, step: "funding" });
     try {
       await PgCommand.airdrop.execute(amount.toString());
@@ -341,16 +364,10 @@ const processDeploy = async (
       lamports: requiredBalance,
     });
     await sendAndConfirmTxWithRetries(
-      () => PgTx.send(transferIx),
-      () => {
-        if (typeof PgWallet.balance !== "number") {
-          throw new Error("Could not get wallet balance");
-        }
-
-        return (
-          PgWeb3.solToLamports(PgWallet.balance) < userBalance - requiredBalance
-        );
-      }
+      () => PgTx.send(transferIx, { connection }),
+      async () =>
+        (await connection.getBalance(standardWallet.publicKey)) <
+        userBalance - requiredBalance
     );
   }
 
@@ -360,15 +377,23 @@ const processDeploy = async (
   // results in `Program was deployed in this block already` error.
   if (additionalLen > 0) {
     throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+    const programPk = PgProgramInfo.pk;
+    if (!programPk) throw new Error("The program ID was not found");
     await sendAndConfirmTxWithRetries(
       async () => {
         return await BpfLoaderUpgradeable.extendProgram(
-          PgProgramInfo.pk!,
+          programPk,
           additionalLen,
-          { wallet: pgWallet }
+          { wallet: pgWallet, connection }
         );
       },
-      () => getAdditionalLen(programLen) <= 0
+      // Read on the run's network: the program info follows the one picked
+      async () =>
+        additionalProgramLen({
+          programLen,
+          deployed: true,
+          onChainLen: await fetchProgramDataLenOn(connection)(programPk),
+        }) <= 0
     );
   }
 
@@ -383,7 +408,7 @@ const processDeploy = async (
         bufferKp,
         bufferBalance,
         programLen,
-        { wallet: pgWallet }
+        { wallet: pgWallet, connection }
       );
     },
     async () => {
@@ -400,6 +425,7 @@ const processDeploy = async (
     programBytes,
     {
       wallet: pgWallet,
+      connection,
       onWrite: (current, total) => {
         const percent = (current / total) * 100;
         PgView.setMainSecondaryProgress(percent);
@@ -432,6 +458,7 @@ const processDeploy = async (
         () =>
           BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
             wallet: pgWallet,
+            connection,
           }),
         async () => !(await connection.getAccountInfo(bufferKp.publicKey))
       );
@@ -477,6 +504,7 @@ const processDeploy = async (
         async () => {
           return await BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
             wallet: pgWallet,
+            connection,
           });
         },
         async () => {
@@ -509,7 +537,7 @@ const processDeploy = async (
         return await BpfLoaderUpgradeable.setBufferAuthority(
           bufferKp.publicKey,
           standardWallet.publicKey,
-          { wallet: pgWallet }
+          { wallet: pgWallet, connection }
         );
       },
       async () => {
@@ -548,7 +576,8 @@ const processDeploy = async (
         return await BpfLoaderUpgradeable.deployProgram(
           PgProgramInfo.kp!,
           bufferKp.publicKey,
-          programLen
+          programLen,
+          { connection }
         );
       },
       async () => {
@@ -565,7 +594,8 @@ const processDeploy = async (
         if (!programPk) throw new Error("The program ID was not found");
         return await BpfLoaderUpgradeable.upgradeProgram(
           programPk,
-          bufferKp.publicKey
+          bufferKp.publicKey,
+          { connection }
         );
       },
       async () => {
@@ -575,6 +605,19 @@ const processDeploy = async (
     );
   }
 };
+
+/**
+ * The length of a program's data account on `connection`, or `undefined` when
+ * the program or its data account is not there
+ */
+const fetchProgramDataLenOn =
+  (connection: PgWeb3.Connection) => async (programPk: PgWeb3.PublicKey) => {
+    const program = await connection.getAccountInfo(programPk);
+    if (!program) return undefined;
+    // An upgradeable program's account holds its data account's address
+    const programDataPk = new PgWeb3.PublicKey(program.data.slice(4));
+    return (await connection.getAccountInfo(programDataPk))?.data.length;
+  };
 
 /** {@link additionalProgramLen} for the current program */
 const getAdditionalLen = (programLen: number) => {
@@ -737,42 +780,46 @@ const keptLamportsOn =
  *
  * `checkConfirmation` is necessary because `PgTx.confirm` can be unreliable.
  *
+ * @param connection the deploy's own: it confirms here, and `sendTx` sends
+ * on it too
  * @param sendTx send transaction callback
  * @param checkConfirmation only confirm the transaction if this callback returns truthy
  * @returns the transaction signature
  */
-const sendAndConfirmTxWithRetries = async (
-  sendTx: () => Promise<string>,
-  checkConfirmation: () => SyncOrAsync<boolean>
-) => {
-  const MAX_RETRIES = 5;
-  const SLEEP_MULTIPLIER = 1.8;
+const sendAndConfirmTxWithRetriesFor =
+  (connection: PgWeb3.Connection) =>
+  async (
+    sendTx: () => Promise<string>,
+    checkConfirmation: () => SyncOrAsync<boolean>
+  ) => {
+    const MAX_RETRIES = 5;
+    const SLEEP_MULTIPLIER = 1.8;
 
-  let sleepAmount = 1000;
-  let err;
-  for (let i = 0; i < MAX_RETRIES; i++) {
-    try {
-      const txHash = await sendTx();
-      if (!txHash) return;
-      const result = await PgTx.confirm(txHash);
-      if (!result?.err) return txHash;
-      if (await checkConfirmation()) return txHash;
-    } catch (e: any) {
-      log.warn("Deploy transaction attempt failed", {
-        context: { error: e, attempt: i + 1, maxAttempts: MAX_RETRIES },
-      });
-      err = e;
-      if (i === MAX_RETRIES - 1) break;
-      await PgCommon.sleep(sleepAmount);
-      sleepAmount *= SLEEP_MULTIPLIER;
+    let sleepAmount = 1000;
+    let err;
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      try {
+        const txHash = await sendTx();
+        if (!txHash) return;
+        const result = await PgTx.confirm(txHash, { connection });
+        if (!result?.err) return txHash;
+        if (await checkConfirmation()) return txHash;
+      } catch (e: any) {
+        log.warn("Deploy transaction attempt failed", {
+          context: { error: e, attempt: i + 1, maxAttempts: MAX_RETRIES },
+        });
+        err = e;
+        if (i === MAX_RETRIES - 1) break;
+        await PgCommon.sleep(sleepAmount);
+        sleepAmount *= SLEEP_MULTIPLIER;
+      }
     }
-  }
 
-  throw new Error(
-    `Exceeded maximum amount of retries (${PgTerminal.bold(
-      MAX_RETRIES.toString()
-    )}).
+    throw new Error(
+      `Exceeded maximum amount of retries (${PgTerminal.bold(
+        MAX_RETRIES.toString()
+      )}).
 This might be an RPC related issue. Consider changing the endpoint from the settings.
 ${err?.message ? `Reason: ${err.message}` : ""}`
-  );
-};
+    );
+  };
