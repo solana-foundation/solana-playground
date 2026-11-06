@@ -54,7 +54,7 @@ export const tabsOf = (files: string[], present: ReadonlySet<string>) =>
 export type DocTab = Pick<Doc, "file" | "title">;
 
 /** The tree's last folder, holding the tutorial's doc pages */
-const DOCS_FOLDER = "Docs";
+export const DOCS_FOLDER = "Docs";
 
 /** One row of the tree: a folder's label, a file, or a doc page */
 export type TreeRow =

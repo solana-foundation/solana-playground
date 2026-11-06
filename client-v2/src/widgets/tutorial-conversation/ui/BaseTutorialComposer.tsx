@@ -11,6 +11,8 @@ import {
   ComposerToolbar,
 } from "@/shared/ui/composer";
 
+import { ACTION, ACTION_FILL } from "./card-action";
+
 export interface BaseTutorialComposerProps {
   value: string;
   onChange: (value: string) => void;
@@ -38,6 +40,11 @@ export interface BaseTutorialComposerProps {
   onStart?: () => void;
   /** A line over the box, such as why a question has not gone yet */
   note?: string | null;
+  /**
+   * The phone layout: before Start, "Start step 1" takes the composer's
+   * place, under the thumb, and nothing else shows
+   */
+  phone?: boolean;
 }
 
 /**
@@ -87,10 +94,21 @@ const BaseTutorialComposer = ({
   waiting,
   onStart,
   note,
+  phone = false,
 }: BaseTutorialComposerProps) => {
   const [focused, setFocused] = useState(false);
   const pressing = usePressing();
   const open = focused || value !== "";
+  if (phone && waiting && onStart) {
+    return (
+      <Button
+        className={cn(ACTION, ACTION_FILL, "h-12 w-full pointer-coarse:h-12")}
+        onClick={onStart}
+      >
+        Start step 1
+      </Button>
+    );
+  }
   return (
     <div className="flex flex-col gap-2">
       {onStart && (

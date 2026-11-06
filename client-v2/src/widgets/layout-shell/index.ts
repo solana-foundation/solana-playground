@@ -5,4 +5,9 @@ export { layoutTelemetry } from "./model/telemetry";
 export { default as LayoutShell } from "./ui/LayoutShell";
 export type { LayoutShellProps, StageConsole } from "./ui/LayoutShell";
 export { default as NoFileOpen } from "./ui/NoFileOpen";
-export type { TutorialFrameSlot, TutorialNavState } from "./ui/BaseLayoutShell";
+export type {
+  TutorialFrameSlot,
+  TutorialNavState,
+  TutorialPhoneSlot,
+  TutorialSpace,
+} from "./ui/BaseLayoutShell";

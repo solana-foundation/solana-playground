@@ -3,12 +3,15 @@ import { useEffect } from "react";
 
 import type { Win } from "@/entities/tutorial";
 import type { PassedVia } from "@/features/tutorial-conversation";
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Kbd } from "@/shared/ui/kbd";
 import { Tag } from "@/shared/ui/tag";
 
 import { BaseDrawnCheck } from "./BaseDrawnCheck";
+import { PHONE_CTA } from "./card-action";
 import { nothingFocused } from "./keys";
+import { phoneCtaWidth, usePhone } from "./phone";
 import { HEADLINE, noStop, Prose, READ } from "./Prose";
 
 export interface BaseWinCardProps {
@@ -53,12 +56,15 @@ const BaseWinCard = ({
   onOpenCall,
   onWriteInClient,
 }: BaseWinCardProps) => {
+  const layout = usePhone();
+  const { phone } = layout;
   const fromPanel = via === "call_panel";
   const canNext = live && next !== null;
   // A navigation link: it stays on the record, as "Write it in client.ts" does
   // After a pass from the panel, the next thing is the code, not the panel
+  // Not on the phone: Code's head holds Call there
   const openCall =
-    win.extra === "openTest" && !fromPanel ? onOpenCall : undefined;
+    win.extra === "openTest" && !fromPanel && !phone ? onOpenCall : undefined;
 
   useEffect(() => {
     if (!canNext) return;
@@ -96,7 +102,7 @@ const BaseWinCard = ({
           <div className="flex flex-col gap-1">
             <Tag className="w-fit">Step {index} done</Tag>
             <p className={HEADLINE}>
-              <Prose text={noStop(win.headline)} />
+              <Prose text={noStop(win.headline, phone)} />
             </p>
           </div>
           {live && (
@@ -107,14 +113,19 @@ const BaseWinCard = ({
           {(canNext || openCall || fromPanel) && (
             <div className="flex flex-wrap items-center gap-2">
               {canNext && (
-                <Button onClick={onNext}>
+                <Button
+                  onClick={onNext}
+                  className={cn(phone && PHONE_CTA, phoneCtaWidth(layout))}
+                >
                   Next: {next}
-                  <Kbd
-                    aria-hidden="true"
-                    className="bg-white/15 text-primary-foreground/80"
-                  >
-                    ↵
-                  </Kbd>
+                  {!phone && (
+                    <Kbd
+                      aria-hidden="true"
+                      className="bg-white/15 text-primary-foreground/80"
+                    >
+                      ↵
+                    </Kbd>
+                  )}
                 </Button>
               )}
               {openCall && (

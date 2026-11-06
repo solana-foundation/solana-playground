@@ -8,6 +8,7 @@ import type { StepBarItem, Turn } from "@/features/tutorial-conversation";
 import { requireFor } from "@/test-utils/require-for";
 
 import hello from "../../../tutorials/hello-anchor/tutorial.json";
+import { requestStepJump } from "../model/jump";
 import type { BaseFeedProps } from "./BaseFeed";
 import BaseFeed from "./BaseFeed";
 import type { TurnHandlers } from "./TurnView";
@@ -163,8 +164,9 @@ const feed = (
       )),
     onJump: over.onJump ?? vi.fn(),
     onBack: over.onBack ?? vi.fn(),
+    bar: over.bar,
   };
-  const { container, rerender } = render(<BaseFeed {...props} />);
+  const { container, rerender, unmount } = render(<BaseFeed {...props} />);
   /** Draw the mounted feed again with other turns */
   const redrawWith = (turns: readonly Turn[]) =>
     rerender(
@@ -173,7 +175,7 @@ const feed = (
         entries={turns.map((turn) => ({ kind: "lesson" as const, turn }))}
       />
     );
-  return { container, props, on, redrawWith };
+  return { container, props, on, redrawWith, unmount };
 };
 
 /** The IntersectionObserver the feed made for its live card, to answer by hand */
@@ -441,5 +443,36 @@ describe("BaseFeed", () => {
     feed({ live: null, steps: bar(["done", "done", "done", "done"]) });
     await userEvent.click(segment(/^Step 1 of 4, Program, done$/));
     expect(screen.queryByRole("button", { name: /^Back to/ })).toBeNull();
+  });
+  it("jumps to a step another part of the screen asks for, as a pick in the bar's menu does", () => {
+    const onJump = vi.fn();
+    const { container } = feed({ onJump });
+    container
+      .querySelectorAll("[data-turn='divider']")
+      .forEach((el, i) =>
+        Object.defineProperty(el, "offsetTop", { value: 100 + i * 400 })
+      );
+    vi.mocked(Element.prototype.scrollTo).mockClear();
+    act(() => requestStepJump(1));
+
+    expect(Element.prototype.scrollTo).toHaveBeenCalledWith(
+      expect.objectContaining({ top: 500 - 22 })
+    );
+    expect(onJump).toHaveBeenCalledWith(1, 2, "menu");
+    expect(screen.getByRole("button", { name: "Back to step 3" })).toBeTruthy();
+  });
+
+  it("stops listening for jumps once it is gone", () => {
+    const onJump = vi.fn();
+    const { unmount } = feed({ onJump });
+    unmount();
+    requestStepJump(1);
+    expect(onJump).not.toHaveBeenCalled();
+  });
+
+  it("leaves the step bar out when the screen draws its own", () => {
+    feed({ bar: false });
+    expect(screen.queryByRole("button", { name: /^Step 1 of 4/ })).toBeNull();
+    expect(screen.getByRole("log")).toBeTruthy();
   });
 });

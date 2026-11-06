@@ -15,6 +15,7 @@ import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 
 import { typing } from "./keys";
+import { usePhone } from "./phone";
 import { HEADING, LISTING, Prose } from "./Prose";
 
 /** How long a right pick shows green before the card folds to its record */
@@ -245,8 +246,11 @@ export interface BaseQuestionCardProps {
   onPick: (option: number) => void;
   onHint: () => void;
   onSkip: () => void;
-  /** Put the caret where the answer lands; only for a question that writes */
-  onTypeIt: () => void;
+  /**
+   * Put the caret where the answer lands; only for a question that writes.
+   * Absent on the phone, which leaves typing code to the desktop
+   */
+  onTypeIt?: () => void;
 }
 
 /**
@@ -268,6 +272,7 @@ const BaseQuestionCard = ({
   onSkip,
   onTypeIt,
 }: BaseQuestionCardProps) => {
+  const { phone } = usePhone();
   const titleId = useId();
   const reasonId = useId();
   const box = useRef<HTMLElement>(null);
@@ -408,7 +413,8 @@ const BaseQuestionCard = ({
               data-shake={shake?.i === i ? shake.n : undefined}
               onClick={() => pick(i)}
               className={cn(
-                "group/opt flex min-h-11 w-full items-start gap-3 rounded-lg border py-3 pl-3.5 pr-4 text-left outline-none transition-colors duration-100 active:translate-y-px motion-reduce:transition-none",
+                "group/opt flex w-full items-start gap-3 rounded-lg border py-3 pl-3.5 pr-4 text-left outline-none transition-colors duration-100 active:translate-y-px motion-reduce:transition-none",
+                phone ? "min-h-12" : "min-h-11",
                 isRight && "border-success/50 bg-success/10",
                 ruled && "cursor-default border-error/25 bg-error/[0.05]",
                 !isRight &&
@@ -471,7 +477,7 @@ const BaseQuestionCard = ({
           : ""}
       </p>
       <div className="-mx-2.5 mt-5 flex items-center gap-1">
-        {ask.writes && (
+        {ask.writes && onTypeIt && (
           <Button
             variant="ghost"
             size="sm"
@@ -486,7 +492,10 @@ const BaseQuestionCard = ({
           <Button
             variant="ghost"
             size="sm"
-            className="ml-auto text-subtle hover:text-muted-foreground"
+            className={cn(
+              "ml-auto text-subtle hover:text-muted-foreground",
+              phone && "h-11"
+            )}
             onClick={onHint}
           >
             <Lightbulb />
@@ -498,7 +507,8 @@ const BaseQuestionCard = ({
           size="sm"
           className={cn(
             "text-subtle hover:text-muted-foreground",
-            hinted && "ml-auto"
+            hinted && "ml-auto",
+            phone && "h-11"
           )}
           onClick={onSkip}
         >

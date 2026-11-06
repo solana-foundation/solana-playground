@@ -241,6 +241,34 @@ describe("TutorialComposer", () => {
     expect(t.send).toHaveBeenCalledWith("what is a PDA");
   });
 
+  it("puts Start alone in the composer's place on the phone before Start, and the box after it", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      store.state = stateAt("intro");
+      store.view.mockReturnValue(view("Ask anything about this tutorial"));
+      const { rerender } = render(<Connected turn={turn()} />);
+      const start = screen.getByRole("button", { name: "Start step 1" });
+      expect(start.className).toContain("w-full");
+      expect(start.className).toContain("h-12");
+      expect(screen.queryByRole("textbox")).toBeNull();
+      expect(screen.queryByText("Ready to start the lesson?")).toBeNull();
+      await userEvent.click(start);
+      expect(store.start).toHaveBeenCalledTimes(1);
+
+      store.state = stateAt("step");
+      rerender(<Connected turn={turn()} />);
+      expect(box()).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Start step 1" })).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("suggests starting once the assistant has answered before Start", async () => {
     store.state = stateAt("intro");
     store.view.mockReturnValue(view("Ask anything about this tutorial"));

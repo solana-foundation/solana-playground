@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { StepJumpVia } from "@/entities/tutorial";
 import type { StepBarItem, Turn } from "@/features/tutorial-conversation";
 
+import { onStepJumpRequest } from "../model/jump";
 import type { FeedEntry } from "../model/merge";
 import { gapBefore, spacedOf } from "../model/rhythm";
 import { liveStepIndex, stepBeside } from "../model/step-bar";
@@ -36,6 +37,11 @@ export interface BaseFeedProps {
   onJump: (index: number, from: number, via: StepJumpVia) => void;
   /** The back pill took the learner to the live card; `step` is its index, null before Start */
   onBack: (step: number | null) => void;
+  /**
+   * Whether the feed draws its step bar; the phone's header stands in for it
+   * and asks for jumps through `requestStepJump`. On by default.
+   */
+  bar?: boolean;
 }
 
 const reducedMotion = () =>
@@ -63,6 +69,7 @@ const BaseFeed = ({
   renderExchange,
   onJump,
   onBack,
+  bar = true,
 }: BaseFeedProps) => {
   const root = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -123,6 +130,13 @@ const BaseFeed = ({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [steps]);
+
+  // A step picked outside the feed (the phone's steps sheet) jumps as the
+  // bar's own menu does
+  useEffect(
+    () => onStepJumpRequest((index) => keyJump.current(index, "menu")),
+    []
+  );
 
   // Scrolling by hand moves "viewing" to the step whose heading is at the
   // feed's top. A feed scrolled to its bottom is on the live step: a short
@@ -213,12 +227,14 @@ const BaseFeed = ({
 
   return (
     <div ref={root} className="relative flex min-h-0 flex-1 flex-col">
-      <BaseStepBar
-        steps={steps}
-        live={liveIndex}
-        viewing={viewing}
-        onJump={jump}
-      />
+      {bar && (
+        <BaseStepBar
+          steps={steps}
+          live={liveIndex}
+          viewing={viewing}
+          onJump={jump}
+        />
+      )}
       <div
         ref={scroller}
         onScroll={onScroll}

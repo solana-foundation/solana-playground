@@ -1535,6 +1535,56 @@ describe("on a phone", () => {
   });
 });
 
+describe("a tutorial below the frame's width", () => {
+  const tutorialPhone: LayoutShellProps["tutorial"] = {
+    chat: <section>chat column</section>,
+    nav: { fold: "rail", onOpenChange: vi.fn(), onClose: vi.fn() },
+    phone: {
+      head: <header>tutorial head</header>,
+      chat: <p>chat body</p>,
+      space: "chat",
+      onSpace: vi.fn(),
+    },
+  };
+  const inTutorial = () =>
+    render(shellTree(undefined, {}, undefined, tutorialPhone));
+
+  it.each([
+    ["phone", 390],
+    ["compact", 900],
+  ])("draws the tutorial's phone layout, not the pager (%s)", (_, at) => {
+    resizeTo(at);
+    inTutorial();
+    expect(screen.getByTestId("tutorial-phone")).toBeTruthy();
+    expect(screen.queryByTestId("phone-pager")).toBeNull();
+    expect(screen.getByText("chat body")).toBeTruthy();
+    expect(screen.queryByText("chat column")).toBeNull();
+  });
+
+  it("keeps the frame on a wide window", () => {
+    inTutorial();
+    expect(screen.queryByTestId("tutorial-phone")).toBeNull();
+    expect(screen.getByText("chat column")).toBeTruthy();
+  });
+
+  it("keeps the stage's node across a rotation over the frame's width", () => {
+    resizeTo(390);
+    inTutorial();
+    const stageNode = () =>
+      requireFor("the stage's node")(screen.getByText("stage").parentElement);
+    const before = stageNode();
+    expect(screen.getByRole("region", { name: "Code" }).contains(before)).toBe(
+      true
+    );
+    act(() => resizeTo(1440));
+    expect(screen.queryByTestId("tutorial-phone")).toBeNull();
+    expect(stageNode()).toBe(before);
+    act(() => resizeTo(390));
+    expect(screen.getByTestId("tutorial-phone")).toBeTruthy();
+    expect(stageNode()).toBe(before);
+  });
+});
+
 describe("the stage bar", () => {
   it("hides the assistant from its toggle and names the project", () => {
     explorer.name = "Counter";

@@ -3,9 +3,13 @@ import type { ReactNode } from "react";
 import type { Text } from "@/entities/tutorial";
 import { cn } from "@/shared/lib/utils";
 
-/** The desktop's copy of a definition's text; the phone's variant is 5.1's */
-export const textOf = (text: Text): string =>
-  typeof text === "string" ? text : text.text;
+import { usePhone } from "./phone";
+
+/** A definition's text: its phone variant on the phone layout, else the desktop's */
+export const textOf = (text: Text, phone: boolean): string => {
+  if (typeof text === "string") return text;
+  return phone ? text.phone : text.text;
+};
 
 /** How long something took, as the cards say it: "41 s", "2 min 5 s" */
 export const formatTook = (ms: number): string => {
@@ -65,7 +69,8 @@ export const Prose = ({
   /** Classes merged over the chip's own, last, so a caller's ground wins */
   codeClassName?: string;
 }) => {
-  const parts = textOf(text).split("`");
+  const { phone } = usePhone();
+  const parts = textOf(text, phone).split("`");
   const out: ReactNode[] = [];
   // How much of the text part at an index a chip before it took as its stop
   const taken = new Map<number, number>();
@@ -129,5 +134,5 @@ export const HEADLINE =
   "font-heading text-[1.75rem] leading-8 font-medium tracking-[-0.02em] text-foreground";
 
 /** A headline or a step's heading carries no full stop, whatever the definition wrote */
-export const noStop = (text: Text): string =>
-  textOf(text).replace(/(?<!\.)\.$/, "");
+export const noStop = (text: Text, phone: boolean): string =>
+  textOf(text, phone).replace(/(?<!\.)\.$/, "");

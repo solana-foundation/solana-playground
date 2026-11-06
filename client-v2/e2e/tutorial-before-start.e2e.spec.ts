@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94 */
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { expect, LONG, stubAiStatus, stubSession, test } from "./fixtures";
 
@@ -17,6 +17,8 @@ const pressBuildKey = async (page: Page) => {
 const notFound = (page: Page) => page.getByText("Current workspace not found");
 const chat = (page: Page) =>
   page.getByRole("complementary", { name: "Tutorial chat" });
+/** Under the frame's width: the phone layout's Chat space */
+const phoneChat = (page: Page) => page.getByRole("region", { name: "Chat" });
 
 /** No stage tab, and Build's key reaches none */
 const noStage = async (page: Page) => {
@@ -120,7 +122,7 @@ test("tutorial-conversation: The menu before Start", async ({ page }) => {
   expect(sent[1]).toContain("The menu is open. They have not started");
 });
 
-test("no stage before Hello Anchor's Start, under the frame's width", async ({
+test("no stage, before or after Hello Anchor's Start, under the frame's width", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -133,18 +135,15 @@ test("no stage before Hello Anchor's Start, under the frame's width", async ({
 
   await noStage(page);
 
-  // The conversation is in the chat column here; Start brings the stages
-  await page.getByRole("button", { name: "Expand assistant" }).click();
-  await chat(page)
+  // The phone layout (5.1) opens on its Chat space. It has no stage bar at
+  // all, Start or not: the build lives in the chat and Code's status strip
+  await phoneChat(page)
     .getByRole("button", { name: /Start step 1/ })
     .click(LONG);
-  await expect(stageTab(page, "Build")).toBeVisible(LONG);
-  await page.keyboard.press("Escape");
-  await pressBuildKey(page);
-  await expect(stageTab(page, "Build")).toHaveAttribute(
-    "aria-selected",
-    "true"
-  );
+  await expect(
+    phoneChat(page).locator('textarea[enterkeyhint="send"]')
+  ).toBeVisible(LONG);
+  await noStage(page);
 });
 
 test("no stage before an upstream tutorial's Start", async ({ page }) => {
@@ -160,20 +159,11 @@ test("no stage before an upstream tutorial's Start", async ({ page }) => {
   await expect(stageTab(page, "Build")).toBeVisible(LONG);
 });
 
-// HOO-2649: under 1024 px the tutorial's chat column must take its holder's
-// height, or after Start it grows with the feed and the composer falls under
-// the fold. 700 is under `LAYOUT_BREAKPOINTS.phone` (the pager, on its Chat),
-// 900 under `.compact` (the assistant's sheet)
+// HOO-2649: under 1024 px the tutorial's chat must take its holder's height,
+// or after Start it grows with the feed and the composer falls under the
+// fold. Below the frame's width a tutorial is the phone layout (5.1), which
+// opens on its Chat space: 700 is a phone, 900 a tablet (the chat centred)
 const HEIGHT = 800;
-const openChat: Record<number, (page: Page) => Promise<void>> = {
-  700: (page) =>
-    page
-      .getByRole("radiogroup", { name: "Show" })
-      .getByRole("radio", { name: "Chat" })
-      .click(LONG),
-  900: (page) =>
-    page.getByRole("button", { name: "Expand assistant" }).click(LONG),
-};
 for (const width of [700, 900]) {
   test(`keeps the composer in the window at ${width}x${HEIGHT}, before and after Start`, async ({
     page,
@@ -181,15 +171,15 @@ for (const width of [700, 900]) {
     test.setTimeout(120_000);
     await page.setViewportSize({ width, height: HEIGHT });
     await page.goto("/tutorials/hello-anchor");
-    await openChat[width](page);
-    const start = chat(page).getByRole("button", { name: /Start step 1/ });
+    const start = phoneChat(page).getByRole("button", {
+      name: /Start step 1/,
+    });
     await expect(start).toBeVisible(LONG);
 
-    // Its placeholder changes after Start and its send key does not, so the
-    // locator keys on `enterkeyhint`
-    const box = chat(page).locator('textarea[enterkeyhint="send"]');
-    // Retried, as a sheet or the pager may still be settling
-    const inWindow = () =>
+    // Before Start the button takes the composer's place (tutorial-phone)
+    const composer = phoneChat(page).locator('textarea[enterkeyhint="send"]');
+    // Retried, as the layout may still be settling
+    const inWindow = (box: Locator) =>
       expect(async () => {
         const rect = await box.boundingBox();
         // No box (not rendered) reads as off the window
@@ -198,13 +188,12 @@ for (const width of [700, 900]) {
         expect(y + height).toBeLessThanOrEqual(HEIGHT);
       }).toPass(LONG);
 
-    await inWindow();
+    await inWindow(start);
     await start.click();
-    await expect(chat(page).getByText("Step 1 of 4")).toBeVisible(LONG);
-    await inWindow();
+    await inWindow(composer);
     // The feed outgrows its room and scrolls itself, above the composer,
     // once the step's turns are in
-    const scroller = chat(page)
+    const scroller = phoneChat(page)
       .getByRole("log", { name: "Tutorial" })
       .locator("..");
     await expect

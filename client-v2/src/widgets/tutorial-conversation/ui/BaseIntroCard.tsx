@@ -7,6 +7,7 @@ import { Kbd } from "@/shared/ui/kbd";
 
 import { ACTION, ACTION_FILL } from "./card-action";
 import { nothingFocused } from "./keys";
+import { usePhone } from "./phone";
 import { HEADING, Prose, READ, TITLE } from "./Prose";
 
 /** The wallet copy of `tutorial-runs`, Almaz's of 28 Oct, verbatim */
@@ -45,6 +46,7 @@ const BaseIntroCard = ({
   log,
   onStart,
 }: BaseIntroCardProps) => {
+  const { phone } = usePhone();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter" || e.defaultPrevented || !nothingFocused()) return;
@@ -95,17 +97,21 @@ const BaseIntroCard = ({
       </p>
       <h3 className={cn(HEADING, "mt-[30px]")}>How it goes</h3>
       <p className={cn(READ, "mt-[9px]")}>{HOW_IT_GOES}</p>
-      <div className="mt-6">
-        <Button className={cn(ACTION, ACTION_FILL, "px-5")} onClick={onStart}>
-          Start step 1
-          <Kbd
-            aria-hidden="true"
-            className="bg-white/15 text-primary-foreground/80"
-          >
-            ↵
-          </Kbd>
-        </Button>
-      </div>
+      {/* On the phone Start takes the composer's place, under the thumb
+          (`BaseTutorialComposer`) */}
+      {!phone && (
+        <div className="mt-6">
+          <Button className={cn(ACTION, ACTION_FILL, "px-5")} onClick={onStart}>
+            Start step 1
+            <Kbd
+              aria-hidden="true"
+              className="bg-white/15 text-primary-foreground/80"
+            >
+              ↵
+            </Kbd>
+          </Button>
+        </div>
+      )}
     </section>
   );
 };

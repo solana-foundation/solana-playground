@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import { useEffect, useReducer, useState } from "react";
 
+import { useViewport } from "../../../shared/lib/hooks/use-viewport";
 import { createLogger } from "../../../shared/lib/logger";
 import {
   PgCommandManager,
@@ -67,6 +68,7 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
   onToggle,
   tutorial,
 }) => {
+  const viewport = useViewport();
   const [flow, setFlow] = useState(() => PgFlow.state);
   // `PgBuildOutput` fills in slightly after the `build-finish` event that
   // sets `flow.build`, and it carries the diagnostic code a failed status
@@ -125,7 +127,12 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
       status={tutorial?.status ?? status}
       bare={tutorial !== undefined}
       empty={tutorial?.empty}
-      shortcut={keyLabel(CONSOLE_KEY, PgCommon.getOS())}
+      // A tutorial below the frame's width is the phone's: no key hints
+      shortcut={
+        tutorial && viewport !== "wide"
+          ? undefined
+          : keyLabel(CONSOLE_KEY, PgCommon.getOS())
+      }
       onClear={clear}
       stop={stop && { run: stop, onStop: () => PgCommandManager.stop() }}
     >

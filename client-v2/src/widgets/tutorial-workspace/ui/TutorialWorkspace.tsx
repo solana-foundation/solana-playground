@@ -28,8 +28,10 @@ import { autoOpenReason, resetsDeploys } from "../model/terminal";
 import { createdIn, tabsOf, treeRows, tutorialFiles } from "../model/tree";
 import BaseDockedTree from "./BaseDockedTree";
 import BaseDocPage from "./BaseDocPage";
+import BaseFilesSheet from "./BaseFilesSheet";
+import BasePhoneCodeHead from "./BasePhoneCodeHead";
 import BaseWorkspaceHead from "./BaseWorkspaceHead";
-import { CallButton, CallPanel } from "./CallPanel";
+import { CallButton, CallPanel, CallSheet } from "./CallPanel";
 import { useEditorLines } from "./use-editor-lines";
 import { useLogRequests } from "./use-log-requests";
 import { pickedDiagnostic } from "./use-terminal-facts";
@@ -85,12 +87,19 @@ export interface WorkspaceConsole {
   setOpen: (open: boolean, via: "button" | "auto") => void;
 }
 
+/**
+ * Where the workspace is drawn: the desktop's frame, the phone's Code space,
+ * or neither
+ */
+export type WorkspaceLayout = "frame" | "phone";
+
 export interface TutorialWorkspaceProps {
   /**
-   * The frame shows. Off, the wrapper still renders, with no head and no
-   * tree, so the stage under it never remounts on the way in or out
+   * The layout the tutorial shows in. With none, the wrapper still renders,
+   * with no head and no tree, so the stage under it never remounts on the
+   * way in or out, nor between the frame and the phone
    */
-  active: boolean;
+  layout?: WorkspaceLayout;
   /** The shell's console, which the head's Terminal and the auto-open drive */
   console: WorkspaceConsole;
   /** The Files and Terminal keys as the tips show them ("⌘E", "⌘J") */
@@ -108,10 +117,12 @@ export interface TutorialWorkspaceProps {
  * A tutorial's workspace (`tutorial-flow-v2` 2.2): the head over the stage,
  * the tree docked beside it, the editor's line states, and the terminal's
  * auto-open. Mounted by the view in the frame's stage while a tutorial with
- * a definition is open; the upstream tab row is not drawn under it.
+ * a definition is open; the upstream tab row is not drawn under it. On the
+ * phone (5.1) the head is the Code head, the tree and the Call panel are
+ * sheets, and the rest runs as in the frame.
  */
 const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
-  active: frame,
+  layout,
   console: terminal,
   keys,
   marks,
@@ -122,8 +133,10 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
   useRenderOnChange(PgExplorer.onDidCreateItem);
   useRenderOnChange(PgExplorer.onDidDeleteItem);
   const tutorial = PgTutorial.current;
-  const definition = frame ? tutorial?.definition : undefined;
+  const definition = layout ? tutorial?.definition : undefined;
   const active = definition !== undefined;
+  const frame = active && layout === "frame";
+  const phone = active && layout === "phone";
   const name = tutorial?.name ?? "";
 
   const files = useMemo(
@@ -135,7 +148,6 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
   );
   // The pages the tutorial lists and carries; one whose Markdown is not in
   // the bundle never shows (the loader rejects such a tutorial anyway).
-  // TODO(HOO-2359): the phone's Code space lists these beside the files
   const pages = tutorial?.docPages;
   const docs = useMemo<DocPage[]>(
     () =>
@@ -309,7 +321,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
   const toggleNow = useRef(toggleTree);
   toggleNow.current = toggleTree;
   useEffect(() => {
-    if (!active) return;
+    if (!frame) return;
     const mac = PgCommon.getOS() === "MacOS";
     const onKey = (e: KeyboardEvent) => {
       const primary = mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
@@ -329,7 +341,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
     window.addEventListener("keydown", onKey, { capture: true });
     return () =>
       window.removeEventListener("keydown", onKey, { capture: true });
-  }, [active]);
+  }, [frame]);
 
   // The drawer opens by itself on a failed build and the first deploy.
   // TODO(tutorial-flow-v2 3.3): a component test over a stubbed PgFlow for
@@ -389,13 +401,23 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   useEditorLines({ root: active ? stage : null, marks: lineMarks, busy });
 
+  const [filesOpen, setFilesOpen] = useState(false);
+
   return (
     <div
       ref={box}
       data-testid={active ? "tutorial-workspace" : undefined}
       className="flex min-h-0 min-w-0 flex-1 flex-col"
     >
-      {active && (
+      {phone && (
+        <BasePhoneCodeHead
+          file={open}
+          doc={frontDoc?.title}
+          onFiles={() => setFilesOpen(true)}
+          call={<CallButton />}
+        />
+      )}
+      {frame && (
         <BaseWorkspaceHead
           tabs={tabsOf(files, present)}
           active={PgCallPanel.isOpen ? null : open}
@@ -427,7 +449,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
         />
       )}
       <div className="flex min-h-0 flex-1">
-        {active && wide && (
+        {frame && wide && (
           <BaseDockedTree
             open={dockedShown}
             rows={rows}
@@ -457,13 +479,26 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
                 title={frontDoc.title}
                 url={frontDoc.url}
                 markdown={frontDoc.markdown}
+                phone={phone}
               />
             </div>
           )}
           {/* Over the editor, which must never unmount */}
-          {active && <CallPanel />}
+          {frame && <CallPanel />}
         </div>
       </div>
+      {phone && (
+        <>
+          <BaseFilesSheet
+            open={filesOpen}
+            onOpenChange={setFilesOpen}
+            rows={rows}
+            onPick={(path) => openFile(path, "tree")}
+            onPickDoc={(file) => showDoc(file, "tree")}
+          />
+          <CallSheet />
+        </>
+      )}
     </div>
   );
 };

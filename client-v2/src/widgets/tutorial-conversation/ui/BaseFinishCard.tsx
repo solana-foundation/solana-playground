@@ -16,6 +16,7 @@ import { Tag } from "@/shared/ui/tag";
 import { BaseDrawnCheck } from "./BaseDrawnCheck";
 import BaseReceipt, { receiptText } from "./BaseReceipt";
 import { ACTION, ACTION_FILL, ACTION_SOFT, PHONE_CTA } from "./card-action";
+import { usePhone } from "./phone";
 import { formatTook, HEADLINE, noStop, Prose, READ } from "./Prose";
 
 /** The finish card's tag, its "Step n done": the whole tutorial is a win */
@@ -67,93 +68,96 @@ const BaseFinishCard = ({
   onAllTutorials,
   onCopyReceipt,
   onCopyError,
-}: BaseFinishCardProps) => (
-  <section
-    aria-label="Finished"
-    className="flex items-start gap-3 rounded-card border border-border bg-surface-panel p-5"
-  >
-    <BaseDrawnCheck draw />
-    {/* One column beside the check, as on the win card, so every part of
+}: BaseFinishCardProps) => {
+  const { phone } = usePhone();
+  return (
+    <section
+      aria-label="Finished"
+      className="flex items-start gap-3 rounded-card border border-border bg-surface-panel p-5"
+    >
+      <BaseDrawnCheck draw />
+      {/* One column beside the check, as on the win card, so every part of
         the card starts where the headline does */}
-    <div className="flex min-w-0 flex-1 flex-col gap-4">
-      <div className="flex flex-col gap-1.5">
-        <Tag className="w-fit">{FINISH_TAG}</Tag>
-        <h2 className={HEADLINE}>
-          <Prose text={noStop(headline)} />
-        </h2>
-        <p className={READ}>
-          <Prose text={line} />
-        </p>
-      </div>
-
-      {receipt && receiptText(receipt) && (
-        <Collapsible className="flex flex-col gap-2 rounded-control border border-border bg-surface-well/50 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <CollapsibleHeading className="text-caption">
-              <CollapsibleChevron />
-              Transaction details
-            </CollapsibleHeading>
-            <CopyButton
-              value={receiptText(receipt)}
-              label="Copy receipt"
-              onClickCapture={onCopyReceipt}
-              onError={onCopyError}
-              className="ml-auto"
-            />
-          </div>
-          <CollapsibleContent>
-            <BaseReceipt call={receipt} onCopyError={onCopyError} />
-          </CollapsibleContent>
-        </Collapsible>
-      )}
-
-      {learned.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-caption font-label text-muted-foreground">
-            What you learned
-          </h3>
-          <ul className="flex flex-col gap-1.5">
-            {learned.map((item) => (
-              <li
-                key={item}
-                className="flex items-start gap-2 text-control text-foreground"
-              >
-                <Check
-                  aria-hidden="true"
-                  className="mt-0.5 size-3.5 shrink-0 text-success"
-                />
-                {item}
-              </li>
-            ))}
-          </ul>
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Tag className="w-fit">{FINISH_TAG}</Tag>
+          <h2 className={HEADLINE}>
+            <Prose text={noStop(headline, phone)} />
+          </h2>
+          <p className={READ}>
+            <Prose text={line} />
+          </p>
         </div>
-      )}
 
-      <p className="text-caption text-subtle tabular-nums">
-        {finishMeta(steps, seconds)}
-      </p>
-
-      <div className="flex flex-wrap items-center gap-2">
-        {next && (
-          <Button
-            className={cn(ACTION, ACTION_FILL, PHONE_CTA)}
-            onClick={onNext}
-          >
-            Next: {next}
-            <ArrowRight aria-hidden="true" />
-          </Button>
+        {receipt && receiptText(receipt) && (
+          <Collapsible className="flex flex-col gap-2 rounded-control border border-border bg-surface-well/50 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <CollapsibleHeading className="text-caption">
+                <CollapsibleChevron />
+                Transaction details
+              </CollapsibleHeading>
+              <CopyButton
+                value={receiptText(receipt)}
+                label="Copy receipt"
+                onClickCapture={onCopyReceipt}
+                onError={onCopyError}
+                className="ml-auto"
+              />
+            </div>
+            <CollapsibleContent>
+              <BaseReceipt call={receipt} onCopyError={onCopyError} />
+            </CollapsibleContent>
+          </Collapsible>
         )}
-        <Button
-          variant="ghost"
-          className={cn(ACTION, ACTION_SOFT, PHONE_CTA)}
-          onClick={onAllTutorials}
-        >
-          All tutorials
-        </Button>
+
+        {learned.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <h3 className="text-caption font-label text-muted-foreground">
+              What you learned
+            </h3>
+            <ul className="flex flex-col gap-1.5">
+              {learned.map((item) => (
+                <li
+                  key={item}
+                  className="flex items-start gap-2 text-control text-foreground"
+                >
+                  <Check
+                    aria-hidden="true"
+                    className="mt-0.5 size-3.5 shrink-0 text-success"
+                  />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <p className="text-caption text-subtle tabular-nums">
+          {finishMeta(steps, seconds)}
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {next && (
+            <Button
+              className={cn(ACTION, ACTION_FILL, PHONE_CTA)}
+              onClick={onNext}
+            >
+              Next: {next}
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            className={cn(ACTION, ACTION_SOFT, PHONE_CTA)}
+            onClick={onAllTutorials}
+          >
+            All tutorials
+          </Button>
+        </div>
       </div>
-    </div>
-  </section>
-);
+    </section>
+  );
+};
 
 export default BaseFinishCard;
 

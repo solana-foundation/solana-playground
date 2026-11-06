@@ -1120,7 +1120,7 @@ describe("BaseWinCard", () => {
     if (!callPanelLine) throw new Error("Hello Anchor has no Call panel line");
     const { onWriteInClient } = win(i, { via: "call_panel" });
     // Prose draws `code` spans without their backticks
-    const panelLine = textOf(callPanelLine).replace(/`/g, "");
+    const panelLine = textOf(callPanelLine, false).replace(/`/g, "");
     expect(
       screen.getByText(
         (_, el) => el?.tagName === "P" && el.textContent === panelLine
@@ -1158,7 +1158,7 @@ describe("BaseWinCard", () => {
   it("reads its own line after a chat pass, and offers no client.ts", () => {
     const i = steps.findIndex((s) => s.win.callPanelLine);
     win(i, { via: "chat" });
-    const line = textOf(steps[i].win.line).replace(/`/g, "");
+    const line = textOf(steps[i].win.line, false).replace(/`/g, "");
     expect(
       screen.getByText(
         (_, el) => el?.tagName === "P" && el.textContent === line

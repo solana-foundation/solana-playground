@@ -180,8 +180,7 @@ test("the folded composer is 46 px below md with a fine pointer", async ({
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 700, height: 800 });
   await page.goto("/tutorials/hello-anchor");
-  // Under the frame's width the conversation is the Chat tab's
-  await page.getByText("Chat", { exact: true }).first().click(LONG);
+  // Under the frame's width the phone layout opens on its Chat space (5.1)
   await page.getByRole("button", { name: /Start step 1/ }).click(LONG);
   await expect(
     page.getByRole("button", { name: "Hint", exact: true })
@@ -305,8 +304,8 @@ test.describe("on a coarse pointer", () => {
     page,
   }) => {
     test.setTimeout(120_000);
+    // The phone layout opens on its Chat space (5.1)
     await page.goto("/tutorials/hello-anchor");
-    await page.getByText("Chat", { exact: true }).first().click(LONG);
     await page.getByRole("button", { name: /Start step 1/ }).click(LONG);
     const send = page.locator("[data-slot=composer-send]:visible");
     await expect(send).toHaveCSS("height", "44px", LONG);

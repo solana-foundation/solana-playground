@@ -1,7 +1,8 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { noStop, Prose } from "./Prose";
+import { PhoneLayoutContext } from "./phone";
+import { noStop, Prose, textOf } from "./Prose";
 
 const draw = (text: string) => render(<Prose text={text} />).container;
 
@@ -30,11 +31,31 @@ describe("Prose", () => {
   });
 });
 
+describe("textOf", () => {
+  it("reads a definition's phone variant on the phone, and its text elsewhere", () => {
+    expect(textOf({ text: "a", phone: "b" }, true)).toBe("b");
+    expect(textOf({ text: "a", phone: "b" }, false)).toBe("a");
+    expect(textOf("a", true)).toBe("a");
+  });
+
+  it("draws the phone variant inside the phone layout", () => {
+    const box = render(
+      <PhoneLayoutContext.Provider value={{ phone: true, tablet: false }}>
+        <Prose text={{ text: "Type `x` here", phone: "Tap `x`" }} />
+      </PhoneLayoutContext.Provider>
+    ).container;
+    expect(box.textContent).toBe("Tap x");
+    expect(noStop({ text: "Desk.", phone: "Phone." }, true)).toBe("Phone");
+  });
+});
+
 describe("noStop", () => {
   it("drops one closing period and nothing else", () => {
-    expect(noStop("Your program compiles.")).toBe("Your program compiles");
-    expect(noStop("Ready?")).toBe("Ready?");
-    expect(noStop("And then...")).toBe("And then...");
-    expect(noStop("No period")).toBe("No period");
+    expect(noStop("Your program compiles.", false)).toBe(
+      "Your program compiles"
+    );
+    expect(noStop("Ready?", false)).toBe("Ready?");
+    expect(noStop("And then...", false)).toBe("And then...");
+    expect(noStop("No period", false)).toBe("No period");
   });
 });
