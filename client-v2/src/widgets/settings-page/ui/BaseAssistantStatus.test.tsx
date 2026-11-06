@@ -123,3 +123,29 @@ describe("BaseAssistantStatus over time", () => {
     ).toBeTruthy();
   });
 });
+
+describe("BaseAssistantStatus after a Try again is answered", () => {
+  it("keeps the focus on the row once Try again goes away", async () => {
+    const onRetry = vi.fn(() => Promise.resolve());
+    const { rerender } = render(
+      <BaseAssistantStatus
+        hosted="unreachable"
+        online
+        onRetry={onRetry}
+        phone={false}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    rerender(
+      <BaseAssistantStatus
+        hosted="present"
+        online
+        onRetry={onRetry}
+        phone={false}
+      />
+    );
+
+    expect(document.activeElement).toBe(screen.getByText("Ready"));
+  });
+});

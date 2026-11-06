@@ -78,7 +78,19 @@ const BaseAssistantStatus = ({
   // When a Try again last settled: a retry that is answered "unreachable"
   // again changes nothing else on the row, so the help line says it asked
   const [askedAt, setAskedAt] = useState<Date>();
-  const retry = () => onRetry().then(() => setAskedAt(new Date()));
+  // A Try again that is answered takes its button away: focus moves to the
+  // row's state, so a keyboard user's next Tab goes on from this row
+  const isRetryPressed = useRef(false);
+  const stateRef = useRef<HTMLSpanElement>(null);
+  const retry = () => {
+    isRetryPressed.current = true;
+    return onRetry().then(() => setAskedAt(new Date()));
+  };
+  useEffect(() => {
+    if (shown === "unreachable" || !isRetryPressed.current) return;
+    isRetryPressed.current = false;
+    if (document.activeElement === document.body) stateRef.current?.focus();
+  }, [shown]);
 
   // The probe failed while offline is not a verdict on the model: back
   // online, the row asks once rather than stay on Not answering
@@ -117,8 +129,10 @@ const BaseAssistantStatus = ({
             </AsyncButton>
           )}
           <span
+            ref={stateRef}
+            tabIndex={-1}
             className={cn(
-              "flex items-center gap-2 text-caption text-muted-foreground max-md:text-control",
+              "flex items-center gap-2 outline-none text-caption text-muted-foreground max-md:text-control",
               shown === "present" && "text-foreground"
             )}
           >
