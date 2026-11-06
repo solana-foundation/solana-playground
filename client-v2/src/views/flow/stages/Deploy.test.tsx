@@ -629,6 +629,37 @@ describe("Deploy stage", () => {
     expect(seen).toEqual([false, true]);
   });
 
+  it("requests an airdrop again on Try again after the faucet refused", async () => {
+    mocks.wallet.current = pgWallet();
+    const seen = airdropAnswers();
+    mocks.execute
+      .mockImplementationOnce(async () => {
+        seen.push(PgDeployRun.answers?.airdrop);
+        throw airdropOff();
+      })
+      .mockImplementationOnce(async () => {
+        seen.push(PgDeployRun.answers?.airdrop);
+        throw new DeployFundingError({
+          reason: "airdrop_failed",
+          balance: 0,
+          needed: 1,
+          address: WALLET,
+          cause: "429",
+        });
+      });
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Request airdrop" }))
+    );
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    );
+
+    expect(seen).toEqual([false, true, true]);
+  });
+
   it("requests an airdrop on the deploy that follows a sign-in from the card", async () => {
     mocks.wallet.current = pgWallet();
     const seen = airdropAnswers();

@@ -39,7 +39,7 @@ const renderCard = (props: Partial<BaseNotEnoughSolProps>) => {
 
 describe("BaseNotEnoughSol", () => {
   it("names the network, the amounts, the address and the faucet's answer", () => {
-    const { card, onRetry } = renderCard({ cause: "429 Too Many Requests" });
+    const { card } = renderCard({ cause: "429 Too Many Requests" });
 
     expect(card.textContent).toContain("Not enough devnet SOL");
     expect(card.textContent).toContain(
@@ -50,8 +50,6 @@ describe("BaseNotEnoughSol", () => {
     expect(
       screen.getByRole("link", { name: "Open faucet" }).getAttribute("href")
     ).toBe(WEB_FAUCET_URL);
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(onRetry).toHaveBeenCalledOnce();
   });
 
   it("offers Request airdrop in place of Try again while automatic airdrop is off", () => {
@@ -66,6 +64,22 @@ describe("BaseNotEnoughSol", () => {
     fireEvent.click(screen.getByRole("button", { name: "Request airdrop" }));
     expect(onAirdrop).toHaveBeenCalledOnce();
     expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it("asks the faucet again on Try again after it refused", () => {
+    const { onAirdrop, onRetry } = renderCard({ reason: "airdrop_failed" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onAirdrop).toHaveBeenCalledOnce();
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it("deploys again without an airdrop on Try again where there is no faucet", () => {
+    const { onAirdrop, onRetry } = renderCard({ reason: "no_faucet" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(onAirdrop).not.toHaveBeenCalled();
   });
 
   it("offers sign-in in place of Try again when signed out", () => {

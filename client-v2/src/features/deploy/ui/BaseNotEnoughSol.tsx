@@ -28,7 +28,10 @@ export interface BaseNotEnoughSolProps {
   /** What the airdrop said when it refused */
   cause: string | null;
   onRetry: () => void;
-  /** Deploy again, requesting an airdrop; offered when automatic airdrop is off */
+  /**
+   * Deploy again, requesting an airdrop: offered when automatic airdrop is
+   * off, and on Try again after the faucet refused
+   */
   onAirdrop: () => void;
   onSignIn: () => void;
 }
@@ -52,6 +55,11 @@ const FundingAction = ({ p }: { p: BaseNotEnoughSolProps }) => {
   }
   if (p.reason === "airdrop_off") {
     return <CalloutAction onClick={p.onAirdrop}>Request airdrop</CalloutAction>;
+  }
+  // The faucet refused the airdrop the user asked for: trying again asks it
+  // again, even with automatic airdrop off
+  if (p.reason === "airdrop_failed") {
+    return <CalloutAction onClick={p.onAirdrop}>Try again</CalloutAction>;
   }
   return <CalloutAction onClick={p.onRetry}>Try again</CalloutAction>;
 };

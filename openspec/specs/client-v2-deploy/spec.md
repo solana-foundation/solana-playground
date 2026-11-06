@@ -78,7 +78,8 @@ testnet only). The reason and the card's first action SHALL be:
 - on a network without a faucet: "This network has no faucet. Send SOL to
   the wallet below." and "Try again" (runs the deploy again);
 - when the airdrop fails: "The faucet did not send SOL.", the faucet's
-  answer, and "Try again".
+  answer, and "Try again" (runs the deploy again and requests the airdrop
+  again);
 
 An airdrop the run requests, on that press, or without a question when the
 user turned automatic airdrop on, SHALL be the shortfall plus fee headroom,
@@ -99,7 +100,8 @@ airdrop question.
 - **WHEN** a wallet with 0 SOL deploys on devnet from the stage, the user
   presses "Request airdrop", and the faucet refuses the airdrop
 - **THEN** the "Not enough SOL" card shows the balance, the amount needed,
-  the address, "Try again" and "Open faucet", and the terminal asked nothing
+  the address, "Try again" and "Open faucet", and the terminal asked nothing;
+  pressing "Try again" requests the airdrop again, with automatic airdrop off
 
 ### Requirement: A failed last build asks in the panel
 
