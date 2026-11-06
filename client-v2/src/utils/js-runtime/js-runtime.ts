@@ -31,6 +31,9 @@ interface ExecuteParams {
   isTest: boolean;
 }
 
+/** How a run ended: its first uncaught error, if any */
+export type RunResult = { ok: true } | { ok: false; error: string };
+
 /** What is running now, if anything */
 type Running = "client" | "tests" | undefined;
 
@@ -48,7 +51,11 @@ export class PgJsRuntime {
    *
    * @param params client parameters
    */
-  static async execute({ fileName, code, isTest }: ExecuteParams) {
+  static async execute({
+    fileName,
+    code,
+    isTest,
+  }: ExecuteParams): Promise<RunResult> {
     if (this._running === "client") {
       throw new Error(
         isTest
@@ -97,20 +104,23 @@ export class PgJsRuntime {
         rpc: relayRpcWith(() => window.fetch)(window.location.origin),
       })(port);
       port.postMessage(run);
+      let error: string | undefined;
       try {
         // A frame that loads another document drops the run's sandbox,
         // which then never posts `end`
         const outcome = await Promise.race([
-          ended.then(() => "ended" as const),
-          reloaded.then(() => "reloaded" as const),
+          ended.then((ending) => ({ ended: true as const, error: ending })),
+          reloaded.then(() => ({ ended: false as const })),
         ]);
-        if (outcome === "reloaded") throw new Error(RELOADED_ERROR);
+        if (!outcome.ended) throw new Error(RELOADED_ERROR);
+        error = outcome.error;
       } finally {
         stopWatching();
         port.close();
       }
 
       if (!isTest) PgTerminal.println("");
+      return error === undefined ? { ok: true } : { ok: false, error };
     } finally {
       this._running = undefined;
     }

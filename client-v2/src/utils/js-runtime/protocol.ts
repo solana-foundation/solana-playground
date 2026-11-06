@@ -65,7 +65,8 @@ export type ToSandbox =
 export type FromSandbox =
   | { type: "output"; level: OutputLevel; text: string }
   | { type: "result"; passes: number; failures: number; pending: number }
-  | { type: "end" }
+  /** `error`: the run's first uncaught error, which makes the run fail */
+  | { type: "end"; error?: string }
   | {
       type: "sign";
       id: number;
@@ -165,7 +166,7 @@ export const isFromSandbox = (data: unknown): data is FromSandbox => {
     case "result":
       return typeof data.passes === "number";
     case "end":
-      return true;
+      return data.error === undefined || typeof data.error === "string";
     case "sign":
       return (
         typeof data.id === "number" &&
@@ -249,6 +250,14 @@ if (import.meta.vitest) {
           body: "{}",
         })
       ).toBe(true);
+    });
+
+    it("takes an end with no error or a text one, and refuses any other error", () => {
+      expect(isFromSandbox({ type: "end" })).toBe(true);
+      expect(isFromSandbox({ type: "end", error: "boom" })).toBe(true);
+      expect(isFromSandbox({ type: "end", error: { message: "boom" } })).toBe(
+        false
+      );
     });
 
     it("refuses a sign request without the bytes to sign", () => {

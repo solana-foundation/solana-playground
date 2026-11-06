@@ -1,5 +1,12 @@
 // Runs inside the project-code sandbox (`runtime.html`): it imports web3.js
 // itself, never `../web3` or the page's wallet, which read the page's storage.
+import type {
+  Address,
+  MessagePartialSigner,
+  SignatureBytes,
+  TransactionMessageBytes,
+  TransactionPartialSigner,
+} from "@solana/kit";
 import {
   Keypair,
   type PublicKey,
@@ -125,6 +132,45 @@ export const signerMethodsWith =
   };
 
 /**
+ * A Kit signer for an account whose key the page holds, for project code
+ * that uses Kit (`signerFromFile`, `js-runtime/kit.ts`): it has the page sign
+ * each transaction's message bytes and each message, as `signerMethodsWith`
+ * does for web3.js.
+ *
+ * @param sign asks the page to sign
+ * @returns a function of the account's public key
+ */
+export const kitSignerWith =
+  (sign: SignThroughPage) => (publicKey: PublicKey) => {
+    const address = publicKey.toBase58() as Address;
+    const signedBy = async (
+      kind: SignKind,
+      bytes: TransactionMessageBytes | Uint8Array
+    ) =>
+      Object.freeze({
+        [address]: (await sign(publicKey)(kind)(
+          // Kit types its message bytes as a branded read-only array, which this
+          // TypeScript's lib does not see as array-like; they are a Uint8Array
+          Uint8Array.from(bytes as Uint8Array)
+        )) as SignatureBytes,
+      });
+    const kitSigner: TransactionPartialSigner & MessagePartialSigner = {
+      address,
+      signTransactions: (transactions) =>
+        Promise.all(
+          transactions.map((transaction) =>
+            signedBy("transaction", transaction.messageBytes)
+          )
+        ),
+      signMessages: (messages) =>
+        Promise.all(
+          messages.map((message) => signedBy("message", message.content))
+        ),
+    };
+    return kitSigner;
+  };
+
+/**
  * The signer provider of the sandbox: its wallets sign by asking the page,
  * which signs with its local provider. It never holds a key, so asking it
  * for key bytes throws.
@@ -151,7 +197,7 @@ export const sandboxSignerProviderWith = (
 });
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { beforeAll, describe, it, expect } = import.meta.vitest;
 
   describe("utils/wallet/sandbox-signer-provider", () => {
     const publicKey = Keypair.generate().publicKey;
@@ -199,6 +245,50 @@ if (import.meta.vitest) {
         methods.signMessage([1, 256] as unknown as Uint8Array)
       ).rejects.toThrow("signMessage takes the message as bytes");
       expect(asked).toEqual([]);
+    });
+
+    describe("kitSignerWith", () => {
+      let kit: typeof import("@solana/kit");
+      beforeAll(async () => {
+        kit = await import("@solana/kit");
+      });
+
+      /** A Kit signer whose "page" records each kind and bytes it signs */
+      const recordingKitSigner = () => {
+        const asked: Array<[string, number[]]> = [];
+        const kitSigner = kitSignerWith(() => (kind) => async (bytes) => {
+          asked.push([kind, Array.from(bytes)]);
+          return new Uint8Array(64).fill(asked.length);
+        })(publicKey);
+        return { kitSigner, asked };
+      };
+
+      it("is a Kit transaction and message signer at the wallet's address", () => {
+        const { kitSigner } = recordingKitSigner();
+        expect(kitSigner.address).toBe(publicKey.toBase58());
+        expect(kit.isTransactionPartialSigner(kitSigner)).toBe(true);
+        expect(kit.isMessagePartialSigner(kitSigner)).toBe(true);
+      });
+
+      it("has the page sign each transaction's message bytes and each message", async () => {
+        const { kitSigner, asked } = recordingKitSigner();
+        const [signed] = await kitSigner.signTransactions([
+          { messageBytes: new Uint8Array([1, 2]), signatures: {} },
+        ] as unknown as Parameters<typeof kitSigner.signTransactions>[0]);
+        const [message] = await kitSigner.signMessages([
+          { content: new Uint8Array([3]), signatures: {} },
+        ]);
+        expect(asked).toEqual([
+          ["transaction", [1, 2]],
+          ["message", [3]],
+        ]);
+        expect(Array.from(signed[kitSigner.address])).toEqual(
+          new Array(64).fill(1)
+        );
+        expect(Array.from(message[kitSigner.address])).toEqual(
+          new Array(64).fill(2)
+        );
+      });
     });
   });
 }
