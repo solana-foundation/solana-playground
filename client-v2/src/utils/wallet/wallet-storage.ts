@@ -118,6 +118,25 @@ type StoredWallet = Omit<SerializedWalletState, "accounts"> & {
 };
 
 /**
+ * Whether a saved state holds every account of a stored wallet, by its key:
+ * a damaged account is never held, since only the next read sets it aside
+ *
+ * @param state the saved state
+ * @returns a function of the stored wallet
+ */
+const holdsAll = (state: SerializedWalletState) => (wallet: StoredWallet) => {
+  const held = new Set(
+    state.accounts.map((stored) => JSON.stringify(stored.kp))
+  );
+  return wallet.accounts.every(
+    (stored) =>
+      typeof stored === "object" &&
+      stored !== null &&
+      held.has(JSON.stringify((stored as { kp?: unknown }).kp))
+  );
+};
+
+/**
  * Whether `value` has the shape of a stored wallet, with a state a saved
  * wallet can have (never `unavailable`). Some accounts may be damaged, but
  * not all of them: a wallet with accounts and no valid one is unreadable as a
@@ -264,7 +283,8 @@ const mergeWallets = (
  * drop the queued save, and with it a key that exists only in memory (a new
  * account). `keepUnsaved`, called when the page is hidden, writes the newest
  * save that has not landed to `localStorage`, where the next load moves it
- * into the store; if the save lands after all, the copy is removed again.
+ * into the store; if the save lands after all, the copy is removed again,
+ * unless it also holds an account the save lacks (another tab's).
  *
  * @param store the keystore
  * @param local the `localStorage` to migrate from and fall back to
@@ -275,8 +295,11 @@ export const walletStorageWith =
     let writes = Promise.resolve();
     /** The newest save that has not landed in either store */
     let unsaved: SerializedWalletState | undefined;
-    /** The text `keepUnsaved` put in `localStorage`, removed once the save lands */
-    let keptText: string | undefined;
+    /**
+     * What `keepUnsaved` put in `localStorage`, and its text: removed once a
+     * save that holds every account in it lands
+     */
+    let kept: { text: string; wallet: StoredWallet } | undefined;
 
     /**
      * The `localStorage` wallet and its text, or `undefined` for none
@@ -505,9 +528,12 @@ export const walletStorageWith =
               if (isDegraded) return fallBack(state);
               try {
                 await store.write(state);
-                if (keptText !== undefined && unsaved === state) {
-                  removeLocal(keptText);
-                  keptText = undefined;
+                // The kept copy may hold the only key of an account another
+                // tab left in `localStorage`; it stays for the next read to
+                // move in unless this save holds every account in it
+                if (kept && unsaved === state && holdsAll(state)(kept.wallet)) {
+                  removeLocal(kept.text);
+                  kept = undefined;
                 }
                 return "store";
               } catch (error) {
@@ -544,17 +570,17 @@ export const walletStorageWith =
         // accounts ride along for the next read to set aside, and an entry
         // that cannot be merged is kept aside before it is overwritten.
         const existing = readLocalWith(keepUnreadable)();
-        const kept: StoredWallet = existing
+        const merged: StoredWallet = existing
           ? mergeWallets(unsaved, existing.wallet)
           : unsaved;
         const withDamaged: StoredWallet = {
-          state: kept.state,
-          accounts: kept.accounts.concat(existing?.damaged ?? []),
-          currentIndex: kept.currentIndex,
-          standardName: kept.standardName,
+          state: merged.state,
+          accounts: merged.accounts.concat(existing?.damaged ?? []),
+          currentIndex: merged.currentIndex,
+          standardName: merged.standardName,
         };
         writeLocal(withDamaged);
-        keptText = JSON.stringify(withDamaged);
+        kept = { text: JSON.stringify(withDamaged), wallet: withDamaged };
       },
     };
   };
@@ -1036,6 +1062,25 @@ if (import.meta.vitest) {
 
       expect(store.held()).toEqual(next);
       expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+    });
+
+    it("keeps the kept copy when it holds an account the landed save lacks", async () => {
+      const { store, release } = heldLock();
+      const other = walletOf([account(2, "Wallet 2")]);
+      const local = memoryLocal(JSON.stringify(other));
+      const storage = walletStorageWith(store)(local);
+
+      const next = walletOf([account(1, "Wallet 1")]);
+      const saved = storage.write(next);
+      storage.keepUnsaved();
+      release();
+      await saved;
+
+      // Wallet 2's key is only in the kept copy: the next read moves it in
+      const kept = JSON.parse(local.items.get(WALLET_LOCAL_KEY) ?? "{}");
+      expect(kept).toEqual(
+        walletOf([account(1, "Wallet 1"), account(2, "Wallet 2")])
+      );
     });
 
     it("keeps nothing when every save has landed", async () => {
