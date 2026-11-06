@@ -429,6 +429,33 @@ test.describe("project-code-sandbox", () => {
     expect(await announces(undefined)).toBe(false);
   });
 
+  test("project-code-sandbox: A run's code never reaches the next run", async ({
+    context,
+    page,
+  }) => {
+    const { writeClient } = await seedPlaynetProject(context, page);
+    // The first run keeps announcing itself as a fresh runtime, and answers
+    // any port it is handed as if it ran the next run's code
+    await writeClient(
+      [
+        'setInterval(() => parent.postMessage({ type: "ready" }, "*"), 0);',
+        'window.addEventListener("message", (e) => {',
+        "  const port = e.ports[0];",
+        "  if (!port) return;",
+        '  port.postMessage({ type: "output", level: "log", text: "stolen" });',
+        '  port.postMessage({ type: "end" });',
+        "});",
+        'console.log("armed");',
+      ].join("\n")
+    );
+    await runFor(page)("run", /armed/);
+
+    // The same code again: it prints only if it reached the new runtime
+    await runFor(page)("run", /armed[\s\S]*armed/);
+
+    await expect(terminalRows(page)).not.toContainText("stolen");
+  });
+
   test("project-code-sandbox: Messages from elsewhere are ignored", async ({
     context,
     page,
