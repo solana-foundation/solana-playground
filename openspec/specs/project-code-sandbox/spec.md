@@ -78,6 +78,13 @@ terminal in the same styles. A test run SHALL print mocha's results, and
 SHALL end when mocha finishes. An uncaught error or a syntax error SHALL
 print its message and end the run.
 
+#### Scenario: A callback the code does not await still gets its reply
+
+- **WHEN** project code starts an RPC call it does not await, such as
+  `pg.connection.getBalance(...).then(console.log)`, and the run ends first
+- **THEN** the reply still reaches the callback, and what it prints shows in
+  the terminal, until the next run replaces the sandbox
+
 #### Scenario: A failing test is reported
 
 - **WHEN** `test` runs a file with one passing and one failing test

@@ -91,6 +91,21 @@ test.describe("project-code-sandbox", () => {
     await expect(terminalRows(page)).toHaveText(/\$\s*$/, LONG);
   });
 
+  test("project-code-sandbox: A callback the code does not await still gets its reply", async ({
+    context,
+    page,
+  }) => {
+    const { writeClient } = await seedPlaynetProject(context, page);
+    await writeClient(
+      'pg.connection.getBalance(pg.wallet.publicKey).then((b) => console.log("late balance:", b));'
+    );
+
+    await runInTerminal(page, "run");
+
+    // As in the old runtime: printed after the run ended
+    await expect(terminalRows(page)).toContainText(/late balance: \d+/, LONG);
+  });
+
   test("project-code-sandbox: A failing test is reported", async ({
     context,
     page,
