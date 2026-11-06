@@ -45,12 +45,12 @@ the same time once 2.1 has merged.
   and the copy in "The banner names the limit and what is over it". Declare
   `sync_file_limit_exceeded`, `sync_project_limit_exceeded` and
   `sync_files_count_limit_exceeded` in `model/telemetry.ts` with doc comments,
-  and emit them from `_raise`. Verified by `project-sync.test.ts` covering no
+  and emit them from `_raiseFoundBy`. Verified by `project-sync.test.ts` covering no
   request sent, the mark unchanged, a server 413 raising the same banner, retry
   re-checking, and each event's parameters asserted through the memory
   provider; and by a `SyncBanner` test rendering each banner text in the spec.
 - [x] 3.2 Refuse explorer writes past a limit (HOO-2418, depends on 2.1):
-  `PgExplorer.createItem` calls `checkFileWrite` (the written file, and the
+  `PgExplorer.createItem` calls `checkWriteTo` (the written file, and the
   project as the write leaves it); `renameItem` and `createWorkspace` call `checkProjectLimits` on the
   project as it would be; each throws the spec's message before any write; `CreateItem.tsx` shows the message instead of a
   boolean error; `CreateItem`, `RenameItem` and the import dialogs put it in
@@ -94,7 +94,7 @@ the same time once 2.1 has merged.
   lock and counts for a write that makes a project count, throwing
   `WriteRefused({limit})`; `limitBannerText` words the cap;
   `sync_projects_count_limit_exceeded` declared in `model/telemetry.ts` and
-  sent from `_raise`. Verified by `model/projects.test.mjs` and
+  sent from `_raiseFoundBy`. Verified by `model/projects.test.mjs` and
   `api/projects.test.mjs` under `yarn test-api` with `DATABASE_URL` set: the
   11th create refused with nothing written, an update at 10 accepted, a delete
   then a create accepted, two concurrent creates at 9 letting exactly one

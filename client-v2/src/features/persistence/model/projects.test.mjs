@@ -372,6 +372,29 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
       assert.ok(result.updatedAt);
     });
 
+    it("answers a missed swap on a project stored over a limit as a conflict", async () => {
+      // Stored before the limits: 60 files
+      await put({ files: many(10) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         select $1, 'p1', 'old/' || g, '' from generate_series(1, 50) g`,
+        [userId]
+      );
+      const earlier = await stored();
+
+      // The other device's token is behind: a version question it merges,
+      // not a 413 it can only show
+      const result = await put({
+        changed: { "src/f0.rs": "y" },
+        removed: [],
+        baseUpdatedAt: "2000-01-01T00:00:00.000Z",
+      });
+
+      assert.equal(result.conflict, true);
+      assert.equal(result.limit, undefined);
+      assert.deepEqual(await stored(), earlier);
+    });
+
     /** Store one row as if written before the limits, then patch another file */
     const patchBeside = async (path, content) => {
       const { updatedAt } = await put({ files: many(2) });

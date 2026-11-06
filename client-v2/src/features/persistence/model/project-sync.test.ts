@@ -1,5 +1,6 @@
 import type { Mock } from "vitest";
 
+import { checkProjectLimits } from "@/entities/project";
 // TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
 import { PgSession } from "@/features/auth";
 import {
@@ -29,6 +30,21 @@ import { PgThreadIndex } from "./thread-index";
 // `mockReset` (`vitest.config.ts`) puts every mock back to these answers
 // before each test. `valueOf` answers `null`, not `undefined`, which reads as
 // "someone is typing in it".
+// A device whose own check did not run: set, the next push skips the
+// client's limit check once, so the server's 413 is what finds the limit
+const limitCheck = vi.hoisted(() => ({ skipNext: false }));
+vi.mock("@/entities/project", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/entities/project")>();
+  return Object.assign({}, actual, {
+    checkProjectLimits: (files: Record<string, string>) => {
+      if (!limitCheck.skipNext) return actual.checkProjectLimits(files);
+      limitCheck.skipNext = false;
+      // eslint-disable-next-line unicorn/no-null -- `checkProjectLimits`' contract: `null` is "under every limit"
+      return null;
+    },
+  });
+});
+
 vi.mock("./editor-models", () => ({
   PgEditorModels: {
     valueOf: vi.fn(async () => null),
@@ -2234,6 +2250,76 @@ describe("a project over a sync limit", () => {
         name: "sync_file_limit_exceeded",
         params: { by: "client", limit: "path", files: 1 },
       },
+    ]);
+  });
+
+  it("takes one file limit from a 413 and from the client's check for the same question", async () => {
+    const big = "a".repeat(131_073);
+    // Out of order: the client's check measures the files as they come
+    const files = { "src/b.rs": big, "src/a.rs": big };
+    answering(() => ({
+      ok: false,
+      status: 413,
+      json: async () => ({
+        reason: "file-too-large",
+        limit: 131_072,
+        paths: ["src/b.rs", "src/a.rs"],
+        sizes: { "src/a.rs": 131_073, "src/b.rs": 131_073 },
+      }),
+    }));
+    // A device whose check did not run sends it; the server refuses
+    limitCheck.skipNext = true;
+    await PgProjectSync.push("p1", { files }, "mine");
+
+    const changes = vi.fn();
+    const listening = PgProjectSync.onDidChangeConflicts(changes);
+    const limit = checkProjectLimits(files);
+    if (!limit) throw new Error("the files are over the size limit");
+    PgProjectSync.raise({ projectId: "p1", kind: "too-large", limit });
+    listening.dispose();
+
+    expect(changes).not.toHaveBeenCalled();
+    expect(syncEvents()).toEqual([
+      {
+        name: "sync_file_limit_exceeded",
+        params: { by: "server", limit: "size", files: 2 },
+      },
+    ]);
+  });
+
+  it("answers a 400 as refused and a 5xx as skipped", async () => {
+    await agreedOn("p1", "mine", many(2));
+    answering(() => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: "A path under .workspace/ is not synced" }),
+    }));
+    expect(await PgProjectSync.push("p1", { files: many(3) }, "mine")).toBe(
+      "refused"
+    );
+    answering(() => ({ ok: false, status: 503, json: async () => ({}) }));
+    expect(await PgProjectSync.push("p1", { files: many(4) }, "mine")).toBe(
+      "skipped"
+    );
+  });
+
+  it("reports a 413 whose body is not JSON once", async () => {
+    answering(() => ({
+      ok: false,
+      status: 413,
+      json: async () => {
+        throw new SyntaxError("Unexpected token '<'");
+      },
+    }));
+    clearFailures();
+    await PgProjectSync.push("p1", { files: many(3) }, "mine");
+
+    expect(PgProjectSync.conflictFor("p1")).toEqual({
+      projectId: "p1",
+      kind: "too-large",
+    });
+    expect(getFailures().map(({ what }) => what)).toEqual([
+      "read refusal body",
     ]);
   });
 

@@ -106,6 +106,22 @@ describe("write_file", () => {
       outcome: "not written: A file can be at most 128 KB.",
     });
   });
+  it("never reports a write that happened as not written", async () => {
+    const b = bridge("old");
+    vi.spyOn(PgPatchUndo, "wrote").mockImplementation(() => {
+      throw new Error("undo store full");
+    });
+    const pending = writeFile(b).run({ path: "src/lib.rs", content: "new" });
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), true);
+
+    const said = await Promise.resolve(pending).catch((e: Error) => e.message);
+    expect(b.applyPatch).toHaveBeenCalled();
+    expect(said).not.toMatch(/Could not write/);
+    expect(PgAssistant.items[0]).not.toMatchObject({ status: "failed" });
+    vi.restoreAllMocks();
+  });
+
   it("leaves an applied patch undoable, and a failed or rejected one not", async () => {
     const file = { content: "old" };
     const b = {

@@ -3,7 +3,7 @@
 // `ACCOUNT_LIMITS` is deliberately not here: only the server counts what an
 // account holds, so browser code has no use for the figures.
 export {
-  checkFileWrite,
+  checkWriteTo,
   checkProjectLimits,
   isSyncedPath,
   PROJECT_LIMITS,

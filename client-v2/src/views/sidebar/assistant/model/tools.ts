@@ -116,11 +116,10 @@ export const createTools = (
       );
     }
 
+    // Only the write itself: once it has happened, nothing after it may say
+    // it did not
     try {
       await bridge.applyPatch({ path, content });
-      PgPatchUndo.wrote(approvalId);
-      PgAssistant.setApprovalOutcome(approvalId, wroteOutcome(path));
-      return `Wrote ${path}.`;
     } catch (e) {
       // TODO(HOO-2603): log an error that is not an `ExplorerLimitError`
       // with `report: true`; a storage failure reaches no logger here
@@ -128,6 +127,9 @@ export const createTools = (
       PgAssistant.setApprovalFailure(approvalId, `not written: ${message}`);
       return `Could not write ${path}: ${message}`;
     }
+    PgAssistant.setApprovalOutcome(approvalId, wroteOutcome(path));
+    PgPatchUndo.wrote(approvalId);
+    return `Wrote ${path}.`;
   }),
 
   bindToolFor("build")(async () => {

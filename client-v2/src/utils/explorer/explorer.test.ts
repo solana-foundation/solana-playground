@@ -836,7 +836,8 @@ describe("writes past a project limit", () => {
 
   describe("renaming", () => {
     it("refuses a folder rename that pushes a file path over 256 characters", async () => {
-      // `dir/` + 242 + `.rs` is 250 code points
+      // `dir/` + 242 + `.rs` is 249 code points, under the 256 limit; under a
+      // 13-character folder name it is 259
       const file = `${"n".repeat(242)}.rs`;
       await PgExplorer.createWorkspace("alpha", {
         files: [

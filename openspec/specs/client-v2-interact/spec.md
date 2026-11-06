@@ -18,7 +18,7 @@ mainnet-beta). Inside a sentence (the fee callout) the network is lower case.
 - **WHEN** a program is deployed on devnet and the person opens Interact
 - **THEN** the head shows "Program", the shortened id, a "Copy program id" button and "Devnet"
 
-### Requirement: The form calls with a Call button
+### Requirement: The form calls with a Test button
 The open card SHALL keep the typed Arguments and Accounts inputs, and SHALL
 show a Fee payer row naming who pays the fee and their balance ("Fee payer ·
 Playground wallet · 0.5 SOL", or the connected wallet's name) above its row.
@@ -101,7 +101,7 @@ requests an airdrop and keeps the cards' values.
 
 ### Requirement: Call history sits beside the form on a wide stage
 When the Interact stage is at least 40rem wide, the `ready` surface SHALL show
-the instruction cards and the last result in a left column and "Call history"
+the instruction cards and each card's last result in a left column and "Call history"
 in a right column 18rem wide that stays in view beside the cards while they
 scroll. Before the first call the right column SHALL show the heading, the
 title "No calls yet" and the line "Calls you make here show with their

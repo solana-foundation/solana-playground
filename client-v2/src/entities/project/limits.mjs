@@ -78,11 +78,19 @@ export const isSyncedPath = (path) =>
   SYNCED_WORKSPACE_FILES.includes(path) || !path.startsWith(".workspace/");
 
 /**
- * The first limit a project is over, with what is over it: what the client's
- * check, the explorer and the server's measure report.
+ * At least one path: every limit that names paths names the ones over it.
  *
- * @typedef {{reason: "path-too-long", limit: number, paths: string[]}
- *   | {reason: "file-too-large", limit: number, paths: string[],
+ * @typedef {[string, ...string[]]} Paths
+ */
+
+/**
+ * The first limit a project is over, with what is over it: what the client's
+ * check, the explorer and the server's measure report. `paths` is sorted and
+ * `sizes` keyed in that order, so two reports of one limit compare equal
+ * whichever side measured it.
+ *
+ * @typedef {{reason: "path-too-long", limit: number, paths: Paths}
+ *   | {reason: "file-too-large", limit: number, paths: Paths,
  *      sizes: Record<string, number>}
  *   | {reason: "too-many-files", limit: number, count: number}
  *   | {reason: "project-too-large", limit: number, size: number}
@@ -122,19 +130,22 @@ export const LIMIT_REASONS = [
  * `tooManyProjects` is the server's alone: no client can count the account.
  */
 export const limitExceeded = Object.freeze({
-  /** @param {string[]} paths */
+  /** @param {Paths} paths */
   pathTooLong: (paths) => ({
     reason: /** @type {const} */ ("path-too-long"),
     limit: PROJECT_LIMITS.pathChars,
-    paths: [...paths].sort(),
+    paths: sortedPaths(paths),
   }),
-  /** @param {Record<string, number>} sizes the size of each file over */
-  fileTooLarge: (sizes) => ({
-    reason: /** @type {const} */ ("file-too-large"),
-    limit: PROJECT_LIMITS.fileBytes,
-    paths: Object.keys(sizes).sort(),
-    sizes,
-  }),
+  /** @param {Record<string, number>} sizes the size of each file over, at least one */
+  fileTooLarge: (sizes) => {
+    const paths = sortedPaths(/** @type {Paths} */ (Object.keys(sizes)));
+    return {
+      reason: /** @type {const} */ ("file-too-large"),
+      limit: PROJECT_LIMITS.fileBytes,
+      paths,
+      sizes: sizesIn(paths)(sizes),
+    };
+  },
   /** @param {number} count */
   tooManyFiles: (count) => ({
     reason: /** @type {const} */ ("too-many-files"),
@@ -160,7 +171,26 @@ export const limitExceeded = Object.freeze({
   }),
 });
 
-/** @param {unknown} value */
+/**
+ * A copy of `paths` in sorted order
+ *
+ * @param {Paths} paths
+ * @returns {Paths}
+ */
+const sortedPaths = (paths) => /** @type {Paths} */ ([...paths].sort());
+
+/**
+ * `sizes` keyed in the order of `paths`, which it must hold
+ *
+ * @param {Paths} paths
+ */
+const sizesIn = (paths) => (/** @type {Record<string, number>} */ sizes) =>
+  Object.fromEntries(paths.map((path) => [path, sizes[path]]));
+
+/**
+ * @param {unknown} value
+ * @returns {value is Paths}
+ */
 const isStringList = (value) =>
   Array.isArray(value) &&
   value.length > 0 &&
@@ -195,21 +225,19 @@ export const readLimitExceeded = (body) => {
       return {
         reason: "path-too-long",
         limit,
-        paths: [...b.paths],
+        paths: sortedPaths(b.paths),
       };
     case "file-too-large": {
       if (!isStringList(b.paths)) return null;
-      const paths = /** @type {string[]} */ (b.paths);
-      const given = /** @type {Record<string, unknown>} */ (b.sizes);
+      const paths = sortedPaths(b.paths);
+      const given = /** @type {Record<string, number>} */ (b.sizes);
       if (!given || typeof given !== "object") return null;
       if (!paths.every((path) => isCount(given[path]))) return null;
       return {
         reason: "file-too-large",
         limit,
-        paths: [...paths],
-        sizes: Object.fromEntries(
-          paths.map((path) => [path, /** @type {number} */ (given[path])])
-        ),
+        paths,
+        sizes: sizesIn(paths)(given),
       };
     }
     case "too-many-files":
@@ -230,13 +258,16 @@ export const readLimitExceeded = (body) => {
         limit,
         count: /** @type {number} */ (b.count),
       };
-    default:
+    case "project-too-large":
       if (!isCount(b.size)) return null;
       return {
         reason: "project-too-large",
         limit,
         size: /** @type {number} */ (b.size),
       };
+    default:
+      // A reason this client has no case for: not one it can name
+      return null;
   }
 };
 
@@ -271,7 +302,7 @@ export const checkProjectLimits = (files) => {
   const longPaths = entries
     .map(([path]) => path)
     .filter((path) => pathLength(path) > PROJECT_LIMITS.pathChars);
-  if (longPaths.length) return limitExceeded.pathTooLong(longPaths);
+  if (isStringList(longPaths)) return limitExceeded.pathTooLong(longPaths);
 
   // No prototype: a body can name a file `__proto__`, which a plain object's
   // inherited setter would take instead of keeping it as an entry
@@ -333,23 +364,31 @@ const measure = (files) => {
  * not the write's to answer for: the sync banner names that file on the next
  * upload.
  *
+ * Curried as the explorer calls it: the project, then the file, then what
+ * is written to it.
+ *
  * @param {Record<string, string>} files the project before the write
- * @param {string} path workspace-relative
- * @param {string} content
- * @returns {ProjectLimitExceeded | null}
  */
-export const checkFileWrite = (files, path, content) => {
-  const own = checkProjectLimits({ [path]: content });
-  if (own || !isSyncedPath(path)) return own;
+export const checkWriteTo =
+  (files) =>
+  /** @param {string} path workspace-relative */
+  (path) =>
+  /**
+   * @param {string} content
+   * @returns {ProjectLimitExceeded | null}
+   */
+  (content) => {
+    const own = checkProjectLimits({ [path]: content });
+    if (own || !isSyncedPath(path)) return own;
 
-  const after = measure(
-    Object.assign(Object.create(null), files, { [path]: content })
-  );
-  if (after.count > PROJECT_LIMITS.files) {
-    return limitExceeded.tooManyFiles(after.count);
-  }
-  if (after.size > PROJECT_LIMITS.projectBytes) {
-    return limitExceeded.projectTooLarge(after.size);
-  }
-  return null;
-};
+    const after = measure(
+      Object.assign(Object.create(null), files, { [path]: content })
+    );
+    if (after.count > PROJECT_LIMITS.files) {
+      return limitExceeded.tooManyFiles(after.count);
+    }
+    if (after.size > PROJECT_LIMITS.projectBytes) {
+      return limitExceeded.projectTooLarge(after.size);
+    }
+    return null;
+  };

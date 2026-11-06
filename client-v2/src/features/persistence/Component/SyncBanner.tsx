@@ -15,7 +15,7 @@ import {
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgView } from "../../../utils/view";
 import { RenameWorkspace } from "../../../views/sidebar/explorer/Component/Modals/RenameWorkspace";
-import type { Conflict, Resolution } from "../model/project-sync";
+import type { Conflict, ConflictKind, Resolution } from "../model/project-sync";
 import { PgProjectSync } from "../model/project-sync";
 import { MAX_PROJECT_BODY_LABEL } from "../model/project-write.mjs";
 import { persistenceTelemetry } from "../model/telemetry";
@@ -92,15 +92,14 @@ type Action = { label: string } & (
  * error. The first action is the one the banner expects, after Resolve… where
  * that shows
  */
-const PROMPTS: Record<
-  Conflict["kind"],
-  {
-    title: string;
-    variant: "warning" | "error";
-    message: (conflict: Conflict) => string;
-    actions: Action[];
-  }
-> = {
+type Prompt<K extends ConflictKind> = {
+  title: string;
+  variant: "warning" | "error";
+  message: (conflict: Extract<Conflict, { kind: K }>) => string;
+  actions: Action[];
+};
+
+const PROMPTS: { [K in ConflictKind]: Prompt<K> } = {
   divergent: {
     title: "Changed on another device",
     variant: "warning",
@@ -145,13 +144,23 @@ const PROMPTS: Record<
   "too-large": {
     title: "Too large to sync",
     variant: "error",
-    message: (conflict) =>
-      conflict.kind === "too-large" && conflict.limit
-        ? limitBannerText(conflict.limit)
+    message: ({ limit }) =>
+      limit
+        ? limitBannerText(limit)
         : `This project is over ${MAX_PROJECT_BODY_LABEL}. Remove or shrink its largest files, then try again.`,
     actions: [{ label: "Try again", kind: "answer", resolution: "retry" }],
   },
 };
+
+/**
+ * `conflict`'s prompt, typed for any conflict. TypeScript cannot tie
+ * `PROMPTS[conflict.kind]` to `conflict`'s own kind, so the one widening is
+ * here: the mapped type above has already checked each entry against its kind.
+ */
+const promptFor = (conflict: Conflict) =>
+  PROMPTS[conflict.kind] as Prompt<ConflictKind> & {
+    message: (conflict: Conflict) => string;
+  };
 
 /**
  * Say why a project has stopped syncing, and offer the way out.
@@ -237,7 +246,7 @@ const SyncBanner = () => {
       : { run: () => answer(action.resolution), failure: "apply your choice" };
 
   const renderBanner = (shown: Conflict) => {
-    const prompt = PROMPTS[shown.kind];
+    const prompt = promptFor(shown);
     // Line by line needs the lines: a divergence the merge never got as far as
     // naming files keeps the two whole-project answers only
     const resolvable = shown.kind === "divergent" && !!shown.files?.length;

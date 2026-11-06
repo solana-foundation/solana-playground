@@ -440,7 +440,13 @@ describe("SyncBanner limit wording", () => {
   });
 
   it("names the first three of several files over it", async () => {
-    const paths = ["a.rs", "b.rs", "c.rs", "d.rs", "e.rs"];
+    const paths: [string, ...string[]] = [
+      "a.rs",
+      "b.rs",
+      "c.rs",
+      "d.rs",
+      "e.rs",
+    ];
     const { text } = await bannerFor({
       reason: "file-too-large",
       limit: 131_072,

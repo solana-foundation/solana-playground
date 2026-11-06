@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 
 import {
   ACCOUNT_LIMITS,
-  checkFileWrite,
   checkProjectLimits,
+  checkWriteTo,
   limitExceeded,
   PROJECT_LIMITS,
   readLimitExceeded,
@@ -172,6 +172,11 @@ describe("entities/project/limits", () => {
       { reason: "too-many-files", limit: 50, count: 51 }
     );
     assert.equal(readLimitExceeded({ reason: "too-large" }), null);
+    assert.equal(
+      readLimitExceeded({ reason: "too-many-lines", limit: 1, size: 2 }),
+      // eslint-disable-next-line unicorn/no-null -- `readLimitExceeded`'s answer for "not a limit body"
+      null
+    );
     assert.equal(readLimitExceeded(null), null);
   });
 
@@ -225,6 +230,24 @@ describe("entities/project/limits", () => {
     }
   });
 
+  it("builds and reads one limit in the same key order", () => {
+    // `sameQuestion` compares limits as JSON, so the client's check and a
+    // 413 must spell one limit identically
+    const built = limitExceeded.fileTooLarge({
+      "b.rs": 140001,
+      "a.rs": 140000,
+    });
+    const read = readLimitExceeded({
+      reason: "file-too-large",
+      limit: built.limit,
+      paths: ["b.rs", "a.rs"],
+      sizes: { "a.rs": 140000, "b.rs": 140001 },
+    });
+    assert.equal(JSON.stringify(read), JSON.stringify(built));
+    assert.deepEqual(built.paths, ["a.rs", "b.rs"]);
+    assert.deepEqual(Object.keys(built.sizes), ["a.rs", "b.rs"]);
+  });
+
   it("caps each kind at its own figure", () => {
     assert.deepEqual(limitExceeded.tooManyProjects("project", 11), {
       reason: "too-many-projects",
@@ -249,31 +272,31 @@ describe("entities/project/limits", () => {
   });
 });
 
-describe("checkFileWrite", () => {
+describe("checkWriteTo", () => {
   it("refuses a file over its own limits whatever the project", () => {
     assert.equal(
-      checkFileWrite({}, "src/a.rs", "a".repeat(131_073))?.reason,
+      checkWriteTo({})("src/a.rs")("a".repeat(131_073))?.reason,
       "file-too-large"
     );
     assert.equal(
-      checkFileWrite({}, "p".repeat(257), "")?.reason,
+      checkWriteTo({})("p".repeat(257))("")?.reason,
       "path-too-long"
     );
   });
 
   it("refuses a new path past the count limit, not an overwrite under it", () => {
     const fifty = emptyFiles(50);
-    assert.deepEqual(checkFileWrite(fifty, "src/new.rs", ""), {
+    assert.deepEqual(checkWriteTo(fifty)("src/new.rs")(""), {
       reason: "too-many-files",
       limit: 50,
       count: 51,
     });
-    assert.equal(checkFileWrite(fifty, "src/f1.rs", "x"), null);
-    assert.equal(checkFileWrite(fifty, ".tutorial.json", "{}"), null);
+    assert.equal(checkWriteTo(fifty)("src/f1.rs")("x"), null);
+    assert.equal(checkWriteTo(fifty)(".tutorial.json")("{}"), null);
   });
 
   it("refuses an overwrite in a project still over the count limit", () => {
-    assert.deepEqual(checkFileWrite(emptyFiles(60), "src/f1.rs", "x"), {
+    assert.deepEqual(checkWriteTo(emptyFiles(60))("src/f1.rs")("x"), {
       reason: "too-many-files",
       limit: 50,
       count: 60,
@@ -285,38 +308,35 @@ describe("checkFileWrite", () => {
     for (let i = 0; i < 5; i++) files[`src/f${i}.rs`] = "a".repeat(110_000);
     // 550,000 bytes: growing, and shrinking by too little, are both refused
     assert.equal(
-      checkFileWrite(files, "src/f0.rs", "a".repeat(110_001))?.reason,
+      checkWriteTo(files)("src/f0.rs")("a".repeat(110_001))?.reason,
       "project-too-large"
     );
-    assert.deepEqual(checkFileWrite(files, "src/f0.rs", "a".repeat(90_000)), {
+    assert.deepEqual(checkWriteTo(files)("src/f0.rs")("a".repeat(90_000)), {
       reason: "project-too-large",
       limit: 524_288,
       size: 530_000,
     });
     // 441,000 bytes: back under
-    assert.equal(checkFileWrite(files, "src/f0.rs", "a".repeat(1_000)), null);
+    assert.equal(checkWriteTo(files)("src/f0.rs")("a".repeat(1_000)), null);
   });
 
   it("refuses a shrink that leaves the file over the size limit", () => {
     const files = { "src/big.rs": "a".repeat(200_000) };
     assert.equal(
-      checkFileWrite(files, "src/big.rs", "a".repeat(150_000))?.reason,
+      checkWriteTo(files)("src/big.rs")("a".repeat(150_000))?.reason,
       "file-too-large"
     );
-    assert.equal(
-      checkFileWrite(files, "src/big.rs", "a".repeat(131_072)),
-      null
-    );
+    assert.equal(checkWriteTo(files)("src/big.rs")("a".repeat(131_072)), null);
   });
 
   it("does not blame the write for another file over a limit", () => {
     const files = { "src/big.rs": "a".repeat(150_000) };
-    assert.equal(checkFileWrite(files, "notes.md", ""), null);
+    assert.equal(checkWriteTo(files)("notes.md")(""), null);
   });
 
   it("ignores a path sync does not carry", () => {
     assert.equal(
-      checkFileWrite(emptyFiles(50), ".workspace/metadata.json", "{}"),
+      checkWriteTo(emptyFiles(50))(".workspace/metadata.json")("{}"),
       null
     );
   });

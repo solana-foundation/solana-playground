@@ -196,9 +196,8 @@ const UPSERT_FILES = `
  *
  * Only the paths sync carries count, as in `MEASURE`: a stored `.workspace/`
  * row sync does not carry is no file to a client, so a patch that removes
- * every synced file beside one is still refused.
- *
- * TODO(HOO-2605): "beside one" means beside such a row, not all but one file.
+ * every synced file, leaving only an unsynced `.workspace/` row, is still
+ * refused.
  */
 const HAS_FILES = `
   select exists(
@@ -382,13 +381,12 @@ const DELETE_OTHERS = `
  * from" is always the row the caller read.
  *
  * A write that leaves the project over any limit is rolled back and answered
- * `{limit}`, the body of the route's 413. A patch is small even when its
+ * `{limit}`; `answerWrite` sends the limit's own fields as the route's 413
+ * body. A patch is small even when its
  * project is not, so the project it produces is what counts. A write that
  * makes a project count toward the account cap (`ACCOUNT_LIMITS`) and takes
  * the account past it is rolled back the same way, answered with
  * `too-many-projects`; see `refuseOverAccountCap`.
- * TODO(HOO-2605): `answerWrite` spreads the fields of `{limit}` into the 413
- * body; the body has no `limit` object.
  *
  * A patch after which the row holds no files is refused and rolled back
  * (`refused: "no-files"`). Such a row reads back as no snapshot, so no device
@@ -444,8 +442,8 @@ export const writeProject = async (q, userId, input) => {
     : await q(CREATE, [userId, id, name, kind]);
 
   const outcome = settle(rows[0]);
-  // TODO(HOO-2606): no test pins that a conflict is answered before
-  // `refuseOverLimit` for a project stored over a limit
+  // Before `refuseOverLimit`: a missed swap on a project stored over a limit
+  // is a version question, which the other device merges, not a 413
   if (outcome.conflict) return outcome;
 
   if (rows[0].adopted) {

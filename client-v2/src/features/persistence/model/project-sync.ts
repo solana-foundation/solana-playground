@@ -1,6 +1,7 @@
 // TODO(ui-migration 1.4): a feature importing a feature; project sync runs only for a signed-in session
 import {
   checkProjectLimits,
+  isSyncedPath,
   type LimitExceeded,
   readLimitExceeded,
 } from "@/entities/project";
@@ -44,11 +45,14 @@ import { PgWorkspaceRegistry } from "./workspace-registry";
 
 /**
  * How a push ended. `unchanged`: the server already holds these files under
- * this name, so there was nothing to send. Apart from `skipped` (not sent for
- * any other reason, offline among them) because "Try again" settles the
- * question on the first and puts it back on the second.
+ * this name, so there was nothing to send. `refused`: the server answered
+ * the body with a 400, which sending it again cannot change; reported
+ * already.
+ * `skipped`: not sent for any other reason, offline among them. `unchanged` and `skipped` are kept apart
+ * because "Try again" settles the question on `unchanged` and puts it back on
+ * `skipped`.
  */
-type PushResult = "ok" | "conflict" | "unchanged" | "skipped";
+type PushResult = "ok" | "conflict" | "unchanged" | "refused" | "skipped";
 
 /** `push`'s options -- see there */
 type PushOptions = {
@@ -307,14 +311,19 @@ const answers = (
  * about the right project.
  */
 const refusalOf = async (response: Response): Promise<Refusal> => {
-  let body: unknown = null;
+  let body: unknown;
   try {
     body = await response.json();
   } catch (e) {
-    // A refusal with no readable body is still a refusal
+    // A refusal with no readable body is still a refusal, read by its status
+    // alone. A platform's or a proxy's 413 is not JSON; it is reported here,
+    // once.
     report("read refusal body", e);
+    return response.status === 413
+      ? { kind: "too-large" }
+      : { kind: "divergent" };
   }
-  const reason = (body as { reason?: unknown } | null)?.reason;
+  const reason = (body as { reason?: unknown } | undefined)?.reason;
 
   if (reason === "name-taken") return { kind: "name-taken" };
   if (reason === DELETED_REASON) return { kind: "deleted-elsewhere" };
@@ -668,7 +677,11 @@ export class PgProjectSync {
     // limit.
     const limit = checkProjectLimits(snapshot.files);
     if (limit) {
-      PgProjectSync._raise({ projectId, kind: "too-large", limit }, "client");
+      PgProjectSync._raiseFoundBy("client")({
+        projectId,
+        kind: "too-large",
+        limit,
+      });
       return "conflict";
     }
 
@@ -738,7 +751,7 @@ export class PgProjectSync {
         // Deliberately without recording anything: the upload has not been
         // accepted, and remembering it would make every later attempt look
         // unchanged and strand the project out of sync for good.
-        PgProjectSync._raise({ projectId, ...refusal }, "server");
+        PgProjectSync._raiseFoundBy("server")({ projectId, ...refusal });
         return "conflict";
       }
       if (!response.ok) {
@@ -776,7 +789,9 @@ export class PgProjectSync {
           // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
           null
         );
-        return "skipped";
+        // A 400 is this body's and comes back for it every time; anything
+        // else (a 401, a 429, a 5xx) may pass on its own
+        return response.status === 400 ? "refused" : "skipped";
       }
 
       const accepted = await response.json();
@@ -1285,7 +1300,13 @@ export class PgProjectSync {
           return "failed";
         }
 
-        const server = full.snapshot.files;
+        // Only what sync carries: a row stored before the server refused
+        // other `.workspace/` paths may hold one, which an upload may not
+        const server = Object.fromEntries(
+          Object.entries(full.snapshot.files).filter(([path]) =>
+            isSyncedPath(path)
+          )
+        );
         const local = carried ?? (await snapshotOf(localName)).files;
         first ??= local;
         // The same state `push` refuses: a store emptied by
@@ -1420,11 +1441,20 @@ export class PgProjectSync {
           { immediate: true, merging: true }
         );
         // "unchanged" is nothing left to send, "skipped" most likely no
-        // network; both leave a state the next reconcile continues from
+        // network; both leave a state the next reconcile continues from. A
+        // refused upload merged nothing into the account's copy, and no
+        // question was up for it: the push cleared it above. Ask, or the
+        // project stops syncing with nothing on screen.
+        if (result === "refused") {
+          // TODO: a 400 asks the version question, whose answers
+          // meet the same refusal; it needs a refusal banner of its own
+          PgProjectSync._raise({ projectId, kind: "divergent" });
+          return "conflict";
+        }
         if (result !== "conflict") return "merged";
 
-        // A refusal that is not about versions is the user's to clear.
-        // TODO(HOO-2606): no test drives a merge whose result is over a limit
+        // A refusal that is not about versions is the user's to clear: a
+        // merged project over a limit keeps the limit's banner
         if (PgProjectSync._conflicts.get(projectId)?.kind !== "divergent") {
           return "conflict";
         }
@@ -1741,10 +1771,12 @@ export class PgProjectSync {
           // divergence gets the version question it now deserves. A push with
           // nothing to send is settled too: the user undid whatever went
           // over a limit, and the server already holds the project as it is
-          // now. The one outcome that raises nothing is a push that never
-          // reached the server, which is why the original question is put
-          // back for it: being offline does not mean the name is free. Put
-          // back without `by`, so no limit event fires twice for one banner.
+          // now. The outcomes that raise nothing are a push that never
+          // reached the server and one refused with a 400, which is why the
+          // original question is put back for them: being offline does not
+          // mean the name is free, and a refusal is no answer. Put
+          // back through `_raise`, so no limit event fires twice for one
+          // banner.
           const previous = PgProjectSync._conflicts.get(projectId) ?? null;
           PgProjectSync._clear(projectId);
 
@@ -1972,21 +2004,35 @@ export class PgProjectSync {
    * limit question is identified by its limit and measure, so two different
    * limits are never taken for the same question.
    *
-   * A limit's event fires here, the one place both the client's check and a
-   * 413 reach, and only for a question that is new: a banner already up sends
-   * nothing more while the user keeps editing. `by` says which found it, and
-   * is left out for a question put back after a retry that never reached the
-   * server: that banner was counted when it first went up. After the banner
-   * is up, so an event that fails cannot keep it down.
+   * Sends no limit event: it raises the questions no limit check found,
+   * reconcile's, and puts back a question after a retry that never reached
+   * the server, whose banner was counted when it first went up. A limit a
+   * check finds goes through `_raiseFoundBy`.
+   *
+   * @returns whether the question is new
    */
-  private static _raise(conflict: Conflict, by?: LimitByParam) {
+  private static _raise(conflict: Conflict) {
     const existing = PgProjectSync._conflicts.get(conflict.projectId);
-    if (existing && sameQuestion(existing, conflict)) return;
+    if (existing && sameQuestion(existing, conflict)) return false;
     PgProjectSync._conflicts.set(conflict.projectId, conflict);
     PgProjectSync._emit();
-    if (conflict.kind === "too-large" && conflict.limit && by) {
-      trackLimit(conflict.limit, by);
-    }
+    return true;
+  }
+
+  /**
+   * `_raise` for a refusal a check found: the client's own (`by` "client")
+   * or a 413 (`by` "server"), the two places a limit is found. A limit's
+   * event fires only for a question that is new, so a banner already up
+   * sends nothing more while the user keeps editing, and after the banner is
+   * up, so an event that fails cannot keep it down.
+   */
+  private static _raiseFoundBy(by: LimitByParam) {
+    return (conflict: Conflict) => {
+      if (!PgProjectSync._raise(conflict)) return;
+      if (conflict.kind === "too-large" && conflict.limit) {
+        trackLimitFoundBy(by)(conflict.limit);
+      }
+    };
   }
 
   /** The files a divergent question up for the project named, if any */
@@ -2035,7 +2081,7 @@ const sameQuestion = (a: Conflict, b: Conflict) => {
 };
 
 /** Send the event named for the limit a banner was raised for */
-const trackLimit = (limit: LimitExceeded, by: LimitByParam) => {
+const trackLimitFoundBy = (by: LimitByParam) => (limit: LimitExceeded) => {
   switch (limit.reason) {
     case "path-too-long":
     case "file-too-large":
@@ -2058,8 +2104,9 @@ const trackLimit = (limit: LimitExceeded, by: LimitByParam) => {
       });
       return;
     case "too-many-projects":
+      // Only the server counts an account's projects
       persistenceTelemetry.track("sync_projects_count_limit_exceeded", {
-        by,
+        by: "server",
         kind: limit.kind,
         projects: limit.count,
       });

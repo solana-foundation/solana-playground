@@ -79,7 +79,8 @@ type PersistenceEvents = {
    * `server`, the one side that knows the count. Once per banner, as above.
    */
   sync_projects_count_limit_exceeded: {
-    by: LimitByParam;
+    /** Only the server counts an account's projects */
+    by: "server";
     kind: "project" | "tutorial";
     projects: number;
   };

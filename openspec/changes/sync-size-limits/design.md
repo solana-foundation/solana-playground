@@ -70,7 +70,7 @@ drift, and the rule "a string two places must agree on is declared once"
 
 `renameItem` and `createWorkspace` (with `files`) build the project's file map
 as it would be after the operation and call `checkProjectLimits` before their
-first write. `PgExplorer.createItem` calls `checkFileWrite` instead, which
+first write. `PgExplorer.createItem` calls `checkWriteTo` instead, which
 judges the written file's own path and size, then the project's file count and
 size as the write leaves them. It judges the result, as the server does, so an
 overwrite that shrinks a file or a project still over its limit is refused: a
@@ -81,7 +81,12 @@ sync banner names that file on the next upload. Over a limit, the three
 methods throw an `Error` whose message is the spec's text, and write nothing. Checking in
 these methods rather than in each dialog covers every caller: the dialogs, the
 assistant's `applyPatch` in `views/sidebar/assistant/bridge/playground-bridge.ts`,
-the `sugar` commands, and the tutorial and template flows.
+the `sugar` commands, and the tutorial and template flows. One write is
+exempt: a file the playground generates from work already done, the Sugar
+cache, goes through `writeGeneratedFileWith`, which skips the refusal. The
+cache holds the links of uploads already paid for, so refusing its save loses
+them; a project it leaves over a limit stays local and the sync banner names
+the limit.
 
 An approved assistant write that the explorer refuses marks its approval card
 `failed`, a new `ApprovalStatus` badged "Failed", with `not written: <message>`
@@ -179,11 +184,12 @@ The `retry` resolution clears the conflict and calls `push`, which runs the
 check first. Still over, `push` raises the conflict again with the current
 limit. This is the existing `retry` path; it needs no new branch.
 
-### Telemetry fires in `_raise`
+### Telemetry fires in `_raiseFoundBy`
 
-The event fires where a `too-large` conflict with a `limit` is raised, which is
-the one place both the client check and a 413 reach. `by` comes from the
-caller. `_raise` already returns early for a conflict identical to the one
+The event fires where a `too-large` conflict with a `limit` is raised by a
+check that found it: `_raiseFoundBy(by)`, which both the client check and a
+413 call. `_raise` itself sends no event, so a question put back after a retry
+is not counted twice. `_raise` returns early for a conflict identical to the one
 outstanding, which gives "a banner already up sends nothing more";
 `sameQuestion` compares `limit` too, so a retry that finds a different limit replaces
 the banner and fires that limit's event.
@@ -277,7 +283,7 @@ one create per refused project, which succeeds once a place is free.
 
 - [A later change lowers a limit or counts more, and stored projects end up
   over it] → they still restore and open, their next edit raises the banner,
-  and `checkFileWrite` does not refuse the edits that bring them back under.
+  and `checkWriteTo` does not refuse the edits that bring them back under.
   No stored project predates these limits: client-v2 has not reached
   production (2026-11-02).
 - [The generated `program-info.json` holds an IDL and grows with the program]

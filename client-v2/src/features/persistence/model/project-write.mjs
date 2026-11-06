@@ -3,8 +3,10 @@
 // `.mjs` so Node can import it directly; `allowJs` lets the TypeScript side
 // import the same file (see `features/auth/config.mjs`).
 
+import { PROJECT_LIMITS } from "../../../entities/project/server.mjs";
+
 /**
- * The largest project write, in bytes of request body: 1 MiB.
+ * The largest project write, in bytes of request body.
  *
  * Twice `PROJECT_LIMITS.projectBytes`, so a full upload of a project at the
  * size limit fits with room for JSON escaping (the `sync-size-limits` change,
@@ -14,16 +16,14 @@
  * produces, short of content made mostly of characters JSON escapes. It sits
  * below Vercel's own cap: a Function refuses a request body over 4.5 MB with
  * its own 413 before the handler runs (https://vercel.com/docs/functions/limitations),
- * so a refusal for size is always this route's, never the platform's. Kept
- * in step with `PROJECT_LIMITS.projectBytes` by hand.
- * TODO(HOO-2605): the cap is reached only when JSON escaping more than
- * doubles the content, and a sender that skips the browser check still meets
- * the platform's 413.
+ * so a refusal for size the browser client meets is always this route's,
+ * never the platform's; a sender that skips the browser's check can still
+ * meet the platform's.
  *
  * The browser checks it before sending, the handler again on the way in; the
  * banner's `too-large` text names it.
  */
-export const MAX_PROJECT_BODY_BYTES = 1024 * 1024;
+export const MAX_PROJECT_BODY_BYTES = 2 * PROJECT_LIMITS.projectBytes;
 
 /** `MAX_PROJECT_BODY_BYTES` as the banner says it, derived so the two agree */
 export const MAX_PROJECT_BODY_LABEL = `${

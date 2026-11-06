@@ -22,16 +22,17 @@ import {
 const log = createLogger("explorer:create-item");
 
 /**
- * What the input shows for a failed create: a limit's rule, or one of the
- * explorer's own refusals ("Already exists", "Invalid name"). Anything else
- * was not expected, so it is reported and the input only turns red.
+ * What the input shows for a failed create of `name`: a limit's rule, or one
+ * of the explorer's own refusals ("Already exists", "Invalid name").
+ * Anything else was not expected, so it is reported and the line names what
+ * was not created, since a red input alone reads as an invalid name.
  */
-const describeCreateFailure = (e: unknown) => {
+const describeCreateFailureOf = (name: string) => (e: unknown) => {
   if (e instanceof ExplorerLimitError) return e.message;
   const message = e instanceof Error ? e.message : "";
   if (Object.values(PgExplorer.errors).includes(message)) return message;
   log.error(e, { report: true });
-  return "";
+  return `Could not create ${name}.`;
 };
 
 export const CreateItem = () => {
@@ -57,7 +58,7 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
 }) => {
   const [itemName, setItemName] = useState("");
   const [error, setError] = useState(false);
-  // A refusal's message (`describeCreateFailure`); empty while there is none
+  // A refusal's message (`describeCreateFailureOf`); empty while there is none
   const [refusal, setRefusal] = useState("");
 
   const newFileRef = useRef<HTMLDivElement>(null);
@@ -99,7 +100,7 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
             const newEl = PgExplorer.getElFromPath(itemPath);
             if (newEl) PgExplorer.setSelectedEl(newEl);
           } catch (e) {
-            setRefusal(describeCreateFailure(e));
+            setRefusal(describeCreateFailureOf(itemName)(e));
             setError(true);
           }
         },

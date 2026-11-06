@@ -140,7 +140,13 @@ if (import.meta.vitest) {
     });
 
     it("names the first three large files and counts the rest", () => {
-      const paths = ["a.rs", "b.rs", "c.rs", "d.rs", "e.rs"];
+      const paths: [string, ...string[]] = [
+        "a.rs",
+        "b.rs",
+        "c.rs",
+        "d.rs",
+        "e.rs",
+      ];
       expect(
         limitBannerText({
           reason: "file-too-large",

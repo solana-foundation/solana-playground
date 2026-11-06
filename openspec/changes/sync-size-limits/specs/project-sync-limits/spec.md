@@ -377,7 +377,10 @@ limits broken, checked in this order:
 The limits SHALL be judged on the result, not on the change: an overwrite that
 makes a file or a project smaller SHALL be refused while that file or project
 is still over its limit, and SHALL be written once it brings it back within
-every limit. Deleting a file SHALL NOT be refused. A file other than the one
+every limit. Deleting a file SHALL NOT be refused. A file the playground
+writes from work already done, the Sugar cache that `sugar upload` and
+`sugar deploy` save after paid uploads, SHALL NOT be refused: refusing it
+would lose that work, and the sync banner names the limit instead. A file other than the one
 written SHALL NOT refuse the write by its own path or size. A refused write
 SHALL change nothing. The refusal message SHALL be the rule of the first limit broken: "A
 file path can be at most 256 characters.", "A file can be at most 128 KB.", "A

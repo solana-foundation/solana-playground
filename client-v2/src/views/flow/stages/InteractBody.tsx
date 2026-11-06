@@ -101,7 +101,7 @@ const InteractBody = ({
             data-slot="interact-columns"
             className="grid grid-cols-1 gap-6 @min-[40rem]:grid-cols-[minmax(0,42rem)_18rem]"
           >
-            {/* The cards stack close, as the Test list on master does */}
+            {/* The cards stack close, as the sidebar Test list (`views/sidebar/test`) does */}
             <div className="flex min-w-0 flex-col gap-2">
               {idl.instructions.map((idlInstruction) => {
                 const outcome = resultOf(idlInstruction.name);
