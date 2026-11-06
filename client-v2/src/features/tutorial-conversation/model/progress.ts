@@ -685,6 +685,7 @@ const receiptSchema = z.object({
     .array(z.object({ name: z.string(), address: z.string() }))
     .optional(),
   log: z.array(z.string()).optional(),
+  computeUnits: z.number().int().nonnegative().optional(),
 });
 
 /**
@@ -711,6 +712,7 @@ const parseReceipt = (
   if (parsed.signer !== undefined) out.signer = parsed.signer;
   if (parsed.accounts?.length) out.accounts = parsed.accounts;
   if (parsed.log?.length) out.log = parsed.log;
+  if (parsed.computeUnits !== undefined) out.computeUnits = parsed.computeUnits;
   return {
     receipt: Object.keys(out).length ? out : null,
     mismatched,
@@ -1573,6 +1575,17 @@ if (import.meta.vitest) {
         })
       ).toMatchObject({
         result: { receipt: { log: ["Program log: Hello, Alex!"] } },
+      });
+    });
+
+    it("keeps a receipt's compute units across a reload", () => {
+      expect(parseReceipt({ fee: 5000, computeUnits: 389 })).toEqual({
+        receipt: { fee: 5000, computeUnits: 389 },
+        mismatched: [],
+      });
+      expect(parseReceipt({ computeUnits: -1 })).toEqual({
+        receipt: null,
+        mismatched: ["computeUnits"],
       });
     });
 
