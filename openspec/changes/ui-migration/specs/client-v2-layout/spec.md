@@ -415,9 +415,8 @@ The settings SHALL open as a page that takes the whole window, in place of
 the app, which SHALL stay loaded beneath it: the open file, the editor's
 content and the terminal's session SHALL be as they were when the user comes
 back. From 768 px wide the page SHALL show "Back to app" over a list of its
-sections (Network, Project, Block Explorer, Build, Connection, Editor,
-Notification, Server, Test UI, UI, Wallet, Experimental) beside the sections
-themselves; a click on a section in the list SHALL bring that section into
+nine sections (Network, Assistant, Editor, Build, Wallet, Appearance,
+Keyboard shortcuts, Project, Advanced) beside the sections themselves; a click on a section in the list SHALL bring that section into
 view and mark it as current. Below 768 px the page SHALL show a bar with
 "Back to app" and the title, and no list. Nothing of the app SHALL be drawn
 over the page: a menu, popover or tooltip open when it opens SHALL close.
@@ -433,7 +432,7 @@ the page.
 
 - **WHEN** a user on a 1280 px wide window opens the settings and clicks
   "Editor" in the section list
-- **THEN** the page lists the twelve sections, the Editor section comes into
+- **THEN** the page lists the nine sections, the Editor section comes into
   view, and "Editor" is marked as current
 
 #### Scenario: Nothing draws over the settings

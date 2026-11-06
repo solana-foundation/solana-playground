@@ -24,6 +24,7 @@ import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
 import {
   Assistant,
   probeDefaultBackend,
+  retryDefaultBackend,
   useDefaultBackend,
   useTurn,
 } from "@/widgets/assistant";
@@ -218,13 +219,30 @@ const shareFromCodeHead = (name: string) =>
   );
 
 /**
- * The settings page with whether the hosted model answers. Its own component,
- * so the probe is read only while the page is open and the frame does not
- * re-render on its answer.
+ * The settings page with whether the hosted model answers, and the asking
+ * again its row offers. Its own component, so the probe is read only while
+ * the page is open and the frame does not re-render on its answer.
  */
 const LiveSettings = (
-  props: Omit<ComponentProps<typeof SettingsPage>, "hosted">
-) => <SettingsPage {...props} hosted={useDefaultBackend().state} />;
+  props: Omit<ComponentProps<typeof SettingsPage>, "hosted" | "onRetryHosted">
+) => (
+  <SettingsPage
+    {...props}
+    hosted={useDefaultBackend().state}
+    onRetryHosted={retryHosted}
+  />
+);
+
+/**
+ * The row's Try again. The probe answers its own failures and tells every
+ * reader; a rejection is a bug past them, reported as the composer's retry
+ * reports it, then rethrown for the button's own handler
+ */
+const retryHosted = () =>
+  retryDefaultBackend().catch((error: unknown) => {
+    log.error(error, { report: true, context: { from: "settings" } });
+    throw error;
+  });
 
 const FlowFrame = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);

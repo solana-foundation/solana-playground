@@ -1676,17 +1676,32 @@ they are answered. One PR.
   a panel on its own when its size drops, 5.1) and Monaco and xterm do not
   re-measure. The page is a sibling of the shell in `Flow`, fixed over the
   whole window, so nothing of the shell's tree changes.
-- **The sections**, in order: Network, Project, Block Explorer, Build,
-  Connection, Editor, Notification, Server, Test UI, UI, Wallet, and a twelfth,
-  Experimental, for `experimental.unstable` (D37; Slava, 2026-10-20: a setting
-  is not dropped for want of a section in the prototype). Network and Project
-  are the overlay's own (the network chips; Export, From GitHub, From files);
-  the rest come from `PgSettings.all`, grouped by the id's prefix as before.
-  The overlay's Explorer links (Wallet, Program, Program IDL) sit in Block
-  Explorer, shown only when there is a wallet or a program. A setting is a row:
-  name and description at the left, the control at the right; on a phone a
-  select goes under them, full width, while a switch stays at the right, as
-  the prototype's checkbox does. A boolean is a `Switch` (5.3), where the
+- **The sections**, in order: Network, Assistant, Editor, Build, Wallet,
+  Appearance, Keyboard shortcuts, Project and Advanced, the nine of the
+  designed Settings (Spec 07, DES-128, #369); a phone leaves out Keyboard
+  shortcuts, having no keyboard for them. They replaced the first cut's
+  twelve (Network, Project, Block Explorer, Build, Connection, Editor,
+  Notification, Server, Test UI, UI, Wallet, Experimental), which grouped
+  `PgSettings.all` by the id's prefix. Network's chips, Assistant's
+  hosted-model row, the shortcuts and Project's Export and imports are the
+  page's own; every other row comes from `PgSettings.all` through `ROWS`
+  (`model/sections.ts`), which maps each setting id to its section, label,
+  one help line, tag and titled card, in page order. A row's place no longer
+  follows its id: `ui.font` sits in Editor with a sample in the font,
+  `notification.showTx` and `testUi.showTxDetailsInTerminal` in Network's
+  "Explorer and logs" card, and `server.endpoint` and `experimental.unstable`
+  in Advanced's "Build server" card (`experimental.unstable` keeps its row,
+  D37; Slava, 2026-10-20: a setting is not dropped for want of a section).
+  `connection.endpoint` maps to no row: the Endpoint select is removed, and
+  the network chips, with Custom for any other URL, set the endpoint. A
+  setting `ROWS` lacks goes to the end of Advanced under its own name and is
+  reported once; `model/sections.test.ts` fails when `ROWS` and the real
+  setting ids part. The user's key sits last, in Advanced. The overlay's
+  Explorer links (Wallet, Program, Program IDL) sit in Network's "Explorer
+  and logs" card, shown only when there is a wallet or a program. A setting
+  is a row: name and description at the left, the control at the right; on
+  a phone a select goes under them, full width, while a switch stays at the
+  right, as the prototype's checkbox does. A boolean is a `Switch` (5.3), where the
   prototype draws a checkbox.
 - **Sections do not fold.** The prototype's sections are flat, so the
   upstream `Collapsible` groups go. The fold scenario in `client-v2-elements`

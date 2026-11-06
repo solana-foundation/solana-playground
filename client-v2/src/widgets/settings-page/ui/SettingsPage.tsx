@@ -5,6 +5,7 @@ import { useState, useSyncExternalStore } from "react";
 import { Github } from "@/components/Icons";
 import Link from "@/components/Link";
 import { useBlockExplorer, useProgramInfo, useWallet } from "@/hooks";
+import { useOnline } from "@/shared/lib/hooks/use-online";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import type {
@@ -32,12 +33,12 @@ import { settingsTelemetry } from "../model/telemetry";
 import AssistantKey from "./AssistantKey";
 import type { HostedModel } from "./BaseAssistantStatus";
 import BaseAssistantStatus from "./BaseAssistantStatus";
-import BaseCodeSample from "./BaseCodeSample";
 import BaseSettingRow from "./BaseSettingRow";
 import BaseSettingsCard from "./BaseSettingsCard";
 import type { SettingsSection } from "./BaseSettingsPage";
 import BaseSettingsPage from "./BaseSettingsPage";
 import BaseShortcuts from "./BaseShortcuts";
+import CodeSample from "./CodeSample";
 import ExportProject, { OpenProjectLine } from "./ExportProject";
 import NetworkSection from "./NetworkSection";
 import { SettingControl } from "./SettingControl";
@@ -71,6 +72,8 @@ interface SettingsPageProps {
   focus: SettingsFocus;
   /** Whether the hosted model answers, as the assistant's probe says */
   hosted: HostedModel;
+  /** Ask the hosted model again: the Try again on its row */
+  onRetryHosted: () => Promise<unknown>;
   /** ⌘, is the key's own, handled where it is bound */
   onClose: (via: Exclude<SettingsExit, "key">) => void;
 }
@@ -85,8 +88,14 @@ const subscribeToModals = (onChange: () => void) =>
  * imports, and the user's key last, in Advanced. Mounted only while the
  * settings are open.
  */
-const LiveSettingsPage = ({ focus, hosted, onClose }: SettingsPageProps) => {
+const LiveSettingsPage = ({
+  focus,
+  hosted,
+  onRetryHosted,
+  onClose,
+}: SettingsPageProps) => {
   const phone = useViewport() === "phone";
+  const online = useOnline();
   const [current, setCurrent] = useState<string>(NETWORK);
 
   // A modal opened from the page (Import from GitHub or files, a setting's
@@ -127,7 +136,7 @@ const LiveSettingsPage = ({ focus, hosted, onClose }: SettingsPageProps) => {
     return (
       <div key={setting.id}>
         {row}
-        <BaseCodeSample font={setting.getValue()} />
+        <CodeSample setting={setting} />
       </div>
     );
   };
@@ -159,7 +168,12 @@ const LiveSettingsPage = ({ focus, hosted, onClose }: SettingsPageProps) => {
     ),
     assistant: (
       <BaseSettingsCard>
-        <BaseAssistantStatus hosted={hosted} phone={phone} />
+        <BaseAssistantStatus
+          hosted={hosted}
+          online={online}
+          onRetry={onRetryHosted}
+          phone={phone}
+        />
       </BaseSettingsCard>
     ),
     editor: cardsOf("editor"),
