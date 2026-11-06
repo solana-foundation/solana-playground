@@ -29,6 +29,7 @@ import { Spinner } from "@/shared/ui/spinner";
 import { summedRecord } from "../model/account-card";
 import BaseAccountView from "./BaseAccountView";
 import { ACTION, ACTION_FILL, ACTION_SOFT, PHONE_CTA } from "./card-action";
+import { phoneCtaWidth, usePhone } from "./phone";
 import { formatSeconds } from "./Prose";
 
 /** A string argument stops at 32 characters */
@@ -175,6 +176,8 @@ const BaseActCard = ({
   disabled,
   onRun,
 }: BaseActCardProps) => {
+  const layout = usePhone();
+  const { phone } = layout;
   const names =
     act.act === "call"
       ? (act.call.args ?? []).filter((a): a is string => typeof a === "string")
@@ -299,16 +302,18 @@ const BaseActCard = ({
   ) : (
     <Button
       type="submit"
-      className={cn(ACTION, ACTION_FILL, PHONE_CTA)}
+      className={cn(ACTION, ACTION_FILL, PHONE_CTA, phoneCtaWidth(layout))}
       disabled={disabled || missing}
     >
       {act.button}
-      <Kbd
-        aria-hidden="true"
-        className="bg-white/15 text-primary-foreground/80"
-      >
-        ⌘↵
-      </Kbd>
+      {!phone && (
+        <Kbd
+          aria-hidden="true"
+          className="bg-white/15 text-primary-foreground/80"
+        >
+          ⌘↵
+        </Kbd>
+      )}
     </Button>
   );
 
@@ -318,7 +323,9 @@ const BaseActCard = ({
       onSubmit={run}
       className={cn(
         "relative flex gap-3 overflow-hidden rounded-panel border border-border bg-surface-panel p-3",
-        names.length || act.repeat ? "flex-col items-stretch" : "items-center"
+        names.length || act.repeat || phone
+          ? "flex-col items-stretch"
+          : "items-center"
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -346,10 +353,14 @@ const BaseActCard = ({
             {note ?? (names.length && missing ? "Type any name" : act.context)}
           </p>
         </div>
-        {!names.length && !act.repeat && (
+        {!names.length && !act.repeat && !phone && (
           <div className="ml-auto shrink-0">{button}</div>
         )}
       </div>
+      {/* On the phone the button sits under its text, under the thumb */}
+      {!names.length && !act.repeat && phone && (
+        <div className="flex">{button}</div>
+      )}
       {account && (
         <BaseAccountView
           account={account}
@@ -382,7 +393,12 @@ const BaseActCard = ({
         </div>
       )}
       {names.length > 0 && (
-        <div className="flex items-center gap-2">
+        <div
+          className={cn(
+            "flex gap-2",
+            phone && !layout.tablet ? "flex-col items-stretch" : "items-center"
+          )}
+        >
           {names.map((name) => (
             <Input
               key={name}

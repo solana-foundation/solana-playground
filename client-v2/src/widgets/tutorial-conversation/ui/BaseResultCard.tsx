@@ -13,6 +13,7 @@ import { Kbd } from "@/shared/ui/kbd";
 
 import BaseTxResultCard from "./BaseTxResultCard";
 import { ACTION, ACTION_FILL, ACTION_SOFT, PHONE_CTA } from "./card-action";
+import { phoneCtaWidth, usePhone } from "./phone";
 import { formatSeconds, Prose, READ } from "./Prose";
 
 export interface BaseResultCardProps {
@@ -115,6 +116,8 @@ const BaseResultCard = ({
 }: BaseResultCardProps) => {
   // A folded failed build opens again from its head, to read, never to act
   const [reopened, setReopened] = useState(false);
+  const layout = usePhone();
+  const { phone } = layout;
   if (isTxResult(result)) {
     return <BaseTxResultCard result={result} account={account} />;
   }
@@ -183,16 +186,23 @@ const BaseResultCard = ({
         <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
           <p className={READ}>{UNREACHABLE}</p>
           <Button
-            className={cn(ACTION, ACTION_FILL, PHONE_CTA, "w-fit")}
+            className={cn(
+              ACTION,
+              ACTION_FILL,
+              PHONE_CTA,
+              phoneCtaWidth(layout) ?? "w-fit"
+            )}
             onClick={onRetry}
           >
             Try again
-            <Kbd
-              aria-hidden="true"
-              className="bg-white/15 text-primary-foreground/80"
-            >
-              ⌘↵
-            </Kbd>
+            {!phone && (
+              <Kbd
+                aria-hidden="true"
+                className="bg-white/15 text-primary-foreground/80"
+              >
+                ⌘↵
+              </Kbd>
+            )}
           </Button>
         </div>
       )}
@@ -231,25 +241,39 @@ const BaseResultCard = ({
           )}
           {open && (
             // One width for both, in one row from `md` up: in a narrow column
-            // they give up padding, not the row. Below `md`, Explain alone at
-            // the full width and 48 px. No key hint
-            // (Design alignment, 5 Nov), though ⌘↵ still presses Explain
-            <div className="grid gap-2 md:w-fit md:auto-cols-fr md:grid-flow-col">
+            // they give up padding, not the row. On the phone layout, Explain
+            // alone: the full width and 48 px on a phone, its label's on a
+            // tablet. No key hint (Design alignment, 5 Nov), though ⌘↵ still
+            // presses Explain
+            <div
+              className={cn(
+                "grid gap-2",
+                !phone && "md:w-fit md:auto-cols-fr md:grid-flow-col",
+                layout.tablet && "w-fit"
+              )}
+            >
               <Button
-                className={cn(ACTION, ACTION_FILL, PHONE_CTA)}
+                className={cn(
+                  ACTION,
+                  ACTION_FILL,
+                  PHONE_CTA,
+                  phoneCtaWidth(layout)
+                )}
                 onClick={onExplain}
               >
                 Explain the error
               </Button>
               {/* A phone can't type the fix, so it isn't offered there:
                   Explain leads to the lines instead (the prototype's) */}
-              <Button
-                variant="ghost"
-                className={cn(ACTION, ACTION_SOFT, "max-md:hidden")}
-                onClick={onFixMyself}
-              >
-                I&apos;ll fix it myself
-              </Button>
+              {!phone && (
+                <Button
+                  variant="ghost"
+                  className={cn(ACTION, ACTION_SOFT)}
+                  onClick={onFixMyself}
+                >
+                  I&apos;ll fix it myself
+                </Button>
+              )}
             </div>
           )}
         </div>

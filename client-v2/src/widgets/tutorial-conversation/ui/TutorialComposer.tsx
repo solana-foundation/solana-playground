@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 
 import { PgConversation } from "@/features/tutorial-conversation";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
 import { hasAnswered } from "../model/merge";
@@ -48,6 +49,8 @@ const HELD =
 export const TutorialComposer = ({ turn }: TutorialComposerProps) => {
   const state = useConversationState();
   const [held, setHeld] = useState(false);
+  // Below the frame's width, the phone layout's composer
+  const phone = useViewport() !== "wide";
   // The answer ended: the question can go now, so the note has done its job
   useEffect(() => {
     if (!turn.busy) setHeld(false);
@@ -100,7 +103,14 @@ export const TutorialComposer = ({ turn }: TutorialComposerProps) => {
       onChip={(i) => PgConversation.chip(i)}
       waiting={waiting}
       note={held ? HELD : null}
-      onStart={answered ? () => PgConversation.start() : undefined}
+      // On the phone Start takes the composer's place for the whole intro, not
+      // only once the assistant has answered
+      onStart={
+        answered || (phone && waiting)
+          ? () => PgConversation.start()
+          : undefined
+      }
+      phone={phone}
     />
   );
 };

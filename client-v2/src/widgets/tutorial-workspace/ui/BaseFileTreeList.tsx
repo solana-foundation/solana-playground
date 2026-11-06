@@ -11,6 +11,9 @@ import { moveFocus } from "../model/tree";
 const ROW =
   "flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-left text-[0.8125rem] whitespace-nowrap outline-none transition-colors duration-100 hover:bg-surface-hover hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand-purple motion-reduce:transition-none";
 
+/** A row on the phone: a fingertip tall, at the sheet's reading size */
+const TALL = "h-11 text-[0.9375rem]";
+
 /** A level's indent: a folder's caret (12) and the gap after it (8) */
 const STEP_PX = 20;
 
@@ -39,6 +42,10 @@ const groups = (rows: TreeRow[]) => {
 
 export interface BaseFileTreeListProps {
   rows: TreeRow[];
+  /** The tree's accessible name; "Files" unless it lists only a part */
+  label?: string;
+  /** The phone's rows: a fingertip tall (44 px) at 15 px */
+  tall?: boolean;
   onPick: (path: string) => void;
   /** A doc page picked, by its Markdown file */
   onPickDoc: (file: string) => void;
@@ -54,6 +61,8 @@ export interface BaseFileTreeListProps {
  */
 const BaseFileTreeList: FC<BaseFileTreeListProps> = ({
   rows,
+  label = "Files",
+  tall = false,
   onPick,
   onPickDoc,
 }) => {
@@ -87,6 +96,7 @@ const BaseFileTreeList: FC<BaseFileTreeListProps> = ({
         style={indentOf(row.depth)}
         className={cn(
           ROW,
+          tall && TALL,
           "relative disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
           row.open
             ? "bg-surface-hover text-foreground"
@@ -128,6 +138,7 @@ const BaseFileTreeList: FC<BaseFileTreeListProps> = ({
       style={indentOf(row.depth)}
       className={cn(
         ROW,
+        tall && TALL,
         row.open ? "bg-surface-hover text-foreground" : "text-muted-foreground"
       )}
     >
@@ -144,7 +155,7 @@ const BaseFileTreeList: FC<BaseFileTreeListProps> = ({
   return (
     <div
       role="tree"
-      aria-label="Files"
+      aria-label={label}
       onKeyDown={onKeyDown}
       className="flex flex-col gap-px"
     >
@@ -164,6 +175,7 @@ const BaseFileTreeList: FC<BaseFileTreeListProps> = ({
               style={indentOf(group.folder.depth)}
               className={cn(
                 ROW,
+                tall && "h-9 text-[0.9375rem]",
                 "cursor-default text-muted-foreground hover:bg-transparent hover:text-muted-foreground"
               )}
             >

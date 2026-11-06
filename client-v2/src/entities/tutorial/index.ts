@@ -17,6 +17,7 @@ export {
   docForLink,
   onCodeRequest,
   onDocRequest,
+  onDocShown,
   requestCode,
   requestDoc,
 } from "./model/docs";

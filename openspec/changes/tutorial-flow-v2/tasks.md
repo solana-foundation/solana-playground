@@ -152,13 +152,13 @@ for; tasks with "after nothing" start at once.
 
 ## 5. Phone
 
-- [ ] 5.1 The phone: the header with the steps sheet and Start over, the
+- [x] 5.1 The phone: the header with the steps sheet and Start over, the
       Chat | Code spaces with swipe and Code's dot, Code's file list (docs
-      included) and status strip, the Finish screen with "Back to the
-      tutorial", Show in switching to Code, the Call sheet, no typing
+      included) and status strip, the chat's finish card with the header's
+      "Done · n of n", Show in switching to Code, the Call sheet, no typing
       paths, touch sizes. Verify: component tests at 390 px;
       the same turns as desktop from one saved progress (HOO-2359;
-      fleet; L 2.5; after 3.3, 3.5, 4.4)
+      fleet; L 2.5; after 3.3, 3.5, 4.4; plan: [plans/5.1-phone.md](plans/5.1-phone.md))
 
 ## 6. Tutorials page and content
 

@@ -5,8 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ActBeat, Ask, TutorialDefinition } from "@/entities/tutorial";
 import type {
+  Action,
   ConversationState,
   ConversationView,
+  EngineState,
+  RunResult,
   Turn,
 } from "@/features/tutorial-conversation";
 import { requireFor } from "@/test-utils/require-for";
@@ -113,12 +116,20 @@ vi.mock("@/utils/tutorial", () => ({
   },
 }));
 
+import { onCodeRequest } from "@/entities/tutorial/model/docs";
 import { tutorialTelemetry } from "@/entities/tutorial/model/telemetry";
 import {
   PgConversation,
   tutorialRunner,
   watchDeploys,
 } from "@/features/tutorial-conversation";
+// Past the slice's entry, which is mocked: the engine's pure parts make the
+// phone's progress
+import {
+  INITIAL_ENGINE_STATE,
+  reduce,
+} from "@/features/tutorial-conversation/model/reducer";
+import { view as viewOf } from "@/features/tutorial-conversation/model/view";
 import {
   markUnavailableHere,
   reportButtonFailure,
@@ -130,10 +141,12 @@ import { PgTutorial } from "@/utils/tutorial";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
+import { onStepJumpRequest, requestStepJump } from "../model/jump";
 import {
   TutorialConversation,
   useConversationStartOver,
 } from "./TutorialConversation";
+import { useConversationSteps } from "./use-conversation-steps";
 
 const store = PgConversation as unknown as {
   state: ConversationState | null;
@@ -1101,6 +1114,292 @@ describe("TutorialConversation keys and the pill", () => {
     expect(track).toHaveBeenLastCalledWith("tutorial_step_back", {
       tutorial: "hello-anchor",
       step: 2,
+    });
+  });
+});
+
+describe("TutorialConversation on the phone", () => {
+  const at = (n: number) => n * 100_000;
+  const built: RunResult = {
+    act: "build",
+    ok: true,
+    seconds: 1,
+    instructions: ["hello"],
+  };
+  const deployed: RunResult = {
+    act: "deploy",
+    ok: true,
+    seconds: 4,
+    programId: "Hello1111111111111111111111111111111111111",
+    signature: "5ig",
+    upgraded: false,
+    lamports: 1_000_000,
+    instructions: ["hello"],
+  };
+  /** Hello Anchor from Start to step 3's open question, as the engine plays it */
+  const toStep3: Action[] = [
+    { type: "start", at: at(1) },
+    { type: "pick", beatId: "s1.q1", option: 1, at: at(2) },
+    {
+      type: "written",
+      beatId: "s1.q1",
+      wrote: { file: "src/lib.rs", lines: [5, 6] },
+      at: at(3),
+    },
+    { type: "act", beatId: "s1.build", at: at(4) },
+    { type: "ended", beatId: "s1.build", result: built, at: at(5) },
+    { type: "next", at: at(6) },
+    { type: "pick", beatId: "s2.q2", option: 0, at: at(7) },
+    { type: "act", beatId: "s2.deploy", at: at(8) },
+    { type: "ended", beatId: "s2.deploy", result: deployed, at: at(9) },
+    { type: "next", at: at(10) },
+  ];
+  const failedBuild: RunResult = {
+    act: "build",
+    ok: false,
+    seconds: 6,
+    reason: "compiler",
+    error: null,
+    log: "error[E0412]: cannot find type",
+  };
+  const toFailedBuild: Action[] = [
+    { type: "start", at: at(1) },
+    { type: "pick", beatId: "s1.q1", option: 1, at: at(2) },
+    { type: "act", beatId: "s1.build", at: at(3) },
+    { type: "ended", beatId: "s1.build", result: failedBuild, at: at(4) },
+  ];
+  const ctx = { definition, slug: "hello-anchor", judge: () => true };
+
+  /** The store holds the progress `actions` make, from one save */
+  const play = (actions: Action[]) => {
+    const engine = actions.reduce<EngineState>(
+      (state, action) => reduce(ctx, state, action).state,
+      INITIAL_ENGINE_STATE
+    );
+    store.state = { context: ctx, engine, loadFailed: false, loadedAt: 0 };
+    store.view.mockImplementation(() =>
+      viewOf(definition, engine, { now: at(1000), loadedAt: 0 })
+    );
+  };
+
+  let width = 1440;
+  const media = (query: string) => ({
+    get matches() {
+      const below = /width\s*<\s*(\d+)px/.exec(query)?.[1];
+      return below !== undefined && width < Number(below);
+    },
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  });
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", media);
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    width = 1440;
+  });
+
+  const drawAt = (px: number) => {
+    width = px;
+    return render(
+      <TooltipProvider>
+        <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+      </TooltipProvider>
+    );
+  };
+  const turnsOf = (box: HTMLElement) =>
+    Array.from(box.querySelectorAll<HTMLElement>("[data-turn]")).map(
+      (el) => el.dataset.turn
+    );
+  const optionsOf = () =>
+    screen
+      .getAllByRole("group")
+      .flatMap((group) =>
+        Array.from(group.querySelectorAll("button")).map((b) => b.textContent)
+      );
+
+  it("draws the same turns and the same question from one save at 390 and 1440 px", () => {
+    play(toStep3);
+    const desk = drawAt(1440);
+    const deskTurns = turnsOf(desk.container);
+    const deskOptions = optionsOf();
+    desk.unmount();
+
+    const phone = drawAt(390);
+    expect(turnsOf(phone.container)).toEqual(deskTurns);
+    expect(optionsOf()).toEqual(deskOptions);
+    expect(deskTurns.filter((t) => t === "divider")).toHaveLength(3);
+  });
+
+  it("takes a step picked in the phone's header to its divider and opens no file", () => {
+    play(toStep3);
+    const track = vi.spyOn(tutorialTelemetry, "track");
+    drawAt(390);
+    act(() => requestStepJump(0));
+    expect(track).toHaveBeenCalledWith(
+      "tutorial_step_jumped",
+      expect.objectContaining({ step: 1, via: "menu" })
+    );
+    expect(PgExplorer.openFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps Code read only on the phone after Start, and not on the desktop", () => {
+    play(toStep3);
+    const desk = drawAt(1440);
+    expect(PgEditor.setReadOnly).not.toHaveBeenCalled();
+    desk.unmount();
+    const phone = drawAt(390);
+    expect(PgEditor.setReadOnly).toHaveBeenLastCalledWith(true);
+    phone.unmount();
+    expect(PgEditor.setReadOnly).toHaveBeenLastCalledWith(false);
+  });
+
+  it("leaves the step bar to the phone's header", () => {
+    play(toStep3);
+    const desk = drawAt(1440);
+    expect(
+      screen.getAllByRole("button", { name: /^Step 3 of 4/ }).length
+    ).toBeGreaterThan(0);
+    desk.unmount();
+    drawAt(390);
+    expect(screen.queryAllByRole("button", { name: /^Step 3 of 4/ })).toEqual(
+      []
+    );
+  });
+
+  it("offers Hint and Skip on the phone's question, and no Type it myself", () => {
+    play(toStep3);
+    const desk = drawAt(1440);
+    expect(screen.getByRole("button", { name: "Type it myself" })).toBeTruthy();
+    desk.unmount();
+
+    drawAt(390);
+    expect(screen.getByRole("button", { name: "Hint" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Type it myself" })).toBeNull();
+  });
+
+  it("offers Explain the error alone on a failed build, at a phone's and a tablet's width", () => {
+    play(toFailedBuild);
+    const desk = drawAt(1440);
+    expect(
+      screen.getByRole("button", { name: "I'll fix it myself" })
+    ).toBeTruthy();
+    desk.unmount();
+
+    for (const px of [390, 900]) {
+      const phone = drawAt(px);
+      expect(
+        screen.getByRole("button", { name: "Explain the error" })
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "I'll fix it myself" })
+      ).toBeNull();
+      phone.unmount();
+    }
+  });
+
+  it("shows no key hints on the phone", () => {
+    play(toFailedBuild.slice(0, 2));
+    const desk = drawAt(1440);
+    expect(desk.container.querySelector("kbd")).toBeTruthy();
+    desk.unmount();
+    const phone = drawAt(390);
+    expect(phone.container.querySelector("kbd")).toBeNull();
+  });
+
+  it("brings Code in from a wrote card's Show", async () => {
+    play(toStep3);
+    drawAt(390);
+    const listen = vi.fn();
+    const stop = onCodeRequest(listen);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show lines 5 to 6 in src/lib.rs" })
+    );
+    stop();
+    expect(listen).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useConversationSteps", () => {
+  // The store keys a conversation by its workspace, named after the tutorial
+  const workspace = PgExplorer as unknown as { currentWorkspaceName: string };
+  beforeEach(() => {
+    workspace.currentWorkspaceName = definition.name;
+  });
+  afterEach(() => {
+    workspace.currentWorkspaceName = "hello";
+  });
+
+  it("hands the phone's header the steps with their objectives and where the learner is", () => {
+    const { result } = renderHook(() => useConversationSteps());
+    expect(result.current.steps.map((s) => s.objective)).toEqual(
+      definition.steps.map((s) => s.objective)
+    );
+    expect(result.current.steps[1].state).toBe("current");
+    expect(result.current).toMatchObject({
+      live: 1,
+      started: true,
+      finished: false,
+      wrote: 1,
+      minutes: definition.minutes,
+    });
+  });
+
+  it("reads done once every step passed", () => {
+    store.view.mockReturnValue(finished);
+    const { result } = renderHook(() => useConversationSteps());
+    expect(result.current.finished).toBe(true);
+    expect(result.current.live).toBe(3);
+  });
+
+  it("asks the feed to jump to a step", () => {
+    const listen = vi.fn();
+    const stop = onStepJumpRequest(listen);
+    const { result } = renderHook(() => useConversationSteps());
+    result.current.jump(0);
+    stop();
+    expect(listen).toHaveBeenCalledWith(0);
+  });
+
+  it("reads as not loaded while the store still holds another tutorial's conversation", () => {
+    workspace.currentWorkspaceName = "Counter";
+    const { result } = renderHook(() => useConversationSteps());
+    expect(result.current).toMatchObject({
+      steps: [],
+      wrote: 0,
+      loaded: false,
+    });
+  });
+
+  it("has no steps outside a conversation tutorial", () => {
+    store.state = {
+      context: null,
+      engine: loaded().engine,
+      loadFailed: false,
+      loadedAt: 0,
+    };
+    store.view.mockReturnValue(null);
+    const { result } = renderHook(() => useConversationSteps());
+    expect(result.current).toMatchObject({
+      steps: [],
+      live: null,
+      started: false,
+      finished: false,
+      wrote: 0,
     });
   });
 });

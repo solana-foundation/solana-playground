@@ -11,7 +11,9 @@ prototype's phone screens.
 
 ### Requirement: The phone shows the same conversation
 
-On a phone viewport a conversation tutorial SHALL render the same turns,
+Below the tutorial frame's width (a viewport under 1024 px: a phone, or a
+tablet, whose chat is 640 px wide and centred) a conversation tutorial SHALL
+render the same turns,
 cards, questions and order as on the desktop, from the same saved progress. A
 step started on one device SHALL continue on the other. Where the definition
 gives a phone variant of a text, the phone SHALL show that variant. The header
@@ -55,8 +57,9 @@ Other differences from the desktop:
 - every touch target is at least 44 px;
 - the learner only taps the card at the bottom of the chat;
 - the "Not enough devnet SOL" card's address row takes the full width;
-- the finish opens its own Finish screen, which keeps "Back to the
-  tutorial".
+- the finish is the chat's finish card, as on the desktop, with no screen
+  of its own (Almaz's phone prototype, 2 Nov); the header then reads
+  "Done · n of n" and Code's dot no longer shows.
 
 #### Scenario: The assistant wrote, seen from Chat
 
@@ -78,3 +81,20 @@ step passing as the desktop's panel.
 - **WHEN** after the deploy the learner opens Call from Code and calls `hello`
 - **THEN** the sheet shows the result and the chat's step 3 win follows
 - **AND** no question card on the phone offers "Type it myself"
+
+### Requirement: The phone's spaces are measured
+
+The tutorial frame slice SHALL emit `tutorial_frame_space_changed` whenever
+the phone moves between its spaces, with `space` (`chat` or `code`) and `via`:
+
+- `toggle`: the header's switch;
+- `swipe`: a sideways swipe;
+- `show`: "Show in <file>" on a wrote card;
+- `doc`: a doc page opened from a link;
+- `step`: a step picked in the steps sheet.
+
+#### Scenario: Show in a file
+
+- **WHEN** the learner presses "Show in lib.rs" from Chat
+- **THEN** `tutorial_frame_space_changed` reaches the memory provider with
+  `space: "code"` and `via: "show"`

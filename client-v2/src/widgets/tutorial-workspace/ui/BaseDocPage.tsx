@@ -12,6 +12,12 @@ export interface BaseDocPageProps {
   url: string;
   /** The page as the tutorial keeps it */
   markdown: string;
+  /**
+   * On the phone the strip reads "Read only" alone: the head's picker above
+   * already names the page, and at 390 px the title cut off the words that
+   * matter
+   */
+  phone?: boolean;
 }
 
 /** The site's name as a link reads it: `anchor-lang.com` */
@@ -33,15 +39,20 @@ const siteOf = (url: string) => {
  * refuse to be framed, so the page is never theirs (design D10 of
  * `tutorial-flow-v2`).
  */
-const BaseDocPage: FC<BaseDocPageProps> = ({ title, url, markdown }) => (
+const BaseDocPage: FC<BaseDocPageProps> = ({
+  title,
+  url,
+  markdown,
+  phone = false,
+}) => (
   <article
     aria-label={title}
     data-testid="tutorial-doc-page"
-    className="flex min-h-0 flex-1 flex-col bg-surface"
+    className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
   >
     <div className="flex h-9 shrink-0 items-center gap-3 border-b border-border px-4 text-caption">
       <span className="min-w-0 truncate text-muted-foreground">
-        {title} · read only
+        {phone ? "Read only" : `${title} · read only`}
       </span>
       <a
         href={url}

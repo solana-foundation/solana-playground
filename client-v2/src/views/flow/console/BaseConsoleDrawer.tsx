@@ -29,8 +29,8 @@ interface BaseConsoleDrawerProps {
    * alone) */
   stop: { run: RunKind; onStop: () => void } | null;
   status: ConsoleStatus;
-  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere */
-  shortcut: string;
+  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere; none on a touch layout */
+  shortcut?: string;
   /**
    * A tutorial's bar: the dot and its line only, no "Terminal" label, as
    * the prototype draws it
@@ -93,7 +93,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
         )}
       </ConsoleDrawerStatus>
       <ConsoleDrawerActions>
-        <Kbd aria-hidden>{shortcut}</Kbd>
+        {shortcut && <Kbd aria-hidden>{shortcut}</Kbd>}
         {/* Spec 13: while a build runs, Clear is off with Stop
             beside it; on a phone Stop takes Clear's place, a fingertip
             wide. Stop shows folded too: the strip is all a folded console

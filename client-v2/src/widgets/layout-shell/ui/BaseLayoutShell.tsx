@@ -32,6 +32,7 @@ import type {
 import { homeOf, isWorkInFrame, screenOf } from "../model/screen";
 import type { PhonePagerState } from "./BasePhonePager";
 import BasePhonePager from "./BasePhonePager";
+import BaseTutorialPhone from "./BaseTutorialPhone";
 
 const FILES = { default: 240, min: 192, folded: 0 } as const;
 /** The stage over the console, beside the files column inside `work` */
@@ -163,7 +164,8 @@ export interface TutorialNavState {
  * assistant are not drawn;
  * the stage and the console are the same outlets, so nothing remounts on the
  * way in or out. Only on the work screen of a wide window; narrower windows
- * keep today's layout.
+ * draw `phone` on the work screen when it is given, and under a page the
+ * pager or the compact frame.
  */
 export interface TutorialFrameSlot {
   /** The chat column, which holds its own width */
@@ -171,6 +173,26 @@ export interface TutorialFrameSlot {
   nav: TutorialNavState;
   /** Drawn over the frame, from its top left: the first fold's hint */
   overNav?: ReactNode;
+  /** The tutorial below the frame's width (`BaseTutorialPhone`) */
+  phone?: TutorialPhoneSlot;
+}
+
+/** Which of a tutorial's two spaces shows below the frame's width */
+export type TutorialSpace = "chat" | "code";
+
+/**
+ * A tutorial below the frame's width (`tutorial-flow-v2`, task 5.1): a head
+ * over two spaces side by side, Chat and Code. Code holds the stage and the
+ * console outlets, so a rotation across the frame's width moves them without
+ * remounting the editor or the terminal.
+ */
+export interface TutorialPhoneSlot {
+  head: ReactNode;
+  /** Chat's body, the same feed the frame's chat column draws */
+  chat: ReactNode;
+  space: TutorialSpace;
+  /** A swipe asked for the other space; the owner decides and sets `space` */
+  onSpace: (space: TutorialSpace, via: "swipe") => void;
 }
 
 export interface BaseLayoutShellProps {
@@ -447,12 +469,19 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
   const home = homeOf(screen);
   // The tutorial's layout holds under a page over the work too, which keeps
   // the work laid out as it was; its navigation holds on the work screen
-  // only. From `LAYOUT_BREAKPOINTS.compact` to wide no source draws it, so
-  // the frame keeps today's layout there, as the phone keeps its pager.
+  // only. It is wide-only: below wide the work screen takes `tutorial.phone`
+  // (`tutorialPhone`), and a page over it keeps the pager or compact frame.
   const tutorialLayout =
     props.tutorial !== undefined && workInFrame && props.viewport === "wide";
   const tutorialNav =
     tutorialLayout && screen.kind === "work" ? props.tutorial?.nav : undefined;
+  // Below the frame's width, a tutorial on the work screen draws its own
+  // layout in place of the pager or the compact frame. Under a page it does
+  // not: the page needs the pager's or the frame's bars to be left.
+  const tutorialPhone =
+    props.viewport !== "wide" && screen.kind === "work"
+      ? props.tutorial?.phone
+      : undefined;
   const overlay = tutorialNav?.fold === "overlay";
   useOverlayFocus(tutorialNav?.fold, tutorialNav?.onClose);
 
@@ -755,241 +784,259 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
           {assistant}
         </AssistantSheet>
       )}
-      {props.viewport === "phone" ? (
+      {tutorialPhone && (
         <SidebarProvider
           open={false}
           style={SIDEBAR_STYLE}
           className="relative min-h-0 flex-1"
         >
-          {/* The navigation and the files column are written against the stock
-          Sidebar's context (`useSidebar`), so the pager sits in a provider too,
-          though it never shows the Sidebar itself */}
-          <BasePhonePager
-            {...props.phone}
-            menu={props.nav({
-              isMobile: true,
-              toggle: () => props.phone.onGo("work"),
-              collapsed: false,
-            })}
-            files={
-              !workInFrame
-                ? null
-                : props.files({
-                    isMobile: true,
-                    toggle: () => props.phone.onFilesOpenChange(false),
-                  })
-            }
-            home={props.home && { content: props.home.content }}
-            cover={props.cover && { content: props.cover.content }}
-            assistant={assistant}
-            stageBar={props.stageTabs}
+          {/* In a provider for the same reason as the pager: what the stage
+          holds may read the stock Sidebar's context */}
+          <BaseTutorialPhone
+            phone={tutorialPhone}
             stageNode={stageNode}
             consoleNode={consoleNode}
-            sheetFont={props.sheetFont}
-            status={props.phoneStatus}
+            consoleOpen={props.consoleState.open}
+            tablet={props.viewport === "compact"}
           />
         </SidebarProvider>
-      ) : (
-        <SidebarProvider
-          open={tutorialNav ? tutorialNav.fold !== "rail" : props.navOpen}
-          onOpenChange={tutorialNav?.onOpenChange ?? props.onNavOpenChange}
-          style={SIDEBAR_STYLE}
-          data-nav-overlay={overlay || undefined}
-          // Over the chat, the column keeps only the rail's width in the row,
-          // so the chat stays where it was under the open navigation
-          className={cn(
-            "relative min-h-0 flex-1",
-            overlay &&
-              "[&_[data-slot=sidebar-gap]]:w-(--sidebar-width-icon)! [&_[data-slot=sidebar-container]]:z-30"
-          )}
-        >
-          {tutorialNav && props.tutorial?.overNav}
-          {/* The stock Sidebar's container is fixed at the window's full height.
+      )}
+      {!tutorialPhone &&
+        (props.viewport === "phone" ? (
+          <SidebarProvider
+            open={false}
+            style={SIDEBAR_STYLE}
+            className="relative min-h-0 flex-1"
+          >
+            {/* The navigation and the files column are written against the stock
+          Sidebar's context (`useSidebar`), so the pager sits in a provider too,
+          though it never shows the Sidebar itself */}
+            <BasePhonePager
+              {...props.phone}
+              menu={props.nav({
+                isMobile: true,
+                toggle: () => props.phone.onGo("work"),
+                collapsed: false,
+              })}
+              files={
+                !workInFrame
+                  ? null
+                  : props.files({
+                      isMobile: true,
+                      toggle: () => props.phone.onFilesOpenChange(false),
+                    })
+              }
+              home={props.home && { content: props.home.content }}
+              cover={props.cover && { content: props.cover.content }}
+              assistant={assistant}
+              stageBar={props.stageTabs}
+              stageNode={stageNode}
+              consoleNode={consoleNode}
+              sheetFont={props.sheetFont}
+              status={props.phoneStatus}
+            />
+          </SidebarProvider>
+        ) : (
+          <SidebarProvider
+            open={tutorialNav ? tutorialNav.fold !== "rail" : props.navOpen}
+            onOpenChange={tutorialNav?.onOpenChange ?? props.onNavOpenChange}
+            style={SIDEBAR_STYLE}
+            data-nav-overlay={overlay || undefined}
+            // Over the chat, the column keeps only the rail's width in the row,
+            // so the chat stays where it was under the open navigation
+            className={cn(
+              "relative min-h-0 flex-1",
+              overlay &&
+                "[&_[data-slot=sidebar-gap]]:w-(--sidebar-width-icon)! [&_[data-slot=sidebar-container]]:z-30"
+            )}
+          >
+            {tutorialNav && props.tutorial?.overNav}
+            {/* The stock Sidebar's container is fixed at the window's full height.
           Flow draws the sync banner above the provider, so the Sidebar sits
           inside the provider instead, where the banner pushes it down rather
           than being covered by it. The frame is flush (design.md, "Frame
           chrome (5.25)"): the container keeps its right line, the columns'
           divider. Its fill is the page's colour, so it covers the window's
           pattern as the prototype's navigation does. */}
-          <Sidebar
-            collapsible="icon"
-            className="absolute inset-y-0 left-0 h-auto border-border [&>[data-slot=sidebar-inner]]:bg-background"
-            // A pick in the overlay closes it. Bubble phase, so the pick's
-            // own click (the pin's) runs before the close unmounts it. Only
-            // a pick in the column itself: React bubbles a click in a menu or
-            // dialog the navigation opened, portaled elsewhere, through here
-            onClick={
-              overlay
-                ? (e) => {
-                    const target = e.target;
-                    if (!(target instanceof Element)) return;
-                    if (!e.currentTarget.contains(target)) return;
-                    const pick = target.closest(PICK);
-                    if (pick && !pick.matches(OPENS_IN_PLACE)) {
-                      tutorialNav?.onClose();
+            <Sidebar
+              collapsible="icon"
+              className="absolute inset-y-0 left-0 h-auto border-border [&>[data-slot=sidebar-inner]]:bg-background"
+              // A pick in the overlay closes it. Bubble phase, so the pick's
+              // own click (the pin's) runs before the close unmounts it. Only
+              // a pick in the column itself: React bubbles a click in a menu or
+              // dialog the navigation opened, portaled elsewhere, through here
+              onClick={
+                overlay
+                  ? (e) => {
+                      const target = e.target;
+                      if (!(target instanceof Element)) return;
+                      if (!e.currentTarget.contains(target)) return;
+                      const pick = target.closest(PICK);
+                      if (pick && !pick.matches(OPENS_IN_PLACE)) {
+                        tutorialNav?.onClose();
+                      }
                     }
-                  }
-                : undefined
-            }
-          >
-            <div className="contents" style={props.sheetFont}>
-              <NavSlot nav={props.nav} />
-            </div>
-          </Sidebar>
-          <SidebarInset className="relative min-h-0 min-w-0 bg-transparent">
-            {!workInFrame ? (
-              // The column bar over Home (or over a page in Home's place) as
-              // over the work: no stage tabs, since no stage shows
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                {inPlace.bar}
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-                  {inPlace.content}
-                </div>
+                  : undefined
+              }
+            >
+              <div className="contents" style={props.sheetFont}>
+                <NavSlot nav={props.nav} />
               </div>
-            ) : (
-              <>
-                {/* Under a page the work stays laid out and mounted, out of
+            </Sidebar>
+            <SidebarInset className="relative min-h-0 min-w-0 bg-transparent">
+              {!workInFrame ? (
+                // The column bar over Home (or over a page in Home's place) as
+                // over the work: no stage tabs, since no stage shows
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                  {inPlace.bar}
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+                    {inPlace.content}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Under a page the work stays laid out and mounted, out of
                 reach: `inert` keeps focus, clicks and the accessibility tree
                 off it */}
-                <div className="contents" inert={screen.kind === "page"}>
-                  {tutorialLayout ? (
-                    <div
-                      data-testid="tutorial-frame"
-                      className="flex min-h-0 min-w-0 flex-1"
-                    >
-                      {props.tutorial?.chat}
-                      {/* The stage alone: the frame has no files column, the
+                  <div className="contents" inert={screen.kind === "page"}>
+                    {tutorialLayout ? (
+                      <div
+                        data-testid="tutorial-frame"
+                        className="flex min-h-0 min-w-0 flex-1"
+                      >
+                        {props.tutorial?.chat}
+                        {/* The stage alone: the frame has no files column, the
                       workspace head holds the tree */}
-                      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                        {workGroup}
+                        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                          {workGroup}
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Between `LAYOUT_BREAKPOINTS.compact` and wide the tree is the
+                    ) : (
+                      <>
+                        {/* Between `LAYOUT_BREAKPOINTS.compact` and wide the tree is the
             same, so a rotate across it does not remount the stage, Monaco or
             the console's terminal; across `LAYOUT_BREAKPOINTS.phone` the
             frame swaps for the pager and they survive as outlets. Below
             `LAYOUT_BREAKPOINTS.compact` the group holds only the work
             area, so it neither takes nor saves the horizontal layout:
             crossing a breakpoint writes nothing. */}
-                      <ResizablePanelGroup
-                        orientation="horizontal"
-                        id="layout-horizontal"
-                        defaultLayout={wide ? props.horizontal : undefined}
-                        onLayoutChanged={
-                          wide
-                            ? (layout, meta) => {
-                                // A drag of the panel's edge takes over from Widen
-                                // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
-                                if (meta.isUserInteraction) setWideFrom(null);
-                                settle(
-                                  {
-                                    panel: assistantRef.current,
-                                    state: props.assistantState,
-                                    openSize: assistantOpenSize.current,
-                                    settledOnce: assistantSettled,
-                                    save: props.onHorizontalLayout,
-                                  },
-                                  layout,
-                                  meta
-                                );
-                              }
-                            : undefined
-                        }
-                      >
-                        {wide && (
-                          <ResizablePanel
-                            id="assistant"
-                            panelRef={assistantRef}
-                            collapsible
-                            collapsedSize={PANEL_SIZES.assistant.folded}
-                            defaultSize={
-                              props.assistantState.open
-                                ? PANEL_SIZES.assistant.default
-                                : PANEL_SIZES.assistant.folded
-                            }
-                            minSize={PANEL_SIZES.assistant.min}
-                            maxSize={PANEL_SIZES.assistant.max}
-                            groupResizeBehavior="preserve-pixel-size"
-                            className="flex min-w-0 flex-col"
-                            onResize={(size) => {
-                              if (
-                                foldedOf(assistantRef.current) === false &&
-                                size.inPixels > PANEL_SIZES.assistant.folded
-                              ) {
-                                assistantOpenSize.current = size.inPixels;
-                              }
-                            }}
-                          >
-                            {assistant}
-                          </ResizablePanel>
-                        )}
-                        {/* Hidden, the assistant takes no width and its handle would double
-              the navigation's line; it stays a drag target, only unseen */}
-                        {wide && (
-                          <ResizableHandle
-                            className={
-                              props.assistantState.open
-                                ? undefined
-                                : "bg-transparent"
-                            }
-                          />
-                        )}
-                        <ResizablePanel
-                          id="work"
-                          minSize={PANEL_SIZES.work.min}
-                          // Over the stage the bar and the stage tabs read as one
-                          // head, so the bar drops its line here; over Home and
-                          // a page it keeps it
-                          className="flex min-w-0 flex-col [&>[data-slot=stage-bar]]:border-b-transparent"
+                        <ResizablePanelGroup
+                          orientation="horizontal"
+                          id="layout-horizontal"
+                          defaultLayout={wide ? props.horizontal : undefined}
+                          onLayoutChanged={
+                            wide
+                              ? (layout, meta) => {
+                                  // A drag of the panel's edge takes over from Widen
+                                  // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+                                  if (meta.isUserInteraction) setWideFrom(null);
+                                  settle(
+                                    {
+                                      panel: assistantRef.current,
+                                      state: props.assistantState,
+                                      openSize: assistantOpenSize.current,
+                                      settledOnce: assistantSettled,
+                                      save: props.onHorizontalLayout,
+                                    },
+                                    layout,
+                                    meta
+                                  );
+                                }
+                              : undefined
+                          }
                         >
-                          {/* Over the files column and the stage both, as the prototype
+                          {wide && (
+                            <ResizablePanel
+                              id="assistant"
+                              panelRef={assistantRef}
+                              collapsible
+                              collapsedSize={PANEL_SIZES.assistant.folded}
+                              defaultSize={
+                                props.assistantState.open
+                                  ? PANEL_SIZES.assistant.default
+                                  : PANEL_SIZES.assistant.folded
+                              }
+                              minSize={PANEL_SIZES.assistant.min}
+                              maxSize={PANEL_SIZES.assistant.max}
+                              groupResizeBehavior="preserve-pixel-size"
+                              className="flex min-w-0 flex-col"
+                              onResize={(size) => {
+                                if (
+                                  foldedOf(assistantRef.current) === false &&
+                                  size.inPixels > PANEL_SIZES.assistant.folded
+                                ) {
+                                  assistantOpenSize.current = size.inPixels;
+                                }
+                              }}
+                            >
+                              {assistant}
+                            </ResizablePanel>
+                          )}
+                          {/* Hidden, the assistant takes no width and its handle would double
+              the navigation's line; it stays a drag target, only unseen */}
+                          {wide && (
+                            <ResizableHandle
+                              className={
+                                props.assistantState.open
+                                  ? undefined
+                                  : "bg-transparent"
+                              }
+                            />
+                          )}
+                          <ResizablePanel
+                            id="work"
+                            minSize={PANEL_SIZES.work.min}
+                            // Over the stage the bar and the stage tabs read as one
+                            // head, so the bar drops its line here; over Home and
+                            // a page it keeps it
+                            className="flex min-w-0 flex-col [&>[data-slot=stage-bar]]:border-b-transparent"
+                          >
+                            {/* Over the files column and the stage both, as the prototype
                 draws them: the column bar, the stage tabs, then the editor head */}
-                          {props.stageBar}
-                          {props.stageTabs}
-                          {props.workHead}
-                          {/* Hidden, the group holds only the
+                            {props.stageBar}
+                            {props.stageTabs}
+                            {props.workHead}
+                            {/* Hidden, the group holds only the
                 stage and, like the horizontal group below `compact`, neither
                 takes nor saves its layout */}
-                          {workGroup}
-                        </ResizablePanel>
-                      </ResizablePanelGroup>
-                      {props.viewport !== "wide" && (
-                        <AssistantSheet
-                          state={props.assistantState}
-                          sheetFont={props.sheetFont}
-                        >
-                          {assistant}
-                        </AssistantSheet>
-                      )}
-                    </>
-                  )}
-                </div>
-                {overlay && (
-                  <div
-                    data-testid="tutorial-nav-scrim"
-                    aria-hidden
-                    className="absolute inset-0 z-20 bg-black/40"
-                    onClick={tutorialNav?.onClose}
-                  />
-                )}
-                {screen.kind === "page" && (
-                  <div
-                    data-testid="layout-cover"
-                    className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col bg-background"
-                  >
-                    {screen.cover.bar}
-                    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
-                      {screen.cover.content}
-                    </div>
+                            {workGroup}
+                          </ResizablePanel>
+                        </ResizablePanelGroup>
+                        {props.viewport !== "wide" && (
+                          <AssistantSheet
+                            state={props.assistantState}
+                            sheetFont={props.sheetFont}
+                          >
+                            {assistant}
+                          </AssistantSheet>
+                        )}
+                      </>
+                    )}
                   </div>
-                )}
-              </>
-            )}
-          </SidebarInset>
-        </SidebarProvider>
-      )}
+                  {overlay && (
+                    <div
+                      data-testid="tutorial-nav-scrim"
+                      aria-hidden
+                      className="absolute inset-0 z-20 bg-black/40"
+                      onClick={tutorialNav?.onClose}
+                    />
+                  )}
+                  {screen.kind === "page" && (
+                    <div
+                      data-testid="layout-cover"
+                      className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col bg-background"
+                    >
+                      {screen.cover.bar}
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+                        {screen.cover.content}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </SidebarInset>
+          </SidebarProvider>
+        ))}
     </>
   );
 };

@@ -45,6 +45,7 @@ import BaseAnswer from "./BaseAnswer";
 import BaseAskedBubble from "./BaseAskedBubble";
 import BaseFeed from "./BaseFeed";
 import { typing } from "./keys";
+import { PhoneLayoutContext, phoneLayoutOf } from "./phone";
 import type { TurnHandlers } from "./TurnView";
 import TurnView from "./TurnView";
 
@@ -216,17 +217,18 @@ const useOpenEnteredStep = (state: ConversationState) => {
 /**
  * The finished program beside the intro card is a preview, read only as the
  * spec's "A tutorial opens on its intro card" has it: the editor refuses
- * typing until Start, and again after Start over. Leaving the tutorial
- * unlocks it.
+ * typing until Start, and again after Start over. On the phone Code is read
+ * only throughout (tutorial-phone, "Chat and Code are two spaces"). Leaving
+ * the tutorial, or widening past the frame's width after Start, unlocks it.
  */
-const useLockedPreview = (state: ConversationState) => {
-  const onIntro =
-    !!state.context && state.engine.progress.cursor.kind === "intro";
+const useLockedPreview = (state: ConversationState, phone: boolean) => {
+  const locked =
+    !!state.context && (phone || state.engine.progress.cursor.kind === "intro");
   useEffect(() => {
-    if (!onIntro) return;
+    if (!locked) return;
     PgEditor.setReadOnly(true);
     return () => PgEditor.setReadOnly(false);
-  }, [onIntro]);
+  }, [locked]);
 };
 
 /** Marks that failed to compute, by message, so a re-render logs each once */
@@ -550,7 +552,6 @@ export const TutorialConversation = ({
   const state = useConversationState();
   const context = state.context;
   useOpenEnteredStep(state);
-  useLockedPreview(state);
   useEditorLink();
   const view = PgConversation.view();
 
@@ -579,6 +580,8 @@ export const TutorialConversation = ({
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // Read by the jump, which is made before the layout's own line below
+  const onPhone = useRef(false);
   const onJump = useCallback(
     (index: number, from: number, via: StepJumpVia) => {
       const definition = PgConversation.state.context?.definition;
@@ -590,7 +593,9 @@ export const TutorialConversation = ({
         from: from + 1,
         via,
       });
-      showStepFile(definition.steps[index].file);
+      // On the phone a picked step takes the chat back to its divider
+      // (tutorial-phone); opening its file would slide the screen to Code
+      if (!onPhone.current) showStepFile(definition.steps[index].file);
     },
     []
   );
@@ -607,11 +612,19 @@ export const TutorialConversation = ({
   // Read each render: the tutorial list is the app's, not this component's
   const nextTutorial = nextTutorialOf(next);
   const viewport = useViewport();
+  // Below the frame's width the feed runs in the phone layout: the header
+  // draws the steps, and typing code is left to the desktop
+  const layout = useMemo(() => phoneLayoutOf(viewport), [viewport]);
+  const phone = layout.phone;
+  onPhone.current = phone;
+  useLockedPreview(state, phone);
   const on = useMemo<TurnHandlers>(
     () => ({
       ...handlers,
-      // The panel lives in the desktop's workspace; the phone has no opener yet
-      openCall: viewport === "wide" ? handlers.openCall : undefined,
+      // The panel lives in the desktop's workspace; on the phone Code's head
+      // holds Call
+      openCall: phone ? undefined : handlers.openCall,
+      typeIt: phone ? undefined : handlers.typeIt,
       openNextTutorial: () => {
         const slug = PgConversation.state.context?.slug;
         if (!nextTutorial || !next || !slug) {
@@ -644,7 +657,7 @@ export const TutorialConversation = ({
         }
       },
     }),
-    [next, nextTutorial, onAllTutorials, onOpenMenu, viewport]
+    [next, nextTutorial, onAllTutorials, onOpenMenu, phone]
   );
 
   if (!context || !view) {
@@ -666,38 +679,45 @@ export const TutorialConversation = ({
     (t) => t.kind === "act" && t.state === "running"
   );
   return (
-    <BaseFeed
-      entries={mergeFeed(
-        view.turns,
-        PgAssistant.items,
-        progress.restartedAt,
-        state.loadedAt
-      )}
-      renderExchange={(entry) =>
-        entry.kind === "asked" ? (
-          <BaseAskedBubble text={entry.text} />
-        ) : (
-          <BaseAnswer text={entry.text} tone={entry.tone} onLink={handleLink} />
-        )
-      }
-      live={view.live}
-      steps={view.steps}
-      onJump={onJump}
-      onBack={onBack}
-      renderTurn={(turn, live) => (
-        <TurnView
-          turn={turn}
-          definition={context.definition}
-          live={live}
-          running={running}
-          passed={progress.passed}
-          read={read}
-          nextTutorial={nextTutorial}
-          programId={PgProgramInfo.pk?.toBase58() ?? null}
-          on={on}
-        />
-      )}
-    />
+    <PhoneLayoutContext.Provider value={layout}>
+      <BaseFeed
+        bar={!phone}
+        entries={mergeFeed(
+          view.turns,
+          PgAssistant.items,
+          progress.restartedAt,
+          state.loadedAt
+        )}
+        renderExchange={(entry) =>
+          entry.kind === "asked" ? (
+            <BaseAskedBubble text={entry.text} />
+          ) : (
+            <BaseAnswer
+              text={entry.text}
+              tone={entry.tone}
+              onLink={handleLink}
+            />
+          )
+        }
+        live={view.live}
+        steps={view.steps}
+        onJump={onJump}
+        onBack={onBack}
+        renderTurn={(turn, live) => (
+          <TurnView
+            turn={turn}
+            definition={context.definition}
+            live={live}
+            running={running}
+            passed={progress.passed}
+            read={read}
+            nextTutorial={nextTutorial}
+            programId={PgProgramInfo.pk?.toBase58() ?? null}
+            on={on}
+          />
+        )}
+      />
+    </PhoneLayoutContext.Provider>
   );
 };
 

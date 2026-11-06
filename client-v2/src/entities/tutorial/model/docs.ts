@@ -53,7 +53,22 @@ export const requestDoc = (file: string): boolean => {
   listeners.forEach((listen) => {
     if (listen(file)) isShown = true;
   });
+  if (isShown) shownListeners.forEach((listen) => listen(file));
   return isShown;
+};
+
+const shownListeners = new Set<(file: string) => void>();
+
+/**
+ * Listens for a doc page a `requestDoc` actually showed, never for one no
+ * workspace had (the phone moves to Code only then); returns what stops
+ * listening
+ */
+export const onDocShown = (listen: (file: string) => void) => {
+  shownListeners.add(listen);
+  return () => {
+    shownListeners.delete(listen);
+  };
 };
 
 /** Listens for `requestDoc`; returns what stops listening */

@@ -32,8 +32,8 @@ export interface TurnHandlers {
   pick: (beatId: string, option: number) => void;
   hint: (beatId: string) => void;
   skip: (beatId: string) => void;
-  /** "Type it myself": the caret to where the answer lands */
-  typeIt: (beatId: string) => void;
+  /** "Type it myself": the caret to where the answer lands; absent on the phone */
+  typeIt?: (beatId: string) => void;
   act: (beatId: string, args?: Record<string, string>) => void;
   explain: (beatId: string) => void;
   fixMyself: (beatId: string) => void;
@@ -265,6 +265,7 @@ const TurnView = ({
     }
     case "ask":
       if (turn.open && live) {
+        const { typeIt } = on;
         return (
           <BaseQuestionCard
             ask={turn.ask}
@@ -274,7 +275,7 @@ const TurnView = ({
             onPick={(option) => on.pick(turn.beatId, option)}
             onHint={() => on.hint(turn.beatId)}
             onSkip={() => on.skip(turn.beatId)}
-            onTypeIt={() => on.typeIt(turn.beatId)}
+            onTypeIt={typeIt ? () => typeIt(turn.beatId) : undefined}
           />
         );
       }
