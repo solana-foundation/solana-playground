@@ -16,7 +16,7 @@ export const MAX_GIST_BYTES = 4 * 1024 * 1024;
 export const MAX_REQUEST_BYTES = 4.5 * 1000 * 1000;
 
 /**
- * GitHub's API lists at most 300 files of a gist, the manifest among them;
+ * GitHub's API lists at most 300 files of a gist, the manifest and the title among them;
  * more would not open again
  */
 export const MAX_GIST_FILES = 300;

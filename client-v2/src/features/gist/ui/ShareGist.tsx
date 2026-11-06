@@ -35,14 +35,12 @@ export interface ShareGistOptions {
    */
   signedIn: boolean;
   /**
-   * Sign in with GitHub, asking for `scopes` on top of sign-in's own. Passed
-   * in because this feature may not import `auth`. Answers `"cancelled"`
-   * when the user ended it (here or on GitHub), and rejects, with a message
-   * fit to show, when it failed.
+   * Sign in with GitHub, asking for `scopes` on top of sign-in's own (`[]`
+   * asks for none). Passed in because this feature may not import `auth`.
+   * Answers `"cancelled"` when the user ended it (here or on GitHub), and
+   * rejects, with a message fit to show, when it failed.
    */
-  signIn: (options?: {
-    scopes?: string[];
-  }) => Promise<"signed-in" | "cancelled">;
+  signIn: (scopes: string[]) => Promise<"signed-in" | "cancelled">;
   /**
    * Stop the sign-in under way, so the `signIn` it started answers
    * `"cancelled"`. Passed in for the same reason as `signIn`.
@@ -145,7 +143,7 @@ export const useShareGist = (
       })
       .catch((e: unknown) => {
         // Only the folded list goes without it: the export reads the files
-        // again and fails there, where the user sees why
+        // again, and `readProject` reports that failure
         log.warn("could not read the project for the file list", {
           context: { error: String(e) },
         });
@@ -153,14 +151,32 @@ export const useShareGist = (
       });
   }, [name, readFiles]);
 
-  /** One export; `afterGrant` says the user has just allowed gists */
-  const share = async ({ afterGrant }: { afterGrant: boolean }) => {
+  /**
+   * The project's files for one export. Nothing has gone to GitHub if this
+   * fails, so the export's failure text would mislead: the frame's toast tells
+   * the user, and the team hears of it here.
+   */
+  const readProject = async () => {
+    try {
+      return await readFiles();
+    } catch (e) {
+      log.error(e, { report: true, context: { item: "share" } });
+      failed("read-failed");
+      throw e;
+    }
+  };
+
+  /**
+   * One export; `onScopeMissing` answers a token without gist access, which
+   * differs by whether the user has just been asked to allow gists
+   */
+  const shareWith = (onScopeMissing: () => void) => async () => {
     if (mounted.current) setBusy(true);
     let result: ExportResult;
     try {
       result = await exportProjectWith(visibility)(source)({
         name,
-        files: await readFiles(),
+        files: await readProject(),
       });
     } finally {
       if (mounted.current) setBusy(false);
@@ -186,13 +202,7 @@ export const useShareGist = (
         });
         return;
       case "needs-gist-scope":
-        if (afterGrant) {
-          failed("needs-gist-scope");
-          show({ step: "failed", reason: "scope-not-granted" });
-          return;
-        }
-        gistTelemetry.track("gist_export_scope_requested", {});
-        show({ step: "grant" });
+        onScopeMissing();
         return;
       case "failed":
         failed(result.reason);
@@ -200,37 +210,55 @@ export const useShareGist = (
         return;
     }
   };
+  const share = shareWith(() => {
+    gistTelemetry.track("gist_export_scope_requested", {});
+    show({ step: "grant" });
+  });
+  // The user has just allowed gists, so a token still without them is final
+  const shareAfterGrant = shareWith(() => {
+    failed("needs-gist-scope");
+    show({ step: "failed", reason: "scope-not-granted" });
+  });
 
-  const signInThen = async (
-    retry: (ended: SignInEnding) => ShareStep,
-    scopes: string[] | undefined
-  ) => {
-    show({ step: "waiting", for: scopes ? "grant" : "sign-in" });
-    let ended: SignInEnding | undefined;
-    isSigningIn.current = true;
-    try {
-      if ((await signIn(scopes ? { scopes } : undefined)) === "cancelled") {
-        // The user's own doing, said quietly
-        ended = { kind: "cancelled", message: SIGN_IN_CANCELLED };
+  /**
+   * Sign in at `step`, asking for `scopes`, then run `thenShare`. An ending
+   * the user caused, or a failure, puts the dialog back at `step` with it.
+   */
+  const signInAtStepFor =
+    (step: "sign-in" | "grant") =>
+    (scopes: string[]) =>
+    (thenShare: () => Promise<void>) =>
+    async () => {
+      show({ step: "waiting", for: step });
+      let ended: SignInEnding | undefined;
+      isSigningIn.current = true;
+      try {
+        if ((await signIn(scopes)) === "cancelled") {
+          // The user's own doing, said quietly
+          ended = { kind: "cancelled", message: SIGN_IN_CANCELLED };
+        }
+      } catch (e) {
+        ended = { kind: "failed", message: signInFailureMessage(e) };
+      } finally {
+        isSigningIn.current = false;
       }
-    } catch (e) {
-      ended = { kind: "failed", message: signInFailureMessage(e) };
-    } finally {
-      isSigningIn.current = false;
-    }
-    // A sign-in that settles after the dialog closed shares nothing: the
-    // user left before it answered
-    if (!mounted.current) return;
-    if (ended) {
-      // `signIn` counted its own ending (`auth_sign_in_failed`); this one is
-      // the share's, a cancel included
-      failed("sign-in-failed");
-      show(retry(ended));
-      return;
-    }
-    show({ step: "ready" });
-    await share({ afterGrant: !!scopes });
-  };
+      // A sign-in that settles after the dialog closed shares nothing: the
+      // user left before it answered
+      if (!mounted.current) return;
+      if (ended) {
+        // `signIn` counted its own ending (`auth_sign_in_failed`); this one is
+        // the share's, a cancel included
+        failed("sign-in-failed");
+        show({ step, ended });
+        return;
+      }
+      show({ step: "ready" });
+      await thenShare();
+    };
+  const signInThenShare = signInAtStepFor("sign-in")([])(share);
+  const grantThenShare = signInAtStepFor("grant")([GIST_SCOPE])(
+    shareAfterGrant
+  );
 
   const copy = async () => {
     if (state.step !== "created") return false;
@@ -269,11 +297,9 @@ export const useShareGist = (
       copyFailed,
     },
     run: {
-      create: () => share({ afterGrant: false }),
-      "sign-in": () =>
-        signInThen((ended) => ({ step: "sign-in", ended }), undefined),
-      grant: () =>
-        signInThen((ended) => ({ step: "grant", ended }), [GIST_SCOPE]),
+      create: share,
+      "sign-in": signInThenShare,
+      grant: grantThenShare,
       "cancel-sign-in": cancelSignIn,
       copy,
     },

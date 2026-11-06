@@ -459,7 +459,7 @@ describe("the session effect", () => {
     it("keeps the open project when the sign-in started on the Deploy stage", async () => {
       const effect = await signedOutAfterLoad();
 
-      await PgSession.signInWith({ from: "deploy" });
+      await PgSession.signInFor("deploy")([]);
       await settle();
 
       // The funding card deploys this project once the sign-in settles
@@ -470,10 +470,33 @@ describe("the session effect", () => {
     it("keeps the open project when the sign-in started in the assistant panel", async () => {
       const effect = await signedOutAfterLoad();
 
-      await PgSession.signInWith({ from: "assistant" });
+      await PgSession.signInFor("assistant")([]);
       await settle();
 
       // The composer still holds a prompt written for this project
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
+    it("keeps the open project when the sign-in started in the share prompt", async () => {
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signInFor("share")([]);
+      await settle();
+
+      // The share dialog posts the open project's files; the editor stays on it
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
+    it("keeps the open project when the share prompt claims a sign-in from the header", async () => {
+      const effect = await signedOutAfterLoad();
+
+      const signingIn = PgSession.signIn();
+      PgSession.claimPendingSignIn("share");
+      await signingIn;
+      await settle();
+
       expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
       effect.dispose();
     });
@@ -494,7 +517,7 @@ describe("the session effect", () => {
       );
       const effect = await signedOutAfterLoad();
 
-      await PgSession.signInWith({ from: "assistant" });
+      await PgSession.signInFor("assistant")([]);
       await settle();
 
       // Nothing to keep, so a panel sign-in must not skip the switch outright

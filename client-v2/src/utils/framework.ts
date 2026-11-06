@@ -321,33 +321,24 @@ export class PgFramework {
    * @throws see {@link PgFramework.convertToPlaygroundLayoutWith}
    */
   static convertToPlaygroundLayout(files: TupleFiles) {
-    return PgFramework.convertToPlaygroundLayoutWith({
-      root: "",
-      source: undefined,
-    })(files);
+    return PgFramework.convertToPlaygroundLayoutWith("")(undefined)(files);
   }
 
   /**
    * {@link PgFramework.convertToPlaygroundLayout} for an import that has a
    * folder and a name.
    *
-   * @param config
-   * - `root`: the imported folder, which a project with no program drops from
-   * its paths; frameworks find their own layout wherever it sits
-   * - `source`: where the files came from, named in the refusal
-   * @returns a function taking the framework files
+   * @param root the imported folder, which a project with no program drops
+   * from its paths; frameworks find their own layout wherever it sits
+   * @returns a function taking `source`, where the files came from (named in
+   * the refusal, `undefined` when there is nothing to name), which returns a
+   * function taking the framework files
    * @throws `NOT_A_PROGRAM` when no framework recognises program source;
    * `noProgramCode` when there is no program and no script; "Could not
    * convert files" when a framework's conversion returns nothing
    */
-  static convertToPlaygroundLayoutWith({
-    root,
-    source,
-  }: {
-    root: string;
-    source: string | undefined;
-  }) {
-    return async (files: TupleFiles) => {
+  static convertToPlaygroundLayoutWith(root: string) {
+    return (source: string | undefined) => async (files: TupleFiles) => {
       const framework = await PgFramework.getFromFiles(files);
       if (!framework) {
         if (files.some(([path]) => PROGRAM_SOURCE_REGEX.test(path))) {
@@ -654,10 +645,9 @@ if (import.meta.vitest) {
           ["token/client/tests/a.ts", "b"],
         ];
         const paths = (
-          await PgFramework.convertToPlaygroundLayoutWith({
-            root: "token/client",
-            source: undefined,
-          })(files)
+          await PgFramework.convertToPlaygroundLayoutWith("token/client")(
+            undefined
+          )(files)
         )
           .map(([path]) => path)
           .sort();
@@ -706,10 +696,9 @@ if (import.meta.vitest) {
           "No program code found."
         );
         await expect(
-          PgFramework.convertToPlaygroundLayoutWith({
-            root: "",
-            source: "alice/docs",
-          })([["README.md", "x"]])
+          PgFramework.convertToPlaygroundLayoutWith("")("alice/docs")([
+            ["README.md", "x"],
+          ])
         ).rejects.toThrow("No program code found in alice/docs.");
       });
 
@@ -799,10 +788,9 @@ if (import.meta.vitest) {
         });
 
         it("reads JSON paths from the imported folder", async () => {
-          const files = await PgFramework.convertToPlaygroundLayoutWith({
-            root: "token/client",
-            source: undefined,
-          })([
+          const files = await PgFramework.convertToPlaygroundLayoutWith(
+            "token/client"
+          )(undefined)([
             ["token/client/index.ts", "a"],
             ["token/client/idl/x.json", "{}"],
             ["token/client/package.json", "{}"],

@@ -49,7 +49,7 @@ const Dialog = (options: ShareGistOptions) => {
         return run.create().catch((e: unknown) => frameFailures.push(e));
       case "sign-in":
       case "grant":
-        void run[action.run]();
+        void run[action.run]().catch((e: unknown) => frameFailures.push(e));
         return;
       default:
         return run[action.run]();
@@ -310,7 +310,7 @@ it("signs a signed-out user in, then shares without a second press", async () =>
 
   await press(/^Sign in with GitHub$/);
 
-  expect(signIn).toHaveBeenCalledWith(undefined);
+  expect(signIn).toHaveBeenCalledWith([]);
   expect(screen.getByLabelText("Playground link")).toHaveProperty(
     "value",
     LINK
@@ -412,7 +412,49 @@ it("stays ready when the project cannot be read, and leaves the failure to the f
   expect(
     screen.getByRole("button", { name: "Create secret gist" })
   ).toBeTruthy();
-  expect(sent.events).toEqual([]);
+  expect(sent.events).toEqual([
+    {
+      name: "gist_export_failed",
+      params: { reason: "read-failed", visibility: "secret" },
+    },
+  ]);
+});
+
+it("counts and hands on an unreadable project after a grant too", async () => {
+  answers([403, { reason: "needs-gist-scope" }]);
+  let reads = 0;
+  renderShareWith({
+    signedIn: true,
+    signIn: resolvingSignIn(),
+    cancelSignIn: noCancel(),
+    // The file list twice (StrictMode) and the first export read it; the export
+    // after the grant fails
+    readFiles: async () => {
+      reads += 1;
+      if (reads > 3) throw new Error("store unreadable");
+      return FILES;
+    },
+  });
+
+  await press(/^Create secret gist$/);
+  await press(/^Allow gists on GitHub$/);
+
+  expect(frameFailures).toEqual([new Error("store unreadable")]);
+  expect(names().at(-1)).toBe("gist_export_failed");
+});
+
+it("counts and hands on an unreadable project after a sign-in too", async () => {
+  renderShareWith({
+    signedIn: false,
+    signIn: resolvingSignIn(),
+    cancelSignIn: noCancel(),
+    readFiles: () => Promise.reject(new Error("store unreadable")),
+  });
+
+  await press(/^Sign in with GitHub$/);
+
+  expect(frameFailures).toEqual([new Error("store unreadable")]);
+  expect(names()).toEqual(["gist_export_failed"]);
 });
 
 it("lists what goes to the gist, folded, with the manifest named", async () => {
@@ -429,6 +471,7 @@ it("lists what goes to the gist, folded, with the manifest named", async () => {
   expect(screen.getByText("client/client.ts")).toBeTruthy();
   expect(screen.getByText("src/lib.rs")).toBeTruthy();
   expect(screen.getByText(".playground.json")).toBeTruthy();
+  expect(screen.getByText("!counter")).toBeTruthy();
 });
 
 it("says so when the browser blocks the sign-in popup", async () => {
@@ -466,7 +509,7 @@ it("asks for gist access once, then retries by itself with the same visibility",
 
   await press(/Allow gists on GitHub/);
 
-  expect(signIn).toHaveBeenCalledWith({ scopes: ["gist"] });
+  expect(signIn).toHaveBeenCalledWith(["gist"]);
   expect(postedPublic(fetch, 1)).toBe(true);
   expect(screen.getByLabelText("Playground link")).toHaveProperty(
     "value",

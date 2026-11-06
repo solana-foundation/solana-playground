@@ -1334,7 +1334,7 @@ SidebarProvider (no padding)
    └─ Panel work
       ├─ StageBar (44 px): [project name when the assistant is hidden] ...
       │                    Files · Assistant · Documentation
-      ├─ stage tabs (38 px): Write | Build | Deploy | Interact, full width
+      ├─ stage tabs (54 px, no line): Write | Build | Deploy | Interact, full width
       └─ Group horizontal (id layout-work)
          ├─ Panel files: LeftPanel, no ⌘E strip; hides to 0 px
          ├─ 1 px handle
@@ -1349,7 +1349,8 @@ SidebarProvider (no padding)
   and radius and sit on the page's background; the editor keeps its own.
   The sync banner keeps its gutter.
 - **Bars.** Every bar is 44 px with a 1 px bottom line, as the navigation's
-  head. Over the assistant it is 5.17's `AssistantHead` (the project's name,
+  head, except over the stage, where the bar and the stage tabs read as one
+  head and the bar drops its line (DES-216). Over the assistant it is 5.17's `AssistantHead` (the project's name,
   More, Widen or Narrow, and "Collapse assistant"), sized to the bar and not
   redrawn. Over the stage, `StageBar` holds the stage's toggles on the
   right: "Collapse project panel" / "Expand project panel" (⌘E; the files
@@ -1359,8 +1360,9 @@ SidebarProvider (no padding)
   hidden, so the head's "Collapse assistant" stays the one button by that
   name. While the assistant is out of view (hidden on a wide window, its
   Sheet closed below 1024 px), the project's name shows at the bar's left.
-- **Stage tabs.** The `Stepper` leaves the bar and becomes a 38 px row of
-  its own under it, spanning the files column and the stage, its four
+- **Stage tabs.** The `Stepper` leaves the bar and becomes a 54 px row of
+  its own under it (8 px above the segments, 12 px below them, no bottom
+  line: DES-216), spanning the files column and the stage, its four
   segments sharing the width equally. Ctrl+1..4, the statuses, the lesson
   target and `flow-stage-tab-*` are kept.
 - **Widths at 1440** are the prototype's: navigation 232, assistant 368,

@@ -325,7 +325,7 @@ export const importGist = async (url: string, from: GistImportSource) => {
   }
 
   // Read from the store: a gist link's temporary view holds no list
-  const names = await PgExplorer.getAllWorkspaceNames();
+  const names = await PgExplorer.readAllWorkspaceNames();
 
   // The owner is known before any request only when the URL names it; then a
   // gist imported before opens without spending one of GitHub's 60 requests

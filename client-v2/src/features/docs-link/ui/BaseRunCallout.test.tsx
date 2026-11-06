@@ -134,7 +134,10 @@ describe("BaseRunCallout", () => {
     expect(
       screen.getByRole("link", { name: "Get devnet SOL" }).getAttribute("href")
     ).toBe(FAUCET_URL);
-    expect(screen.getByRole("button", { name: "Copy address" })).toBeTruthy();
+    // Thumb sized on a phone, as the actions beside it are
+    expect(
+      screen.getByRole("button", { name: "Copy address" }).className
+    ).toContain("max-md:size-11");
 
     fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));

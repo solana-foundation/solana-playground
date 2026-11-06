@@ -164,7 +164,6 @@ const BusyRetry = ({ retry }: { retry: BusyRetryView }) => (
     <CalloutActions>
       <CalloutAction asChild>
         <AsyncButton
-          variant="ghost"
           size="sm"
           disabled={!retry.canTryNow}
           onClick={retry.onTryNow}

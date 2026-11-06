@@ -192,7 +192,10 @@ describe("Thread, signed out", () => {
   it("signing in from the offer stays in the project and is reported", async () => {
     session(SIGNED_OUT);
     syncs(true);
-    const signIn = vi.spyOn(PgSession, "signInWith").mockResolvedValue();
+    const signIn = vi
+      .fn<(scopes: string[]) => Promise<void>>()
+      .mockResolvedValue();
+    const signInFor = vi.spyOn(PgSession, "signInFor").mockReturnValue(signIn);
     act(() => {
       PgAssistant.addUserMessage("Hi");
     });
@@ -200,7 +203,8 @@ describe("Thread, signed out", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Sign in with GitHub" })
     );
-    expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+    expect(signInFor).toHaveBeenCalledWith("assistant");
+    expect(signIn).toHaveBeenCalledWith([]);
     expect(tracked()).toEqual([["assistant_sign_in_offered_clicked", {}]]);
   });
 
@@ -300,9 +304,12 @@ describe("Thread, signed out", () => {
     const cancelled = await PgSession.signIn().catch((e: unknown) => e);
     refused.mockRestore();
     const broken = new Error("popup threw");
-    vi.spyOn(PgSession, "signInWith")
-      .mockRejectedValueOnce(cancelled)
-      .mockRejectedValueOnce(broken);
+    vi.spyOn(PgSession, "signInFor").mockReturnValue(
+      vi
+        .fn<(scopes: string[]) => Promise<void>>()
+        .mockRejectedValueOnce(cancelled)
+        .mockRejectedValueOnce(broken)
+    );
     act(() => {
       PgAssistant.addUserMessage("Hi");
     });

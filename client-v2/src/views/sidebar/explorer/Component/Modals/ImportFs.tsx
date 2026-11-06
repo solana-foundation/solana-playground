@@ -47,10 +47,9 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
         importFiles.map(([path]) => /^\/?([^/]+)\//.exec(path)?.[1])
       );
       const [root] = folders.size === 1 ? [...folders] : [];
-      const pgFiles = await PgFramework.convertToPlaygroundLayoutWith({
-        root: root ?? "",
-        source: root,
-      })(importFiles);
+      const pgFiles = await PgFramework.convertToPlaygroundLayoutWith(
+        root ?? ""
+      )(root)(importFiles);
 
       // Closed while the files were read: open it again with them
       if (!mounted.current) {

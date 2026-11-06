@@ -10,6 +10,12 @@ export { MANIFEST_NAME, MAX_GIST_BYTES, MAX_GIST_FILES };
 
 const MANIFEST_VERSION = 1;
 
+/** What every exported gist holds besides the project: manifest and title */
+export const FRAME_FILES = 2;
+
+/** Code points kept: at four bytes each it stays under a file name's 255 */
+const MAX_TITLE_NAME = 60;
+
 /** A gist's files as GitHub's API names them, content resolved */
 export type GistFiles = Record<string, { content: string }>;
 
@@ -72,12 +78,39 @@ const withCounter = (name: string, n: number) => {
   return `${name.slice(0, dot)}-${n}${name.slice(dot)}`;
 };
 
+const utf8 = new TextEncoder();
+
+/** Whether `a` comes before `b` in byte order, the order GitHub lists files in */
+const isBefore = (a: string, b: string) => {
+  const x = utf8.encode(a);
+  const y = utf8.encode(b);
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] !== y[i]) return x[i] < y[i];
+  }
+  return x.length < y.length;
+};
+
 /**
- * Flatten a project into gist files plus the manifest that reverses it.
+ * The file a gist's page is headed by. GitHub has no title field: it heads a
+ * gist with its first file in byte order, which would be the manifest. `!`
+ * sorts ahead of `.`, and of almost every name a project holds. An import
+ * ignores this file, since only what the manifest lists is written.
+ */
+export const titleFileName = (projectName: string) =>
+  `!${Array.from(projectName.replaceAll("/", "__").trim())
+    .slice(0, MAX_TITLE_NAME)
+    .join("")}`;
+
+/**
+ * Flatten a project into gist files, the file that titles the gist and the
+ * manifest that reverses the flattening.
  *
  * Names are the path with `/` replaced by `__`, readable on the gist's page;
- * a name already taken (or the manifest's) gets a counter. Paths are taken in
- * sorted order so the same project always gets the same names.
+ * a name that would sort before the title, and so head the gist, gets a `_`
+ * in front, and a name already taken (or the manifest's or the title's) gets
+ * a counter.
+ * Paths are taken in sorted order so the same project always gets the same
+ * names.
  *
  * @param project files keyed by path relative to the project root
  */
@@ -91,7 +124,8 @@ export const toGistFiles = (project: {
   const gist = new Map<string, { content: string }>();
   const named = new Map<string, string>();
   const empty: string[] = [];
-  const taken = new Set([MANIFEST_NAME]);
+  const title = titleFileName(project.name);
+  const taken = new Set([MANIFEST_NAME, title]);
 
   const paths = Object.keys(project.files).filter(isExportablePath).sort();
   for (const path of paths) {
@@ -101,7 +135,8 @@ export const toGistFiles = (project: {
       continue;
     }
 
-    const flat = path.replaceAll("/", "__");
+    const plain = path.replaceAll("/", "__");
+    const flat = isBefore(plain, title) ? `_${plain}` : plain;
     let name = flat;
     for (let n = 2; taken.has(name); n++) name = withCounter(flat, n);
     taken.add(name);
@@ -118,6 +153,9 @@ export const toGistFiles = (project: {
   };
   // eslint-disable-next-line unicorn/no-null -- `JSON.stringify` takes `null` for "no replacer"
   gist.set(MANIFEST_NAME, { content: JSON.stringify(manifest, null, 2) });
+  gist.set(title, {
+    content: `${project.name}, shared from Solana Playground\n`,
+  });
   return Object.fromEntries(gist);
 };
 
@@ -259,7 +297,8 @@ export const fromGistFiles = fromGistFilesWith(
 
 /**
  * What a gist costs against {@link MAX_GIST_BYTES} and {@link MAX_GIST_FILES}:
- * UTF-8 bytes of every file, the manifest included; files without it.
+ * UTF-8 bytes of every file; files without the {@link FRAME_FILES}, so it
+ * takes what {@link toGistFiles} returned.
  */
 export const measureGist = (files: GistFiles) => {
   const encoder = new TextEncoder();
@@ -269,14 +308,14 @@ export const measureGist = (files: GistFiles) => {
   }
   return {
     bytes,
-    files: Object.keys(files).filter((name) => name !== MANIFEST_NAME).length,
+    files: Object.keys(files).length - FRAME_FILES,
   };
 };
 
 /**
  * What the share dialog lists: the project's paths that go to the gist, by
- * their names in the project, and the gist's size with the manifest, which
- * the dialog names on a line of its own
+ * their names in the project, and the gist's size with the title and the
+ * manifest, which the dialog names on a line of its own
  */
 export const shareFilesOf = (project: {
   name: string;
@@ -325,6 +364,56 @@ if (import.meta.vitest) {
       expect(back).toEqual({ name: "counter", files, layout: "manifest" });
     });
 
+    it("titles the gist after the project: its file sorts first", () => {
+      const gist = toGistFiles({
+        name: "counter",
+        files: { ".env.example": "a", "Anchor.toml": "b" },
+      });
+
+      expect(Object.keys(gist).sort()[0]).toBe("!counter");
+      expect(gist["!counter"].content).toContain("counter");
+    });
+
+    it("a title's name holds no slash and stays short", () => {
+      expect(titleFileName("a/b")).toBe("!a__b");
+      expect(titleFileName(" a ")).toBe("!a");
+      expect(titleFileName("a".repeat(60))).toBe(`!${"a".repeat(60)}`);
+      expect(Array.from(titleFileName("😀".repeat(100)))).toHaveLength(61);
+    });
+
+    it("a project file that would sort before the title is renamed", () => {
+      const files = { "!a.rs": "first", " b.rs": "spaced", "src/lib.rs": "x" };
+      const gist = toGistFiles({ name: "counter", files });
+
+      expect(Object.keys(gist).sort()[0]).toBe("!counter");
+      expect(manifestOf(gist).files).toEqual({
+        "_!a.rs": "!a.rs",
+        "_ b.rs": " b.rs",
+        "src__lib.rs": "src/lib.rs",
+      });
+      expect(fromGistFiles(gist).files).toEqual(files);
+    });
+
+    it("a project file named like the title gets a counter", () => {
+      const gist = toGistFiles({ name: "p", files: { "!p": "mine" } });
+
+      expect(gist["!p-2"].content).toBe("mine");
+      expect(manifestOf(gist).files).toEqual({ "!p-2": "!p" });
+    });
+
+    it("an import leaves the title out, and a gist without one opens", () => {
+      const files = { "src/lib.rs": "x" };
+      const gist = toGistFiles({ name: "p", files });
+      expect(fromGistFiles(gist).files).toEqual(files);
+
+      delete gist["!p"];
+      expect(fromGistFiles(gist)).toEqual({
+        name: "p",
+        files,
+        layout: "manifest",
+      });
+    });
+
     it("nested paths become __ names", () => {
       const gist = toGistFiles({
         name: "p",
@@ -332,6 +421,7 @@ if (import.meta.vitest) {
       });
 
       expect(Object.keys(gist).sort()).toEqual([
+        "!p",
         MANIFEST_NAME,
         "client__client.ts",
         "src__lib.rs",
@@ -380,7 +470,11 @@ if (import.meta.vitest) {
         files: { "tests/.keep": "", "src/lib.rs": "x" },
       });
 
-      expect(Object.keys(gist).sort()).toEqual([MANIFEST_NAME, "src__lib.rs"]);
+      expect(Object.keys(gist).sort()).toEqual([
+        "!p",
+        MANIFEST_NAME,
+        "src__lib.rs",
+      ]);
       expect(manifestOf(gist).empty).toEqual(["tests/.keep"]);
     });
 
@@ -577,7 +671,7 @@ if (import.meta.vitest) {
       ).toBe("no-supported-files");
     });
 
-    it("measures UTF-8 bytes and leaves the manifest out of the file count", () => {
+    it("measures UTF-8 bytes and counts only the project's files", () => {
       const gist = toGistFiles({
         name: "p",
         files: { "a.rs": "é", "b.rs": "x" },
@@ -587,7 +681,9 @@ if (import.meta.vitest) {
 
       expect(size.files).toBe(2);
       expect(size.bytes).toBe(
-        3 + new TextEncoder().encode(gist[MANIFEST_NAME].content).length
+        3 +
+          new TextEncoder().encode(gist[MANIFEST_NAME].content).length +
+          new TextEncoder().encode(gist["!p"].content).length
       );
     });
   });

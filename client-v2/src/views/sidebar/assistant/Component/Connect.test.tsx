@@ -57,6 +57,14 @@ const blockedPopup = async () => {
   return PgSession.signIn().catch((error: unknown) => error);
 };
 
+/** The assistant's sign-in, `PgSession.signInFor("assistant")`, fails with `error` */
+const signInRejects = (error: unknown) =>
+  vi
+    .spyOn(PgSession, "signInFor")
+    .mockReturnValue(
+      vi.fn<(scopes: string[]) => Promise<void>>().mockRejectedValue(error)
+    );
+
 const checked = () =>
   screen
     .getAllByRole("radio")
@@ -133,18 +141,23 @@ describe("Connect", () => {
     });
 
     it("signs in from the assistant when the action is pressed", async () => {
-      const signIn = vi.spyOn(PgSession, "signInWith").mockResolvedValue();
+      const signIn = vi.fn<(scopes: string[]) => Promise<void>>();
+      signIn.mockResolvedValue();
+      const signInFor = vi
+        .spyOn(PgSession, "signInFor")
+        .mockReturnValue(signIn);
       renderConnect({ defaultBackend: "present" });
 
       await act(async () => connect());
 
-      expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+      expect(signInFor).toHaveBeenCalledWith("assistant");
+      expect(signIn).toHaveBeenCalledWith([]);
       expect(PgAssistant.connection).toBeNull();
     });
 
     it("shows why a sign-in failed", async () => {
       const failure = await blockedPopup();
-      vi.spyOn(PgSession, "signInWith").mockRejectedValue(failure);
+      signInRejects(failure);
       renderConnect({ defaultBackend: "present" });
 
       await act(async () => connect());
@@ -157,9 +170,7 @@ describe("Connect", () => {
     it("reports a sign-in that failed for a reason it does not know", async () => {
       const logged = memoryProvider();
       initLogger({ providers: [logged] });
-      vi.spyOn(PgSession, "signInWith").mockRejectedValue(
-        new TypeError("Failed to fetch")
-      );
+      signInRejects(new TypeError("Failed to fetch"));
       renderConnect({ defaultBackend: "present" });
 
       await act(async () => connect());
@@ -185,9 +196,12 @@ describe("Connect", () => {
 
     it("clears the failure when the next sign-in starts", async () => {
       const failure = await blockedPopup();
-      vi.spyOn(PgSession, "signInWith")
-        .mockRejectedValueOnce(failure)
-        .mockReturnValueOnce(new Promise(() => {}));
+      vi.spyOn(PgSession, "signInFor").mockReturnValue(
+        vi
+          .fn<(scopes: string[]) => Promise<void>>()
+          .mockRejectedValueOnce(failure)
+          .mockReturnValueOnce(new Promise(() => {}))
+      );
       renderConnect({ defaultBackend: "present" });
       await act(async () => connect());
       await screen.findByRole("alert");

@@ -134,7 +134,7 @@ export class PgGithub {
     const githubWorkspaceName = `github-${owner}/${repo}/${path}`;
 
     // Read from the store: a repository link's temporary view holds no list
-    const names = await PgExplorer.getAllWorkspaceNames();
+    const names = await PgExplorer.readAllWorkspaceNames();
     if (names.includes(githubWorkspaceName)) {
       // Switch to the existing workspace
       await PgExplorer.switchWorkspace(githubWorkspaceName);
@@ -160,10 +160,9 @@ export class PgGithub {
       url,
       onProgress
     );
-    const convertedFiles = await PgFramework.convertToPlaygroundLayoutWith({
-      root: path,
-      source: sourceOf(`${owner}/${repo}`, path),
-    })(files);
+    const convertedFiles = await PgFramework.convertToPlaygroundLayoutWith(
+      path
+    )(sourceOf(`${owner}/${repo}`, path))(files);
     return convertedFiles;
   }
 

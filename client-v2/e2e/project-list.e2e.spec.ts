@@ -306,3 +306,34 @@ test("client-v2-layout: Pinning by key", async ({ seededPage: page }) => {
     .toContain("action: pin");
   expect(lineOf(lines, "nav_project_action")).toContain("via: key");
 });
+
+for (const [layout, viewport] of [
+  ["desk", { width: 1280, height: 800 }],
+  ["phone", { width: 390, height: 844 }],
+] as const) {
+  // HOO-2546: the "⋮" sits on the row's middle at both row heights. The pin
+  // is no longer measured: it moved into the name's line, on its baseline
+  // beside the sync marker (design sync 4.21)
+  test(`centres a project row's menu (${layout})`, async ({ page }) => {
+    await seedWorkspace(page, "alpha");
+    await startAnotherProject(page, "beta");
+
+    await page.setViewportSize(viewport);
+    if (layout === "phone") {
+      await page.getByRole("button", { name: "Menu", exact: true }).click();
+    }
+
+    const offMiddle = await projectRow(page, "alpha").evaluate((button) => {
+      const middle = (element: Element | null | undefined) => {
+        if (!element) throw new Error("the row lacks its menu");
+        const box = element.getBoundingClientRect();
+        return box.top + box.height / 2;
+      };
+      const menu = button.parentElement?.querySelector(
+        '[data-sidebar="menu-action"]'
+      );
+      return Math.abs(middle(menu) - middle(button));
+    });
+    expect(offMiddle).toBeLessThanOrEqual(1);
+  });
+}

@@ -47,6 +47,7 @@ const mocks = vi.hoisted(() => ({
   },
   walletListeners: new Set<(w: unknown) => void>(),
   signIn: vi.fn(),
+  signInFor: vi.fn(),
   automaticAirdrop: false,
 }));
 
@@ -78,7 +79,7 @@ vi.mock("../../../utils", () => ({
   PgWallet: mocks.wallet,
 }));
 vi.mock("@/features/auth", () => ({
-  PgSession: { signInWith: mocks.signIn },
+  PgSession: { signInFor: mocks.signInFor },
   isSignInFailure: () => false,
 }));
 vi.mock("../../../hooks", () => ({
@@ -141,6 +142,7 @@ const becomeCurrent = () => {
 
 beforeEach(() => {
   mocks.wallet.add.mockImplementation(becomeCurrent);
+  mocks.signInFor.mockReturnValue(mocks.signIn);
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
   localStorage.clear();
@@ -544,7 +546,8 @@ describe("Deploy stage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Sign in" }))
     );
 
-    expect(mocks.signIn).toHaveBeenCalledExactlyOnceWith({ from: "deploy" });
+    expect(mocks.signInFor).toHaveBeenCalledExactlyOnceWith("deploy");
+    expect(mocks.signIn).toHaveBeenCalledExactlyOnceWith([]);
     expect(mocks.execute).toHaveBeenCalledTimes(2);
   });
 

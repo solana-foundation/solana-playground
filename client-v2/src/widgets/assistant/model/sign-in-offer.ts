@@ -79,7 +79,7 @@ const signIn = () => {
   assistantTelemetry.track("assistant_sign_in_offered_clicked", {});
   // From the assistant, so the account's newest project does not open over the
   // one this conversation is about
-  PgSession.signInWith({ from: "assistant" }).catch((error: unknown) => {
+  PgSession.signInFor("assistant")([]).catch((error: unknown) => {
     // `PgSession.signInState` holds every failure and the account row shows
     // it; `auth` telemetry has its reason
     if (isSignInFailure(error)) {

@@ -149,7 +149,7 @@ test("project-without-program: An IDL and a fixture are kept", async ({
     "tests/fixtures/a.json": "{}",
     "tsconfig.json": "{}",
   });
-  await importRepository(page);
+  await importRepository(page, "");
 
   await expect(item(page, "client/idl/x.json")).toHaveCount(1, LONG);
   await expect(item(page, "client/src/index.ts")).toHaveCount(1);

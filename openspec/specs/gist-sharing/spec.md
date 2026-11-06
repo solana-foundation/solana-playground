@@ -37,7 +37,7 @@ listed on your GitHub profile.") and Public (`share-gist-visibility-public`,
 "Listed on your GitHub profile, anyone can find it."). Secret SHALL be
 selected each time the dialog opens. Under the choice the dialog SHALL say
 how many files go to the gist and their size, list them on request together
-with the manifest, and say that the program keypair and workspace settings
+with the title and the manifest, and say that the program keypair and workspace settings
 stay in the browser. To list the files the dialog reads the project in the
 browser; nothing SHALL reach GitHub until the user presses the footer's
 action. That action SHALL read "Create secret gist" or "Create public gist",
@@ -218,7 +218,7 @@ may write.
 
 A gist cannot hold `/` in a file name, so each exported file SHALL go in under
 its path with every `/` replaced by `__` (`src/lib.rs` becomes `src__lib.rs`).
-A name already taken, or equal to the manifest's, SHALL get `-2`, `-3`, ...
+A name already taken, or equal to the manifest's or the title's, SHALL get `-2`, `-3`, ...
 before its extension. Names SHALL be assigned in path order, so the same
 project always gives the same names.
 
@@ -373,7 +373,8 @@ The `gist` slice SHALL send these events under the prefix `gist`:
 - `gist_export_succeeded` with `files` and `visibility` when the gist is made
 - `gist_export_failed` with `visibility` and a `reason`, one of `too-large`,
   `signed-out`, `sign-in-failed`, `needs-gist-scope`, `github-unauthorized`,
-  `rate-limited`, `rejected`, `request-failed`
+  `rate-limited`, `rejected`, `request-failed`, `read-failed` (the project
+  could not be read, so no `gist_export_started` came before it)
 - `gist_link_copied` when a copy of the Playground link in the shared state
   succeeds, with `copied: "playground"`
 
@@ -537,3 +538,19 @@ copied.
 - **WHEN** the gist is made and the user presses Copy link
 - **THEN** the clipboard holds `<origin>/gist/<id>` and a "Link copied" toast
   shows
+
+### Requirement: Head the gist with the project's name
+
+Every exported gist SHALL hold a file named `!` followed by the project's name, with `/` replaced by `__`, trimmed and cut to 60 code points. It sorts ahead of the manifest, so GitHub heads the gist's page with it. A project file of the same name SHALL get a counter. The share dialog SHALL name this file beside the manifest. An import SHALL NOT write it, and a gist without it SHALL open as before.
+
+#### Scenario: The title sorts first (manual)
+
+- **WHEN** a project named `counter` holding `.env.example` and `Anchor.toml` is flattened
+- **THEN** the first of the gist's names in byte order is `!counter`
+- Pinned by client-v2/src/features/gist/lib/format.ts: "titles the gist after the project: its file sorts first"
+
+#### Scenario: An import leaves it out (manual)
+
+- **WHEN** a gist is read back, with the title file or without it
+- **THEN** the title file is not among the project's files, and the paths and name are the exported ones
+- Pinned by client-v2/src/features/gist/lib/format.ts: "an import leaves the title out, and a gist without one opens"

@@ -302,6 +302,15 @@ describe("BaseThread", () => {
       expect(retry.onStop).toHaveBeenCalled();
     });
 
+    // A ghost button's dark hover outranks the callout's tone: grey beside Stop
+    it("gives Try now the callout's hover and no other", () => {
+      renderThread([USER_ITEM], { retry: busy(true) });
+
+      expect(
+        screen.getByRole("button", { name: "Try now" }).className
+      ).not.toMatch(/hover:bg-muted|hover:text-foreground/);
+    });
+
     it("keeps Try now off while the server's wait runs", () => {
       renderThread([USER_ITEM], { retry: busy(false) });
 

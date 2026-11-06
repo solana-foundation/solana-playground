@@ -85,7 +85,8 @@ type Action = { label: string } & (
  * What the user is shown, and what each answer does. Titles and tones follow
  * the designers' failure-states spec (Spec 08, ACCT-06 to ACCT-09): a question
  * about two copies is a warning, a project that has stopped uploading is an
- * error. The first action is the one the banner expects
+ * error. The first action is the one the banner expects, after Resolve… where
+ * that shows
  */
 const PROMPTS: Record<
   Conflict["kind"],
@@ -261,7 +262,6 @@ const SyncBanner = () => {
             return (
               <CalloutAction key={action.label} asChild>
                 <AsyncButton
-                  variant="ghost"
                   size="sm"
                   disabled={busy}
                   onClick={run}
