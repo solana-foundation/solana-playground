@@ -501,6 +501,17 @@ describe("the session effect", () => {
       effect.dispose();
     });
 
+    it("keeps the tutorial open when the sign-in started on its build card", async () => {
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signInFor("tutorial")([]);
+      await settle();
+
+      // The lesson stays on its step, where the card now offers Build
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
     it("opens the newest project when the sign-in started from the header", async () => {
       const effect = await signedOutAfterLoad();
 

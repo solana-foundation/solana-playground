@@ -133,6 +133,20 @@ describe("features/tutorial-conversation/model/runners/build", () => {
     });
   });
 
+  it("returns signed_out, not compiler, when the server asks for sign-in", async () => {
+    h.execute.mockRejectedValue(
+      Object.assign(new Error("Sign in with GitHub to build."), {
+        reason: "signed-out",
+      })
+    );
+    expect(await run().result).toMatchObject({
+      ok: false,
+      reason: "signed_out",
+      error: null,
+      log: "Sign in with GitHub to build.",
+    });
+  });
+
   it("never reads an output from before the press or from another workspace", async () => {
     h.latest = {
       stderr: PLANNED,

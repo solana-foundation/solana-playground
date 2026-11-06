@@ -2,6 +2,7 @@
 import type { Act } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
 import { PgCommand, PgExplorer, PgProgramInfo } from "@/utils";
+import { isSignInRefusalError } from "@/utils/sign-in-refusal";
 import {
   PgBuildOutput,
   stripKnownNoise,
@@ -28,8 +29,8 @@ const log = createLogger("tutorial-conversation:build");
  * last-build state move exactly as they do for the editor (design D4), then
  * the raw log the command keeps for the assistant, read back and parsed.
  * The result is a fact, never a throw: a server that never answered is
- * `unreachable`; one that refused the request shows its text as the log,
- * with no line.
+ * `unreachable`; one that asked for a sign-in is `signed_out`; one that
+ * refused the request otherwise shows its text as the log, with no line.
  *
  * @param act the act being run; only `build` reaches this runner
  * @param input the step's `failsWith`, when the build may be its planned failure
@@ -52,6 +53,19 @@ export const runBuild = async (
     if (NO_ANSWER.test(message)) {
       log.warn("the build server did not answer", { context: { message } });
       return failedResult(act, message, seconds());
+    }
+    // Nothing is wrong with the code: the card asks for a sign-in, and the
+    // team has nothing to hear (HOO-2661)
+    if (isSignInRefusalError(e)) {
+      log.info("the build server asked for a sign-in");
+      return {
+        act: "build",
+        ok: false,
+        seconds: seconds(),
+        reason: "signed_out",
+        error: null,
+        log: message,
+      };
     }
     // A server refusal, or the client failing before the request: the card
     // shows the text as the log; the team hears of it

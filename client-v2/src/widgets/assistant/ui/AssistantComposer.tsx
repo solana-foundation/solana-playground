@@ -5,6 +5,7 @@ import {
   isSignInFailure,
   PgSession,
   SIGN_IN_FAILED_UNKNOWN,
+  useSignedIn,
 } from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
@@ -26,7 +27,6 @@ import {
 } from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";
 import { withEffort, withModel } from "../model/tune";
-import { useSignedIn } from "../model/use-signed-in";
 import type { Turn, TurnPhase } from "../model/use-turn";
 import { AI_OFF_SEND_BLOCKED, BaseAiOffRow } from "./BaseAiOffRow";
 import {

@@ -1,5 +1,10 @@
 export { tutorialTelemetry } from "./model/telemetry";
-export { freshProgress, isUnreachable, parseProgress } from "./model/progress";
+export {
+  freshProgress,
+  isSignedOut,
+  isUnreachable,
+  parseProgress,
+} from "./model/progress";
 export type {
   AccountReading,
   BuildError,

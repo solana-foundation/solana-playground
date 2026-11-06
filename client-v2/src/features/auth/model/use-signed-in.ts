@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useState } from "react";
 
-import { PgSession } from "@/features/auth";
+import { PgSession } from "./session";
 
 /**
  * Whether someone is signed in, or `undefined` until the page's session read has

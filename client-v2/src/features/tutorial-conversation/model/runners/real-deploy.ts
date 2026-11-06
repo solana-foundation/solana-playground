@@ -320,6 +320,10 @@ export const realDeployPort = (): DeployPort => {
 /** A failed build's line on the deploy's failed card */
 const buildFailureOf = (r: Extract<RunResult, { act: "build"; ok: false }>) => {
   if (r.reason === "unreachable") return "The build server didn't answer.";
+  // TODO(HOO-2661): untested; this module needs the app's globals to load,
+  // so an in-source block cannot reach it. The line is the one the
+  // tutorial-runs spec names for a build-and-deploy refused for sign-in
+  if (r.reason === "signed_out") return "Sign in with GitHub to build.";
   const e = r.error;
   if (!e) return "The build failed. See the terminal.";
   const where = e.line !== null ? ` (line ${e.line})` : "";
