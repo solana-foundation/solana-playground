@@ -209,6 +209,7 @@ const props = (
       onFilesOpenChange: vi.fn(),
       stageOn: "work",
       consoleOpen: false,
+      onConsoleClose: vi.fn(),
     },
   };
 };
