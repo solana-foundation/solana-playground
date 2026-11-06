@@ -138,6 +138,12 @@ describe("tutorials/AUTHORING.md", () => {
       d.steps[0].planned = "On purpose.";
       d.steps[0].onFail = [{ kind: "say", id: "f1.explain", text: "Why." }];
     },
+    "start is not the previous target": (d) => {
+      d.steps[1].start["src/lib.rs"] = d.steps[1].start["src/lib.rs"].replace(
+        "Echo: {}",
+        "Echoed: {}"
+      );
+    },
     "read-only file the step lacks": (d) => {
       d.steps[1].readOnly = ["src/lib.rs", "Anchor.toml"];
     },

@@ -20,7 +20,7 @@ for; tasks with "after nothing" start at once.
       [plans/1.2-authoring-instruction.md](plans/1.2-authoring-instruction.md))
 - [x] 1.3 The outside author kit: the recipe tried on two models (Claude Sonnet, Claude Haiku) that see only
       `AUTHORING.md` and the schema, what blocked them fixed there, and a
-      how-to for an author outside the team; the non-Claude run is Kat's.
+      how-to for an author outside the team; the non-Claude run is Cat McGee's.
       Verify: both drafts pass the check (HOO-2647; fleet; S 0.5; after 1.2; plan:
       [plans/1.3-outside-author-kit.md](plans/1.3-outside-author-kit.md))
 
