@@ -98,6 +98,13 @@ print its message and end the run.
 - **THEN** the read throws "The program's IDL can't be called: <reason>.",
   and `pg.program` is not among `pg`'s keys
 
+#### Scenario: A run's code never reaches the next run
+
+- **WHEN** a run's code keeps announcing itself as a fresh runtime and
+  answers any port it is handed, and the next run starts
+- **THEN** the next run's code runs in a new frame and nothing the earlier
+  run's code posts reaches the terminal
+
 #### Scenario: A failing test is reported
 
 - **WHEN** `test` runs a file with one passing and one failing test

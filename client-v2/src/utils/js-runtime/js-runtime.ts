@@ -188,8 +188,11 @@ export class PgJsRuntime {
   }
 
   /**
-   * Loads a fresh sandbox and opens its private channel. The frame is made
-   * once and reloaded for every run, so no run sees another's globals.
+   * Loads a fresh sandbox and opens its private channel. Every run gets a
+   * new frame and the last one is removed first, so no run sees another's
+   * globals, and the last run's code, gone with its frame, cannot answer the
+   * handshake meant for this one: a reused frame keeps its window, which the
+   * handshake's `source` check would accept from the old document too.
    *
    * @returns the page's side of the channel, a promise that resolves if the
    * frame loads another document during the run, and what stops watching
@@ -198,7 +201,8 @@ export class PgJsRuntime {
     // The previous run's frame is about to be replaced
     this._lastPort?.close();
     this._lastPort = undefined;
-    const frame = this._frame ?? this._createFrame();
+    this._frame?.remove();
+    const frame = this._createFrame();
     // Watched before the frame is pointed at the sandbox, so the sandbox's
     // own `load` is the first one counted
     const reloads = watchReloadsOf(frame);
@@ -208,7 +212,7 @@ export class PgJsRuntime {
     frame.src = SANDBOX_URL;
     // Attached only now, with its `src` set: a frame attached without one
     // loads `about:blank` first, which would count as a reload
-    if (!frame.isConnected) document.body.appendChild(frame);
+    document.body.appendChild(frame);
     try {
       const port = await connected;
       return { port, reloaded: reloads.reloaded, stopWatching: reloads.stop };
@@ -238,6 +242,6 @@ export class PgJsRuntime {
   /** The channel of the last run that ended, served until the next run */
   private static _lastPort: MessagePort | undefined;
 
-  /** The sandbox's frame, made on the first run */
+  /** The current run's frame, or the last run's until the next one */
   private static _frame: HTMLIFrameElement | undefined;
 }
