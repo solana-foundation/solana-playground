@@ -400,5 +400,5 @@ export const realDeployWatch = (): DeployWatchPort => ({
   isIdle: () => PgGlobal.deployState === "ready",
   workspace: () => PgExplorer.currentWorkspaceName ?? undefined,
   cluster: () => PgConnection.cluster ?? undefined,
-  idl: () => PgProgramInfo.idl ?? undefined,
+  idl: () => PgProgramInfo.callableIdl() ?? undefined,
 });
