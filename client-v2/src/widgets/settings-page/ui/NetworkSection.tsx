@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { DEFAULT_ENDPOINT } from "@/constants";
 import type { CustomRpc, SaveResult } from "@/entities/custom-rpc";
-import { PgCustomRpcs } from "@/entities/custom-rpc";
+import { checkRpcUrl, PgCustomRpcs } from "@/entities/custom-rpc";
 import { useRenderOnChange } from "@/hooks";
 import { Button } from "@/shared/ui/button";
 import { PgGlobal, PgSettings, PgView } from "@/utils";
@@ -26,12 +26,16 @@ const refusal = (result: Exclude<SaveResult, { ok: true }>): string => {
   }
 };
 
+/** Say that a running deploy holds the network where it is */
+const toastNetworkHeld = () =>
+  PgView.setToast(
+    () => <span>A deploy is running. Change the network when it ends.</span>,
+    { options: { name: "network-held-by-deploy" } }
+  );
+
 const pick = (url: string) => {
   if (!canSwitchNetwork(PgGlobal.deployState)) {
-    PgView.setToast(
-      () => <span>A deploy is running. Change the network when it ends.</span>,
-      { options: { name: "network-held-by-deploy" } }
-    );
+    toastNetworkHeld();
     return;
   }
   PgSettings.connection.endpoint = url;
@@ -130,6 +134,20 @@ const NetworkSection = () => {
   // An edited RPC keeps the connection on it when it was the one in use
   const handleEdit = (rpc: CustomRpc, input: CustomRpc) => {
     const wasPicked = PgSettings.connection.endpoint === rpc.url;
+    // A new URL for the RPC in use would move the network, so a running
+    // deploy refuses it before the list changes; a rename still saves
+    const check = checkRpcUrl(input.url);
+    if (
+      wasPicked &&
+      check.ok &&
+      check.url !== rpc.url &&
+      !canSwitchNetwork(PgGlobal.deployState)
+    ) {
+      return {
+        ok: false as const,
+        error: "A deploy is running. Change the URL when it ends.",
+      };
+    }
     const result = PgCustomRpcs.replace(rpc.url, input);
     if (result.ok && wasPicked) pick(result.rpc.url);
     return answerFor("edit")(result);
@@ -137,6 +155,13 @@ const NetworkSection = () => {
 
   const handleRemove = (rpc: CustomRpc) => {
     const wasPicked = PgSettings.connection.endpoint === rpc.url;
+    // Removing the RPC in use moves the network to Devnet, so a running
+    // deploy keeps it listed rather than leaving the connection on an RPC
+    // the list no longer has
+    if (wasPicked && !canSwitchNetwork(PgGlobal.deployState)) {
+      toastNetworkHeld();
+      return;
+    }
     const removed = PgCustomRpcs.remove(rpc.url);
     if (!removed) {
       // Gone already (another tab), or the browser refused; the store
