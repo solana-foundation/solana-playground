@@ -106,6 +106,23 @@ test.describe("project-code-sandbox", () => {
     await expect(terminalRows(page)).toContainText(/late balance: \d+/, LONG);
   });
 
+  test("project-code-sandbox: An error after the run ended says so", async ({
+    context,
+    page,
+  }) => {
+    const { writeClient } = await seedPlaynetProject(context, page);
+    await writeClient(
+      'setTimeout(() => { throw new Error("late"); }, 500);\nconsole.log("ran");'
+    );
+
+    await runInTerminal(page, "run");
+
+    await expect(terminalRows(page)).toContainText(
+      "Uncaught error after the run ended: late",
+      LONG
+    );
+  });
+
   test("project-code-sandbox: A failing test is reported", async ({
     context,
     page,

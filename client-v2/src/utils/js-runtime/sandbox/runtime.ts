@@ -225,6 +225,9 @@ const printUncaughtWith =
   (error: unknown) =>
     console.log("Uncaught error:", fail(error));
 
+/** What an error printed after the run ended starts with */
+const AFTER_END = "Uncaught error after the run ended:";
+
 /**
  * Overrides `@solana/kit-plugin-signer`'s `signerFromFile`: the Playground
  * wallet, signing through the page, is a docs script's `wallet.json`
@@ -277,12 +280,19 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
   const console = consoleFor(channel);
   // The run's first uncaught error, which makes it fail (`RunResult`)
   let failure: string | undefined;
+  // Set once `end` is posted: a callback the code did not await may still
+  // throw, too late to fail the run, so its error says so
+  let hasEnded = false;
   const fail = (reason: unknown) => {
     const message = reasonMessage(reason);
     failure ??= message;
     return message;
   };
-  const printUncaught = printUncaughtWith(console)(fail);
+  const printDuring = printUncaughtWith(console)(fail);
+  const printUncaught = (error: unknown) =>
+    hasEnded
+      ? console.log(AFTER_END, reasonMessage(error))
+      : printDuring(error);
   // An error thrown outside the code's promise chain (a timer's callback)
   // ends the run, as it did in the old runtime: the code may be awaiting that
   // callback, and `finished` would then never settle. The sandbox is a fresh
@@ -376,6 +386,7 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
     channel.post(
       failure === undefined ? { type: "end" } : { type: "end", error: failure }
     );
+    hasEnded = true;
   }
 };
 
