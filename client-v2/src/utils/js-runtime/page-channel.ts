@@ -45,11 +45,12 @@ const reasonOf = (error: unknown) =>
  * waits on a reply that will not come.
  *
  * @param handlers what the page does with each request
- * @returns a function of the port, resolving when the sandbox posts `end`
+ * @returns a function of the port, resolving when the sandbox posts `end`,
+ * with the run's first uncaught error if it had one
  */
 export const serveSandboxWith =
   (handlers: SandboxHandlers) =>
-  (port: MessagePort): Promise<void> =>
+  (port: MessagePort): Promise<string | undefined> =>
     new Promise((resolve) => {
       const reply = (message: ToSandbox) => port.postMessage(message);
       const refuse = (request: Answerable) => (error: string) =>
@@ -69,7 +70,7 @@ export const serveSandboxWith =
           case "result":
             return;
           case "end":
-            resolve();
+            resolve(data.error);
             return;
           case "sign":
             handlers
@@ -169,6 +170,22 @@ if (import.meta.vitest) {
         id: 1,
         reply: { error: "wallet gone" },
       });
+    });
+
+    it("resolves with the error the sandbox's end names, or undefined", async () => {
+      const serve = (end: object) => {
+        const channel = new MessageChannel();
+        channels.push(channel);
+        const ended = serveSandboxWith({
+          print: () => undefined,
+          sign: refuse,
+          rpc: refuse,
+        })(channel.port2);
+        channel.port1.postMessage(end);
+        return ended;
+      };
+      expect(await serve({ type: "end", error: "boom" })).toBe("boom");
+      expect(await serve({ type: "end" })).toBeUndefined();
     });
 
     it("answers with the reason when the RPC handler rejects", async () => {

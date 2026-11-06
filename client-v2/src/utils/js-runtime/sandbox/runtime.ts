@@ -4,9 +4,11 @@ import * as mocha from "mocha/browser-entry";
 import { format } from "util";
 
 import {
+  kitSignerWith,
   sandboxSignerProviderWith,
   signerMethodsWith,
 } from "../../wallet/sandbox-signer-provider";
+import { pgSignerFromFileWith, reasonMessage, showBigInts } from "../kit";
 import { PgJsRuntimePackage } from "../package";
 import type { OutputLevel } from "../protocol";
 import type { RunMessage, SandboxChannel } from "./channel";
@@ -34,7 +36,11 @@ const consoleFor = (channel: SandboxChannel) => {
   const printAt =
     (level: OutputLevel) =>
     (...args: unknown[]) =>
-      channel.post({ type: "output", level, text: format(...args) });
+      channel.post({
+        type: "output",
+        level,
+        text: format(...showBigInts(args)),
+      });
   return {
     log: printAt("log"),
     info: printAt("info"),
@@ -206,13 +212,39 @@ const globalPackagesFor = async (
     })
   );
 
-/** Prints an error the way the old runtime did, and goes on */
+/**
+ * Prints an error the way the old runtime did, and goes on
+ *
+ * @param console the sandbox's console
+ * @param fail records the run's failure, returning the error's message
+ */
 const printUncaughtWith =
-  (console: ReturnType<typeof consoleFor>) => (error: unknown) =>
-    console.log(
-      "Uncaught error:",
-      error instanceof Error ? error.message : String(error)
-    );
+  (console: ReturnType<typeof consoleFor>) =>
+  (fail: (reason: unknown) => string) =>
+  (error: unknown) =>
+    console.log("Uncaught error:", fail(error));
+
+/**
+ * Overrides `@solana/kit-plugin-signer`'s `signerFromFile`: the Playground
+ * wallet, signing through the page, is a docs script's `wallet.json`
+ */
+const kitPluginSignerFor =
+  (channel: SandboxChannel) =>
+  (run: RunMessage) =>
+  (pkg: Record<string, unknown>) => {
+    const current =
+      run.current === undefined ? undefined : run.wallets[run.current];
+    return {
+      ...pkg,
+      signerFromFile: pgSignerFromFileWith({
+        signer: pkg.signer as (signer: unknown) => (client: unknown) => unknown,
+      })(() =>
+        current?.isPg
+          ? kitSignerWith(channel.sign)(new web3.PublicKey(current.publicKey))
+          : undefined
+      ),
+    };
+  };
 
 /** Runs mocha over what the code registered, posting each line and the counts */
 const runMocha = (channel: SandboxChannel) =>
@@ -242,7 +274,14 @@ const runMocha = (channel: SandboxChannel) =>
  */
 export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
   const console = consoleFor(channel);
-  const printUncaught = printUncaughtWith(console);
+  // The run's first uncaught error, which makes it fail (`RunResult`)
+  let failure: string | undefined;
+  const fail = (reason: unknown) => {
+    const message = reasonMessage(reason);
+    failure ??= message;
+    return message;
+  };
+  const printUncaught = printUncaughtWith(console)(fail);
   // An error thrown outside the code's promise chain (a timer's callback)
   // ends the run, as it did in the old runtime: the code may be awaiting that
   // callback, and `finished` would then never settle. The sandbox is a fresh
@@ -260,10 +299,16 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
   try {
     const pg = pgFor(channel)(run);
     const overrideAnchor = anchorFor(pg)(run);
-    const overridePackage = (name: string, pkg: Record<string, unknown>) =>
-      name === "@coral-xyz/anchor" || name === "@project-serum/anchor"
-        ? overrideAnchor(name, pkg)
-        : pkg;
+    const overrideKitPluginSigner = kitPluginSignerFor(channel)(run);
+    const overridePackage = (name: string, pkg: Record<string, unknown>) => {
+      if (name === "@coral-xyz/anchor" || name === "@project-serum/anchor") {
+        return overrideAnchor(name, pkg);
+      }
+      if (name === "@solana/kit-plugin-signer") {
+        return overrideKitPluginSigner(pkg);
+      }
+      return pkg;
+    };
 
     if (run.isTest) {
       // Every line mocha's reporters print goes through `Base.consoleLog`
@@ -305,7 +350,7 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
       await Promise.race([finished, thrownOutside]);
     } catch (error) {
       if (error instanceof SyntaxError) {
-        console.error(`SyntaxError: ${error.message}`);
+        console.error(`SyntaxError: ${fail(error)}`);
       } else {
         printUncaught(error);
       }
@@ -325,7 +370,9 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
   } catch (error) {
     printUncaught(error);
   } finally {
-    channel.post({ type: "end" });
+    channel.post(
+      failure === undefined ? { type: "end" } : { type: "end", error: failure }
+    );
   }
 };
 

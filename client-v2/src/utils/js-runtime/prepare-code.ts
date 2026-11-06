@@ -1,8 +1,22 @@
+import type { CompilerOptions } from "typescript";
 import {
   flattenDiagnosticMessageText,
   ScriptTarget,
   transpileModule,
 } from "typescript";
+
+/**
+ * How project code is transpiled. ES2020, not ES5: ES5 turns `for...of` over
+ * a `Map` or `Set` into an index loop that reads `.length` and silently runs
+ * zero times, and Kit's own examples iterate maps.
+ */
+const TRANSPILE_OPTIONS: CompilerOptions = {
+  target: ScriptTarget.ES2020,
+  removeComments: true,
+};
+
+/** Globals project code must not reach, hidden behind its wrapper's parameters */
+const HIDDEN_GLOBALS = ["eval", "Function"];
 
 /**
  * `import` statements of project code: `* as name`, `{ a, b as c }`, a
@@ -51,6 +65,9 @@ const WRAPPER_LINES = 2;
  * Turns project code into what the sandbox runs: imports rewritten, wrapped
  * so top-level `await` works and `this` is not the window, handed to
  * `__pgDone` so the sandbox knows when it ends, and transpiled to JavaScript.
+ * The class body makes the code strict; `eval` and `Function` are shadowed
+ * by the outer function's parameters, since assigning to them in strict
+ * code is a syntax error.
  *
  * Transpiling stays in the page, so the sandbox's bundle carries no
  * TypeScript compiler.
@@ -62,14 +79,11 @@ const WRAPPER_LINES = 2;
  */
 export const prepareCode = (code: string) => {
   const { outputText, diagnostics } = transpileModule(
-    `__pgDone((async () => {
+    `__pgDone((async function (${HIDDEN_GLOBALS.join(", ")}) {
   class __Pg { async __run() {\n${rewriteImports(code)}\n} }
   await new __Pg().__run();
 })());`,
-    {
-      compilerOptions: { target: ScriptTarget.ES5, removeComments: true },
-      reportDiagnostics: true,
-    }
+    { compilerOptions: TRANSPILE_OPTIONS, reportDiagnostics: true }
   );
 
   const [first] = diagnostics ?? [];
@@ -145,6 +159,28 @@ if (import.meta.vitest) {
       );
       expect(() => prepareCode("const a = 1;\nconst x = ;")).toThrow(
         SyntaxError
+      );
+    });
+
+    it("keeps for...of over a Map, BigInt literals and numeric separators", async () => {
+      const seen = await runPrepared(
+        'for (const [k] of new Map([["a", 1]])) seen.push(k);\nseen.push(1_000n * 2n);',
+        {}
+      );
+      expect(seen).toEqual(["a", 2000n]);
+    });
+
+    it("hides eval and Function from the code", async () => {
+      const seen = await runPrepared(
+        "seen.push(typeof eval, typeof Function);",
+        {}
+      );
+      expect(seen).toEqual(["undefined", "undefined"]);
+    });
+
+    it("runs the code as strict code", async () => {
+      await expect(runPrepared("undeclared = 1;", {})).rejects.toThrow(
+        /undeclared/
       );
     });
 
