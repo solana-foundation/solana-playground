@@ -25,7 +25,10 @@ describe("platformRules", () => {
     const asset = headersFor("/static/js/main.js");
     assert.equal(asset["Cross-Origin-Resource-Policy"], "cross-origin");
     assert.equal(asset["Cross-Origin-Embedder-Policy"], "require-corp");
+    // The sandbox loads its scripts with `crossorigin`, from an opaque origin
+    assert.equal(asset["Access-Control-Allow-Origin"], "*");
     assert.equal(headersFor("/")["Cross-Origin-Resource-Policy"], undefined);
+    assert.equal(headersFor("/")["Access-Control-Allow-Origin"], undefined);
     assert.equal(
       headersFor("/staticky")["Cross-Origin-Resource-Policy"],
       undefined

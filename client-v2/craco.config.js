@@ -139,6 +139,12 @@ const addSandboxEntry = (webpackConfig, env) => {
   if (!appPage) throw new Error("craco: expected CRA's HtmlWebpackPlugin");
   appPage.userOptions.chunks = ["main"];
 
+  // The sandbox's scripts, its entry (`runtime.html`) and the chunks it loads,
+  // are cross-origin to its opaque origin. Loaded without CORS, their errors
+  // are muted: the browser reports every error as "Script error." and never
+  // fires `unhandledrejection` for their promises
+  webpackConfig.output.crossOriginLoading = "anonymous";
+
   webpackConfig.plugins.push(
     new HtmlWebpackPlugin({
       filename: SANDBOX_PAGE,
@@ -147,7 +153,8 @@ const addSandboxEntry = (webpackConfig, env) => {
         "src/utils/js-runtime/sandbox/runtime.html"
       ),
       chunks: [SANDBOX_ENTRY],
-      inject: true,
+      // The template writes the script tags, with `crossorigin`
+      inject: false,
       minify: env === "production",
     })
   );
@@ -583,9 +590,14 @@ module.exports = {
       // `originalUrl`: the middleware is mounted on "*", which strips `path`
       const urlPath = req.originalUrl.split("?")[0];
       // The sandbox's opaque origin makes every script it loads
-      // cross-origin, which its COEP blocks without this header
+      // cross-origin, which its COEP blocks without CORP; it loads them with
+      // `crossorigin`, so they need CORS too
       if (urlPath.startsWith("/static/")) {
-        return { ...headers, "Cross-Origin-Resource-Policy": "cross-origin" };
+        return {
+          ...headers,
+          "Cross-Origin-Resource-Policy": "cross-origin",
+          "Access-Control-Allow-Origin": "*",
+        };
       }
       // The sandbox's page is an opaque origin however it is framed, and
       // only the app may frame it
