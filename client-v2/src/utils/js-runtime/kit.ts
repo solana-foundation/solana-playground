@@ -1,5 +1,9 @@
 // Runs inside the project-code sandbox (`runtime.html`), so nothing here may
 // import the TypeScript compiler, which stays in the page (`prepare-code.ts`).
+import type {
+  MessagePartialSigner,
+  TransactionPartialSigner,
+} from "@solana/kit";
 
 /**
  * Write BigInt arguments as Node's console does (`2000n`): the browser's
@@ -39,7 +43,7 @@ export const reasonMessage = (reason: unknown): string => {
 export const SIGNER_NEEDS_PG_WALLET =
   "signerFromFile uses your Playground wallet. Switch to it to run this script.";
 
-/** What `pgSignerFromFileWith` needs from Kit, passed in to keep Kit lazy */
+/** What `pgSignerFromFileWith` needs from the signer plugin, passed in so this module imports no Kit code */
 interface KitSignerDeps {
   signer: (signer: any) => (client: any) => any;
 }
@@ -61,7 +65,11 @@ type KitPlugin = <T extends object>(client: T) => Promise<any>;
  */
 export const pgSignerFromFileWith =
   (deps: KitSignerDeps) =>
-  (getSigner: () => object | undefined): ((path: string) => KitPlugin) =>
+  (
+    getSigner: () =>
+      | (TransactionPartialSigner & MessagePartialSigner)
+      | undefined
+  ): ((path: string) => KitPlugin) =>
   // The path the docs pass is their file name; Playground has one wallet
   () =>
   async <T extends object>(client: T) => {

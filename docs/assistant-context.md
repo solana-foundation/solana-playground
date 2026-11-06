@@ -144,7 +144,8 @@ comes from the page over a private message channel.
   transactions, and Anchor's `provider.wallet.payer` and `.signers([payer])` all
   work. So do Metaplex's `keypairIdentity(pg.wallet.keypair)` and passing
   `pg.wallet.keypair` as a signer of a Metaplex operation, and Kit's
-  `signerFromFile(...)`, which is the Playground wallet whatever path it names.
+  `signerFromFile(...)`, which is the Playground wallet whatever path it names
+  (with another wallet connected, it says to switch to the Playground wallet).
 - Reading `pg.wallet.keypair.secretKey` throws an error that names
   `pg.wallet.signTransaction` and `pg.wallet.signMessage`. So does anything built
   on the bytes, such as `Keypair.fromSecretKey(pg.wallet.keypair.secretKey)` or
