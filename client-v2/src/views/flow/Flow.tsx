@@ -457,9 +457,15 @@ const FlowFrame = () => {
         fade={1}
         className="-z-10 will-change-transform"
       />
-      {/* Outside the part that goes inert, so it still speaks over the settings */}
+      {/* Outside the part that goes inert, so it still speaks over the
+          settings. No stage while they cover the work: the stage's notice is
+          invisible and inert then, so the announcer says the outage itself */}
       <StatusAnnouncer
-        stage={page.view === "work" && !catalog ? state.stage : undefined}
+        stage={
+          page.view === "work" && !catalog && !settings.open
+            ? state.stage
+            : undefined
+        }
       />
       {/* The app stays mounted under the settings page, invisible and inert
           (design.md, "Settings as a full page (5.20)"): `Write` must never
