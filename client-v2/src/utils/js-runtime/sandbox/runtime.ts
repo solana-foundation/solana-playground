@@ -13,6 +13,7 @@ import { PgJsRuntimePackage } from "../package";
 import type { OutputLevel } from "../protocol";
 import type { RunMessage, SandboxChannel } from "./channel";
 import { patchConfirmTransaction } from "./confirm";
+import { metaplexFor } from "./metaplex";
 import { countUnsent, patchWeb3 } from "./placeholders";
 
 /** The names the page's code wrapper calls (`prepare-code.ts`) */
@@ -300,6 +301,7 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
     const pg = pgFor(channel)(run);
     const overrideAnchor = anchorFor(pg)(run);
     const overrideKitPluginSigner = kitPluginSignerFor(channel)(run);
+    const overrideMetaplex = metaplexFor(channel.sign);
     const overridePackage = (name: string, pkg: Record<string, unknown>) => {
       if (name === "@coral-xyz/anchor" || name === "@project-serum/anchor") {
         return overrideAnchor(name, pkg);
@@ -307,6 +309,7 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
       if (name === "@solana/kit-plugin-signer") {
         return overrideKitPluginSigner(pkg);
       }
+      if (name === "@metaplex-foundation/js") return overrideMetaplex(pkg);
       return pkg;
     };
 

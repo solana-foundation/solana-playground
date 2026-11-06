@@ -104,6 +104,14 @@ that names `pg.wallet.signMessage` and `pg.wallet.signTransaction`.
 - **THEN** the transaction is confirmed with a valid signature by the
   current account
 
+#### Scenario: Metaplex with pg.wallet.keypair
+
+- **WHEN** project code uses Metaplex with `keypairIdentity(pg.wallet.keypair)`
+  and passes `pg.wallet.keypair` as a signer of an operation, as the
+  spl-token-vault tutorial does
+- **THEN** the operation's transaction is confirmed with a valid signature by
+  the current account, and the key never enters the sandbox
+
 #### Scenario: A v0 transaction signed with pg.wallet.keypair
 
 - **WHEN** project code calls `tx.sign([pg.wallet.keypair])` on a
