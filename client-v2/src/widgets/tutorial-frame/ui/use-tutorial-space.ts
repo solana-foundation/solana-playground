@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { onCodeRequest, onDocShown } from "@/entities/tutorial";
+import { PgConversation } from "@/features/tutorial-conversation";
 
 import type { SpaceSource, TutorialSpace } from "../model/telemetry";
 import { tutorialFrameTelemetry } from "../model/telemetry";
@@ -30,9 +31,10 @@ export interface UseTutorialSpace {
 
 /**
  * Which of the phone's two spaces is in view, and Code's dot. A request for
- * the code ("Show in lib.rs"), or a doc page the workspace showed, switches
- * to Code. Each tutorial entered starts on Chat, so a learner never
- * lands on an empty editor before Start.
+ * the code ("Show in lib.rs"), a doc page the workspace showed, or a result
+ * card's Log (the terminal is in Code) switches to Code. Each tutorial
+ * entered starts on Chat, so a learner never lands on an empty editor before
+ * Start.
  */
 export const useTutorialSpace = ({
   name,
@@ -79,9 +81,12 @@ export const useTutorialSpace = ({
     // Only once the workspace showed the page: a link to a page it lacks
     // opens as a link and leaves the chat in view
     const stopDoc = onDocShown(() => setSpace("code", "doc"));
+    // The workspace opens the drawer once Code is no longer inert
+    const log = PgConversation.onDidRequestLog(() => setSpace("code", "log"));
     return () => {
       stopCode();
       stopDoc();
+      log.dispose();
     };
   }, [phone, setSpace]);
 

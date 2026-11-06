@@ -12,6 +12,18 @@ import {
 // requests live in one module, rebuilt here as the entry
 vi.mock("@/entities/tutorial", () => import("@/entities/tutorial/model/docs"));
 
+// A result card's Log, without the conversation's store and its engine
+const { logs } = vi.hoisted(() => ({ logs: new Set<() => void>() }));
+vi.mock("@/features/tutorial-conversation", () => ({
+  PgConversation: {
+    onDidRequestLog: (cb: () => void) => {
+      logs.add(cb);
+      return { dispose: () => logs.delete(cb) };
+    },
+  },
+}));
+const requestLog = () => logs.forEach((cb) => cb());
+
 import type { UseTutorialSpaceOptions } from "./use-tutorial-space";
 import { useTutorialSpace } from "./use-tutorial-space";
 
@@ -117,15 +129,28 @@ describe("useTutorialSpace", () => {
     expect(result.current.dot).toBe(false);
   });
 
+  it("switches to Code for a result card's Log, where its terminal is", () => {
+    const { result } = draw(options({}));
+    act(() => requestLog());
+    expect(result.current.space).toBe("code");
+    expect(
+      sent.events
+        .filter((e) => e.name === "tutorial_frame_space_changed")
+        .map((e) => e.params)
+    ).toEqual([{ space: "code", via: "log" }]);
+  });
+
   it("listens to no request off the phone", () => {
     const { result } = draw(options({ phone: false }));
     let shown: boolean | undefined;
     act(() => {
       requestCode();
+      requestLog();
       shown = requestDoc("idl.md");
     });
     expect(result.current.space).toBe("chat");
     expect(shown).toBe(false);
+    expect(logs.size).toBe(0);
   });
 
   it("reports the space and what switched it", () => {

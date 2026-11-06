@@ -48,7 +48,8 @@ The header's switch, or a sideways swipe, SHALL move between two spaces:
   - a status strip at its foot with the last result.
 
 A dot SHALL mark Code when the assistant wrote since it was last viewed. "Show
-in <file>" on a wrote card SHALL switch to Code with the lines lit.
+in <file>" on a wrote card SHALL switch to Code with the lines lit, and a
+result card's Log SHALL switch to Code with the terminal open.
 
 Other differences from the desktop:
 
@@ -67,6 +68,11 @@ Other differences from the desktop:
 - **THEN** the wrote card shows the first lines in the feed and Code gets its
   dot
 - **AND** "Show in lib.rs" switches to Code with the lines lit
+
+#### Scenario: A result's Log, seen from Chat (manual)
+
+- **WHEN** the learner presses Log on a deploy's result card while Chat is open
+- **THEN** the phone switches to Code and the terminal opens there
 
 ### Requirement: The phone leaves typing code to the desktop
 
@@ -91,6 +97,7 @@ the phone moves between its spaces, with `space` (`chat` or `code`) and `via`:
 - `swipe`: a sideways swipe;
 - `show`: "Show in <file>" on a wrote card;
 - `doc`: a doc page opened from a link;
+- `log`: a result card's Log;
 - `step`: a step picked in the steps sheet.
 
 #### Scenario: Show in a file (manual)

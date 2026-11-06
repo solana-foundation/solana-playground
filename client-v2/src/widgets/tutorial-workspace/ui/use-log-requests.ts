@@ -8,9 +8,10 @@ import type { WorkspaceConsole } from "./TutorialWorkspace";
 
 /**
  * A result card's Log opens the drawer, as the learner's own toggle would. It
- * listens only while the workspace is `active`, does nothing when the drawer
- * is already open, and nothing behind a page (`box` under `[inert]`), where
- * the work is not on screen, as the drawer's own auto-open does.
+ * listens only while the workspace is `active`, and does nothing when the
+ * drawer is already open. While `box` is under `[inert]` (the phone's Code
+ * space with Chat in view, which the same Log switches to) the drawer cannot
+ * open yet: the request waits and opens it once `box` is no longer inert.
  */
 export const useLogRequests = (
   active: boolean,
@@ -19,11 +20,35 @@ export const useLogRequests = (
 ) => {
   useEffect(() => {
     if (!active) return;
+    const inert = () => !!box.current?.closest("[inert]");
+    const open = () => {
+      if (!terminal.current.open) terminal.current.setOpen(true, "button");
+    };
+    // One request waits at a time; a second press while it waits adds nothing
+    let waiting: MutationObserver | undefined;
+    const stopWaiting = () => {
+      waiting?.disconnect();
+      waiting = undefined;
+    };
     const sub = PgConversation.onDidRequestLog(() => {
-      if (terminal.current.open) return;
-      if (box.current?.closest("[inert]")) return;
-      terminal.current.setOpen(true, "button");
+      if (!inert()) return open();
+      if (waiting) return;
+      // The inert ancestor is set by the layout, above the workspace and
+      // out of its renders, so only the DOM says when it lifts
+      waiting = new MutationObserver(() => {
+        if (inert()) return;
+        stopWaiting();
+        open();
+      });
+      waiting.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["inert"],
+      });
     });
-    return () => sub.dispose();
+    return () => {
+      sub.dispose();
+      stopWaiting();
+    };
   }, [active, terminal, box]);
 };
