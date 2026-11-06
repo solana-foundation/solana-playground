@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   println: vi.fn(() => Promise.resolve()),
   pk: "P" as string | null,
   cluster: "devnet" as string | null,
+  idlErrors: [{ code: 6000, name: "NotEnoughEnergy" }] as unknown,
 }));
 
 vi.mock("../../../utils", () => ({
@@ -23,7 +24,10 @@ vi.mock("../../../utils", () => ({
       return h.cluster;
     },
   },
-  PgProgramInfo: { getPkStr: () => h.pk },
+  PgProgramInfo: {
+    getPkStr: () => h.pk,
+    callableIdl: () => ({ errors: h.idlErrors }),
+  },
   PgSettings: { testUi: { showTxDetailsInTerminal: false } },
   PgTerminal: {
     println: h.println,
@@ -51,6 +55,7 @@ beforeEach(() => {
   h.println.mockClear();
   h.pk = "P";
   h.cluster = "devnet";
+  h.idlErrors = [{ code: 6000, name: "NotEnoughEnergy" }];
 });
 
 describe("runCall", () => {
@@ -140,6 +145,101 @@ describe("runCall", () => {
       signature: undefined,
       failingLine: ERROR_LINE,
     });
+  });
+
+  // The debit-with-no-credit repro (HOO-2666): web3's text tells a learner to
+  // catch an exception; the card names the error instead
+  it("a preflight refusal with no logs names the error, never web3's advice", async () => {
+    const transactionMessage =
+      "Transaction simulation failed: Attempt to debit an account but found no record of a prior credit.";
+    h.test.mockRejectedValue(
+      Object.assign(
+        new Error(
+          `Simulation failed. \nMessage: ${transactionMessage}. \nLogs: \n[]. \nCatch the \`SendTransactionError\` and call \`getLogs()\` on it for full details.`
+        ),
+        { transactionMessage, logs: [] }
+      )
+    );
+
+    const outcome = await runCall(IX);
+
+    expect(outcome.failingLine).toBe(
+      "Attempt to debit an account but found no record of a prior credit"
+    );
+    expect(h.println).toHaveBeenCalledWith(
+      "Failed · attempt to debit an account but found no record of a prior credit"
+    );
+    expect(PgCallHistory.list("P", "devnet")[0].failingLine).toBe(
+      outcome.failingLine
+    );
+  });
+
+  it("a call the program rejects with no logs names the IDL error and code", async () => {
+    h.test.mockResolvedValue("sig");
+    h.confirm.mockResolvedValue({
+      err: { InstructionError: [0, { Custom: 6000 }] },
+    });
+    h.getTransaction.mockResolvedValue({ meta: { logMessages: [] } });
+
+    expect((await runCall(IX)).failingLine).toBe(
+      "NotEnoughEnergy · error 6000"
+    );
+  });
+
+  it("a named error wins over a last log line that is not a failure", async () => {
+    h.test.mockResolvedValue("sig");
+    h.confirm.mockResolvedValue({
+      err: { InstructionError: [0, { Custom: 6000 }] },
+    });
+    h.getTransaction.mockResolvedValue({
+      meta: { logMessages: ["Program X invoke [1]", "Program X consumed 10"] },
+    });
+
+    expect((await runCall(IX)).failingLine).toBe(
+      "NotEnoughEnergy · error 6000"
+    );
+  });
+
+  it("the program's failure line wins over a named error", async () => {
+    h.test.mockResolvedValue("sig");
+    h.confirm.mockResolvedValue({
+      err: { InstructionError: [0, { Custom: 6000 }] },
+    });
+    h.getTransaction.mockResolvedValue({
+      meta: { logMessages: ["Program X invoke [1]", ERROR_LINE] },
+    });
+
+    expect((await runCall(IX)).failingLine).toBe(ERROR_LINE);
+  });
+
+  it("names the error from the IDL the call went out with", async () => {
+    let answer: (signature: string) => void = () => {};
+    h.test.mockReturnValue(
+      new Promise<string>((resolve) => {
+        answer = resolve;
+      })
+    );
+    h.confirm.mockResolvedValue({
+      err: { InstructionError: [0, { Custom: 6000 }] },
+    });
+    h.getTransaction.mockResolvedValue({ meta: { logMessages: [] } });
+
+    const call = runCall(IX);
+    h.idlErrors = [{ code: 6000, name: "OtherProgramsError" }];
+    answer("sig");
+
+    expect((await call).failingLine).toBe("NotEnoughEnergy · error 6000");
+  });
+
+  it("reads an IDL without an error list as declaring none", async () => {
+    h.idlErrors = undefined;
+    h.test.mockResolvedValue("sig");
+    h.confirm.mockResolvedValue({
+      err: { InstructionError: [0, { Custom: 6000 }] },
+    });
+    h.getTransaction.mockResolvedValue({ meta: { logMessages: [] } });
+
+    expect((await runCall(IX)).failingLine).toBe("Custom · error 6000");
   });
 
   it("a call that never reached the network shows the error, translated", async () => {

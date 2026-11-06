@@ -16,8 +16,14 @@ import {
   PgProgramInteraction,
 } from "../../../utils/program-interaction";
 import { PgCallHistory } from "../state/call-history";
+import {
+  type IdlError,
+  nameSendErrorWith,
+  nameTxErrorWith,
+  terminalFailure,
+} from "./call-error";
 import type { CallOutcome } from "./call-outcome";
-import { failingLineWith } from "./call-outcome";
+import { failingLineWith, programFailureLine } from "./call-outcome";
 
 const log = createLogger("flow:run-call");
 
@@ -67,6 +73,12 @@ const describe = (err: unknown) => {
   }
 };
 
+/** The errors the program's IDL declares, to name a custom error's code */
+const getIdlErrors = (): IdlError[] => {
+  const errors: unknown = PgProgramInfo.callableIdl()?.errors;
+  return Array.isArray(errors) ? errors : [];
+};
+
 /** An absent value as a stored record writes it: `null` */
 // eslint-disable-next-line unicorn/no-null -- `CallRecord` persists an absent signature or failing line as null
 const toStored = <T>(value: T | undefined) => value ?? null;
@@ -76,6 +88,8 @@ const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
   // The connection the call goes out on: a network switch while the wallet
   // asks must not confirm a landed call on another cluster as failed
   const connection = PgConnection.current;
+  // The IDL of the program the call went to, read before a switch can move it
+  const idlErrors = getIdlErrors();
   try {
     signature = await PgCommon.transition(PgProgramInteraction.test(ix));
     const confirmed = await PgTx.confirm(signature, { connection });
@@ -88,13 +102,18 @@ const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
       logs,
       failingLine: ok
         ? undefined
-        : failingLineWith(`Transaction failed: ${describe(confirmed?.err)}`)(
+        : programFailureLine(logs) ??
+          nameTxErrorWith(idlErrors)(confirmed?.err) ??
+          failingLineWith(`Transaction failed: ${describe(confirmed?.err)}`)(
             logs
           ),
     };
   } catch (e: any) {
     const raw: string = e?.message ?? String(e);
-    const message = KNOWN_ERRORS[raw] ?? raw;
+    // An RPC refusal is named rather than shown in web3's words, which tell
+    // a learner to catch the exception
+    const named = nameSendErrorWith(idlErrors)(e);
+    const message = KNOWN_ERRORS[raw] ?? named ?? raw;
     // A preflight failure (`SendTransactionError`) carries the simulation's
     // logs; anything else is not the program's answer and is logged
     const logs: string[] = Array.isArray(e?.logs) ? e.logs : [];
@@ -110,7 +129,7 @@ const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
       // A signature with a thrown error: sent, but its confirmation is unknown
       failingLine: signature
         ? `Could not confirm the call: ${message}`
-        : failingLineWith(message)(logs),
+        : programFailureLine(logs) ?? named ?? failingLineWith(message)(logs),
     };
   }
 };
@@ -163,7 +182,7 @@ export const runCall = async (
     print(
       outcome.ok
         ? PgTerminal.success("Call succeeded.")
-        : PgTerminal.error(`Call failed: ${outcome.failingLine}`)
+        : PgTerminal.error(terminalFailure(outcome.failingLine ?? ""))
     );
     if (programId && cluster) {
       PgCallHistory.add({

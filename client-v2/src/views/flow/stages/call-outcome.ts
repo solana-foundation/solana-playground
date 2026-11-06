@@ -12,12 +12,16 @@ export interface CallOutcome {
 /** Log lines a program writes when it fails, as Spec 03 picks them */
 const FAILURE = /Error Code:|custom program error|failed:/;
 
+/** The log line where the program says it failed; `undefined` if none does */
+export const programFailureLine = (logs: string[]): string | undefined =>
+  logs.find((l) => FAILURE.test(l));
+
 /**
  * The one log line that explains a failed call: the program's own error if a
  * line names one, else the last line; `undefined` with no logs.
  */
 export const failingLine = (logs: string[]): string | undefined =>
-  logs.find((l) => FAILURE.test(l)) ?? logs.at(-1);
+  programFailureLine(logs) ?? logs.at(-1);
 
 /** `failingLine`, with the error message standing in when the logs say nothing */
 export const failingLineWith =
