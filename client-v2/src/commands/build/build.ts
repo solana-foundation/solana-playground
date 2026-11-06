@@ -246,9 +246,17 @@ const buildRust = async (files: TupleFiles, signal: AbortSignal) => {
       files,
       uuid: PgProgramInfo.uuid,
       flags: PgSettings.build.flags,
+      project: currentProject(),
     },
     { signal }
   );
+};
+
+/** The open project, for the build audit; none outside a workspace */
+const currentProject = () => {
+  const id = PgExplorer.currentWorkspaceId;
+  const name = PgExplorer.currentWorkspaceName;
+  return id && name ? { id, name } : undefined;
 };
 
 /**

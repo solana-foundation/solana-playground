@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 
+import { PgSession } from "@/features/auth";
 import { DownloadProgram } from "@/features/cli-deploy";
 import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { useOnline } from "@/shared/lib/hooks/use-online";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { requestConsole } from "@/widgets/layout-shell";
 
 import { useRenderOnChange } from "../../../hooks";
@@ -33,7 +35,8 @@ import { useSlowBuild } from "./use-slow-build";
 const serverHost = () => {
   const endpoint = PgSettings.server.endpoint;
   try {
-    return new URL(endpoint).host;
+    // The default is a path on this origin (`/api/build-server`)
+    return new URL(endpoint, window.location.href).host;
   } catch {
     return endpoint;
   }
@@ -97,6 +100,24 @@ const Build = () => {
           <DownloadProgram from="build-stage" look="link" />
         </>
       }
+      onSignIn={async () => {
+        const workspace = PgExplorer.currentWorkspaceName;
+        // With an origin, so the session effect keeps this project open
+        // instead of the account's latest
+        await PgSession.signInFor("build")([]);
+        // A closed popup resolves with nobody signed in: building would
+        // only be refused again
+        if (!PgSession.get()) return;
+        // The popup can stay open long enough to move elsewhere: the build
+        // was asked for this project, not whichever is open now
+        if (PgExplorer.currentWorkspaceName !== workspace) return;
+        // Not awaited: a failed build is the build's to report, never the
+        // sign-in button's
+        PgCommand.build
+          .execute()
+          .catch(toldByStage("build"))
+          .catch(reportButtonFailure("build"));
+      }}
     />
   );
 };

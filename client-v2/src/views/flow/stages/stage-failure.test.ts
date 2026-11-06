@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  flow: { build: "done", deploy: "active" } as Record<string, string>,
+  flow: { build: "done", deploy: "active" } as Record<string, unknown>,
 }));
 
 // The real flow store pulls in the whole playground; only its state is read
@@ -53,5 +53,19 @@ describe("toldByStage", () => {
     expect(
       settle("deploy", "active", new Error("no terminal"))
     ).toHaveBeenCalledOnce();
+  });
+
+  // A sign-in refusal leaves Build where it was; its surface asks to sign in
+  it("a build refused for sign-in is not toasted as well", () => {
+    mocks.flow = {
+      build: "done",
+      deploy: "active",
+      buildFailure: { kind: "signed-out", message: "Sign in" },
+    };
+    const toast = vi.spyOn(PgView, "setToast").mockImplementation(() => "");
+    const error = new Error("Sign in");
+    expect(() => toldByStage("build")(error)).toThrow(error);
+    reportButtonFailure("build")(error);
+    expect(toast).not.toHaveBeenCalled();
   });
 });
