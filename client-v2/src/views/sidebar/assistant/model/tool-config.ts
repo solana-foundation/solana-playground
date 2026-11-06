@@ -47,10 +47,11 @@ const bareUrl = (url: string) => {
   parsed.password = "";
   parsed.search = "";
   parsed.hash = "";
-  // A dot segment can leave `//host/...` as the path, which reads back as another host
-  return PATH_RELATIVE.test(url.trim()) && !parsed.pathname.startsWith("//")
-    ? parsed.pathname
-    : parsed.href;
+  if (!PATH_RELATIVE.test(url.trim())) return parsed.href;
+  // A dot segment can leave `//host/...` as the path, which reads back as another host; `/.` keeps it on this one
+  return parsed.pathname.startsWith("//")
+    ? `/.${parsed.pathname}`
+    : parsed.pathname;
 };
 
 const isFilled = (map: Record<string, string> | undefined) =>
@@ -338,6 +339,11 @@ if (import.meta.vitest) {
       expect(new URL(kept, window.location.origin).host).toBe(
         window.location.host
       );
+      expect(
+        decodeToolConfig(
+          encodeToolConfig(state({ servers: [server({ url })] }))
+        ).servers.map((entry) => entry.url)
+      ).toEqual([kept]);
     });
 
     it("keeps a URL without a credential as it was typed", () => {
