@@ -1089,6 +1089,46 @@ describe("PgConversation", () => {
     );
   });
 
+  it("drops a scripted write held across Start over, so the intro's files stay", async () => {
+    const files = memoryWorkspace({ "src/lib.rs": "" });
+    let release: () => void = () => {};
+    let held = false;
+    const workspace: Workspace = {
+      // The first read is the step's scripted write looking at the file:
+      // it waits until the test lets it go
+      read: async (path, name) => {
+        if (!held) {
+          held = true;
+          await new Promise<void>((r) => {
+            release = r;
+          });
+        }
+        return files.read(path, name);
+      },
+      write: files.write,
+      remove: files.remove,
+    };
+    open(NAME, { workspace });
+    await settle();
+    PgConversation.start();
+    await settle();
+    expect(held).toBe(true);
+    PgConversation.startOver();
+    await settle();
+    release();
+    await settle();
+    expect(files.files["src/lib.rs"]).toBe(hello.intro.files["src/lib.rs"]);
+    expect(PgConversation.state.engine.progress.cursor).toEqual({
+      kind: "intro",
+    });
+    expect(
+      logged.entries.some(
+        (e) =>
+          e.level === "info" && `${e.message ?? ""}`.includes("at a restart")
+      )
+    ).toBe(true);
+  });
+
   it("start over writes a fresh save", async () => {
     open(NAME);
     await settle();

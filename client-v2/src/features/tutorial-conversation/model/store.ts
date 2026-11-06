@@ -38,6 +38,20 @@ import { view } from "./view";
 
 const log = createLogger("tutorial-conversation:store");
 
+/** An effect that reads or writes the workspace's files */
+const touchesFiles = (effect: Effect): boolean =>
+  effect.kind === "restore" ||
+  effect.kind === "apply" ||
+  effect.kind === "create" ||
+  effect.kind === "write";
+
+/** A file effect the lesson's script queued, not the learner's Apply: it
+ * belongs to the walk it was queued in. An Apply checks its own line. */
+const isScripted = (effect: Effect): boolean =>
+  effect.kind === "restore" ||
+  effect.kind === "create" ||
+  effect.kind === "write";
+
 /** The store's state: a context while the open workspace is a conversation tutorial */
 export interface ConversationState {
   /** Null whenever the open workspace is not a tutorial with a definition */
@@ -681,6 +695,11 @@ export class PgConversation {
     if (engine === s.engine && effects.length === 0) return;
 
     if (engine !== s.engine) {
+      // A new walk: the files go back to how it starts, and a scripted file
+      // effect still queued from the old one must not write over them
+      if (action.type === "startOver" || action.type === "restartStep") {
+        PgConversation._walk++;
+      }
       // Start over is the one write allowed over a save that could not be
       // read: it is the learner's "discard it", and the only way out
       const loadFailed = action.type === "startOver" ? false : s.loadFailed;
@@ -743,12 +762,23 @@ export class PgConversation {
     const ports = PgConversation._ports;
     if (!ports) return;
     const name = context.definition.name;
+    /** The walk these effects were reduced in, captured at dispatch */
+    const walk = PgConversation._walk;
     /** A write or a run landing after a switch must not touch the new workspace */
     const stillOpen = () => PgExplorer.currentWorkspaceName === name;
+    /** A scripted file effect also belongs to its walk: Start over or a
+     * step's restart has put the files back since */
+    const current = () => stillOpen() && walk === PgConversation._walk;
 
-    for (const effect of effects) {
+    const carryOut = async (effect: Effect) => {
       try {
-        await PgConversation._carryOut(context, effect, ports, name, stillOpen);
+        await PgConversation._carryOut(
+          context,
+          effect,
+          ports,
+          name,
+          isScripted(effect) ? current : stillOpen
+        );
       } catch (e) {
         // A listener or the tracker threw: the effects after it still run
         log.error(e, {
@@ -756,7 +786,37 @@ export class PgConversation {
           context: { effect: effect.kind, tutorial: name },
         });
       }
+    };
+
+    for (const effect of effects) {
+      if (!touchesFiles(effect)) {
+        await carryOut(effect);
+        continue;
+      }
+      // One file effect at a time across actions: a restore queued by Start
+      // over lands after a write already in flight, never under it
+      await PgConversation._queueFileEffect(async () => {
+        if (isScripted(effect) && walk !== PgConversation._walk) {
+          log.info(
+            `A ${effect.kind} for ${name} queued before a restart was dropped`
+          );
+          return;
+        }
+        await carryOut(effect);
+        if (isScripted(effect) && walk !== PgConversation._walk) {
+          log.info(
+            `A ${effect.kind} for ${name} was in flight at a restart; what it had left to write was dropped`
+          );
+        }
+      });
     }
+  }
+
+  /** Runs `job` after every file effect queued before it; `job` never rejects */
+  private static _queueFileEffect(job: () => Promise<void>): Promise<void> {
+    const next = PgConversation._fileEffects.then(job);
+    PgConversation._fileEffects = next;
+    return next;
   }
 
   /** The workspace moved while the port was in flight: expected, not an error */
@@ -817,7 +877,15 @@ export class PgConversation {
             }
           }
         }
-        if (left.length) {
+        if (left.length && PgExplorer.currentWorkspaceName === name) {
+          // A restart came mid-restore: its own restore, queued behind this
+          // one, puts every file back, so nothing is lost
+          log.info(
+            `The restore for ${name} stopped at a restart; left to the next restore: ${left.join(
+              ", "
+            )}`
+          );
+        } else if (left.length) {
           // The workspace moved mid-restore: the file holds the old lesson
           // and the save the new one, so the team hears of it
           log.warn(
@@ -1031,10 +1099,10 @@ export class PgConversation {
   }
 
   /** The block is in the file but its record cannot be saved: the workspace
-   * moved between the write and the dispatch */
+   * moved, or the lesson restarted, between the write and the dispatch */
   private static _landedLate(name: string, path: string) {
     log.warn(
-      `A write to ${path} for ${name} landed after the workspace moved on; its lines are not recorded`
+      `A write to ${path} for ${name} landed after the workspace moved on or the lesson restarted; its lines are not recorded`
     );
   }
 
@@ -1097,6 +1165,10 @@ export class PgConversation {
     }
   }
 
+  /** Bumped by Start over and a step's restart; see `_drain` */
+  private static _walk = 0;
+  /** The tail of the file-effect queue (`_queueFileEffect`) */
+  private static _fileEffects: Promise<void> = Promise.resolve();
   /** `load:<name>` and `save:<name>`: which toasts this session has shown */
   private static readonly _told = new Set<string>();
   /** One write at a time per tutorial, the latest save last */
