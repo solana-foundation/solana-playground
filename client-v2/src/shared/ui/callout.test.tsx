@@ -60,7 +60,7 @@ describe("CalloutAction", () => {
   });
 
   describe("lending its look to an AsyncButton", () => {
-    const lent = ({
+    const renderLent = ({
       onClick,
       disabled,
     }: {
@@ -79,18 +79,18 @@ describe("CalloutAction", () => {
 
     it("keeps the button's own disabled and click", () => {
       const onClick = vi.fn();
-      const { unmount } = lent({ onClick, disabled: true });
+      const { unmount } = renderLent({ onClick, disabled: true });
       expect(button().disabled).toBe(true);
       unmount();
 
-      lent({ onClick });
+      renderLent({ onClick });
       fireEvent.click(button());
       expect(onClick).toHaveBeenCalledOnce();
     });
 
     it("stays busy while the click waits", async () => {
       let settle = () => {};
-      lent({
+      renderLent({
         onClick: () => new Promise<void>((resolve) => (settle = resolve)),
       });
       fireEvent.click(button());
@@ -104,7 +104,7 @@ describe("CalloutAction", () => {
     });
 
     it("leaves none of the button's default fill or text colour", () => {
-      lent({ onClick: () => undefined });
+      renderLent({ onClick: () => undefined });
       expect(button().className).not.toMatch(/bg-primary|primary-foreground/);
     });
   });

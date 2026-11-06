@@ -183,8 +183,16 @@ describe("SyncBanner wording", () => {
     const description = requireFor("the banner's description")(
       container.querySelector('[data-slot="callout-description"]')
     );
-    expect(description.className).toContain("opacity-100");
-    expect(description.className).not.toContain("opacity-90");
+    // The callout lifts its description to full strength once it holds
+    // actions, as the banner always does
+    expect(description.className).toContain(
+      "group-has-[>[data-slot=callout-actions]]/callout:opacity-100"
+    );
+    expect(
+      description.parentElement?.querySelector(
+        ':scope > [data-slot="callout-actions"]'
+      )
+    ).not.toBeNull();
 
     const keep = requireFor("the answer")(
       Array.from(container.querySelectorAll("button")).find(
