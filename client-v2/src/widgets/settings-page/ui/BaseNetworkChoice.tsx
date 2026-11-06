@@ -1,23 +1,30 @@
+import type { ReactNode } from "react";
 import { useId } from "react";
 
 import { NETWORKS as OFFERED } from "@/constants";
 import type { CustomRpc } from "@/entities/cluster";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
+import { StatusDot } from "@/shared/ui/status-dot";
 
-const REAL_SOL = "Deploys with real SOL";
-
-/** A chip; `line` says how its network deploys, only Mainnet has one so far */
+/**
+ * A chip. An offered network says how a deploy works there (free SOL only on
+ * devnet, following Spec 03) and whether that spends real SOL (an amber dot);
+ * a saved custom RPC says neither, since its cluster is unknown.
+ */
 interface Chip {
   label: string;
   endpoint: string;
-  line?: string;
+  foot?: { line: string; realSol: boolean };
 }
 
 const NETWORKS: ReadonlyArray<Chip> = OFFERED.map(
   ({ name, value, cluster }) => ({
     label: name,
     endpoint: value,
-    line: cluster === "mainnet-beta" ? REAL_SOL : undefined,
+    foot:
+      cluster === "mainnet-beta"
+        ? { line: "Deploys with real SOL", realSol: true }
+        : { line: "Deploys with free devnet SOL", realSol: false },
   })
 );
 
@@ -55,9 +62,12 @@ export const checkedChipKey = (
 };
 
 /**
- * The network chips: the offered networks, then each saved custom RPC under
- * its name, with the checked network's line under them. An endpoint no chip
- * lists (Playnet, or a URL not saved yet) leaves none checked.
+ * The network card's rows: the chips, Devnet and Mainnet, then each saved
+ * custom RPC under its name; then `children` (the saved RPCs' list); then
+ * the card's foot, how a deploy works on the checked network. An endpoint no
+ * chip lists (Playnet, or a URL not saved yet) leaves none checked and no
+ * foot. Render it directly inside BaseSettingsCard: the rows are a fragment,
+ * so the card's divide-y draws the hairlines between them.
  *
  * Chips may share a URL (HOO-2690). One is checked: `chosen` while the
  * endpoint is still its URL, else the first listing the endpoint.
@@ -67,6 +77,7 @@ const BaseNetworkChoice = ({
   custom = [],
   chosen,
   onPick,
+  children,
 }: {
   endpoint: string;
   /** The saved custom RPCs, in the order they were saved */
@@ -75,6 +86,8 @@ const BaseNetworkChoice = ({
   chosen?: string;
   /** A chip was picked: its URL, and its key for `chosen` */
   onPick: (endpoint: string, key: string) => void;
+  /** A row between the chips and the foot */
+  children?: ReactNode;
 }) => {
   const chips = chipsOf(custom);
   const picked = pickedOf(chips, { endpoint, chosen });
@@ -82,33 +95,42 @@ const BaseNetworkChoice = ({
     const chip = chips.find((n) => keyOf(n) === key);
     if (chip) onPick(chip.endpoint, key);
   };
-  const lineId = useId();
+  const footId = useId();
   return (
-    <div className="flex flex-col gap-2">
-      <Segmented
-        variant="chips"
-        aria-label="Network"
-        aria-describedby={picked?.line ? lineId : undefined}
-        value={picked ? keyOf(picked) : ""}
-        onValueChange={handleChange}
-      >
-        {chips.map((n) => (
-          <SegmentedItem
-            key={keyOf(n)}
-            value={keyOf(n)}
-            // A fingertip tall on a phone, as the prototype's network chips
-            className="max-md:h-12 max-md:px-4 max-md:text-control"
-          >
-            {n.label}
-          </SegmentedItem>
-        ))}
-      </Segmented>
-      {picked?.line && (
-        <span id={lineId} className="text-xs text-muted-foreground">
-          {picked.line}
-        </span>
+    <>
+      <div className="px-4 py-4">
+        <Segmented
+          variant="chips"
+          aria-label="Network"
+          aria-describedby={picked?.foot ? footId : undefined}
+          value={picked ? keyOf(picked) : ""}
+          // Segmented picks on arrow-key focus, as a radio group does
+          onValueChange={handleChange}
+        >
+          {chips.map((n) => (
+            <SegmentedItem
+              key={keyOf(n)}
+              value={keyOf(n)}
+              // A fingertip tall on a phone, at the h-11 of the Settings design's chips (DES-128)
+              className="max-md:h-11 max-md:px-4 max-md:text-control"
+            >
+              {n.label}
+            </SegmentedItem>
+          ))}
+        </Segmented>
+      </div>
+      {children}
+      {picked?.foot && (
+        // The card's foot: how a deploy works here, amber where SOL is real
+        <p
+          id={footId}
+          className="flex items-center gap-2 bg-surface-raised/50 px-4 py-2.5 text-xs text-muted-foreground max-md:text-caption max-md:font-read"
+        >
+          <StatusDot variant={picked.foot.realSol ? "warning" : "success"} />
+          {picked.foot.line}
+        </p>
       )}
-    </div>
+    </>
   );
 };
 
