@@ -51,7 +51,7 @@ const signInThenDeploy = async () => {
   const cluster = PgConnection.cluster;
   const workspace = PgExplorer.currentWorkspaceName;
   try {
-    await PgSession.signInWith({ from: "deploy" });
+    await PgSession.signInFor("deploy")([]);
   } catch (error) {
     if (isSignInFailure(error)) {
       log.info("sign-in from the deploy stage failed", {
