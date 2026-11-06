@@ -34,7 +34,7 @@ vi.mock("../../../utils", () => ({
   PgTx: { confirm: h.confirm },
 }));
 vi.mock("../../../utils/program-interaction", () => ({
-  PgProgramInteraction: { test: h.test },
+  PgProgramInteraction: { test: h.test, getAnchorProgram: () => ({}) },
 }));
 
 import { PgCallHistory } from "../state/call-history";

@@ -19,7 +19,8 @@ import type {
   TutorialStorageData,
 } from "./types";
 
-const log = createLogger("tutorial:pg-tutorial");
+const log = createLogger("tutorial:open");
+const storageLog = createLogger("tutorial:storage");
 
 const defaultState: TutorialState = {
   pageNumber: null,
@@ -71,7 +72,7 @@ const storage = {
     try {
       await writeWorkspaceFile(this.PATH, JSON.stringify(state));
     } catch (e) {
-      log.error(e, { report: true });
+      storageLog.error(e, { report: true });
     }
   },
 };
