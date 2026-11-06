@@ -1375,3 +1375,49 @@ describe("renaming an item", () => {
     expect(announced).not.toHaveBeenCalled();
   });
 });
+
+describe("deleting a file that has no tab", () => {
+  beforeEach(reset);
+
+  // A delete closes only the tabs of what it deletes; a path with no tab
+  // has nothing to close
+  it("leaves the open tabs and the selected tab as they were", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "declare_id!();"],
+        ["/alpha/client/client.ts", "client"],
+        ["/alpha/tests/anchor.test.ts", "test"],
+      ],
+    });
+    const lib = PgExplorer.convertToFullPath("src/lib.rs");
+    const client = PgExplorer.convertToFullPath("client/client.ts");
+    PgExplorer.setTabs([lib, client]);
+    PgExplorer.openFile(lib);
+
+    await PgExplorer.deleteItem("tests/anchor.test.ts");
+
+    expect(PgExplorer.tabs).toEqual([lib, client]);
+    expect(PgExplorer.currentFilePath).toBe(lib);
+  });
+
+  it("closes only the tabs of a folder's files when the folder goes", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "declare_id!();"],
+        ["/alpha/client/a.ts", "a"],
+        ["/alpha/client/b.ts", "b"],
+        ["/alpha/tests/anchor.test.ts", "test"],
+      ],
+    });
+    const lib = PgExplorer.convertToFullPath("src/lib.rs");
+    const a = PgExplorer.convertToFullPath("client/a.ts");
+    const test = PgExplorer.convertToFullPath("tests/anchor.test.ts");
+    PgExplorer.setTabs([lib, a, test]);
+    PgExplorer.openFile(lib);
+
+    await PgExplorer.deleteItem("client");
+
+    expect(PgExplorer.tabs).toEqual([lib, test]);
+    expect(PgExplorer.currentFilePath).toBe(lib);
+  });
+});

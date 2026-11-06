@@ -1395,13 +1395,18 @@ export class PgExplorer {
 
   /**
    * Close the file at the given path.
-
-   * This method mutates the existing tabs array.
+   *
+   * This method mutates the existing tabs array. A path with no tab is left
+   * alone, and no close event is dispatched for it.
    *
    * @param path file path
    */
   static closeFile(path: string) {
     path = this.convertToFullPath(path);
+
+    // Without this, `indexOf` gives -1 and `splice(-1, 1)` below removes the
+    // last tab, an unrelated one
+    if (!this.tabs.includes(path)) return;
 
     // If closing the current file, change the current file to the next tab
     if (this.currentFilePath === path) {
