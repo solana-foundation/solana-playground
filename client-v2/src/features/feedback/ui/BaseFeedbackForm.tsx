@@ -185,7 +185,7 @@ const GithubAnchor = ({
     target="_blank"
     rel="noopener noreferrer"
     onClick={() => onGithub(link)}
-    className="text-primary hover:underline"
+    className="text-primary-ink hover:underline"
   >
     {children}
     <ExternalLink aria-hidden="true" className="ml-0.5 inline size-3" />

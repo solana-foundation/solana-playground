@@ -28,7 +28,7 @@ const CodeBlock = ({ lang, children: code, ...props }: CodeBlockProps) => {
     >
       <div
         ref={copyButtonWrapperRef}
-        className="absolute top-2 right-4 rounded-[12px] opacity-0 shadow-panel transition-opacity duration-50 ease-linear group-hover:opacity-100"
+        className="absolute top-2 right-4 rounded-[12px] opacity-0 shadow-panel transition-opacity duration-50 ease-linear group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100"
       >
         <CopyButton value={code} onError={reportButtonFailure("copy")} />
       </div>

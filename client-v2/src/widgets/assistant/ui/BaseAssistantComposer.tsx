@@ -52,7 +52,7 @@ export interface ComposerAddableFile {
 const CHIP_TARGET =
   "relative before:absolute before:inset-x-0 before:-inset-y-[11px] before:content-[''] md:before:hidden";
 const REMOVE_TARGET =
-  "relative grid size-auto place-items-center rounded-full border-0 text-muted-foreground hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-transparent before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-[''] md:before:-inset-1";
+  "relative grid size-auto place-items-center rounded-full border-0 text-muted-foreground hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-transparent before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-[''] md:before:-inset-1.5";
 
 /**
  * Where the user writes to the assistant: what it will read, the words, the
