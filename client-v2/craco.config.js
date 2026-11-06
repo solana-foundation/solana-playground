@@ -139,10 +139,12 @@ const addSandboxEntry = (webpackConfig, env) => {
   if (!appPage) throw new Error("craco: expected CRA's HtmlWebpackPlugin");
   appPage.userOptions.chunks = ["main"];
 
-  // The sandbox's scripts, its entry (`runtime.html`) and the chunks it loads,
-  // are cross-origin to its opaque origin. Loaded without CORS, their errors
-  // are muted: the browser reports every error as "Script error." and never
-  // fires `unhandledrejection` for their promises
+  // The scripts the sandbox's page (`runtime.html`) loads, its entry and the
+  // chunks the entry imports, are cross-origin to its opaque origin. Loaded
+  // without CORS, their errors are muted: the browser reports every error as
+  // "Script error." and never fires `unhandledrejection` for their promises.
+  // The setting is the whole build's, so the app's lazy chunks load with
+  // CORS too, which same-origin requests pass as before
   webpackConfig.output.crossOriginLoading = "anonymous";
 
   webpackConfig.plugins.push(

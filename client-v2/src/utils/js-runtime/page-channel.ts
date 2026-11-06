@@ -38,7 +38,9 @@ const reasonOf = (error: unknown) =>
 
 /**
  * Serves one run on the page's side of the port: prints output, answers sign
- * and RPC requests, and ends with the sandbox's `end`. A message that does
+ * and RPC requests, and resolves on the sandbox's `end`. It goes on serving
+ * after that, for callbacks the code did not await, until the port is closed
+ * (`PgJsRuntime`, when the next run opens the sandbox). A message that does
  * not have the shape its type names is not acted on; the sandbox runs code
  * nobody vetted. Every sign or RPC request with an id is answered, with an
  * error when it is malformed or its handler fails, so the sandbox never
