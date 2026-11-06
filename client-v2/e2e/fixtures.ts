@@ -118,7 +118,11 @@ export const HELP_TAIL = "Run test(s)";
 export const runInTerminal = async (page: Page, command: string) => {
   await expect(page.locator(".xterm-rows").first()).toHaveText(/\$\s*$/);
   const input = page.getByLabel("Terminal input").first();
-  await input.click();
+  // Focused, not clicked: xterm sizes its helper textarea only while the
+  // terminal has the focus, and a console that opened on its own (a wallet's
+  // setup, a run) keeps the focus where it was, so the textarea is 0 x 0 and
+  // never reads as visible for a click
+  await input.focus();
   await expect(input).toBeFocused();
   await page.keyboard.type(command);
   await page.keyboard.press("Enter");
