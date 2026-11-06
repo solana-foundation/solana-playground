@@ -15,6 +15,7 @@ import {
   type SettingsFocus,
   type SettingsRequest,
 } from "@/shared/lib/settings-request";
+import { cn } from "@/shared/lib/utils";
 import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
 import { PgCommon, PgExplorer, PgView } from "@/utils";
@@ -549,8 +550,18 @@ const FlowFrame = () => {
           )}
           assistant={({ open, toggle, ...widen }) => (
             // No fill, so the conversation sits on the window's pattern, as
-            // the prototype's does
-            <aside className="relative flex h-full w-full flex-col overflow-hidden">
+            // the prototype's does. Holding the tutorial's chat column
+            // (`chatInColumn`) it is a row, as the frame's holder is:
+            // `BaseChatColumn`'s `shrink-0` then holds its width and the row
+            // bounds its height, so the feed scrolls above the composer. In
+            // a column `shrink-0` holds the height instead, and the column
+            // grows past the window (HOO-2649)
+            <aside
+              className={cn(
+                "relative flex h-full w-full overflow-hidden",
+                chatInColumn ? "flex-row" : "flex-col"
+              )}
+            >
               {/* The head carries "Collapse assistant", and Widen while the
                 shell says it can widen. Hidden, the column takes no width and
                 the stage bar carries "Expand assistant" (design.md, "Frame

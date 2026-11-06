@@ -159,3 +159,59 @@ test("no stage before an upstream tutorial's Start", async ({ page }) => {
   await start.click();
   await expect(stageTab(page, "Build")).toBeVisible(LONG);
 });
+
+// HOO-2649: under 1024 px the tutorial's chat column must take its holder's
+// height, or after Start it grows with the feed and the composer falls under
+// the fold. 700 is under `LAYOUT_BREAKPOINTS.phone` (the pager, on its Chat),
+// 900 under `.compact` (the assistant's sheet)
+const HEIGHT = 800;
+const openChat: Record<number, (page: Page) => Promise<void>> = {
+  700: (page) =>
+    page
+      .getByRole("radiogroup", { name: "Show" })
+      .getByRole("radio", { name: "Chat" })
+      .click(LONG),
+  900: (page) =>
+    page.getByRole("button", { name: "Expand assistant" }).click(LONG),
+};
+for (const width of [700, 900]) {
+  test(`keeps the composer in the window at ${width}x${HEIGHT}, before and after Start`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width, height: HEIGHT });
+    await page.goto("/tutorials/hello-anchor");
+    await openChat[width](page);
+    const start = chat(page).getByRole("button", { name: /Start step 1/ });
+    await expect(start).toBeVisible(LONG);
+
+    // Its placeholder changes after Start and its send key does not, so the
+    // locator keys on `enterkeyhint`
+    const box = chat(page).locator('textarea[enterkeyhint="send"]');
+    // Retried, as a sheet or the pager may still be settling
+    const inWindow = () =>
+      expect(async () => {
+        const rect = await box.boundingBox();
+        // No box (not rendered) reads as off the window
+        const { y, height } = rect ?? { y: -1, height: 0 };
+        expect(y).toBeGreaterThanOrEqual(0);
+        expect(y + height).toBeLessThanOrEqual(HEIGHT);
+      }).toPass(LONG);
+
+    await inWindow();
+    await start.click();
+    await expect(chat(page).getByText("Step 1 of 4")).toBeVisible(LONG);
+    await inWindow();
+    // The feed outgrows its room and scrolls itself, above the composer,
+    // once the step's turns are in
+    const scroller = chat(page)
+      .getByRole("log", { name: "Tutorial" })
+      .locator("..");
+    await expect
+      .poll(
+        () => scroller.evaluate((el) => el.scrollHeight > el.clientHeight),
+        LONG
+      )
+      .toBe(true);
+  });
+}

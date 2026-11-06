@@ -201,8 +201,10 @@ export default defineConfig({
   // Under the `e2e` shard job's `timeout-minutes` (client-v2.yml), so
   // Playwright itself ends a hung shard and still prints its summary; a
   // GitHub cancel keeps the traces but not the line saying which test was
-  // running.
-  globalTimeout: process.env.CI ? 15 * 60_000 : 0,
+  // running. 25 minutes, not 15, while scope/tutorial-flow's shards are
+  // uneven: shard 5 outgrew 15 with every test passing (#383, HOO-2585). It
+  // goes back once the shards are rebalanced.
+  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every page starts as a visitor who left the file tree open: a first
