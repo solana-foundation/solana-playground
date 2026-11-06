@@ -20,10 +20,12 @@ const HIDDEN_GLOBALS = ["eval", "Function"];
 
 /**
  * `import` statements of project code: `* as name`, `{ a, b as c }`, a
- * default name, or none (side effect only)
+ * default name, or none (side effect only). Only one that starts a line or
+ * follows a `;`: an `import` in a comment or a string is not a statement,
+ * and hoisting it would run it.
  */
 const IMPORT_REGEX =
-  /import\s+(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["|'](.+)["|']/gm;
+  /(?<=^|;)[ \t]*import\s+(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["']([^"']+)["']/gm;
 
 /**
  * The awaited `__pgImport(path)` an `import` statement becomes, which the
@@ -89,7 +91,8 @@ const hoistImports = (code: string) => {
 const WRAPPER_LINES = 2;
 
 /**
- * Turns project code into what the sandbox runs: imports rewritten, wrapped
+ * Turns project code into what the sandbox runs: imports moved to the start
+ * (`hoistImports`), wrapped
  * so top-level `await` works and `this` is not the window, handed to
  * `__pgDone` so the sandbox knows when it ends, and transpiled to JavaScript.
  * The class body makes the code strict; `eval` and `Function` are shadowed
@@ -178,6 +181,20 @@ if (import.meta.vitest) {
         { a: { x: 1 } }
       );
       expect(seen).toEqual([1]);
+    });
+
+    it("loads two imports on one line", async () => {
+      const seen = await runPrepared(
+        'import * as a from "a"; import * as b from "b";\nseen.push(a.x, b.x);',
+        { a: { x: 1 }, b: { x: 2 } }
+      );
+      expect(seen).toEqual([1, 2]);
+    });
+
+    it("leaves an import in a comment where it is, unrun", () => {
+      expect(
+        prepareCode('// import * as gone from "missing";\nconst a = 1;')
+      ).not.toContain("__pgImport");
     });
 
     it("keeps the code's line numbers with its imports moved", () => {
