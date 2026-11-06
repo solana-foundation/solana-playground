@@ -255,13 +255,16 @@ export class PgCallPanel {
     const tutorial = PgCallPanel._name();
     PgCallPanel._set({ calling: true });
     const result = await PgConversation.callFromPanel({ instruction, args });
-    // At once: the terminal puts a prompt back after every print
-    PgTerminal.println(logLines(instruction, result).join("\n"));
     // Another tutorial opened meanwhile: the panel on screen is its own
-    if (PgCallPanel._name() !== tutorial) return;
-    PgCallPanel._set({
-      calling: false,
-      last: { instruction, args, deployed, result },
-    });
+    const sameTutorial = PgCallPanel._name() === tutorial;
+    if (sameTutorial) {
+      PgCallPanel._set({
+        calling: false,
+        last: { instruction, args, deployed, result },
+      });
+    }
+    // After the panel settles, so a print that throws cannot leave Call
+    // disabled; at once, as the terminal puts a prompt back after every print
+    PgTerminal.println(logLines(instruction, result).join("\n"));
   }
 }

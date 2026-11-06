@@ -70,8 +70,9 @@ import { useStagesOffered } from "./use-stages-offered";
  * column, and the stage router over its collapsible console, with the shell's
  * stage bar (`BaseStageBar`) and then the `StageBar` stage tabs across the
  * last two (a tutorial's frame draws neither the tabs nor the files column).
- * The sync banner sits above all four, full width. On `/` with no project, `useStartView` hands the shell `homeSlot`, and Home stands where
- * the assistant and the work go.
+ * The sync banner sits above all four, full width. On `/` with no project,
+ * `useStartView` hands the shell `homeSlot`, and Home stands where the
+ * assistant and the work go.
  *
  * The feedback form and its state sit in `FeedbackHost`, above the frame, not
  * in the footer with the account menu: below `LAYOUT_BREAKPOINTS.phone` the

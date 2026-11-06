@@ -163,7 +163,9 @@ const sendCall = async (
   // The program on chain answers to the IDL it was deployed with: a build
   // since then must not change what is sent
   const idl = deployed ?? PgProgramInfo.callableIdl();
-  const idlIx = idl?.instructions.find((ix) => ix.name === call.instruction);
+  const idlIx = idl?.instructions.find((ix) =>
+    sameIdlName(ix.name, call.instruction)
+  );
   if (!idlIx) {
     throw new Error(
       `The deployed program has no \`${call.instruction}\`. Build and deploy it again.`

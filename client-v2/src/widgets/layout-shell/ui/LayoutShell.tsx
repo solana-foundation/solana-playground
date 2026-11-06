@@ -140,9 +140,10 @@ export interface LayoutShellProps {
   phoneStatus?: ReactNode;
   /**
    * A tutorial's frame (`BaseLayoutShellProps.tutorial`). On a wide window
-   * it has no assistant panel and holds the files column open, so Ctrl+R,
-   * ⌘E and the assistant's own requests to open do nothing while it holds
-   * the work; the frame's navigation state is its own and never saved.
+   * it has neither the assistant panel nor the files column, so Ctrl+R and
+   * the assistant's own requests to open do nothing while it holds the work,
+   * and ⌘E opens the workspace's tree; the frame's navigation state is its
+   * own and never saved.
    */
   tutorial?: TutorialFrameSlot;
 }
