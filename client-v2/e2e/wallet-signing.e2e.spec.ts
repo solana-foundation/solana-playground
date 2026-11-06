@@ -58,7 +58,7 @@ test("wallet-signing: Project code signs with pg.wallet.keypair", async ({
   });
 
   await seedWorkspace(page);
-  await replaceFile(context, page)("client", "client.ts")(CLIENT);
+  await replaceFile(context)(page)("client")("client.ts")(CLIENT);
 
   await openTerminal(page);
   await runInTerminal(page, "run");
@@ -289,7 +289,7 @@ test.describe("wallet-signing in the sandbox", () => {
       });
     });
     await seedWorkspace(page);
-    await replaceFile(context, page)("client", "client.ts")(
+    await replaceFile(context)(page)("client")("client.ts")(
       [
         `const connection = new web3.Connection("${V0_RPC}/");`,
         "const tx = new web3.VersionedTransaction(new web3.TransactionMessage({",
