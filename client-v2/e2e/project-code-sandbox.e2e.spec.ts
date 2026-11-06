@@ -81,9 +81,12 @@ test.describe("project-code-sandbox", () => {
 
     await runInTerminal(page, "run");
 
-    // The frame's opaque origin mutes the message of an error thrown by a
-    // timer's callback to "Script error."
-    await expect(terminalRows(page)).toContainText("Uncaught error:", LONG);
+    // Not "Script error.": the sandbox loads its scripts with CORS, so the
+    // browser does not mute their errors
+    await expect(terminalRows(page)).toContainText(
+      "Uncaught error: boom",
+      LONG
+    );
     // The prompt is back: the command ended
     await expect(terminalRows(page)).toHaveText(/\$\s*$/, LONG);
   });
