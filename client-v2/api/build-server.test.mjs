@@ -281,20 +281,39 @@ describe("/api/build-server", () => {
   });
 
   it("aborts the server request when the caller leaves", async () => {
+    const res = makeRes();
     let signal;
     const d = deps({
       fetch: mock.fn(async (_url, init) => {
         signal = init.signal;
+        res.destroyed = true;
+        res.emit("close");
         throw Object.assign(new Error("aborted"), { name: "AbortError" });
       }),
     });
-    const res = makeRes();
-    res.destroyed = true;
 
     await handleWith(d)(makeReq({ body: BUILD }), res);
 
-    assert.ok(signal);
+    assert.equal(signal.aborted, true);
     assert.equal(d.query.mock.calls[1].arguments[1][2], 499);
+  });
+
+  it("starts no build for a caller who left while the audit row was written", async () => {
+    const res = makeRes();
+    const query = mock.fn(async (text) => {
+      if (/insert/.test(text)) {
+        res.destroyed = true;
+        res.emit("close");
+        return { rows: [{ id: "9" }] };
+      }
+      return { rows: [] };
+    });
+    const d = deps({ query });
+
+    await handleWith(d)(makeReq({ body: BUILD }), res);
+
+    assert.equal(d.fetch.mock.callCount(), 0);
+    assert.equal(query.mock.calls[1].arguments[1][2], 499);
   });
 
   for (const [method, path] of [

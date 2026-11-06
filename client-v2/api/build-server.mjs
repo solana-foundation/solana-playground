@@ -51,10 +51,10 @@ import {
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
 import {
-  finishAudit,
+  finishAuditWith,
   projectOf,
   resolveRoute,
-  startAudit,
+  startAuditWith,
   upstreamPath,
 } from "../src/features/build-server/server.mjs";
 import { query } from "../src/features/persistence/server.mjs";
@@ -193,6 +193,11 @@ export const handleWith = (deps) => {
       return sendJson(res, 404, { error: "Not a build server route." });
     }
 
+    // A caller who leaves stops the build server's request too. Listening
+    // before the first wait, so a caller gone before the forward is seen
+    const abort = new AbortController();
+    res.on?.("close", () => abort.abort());
+
     // Who is asking comes first, so a refused caller costs nothing
     if (!deps.isAllowedOrigin(req)) {
       return sendJson(res, 403, { error: "Cross-origin request refused" });
@@ -243,7 +248,7 @@ export const handleWith = (deps) => {
     let auditId;
     if (route.kind === "build") {
       try {
-        auditId = await startAudit(deps.query, {
+        auditId = await startAuditWith(deps.query)({
           userId: session.user.id,
           project: projectOf(json),
           unstable: route.unstable,
@@ -266,7 +271,7 @@ export const handleWith = (deps) => {
     const finish = (status, answer) =>
       auditId === undefined
         ? Promise.resolve()
-        : finishAudit(deps.query, {
+        : finishAuditWith(deps.query)({
             id: auditId,
             programUuid: programUuidOf(json, answer),
             status,
@@ -280,9 +285,12 @@ export const handleWith = (deps) => {
     if (body !== undefined) headers["content-type"] = "application/json";
     if (API_KEY) headers["x-api-key"] = API_KEY;
 
-    // A caller who leaves stops the build server's request too
-    const abort = new AbortController();
-    res.on?.("close", () => abort.abort());
+    // A caller who left while the route waited (session, body, audit) is
+    // not worth a build: the close already fired, so nothing would abort it
+    if (res.destroyed || abort.signal.aborted) {
+      await finish(CALLER_LEFT, "");
+      return;
+    }
 
     let upstream;
     try {

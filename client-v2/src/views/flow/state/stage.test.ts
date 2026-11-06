@@ -353,7 +353,10 @@ describe("PgFlow.reduce, a stopped run", () => {
 
   it("a deploy whose build was refused for sign-in did not fail", () => {
     const deploying = PgFlow.reduce(
-      PgFlow.reduce(builtOnce(), { type: "deploy-start" }),
+      PgFlow.reduce(builtOnce(), {
+        type: "deploy-start",
+        from: "command",
+      }),
       {
         type: "build-finish",
         failed: true,
@@ -369,12 +372,34 @@ describe("PgFlow.reduce, a stopped run", () => {
     const s = PgFlow.reduce(deploying, {
       type: "deploy-finish",
       ok: false,
-      signInRefused: true,
+      from: "command",
+      refusal: { kind: "signed-out", message: "Sign in with GitHub to build." },
     });
 
     expect(s.deploy).toBe("active");
     expect(s.stage).toBe("build");
     expect(isSignInRefusal(s.buildFailure)).toBe(true);
+  });
+
+  it("a deploy refused with no build before it puts the sign-in on Build", () => {
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "command",
+    });
+
+    const s = PgFlow.reduce(deploying, {
+      type: "deploy-finish",
+      ok: false,
+      from: "command",
+      refusal: { kind: "signed-out", message: "Sign in with GitHub to build." },
+    });
+
+    expect(s.stage).toBe("build");
+    expect(s.build).toBe("done");
+    expect(s.buildFailure).toEqual({
+      kind: "signed-out",
+      message: "Sign in with GitHub to build.",
+    });
   });
 
   it("a stopped first build goes back to upcoming", () => {
@@ -1277,26 +1302,66 @@ describe("PgFlow, a deploy run outside the deploy command", () => {
   });
 });
 
-describe("buildFailureOf", () => {
-  it("reads the route's sign-in refusal (HOO-2422)", async () => {
-    const { buildFailureOf } = await import("./stage");
-    expect(
-      buildFailureOf(
-        Object.assign(new Error("Sign in with GitHub to build."), {
-          answered: true,
-          reason: "signed-out",
-        })
-      )
-    ).toEqual({
+describe("what a rejected command tells the flow (HOO-2422)", () => {
+  /** `PgFlow.init` with the two finish listeners captured */
+  const listen = async () => {
+    const { PgCommand, PgGlobal } = await import("../../../utils");
+    PgGlobal.deployState = "ready";
+    // `PgBuildOutput.latest` stays null: the case that sets it puts it back
+    let build: Parameters<typeof PgCommand.build.onDidFinish>[0] | undefined;
+    let deploy: Parameters<typeof PgCommand.deploy.onDidFinish>[0] | undefined;
+    vi.mocked(PgCommand.build.onDidFinish).mockImplementationOnce((cb) => {
+      build = cb;
+      return { dispose: vi.fn() };
+    });
+    vi.mocked(PgCommand.deploy.onDidFinish).mockImplementationOnce((cb) => {
+      deploy = cb;
+      return { dispose: vi.fn() };
+    });
+    const sub = PgFlow.init();
+    return {
+      sub,
+      build: requireFor("the build finish listener")(build),
+      deploy: requireFor("the deploy finish listener")(deploy),
+    };
+  };
+  const refusal = () =>
+    Object.assign(new Error("Sign in with GitHub to build."), {
+      answered: true,
+      reason: "signed-out",
+    });
+
+  it("reads the route's sign-in refusal of a build", async () => {
+    const { sub, build } = await listen();
+
+    build({ err: refusal() });
+
+    expect(PgFlow.state.buildFailure).toEqual({
       kind: "signed-out",
       message: "Sign in with GitHub to build.",
     });
+    sub.dispose();
   });
 
   it("keeps any other answered failure as other", async () => {
-    const { buildFailureOf } = await import("./stage");
-    expect(
-      buildFailureOf(Object.assign(new Error("boom"), { answered: true }))
-    ).toEqual({ kind: "other", message: "boom" });
+    const { sub, build } = await listen();
+
+    build({ err: Object.assign(new Error("boom"), { answered: true }) });
+
+    expect(PgFlow.state.buildFailure).toEqual({
+      kind: "other",
+      message: "boom",
+    });
+    sub.dispose();
+  });
+
+  it("carries a refused deploy's sign-in to Build", async () => {
+    const { sub, deploy } = await listen();
+
+    deploy({ err: refusal() });
+
+    expect(PgFlow.state.stage).toBe("build");
+    expect(isSignInRefusal(PgFlow.state.buildFailure)).toBe(true);
+    sub.dispose();
   });
 });
