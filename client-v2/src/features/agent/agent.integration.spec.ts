@@ -51,10 +51,13 @@ const db = vi.hoisted(() => {
     spend: new Map<string, { reserved: number; spent: number }>(),
     /** `agent_spend.capped` by `${userId}|${day}`, kept apart so `spend` rows compare as before */
     capped: new Map<string, number>(),
-    /** `agent_turn`, in insertion order */
+    /** `agent_turn`, in insertion order; `id` is the row's serial, as text */
     turns: [] as {
+      id: string;
       userId: string;
+      day: string;
       tier: string;
+      model: string;
       outcome: string;
       promptTokens: number | null;
       completionTokens: number | null;
@@ -63,6 +66,8 @@ const db = vi.hoisted(() => {
     /** Every query and upstream call, in order */
     log: [] as string[],
     down: false,
+    /** The last `agent_turn.id` handed out: a serial, never reused */
+    lastTurnId: 0,
     /** Runs while a statement is in flight, before it answers */
     during: null as ((text: string) => void) | null,
   };
@@ -78,8 +83,8 @@ const db = vi.hoisted(() => {
       return { rows: [] };
     }
     if (text.includes("insert into agent_spend")) {
-      const [userId, day, ageDays, amount, newcomerCap, establishedCap] =
-        params as [string, string, number, number, number, number];
+      const [userId, day, ageDays, amount, newcomerCap, establishedCap, model] =
+        params as [string, string, number, number, number, number, string];
       const user = state.users.get(userId);
       if (!user) return { rows: [] };
       const createdAt = user.githubCreatedAt;
@@ -100,41 +105,52 @@ const db = vi.hoisted(() => {
         row.reserved += amount;
         admitted = true;
       }
-      return { rows: [{ tier, dated, admitted }] };
+      // The same statement records an admitted turn as started
+      if (!admitted) {
+        // eslint-disable-next-line unicorn/no-null -- a Postgres row: no turn is SQL `NULL`
+        return { rows: [{ tier, dated, turn_id: null }] };
+      }
+      state.lastTurnId += 1;
+      const id = String(state.lastTurnId);
+      state.turns.push({
+        id,
+        userId,
+        day,
+        tier,
+        model,
+        outcome: "started",
+        promptTokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        completionTokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        charged: amount,
+      });
+      return { rows: [{ tier, dated, turn_id: id }] };
     }
-    if (text.includes("update agent_spend")) {
-      const [userId, day, reserved, charge] = params as [
-        string,
+    if (text.includes("update agent_turn")) {
+      // Checked before `update agent_spend`: this statement holds both
+      const [id, charge, outcome, promptTokens, completionTokens] = params as [
         string,
         number,
-        number
+        string,
+        number | null,
+        number | null
       ];
-      const row = state.spend.get(`${userId}|${day}`);
+      const turn = state.turns.find(
+        (t) => t.id === id && t.outcome === "started"
+      );
+      if (!turn) return { rows: [{ ended: 0 }] };
+      // The reservation the row held, as the statement's `held` reads it
+      const reserved = turn.charged;
+      turn.outcome = outcome;
+      turn.promptTokens = promptTokens;
+      turn.completionTokens = completionTokens;
+      turn.charged = charge;
+      // The same statement settles the day the turn was reserved on
+      const row = state.spend.get(`${turn.userId}|${turn.day}`);
       if (row) {
         row.reserved -= reserved;
         row.spent += charge;
       }
-      // The same statement records the turn
-      const [, , , , tier, outcome, promptTokens, completionTokens] =
-        params as [
-          string,
-          string,
-          number,
-          number,
-          string,
-          string,
-          number | null,
-          number | null
-        ];
-      state.turns.push({
-        userId,
-        tier,
-        outcome,
-        promptTokens,
-        completionTokens,
-        charged: charge,
-      });
-      return { rows: [] };
+      return { rows: [{ ended: 1 }] };
     }
     if (text.includes('"accessToken"')) {
       const token = state.users.get(params[0] as string)?.token;
@@ -192,6 +208,7 @@ beforeEach(() => {
   db.state.users.clear();
   db.state.spend.clear();
   db.state.turns.length = 0;
+  db.state.lastTurnId = 0;
   db.state.capped.clear();
   db.state.log.length = 0;
   db.state.down = false;
@@ -1553,13 +1570,14 @@ describe("POST /api/agent spend gate", () => {
       tokens?: [number, number];
     }) => [
       {
+        id: "1",
         userId: "user-1",
+        day: today(),
         tier: "established",
+        model: "test-model",
         outcome: turn.outcome,
-        /* eslint-disable unicorn/no-null -- the `agent_turns` row: no usage is SQL `NULL` */
-        promptTokens: turn.tokens?.[0] ?? null,
-        completionTokens: turn.tokens?.[1] ?? null,
-        /* eslint-enable unicorn/no-null */
+        promptTokens: turn.tokens?.[0] ?? null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        completionTokens: turn.tokens?.[1] ?? null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
         charged: turn.charged,
       },
     ];
@@ -1623,10 +1641,13 @@ describe("POST /api/agent spend gate", () => {
       expect(res.statusCode).toBe(200);
       expect(db.state.turns).toEqual([
         {
+          id: "1",
           userId: "user-1",
+          day: today(),
           tier: "established",
+          model: "test-model",
           outcome: "completed",
-          // eslint-disable-next-line unicorn/no-null -- the `agent_turns` row: a count the upstream left out is SQL `NULL`
+          // eslint-disable-next-line unicorn/no-null -- the `agent_turn` row: a count the upstream left out is SQL `NULL`
           promptTokens: null,
           completionTokens: 5,
           charged: RESERVED,
@@ -1635,24 +1656,54 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: RESERVED });
     });
 
-    it("logs a settle that fails, with what it would have charged", async () => {
+    it("warns, and charges nothing more, when the turn has no started row to settle", async () => {
       const logged = serverLog();
       network();
       db.state.during = (text) => {
-        if (text.includes("insert into agent_turn")) db.state.down = true;
+        if (text.includes("update agent_turn")) db.state.turns.length = 0;
+      };
+
+      const res = await postJson(handler, TURN);
+
+      expect(res.statusCode).toBe(200);
+      expect(spend()).toEqual({ reserved: RESERVED, spent: 0 });
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "warn",
+          message: "settle found no started turn",
+          report: true,
+          context: {
+            userId: "user-1",
+            turnId: "1",
+            end: "completed",
+            day: today(),
+          },
+        })
+      );
+    });
+
+    it("leaves the turn started, at its reservation, when its settle fails", async () => {
+      const logged = serverLog();
+      network();
+      db.state.during = (text) => {
+        if (text.includes("update agent_turn")) db.state.down = true;
       };
 
       const res = await postJson(handler, TURN);
 
       expect(res.statusCode).toBe(200);
       expect(res.ended).toBe(true);
-      expect(db.state.turns).toEqual([]);
+      expect(db.state.turns).toEqual(
+        recorded({ outcome: "started", charged: RESERVED })
+      );
+      expect(spend()).toEqual({ reserved: RESERVED, spent: 0 });
       expect(logged).toContainEqual(
         expect.objectContaining({
           level: "error",
           report: true,
           error: expect.objectContaining({ message: "connect ECONNREFUSED" }),
           context: expect.objectContaining({
+            turnId: "1",
             end: "completed",
             tier: "established",
             day: today(),

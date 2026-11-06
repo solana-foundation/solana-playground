@@ -331,8 +331,8 @@ async function handler(req, res) {
     });
   }
 
-  // One clock for the day the turn is reserved on, the day it settles on and
-  // the `Retry-After` of a refusal
+  // One clock for the day the turn is reserved on (and so settles on, which
+  // `settle` reads back from the turn's row) and the `Retry-After` of a refusal
   const now = new Date();
   const turn = {
     userId: session.user.id,
@@ -351,6 +351,7 @@ async function handler(req, res) {
       userId: turn.userId,
       day: turn.day,
       amount: turn.amount,
+      model: configured.model,
       newcomerAgeDays: configured.newcomerAgeDays,
       caps: configured.caps,
     });
@@ -380,28 +381,42 @@ async function handler(req, res) {
     // this delays an answer. None of these steps throws: there is nobody left
     // to tell.
     if (gate.admitted) {
-      await settle(query, {
-        userId: turn.userId,
-        day: turn.day,
-        reserved: turn.amount,
-        charge: chargeFor(end, turn.amount, configured.prices),
-        tier: gate.tier,
+      const charge = chargeFor(end, turn.amount, configured.prices);
+      const ended = await settle(query, {
+        turnId: gate.turnId,
+        charge,
         end,
-      }).catch((e) =>
-        // The reservation stays spent for the day: an overcharge, never an
-        // undercharge
+      }).catch((e) => {
+        // The reservation stays spent for the day, and the turn's row stays
+        // `started`: an overcharge, never an undercharge
         log.error(e, {
           report: true,
           context: {
             code: e?.code,
+            turnId: gate.turnId,
             end: end.kind,
             tier: gate.tier,
             day: turn.day,
             reserved: turn.amount,
-            charge: chargeFor(end, turn.amount, configured.prices),
+            charge,
           },
-        })
-      );
+        });
+        return undefined;
+      });
+      // The route settles a turn once, so its row is gone: the user was
+      // deleted mid-turn, which is harmless, or something removed the row,
+      // which leaves the reservation spent. Reported, to tell them apart.
+      if (ended === false) {
+        log.warn("settle found no started turn", {
+          report: true,
+          context: {
+            userId: turn.userId,
+            turnId: gate.turnId,
+            end: end.kind,
+            day: turn.day,
+          },
+        });
+      }
     } else {
       // Only the count is lost: the caller already has the 429
       await recordCapped(query, { userId: turn.userId, day: turn.day }).catch(
