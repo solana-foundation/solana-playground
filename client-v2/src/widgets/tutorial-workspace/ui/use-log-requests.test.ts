@@ -42,6 +42,46 @@ describe("useLogRequests", () => {
     unmount();
   });
 
+  it("opens the drawer once the Code space a Log switches to stops being inert", async () => {
+    const { ref, setOpen } = drawer(false);
+    const code = document.createElement("section");
+    code.setAttribute("inert", "");
+    const box = { current: document.createElement("div") };
+    code.appendChild(box.current);
+    document.body.appendChild(code);
+    const { unmount } = renderHook(() => useLogRequests(true, ref, box));
+    request();
+    expect(setOpen).not.toHaveBeenCalled();
+    code.removeAttribute("inert");
+    await vi.waitFor(() =>
+      expect(setOpen).toHaveBeenCalledWith(true, "button")
+    );
+    // Asked once, opened once: a later change of space opens nothing more
+    setOpen.mockClear();
+    code.setAttribute("inert", "");
+    code.removeAttribute("inert");
+    await Promise.resolve();
+    expect(setOpen).not.toHaveBeenCalled();
+    unmount();
+    code.remove();
+  });
+
+  it("drops a request still waiting when the workspace lets go", async () => {
+    const { ref, setOpen } = drawer(false);
+    const code = document.createElement("section");
+    code.setAttribute("inert", "");
+    const box = { current: document.createElement("div") };
+    code.appendChild(box.current);
+    document.body.appendChild(code);
+    const { unmount } = renderHook(() => useLogRequests(true, ref, box));
+    request();
+    unmount();
+    code.removeAttribute("inert");
+    await Promise.resolve();
+    expect(setOpen).not.toHaveBeenCalled();
+    code.remove();
+  });
+
   it("does not listen while the workspace is not active, nor act behind a page", () => {
     const { ref, setOpen } = drawer(false);
     const page = document.createElement("div");

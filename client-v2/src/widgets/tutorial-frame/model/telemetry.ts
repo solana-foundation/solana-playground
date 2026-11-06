@@ -11,9 +11,10 @@ export type TutorialSpace = "chat" | "code";
 
 /**
  * What switched the phone's space: the header's toggle, a sideways swipe, a
- * "Show in <file>" press, a doc link, or a step picked in the steps sheet
+ * "Show in <file>" press, a doc link, a result card's Log, or a step picked
+ * in the steps sheet
  */
-export type SpaceSource = "toggle" | "swipe" | "show" | "doc" | "step";
+export type SpaceSource = "toggle" | "swipe" | "show" | "doc" | "log" | "step";
 
 type TutorialFrameEvents = {
   /**
