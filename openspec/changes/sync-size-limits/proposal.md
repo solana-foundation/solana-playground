@@ -11,7 +11,7 @@ accepts 100 MB, but
 says 4.5 MB, which HOO-1729 then followed. HOO-2418.
 
 The largest file in the bundled tutorials is 7.8 KB (`battle-coins` `src/lib.rs`,
-about 210 lines). The largest tutorial holds 12.5 KB of code in 3 files.
+about 210 lines). The largest tutorial holds 12 KB of code in 3 files (12,471 bytes).
 Measured over this repository, a line of Rust averages 36 bytes. A Playground
 project is an exercise, so the limits sit far above those figures and far below
 the platform's.

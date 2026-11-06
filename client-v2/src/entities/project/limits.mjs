@@ -5,9 +5,9 @@
 // same file rather than restate a figure that must agree on both sides.
 //
 // A Playground project is an exercise: the largest bundled tutorial holds
-// 12.5 KB in 3 files, so these sit far above that and far below the 4.5 MB a
-// Vercel Function accepts as a request body.
-//
+// 12 KB in 3 files (12,471 bytes), so these sit far above that and far below
+// the 4.5 MB a Vercel Function accepts as a request body.
+
 // TODO(HOO-2604): the JSDoc types below are declared, not checked: the
 // tsconfig has no `checkJs`.
 
@@ -213,14 +213,18 @@ const isCount = (value) => Number.isInteger(value) && Number(value) >= 0;
  * @returns {LimitExceeded | null}
  */
 export const readLimitExceeded = (body) => {
+  // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
   if (!body || typeof body !== "object") return null;
   const b = /** @type {Record<string, unknown>} */ (body);
+  // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
   if (!LIMIT_REASONS.includes(/** @type {any} */ (b.reason))) return null;
+  // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
   if (!isCount(b.limit)) return null;
   const limit = /** @type {number} */ (b.limit);
 
   switch (b.reason) {
     case "path-too-long":
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       if (!isStringList(b.paths)) return null;
       return {
         reason: "path-too-long",
@@ -228,10 +232,13 @@ export const readLimitExceeded = (body) => {
         paths: sortedPaths(b.paths),
       };
     case "file-too-large": {
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       if (!isStringList(b.paths)) return null;
       const paths = sortedPaths(b.paths);
       const given = /** @type {Record<string, number>} */ (b.sizes);
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       if (!given || typeof given !== "object") return null;
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       if (!paths.every((path) => isCount(given[path]))) return null;
       return {
         reason: "file-too-large",
@@ -241,6 +248,7 @@ export const readLimitExceeded = (body) => {
       };
     }
     case "too-many-files":
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       if (!isCount(b.count)) return null;
       return {
         reason: "too-many-files",
@@ -248,9 +256,9 @@ export const readLimitExceeded = (body) => {
         count: /** @type {number} */ (b.count),
       };
     case "too-many-projects":
-      // eslint-disable-next-line unicorn/no-null -- the function's contract: `null` is "not a limit body"
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       if (!isCount(b.count)) return null;
-      // eslint-disable-next-line unicorn/no-null -- the function's contract: `null` is "not a limit body"
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       if (b.kind !== "project" && b.kind !== "tutorial") return null;
       return {
         reason: "too-many-projects",
@@ -259,6 +267,7 @@ export const readLimitExceeded = (body) => {
         count: /** @type {number} */ (b.count),
       };
     case "project-too-large":
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       if (!isCount(b.size)) return null;
       return {
         reason: "project-too-large",
@@ -267,6 +276,7 @@ export const readLimitExceeded = (body) => {
       };
     default:
       // A reason this client has no case for: not one it can name
+      // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
       return null;
   }
 };
@@ -332,6 +342,7 @@ export const checkProjectLimits = (files) => {
     return limitExceeded.projectTooLarge(size);
   }
 
+  // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
   return null;
 };
 
@@ -390,5 +401,6 @@ export const checkWriteTo =
     if (after.size > PROJECT_LIMITS.projectBytes) {
       return limitExceeded.projectTooLarge(after.size);
     }
+    // eslint-disable-next-line unicorn/no-null -- the contract: `null` is "none", read by client and server
     return null;
   };

@@ -22,7 +22,7 @@ const isHeld = (url: string) =>
   PgSettings.connection.endpoint === url &&
   !canSwitchNetwork(PgGlobal.deployState);
 
-/** Save a custom RPC once its URL answers one health request (Spec 07) */
+/** Save a custom RPC once its URL answers one health request (spec `client-v2-custom-rpcs`) */
 const saveChecked = saveCheckedWith(fetchRpcHealth)(isHeld);
 
 /** Say that a running deploy holds the network where it is */

@@ -22,7 +22,8 @@ over the file size limit.
 - **WHEN** a project holds a file of 131,073 bytes
 - **THEN** the project is over the file size limit and no upload is sent
 
-#### Scenario: Multi-byte characters count as bytes
+#### Scenario: Multi-byte characters count as bytes (manual)
+The pure measure: pinned by `client-v2/src/entities/project/limits.test.mjs`, not in the browser.
 - **WHEN** a file holds 50,000 characters that each encode to 3 UTF-8 bytes
 - **THEN** its size is 150,000 bytes and the project is over the file size limit
 
@@ -32,11 +33,13 @@ A path's length SHALL be its count of Unicode code points, measured on the path
 as sync sends it (relative to the workspace). A path of 257 code points or more
 SHALL put its project over the path limit.
 
-#### Scenario: A path of 256 characters syncs
+#### Scenario: A path of 256 characters syncs (manual)
+The pure measure: pinned by `client-v2/src/entities/project/limits.test.mjs`, not in the browser.
 - **WHEN** a project holds a file whose path is 256 code points long and is under every other limit
 - **THEN** the upload is sent and accepted
 
-#### Scenario: A path of 257 characters stops the project
+#### Scenario: A path of 257 characters stops the project (manual)
+The pure measure: pinned by `client-v2/src/entities/project/limits.test.mjs`, not in the browser.
 - **WHEN** a project holds a file whose path is 257 code points long
 - **THEN** the project is over the path limit and no upload is sent
 
@@ -61,11 +64,13 @@ the generated workspace files (`.tutorial.json`,
 of up to 50 counted files SHALL sync. A project of 51 or more SHALL be over the
 file count limit, whatever the files' sizes.
 
-#### Scenario: Fifty files and the generated files sync
+#### Scenario: Fifty files and the generated files sync (manual)
+The pure measure: pinned by `client-v2/src/entities/project/limits.test.mjs`, not in the browser.
 - **WHEN** a tutorial project holds 50 files of its own plus the three generated workspace files
 - **THEN** the upload is sent and accepted
 
-#### Scenario: Fifty-one empty files stop the project
+#### Scenario: Fifty-one empty files stop the project (manual)
+The pure measure: pinned by `client-v2/src/entities/project/limits.test.mjs`, not in the browser.
 - **WHEN** a project holds 51 files of its own, each of them empty
 - **THEN** the project is over the file count limit and no upload is sent
 

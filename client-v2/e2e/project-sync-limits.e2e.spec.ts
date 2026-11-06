@@ -26,7 +26,10 @@ import { linesOn } from "./telemetry";
  * restored from the account, which is never refused. `/api/projects` is
  * stubbed with such rows. The server's own refusals are covered against a
  * real database in `api/projects.test.mjs` and `model/projects.test.mjs`,
- * and their scenarios are marked `(manual)` in the spec.
+ * and their scenarios are marked `(manual)` in the spec. So are the scenarios
+ * that only measure a project (multi-byte content, the 256-character path, the
+ * 51st file): `checkProjectLimits` is covered by `limits.test.mjs`, and this
+ * suite keeps the scenarios that wire a measure to the browser.
  */
 
 test.describe.configure({ timeout: 180_000 });
@@ -272,61 +275,6 @@ test("project-sync-limits: A file one byte over the limit stops the project", as
   expect(account.writes).toEqual([]);
 });
 
-test("project-sync-limits: Multi-byte characters count as bytes", async ({
-  page,
-}) => {
-  await stubAccount(page, {
-    "src/lib.rs": "// lib\n",
-    // 50,000 characters of three bytes each: 150,000 bytes
-    "src/euro.rs": "€".repeat(50_000),
-  });
-  await openRestored(page);
-
-  await editFile(page);
-
-  await expect(bannerText(page)).toContainText("src/euro.rs is 147 KB.", LONG);
-});
-
-/* ------------------------------ Path length ----------------------------- */
-
-test("project-sync-limits: A path of 256 characters syncs", async ({
-  page,
-}) => {
-  const long = `src/${"p".repeat(249)}.rs`;
-  expect(long).toHaveLength(256);
-  const account = await stubAccount(page, {
-    "src/lib.rs": "// lib\n",
-    [long]: "// long\n",
-  });
-  await openRestored(page);
-
-  await editFile(page);
-
-  await expect
-    .poll(() => account.sent("src/lib.rs", "// edited"), LONG)
-    .toBe(true);
-  await expect(banner(page)).toHaveCount(0);
-});
-
-test("project-sync-limits: A path of 257 characters stops the project", async ({
-  page,
-}) => {
-  const long = `src/${"p".repeat(250)}.rs`;
-  const account = await stubAccount(page, {
-    "src/lib.rs": "// lib\n",
-    [long]: "// long\n",
-  });
-  await openRestored(page);
-
-  await editFile(page);
-
-  await expect(bannerText(page)).toContainText(
-    "A file path is longer than 256 characters",
-    LONG
-  );
-  expect(account.writes).toEqual([]);
-});
-
 /* ----------------------------- Project size ----------------------------- */
 
 test("project-sync-limits: Five files of 100 KiB stop the project", async ({
@@ -358,48 +306,12 @@ test("project-sync-limits: Five files of 100 KiB stop the project", async ({
   expect(account.sent("src/sixth.rs", "aaaa")).toBe(false);
 });
 
-/* ------------------------------ File count ------------------------------ */
-
-test("project-sync-limits: Fifty files and the generated files sync", async ({
-  page,
-}) => {
-  const files = manyFiles(50);
-  files[".tutorial.json"] = '{"pageNumber":1}';
-  files[".workspace/tutorial-storage.json"] = "{}";
-  const account = await stubAccount(page, files);
-  await openRestored(page);
-
-  await editFile(page);
-
-  await expect
-    .poll(() => account.sent("src/lib.rs", "// edited"), LONG)
-    .toBe(true);
-  await expect(banner(page)).toHaveCount(0);
-});
-
-test("project-sync-limits: Fifty-one empty files stop the project", async ({
-  page,
-}) => {
-  const account = await stubAccount(
-    page,
-    manyFiles(51, () => "")
-  );
-  await openRestored(page);
-
-  await editFile(page);
-
-  await expect(bannerText(page)).toContainText(
-    "This project has 51 files.",
-    LONG
-  );
-  expect(account.writes).toEqual([]);
-});
-
 /* -------------------------- The client's check -------------------------- */
 
 test("project-sync-limits: A one-line edit to a large project is not sent", async ({
   page,
 }) => {
+  const lines = linesOn(page);
   const account = await stubAccount(page, bigFiles(5, 122_880));
   await openRestored(page);
 
@@ -409,8 +321,10 @@ test("project-sync-limits: A one-line edit to a large project is not sent", asyn
     "A project can be at most 512 KB.",
     LONG
   );
-  // The editor's push and the debounce after it have both had their turn
-  await page.waitForTimeout(5000);
+  // The event is sent by the push that the client's own check stopped, so
+  // that push has been decided by now and nothing waits on a timer
+  await expect.poll(() => limitEvents(lines)).toHaveLength(1);
+  expect(limitEvents(lines)[0]).toMatch(/by\W+client/);
   expect(account.writes).toEqual([]);
 });
 

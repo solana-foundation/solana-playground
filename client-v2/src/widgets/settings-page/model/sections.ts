@@ -56,7 +56,7 @@ export interface SettingGroup<S extends Groupable> {
 
 /**
  * Settings the Network section writes itself, through its chips and the
- * custom RPC list. Spec 07 (SET-08) wants one network control, so the page
+ * custom RPC list. The `client-v2-custom-rpcs` spec wants one network control, so the page
  * draws no generic row for them; the settings themselves stay.
  */
 const NETWORK_SECTION_SETTINGS = new Set(["connection.endpoint"]);

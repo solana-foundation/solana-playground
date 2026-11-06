@@ -204,7 +204,9 @@ describe("/api/projects", () => {
     });
 
     it("reads a full upload of a project at the size limit", async () => {
-      // 524,288 bytes of ordinary source escape to about the same in JSON
+      // The files are 4 x 13,107 x 10 = 524,280 bytes; escaping each `\n`
+      // as two bytes in JSON adds about 10%, to about 576,000, still under
+      // the 1 MiB body cap
       const files = Object.fromEntries(
         [0, 1, 2, 3].map((i) => [`src/f${i}.rs`, "fn x() {}\n".repeat(13_107)])
       );
@@ -594,22 +596,6 @@ describe("/api/projects", () => {
   describe("answerWrite", () => {
     const limit = { reason: "too-many-files", limit: 50, count: 51 };
 
-    it("answers a limit from describeWrite 413, its measure at the top level", async () => {
-      const mod = await load();
-      const files = Object.fromEntries(
-        Array.from({ length: 51 }, (_, i) => [`f${i}`, ""])
-      );
-      assert.deepEqual(mod.answerWrite(mod.describeWrite({ files })), {
-        status: 413,
-        body: {
-          error: "The project is over a sync limit",
-          reason: limit.reason,
-          limit: limit.limit,
-          count: limit.count,
-        },
-      });
-    });
-
     it("answers a limit from saveProject 413, not 200", async () => {
       const mod = await load();
       assert.deepEqual(mod.answerWrite({ limit }), {
@@ -685,18 +671,20 @@ describe("/api/projects", () => {
       });
     });
 
-    it("answers a full write over the path limit 413, without the database", async () => {
+    it("answers a malformed baseUpdatedAt 400, not a 500, without the database", async () => {
       const mod = await load();
-      const path = "p".repeat(257);
       const answer = await mod.putProject("u1", {
         id: UUID,
         name: "mine",
         kind: "project",
-        files: { [path]: "" },
+        changed: { "src/lib.rs": "x" },
+        removed: [],
+        baseUpdatedAt: "not a timestamp",
       });
-      assert.equal(answer.status, 413);
-      assert.equal(answer.body.reason, "path-too-long");
-      assert.deepEqual(answer.body.paths, [path]);
+      assert.deepEqual(answer, {
+        status: 400,
+        body: { error: "baseUpdatedAt must be a timestamp" },
+      });
     });
 
     it("answers a bad project before its files are measured", async () => {

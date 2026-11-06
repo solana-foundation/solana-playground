@@ -23,7 +23,7 @@ export const RPC_NAME_MAX = 32;
 const KEY = "customRpcs";
 
 /**
- * Whether a typed value may be saved as an RPC (Spec 07): `https://`, or
+ * Whether a typed value may be saved as an RPC (spec `client-v2-custom-rpcs`): `https://`, or
  * `http://` on `localhost` or `127.0.0.1`, and nothing else. A saved URL is
  * normalised, so two spellings of one address compare equal.
  */

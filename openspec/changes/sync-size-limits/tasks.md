@@ -48,7 +48,8 @@ the same time once 2.1 has merged.
   and emit them from `_raiseFoundBy`. Verified by `project-sync.test.ts` covering no
   request sent, the mark unchanged, a server 413 raising the same banner, retry
   re-checking, and each event's parameters asserted through the memory
-  provider; and by a `SyncBanner` test rendering each banner text in the spec.
+  provider; by the `limitBannerText` tests in `entities/project/model/describe.ts` pinning each banner
+  text in the spec; and by two `SyncBanner` tests rendering one of them.
 - [x] 3.2 Refuse explorer writes past a limit (HOO-2418, depends on 2.1):
   `PgExplorer.createItem` calls `checkWriteTo` (the written file, and the
   project as the write leaves it); `renameItem` and `createWorkspace` call `checkProjectLimits` on the

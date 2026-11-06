@@ -34,8 +34,8 @@ export interface InteractBodyProps {
 }
 
 /**
- * A deployed program's instructions as cards that fold on their own, the
- * last call's result under the card that made it, and the calls before it in
+ * A deployed program's instructions as cards that fold on their own, each
+ * card's latest call result under it, and the calls before it in
  * a column beside them on a wide stage (under them on a narrow one), then
  * the account and event lookups.
  */
@@ -50,8 +50,9 @@ const InteractBody = ({
   useSyncInstructionStorage();
 
   const names = idl.instructions.map((ix) => ix.name);
-  // Every card folded on arrival, each one folding on its own (Almaz's card
-  // from hoodieshq PR 272); a name a rebuild dropped simply matches no card
+  // Every card folded on arrival, each one folding on its own (see
+  // openspec/changes/archive/2026-11-06-interact-instruction-cards); a name
+  // a rebuild dropped simply matches no card
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const toggle = (name: string, isOpen: boolean) =>
     setOpen((prev) => {

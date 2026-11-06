@@ -37,7 +37,7 @@ interface BaseCustomRpcsProps {
   onRemove: (rpc: CustomRpc) => void;
 }
 
-/** Spec 07's help line for a custom RPC */
+/** The `client-v2-custom-rpcs` spec's help line for a custom RPC */
 const HELP = "Any Solana RPC URL. It stays in this browser.";
 
 /** Which form is open: none, a new RPC's, or the edit of the one at this URL */

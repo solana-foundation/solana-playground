@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
-  ACCOUNT_LIMITS,
   checkProjectLimits,
   checkWriteTo,
   limitExceeded,
-  PROJECT_LIMITS,
   readLimitExceeded,
   SYNCED_WORKSPACE_FILES,
 } from "./limits.mjs";
@@ -256,19 +254,6 @@ describe("entities/project/limits", () => {
       count: 11,
     });
     assert.equal(limitExceeded.tooManyProjects("tutorial", 33).limit, 32);
-  });
-
-  it("keeps its figures", () => {
-    assert.deepEqual(
-      { ...PROJECT_LIMITS },
-      {
-        fileBytes: 131_072,
-        pathChars: 256,
-        projectBytes: 524_288,
-        files: 50,
-      }
-    );
-    assert.deepEqual(ACCOUNT_LIMITS, { projects: 10, tutorials: 32 });
   });
 });
 

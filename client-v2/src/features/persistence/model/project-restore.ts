@@ -89,6 +89,13 @@ const isClean = async (projectId: string, localName: string) =>
  *   nothing: its hash matches the mark.
  * - An outstanding question. A refused push (`too-large`, a divergence)
  *   writes no mark, so the mark cannot say what the refusal left unsent.
+ *   `deleted-elsewhere` included, on purpose: `settleDeletes` raises it
+ *   only for a copy holding work the account never had (a clean one it
+ *   deletes), and deleting is one of the question's two answers, which
+ *   sign-out must not give for the user. The copy stays local; the same
+ *   account signing in is asked again, since its mark still names a row that
+ *   is gone, and another account never uploads it
+ *   (`PgSyncMark.belongsToAnotherAccount`).
  */
 const isReleasable = async (projectId: string, localName: string) => {
   if (PgProjectSync.conflictFor(projectId)) return false;

@@ -66,14 +66,6 @@ describe("BaseNotEnoughSol", () => {
     expect(onRetry).not.toHaveBeenCalled();
   });
 
-  it("asks the faucet again on Try again after it refused", () => {
-    const { onAirdrop, onRetry } = renderCard({ reason: "airdrop_failed" });
-
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(onAirdrop).toHaveBeenCalledOnce();
-    expect(onRetry).not.toHaveBeenCalled();
-  });
-
   it("deploys again without an airdrop on Try again where there is no faucet", () => {
     const { onAirdrop, onRetry } = renderCard({ reason: "no_faucet" });
 

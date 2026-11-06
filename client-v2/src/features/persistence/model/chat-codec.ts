@@ -1,8 +1,13 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import type {
   ApprovalRequest,
+  ApprovalStatus,
   ChatItem,
 } from "../../../views/sidebar/assistant/store";
 import { TOOL_NAME } from "./tool-call";
+
+const log = createLogger("persistence:chat-codec");
 
 /**
  * Unchanged lines kept either side of a change.
@@ -196,7 +201,37 @@ export const decodeItem = (stored: unknown): ChatItem | null => {
     // eslint-disable-next-line unicorn/no-null -- `decodeItem` answers `null` for a dropped item, as above
     return null;
   }
-  return withValidUndo(withValidVersion(stored));
+  return withValidUndo(withValidStatus(withValidVersion(stored)));
+};
+
+/**
+ * The statuses a restored card may carry: every one but `pending`. A record
+ * rather than a list, so a status added to `ApprovalStatus` fails the type
+ * check here until it is placed.
+ */
+const SETTLED_STATUSES: Record<Exclude<ApprovalStatus, "pending">, true> = {
+  allowed: true,
+  denied: true,
+  unanswered: true,
+  failed: true,
+};
+
+const isSettledStatus = (status: string) =>
+  Object.hasOwn(SETTLED_STATUSES, status);
+
+/**
+ * A restored approval card's status is a settled one. Anything else reads as
+ * `unanswered`: a status a later build added (`failed` reached tabs on the
+ * build before it, which drew a card with no label), or a `pending` card a
+ * hand edit left, which nothing could ever resolve.
+ */
+const withValidStatus = (item: ChatItem): ChatItem => {
+  if (item.kind !== "approval" || isSettledStatus(item.status)) return item;
+  // Expected from a build ahead of or behind this one, so not a failure
+  log.warn(
+    `approval card ${item.id}: status ${item.status} read as unanswered`
+  );
+  return { ...item, status: "unanswered" };
 };
 
 /**
@@ -392,7 +427,12 @@ if (import.meta.vitest) {
       });
 
       it("leaves a settled approval's status alone", () => {
-        for (const status of ["allowed", "denied", "unanswered"] as const) {
+        for (const status of [
+          "allowed",
+          "denied",
+          "unanswered",
+          "failed",
+        ] as const) {
           const item: ChatItem = {
             ...base,
             kind: "approval",
@@ -466,6 +506,24 @@ if (import.meta.vitest) {
       const storedCard = storedCardOf("patch");
       const undoOf = (item: ChatItem | null) =>
         item?.kind === "approval" ? item.undo : "not a card";
+
+      it("reads a status it does not know as unanswered", () => {
+        expect(
+          decodeItem(storedCardOf("command")("superseded", undefined))
+        ).toMatchObject({ status: "unanswered" });
+      });
+
+      it("reads a stored pending card as unanswered", () => {
+        expect(
+          decodeItem(storedCardOf("command")("pending", undefined))
+        ).toMatchObject({ status: "unanswered" });
+      });
+
+      it("keeps a failed card's status", () => {
+        expect(
+          decodeItem(storedCardOf("command")("failed", undefined))
+        ).toMatchObject({ status: "failed" });
+      });
 
       it("keeps an allowed patch card's undo state", () => {
         expect(undoOf(decodeItem(storedCard("allowed", "stranded")))).toBe(

@@ -1,11 +1,11 @@
 import {
   checkProjectLimits,
   checkWriteTo,
+  isSyncedPath,
   limitKind,
   limitRule,
   limitSummary,
   type ProjectLimitExceeded,
-  SYNCED_WORKSPACE_FILES,
 } from "../../entities/project";
 import {
   isMissing,
@@ -50,10 +50,11 @@ type OpenOptions = {
 /**
  * A create, rename or import the explorer refused because the project would
  * be over a limit. Its own class so a dialog can show it beside its input
- * rather than as a failure the team hears about.
+ * rather than as a failure the team hears about. It carries the limit too,
+ * so a caller can say more than the message without parsing it.
  */
 export class ExplorerLimitError extends Error {
-  constructor(message: string) {
+  constructor(readonly limit: ProjectLimitExceeded, message: string) {
     super(message);
     this.name = "ExplorerLimitError";
   }
@@ -499,7 +500,6 @@ export class PgExplorer {
     );
     const moved: Record<string, string> = {};
     if (itemType.file) {
-      // TODO(HOO-2606): untested; only a folder rename past the limit is
       moved[this.getRelativePath(newPath)] = "";
     } else if (!renamesWorkspace) {
       const newPrefix = oldPath.endsWith("/")
@@ -1177,26 +1177,40 @@ export class PgExplorer {
   }
 
   /**
-   * `_projectFiles` plus the `SYNCED_WORKSPACE_FILES` on disk. Their names
-   * start with a dot, which `isItemNameValid` rejects, so they never enter
-   * the explorer's file map, yet sync counts them toward the project's size.
-   * A temporary project has no store and none of them.
+   * `_projectFiles` plus every file sync carries that only the store has.
+   * `isItemNameValid` keeps dot-named entries out of the explorer's file map,
+   * yet sync and the server count them toward the project's size: the
+   * `SYNCED_WORKSPACE_FILES`, and a user's `.gitignore` or `.github/` that an
+   * import or another device wrote. Only those files are read; the rest come
+   * from memory. A temporary project has no store and none of them.
    */
   private static async _syncedProjectFiles(): Promise<Record<string, string>> {
     const files = this._projectFiles();
     const workspacePath = this.getCurrentWorkspacePath();
     if (this.isTemporary || !workspacePath) return files;
 
-    for (const path of SYNCED_WORKSPACE_FILES) {
+    const root = PgCommon.appendSlash(workspacePath);
+    const walk = async (dir: string): Promise<void> => {
+      let names: string[];
       try {
-        files[path] = await this.fs.readToString(
-          PgCommon.joinPaths(workspacePath, path)
-        );
+        names = await this.fs.readDir(dir);
       } catch (e) {
         // Not written yet: nothing to count
-        if (!isMissing(e)) throw e;
+        if (isMissing(e)) return;
+        throw e;
       }
-    }
+      for (const name of names) {
+        const path = PgCommon.joinPaths(dir, name);
+        const relative = path.slice(root.length);
+        if (!isSyncedPath(relative)) continue;
+        if ((await this.fs.getMetadata(path)).isDirectory()) {
+          await walk(path);
+        } else if (!(relative in files)) {
+          files[relative] = await this.fs.readToString(path);
+        }
+      }
+    };
+    await walk(workspacePath);
     return files;
   }
 
@@ -1235,6 +1249,7 @@ export class PgExplorer {
       limit: limitKind(limit),
     });
     throw new ExplorerLimitError(
+      limit,
       action === "import" ? limitSummary(limit) : limitRule(limit)
     );
   }
