@@ -314,8 +314,8 @@ test.describe("Connect a model", () => {
       const box = requireFor("the dialog's bounding box")(
         await dialog.boundingBox()
       );
-      expect(box.width).toBeLessThan(1280);
-      expect(box.height).toBeLessThan(800);
+      expect(box.width).toBeLessThan(DESK.width);
+      expect(box.height).toBeLessThan(DESK.height);
 
       // With no default on the deployment, the form opens on Anthropic
       await dialog.locator("#assistant-api-key").fill("sk-ant-fake-key");

@@ -352,7 +352,7 @@ test.describe("client-v2-stages on a phone", () => {
     // A long program id or meta line scrolls inside the stage, never the page
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth)
-    ).toBeLessThanOrEqual(390);
+    ).toBeLessThanOrEqual(PHONE.width);
   });
 });
 
