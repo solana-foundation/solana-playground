@@ -14,6 +14,7 @@ import {
   PgWallet,
   PgWeb3,
   SyncOrAsync,
+  Wallet,
 } from "../../utils";
 import { StoppedError, throwIfStopped } from "../../utils/stopped";
 import { isAirdropSignInGated } from "../airdrop/sign-in-gate";
@@ -23,10 +24,11 @@ import { additionalProgramLen } from "./additional-len";
 import { airdropTopUp } from "./airdrop-top-up";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
 import { MAINNET_DEPLOY_WARNING, warnsOnDeploy } from "./mainnet-warning";
+import { forgetOpenBuffer, recordOpenBuffer } from "./open-buffers";
 import type { DeployResult, FundingFailure } from "./run";
 import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
 import type { StoppedBuffer } from "./stopped";
-import { deployStoppedLine } from "./stopped";
+import { bufferLeftLine, deployStoppedLine } from "./stopped";
 
 const log = createLogger("commands:deploy");
 
@@ -400,64 +402,66 @@ const processDeploy = async (
   // Funding is done; a stop here leaves no buffer
   throwIfStopped(signal, deployStoppedLine({ state: "none" }));
 
-  // Create buffer
   const bufferKp = PgWeb3.Keypair.generate();
-  await sendAndConfirmTxWithRetries(
-    async () => {
-      return await BpfLoaderUpgradeable.createBuffer(
-        bufferKp,
-        bufferBalance,
-        programLen,
-        { wallet: pgWallet, connection }
-      );
-    },
-    async () => {
-      const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
-      return !!bufferAcc;
-    }
-  );
+  const bufferAddress = bufferKp.publicKey.toBase58();
+  // The loader takes a buffer's close from its authority: the Playground
+  // wallet, until `setBufferAuthority` below hands it to the standard wallet
+  let bufferAuthority: Wallet = pgWallet;
+  const recordBuffer = () =>
+    recordOpenBuffer({
+      address: bufferAddress,
+      authority: bufferAuthority.publicKey.toBase58(),
+      endpoint: connection.rpcEndpoint,
+      cluster,
+      at: new Date().toISOString(),
+    });
+  // Recorded before it exists, so the rent a closed tab or a failed close
+  // leaves behind stays on record for a reclaim (none reads it yet)
+  await recordBuffer();
+  // Whether the buffer surely exists, and whether a stop or a cancel already
+  // dealt with it
+  let isBufferCreated = false;
+  let isBufferSettled = false;
 
-  // Load buffer
-  PgDeployRun.update({ step: "write", percent: 0 });
-  const loadBufferResult = await loadBufferWithControl(
-    signal,
-    bufferKp.publicKey,
-    programBytes,
-    {
-      wallet: pgWallet,
-      connection,
-      onWrite: (current, total) => {
-        const percent = (current / total) * 100;
-        PgView.setMainSecondaryProgress(percent);
-        PgDeployRun.update({ percent: Math.floor(percent) });
-      },
-      onMissing: (missingCount) => {
-        PgTerminal.println(
-          `Warning: ${PgTerminal.bold(
-            missingCount.toString()
-          )} ${PgCommon.makePlural(
-            "transaction",
-            missingCount
-          )} not confirmed, retrying...`
-        );
-      },
-      onRateLimit: (retryAfter) => {
-        PgTerminal.println(
-          `Warning: Reached rate-limits, waiting (${PgCommon.formatSeconds(
-            retryAfter
-          )})...`
-        );
-      },
+  /**
+   * Who may close the buffer now, read from the buffer itself: a
+   * `setBufferAuthority` can land while its confirmation fails, and then the
+   * standard wallet holds the close although the deploy never learned it. A
+   * change is recorded, so a later reclaim signs with the right wallet.
+   */
+  const closeSigner = async (): Promise<Wallet> => {
+    if (!standardWallet) return pgWallet;
+    try {
+      const account = await connection.getAccountInfo(bufferKp.publicKey);
+      const named = account?.data.slice(5, 37);
+      const holder = [standardWallet, pgWallet].find((w) =>
+        named?.equals(w.publicKey.toBuffer())
+      );
+      if (holder && holder !== bufferAuthority) {
+        bufferAuthority = holder;
+        await recordBuffer();
+      }
+    } catch (e) {
+      log.warn("could not read the buffer's authority", {
+        context: { error: String(e) },
+      });
     }
-  );
-  /** End a stopped deploy, closing its buffer so its SOL comes back */
-  const stopWithBuffer = async () => {
+    return bufferAuthority;
+  };
+
+  /**
+   * Close the buffer, or name what it still holds when the close fails. A
+   * buffer closed, or found gone, is forgotten; a kept one stays on record
+   * for a later reclaim.
+   */
+  const closeOrKeep = async (action: string): Promise<StoppedBuffer> => {
     let left: StoppedBuffer;
     try {
+      const signer = await closeSigner();
       await sendAndConfirmTxWithRetries(
         () =>
           BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
-            wallet: pgWallet,
+            wallet: signer,
             connection,
           }),
         async () => !(await connection.getAccountInfo(bufferKp.publicKey))
@@ -466,93 +470,199 @@ const processDeploy = async (
     } catch (e) {
       // The line names the buffer, the SOL it holds and how to reclaim it
       // by hand
-      log.error(e, {
-        report: true,
-        context: { action: "close the buffer on stop" },
-      });
+      log.error(e, { report: true, context: { action } });
       const lamports = await keptLamportsOn(connection)(bufferKp.publicKey);
       // A live buffer is rent-exempt, so an empty one is gone: the close
-      // landed and only its confirmation failed
+      // landed and only its confirmation failed, or, after a failure, the
+      // deploy itself consumed it
       if (lamports === 0) {
-        left = { state: "closed" };
+        left = { state: "gone" };
       } else {
-        left = {
-          state: "kept",
-          address: bufferKp.publicKey.toBase58(),
-          sol:
-            lamports === undefined ? undefined : PgWeb3.lamportsToSol(lamports),
-        };
+        const sol =
+          lamports === undefined ? undefined : PgWeb3.lamportsToSol(lamports);
+        left = { state: "kept", address: bufferAddress, sol };
       }
     }
+    if (left.state !== "kept") await forgetOpenBuffer(bufferAddress);
+    return left;
+  };
+
+  /** End a stopped deploy, closing its buffer so its SOL comes back */
+  const stopWithBuffer = async () => {
+    isBufferSettled = true;
+    const left = await closeOrKeep("close the buffer on stop");
     return new StoppedError(deployStoppedLine(left));
   };
 
-  if (loadBufferResult.cancelled) {
-    // Stopped: no questions, the buffer is closed
-    if (signal.aborted) throw await stopWithBuffer();
-
-    const term = await PgTerminal.get();
-    const shouldCloseBufferAccount = await term.waitForInput(
-      `${PgTerminal.warning(
-        "Cancelled deployment."
-      )} Would you like to close the buffer account and reclaim SOL?`,
-      { confirm: true, default: "yes" }
-    );
-    let msg;
-    if (shouldCloseBufferAccount) {
-      await sendAndConfirmTxWithRetries(
-        async () => {
-          return await BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
-            wallet: pgWallet,
-            connection,
-          });
-        },
-        async () => {
-          const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
-          return !bufferAcc;
-        }
-      );
-      msg = PgTerminal.success("Reclaim successful.");
-    } else {
-      msg = `${PgTerminal.error(
-        "Reclaim rejected."
-      )} Run \`solana program close --buffers\` to close unused buffer accounts and reclaim SOL.`;
+  /**
+   * After a failure the buffer is closed as on a stop: left open, it held the
+   * whole program's rent at an address shown nowhere. A close racing a deploy
+   * still in flight is safe, as both consume the buffer.
+   */
+  const closeAfterFailure = async () => {
+    if (isBufferSettled) return;
+    // Read first: with preflight off, a close of an account already gone
+    // lands as a failed transaction, and the buffer would read as closed
+    let account;
+    try {
+      account = await connection.getAccountInfo(bufferKp.publicKey);
+    } catch (e) {
+      log.error(e, {
+        context: { action: "read the buffer after a failed deploy" },
+      });
+      // An account that cannot be read is named, never closed blind, unless
+      // it surely exists
+      if (!isBufferCreated) {
+        PgTerminal.println(
+          bufferLeftLine({ state: "unknown", address: bufferAddress })
+        );
+        return;
+      }
+      account = true;
     }
+    if (!account) {
+      // A create that failed every retry most likely made no account. One
+      // that lands later still holds rent, so the record stays and nothing
+      // is said
+      if (!isBufferCreated) return;
+      // The deploy may have consumed it while its confirmation failed
+      await forgetOpenBuffer(bufferAddress);
+      PgTerminal.println(bufferLeftLine({ state: "gone" }));
+      return;
+    }
+    const left = await closeOrKeep("close the buffer after a failed deploy");
+    PgTerminal.println(bufferLeftLine(left));
+  };
 
-    term.println(msg);
-    throw new Error("Deployment cancelled");
-  }
-
-  // A stop that came as the last chunk landed still ends here; from here the
-  // deploy finishes, since its last transactions cannot stop
-  if (signal.aborted) throw await stopWithBuffer();
-  lockStop();
-
-  // If deploying from a standard wallet, transfer the buffer authority
-  // to the standard wallet before deployment, otherwise it doesn't
-  // pass on-chain checks.
-  if (standardWallet) {
+  let signature: string | undefined;
+  try {
+    // Create buffer
     await sendAndConfirmTxWithRetries(
       async () => {
-        return await BpfLoaderUpgradeable.setBufferAuthority(
-          bufferKp.publicKey,
-          standardWallet.publicKey,
+        return await BpfLoaderUpgradeable.createBuffer(
+          bufferKp,
+          bufferBalance,
+          programLen,
           { wallet: pgWallet, connection }
         );
       },
       async () => {
         const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
-        const isBufferAuthority = bufferAcc?.data
-          .slice(5, 37)
-          .equals(standardWallet.publicKey.toBuffer());
-        return !!isBufferAuthority;
+        return !!bufferAcc;
       }
     );
-  }
+    isBufferCreated = true;
 
-  // Deploy
-  PgDeployRun.update({ step: "deploy" });
-  const signature = await (programExists ? upgrade() : deployNew());
+    // Load buffer
+    PgDeployRun.update({ step: "write", percent: 0 });
+    const loadBufferResult = await loadBufferWithControl(
+      signal,
+      bufferKp.publicKey,
+      programBytes,
+      {
+        wallet: pgWallet,
+        connection,
+        onWrite: (current, total) => {
+          const percent = (current / total) * 100;
+          PgView.setMainSecondaryProgress(percent);
+          PgDeployRun.update({ percent: Math.floor(percent) });
+        },
+        onMissing: (missingCount) => {
+          PgTerminal.println(
+            `Warning: ${PgTerminal.bold(
+              missingCount.toString()
+            )} ${PgCommon.makePlural(
+              "transaction",
+              missingCount
+            )} not confirmed, retrying...`
+          );
+        },
+        onRateLimit: (retryAfter) => {
+          PgTerminal.println(
+            `Warning: Reached rate-limits, waiting (${PgCommon.formatSeconds(
+              retryAfter
+            )})...`
+          );
+        },
+      }
+    );
+    if (loadBufferResult.cancelled) {
+      // Stopped: no questions, the buffer is closed
+      if (signal.aborted) throw await stopWithBuffer();
+      const term = await PgTerminal.get();
+      const shouldCloseBufferAccount = await term.waitForInput(
+        `${PgTerminal.warning(
+          "Cancelled deployment."
+        )} Would you like to close the buffer account and reclaim SOL?`,
+        { confirm: true, default: "yes" }
+      );
+      // The person decided; a rejected reclaim keeps the buffer on record.
+      // A question that never got its answer falls to the failure close
+      isBufferSettled = true;
+      let msg;
+      if (shouldCloseBufferAccount) {
+        const left = await closeOrKeep("close the buffer on cancel");
+        // No deploy is in flight on a cancel, so a buffer gone is closed
+        msg =
+          left.state === "kept"
+            ? bufferLeftLine(left)
+            : PgTerminal.success("Reclaim successful.");
+      } else {
+        msg = `${PgTerminal.error(
+          "Reclaim rejected."
+        )} Run \`solana program close --buffers\` to close unused buffer accounts and reclaim SOL.`;
+      }
+
+      term.println(msg);
+      throw new Error("Deployment cancelled");
+    }
+
+    // A stop that came as the last chunk landed still ends here; from here the
+    // deploy finishes, since its last transactions cannot stop
+    if (signal.aborted) throw await stopWithBuffer();
+    lockStop();
+
+    // If deploying from a standard wallet, transfer the buffer authority
+    // to the standard wallet before deployment, otherwise it doesn't
+    // pass on-chain checks.
+    if (standardWallet) {
+      await sendAndConfirmTxWithRetries(
+        async () => {
+          return await BpfLoaderUpgradeable.setBufferAuthority(
+            bufferKp.publicKey,
+            standardWallet.publicKey,
+            { wallet: pgWallet, connection }
+          );
+        },
+        async () => {
+          const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
+          const isBufferAuthority = bufferAcc?.data
+            .slice(5, 37)
+            .equals(standardWallet.publicKey.toBuffer());
+          return !!isBufferAuthority;
+        }
+      );
+      bufferAuthority = standardWallet;
+      await recordBuffer();
+    }
+
+    // Deploy
+    PgDeployRun.update({ step: "deploy" });
+    signature = await (programExists ? upgrade() : deployNew());
+  } catch (e) {
+    try {
+      await closeAfterFailure();
+    } catch (closeError) {
+      // The deploy's own error is what the person needs to see
+      log.error(closeError, {
+        report: true,
+        context: { action: "settle the buffer after a failed deploy" },
+      });
+    }
+    throw e;
+  }
+  // The deploy consumed the buffer
+  await forgetOpenBuffer(bufferAddress);
   // The program is on chain by now: a failed balance read costs the run its
   // cost figure, never its success, or a retry would pay for an upgrade
   let cost: number | undefined;
@@ -635,9 +745,8 @@ const getAdditionalLen = (programLen: number) => {
  * stop: a stop ends the write after the chunks in flight, and answers an open
  * "Continue deployment?" with no.
  *
- * TODO(HOO-2394 follow-up): the stop at the pause question and a failed
- * buffer close have no unit test yet (`deploy.test.ts` covers a load that
- * fails after a stop); the manual deploy scenarios cover them until then.
+ * TODO(HOO-2394 follow-up): the stop at the pause question has no unit test
+ * yet; the manual deploy scenarios cover it until then.
  */
 const loadBufferWithControl = (
   signal: AbortSignal,

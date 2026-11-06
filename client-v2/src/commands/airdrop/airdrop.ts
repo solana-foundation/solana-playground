@@ -7,9 +7,10 @@ import {
   PgWallet,
   PgWeb3,
 } from "../../utils";
+import { askAgain } from "../../utils/ask-again";
 import { checkWallet } from "../checks";
 import { createArgs, createCmd } from "../create";
-import { NO_FAUCET } from "./no-faucet";
+import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
 import { isAirdropSignInGated } from "./sign-in-gate";
 
 /**
@@ -41,12 +42,30 @@ export const airdrop = createCmd({
   ]),
   preChecks: [checkWallet, checkSignedInWhereGated],
   handle: async (input) => {
+    let cluster = PgConnection.cluster;
+    let isStale = PgConnection.clusterIsStale;
+    // A read that failed will not finish by waiting; it is tried once more,
+    // since the endpoint may be back
+    if (PgConnection.hasClusterReadFailed) {
+      try {
+        cluster = await PgConnection.readCluster();
+        isStale = false;
+      } catch {
+        // `readCluster` logs its own failure
+        throw new Error(COULD_NOT_READ_NETWORK);
+      }
+      // The derivable still holds the failed read; the rest of the app
+      // catches up through it
+      askAgain();
+      // The pre-check skipped the sign-in while the cluster was unknown
+      if (isAirdropSignInGated(cluster)) checkSignedIn();
+    }
     // Until the endpoint is read every cluster looks faucet-less; saying so
     // then would be wrong
-    if (!PgConnection.cluster || PgConnection.clusterIsStale) {
+    if (!cluster || isStale) {
       throw new Error("The network is still loading. Try again in a moment.");
     }
-    const defaultAmount = PgConnection.getAirdropAmount();
+    const defaultAmount = PgConnection.getAirdropAmountOn(cluster);
     if (typeof defaultAmount !== "number") {
       throw new Error(NO_FAUCET);
     }
@@ -87,7 +106,7 @@ export const airdrop = createCmd({
     }
 
     // Even though we waited for the transaction to confirm, `getBalance` can
-    // sometimes return a stale balance. Try a couple times to mitigate.
+    // sometimes return a isStale balance. Try a couple times to mitigate.
     const MAX_RETRIES = 3;
     for (let i = 0; i < MAX_RETRIES; i++) {
       const afterBalance = await connection.getBalance(walletPk, "processed");
