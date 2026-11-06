@@ -391,6 +391,8 @@ describe("BaseResultCard", () => {
           onFixMyself={vi.fn()}
           onShowLine={vi.fn()}
           onRetry={vi.fn()}
+          signedIn={false}
+          onSignIn={vi.fn()}
         />
       </TooltipProvider>
     );
@@ -546,6 +548,8 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={vi.fn()}
+        signedIn={false}
+        onSignIn={vi.fn()}
       />
     );
     expect(screen.getByText("Build successful")).toBeTruthy();
@@ -571,6 +575,8 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={vi.fn()}
+        signedIn={false}
+        onSignIn={vi.fn()}
       />
     );
     const { unmount } = render(deployed(1_250_000_000));
@@ -594,6 +600,8 @@ describe("BaseResultCard", () => {
         onFixMyself={onFixMyself}
         onShowLine={onShowLine}
         onRetry={vi.fn()}
+        signedIn={false}
+        onSignIn={vi.fn()}
       />
     );
     expect(screen.getByText("Build failed")).toBeTruthy();
@@ -630,6 +638,8 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={onRetry}
+        signedIn={false}
+        onSignIn={vi.fn()}
       />
     );
     expect(screen.getByText("Build server unreachable")).toBeTruthy();
@@ -641,6 +651,63 @@ describe("BaseResultCard", () => {
     expect(screen.queryByRole("button", { name: /Explain/ })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: /Try again/ }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  describe("a build refused for sign-in", () => {
+    const refused = {
+      act: "build",
+      ok: false,
+      seconds: 0,
+      reason: "signed_out",
+      error: null,
+      log: "Sign in with GitHub to build.",
+    } as const;
+    const card = (signedIn: boolean) => {
+      const on = { retry: vi.fn(), signIn: vi.fn(async () => {}) };
+      render(
+        <BaseResultCard
+          result={refused}
+          planned={null}
+          open
+          onExplain={vi.fn()}
+          onFixMyself={vi.fn()}
+          onShowLine={vi.fn()}
+          onRetry={on.retry}
+          signedIn={signedIn}
+          onSignIn={on.signIn}
+        />
+      );
+      return on;
+    };
+
+    it("asks a signed-out learner to sign in, with no Explain", async () => {
+      const on = card(false);
+      expect(screen.getByText("Sign in to build")).toBeTruthy();
+      expect(screen.queryByText("Build failed")).toBeNull();
+      expect(
+        screen.getByText(
+          "Builds run on Playground's build server, which needs a GitHub sign-in. Your code stays in this browser."
+        )
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /Explain/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Build/ })).toBeNull();
+      await userEvent.click(
+        screen.getByRole("button", { name: /Sign in with GitHub/ })
+      );
+      expect(on.signIn).toHaveBeenCalledTimes(1);
+      expect(on.retry).not.toHaveBeenCalled();
+    });
+
+    it("reads Build once signed in, and runs the build", async () => {
+      const on = card(true);
+      expect(screen.getByText("Sign in to build")).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: /Sign in with GitHub/ })
+      ).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: /^Build/ }));
+      expect(on.retry).toHaveBeenCalledTimes(1);
+      expect(on.signIn).not.toHaveBeenCalled();
+    });
   });
 
   it("shows the log, with no line link, for a failure no line names", () => {
@@ -660,6 +727,8 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={vi.fn()}
+        signedIn={false}
+        onSignIn={vi.fn()}
       />
     );
     expect(screen.getByText(/Invalid path/)).toBeTruthy();
@@ -692,6 +761,8 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={vi.fn()}
+        signedIn={false}
+        onSignIn={vi.fn()}
       />
     );
     expect(screen.getByText(/exit status: 1/)).toBeTruthy();
@@ -709,6 +780,8 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={onShowLine}
         onRetry={vi.fn()}
+        signedIn={false}
+        onSignIn={vi.fn()}
       />
     );
     expect(screen.getByText("E0412 on line 9")).toBeTruthy();
@@ -815,6 +888,7 @@ describe("TurnView", () => {
     revealError: vi.fn(),
     showLog: vi.fn(),
     createWallet: vi.fn(),
+    signIn: vi.fn(),
   });
   const draw = (turn: Turn, live: boolean, handlers = on()) =>
     render(
@@ -1392,6 +1466,7 @@ describe("TurnView's last win", () => {
           revealError: vi.fn(),
           showLog: vi.fn(),
           createWallet: vi.fn(),
+          signIn: vi.fn(),
         }}
       />
     );
@@ -1506,6 +1581,7 @@ describe("TurnView's chip answer", () => {
     revealError: vi.fn(),
     showLog: vi.fn(),
     createWallet: vi.fn(),
+    signIn: vi.fn(),
   });
   const reply = (follow: Follow | null): Turn => ({
     id: "reply:0",

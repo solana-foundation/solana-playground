@@ -51,6 +51,8 @@ vi.mock("@/features/tutorial-conversation", async () => ({
   watchDeploys: vi.fn(() => ({ dispose: vi.fn() })),
   isUnreachable: (r: { act: string; ok: boolean; reason?: string }) =>
     r.act === "build" && !r.ok && r.reason === "unreachable",
+  isSignedOut: (r: { act: string; ok: boolean; reason?: string }) =>
+    r.act === "build" && !r.ok && r.reason === "signed_out",
   realWorkspace: "realWorkspace",
   tutorialRunner: {
     run: vi.fn(async () => ({
@@ -62,6 +64,22 @@ vi.mock("@/features/tutorial-conversation", async () => ({
     })),
     recognise: "recognise",
   },
+}));
+const session = vi.hoisted(() => ({
+  user: undefined as { login: string } | undefined,
+  signIn: vi.fn(async () => {}),
+  refresh: vi.fn(async () => {}),
+}));
+vi.mock("@/features/auth", () => ({
+  PgSession: {
+    get: () => session.user,
+    signInFor: (from: string) => (scopes: string[]) =>
+      session.signIn(from, scopes),
+    refresh: session.refresh,
+    onDidChange: () => ({ dispose: () => {} }),
+  },
+  useSignedIn: () => !!session.user,
+  isSignInFailure: () => false,
 }));
 vi.mock("@/views/flow/state/stage", () => ({
   PgFlow: { deployStarted: vi.fn(), deployFinished: vi.fn() },
@@ -1098,6 +1116,67 @@ describe("TutorialConversation keys and the pill", () => {
     press();
     expect(PgConversation.act).toHaveBeenCalledWith("s1.build");
     expect(PgConversation.explain).not.toHaveBeenCalled();
+  });
+
+  describe("on a build refused for sign-in", () => {
+    const refused: Turn = {
+      id: "result:s1.build:0",
+      kind: "result",
+      step: definition.steps[0].id,
+      at: 4,
+      whole: true,
+      beatId: "s1.build",
+      act: "build",
+      result: {
+        act: "build",
+        ok: false,
+        reason: "signed_out",
+        seconds: 0,
+        error: null,
+        log: "Sign in with GitHub to build.",
+      },
+      took: 10,
+      planned: null,
+      open: true,
+    };
+    const showRefused = () => {
+      store.view.mockReturnValue({
+        turns: [refused],
+        live: refused,
+        steps: onStep2.steps,
+        placeholder: "Ask about this step",
+        nextAt: null,
+        finishAt: null,
+      });
+      render(
+        <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+      );
+    };
+
+    it("signs in on ⌘↵ while nobody is signed in", () => {
+      session.user = undefined;
+      showRefused();
+      expect(session.refresh).not.toHaveBeenCalled();
+      press();
+      expect(session.signIn).toHaveBeenCalledWith("tutorial", []);
+      expect(PgConversation.act).not.toHaveBeenCalled();
+      expect(PgConversation.explain).not.toHaveBeenCalled();
+    });
+
+    it("builds on ⌘↵ once someone is signed in", async () => {
+      session.user = { login: "learner" };
+      showRefused();
+      expect(
+        await screen.findByRole("button", { name: /^Build/ })
+      ).toBeTruthy();
+      press();
+      expect(PgConversation.act).toHaveBeenCalledWith("s1.build");
+      expect(session.signIn).not.toHaveBeenCalled();
+      // The server refused a browser that thinks it is signed in: the
+      // session is read again, so an expired one turns the card back
+      expect(session.refresh).toHaveBeenCalledTimes(1);
+      session.user = undefined;
+    });
   });
 
   it("counts the pill's way back to the live step", async () => {

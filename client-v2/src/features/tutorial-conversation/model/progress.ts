@@ -242,12 +242,22 @@ export type RunRecord =
       fixedAt?: number;
     };
 
-/** Why a build failed: the code, or a server that never answered */
-export type BuildFailure = "compiler" | "unreachable";
+/**
+ * Why a build failed: the code, a server that never answered, or a server
+ * that builds only for a signed-in GitHub user (HOO-2422)
+ */
+export type BuildFailure = "compiler" | "unreachable" | "signed_out";
 
 /** A build whose server never answered: nothing to explain, only Try again */
 export const isUnreachable = (r: RunResult): boolean =>
   r.act === "build" && !r.ok && r.reason === "unreachable";
+
+/**
+ * A build the server refused because nobody is signed in: not a failure of
+ * the code, so nothing to explain; its card asks for a sign-in (HOO-2661)
+ */
+export const isSignedOut = (r: RunResult): boolean =>
+  r.act === "build" && !r.ok && r.reason === "signed_out";
 
 /** The compiler error a failed build's card shows, as the server's log names it */
 export interface BuildError {
@@ -326,7 +336,8 @@ export type RunResult =
       seconds: number;
       /**
        * `compiler`: the server answered and the build failed, or the server
-       * refused the request; `unreachable`: no answer reached the browser
+       * refused the request; `unreachable`: no answer reached the browser;
+       * `signed_out`: the server builds only for a signed-in user
        */
       reason: BuildFailure;
       error: BuildError | null;
@@ -627,7 +638,12 @@ const parseResult = (v: unknown): RunResult | null => {
     return null;
   }
   // A failed build saved before `reason` existed failed in the compiler
-  if (v.act === "build" && !v.ok && v.reason !== "unreachable") {
+  if (
+    v.act === "build" &&
+    !v.ok &&
+    v.reason !== "unreachable" &&
+    v.reason !== "signed_out"
+  ) {
     return { ...v, reason: "compiler" } as unknown as RunResult;
   }
   if ((v.act === "run" || v.act === "call") && v.ok) {
@@ -1167,6 +1183,26 @@ if (import.meta.vitest) {
         },
         unreachable,
       ]);
+    });
+
+    it("keeps a build refused for sign-in on load, never a compiler failure", () => {
+      const refused: RunResult = {
+        act: "build",
+        ok: false,
+        seconds: 0,
+        reason: "signed_out",
+        error: null,
+        log: "Sign in with GitHub to build.",
+      };
+      const saved = midway({
+        runs: {
+          "s1.build": [{ status: "failed", at: 3, took: 0, result: refused }],
+        },
+      });
+      const runs = reload(saved)?.runs["s1.build"];
+      expect(runs?.map((r) => "result" in r && r.result)).toEqual([refused]);
+      expect(isSignedOut(refused)).toBe(true);
+      expect(isUnreachable(refused)).toBe(false);
     });
 
     it("reloads an explained failure's moments, and drops one that is not a time", () => {

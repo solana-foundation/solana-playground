@@ -81,11 +81,11 @@ export interface SessionUser {
 
 /**
  * The task a sign-in is for: a prompt in the assistant panel, the deploy the
- * funding card runs next, or the files the share dialog posts. A sign-in that
- * carries one keeps the open project; a task can claim one it did not start
- * (`PgSession.claimPendingSignIn`).
+ * funding card runs next, the files the share dialog posts, or a tutorial's
+ * build card. A sign-in that carries one keeps the open project; a task can
+ * claim one it did not start (`PgSession.claimPendingSignIn`).
  */
-export type SignInOrigin = "assistant" | "deploy" | "share";
+export type SignInOrigin = "assistant" | "deploy" | "share" | "tutorial";
 
 /** Local cleanup that runs only after the server has ended the session */
 export type SignOutTeardown = () => Promise<void>;

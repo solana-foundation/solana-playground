@@ -66,6 +66,8 @@ export interface TurnHandlers {
   showLog: () => void;
   /** Make the Playground wallet a deploy found missing, then run it again */
   createWallet: (beatId: string) => Promise<unknown> | void;
+  /** Sign in with GitHub, for a build the server refused for sign-in */
+  signIn: () => Promise<unknown>;
 }
 
 export interface TurnViewProps {
@@ -81,6 +83,8 @@ export interface TurnViewProps {
   read: (file: string) => string | null;
   /** The next tutorial's name, for the finish card, or null */
   nextTutorial: string | null;
+  /** Someone is signed in: a build refused for sign-in offers Build, not sign-in */
+  signedIn?: boolean;
   /** The workspace's program id, which an act's `{program}` names; null before a build */
   programId?: string | null;
   on: TurnHandlers;
@@ -172,6 +176,7 @@ const TurnView = ({
   read,
   nextTutorial,
   programId = null,
+  signedIn = false,
   on,
 }: TurnViewProps) => {
   const showQuote = (quote: Quote) => on.showLine(quote.file, quote.line);
@@ -333,6 +338,8 @@ const TurnView = ({
           onFixMyself={() => on.fixMyself(turn.beatId)}
           onShowLine={on.revealError}
           onRetry={() => on.act(turn.beatId)}
+          signedIn={signedIn}
+          onSignIn={on.signIn}
         />
       );
     case "win": {

@@ -32,7 +32,13 @@ import type {
   SkipVia,
   Wrote,
 } from "./progress";
-import { answerOf, freshProgress, hintOf, isUnreachable } from "./progress";
+import {
+  answerOf,
+  freshProgress,
+  hintOf,
+  isSignedOut,
+  isUnreachable,
+} from "./progress";
 import type { Word } from "./route";
 
 /**
@@ -1359,8 +1365,13 @@ const reduceAction = (
       if (passed(p, found.step)) return same(state);
       if (!run.planned || p.cursor.fail) {
         // Asked once: the card closes on the press. A server that never
-        // answered has nothing to explain; its card offers Try again
-        if (run.explainedAt !== undefined || isUnreachable(run.result)) {
+        // answered, or that asks for a sign-in, has nothing to explain; its
+        // card offers the way on instead
+        if (
+          run.explainedAt !== undefined ||
+          isUnreachable(run.result) ||
+          isSignedOut(run.result)
+        ) {
           return same(state);
         }
         return {
@@ -3494,6 +3505,33 @@ if (import.meta.vitest) {
         }).effects.find((e) => e.kind === "run");
         expect(second).toMatchObject({ input: { beatId: "f1.build" } });
         expect(second).not.toHaveProperty("input.failsWith");
+      });
+
+      it("explains nothing on a build refused for sign-in", () => {
+        const refused: RunResult = {
+          act: "build",
+          ok: false,
+          seconds: 0,
+          reason: "signed_out",
+          error: null,
+          log: "Sign in with GitHub to build.",
+        };
+        const stopped = play([
+          start,
+          rightPick,
+          build(7000),
+          { type: "ended", beatId: "s1.build", result: refused, at: 7100 },
+        ]).state;
+        expect(stopped.progress.runs["s1.build"]).toEqual([
+          { status: "failed", at: 7000, took: 100, result: refused },
+        ]);
+        const r = reduce(ctx(), stopped, {
+          type: "explain",
+          beatId: "s1.build",
+          at: 8000,
+        });
+        expect(r.state).toBe(stopped);
+        expect(r.effects).toEqual([]);
       });
 
       it("marks the planned failure on its run, never a build that could not run", () => {

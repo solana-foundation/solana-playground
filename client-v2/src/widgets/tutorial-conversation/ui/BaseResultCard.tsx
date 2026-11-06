@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94 */
-import { ChevronDown, CircleCheck, CircleX } from "lucide-react";
+import { ChevronDown, CircleCheck, CircleX, LogIn } from "lucide-react";
 import { useState } from "react";
 
 import type { Text } from "@/entities/tutorial";
@@ -7,7 +7,9 @@ import type {
   AccountOnCard,
   RunResult,
 } from "@/features/tutorial-conversation";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Kbd } from "@/shared/ui/kbd";
 
@@ -28,13 +30,24 @@ export interface BaseResultCardProps {
   onFixMyself: () => void;
   /** Open a file at a line: the compiler's location */
   onShowLine: (file: string, line: number) => void;
-  /** Run the act again: a build whose server never answered */
+  /** Run the act again: a build whose server never answered, or one refused for sign-in once someone is signed in */
   onRetry: () => void;
+  /** Someone is signed in: a build refused for sign-in can run again */
+  signedIn: boolean;
+  /** Sign in with GitHub, for a build refused for sign-in */
+  onSignIn: () => Promise<unknown>;
 }
 
 /** The unreachable build server's line (HOO-2355, designers' BUILD-04) */
 export const UNREACHABLE =
   "Build couldn't start. The Playground server didn't answer. Your code is unchanged.";
+
+/** A build refused for sign-in: the card's head (HOO-2661, Design alignment 6 Nov) */
+export const SIGN_IN_TO_BUILD = "Sign in to build";
+
+/** That card's line */
+export const SIGN_IN_LINE =
+  "Builds run on Playground's build server, which needs a GitHub sign-in. Your code stays in this browser.";
 
 /** lamports to devnet SOL, as the card prints it */
 const sol = (lamports: number) =>
@@ -76,6 +89,7 @@ const headOf = (
     if (r.reason === "unreachable") {
       return { title: "Build server unreachable", meta: "" };
     }
+    if (r.reason === "signed_out") return { title: SIGN_IN_TO_BUILD, meta: "" };
     return { title: "Build failed", meta: errorMeta(r, expanded) };
   }
   // A deploy or a build-and-deploy
@@ -94,12 +108,26 @@ const headOf = (
   return { title: titles[r.reason], meta: r.message };
 };
 
+/** The head's icon: a tick, a cross, or a sign-in for a build refused for one */
+const iconOf = (ok: boolean, signedOut: boolean) => {
+  if (ok) return CircleCheck;
+  return signedOut ? LogIn : CircleX;
+};
+
+/** The icon's colour: a refusal for sign-in is not a failure */
+const iconTone = (ok: boolean, signedOut: boolean) => {
+  if (ok) return "text-success";
+  return signedOut ? "text-muted-foreground" : "text-error";
+};
+
 /**
  * What a run came back with, one shape for build, deploy, run and call. This
  * is the shell: the head, and for a failed build the compiler's line, its
  * location as a link, the definition's line when it plans the failure, and
- * Explain and "I'll fix it myself" while it is open. The run tickets (4.1 to
- * 4.3) fill the bodies each result carries.
+ * Explain and "I'll fix it myself" while it is open. A build that never ran
+ * has one way on instead: Try again when its server did not answer, and
+ * "Sign in with GitHub", then Build, when the server asked for a sign-in.
+ * The run tickets (4.1 to 4.3) fill the bodies each result carries.
  *
  * A run's or call's result is `BaseTxResultCard`'s; a deploy's is
  * `BaseDeployResultCard`'s, which `TurnView` picks for it.
@@ -113,6 +141,8 @@ const BaseResultCard = ({
   onFixMyself,
   onShowLine,
   onRetry,
+  signedIn,
+  onSignIn,
 }: BaseResultCardProps) => {
   // A folded failed build opens again from its head, to read, never to act
   const [reopened, setReopened] = useState(false);
@@ -121,28 +151,41 @@ const BaseResultCard = ({
   if (isTxResult(result)) {
     return <BaseTxResultCard result={result} account={account} />;
   }
-  const Icon = result.ok ? CircleCheck : CircleX;
   const failedBuild = result.act === "build" && !result.ok ? result : null;
   const error = failedBuild?.error ?? null;
   // A Base component takes types only from the feature: the slice's entry
   // would load its store
   const unreachable = failedBuild?.reason === "unreachable";
+  // Not a failure: nothing is wrong with the code (Design alignment, 6 Nov)
+  const signedOut = failedBuild?.reason === "signed_out";
+  // The build never ran: one way on, nothing of the compiler's to read
+  const stopped = unreachable || signedOut;
+  const Icon = iconOf(result.ok, signedOut);
   // Folded, it opens again only when there is something to read
   const foldable =
     !!failedBuild &&
-    !unreachable &&
+    !stopped &&
     !open &&
     (failedBuild.error !== null || failedBuild.log !== "");
   const expanded = open || (foldable && reopened);
   const { title, meta } = headOf(result, expanded);
+  // The one action of a build that never ran, and its key: ⌘↵ presses it
+  const primary = cn(
+    ACTION,
+    ACTION_FILL,
+    PHONE_CTA,
+    phoneCtaWidth(layout) ?? "w-fit"
+  );
+  const keyHint = !phone && (
+    <Kbd aria-hidden="true" className="bg-white/15 text-primary-foreground/80">
+      ⌘↵
+    </Kbd>
+  );
   const headParts = (
     <>
       <Icon
         aria-hidden="true"
-        className={cn(
-          "size-4 shrink-0",
-          result.ok ? "text-success" : "text-error"
-        )}
+        className={cn("size-4 shrink-0", iconTone(result.ok, signedOut))}
       />
       <span className="text-[0.8125rem] font-label text-foreground">
         {title}
@@ -160,7 +203,7 @@ const BaseResultCard = ({
       role="status"
       className={cn(
         "overflow-hidden rounded-control border bg-surface-panel",
-        result.ok ? "border-border" : "border-error/40"
+        result.ok || signedOut ? "border-border" : "border-error/40"
       )}
     >
       {foldable ? (
@@ -185,28 +228,33 @@ const BaseResultCard = ({
       {open && unreachable && (
         <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
           <p className={READ}>{UNREACHABLE}</p>
-          <Button
-            className={cn(
-              ACTION,
-              ACTION_FILL,
-              PHONE_CTA,
-              phoneCtaWidth(layout) ?? "w-fit"
-            )}
-            onClick={onRetry}
-          >
+          <Button className={primary} onClick={onRetry}>
             Try again
-            {!phone && (
-              <Kbd
-                aria-hidden="true"
-                className="bg-white/15 text-primary-foreground/80"
-              >
-                ⌘↵
-              </Kbd>
-            )}
+            {keyHint}
           </Button>
         </div>
       )}
-      {expanded && failedBuild && !unreachable && (
+      {open && signedOut && (
+        <div className="flex flex-col gap-3 border-t border-border px-3 py-3">
+          <p className={READ}>{SIGN_IN_LINE}</p>
+          {signedIn ? (
+            <Button className={primary} onClick={onRetry}>
+              Build
+              {keyHint}
+            </Button>
+          ) : (
+            <AsyncButton
+              className={primary}
+              onClick={() => onSignIn()}
+              onError={reportButtonFailure("sign in")}
+            >
+              Sign in with GitHub
+              {keyHint}
+            </AsyncButton>
+          )}
+        </div>
+      )}
+      {expanded && failedBuild && !stopped && (
         <div className="flex flex-col gap-3 border-t border-error/20 px-3 py-3">
           {/* The compiler's words on a red rule, a quote of its output with
               no well (the prototype's ResultCard, f7d42bf2e) */}
