@@ -24,7 +24,7 @@ the Solana-brand mark from the first byte (HOO-2568).
 - `applyFavicon` and `src/app/favicon.svg` are removed; nothing sets the icon
   at runtime any more.
 - The manifest names the app "Solana Playground", short name "Playground"
-  (approved by Cat McGee, 4 Nov); no "SolPg" anywhere.
+  (approved by Kat, 4 Nov); no "SolPg" anywhere.
 - Telemetry: none added, renamed or removed.
 
 ## Capabilities
