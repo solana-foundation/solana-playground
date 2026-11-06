@@ -112,11 +112,17 @@ export class PgJsRuntime {
           ended.then((ending) => ({ ended: true as const, error: ending })),
           reloaded.then(() => ({ ended: false as const })),
         ]);
-        if (!outcome.ended) throw new Error(RELOADED_ERROR);
+        if (!outcome.ended) {
+          port.close();
+          throw new Error(RELOADED_ERROR);
+        }
         error = outcome.error;
+        // Kept open until the next run replaces the frame: a callback the
+        // code did not await may still print, sign or call the cluster, as
+        // in the old runtime
+        this._lastPort = port;
       } finally {
         stopWatching();
-        port.close();
       }
 
       if (!isTest) PgTerminal.println("");
@@ -177,6 +183,9 @@ export class PgJsRuntime {
    * frame loads another document during the run, and what stops watching
    */
   private static async _openSandbox() {
+    // The previous run's frame is about to be replaced
+    this._lastPort?.close();
+    this._lastPort = undefined;
     const frame = this._frame ?? this._createFrame();
     // Watched before the frame is pointed at the sandbox, so the sandbox's
     // own `load` is the first one counted
@@ -213,6 +222,9 @@ export class PgJsRuntime {
 
   /** What is running now */
   private static _running: Running;
+
+  /** The channel of the last run that ended, served until the next run */
+  private static _lastPort: MessagePort | undefined;
 
   /** The sandbox's frame, made on the first run */
   private static _frame: HTMLIFrameElement | undefined;
