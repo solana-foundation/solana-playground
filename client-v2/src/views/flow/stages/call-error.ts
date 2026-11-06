@@ -15,7 +15,11 @@ export interface IdlError {
 
 const CUSTOM = /custom program error: 0x([0-9a-f]+)/i;
 
-const programError = (code: number, idlErrors: IdlError[]) =>
+/**
+ * The terminal's label for a program error code, against one program's
+ * errors: the IDL's name, or Custom, then the code
+ */
+const programErrorWith = (idlErrors: IdlError[]) => (code: number) =>
   `${idlErrors.find((e) => e.code === code)?.name ?? "Custom"} · error ${code}`;
 
 /**
@@ -41,7 +45,8 @@ export const nameSendErrorWith =
     if (typeof message !== "string" || !message.trim()) return undefined;
 
     const custom = CUSTOM.exec(message);
-    if (custom) return programError(Number.parseInt(custom[1], 16), idlErrors);
+    if (custom)
+      return programErrorWith(idlErrors)(Number.parseInt(custom[1], 16));
 
     return sentenceOf(message);
   };
@@ -65,7 +70,7 @@ export const nameTxErrorWith =
     if (!inner || typeof inner !== "object") return name;
     const [innerName, innerDetail] = Object.entries(inner)[0] ?? [];
     if (innerName === "Custom" && Number.isInteger(innerDetail))
-      return programError(innerDetail as number, idlErrors);
+      return programErrorWith(idlErrors)(innerDetail as number);
     return innerName ?? name;
   };
 
@@ -77,11 +82,13 @@ export const nameTxErrorWith =
  * ("NotEnoughEnergy · error 6000"), a capitalised term ("Anchor…").
  */
 export const terminalFailure = (failingLine: string) => {
-  const sentence =
+  const isSentence =
     /^[A-Z][a-z]+ [a-z]/.test(failingLine) &&
     !/^(Program|Anchor|Solana) /.test(failingLine);
   return `Failed · ${
-    sentence ? failingLine[0].toLowerCase() + failingLine.slice(1) : failingLine
+    isSentence
+      ? failingLine[0].toLowerCase() + failingLine.slice(1)
+      : failingLine
   }`;
 };
 
