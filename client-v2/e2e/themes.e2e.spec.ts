@@ -25,11 +25,10 @@ const isDark = (page: Page) =>
 /** The theme select on the Settings page, opened */
 const openThemeSelect = async (page: Page) => {
   await page.locator("[data-settings-trigger]").first().click();
-  const row = page
-    .locator('[aria-label="Settings"]')
-    .locator("span", { hasText: /^Theme$/ })
-    .locator("xpath=../..");
-  await row.getByRole("combobox").focus();
+  await page
+    .getByRole("region", { name: "Settings" })
+    .getByRole("combobox", { name: "Theme" })
+    .focus();
   await page.keyboard.press("ArrowDown");
 };
 

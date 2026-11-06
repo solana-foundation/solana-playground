@@ -19,9 +19,8 @@ interface BaseAssistantKeyProps {
 }
 
 const DESCRIPTIONS: Record<AssistantKeyState, string> = {
-  none: "No key entered. The default model needs none.",
-  ready:
-    "Held in this tab's memory only. A reload asks for it again. Deleting it also clears the conversation on screen.",
+  none: "No key entered. The hosted model needs none.",
+  ready: "Kept in this tab only. Deleting it clears the chat on screen.",
   busy: "In use by the reply being written. Delete it once that ends.",
 };
 
@@ -36,10 +35,13 @@ const BaseAssistantKey = ({
     name="Your model key"
     description={stuck ?? DESCRIPTIONS[state]}
     phone={phone}
+    // Quiet until there is a key to delete
+    small={!phone}
     control={
       <Button
-        variant="destructive"
-        className={phone ? "h-12 w-full rounded-xl" : "w-full"}
+        variant={state === "ready" ? "destructive" : "ghost"}
+        size={phone ? "default" : "sm"}
+        className={phone ? "h-11 w-full rounded-lg" : undefined}
         disabled={state !== "ready"}
         onClick={onDelete}
       >

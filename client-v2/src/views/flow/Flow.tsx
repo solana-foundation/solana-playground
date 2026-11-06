@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { openConnectDialog } from "@/app/ConnectDialog";
@@ -19,7 +20,11 @@ import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
 import { PgExplorer, PgView } from "@/utils";
 import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
-import { Assistant, probeDefaultBackend } from "@/widgets/assistant";
+import {
+  Assistant,
+  probeDefaultBackend,
+  useDefaultBackend,
+} from "@/widgets/assistant";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
@@ -159,6 +164,15 @@ const shareFromCodeHead = (name: string) =>
     () => readProjectFiles(name, PgExplorer.fs),
     name
   );
+
+/**
+ * The settings page with whether the hosted model answers. Its own component,
+ * so the probe is read only while the page is open and the frame does not
+ * re-render on its answer.
+ */
+const LiveSettings = (
+  props: Omit<ComponentProps<typeof SettingsPage>, "hosted">
+) => <SettingsPage {...props} hosted={useDefaultBackend().state} />;
 
 const FlowFrame = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
@@ -517,7 +531,7 @@ const FlowFrame = () => {
       </div>
 
       {settings.open && (
-        <SettingsPage focus={settings.focus} onClose={closeSettings} />
+        <LiveSettings focus={settings.focus} onClose={closeSettings} />
       )}
 
       <ModalHost />
