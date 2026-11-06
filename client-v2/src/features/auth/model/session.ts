@@ -176,7 +176,19 @@ let isRememberedUserUnwritten = false;
 
 const writeRememberedUser = (user: SessionUser) => {
   try {
-    localStorage.setItem(SIGNED_IN_USER_KEY, JSON.stringify(user));
+    // `signedInAt` makes every sign-in a new value: rewriting the same account
+    // unchanged fires no \`storage\` event, and a tab whose session ended would
+    // never hear that another tab signed it back in (\`followOtherTabs\`)
+    localStorage.setItem(
+      SIGNED_IN_USER_KEY,
+      JSON.stringify({
+        id: user.id,
+        name: user.name,
+        image: user.image,
+        login: user.login,
+        signedInAt: Date.now(),
+      })
+    );
     isRememberedUserUnwritten = false;
   } catch (error) {
     // A full origin, most likely. An older account's entry must not stand in
@@ -1402,7 +1414,8 @@ if (import.meta.vitest) {
 
           await expect(PgSession.signOut()).rejects.toThrow();
 
-          expect(localStorage.getItem(SIGNED_IN_USER_KEY)).toBe(REMEMBERED);
+          const kept = localStorage.getItem(SIGNED_IN_USER_KEY);
+          expect(kept && JSON.parse(kept).id).toBe(ADA.id);
         });
 
         it("falls back to the user in memory when storage throws", async () => {
@@ -1496,6 +1509,20 @@ if (import.meta.vitest) {
           );
           await vi.waitFor(() => expect(PgSession.expiredUser).toBeUndefined());
           watching.dispose();
+        });
+
+        it("rewrites the remembered entry when the same account signs in again", async () => {
+          await PgSession.refreshWith(ADA);
+          const first = localStorage.getItem(SIGNED_IN_USER_KEY);
+          answers(JSON_NULL);
+          await PgSession.refresh();
+          vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1000);
+
+          await PgSession.refreshWith(ADA);
+
+          // An identical value fires no \`storage\` event, so the other tab
+          // whose session ended would never hear of this sign-in
+          expect(localStorage.getItem(SIGNED_IN_USER_KEY)).not.toBe(first);
         });
 
         it("ignores another tab's change while a session is live", async () => {
