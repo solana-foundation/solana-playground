@@ -473,8 +473,9 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
               >
                 {PHONE_ICONS.back}
               </BarButton>
-              {/* `py-1` keeps the tabs' 48 px tap inside the strip, which
-                  clips both ways once it scrolls sideways */}
+              {/* A horizontal scroller clips vertically too, at its padding
+                  edge: 4 px over and under the 40 px pill keep the tabs'
+                  invisible `before` whole, so each still taps at 48 px */}
               <div className="min-w-0 flex-1 overflow-x-auto py-1">
                 {props.stageBar}
               </div>
