@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 import type { McpServerEntry } from "@/features/mcp";
 import {
@@ -29,6 +29,7 @@ import { useRenderOnChange } from "../../../../hooks";
 import type { SkillEntry } from "../grounding";
 import { isAlwaysOn, isCommunity } from "../grounding";
 import { MODEL_PROVIDER_PROFILES } from "../model/model-providers";
+import type { CredentialField } from "../model/tool-config";
 import { PROVIDERS } from "../model/types";
 import { PgAssistant } from "../store";
 import ServerConsole from "./ServerConsole";
@@ -84,6 +85,16 @@ const SourceLabel = ({
     </span>
   </FieldLabel>
 );
+
+/** A credential by its key in the entry format */
+const CredentialName = ({ field }: { field: CredentialField }) =>
+  field === "url query" ? (
+    <>
+      the query in <code>url</code>
+    </>
+  ) : (
+    <code>{field}</code>
+  );
 
 const skillNote = (skill: SkillEntry) => {
   // The description sits in the row's tip, so each row stays one short line
@@ -164,6 +175,14 @@ const Grounding = () => {
 
   const applied = serializeServers(local);
   const dirty = draft !== applied;
+
+  // The stored list can land after this mounted; a draft being edited keeps its own
+  const lastApplied = useRef(applied);
+  useEffect(() => {
+    const previous = lastApplied.current;
+    lastApplied.current = applied;
+    setDraft((current) => (current === previous ? applied : current));
+  }, [applied]);
 
   const [additionalOpen, setAdditionalOpen] = useState(false);
   // Applied entries, or a draft that is more than an empty array
@@ -399,6 +418,28 @@ const Grounding = () => {
                   the entry to use both.
                 </div>
               ))}
+
+              {local.map((server) => {
+                const fields = PgAssistant.missingMcpCredentials.get(server.id);
+                return (
+                  fields && (
+                    <div
+                      key={server.id}
+                      role="status"
+                      className={cn(MUTED, "pb-[0.4375rem] leading-[1.6]")}
+                    >
+                      Enter again for <code>{server.id}</code>:{" "}
+                      {fields.map((field, index) => (
+                        <Fragment key={field}>
+                          {index > 0 && ", "}
+                          <CredentialName field={field} />
+                        </Fragment>
+                      ))}
+                      . Credentials aren&apos;t saved, so a reload clears them.
+                    </div>
+                  )
+                );
+              })}
 
               <textarea
                 className="w-full resize-y rounded-panel border border-border bg-surface-base px-2.5 py-2 font-pg-code text-[0.75rem] leading-normal text-[var(--text-primary)] [tab-size:2] focus-visible:-outline-offset-1 focus-visible:outline-1 focus-visible:outline-primary"

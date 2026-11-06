@@ -104,7 +104,7 @@ the ones it depends on.
       holds "A gateway server switched off" at the tool level,
       `Grounding.test.tsx` holds "A user-added server switched on" and "A
       toggle while the editor is dirty", and a `yarn dev` walk-through of
-      "The selection lives in memory" and "A skill switched off" is in the
+      "The selection survives a reload" and "A skill switched off" is in the
       PR with dated screenshots
 
 ## 4. Integration

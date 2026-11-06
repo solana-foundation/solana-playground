@@ -14,7 +14,6 @@ interface Setup {
   value?: string;
   placeholder?: string;
   chips?: ComposerContextChip[];
-  connectLabel?: string;
   focusRequest?: number;
   sendBlocked?: string | null;
   addable?: { path: string; add(): void }[];
@@ -28,13 +27,11 @@ const setup = ({
   chips = [],
   focusRequest = 0,
   sendBlocked = null,
-  connectLabel = "Connect a model…",
   addable = [],
 }: Setup = {}) => {
   const onSend = vi.fn();
   const onStop = vi.fn();
   const onSources = vi.fn();
-  const onConnect = vi.fn();
   const Harness = () => {
     const [text, setText] = useState(value);
     return (
@@ -52,8 +49,6 @@ const setup = ({
           focusRequest={focusRequest}
           sendBlocked={sendBlocked}
           onSources={onSources}
-          onConnect={onConnect}
-          connectLabel={connectLabel}
           addable={addable}
           focusPicked={() => false}
         />
@@ -65,7 +60,6 @@ const setup = ({
     onSend,
     onStop,
     onSources,
-    onConnect,
     user: userEvent.setup(),
     view,
   };
@@ -366,8 +360,6 @@ describe("BaseAssistantComposer", () => {
             model={undefined}
             effort={undefined}
             onSources={vi.fn()}
-            onConnect={vi.fn()}
-            connectLabel="Connect a model…"
             addable={[]}
             focusPicked={() => false}
           />
@@ -388,31 +380,15 @@ describe("BaseAssistantComposer", () => {
   });
 
   describe("the + menu", () => {
-    it("offers Add a file, Sources and tools and Connect a model…", async () => {
+    it("offers Add a file and Sources and tools, and no Connect", async () => {
       const { user, onSources } = setup();
       await user.click(screen.getByRole("button", { name: "Add context" }));
       const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
-      expect(items).toEqual([
-        "Add a file",
-        "Sources and toolsS",
-        "Connect a model…K",
-      ]);
+      expect(items).toEqual(["Add a file", "Sources and toolsS"]);
       await user.click(
         screen.getByRole("menuitem", { name: /Sources and tools/ })
       );
       expect(onSources).toHaveBeenCalledTimes(1);
-    });
-
-    it("names Connect by the label it is given, and takes K", async () => {
-      const { user, onConnect } = setup({
-        connectLabel: "Connection and key…",
-      });
-      await user.click(screen.getByRole("button", { name: "Add context" }));
-      expect(
-        screen.getByRole("menuitem", { name: /Connection and key…/ })
-      ).toBeTruthy();
-      await user.keyboard("k");
-      expect(onConnect).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -492,8 +468,6 @@ describe("BaseAssistantComposer", () => {
         effort={null}
         focusRequest={focusRequest}
         onSources={vi.fn()}
-        onConnect={vi.fn()}
-        connectLabel="Connect a model…"
         addable={[]}
         focusPicked={() => false}
       />

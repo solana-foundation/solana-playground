@@ -35,6 +35,13 @@ import { isAlwaysOn, listGatewaySkills, skillsTelemetry } from "./grounding";
 import { type BackendParams, paramsOf } from "./model/backend-params";
 import { forgetBackend, rememberBackend } from "./model/remembered-backend";
 import {
+  type CredentialField,
+  encodeToolConfig,
+  readToolConfig,
+  type ToolConfig,
+  writeToolConfig,
+} from "./model/tool-config";
+import {
   type Effort,
   isDefaultBackend,
   type KeyHold,
@@ -160,7 +167,7 @@ export type ChatItem =
       kind: "error";
       text: string;
       /**
-       * The backend whose key the provider refused with a 401, for Enter key
+       * The backend whose key the provider refused with a 401, for Change key
        * to reopen Connect a model on it; a 403 keeps the provider's own
        * message (`isRejectedKey` in `use-turn`). Never the key.
        */
@@ -403,12 +410,12 @@ export class PgAssistant {
    * Choose a backend for this tab, keeping the conversation.
    *
    * A switch to a different backend does not clear the thread: `useTurn`
-   * rebuilds the provider for the new connection from what is rendered, as it
-   * does after a reload, so the next turn goes to the new backend with the
-   * conversation so far, and each reply's `origin` says which backend wrote
-   * it. Clearing here dropped the thread from the screen whenever the user
-   * entered their key again in a new tab (HOO-1719). Marks Connect a model
-   * closed.
+   * rebuilds the provider for the new connection from the thread's messages
+   * and finished tool calls (`toReplayMessagesWith`), as it does after a
+   * reload, so the next turn goes to the new backend with the conversation so
+   * far, and each reply's `origin` says which backend wrote it. Clearing here
+   * dropped the thread from the screen whenever the user entered their key
+   * again in a new tab (HOO-1719). Marks Connect a model closed.
    *
    * @param connection which provider, its key, and whatever it needs to be
    * reached — a base URL and model, or a model and effort
@@ -572,6 +579,7 @@ export class PgAssistant {
       enabled
     );
     skillsTelemetry.track("skills_toggled", { id, enabled });
+    PgAssistant._writeToolConfig();
     PgAssistant._emit();
   }
 
@@ -582,11 +590,13 @@ export class PgAssistant {
    */
   static async loadSkills() {
     const seq = ++PgAssistant._skillsSeq;
+    const account = PgSession.get()?.id;
     try {
       const skills = await listGatewaySkills();
       if (seq !== PgAssistant._skillsSeq) return;
       PgAssistant._skills = skills;
       PgAssistant._skillsUnavailable = false;
+      PgAssistant._skillsListedFor = account;
     } catch (error) {
       if (seq !== PgAssistant._skillsSeq) return;
       // The slice logged the cause; the tab tells the user the server reported none
@@ -595,6 +605,7 @@ export class PgAssistant {
       });
       PgAssistant._skills = [];
       PgAssistant._skillsUnavailable = true;
+      PgAssistant._skillsListedFor = undefined;
     }
     PgAssistant._emit();
   }
@@ -638,6 +649,14 @@ export class PgAssistant {
     return PgAssistant._localServers;
   }
 
+  /** Per local entry, the credentials a reload took from it, until that entry is next applied with a change */
+  static get missingMcpCredentials(): ReadonlyMap<
+    string,
+    readonly CredentialField[]
+  > {
+    return PgAssistant._missingCredentials;
+  }
+
   /** The servers a turn should actually declare */
   static get enabledMcpServers(): readonly McpServerEntry[] {
     return PgAssistant.mcpServers.filter((s) => s.enabled && s.url.trim());
@@ -645,9 +664,18 @@ export class PgAssistant {
 
   /** Replace the local additions — edited as one JSON document */
   static setMcpServers(servers: readonly McpServerEntry[]) {
+    const before = new Map(PgAssistant._localServers.map((s) => [s.id, s]));
     PgAssistant._replaceServers(() => {
       PgAssistant._localServers = servers;
     });
+    // Applying an entry is the user's answer, with or without those fields; one they left as it was is still owed
+    PgAssistant._missingCredentials = new Map(
+      Array.from(PgAssistant._missingCredentials).filter(([id]) => {
+        const next = servers.find((s) => s.id === id);
+        return next && JSON.stringify(next) === JSON.stringify(before.get(id));
+      })
+    );
+    PgAssistant._writeToolConfig();
     PgAssistant._emit();
   }
 
@@ -674,6 +702,7 @@ export class PgAssistant {
       server: gateway ? "gateway" : "user",
       enabled,
     });
+    PgAssistant._writeToolConfig();
     PgAssistant._emit();
   }
 
@@ -710,14 +739,19 @@ export class PgAssistant {
    */
   static async loadMcpServers() {
     const seq = ++PgAssistant._gatewayServersSeq;
+    const account = PgSession.get()?.id;
     try {
       const gateway = await listGatewayServers();
       if (seq !== PgAssistant._gatewayServersSeq) return;
+      PgAssistant._gatewayServersListedFor = account;
       PgAssistant._replaceServers(() => {
         PgAssistant._gatewayServers = gateway;
       });
       PgAssistant._emit();
     } catch (err) {
+      if (seq === PgAssistant._gatewayServersSeq) {
+        PgAssistant._gatewayServersListedFor = undefined;
+      }
       log.warn("MCP gateway unavailable; using local servers only", {
         context: { error: err },
       });
@@ -727,13 +761,81 @@ export class PgAssistant {
   /**
    * Learn which skills and servers exist, and what the servers offer. Tool
    * discovery waits on the server list only, never on the skills route.
-   * Safe to call again, as on every mount and session change.
+   * The user's stored edits come first, so nothing is asked of a server they
+   * turned off. Safe to call again, as on every mount and session change.
    */
   static async initMcp() {
+    await PgAssistant._readToolConfig();
     await Promise.all([
       PgAssistant.loadMcpServers().then(() => PgAssistant.discoverMcpTools()),
       PgAssistant.loadSkills(),
     ]);
+  }
+
+  /** Layer the stored edits under anything already edited this session, once per page */
+  private static _readToolConfig() {
+    PgAssistant._toolConfigRead ??= readToolConfig()
+      .then((read) => {
+        PgAssistant._canWriteToolConfig = read.kind !== "unreadable";
+        // Storage failing may pass, so the next write reads again
+        if (read.kind === "unreadable") PgAssistant._toolConfigRead = undefined;
+        if (read.kind === "found") PgAssistant._layerToolConfig(read.config);
+      })
+      // Remembered for the page, so a throw here would stop every later `initMcp` and write
+      .catch((e) => report("apply tool config", e));
+    return PgAssistant._toolConfigRead;
+  }
+
+  private static _layerToolConfig(config: ToolConfig) {
+    PgAssistant._skillChoices = new Map(
+      Array.from(config.skillChoices).concat(
+        Array.from(PgAssistant._skillChoices)
+      )
+    );
+    PgAssistant._gatewayServersOff = new Set(
+      Array.from(config.gatewayServersOff).concat(
+        Array.from(PgAssistant._gatewayServersOff)
+      )
+    );
+    const edited = new Set(PgAssistant._localServers.map((s) => s.id));
+    PgAssistant._replaceServers(() => {
+      PgAssistant._localServers = config.servers
+        .filter((s) => !edited.has(s.id))
+        .concat(PgAssistant._localServers);
+    });
+    PgAssistant._missingCredentials = new Map(
+      Array.from(config.missing).filter(([id]) => !edited.has(id))
+    );
+    PgAssistant._emit();
+  }
+
+  /**
+   * Store the delta, after the read so an early edit cannot replace what is
+   * stored with itself alone, and on the write queue so writes keep their order.
+   * An id is unknown only against the whole list of the account signed in now:
+   * a signed-out list lacks `signedIn` sources, and a failed one lacks them all.
+   */
+  private static _writeToolConfig() {
+    PgAssistant._lastWrite = PgAssistant._afterWrites()
+      .then(() => PgAssistant._readToolConfig())
+      .then(() => {
+        // Storage failed the read: what it holds may be fine, and this delta lacks it
+        if (!PgAssistant._canWriteToolConfig) return;
+        const account = PgSession.get()?.id;
+        return writeToolConfig(
+          encodeToolConfig({
+            skillChoices: PgAssistant._skillChoices,
+            skills: PgAssistant._skills,
+            skillsListed: !!account && PgAssistant._skillsListedFor === account,
+            gatewayServersOff: PgAssistant._gatewayServersOff,
+            gatewayServerIds: PgAssistant._gatewayServers.map((s) => s.id),
+            gatewayServersListed:
+              !!account && PgAssistant._gatewayServersListedFor === account,
+            servers: PgAssistant._localServers,
+            missing: PgAssistant._missingCredentials,
+          })
+        );
+      });
   }
 
   /**
@@ -1776,11 +1878,20 @@ export class PgAssistant {
   // A session change reloads the list, and the older session's answer must not land over it
   private static _skillsSeq = 0;
   private static _gatewayServersSeq = 0;
-  // Kept apart from the listed skills, which `loadSkills` replaces whole; in memory only
+  // Kept apart from the listed skills, which `loadSkills` replaces whole
   private static _skillChoices: ReadonlyMap<string, boolean> = new Map();
+  // The account `_skills` is the whole list of; undefined while signed out or after a failure
+  private static _skillsListedFor: string | undefined;
+  private static _gatewayServersListedFor: string | undefined;
+  private static _toolConfigRead: Promise<void> | undefined;
+  private static _canWriteToolConfig = true;
+  private static _missingCredentials: ReadonlyMap<
+    string,
+    readonly CredentialField[]
+  > = new Map();
   private static _turnBusy = false;
   private static _gatewayServers: readonly McpServerEntry[] = [];
-  // Kept apart from the gateway's list, which `loadMcpServers` replaces whole; in memory only, like `_localServers`
+  // Kept apart from the gateway's list, which `loadMcpServers` replaces whole
   private static _gatewayServersOff: ReadonlySet<string> = new Set();
   // Copied, so editing a server in the UI never mutates the registry default
   private static _localServers: readonly McpServerEntry[] =
@@ -1930,9 +2041,9 @@ export class PgAssistant {
   }
 }
 
-// A handle on the panel's state for the browser console, and for the e2e tests
-// that cover thread persistence -- sending a message for real would need a
-// configured backend and a live model call, which is not what those assert.
+// A handle on the panel's state for the browser console and the e2e tests,
+// which drive the thread and the connection through it without a live model
+// call.
 //
 // Development only: `craco build` sets NODE_ENV to production, so this is
 // dropped from the shipped bundle rather than merely unused in it.

@@ -762,23 +762,19 @@ test("assistant-turn-states: Try again after Stop", async ({ page }) => {
   await expect(log.getByRole("button", { name: "Try again" })).toHaveCount(0);
 });
 
-test("assistant-composer-context: Connect a model from the + menu", async ({
+test("assistant-composer-context: The + menu holds context only", async ({
   page,
 }) => {
   // eslint-disable-next-line unicorn/no-null -- the `GET /api/agent` body: `model: null` is on the wire
   await stubAgent(page, { configured: false, model: null }, answer);
-  const lines = linesOn(page);
   await openProject(page, "add-menu");
 
   await page.getByRole("button", { name: "Add context" }).click();
-  await page.getByRole("menuitem", { name: /Connect a model…/ }).click();
-
-  await expect(
-    page.getByRole("dialog", { name: "Connect a model" })
-  ).toBeVisible(LONG);
-  await expect
-    .poll(() => lineOf(lines, "assistant_connect_opened"))
-    .toMatch(/via\W+add/);
+  await expect(page.getByRole("menuitem")).toHaveText([
+    /^Add a file/,
+    /^Sources and tools/,
+  ]);
+  await expect(page.getByRole("menuitem", { name: /^Connect/ })).toHaveCount(0);
 });
 
 /** The bodies of the turns sent to `/api/agent`, on the hosted default */

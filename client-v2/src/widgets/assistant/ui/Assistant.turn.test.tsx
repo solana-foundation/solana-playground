@@ -42,8 +42,6 @@ vi.mock("./AssistantComposer", async () => {
         effort={undefined}
         focusRequest={turn.focusRequest}
         onSources={onSources}
-        onConnect={() => turn.openConnect("add")}
-        connectLabel="Connect a model…"
         addable={[]}
         focusPicked={focusPicked}
       />

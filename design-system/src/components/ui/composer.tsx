@@ -49,9 +49,10 @@ function ComposerBanner({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-/* The files and selections it will read */
+/* The files and selections it will read. The chips start on the input's
+   text edge (18 px), so the box has one left line */
 function ComposerContextList({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="composer-context" className={cn("flex flex-wrap gap-1.5 px-3 pt-3", className)} {...props} />
+  return <div data-slot="composer-context" className={cn("flex flex-wrap gap-1.5 px-[1.125rem] pt-3", className)} {...props} />
 }
 
 function ComposerChip({ className, ...props }: React.ComponentProps<"span">) {
@@ -128,8 +129,10 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
   )
 }
 
+/* The model, effort and Send. 8 px in, so a ghost button's icon (10 px in
+   its own padding) lands on the input's 18 px text edge */
 function ComposerToolbar({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="composer-toolbar" className={cn("flex items-center gap-1.5 px-3 pt-1.5 pb-2.5", className)} {...props} />
+  return <div data-slot="composer-toolbar" className={cn("flex items-center gap-1.5 pt-1.5 pr-3 pb-2.5 pl-2", className)} {...props} />
 }
 
 /* Add a file, a selection, a program */

@@ -610,7 +610,7 @@ test.describe("assistant-own-key", () => {
     await expect(dialog.locator("#assistant-model")).toHaveValue("gpt-y");
     await expect(dialog).not.toContainText("new conversation");
   });
-  test("assistant-own-key: A 401 offers Enter key", async ({ page }) => {
+  test("assistant-own-key: A 401 offers Change key", async ({ page }) => {
     await page.route(COMPLETIONS_URL, (route) =>
       route.fulfill({
         status: 401,

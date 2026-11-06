@@ -335,7 +335,12 @@ describe("BaseThreadItem", () => {
       />
     );
     expect(screen.getByRole("status").textContent).toContain("Stopped.");
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    const tryAgain = screen.getByRole("button", { name: "Try again" });
+    // Under the text, which is what brings the text to full strength
+    expect(tryAgain.parentElement?.getAttribute("data-slot")).toBe(
+      "callout-actions"
+    );
+    fireEvent.click(tryAgain);
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 

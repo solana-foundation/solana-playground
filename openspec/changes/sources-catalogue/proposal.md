@@ -71,8 +71,8 @@ and delivers both halves as this change states them.
 - The Sources tab shows a checkbox for every source, skill or server, gateway
   or user-added. An unchecked server contributes no tools to the next turn and
   shows no console; an unchecked skill is absent from the prompt's catalogue
-  and `load_skill` refuses it. The choice lives in memory, as the skill choice
-  does today. A model provider profile declares `supportsTools`; when it is
+  and `load_skill` refuses it. The choice is kept as `assistant-tool-config` says (this change
+  left it in memory). A model provider profile declares `supportsTools`; when it is
   `false`, a turn declares no tools and the tab says so in place of the lists.
   Community skills sit in a fold of their own with a count of those
   checked, and the fold is absent while none is listed. The skills list and the additional-servers editor each have a help
@@ -140,8 +140,6 @@ and delivers both halves as this change states them.
   mark `signedIn`. Chat, approvals, Stop, stored threads,
   and the default backend's sign-in gate behave as before.
 - Out of scope:
-  - Persisting the selection across reloads: nothing in the Sources tab is
-    persisted today, and the selection joins it.
   - Enforcing the selection on the server. Tools execute in the browser for
     every backend, and `api/agent.mjs` keeps forwarding what the browser
     declares; the server decides what is offered, the browser what is used.

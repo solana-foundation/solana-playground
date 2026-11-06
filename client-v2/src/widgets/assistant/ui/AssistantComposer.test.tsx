@@ -291,39 +291,11 @@ describe("AssistantComposer, the + menu", () => {
     expect(openSources).toHaveBeenCalledTimes(1);
   });
 
-  it("offers Connection and key… once connected, and opens Connect from +", async () => {
-    render(<Harness />);
-    const user = await openMenu(/Add context/);
-    await user.click(
-      screen.getByRole("menuitem", { name: /Connection and key…/ })
-    );
-    expect(openConnect).toHaveBeenCalledWith("add", undefined);
-  });
-
-  it("offers Connect a model… with nothing connected", async () => {
+  it("leaves Connect to the model button and More, not +", async () => {
     PgAssistant.disconnect();
     render(<Harness />);
     await openMenu(/Add context/);
-    expect(
-      screen.getByRole("menuitem", { name: /Connect a model…/ })
-    ).toBeTruthy();
-  });
-});
-
-describe("AssistantComposer, chip order", () => {
-  it("names the files in tab order, then the added ones", async () => {
-    render(<Harness />);
-    const user = await openMenu(/Add context/);
-    await openAddFile(user);
-    await pickFile(user, "tests/anchor.test.ts");
-    // Each chip is its tooltip's trigger, which takes over its data-slot
-    const chips = Array.from(
-      document.querySelectorAll('[data-slot="composer-context"] > *')
-    ).map(
-      // The short label; the chip also carries its spoken name for a reader
-      (chip) => chip.querySelector('[aria-hidden="true"]')?.textContent
-    );
-    expect(chips).toEqual(["lib.rs", "anchor.test.ts"]);
+    expect(screen.queryByRole("menuitem", { name: /Connect/ })).toBeNull();
   });
 });
 
