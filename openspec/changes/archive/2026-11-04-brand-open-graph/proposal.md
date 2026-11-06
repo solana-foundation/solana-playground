@@ -15,7 +15,7 @@ branded card (HOO-2597). Slava, 4 Nov: before Breakpoint, alongside the icons
   existing static overlay, like the icons.
 - `brand-head.mjs` adds Almaz's Open Graph and Twitter tags to the generated
   `public/index.html` head, after the icon block: type, site name, title
-  "Solana Playground" (the manifest name Kat approved), description, URL,
+  "Solana Playground" (the manifest name Cat McGee approved), description, URL,
   image with its type, size and alt text, and `summary_large_image`.
 - The tags carry absolute URLs on the current production base,
   `https://solana-playground-teal.vercel.app`. The production domain is not

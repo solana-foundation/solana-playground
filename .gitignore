@@ -11,6 +11,8 @@
 # Production
 */build
 client-v2/bundle-info/
+# Packed by `yarn tutorial:skill`
+client-v2/tutorial-author.zip
 
 # Misc
 .env

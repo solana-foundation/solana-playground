@@ -188,6 +188,7 @@
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
     "tutorial:check": "tsx scripts/tutorial-check.ts",
+    "tutorial:skill": "node scripts/tutorial-skill.mjs",
     "check": "yarn test-types && yarn check-format && yarn check-md && yarn lint && yarn check-colors && yarn tutorial:check && yarn spec:validate && yarn spec:coverage && yarn test-unit && yarn test-api",
     "generate": "node scripts/update-static.mjs && yarn generate-crates && yarn generate-default-crates && yarn generate-exports && yarn generate-packages && yarn generate-tutorials && yarn sync-assistant-context",
     "generate-fast": "node scripts/update-static.mjs && yarn generate-exports && yarn generate-packages && yarn generate-tutorials && yarn sync-assistant-context",

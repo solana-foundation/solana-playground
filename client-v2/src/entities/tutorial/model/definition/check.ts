@@ -390,8 +390,38 @@ const ruleErrors = (
     }
   };
 
+  /**
+   * A step's start is the previous step's target: a block lands by the lines
+   * the file already has, so a line neither knows sends it to the file's end
+   */
+  const continues = (step: Step, i: number) => {
+    if (i === 0) return;
+    const previous = d.steps[i - 1].target;
+    const before = `steps[${i - 1}].target`;
+    const files = new Set([
+      ...Object.keys(previous),
+      ...Object.keys(step.start),
+    ]);
+    for (const file of files) {
+      const was = previous[file];
+      const is = step.start[file];
+      if (was === is) continue;
+      let message = `the same file as ${before}, found a different one`;
+      if (is === undefined)
+        message = `the file as ${before} has it, found none`;
+      else if (was === undefined) {
+        message = `a file ${before} has, found one it lacks`;
+      }
+      errors.push({
+        path: `steps[${i}].start[${JSON.stringify(file)}]`,
+        message,
+      });
+    }
+  };
+
   d.steps.forEach((step, i) => {
     once(stepIds, step.id, `steps[${i}].id`, "step");
+    continues(step, i);
     step.readOnly?.forEach((file, k) => {
       if (step.start[file] === undefined && step.target[file] === undefined) {
         errors.push({
@@ -1162,6 +1192,52 @@ if (import.meta.vitest) {
       expect(lines(d)).toEqual([
         'steps[0].readOnly[1]: a file in the step\'s start or target, found "Anchor.toml"',
       ]);
+    });
+
+    describe("a step starts where the previous one ended", () => {
+      it("refuses a start whose file differs from the previous target", () => {
+        const d = minimal();
+        d.steps[1].start = { "src/lib.rs": LIB.replace("name", "who") };
+        expect(lines(d)).toEqual([
+          'steps[1].start["src/lib.rs"]: the same file as steps[0].target, found a different one',
+        ]);
+      });
+
+      it("refuses a start missing a file of the previous target", () => {
+        const d = minimal();
+        d.steps[0].target["client/client.ts"] = "";
+        d.steps[1].target["client/client.ts"] = "";
+        expect(lines(d)).toEqual([
+          'steps[1].start["client/client.ts"]: the file as steps[0].target has it, found none',
+        ]);
+      });
+
+      it("refuses a start holding a file the previous target lacks", () => {
+        const d = minimal();
+        d.steps[1].start["client/client.ts"] = "";
+        expect(lines(d)).toEqual([
+          'steps[1].start["client/client.ts"]: a file steps[0].target has, found one it lacks',
+        ]);
+      });
+
+      it("compares each step with the one just before it", () => {
+        const d = minimal();
+        const third = structuredClone(d.steps[1]);
+        third.id = "again";
+        third.beats = [{ kind: "say", id: "s3.a", text: "Again." }];
+        third.win = { id: "s3.win", headline: "Again.", line: "Once more." };
+        third.start = { "src/lib.rs": `${LIB}// changed\n` };
+        d.steps.push(third);
+        expect(lines(d)).toEqual([
+          'steps[2].start["src/lib.rs"]: the same file as steps[1].target, found a different one',
+        ]);
+      });
+
+      it("leaves the first step's start alone", () => {
+        const d = minimal();
+        d.steps[0].start = { "src/lib.rs": "// anything" };
+        expect(lines(d)).toEqual([]);
+      });
     });
 
     /** `minimal` with two docs, checked against the given docs folder */

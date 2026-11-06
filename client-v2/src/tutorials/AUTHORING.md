@@ -5,6 +5,8 @@ Playground's conversation flow. Give an LLM two files, this one and
 `tutorial.schema.json`, and talk the tutorial through with it. It writes one
 file, `tutorial.json`, that the check accepts and Playground runs with no
 code change. A pull request that adds the tutorial's folder publishes it.
+A skill, `SKILL.md`, may come with the two: it says how to run the
+conversation and hand the draft over.
 
 If you are the agent: the person you talk to knows what the tutorial should
 teach. You know the format. Ask the questions in "Settle these first",
@@ -48,8 +50,9 @@ Ask the person, and write the answers down before any JSON:
    and asks a "Fix it" question.
 6. **Which tutorial comes next,** and which few doc pages (at most eight) the
    learner may want open beside the code.
-7. **Who are the authors, and is there a thumbnail?** The pull request
-   carries the image.
+7. **Who are the authors, and is there a thumbnail?** A thumbnail is
+   optional: a draft goes without one, and the pull request that publishes
+   the tutorial carries it.
 
 ## The shape of a definition
 
@@ -76,10 +79,11 @@ The schema describes every field. The parts that need judgement:
   `lib.rs`, `TypeScript` for a client. `minutes` is about three a step.
 - `categories` is optional: up to three from the schema's list, left out
   when none fits.
-- `thumbnail` is a 4:3 image next to `tutorial.json` (`thumbnail.jpg`),
-  under 1 MB. Ask the person for
-  it. The check does not look for the file, but the card shows a broken
-  image without it, so the pull request must carry it.
+- `thumbnail` is always `"thumbnail.jpg"`, the name of a 4:3 image next to
+  `tutorial.json`, under 1 MB. The image itself is optional for a draft: the
+  check does not look for the file, and without it the card shows a broken
+  image until someone adds one. Ask the person whether they have one; never
+  hold the draft for it.
 - `intro.promise` says what the learner ends with. `intro.log` is the log
   line from question 2, as the log shows it: `Program log: Echo: gm`. `intro.files` is the finished program, shown read
   only before Start, usually the last step's `target`.
@@ -117,13 +121,16 @@ Every step carries whole files, never edits:
 How a block lands: Playground finds the block's lines in the target and
 rebuilds the file from the target, keeping the lines the file already has.
 So blocks land in their place whatever order the beats write them in. The
-check does not test rule 1, nor rule 3 for a write without its own `ref`;
-break them and the check still passes, but blocks land in the wrong place.
+check tests rule 1, but not rule 3 for a write without its own `ref`: break
+that one and the check still passes, but blocks land in the wrong place.
 The rules:
 
-1. **A step's `start` is the previous step's `target`, copied exactly.** A
-   line the learner's file has that neither the start nor the target knows
-   makes the block go to the end of the file instead.
+1. **A step's `start` is the previous step's `target`, copied exactly:**
+   every file, character for character, and no file more. A line the
+   learner's file has that neither the start nor the target knows makes the
+   block go to the end of the file instead. Write the previous target first
+   and copy it; never retype it. The first step's `start` is yours to
+   choose.
 2. **Copy each block out of the target, never retype it.** The check
    compares the block's lines with the target's after trimming each line and
    dropping blank ones: any other difference, a space inside a line, a
@@ -479,12 +486,8 @@ the failure. `onFail` holds the beats after the learner presses Explain: a
   again, or comes back to the step, may find the account an earlier call
   made: a counter prints `Counter is now 2` the second time, so its goal's
   `log` is `"Counter is now \\d+"` in JSON, not `1`. Make the goal the
-  call that works on every run (`increment`), never a one-time call
-  (`initialize`), which Anchor's `init` refuses once the account exists.
-  Put the one-time call in a `call` act before the goal's; a learner
-  whose account already exists gets that refusal, and the step does not
-  move on from it yet, so keep one-time calls to the step that creates the
-  account.
+  call that works on every run (`increment`), never the call that creates
+  the account (`initialize`); that one needs care of its own, below.
 - `{ "kind": "refused", "instruction": "chop_tree", "error": { "name": "NotEnoughEnergy", "code": 6000 } }`:
   the program refused a call of the instruction with this error. Give the
   error's `name` (the variant of your `#[error_code]` enum), its `code`
@@ -499,6 +502,20 @@ the failure. `onFail` holds the beats after the learner presses Explain: a
   that never reached the program (no wallet, no funds) passes nothing, and a
   refusal on a step whose goal is not `refused` is an ordinary failure the
   assistant explains.
+
+**The call that creates an account runs again too.** It is a `call` act
+before the goal's, and a learner who comes back presses it a second time,
+when the account already exists. Anchor's `init` refuses that press and
+the learner is stuck on the card. So write its accounts struct with
+`init_if_needed` in place of `init`. Playground's build server turns on
+the Anchor feature it needs, so there is no `Cargo.toml` to change. Let its body leave the data alone:
+`#[account(init_if_needed, payer = user, space = 8 + 8, seeds = [b"counter", user.key().as_ref()], bump)]`
+over `pub counter: Account<'info, Counter>` (`space` is 8 for Anchor's
+discriminator plus the account's fields, here one `u64`), and `Ok(())` as
+the body.
+Anchor fills a new account with zeros, so `initialize` needs no
+`counter.count = 0`; that line would reset a returning learner's count.
+Keep such calls to the step that creates the account.
 
 `win` closes the step: `headline` says what is now true ("Your program
 compiles"), `line` says what that means. A headline, like a step's
@@ -747,7 +764,9 @@ In a clone of the repository, from `client-v2/`:
 yarn tutorial:check <slug>
 ```
 
-It prints `<slug>: ok`, or every error and exits with code 1. Fix them all and
+The argument is the slug of a folder under `src/tutorials/`, or the path of
+a folder anywhere that holds `tutorial.json`. It prints `<slug>: ok`, or
+every error and exits with code 1. Fix them all and
 run it again; never hand in a definition the check refuses.
 
 ## Reading the check's errors
@@ -799,6 +818,10 @@ example above, broken one way each:
 - `steps[0]: needs "failsWith", found none`
   A planned failure names the log line that marks it, with `planned` and
   `onFail`.
+- `steps[1].start["src/lib.rs"]: the same file as steps[0].target, found a different one`
+  A step's start is not the previous step's target as it stands: copy that
+  target again, whole. With `found none` the start lacks one of its files,
+  with `found one it lacks` the start has a file the target does not.
 - `steps[1].readOnly[1]: a file in the step's start or target, found "Anchor.toml"`
   A read-only file the step does not have.
 - `docs[0].file: a Markdown file in the tutorial's docs folder, found no "programs.md" there`
@@ -840,7 +863,7 @@ The tutorial is one folder, `client-v2/src/tutorials/<slug>/`:
 ```text
 <slug>/
   tutorial.json
-  thumbnail.jpg
+  thumbnail.jpg  optional in a draft
   docs/          only when the definition lists docs
     <page>.md
 ```
