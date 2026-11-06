@@ -79,14 +79,14 @@ const CLUSTERS = new Map<string, string>([
   [normalised(Endpoint.LOCALNET), clusterName("localnet")],
 ]);
 
-/** Why a value cannot be saved, before anything is written */
-export type Refusal =
-  | { ok: false; reason: "format" }
-  | { ok: false; reason: "duplicate"; name: string };
-
+/**
+ * A save's result: the stored RPC, a value refused before anything is
+ * written (`format`, `duplicate`), or a write the browser refused (`storage`)
+ */
 export type SaveResult =
   | { ok: true; rpc: CustomRpc }
-  | Refusal
+  | { ok: false; reason: "format" }
+  | { ok: false; reason: "duplicate"; name: string }
   | { ok: false; reason: "storage" };
 
 /** Why nothing was saved: a refusal, or a stored list that cannot be read */

@@ -2,11 +2,7 @@ import { useEffect, useState } from "react";
 
 import { DEFAULT_ENDPOINT } from "@/constants";
 import type { CustomRpc } from "@/entities/custom-rpc";
-import {
-  checkRpcUrl,
-  fetchRpcHealth,
-  PgCustomRpcs,
-} from "@/entities/custom-rpc";
+import { fetchRpcHealth, PgCustomRpcs } from "@/entities/custom-rpc";
 import { useRenderOnChange } from "@/hooks";
 import { Button } from "@/shared/ui/button";
 import { PgGlobal, PgSettings, PgView } from "@/utils";
@@ -18,8 +14,16 @@ import { settingsTelemetry } from "../model/telemetry";
 import BaseCustomRpcs from "./BaseCustomRpcs";
 import BaseNetworkChoice from "./BaseNetworkChoice";
 
+/**
+ * Whether a running deploy holds the network on the RPC saved under `url`:
+ * it is the one in use, and a deploy is running or paused
+ */
+const isHeld = (url: string) =>
+  PgSettings.connection.endpoint === url &&
+  !canSwitchNetwork(PgGlobal.deployState);
+
 /** Save a custom RPC once its URL answers one health request (Spec 07) */
-const saveChecked = saveCheckedWith(fetchRpcHealth);
+const saveChecked = saveCheckedWith(fetchRpcHealth)(isHeld);
 
 /** Say that a running deploy holds the network where it is */
 const toastNetworkHeld = () =>
@@ -111,34 +115,20 @@ const NetworkSection = () => {
     );
 
   // An edited RPC keeps the connection on it when it is the one in use at
-  // the moment it saves
-  const handleEdit = async (rpc: CustomRpc, input: CustomRpc) => {
-    // A new URL for the RPC in use would move the network, so a running
-    // deploy refuses it before the check and before the list changes; a
-    // rename still saves
-    const url = checkRpcUrl(input.url);
-    if (
-      PgSettings.connection.endpoint === rpc.url &&
-      url.ok &&
-      url.url !== rpc.url &&
-      !canSwitchNetwork(PgGlobal.deployState)
-    ) {
-      return {
-        kind: "refused" as const,
-        error: "A deploy is running. Change the URL when it ends.",
-      };
-    }
-    return answerFor((saved) => {
+  // the moment it saves. A new URL for that RPC would move the network, so
+  // `saveChecked` refuses it while a deploy runs, before the health request
+  // and again at the write; a rename still saves
+  const handleEdit = async (rpc: CustomRpc, input: CustomRpc) =>
+    answerFor((saved) => {
       if (PgSettings.connection.endpoint === rpc.url) pick(saved.url);
     })("edit")(await saveChecked(input, rpc.url));
-  };
 
   const handleRemove = (rpc: CustomRpc) => {
     const wasPicked = PgSettings.connection.endpoint === rpc.url;
     // Removing the RPC in use moves the network to Devnet, so a running
     // deploy keeps it listed rather than leaving the connection on an RPC
     // the list no longer has
-    if (wasPicked && !canSwitchNetwork(PgGlobal.deployState)) {
+    if (isHeld(rpc.url)) {
       toastNetworkHeld();
       return;
     }

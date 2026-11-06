@@ -154,7 +154,7 @@ const SAVE_FAILED: SettledAnswer = {
 
 /**
  * Name, then URL with Save, the help line and the refusal under it. While
- * the URL is checked (up to 5 s) Save shows a spinner and nothing can be
+ * the URL is checked (for up to the health check's timeout, `fetchRpcHealth`) Save shows a spinner and nothing can be
  * edited, cancelled or sent again; an unchecked URL offers "Use anyway",
  * which saves what was checked, so changing either field takes it away.
  */

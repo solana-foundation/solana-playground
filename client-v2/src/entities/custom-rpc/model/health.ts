@@ -57,7 +57,7 @@ const fetchRpcHealthWithin =
     }
   };
 
-/** `fetchRpcHealthWithin` at Spec 07's 5 s */
+/** `fetchRpcHealthWithin` at Spec 07's `RPC_CHECK_TIMEOUT_MS` */
 export const fetchRpcHealth = fetchRpcHealthWithin(RPC_CHECK_TIMEOUT_MS);
 
 if (import.meta.vitest) {

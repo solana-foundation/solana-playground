@@ -191,6 +191,69 @@ describe("NetworkSection while a deploy runs", () => {
     expect(state.endpoint).toBe(HELIUS.url);
   });
 
+  it("refuses a new URL for the RPC in use when a deploy starts during its check", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      state.deployState = "loading";
+      return new Response('{"result":"ok"}');
+    });
+    render(<NetworkSection />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Helius" }));
+    const url = screen.getByLabelText("RPC URL");
+    await userEvent.clear(url);
+    await userEvent.type(url, "https://other.test{Enter}");
+
+    expect(
+      await screen.findByText(
+        "A deploy is running. Change the URL when it ends."
+      )
+    ).toBeTruthy();
+    expect(PgCustomRpcs.list()).toEqual([HELIUS]);
+    expect(state.endpoint).toBe(HELIUS.url);
+  });
+
+  it("refuses Use anyway on the RPC in use once a deploy has started", async () => {
+    stubRpcNotAnswering();
+    render(<NetworkSection />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Helius" }));
+    const url = screen.getByLabelText("RPC URL");
+    await userEvent.clear(url);
+    await userEvent.type(url, "https://other.test{Enter}");
+    const useAnyway = await screen.findByRole("button", {
+      name: "Use anyway",
+    });
+    state.deployState = "paused";
+    await userEvent.click(useAnyway);
+
+    expect(
+      await screen.findByText(
+        "A deploy is running. Change the URL when it ends."
+      )
+    ).toBeTruthy();
+    expect(PgCustomRpcs.list()).toEqual([HELIUS]);
+    expect(state.endpoint).toBe(HELIUS.url);
+  });
+
+  it("saves a new URL for an RPC not in use", async () => {
+    state.deployState = "loading";
+    state.endpoint = DEVNET;
+    stubRpcAnswering();
+    render(<NetworkSection />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit Helius" }));
+    const url = screen.getByLabelText("RPC URL");
+    await userEvent.clear(url);
+    await userEvent.type(url, "https://other.test{Enter}");
+
+    await waitFor(() =>
+      expect(PgCustomRpcs.list()).toEqual([
+        { name: "Helius", url: "https://other.test/" },
+      ])
+    );
+    expect(state.endpoint).toBe(DEVNET);
+  });
+
   it("renames the RPC in use", async () => {
     state.deployState = "loading";
     render(<NetworkSection />);
