@@ -46,6 +46,56 @@ const writeSeen = (name: string, shape: string) => {
   }
 };
 
+/**
+ * The panel as the learner left it, per tutorial, for a reload of this tab:
+ * open or not, the tab, the picked chip and the typed fields (the spec's
+ * "Reload in step 3"). The tab's own store, so nothing syncs and no other tab
+ * or device sees it; the latest result stays in memory
+ */
+const KEPT_KEY = "tutorial-conversation.call-panel";
+
+type KeptPanel = Pick<PanelState, "open" | "tab" | "picked" | "values">;
+
+const readAllKept = (): Record<string, Partial<KeptPanel>> => {
+  try {
+    const parsed: unknown = JSON.parse(
+      sessionStorage.getItem(KEPT_KEY) ?? "{}"
+    );
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, Partial<KeptPanel>>)
+      : {};
+  } catch (error) {
+    // A broken or blocked store opens the panel as on a first visit
+    log.warn("could not read the kept Call panel", { context: { error } });
+    return {};
+  }
+};
+
+/** The kept fields of `name` that have the right type; the rest start fresh */
+const readKept = (name: string): Partial<KeptPanel> => {
+  const kept = readAllKept()[name];
+  if (typeof kept !== "object" || kept === null) return {};
+  const out: Partial<KeptPanel> = {};
+  if (typeof kept.open === "boolean") out.open = kept.open;
+  if (kept.tab === "form" || kept.tab === "idl") out.tab = kept.tab;
+  if (typeof kept.picked === "string") out.picked = kept.picked;
+  if (typeof kept.values === "object" && kept.values !== null) {
+    out.values = kept.values;
+  }
+  return out;
+};
+
+const writeKept = (name: string, state: KeptPanel) => {
+  try {
+    sessionStorage.setItem(
+      KEPT_KEY,
+      JSON.stringify({ ...readAllKept(), [name]: state })
+    );
+  } catch (error) {
+    log.warn("could not keep the Call panel", { context: { error } });
+  }
+};
+
 interface PanelState {
   /** The tutorial this state belongs to: another one starts clean */
   tutorial: string | undefined;
@@ -125,13 +175,19 @@ export class PgCallPanel {
   private static _current(): PanelState {
     const tutorial = PgCallPanel._name();
     if (PgCallPanel._state.tutorial !== tutorial) {
-      PgCallPanel._state = { ...INITIAL, tutorial };
+      PgCallPanel._state = {
+        ...INITIAL,
+        tutorial,
+        ...(tutorial ? readKept(tutorial) : {}),
+      };
     }
     return PgCallPanel._state;
   }
 
   private static _set(next: Partial<PanelState>) {
     PgCallPanel._state = { ...PgCallPanel._current(), ...next };
+    const { tutorial, open, tab, picked, values } = PgCallPanel._state;
+    if (tutorial) writeKept(tutorial, { open, tab, picked, values });
     for (const cb of PgCallPanel._listeners) cb();
   }
 
