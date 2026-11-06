@@ -1,4 +1,6 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import type { Idl } from "@coral-xyz/anchor";
+
 import type { TutorialDefinition } from "@/entities/tutorial";
 import { slugOf } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
@@ -202,6 +204,14 @@ export class PgConversation {
   /** A step's goal met outside the feed: the Call panel or a client run */
   static passed(via: Exclude<PassedVia, "chat">, result: RunResult) {
     PgConversation._dispatch({ type: "passed", via, result, at: Date.now() });
+  }
+
+  /**
+   * The program deployed outside the cards (`watchDeploys`): the Call panel
+   * and the call acts go on with its IDL
+   */
+  static deployed(idl: Idl) {
+    PgConversation._dispatch({ type: "deployed", idl, at: Date.now() });
   }
 
   /**

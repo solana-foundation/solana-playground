@@ -246,6 +246,16 @@ Call button.
   button's dot shows once
 - **AND** typing `name: String` in `lib.rs` before that upgrade adds no field
 
+#### Scenario: A deploy outside the cards
+
+- **WHEN** the learner adds an argument, builds, and runs `deploy` in the
+  terminal (or deploys from the explorer's menu or through the assistant), and
+  the deploy lands on devnet in the tutorial's own workspace
+- **THEN** the Call panel shows the new argument with "New", and no step passes
+  on that deploy
+- **AND** a deploy that finished on another cluster, or after a switch to
+  another workspace, leaves the panel as it was
+
 #### Scenario: Several instructions
 
 - **WHEN** a program has three instructions and the live step's goal calls

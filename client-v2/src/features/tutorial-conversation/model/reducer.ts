@@ -130,6 +130,11 @@ export type Action =
    * its result posts as if the run had ended, rather than the interrupted card
    */
   | { type: "recognised"; beatId: string; result: RunResult; at: number }
+  /**
+   * The program deployed outside the cards, through the deploy command
+   * (`watchDeploys`): the Call panel reads its IDL. No step passes on it
+   */
+  | { type: "deployed"; idl: Idl; at: number }
   /** A step's goal met outside the feed: a Call panel call or a client run */
   | {
       type: "passed";
@@ -1266,6 +1271,18 @@ const reduceAction = (
         ];
       });
       return { state, effects };
+    }
+
+    case "deployed": {
+      const deployed = nextDeployed(p.deployed, action.idl);
+      // The same IDL again leaves the save as it was
+      if (
+        p.deployed &&
+        JSON.stringify(p.deployed) === JSON.stringify(deployed)
+      ) {
+        return same(state);
+      }
+      return withProgress(state, { ...p, deployed });
     }
 
     case "recognised": {
@@ -2431,6 +2448,54 @@ if (import.meta.vitest) {
         );
         // No such run in flight: the engine dropped it, and keeps no IDL
         expect(upgraded.state.progress.deployed).toEqual(landed.deployed);
+      });
+
+      it("keeps the IDL of a deploy that ran outside the cards", () => {
+        const idlWith = (args: string[]) =>
+          ({
+            version: "0.1.0",
+            name: "hello_anchor",
+            instructions: [
+              {
+                name: "hello",
+                accounts: [],
+                args: args.map((name) => ({ name, type: "string" })),
+              },
+            ],
+          } as Idl);
+        const before = play([start, rightPick]).state;
+        const first = reduce(ctx(), before, {
+          type: "deployed",
+          idl: idlWith([]),
+          at: 6000,
+        });
+        expect(first.state.progress.deployed).toEqual({
+          idl: idlWith([]),
+          added: [],
+        });
+        // Nothing else moves: no step passes, no telemetry
+        expect(first.effects).toEqual([]);
+        expect(first.state.progress.passed).toEqual(before.progress.passed);
+        expect(first.state.progress.cursor).toEqual(before.progress.cursor);
+
+        // A terminal redeploy with a new argument: the panel's "New" shows it
+        const upgraded = reduce(ctx(), first.state, {
+          type: "deployed",
+          idl: idlWith(["name"]),
+          at: 7000,
+        });
+        expect(upgraded.state.progress.deployed).toEqual({
+          idl: idlWith(["name"]),
+          added: ["hello.name"],
+        });
+
+        // The same IDL again changes nothing, so nothing is saved
+        const again = reduce(ctx(), upgraded.state, {
+          type: "deployed",
+          idl: idlWith(["name"]),
+          at: 8000,
+        });
+        expect(again.state).toBe(upgraded.state);
       });
 
       it("counts a question once, whatever comes after it resolved", () => {
