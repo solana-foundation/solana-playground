@@ -235,8 +235,8 @@ const useLockedPreview = (state: ConversationState, phone: boolean) => {
     !!state.context && (phone || state.engine.progress.cursor.kind === "intro");
   useEffect(() => {
     if (!locked) return;
-    PgEditor.setReadOnly(true);
-    return () => PgEditor.setReadOnly(false);
+    const hold = PgEditor.holdReadOnly("preview");
+    return () => hold.dispose();
   }, [locked]);
 };
 

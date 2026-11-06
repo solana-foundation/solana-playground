@@ -2,6 +2,8 @@
 import * as monaco from "monaco-editor";
 import { useEffect, useState } from "react";
 
+import { PgEditor } from "@/utils/editor";
+
 import type { LineMarks } from "../model/lines";
 import { arrivalMs, decorationsFor, GHOST_TEXT } from "../model/lines";
 
@@ -119,16 +121,17 @@ export const useEditorLines = ({ root, marks, busy }: EditorLines) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the keys stand for the marks
   }, [editor, model, writtenKey, arriving, landingKey, errorKey]);
 
-  // Busy: read only and dimmed, and back as it was once the act is done
+  // Busy: read only and dimmed. Held in `PgEditor` beside the preview's
+  // lock rather than saved and restored here: the phone's lock may go while
+  // the act runs, and a saved value would bring it back after
   useEffect(() => {
     if (!editor || !busy) return;
     const node = editor.getContainerDomNode();
-    const wasReadOnly = editor.getOption(monaco.editor.EditorOption.readOnly);
-    editor.updateOptions({ readOnly: true });
+    const hold = PgEditor.holdReadOnly("act");
     node.classList.add("pg-editor-busy");
     return () => {
       node.classList.remove("pg-editor-busy");
-      editor.updateOptions({ readOnly: wasReadOnly });
+      hold.dispose();
     };
   }, [editor, busy]);
 };
