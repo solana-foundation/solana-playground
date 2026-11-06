@@ -21,12 +21,16 @@ import type { RunResult } from "../progress";
 import type { ActRun } from "./act-runner";
 import { actRunner } from "./act-runner";
 import { runBuild } from "./build";
+import type { BuildSource } from "./build-source";
+import { trackBuildSource } from "./build-source";
 import type { DeployPort, OnChain } from "./deploy";
 import { runDeploy } from "./deploy";
 import type { DeployWatchPort } from "./deploy-watch";
 import type { FundingChain } from "./fund";
+import { currentTarget } from "./real-run";
 import { runOnDevnet } from "./real-run";
 import { deploySlotOf, landedDeploy, recogniseDeploy } from "./recognise";
+import { targetGuardFor } from "./target";
 
 /** Sends and confirms on the connection the settings hold, as `PgTx` does */
 const sendAndConfirmTxWithRetries: ReturnType<
@@ -153,6 +157,29 @@ const sendFromBuffer = async (
   throw failure;
 };
 
+/** The program's source as one value: every file under `src/`, by path */
+const programSource = () => {
+  const src = PgExplorer.getCurrentSrcPath();
+  return JSON.stringify(
+    Object.entries(PgExplorer.files)
+      .filter(([path]) => path.startsWith(src))
+      .map(([path, file]) => [path, file.content ?? ""])
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+  );
+};
+
+/**
+ * The source of the last passing build, across every build the page sees.
+ * Module scope, as the build command it listens to is: a tutorial frame
+ * mounting twice must not lose the build its first mount saw.
+ */
+const buildSource: BuildSource = trackBuildSource({
+  onDidStart: (cb) => PgCommand.build.onDidStart(() => cb()),
+  onDidFinish: (cb) => PgCommand.build.onDidFinish(cb),
+  source: programSource,
+  failed: () => !!PgProgramInfo.lastBuildFailed,
+});
+
 /**
  * The deploy port over the editor's loader calls. A tutorial runs on devnet
  * only: on any other cluster the deploy refuses with what to do, rather than
@@ -160,11 +187,15 @@ const sendFromBuffer = async (
  */
 export const realDeployPort = (): DeployPort => {
   let wallet: Wallet | null = null;
+  const target = targetGuardFor("the deploy")(currentTarget);
   return {
-    refusal: () =>
-      PgConnection.cluster === "devnet"
-        ? null
-        : "Tutorials deploy to devnet. Switch the network to devnet in Settings and try again.",
+    refusal: () => {
+      if (PgConnection.cluster !== "devnet") {
+        return "Tutorials deploy to devnet. Switch the network to devnet in Settings and try again.";
+      }
+      target.capture();
+      return null;
+    },
     wallet: () => {
       wallet = playgroundWallet();
       return wallet ? wallet.publicKey.toBase58() : null;
@@ -172,7 +203,10 @@ export const realDeployPort = (): DeployPort => {
     program: () => ({
       id: PgProgramInfo.pk?.toBase58() ?? null,
       keypair: !!PgProgramInfo.kp,
-      stale: !PgProgramInfo.uuid || !!PgProgramInfo.lastBuildFailed,
+      stale:
+        !PgProgramInfo.uuid ||
+        !!PgProgramInfo.lastBuildFailed ||
+        !buildSource.isCurrent(),
       length: null,
     }),
     // The build act's own run, so a build-and-deploy names the same error
@@ -209,6 +243,7 @@ export const realDeployPort = (): DeployPort => {
     funding: devnetFunding,
     capSol: DEVNET_FAUCET_SOL,
     writeBuffer: async (bytes, onChain) => {
+      target.ensure();
       const payer = needed(wallet, "a wallet");
       const programPk = needed(PgProgramInfo.pk, "the program id");
       const conn = PgConnection.current;
@@ -250,6 +285,7 @@ export const realDeployPort = (): DeployPort => {
         async () => !!(await conn.getAccountInfo(buffer.publicKey))
       );
       try {
+        target.ensure();
         await BpfLoaderUpgradeable.loadBuffer(buffer.publicKey, bytes, {
           wallet: payer,
           onRateLimit: (retryAfter) =>
@@ -271,6 +307,7 @@ export const realDeployPort = (): DeployPort => {
       return buffer.publicKey.toBase58();
     },
     deploy: async (buffer, length) => {
+      target.ensure();
       const conn = PgConnection.current;
       return sendFromBuffer(
         () =>
@@ -290,6 +327,7 @@ export const realDeployPort = (): DeployPort => {
       );
     },
     upgrade: async (buffer) => {
+      target.ensure();
       const conn = PgConnection.current;
       return sendFromBuffer(
         () =>
