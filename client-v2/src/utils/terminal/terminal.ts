@@ -12,6 +12,7 @@ import { PgCommon } from "../common";
 import { isStopped } from "../stopped";
 import type { ClassReturnType, Methods, SyncOrAsync } from "../types";
 import { PgAutocomplete } from "./autocomplete";
+import { fitBuffersTableWith } from "./buffers-table";
 import { confirmReply, confirmSuffix } from "./confirm";
 import { PgHistory } from "./history";
 import { lineTone, processErrorLine, toneWith } from "./line-error";
@@ -119,7 +120,7 @@ export class PgTerminal {
 
   /**
    * `run`, doing nothing while no terminal is mounted. For `enable`,
-   * `println`, `focus` and `clear`, which are called without `await` all over
+   * `println`, `printlnWasm`, `focus` and `clear`, which are called without `await` all over
    * the app: under Home,
    * which mounts no terminal, there is nothing to print to or focus, and a
    * rejection there would go unhandled.
@@ -142,7 +143,11 @@ export class PgTerminal {
    * Mainly used from WASM
    */
   static logWasm(msg: any) {
-    this.println(msg);
+    // WASM does not await this, so a failure is logged here; rethrown, it
+    // would be an unhandled rejection and the output lost without a trace
+    PgTerminal._runIfMounted({ printlnWasm: [msg] }).catch((e) =>
+      log.error(e, { report: true })
+    );
   }
 
   /**
@@ -482,6 +487,15 @@ export class PgTerm {
   /** Print a message with end line character appended. */
   println(msg: any, opts?: PrintOptions) {
     this.print(msg, { ...opts, newLine: true });
+  }
+
+  /**
+   * Print what a WASM package logs; the buffers table solana-cli prints is
+   * first laid out for the terminal's width (see {@link fitBuffersTableWith}).
+   * Called through `PgTerminal.logWasm`, not directly.
+   */
+  printlnWasm(msg: any) {
+    this.println(fitBuffersTableWith(this._tty.size.cols)(msg));
   }
 
   /**
