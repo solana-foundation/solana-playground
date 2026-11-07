@@ -6,12 +6,11 @@ import {
   type SignThroughPage,
 } from "../sandbox-signer-provider";
 import type { WalletSignerProvider } from "../signer-provider";
+import { CLI_KEY_ERROR } from "./cli-line";
 import type { KeyFrame } from "./client";
 import { createdKeyOf, signatureOf } from "./protocol";
 
-/** What the WASM CLIs get in place of the built-in wallet's key bytes */
-export const CLI_KEY_ERROR =
-  "The built-in wallet's key is kept on its own origin, so the solana, spl-token and anchor commands cannot sign with it. Connect a wallet, or use the Deploy button.";
+export { CLI_KEY_ERROR } from "./cli-line";
 
 /**
  * The signer provider that keeps the built-in wallet's keys on the key origin:
