@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { checkWallet } from "../checks";
-import { deploy } from "./deploy";
 import { checkNotMainnet } from "./check-not-mainnet";
+import { deploy } from "./deploy";
 
 vi.mock("../../utils", () => ({
   PgCommon: {},

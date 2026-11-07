@@ -5,9 +5,9 @@ import { checkNotMainnet } from "./check-not-mainnet";
 import { MAINNET_DEPLOY_BLOCKED } from "./mainnet-block";
 
 vi.mock("../../utils", async () => {
-  const { TerminalLineError } = await import("../../utils/terminal");
+  const terminal = await import("../../utils/terminal");
   return {
-    TerminalLineError,
+    TerminalLineError: terminal.TerminalLineError,
     PgConnection: {
       cluster: "devnet",
       current: { rpcEndpoint: "https://rpc.example.com" },
