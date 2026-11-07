@@ -63,3 +63,60 @@ Setup, and SHALL write nothing to the page's record.
 - **WHEN** an account in the page's record has no key in the key page
 - **THEN** signing with it fails with an error naming its public key, and the
   account is not removed
+
+## MODIFIED Requirements
+
+### Requirement: A damaged account does not hide the others
+
+A stored wallet, in IndexedDB or in `localStorage`, in which some accounts
+are damaged (not a name with a valid `publicKey` or a 64-byte keypair, or
+the two disagree) SHALL load with its valid
+accounts. The damaged accounts SHALL be kept aside in the wallet's IndexedDB
+database, and no later write SHALL remove them. The
+user SHALL be told once per page load with the notice "Some wallet accounts
+could not be read and were set aside." A record in IndexedDB that is not a
+wallet's shape, a wallet with no valid account among them, SHALL be set aside
+whole in the same set-aside record and read as no
+wallet, with the same notice. A `localStorage` copy of the wrong shape is
+kept aside in `localStorage`, as before.
+
+They SHALL go to `localStorage` only when the store refuses the set-aside
+write: then the original text that held them (the `localStorage` copy, or else
+the IndexedDB record) SHALL be kept in `localStorage['wallet.unreadable']`,
+where the first copy kept is never replaced, rather than lost.
+
+#### Scenario: One of three accounts is damaged
+
+- **WHEN** the stored wallet has three accounts and one has a 10-byte keypair
+- **THEN** the wallet loads with the other two
+- **AND** the damaged account is in the wallet's database under the set-aside
+  record
+- **AND** the notice is shown once
+
+#### Scenario: The current account is the damaged one
+
+- **WHEN** the current account is the damaged one
+- **THEN** the first valid account becomes current
+
+#### Scenario: The stored record is not a wallet
+
+- **WHEN** the wallet's IndexedDB record is not a wallet's shape, or has no
+  valid account, and `localStorage` holds no wallet
+- **THEN** the whole record is in the wallet's database under the set-aside
+  record
+- **AND** the wallet reads as no wallet, so the Setup flow is offered
+- **AND** the notice is shown once
+
+#### Scenario: The store refuses the set-aside write
+
+- **WHEN** a stored wallet has a damaged account, or the IndexedDB record is
+  not a wallet's shape, and writing the set-aside record fails
+- **THEN** the text that held them is in `localStorage['wallet.unreadable']`
+- **AND** a copy already kept there is not replaced
+
+#### Scenario: The stored record is not a wallet, and localStorage holds one
+
+- **WHEN** the wallet's IndexedDB record is not a wallet's shape and
+  `localStorage` holds a wallet
+- **THEN** the record is set aside whole and the `localStorage` wallet moves
+  into IndexedDB in its place

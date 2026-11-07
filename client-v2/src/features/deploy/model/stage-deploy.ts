@@ -80,7 +80,7 @@ const ensurePlaygroundWallet = async (
     };
   });
   try {
-    if (PgWallet.accounts.length === 0) PgWallet.add();
+    if (PgWallet.accounts.length === 0) await PgWallet.addNew();
     else PgWallet.switch(Math.max(PgWallet.currentIndex, 0));
     await connected;
   } finally {

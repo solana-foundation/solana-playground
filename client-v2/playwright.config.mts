@@ -257,6 +257,13 @@ export default defineConfig({
     env: {
       BROWSER: "none",
       PORT: String(port),
+      // `.env.development` turns the wallet's key origin on for `yarn dev`;
+      // the specs were written against keys in the page, so they keep them
+      // there unless the shell sets these
+      REACT_APP_WALLET_KEY_ORIGIN:
+        process.env.REACT_APP_WALLET_KEY_ORIGIN ?? "",
+      REACT_APP_WALLET_APP_ORIGIN:
+        process.env.REACT_APP_WALLET_APP_ORIGIN ?? "",
       REACT_APP_DEVNET_RPC_URL: "",
       REACT_APP_MAINNET_RPC_URL: "",
     },

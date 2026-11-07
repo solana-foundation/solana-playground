@@ -28,6 +28,30 @@ export interface WalletSignerProvider {
   /** Short name of the provider, for diagnostics */
   readonly name: string;
   /**
+   * Whether the page holds the keys: the account record keeps `kp`, and key
+   * bytes can be handed out (`secretKeyFor`)
+   */
+  readonly holdsKeysInPage: boolean;
+  /**
+   * Make a new key that `walletFor` and `secretKeyFor` find before any
+   * account names it.
+   *
+   * @returns the key's base58 public key
+   */
+  makeKey(): Promise<string>;
+  /**
+   * Keep the key of an account just added; a key already kept stays as it is.
+   *
+   * @param publicKey base58 public key of the account
+   */
+  keepKey(publicKey: string): Promise<void>;
+  /**
+   * Drop the key of an account removed, or of a key made and never added.
+   *
+   * @param publicKey base58 public key of the key
+   */
+  forgetKey(publicKey: string): Promise<void>;
+  /**
    * The wallet for an account: its public key, its name and the signing
    * methods.
    *
@@ -55,7 +79,8 @@ export const publicKeyOf = (kp: number[]) =>
 /**
  * The signer provider that keeps the keys in the page, as the wallet always
  * has: every wallet carries its `keypair`, which project code reads as
- * `pg.wallet.keypair`.
+ * `pg.wallet.keypair`. A key `makeKey` made lives in memory until an account
+ * stores it in the record; keeping and forgetting are the record's own.
  *
  * @param keyFor looks up an account's 64 secret key bytes by its public key
  * @returns the local signer provider
@@ -63,8 +88,9 @@ export const publicKeyOf = (kp: number[]) =>
 export const localSignerProviderWith = (
   keyFor: (publicKey: PgWeb3.PublicKey) => number[] | undefined
 ): WalletSignerProvider => {
+  const drafts = new Map<string, number[]>();
   const keypairFor = (publicKey: PgWeb3.PublicKey) => {
-    const kp = keyFor(publicKey);
+    const kp = keyFor(publicKey) ?? drafts.get(publicKey.toBase58());
     // The public key names the account; it is not key material
     if (!kp) throw new Error(`No key for account ${publicKey.toBase58()}`);
     return PgWeb3.Keypair.fromSecretKey(Uint8Array.from(kp));
@@ -72,6 +98,15 @@ export const localSignerProviderWith = (
 
   return {
     name: "local",
+    holdsKeysInPage: true,
+    async makeKey() {
+      const keypair = PgWeb3.Keypair.generate();
+      const publicKey = keypair.publicKey.toBase58();
+      drafts.set(publicKey, Array.from(keypair.secretKey));
+      return publicKey;
+    },
+    async keepKey() {},
+    async forgetKey() {},
     walletFor(account) {
       const keypair = keypairFor(account.publicKey);
 
@@ -201,6 +236,18 @@ if (import.meta.vitest) {
       expect(Array.from(secretKey)).toEqual(kp);
       secretKey.fill(0);
       expect(Array.from(provider.secretKeyFor(keypair.publicKey))).toEqual(kp);
+    });
+
+    it("makeKey makes a key that walletFor and secretKeyFor find", async () => {
+      const publicKey = await provider.makeKey();
+      const wallet = provider.walletFor({
+        name: "New",
+        publicKey: new PgWeb3.PublicKey(publicKey),
+      });
+      expect(wallet.publicKey.toBase58()).toBe(publicKey);
+      const secretKey = provider.secretKeyFor(new PgWeb3.PublicKey(publicKey));
+      expect(publicKeyOf(Array.from(secretKey)).toBase58()).toBe(publicKey);
+      expect(provider.holdsKeysInPage).toBe(true);
     });
 
     it("secretKeyFor refuses a public key it holds no key for", () => {
