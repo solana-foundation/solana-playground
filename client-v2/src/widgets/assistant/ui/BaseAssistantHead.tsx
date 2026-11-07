@@ -2,6 +2,7 @@ import {
   Ellipsis,
   FoldHorizontal,
   PanelLeftClose,
+  PanelRightClose,
   UnfoldHorizontal,
 } from "lucide-react";
 
@@ -83,6 +84,11 @@ export interface BaseAssistantHeadProps {
   onHide(): void;
   /** Widen is offered: not in the Sheet, which has no width to change */
   canWiden: boolean;
+  /**
+   * The edge the assistant sits at, so Collapse points the way it goes: the
+   * column folds left, the Sheet closes right
+   */
+  side: "left" | "right";
   deleteKey: DeleteKey;
   /** Drops the backend and the key this tab holds */
   onDeleteKey(): void;
@@ -108,6 +114,7 @@ export function BaseAssistantHead({
   onWiden,
   onHide,
   canWiden,
+  side,
   deleteKey,
   onDeleteKey,
 }: BaseAssistantHeadProps) {
@@ -178,7 +185,11 @@ export function BaseAssistantHead({
             aria-label="Collapse assistant"
             onClick={onHide}
           >
-            <PanelLeftClose aria-hidden="true" />
+            {side === "right" ? (
+              <PanelRightClose aria-hidden="true" />
+            ) : (
+              <PanelLeftClose aria-hidden="true" />
+            )}
           </Button>
         </TooltipTrigger>
         <TooltipContent>Collapse assistant</TooltipContent>

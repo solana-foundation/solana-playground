@@ -134,7 +134,10 @@ test.describe("on a desktop window", () => {
 
 /** The navigation's Home item, apart from Home's own region of that name */
 const navHome = (page: Page) =>
-  page.locator('[data-slot="sidebar"]').getByRole("button", { name: "Home" });
+  page
+    .locator('[data-slot="sidebar"]')
+    // Exact: the logo is "Go to Home", in the same sidebar
+    .getByRole("button", { name: "Home", exact: true });
 
 /** Focus the editor without a click, which would move its cursor */
 const focusEditor = (page: Page) =>

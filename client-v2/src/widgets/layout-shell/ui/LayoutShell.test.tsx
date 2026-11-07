@@ -1524,17 +1524,20 @@ describe("on a phone", () => {
 });
 
 describe("the stage bar", () => {
-  it("hides the assistant from its toggle and names the project", () => {
+  it("hides the assistant from its toggle and names the project either way", () => {
     explorer.name = "Counter";
     shell();
-    expect(screen.queryByText("Counter")).toBeNull();
+    const bar = () => slot<HTMLElement>("stage-bar");
+    // The assistant's head names the model, not the project, so the bar
+    // keeps the name while the assistant shows
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
     expect(toggled()).toEqual([
       { panel: "assistant", open: false, via: "button" },
     ]);
-    expect(screen.getByText("Counter")).toBeTruthy();
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
-    expect(screen.queryByText("Counter")).toBeNull();
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
   });
 
   it("opens the assistant Sheet from the bar between 768 and 1023 px", () => {
@@ -1561,7 +1564,7 @@ describe("the stage bar", () => {
     expect(screen.getByText("Counter v2")).toBeTruthy();
   });
 
-  it("names the project between 768 and 1023 px while the assistant's Sheet is closed", () => {
+  it("names the project between 768 and 1023 px, the assistant's Sheet open or closed", () => {
     explorer.name = "Counter";
     resizeTo(900);
     shell();
@@ -1570,8 +1573,7 @@ describe("the stage bar", () => {
     fireEvent.click(
       within(bar()).getByRole("button", { name: "Expand assistant" })
     );
-    // Open, the Sheet's head names it
-    expect(within(bar()).queryByText("Counter")).toBeNull();
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
   });
 
   it("leaves one Expand assistant between 768 and 1023 px", () => {

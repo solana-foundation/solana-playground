@@ -55,6 +55,8 @@ export interface AssistantWiden {
   wide: boolean;
   setWide(wide: boolean): void;
   canWiden: boolean;
+  /** Shown as the right Sheet, so Collapse points right */
+  inSheet: boolean;
 }
 
 export interface AssistantProps {
@@ -73,7 +75,7 @@ export interface AssistantProps {
  * or Sources and tools in their place.
  */
 export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
-  const { wide, setWide, canWiden } = widen;
+  const { wide, setWide, canWiden, inSheet } = widen;
   const [view, setView] = useState<View>("chat");
   // Here, above both views, so a turn and a prompt waiting in the composer
   // outlive a visit to Sources; the thread and the composer share this one
@@ -151,6 +153,7 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
         onWiden={() => setWide(!wide)}
         onHide={onHide}
         canWiden={canWiden}
+        side={inSheet ? "right" : "left"}
         // Read on every render `useTurn` makes for a change in the store
         deleteKey={PgAssistant.keyHold}
         onDeleteKey={() => {

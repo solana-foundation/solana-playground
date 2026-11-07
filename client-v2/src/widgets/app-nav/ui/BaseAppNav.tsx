@@ -56,6 +56,26 @@ export interface BaseAppNavProps {
   current?: NavItem;
 }
 
+/**
+ * The logo opens Home, as on most sites: `onOpen("home")`, as the Home item
+ * does. The rail draws no logo; its Home item is the way there
+ */
+const HomeLogo = ({
+  logo,
+  onOpen,
+}: Pick<BaseAppNavProps, "logo" | "onOpen">) => (
+  <button
+    type="button"
+    aria-label="Go to Home"
+    onClick={() => onOpen("home")}
+    // Dims a little on hover, as a link would, so the pointer is not the
+    // only sign the logo can be pressed
+    className="flex items-center rounded-md transition-opacity outline-none hover:opacity-80 focus-visible:ring-3 focus-visible:ring-ring/50"
+  >
+    {logo}
+  </button>
+);
+
 const BaseAppNav = ({
   phone = false,
   collapsed,
@@ -74,7 +94,7 @@ const BaseAppNav = ({
       // The prototype's phone head: 60 tall, the logo at the left, a close
       // the size of a fingertip at the right
       <SidebarHeader className="h-phone-bar shrink-0 flex-row items-center justify-between gap-2 border-b border-sidebar-border py-0 pr-2 pl-5">
-        {logo}
+        <HomeLogo logo={logo} onOpen={onOpen} />
         <Button
           variant="ghost"
           size="icon"
@@ -93,7 +113,7 @@ const BaseAppNav = ({
       // 44 px bars beside the nav. TODO(design-system): the kit's header
       <SidebarHeader className="pt-1.5">
         <div className="flex items-center justify-between gap-2">
-          {!collapsed && logo}
+          {!collapsed && <HomeLogo logo={logo} onOpen={onOpen} />}
           <Button
             variant="ghost"
             size="icon"
