@@ -125,7 +125,11 @@ describe("utils/wallet/wallet", () => {
       const secretKeyFor = vi.spyOn(provider, "secretKeyFor");
       const walletFor = vi.spyOn(provider, "walletFor");
       PgWallet.setSignerProvider(provider);
-      const wallet = PgWallet.create({ kp, name: "Wallet 1" });
+      const wallet = PgWallet.create({
+        kp,
+        name: "Wallet 1",
+        publicKey: keypair.publicKey.toBase58(),
+      });
       // `derivable` defines `current` only once the wallet initializes
       Object.defineProperty(PgWallet, "current", {
         get: (): Wallet => wallet,
@@ -141,6 +145,24 @@ describe("utils/wallet/wallet", () => {
     it("create hands the provider's keypair to pg.wallet.keypair", () => {
       const { wallet, walletFor } = connect();
       expect(wallet.isPg && Array.from(wallet.keypair.secretKey)).toEqual(kp);
+      expect(walletFor).toHaveBeenCalledWith({
+        name: "Wallet 1",
+        publicKey: keypair.publicKey,
+      });
+    });
+
+    it("create names the account by its public key, not its key bytes", () => {
+      const provider = localSignerProviderWith((publicKey) =>
+        publicKey.equals(keypair.publicKey) ? kp : undefined
+      );
+      const walletFor = vi.spyOn(provider, "walletFor");
+      PgWallet.setSignerProvider(provider);
+
+      PgWallet.create({
+        name: "Wallet 1",
+        publicKey: keypair.publicKey.toBase58(),
+      });
+
       expect(walletFor).toHaveBeenCalledWith({
         name: "Wallet 1",
         publicKey: keypair.publicKey,

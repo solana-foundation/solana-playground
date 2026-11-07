@@ -1,5 +1,6 @@
 import { createLogger, toError } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
+import { PgWeb3 } from "../web3";
 import { isIndexedDbMissing, type WalletStore } from "./keystore";
 import { publicKeyOf } from "./signer-provider";
 import type {
@@ -85,17 +86,48 @@ const reportFailure = reportFailureWith({});
 const reportFailureFor = (state: { accounts: unknown[] }) =>
   reportFailureWith({ accounts: state.accounts.length });
 
-/** Whether `value` is an account with a 64-byte keypair */
-const isAccount = (value: unknown): value is WalletAccount => {
-  if (typeof value !== "object" || value === null) return false;
-  const { kp, name } = value as Partial<WalletAccount>;
-  return (
-    typeof name === "string" &&
-    Array.isArray(kp) &&
-    kp.length === 64 &&
-    kp.every((byte) => Number.isInteger(byte) && byte >= 0 && byte < 256)
-  );
+/** Whether `value` is 64 key bytes */
+const isKeypairBytes = (value: unknown): value is number[] =>
+  Array.isArray(value) &&
+  value.length === 64 &&
+  value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte < 256);
+
+/** Whether `value` is a public key in base58, as `toBase58` writes it */
+const isPublicKeyText = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  try {
+    return new PgWeb3.PublicKey(value).toBase58() === value;
+  } catch {
+    return false;
+  }
 };
+
+/**
+ * The account `value` holds, or `undefined` for a damaged one.
+ *
+ * An account is a name with a base58 public key, a 64-byte keypair, or
+ * both, and then the public key must be the keypair's. An account stored
+ * before accounts had a public key gets its keypair's.
+ */
+const accountOf = (value: unknown): WalletAccount | undefined => {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kp, name, publicKey } = value as Partial<
+    Record<keyof WalletAccount, unknown>
+  >;
+  if (typeof name !== "string") return undefined;
+  if (kp === undefined) {
+    return isPublicKeyText(publicKey) ? (value as WalletAccount) : undefined;
+  }
+  if (!isKeypairBytes(kp)) return undefined;
+  const own = publicKeyOf(kp).toBase58();
+  if (publicKey === undefined) {
+    return { ...value, publicKey: own } as WalletAccount;
+  }
+  return publicKey === own ? (value as WalletAccount) : undefined;
+};
+
+/** Whether `value` is an account, not a damaged one */
+const isAccount = (value: unknown) => accountOf(value) !== undefined;
 
 /**
  * Every state a stored wallet may have, as a record so that a state added to
@@ -125,15 +157,11 @@ type StoredWallet = Omit<SerializedWalletState, "accounts"> & {
  * @returns a function of the stored wallet
  */
 const lackedBy = (state: SerializedWalletState) => (wallet: StoredWallet) => {
-  const held = new Set(
-    state.accounts.map((stored) => JSON.stringify(stored.kp))
-  );
-  return wallet.accounts.filter(
-    (stored) =>
-      typeof stored !== "object" ||
-      stored === null ||
-      !held.has(JSON.stringify((stored as { kp?: unknown }).kp))
-  );
+  const held = new Set(state.accounts.map((stored) => stored.publicKey));
+  return wallet.accounts.filter((stored) => {
+    const account = accountOf(stored);
+    return !account || !held.has(account.publicKey);
+  });
 };
 
 /**
@@ -162,18 +190,20 @@ interface PartitionedWallet {
 }
 
 /**
- * Split off the damaged accounts. The current account keeps its place among
- * the valid ones; when it is the damaged one, the first valid one is current.
+ * Split off the damaged accounts, and give each valid one its public key. The
+ * current account keeps its place among the valid ones; when it is the
+ * damaged one, the first valid one is current.
  */
 const partitionWallet = (stored: StoredWallet): PartitionedWallet => {
-  const damaged = stored.accounts.filter((account) => !isAccount(account));
-  if (damaged.length === 0) {
-    return { wallet: stored as SerializedWalletState, damaged };
-  }
-  const accounts = stored.accounts.filter(isAccount);
-  const current = accounts.indexOf(
-    stored.accounts[stored.currentIndex] as WalletAccount
+  const read = stored.accounts.map(accountOf);
+  const damaged = stored.accounts.filter((_, i) => read[i] === undefined);
+  const accounts = read.filter(
+    (account): account is WalletAccount => account !== undefined
   );
+  if (damaged.length === 0) {
+    return { wallet: { ...stored, accounts }, damaged };
+  }
+  const current = accounts.indexOf(read[stored.currentIndex] as WalletAccount);
   return {
     wallet: {
       state: stored.state,
@@ -200,9 +230,6 @@ const isLegacyWallet = (value: unknown) =>
   value !== null &&
   Array.isArray((value as { sk?: unknown }).sk);
 
-/** An account's public key, as the merge compares it */
-const keyIdOf = (account: WalletAccount) => publicKeyOf(account.kp).toBase58();
-
 /** The name, or the first `<name> (n)` that `taken` does not hold */
 const freeNameFor = (taken: Set<string>) => (name: string) => {
   if (!taken.has(name)) return name;
@@ -225,16 +252,16 @@ const mergeWallets = (
   primary: SerializedWalletState,
   other: SerializedWalletState
 ): SerializedWalletState => {
-  const keys = new Set(primary.accounts.map(keyIdOf));
+  const keys = new Set(primary.accounts.map((account) => account.publicKey));
   const names = new Set(primary.accounts.map((account) => account.name));
   const freeName = freeNameFor(names);
   const accounts = [...primary.accounts];
   for (const account of other.accounts) {
-    if (keys.has(keyIdOf(account))) continue;
+    if (keys.has(account.publicKey)) continue;
     const name = freeName(account.name);
     names.add(name);
-    keys.add(keyIdOf(account));
-    accounts.push({ kp: account.kp, name });
+    keys.add(account.publicKey);
+    accounts.push({ ...account, name });
   }
 
   return {
@@ -267,8 +294,9 @@ const mergeWallets = (
  * exception is a failed read with no `localStorage` wallet: that read is
  * `unavailable`, and the instance stays on the store so a later read retries.
  *
- * Damaged accounts (not a name and a 64-byte keypair) in either copy are
- * split off: the wallet loads with the valid ones, and the damaged ones go to
+ * Damaged accounts (not a name with a public key, a 64-byte keypair or both
+ * agreeing; see `accountOf`) in either copy are split off: the wallet loads
+ * with the valid ones, and the damaged ones go to
  * the store's set-aside record before any copy is rewritten without them. A
  * store record of the wrong shape (no valid account among them) goes there
  * whole, and the store reads as holding no wallet.
@@ -643,7 +671,11 @@ if (import.meta.vitest) {
     const kp = (seed: number) =>
       Array.from({ length: 64 }, (_, i) => (seed * 7 + i * 13) % 256);
 
-    const account = (seed: number, name: string) => ({ kp: kp(seed), name });
+    const account = (seed: number, name: string) => ({
+      kp: kp(seed),
+      name,
+      publicKey: publicKeyOf(kp(seed)).toBase58(),
+    });
 
     /** No Wallet Standard wallet: `WalletState.standardName` stores `null` */
     // eslint-disable-next-line unicorn/no-null -- the stored shape's own "none"
@@ -1322,6 +1354,120 @@ if (import.meta.vitest) {
       expect(await storage.read()).toEqual(UNAVAILABLE);
 
       expect(await storage.read()).toEqual(found(stored));
+    });
+
+    describe("accounts by public key", () => {
+      /** The base58 public key of `kp(seed)` */
+      const pk = (seed: number) => publicKeyOf(kp(seed)).toBase58();
+
+      const storedWith = (accounts: unknown[]) => ({
+        state: "pg",
+        accounts,
+        currentIndex: 0,
+        standardName: NO_STANDARD,
+      });
+
+      it("fills the public key of an account stored before it had one", async () => {
+        const store = memoryStore(undefined);
+        store.read.mockResolvedValueOnce(
+          storedWith([{ kp: kp(1), name: "A" }]) as never
+        );
+
+        const read = await walletStorageWith(store)(
+          memoryLocal(undefined)
+        ).read();
+
+        expect(read).toEqual(
+          found(walletOf([{ kp: kp(1), name: "A", publicKey: pk(1) }]))
+        );
+      });
+
+      it("moves an old localStorage account into the store with its public key", async () => {
+        const store = memoryStore(undefined);
+        const local = memoryLocal(
+          JSON.stringify(storedWith([{ kp: kp(1), name: "A" }]))
+        );
+
+        await walletStorageWith(store)(local).read();
+
+        expect(store.held()).toEqual(
+          walletOf([{ kp: kp(1), name: "A", publicKey: pk(1) }])
+        );
+        expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+      });
+
+      it("reads an account with a public key and no keypair", async () => {
+        const stored = walletOf([{ name: "A", publicKey: pk(1) }]);
+        const store = memoryStore(stored);
+
+        const read = await walletStorageWith(store)(
+          memoryLocal(undefined)
+        ).read();
+
+        expect(read).toEqual(found(stored));
+        expect(store.setAside).not.toHaveBeenCalled();
+      });
+
+      it("sets aside an account whose public key disagrees with its keypair", async () => {
+        const wrong = { kp: kp(2), name: "B", publicKey: pk(3) };
+        const store = memoryStore(undefined);
+        store.read.mockResolvedValueOnce(
+          storedWith([{ kp: kp(1), name: "A" }, wrong]) as never
+        );
+
+        const read = await walletStorageWith(store)(
+          memoryLocal(undefined)
+        ).read();
+
+        expect(read).toEqual({
+          kind: "wallet",
+          wallet: walletOf([{ kp: kp(1), name: "A", publicKey: pk(1) }]),
+          setAside: 1,
+        });
+        expect(store.heldAside()).toEqual([wrong]);
+      });
+
+      it("sets aside an account with no usable public key", async () => {
+        // A 31-byte key: the base58 of 31 zero bytes, one "1" per zero byte
+        const thirtyOneBytes = "1".repeat(31);
+        const accounts: unknown[] = [
+          { name: "neither" },
+          { name: "not base58", publicKey: "0OIl" },
+          { name: "short", publicKey: thirtyOneBytes },
+          { name: "not text", publicKey: kp(1).slice(32) },
+          { name: "keypair not bytes", kp: "abc", publicKey: pk(1) },
+        ];
+        for (const bad of accounts) {
+          const store = memoryStore(undefined);
+          store.read.mockResolvedValueOnce(
+            storedWith([{ name: "A", publicKey: pk(2) }, bad]) as never
+          );
+
+          const read = await walletStorageWith(store)(
+            memoryLocal(undefined)
+          ).read();
+
+          expect(read).toEqual({
+            kind: "wallet",
+            wallet: walletOf([{ name: "A", publicKey: pk(2) }]),
+            setAside: 1,
+          });
+          expect(store.heldAside()).toEqual([bad]);
+        }
+      });
+
+      it("merges an account with no keypair with the same key's keypair", async () => {
+        const store = memoryStore(walletOf([{ name: "A", publicKey: pk(1) }]));
+        const local = memoryLocal(
+          JSON.stringify(storedWith([{ kp: kp(1), name: "Renamed" }]))
+        );
+
+        const read = await walletStorageWith(store)(local).read();
+
+        expect(read).toEqual(
+          found(walletOf([{ kp: kp(1), name: "Renamed", publicKey: pk(1) }]))
+        );
+      });
     });
 
     /** An account whose keypair is 10 bytes: damaged */

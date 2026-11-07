@@ -19,16 +19,19 @@ export interface WalletState {
   standardName: string | null;
 }
 
-/** Playground wallet accounts (with keypair) */
+/** Playground wallet accounts, addressed by their public key */
 export interface WalletAccount {
+  /** Name of the account */
+  name: string;
+  /** Base58 public key of the account, which names its key in the provider */
+  publicKey: string;
   /**
-   * ed25519 keypair of the account.
+   * ed25519 keypair of the account, held only where the page keeps the keys
+   * (the `local` signer provider).
    *
    * First 32 bytes are the private key, last 32 bytes are the public key.
    */
-  kp: number[];
-  /** Name of the account */
-  name: string;
+  kp?: number[];
 }
 
 /** The connection states a stored wallet can have: `unavailable` is never saved */
