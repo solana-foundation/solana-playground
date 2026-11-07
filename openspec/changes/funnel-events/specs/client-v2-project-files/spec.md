@@ -146,15 +146,15 @@ to the project as it is sends `false`.
 
 ### Requirement: The settings page's export is counted
 
-The "Export project (zip)" button of `Project` in
-`widgets/settings-page/ui/SettingsPage.tsx` SHALL send
+The Export button (named "Export project") of the `Project` section's
+Export project row in `widgets/settings-page/ui/SettingsPage.tsx` SHALL send
 `project_exported {from: "settings", converted: false}` once
 `PgFramework.exportWorkspace` resolves, and
 `project_export_failed {from: "settings"}` when it rejects.
 
 #### Scenario: Export from the settings page fails (manual)
 
-- **WHEN** a user presses "Export project (zip)" and the zip cannot be made
+- **WHEN** a user presses Export in Settings and the zip cannot be made
 - **THEN** `project_export_failed` is sent with `from: "settings"`
 
 ### Requirement: No project event names the project
