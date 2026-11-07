@@ -285,8 +285,13 @@ const derive = () => ({
           // Check whether the current account exists
           const currentAccount = PgWallet.accounts[PgWallet.currentIndex];
           if (!currentAccount) {
-            if (!PgWallet.accounts.length) void addFirst();
-            else PgWallet.switch(0);
+            if (!PgWallet.accounts.length) {
+              // The next derive tries again; the user is told once a load
+              PgWallet.addFirst().catch((error: unknown) => {
+                accountLog.error(error, { report: true });
+                tell("first-account-failed");
+              });
+            } else PgWallet.switch(0);
 
             return null;
           }
@@ -453,25 +458,8 @@ const migrate = () => {
 
 const accountLog = createLogger("wallet:account");
 
-/** The first account being made, so a second derive does not make another */
-let addingFirst: Promise<void> | undefined;
-
-/**
- * The wallet's first account, made when it connects with none. Making its key
- * is asynchronous, so a derive that runs meanwhile shares this attempt instead
- * of adding a second account. A failure (the key page went away) leaves the
- * wallet with no current account, as before the attempt; it is logged, never
- * thrown into the derive.
- */
-const addFirst = () =>
-  (addingFirst ??= PgWallet.addNew()
-    .then(() => {})
-    .catch((error: unknown) => {
-      accountLog.error(error, { report: true });
-    })
-    .finally(() => {
-      addingFirst = undefined;
-    }));
+/** The first account being made, so a second caller does not make another */
+let addingFirst: Promise<boolean> | undefined;
 
 /**
  * Tell of a key the provider failed to keep or drop: by public key only,
@@ -596,6 +584,23 @@ class _PgWallet {
       await forget();
       throw error;
     }
+  }
+
+  /**
+   * The wallet's first account, for a wallet with none. Making its key is
+   * asynchronous, so every caller meanwhile (a derive, Deploy) shares this
+   * attempt instead of adding a second account. A failure (the key page went
+   * away) leaves the wallet with no account, as before the attempt, and the
+   * next call tries again.
+   *
+   * @returns what `addNew` resolves with
+   * @throws what `addNew` throws, to every caller that shared the attempt
+   */
+  static addFirst() {
+    addingFirst ??= PgWallet.addNew().finally(() => {
+      addingFirst = undefined;
+    });
+    return addingFirst;
   }
 
   /**

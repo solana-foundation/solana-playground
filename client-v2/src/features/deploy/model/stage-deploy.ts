@@ -80,7 +80,8 @@ const ensurePlaygroundWallet = async (
     };
   });
   try {
-    if (PgWallet.accounts.length === 0) await PgWallet.addNew();
+    // Shared with the derive that may be making it already: one account
+    if (PgWallet.accounts.length === 0) await PgWallet.addFirst();
     else PgWallet.switch(Math.max(PgWallet.currentIndex, 0));
     await connected;
   } finally {

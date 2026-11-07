@@ -277,6 +277,31 @@ describe("utils/wallet/wallet", () => {
         await vi.waitFor(() => expect(kept.size).toBe(0));
       });
 
+      it("addFirst shares one attempt between callers, and tries again after a failure", async () => {
+        const { kept, provider } = fakeKeyPage();
+        let failNext = true;
+        const make = provider.makeKey;
+        vi.spyOn(provider, "makeKey").mockImplementation(() =>
+          failNext ? Promise.reject(new KeyFrameUnavailable("timeout")) : make()
+        );
+        PgWallet.setSignerProvider(provider);
+        const { accounts } = holdState([]);
+
+        const first = PgWallet.addFirst();
+        expect(PgWallet.addFirst()).toBe(first);
+        await expect(first).rejects.toBeInstanceOf(KeyFrameUnavailable);
+        expect(accounts).toHaveLength(0);
+
+        failNext = false;
+        const retry = PgWallet.addFirst();
+        expect(retry).not.toBe(first);
+        const shared = PgWallet.addFirst();
+        expect(await retry).toBe(true);
+        expect(await shared).toBe(true);
+        expect(accounts).toHaveLength(1);
+        expect(kept.size).toBe(1);
+      });
+
       it("getKeypairBytes refuses with the CLI message, export with the key panel's", async () => {
         const { provider } = fakeKeyPage();
         PgWallet.setSignerProvider(provider);

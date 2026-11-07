@@ -1,5 +1,8 @@
 /** The wallet storage failures the user is told about, once a page load */
-export type WalletNoticeKind = "save-failed" | "set-aside";
+export type WalletNoticeKind =
+  | "save-failed"
+  | "set-aside"
+  | "first-account-failed";
 
 /** Each notice's lead sentence, and what follows it */
 const NOTICES: Record<WalletNoticeKind, { title: string; detail?: string }> = {
@@ -10,6 +13,10 @@ const NOTICES: Record<WalletNoticeKind, { title: string; detail?: string }> = {
   },
   "set-aside": {
     title: "Some wallet accounts could not be read and were set aside.",
+  },
+  "first-account-failed": {
+    title: "Your wallet's first account could not be made.",
+    detail: "Reload the page and try again.",
   },
 };
 

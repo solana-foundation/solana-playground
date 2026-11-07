@@ -36,7 +36,7 @@ const mocks = vi.hoisted(() => ({
     },
     accounts: [] as unknown[],
     currentIndex: -1,
-    addNew: vi.fn(),
+    addFirst: vi.fn(),
     switch: vi.fn(),
     export: vi.fn(),
     onDidChangeCurrent: vi.fn((cb: (w: unknown) => void) => {
@@ -134,14 +134,14 @@ const render = (ui: ReactElement) =>
   rtlRender(<TooltipProvider>{ui}</TooltipProvider>);
 
 let sent: ReturnType<typeof memoryProvider>;
-/** The wallet `addNew` creates becomes current, and its listeners hear it */
+/** The wallet `addFirst` creates becomes current, and its listeners hear it */
 const becomeCurrent = () => {
   mocks.wallet.current = pgWallet();
   for (const cb of mocks.walletListeners) cb(mocks.wallet.current);
 };
 
 beforeEach(() => {
-  mocks.wallet.addNew.mockImplementation(becomeCurrent);
+  mocks.wallet.addFirst.mockImplementation(becomeCurrent);
   mocks.signInFor.mockReturnValue(mocks.signIn);
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
@@ -304,7 +304,7 @@ describe("Deploy stage", () => {
   it("creates the Playground wallet it pays from, without a dialog", async () => {
     // The wallet becomes current only after its derivation settles, as
     // `PgWallet.current` does; the deploy's own wallet check must see it
-    mocks.wallet.addNew.mockImplementation(() => setTimeout(becomeCurrent));
+    mocks.wallet.addFirst.mockImplementation(() => setTimeout(becomeCurrent));
     let walletAtDeploy: string | undefined = "not run";
     mocks.execute.mockImplementation(async () => {
       walletAtDeploy = mocks.wallet.current?.publicKey.toBase58();
@@ -314,7 +314,7 @@ describe("Deploy stage", () => {
     await pressDeploy();
     await act(async () => new Promise((r) => setTimeout(r, 10)));
 
-    expect(mocks.wallet.addNew).toHaveBeenCalledOnce();
+    expect(mocks.wallet.addFirst).toHaveBeenCalledOnce();
     expect(mocks.wallet.switch).not.toHaveBeenCalled();
     expect(walletAtDeploy).toBe(WALLET);
   });
@@ -743,7 +743,7 @@ describe("Deploy stage", () => {
     await pressDeploy();
 
     expect(mocks.wallet.switch).toHaveBeenCalledWith(0);
-    expect(mocks.wallet.addNew).not.toHaveBeenCalled();
+    expect(mocks.wallet.addFirst).not.toHaveBeenCalled();
   });
 
   it("starts nothing while a deploy typed in the terminal runs", async () => {
@@ -769,7 +769,7 @@ describe("Deploy stage", () => {
   it("gives up on a wallet that never connects, says so, and leaves nothing listening", async () => {
     vi.useFakeTimers();
     try {
-      mocks.wallet.addNew.mockImplementation(() => undefined);
+      mocks.wallet.addFirst.mockImplementation(() => undefined);
       render(<Deploy onChangeNetwork={() => {}} />);
 
       await pressDeploy();
