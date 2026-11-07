@@ -3,6 +3,7 @@ import { useId } from "react";
 import { NETWORKS as OFFERED } from "@/constants";
 import type { CustomRpc } from "@/entities/cluster";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
+import { StatusDot } from "@/shared/ui/status-dot";
 
 const NO_DEPLOYS = "Not available for deploys";
 
@@ -104,7 +105,12 @@ const BaseNetworkChoice = ({
         ))}
       </Segmented>
       {picked?.line && (
-        <span id={lineId} className="text-xs text-muted-foreground">
+        <span
+          id={lineId}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+        >
+          {/* Amber: the network is offered, its deploys are not */}
+          <StatusDot variant="warning" />
           {picked.line}
         </span>
       )}

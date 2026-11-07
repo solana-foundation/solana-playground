@@ -168,7 +168,7 @@ describe("BaseNetworkChoice", () => {
     expect(screen.queryByText("Not available for deploys")).toBeNull();
   });
 
-  it("offers Mainnet, described as deploying with real SOL", () => {
+  it("offers Mainnet, described as not available for deploys", () => {
     render(
       <BaseNetworkChoice endpoint={Endpoint.MAINNET_BETA} onPick={() => {}} />
     );
@@ -183,9 +183,15 @@ describe("BaseNetworkChoice", () => {
         description: "Not available for deploys",
       })
     ).toBeTruthy();
+    // The amber dot marks a network offered without deploys
+    expect(
+      screen
+        .getByText("Not available for deploys")
+        .querySelector('[data-slot="status-dot"][data-variant="warning"]')
+    ).toBeTruthy();
   });
 
-  it("says nothing about real SOL on devnet", () => {
+  it("says nothing about deploys on devnet", () => {
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
     expect(screen.queryByText("Not available for deploys")).toBeNull();
   });
