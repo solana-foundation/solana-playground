@@ -148,6 +148,9 @@ export const applyTheme = (root: HTMLElement, tokens: ThemeTokens) => {
   }
 };
 
+/** How long a key file's `blob:` URL outlives the click that downloads it */
+const REVOKE_AFTER_MS = 10_000;
+
 const LABEL: Record<PanelRoute["mode"], string> = {
   import: "Import keypair",
   export: "Save keypair",
@@ -236,7 +239,8 @@ export const runPanelWith =
             link.href = url;
             link.download = keyFileName(route.name);
             link.click();
-            setTimeout(() => URL.revokeObjectURL(url));
+            // Revoked at once, Firefox and Safari can cancel the download
+            setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
             return { type: "exported" };
           });
         });

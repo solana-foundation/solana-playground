@@ -129,12 +129,15 @@ const PAGES = [
 ];
 
 /** A page's headers in `vercel.json`, so the dev server and Vercel agree */
-const vercelHeadersOf = (page) =>
-  Object.fromEntries(
-    require("./vercel.json")
-      .headers.find((rule) => rule.source === `/${page}`)
-      .headers.map((header) => [header.key, header.value])
+const vercelHeadersOf = (page) => {
+  const rule = require("./vercel.json").headers.find(
+    (r) => r.source === `/${page}`
   );
+  if (!rule) throw new Error(`craco: vercel.json has no headers for /${page}`);
+  return Object.fromEntries(
+    rule.headers.map((header) => [header.key, header.value])
+  );
+};
 
 /** The CSP `runtime.html` is served with */
 const RUNTIME_CSP = vercelHeadersOf(SANDBOX_PAGE)["Content-Security-Policy"];
@@ -655,7 +658,9 @@ module.exports = {
         return { ...headers, "Content-Security-Policy": RUNTIME_CSP };
       }
       // The key page: its own CSP, and CORP so the app's COEP lets it frame
-      // the page from the other loopback host
+      // the page from the other loopback host. Only the headers: the dev
+      // server has no key-host redirect, so 127.0.0.1 serves the whole app
+      // too, which proves nothing about `vercel.json`'s `redirects`
       if (urlPath === `/${KEY_PAGE}`) {
         return { ...headers, ...KEY_PAGE_HEADERS };
       }
