@@ -11,11 +11,9 @@ use solana_cli_config_wasm::{Config as CliConfig, ConfigInput};
 use solana_cli_output_wasm::cli_output::OutputFormat;
 use solana_client_wasm::{utils::rpc_config::BlockhashQuery, WasmClient};
 use solana_extra_wasm::program::spl_associated_token_account::get_associated_token_address_with_program_id;
+use solana_playground_utils_wasm::wallet::WalletSigner;
 use solana_remote_wallet::remote_wallet::RemoteWalletManager;
-use solana_sdk::{
-    pubkey::Pubkey,
-    signature::{Keypair, Signer},
-};
+use solana_sdk::{pubkey::Pubkey, signature::Signer};
 
 use crate::utils::blockhash_query_from_matches;
 
@@ -23,7 +21,7 @@ pub struct Config<'a> {
     pub(crate) rpc_client: Arc<WasmClient>,
     // pub(crate) websocket_url: String,
     pub(crate) output_format: OutputFormat,
-    pub(crate) keypair_bytes: &'a [u8],
+    pub(crate) wallet: WalletSigner,
     pub(crate) fee_payer: Pubkey,
     pub(crate) nonce_account: Option<Pubkey>,
     pub(crate) nonce_authority: Option<Pubkey>,
@@ -184,7 +182,7 @@ impl<'a> Config<'a> {
     // }
 
     pub(crate) fn get_default_signer(&self) -> Box<dyn Signer> {
-        Box::new(Keypair::from_bytes(self.keypair_bytes).unwrap())
+        Box::new(self.wallet.clone())
     }
 }
 
@@ -208,7 +206,7 @@ pub fn get_config<'a>(
     matches: &'a ArgMatches,
     endpoint: &str,
     commitment: &str,
-    keypair_bytes: &'a [u8],
+    wallet: WalletSigner,
 ) -> Config<'a> {
     // TODO:
     // let cli_config = if let Some(&config_file) = matches.value_of("config_file") {
@@ -247,8 +245,7 @@ pub fn get_config<'a>(
     //     panic!();
     // });
     // bulk_signers.push(signer);
-    let default_signer = Keypair::from_bytes(keypair_bytes).unwrap();
-    let fee_payer = default_signer.pubkey();
+    let fee_payer = wallet.pubkey();
 
     let verbose = matches.is_present("verbose");
     let output_format = matches
@@ -330,7 +327,7 @@ pub fn get_config<'a>(
         )),
         // websocket_url,
         output_format,
-        keypair_bytes,
+        wallet,
         fee_payer,
         nonce_account,
         nonce_authority,

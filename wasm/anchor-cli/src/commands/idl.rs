@@ -456,7 +456,7 @@ async fn create_and_write_buffer(program_id: Pubkey) -> CliResult<Pubkey> {
     let tx = Transaction::new_signed_with_payer(
         &[create_account_ix, create_buffer_ix],
         Some(&keypair.pubkey()),
-        &[&keypair, &buffer_kp],
+        &[&keypair as &dyn Signer, &buffer_kp],
         latest_hash,
     );
 

@@ -54,6 +54,15 @@ pub enum WalletSigner {
     Deferred(PgWalletSigner),
 }
 
+impl Clone for WalletSigner {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Key(k) => Self::Key(k.insecure_clone()),
+            Self::Deferred(s) => Self::Deferred(*s),
+        }
+    }
+}
+
 impl Signer for WalletSigner {
     fn try_pubkey(&self) -> Result<Pubkey, SignerError> {
         match self {

@@ -24,7 +24,7 @@ serde = "*"
 serde_derive = "*"
 serde_json = "*"
 solana-client-wasm = { path = "../solana-client" }
-solana-playground-utils-wasm = { path = "../utils/solana-playground-utils" }
+solana-playground-utils-wasm = { path = "../utils/solana-playground-utils", features = ["wallet"] }
 solana-sdk = "*"
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = "*"
