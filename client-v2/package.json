@@ -185,7 +185,7 @@
     "check-md": "markdownlint-cli2",
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
-    "lint": "eslint --max-warnings 2381 --ext .js,.ts,.tsx,.mjs,.mts src api e2e scripts eslint-plugin-layers",
+    "lint": "eslint --max-warnings 2242 --ext .js,.ts,.tsx,.mjs,.mts src api e2e scripts eslint-plugin-layers",
     "lint:layers": "eslint --quiet --ext .ts,.tsx,.mjs,.mts src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
