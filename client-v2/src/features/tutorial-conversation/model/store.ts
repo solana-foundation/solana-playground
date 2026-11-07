@@ -570,6 +570,16 @@ export class PgConversation {
 
     // The workspace may have moved on while the read was in flight
     if (PgExplorer.currentWorkspaceName !== name) return;
+    // The learner acted on this tutorial while the read was in flight: the
+    // state in memory is newer than what was read, and its own save follows.
+    // Replacing it would drop a run just started, and its result after it
+    const now = PgConversation._state;
+    if (now !== current && now.context?.definition.name === name) {
+      log.info(
+        `${name} changed while its save was read; the save is not reloaded`
+      );
+      return;
+    }
     PgConversation._set({
       context,
       engine: { progress, stage: null },

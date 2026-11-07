@@ -655,6 +655,45 @@ describe("PgConversation", () => {
     expect(PgConversation.state.engine.progress.startedAt).toBe(5);
   });
 
+  it("a reload whose read an act overtook keeps the act, not the older save", async () => {
+    let release: (r: RunResult) => void = () => {};
+    const runner: Runner = {
+      run: () =>
+        new Promise<RunResult>((r) => {
+          release = r;
+        }),
+    };
+    open(NAME, { runner });
+    await settle();
+    PgConversation.start();
+    await settle();
+    PgConversation.pick("s1.q1", 1);
+    await settle();
+    // The save as it stands before the act, held until the act has started
+    const before = JSON.parse(JSON.stringify(file)) as unknown;
+    let read: () => void = () => {};
+    vi.mocked(PgExplorer.fs.readToJSON).mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          read = () => r(before);
+        })
+    );
+    switchWorkspace(NAME);
+    await settle();
+    PgConversation.act("s1.build");
+    await settle();
+    read();
+    await settle();
+    expect(PgConversation.state.engine.progress.runs["s1.build"]).toEqual([
+      { status: "started", at: expect.any(Number) },
+    ]);
+    release(OK_BUILD);
+    await settle();
+    expect(PgConversation.state.engine.progress.passed).toEqual([
+      "write-program",
+    ]);
+  });
+
   it("a reload waits for a save of the same tutorial still in flight", async () => {
     const releases: (() => void)[] = [];
     vi.mocked(writeWorkspaceFile).mockImplementation(async (path, data) => {
