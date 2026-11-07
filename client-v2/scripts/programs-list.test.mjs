@@ -1,11 +1,11 @@
-// The curated gallery (`static/programs/programs.json`), checked against the
-// rules in `static/programs/README.md` that a file can show: whether a
-// program builds is checked by hand, as the README says.
+// The curated gallery (`public/programs/programs.json`), checked against the
+// rules in `client-v2/README.md` ("The program gallery") that a file can show:
+// whether a program builds is checked by hand, as the README says.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "node:test";
 
-const LIST_URL = new URL("../static/programs/programs.json", import.meta.url);
+const LIST_URL = new URL("../public/programs/programs.json", import.meta.url);
 const programs = JSON.parse(fs.readFileSync(LIST_URL, "utf8"));
 
 /** The fields `entities/program` (`isListing`) refuses an entry without */

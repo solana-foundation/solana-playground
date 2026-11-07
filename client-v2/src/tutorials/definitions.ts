@@ -54,7 +54,7 @@ export const definitionTutorials = (others: TutorialData[]): TutorialData[] => {
 /**
  * Every tutorial the page lists: the conversation ones first, then `others`
  * without those a definition replaces. A definition named like an upstream
- * tutorial (Zero Copy, Markdown in `client/public`) is the one card of that
+ * tutorial (Zero Copy, Markdown in `public/tutorials`) is the one card of that
  * slug; listing both would show the tutorial twice.
  */
 export const listTutorials = (others: TutorialData[]): TutorialData[] => {

@@ -38,7 +38,6 @@ Once, with Node 22, Yarn 1 and Git installed. The tutorial files live on the
 ```sh
 git clone --branch scope/tutorial-flow https://github.com/hoodieshq/solana-playground.git
 cd solana-playground/client-v2
-git submodule update --init ../client/public
 ../wasm/stub-packages.sh
 yarn install --frozen-lockfile
 yarn generate-fast

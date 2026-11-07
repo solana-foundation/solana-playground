@@ -9,9 +9,9 @@ import { PgCommon, SidebarPage, SidebarPageParam } from "../../utils";
 export const createSidebarPage = <N extends string>(
   page: SidebarPageParam<N>
 ) => {
-  // A bare filename refers to `public/icons/sidebar`, which lives in the assets
-  // submodule. An already-resolved icon (an imported asset, a URL, a data URI)
-  // is used as-is so a page can ship its own.
+  // A bare filename refers to `public/icons/sidebar`. An already-resolved
+  // icon (an imported asset, a URL, a data URI) is used as-is so a page can
+  // ship its own.
   if (!/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(page.icon)) {
     page.icon = "/icons/sidebar/" + page.icon;
   }

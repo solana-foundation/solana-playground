@@ -32,16 +32,10 @@ COPY --from=solana-playground-wasm /wasm wasm
 # A linked worktree's `.git` names a host path, and every git call below it fails, yarn's included
 RUN rm -rf .git
 
-# A full clone at the pinned commit: `update-static.mjs` dates tutorials from its history, at build and at runtime
-ENV ASSETS_DIR=/opt/assets
-RUN git clone --quiet --no-checkout "$(git config -f .gitmodules submodule.client/public.url)" "$ASSETS_DIR" \
-    && git -C "$ASSETS_DIR" checkout --quiet --detach "$(cat client-v2/scripts/assets-commit.txt)"
-
-# The assets are baked in so the container starts without the network; `yarn start` re-runs the idempotent update-static.mjs
+# Install dependencies
 WORKDIR /home/${USER}/client-v2
 RUN yarn install --frozen-lockfile \
-    && yarn cache clean \
-    && node scripts/update-static.mjs
+    && yarn cache clean
 
 # pipefail: a failed rustup download must fail here, not later as a missing `rustup`
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]

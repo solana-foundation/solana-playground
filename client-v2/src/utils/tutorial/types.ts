@@ -59,8 +59,7 @@ export interface TutorialDataParam {
   /**
    * UNIX timestamp of tutorial's creation date.
    *
-   * Defaults to the timestamp of the first commit that includes the tutorial's
-   * directory.
+   * A Markdown tutorial's comes from `added` in `src/tutorials/markdown-tutorials.json`.
    */
   unixTimestamp?: number;
   /**
