@@ -23,7 +23,7 @@ import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
 import { airdropTopUp } from "./airdrop-top-up";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
-import { MAINNET_DEPLOY_WARNING, warnsOnDeploy } from "./mainnet-warning";
+import { checkNotMainnet } from "./check-not-mainnet";
 import { forgetOpenBuffer, recordOpenBuffer } from "./open-buffers";
 import type { DeployResult, FundingFailure } from "./run";
 import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
@@ -45,7 +45,8 @@ export const deploy = createCmd({
   name: "deploy",
   description: "Deploy your program",
   needsConnection: true,
-  preChecks: [checkWallet, checkProgram],
+  // Mainnet first: refused before the wallet question and before any send
+  preChecks: [checkNotMainnet, checkWallet, checkProgram],
   stoppable: true,
   handle: async ({ signal, lockStop }): Promise<DeployResult | undefined> => {
     switch (PgGlobal.deployState) {
@@ -63,9 +64,6 @@ export const deploy = createCmd({
     }
 
     PgView.setMainSecondaryProgress(0.1);
-    if (warnsOnDeploy(PgConnection.cluster)) {
-      PgTerminal.println(PgTerminal.warning(MAINNET_DEPLOY_WARNING));
-    }
     PgTerminal.println(
       `${PgTerminal.info(
         "Deploying..."

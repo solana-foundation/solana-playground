@@ -165,7 +165,7 @@ describe("BaseNetworkChoice", () => {
     expect(
       screen.getByRole("radio", { name }).getAttribute("aria-checked")
     ).toBe("true");
-    expect(screen.queryByText("Deploys with real SOL")).toBeNull();
+    expect(screen.queryByText("Not available for deploys")).toBeNull();
   });
 
   it("offers Mainnet, described as deploying with real SOL", () => {
@@ -180,14 +180,14 @@ describe("BaseNetworkChoice", () => {
     expect(
       screen.getByRole("radiogroup", {
         name: "Network",
-        description: "Deploys with real SOL",
+        description: "Not available for deploys",
       })
     ).toBeTruthy();
   });
 
   it("says nothing about real SOL on devnet", () => {
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
-    expect(screen.queryByText("Deploys with real SOL")).toBeNull();
+    expect(screen.queryByText("Not available for deploys")).toBeNull();
   });
 
   it("picks once on a click", async () => {
