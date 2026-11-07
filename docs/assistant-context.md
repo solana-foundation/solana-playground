@@ -207,7 +207,7 @@ Done:
   Programs in the navigation (and Home's tiles, and the `/tutorials` and
   `/programs` links) open pages with a search field and cards, over the open
   project, which comes back as it was; opening a card opens the tutorial or
-  imports the program. The New Workspace gallery (New project) starts a
+  imports the program. New project, a page of its own beside them (also at `/new`), starts a
   project from scratch, from one of 10 programs that build on the default
   server, or from one of 16 tutorials. The cluster row, the account menu's
   Settings or Cmd+, open Settings as a page of its
@@ -291,7 +291,7 @@ Honesty rule for the demo — never present a mocked step as working.
   saves the IDL a successful build already produced; "Upload IDL" on
   Deploy and Interact replaces the IDL this browser uses -- neither
   generates anything or writes anything on-chain.
-- **Not view-only:** the Programs page's and the gallery's ecosystem program cards
+- **Not view-only:** the Programs page's and New project's ecosystem program cards
   import from GitHub through upstream's own mechanism (`PgGithub.import`)
   into a normal, editable project -- they open as a normal project; those
   targeting Anchor newer than the pinned 0.29 will not compile on this build

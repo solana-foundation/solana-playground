@@ -49,3 +49,11 @@ it("closes the page, tells the user and reports a start route it cannot reach", 
   expect(catalog.catalogPage.close).toHaveBeenCalledTimes(1);
   expect(utils.PgView.setToast).toHaveBeenCalledTimes(1);
 });
+
+it("opens New project from `/new` the same way", async () => {
+  openPageFromLink("new-project");
+  await Promise.resolve();
+
+  expect(catalog.catalogPage.open).toHaveBeenCalledWith("new-project", "link");
+  expect(utils.PgRouter.navigate).toHaveBeenCalledWith("/", { replace: true });
+});

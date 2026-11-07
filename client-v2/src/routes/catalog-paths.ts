@@ -1,5 +1,6 @@
-/** The links that open a page: the bare `/tutorials` and `/programs` */
+/** The links that open a page: the bare `/new`, `/tutorials` and `/programs` */
 const LINKS = {
+  "/new": "new-project",
   "/tutorials": "tutorials",
   "/programs": "programs",
 } as const;
@@ -31,6 +32,8 @@ if (import.meta.vitest) {
       ["/tutorials", "tutorials"],
       ["/tutorials/", "tutorials"],
       ["/programs", "programs"],
+      ["/new", "new-project"],
+      ["/new/", "new-project"],
       ["/tutorials/hello-anchor", null],
       ["/", null],
       ["/programs/x", null],

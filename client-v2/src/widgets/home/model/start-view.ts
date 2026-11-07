@@ -19,7 +19,7 @@ const log = createLogger("home:start");
 export const START_TIMEOUT_MS = 10_000;
 
 /**
- * Where Home can show: `/`, and the `/tutorials` and `/programs` links, which
+ * Where Home can show: `/`, and the `/new`, `/tutorials` and `/programs` links, which
  * open their page and go on to `/`
  */
 const isStartPath = (path: string) => path === "/" || isCatalogLinkPath(path);

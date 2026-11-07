@@ -2,6 +2,7 @@ import {
   expect,
   home,
   homeRegion,
+  newProjectPage,
   startProject,
   startTutorialFromAbout,
   stubAiStatus,
@@ -25,13 +26,11 @@ test("opens an unstarted tutorial from an active project", async ({ page }) => {
 
   // Make a real project the active workspace first -- the crash only shows up
   // when a project is already active, not on the very first, empty-state
-  // open (Home's New project tile unfolds `StartFromScratch`).
+  // open (Home's New project tile opens the New project page).
   await startProject(page, "active-project");
 
-  // The gallery as a dialog named by its title, for the steps below.
-  const gallery = page.getByRole("dialog", {
-    name: "What do you want to build?",
-  });
+  // The New project page, for the steps below.
+  const gallery = newProjectPage(page);
 
   // Reopen the gallery from the navigation now that a project is active
   await openGallery(page);

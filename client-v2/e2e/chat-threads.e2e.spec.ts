@@ -235,7 +235,7 @@ test("each project keeps its own conversation", async ({ page }) => {
   const alpha = await threadId(page);
 
   await openGallery(page);
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await expect(gallery).toBeVisible();
   await gallery.getByLabel("Project name").fill("beta");
   await gallery.getByRole("button", { name: /^Start/ }).click();

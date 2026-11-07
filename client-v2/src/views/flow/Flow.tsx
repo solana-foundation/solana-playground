@@ -45,7 +45,6 @@ import {
 } from "@/widgets/status";
 
 import ConsoleDrawer from "./console/ConsoleDrawer";
-import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import StageBar from "./header/StageBar";
 import LeftPanel from "./left/LeftPanel";
 import type { LessonState } from "./lessons";
@@ -229,7 +228,8 @@ const FlowFrame = () => {
     return () => subs.forEach((s) => s.dispose());
   }, []);
 
-  const openGallery = () => PgView.setModal(NewWorkspaceModal);
+  // The lesson band's Browse gallery: New project, as the navigation opens it
+  const openGallery = () => catalogPage.open("new-project", "lesson");
   const shell = useRef<HTMLDivElement>(null);
   // Back to the control that opened them, once the shell is no longer inert
   // and its reveal's `visibility` transitions are over (`revealAtOnce`),
@@ -305,7 +305,7 @@ const FlowFrame = () => {
   );
 
   const page = useStartView();
-  // The Tutorials or Programs page shown, if any (`widgets/catalog`)
+  // The New project, Tutorials or Programs page shown, if any (`widgets/catalog`)
   const catalog = useCatalogPage();
 
   const described = describeStep(lesson);
@@ -408,8 +408,6 @@ const FlowFrame = () => {
                   // A phone's menu page would cover the page it just opened
                   closeSheet();
                 }}
-                onClosePage={catalogPage.close}
-                closeSheet={closeSheet}
                 phone={menuPage}
                 collapsed={collapsed}
                 onToggle={toggle}

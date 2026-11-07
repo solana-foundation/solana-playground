@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 import { catalogPage } from "../model/catalog-page";
-import type { CatalogPage } from "../model/telemetry";
+import type { ShownPage } from "../model/telemetry";
+import NewProjectPage from "./NewProjectPage";
 import ProgramsPage from "./ProgramsPage";
 import TutorialsPage from "./TutorialsPage";
 
@@ -12,16 +13,14 @@ export interface CatalogSlot {
   onClose: () => void;
 }
 
-const PAGES: Record<CatalogPage, { title: string; content: () => ReactNode }> =
-  {
-    tutorials: { title: "Tutorials", content: () => <TutorialsPage /> },
-    programs: { title: "Programs", content: () => <ProgramsPage /> },
-  };
+const PAGES: Record<ShownPage, { title: string; content: () => ReactNode }> = {
+  "new-project": { title: "New project", content: () => <NewProjectPage /> },
+  tutorials: { title: "Tutorials", content: () => <TutorialsPage /> },
+  programs: { title: "Programs", content: () => <ProgramsPage /> },
+};
 
 /** The page shown, for the layout shell's `cover`; none while no page shows */
-export const catalogSlot = (
-  page: CatalogPage | null
-): CatalogSlot | undefined =>
+export const catalogSlot = (page: ShownPage | null): CatalogSlot | undefined =>
   page === null
     ? undefined
     : {
