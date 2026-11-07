@@ -77,8 +77,9 @@ const files = apiFiles();
 const isServed = (urlPath) => {
   if (files.some((file) => fileRoute(file).test(urlPath))) return true;
 
-  for (const { source, destination } of rewrites) {
-    if (!rewriteRoute(source).test(urlPath)) continue;
+  for (const { source, destination, has } of rewrites) {
+    // A rule with `has` answers another host only (the key page's), never the app's
+    if (has || !rewriteRoute(source).test(urlPath)) continue;
     const dest = destination.split("?")[0];
     return files.some((file) => fileRoute(file).test(dest));
   }

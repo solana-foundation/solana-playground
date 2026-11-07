@@ -305,7 +305,10 @@ describe("vercel.json routing of /api/ai/status", () => {
     const config = JSON.parse(
       await readFile(new URL("../vercel.json", import.meta.url), "utf8")
     );
-    return config.rewrites.find(({ source }) => matches(source, path));
+    // A rule with `has` answers another host only (the key page's), never the app's
+    return config.rewrites.find(
+      ({ source, has }) => !has && matches(source, path)
+    );
   };
 
   it("assistant-ai-status: The platform's routing serves the path", async () => {

@@ -39,7 +39,7 @@ class GoogleTagPlugin {
     compiler.hooks.compilation.tap("GoogleTagPlugin", (compilation) => {
       HtmlWebpackPlugin.getHooks(compilation).beforeEmit.tap(
         "GoogleTagPlugin",
-        // The sandbox's runtime.html runs project code, never the tag
+        // Only the app carries the tag: never the sandbox or the key page
         (data) =>
           data.outputName === "index.html"
             ? { ...data, html: insertGoogleTag(data.html, this.id) }
@@ -99,37 +99,69 @@ class BundleModulesPlugin {
 }
 
 /**
- * The sandboxed frame that `run` and `test` execute project code in
- * (`src/utils/js-runtime/sandbox`): its own entry and page, so it shares no
- * code or origin with the app (`sandbox="allow-scripts"` makes it opaque).
+ * The pages built beside CRA's `index.html`, each from its own entry, so they
+ * share no code with the app:
+ * - the sandboxed frame that `run` and `test` execute project code in
+ *   (`src/utils/js-runtime/sandbox`; `sandbox="allow-scripts"` makes its
+ *   origin opaque);
+ * - the key page, which holds the built-in wallet's keys on an origin of
+ *   their own (`src/utils/wallet/key-origin/frame`). `vercel.json` serves
+ *   nothing else on that origin, which `static/js/wallet-keys*` relies on:
+ *   its entry's file name starts with the entry's name.
  */
 const SANDBOX_ENTRY = "sandbox";
 const SANDBOX_PAGE = "runtime.html";
+const KEY_PAGE_ENTRY = "wallet-keys";
+const KEY_PAGE = "wallet-keys.html";
+const PAGES = [
+  {
+    entry: SANDBOX_ENTRY,
+    page: SANDBOX_PAGE,
+    source: "src/utils/js-runtime/sandbox/index.ts",
+    template: "src/utils/js-runtime/sandbox/runtime.html",
+  },
+  {
+    entry: KEY_PAGE_ENTRY,
+    page: KEY_PAGE,
+    source: "src/utils/wallet/key-origin/frame/index.ts",
+    template: "src/utils/wallet/key-origin/frame/wallet-keys.html",
+  },
+];
 
-/** The CSP `runtime.html` is served with: `vercel.json`'s, so the two agree */
-const RUNTIME_CSP = require("./vercel.json")
-  .headers.find((rule) => rule.source === `/${SANDBOX_PAGE}`)
-  .headers.find((header) => header.key === "Content-Security-Policy").value;
+/** A page's headers in `vercel.json`, so the dev server and Vercel agree */
+const vercelHeadersOf = (page) =>
+  Object.fromEntries(
+    require("./vercel.json")
+      .headers.find((rule) => rule.source === `/${page}`)
+      .headers.map((header) => [header.key, header.value])
+  );
+
+/** The CSP `runtime.html` is served with */
+const RUNTIME_CSP = vercelHeadersOf(SANDBOX_PAGE)["Content-Security-Policy"];
+
+/** The CSP and CORP `wallet-keys.html` is served with */
+const KEY_PAGE_HEADERS = vercelHeadersOf(KEY_PAGE);
 
 /**
- * Adds the sandbox's entry and page beside CRA's, and keeps CRA's
- * index.html to its own entry
+ * Adds each page's entry and page beside CRA's, and keeps CRA's index.html
+ * to its own entry
  */
-const addSandboxEntry = (webpackConfig, env) => {
+const addPageEntries = (webpackConfig, env) => {
   webpackConfig.entry = {
     main: webpackConfig.entry,
-    [SANDBOX_ENTRY]: path.join(
-      __dirname,
-      "src/utils/js-runtime/sandbox/index.ts"
+    ...Object.fromEntries(
+      PAGES.map(({ entry, source }) => [entry, path.join(__dirname, source)])
     ),
   };
 
-  // Development names CRA's one entry `bundle.js`; two entries need two names
+  // Development names CRA's one entry `bundle.js`; several entries need
+  // several names
   const filename = webpackConfig.output.filename;
   if (typeof filename === "string" && !filename.includes("[name]")) {
+    const pageEntries = new Set(PAGES.map(({ entry }) => entry));
     webpackConfig.output.filename = (pathData) =>
-      pathData.chunk.name === SANDBOX_ENTRY
-        ? `static/js/${SANDBOX_ENTRY}.bundle.js`
+      pageEntries.has(pathData.chunk.name)
+        ? `static/js/${pathData.chunk.name}.bundle.js`
         : filename;
   }
 
@@ -147,19 +179,18 @@ const addSandboxEntry = (webpackConfig, env) => {
   // CORS too, which same-origin requests pass as before
   webpackConfig.output.crossOriginLoading = "anonymous";
 
-  webpackConfig.plugins.push(
-    new HtmlWebpackPlugin({
-      filename: SANDBOX_PAGE,
-      template: path.join(
-        __dirname,
-        "src/utils/js-runtime/sandbox/runtime.html"
-      ),
-      chunks: [SANDBOX_ENTRY],
-      // The template writes the script tags, with `crossorigin`
-      inject: false,
-      minify: env === "production",
-    })
-  );
+  for (const { entry, page, template } of PAGES) {
+    webpackConfig.plugins.push(
+      new HtmlWebpackPlugin({
+        filename: page,
+        template: path.join(__dirname, template),
+        chunks: [entry],
+        // The template writes the script tags, with `crossorigin`
+        inject: false,
+        minify: env === "production",
+      })
+    );
+  }
 };
 
 /** CRA's in-build type check and lint, by plugin class name */
@@ -249,7 +280,7 @@ module.exports = {
       // tsconfig `paths` is the only `@/` mapping; react-scripts 5 strips it only in `init`, never in start or build
       webpackConfig.resolve.tsconfig = path.join(__dirname, "tsconfig.json");
 
-      addSandboxEntry(webpackConfig, env);
+      addPageEntries(webpackConfig, env);
 
       // Here, not at the top: CRA's `config/env.js` has loaded `.env` by now
       warnAboutMissingObservabilityIds();
@@ -605,6 +636,11 @@ module.exports = {
       // only the app may frame it
       if (urlPath === `/${SANDBOX_PAGE}`) {
         return { ...headers, "Content-Security-Policy": RUNTIME_CSP };
+      }
+      // The key page: its own CSP, and CORP so the app's COEP lets it frame
+      // the page from the other loopback host
+      if (urlPath === `/${KEY_PAGE}`) {
+        return { ...headers, ...KEY_PAGE_HEADERS };
       }
       return headers;
     };
