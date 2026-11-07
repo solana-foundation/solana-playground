@@ -54,20 +54,18 @@ const defaultState: WalletState = {
  * page. Not looked up under Node, where the build imports this module
  * (`src/settings`) and there is no `window`.
  */
-const keyOrigin =
-  typeof window === "undefined"
-    ? undefined
-    : keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN, window.location);
+// `src/settings` runs this module under Node with a `window` shim that has no
+// `location`, so both are checked
+const here = typeof window === "undefined" ? undefined : window.location;
+const keyOrigin = here
+  ? keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN, here)
+  : undefined;
 
 // Logged here, once per load, not in `origin.ts`: the key page imports that
 // module too, and its bundle carries no logger
-if (
-  typeof window !== "undefined" &&
-  process.env.REACT_APP_WALLET_KEY_ORIGIN &&
-  !keyOrigin
-) {
+if (here && process.env.REACT_APP_WALLET_KEY_ORIGIN && !keyOrigin) {
   createLogger("wallet:key-origin").warn(
-    `REACT_APP_WALLET_KEY_ORIGIN="${process.env.REACT_APP_WALLET_KEY_ORIGIN}" names no usable origin from ${window.location.origin}; the keys stay in the page`
+    `REACT_APP_WALLET_KEY_ORIGIN="${process.env.REACT_APP_WALLET_KEY_ORIGIN}" names no usable origin from ${here.origin}; the keys stay in the page`
   );
 }
 
