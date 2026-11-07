@@ -1539,15 +1539,17 @@ test("client-v2-layout: Hiding the assistant from the stage bar", async ({
   await page.setViewportSize(WIDE_DESK);
   const before = await widthOf(page);
   const stageBar = page.locator('[data-slot="stage-bar"]');
-  await expect(stageBar).not.toContainText("e2e-project");
+  // The bar names the project whether the assistant shows or not: the
+  // assistant's head names the model, not the project
+  await expect(stageBar).toContainText("e2e-project");
   await page.getByRole("button", { name: "Hide the assistant" }).click();
   await expect.poll(() => widthOf(page)).toBe(0);
-  // The project's name moves into the stage bar while the assistant is hidden
   await expect(stageBar).toContainText("e2e-project");
   await page.getByRole("button", { name: "Expand assistant" }).click();
   await expect
     .poll(async () => Math.abs((await widthOf(page)) - before))
     .toBeLessThanOrEqual(2);
+  await expect(stageBar).toContainText("e2e-project");
 });
 
 test("client-v2-layout: A layout saved before the column bars", async ({

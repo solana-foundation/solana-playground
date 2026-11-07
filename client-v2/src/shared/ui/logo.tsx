@@ -42,13 +42,14 @@ function LogoMark({ className, ...props }: React.ComponentProps<"svg">) {
 /* The play shape alone, for a button that is already round (the composer's
    send). It draws the play shape alone, in the mark's coordinates cropped to
    it: a crop of the whole mark left slivers of the ring in its corners. The
-   crop sits 7 units (1 px at 16 px) right of the shape's box, so the arrow
-   reads centred in the round button */
+   crop is centred 7 units (1 px at 16 px) left of the shape's box (x 75 to
+   163): a right-pointing arrow's visual centre lies left of its box's
+   centre, so this offset is what reads centred in the round button */
 function LogoPlay({ className, ...props }: React.ComponentProps<"svg">) {
   return (
     <svg
       data-slot="logo-play"
-      viewBox="68 48 116 116"
+      viewBox="54 48 116 116"
       aria-hidden="true"
       className={cn("size-6 shrink-0 fill-current", className)}
       {...props}

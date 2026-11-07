@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { requireFor } from "@/test-utils/require-for";
 
 import type { NavItem } from "../model/nav-item";
 import BaseAppNav from "./BaseAppNav";
@@ -71,6 +72,7 @@ it("shows the logo, project list and footer when open, not the rail's", () => {
 it("swaps the logo, project list and footer for the rail's footer when collapsed, keeping the items", () => {
   draw(true);
   expect(screen.queryByText("logo")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Go to Home" })).toBeNull();
   expect(screen.queryByText("projects")).toBeNull();
   expect(screen.queryByText("footer")).toBeNull();
   expect(screen.queryByText("setup")).toBeNull();
@@ -119,6 +121,38 @@ it("on a phone, heads the menu with the logo and a close, not a collapse", () =>
   ).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Close the menu" }));
   expect(onToggle).toHaveBeenCalledOnce();
+});
+
+it("takes the logo to Home, in the column and at the head of the phone's menu", () => {
+  const onOpen = vi.fn();
+  draw(false, onOpen);
+  fireEvent.click(screen.getByRole("button", { name: "Go to Home" }));
+  expect(onOpen).toHaveBeenLastCalledWith("home");
+
+  render(
+    <TooltipProvider>
+      <SidebarProvider>
+        <BaseAppNav
+          phone
+          collapsed={false}
+          onToggle={vi.fn()}
+          onOpen={onOpen}
+          logo={<span>phone logo</span>}
+          projects={undefined}
+          footer={undefined}
+          railFooter={undefined}
+          setup={undefined}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  const phoneLogo = requireFor("the phone logo's button")(
+    screen.getByText("phone logo").closest("button")
+  );
+  expect(phoneLogo.getAttribute("aria-label")).toBe("Go to Home");
+  fireEvent.click(phoneLogo);
+  expect(onOpen).toHaveBeenCalledTimes(2);
+  expect(onOpen).toHaveBeenLastCalledWith("home");
 });
 
 it("draws the way to a computer only on a phone, in its own group above Get set up", () => {

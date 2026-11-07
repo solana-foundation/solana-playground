@@ -77,3 +77,38 @@ it("offers Clear search when nothing matches", () => {
   fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
   expect(onClear).toHaveBeenCalledTimes(1);
 });
+
+it("draws a program's image in a square tile, as a tutorial's cover, so it is not cropped", () => {
+  render(
+    <BaseCatalogGrid
+      label="programs"
+      query=""
+      onClear={vi.fn()}
+      list={{
+        state: "ready",
+        cards: [
+          card("token-vesting"),
+          {
+            id: "Hello",
+            title: "Hello",
+            description: "About Hello",
+            media: <svg />,
+            tags: [{ label: "Anchor" }],
+          },
+        ],
+      }}
+      busy={false}
+      onOpen={vi.fn(async () => {})}
+    />
+  );
+
+  // jsdom lays nothing out, so the tile's size is read from its classes
+  const tiles = document.querySelectorAll("[data-slot=action-card-media]");
+  expect(tiles).toHaveLength(2);
+  tiles.forEach((tile) => {
+    const classes = tile.className.split(" ");
+    expect(classes).toContain("w-14");
+    expect(classes).toContain("h-14");
+    expect(classes).not.toContain("h-[2.625rem]");
+  });
+});

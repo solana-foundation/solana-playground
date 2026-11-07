@@ -13,7 +13,10 @@ import { DESK, PHONE } from "./viewports";
 
 /** The navigation's Home, which brings Home back over an open project */
 const navHome = (page: Page) =>
-  page.locator('[data-slot="sidebar"]').getByRole("button", { name: "Home" });
+  page
+    .locator('[data-slot="sidebar"]')
+    // Exact: the logo is "Go to Home", in the same sidebar
+    .getByRole("button", { name: "Home", exact: true });
 
 /**
  * Answers every build with success and counts them: the example's build is
