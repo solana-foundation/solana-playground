@@ -1617,6 +1617,33 @@ describe("PgConversation's later airdrop card (designers, 7 Nov)", () => {
     expect(PgConversation.view(LATER)?.live?.id).toBe("s4.ship");
   });
 
+  it("a balance check that ends while a reload reads the save lets the reload through", async () => {
+    let answer: (funded: boolean) => void = () => undefined;
+    const runner = runnerWith(
+      () => new Promise<boolean>((resolve) => (answer = resolve)),
+      [OK_BUILD]
+    );
+    await toLaterAirdrop(runner);
+    expect(PgConversation.state.probing).toEqual(["s4.airdrop"]);
+    // The save sync brought in, held until the check has ended
+    const synced = JSON.parse(JSON.stringify(file)) as Record<string, unknown>;
+    (synced[STORAGE_KEY] as { startedAt: number }).startedAt = 7;
+    let read: () => void = () => {};
+    vi.mocked(PgExplorer.fs.readToJSON).mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          read = () => r(synced);
+        })
+    );
+    switchWorkspace(NAME);
+    await settle();
+    answer(false);
+    await settle();
+    read();
+    await settle();
+    expect(PgConversation.state.engine.progress.startedAt).toBe(7);
+  });
+
   it("shows the card and its say line once the check finds the wallet short", async () => {
     const runner = runnerWith(async () => false, [OK_BUILD]);
     await toLaterAirdrop(runner);

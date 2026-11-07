@@ -571,10 +571,15 @@ export class PgConversation {
     // The workspace may have moved on while the read was in flight
     if (PgExplorer.currentWorkspaceName !== name) return;
     // The learner acted on this tutorial while the read was in flight: the
-    // state in memory is newer than what was read, and its own save follows.
-    // Replacing it would drop a run just started, and its result after it
+    // progress in memory is newer than what was read, and its own save
+    // follows. Replacing it would drop a run just started, and its result
+    // after it. Only progress counts: a balance check ending (`probing`)
+    // changes nothing a save holds
     const now = PgConversation._state;
-    if (now !== current && now.context?.definition.name === name) {
+    if (
+      now.engine.progress !== current.engine.progress &&
+      now.context?.definition.name === name
+    ) {
       log.info(
         `${name} changed while its save was read; the save is not reloaded`
       );
