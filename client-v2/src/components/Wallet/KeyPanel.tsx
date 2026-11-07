@@ -243,8 +243,10 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       },
       (error: unknown) => {
         if (!isLive) return;
-        // The reason only: nothing here carries key bytes, and naming it keeps it so
+        // The reason only: nothing here carries key bytes, and naming it keeps
+        // it so. Reported: a misconfigured key origin reads this way
         log.warn("key panel did not load", {
+          report: true,
           context: {
             reason:
               error instanceof Error && "reason" in error

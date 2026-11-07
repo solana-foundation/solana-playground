@@ -1,6 +1,12 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  initLogger,
+  memoryProvider as logMemory,
+  resetLogger,
+} from "@/shared/lib/logger";
+
 import { KeyFrameUnavailable } from "../../utils/wallet/key-origin/client";
 import type { ThemeTokens } from "../../utils/wallet/key-origin/protocol";
 import {
@@ -189,6 +195,35 @@ describe("components/Wallet/KeyPanel", () => {
       "Key storage didn't load. Reload the page and try again."
     );
     expect(screen.queryByTitle("Import keypair")).toBeNull();
+  });
+
+  it("reports a key page that did not load, by its reason only", async () => {
+    const logs = logMemory();
+    initLogger({ providers: [logs] });
+    try {
+      render(
+        <BaseKeyPanel
+          action="import"
+          origin={ORIGIN}
+          connect={() => () => () =>
+            Promise.reject(new KeyFrameUnavailable("timeout"))}
+          readTokens={readTokens}
+          onError={() => {}}
+        />
+      );
+
+      await screen.findByText(KEY_PANEL_UNAVAILABLE);
+      expect(logs.entries).toHaveLength(1);
+      expect(logs.entries[0]).toMatchObject({
+        level: "warn",
+        message: "key panel did not load",
+        report: true,
+        context: { reason: "timeout" },
+      });
+      expect(logs.entries[0].error).toBeUndefined();
+    } finally {
+      resetLogger();
+    }
   });
 
   it("says so at once when the build names no key origin", () => {
