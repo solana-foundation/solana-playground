@@ -68,8 +68,9 @@ rest come from the 7 Nov call.
 - **The key origin comes from `REACT_APP_WALLET_KEY_ORIGIN`.** Unset, the
   build keeps the `local` provider: production stays on SF#106's behaviour
   until the domain exists, and nothing breaks before it does. Set, the
-  key-origin provider is the default. The value `loopback` (development and
-  e2e) means the same port on the other loopback host: an app on
+  key-origin provider is the default. `client-v2/.env.development` sets
+  `loopback` for both settings, so `yarn dev` runs the key-origin provider
+  by default. The value `loopback` (development and e2e) means the same port on the other loopback host: an app on
   `http://localhost:<port>` uses `http://127.0.0.1:<port>`, and the reverse.
   One dev server, two origins, no second port to allocate per worktree
   **(my call; the ticket said a second port)**. The e2e spec runs on loopback

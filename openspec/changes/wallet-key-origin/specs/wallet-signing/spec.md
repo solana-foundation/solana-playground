@@ -94,7 +94,9 @@ move from the page into the key page.
 Under the key-origin provider, a new account's key SHALL be made in the key
 page and stored there at once, when the dialog opens, so its key file can be
 saved before the account exists. A key made for a dialog the user leaves
-without adding the account SHALL be forgotten when the dialog closes.
+without adding the account SHALL be forgotten when the dialog closes. The
+first account SHALL be made once per page load, shared by the wallet and
+Deploy; when it cannot be made, the user SHALL be told once.
 
 #### Scenario: Setup makes the first account
 
@@ -107,6 +109,18 @@ without adding the account SHALL be forgotten when the dialog closes.
 - **WHEN** the user opens Add, then closes it without adding the account
 - **THEN** the key page forgets the key it made for the dialog, and holds no
   new key
+
+#### Scenario: The wallet and Deploy share the first account
+
+- **WHEN** Deploy needs the built-in wallet while the wallet is making its
+  first account
+- **THEN** both wait on the same account, and the wallet holds one account
+
+#### Scenario: The first account cannot be made
+
+- **WHEN** the key page fails to make the first account
+- **THEN** the user is told once that the first account could not be made,
+  and the page does not try again until it reloads
 
 ### Requirement: Key files are read and written by the key origin
 

@@ -22,7 +22,10 @@ marked it urgent, before Breakpoint (HOO-2680).
   names a key origin (`REACT_APP_WALLET_KEY_ORIGIN`). Wallets it builds sign
   through the key page and carry a keypair-shaped `keypair` whose `secretKey`
   throws, the same object the sandbox gives project code. A build without the
-  variable keeps the `local` provider as it is today.
+  variable keeps the `local` provider as it is today. `yarn dev` names the
+  loopback key origin by default (`client-v2/.env.development`), so a local
+  dev server runs the key-origin provider; production and preview builds read
+  no such file.
 - **The page's wallet record holds no key bytes.** An account is stored as its
   name and public key. Under the key-origin provider no store of the app's
   origin, IndexedDB or `localStorage`, holds key bytes.
@@ -47,7 +50,7 @@ marked it urgent, before Breakpoint (HOO-2680).
   (`default-src 'none'`, its own script only, `frame-ancestors` the app
   origins) and the COEP/CORP headers an embedded page of a `require-corp` app
   needs. On a host whose first label is `wallet-keys`, every other path is
-  refused, so the app itself never runs on the key origin.
+  redirected to the key page, so the app itself never runs on the key origin.
 
 ## Capabilities
 
