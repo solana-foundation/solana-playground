@@ -45,7 +45,9 @@ export const pickedDiagnostic = () => {
 /** What the output and the program say at the moment a verdict is read */
 const verdicts = (): Verdicts => ({
   failedLine: pickedDiagnostic()?.line ?? null,
-  instructions: PgProgramInfo.idl?.instructions.map((ix) => ix.name) ?? [],
+  // A stored IDL `readIdl` refuses may lack `instructions`; it names none
+  instructions:
+    PgProgramInfo.callableIdl()?.instructions.map((ix) => ix.name) ?? [],
 });
 
 const contentOf = (path: string) => {
