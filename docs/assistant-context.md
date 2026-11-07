@@ -208,7 +208,7 @@ Done:
   `/programs` links) open pages with a search field and cards, over the open
   project, which comes back as it was; opening a card opens the tutorial or
   imports the program. The New Workspace gallery (New project) starts a
-  project from scratch, from one of 11 programs that build on the default
+  project from scratch, from one of 10 programs that build on the default
   server, or from one of 16 tutorials. The cluster row, the account menu's
   Settings or Cmd+, open Settings as a page of its
   own over the whole window: a list of sections (Network, Project, Block
