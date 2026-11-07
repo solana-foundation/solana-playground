@@ -217,8 +217,11 @@ export default defineConfig({
   // Under the `e2e` shard job's `timeout-minutes` (client-v2.yml), so
   // Playwright itself ends a hung shard and still prints its summary; a
   // GitHub cancel keeps the traces but not the line saying which test was
-  // running.
-  globalTimeout: process.env.CI ? 15 * 60_000 : 0,
+  // running. 20 minutes, not 15: `fullyParallel` shards split by test count,
+  // not duration, so one shard can draw the slow project-* and conflict
+  // specs together; on run 42373915159 (2026-11-07) shard 7 of 8 summed
+  // 1458 s of tests while shard 6 summed 703 s
+  globalTimeout: process.env.CI ? 20 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every page starts as a visitor who left the file tree open: a first
