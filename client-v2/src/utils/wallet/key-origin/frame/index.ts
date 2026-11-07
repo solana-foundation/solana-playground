@@ -6,7 +6,7 @@ import { appOriginFor } from "../origin";
 import { awaitPortFor, serveWith } from "./channel";
 import { handlerWith } from "./handler";
 import { panelRouteOf, runPanelWith } from "./panel";
-import { indexedDbKeyStore } from "./store";
+import { indexedDbKeyStore, KEY_DB_NAME } from "./store";
 
 const appOrigin = appOriginFor(
   process.env.REACT_APP_WALLET_APP_ORIGIN,
@@ -20,7 +20,7 @@ const route = isHidden ? undefined : panelRouteOf(window.location.hash);
 // Unframed, built without an app to serve, or on an unknown fragment, the
 // page does nothing: it never announces itself
 if (appOrigin && window.parent !== window && (isHidden || route)) {
-  const store = indexedDbKeyStore();
+  const store = indexedDbKeyStore(KEY_DB_NAME);
   const handle = handlerWith(store);
   const connected = awaitPortFor(appOrigin, window.parent)(window);
   if (route) runPanelWith(handle, store)(route, connected);
