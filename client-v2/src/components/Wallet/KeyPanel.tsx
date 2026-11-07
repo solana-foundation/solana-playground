@@ -91,8 +91,17 @@ export const readThemeTokens = ({
 };
 
 type PanelResults = {
-  /** The panel stored the key in this file, by its public key */
-  onImported?: (publicKey: string) => void;
+  /**
+   * The panel stored the key in this file, by its public key; `isNew` is
+   * `false` when the key page already held it
+   */
+  onImported?: (publicKey: string, isNew: boolean) => void;
+  /**
+   * The panel started or finished a task (a file read, a save). Called on
+   * each change only, and with `false` when the panel goes mid-task, so
+   * calls pair up (`useBusyPanels`)
+   */
+  onBusy?: (busy: boolean) => void;
   /** The browser was handed the key file */
   onExported?: () => void;
   /** What went wrong, in words the dialog can show; never key bytes */
@@ -159,6 +168,12 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
             name: nameRef.current ?? "",
           };
     let isLive = true;
+    let isBusy = false;
+    const setBusy = (busy: boolean) => {
+      if (busy === isBusy) return;
+      isBusy = busy;
+      resultsRef.current.onBusy?.(busy);
+    };
     let port: MessagePort | undefined;
     const stopped = new AbortController();
 
@@ -201,13 +216,27 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
           const results = resultsRef.current;
           switch (data.type) {
             case "imported":
-              results.onImported?.(data.publicKey);
+              results.onImported?.(data.publicKey, data.isNew);
               break;
             case "exported":
               results.onExported?.();
               break;
             case "error":
               results.onError(data.message);
+              break;
+            case "busy":
+              setBusy(data.busy);
+              break;
+            case "escape":
+              // As if pressed here: the dialog's own Escape handling (Radix
+              // listens on the document) closes it, or not while it may not
+              frame.dispatchEvent(
+                new KeyboardEvent("keydown", {
+                  key: "Escape",
+                  bubbles: true,
+                  cancelable: true,
+                })
+              );
               break;
           }
         };
@@ -233,6 +262,8 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       observer.disconnect();
       port?.close();
       portRef.current = undefined;
+      // Its "not busy" can no longer arrive
+      setBusy(false);
       // Away from the panel, so pointing the frame at it again is a fresh
       // load (the same URL again would be a fragment navigation, no load)
       frame.src = "about:blank";

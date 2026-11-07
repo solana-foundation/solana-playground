@@ -100,19 +100,25 @@ export const NOT_A_KEY_FILE =
  *
  * @param handle the panel's own request handler
  * @returns for a key file's content, the message for the page: the stored
- * key's public key, or why not
+ * key's public key and whether this import stored it newly, or why not
  */
 export const importKeyFileWith =
   (handle: (request: KeyRequest) => Promise<KeyReply>) =>
   async (text: string): Promise<PanelMessage> => {
     const key = keyFileBytes(text);
     if (!key) return { type: "error", message: NOT_A_KEY_FILE };
-    const reply = await handle({ id: 0, type: "adopt", keys: [key] });
-    if (!reply.ok) return { type: "error", message: reply.error };
+    // The file's own public half: `adopt` refuses it unless it is the key's
     const publicKey = base58Encode(
       Uint8Array.from(key.slice(PUBLIC_KEY_LENGTH))
     );
-    return { type: "imported", publicKey };
+    const held = await handle({ id: 0, type: "accounts" });
+    if (!held.ok) return { type: "error", message: held.error };
+    const isNew = !(
+      Array.isArray(held.result) && held.result.includes(publicKey)
+    );
+    const reply = await handle({ id: 0, type: "adopt", keys: [key] });
+    if (!reply.ok) return { type: "error", message: reply.error };
+    return { type: "imported", publicKey, isNew };
   };
 
 /**
@@ -173,6 +179,17 @@ export const pageMessageHandler =
     else if (data.type === "name") on.name(data.name);
   };
 
+/**
+ * @param send posts a message to the page
+ * @returns a keydown handler that tells the page of Escape, so the dialog
+ * around the panel closes as it does when its own document has the focus
+ */
+export const escapeHandler =
+  (send: (message: PanelMessage) => void) =>
+  (event: Pick<KeyboardEvent, "key">) => {
+    if (event.key === "Escape") send({ type: "escape" });
+  };
+
 /** How long a key file's `blob:` URL outlives the click that downloads it */
 const REVOKE_AFTER_MS = 10_000;
 
@@ -217,6 +234,7 @@ export const runPanelWith =
         name: (next) => (name = next),
       });
       port.onmessage = (event: MessageEvent) => onPageMessage(event.data);
+      doc.addEventListener("keydown", escapeHandler(send));
 
       const whileBusy = async (task: () => Promise<PanelMessage>) => {
         button.disabled = true;
@@ -351,6 +369,14 @@ if (import.meta.vitest) {
       ]);
     });
 
+    it("tells the page of Escape, and of no other key", () => {
+      const sent: PanelMessage[] = [];
+      const onKeyDown = escapeHandler((message) => sent.push(message));
+      onKeyDown({ key: "Enter" });
+      onKeyDown({ key: "Escape" });
+      expect(sent).toEqual([{ type: "escape" }]);
+    });
+
     it("names the key file safely", () => {
       expect(keyFileName("main")).toBe("main-keypair.json");
       expect(keyFileName("a/b\\c:d")).toBe("a-b-c-d-keypair.json");
@@ -388,6 +414,13 @@ if (import.meta.vitest) {
       expect(imported).toEqual({
         type: "imported",
         publicKey: base58Encode(pub),
+        isNew: true,
+      });
+      // The same file again stores nothing new
+      expect(await importKeyFile(JSON.stringify(secret))).toEqual({
+        type: "imported",
+        publicKey: base58Encode(pub),
+        isNew: false,
       });
       expect(await keyFileOf(store, base58Encode(pub))).toBe(
         JSON.stringify(secret)

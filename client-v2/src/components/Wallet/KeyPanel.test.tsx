@@ -110,12 +110,66 @@ describe("components/Wallet/KeyPanel", () => {
     await waitFor(() => expect(srcs).toHaveLength(1));
     expect(srcs[0]).toContain("#panel/import?");
 
-    panel.postMessage({ type: "imported", publicKey: PUBLIC_KEY });
+    panel.postMessage({ type: "imported", publicKey: PUBLIC_KEY, isNew: true });
     panel.postMessage({ type: "error", message: "not a keypair" });
     panel.postMessage({ type: "imported" });
     await waitFor(() => expect(onError).toHaveBeenCalledOnce());
-    expect(onImported).toHaveBeenCalledExactlyOnceWith(PUBLIC_KEY);
+    expect(onImported).toHaveBeenCalledExactlyOnceWith(PUBLIC_KEY, true);
     expect(onError).toHaveBeenCalledWith("not a keypair");
+  });
+
+  it("says when the panel is busy, and that it is not once it goes", async () => {
+    const { connect, panel, srcs } = fakePanel();
+    const onBusy = vi.fn();
+    const { unmount } = render(
+      <BaseKeyPanel
+        action="import"
+        origin={ORIGIN}
+        connect={connect}
+        readTokens={readTokens}
+        onBusy={onBusy}
+        onError={() => {}}
+      />
+    );
+    await waitFor(() => expect(srcs).toHaveLength(1));
+
+    panel.postMessage({ type: "busy", busy: true });
+    panel.postMessage({ type: "busy", busy: true });
+    await waitFor(() => expect(onBusy).toHaveBeenCalledWith(true));
+    panel.postMessage({ type: "busy", busy: false });
+    await waitFor(() => expect(onBusy).toHaveBeenCalledWith(false));
+    // Each change once, so a dialog can count its busy panels
+    expect(onBusy.mock.calls).toEqual([[true], [false]]);
+
+    panel.postMessage({ type: "busy", busy: true });
+    await waitFor(() => expect(onBusy).toHaveBeenCalledTimes(3));
+    // Gone mid-task, its "not busy" never arrives: the panel says it itself
+    unmount();
+    expect(onBusy.mock.calls).toEqual([[true], [false], [true], [false]]);
+  });
+
+  it("passes Escape pressed in the panel on to the dialog", async () => {
+    const { connect, panel, srcs } = fakePanel();
+    const keys: string[] = [];
+    const onKeyDown = (event: KeyboardEvent) => keys.push(event.key);
+    document.addEventListener("keydown", onKeyDown);
+    try {
+      render(
+        <BaseKeyPanel
+          action="import"
+          origin={ORIGIN}
+          connect={connect}
+          readTokens={readTokens}
+          onError={() => {}}
+        />
+      );
+      await waitFor(() => expect(srcs).toHaveLength(1));
+
+      panel.postMessage({ type: "escape" });
+      await waitFor(() => expect(keys).toEqual(["Escape"]));
+    } finally {
+      document.removeEventListener("keydown", onKeyDown);
+    }
   });
 
   it("says the key storage did not load in place of the button", async () => {
