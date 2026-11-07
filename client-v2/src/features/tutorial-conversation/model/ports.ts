@@ -3,7 +3,7 @@ import type { Idl } from "@coral-xyz/anchor";
 
 import type { Act, Goal } from "@/entities/tutorial";
 
-import type { RunResult } from "./progress";
+import type { RunResult, UnreadTx } from "./progress";
 
 /**
  * The engine's three doors to the world. The reducer never touches them: it
@@ -56,6 +56,11 @@ export interface RunInput {
   log?: string;
   /** The account the act draws: read from the chain once the run landed */
   account?: string;
+  /**
+   * "Check again" on an unconfirmed run or call: the transactions it sent, to
+   * read from devnet again. Nothing is funded or sent.
+   */
+  recheck?: UnreadTx[];
 }
 
 /** One stage of a run as it starts: its label, and "n of m" */

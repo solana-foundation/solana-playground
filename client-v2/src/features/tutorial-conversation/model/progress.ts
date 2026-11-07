@@ -259,6 +259,13 @@ export const isUnreachable = (r: RunResult): boolean =>
 export const isSignedOut = (r: RunResult): boolean =>
   r.act === "build" && !r.ok && r.reason === "signed_out";
 
+/**
+ * A run or call devnet has not read back yet (HOO-2675): sent, not failed,
+ * so nothing to explain; its card's way on is Check again
+ */
+export const isUnconfirmed = (r: RunResult): boolean =>
+  (r.act === "run" || r.act === "call") && !r.ok && r.reason === "unconfirmed";
+
 /** The compiler error a failed build's card shows, as the server's log names it */
 export interface BuildError {
   code: string | null;
@@ -322,6 +329,18 @@ export interface Receipt {
 export interface Refusal {
   instruction: string;
   error: { code: number; name: string | null } | null;
+}
+
+/**
+ * A transaction a run or call sent, kept so it can be read from devnet again
+ * without sending: its signature and its instructions to the program, as the
+ * deployed IDL decoded them when it was sent
+ */
+export interface UnreadTx {
+  signature: string;
+  calls: (Called & { accounts: ReceiptAccount[]; wrote: ReceiptAccount[] })[];
+  /** One of them did not decode, so `calls` may be short */
+  undecoded?: true;
 }
 
 /**
@@ -443,6 +462,23 @@ export type RunResult =
       reason: "no_funds";
       /** The "Not enough devnet SOL" card's facts, in lamports */
       funding: { balance: number; cost: number; address: string };
+      refused?: undefined;
+    }
+  | {
+      act: "run" | "call";
+      ok: false;
+      seconds: number;
+      message: string;
+      log: string;
+      /**
+       * Sent, but devnet did not read a transaction back in the read window:
+       * on a slow devnet it may still land, so this is no failure of the
+       * learner's, and "Check again" reads the `unconfirmed` transactions
+       * again, without sending
+       */
+      reason: "unconfirmed";
+      /** Every transaction the run sent, in order, to read again */
+      unconfirmed: UnreadTx[];
       refused?: undefined;
     };
 

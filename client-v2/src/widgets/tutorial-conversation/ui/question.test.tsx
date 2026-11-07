@@ -158,6 +158,7 @@ const Lesson = ({ world }: { world: World }) => {
             skip: (beatId) => send({ type: "skip", beatId, at: now() }),
             typeIt: (beatId) => send({ type: "typeIt", beatId, at: now() }),
             act: vi.fn(),
+            recheck: vi.fn(),
             explain: vi.fn(),
             fixMyself: vi.fn(),
             showFix: vi.fn(),

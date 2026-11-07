@@ -9,6 +9,7 @@ import type {
   ReceiptAccount,
   Refusal,
   RunResult,
+  UnreadTx,
 } from "../progress";
 
 /**
@@ -37,7 +38,9 @@ export type SentTx =
       log: string[];
       message: string;
       calls: DecodedCall[];
-    };
+    }
+  /** Sent, and devnet has not read it back yet: it may still land */
+  | ({ kind: "unread" } & UnreadTx);
 
 /** An instruction to the tutorial's program, as the deployed IDL decodes it */
 export interface DecodedCall extends Called {
@@ -224,7 +227,9 @@ export const refusalOf = (
  * refused send, the RPC's first line; for a landed transaction with no
  * Anchor error, its error as the chain gives it
  */
-const reasonOf = (tx: SentTx): string => {
+type ReadTx = Exclude<SentTx, { kind: "unread" }>;
+
+const reasonOf = (tx: ReadTx): string => {
   const anchor = anchorError(tx.log);
   if (anchor?.message) return anchor.message;
   if (anchor) return anchor.name;
@@ -232,15 +237,24 @@ const reasonOf = (tx: SentTx): string => {
   return `The transaction failed: ${JSON.stringify(tx.err)}`;
 };
 
-const failed = (tx: SentTx): boolean =>
-  tx.kind === "refused" || tx.err !== null;
+const failed = (tx: SentTx): tx is ReadTx =>
+  tx.kind === "refused" || (tx.kind === "landed" && tx.err !== null);
+
+/** A sent transaction as it is kept to be read again */
+const unreadOf = (tx: Exclude<SentTx, { kind: "refused" }>): UnreadTx => ({
+  signature: tx.signature,
+  calls: tx.calls,
+  ...(tx.undecoded ? { undecoded: tx.undecoded } : {}),
+});
 
 /**
  * One result from every transaction a run or call sent; `sent` is never
  * empty (`runOrCall` answers a run that sent nothing itself). Any failure fails
- * the run, with the first failure's reason, log and refusal; otherwise the
- * run landed, with every signature, the picked line, every call to the
- * program, and the last transaction's receipt.
+ * the run, with the first failure's reason, log and refusal; else a
+ * transaction devnet has not read back makes it unconfirmed, with every
+ * transaction to read again; otherwise the run landed, with every signature,
+ * the picked line, every call to the program, and the last transaction's
+ * receipt.
  */
 export const resultOf = ({
   act,
@@ -265,6 +279,24 @@ export const resultOf = ({
       message: reasonOf(failure),
       log: failure.log.join("\n"),
       ...(refused ? { refused } : {}),
+    };
+  }
+  const unread = sent.find(
+    (tx): tx is Extract<SentTx, { kind: "unread" }> => tx.kind === "unread"
+  );
+  if (unread) {
+    return {
+      act,
+      ok: false,
+      seconds,
+      reason: "unconfirmed",
+      message:
+        "Devnet has not confirmed this transaction yet. Check again, or open it in Explorer.",
+      log: "",
+      // With no failure, every transaction was sent and none refused
+      unconfirmed: sent.flatMap((tx) =>
+        tx.kind === "refused" ? [] : [unreadOf(tx)]
+      ),
     };
   }
   const landed = sent.filter(
@@ -642,6 +674,41 @@ if (import.meta.vitest) {
           message: "failed to send transaction: blockhash not found",
           log: "",
         });
+      });
+
+      it("a sent transaction devnet has not read back is unconfirmed, with every signature to read again", () => {
+        const result = resultFor(
+          [
+            landed(HELLO_LOG),
+            { kind: "unread", signature: "late", calls: [hello()] },
+          ],
+          "call"
+        );
+        expect(result).toEqual({
+          act: "call",
+          ok: false,
+          seconds: 3,
+          reason: "unconfirmed",
+          message:
+            "Devnet has not confirmed this transaction yet. Check again, or open it in Explorer.",
+          log: "",
+          unconfirmed: [
+            { signature: `sig${HELLO_LOG.length}`, calls: [hello()] },
+            { signature: "late", calls: [hello()] },
+          ],
+        });
+      });
+
+      it("a refusal outranks a transaction not read back", () => {
+        const result = resultFor([
+          { kind: "unread", signature: "late", calls: [hello()] },
+          landed(CHOP_LOG, [], { InstructionError: [0, { Custom: 6000 }] }),
+        ]);
+        expect(result).toMatchObject({
+          ok: false,
+          message: "Not enough energy",
+        });
+        expect(result).not.toHaveProperty("reason");
       });
     });
   });

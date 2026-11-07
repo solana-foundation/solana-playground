@@ -32,6 +32,8 @@ export interface BaseResultCardProps {
   onShowLine: (file: string, line: number) => void;
   /** Run the act again: a build whose server never answered, or one refused for sign-in once someone is signed in */
   onRetry: () => void;
+  /** Read an unconfirmed run's or call's transactions again, sending nothing */
+  onRecheck: () => void;
   /** Someone is signed in: a build refused for sign-in can run again */
   signedIn: boolean;
   /** Sign in with GitHub, for a build refused for sign-in */
@@ -141,6 +143,7 @@ const BaseResultCard = ({
   onFixMyself,
   onShowLine,
   onRetry,
+  onRecheck,
   signedIn,
   onSignIn,
 }: BaseResultCardProps) => {
@@ -149,7 +152,13 @@ const BaseResultCard = ({
   const layout = usePhone();
   const { phone } = layout;
   if (isTxResult(result)) {
-    return <BaseTxResultCard result={result} account={account} />;
+    return (
+      <BaseTxResultCard
+        result={result}
+        account={account}
+        onRecheck={open ? onRecheck : undefined}
+      />
+    );
   }
   const failedBuild = result.act === "build" && !result.ok ? result : null;
   const error = failedBuild?.error ?? null;

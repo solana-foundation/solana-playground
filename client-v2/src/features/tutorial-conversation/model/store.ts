@@ -215,6 +215,16 @@ export class PgConversation {
     PgConversation._dispatch({ type: "act", beatId, args, at: Date.now() });
   }
 
+  /** "Check again" on an unconfirmed run or call: reads, never sends */
+  static recheck(beatId: string) {
+    PgConversation._dispatch({
+      type: "act",
+      beatId,
+      recheck: true,
+      at: Date.now(),
+    });
+  }
+
   /** A step's goal met outside the feed: the Call panel or a client run */
   static passed(via: Exclude<PassedVia, "chat">, result: RunResult) {
     PgConversation._dispatch({ type: "passed", via, result, at: Date.now() });

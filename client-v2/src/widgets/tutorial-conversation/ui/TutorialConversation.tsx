@@ -16,6 +16,7 @@ import type {
 } from "@/features/tutorial-conversation";
 import {
   isSignedOut,
+  isUnconfirmed,
   isUnreachable,
   judgeGoal,
   PgCallPanel,
@@ -453,10 +454,16 @@ const useSessionCheckOnRefusal = (live: Turn | undefined | null) => {
 /**
  * ⌘↵ on an open result: the card's one way on. A build server that never
  * answered builds again; a refusal for sign-in signs in, or builds once
- * someone is; any other failure is explained.
+ * someone is; a transaction devnet has not read back is checked again; any
+ * other failure is explained.
  */
 const pressResult = (beatId: string, result: RunResult) => {
-  if (isUnreachable(result) || (isSignedOut(result) && PgSession.get())) {
+  if (isUnconfirmed(result)) {
+    PgConversation.recheck(beatId);
+  } else if (
+    isUnreachable(result) ||
+    (isSignedOut(result) && PgSession.get())
+  ) {
     PgConversation.act(beatId);
   } else if (isSignedOut(result)) {
     void signIn();
@@ -538,6 +545,7 @@ const handlers: Omit<
   skip: (beatId) => PgConversation.skip(beatId),
   typeIt: (beatId) => PgConversation.typeIt(beatId),
   act: (beatId, args) => PgConversation.act(beatId, args),
+  recheck: (beatId) => PgConversation.recheck(beatId),
   explain: (beatId) => PgConversation.explain(beatId),
   fixMyself: (beatId) => PgConversation.fixMyself(beatId),
   showFix,
