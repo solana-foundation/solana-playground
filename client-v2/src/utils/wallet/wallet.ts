@@ -11,6 +11,7 @@ import {
 import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
 import { type KeyFrame, keyFrame } from "./key-origin/client";
+import { moveKeysOut } from "./key-origin/move";
 import { keyOriginFor } from "./key-origin/origin";
 import { keyOriginSignerProvider } from "./key-origin/provider";
 import { parseKeypairFile } from "./keypair-file";
@@ -26,7 +27,12 @@ import type {
   WalletAccount,
   WalletState,
 } from "./types";
-import { WALLET_LOCAL_KEY, walletStorageWith } from "./wallet-storage";
+import {
+  type MoveKeys,
+  WALLET_LOCAL_KEY,
+  type WalletRead,
+  walletStorageWith,
+} from "./wallet-storage";
 
 const defaultState: WalletState = {
   state: "setup",
@@ -212,14 +218,23 @@ export const readWith =
 const storage = {
   /** Read from storage and deserialize the data. */
   read(): Promise<WalletState> {
-    return keyPage
-      ? readWith(keyPage)(storage.readStored)
-      : storage.readStored();
+    if (!keyPage) return storage.readStored(walletStorage().read());
+    // The keys still in the page move into the key page under the read's
+    // lock, once it answers: copy, confirm, then drop (`moveKeysOut`)
+    const move: MoveKeys = async (record, extraKeys) =>
+      moveKeysOut(record, extraKeys, await keyPage());
+    return readWith(keyPage)(() =>
+      storage.readStored(walletStorage().readMovingKeys(move))
+    );
   },
 
-  /** The wallet as stored */
-  async readStored(): Promise<WalletState> {
-    const read = await walletStorage().read();
+  /**
+   * The wallet as stored
+   *
+   * @param reading the storage's read, with or without moving the keys
+   */
+  async readStored(reading: Promise<WalletRead>): Promise<WalletState> {
+    const read = await reading;
     switch (read.kind) {
       case "wallet":
         if (read.setAside > 0) tell("set-aside");

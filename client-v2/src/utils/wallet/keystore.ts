@@ -19,6 +19,14 @@ export interface WalletStore {
    * added twice.
    */
   setAside(accounts: unknown[]): Promise<void>;
+  /** The set-aside record's items, none when there is no record */
+  readAside(): Promise<unknown[]>;
+  /**
+   * Replace the set-aside record with what `update` makes of it, read and
+   * written in one transaction. Only for taking out key bytes the key page
+   * has confirmed holding: nothing set aside is ever dropped.
+   */
+  updateAside(update: (items: unknown[]) => unknown[]): Promise<void>;
   /**
    * Run `task` while no other tab runs one on the same store, so one tab's
    * move cannot interleave with another tab's move or save. Where the lock
@@ -130,6 +138,23 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
   /** Whether a refused lock was reported: once a page, not once a save */
   let hasReportedRefusal = false;
 
+  /** Rewrite the set-aside record in one transaction */
+  const updateAside = async (update: (items: unknown[]) => unknown[]) => {
+    const db = await open();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      const kept = store.get(SET_ASIDE_KEY);
+      kept.onsuccess = () => {
+        const before: unknown[] = Array.isArray(kept.result) ? kept.result : [];
+        store.put(update(before), SET_ASIDE_KEY);
+      };
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error ?? kept.error);
+      tx.onabort = () => reject(tx.error ?? new Error("Transaction aborted"));
+    });
+  };
+
   return {
     async exclusive(task) {
       // Without Web Locks (old browsers, some test environments) the task runs
@@ -170,29 +195,25 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
         store.put(state, RECORD_KEY)
       );
     },
-    async setAside(accounts) {
-      const db = await open();
+    setAside(accounts) {
       // The read and the append in one transaction, so two tabs setting
       // accounts aside cannot drop each other's
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const kept = store.get(SET_ASIDE_KEY);
-        kept.onsuccess = () => {
-          const before: unknown[] = Array.isArray(kept.result)
-            ? kept.result
-            : [];
-          const texts = new Set(before.map((item) => JSON.stringify(item)));
-          const added = accounts.filter(
-            (item) => !texts.has(JSON.stringify(item))
-          );
-          store.put(before.concat(added), SET_ASIDE_KEY);
-        };
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error ?? kept.error);
-        tx.onabort = () => reject(tx.error ?? new Error("Transaction aborted"));
+      return updateAside((before) => {
+        const texts = new Set(before.map((item) => JSON.stringify(item)));
+        const added = accounts.filter(
+          (item) => !texts.has(JSON.stringify(item))
+        );
+        return before.concat(added);
       });
     },
+    async readAside() {
+      const db = await open();
+      const value = await requestWith(db)("readonly")<unknown>((store) =>
+        store.get(SET_ASIDE_KEY)
+      );
+      return Array.isArray(value) ? value : [];
+    },
+    updateAside,
   };
 };
 
@@ -342,6 +363,32 @@ if (import.meta.vitest) {
         { kp: [1, 2], name: "A" },
         { kp: [3], name: "B" },
       ]);
+    });
+
+    it("reads the set-aside record, empty when there is none", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      expect(await store.readAside()).toEqual([]);
+
+      await store.setAside([{ kp: [1, 2], name: "A" }]);
+
+      expect(await store.readAside()).toEqual([{ kp: [1, 2], name: "A" }]);
+    });
+
+    it("rewrites the set-aside record in place, leaving the wallet's alone", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.write(walletOf("Wallet 1"));
+      await store.setAside([
+        { kp: [1, 2], name: "A" },
+        { kp: [3], name: "B" },
+      ]);
+
+      await store.updateAside((items) => items.slice().reverse());
+
+      expect(await store.readAside()).toEqual([
+        { kp: [3], name: "B" },
+        { kp: [1, 2], name: "A" },
+      ]);
+      expect(await store.read()).toEqual(walletOf("Wallet 1"));
     });
 
     it("keeps databases of different names apart", async () => {

@@ -273,6 +273,62 @@ const mergeWallets = (
 };
 
 /**
+ * Moves keys into the key page (`key-origin/move.ts`'s `moveKeysOut`, bound
+ * to the frame): given the record and every other copy's keys, it gives the
+ * record back without key bytes and the keys the key page confirmed, or
+ * throws, and then nothing may be dropped.
+ */
+export type MoveKeys = (
+  record: SerializedWalletState,
+  extraKeys: number[][]
+) => Promise<{ record: SerializedWalletState; keys: number[][] }>;
+
+/** What a move is handed when no copy holds a wallet, only stray keys */
+const NO_RECORD: SerializedWalletState = {
+  state: "setup",
+  accounts: [],
+  currentIndex: -1,
+  // eslint-disable-next-line unicorn/no-null -- the stored shape's own "none"
+  standardName: null,
+};
+
+/**
+ * The key bytes in stored items: an account's `kp`, or those of the accounts
+ * of a whole record set aside. Anything 64 bytes long counts; the move skips
+ * the ones that are not keys.
+ */
+const keysIn = (items: unknown[]): number[][] =>
+  items.flatMap((item) => {
+    if (typeof item !== "object" || item === null) return [];
+    const { kp, accounts } = item as { kp?: unknown; accounts?: unknown };
+    const own = isKeypairBytes(kp) ? [kp] : [];
+    return Array.isArray(accounts) ? own.concat(keysIn(accounts)) : own;
+  });
+
+/** Whether any copy read holds key bytes */
+const holdsKeys = (items: unknown[]) => keysIn(items).length > 0;
+
+/**
+ * The item without the key bytes of `moved`, the keys the key page
+ * confirmed. Everything else, other key bytes included, stays as it was.
+ */
+const withoutMovedWith =
+  (moved: Set<string>) =>
+  (item: unknown): unknown => {
+    if (typeof item !== "object" || item === null) return item;
+    let next = item as Record<string, unknown>;
+    const { kp, accounts } = next;
+    if (isKeypairBytes(kp) && moved.has(kp.join(","))) {
+      const { kp: _moved, ...rest } = next;
+      next = rest;
+    }
+    if (Array.isArray(accounts)) {
+      next = { ...next, accounts: accounts.map(withoutMovedWith(moved)) };
+    }
+    return next;
+  };
+
+/**
  * The wallet's persistence: IndexedDB, with `localStorage` as what it moves
  * from and what it falls back to.
  *
@@ -482,9 +538,40 @@ export const walletStorageWith =
       }
     };
 
-    const migrate = async (): Promise<WalletRead> => {
+    /**
+     * Whether a move must wait for the store: keys in `localStorage` move
+     * only together with the store's copy, never from `localStorage` alone,
+     * so the read is `unavailable` and the next one tries again
+     */
+    const isMoveBlocked = (
+      move: MoveKeys | undefined,
+      fromLocal:
+        | { wallet: SerializedWalletState; damaged: unknown[] }
+        | undefined
+    ) =>
+      move !== undefined &&
+      fromLocal !== undefined &&
+      holdsKeys([...fromLocal.wallet.accounts, ...fromLocal.damaged]);
+
+    /** Take the moved keys' bytes out of the set-aside record */
+    const clearMovedAside = async (keys: number[][]) => {
+      if (keys.length === 0) return;
+      const moved = new Set(keys.map((kp) => kp.join(",")));
+      try {
+        await store.updateAside((items) => items.map(withoutMovedWith(moved)));
+      } catch (error) {
+        // The key page holds them; the next load moves them again, which
+        // adds no copy, and clears them then
+        reportFailure("Moved keys left in the set-aside record", error);
+      }
+    };
+
+    const migrate = async (move: MoveKeys | undefined): Promise<WalletRead> => {
       const fromLocal = readLocal();
-      if (isDegraded) return foundOrNone(fromLocal?.wallet);
+      if (isDegraded) {
+        if (isMoveBlocked(move, fromLocal)) return UNAVAILABLE;
+        return foundOrNone(fromLocal?.wallet);
+      }
 
       let fromStore: StoreRead;
       try {
@@ -494,6 +581,7 @@ export const walletStorageWith =
         // A store that may hold a wallet, and no copy to fall back to: not
         // degraded, so the next read (Try again) asks the store again
         if (!fromLocal && !isIndexedDbMissing(error)) return UNAVAILABLE;
+        if (isMoveBlocked(move, fromLocal)) return UNAVAILABLE;
         // A save while falling back rewrites `localStorage` without its
         // damaged accounts, which may still hold key bytes: their text goes
         // aside first, as when the store refuses the set-aside record
@@ -510,10 +598,40 @@ export const walletStorageWith =
       const misshapen =
         fromStore.kind === "misshapen" ? [fromStore.record] : [];
 
-      const merged =
+      let merged =
         fromLocal && stored
           ? mergeWallets(fromLocal.wallet, stored.wallet)
           : (fromLocal ?? stored)?.wallet;
+
+      // Under the key-origin provider: copy every key into the key page and
+      // have it confirm them before anything is written. The merge above may
+      // keep a keyless account over another copy's `kp`, so every copy's keys
+      // go along, the set-aside record's too.
+      let movedKeys: number[][] = [];
+      if (move) {
+        try {
+          const aside = await store.readAside();
+          const extraKeys = keysIn([
+            ...(fromLocal?.wallet.accounts ?? []),
+            ...(fromLocal?.damaged ?? []),
+            ...(stored?.wallet.accounts ?? []),
+            ...(stored?.damaged ?? []),
+            ...misshapen,
+            ...aside,
+          ]);
+          const moved = await move(merged ?? NO_RECORD, extraKeys);
+          if (merged) merged = moved.record;
+          movedKeys = moved.keys;
+        } catch (error) {
+          // Nothing was written: every copy keeps its keys, and the next
+          // read tries again
+          reportFailureWith({ accounts: merged?.accounts.length ?? 0 })(
+            "Wallet keys not moved to the key page",
+            error
+          );
+          return UNAVAILABLE;
+        }
+      }
       // Before anything is rewritten without them, into the store's
       // set-aside record: a damaged account may still hold key bytes
       const damaged = (fromLocal?.damaged ?? [])
@@ -539,18 +657,21 @@ export const walletStorageWith =
       const found = foundOrNoneWith(damaged.length);
 
       if (!fromLocal) {
-        if (stored && stored.damaged.length > 0) {
+        const isMoved = movedKeys.length > 0;
+        if (merged && (isMoved || (stored && stored.damaged.length > 0))) {
           try {
-            await store.write(stored.wallet);
+            await store.write(merged);
           } catch (error) {
-            // The next load sets them aside again, which adds no copy
-            reportFailureFor(stored.wallet)(
-              "Wallet not rewritten without its damaged accounts",
+            // The next load sets them aside again, which adds no copy, and
+            // moves the keys again, which the key page already holds
+            reportFailureFor(merged)(
+              "Wallet not rewritten without its damaged accounts or keys",
               error
             );
           }
         }
-        return found(stored?.wallet);
+        await clearMovedAside(movedKeys);
+        return found(merged);
       }
 
       const moved = merged ?? fromLocal.wallet;
@@ -563,6 +684,7 @@ export const walletStorageWith =
       }
 
       removeLocal(fromLocal.text);
+      await clearMovedAside(movedKeys);
       return found(moved);
     };
 
@@ -574,7 +696,21 @@ export const walletStorageWith =
        * on the next read.
        */
       read(): Promise<WalletRead> {
-        return store.exclusive(migrate);
+        return store.exclusive(() => migrate(undefined));
+      },
+
+      /**
+       * Read the wallet as `read` does, under the key-origin provider: every
+       * key in every copy is moved into the key page first, under the same
+       * lock, and the copies are written without key bytes only once it
+       * confirmed them all. A move that fails, or a store that cannot be
+       * read while `localStorage` holds keys, reads `unavailable` and writes
+       * nothing, so the next read tries again.
+       *
+       * @param move moves keys into the key page
+       */
+      readMovingKeys(move: MoveKeys): Promise<WalletRead> {
+        return store.exclusive(() => migrate(move));
       },
 
       /**
@@ -708,6 +844,10 @@ if (import.meta.vitest) {
         ) as unknown as WalletStore["exclusive"] & ReturnType<typeof vi.fn>,
         setAside: vi.fn(async (accounts: unknown[]) => {
           setAside = setAside.concat(structuredClone(accounts));
+        }),
+        readAside: vi.fn(async () => structuredClone(setAside)),
+        updateAside: vi.fn(async (update: (items: unknown[]) => unknown[]) => {
+          setAside = update(structuredClone(setAside));
         }),
         held: () => value,
         heldAside: () => setAside,
