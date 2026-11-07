@@ -309,10 +309,13 @@ if (import.meta.vitest) {
     const PUBLIC_KEY = "11111111111111111111111111111111";
 
     it("reads the import and export panels from the fragment", () => {
-      const theme = encode({ bg: "#111", font: "Inter, sans-serif" });
+      const theme = encode({
+        bg: "var(--surface-panel)",
+        font: "Inter, sans-serif",
+      });
       expect(panelRouteOf(`#panel/import?theme=${theme}`)).toEqual({
         mode: "import",
-        theme: { bg: "#111", font: "Inter, sans-serif" },
+        theme: { bg: "var(--surface-panel)", font: "Inter, sans-serif" },
       });
       expect(
         panelRouteOf(
@@ -322,7 +325,7 @@ if (import.meta.vitest) {
         mode: "export",
         publicKey: PUBLIC_KEY,
         name: "My wallet",
-        theme: { bg: "#111", font: "Inter, sans-serif" },
+        theme: { bg: "var(--surface-panel)", font: "Inter, sans-serif" },
       });
       expect(panelRouteOf("#panel/import")).toEqual({
         mode: "import",
@@ -359,13 +362,16 @@ if (import.meta.vitest) {
         theme: (tokens) => seen.push(["theme", tokens]),
         name: (name) => seen.push(["name", name]),
       });
-      onPageMessage({ type: "theme", tokens: { hoverBg: "#222" } });
+      onPageMessage({
+        type: "theme",
+        tokens: { hoverBg: "var(--surface-hover)" },
+      });
       onPageMessage({ type: "name", name: "Mine" });
       onPageMessage({ type: "name", name: 5 });
       onPageMessage({ type: "imported", publicKey: PUBLIC_KEY });
       onPageMessage("theme");
       expect(seen).toEqual([
-        ["theme", { hoverBg: "#222" }],
+        ["theme", { hoverBg: "var(--surface-hover)" }],
         ["name", "Mine"],
       ]);
     });
