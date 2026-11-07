@@ -9,7 +9,8 @@ import { CLI_KEY_ERROR, keyOriginSignerProvider } from "./key-origin/provider";
 import { KeypairFileError } from "./keypair-file";
 import { localSignerProviderWith, publicKeyOf } from "./signer-provider";
 import type { Wallet, WalletAccount, WalletState } from "./types";
-import { PgWallet, readWith } from "./wallet";
+import { PgWallet, readWith, refuseKeylessRecord } from "./wallet";
+import type { WalletRead } from "./wallet-storage";
 
 // The connection module reads build-time globals the unit runner does not
 // define; `PgWallet.import` never touches it.
@@ -266,6 +267,18 @@ describe("utils/wallet/wallet", () => {
         expect(accounts).toHaveLength(0);
       });
 
+      it("import refuses before the file picker opens, so no key file is read into the page", async () => {
+        const { provider } = fakeKeyPage();
+        PgWallet.setSignerProvider(provider);
+        holdState([]);
+        const click = vi.spyOn(HTMLInputElement.prototype, "click");
+
+        await expect(PgWallet.import()).rejects.toThrow(
+          "Import the key file from the key panel."
+        );
+        expect(click).not.toHaveBeenCalled();
+      });
+
       it("remove drops the account's key from the key page", async () => {
         const { kept, provider } = fakeKeyPage();
         PgWallet.setSignerProvider(provider);
@@ -351,6 +364,52 @@ describe("utils/wallet/wallet", () => {
           account.publicKey
         );
       });
+    });
+  });
+
+  describe("refuseKeylessRecord, the read under the local provider", () => {
+    const keypair = PgWeb3.Keypair.generate();
+    const withKey: WalletAccount = {
+      name: "Kept",
+      publicKey: keypair.publicKey.toBase58(),
+      kp: Array.from(keypair.secretKey),
+    };
+    const moved: WalletAccount = {
+      name: "Moved",
+      publicKey: PgWeb3.Keypair.generate().publicKey.toBase58(),
+    };
+    const recordOf = (accounts: WalletAccount[]): WalletRead => ({
+      kind: "wallet",
+      wallet: {
+        state: "pg",
+        accounts,
+        currentIndex: 0,
+        // eslint-disable-next-line unicorn/no-null -- the stored shape: no standard wallet
+        standardName: null,
+      },
+      setAside: 0,
+    });
+
+    // A build that lost the key-origin variable after a move: the keys are in
+    // the key origin, and the record keeps only names and public keys
+    it("reads unavailable when an account's key is not in the record, leaving the record as it is", () => {
+      const read = recordOf([withKey, moved]);
+      const before = structuredClone(read);
+
+      expect(refuseKeylessRecord(read)).toEqual({ kind: "unavailable" });
+      expect(read).toEqual(before);
+    });
+
+    it("passes a record holding every key through", () => {
+      const read = recordOf([withKey]);
+      expect(refuseKeylessRecord(read)).toBe(read);
+    });
+
+    it("passes no record and an unavailable read through", () => {
+      const none: WalletRead = { kind: "none", setAside: 0 };
+      const unavailable: WalletRead = { kind: "unavailable" };
+      expect(refuseKeylessRecord(none)).toBe(none);
+      expect(refuseKeylessRecord(unavailable)).toBe(unavailable);
     });
   });
 
