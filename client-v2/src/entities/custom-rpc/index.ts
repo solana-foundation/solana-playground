@@ -1,6 +1,7 @@
 export {
   checkRpcUrl,
   hostOf,
+  isSameRpc,
   PgCustomRpcs,
   RPC_NAME_MAX,
 } from "./model/custom-rpcs";

@@ -179,8 +179,20 @@ test("client-v2-custom-rpcs: A duplicate URL is refused", async ({
 }) => {
   const settings = await openSettings(page);
   await addRpc(page, { name: "Helius", url: "https://helius.rpc.test/" });
-  await addRpc(page, { name: "Again", url: "https://HELIUS.rpc.test" });
+  await addRpc(page, { name: "Helius", url: "https://HELIUS.rpc.test" });
   await expect(settings.getByText("Already saved as Helius.")).toBeVisible();
+});
+
+test("client-v2-custom-rpcs: A saved URL is accepted under another name", async ({
+  seededPage: page,
+}) => {
+  const settings = await openSettings(page);
+  await addRpc(page, { name: "Helius", url: "https://helius.rpc.test/" });
+  await addRpc(page, { name: "Helius backup", url: "https://HELIUS.rpc.test" });
+  await expect(
+    network(page).getByRole("radio", { name: "Helius backup" })
+  ).toHaveAttribute("aria-checked", "true");
+  await expect(settings.getByText(/Already saved as/)).toHaveCount(0);
 });
 
 test("client-v2-custom-rpcs: The key in a URL is never drawn", async ({

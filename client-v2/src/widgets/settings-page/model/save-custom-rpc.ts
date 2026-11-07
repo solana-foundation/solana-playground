@@ -64,7 +64,7 @@ const writtenWith =
       : { kind: "refused", refusal: result };
 
 /**
- * Save `input` (over the RPC saved under `replacing`, or as a new one) once
+ * Save `input` (over the saved RPC `replacing`, or as a new one) once
  * its URL answers `fetchHealth`. A value the list would refuse sends no
  * request, and neither does an edit that keeps its URL or one `isHeld`
  * refuses. The write checks the list again, since another tab may change it
@@ -81,16 +81,16 @@ export const saveCheckedWith =
   (isHeld: (url: string) => boolean) =>
   async (
     input: CustomRpc,
-    replacing: string | undefined
+    replacing: CustomRpc | undefined
   ): Promise<CheckedSave> => {
     const checked = PgCustomRpcs.check(input, replacing);
     if (!checked.ok) return { kind: "refused", refusal: checked };
     let write: () => WriteResult = () => PgCustomRpcs.save(input);
     if (replacing !== undefined) {
       const edit = () => PgCustomRpcs.replace(replacing, input);
-      if (checked.url === replacing) return writtenWith("none")(edit());
-      if (isHeld(replacing)) return { kind: "refused", refusal: HELD };
-      write = () => (isHeld(replacing) ? HELD : edit());
+      if (checked.url === replacing.url) return writtenWith("none")(edit());
+      if (isHeld(replacing.url)) return { kind: "refused", refusal: HELD };
+      write = () => (isHeld(replacing.url) ? HELD : edit());
     }
     const health = await fetchHealth(checked.url);
     if (health === "answered") return writtenWith("passed")(write());
@@ -258,7 +258,7 @@ if (import.meta.vitest) {
         const health = healthOf("no_answer");
         const checked = await saveCheckedWith(health)(neverHeld)(
           { name: "Triton 2", url: "https://T.test" },
-          "https://t.test/"
+          SAVED_TRITON
         );
         expect(health).not.toHaveBeenCalled();
         expect(checked).toMatchObject({ kind: "saved", check: "none" });
@@ -270,7 +270,7 @@ if (import.meta.vitest) {
         const health = healthOf("answered");
         await saveCheckedWith(health)(neverHeld)(
           { name: "Triton", url: "https://t2.test" },
-          "https://t.test/"
+          SAVED_TRITON
         );
         expect(health).toHaveBeenCalledWith("https://t2.test/");
         expect(PgCustomRpcs.list()).toEqual([
@@ -278,9 +278,9 @@ if (import.meta.vitest) {
         ]);
       });
 
-      it("refuses a URL another tab saved while it was being checked", async () => {
+      it("refuses an entry another tab saved while it was being checked", async () => {
         const health = vi.fn(async () => {
-          PgCustomRpcs.save({ name: "Elsewhere", url: TRITON.url });
+          PgCustomRpcs.save(TRITON);
           return "answered" as const;
         });
         const checked = await saveCheckedWith(health)(neverHeld)(
@@ -289,7 +289,7 @@ if (import.meta.vitest) {
         );
         expect(checked).toEqual({
           kind: "refused",
-          refusal: { ok: false, reason: "duplicate", name: "Elsewhere" },
+          refusal: { ok: false, reason: "duplicate", name: "Triton" },
         });
       });
 
@@ -302,7 +302,7 @@ if (import.meta.vitest) {
           const isHeld = vi.fn((url: string) => url === "https://t.test/");
           const checked = await saveCheckedWith(health)(isHeld)(
             T2,
-            "https://t.test/"
+            SAVED_TRITON
           );
           expect(health).not.toHaveBeenCalled();
           expect(isHeld).toHaveBeenCalledWith("https://t.test/");
@@ -322,7 +322,7 @@ if (import.meta.vitest) {
           });
           const checked = await saveCheckedWith(health)(() => held)(
             T2,
-            "https://t.test/"
+            SAVED_TRITON
           );
           expect(checked).toEqual({ kind: "refused", refusal: HELD });
           expect(PgCustomRpcs.list()).toEqual([SAVED_TRITON]);
@@ -333,7 +333,7 @@ if (import.meta.vitest) {
           let held = false;
           const checked = await saveCheckedWith(healthOf("no_answer"))(
             () => held
-          )(T2, "https://t.test/");
+          )(T2, SAVED_TRITON);
           if (checked.kind !== "unreachable") throw new Error(checked.kind);
           held = true;
           expect(checked.useAnyway()).toEqual(HELD);
@@ -344,7 +344,7 @@ if (import.meta.vitest) {
           PgCustomRpcs.save(TRITON);
           const checked = await saveCheckedWith(healthOf("answered"))(
             () => true
-          )({ name: "Mine", url: "https://T.test" }, "https://t.test/");
+          )({ name: "Mine", url: "https://T.test" }, SAVED_TRITON);
           expect(checked).toMatchObject({ kind: "saved", check: "none" });
         });
 
@@ -352,7 +352,7 @@ if (import.meta.vitest) {
           PgCustomRpcs.save(TRITON);
           const checked = await saveCheckedWith(healthOf("no_answer"))(
             () => false
-          )(T2, "https://t.test/");
+          )(T2, SAVED_TRITON);
           if (checked.kind !== "unreachable") throw new Error(checked.kind);
           expect(checked.useAnyway().ok).toBe(true);
           expect(PgCustomRpcs.list()).toEqual([
@@ -400,17 +400,17 @@ if (import.meta.vitest) {
         });
       });
 
-      it("refuses Use anyway for a URL another tab saved meanwhile", async () => {
+      it("refuses Use anyway for an entry another tab saved meanwhile", async () => {
         const checked = await saveCheckedWithout(healthOf("no_answer"))(
           TRITON,
           undefined
         );
         if (checked.kind !== "unreachable") throw new Error(checked.kind);
-        PgCustomRpcs.save({ name: "Elsewhere", url: TRITON.url });
+        PgCustomRpcs.save(TRITON);
         expect(checked.useAnyway()).toEqual({
           ok: false,
           reason: "duplicate",
-          name: "Elsewhere",
+          name: "Triton",
         });
         expect(PgCustomRpcs.list()).toHaveLength(1);
       });

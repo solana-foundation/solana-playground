@@ -116,7 +116,10 @@ const isAddress = (value: unknown): value is string => {
 
 /**
  * Settings as they go into `localStorage`: an address we provide becomes
- * its option's key, so rotating it in the env reaches every profile.
+ * its option's key, so rotating it in the env reaches every profile. An
+ * address whose key reads back as another one is stored as custom: the
+ * public Devnet picked as a custom RPC beside Devnet on a platform RPC
+ * (HOO-2690) must stay the public one after a reload.
  *
  * @param state the settings in memory
  * @param options the addresses we provide
@@ -129,7 +132,9 @@ export const toStoredEndpoints = (
     (acc, id) =>
       mapSetting(acc, id, (url): StoredEndpoint => {
         const known = options[id].find((o) => o.url === url);
-        return known
+        const readsBack =
+          known && options[id].find((o) => o.key === known.key)?.url === url;
+        return readsBack
           ? { option: known.key }
           : { option: "custom", url: url as string };
       }),
@@ -647,28 +652,35 @@ if (import.meta.vitest) {
         }
       );
 
-      it("stores a public URL under the offered network's key", () => {
-        for (const [url, option] of [
-          [Endpoint.DEVNET, "devnet"],
-          [Endpoint.MAINNET_BETA, "mainnet-beta"],
-        ]) {
+      it("stores a public URL picked beside the offered network as custom", () => {
+        // HOO-2690: the public Devnet saved as a custom RPC while Devnet is
+        // on a platform RPC; its key would read back as the platform one
+        for (const url of [Endpoint.DEVNET, Endpoint.MAINNET_BETA]) {
           expect(
             at(
               toStoredEndpoints(state(url, LOCAL_ENDPOINT), options),
               "connection.endpoint"
             )
-          ).toEqual({ option });
+          ).toEqual({ option: "custom", url });
         }
       });
 
-      it("moves a profile on a public URL to the offered network", () => {
+      it("keeps a public URL saved as a custom RPC, slash and all, across a reload", () => {
+        // A saved RPC holds its URL normalised, as `PgCustomRpcs` stores it
+        const picked = new URL(Endpoint.DEVNET).href;
+        expect(
+          roundTrip(state(picked, LOCAL_ENDPOINT)).connection.endpoint
+        ).toBe(picked);
+      });
+
+      it("keeps a profile on a public URL there across a reload", () => {
         expect(
           roundTrip(state(Endpoint.DEVNET, LOCAL_ENDPOINT)).connection.endpoint
-        ).toBe(PLATFORM_DEVNET);
+        ).toBe(Endpoint.DEVNET);
         expect(
           roundTrip(state(Endpoint.MAINNET_BETA, LOCAL_ENDPOINT)).connection
             .endpoint
-        ).toBe(PLATFORM_MAINNET);
+        ).toBe(Endpoint.MAINNET_BETA);
       });
 
       it("moves a profile that stored a public URL as a plain string to the offered network", () => {

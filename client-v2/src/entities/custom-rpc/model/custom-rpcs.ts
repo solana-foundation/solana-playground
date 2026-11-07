@@ -22,6 +22,9 @@ export const RPC_NAME_MAX = 32;
 /** `localStorage` key of the saved list */
 const KEY = "customRpcs";
 
+/** `localStorage` key of the network chip picked last, see `PgCustomRpcs.chosen` */
+const CHOSEN_KEY = "customRpcChosen";
+
 /**
  * Whether a typed value may be saved as an RPC (spec `client-v2-custom-rpcs`): `https://`, or
  * `http://` on `localhost` or `127.0.0.1`, and nothing else. A saved URL is
@@ -62,16 +65,16 @@ const normalised = (value: string) => {
 };
 
 /**
- * The addresses the network chips already offer, normalised, under the
- * offered network's name: the configured Devnet and Mainnet, and the public
- * ones, which `stored-endpoint.ts` reads back as them. None is saved or
- * adopted as a custom RPC: it would be a second chip for one network.
+ * The network chips, Devnet and Mainnet, each under its normalised address.
+ * A custom RPC may use a chip's address under a name of its own (HOO-2690:
+ * Devnet on a platform RPC, the public Devnet beside it); only a copy of a
+ * chip, its name and its address, is refused. An endpoint a chip offers is
+ * never adopted: its chip lists it already.
  */
-const OFFERED = new Map<string, string>([
-  ...NETWORKS.map((n) => [normalised(n.value), n.name] as const),
-  [normalised(Endpoint.DEVNET), clusterName("devnet")],
-  [normalised(Endpoint.MAINNET_BETA), clusterName("mainnet-beta")],
-]);
+const CHIPS: ReadonlyArray<CustomRpc> = NETWORKS.map((n) => ({
+  name: n.name,
+  url: normalised(n.value),
+}));
 
 /** Clusters with no chip of their own, named as the cluster when listed */
 const CLUSTERS = new Map<string, string>([
@@ -81,7 +84,8 @@ const CLUSTERS = new Map<string, string>([
 
 /**
  * A save's result: the stored RPC, a value refused before anything is
- * written (`format`, `duplicate`), or a write the browser refused (`storage`)
+ * written (`format`; `duplicate`, an entry with this name and this URL
+ * already, a chip or a saved RPC), or a write the browser refused (`storage`)
  */
 export type SaveResult =
   | { ok: true; rpc: CustomRpc }
@@ -92,12 +96,20 @@ export type SaveResult =
 /** Why nothing was saved: a refusal, or a stored list that cannot be read */
 export type Refused = Exclude<SaveResult, { ok: true }>;
 
+/**
+ * Whether two entries are one: the same name and the same URL. Either alone
+ * may repeat, so the pair is what an edit or a remove names.
+ */
+export const isSameRpc = (a: CustomRpc, b: CustomRpc): boolean =>
+  a.name === b.name && a.url === b.url;
+
 /** A listed RPC's name when the user gave none: its cluster's, else its host */
 const defaultName = (url: string) => CLUSTERS.get(url) ?? hostOf(url);
 
 /** Name a stored or typed entry: trimmed, capped, a default when empty */
 const nameOf = (name: string, url: string) =>
-  name.trim().slice(0, RPC_NAME_MAX) || defaultName(url);
+  // Trimmed again after the cap, so a name reads the same on every save
+  name.trim().slice(0, RPC_NAME_MAX).trim() || defaultName(url);
 
 /**
  * The stored list, keeping each valid RPC once; `undefined` when the stored
@@ -135,17 +147,14 @@ const readStored = (): CustomRpc[] | undefined => {
   for (const entry of parsed) {
     const { name, url } = (entry ?? {}) as { name?: unknown; url?: unknown };
     const check = typeof url === "string" ? checkRpcUrl(url) : undefined;
-    if (
-      !check?.ok ||
-      OFFERED.has(check.url) ||
-      list.some((r) => r.url === check.url)
-    ) {
-      continue;
-    }
-    list.push({
+    if (!check?.ok) continue;
+    const rpc = {
       name: nameOf(typeof name === "string" ? name : "", check.url),
       url: check.url,
-    });
+    };
+    const copy = (r: CustomRpc) => isSameRpc(r, rpc);
+    if (CHIPS.some(copy) || list.some(copy)) continue;
+    list.push(rpc);
   }
   if (list.length < parsed.length) {
     log.warn("dropped saved custom RPCs that are not valid", {
@@ -177,39 +186,45 @@ const write = (list: CustomRpc[]): boolean => {
 };
 
 /**
- * Whether `input` may be saved over the entry under `replacing` (a new one
- * when `undefined`): the URL rule, then neither a chip's address nor another
- * saved RPC's. Answers the normalised URL; writes nothing.
+ * Whether `input` may be saved over the entry `replacing` (a new one when
+ * `undefined`): the URL rule, then no chip and no other saved RPC with both
+ * its name and its URL. Any URL passes on its own, a chip's included.
+ * Answers the entry as it would be saved; writes nothing.
  */
 const checkSave = (
   input: CustomRpc,
-  replacing: string | undefined
-): { ok: true; url: string; list: CustomRpc[] } | Refused => {
+  replacing: CustomRpc | undefined
+): { ok: true; rpc: CustomRpc; list: CustomRpc[] } | Refused => {
   const url = checkRpcUrl(input.url);
   if (!url.ok) return url;
+  const rpc = { name: nameOf(input.name, url.url), url: url.url };
 
-  const network = OFFERED.get(url.url);
-  if (network) return { ok: false, reason: "duplicate", name: network };
+  const chip = CHIPS.find((r) => isSameRpc(r, rpc));
+  if (chip) return { ok: false, reason: "duplicate", name: chip.name };
   // A stored value that does not read as a list is left alone, never
   // replaced by a list holding only this entry
   const list = readStored();
   if (!list) return { ok: false, reason: "storage" };
-  const taken = list.find((r) => r.url === url.url && r.url !== replacing);
+  const taken = list.find(
+    (r) => isSameRpc(r, rpc) && !(replacing && isSameRpc(r, replacing))
+  );
   if (taken) return { ok: false, reason: "duplicate", name: taken.name };
-  return { ok: true, url: url.url, list };
+  return { ok: true, rpc, list };
 };
 
 /**
- * Save `input` over the entry saved under `replacing`, or as a new one when
- * none is saved there (another tab may have removed it)
+ * Save `input` over the entry `replacing`, or as a new one when none is
+ * saved as it (another tab may have removed it)
  */
-const put = (input: CustomRpc, replacing: string | undefined): SaveResult => {
+const put = (
+  input: CustomRpc,
+  replacing: CustomRpc | undefined
+): SaveResult => {
   const checked = checkSave(input, replacing);
   if (!checked.ok) return checked;
-  const { list } = checked;
+  const { list, rpc } = checked;
 
-  const rpc = { name: nameOf(input.name, checked.url), url: checked.url };
-  const at = list.findIndex((r) => r.url === replacing);
+  const at = replacing ? list.findIndex((r) => isSameRpc(r, replacing)) : -1;
   if (at === -1) list.push(rpc);
   else list[at] = rpc;
   if (!write(list)) return { ok: false, reason: "storage" };
@@ -227,10 +242,10 @@ export const PgCustomRpcs = {
    */
   check(
     input: CustomRpc,
-    replacing: string | undefined
+    replacing: CustomRpc | undefined
   ): { ok: true; url: string } | Refused {
     const checked = checkSave(input, replacing);
-    return checked.ok ? { ok: true, url: checked.url } : checked;
+    return checked.ok ? { ok: true, url: checked.rpc.url } : checked;
   },
 
   /** Save a new RPC; an empty name saves as `defaultName` gives it */
@@ -238,23 +253,23 @@ export const PgCustomRpcs = {
     return put(input, undefined);
   },
 
-  /** Replace the RPC saved under `url` in place, under the same rules */
-  replace(url: string, input: CustomRpc): SaveResult {
-    return put(input, url);
+  /** Replace the saved `rpc` in place, under the same rules */
+  replace(rpc: CustomRpc, input: CustomRpc): SaveResult {
+    return put(input, rpc);
   },
 
   /**
-   * Remove the RPC saved under `url`. Answers it with its index, for
-   * `restore`, or `undefined` when none is saved there or the browser
-   * refused the write.
+   * Remove the saved `rpc`, matched by name and URL. Answers it with its
+   * index, for `restore`, or `undefined` when none is saved as it or the
+   * browser refused the write.
    */
-  remove(url: string): { rpc: CustomRpc; index: number } | undefined {
+  remove(rpc: CustomRpc): { rpc: CustomRpc; index: number } | undefined {
     const list = readStored();
     if (!list) return undefined;
-    const index = list.findIndex((r) => r.url === url);
+    const index = list.findIndex((r) => isSameRpc(r, rpc));
     if (index === -1) return undefined;
-    const [rpc] = list.splice(index, 1);
-    return write(list) ? { rpc, index } : undefined;
+    const [removed] = list.splice(index, 1);
+    return write(list) ? { rpc: removed, index } : undefined;
   },
 
   /**
@@ -264,13 +279,13 @@ export const PgCustomRpcs = {
   restore(rpc: CustomRpc, index: number): boolean {
     const stored = readStored();
     if (!stored) return false;
-    const list = stored.filter((r) => r.url !== rpc.url);
+    const list = stored.filter((r) => !isSameRpc(r, rpc));
     list.splice(Math.min(index, list.length), 0, rpc);
     return write(list);
   },
 
   /**
-   * List the connection's endpoint when no chip offers it, named by its
+   * List the connection's endpoint when nothing offers it, named by its
    * host (or its cluster: Testnet, Localnet), so a profile on a custom URL
    * from before, or one set elsewhere, sees it. Answers the URL it is listed
    * under, which may be spelled differently from `endpoint`; `undefined`
@@ -278,7 +293,7 @@ export const PgCustomRpcs = {
    */
   adopt(endpoint: string): string | undefined {
     const check = checkRpcUrl(endpoint);
-    if (!check.ok || OFFERED.has(check.url)) return undefined;
+    if (!check.ok || CHIPS.some((r) => r.url === check.url)) return undefined;
     // Opening Settings must not write over a list that does not read
     const list = readStored();
     if (!list) return undefined;
@@ -286,6 +301,33 @@ export const PgCustomRpcs = {
     return write([...list, { name: defaultName(check.url), url: check.url }])
       ? check.url
       : undefined;
+  },
+
+  /**
+   * The network chip picked or saved last, as the Network row keys it, so
+   * it stays checked after a reload when other chips share its URL;
+   * `undefined` when none is stored or it cannot be read
+   */
+  chosen(): string | undefined {
+    try {
+      return localStorage.getItem(CHOSEN_KEY) ?? undefined;
+    } catch (error) {
+      log.warn("could not read the picked network chip", {
+        context: { error: String(error) },
+      });
+      return undefined;
+    }
+  },
+
+  /** Store the chip picked last; a refused write only loses it on reload */
+  choose(key: string): void {
+    try {
+      localStorage.setItem(CHOSEN_KEY, key);
+    } catch (error) {
+      log.warn("could not store the picked network chip", {
+        context: { error: String(error) },
+      });
+    }
   },
 
   /** Fires on every change, this tab's or another's, a `clear()` included */
@@ -315,9 +357,18 @@ if (import.meta.vitest) {
 
     const add = (name: string, url: string) => PgCustomRpcs.save({ name, url });
 
+    /** The saved entry named `name` */
+    const at = (name: string): CustomRpc => {
+      const rpc = PgCustomRpcs.list().find((r) => r.name === name);
+      if (!rpc) throw new Error(`not listed: ${name}`);
+      return rpc;
+    };
+
     /** Remove, then restore, as the toast's Undo does */
     const removeAndRestore = (url: string) => {
-      const removed = PgCustomRpcs.remove(url);
+      const removed = PgCustomRpcs.remove(
+        PgCustomRpcs.list().find((r) => r.url === url) ?? { name: "", url }
+      );
       if (!removed) throw new Error(`not listed: ${url}`);
       PgCustomRpcs.restore(removed.rpc, removed.index);
     };
@@ -369,6 +420,15 @@ if (import.meta.vitest) {
       expect(PgCustomRpcs.list()[0].name).toBe("x".repeat(32));
     });
 
+    it("trims a name again after the cap, so the same name is refused as a copy", () => {
+      const name = `${"x".repeat(31)} y`;
+      expect(add(name, "https://a.test").ok).toBe(true);
+      expect(PgCustomRpcs.list()[0].name).toBe("x".repeat(31));
+      expect(add(name, "https://a.test")).toMatchObject({
+        reason: "duplicate",
+      });
+    });
+
     it("refuses a URL that fails the rule, and saves nothing", () => {
       expect(add("", "http://api.devnet.solana.com")).toEqual({
         ok: false,
@@ -377,13 +437,30 @@ if (import.meta.vitest) {
       expect(PgCustomRpcs.list()).toEqual([]);
     });
 
-    it("refuses a URL already saved, compared as a URL, naming the saved one", () => {
+    it("refuses an entry already saved, its name and its URL compared as a URL", () => {
       add("Helius", "https://rpc.example.com/");
-      expect(add("", "https://RPC.example.com")).toEqual({
+      expect(add(" Helius ", "https://RPC.example.com")).toEqual({
         ok: false,
         reason: "duplicate",
         name: "Helius",
       });
+      add("", "https://b.test");
+      expect(add("", "https://B.test/")).toEqual({
+        ok: false,
+        reason: "duplicate",
+        name: "b.test",
+      });
+    });
+
+    it("saves a URL already saved under another name, and a name under another URL", () => {
+      add("Helius", "https://rpc.example.com/");
+      expect(add("Helius backup", "https://rpc.example.com").ok).toBe(true);
+      expect(add("Helius", "https://other.example.com").ok).toBe(true);
+      expect(PgCustomRpcs.list()).toEqual([
+        { name: "Helius", url: "https://rpc.example.com/" },
+        { name: "Helius backup", url: "https://rpc.example.com/" },
+        { name: "Helius", url: "https://other.example.com/" },
+      ]);
     });
 
     it("keeps the order of saving, and persists across a fresh read", () => {
@@ -400,7 +477,7 @@ if (import.meta.vitest) {
     it("replaces an edited entry in place", () => {
       add("A", "https://a.test");
       add("B", "https://b.test");
-      const edited = PgCustomRpcs.replace("https://a.test/", {
+      const edited = PgCustomRpcs.replace(at("A"), {
         name: "A2",
         url: "https://a2.test",
       });
@@ -411,21 +488,35 @@ if (import.meta.vitest) {
       ]);
     });
 
-    it("lets an edit keep its own URL, but not take another's", () => {
+    it("lets an edit keep itself, take another's URL, but not become another entry", () => {
       add("A", "https://a.test");
       add("B", "https://b.test");
       expect(
-        PgCustomRpcs.replace("https://a.test/", {
-          name: "A!",
-          url: "https://a.test",
-        }).ok
+        PgCustomRpcs.replace(at("A"), { name: "A", url: "https://a.test" }).ok
       ).toBe(true);
       expect(
-        PgCustomRpcs.replace("https://a.test/", {
-          name: "A",
-          url: "https://b.test",
-        })
+        PgCustomRpcs.replace(at("A"), { name: "A", url: "https://b.test" }).ok
+      ).toBe(true);
+      expect(
+        PgCustomRpcs.replace(at("A"), { name: "B", url: "https://b.test" })
       ).toEqual({ ok: false, reason: "duplicate", name: "B" });
+      expect(PgCustomRpcs.list()).toEqual([
+        { name: "A", url: "https://b.test/" },
+        { name: "B", url: "https://b.test/" },
+      ]);
+    });
+
+    it("edits and removes the entry named, when another shares its URL", () => {
+      add("A", "https://same.test");
+      add("B", "https://same.test");
+      PgCustomRpcs.replace(at("B"), { name: "B2", url: "https://same.test" });
+      expect(PgCustomRpcs.remove(at("A"))).toEqual({
+        rpc: { name: "A", url: "https://same.test/" },
+        index: 0,
+      });
+      expect(PgCustomRpcs.list()).toEqual([
+        { name: "B2", url: "https://same.test/" },
+      ]);
     });
 
     it("restores a removed entry where it was", () => {
@@ -433,7 +524,7 @@ if (import.meta.vitest) {
       add("B", "https://b.test");
       add("C", "https://c.test");
       const before = PgCustomRpcs.list();
-      expect(PgCustomRpcs.remove("https://b.test/")).toEqual({
+      expect(PgCustomRpcs.remove(at("B"))).toEqual({
         rpc: { name: "B", url: "https://b.test/" },
         index: 1,
       });
@@ -450,35 +541,40 @@ if (import.meta.vitest) {
         expect(PgCustomRpcs.list()).toEqual([]);
       });
 
-      it("refuses as save would: the URL rule, a chip's address, another saved RPC", () => {
+      it("refuses as save would: the URL rule, a copy of a chip, of another saved RPC", () => {
         add("A", "https://a.test");
         expect(
           PgCustomRpcs.check({ name: "", url: "devnet" }, undefined)
         ).toEqual({ ok: false, reason: "format" });
         expect(
           PgCustomRpcs.check(
-            { name: "", url: "https://api.mainnet-beta.solana.com" },
+            { name: NETWORKS[1].name, url: NETWORKS[1].value },
             undefined
           )
         ).toEqual({ ok: false, reason: "duplicate", name: "Mainnet" });
         expect(
-          PgCustomRpcs.check({ name: "", url: "https://a.test" }, undefined)
+          PgCustomRpcs.check({ name: "A", url: "https://a.test" }, undefined)
         ).toEqual({ ok: false, reason: "duplicate", name: "A" });
       });
 
-      it("lets an edit keep its own URL", () => {
+      it("lets an edit keep itself", () => {
         add("A", "https://a.test");
         expect(
-          PgCustomRpcs.check(
-            { name: "A2", url: "https://a.test" },
-            "https://a.test/"
-          )
+          PgCustomRpcs.check({ name: "A", url: "https://a.test" }, at("A"))
         ).toEqual({ ok: true, url: "https://a.test/" });
       });
     });
 
+    it("keeps the chip picked last across a fresh read", () => {
+      expect(PgCustomRpcs.chosen()).toBeUndefined();
+      PgCustomRpcs.choose("Mine\nhttps://a.test/");
+      expect(PgCustomRpcs.chosen()).toBe("Mine\nhttps://a.test/");
+    });
+
     it("answers undefined when removing a URL that is not listed", () => {
-      expect(PgCustomRpcs.remove("https://none.test/")).toBeUndefined();
+      expect(
+        PgCustomRpcs.remove({ name: "none", url: "https://none.test/" })
+      ).toBeUndefined();
     });
 
     it.each([
@@ -536,10 +632,17 @@ if (import.meta.vitest) {
         ]);
       });
 
+      it("leaves an endpoint out when a saved RPC lists it, under any name", () => {
+        add("Mine", "https://own.test");
+        expect(PgCustomRpcs.adopt("https://own.test")).toBe(
+          "https://own.test/"
+        );
+        expect(PgCustomRpcs.list()).toHaveLength(1);
+      });
+
       it.each([
         ["the offered Devnet", () => NETWORKS[0].value],
-        ["the public Devnet", () => "https://api.devnet.solana.com"],
-        ["the public Mainnet", () => "https://api.mainnet-beta.solana.com/"],
+        ["the offered Mainnet", () => NETWORKS[1].value],
         ["Playnet", () => "http://playnet"],
         ["a value that is not an RPC", () => "devnet"],
       ])("leaves %s out", (_, endpoint) => {
@@ -548,31 +651,54 @@ if (import.meta.vitest) {
       });
     });
 
-    it("refuses an address the network chips already offer, naming its network", () => {
-      expect(add("", "https://api.mainnet-beta.solana.com")).toEqual({
-        ok: false,
-        reason: "duplicate",
-        name: "Mainnet",
-      });
-      expect(add("", NETWORKS[0].value)).toEqual({
+    it("saves a chip's address under a name of its own, and the public Devnet beside Devnet", () => {
+      expect(add("My Devnet", NETWORKS[0].value).ok).toBe(true);
+      expect(add("", NETWORKS[1].value).ok).toBe(true);
+      expect(add("Public Devnet", "https://api.devnet.solana.com").ok).toBe(
+        true
+      );
+      expect(PgCustomRpcs.list().map((r) => r.name)).toEqual([
+        "My Devnet",
+        hostOf(NETWORKS[1].value),
+        "Public Devnet",
+      ]);
+    });
+
+    it("refuses a copy of a chip, its name and its address, naming its network", () => {
+      expect(add("Devnet", NETWORKS[0].value)).toEqual({
         ok: false,
         reason: "duplicate",
         name: "Devnet",
       });
     });
 
-    it("reads stored names trimmed, capped and never empty, and each URL once", () => {
+    it("drops a stored copy of a chip, and keeps its address under another name", () => {
+      localStorage.setItem(
+        "customRpcs",
+        JSON.stringify([
+          { name: "Mine", url: NETWORKS[0].value },
+          { name: "Devnet", url: NETWORKS[0].value },
+        ])
+      );
+      expect(PgCustomRpcs.list()).toEqual([
+        { name: "Mine", url: new URL(NETWORKS[0].value).href },
+      ]);
+    });
+
+    it("reads stored names trimmed, capped and never empty, and each entry once", () => {
       localStorage.setItem(
         "customRpcs",
         JSON.stringify([
           { name: "  ", url: "https://a.test" },
           { name: "x".repeat(40), url: "https://b.test" },
           { name: "again", url: "https://A.test/" },
+          { name: "a.test", url: "https://A.test/" },
         ])
       );
       expect(PgCustomRpcs.list()).toEqual([
         { name: "a.test", url: "https://a.test/" },
         { name: "x".repeat(32), url: "https://b.test/" },
+        { name: "again", url: "https://a.test/" },
       ]);
     });
 
@@ -600,7 +726,7 @@ if (import.meta.vitest) {
         vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
           throw new DOMException("full", "QuotaExceededError");
         });
-        expect(PgCustomRpcs.remove("https://a.test/")).toBeUndefined();
+        expect(PgCustomRpcs.remove(at("A"))).toBeUndefined();
       });
 
       it("reads none when reading throws", () => {

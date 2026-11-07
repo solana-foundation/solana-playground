@@ -103,6 +103,151 @@ describe("NetworkSection", () => {
     expect(state.endpoint).toBe("https://dead.test/");
   });
 
+  it("saves Devnet's URL under a name of its own, beside the Devnet chip", async () => {
+    stubRpcAnswering();
+    render(<NetworkSection />);
+    await addRpc("Public Devnet", DEVNET);
+    expect(
+      await screen.findByRole("radio", { name: "Public Devnet" })
+    ).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Devnet" })).toBeTruthy();
+    expect(PgCustomRpcs.list()).toEqual([
+      { name: "Public Devnet", url: DEVNET },
+    ]);
+    // The new chip is the one checked, though Devnet shares its URL
+    expect(
+      screen
+        .getByRole("radio", { name: "Public Devnet" })
+        .getAttribute("aria-checked")
+    ).toBe("true");
+    expect(
+      screen.getByRole("radio", { name: "Devnet" }).getAttribute("aria-checked")
+    ).toBe("false");
+  });
+
+  it("refuses an entry with the name and the URL of one saved", async () => {
+    stubRpcAnswering();
+    render(<NetworkSection />);
+    await addRpc("Helius", "https://helius.test");
+    await screen.findByRole("radio", { name: "Helius" });
+    await addRpc("Helius", "https://HELIUS.test/");
+    expect(await screen.findByText("Already saved as Helius.")).toBeTruthy();
+    expect(PgCustomRpcs.list()).toHaveLength(1);
+  });
+
+  it("checks the chip picked before the reload, though another shares its URL", () => {
+    localStorage.setItem(
+      "customRpcs",
+      JSON.stringify([
+        { name: "First", url: DEVNET },
+        { name: "Public Devnet", url: DEVNET },
+      ])
+    );
+    localStorage.setItem("customRpcChosen", `Public Devnet\n${DEVNET}`);
+    render(<NetworkSection />);
+    const checked = screen
+      .getAllByRole("radio")
+      .filter((r) => r.getAttribute("aria-checked") === "true")
+      .map((r) => r.textContent);
+    expect(checked).toEqual(["Public Devnet"]);
+  });
+
+  it("stores the chip clicked, and checks it again after a remount", async () => {
+    localStorage.setItem(
+      "customRpcs",
+      JSON.stringify([
+        { name: "A", url: "https://same.test/" },
+        { name: "B", url: "https://same.test/" },
+      ])
+    );
+    state.endpoint = "https://same.test/";
+    const { unmount } = render(<NetworkSection />);
+    await userEvent.click(screen.getByRole("radio", { name: "B" }));
+    expect(PgCustomRpcs.chosen()).toBe("B\nhttps://same.test/");
+    unmount();
+    render(<NetworkSection />);
+    expect(
+      screen.getByRole("radio", { name: "B" }).getAttribute("aria-checked")
+    ).toBe("true");
+  });
+
+  it("keeps the network when the RPC removed shares its URL with another", async () => {
+    localStorage.setItem(
+      "customRpcs",
+      JSON.stringify([
+        { name: "A", url: "https://same.test/" },
+        { name: "B", url: "https://same.test/" },
+      ])
+    );
+    state.endpoint = "https://same.test/";
+    render(<NetworkSection />);
+    await userEvent.click(screen.getByRole("button", { name: "Remove A" }));
+    expect(PgCustomRpcs.list()).toEqual([
+      { name: "B", url: "https://same.test/" },
+    ]);
+    expect(state.endpoint).toBe("https://same.test/");
+  });
+
+  it("keeps the network when a chip on its URL that is not the checked one is edited", async () => {
+    localStorage.setItem(
+      "customRpcs",
+      JSON.stringify([
+        { name: "A", url: "https://same.test/" },
+        { name: "B", url: "https://same.test/" },
+      ])
+    );
+    state.endpoint = "https://same.test/";
+    stubRpcAnswering();
+    render(<NetworkSection />);
+    // A is the checked chip: the first on the URL
+    await userEvent.click(screen.getByRole("button", { name: "Edit B" }));
+    await userEvent.clear(screen.getByLabelText("RPC URL"));
+    await userEvent.type(
+      screen.getByLabelText("RPC URL"),
+      "https://b2.test{Enter}"
+    );
+    await waitFor(() => expect(screen.queryByLabelText("RPC URL")).toBeNull());
+    expect(state.endpoint).toBe("https://same.test/");
+    expect(PgCustomRpcs.list()).toEqual([
+      { name: "A", url: "https://same.test/" },
+      { name: "B", url: "https://b2.test/" },
+    ]);
+  });
+
+  it("moves the network with the checked chip when it is edited", async () => {
+    localStorage.setItem(
+      "customRpcs",
+      JSON.stringify([
+        { name: "A", url: "https://same.test/" },
+        { name: "B", url: "https://same.test/" },
+      ])
+    );
+    state.endpoint = "https://same.test/";
+    stubRpcAnswering();
+    render(<NetworkSection />);
+    await userEvent.click(screen.getByRole("radio", { name: "B" }));
+    // A click on a chip on the URL in use moves the check only
+    expect(state.endpoint).toBe("https://same.test/");
+    await userEvent.click(screen.getByRole("button", { name: "Edit B" }));
+    await userEvent.clear(screen.getByLabelText("RPC URL"));
+    await userEvent.type(
+      screen.getByLabelText("RPC URL"),
+      "https://b2.test{Enter}"
+    );
+    await waitFor(() => expect(state.endpoint).toBe("https://b2.test/"));
+  });
+
+  it("lands on Devnet when the RPC removed is on Devnet's address spelt with a slash", async () => {
+    localStorage.setItem(
+      "customRpcs",
+      JSON.stringify([{ name: "Mine", url: DEVNET }])
+    );
+    render(<NetworkSection />);
+    await userEvent.click(screen.getByRole("button", { name: "Remove Mine" }));
+    expect(PgCustomRpcs.list()).toEqual([]);
+    expect(state.endpoint).toBe(DEFAULT_ENDPOINT);
+  });
+
   it("leaves the connection alone when an RPC not in use is edited", async () => {
     localStorage.setItem(
       "customRpcs",

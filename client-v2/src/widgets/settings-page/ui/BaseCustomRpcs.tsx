@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { useId, useState } from "react";
 
 import type { CustomRpc } from "@/entities/custom-rpc";
-import { hostOf, RPC_NAME_MAX } from "@/entities/custom-rpc";
+import { hostOf, isSameRpc, RPC_NAME_MAX } from "@/entities/custom-rpc";
 import { createLogger } from "@/shared/lib/logger";
 import { Button } from "@/shared/ui/button";
 import {
@@ -40,8 +40,14 @@ interface BaseCustomRpcsProps {
 /** The `client-v2-custom-rpcs` spec's help line for a custom RPC */
 const HELP = "Any Solana RPC URL. It stays in this browser.";
 
-/** Which form is open: none, a new RPC's, or the edit of the one at this URL */
-type Editing = undefined | "new" | { url: string };
+/**
+ * Which form is open: none, a new RPC's, or the edit of this saved one,
+ * named by its name and URL, since either alone may repeat
+ */
+type Editing = undefined | "new" | { rpc: CustomRpc };
+
+/** A row's key: its name and URL, unique in the list */
+const keyOf = (rpc: CustomRpc) => `${rpc.name}\n${rpc.url}`;
 
 /**
  * The saved custom RPCs under the network chips, each with Edit and Remove,
@@ -68,8 +74,8 @@ const BaseCustomRpcs = ({
       {rpcs.length > 0 && (
         <ul aria-label="Custom RPCs" className="flex flex-col">
           {rpcs.map((rpc) =>
-            typeof editing === "object" && editing.url === rpc.url ? (
-              <li key={rpc.url}>
+            typeof editing === "object" && isSameRpc(editing.rpc, rpc) ? (
+              <li key={keyOf(rpc)}>
                 <RpcForm
                   initial={rpc}
                   onSave={(input) => onEdit(rpc, input)}
@@ -79,7 +85,7 @@ const BaseCustomRpcs = ({
               </li>
             ) : (
               <li
-                key={rpc.url}
+                key={keyOf(rpc)}
                 className="flex items-center gap-2 border-b border-border py-1.5"
               >
                 <span className="flex min-w-0 flex-1 flex-col">
@@ -96,7 +102,7 @@ const BaseCustomRpcs = ({
                   aria-label={`Edit ${rpc.name}`}
                   className="max-md:size-12"
                   disabled={isChecking}
-                  onClick={() => setEditing({ url: rpc.url })}
+                  onClick={() => setEditing({ rpc })}
                 >
                   <Pencil />
                 </Button>
