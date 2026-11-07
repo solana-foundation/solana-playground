@@ -47,11 +47,92 @@ export const checkRpcUrl = (value: string): UrlCheck => {
   return { ok: true, url: url.href };
 };
 
-/**
- * What the page shows of a saved RPC's URL: its host, never the path or
- * query, which often carry a provider's API key
- */
+/** A URL's host, port included: an unnamed RPC's default name */
 export const hostOf = (url: string): string => new URL(url).host;
+
+/** What stands for a secret: four dots, whatever the secret's length */
+const MASK = "••••";
+
+/** A query name a provider puts a key under (`api-key`, `apiKey`, `access_token`…) */
+const KEY_NAME = /key|token|secret|auth|pass|sig|credential/i;
+
+/**
+ * A value that reads as a token: 16 or more characters a key is written in
+ * (letters, digits, `-`, `_`, `.`, `~`, `+`, `=`, `%`, so JWTs and base64
+ * too), with a digit, or 24 or more in mixed case. A long slug with a digit
+ * is masked as well: hiding a word is cheaper than showing a key.
+ */
+const isTokenLike = (value: string) =>
+  /^[\w.~+=%-]{16,}$/.test(value) &&
+  (/\d/.test(value) ||
+    (value.length >= 24 && /[a-z]/.test(value) && /[A-Z]/.test(value)));
+
+/** A saved RPC's URL as the page draws it, and whether anything was masked */
+export interface MaskedUrl {
+  /** For display only: never parse or fetch it, its secrets are `••••` */
+  text: string;
+  /** Whether anything was masked, which the "API key" badge says */
+  masked: boolean;
+}
+
+/** What a stored value that is not a URL shows: nothing of it */
+const UNREADABLE: MaskedUrl = { text: MASK, masked: true };
+
+/**
+ * A saved RPC's whole URL with every secret in it as `••••` (spec
+ * `client-v2-custom-rpcs`): a non-empty query value under a key-like name;
+ * a host label, path segment, query value or bare query term, or fragment
+ * that looks like a token; and a username and password. Built from the
+ * parsed URL's parts split by hand, not `URLSearchParams`, so names keep
+ * their spelling and `••••` is never percent-encoded.
+ */
+export const maskRpcUrl = (url: string): MaskedUrl => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // Never the value, nor the error quoting it: it may be a key
+    log.info("a saved RPC URL does not parse; drawn fully masked");
+    return UNREADABLE;
+  }
+  let masked = false;
+  const mask = () => {
+    masked = true;
+    return MASK;
+  };
+  /** The part itself, or `••••` when it reads as a token */
+  const maskToken = (part: string) => (isTokenLike(part) ? mask() : part);
+
+  // A username and a password, either or both, show as one `••••`
+  const auth = parsed.username || parsed.password ? `${mask()}@` : "";
+  const host =
+    parsed.hostname.split(".").map(maskToken).join(".") +
+    (parsed.port ? `:${parsed.port}` : "");
+  const path = parsed.pathname.split("/").map(maskToken).join("/");
+  const query = parsed.search
+    ? "?" +
+      parsed.search
+        .slice(1)
+        .split("&")
+        .map((pair) => {
+          const at = pair.indexOf("=");
+          if (at < 0) return maskToken(pair);
+          const name = pair.slice(0, at);
+          const value = pair.slice(at + 1);
+          const secret =
+            value !== "" && (KEY_NAME.test(name) || isTokenLike(value));
+          return `${name}=${secret ? mask() : value}`;
+        })
+        .join("&")
+    : "";
+  const hash = parsed.hash.slice(1);
+  const fragment = parsed.hash ? `#${maskToken(hash)}` : "";
+
+  return {
+    text: `${parsed.protocol}//${auth}${host}${path}${query}${fragment}`,
+    masked,
+  };
+};
 
 /** `new URL(value).href`, or the value itself when it is not a URL */
 const normalised = (value: string) => {
@@ -441,6 +522,94 @@ if (import.meta.vitest) {
         "rpc.example.com"
       );
       expect(hostOf("http://localhost:8899/")).toBe("localhost:8899");
+    });
+
+    describe("maskRpcUrl", () => {
+      it.each([
+        [
+          "https://devnet.helius-rpc.com/?api-key=abc",
+          "https://devnet.helius-rpc.com/?api-key=••••",
+        ],
+        [
+          "https://r.test/?apiKey=x&cluster=devnet",
+          "https://r.test/?apiKey=••••&cluster=devnet",
+        ],
+        ["https://r.test/?access_token=x", "https://r.test/?access_token=••••"],
+        [
+          "https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789",
+          "https://solana-mainnet.g.alchemy.com/v2/••••",
+        ],
+        [
+          "https://x.solana-mainnet.quiknode.pro/0123456789abcdef0123456789abcdef01234567/",
+          "https://x.solana-mainnet.quiknode.pro/••••/",
+        ],
+        [
+          "https://rpc.ankr.com/solana/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+          "https://rpc.ankr.com/solana/••••",
+        ],
+        ["https://r.test/?id=a1b2c3d4e5f6g7h8i9", "https://r.test/?id=••••"],
+        ["https://user:pass@r.test/", "https://••••@r.test/"],
+        ["https://r.test/#a1b2c3d4e5f6g7h8i9", "https://r.test/#••••"],
+        ["https://r.test/?a1b2c3d4e5f6g7h8i9", "https://r.test/?••••"],
+        // Every key-like name, each with a value too short to be a token
+        ["https://r.test/?secret=x", "https://r.test/?secret=••••"],
+        ["https://r.test/?auth=x", "https://r.test/?auth=••••"],
+        ["https://r.test/?passphrase=x", "https://r.test/?passphrase=••••"],
+        ["https://r.test/?sig=x", "https://r.test/?sig=••••"],
+        ["https://r.test/?credential=x", "https://r.test/?credential=••••"],
+        // A token at the 16-character floor, and in other spellings
+        ["https://r.test/a1b2c3d4e5f6g7h8", "https://r.test/••••"],
+        ["https://r.test/eyJhbGciOi.eyJzdWIiOjF9.c2ln", "https://r.test/••••"],
+        ["https://r.test/?id=ab%2Bcd%3D1234567890", "https://r.test/?id=••••"],
+        [
+          "https://r.test/v2/AbCdEfGhIjKlMnOpQrStUvWxYz",
+          "https://r.test/v2/••••",
+        ],
+        // A token in the subdomain; the port stays
+        [
+          "https://a1b2c3d4e5f6g7h8i9.rpc.test:8443/",
+          "https://••••.rpc.test:8443/",
+        ],
+        // A username alone, a password alone, and with a port
+        ["https://TOKEN@r.test/", "https://••••@r.test/"],
+        ["https://:pw@r.test/", "https://••••@r.test/"],
+        ["https://u:p@r.test:8899/", "https://••••@r.test:8899/"],
+        // A token path beside a key-named query
+        [
+          "https://r.test/a1b2c3d4e5f6g7h8i9/?api-key=k",
+          "https://r.test/••••/?api-key=••••",
+        ],
+      ])("masks the key in %s", (url, text) => {
+        expect(maskRpcUrl(url)).toEqual({ text, masked: true });
+      });
+
+      it.each([
+        "https://api.devnet.solana.com/",
+        "http://localhost:8899/",
+        "https://r.test/solana-mainnet-endpoint/?cluster=devnet",
+        // One short of the token floor, and long words with no digit
+        "https://r.test/a1b2c3d4e5f6g7h",
+        "https://r.test/solana-mainnet-endpoint-beta/",
+        // A key-like name with nothing in it, and a plain fragment
+        "https://r.test/?api-key=",
+        "https://r.test/#section",
+        "http://[::1]:8899/",
+      ])("shows %s in full", (url) => {
+        expect(maskRpcUrl(url)).toEqual({ text: url, masked: false });
+      });
+
+      it("draws a stored value that is not a URL fully masked", () => {
+        expect(maskRpcUrl("not a url s3cr3t")).toEqual({
+          text: "••••",
+          masked: true,
+        });
+      });
+
+      it("never draws the key's length", () => {
+        expect(maskRpcUrl("https://r.test/?key=a").text).toBe(
+          maskRpcUrl("https://r.test/?key=abcdefghijklmnopqrstuvwxyz").text
+        );
+      });
     });
 
     it("saves an unnamed RPC under its host", () => {

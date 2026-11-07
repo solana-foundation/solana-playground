@@ -61,15 +61,6 @@ A URL SHALL be saved only when it starts with `https://`, or with `http://` on `
 - **THEN** it is saved and picked, beside the other
 - **AND** its chip is the one checked
 
-### Requirement: A saved RPC shows only its host
-
-The list of saved RPCs (`aria-label="Custom RPCs"`) SHALL show each RPC's name and its URL's host, never its path or query, which can hold a provider key. The full URL SHALL appear only inside the edit field.
-
-#### Scenario: The key in a URL is never drawn
-
-- **WHEN** a saved RPC's URL is `https://rpc.example.com/?api-key=secret`
-- **THEN** the page shows `rpc.example.com` and no text containing `secret`, outside the edit field
-
 ### Requirement: Editing and removing a saved RPC
 
 Each saved RPC SHALL have an "Edit {name}" and a "Remove {name}" button. Edit SHALL open the form filled in and save under the same rules. Remove SHALL drop the RPC and show a toast "Removed {name}." with "Undo"; removing the picked RPC SHALL set the network to Devnet and say "Removed {name}. Network is Devnet now." Undo SHALL put the RPC back where it was and re-pick it if it was picked and the network is still Devnet. A remove or an Undo the browser cannot store SHALL say "Could not remove {name}." or "Could not put {name} back."
@@ -161,3 +152,23 @@ Chips MAY share a URL. When several list the URL in use, exactly one SHALL be ch
 - **WHEN** Devnet is on a platform RPC and a person saves `https://api.devnet.solana.com` as "Public Devnet"
 - **THEN** "Public Devnet" is checked and the network is the public Devnet
 - **AND** after a reload it still is
+
+### Requirement: A saved RPC shows its URL with its key masked
+
+The list of saved RPCs (`aria-label="Custom RPCs"`) SHALL show each RPC's name and its whole stored URL, with every secret in it replaced by `••••`, always four dots whatever the secret's length. A secret SHALL be: a non-empty query value whose name looks like a key (it contains `key`, `token`, `secret`, `auth`, `pass`, `sig` or `credential`, in any case); any host label, path segment, query value, bare query term or fragment that looks like a token, 16 or more of letters, digits, `-`, `_`, `.`, `~`, `+`, `=` or `%` with a digit, or 24 or more in mixed case; and a username or password. A stored value that is not a URL SHALL show as `••••` alone. When anything was masked, an "API key" badge SHALL show beside the URL. The stored URL SHALL not change, and the full URL SHALL appear only inside the edit field.
+
+#### Scenario: A key in the query is masked
+
+- **WHEN** a saved RPC's URL is `https://devnet.helius-rpc.com/?api-key=secret`
+- **THEN** the page shows `https://devnet.helius-rpc.com/?api-key=••••` and an "API key" badge
+- **AND** no text containing `secret`, outside the edit field
+
+#### Scenario: A key in the path is masked
+
+- **WHEN** a saved RPC's URL is `https://mainnet.rpc.test/v2/abc123def456ghi789`
+- **THEN** the page shows `https://mainnet.rpc.test/v2/••••` and an "API key" badge
+
+#### Scenario: A URL with no key shows in full
+
+- **WHEN** a saved RPC's URL is `https://rpc.example.com/`
+- **THEN** the page shows `https://rpc.example.com/` and no "API key" badge

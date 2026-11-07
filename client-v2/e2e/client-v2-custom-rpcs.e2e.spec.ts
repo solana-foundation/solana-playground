@@ -204,7 +204,7 @@ test("client-v2-custom-rpcs: A saved URL is accepted under another name", async 
   await expect(settings.getByText(/Already saved as/)).toHaveCount(0);
 });
 
-test("client-v2-custom-rpcs: The key in a URL is never drawn", async ({
+test("client-v2-custom-rpcs: A key in the query is masked", async ({
   seededPage: page,
 }) => {
   const settings = await openSettings(page);
@@ -212,10 +212,34 @@ test("client-v2-custom-rpcs: The key in a URL is never drawn", async ({
     name: "Helius",
     url: "https://helius.rpc.test/?api-key=secret",
   });
-  await expect(
-    settings.getByRole("list", { name: "Custom RPCs" })
-  ).toContainText("helius.rpc.test");
+  const list = settings.getByRole("list", { name: "Custom RPCs" });
+  await expect(list).toContainText("https://helius.rpc.test/?api-key=••••");
+  await expect(list.getByText("API key", { exact: true })).toBeVisible();
   await expect(page.locator("body")).not.toContainText("secret");
+});
+
+test("client-v2-custom-rpcs: A key in the path is masked", async ({
+  seededPage: page,
+}) => {
+  const settings = await openSettings(page);
+  await addRpc(page, {
+    name: "Alchemy",
+    url: "https://mainnet.rpc.test/v2/abc123def456ghi789",
+  });
+  const list = settings.getByRole("list", { name: "Custom RPCs" });
+  await expect(list).toContainText("https://mainnet.rpc.test/v2/••••");
+  await expect(list.getByText("API key", { exact: true })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText("abc123def456ghi789");
+});
+
+test("client-v2-custom-rpcs: A URL with no key shows in full", async ({
+  seededPage: page,
+}) => {
+  const settings = await openSettings(page);
+  await addRpc(page, { name: "Example", url: "https://rpc.example.com/" });
+  const list = settings.getByRole("list", { name: "Custom RPCs" });
+  await expect(list).toContainText("https://rpc.example.com/");
+  await expect(list.getByText("API key", { exact: true })).toHaveCount(0);
 });
 
 test("client-v2-custom-rpcs: Editing renames the chip", async ({

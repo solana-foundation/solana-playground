@@ -49,12 +49,20 @@ const renderList = (
 };
 
 describe("BaseCustomRpcs", () => {
-  it("lists each saved RPC by name and host, never the key in its URL", () => {
+  it("lists each saved RPC by name and URL, its key masked and marked", () => {
     renderList({});
     const list = screen.getByRole("list", { name: "Custom RPCs" });
     expect(within(list).getByText("Helius")).toBeTruthy();
-    expect(within(list).getByText("h.test")).toBeTruthy();
+    expect(within(list).getByText("https://h.test/?api-key=••••")).toBeTruthy();
+    expect(within(list).getByText("API key")).toBeTruthy();
     expect(document.body.textContent).not.toContain("s3cr3t");
+  });
+
+  it("shows a URL with no key in full, unmarked", () => {
+    renderList({ rpcs: [{ name: "Local", url: "http://localhost:8899/" }] });
+    const list = screen.getByRole("list", { name: "Custom RPCs" });
+    expect(within(list).getByText("http://localhost:8899/")).toBeTruthy();
+    expect(within(list).queryByText("API key")).toBeNull();
   });
 
   it("shows no list while nothing is saved", () => {
