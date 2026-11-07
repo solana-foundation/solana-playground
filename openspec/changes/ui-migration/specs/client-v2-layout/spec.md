@@ -543,8 +543,8 @@ list is picked (once that project is open), when the product asks for the
 assistant over the work, when Back or Forward goes to a path other than the
 page's own, and on nothing else the user did; a project open before
 the page SHALL come back as it was. The routes
-`/tutorials` and `/programs` SHALL open their page and stay in the address
-while it shows.
+`/new`, `/tutorials` and `/programs` SHALL open their page and stay in the
+address while it shows.
 
 #### Scenario: Finding a tutorial by search
 
@@ -736,8 +736,9 @@ next project SHALL open in a filled editor.
 
 ### Requirement: Home, the pages and the work have their own addresses
 
-Home picked in the navigation SHALL show on `/home`, the Tutorials and
-Programs pages on `/tutorials` and `/programs`, and the work on its
+Home picked in the navigation SHALL show on `/home`, the New project,
+Tutorials and Programs pages on `/new`, `/tutorials` and `/programs`, and
+the work on its
 project's path: a tutorial's route at its saved page, or `/` for any other
 project. Each view the user picks SHALL add one history entry, so Back and
 Forward move between them and show what each address names. Home that

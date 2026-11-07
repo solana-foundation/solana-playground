@@ -15,15 +15,15 @@ Start from scratch under the tiles without the lists. HOO-2709.
   project". Its content is the dialog's body, unchanged: the intro line,
   Start from scratch, Tutorials and Programs with counts and a search, the
   cards.
-- The navigation's New project, Home's New project tile, the lesson band's
-  Browse gallery and the empty editor's Start a project open the page. The navigation marks New project
+- The navigation's New project, Home's New project tile and the empty
+  editor's Start a project open the page. The navigation marks New project
   current while it shows.
-- `/new` opens the page, as `/tutorials` and `/programs` open theirs: the
-  page shows and the URL is replaced with `/`.
+- `/new` opens the page, as `/tutorials` and `/programs` open theirs, and
+  stays in the address while the page shows (task 2.1).
 - Removed: the `NewWorkspaceModal` dialog, and Home's unfolding Start from
   scratch.
 - Telemetry: `catalog_shown` takes `page` `new-project`, and `via`
-  `lesson` and `editor`.
+  `editor`.
   `home_tile_opened` with `tile` `new-project` now fires when the tile opens
   the page. `new_project_started`, `new_project_start_failed` and
   `catalog_tab_switched` are kept as they are. No event is added or removed.
@@ -49,9 +49,8 @@ None.
   `views/flow/Flow.tsx`,
   `routes/` (a `new` route, `catalog-paths.ts`). `views/flow/gallery/` is
   deleted.
-- e2e: `new-project`, `home`, `lesson-path`, `workspace-migration` and the
-  fixtures go through the page.
-- Out of scope: browser Back and reload as history entries for the three
-  pages (sent to Lead as its own intake). Import from URL (HOO-2608). The
+- e2e: `new-project`, `home`, `workspace-migration` and the fixtures go
+  through the page; `page-history` covers Back, Forward and a reload.
+- Out of scope: Import from URL (HOO-2608). The
   designers' Anchor version and Template controls. The intro copy's wording.
   The phone's "New Anchor project" quick start.

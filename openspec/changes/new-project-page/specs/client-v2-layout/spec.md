@@ -43,7 +43,8 @@ address while it shows, so each page is a history entry of its own: opening
 a page SHALL push its path, Back SHALL close it onto what it showed over,
 and a reload SHALL show it again. A page that closes on its own path SHALL
 move the address back to what it showed over: the open project's path, or,
-over Home, the path Home showed on. A shared project's address
+over Home, the path Home showed on; Home picked in the navigation SHALL move
+it to Home's own path, `/home`. A shared project's address
 (a docs link, a gist) SHALL NOT change for a page.
 
 #### Scenario: Finding a tutorial by search
@@ -96,9 +97,8 @@ over Home, the path Home showed on. A shared project's address
 ### Requirement: The pages are measured
 
 The pages SHALL send `catalog_shown` with `page` (`new-project`,
-`tutorials` or `programs`) and `via` (`nav`, `home`, `link`, `lesson` for
-the lesson band's Browse gallery, or `editor` for the empty editor's Start
-a project) when a page shows;
+`tutorials` or `programs`) and `via` (`nav`, `home`, `link`, or `editor`
+for the empty editor's Start a project) when a page shows;
 `catalog_searched` with `page` and `empty` once typing in the search field
 has rested for 500 ms on a non-empty query; `catalog_item_opened` with
 `page` when an Open succeeds; and `catalog_open_failed` with `page` when it
@@ -121,8 +121,8 @@ deploy.", then Start from scratch (a framework, a project name and Start), then
 Tutorials and Programs as one choice with a count each beside a search
 field, then the chosen list's cards as the pages draw them. No dialog named
 "What do you want to build?" SHALL exist. The navigation's New project,
-Home's New project tile, the lesson band's Browse gallery and the empty
-editor's Start a project SHALL open the page. Start SHALL make a project from the framework's starter and close the
+Home's New project tile and the empty editor's Start a project SHALL open
+the page. Start SHALL make a project from the framework's starter and close the
 page; opening a card SHALL open its tutorial or import its program and
 close the page, and a failure SHALL stay on its card. On a phone every
 card, here and on the other pages, SHALL be one target that ends in a

@@ -13,8 +13,9 @@ by id when a card's Open or Start finishes.
 **Goals:** one way to show New project, the same as the other pages, from
 every entry.
 
-**Non-Goals:** history entries for the pages, and any change to New
-project's content.
+**Non-Goals:** any change to New project's content. History entries for
+the pages came later as task 2.1, and are now foundation master's page-path
+model (`views/flow/use-view-path.ts`) with `/new` added.
 
 ## Decisions
 
@@ -28,8 +29,9 @@ project's content.
 - **Home's tile opens the page through `onOpenPage`.** `PageTile` gains
   `new-project`. `BaseHome` loses `scratch` and its unfold state.
 - **`/new` is an entry link like `/programs`** (`openPageFromLink`), and
-  it is listed in `catalog-paths.ts` so `/new` counts as a start path.
-- **The lesson band's Browse gallery opens the page** with `via` `lesson`.
+  it is listed in `catalog-paths.ts`, both ways (`catalogPageOfPath`,
+  `pathOfCatalogPage`), so `/new` counts as a start path and stays in the
+  address while the page shows.
 
 ## Risks / Trade-offs
 
