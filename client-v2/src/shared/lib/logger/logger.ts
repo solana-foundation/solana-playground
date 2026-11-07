@@ -12,7 +12,8 @@ const BUFFER_LIMIT = 50;
 let initialised = false;
 // Reports made before the first `initLogger`, such as during module import
 const pending: LogEntry[] = [];
-let overflowed = false;
+// Reports past `BUFFER_LIMIT`, counted so the first `initLogger` can say how many
+let dropped: { count: number; firstNs: Namespace } | undefined;
 
 /** Keeps a thrown non-Error value as `cause`, so it is not lost */
 export const toError = (value: unknown): Error =>
@@ -36,9 +37,12 @@ const send = (entry: LogEntry) => {
 const keepPending = (entry: LogEntry) => {
   if (pending.length < BUFFER_LIMIT) {
     pending.push(entry);
-  } else if (!overflowed) {
-    overflowed = true;
-    // Not reported, so it is not buffered behind the reports it is about
+  } else if (dropped) {
+    dropped.count += 1;
+  } else {
+    dropped = { count: 1, firstNs: entry.ns };
+    // Printed now as well, for an app that never reaches `initLogger`; not
+    // reported, so it is not buffered behind the reports it is about
     send({
       ns: "logger:buffer",
       level: "warn",
@@ -50,11 +54,29 @@ const keepPending = (entry: LogEntry) => {
   }
 };
 
+/** One reported entry counting the reports `keepPending` dropped, sent once by the first `initLogger` */
+const droppedSummary = ({
+  count,
+  firstNs,
+}: {
+  count: number;
+  firstNs: Namespace;
+}): LogEntry => ({
+  ns: "logger:buffer",
+  level: "warn",
+  message: "reports dropped before the logger started",
+  context: { kept: BUFFER_LIMIT, dropped: count, firstDropped: firstNs },
+  report: true,
+  unhandled: false,
+});
+
 /**
  * Replaces the providers every logger sends to, including loggers created
  * earlier. The first call also delivers, in order, the reports made before
- * it to every provider not marked `replay: false`; later calls replay
- * nothing, so pass the final provider set on the first call.
+ * it to every provider not marked `replay: false`. Reports dropped past the
+ * buffer then go out as one reported summary to every provider, `replay:
+ * false` included. Later calls replay nothing, so pass the final provider set
+ * on the first call.
  */
 export const initLogger = (options: { providers: LogProvider[] }) => {
   providers = options.providers;
@@ -62,6 +84,7 @@ export const initLogger = (options: { providers: LogProvider[] }) => {
   initialised = true;
   const replayTo = providers.filter((provider) => provider.replay !== false);
   for (const entry of pending.splice(0)) deliver(entry, replayTo);
+  if (dropped) deliver(droppedSummary(dropped), providers);
 };
 
 /** Test seam: back to the console-only default, before `initLogger` */
@@ -69,7 +92,7 @@ export const resetLogger = () => {
   providers = [consoleProvider()];
   initialised = false;
   pending.length = 0;
-  overflowed = false;
+  dropped = undefined;
 };
 
 type ErrorOptions = LogOptions & { unhandled?: boolean };
@@ -242,21 +265,102 @@ if (import.meta.vitest) {
         expect(logged.entries).toHaveLength(1);
       });
 
-      it("should keep at most BUFFER_LIMIT reports and warn once about the rest", () => {
+      it("should keep BUFFER_LIMIT reports and send one reported summary counting the rest", () => {
+        for (let i = 0; i < BUFFER_LIMIT + 10; i++) {
+          early.error(new Error(`e${i}`), { report: true });
+        }
+
+        initLogger({ providers: [logged] });
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries).toHaveLength(BUFFER_LIMIT + 1);
+        expect(logged.entries.at(-1)).toEqual({
+          ns: "logger:buffer",
+          level: "warn",
+          message: "reports dropped before the logger started",
+          context: {
+            kept: BUFFER_LIMIT,
+            dropped: 10,
+            firstDropped: "persistence:sync",
+          },
+          report: true,
+          unhandled: false,
+        });
+      });
+
+      it("should send the summary to every provider, the console included", () => {
+        const warned = vi.spyOn(console, "warn");
+        for (let i = 0; i <= BUFFER_LIMIT; i++) {
+          early.error(new Error(`e${i}`), { report: true });
+        }
+
+        initLogger({ providers: [consoleProvider(), logged] });
+
+        expect(warned).toHaveBeenCalledWith(
+          "[logger:buffer]",
+          "reports dropped before the logger started",
+          { kept: BUFFER_LIMIT, dropped: 1, firstDropped: "persistence:sync" }
+        );
+        expect(logged.entries.at(-1)).toMatchObject({
+          ns: "logger:buffer",
+          report: true,
+        });
+      });
+
+      it("should warn on the console at the first drop, before initLogger", () => {
         const warned = vi.spyOn(console, "warn");
         for (let i = 0; i <= BUFFER_LIMIT + 1; i++) {
           early.error(new Error(`e${i}`), { report: true });
         }
 
-        initLogger({ providers: [logged] });
-
-        expect(logged.entries).toHaveLength(BUFFER_LIMIT);
         expect(warned).toHaveBeenCalledTimes(1);
         expect(warned).toHaveBeenCalledWith(
           "[logger:buffer]",
           "reports dropped: the logger is not initialised",
           { kept: BUFFER_LIMIT, firstDropped: "persistence:sync" }
         );
+      });
+
+      it("should name the first dropped report's namespace and count only reported drops", () => {
+        for (let i = 0; i < BUFFER_LIMIT; i++) {
+          early.error(new Error(`e${i}`), { report: true });
+        }
+        early.warn("not reported");
+        createLogger("wallet:connect").error(new Error("a"), { report: true });
+        early.info("not reported either");
+        createLogger("auth:popup").error(new Error("b"), { report: true });
+
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries.at(-1)?.context).toEqual({
+          kept: BUFFER_LIMIT,
+          dropped: 2,
+          firstDropped: "wallet:connect",
+        });
+      });
+
+      it("should send no summary when the buffer is exactly full", () => {
+        for (let i = 0; i < BUFFER_LIMIT; i++) {
+          early.error(new Error(`e${i}`), { report: true });
+        }
+
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries).toHaveLength(BUFFER_LIMIT);
+        expect(
+          logged.entries.some((entry) => entry.ns === "logger:buffer")
+        ).toBe(false);
+      });
+
+      it("should forget the drop count on resetLogger", () => {
+        for (let i = 0; i <= BUFFER_LIMIT; i++) {
+          early.error(new Error(`e${i}`), { report: true });
+        }
+
+        resetLogger();
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries).toEqual([]);
       });
     });
 
