@@ -129,17 +129,22 @@ export const THEME_TOKENS = [
   "padding",
   "fontSize",
   "fontWeight",
+  "hoverBg",
+  "hoverFg",
+  "ring",
 ] as const;
 
 /** Values of the panel's design tokens, as CSS values; any may be missing */
 export type ThemeTokens = Partial<Record<typeof THEME_TOKENS[number], string>>;
 
 /**
- * What goes over the visible panel's port: the page sends `theme`, the panel
- * sends the rest. `imported` names the key the panel stored, never its bytes.
+ * What goes over the visible panel's port: the page sends `theme` and `name`
+ * (the account's name, which the key file is named after), the panel sends the
+ * rest. `imported` names the key the panel stored, never its bytes.
  */
 export type PanelMessage =
   | { type: "theme"; tokens: ThemeTokens }
+  | { type: "name"; name: string }
   | { type: "imported"; publicKey: string }
   | { type: "exported" }
   | { type: "error"; message: string }
@@ -165,6 +170,8 @@ export const isPanelMessage = (x: unknown): x is PanelMessage => {
   switch (x.type) {
     case "theme":
       return isThemeTokens(x.tokens);
+    case "name":
+      return isString(x.name);
     case "imported":
       return isString(x.publicKey);
     case "exported":
@@ -258,6 +265,8 @@ if (import.meta.vitest) {
       const good: unknown[] = [
         { type: "theme", tokens: { bg: "#000", fontSize: "14px" } },
         { type: "theme", tokens: {} },
+        { type: "theme", tokens: { hoverBg: "#111", ring: "#222" } },
+        { type: "name", name: "Wallet 2" },
         { type: "imported", publicKey: "abc" },
         { type: "exported" },
         { type: "error", message: "no" },
@@ -269,6 +278,7 @@ if (import.meta.vitest) {
         { type: "theme" },
         { type: "theme", tokens: { bg: 1 } },
         { type: "theme", tokens: { colour: "#000" } },
+        { type: "name" },
         { type: "imported" },
         { type: "error" },
         { type: "busy", busy: "yes" },

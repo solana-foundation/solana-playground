@@ -302,6 +302,22 @@ describe("utils/wallet/wallet", () => {
         expect(kept.size).toBe(1);
       });
 
+      it("makeKey stores a key, and forgetKey drops it unless an account holds it", async () => {
+        const { kept, provider } = fakeKeyPage();
+        PgWallet.setSignerProvider(provider);
+        holdState([]);
+        expect(PgWallet.holdsKeysInPage()).toBe(false);
+
+        const dropped = await PgWallet.makeKey();
+        const added = await PgWallet.makeKey();
+        expect(kept.size).toBe(2);
+        PgWallet.add({ publicKey: added });
+
+        await PgWallet.forgetKey(dropped);
+        await PgWallet.forgetKey(added);
+        expect(Array.from(kept.keys())).toEqual([added]);
+      });
+
       it("getKeypairBytes refuses with the CLI message, export with the key panel's", async () => {
         const { provider } = fakeKeyPage();
         PgWallet.setSignerProvider(provider);

@@ -85,8 +85,13 @@ export const keyFileBytes = (text: string) => {
   }
 };
 
-/** Sent for a file that is not a key file; it names no byte of the file */
-export const NOT_A_KEY_FILE = "The file is not a keypair file";
+/**
+ * Sent for a file that is not a key file; it names no byte of the file. The
+ * app's own words for it (`KeypairFileError`), so an import says the same
+ * under either provider.
+ */
+export const NOT_A_KEY_FILE =
+  "That file is not a keypair. Pick a .json file saved from Playground or the Solana CLI.";
 
 /**
  * Stores the key in a key file. The key's halves are checked, and the store
@@ -131,6 +136,9 @@ const CSS_VARIABLE: Record<keyof ThemeTokens, string> = {
   padding: "--padding",
   fontSize: "--font-size",
   fontWeight: "--font-weight",
+  hoverBg: "--hover-bg",
+  hoverFg: "--hover-fg",
+  ring: "--ring",
 };
 
 /**
@@ -147,6 +155,23 @@ export const applyTheme = (root: HTMLElement, tokens: ThemeTokens) => {
       root.style.setProperty(variable, value);
   }
 };
+
+/**
+ * @param on what the panel does with each of the page's messages: new theme
+ * tokens, and the account's new name
+ * @returns a handler of what arrives on the panel's port; anything that is
+ * not a page message is ignored
+ */
+export const pageMessageHandler =
+  (on: {
+    theme: (tokens: ThemeTokens) => void;
+    name: (name: string) => void;
+  }) =>
+  (data: unknown) => {
+    if (!isPanelMessage(data)) return;
+    if (data.type === "theme") on.theme(data.tokens);
+    else if (data.type === "name") on.name(data.name);
+  };
 
 /** How long a key file's `blob:` URL outlives the click that downloads it */
 const REVOKE_AFTER_MS = 10_000;
@@ -171,6 +196,7 @@ export const runPanelWith =
     const doc = document;
     const importKeyFile = importKeyFileWith(handle);
     applyTheme(doc.documentElement, route.theme);
+    let name = route.mode === "export" ? route.name : "";
 
     const button = doc.createElement("button");
     button.type = "button";
@@ -186,12 +212,11 @@ export const runPanelWith =
 
     void connected.then((port) => {
       const send = (message: PanelMessage) => port.postMessage(message);
-      port.onmessage = (event: MessageEvent) => {
-        const data: unknown = event.data;
-        if (isPanelMessage(data) && data.type === "theme") {
-          applyTheme(doc.documentElement, data.tokens);
-        }
-      };
+      const onPageMessage = pageMessageHandler({
+        theme: (tokens) => applyTheme(doc.documentElement, tokens),
+        name: (next) => (name = next),
+      });
+      port.onmessage = (event: MessageEvent) => onPageMessage(event.data);
 
       const whileBusy = async (task: () => Promise<PanelMessage>) => {
         button.disabled = true;
@@ -237,7 +262,7 @@ export const runPanelWith =
             );
             const link = doc.createElement("a");
             link.href = url;
-            link.download = keyFileName(route.name);
+            link.download = keyFileName(name);
             link.click();
             // Revoked at once, Firefox and Safari can cancel the download
             setTimeout(() => URL.revokeObjectURL(url), REVOKE_AFTER_MS);
@@ -307,6 +332,23 @@ if (import.meta.vitest) {
       expect(decodeTheme(encode({ bg: 1 }))).toEqual({});
       expect(decodeTheme(encode({ colour: "red" }))).toEqual({});
       expect(decodeTheme(encode(["bg"]))).toEqual({});
+    });
+
+    it("takes the page's theme and name, and nothing else", () => {
+      const seen: unknown[] = [];
+      const onPageMessage = pageMessageHandler({
+        theme: (tokens) => seen.push(["theme", tokens]),
+        name: (name) => seen.push(["name", name]),
+      });
+      onPageMessage({ type: "theme", tokens: { hoverBg: "#222" } });
+      onPageMessage({ type: "name", name: "Mine" });
+      onPageMessage({ type: "name", name: 5 });
+      onPageMessage({ type: "imported", publicKey: PUBLIC_KEY });
+      onPageMessage("theme");
+      expect(seen).toEqual([
+        ["theme", { hoverBg: "#222" }],
+        ["name", "Mine"],
+      ]);
     });
 
     it("names the key file safely", () => {

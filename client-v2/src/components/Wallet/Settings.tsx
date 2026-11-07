@@ -60,7 +60,13 @@ const importWallet = async () => {
     if (!imported) return;
 
     const { name } = PgWallet.accounts[PgWallet.currentIndex];
-    const text = importedText(imported, name);
+    const text = importedText(
+      {
+        publicKey: imported.keypair.publicKey.toBase58(),
+        added: imported.added,
+      },
+      name
+    );
     PgView.setToast(() => <span>{text}</span>, {
       options: { name: "wallet-imported" },
     });
@@ -185,12 +191,32 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
               <MenuItemText>Remove</MenuItemText>
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={importWallet}>
+          <DropdownMenuItem
+            onSelect={
+              PgWallet.holdsKeysInPage()
+                ? importWallet
+                : () =>
+                    openModal("import", async () => {
+                      const { ImportKey } = await import("./Modals/KeyFile");
+                      await PgView.setModal(ImportKey);
+                    })
+            }
+          >
             <ImportFile />
             <MenuItemText>Import</MenuItemText>
           </DropdownMenuItem>
           {isPg && (
-            <DropdownMenuItem onSelect={() => PgWallet.export()}>
+            <DropdownMenuItem
+              onSelect={
+                PgWallet.holdsKeysInPage()
+                  ? () => PgWallet.export()
+                  : () =>
+                      openModal("export", async () => {
+                        const { ExportKey } = await import("./Modals/KeyFile");
+                        await PgView.setModal(ExportKey);
+                      })
+              }
+            >
               <ExportFile />
               <MenuItemText>Export</MenuItemText>
             </DropdownMenuItem>

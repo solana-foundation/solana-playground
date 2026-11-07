@@ -604,6 +604,45 @@ class _PgWallet {
   }
 
   /**
+   * Whether the accounts' keys are held in the page (the `local` provider).
+   * When not, a dialog makes a key with `makeKey`, adds it with
+   * `add({ publicKey })`, and imports and exports key files through the key
+   * page's panel.
+   */
+  static holdsKeysInPage() {
+    return signerProvider.holdsKeysInPage;
+  }
+
+  /**
+   * Make a key for an account a dialog is about to add, stored at once by
+   * the key-origin provider. One the dialog does not add is dropped with
+   * `forgetKey`.
+   *
+   * @returns the new key's public key
+   * @throws while the wallet is unavailable, or when the provider cannot make
+   * the key
+   */
+  static makeKey() {
+    refuseWhileUnavailable();
+    return signerProvider.makeKey();
+  }
+
+  /**
+   * Drop a key `makeKey` made that no account took. A key an account holds
+   * is kept: it is the account's.
+   *
+   * @param publicKey the key's public key
+   */
+  static async forgetKey(publicKey: string) {
+    if (PgWallet.accounts.some((account) => account.publicKey === publicKey)) {
+      return;
+    }
+    await signerProvider
+      .forgetKey(publicKey)
+      .catch(reportKeyFailure("forget", publicKey));
+  }
+
+  /**
    * Remove the account at the given index.
    *
    * @param index account index
