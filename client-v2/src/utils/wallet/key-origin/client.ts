@@ -7,13 +7,14 @@ import {
   type KeyHandshake,
   type KeyReply,
   type KeyRequest,
+  type ThemeTokens,
 } from "./protocol";
 
 /** Where the key page is served, under the key origin */
 const KEY_PAGE_PATH = "/wallet-keys.html";
 
 /** How long the key page has to load and announce itself */
-const HANDSHAKE_TIMEOUT_MS = 10_000;
+export const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 /** How long a request may wait for its reply before the key page counts as gone */
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -126,10 +127,78 @@ const frameOverWith =
   };
 
 /**
- * Opens the hidden key page on `origin` and a private channel to it. Only a
- * ready message from that frame's own window, at `origin`, counts; the page
- * answers with one port of a new `MessageChannel`, and everything after goes
- * over that port.
+ * Waits for the key page in `frame` to announce itself and hands it one port
+ * of a new `MessageChannel`. Only a ready message from that frame's own
+ * window, at `origin`, counts. Listens from the call on, so call it before the
+ * frame starts loading.
+ *
+ * @param wait.origin the key origin
+ * @param wait.host the window the frame is in
+ * @param wait.timeoutMs how long the key page has to announce itself
+ * @param wait.signal stops the wait: a frame pointed elsewhere must not take a
+ * later load's ready for its own
+ * @returns for the frame, the page's end of the channel
+ * @throws {KeyFrameUnavailable} when the key page does not announce itself in
+ * time, or speaks another protocol version; the signal's reason once aborted
+ */
+const handshakeWith =
+  ({
+    origin,
+    host,
+    timeoutMs,
+    signal,
+  }: {
+    origin: string;
+    host: Window;
+    timeoutMs: number;
+    signal: AbortSignal;
+  }) =>
+  (frame: HTMLIFrameElement): Promise<MessagePort> =>
+    new Promise<MessagePort>((resolve, reject) => {
+      const stop = () => {
+        clearTimeout(timer);
+        host.removeEventListener("message", handleMessage);
+        signal.removeEventListener("abort", abort);
+      };
+      const abort = () => {
+        stop();
+        reject(signal.reason);
+      };
+      const fail = (reason: "timeout" | "version") => {
+        stop();
+        reject(new KeyFrameUnavailable(reason));
+      };
+      const handleMessage = (event: MessageEvent) => {
+        const target = frame.contentWindow;
+        if (
+          !target ||
+          event.source !== target ||
+          event.origin !== origin ||
+          !isKeyReady(event.data)
+        ) {
+          return;
+        }
+        if (event.data.version !== KEY_PROTOCOL_VERSION) {
+          fail("version");
+          return;
+        }
+        stop();
+        const channel = new MessageChannel();
+        const handshake: KeyHandshake = {
+          type: "pg-wallet-keys:connect",
+          version: KEY_PROTOCOL_VERSION,
+        };
+        target.postMessage(handshake, origin, [channel.port2]);
+        resolve(channel.port1);
+      };
+      const timer = setTimeout(() => fail("timeout"), timeoutMs);
+      host.addEventListener("message", handleMessage);
+      signal.addEventListener("abort", abort);
+    });
+
+/**
+ * Opens the hidden key page on `origin` and a private channel to it
+ * (`handshakeWith`); everything after the handshake goes over that port.
  *
  * @param origin the key origin
  * @param opts the handshake's time limit, the document to put the frame in,
@@ -147,44 +216,76 @@ export const connectKeyFrame = (
   } = opts;
   const host = doc.defaultView ?? window;
   const frame = hiddenFrame(doc, origin + KEY_PAGE_PATH);
-  return new Promise<KeyFrame>((resolve, reject) => {
-    const stop = () => {
-      clearTimeout(timer);
-      host.removeEventListener("message", handleMessage);
-    };
-    const fail = (reason: "timeout" | "version") => {
-      stop();
+  // Never stopped: a failed handshake removes the frame instead
+  const connected = handshakeWith({
+    origin,
+    host,
+    timeoutMs,
+    signal: new AbortController().signal,
+  })(frame);
+  doc.body.append(frame);
+  return connected.then(
+    (port) => frameOverWith(frameOptions)(port, frame),
+    (error: unknown) => {
       frame.remove();
-      reject(new KeyFrameUnavailable(reason));
-    };
-    const handleMessage = (event: MessageEvent) => {
-      const target = frame.contentWindow;
-      if (
-        !target ||
-        event.source !== target ||
-        event.origin !== origin ||
-        !isKeyReady(event.data)
-      ) {
-        return;
-      }
-      if (event.data.version !== KEY_PROTOCOL_VERSION) {
-        fail("version");
-        return;
-      }
-      stop();
-      const channel = new MessageChannel();
-      const handshake: KeyHandshake = {
-        type: "pg-wallet-keys:connect",
-        version: KEY_PROTOCOL_VERSION,
-      };
-      target.postMessage(handshake, origin, [channel.port2]);
-      resolve(frameOverWith(frameOptions)(channel.port1, frame));
-    };
-    const timer = setTimeout(() => fail("timeout"), timeoutMs);
-    host.addEventListener("message", handleMessage);
-    doc.body.append(frame);
-  });
+      throw error;
+    }
+  );
 };
+
+/** The visible panel a dialog shows: import a key file, or save one */
+export type KeyPanelRoute =
+  | { mode: "import" }
+  | { mode: "export"; publicKey: string; name: string };
+
+/**
+ * @param value what to encode
+ * @returns base64url of its JSON, as the key page's `decodeTheme` reads it
+ */
+const base64UrlJson = (value: unknown) =>
+  btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(value))))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+
+/**
+ * @param origin the key origin
+ * @returns for the panel to show and the tokens it is drawn with, the URL of
+ * the key page showing that panel
+ */
+export const keyPanelUrl =
+  (origin: string) => (route: KeyPanelRoute, theme: ThemeTokens) => {
+    const query = new URLSearchParams();
+    if (route.mode === "export") query.set("name", route.name);
+    query.set("theme", base64UrlJson(theme));
+    const path =
+      route.mode === "import"
+        ? "panel/import"
+        : `panel/export/${route.publicKey}`;
+    return `${origin}${KEY_PAGE_PATH}#${path}?${query}`;
+  };
+
+/**
+ * Connects to the key page's visible panel in `frame`, a frame the caller
+ * renders and owns: it is never removed here. The handshake is the hidden
+ * frame's (`handshakeWith`); the port then carries `PanelMessage`s.
+ *
+ * @param origin the key origin
+ * @param timeoutMs how long the panel has to answer (`HANDSHAKE_TIMEOUT_MS`)
+ * @returns for the frame and a signal that stops the wait (the frame is about
+ * to be pointed elsewhere), a function that points it at `src` and resolves
+ * with the panel's port once the panel answers
+ * @throws {KeyFrameUnavailable} when the panel does not answer in time
+ */
+export const connectKeyPanel =
+  (origin: string, timeoutMs: number) =>
+  (frame: HTMLIFrameElement, signal: AbortSignal) =>
+  (src: string): Promise<MessagePort> => {
+    const host = frame.ownerDocument.defaultView ?? window;
+    const connected = handshakeWith({ origin, host, timeoutMs, signal })(frame);
+    frame.src = src;
+    return connected;
+  };
 
 /**
  * @param requestTimeoutMs how long a request may wait for its reply
@@ -425,6 +526,97 @@ if (import.meta.vitest) {
       answer();
       await second;
       second.then((frame) => frame.close());
+    });
+
+    it("points a panel frame at its panel, theme in the fragment", async () => {
+      const { decodeTheme, panelRouteOf } = await import("./frame/panel");
+      const theme = {
+        bg: "oklch(0.2 0 0)",
+        font: '"Stack Sans Text", sans-serif',
+      };
+      const exportUrl = new URL(
+        keyPanelUrl(ORIGIN)(
+          {
+            mode: "export",
+            publicKey: "11111111111111111111111111111111",
+            name: "My wallet",
+          },
+          theme
+        )
+      );
+      expect(exportUrl.origin + exportUrl.pathname).toBe(
+        ORIGIN + "/wallet-keys.html"
+      );
+      expect(panelRouteOf(exportUrl.hash)).toEqual({
+        mode: "export",
+        publicKey: "11111111111111111111111111111111",
+        name: "My wallet",
+        theme,
+      });
+      const importUrl = new URL(keyPanelUrl(ORIGIN)({ mode: "import" }, {}));
+      expect(panelRouteOf(importUrl.hash)).toEqual({
+        mode: "import",
+        theme: {},
+      });
+      expect(
+        decodeTheme(
+          new URLSearchParams(importUrl.hash.split("?")[1]).get("theme")
+        )
+      ).toEqual({});
+    });
+
+    it("connects a panel frame the caller owns, and leaves it on a timeout", async () => {
+      const frame = document.createElement("iframe");
+      document.body.append(frame);
+      const connected = connectKeyPanel(ORIGIN, 1000)(
+        frame,
+        new AbortController().signal
+      )(ORIGIN + "/wallet-keys.html#panel/import");
+      expect(frame.src).toBe(ORIGIN + "/wallet-keys.html#panel/import");
+      // The window the frame shows once pointed at the panel
+      const target = frame.contentWindow as Window;
+      const handed: unknown[][] = [];
+      vi.spyOn(target, "postMessage").mockImplementation(((
+        ...args: unknown[]
+      ) => {
+        handed.push(args);
+      }) as never);
+      ready({}, ORIGIN);
+      ready(target, "https://evil.example");
+      ready(target, ORIGIN);
+      const port = await connected;
+      expect(handed).toHaveLength(1);
+      expect(port).toBeInstanceOf(MessagePort);
+      port.close();
+
+      vi.useFakeTimers();
+      const silent = document.createElement("iframe");
+      document.body.append(silent);
+      const timedOut = expect(
+        connectKeyPanel(ORIGIN, 1000)(silent, new AbortController().signal)(
+          ORIGIN + "/wallet-keys.html"
+        )
+      ).rejects.toBeInstanceOf(KeyFrameUnavailable);
+      vi.advanceTimersByTime(1000);
+      await timedOut;
+      expect(silent.isConnected).toBe(true);
+    });
+
+    it("stops a panel's handshake when told, so a later load is not taken for it", async () => {
+      const frame = document.createElement("iframe");
+      document.body.append(frame);
+      const controller = new AbortController();
+      const stopped = connectKeyPanel(ORIGIN, 1000)(frame, controller.signal)(
+        ORIGIN + "/wallet-keys.html#panel/import"
+      );
+      const target = frame.contentWindow as Window;
+      const post = vi
+        .spyOn(target, "postMessage")
+        .mockImplementation((() => {}) as never);
+      controller.abort(new Error("moved on"));
+      await expect(stopped).rejects.toThrow("moved on");
+      ready(target, ORIGIN);
+      expect(post).not.toHaveBeenCalled();
     });
 
     it("rejects on another protocol version", async () => {
