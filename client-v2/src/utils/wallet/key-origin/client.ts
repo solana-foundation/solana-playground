@@ -15,6 +15,11 @@ const KEY_PAGE_PATH = "/wallet-keys.html";
 /** How long the key page has to load and announce itself */
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
+/** How long a request may wait for its reply before the key page counts as gone */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+const CLOSED = "The wallet's key page was closed.";
+
 /** The key page could not be reached: it never answered, or speaks another protocol */
 export class KeyFrameUnavailable extends Error {
   constructor(readonly reason: "timeout" | "version") {
@@ -51,40 +56,74 @@ const hiddenFrame = (doc: Document, src: string) => {
   return frame;
 };
 
-const frameOver = (port: MessagePort, frame: HTMLIFrameElement): KeyFrame => {
-  let nextId = 1;
-  const pending = new Map<number, Pending>();
-  port.onmessage = (event: MessageEvent) => {
-    const data: unknown = event.data;
-    if (!isKeyReply(data)) return;
-    const waiting = pending.get(data.id);
-    if (!waiting) return;
-    pending.delete(data.id);
-    waiting.resolve(data);
-  };
-  return {
-    request: <T>(body: DistributiveOmit<KeyRequest, "id">) =>
-      new Promise<T>((resolve, reject) => {
-        const id = nextId++;
-        pending.set(id, {
-          resolve: (reply) =>
-            reply.ok
-              ? resolve(reply.result as T)
-              : reject(new Error(reply.error)),
-          reject,
-        });
-        port.postMessage({ ...body, id });
-      }),
-    close: () => {
-      port.close();
-      frame.remove();
-      for (const { reject } of pending.values()) {
-        reject(new Error("The wallet's key page was closed."));
-      }
-      pending.clear();
-    },
-  };
+/** What a frame does past the handshake */
+type FrameOptions = {
+  /** How long a request may wait for its reply; 30 s when not given */
+  requestTimeoutMs?: number;
+  /** Told when a request times out: the key page may be gone */
+  onDead?: () => void;
 };
+
+const frameOverWith =
+  ({ requestTimeoutMs, onDead }: FrameOptions) =>
+  (port: MessagePort, frame: HTMLIFrameElement): KeyFrame => {
+    let nextId = 1;
+    let isClosed = false;
+    const pending = new Map<number, Pending>();
+    const rejectAll = (error: Error) => {
+      for (const { reject } of pending.values()) reject(error);
+      pending.clear();
+    };
+    port.onmessage = (event: MessageEvent) => {
+      const data: unknown = event.data;
+      if (!isKeyReply(data)) return;
+      const waiting = pending.get(data.id);
+      if (!waiting) return;
+      pending.delete(data.id);
+      waiting.resolve(data);
+    };
+    // A reply that could not be deserialized names no request, so every
+    // waiting one fails rather than waits for its time limit
+    port.addEventListener("messageerror", () =>
+      rejectAll(
+        new Error("The wallet's key page sent a reply that could not be read.")
+      )
+    );
+    return {
+      request: <T>(body: DistributiveOmit<KeyRequest, "id">) =>
+        new Promise<T>((resolve, reject) => {
+          if (isClosed) {
+            reject(new Error(CLOSED));
+            return;
+          }
+          const id = nextId++;
+          const timer = setTimeout(() => {
+            if (!pending.delete(id)) return;
+            reject(new KeyFrameUnavailable("timeout"));
+            onDead?.();
+          }, requestTimeoutMs ?? REQUEST_TIMEOUT_MS);
+          pending.set(id, {
+            resolve: (reply) => {
+              clearTimeout(timer);
+              if (reply.ok) resolve(reply.result as T);
+              else reject(new Error(reply.error));
+            },
+            reject: (error) => {
+              clearTimeout(timer);
+              reject(error);
+            },
+          });
+          port.postMessage({ ...body, id });
+        }),
+      close: () => {
+        if (isClosed) return;
+        isClosed = true;
+        port.close();
+        frame.remove();
+        rejectAll(new Error(CLOSED));
+      },
+    };
+  };
 
 /**
  * Opens the hidden key page on `origin` and a private channel to it. Only a
@@ -93,14 +132,19 @@ const frameOver = (port: MessagePort, frame: HTMLIFrameElement): KeyFrame => {
  * over that port.
  *
  * @param origin the key origin
- * @param opts the time limit and the document to put the frame in
+ * @param opts the handshake's time limit, the document to put the frame in,
+ * and what the connection does past the handshake
  * @returns the connection
  */
 export const connectKeyFrame = (
   origin: string,
-  opts: { timeoutMs?: number; doc?: Document } = {}
+  opts: { timeoutMs?: number; doc?: Document } & FrameOptions = {}
 ): Promise<KeyFrame> => {
-  const { timeoutMs = HANDSHAKE_TIMEOUT_MS, doc = document } = opts;
+  const {
+    timeoutMs = HANDSHAKE_TIMEOUT_MS,
+    doc = document,
+    ...frameOptions
+  } = opts;
   const host = doc.defaultView ?? window;
   const frame = hiddenFrame(doc, origin + KEY_PAGE_PATH);
   return new Promise<KeyFrame>((resolve, reject) => {
@@ -134,7 +178,7 @@ export const connectKeyFrame = (
         version: KEY_PROTOCOL_VERSION,
       };
       target.postMessage(handshake, origin, [channel.port2]);
-      resolve(frameOver(channel.port1, frame));
+      resolve(frameOverWith(frameOptions)(channel.port1, frame));
     };
     const timer = setTimeout(() => fail("timeout"), timeoutMs);
     host.addEventListener("message", handleMessage);
@@ -142,38 +186,49 @@ export const connectKeyFrame = (
   });
 };
 
-let connection: Promise<KeyFrame> | undefined;
-
 /**
- * @returns the page's one connection to the key page, made on first use; a
- * failed attempt is not kept, so the next call reconnects
+ * @param requestTimeoutMs how long a request may wait for its reply
+ * @returns a function giving one connection to the key page, made on first
+ * use; a failed attempt is not kept, and neither is a connection whose request
+ * timed out, so the next call reconnects
  */
-export const keyFrame = (): Promise<KeyFrame> => {
-  if (connection) return connection;
-  const origin = keyOriginFor(
-    process.env.REACT_APP_WALLET_KEY_ORIGIN,
-    window.location
-  );
-  if (!origin) {
-    return Promise.reject(
-      new Error("No key origin is configured for the wallet.")
+export const keyFrameWith = (requestTimeoutMs: number) => {
+  let connection: Promise<KeyFrame> | undefined;
+  return (): Promise<KeyFrame> => {
+    if (connection) return connection;
+    const origin = keyOriginFor(
+      process.env.REACT_APP_WALLET_KEY_ORIGIN,
+      window.location
     );
-  }
-  const attempt = connectKeyFrame(origin).then((frame) => {
-    return {
+    if (!origin) {
+      return Promise.reject(
+        new Error("No key origin is configured for the wallet.")
+      );
+    }
+    const drop = () => {
+      if (connection === attempt) connection = undefined;
+    };
+    const attempt: Promise<KeyFrame> = connectKeyFrame(origin, {
+      requestTimeoutMs,
+      onDead: () => {
+        drop();
+        void attempt.then((frame) => frame.close());
+      },
+    }).then((frame) => ({
       request: frame.request,
       close: () => {
-        if (connection === attempt) connection = undefined;
+        drop();
         frame.close();
       },
-    };
-  });
-  connection = attempt;
-  attempt.catch(() => {
-    if (connection === attempt) connection = undefined;
-  });
-  return attempt;
+    }));
+    connection = attempt;
+    attempt.catch(drop);
+    return attempt;
+  };
 };
+
+/** The page's one connection to the key page (`keyFrameWith`) */
+export const keyFrame = keyFrameWith(REQUEST_TIMEOUT_MS);
 
 if (import.meta.vitest) {
   const { describe, it, expect, vi, afterEach } = import.meta.vitest;
@@ -183,6 +238,8 @@ if (import.meta.vitest) {
 
     afterEach(() => {
       vi.useRealTimers();
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
       document.body.innerHTML = "";
     });
 
@@ -276,6 +333,98 @@ if (import.meta.vitest) {
       vi.advanceTimersByTime(1000);
       await outcome;
       expect(document.querySelector("iframe")).toBeNull();
+    });
+
+    /** A connected frame, the key page's port, and the requests it saw */
+    const linked = async (opts: Parameters<typeof connectKeyFrame>[1]) => {
+      const pending = connectKeyFrame(ORIGIN, opts);
+      const frame = document.querySelector("iframe") as HTMLIFrameElement;
+      const target = frame.contentWindow as Window;
+      const ports: MessagePort[] = [];
+      // postMessage(message, targetOrigin, transfer): keep the ports handed over
+      vi.spyOn(target, "postMessage").mockImplementation(((
+        ...args: [unknown, string, MessagePort[]]
+      ) => {
+        ports.push(...args[2]);
+      }) as never);
+      ready(target, ORIGIN);
+      const link = await pending;
+      const server = ports[0];
+      const seen: KeyRequest[] = [];
+      server.onmessage = (event) => seen.push(event.data);
+      return { link, server, seen };
+    };
+
+    it("rejects a request made after close, without sending it", async () => {
+      const { link, server, seen } = await linked({});
+      link.close();
+      await expect(link.request({ type: "accounts" })).rejects.toThrow(
+        "closed"
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(seen).toHaveLength(0);
+      server.close();
+    });
+
+    it("rejects a request the key page never answers, as a timeout", async () => {
+      const { link, server, seen } = await linked({ requestTimeoutMs: 50 });
+      const unanswered = link.request({ type: "accounts" });
+      await expect(unanswered).rejects.toBeInstanceOf(KeyFrameUnavailable);
+      await expect(unanswered).rejects.toMatchObject({ reason: "timeout" });
+      // A late answer to it is dropped, not an error
+      server.postMessage({ id: seen[0].id, ok: true, result: [] });
+      server.close();
+    });
+
+    it("rejects pending requests when a reply cannot be read", async () => {
+      // The listeners the page's port gets, so a test can fire what the
+      // browser fires there (jsdom's events do not reach Node's ports)
+      const listeners: Array<[string, () => void]> = [];
+      const Real = MessageChannel;
+      vi.stubGlobal(
+        "MessageChannel",
+        class extends Real {
+          constructor() {
+            super();
+            this.port1.addEventListener = ((...args: [string, () => void]) =>
+              listeners.push(args)) as never;
+          }
+        }
+      );
+      const { link, server } = await linked({});
+      const first = link.request({ type: "accounts" });
+      const second = link.request({ type: "create" });
+      for (const [type, listener] of listeners) {
+        if (type === "messageerror") listener();
+      }
+      await expect(first).rejects.toThrow("could not be read");
+      await expect(second).rejects.toThrow("could not be read");
+      server.close();
+    });
+
+    it("keyFrameWith drops a connection whose request timed out", async () => {
+      vi.stubEnv("REACT_APP_WALLET_KEY_ORIGIN", ORIGIN);
+      const answer = () => {
+        const frames = document.querySelectorAll("iframe");
+        const target = frames[frames.length - 1].contentWindow as Window;
+        vi.spyOn(target, "postMessage").mockImplementation((() => {}) as never);
+        ready(target, ORIGIN);
+      };
+      const frameFor = keyFrameWith(20);
+      const first = frameFor();
+      answer();
+      const link = await first;
+      expect(frameFor()).toBe(first);
+
+      await expect(link.request({ type: "accounts" })).rejects.toMatchObject({
+        reason: "timeout",
+      });
+
+      const second = frameFor();
+      expect(second).not.toBe(first);
+      answer();
+      await second;
+      second.then((frame) => frame.close());
     });
 
     it("rejects on another protocol version", async () => {
