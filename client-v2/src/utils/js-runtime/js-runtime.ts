@@ -6,11 +6,12 @@ import { PgProgramInfo } from "../program-info";
 import { PgTerminal } from "../terminal";
 import { PgWallet } from "../wallet";
 import { signRequestWith } from "../wallet/sign-bridge";
+import { PgWeb3 } from "../web3";
 import { formatOutputFor } from "./output";
 import { serveSandboxWith } from "./page-channel";
 import { prepareCode } from "./prepare-code";
 import type { SandboxWallet, ToSandbox } from "./protocol";
-import { relayRpcWith } from "./rpc-relay";
+import { relayRpcWith, type SendEncodedWith } from "./rpc-relay";
 import {
   connectWith,
   LOAD_TIMEOUT_MS,
@@ -20,6 +21,16 @@ import {
 } from "./sandbox-frame";
 
 const log = createLogger("js-runtime:sandbox");
+
+/**
+ * The page's web3.js send, so a hook on `Connection.prototype` sees the
+ * sandbox's transactions; web3.js retries no 429 here, the sandbox's does
+ */
+const sendEncodedWith: SendEncodedWith = (fetch) => (url) => (encoded) =>
+  new PgWeb3.Connection(url, {
+    fetch,
+    disableRetryOnRateLimit: true,
+  }).sendEncodedTransaction(encoded);
 
 /** Options to use when running a script/test */
 interface ExecuteParams {
@@ -101,7 +112,9 @@ export class PgJsRuntime {
             log.warn(`sign request refused: ${reply.error}`);
           return reply;
         },
-        rpc: relayRpcWith(() => window.fetch)(window.location.origin),
+        rpc: relayRpcWith(() => window.fetch)(sendEncodedWith)(
+          window.location.origin
+        ),
       })(port);
       port.postMessage(run);
       let error: string | undefined;
