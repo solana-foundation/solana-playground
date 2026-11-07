@@ -6,28 +6,70 @@ import type { LogEntry, LogOptions, LogProvider, Namespace } from "./types";
 // Read on every call: module-level loggers exist before `initLogger` runs
 let providers: LogProvider[] = [consoleProvider()];
 
-/** Replaces the providers every logger sends to, including loggers created earlier */
-export const initLogger = (options: { providers: LogProvider[] }) => {
-  providers = options.providers;
-};
+/** Bounds the reports kept before `initLogger`, so a never-initialised app cannot grow it */
+const BUFFER_LIMIT = 50;
 
-/** Test seam: back to the console-only default */
-export const resetLogger = () => {
-  providers = [consoleProvider()];
-};
+let initialised = false;
+// Reports made before the first `initLogger`, such as during module import
+const pending: LogEntry[] = [];
+let overflowed = false;
 
 /** Keeps a thrown non-Error value as `cause`, so it is not lost */
 export const toError = (value: unknown): Error =>
   value instanceof Error ? value : new Error(String(value), { cause: value });
 
-const send = (entry: LogEntry) => {
-  for (const provider of providers) {
+const deliver = (entry: LogEntry, to: LogProvider[]) => {
+  for (const provider of to) {
     try {
       provider.log(entry);
     } catch (error) {
       reportProviderFailure(error);
     }
   }
+};
+
+const send = (entry: LogEntry) => {
+  deliver(entry, providers);
+  if (!initialised && entry.report) keepPending(entry);
+};
+
+const keepPending = (entry: LogEntry) => {
+  if (pending.length < BUFFER_LIMIT) {
+    pending.push(entry);
+  } else if (!overflowed) {
+    overflowed = true;
+    // Not reported, so it is not buffered behind the reports it is about
+    send({
+      ns: "logger:buffer",
+      level: "warn",
+      message: "reports dropped: the logger is not initialised",
+      context: { kept: BUFFER_LIMIT, firstDropped: entry.ns },
+      report: false,
+      unhandled: false,
+    });
+  }
+};
+
+/**
+ * Replaces the providers every logger sends to, including loggers created
+ * earlier. The first call also delivers, in order, the reports made before
+ * it to every provider not marked `replay: false`; later calls replay
+ * nothing, so pass the final provider set on the first call.
+ */
+export const initLogger = (options: { providers: LogProvider[] }) => {
+  providers = options.providers;
+  if (initialised) return;
+  initialised = true;
+  const replayTo = providers.filter((provider) => provider.replay !== false);
+  for (const entry of pending.splice(0)) deliver(entry, replayTo);
+};
+
+/** Test seam: back to the console-only default, before `initLogger` */
+export const resetLogger = () => {
+  providers = [consoleProvider()];
+  initialised = false;
+  pending.length = 0;
+  overflowed = false;
 };
 
 type ErrorOptions = LogOptions & { unhandled?: boolean };
@@ -130,6 +172,92 @@ if (import.meta.vitest) {
       early.error(new Error("push rejected"));
 
       expect(logged.entries).toHaveLength(1);
+    });
+
+    describe("before initLogger", () => {
+      beforeEach(() => {
+        resetLogger();
+        vi.spyOn(console, "error").mockImplementation(() => {});
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+      });
+      afterEach(() => vi.restoreAllMocks());
+
+      it("should deliver a reported entry once, after the first initLogger", () => {
+        early.error(new Error("bad tutorial definition"), { report: true });
+
+        initLogger({ providers: [logged] });
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries).toMatchObject([
+          { ns: "persistence:sync", report: true },
+        ]);
+      });
+
+      it("should replay the kept reports in the order they were made", () => {
+        early.error(new Error("first"), { report: true });
+        early.error(new Error("second"), { report: true });
+
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries.map((entry) => entry.error?.message)).toEqual([
+          "first",
+          "second",
+        ]);
+      });
+
+      it("should not replay a report made after the first initLogger", () => {
+        initLogger({ providers: [memoryProvider()] });
+        early.error(new Error("x"), { report: true });
+
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries).toEqual([]);
+      });
+
+      it("should drop the kept reports on resetLogger", () => {
+        early.error(new Error("x"), { report: true });
+
+        resetLogger();
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries).toEqual([]);
+      });
+
+      it("should not replay an entry that was not reported", () => {
+        early.warn("not reported");
+
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries).toEqual([]);
+      });
+
+      it("should not replay to a provider that already printed the entry", () => {
+        const printed = vi.spyOn(console, "error");
+        early.error(new Error("x"), { report: true });
+        printed.mockClear();
+
+        initLogger({ providers: [consoleProvider(), logged] });
+
+        expect(printed).not.toHaveBeenCalled();
+        expect(logged.entries).toHaveLength(1);
+      });
+
+      it("should keep at most BUFFER_LIMIT reports and warn once about the rest", () => {
+        const warned = vi.spyOn(console, "warn");
+        for (let i = 0; i <= BUFFER_LIMIT + 1; i++) {
+          early.error(new Error(`e${i}`), { report: true });
+        }
+
+        initLogger({ providers: [logged] });
+
+        expect(logged.entries).toHaveLength(BUFFER_LIMIT);
+        expect(warned).toHaveBeenCalledTimes(1);
+        expect(warned).toHaveBeenCalledWith(
+          "[logger:buffer]",
+          "reports dropped: the logger is not initialised",
+          { kept: BUFFER_LIMIT, firstDropped: "persistence:sync" }
+        );
+      });
     });
 
     it("should keep a thrown non-Error value as the cause", () => {

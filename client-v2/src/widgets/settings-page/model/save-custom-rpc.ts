@@ -420,6 +420,8 @@ if (import.meta.vitest) {
       it("answers saved and reports it when onSaved throws after the list write", async () => {
         const logger = await import("@/shared/lib/logger");
         const logged = logger.memoryProvider();
+        // Earlier tests' reports wait for the first `initLogger`; start clean
+        logger.resetLogger();
         logger.initLogger({ providers: [logged] });
         try {
           const answer = answerFor(() => {
