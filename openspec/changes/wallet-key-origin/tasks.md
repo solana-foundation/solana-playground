@@ -4,7 +4,7 @@ Plan: [plans/1-wallet-key-origin.md](plans/1-wallet-key-origin.md)
 
 - [x] 1.1 Protocol: request/reply types, validators, protocol version, `loopback` origin resolution (`key-origin/protocol.ts`, `key-origin/origin.ts`)
 - [x] 1.2 Key store on the key origin: IndexedDB `pg-wallet-keys` by public key, Web Lock, no drafts (`key-origin/frame/store.ts`)
-- [x] 1.3 Key page handler: handshake with origin check, `accounts`, `create`, `keep`, `sign` (transaction / message, message-that-is-a-transaction refused), `forget`, `adopt` (`key-origin/frame/handler.ts`)
+- [x] 1.3 Key page handler: handshake with origin check, `accounts`, `create`, `sign` (transaction / message, message-that-is-a-transaction refused), `forget`, `adopt` (`key-origin/frame/handler.ts`)
 - [x] 1.4 Entry and page `wallet-keys.html` in `craco.config.js`; CSP, COEP/CORP and the `wallet-keys` host rule in `vercel.json`; dev-server headers
 
 ## 2. Page side

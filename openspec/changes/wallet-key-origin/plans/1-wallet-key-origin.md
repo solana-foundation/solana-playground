@@ -1,5 +1,10 @@
 # Wallet keys on their own origin: implementation plan
 
+> **Superseded where it differs.** `design.md` is the current description.
+> Where this plan and `design.md` differ, `design.md` wins: drafts, the
+> `keep` request and `PgWallet.keepKey` were removed, and `create` stores a
+> new key at once (forgotten when its dialog closes without adding).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The built-in wallet's key bytes are held and used only by a hidden

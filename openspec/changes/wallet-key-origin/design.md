@@ -98,10 +98,11 @@ rest come from the 7 Nov call.
   - `accounts` → the base58 public keys the key page holds.
   - `create` → makes a key, stores it at once and returns its public key.
     Setup and Add need the key before the account exists, so they can offer
-    the key file first. The panel is a second key-page instance with its own
-    memory and cannot see the hidden frame's drafts, so there are no
-    per-frame drafts. A dialog that closes without adding the account calls
-    `forget` for the key.
+    the key file first. The panel that saves that file is a separate
+    key-page instance, which sees only the store and none of the hidden
+    frame's memory; so `create` stores the key before it replies, and the
+    panel reads it from there. A dialog that closes without adding the
+    account calls `forget` for the key.
   - `sign(publicKey, kind, bytes)`: `kind` is `transaction` (the serialized
     message) or `message`; the reply is the 64-byte signature. A `message`
     whose bytes parse as a transaction message is refused, so a message
