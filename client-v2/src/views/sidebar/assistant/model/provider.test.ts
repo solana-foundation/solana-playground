@@ -248,7 +248,11 @@ describe("the assistant's provider", () => {
     ]);
   });
 
-  it("still sends the turn when a mode's context throws, without it", async () => {
+  it("still sends the turn when a mode's context throws, without it, and reports it", async () => {
+    // A logger of its own: one not yet set up buffers the report and replays
+    // it into the next test that sets one up
+    const memory = memoryLog();
+    initLogger({ providers: [memory] });
     const sent = respond(openAiText("Hi."));
     const mode = PgAssistant.setMode({
       name: "tutorial",
@@ -263,6 +267,7 @@ describe("the assistant's provider", () => {
       await createProvider({ id: "default", apiKey: "" }).send("hi");
     } finally {
       mode.dispose();
+      resetLogger();
     }
 
     expect(messagesOf(sent[0].body).slice(0, 3)).toEqual([
@@ -270,6 +275,9 @@ describe("the assistant's provider", () => {
       { role: "system", content: "Current project state:\n\nproject" },
       { role: "user", content: "hi" },
     ]);
+    expect(
+      memory.entries.filter((entry) => entry.report).map((e) => e.context)
+    ).toEqual([{ mode: "tutorial" }]);
   });
 
   it("asks Anthropic for droppable updates, effort, fallbacks, a cached prompt and 64000 tokens", async () => {
