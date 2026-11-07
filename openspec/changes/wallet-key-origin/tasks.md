@@ -1,3 +1,5 @@
+Plan: [plans/1-wallet-key-origin.md](plans/1-wallet-key-origin.md)
+
 ## 1. Key page
 
 - [ ] 1.1 Protocol: request/reply types, validators, protocol version, `loopback` origin resolution (`key-origin/protocol.ts`, `key-origin/origin.ts`)
