@@ -243,13 +243,12 @@ export const runPanelWith =
         try {
           send(await task());
         } catch (error) {
-          // Named by type only: a browser's message is not ours to vouch for
-          send({
-            type: "error",
-            message: `The key page failed: ${
-              error instanceof Error ? error.name : typeof error
-            }`,
-          });
+          // Named by type only: a browser's message is not ours to vouch for.
+          // Logged here too, so an IndexedDB failure leaves a trace on the key page
+          const kind = error instanceof Error ? error.name : typeof error;
+          // eslint-disable-next-line no-console -- the key page loads no logger: it is its own bundle, with nothing third-party
+          console.error("The key page failed:", kind);
+          send({ type: "error", message: `The key page failed: ${kind}` });
         } finally {
           button.removeAttribute("aria-busy");
           button.disabled = false;
