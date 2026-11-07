@@ -1,9 +1,10 @@
 // A file of its own: `src/commands/` is a runtime module the UI move rule
 // never touches, so its tests stay out of the modules (AGENTS.md).
 //
-// Under the key origin the terminal cannot read the built-in wallet's key,
-// so a CLI run that would read it ends with one line before it starts; a run
-// that never reads it, and every run under the local provider, goes on.
+// Under the key origin the CLIs sign the built-in wallet's slot through the
+// key page at the send step. Only a `--sign-only` run, which prints signatures
+// without sending, needs the key itself: it ends with one line before it
+// starts. Every other run, and every run under the local provider, goes on.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const env = vi.hoisted(() => ({ hasKeysInPage: false }));
@@ -52,19 +53,18 @@ beforeEach(() => {
   env.hasKeysInPage = false;
 });
 
-describe("commands that read the wallet's key, under the key origin", () => {
+describe("commands that need the wallet's key, under the key origin", () => {
   it.each([
-    ["solana balance", "solana"],
-    ["solana config get", "solana"],
-    ["spl-token accounts", "spl-token"],
-    ["anchor idl init", "anchor idl init"],
     [
-      "anchor idl upgrade 11111111111111111111111111111111",
-      "anchor idl upgrade",
+      "solana transfer 11111111111111111111111111111111 0.01 --sign-only --blockhash 11111111111111111111111111111111",
+      "solana --sign-only",
     ],
-    ["anchor idl write-buffer", "anchor idl write-buffer"],
+    [
+      "spl-token transfer So11111111111111111111111111111111111111112 1 11111111111111111111111111111111 --sign-only",
+      "spl-token --sign-only",
+    ],
   ])("`%s` ends with the key line naming `%s`", async (input, named) => {
-    const cmd = { solana, "spl-token": splToken, anchor }[
+    const cmd = { solana, "spl-token": splToken }[
       input.split(" ")[0] as "solana"
     ];
 
@@ -75,16 +75,18 @@ describe("commands that read the wallet's key, under the key origin", () => {
   });
 
   it.each([
-    "solana",
+    "solana balance",
+    "solana config get",
+    "solana transfer 11111111111111111111111111111111 0.01",
     "solana --help",
-    "solana help",
+    "solana transfer --sign-only --help",
+    "spl-token accounts",
     "spl-token -V",
+    "anchor idl init",
+    "anchor idl upgrade 11111111111111111111111111111111",
     "anchor idl fetch",
-    "anchor idl authority",
-    "anchor idl init --help",
-    "anchor",
     "sugar launch",
-  ])("`%s` never reads the key and goes on", async (input) => {
+  ])("`%s` signs at send and goes on", async (input) => {
     const cmd = { solana, "spl-token": splToken, anchor, sugar }[
       input.split(" ")[0] as "solana"
     ];
@@ -93,7 +95,7 @@ describe("commands that read the wallet's key, under the key origin", () => {
   });
 
   it("refuses before the wallet question", () => {
-    for (const cmd of [solana, splToken, anchor]) {
+    for (const cmd of [solana, splToken]) {
       const checks = [cmd.preChecks].flat();
       expect(checks.indexOf(checkPgWallet)).toBe(checks.length - 1);
     }
@@ -101,17 +103,18 @@ describe("commands that read the wallet's key, under the key origin", () => {
 });
 
 describe("under the local provider", () => {
-  it.each(["solana balance", "spl-token accounts", "anchor idl init"])(
-    "`%s` goes on",
-    async (input) => {
-      env.hasKeysInPage = true;
-      const cmd = { solana, "spl-token": splToken, anchor }[
-        input.split(" ")[0] as "solana"
-      ];
+  it.each([
+    "solana transfer 11111111111111111111111111111111 0.01 --sign-only",
+    "spl-token accounts",
+    "anchor idl init",
+  ])("`%s` goes on", async (input) => {
+    env.hasKeysInPage = true;
+    const cmd = { solana, "spl-token": splToken, anchor }[
+      input.split(" ")[0] as "solana"
+    ];
 
-      expect(await refusalOf(cmd, input)).toBeUndefined();
-    }
-  );
+    expect(await refusalOf(cmd, input)).toBeUndefined();
+  });
 });
 
 describe("the key line", () => {

@@ -41,15 +41,15 @@ const connect = async (question: string) => {
 };
 
 /**
- * Which run of a WASM CLI reads the built-in wallet's key bytes, named as the
- * person typed it, or `undefined` for a run that never reads them.
+ * Which run of a WASM CLI needs the built-in wallet's key in the page, named
+ * as the person typed it, or `undefined` for a run that does not.
  */
 export type KeyRead = (tokens: readonly string[]) => string | undefined;
 
 /**
- * End a run that would read the built-in wallet's key bytes while the key
- * origin keeps them, before the wallet question and the WASM import: the CLI
- * would otherwise fail inside WASM. Under the local provider it does nothing.
+ * End a run that needs the built-in wallet's key in the page while the key
+ * origin keeps it, before the wallet question and the WASM import. Under the
+ * local provider it does nothing.
  *
  * @param readsKey which runs read the key
  * @returns the pre-check
@@ -72,9 +72,12 @@ const isClapOnlyAsk = (tokens: readonly string[]) =>
   tokens.some((t) => ["-h", "--help", "-V", "--version"].includes(t));
 
 /**
- * `solana` and `spl-token` read the key on every run clap parses
- * (`wasm/solana-cli/src/wasm.rs`, `wasm/spl-token-cli/src/wasm.rs`),
- * `solana config` included.
+ * `solana` and `spl-token` sign the wallet's slot at the send step, through
+ * `PgWallet.signTransactionMessage` (`wasm/utils/solana-playground-utils`,
+ * `wallet.rs`). A `--sign-only` run prints signatures without sending, so
+ * the key page is never asked and the run needs the key itself.
  */
-export const everyRunReadsKey: KeyRead = (tokens) =>
-  isClapOnlyAsk(tokens) ? undefined : tokens[0];
+export const signsOffline: KeyRead = (tokens) =>
+  isClapOnlyAsk(tokens) || !tokens.includes("--sign-only")
+    ? undefined
+    : `${tokens[0]} --sign-only`;
