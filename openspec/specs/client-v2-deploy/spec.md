@@ -271,8 +271,13 @@ SHALL name that connection's network, whatever network is picked while it runs.
 The airdrop is the exception: the faucet funds the network picked now, so a
 deploy that needs SOL SHALL end with "The network changed during the deploy,
 so an airdrop would fund another network. Deploy again." when the endpoint
-changed since it started, before it asks the faucet. Both scenarios are held by
-unit tests (`deploy-run.test.ts`, `bpf-loader-upgradeable.test.ts`).
+changed since it started, before it asks the faucet. When the starting
+connection's network cannot be read (a custom endpoint whose genesis hash does
+not answer), the run's network SHALL be unknown: the deploy goes on, and SHALL
+add no history record and send no `deploy_succeeded`, rather than name the
+network selected now. The scenarios are held by unit tests
+(`deploy-run.test.ts`, `bpf-loader-upgradeable.test.ts`, `deploy-history.test.ts`,
+`Deploy.test.tsx`).
 
 #### Scenario: The network changes during the first reads (manual)
 
@@ -284,3 +289,8 @@ unit tests (`deploy-run.test.ts`, `bpf-loader-upgradeable.test.ts`).
 
 - **WHEN** a deploy that needs SOL finds the endpoint changed since it started
 - **THEN** it ends with the network-changed error and requests no airdrop
+
+#### Scenario: The run's network cannot be read (manual)
+
+- **WHEN** a deploy succeeds on a custom endpoint whose network cannot be read
+- **THEN** the history gets no record and no `deploy_succeeded` is sent

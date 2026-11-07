@@ -185,7 +185,7 @@ describe("PgDeployHistory deploy result", () => {
     sub.dispose();
   });
 
-  it("records the selected network when the deploy could not name its own", async () => {
+  it("records nothing when the deploy could not name its network, not the one selected", async () => {
     const { PgCommand, PgConnection, PgExplorer, PgGlobal, PgProgramInfo } =
       await mockedUtils();
     let deployCallback = undefined as ((result: unknown) => void) | undefined;
@@ -203,7 +203,7 @@ describe("PgDeployHistory deploy result", () => {
       ok: { signature: "sig1", cost: 1, upgraded: false, cluster: NONE },
     });
 
-    expect(PgDeployHistory.list("w").map((r) => r.cluster)).toEqual(["devnet"]);
+    expect(PgDeployHistory.list("w")).toEqual([]);
     sub.dispose();
   });
 

@@ -8,7 +8,8 @@ The `features/deploy` slice SHALL emit, with prefix `deploy`:
 
 - `deploy_started` when a deploy starts, with `cluster`, `kind` and `via`;
 - `deploy_succeeded` when the program is deployed, with `cluster`, `kind`
-  and `via`;
+  and `via`; a deploy whose endpoint cannot name its network sends none,
+  since the network selected now may not be the one it ran on;
 - `deploy_failed` when the deploy stops with an error, with `cluster`,
   `kind`, `via` and `step` (`checks`, `funding`, `buffer`, `write`,
   `authority`, `deploy`);

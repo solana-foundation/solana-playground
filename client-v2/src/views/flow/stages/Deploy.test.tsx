@@ -372,6 +372,7 @@ describe("Deploy stage", () => {
       signature: "sig",
       cost: 1,
       upgraded: false,
+      cluster: "devnet",
     });
     mocks.history = [
       {
@@ -476,6 +477,25 @@ describe("Deploy stage", () => {
 
     const succeeded = sent.events.find((e) => e.name === "deploy_succeeded");
     expect(succeeded?.params).toEqual({ cluster: "testnet", redeploy: false });
+  });
+
+  it("reports no success event when the deploy could not name its network", async () => {
+    // Devnet is selected, but the run's own network is unknown
+    mocks.execute.mockResolvedValue({
+      signature: "sig",
+      cost: 1,
+      upgraded: false,
+      // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` when the run's network is unknown
+      cluster: null,
+    });
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    const names = sent.events.map((e) => e.name);
+    expect(names).not.toContain("deploy_succeeded");
+    expect(names).not.toContain("deploy_failed");
   });
 
   it("saves the keypair from the backup line, and keeps the line when the save fails", async () => {

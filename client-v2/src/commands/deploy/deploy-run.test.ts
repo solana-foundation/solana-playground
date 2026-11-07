@@ -310,7 +310,7 @@ describe("deploy run", () => {
     expect(PgCommand.airdrop.execute).not.toHaveBeenCalled();
   });
 
-  it("reports the selected network when the connection's cannot be read", async () => {
+  it("reports no network when the connection's cannot be read, not the one selected", async () => {
     const { PgConnection } = await import("../../utils");
     vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
       new Error("genesis hash unreadable")
@@ -323,7 +323,7 @@ describe("deploy run", () => {
     const result = await handleDeploy();
 
     expect(result?.signature).toBe("sig-deploy");
-    expect(result?.cluster).toBe("devnet");
+    expect(result?.cluster).toBeNull();
   });
 
   it("funds first, without a question, when the stage started it", async () => {

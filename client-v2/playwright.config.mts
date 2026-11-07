@@ -198,12 +198,13 @@ export default defineConfig({
         ["json", { outputFile: "test-results/report.json" }],
       ]
     : "line",
-  // Under the `e2e` shard job's `timeout-minutes` (client-v2.yml), so
+  // Under the `e2e` shard job's `timeout-minutes` (reusable-client-v2.yml), so
   // Playwright itself ends a hung shard and still prints its summary; a
   // GitHub cancel keeps the traces but not the line saying which test was
-  // running. 25 minutes, not 15, while scope/users-work-2 keeps four shards:
-  // its shards outgrew 15 (#377). It goes back when the branch rebases onto
-  // master, which splits the suite into more shards.
+  // running. 25 minutes, not 15: on run 42259738085 (2026-11-06, seven
+  // shards) the slowest shard's `Browser tests` step took 14.7 minutes, so
+  // 15 would end a healthy shard. Lower it when the shards are measured well
+  // under 15 again.
   globalTimeout: process.env.CI ? 25 * 60_000 : 0,
   use: {
     baseURL: origin,

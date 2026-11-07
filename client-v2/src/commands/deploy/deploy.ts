@@ -107,11 +107,14 @@ async function clusterOf(
     return await PgConnection.getCluster(connection.rpcEndpoint);
   } catch (error) {
     // A custom endpoint whose genesis hash cannot be read: the deploy itself
-    // goes on, and its record takes the network selected now
-    log.warn("could not read the deploy's cluster", {
+    // goes on, its network unknown. The network selected now may be another
+    // one, so a record under it would be the wrong-network record this
+    // function exists to prevent.
+    log.warn("could not read the deploy's cluster; it is not recorded", {
       context: { error: String(error) },
     });
-    return PgConnection.cluster;
+    // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` for an unknown network
+    return null;
   }
 }
 
