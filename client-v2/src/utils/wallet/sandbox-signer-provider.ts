@@ -170,6 +170,11 @@ export const kitSignerWith =
     return kitSigner;
   };
 
+/** The sandbox makes, keeps and drops no keys: the page's wallet does */
+const refuseKeys = async (): Promise<never> => {
+  throw new Error("Project code cannot add or remove the wallet's keys.");
+};
+
 /**
  * The signer provider of the sandbox: its wallets sign by asking the page,
  * which signs with its local provider. It never holds a key, so asking it
@@ -182,6 +187,10 @@ export const sandboxSignerProviderWith = (
   sign: SignThroughPage
 ): WalletSignerProvider => ({
   name: "sandbox",
+  holdsKeysInPage: false,
+  makeKey: refuseKeys,
+  keepKey: refuseKeys,
+  forgetKey: refuseKeys,
   walletFor(account: SignerAccount): PlaygroundWallet {
     return {
       isPg: true,

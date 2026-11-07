@@ -10,6 +10,9 @@ import {
 } from "../decorators";
 import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
+import { type KeyFrame, keyFrame } from "./key-origin/client";
+import { keyOriginFor } from "./key-origin/origin";
+import { keyOriginSignerProvider } from "./key-origin/provider";
 import { parseKeypairFile } from "./keypair-file";
 import { indexedDbStoreFor } from "./keystore";
 import {
@@ -35,16 +38,31 @@ const defaultState: WalletState = {
 };
 
 /**
- * Holds the accounts' keys and signs with them (`signer-provider.ts`). Every
- * use of an account's key goes through it; `local` keeps the keys in the page
- * as the wallet always has.
+ * The key page, when the build names a key origin
+ * (`REACT_APP_WALLET_KEY_ORIGIN`): the accounts' keys live there, not in the
+ * page. Not looked up under Node, where the build imports this module
+ * (`src/settings`) and there is no `window`.
  */
-let signerProvider: WalletSignerProvider = localSignerProviderWith(
-  (publicKey) =>
-    PgWallet.accounts.find(
-      (account) => account.publicKey === publicKey.toBase58()
-    )?.kp
-);
+const keyPage =
+  typeof window !== "undefined" &&
+  keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN, window.location)
+    ? keyFrame
+    : undefined;
+
+/**
+ * Holds the accounts' keys and signs with them (`signer-provider.ts`). Every
+ * use of an account's key goes through it: `key-origin` when the build names a
+ * key origin, else `local`, which keeps the keys in the page as the wallet
+ * always has.
+ */
+let signerProvider: WalletSignerProvider = keyPage
+  ? keyOriginSignerProvider(keyPage)
+  : localSignerProviderWith(
+      (publicKey) =>
+        PgWallet.accounts.find(
+          (account) => account.publicKey === publicKey.toBase58()
+        )?.kp
+    );
 
 let walletStorageInstance:
   | ReturnType<ReturnType<typeof walletStorageWith>>
@@ -159,9 +177,48 @@ const requestPersistence = async () => {
   }
 };
 
+const keyOriginLog = createLogger("wallet:key-origin");
+
+/**
+ * The wallet as read under the key-origin provider: only once the key page
+ * answers. While it cannot be reached the wallet is `unavailable`, never
+ * Setup, so nothing is written over the stored record; reading again (`Try
+ * again`, `connect`) asks the key page again.
+ *
+ * @param frame the connection to the key page
+ * @returns a function of the read to run once the key page answers
+ */
+export const readWith =
+  (frame: () => Promise<KeyFrame>) =>
+  async (read: () => Promise<WalletState>): Promise<WalletState> => {
+    try {
+      await frame();
+    } catch (error) {
+      // Its name and reason only: no failure here carries key bytes, and
+      // naming them keeps it so
+      const { name } = toError(error);
+      const reason =
+        error instanceof Error && "reason" in error
+          ? String(error.reason)
+          : undefined;
+      keyOriginLog.warn(`wallet key page unreachable: ${name}`, {
+        context: { reason },
+      });
+      return { ...defaultState, state: "unavailable" };
+    }
+    return read();
+  };
+
 const storage = {
   /** Read from storage and deserialize the data. */
-  async read(): Promise<WalletState> {
+  read(): Promise<WalletState> {
+    return keyPage
+      ? readWith(keyPage)(storage.readStored)
+      : storage.readStored();
+  },
+
+  /** The wallet as stored */
+  async readStored(): Promise<WalletState> {
     const read = await walletStorage().read();
     switch (read.kind) {
       case "wallet":
@@ -213,7 +270,7 @@ const derive = () => ({
           // Check whether the current account exists
           const currentAccount = PgWallet.accounts[PgWallet.currentIndex];
           if (!currentAccount) {
-            if (!PgWallet.accounts.length) PgWallet.add();
+            if (!PgWallet.accounts.length) void addFirst();
             else PgWallet.switch(0);
 
             return null;
@@ -379,6 +436,37 @@ const migrate = () => {
   localStorage.removeItem("walletName");
 };
 
+const accountLog = createLogger("wallet:account");
+
+/** The first account being made, so a second derive does not make another */
+let addingFirst: Promise<void> | undefined;
+
+/**
+ * The wallet's first account, made when it connects with none. Making its key
+ * is asynchronous, so a derive that runs meanwhile shares this attempt instead
+ * of adding a second account. A failure (the key page went away) leaves the
+ * wallet with no current account, as before the attempt; it is logged, never
+ * thrown into the derive.
+ */
+const addFirst = () =>
+  (addingFirst ??= PgWallet.addNew()
+    .then(() => {})
+    .catch((error: unknown) => {
+      accountLog.error(error, { report: true });
+    })
+    .finally(() => {
+      addingFirst = undefined;
+    }));
+
+/**
+ * Tell of a key the provider failed to keep or drop: by public key only,
+ * which names the account and is not key material
+ */
+const reportKeyFailure =
+  (action: "keep" | "forget", publicKey: string) => (error: unknown) => {
+    accountLog.error(error, { report: true, context: { action, publicKey } });
+  };
+
 /**
  * Refuse a new account while the wallet is unavailable: it is never saved
  * then, so the account would live only in memory and be lost on reload
@@ -397,28 +485,45 @@ class _PgWallet {
   /**
    * Add a new account.
    *
-   * @param name name of the account
-   * @param keypair optional keypair, default to a random keypair
-   * @returns `false` when an account with the name or keypair already existed
+   * Under a provider that keeps the keys out of the page
+   * (`holdsKeysInPage === false`) the account is its name and public key: its
+   * key is the provider's, kept with `keepKey`, and a keypair is refused.
+   *
+   * @param params.name name of the account
+   * @param params.publicKey public key of a key the provider holds (from
+   * `makeKey`)
+   * @param params.keypair keypair to add, under a provider that holds keys in
+   * the page; with neither, a random one
+   * @returns `false` when an account with the name or key already existed
    * and it switched to that account instead
    * @throws while the wallet is unavailable
    */
-  static add(params?: { name?: string; keypair?: PgWeb3.Keypair }) {
+  static add(params?: {
+    name?: string;
+    publicKey?: string;
+    keypair?: PgWeb3.Keypair;
+  }) {
     refuseWhileUnavailable();
-    const { name, keypair } = PgCommon.setDefault(params, {
-      name: PgWallet.getNextAvailableAccountName(),
-      keypair: PgWeb3.Keypair.generate(),
-    });
+    const holdsKeysInPage = signerProvider.holdsKeysInPage;
+    if (!holdsKeysInPage && params?.keypair) {
+      throw new Error("Import the key file from the key panel.");
+    }
+    if (!holdsKeysInPage && !params?.publicKey) {
+      throw new Error("A new account's key comes from PgWallet.addNew.");
+    }
+    const name = params?.name ?? PgWallet.getNextAvailableAccountName();
+    const keypair =
+      params?.keypair ??
+      (params?.publicKey ? undefined : PgWeb3.Keypair.generate());
+    const publicKey = keypair?.publicKey.toBase58() ?? params?.publicKey;
+    if (!publicKey) throw new Error("No public key for the new account");
 
     // Validate name
     PgWallet.validateAccountName(name);
 
     // Check if account exists
     const accountIndex = PgWallet.accounts.findIndex((acc) => {
-      return (
-        (name && acc.name === name) ||
-        acc.publicKey === keypair.publicKey.toBase58()
-      );
+      return (name && acc.name === name) || acc.publicKey === publicKey;
     });
     if (accountIndex !== -1) {
       // Account exists, switch to the account
@@ -427,11 +532,19 @@ class _PgWallet {
     }
 
     // Add the account
-    PgWallet.accounts.push({
-      kp: Array.from(keypair.secretKey),
-      name,
-      publicKey: keypair.publicKey.toBase58(),
-    });
+    if (holdsKeysInPage) {
+      const kp = keypair
+        ? Array.from(keypair.secretKey)
+        : Array.from(
+            signerProvider.secretKeyFor(new PgWeb3.PublicKey(publicKey))
+          );
+      PgWallet.accounts.push({ kp, name, publicKey });
+    } else {
+      PgWallet.accounts.push({ name, publicKey });
+      signerProvider
+        .keepKey(publicKey)
+        .catch(reportKeyFailure("keep", publicKey));
+    }
 
     // Update the accounts
     PgWallet.update({
@@ -444,18 +557,51 @@ class _PgWallet {
   }
 
   /**
+   * Add an account with a new key, which the signer provider makes.
+   *
+   * @param name name of the account, by default the next free default name
+   * @returns `false` when an account with the name already existed and it
+   * switched to that account instead
+   * @throws while the wallet is unavailable, or when the provider cannot make
+   * the key
+   */
+  // eslint-disable-next-line layers/curry-order -- the name is optional as in `add`, a call of the wallet API
+  static async addNew(name?: string) {
+    refuseWhileUnavailable();
+    const publicKey = await signerProvider.makeKey();
+    const forget = () =>
+      signerProvider
+        .forgetKey(publicKey)
+        .catch(reportKeyFailure("forget", publicKey));
+    try {
+      const added = PgWallet.add({ name, publicKey });
+      if (!added) await forget();
+      return added;
+    } catch (error) {
+      await forget();
+      throw error;
+    }
+  }
+
+  /**
    * Remove the account at the given index.
    *
    * @param index account index
    */
   static remove(index: number = PgWallet.currentIndex) {
-    PgWallet.accounts.splice(index, 1);
+    const [removed] = PgWallet.accounts.splice(index, 1);
 
     // Update the accounts
     PgWallet.update({
       accounts: PgWallet.accounts,
       currentIndex: PgWallet.accounts.length - 1,
     });
+
+    if (removed) {
+      signerProvider
+        .forgetKey(removed.publicKey)
+        .catch(reportKeyFailure("forget", removed.publicKey));
+    }
   }
 
   /**
@@ -510,8 +656,13 @@ class _PgWallet {
    * @param params optional parameters
    * @param params.name optional name, defaults to the current wallet's name
    * @param params.keypair optional keypair, defaults to the current wallet
+   * @throws under a provider that keeps the keys out of the page: the key
+   * page's own panel exports the key file there
    */
   static export(params?: { name?: string; keypair?: PgWeb3.Keypair }) {
+    if (!signerProvider.holdsKeysInPage) {
+      throw new Error("Export the key file from the key panel.");
+    }
     params ??= {};
     if (!params.name || !params.keypair) {
       if (!PgWallet.current) throw new Error("Not connected");

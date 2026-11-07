@@ -3,10 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { requireFor } from "../../test-utils/require-for";
 import { PgCommon } from "../common";
 import { PgWeb3 } from "../web3";
+import { type KeyFrame, KeyFrameUnavailable } from "./key-origin/client";
+import { handlerWith } from "./key-origin/frame/handler";
+import { CLI_KEY_ERROR, keyOriginSignerProvider } from "./key-origin/provider";
 import { KeypairFileError } from "./keypair-file";
-import { localSignerProviderWith } from "./signer-provider";
-import type { Wallet } from "./types";
-import { PgWallet } from "./wallet";
+import { localSignerProviderWith, publicKeyOf } from "./signer-provider";
+import type { Wallet, WalletAccount, WalletState } from "./types";
+import { PgWallet, readWith } from "./wallet";
 
 // The connection module reads build-time globals the unit runner does not
 // define; `PgWallet.import` never touches it.
@@ -181,6 +184,159 @@ describe("utils/wallet/wallet", () => {
       PgWallet.export();
       expect(exported).toHaveBeenCalledWith("wallet-1-keypair.json", kp);
       expect(secretKeyFor).toHaveBeenCalledWith(keypair.publicKey);
+    });
+  });
+
+  describe("adding and removing accounts", () => {
+    /** A key page over an in-memory store, reached as a `KeyFrame` */
+    const fakeKeyPage = () => {
+      const kept = new Map<string, Uint8Array>();
+      const handle = handlerWith({
+        all: async () => new Map(kept),
+        put: async (entries) => {
+          for (const [publicKey, secret] of entries)
+            kept.set(publicKey, secret);
+        },
+        remove: async (publicKey) => {
+          kept.delete(publicKey);
+        },
+      });
+      let id = 0;
+      const link: KeyFrame = {
+        request: async <T>(body: Parameters<KeyFrame["request"]>[0]) => {
+          const reply = await handle(
+            Object.assign({ id: ++id }, body) as Parameters<typeof handle>[0]
+          );
+          if (!reply.ok) throw new Error(reply.error);
+          return reply.result as T;
+        },
+        close: () => {},
+      };
+      return { kept, provider: keyOriginSignerProvider(async () => link) };
+    };
+
+    /** The wallet's state, which `updatable` would hold once initialized */
+    const holdState = (accounts: WalletAccount[]) => {
+      Object.defineProperty(PgWallet, "accounts", {
+        get: () => accounts,
+        configurable: true,
+      });
+      Object.defineProperty(PgWallet, "state", {
+        get: () => "pg",
+        configurable: true,
+      });
+      const updates: Partial<WalletState>[] = [];
+      vi.spyOn(PgWallet, "update").mockImplementation((update) => {
+        updates.push(update);
+      });
+      return { accounts, updates };
+    };
+
+    afterEach(() => {
+      for (const prop of ["accounts", "state", "current"]) {
+        Reflect.deleteProperty(PgWallet, prop);
+      }
+    });
+
+    describe("under the key-origin provider", () => {
+      it("addNew stores the account by public key, and its key in the key page", async () => {
+        const { kept, provider } = fakeKeyPage();
+        PgWallet.setSignerProvider(provider);
+        const { accounts } = holdState([]);
+
+        expect(await PgWallet.addNew()).toBe(true);
+
+        expect(accounts).toHaveLength(1);
+        const [account] = accounts;
+        expect(account).toEqual({
+          name: "Wallet 1",
+          publicKey: Array.from(kept.keys())[0],
+        });
+        expect("kp" in account).toBe(false);
+      });
+
+      it("add refuses a keypair, so no key bytes reach the record", () => {
+        const { provider } = fakeKeyPage();
+        PgWallet.setSignerProvider(provider);
+        const { accounts } = holdState([]);
+
+        expect(() =>
+          PgWallet.add({ keypair: PgWeb3.Keypair.generate() })
+        ).toThrow("Import the key file from the key panel.");
+        expect(accounts).toHaveLength(0);
+      });
+
+      it("remove drops the account's key from the key page", async () => {
+        const { kept, provider } = fakeKeyPage();
+        PgWallet.setSignerProvider(provider);
+        holdState([]);
+        await PgWallet.addNew();
+
+        PgWallet.remove(0);
+
+        await vi.waitFor(() => expect(kept.size).toBe(0));
+      });
+
+      it("getKeypairBytes refuses with the CLI message, export with the key panel's", async () => {
+        const { provider } = fakeKeyPage();
+        PgWallet.setSignerProvider(provider);
+        const publicKey = new PgWeb3.PublicKey(await provider.makeKey());
+        const wallet = provider.walletFor({ name: "Wallet 1", publicKey });
+        Object.defineProperty(PgWallet, "current", {
+          get: (): Wallet => wallet,
+          configurable: true,
+        });
+        const exported = vi.spyOn(PgCommon, "export");
+
+        expect(() => PgWallet.getKeypairBytes()).toThrow(CLI_KEY_ERROR);
+        expect(() => PgWallet.export()).toThrow(
+          "Export the key file from the key panel."
+        );
+        expect(exported).not.toHaveBeenCalled();
+      });
+    });
+
+    describe("under the local provider", () => {
+      it("addNew stores the new key in the record", async () => {
+        PgWallet.setSignerProvider(localSignerProviderWith(() => undefined));
+        const { accounts } = holdState([]);
+
+        expect(await PgWallet.addNew("Mine")).toBe(true);
+
+        const [account] = accounts;
+        expect(account.name).toBe("Mine");
+        expect(account.kp).toHaveLength(64);
+        expect(publicKeyOf(account.kp as number[]).toBase58()).toBe(
+          account.publicKey
+        );
+      });
+    });
+  });
+
+  describe("readWith, the read under the key-origin provider", () => {
+    const stored: WalletState = {
+      state: "pg",
+      accounts: [],
+      currentIndex: -1,
+      show: false,
+      standardWallets: [],
+      // eslint-disable-next-line unicorn/no-null -- the stored shape: no standard wallet
+      standardName: null,
+    };
+
+    it("reads unavailable, reading nothing, while the key page cannot be reached", async () => {
+      const read = vi.fn(async () => stored);
+      const wallet = await readWith(() =>
+        Promise.reject(new KeyFrameUnavailable("timeout"))
+      )(read);
+      expect(wallet.state).toBe("unavailable");
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it("reads the stored wallet once the key page answers", async () => {
+      const read = vi.fn(async () => stored);
+      const wallet = await readWith(async () => ({} as KeyFrame))(read);
+      expect(wallet).toBe(stored);
     });
   });
 });
