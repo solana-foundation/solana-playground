@@ -16,14 +16,16 @@ const CLUSTER_READ_MS = 15_000;
 
 /** `read`, or a rejection once `ms` passed: a hung RPC holds no deploy */
 const within = <T>(read: Promise<T>, ms: number) => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   const timedOut = new Promise<never>((_, reject) => {
-    timer = setTimeout(
+    timer = window.setTimeout(
       () => reject(new Error(`no answer in ${ms / 1000} s`)),
       ms
     );
   });
-  return Promise.race([read, timedOut]).finally(() => clearTimeout(timer));
+  return Promise.race([read, timedOut]).finally(() =>
+    window.clearTimeout(timer)
+  );
 };
 
 /**
