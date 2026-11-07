@@ -14,6 +14,8 @@ interface ServerConsoleProps {
   server: McpServerEntry;
   /** The connected backend's name, when one is connected */
   providerName?: string;
+  /** The view's own id prefix, so two views on screen never share an id */
+  scope: string;
 }
 
 const MUTED = "text-[0.7rem] text-[var(--text-secondary)]";
@@ -74,7 +76,7 @@ const skeletonFor = (tool: McpTool, cluster: string) => {
 };
 
 /** One MCP server, with a console for calling its tools with no backend connected at all */
-const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
+const ServerConsole = ({ server, providerName, scope }: ServerConsoleProps) => {
   const tools = PgAssistant.mcpTools[server.id] ?? [];
 
   const [busy, setBusy] = useState(false);
@@ -179,13 +181,16 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
 
       {tools.length > 0 && (
         <>
-          <label htmlFor={`mcp-tool-${server.id}`} className={FIELD_LABEL}>
+          <label
+            htmlFor={`${scope}mcp-tool-${server.id}`}
+            className={FIELD_LABEL}
+          >
             TOOL
           </label>
           <NativeSelect
             size="sm"
             className="w-full [&_select]:font-mono [&_select]:text-xs"
-            id={`mcp-tool-${server.id}`}
+            id={`${scope}mcp-tool-${server.id}`}
             value={selected ?? ""}
             onChange={(ev) => pick(ev.target.value)}
           >
@@ -225,11 +230,14 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
                 </button>
               )}
 
-              <label htmlFor={`mcp-args-${server.id}`} className={FIELD_LABEL}>
+              <label
+                htmlFor={`${scope}mcp-args-${server.id}`}
+                className={FIELD_LABEL}
+              >
                 ARGUMENTS
               </label>
               <textarea
-                id={`mcp-args-${server.id}`}
+                id={`${scope}mcp-args-${server.id}`}
                 value={args}
                 onChange={(ev) => setArgs(ev.target.value)}
                 spellCheck={false}

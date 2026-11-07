@@ -37,6 +37,7 @@ import {
 } from "../model/sections";
 import { settingsTelemetry } from "../model/telemetry";
 import AssistantKey from "./AssistantKey";
+import AssistantSources from "./AssistantSources";
 import type { HostedModel } from "./BaseAssistantStatus";
 import BaseAssistantStatus from "./BaseAssistantStatus";
 import BaseSettingRow from "./BaseSettingRow";
@@ -180,16 +181,21 @@ const LiveSettingsPage = ({
       </>
     ),
     assistant: (
-      <BaseSettingsCard>
-        <BaseAssistantStatus
-          hosted={hosted}
-          hostedName={hostedName}
-          ownKey={ownKey}
-          online={online}
-          onRetry={onRetryHosted}
-          phone={phone}
-        />
-      </BaseSettingsCard>
+      <>
+        <BaseSettingsCard>
+          <BaseAssistantStatus
+            hosted={hosted}
+            hostedName={hostedName}
+            ownKey={ownKey}
+            online={online}
+            onRetry={onRetryHosted}
+            phone={phone}
+          />
+        </BaseSettingsCard>
+        <BaseSettingsCard title={GROUPS.sources}>
+          <AssistantSources />
+        </BaseSettingsCard>
+      </>
     ),
     editor: cardsOf("editor"),
     build: cardsOf("build"),
