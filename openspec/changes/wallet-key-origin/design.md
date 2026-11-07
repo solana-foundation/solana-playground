@@ -45,11 +45,14 @@ rest come from the 7 Nov call.
   domain, so there is no second project to build and keep in step. A second
   project would isolate the key origin's files further; it costs a pipeline
   and a release that can drift from the app's protocol version.
-- **The app never runs on the key origin (my call).** `vercel.json` refuses
-  every path but `/wallet-keys.html` and `/static/js/wallet-keys*` on a host
-  whose first label is `wallet-keys` (for example
-  `wallet-keys.playground.solana.com`). Without that rule an app XSS opened
-  on the key origin would read the keys.
+- **The app never runs on the key origin (my call).** A `vercel.json`
+  redirect sends every path but `/wallet-keys.html` and
+  `/static/js/wallet-keys*` to `/wallet-keys.html` on a host whose first
+  label is `wallet-keys` (for example `wallet-keys.playground.solana.com`).
+  It is a redirect because Vercel runs redirects before its files and
+  functions, and rewrites only after them: as a rewrite, `index.html`, the
+  app's scripts and `/api` would still answer on that host. Without the rule
+  an app XSS opened on the key origin would read the keys.
 - **The key origin is same-site with the app in production.** A subdomain of
   the app's site keeps the frame's storage unpartitioned and under the same
   browser retention rules as the app's own (Safari's included). A preview on

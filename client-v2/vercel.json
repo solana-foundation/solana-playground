@@ -47,12 +47,15 @@
       ]
     }
   ],
-  "rewrites": [
+  "redirects": [
     {
       "source": "/((?!wallet-keys\\.html|static/js/wallet-keys).*)",
-      "has": [{ "type": "host", "value": "wallet-keys\\..*" }],
-      "destination": "/404"
-    },
+      "has": [{ "type": "host", "value": "^wallet-keys\\..*$" }],
+      "destination": "/wallet-keys.html",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
     {
       "source": "/api/auth/:authPath+",
       "destination": "/api/auth"

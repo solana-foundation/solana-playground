@@ -154,17 +154,84 @@ describe("vercel.json for the key page", () => {
     });
   });
 
-  it("refuses every other path on the key host, before any other rewrite", () => {
-    assert.deepEqual(vercel.rewrites[0], {
-      source: "/((?!wallet-keys\\.html|static/js/wallet-keys).*)",
-      has: [{ type: "host", value: "wallet-keys\\..*" }],
-      destination: "/404",
-    });
-    const refused = new RegExp(`^${vercel.rewrites[0].source}$`);
-    assert.ok(refused.test("/index.html"));
-    assert.ok(refused.test("/static/js/main.1234.js"));
-    assert.ok(refused.test("/api/agent"));
-    assert.ok(!refused.test("/wallet-keys.html"));
-    assert.ok(!refused.test("/static/js/wallet-keys.1234.js"));
+  /**
+   * Where Vercel sends a request, in its phase order
+   * (`getTransformedRoutes` in `@vercel/routing-utils`): redirects, then the
+   * filesystem (static files and `api/` functions), then rewrites. A
+   * host-conditioned rule outside `redirects` would run after the app's own
+   * files had answered. Sources here are raw regexes, as this file's are.
+   */
+  const FILES = new Set([
+    "/index.html",
+    "/runtime.html",
+    "/wallet-keys.html",
+    "/static/js/main.abc.js",
+    "/static/js/wallet-keys.abc.js",
+    "/api/agent",
+  ]);
+  const hostMatches = (has, host) =>
+    (has ?? []).every(
+      (item) =>
+        item.type === "host" &&
+        // Unanchored, as the strictest reading: the value anchors itself
+        new RegExp(item.value).test(host)
+    );
+  const routeOf = (host, urlPath) => {
+    for (const rule of vercel.redirects ?? []) {
+      if (
+        new RegExp(`^${rule.source}$`).test(urlPath) &&
+        hostMatches(rule.has, host)
+      ) {
+        return `redirect ${rule.destination}`;
+      }
+    }
+    // `/` is the directory index
+    const file = urlPath === "/" ? "/index.html" : urlPath;
+    if (FILES.has(file)) return `file ${file}`;
+    return "rewrites";
+  };
+
+  const KEY_HOST = "wallet-keys.playground.solana.com";
+  const APP_HOST = "playground.solana.com";
+
+  it("sends every other path on the key host to the key page, before any file answers", () => {
+    for (const urlPath of [
+      "/",
+      "/index.html",
+      "/static/js/main.abc.js",
+      "/runtime.html",
+      "/api/agent",
+      "/some/client/route",
+    ]) {
+      assert.equal(
+        routeOf(KEY_HOST, urlPath),
+        "redirect /wallet-keys.html",
+        urlPath
+      );
+    }
+    assert.equal(
+      routeOf(KEY_HOST, "/wallet-keys.html"),
+      "file /wallet-keys.html"
+    );
+    assert.equal(
+      routeOf(KEY_HOST, "/static/js/wallet-keys.abc.js"),
+      "file /static/js/wallet-keys.abc.js"
+    );
+    assert.equal(vercel.redirects[0].permanent, false);
+  });
+
+  it("changes nothing on the app's host, nor on a host that only contains the label", () => {
+    for (const host of [APP_HOST, "foo-wallet-keys.example.com"]) {
+      assert.equal(routeOf(host, "/"), "file /index.html", host);
+      assert.equal(routeOf(host, "/api/agent"), "file /api/agent", host);
+      assert.equal(routeOf(host, "/some/client/route"), "rewrites", host);
+    }
+  });
+
+  it("puts no host-conditioned rule in rewrites, where files answer first", () => {
+    assert.deepEqual(
+      vercel.rewrites.filter((rule) => rule.has),
+      []
+    );
   });
 });
