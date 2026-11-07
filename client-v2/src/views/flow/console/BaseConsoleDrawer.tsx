@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from "react";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
   ConsoleDrawer,
@@ -28,8 +29,17 @@ interface BaseConsoleDrawerProps {
    * alone) */
   stop: { run: RunKind; onStop: () => void } | null;
   status: ConsoleStatus;
-  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere */
-  shortcut: string;
+  /** How far a long command (a deploy's buffer writes) has got, 0 to 100; 0 draws no bar */
+  progress?: number;
+  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere; none on a touch layout */
+  shortcut?: string;
+  /**
+   * A tutorial's bar: the dot and its line only, no "Terminal" label, as
+   * the prototype draws it
+   */
+  bare?: boolean;
+  /** A line over the terminal before anything has run */
+  empty?: string | null;
   children?: ReactNode;
 }
 
@@ -47,7 +57,11 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   onClear,
   stop,
   status,
+  progress = 0,
   shortcut,
+  bare = false,
+  // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  empty = null,
   children,
 }) => (
   <ConsoleDrawer
@@ -57,23 +71,47 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     contentId={CONSOLE_BODY_ID}
     className="h-full bg-surface"
   >
-    <ConsoleDrawerBar triggerLabel="Terminal" className="shrink-0">
+    <ConsoleDrawerBar triggerLabel="Terminal" className="relative shrink-0">
+      {progress > 0 && (
+        <div
+          role="progressbar"
+          aria-label="Progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress)}
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.5"
+        >
+          <div
+            className="h-full bg-primary transition-[width] duration-300"
+            style={{ width: `${Math.min(progress, 100)}%` }}
+          />
+        </div>
+      )}
       <ConsoleDrawerStatus>
         <StatusDot variant={status.tone} />
-        <span
-          data-console-label
-          className="font-semibold tracking-wide text-foreground"
-        >
-          Terminal
-        </span>
+        {!bare && (
+          <span
+            data-console-label
+            className="font-semibold tracking-wide text-foreground"
+          >
+            Terminal
+          </span>
+        )}
         {status.text && (
-          <span className={status.tone === "error" ? "text-error" : undefined}>
+          <span
+            data-console-status
+            className={cn(
+              "truncate",
+              status.tone === "error" && "text-error",
+              status.tone === "warning" && "text-warning"
+            )}
+          >
             {status.text}
           </span>
         )}
       </ConsoleDrawerStatus>
       <ConsoleDrawerActions>
-        <Kbd aria-hidden>{shortcut}</Kbd>
+        {shortcut && <Kbd aria-hidden>{shortcut}</Kbd>}
         {/* Spec 13: while a build runs, Clear is off with Stop
             beside it; on a phone Stop takes Clear's place, a fingertip
             wide. Stop shows folded too: the strip is all a folded console
@@ -114,6 +152,11 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
           too: an `auto` one is never narrower than the terminal's own width,
           so the terminal outgrows a narrowing stage and fit, which takes the
           scrollbar off that width, gets there one scrollbar per pass. */}
+      {empty && (
+        <p className="shrink-0 px-4 pt-3 font-mono text-code text-muted-foreground">
+          {empty}
+        </p>
+      )}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
         {children}
       </div>

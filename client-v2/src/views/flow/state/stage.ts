@@ -86,8 +86,12 @@ export type FlowEvent =
   /** The person stopped the build: no result is kept, the stage goes back to
    * its settled status */
   | { type: "build-stop" }
-  | { type: "deploy-start" }
-  | { type: "deploy-finish"; ok: boolean }
+  /**
+   * `from`: the deploy command, whose events route to the Deploy stage, or a
+   * tutorial's deploy act, which leaves the stage where it is
+   */
+  | { type: "deploy-start"; from: DeployFrom }
+  | { type: "deploy-finish"; ok: boolean; from: DeployFrom }
   /** The person stopped the deploy before its last step: the program on
    * chain is as it was, and the stage goes back to where it was */
   | { type: "deploy-stop" }
@@ -163,6 +167,13 @@ export const countErrors = (stderr: string) =>
       return !!head && !SUMMARY.test(head[1]);
     }).length;
 
+/** Who ran a deploy: the deploy command, or a tutorial's deploy act */
+export type DeployFrom = "command" | "tutorial";
+
+/** The command's deploy routes to the Deploy stage; a tutorial's keeps the editor */
+const deployStage = (from: DeployFrom, state: FlowState): Stage =>
+  from === "command" ? "deploy" : state.stage;
+
 /**
  * What a `build` command's rejection says: about the server, or about an
  * empty program file it never sent. By shape, not `instanceof
@@ -192,6 +203,21 @@ export class PgFlow {
 
   static setStage(stage: Stage) {
     PgFlow._dispatch({ type: "set-stage", stage });
+  }
+
+  /**
+   * A deploy that does not go through `PgCommand.deploy` started: a
+   * tutorial's deploy act (`tutorial-runs`). The terminal bar and the
+   * drawer's first-deploy opening read the same state for both. The stage
+   * stays where it is: the tutorial's editor, not the Deploy stage.
+   */
+  static deployStarted() {
+    PgFlow._dispatch({ type: "deploy-start", from: "tutorial" });
+  }
+
+  /** That deploy ended, landed (`ok`) or not */
+  static deployFinished(ok: boolean) {
+    PgFlow._dispatch({ type: "deploy-finish", ok, from: "tutorial" });
   }
 
   static onDidChange(cb: (s: FlowState) => void): Disposable {
@@ -257,7 +283,7 @@ export class PgFlow {
         if (state.deploy === "running") return state;
         return {
           ...state,
-          stage: "deploy",
+          stage: deployStage(ev.from, state),
           deploy: "running",
           deployBeforeRun: state.deploy,
           stopped: null,
@@ -270,19 +296,12 @@ export class PgFlow {
           // A stop of the build a deploy runs first is the build's stop
           stopped: state.stopped === "build" ? "build" : "deploy",
         };
-      case "deploy-finish":
+      case "deploy-finish": {
+        const stage = deployStage(ev.from, state);
         return ev.ok
-          ? {
-              ...state,
-              stage: "deploy",
-              deploy: "done",
-              interact: "active",
-            }
-          : {
-              ...state,
-              stage: "deploy",
-              deploy: "failed",
-            };
+          ? { ...state, stage, deploy: "done", interact: "active" }
+          : { ...state, stage, deploy: "failed" };
+      }
       case "set-stage":
         return { ...state, stage: ev.stage };
       case "program":
@@ -379,7 +398,7 @@ export class PgFlow {
         });
       }),
       PgCommand.deploy.onDidStart(() =>
-        PgFlow._dispatch({ type: "deploy-start" })
+        PgFlow._dispatch({ type: "deploy-start", from: "command" })
       ),
       PgCommand.deploy.onDidFinish((result) => {
         // A second click while a deploy is already running pauses it
@@ -396,6 +415,7 @@ export class PgFlow {
         PgFlow._dispatch({
           type: "deploy-finish",
           ok: !("err" in result),
+          from: "command",
         });
       }),
       PgCommand.airdrop.onDidStart(() =>

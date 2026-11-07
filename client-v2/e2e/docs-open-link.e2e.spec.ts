@@ -171,7 +171,7 @@ test.describe("docs-open-link", () => {
       LONG
     );
     await page.locator("#docs-link-home").click();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/home$/);
   });
 });
 
@@ -273,7 +273,10 @@ test.describe("client-run", () => {
     await expect(card).toContainText("0.02 SOL");
     await expect(
       card.getByRole("link", { name: "Get devnet SOL" })
-    ).toHaveAttribute("href", "https://faucet.solana.com");
+    ).toHaveAttribute(
+      "href",
+      /^https:\/\/faucet\.solana\.com\/\?walletAddress=[1-9A-HJ-NP-Za-km-z]{32,44}&cluster=devnet$/
+    );
     await expect(page.locator(".xterm-rows")).not.toContainText("same wallet");
   });
 

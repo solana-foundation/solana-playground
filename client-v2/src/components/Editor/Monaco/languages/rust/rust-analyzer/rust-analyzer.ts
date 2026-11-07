@@ -252,6 +252,9 @@ const loadLocalFiles = async () => {
  * @param model monaco editor model
  */
 const update = async (model: monaco.editor.IModel) => {
+  // The model goes with its project (the last one deleted, a switch) while
+  // an update awaits the worker; reading it then throws "Model is disposed!"
+  if (model.isDisposed()) return;
   const crateImportPromises = CRATES.importable
     .map((crate) => {
       const status = cachedNames.get(crate);
@@ -270,7 +273,9 @@ const update = async (model: monaco.editor.IModel) => {
     await Promise.all(crateImportPromises);
   }
 
+  if (model.isDisposed()) return;
   const { diagnostics } = await state.update(model.uri.path, model.getValue());
+  if (model.isDisposed()) return;
   monaco.editor.setModelMarkers(model, LANGUAGE_ID, diagnostics);
 };
 

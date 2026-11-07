@@ -3,8 +3,8 @@ import type {
   Refused,
   RpcHealth,
   SaveResult,
-} from "@/entities/custom-rpc";
-import { PgCustomRpcs } from "@/entities/custom-rpc";
+} from "@/entities/cluster";
+import { PgCustomRpcs } from "@/entities/cluster";
 import { createLogger } from "@/shared/lib/logger";
 
 import { settingsTelemetry } from "./telemetry";

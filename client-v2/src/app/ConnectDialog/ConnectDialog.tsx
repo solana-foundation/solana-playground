@@ -100,12 +100,16 @@ const ConnectDialog = ({ preset }: ConnectDialogProps) => {
           title="Connect a model"
           // One column, as the prototype's 27rem card holds it
           size="narrow"
+          // A preset comes from a key the provider refused, so the fields
+          // take the focus; otherwise the dialog does, with nothing ringed
+          openFocus={preset ? "field" : "dialog"}
           buttonProps={{
             text: action.text,
             disabled: !action.ready,
             onSubmit: action.connect,
-            // Connect is the one call to action here (design 5.4)
-            variant: "brand",
+            // Solid, so it reads as the one call to action whether or not it
+            // can be pressed yet; the ring read as disabled
+            variant: "default",
             // The dialog closes itself on the connection, with it as the
             // answer
             noCloseOnSubmit: true,

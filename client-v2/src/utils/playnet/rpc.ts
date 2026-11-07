@@ -1,9 +1,10 @@
 import type { PgRpc, TransactionStatus } from "@solana-playground/playnet";
 
+import { buildConnectionWith } from "@/entities/cluster";
+
 import { Endpoint } from "../../constants";
 import { PgCodec } from "../codec";
 import { PgCommon } from "../common";
-import { PgConnection } from "../connection";
 import { PgSettings } from "../settings";
 import { PgWeb3 } from "../web3";
 import { PgSerde } from "./serde";
@@ -50,10 +51,10 @@ export class PgPlaynetRpc {
     // Return early if `playnet` doesn't exist
     if (!rpc) return null;
 
-    // Override connection to make it compatible with Playnet
-    const connection: OverridableConnection = PgConnection.create({
-      fetch: newFetch,
-    });
+    // Override connection to make it compatible with Playnet; never cached, since its methods are replaced below
+    const connection: OverridableConnection = buildConnectionWith(newFetch)(
+      PgSettings.connection.endpoint
+    );
 
     // @ts-ignore
     connection.confirmTransaction = async (

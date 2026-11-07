@@ -179,7 +179,11 @@ describe("PgFlow.reduce", () => {
       errorCount: 0,
       ms: 1,
     });
-    const s = PgFlow.reduce(built, { type: "deploy-finish", ok: true });
+    const s = PgFlow.reduce(built, {
+      type: "deploy-finish",
+      ok: true,
+      from: "command",
+    });
     expect(s.deploy).toBe("done");
     expect(s.interact).toBe("active");
     expect(s.stage).toBe("deploy");
@@ -300,7 +304,10 @@ describe("PgFlow.reduce, a stopped run", () => {
   });
 
   it("a stopped deploy goes back to what Deploy showed before it", () => {
-    const deploying = PgFlow.reduce(builtOnce(), { type: "deploy-start" });
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "command",
+    });
     expect(deploying.deploy).toBe("running");
 
     const s = PgFlow.reduce(deploying, { type: "deploy-stop" });
@@ -310,9 +317,50 @@ describe("PgFlow.reduce, a stopped run", () => {
     expect(s.stopped).toBe("deploy");
   });
 
+  it("a tutorial's deploy leaves the stage where it is, however it ends", () => {
+    const writing = PgFlow.reduce(builtOnce(), {
+      type: "set-stage",
+      stage: "write",
+    });
+    const deploying = PgFlow.reduce(writing, {
+      type: "deploy-start",
+      from: "tutorial",
+    });
+    expect(deploying.stage).toBe("write");
+    expect(deploying.deploy).toBe("running");
+
+    for (const ok of [true, false]) {
+      const s = PgFlow.reduce(deploying, {
+        type: "deploy-finish",
+        ok,
+        from: "tutorial",
+      });
+      expect(s.stage).toBe("write");
+      expect(s.deploy).toBe(ok ? "done" : "failed");
+    }
+  });
+
+  it("a stop during a tutorial's deploy goes back to what Deploy showed", () => {
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "tutorial",
+    });
+
+    const s = PgFlow.reduce(deploying, { type: "deploy-stop" });
+
+    expect(s.deploy).toBe("active");
+    expect(s.stopped).toBe("deploy");
+  });
+
   it("a second Deploy click keeps what Deploy showed before the run", () => {
-    const deploying = PgFlow.reduce(builtOnce(), { type: "deploy-start" });
-    const pausedClick = PgFlow.reduce(deploying, { type: "deploy-start" });
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "command",
+    });
+    const pausedClick = PgFlow.reduce(deploying, {
+      type: "deploy-start",
+      from: "command",
+    });
 
     const s = PgFlow.reduce(pausedClick, { type: "deploy-stop" });
 
@@ -354,7 +402,10 @@ describe("PgFlow.reduce, a stopped run", () => {
   });
 
   it("a stop of the build a deploy runs first reads as the build's", () => {
-    const deploying = PgFlow.reduce(builtOnce(), { type: "deploy-start" });
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "command",
+    });
     const building = PgFlow.reduce(deploying, { type: "build-start", at: 9 });
     const buildStopped = PgFlow.reduce(building, { type: "build-stop" });
 
@@ -381,7 +432,9 @@ describe("PgFlow.reduce, a stopped run", () => {
     expect(
       PgFlow.reduce(stopped, { type: "build-start", at: 10 }).stopped
     ).toBeNull();
-    expect(PgFlow.reduce(stopped, { type: "deploy-start" }).stopped).toBeNull();
+    expect(
+      PgFlow.reduce(stopped, { type: "deploy-start", from: "command" }).stopped
+    ).toBeNull();
   });
 });
 
@@ -975,7 +1028,10 @@ describe("a project with no program", () => {
     const built = PgFlow.reduce(noProgram(), { type: "build-start", at: 1 });
     expect(built.stage).toBe("write");
     expect(built.build).toBe("running");
-    const deployed = PgFlow.reduce(noProgram(), { type: "deploy-start" });
+    const deployed = PgFlow.reduce(noProgram(), {
+      type: "deploy-start",
+      from: "command",
+    });
     expect(deployed.stage).toBe("write");
   });
 
@@ -987,8 +1043,8 @@ describe("a project with no program", () => {
   it("keeps a hidden stage hidden when a build or a deploy finishes", () => {
     const finishes: FlowEvent[] = [
       { type: "build-finish", failed: true, errorCount: 1, ms: 1 },
-      { type: "deploy-finish", ok: true },
-      { type: "deploy-finish", ok: false },
+      { type: "deploy-finish", ok: true, from: "command" },
+      { type: "deploy-finish", ok: false, from: "command" },
     ];
     for (const ev of finishes) {
       expect(PgFlow.reduce(noProgram(), ev).stage).toBe("write");
@@ -1104,5 +1160,33 @@ describe("PgFlow.init, reading whether the project has a program", () => {
 
     expect(() => fired.onDidDeleteItem()).not.toThrow();
     expect(PgFlow.state.hasProgram).toBe(false);
+  });
+});
+
+describe("PgFlow, a deploy run outside the deploy command", () => {
+  it("reads running, then done or failed, as the command's own would", () => {
+    PgFlow.deployStarted();
+    expect(PgFlow.state.deploy).toBe("running");
+    PgFlow.deployFinished(true);
+    expect(PgFlow.state.deploy).toBe("done");
+    PgFlow.deployStarted();
+    PgFlow.deployFinished(false);
+    expect(PgFlow.state.deploy).toBe("failed");
+  });
+
+  it("routes the command's deploy to the Deploy stage, as before", () => {
+    const s = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "deploy-start",
+      from: "command",
+    });
+    expect(s.stage).toBe("deploy");
+  });
+
+  it("leaves the stage where it is: a tutorial's editor stays on screen", () => {
+    PgFlow.setStage("write");
+    PgFlow.deployStarted();
+    expect(PgFlow.state.stage).toBe("write");
+    PgFlow.deployFinished(true);
+    expect(PgFlow.state.stage).toBe("write");
   });
 });

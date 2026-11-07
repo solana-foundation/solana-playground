@@ -395,9 +395,9 @@ test("client-v2-external-wallet: A payer beside the current extension", async ({
     .getByRole("button", { name: "More" })
     .click();
   await expect(
-    page.getByRole("menuitem", { name: "Disconnect from Phantom" })
+    page.getByRole("menuitem", { name: "Disconnect Phantom Wallet" })
   ).toBeVisible();
   await expect(
-    page.getByRole("menuitem", { name: "Disconnect from Solflare" })
+    page.getByRole("menuitem", { name: "Disconnect Solflare Wallet" })
   ).toBeVisible();
 });

@@ -226,6 +226,60 @@ describe("the assistant's provider", () => {
     ]);
   });
 
+  it("sends a mode's context after the project's state while the mode is set", async () => {
+    const sent = respond(openAiText("Hi."));
+    const mode = PgAssistant.setMode({
+      name: "tutorial",
+      context: () => "Tutorial: Hello Anchor, step 1 of 4",
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      await createProvider({ id: "default", apiKey: "" }).send("hi");
+    } finally {
+      mode.dispose();
+    }
+
+    expect(messagesOf(sent[0].body).slice(0, 3)).toEqual([
+      { role: "system", content: "system" },
+      { role: "system", content: "Current project state:\n\nproject" },
+      { role: "system", content: "Tutorial: Hello Anchor, step 1 of 4" },
+    ]);
+  });
+
+  it("still sends the turn when a mode's context throws, without it, and reports it", async () => {
+    // A logger of its own: one not yet set up buffers the report and replays
+    // it into the next test that sets one up
+    const memory = memoryLog();
+    initLogger({ providers: [memory] });
+    const sent = respond(openAiText("Hi."));
+    const mode = PgAssistant.setMode({
+      name: "tutorial",
+      context: () => {
+        throw new Error("no definition");
+      },
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      await createProvider({ id: "default", apiKey: "" }).send("hi");
+    } finally {
+      mode.dispose();
+      resetLogger();
+    }
+
+    expect(messagesOf(sent[0].body).slice(0, 3)).toEqual([
+      { role: "system", content: "system" },
+      { role: "system", content: "Current project state:\n\nproject" },
+      { role: "user", content: "hi" },
+    ]);
+    expect(
+      memory.entries.filter((entry) => entry.report).map((e) => e.context)
+    ).toEqual([{ mode: "tutorial" }]);
+  });
+
   it("asks Anthropic for droppable updates, effort, fallbacks, a cached prompt and 64000 tokens", async () => {
     const sent = respond(anthropicText("ok", "end_turn"));
 

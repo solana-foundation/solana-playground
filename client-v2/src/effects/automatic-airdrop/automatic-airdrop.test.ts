@@ -16,7 +16,10 @@ vi.mock("../../utils", () => ({
   PgConnection: { cluster: "devnet", getAirdropAmount: () => 5 },
   PgSettings: { wallet: { automaticAirdrop: true } },
   PgTerminal: { println: vi.fn() },
-  PgWallet: { balance: 0 },
+  PgWallet: {
+    balance: 0,
+    current: { publicKey: { toBase58: () => "Wa11et" } },
+  },
   isTerminalUnmounted: (error: unknown) => error === unmounted,
 }));
 vi.mock("../../features/auth", () => ({
@@ -24,10 +27,11 @@ vi.mock("../../features/auth", () => ({
 }));
 
 import { PgSession } from "../../features/auth";
-import { PgCommand, PgConnection } from "../../utils";
+import { PgCommand, PgConnection, PgTerminal } from "../../utils";
 import { automaticAirdrop } from "./automatic-airdrop";
 
 const airdrop = vi.mocked(PgCommand.airdrop.execute);
+const println = vi.mocked(PgTerminal.println);
 const pass = automaticAirdrop() as unknown as () => Promise<void>;
 
 describe("automaticAirdrop", () => {
@@ -87,5 +91,29 @@ describe("automaticAirdrop", () => {
     await pass();
 
     expect(airdrop).not.toHaveBeenCalled();
+  });
+
+  it("points to the faucet's site, with the wallet's address, when an airdrop on devnet fails", async () => {
+    (PgConnection as { cluster: string }).cluster = "devnet";
+    println.mockClear();
+    airdrop.mockRejectedValueOnce(new Error("Too many airdrop requests"));
+    await pass();
+
+    expect(println).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "Visit https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet to obtain SOL."
+      )
+    );
+  });
+
+  it("names no faucet site for a local validator", async () => {
+    (PgConnection as { cluster: string }).cluster = "localnet";
+    println.mockClear();
+    airdrop.mockRejectedValueOnce(new Error("connection refused"));
+    await pass();
+
+    const note = String(println.mock.calls.at(-1)?.[0]);
+    expect(note).toContain("automatic airdrop request");
+    expect(note).not.toContain("faucet.solana.com");
   });
 });

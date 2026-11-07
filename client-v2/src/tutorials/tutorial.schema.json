@@ -1,0 +1,893 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://beta.solpg.io/tutorial.schema.json",
+  "title": "Conversation tutorial",
+  "description": "One tutorial on the conversation flow: its catalog card, its intro, its steps and its finish. `yarn tutorial:check` validates a definition against this schema and a few rules a schema cannot express.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "name",
+    "description",
+    "authors",
+    "level",
+    "framework",
+    "languages",
+    "thumbnail",
+    "minutes",
+    "intro",
+    "steps",
+    "finish"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "description": "The format's version. Only 1 exists.",
+      "const": 1
+    },
+    "name": {
+      "description": "The tutorial's name on its card and in the chat head.",
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "description": "One line on the card. Only the first 72 characters show.",
+      "type": "string",
+      "minLength": 1
+    },
+    "authors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "link": {
+            "type": "string",
+            "pattern": "^https?://"
+          }
+        }
+      }
+    },
+    "level": {
+      "enum": ["Beginner", "Intermediate", "Advanced"]
+    },
+    "framework": {
+      "enum": ["Anchor", "Native", "Seahorse"]
+    },
+    "languages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["JavaScript", "Python", "Rust", "TypeScript"]
+      }
+    },
+    "categories": {
+      "type": "array",
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "Compression",
+          "DeFi",
+          "Gaming",
+          "Governance",
+          "Lending",
+          "Multisig",
+          "NFT",
+          "Payment",
+          "Stablecoin",
+          "SPL",
+          "Staking",
+          "Token",
+          "Trading"
+        ]
+      }
+    },
+    "thumbnail": {
+      "description": "The card's 4:3 image: a file next to tutorial.json (`thumbnail.jpg`), a path under `/tutorials/` or a full URL.",
+      "type": "string",
+      "minLength": 1
+    },
+    "minutes": {
+      "description": "About how long the tutorial takes, for the card and the intro.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "intro": {
+      "description": "What shows before Start.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["promise", "log", "files"],
+      "properties": {
+        "promise": {
+          "description": "The promise line under \"What you'll build\": what the learner ends with.",
+          "$ref": "#/definitions/text"
+        },
+        "log": {
+          "description": "The log line the finished program prints, shown as code under the promise.",
+          "type": "string",
+          "minLength": 1
+        },
+        "files": {
+          "description": "The finished program, shown read only beside the intro.",
+          "$ref": "#/definitions/files"
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": {
+        "$ref": "#/definitions/step"
+      }
+    },
+    "finish": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["headline", "line", "learned", "chips", "next"],
+      "properties": {
+        "headline": {
+          "$ref": "#/definitions/text"
+        },
+        "line": {
+          "$ref": "#/definitions/text"
+        },
+        "learned": {
+          "description": "What was learned, one item a step.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "chips": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/chip"
+          }
+        },
+        "next": {
+          "description": "The slug of the tutorial the finish suggests next, or null.",
+          "type": ["string", "null"],
+          "minLength": 1
+        }
+      }
+    },
+    "docs": {
+      "description": "The few doc pages the tutorial needs, opened as read-only tabs beside the files and linked by the assistant.",
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/definitions/doc"
+      }
+    }
+  },
+  "definitions": {
+    "text": {
+      "description": "Text in the conversation's inline Markdown (inline code, emphasis, links), or that text with a shorter phone variant.",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "phone"],
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1
+            },
+            "phone": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "id": {
+      "description": "An id unique in the tutorial: saved progress names beats and steps by it.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9.-]*$"
+    },
+    "path": {
+      "description": "A workspace file path, relative: `src/lib.rs`, `client/client.ts`.",
+      "type": "string",
+      "pattern": "^[^/](.*[^/])?$"
+    },
+    "files": {
+      "description": "Whole file contents by path.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/definitions/path"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "doc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "url", "file"],
+      "properties": {
+        "title": {
+          "description": "The tab's title.",
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "description": "The page on its own site, linked from the tab.",
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "file": {
+          "description": "The page as Markdown, a file in the tutorial's `docs/` folder: `idl.md`.",
+          "type": "string",
+          "pattern": "^[^/.][^/]*\\.md$"
+        }
+      }
+    },
+    "pattern": {
+      "description": "A JavaScript regular expression, matched case-insensitively.",
+      "type": "string",
+      "minLength": 1
+    },
+    "follow": {
+      "description": "A quiet button after an answer. It only opens or shows something.",
+      "enum": ["openTest", "showMenu", "showFix", "writeClient", "nextTutorial"]
+    },
+    "chip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "answer"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "answer": {
+          "$ref": "#/definitions/text"
+        },
+        "follow": {
+          "$ref": "#/definitions/follow"
+        }
+      },
+      "description": "A finish chip: pressed, it posts its answer with no model call."
+    },
+    "block": {
+      "description": "Code written into a file. It must appear in its step's target for that file, or exactly once in its own `ref`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "block"],
+      "properties": {
+        "file": {
+          "$ref": "#/definitions/path"
+        },
+        "block": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "description": "The whole file the block lands in, when that is not the step's target: a planned failure's code, or a fix of it. The block must appear in it exactly once.",
+          "type": "string",
+          "minLength": 1
+        },
+        "start": {
+          "description": "The whole file as this write finds it, when that is not the step's start. Its lines count as known; those its `ref` lacks go when the file is rebuilt from the `ref`.",
+          "type": "string"
+        }
+      }
+    },
+    "quote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "line", "tone"],
+      "properties": {
+        "file": {
+          "$ref": "#/definitions/path"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mark": {
+          "description": "The token on the line to underline.",
+          "type": "string",
+          "minLength": 1
+        },
+        "tone": {
+          "enum": ["lit", "error"]
+        }
+      }
+    },
+    "say": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "text"],
+      "properties": {
+        "kind": {
+          "const": "say"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "text": {
+          "$ref": "#/definitions/text"
+        },
+        "quote": {
+          "$ref": "#/definitions/quote"
+        }
+      }
+    },
+    "write": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "text", "writes"],
+      "properties": {
+        "kind": {
+          "const": "write"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "text": {
+          "$ref": "#/definitions/text"
+        },
+        "writes": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/block"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["create"],
+              "properties": {
+                "create": {
+                  "$ref": "#/definitions/path"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id",
+        "kicker",
+        "question",
+        "options",
+        "code",
+        "answer",
+        "right",
+        "why",
+        "hint"
+      ],
+      "properties": {
+        "kind": {
+          "const": "ask"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "kicker": {
+          "description": "`Fix it` for the question that repairs a planned failure.",
+          "enum": ["Question", "Fix it"]
+        },
+        "question": {
+          "$ref": "#/definitions/text"
+        },
+        "options": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "code": {
+          "description": "The options are code, shown highlighted, rather than prose.",
+          "type": "boolean"
+        },
+        "answer": {
+          "description": "The index of the right option: 0, 1 or 2.",
+          "type": "integer"
+        },
+        "right": {
+          "description": "What the assistant says to the right pick.",
+          "$ref": "#/definitions/text"
+        },
+        "why": {
+          "description": "Why each option is wrong, by index; null at the right one.",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": ["string", "null"]
+          }
+        },
+        "hint": {
+          "$ref": "#/definitions/text"
+        },
+        "writes": {
+          "description": "The code a right pick or a Skip writes. A prediction question has none.",
+          "$ref": "#/definitions/block"
+        },
+        "skipped": {
+          "description": "What Skip says, when the default does not fit.",
+          "$ref": "#/definitions/text"
+        },
+        "key": {
+          "description": "The one line that counts as typing the answer by hand. A code question's default is its right option.",
+          "type": "string",
+          "minLength": 1
+        },
+        "typed": {
+          "description": "What the assistant says when the learner typed the key line.",
+          "$ref": "#/definitions/text"
+        }
+      }
+    },
+    "accountView": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "energy", "wood", "max"],
+          "properties": {
+            "kind": { "const": "player" },
+            "name": { "type": "string", "minLength": 1 },
+            "energy": { "type": "string", "minLength": 1 },
+            "wood": { "type": "string", "minLength": 1 },
+            "max": { "type": "integer", "minimum": 1 },
+            "refill": {
+              "description": "One energy back each `seconds`, counted from the unix time in the field `from`.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["seconds", "from"],
+              "properties": {
+                "seconds": { "type": "integer", "minimum": 1 },
+                "from": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "capacity"],
+          "properties": {
+            "kind": { "const": "memory" },
+            "name": { "type": "string", "minLength": 1 },
+            "capacity": { "type": "integer", "minimum": 1 },
+            "zero": { "type": "boolean" }
+          }
+        }
+      ]
+    },
+    "act": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "act", "title", "context", "button"],
+      "properties": {
+        "kind": {
+          "const": "act"
+        },
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "act": {
+          "enum": ["airdrop", "build", "deploy", "buildDeploy", "run", "call"]
+        },
+        "say": {
+          "description": "The line posted above the act card.",
+          "$ref": "#/definitions/text"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "context": {
+          "type": "string",
+          "minLength": 1
+        },
+        "button": {
+          "type": "string",
+          "minLength": 1
+        },
+        "record": {
+          "description": "The line the act's card reads once its run landed, before the time it took: \"Created your map · 10 KB\". Without it the card reads its default record.",
+          "type": "string",
+          "minLength": 1
+        },
+        "account": {
+          "description": "For a `run` or `call` act only: the account its cards draw, as a player or as memory.",
+          "$ref": "#/definitions/accountView"
+        },
+        "repeat": {
+          "description": "For a `call` act only: the card stays one card across its presses, one line per press, and ends on the step's goal or on `until`.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["label"],
+          "properties": {
+            "label": {
+              "description": "The button that runs the presses one after another: \"Grow to 40 KB\".",
+              "type": "string",
+              "minLength": 1
+            },
+            "until": {
+              "description": "A pattern over a press's log line. A match ends the card and the lesson goes on to the next beat, for a card that is a move on the way to the step's goal.",
+              "$ref": "#/definitions/pattern"
+            }
+          }
+        },
+        "call": {
+          "description": "For a `call` act only: the instruction and its arguments. A name is a field the learner fills; `{ name, value }` is sent as given, with no field; `{ name, value, add }` sends `value` on the first run and adds `add` for each run of this card that landed.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["instruction"],
+          "properties": {
+            "instruction": {
+              "type": "string",
+              "minLength": 1
+            },
+            "args": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/callArg"
+              },
+              "minItems": 1
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "act": {
+            "const": "call"
+          }
+        }
+      },
+      "then": {
+        "required": ["call"]
+      },
+      "else": {
+        "not": {
+          "required": ["call"]
+        }
+      }
+    },
+    "callArg": {
+      "description": "One argument of a call act: a field the learner fills, a fixed value, or a whole number that grows by `add` with each run that landed.",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "type": ["string", "integer"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value", "add"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "type": "integer"
+            },
+            "add": {
+              "description": "Added for each run of this card that landed: a whole number, at least 1.",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
+    "beat": {
+      "type": "object",
+      "required": ["kind"],
+      "discriminator": {
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/definitions/say"
+        },
+        {
+          "$ref": "#/definitions/write"
+        },
+        {
+          "$ref": "#/definitions/ask"
+        },
+        {
+          "$ref": "#/definitions/act"
+        }
+      ]
+    },
+    "goal": {
+      "description": "What passes the step, checked on the real result.",
+      "type": "object",
+      "required": ["kind"],
+      "discriminator": {
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "const": "build"
+            },
+            "instructions": {
+              "description": "Instructions the built IDL must hold.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "const": "deploy"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "properties": {
+            "kind": {
+              "const": "call"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1
+            },
+            "args": {
+              "description": "Names of the arguments the call must carry, each with a value.",
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minItems": 1
+            },
+            "log": {
+              "description": "A pattern the call's program log must match.",
+              "$ref": "#/definitions/pattern"
+            },
+            "creates": {
+              "description": "The account the instruction creates with Anchor's `init`, as the IDL names it. The goal also passes when that account already exists, and the win then needs `existsLine`.",
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "anyOf": [
+            {
+              "required": ["error"]
+            },
+            {
+              "required": ["log"]
+            }
+          ],
+          "properties": {
+            "kind": {
+              "const": "refused"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1
+            },
+            "error": {
+              "description": "The program error the call was refused with: its name, its code (Anchor numbers custom errors from 6000), or both.",
+              "type": "object",
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": ["name"]
+                },
+                {
+                  "required": ["code"]
+                }
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "code": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "log": {
+              "description": "A pattern the refused transaction's log must match: alone for a refusal with no error code (a panic, running out of memory), or beside `error`, when both must match.",
+              "$ref": "#/definitions/pattern"
+            }
+          }
+        }
+      ]
+    },
+    "win": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "headline", "line"],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "headline": {
+          "$ref": "#/definitions/text"
+        },
+        "line": {
+          "$ref": "#/definitions/text"
+        },
+        "callPanelLine": {
+          "description": "The line instead of `line` when the step passed from the Call panel.",
+          "$ref": "#/definitions/text"
+        },
+        "existsLine": {
+          "description": "The line instead of `line` and `callPanelLine` when the step passed because the account its goal `creates` already existed. Only on a step whose goal has `creates`, which needs it.",
+          "$ref": "#/definitions/text"
+        },
+        "extra": {
+          "const": "openTest"
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "short",
+        "objective",
+        "learned",
+        "file",
+        "start",
+        "target",
+        "beats",
+        "goal",
+        "win",
+        "explain"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "short": {
+          "description": "The step bar's label.",
+          "type": "string",
+          "minLength": 1
+        },
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "learned": {
+          "description": "What the step teaches.",
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "description": "The step's main file, the one the editor shows.",
+          "$ref": "#/definitions/path"
+        },
+        "start": {
+          "description": "The files at the step's start.",
+          "$ref": "#/definitions/files"
+        },
+        "target": {
+          "description": "The files once the step is done. Every block a beat writes is found in them.",
+          "$ref": "#/definitions/files"
+        },
+        "idl": {
+          "description": "The Anchor IDL of the step's target program, as one minified JSON string. Generated by `yarn tutorial:idl`, never written by hand; it holds until the next step that carries one.",
+          "type": "string",
+          "minLength": 2
+        },
+        "readOnly": {
+          "description": "Files the learner cannot edit in this step, by path. Each is in the step's start or target.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/definitions/path"
+          }
+        },
+        "beats": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/beat"
+          }
+        },
+        "planned": {
+          "description": "The assistant's line inside a planned build failure's card.",
+          "$ref": "#/definitions/text"
+        },
+        "failsWith": {
+          "description": "A line of the build log that marks the planned failure, e.g. \"cannot find type `Hello` in this scope\". A failed build is the planned one only when its log holds it.",
+          "type": "string",
+          "minLength": 1
+        },
+        "onFail": {
+          "description": "The beats after the planned build failure: the explanation, the fixing question and the second build.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/beat"
+          }
+        },
+        "goal": {
+          "$ref": "#/definitions/goal"
+        },
+        "win": {
+          "$ref": "#/definitions/win"
+        },
+        "explain": {
+          "description": "The answer to \"Explain this step\".",
+          "$ref": "#/definitions/text"
+        }
+      },
+      "dependencies": {
+        "onFail": ["planned"],
+        "planned": ["onFail", "failsWith"]
+      }
+    }
+  }
+}

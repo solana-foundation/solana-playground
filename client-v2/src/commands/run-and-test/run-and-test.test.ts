@@ -12,6 +12,7 @@ const files = vi.hoisted(
 
 vi.mock("../../utils", () => ({
   PgCommon: {
+    appendSlash: (path: string) => (path.endsWith("/") ? path : `${path}/`),
     joinPaths: (...parts: string[]) =>
       `/${parts.join("/")}`.replace(/\/+/g, "/"),
   },
@@ -20,8 +21,15 @@ vi.mock("../../utils", () => ({
     getFolderContent: () => ({ files: ["a.ts", "b.ts"], folders: [] }),
     getFileContent: (path: string) => files.get(path),
     getItemNameFromPath: (path: string) => path.split("/").at(-1),
-    getAllFiles: () => [],
-    getRelativePath: (path: string) => path,
+    getAllFiles: () => [["/hello/client/client.ts", ""]],
+    // A static that reads `this`, as the real one does
+    getRequiredCurrentWorkspacePath: () => "/hello/",
+    getRelativePath(
+      this: { getRequiredCurrentWorkspacePath(): string },
+      path: string
+    ) {
+      return path.replace(this.getRequiredCurrentWorkspacePath(), "");
+    },
     getParentPathFromPath: (path: string) => path,
     createItem: vi.fn(),
   },
@@ -74,5 +82,16 @@ describe("run", () => {
       error: "boom",
     });
     expect(runtime.execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("run's paths", () => {
+  it("accepts a client file named without its folder", () => {
+    const [paths] = run.args ?? [];
+    const values = paths?.values;
+    expect(typeof values).toBe("function");
+    expect(
+      (values as (token: string, tokens: string[]) => string[])("client.ts", [])
+    ).toEqual(["client.ts"]);
   });
 });

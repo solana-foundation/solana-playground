@@ -2,7 +2,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { FAUCET_URL } from "@/shared/lib/faucet";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import type { BaseNotEnoughSolProps } from "./BaseNotEnoughSol";
@@ -50,7 +49,9 @@ describe("BaseNotEnoughSol", () => {
     expect(card.textContent).toContain("429 Too Many Requests");
     expect(
       screen.getByRole("link", { name: "Open faucet" }).getAttribute("href")
-    ).toBe(FAUCET_URL);
+    ).toBe(
+      `https://faucet.solana.com/?walletAddress=${ADDRESS}&cluster=devnet`
+    );
   });
 
   it("offers Request airdrop in place of Try again while automatic airdrop is off", () => {

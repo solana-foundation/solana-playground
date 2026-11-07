@@ -1,7 +1,7 @@
 vi.mock("../CodeBlock", () => ({
   __esModule: true,
   default: ({ lang, children }: { lang?: string; children: string }) => (
-    <pre data-testid="code-block" data-lang={lang}>
+    <pre data-testid="code-block" data-lang={lang} data-type={typeof children}>
       {children}
     </pre>
   ),
@@ -55,6 +55,17 @@ describe("Markdown", () => {
     const block = container.querySelector('[data-testid="code-block"]');
     expect(block?.getAttribute("data-lang")).toBe("rust");
     expect(block?.textContent).toBe("fn main() {}\n");
+  });
+
+  // A streamed answer shows a fence before its first line arrives: the
+  // highlighter splits the text, and undefined took the whole page down
+  it("gives CodeBlock empty text for a code block with no lines yet", async () => {
+    await act(async () => {
+      root.render(<Markdown>{"```rust\n```"}</Markdown>);
+    });
+
+    const block = container.querySelector('[data-testid="code-block"]');
+    expect(block?.getAttribute("data-type")).toBe("string");
   });
 
   // react-markdown 9 hands a lone text child to `h2` as a string, which the

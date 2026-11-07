@@ -43,7 +43,7 @@ vi.mock("../../../effects/chat-thread/push-thread", () => ({
   pushThread: vi.fn(() => Promise.resolve()),
 }));
 
-// What the chips read: the workspace, the bridge and the lesson. The real ones
+// What the chips read: the workspace and the bridge. The real ones
 // reach the utils barrel, which needs the build's globals
 const { noEvent } = vi.hoisted(() => ({
   noEvent: () => ({ dispose: () => {} }),
@@ -93,10 +93,6 @@ vi.mock(
 );
 vi.mock("../../../views/sidebar/assistant/bridge/build-output", () => ({
   PgBuildOutput: { latest: null },
-}));
-vi.mock("../../../views/flow/lessons", () => ({
-  INITIAL_LESSON_STATE: { path: null, record: [] },
-  PgLesson: { onDidChange: () => ({ dispose: () => {} }) },
 }));
 
 let events: ReturnType<typeof memoryTelemetry>;

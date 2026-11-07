@@ -73,9 +73,11 @@ const LISTING = Array.from({ length: 34 }, (_, i) => ({
 
 beforeEach(() => {
   utils.PgTutorial.all = [
-    { name: "Intro", level: "Intermediate" },
-    { name: "Hello Anchor", level: "Beginner" },
+    // Another Beginner leaves the start: only the ladder counts and leads
     { name: "Another", level: "Beginner" },
+    { name: "Lumberjack", level: "Intermediate" },
+    { name: "Hello Anchor", level: "Beginner" },
+    { name: "Zero Copy", level: "Advanced" },
   ];
   utils.PgTutorial.open.mockReset().mockResolvedValue(undefined);
   utils.PgView.setModal.mockReset().mockResolvedValue(null);

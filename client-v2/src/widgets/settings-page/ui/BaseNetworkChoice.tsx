@@ -1,7 +1,7 @@
 import { useId } from "react";
 
 import { NETWORKS as OFFERED } from "@/constants";
-import type { CustomRpc } from "@/entities/custom-rpc";
+import type { CustomRpc } from "@/entities/cluster";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 
 const REAL_SOL = "Deploys with real SOL";

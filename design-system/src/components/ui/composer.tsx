@@ -65,7 +65,7 @@ function ComposerChip({ className, ...props }: React.ComponentProps<"span">) {
   )
 }
 
-function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React.ComponentProps<"textarea">) {
+function ComposerInput({ className, onKeyDown, onInput, value, placeholder, ...props }: React.ComponentProps<"textarea">) {
   const { setEmpty } = React.useContext(ComposerContext)
   const ref = React.useRef<HTMLTextAreaElement>(null)
   // The width the height was last measured at; null until it first is
@@ -80,11 +80,13 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
     [setEmpty]
   )
   // A controlled value can change without an input event (a prompt the
-  // product puts in, a send that clears it), so emptiness follows it too.
+  // product puts in, a send that clears it), so emptiness follows it too. An
+  // empty field is as tall as its placeholder, which can change as well: a
+  // shorter one must not keep the height a longer one wrapped to.
   React.useLayoutEffect(() => {
     if (value === undefined || !ref.current) return
     grow(ref.current)
-  }, [value, grow])
+  }, [value, placeholder, grow])
   // The height follows the width too. An input measured in a narrow column
   // (a panel that mounts it while still folded, then opens) wraps its
   // placeholder per character and would keep that height once the column
@@ -105,6 +107,7 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
     <textarea
       ref={ref}
       value={value}
+      placeholder={placeholder}
       data-slot="composer-input"
       rows={1}
       aria-label="Message"
@@ -129,8 +132,9 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
   )
 }
 
-/* The model, effort and Send. 8 px in, so a ghost button's icon (10 px in
-   its own padding) lands on the input's 18 px text edge */
+/* The +, the model, effort and Send. 8 px in, so a ghost button's icon (10 px
+   in its own padding) lands on the input's 18 px text edge; the +'s icon,
+   centred in its 32 px button, sits at 16 (24 in the 48 px phone button) */
 function ComposerToolbar({ className, ...props }: React.ComponentProps<"div">) {
   return <div data-slot="composer-toolbar" className={cn("flex items-center gap-1.5 pt-1.5 pr-3 pb-2.5 pl-2", className)} {...props} />
 }

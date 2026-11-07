@@ -15,6 +15,7 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | [Parallel runs](#8-parallel-runs) | groups of cases run at once, on rotated ports |
 | [client-v2 production build](#7-client-v2-production-build) | memory, the esbuild minifier, browser floor, type checks outside the build |
 | [Default backend access](#9-default-backend-access) | `/api/agent` refuses every request without a session, from the browser and from `curl` |
+| [Tutorial flow on devnet](#10-tutorial-flow-on-devnet) | Hello Anchor end to end on the real build server and devnet |
 
 Case IDs are stable: refer to a case by ID, not by position.
 
@@ -1214,3 +1215,27 @@ Run G-1 to G-4 against a preview or production origin, then the rules in
 [Firewall](../client-v2/docs/firewall.md#verifying).
 
 Expect: the same answers as locally, and `429` once a loop passes the `/api/agent` rate limit.
+
+## 10. Tutorial flow on devnet
+
+CI walks Hello Anchor from the intro card to the finish card in
+[tutorial-hello-anchor.e2e.spec.ts](../client-v2/e2e/tutorial-hello-anchor.e2e.spec.ts), with the build server and
+devnet answered in the test ([fake-build-server.ts](../client-v2/e2e/fake-build-server.ts),
+[fake-devnet.ts](../client-v2/e2e/fake-devnet.ts)). The fakes check no signature and model only what Hello Anchor
+sends: T-1 is the same walk against the real ones, which only a real network shows (the server's logs, devnet's answers and its faucet).
+
+### T-1. Hello Anchor on the build server and devnet
+
+Precondition: a network that reaches the build server and `api.devnet.solana.com`, and a devnet faucet that is not at
+its daily limit for this machine. Like the rest of the browser suite it takes no slot: leave `PORT` unset.
+
+```sh
+PG_AI_API_KEY= E2E_LIVE=1 yarn --cwd client-v2 test-e2e:with-stubs e2e/tutorial-hello-anchor.e2e.spec.ts
+```
+
+Expect:
+
+- [ ] `1 passed` and `4 skipped`: the walk passes; the cases that steer the fakes skip, and so does the Call panel
+      case while it is a `fixme`.
+- [ ] the run took under five minutes. A deploy that waits on the faucet longer is the faucet, not the flow: run again
+      later.

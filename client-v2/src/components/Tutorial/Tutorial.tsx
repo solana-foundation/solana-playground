@@ -28,7 +28,11 @@ export const Tutorial: FC<React.PropsWithChildren<TutorialComponentProps>> = ({
     if (typeof cleanup === "function") return cleanup;
   }, [onMount]);
 
-  if (!PgTutorial.current) throw new Error("Current tutorial has not been set");
+  // `current` is derived from the path, and a mounted tutorial route always
+  // has it set. Navigating away clears it and re-renders this view once before
+  // the route change unmounts it: render nothing for that one pass.
+  // eslint-disable-next-line unicorn/no-null -- `FC` here must return an element or null
+  if (!PgTutorial.current) return null;
 
   const isStarted = PgTutorial.isStarted(PgTutorial.current.name);
 

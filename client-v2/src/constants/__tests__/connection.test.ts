@@ -1,7 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { clustersFor } from "@/entities/cluster";
+
 import type { Network } from "../connection";
-import { buildNetworks, clusterName, Endpoint } from "../connection";
+import { clusterName, Endpoint, networksOf } from "../connection";
+
+/** The offered networks with the remote ones on the given platform URLs */
+const buildNetworks = (urls: {
+  devnet?: string;
+  mainnet?: string;
+  testnet?: string;
+}) =>
+  networksOf(
+    clustersFor({
+      devnet: { rpcUrl: urls.devnet },
+      "mainnet-beta": { rpcUrl: urls.mainnet },
+      testnet: { rpcUrl: urls.testnet },
+    })
+  );
 
 /** The five networks, the remote ones on the given URLs, in Settings' order */
 const offered = (urls: {

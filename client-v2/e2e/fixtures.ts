@@ -232,6 +232,15 @@ export const json = (r: Route, body: unknown) =>
     body: JSON.stringify(body),
   });
 
+/** The chat-completions stream `/api/agent` answers with: `text`, then stop */
+export const streamed = (text: string) =>
+  [
+    { choices: [{ index: 0, delta: { role: "assistant", content: text } }] },
+    { choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+  ]
+    .map((c) => `data: ${JSON.stringify(c)}\n\n`)
+    .join("") + "data: [DONE]\n\n";
+
 /**
  * What `GET /api/ai/status` answers, whatever the dev server is configured
  * with: the hosted model's id (a string, or `null` for one with no name), or

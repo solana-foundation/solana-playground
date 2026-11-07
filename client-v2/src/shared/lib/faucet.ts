@@ -1,6 +1,9 @@
 /** The web faucet, until Playground has a faucet of its own */
 export const FAUCET_URL = "https://faucet.solana.com";
 
+/** The most SOL the faucet gives on devnet in one request */
+export const DEVNET_FAUCET_SOL = 5;
+
 /**
  * The amounts the faucet's form offers; it ignores any other in a link, which
  * then opens with the amount unset. Read from faucet.solana.com's page script
@@ -10,6 +13,10 @@ const FAUCET_AMOUNTS: readonly number[] = [0.5, 1, 2.5, 5];
 
 /** The clusters the faucet's form has; it ignores any other in a link */
 const FAUCET_CLUSTERS: readonly string[] = ["devnet", "testnet"];
+
+/** Whether the faucet serves the cluster; a local validator has none */
+export const isFaucetCluster = (cluster: string): boolean =>
+  FAUCET_CLUSTERS.includes(cluster);
 
 export interface FaucetLinkFill {
   walletAddress?: string;
@@ -33,12 +40,27 @@ export const faucetLink = ({
   if (amount !== undefined && FAUCET_AMOUNTS.includes(amount)) {
     query.set("amount", String(amount));
   }
-  if (cluster && FAUCET_CLUSTERS.includes(cluster)) {
+  if (cluster && isFaucetCluster(cluster)) {
     query.set("cluster", cluster);
   }
   const search = query.toString();
   return search ? `${FAUCET_URL}/?${search}` : FAUCET_URL;
 };
+
+/** {@link faucetLink} for a wallet, the bare faucet without one */
+const linkWith =
+  (fill: Pick<FaucetLinkFill, "amount">) =>
+  (cluster: string) =>
+  (address: string | undefined): string =>
+    address
+      ? faucetLink({ walletAddress: address, cluster, ...fill })
+      : FAUCET_URL;
+
+/** The faucet with the wallet's address filled in; the bare site without one */
+export const faucetUrlFor = linkWith({});
+
+/** {@link faucetUrlFor}, also asking for `sol` */
+export const faucetUrlWith = (sol: number) => linkWith({ amount: sol });
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -77,6 +99,12 @@ if (import.meta.vitest) {
       const url = new URL(faucetLink({ cluster: "testnet", amount: 1 }));
       expect(url.searchParams.get("cluster")).toBe("testnet");
       expect(url.searchParams.get("amount")).toBe("1");
+    });
+
+    it("is the bare faucet for a wallet link with no address", () => {
+      expect(faucetUrlWith(DEVNET_FAUCET_SOL)("devnet")(undefined)).toBe(
+        FAUCET_URL
+      );
     });
   });
 }

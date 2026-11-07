@@ -7,14 +7,6 @@ import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 
 import { useKeybind } from "../../../hooks";
-import type { LessonState } from "../lessons";
-import {
-  cursorStep,
-  foldRecord,
-  INITIAL_LESSON_STATE,
-  PgLesson,
-  targetStage,
-} from "../lessons";
 import type { FlowState } from "../state/stage";
 import { INITIAL_FLOW_STATE, PgFlow, STAGES, stagesOf } from "../state/stage";
 import Stepper from "./Stepper";
@@ -24,11 +16,11 @@ import Stepper from "./Stepper";
  * stage bar, across the files column and the stage (`LayoutShell`'s
  * `stageTabs`, design.md "Frame chrome (5.25)"); on a phone, across the
  * preview page's bar, without Write, which is the code's own page there. It
- * owns the Ctrl+1..4 stage keys and points the stepper at the stage the
- * current lesson step is graded on. A project with no program offers only
- * Write, so the other keys do nothing, and the row labels it "Client
- * project" and carries its Run; on a phone, where Write is the code's own
- * page, it has no stepper at all, only the label and Run. The
+ * owns the Ctrl+1..4 stage keys; Flow does not mount it before a tutorial's
+ * Start (`useStagesOffered`), so no stage can be reached then. A project with
+ * no program offers only Write, so the other keys do nothing, and the row
+ * labels it "Client project" and carries its Run; on a phone, where Write is
+ * the code's own page, it has no stepper at all, only the label and Run. The
  * project list and the session footer live in the navigation (`AppNav`),
  * not here.
  */
@@ -37,14 +29,6 @@ const StageBar: FC = () => {
   useEffect(() => PgFlow.onDidChange(setState).dispose, []);
   // Every run is shown and measured, in a project with a program too
   useEffect(() => PgClientRun.follow(), []);
-
-  const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
-  useEffect(() => PgLesson.onDidChange(setLesson).dispose, []);
-
-  const step = lesson.path
-    ? cursorStep(lesson.path, foldRecord(lesson.path, lesson.record))
-    : null;
-  const target = step ? targetStage(step.verify) : null;
 
   // Cmd/Ctrl+1..4 jump to a stage. `PgKeybind` folds `metaKey` into CTRL, so
   // one binding covers both platforms.
@@ -83,7 +67,6 @@ const StageBar: FC = () => {
       <Stepper
         state={state}
         onSelect={PgFlow.setStage}
-        target={target}
         fill={row}
         phone={!row}
       />

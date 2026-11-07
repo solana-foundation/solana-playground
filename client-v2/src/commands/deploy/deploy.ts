@@ -1,4 +1,4 @@
-import { createLogger } from "@/shared/lib/logger";
+import { createLogger, toError } from "@/shared/lib/logger";
 
 import { PgSession } from "../../features/auth";
 import {
@@ -28,9 +28,18 @@ import { forgetOpenBuffer, recordOpenBuffer } from "./open-buffers";
 import type { DeployResult, FundingFailure } from "./run";
 import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
 import type { StoppedBuffer } from "./stopped";
-import { bufferLeftLine, deployStoppedLine } from "./stopped";
+import {
+  bufferLeftLine,
+  closeBuffersCommandFor,
+  deployStoppedLine,
+} from "./stopped";
 
 const log = createLogger("commands:deploy");
+
+const reclaimRejectedLineFor = (readBufferUrl: string | undefined) =>
+  `${PgTerminal.error("Reclaim rejected.")} Run \`${closeBuffersCommandFor(
+    readBufferUrl
+  )}\` to close unused buffer accounts and reclaim SOL.`;
 
 export const deploy = createCmd({
   name: "deploy",
@@ -224,6 +233,10 @@ const processDeploy = async (
   // connection and what the program info says about its network: a network
   // change from here on must not split it across two networks.
   const connection = PgConnection.current;
+  // The platform RPC does not return fresh buffers
+  const bufferConnection = PgConnection.getReadBufferConnection(connection);
+  const readBufferUrl =
+    bufferConnection === connection ? undefined : bufferConnection.rpcEndpoint;
   const onChain = PgProgramInfo.onChain;
   if (!onChain) throw new Error("Failed to get on-chain program info");
   const programExists = onChain.deployed;
@@ -435,7 +448,7 @@ const processDeploy = async (
   const closeSigner = async (): Promise<Wallet> => {
     if (!standardWallet) return pgWallet;
     try {
-      const account = await connection.getAccountInfo(bufferKp.publicKey);
+      const account = await bufferConnection.getAccountInfo(bufferKp.publicKey);
       const named = account?.data.slice(5, 37);
       const holder = [standardWallet, pgWallet].find((w) =>
         named?.equals(w.publicKey.toBuffer())
@@ -467,14 +480,19 @@ const processDeploy = async (
             wallet: signer,
             connection,
           }),
-        async () => !(await connection.getAccountInfo(bufferKp.publicKey))
+        async () => !(await bufferConnection.getAccountInfo(bufferKp.publicKey))
       );
       left = { state: "closed" };
     } catch (e) {
       // The line names the buffer, the SOL it holds and how to reclaim it
       // by hand
-      log.error(e, { report: true, context: { action } });
-      const lamports = await keptLamportsOn(connection)(bufferKp.publicKey);
+      log.error(e, {
+        report: true,
+        context: { action, buffer: bufferAddress },
+      });
+      const lamports = await keptLamportsOn(bufferConnection)(
+        bufferKp.publicKey
+      );
       // A live buffer is rent-exempt, so an empty one is gone: the close
       // landed and only its confirmation failed, or, after a failure, the
       // deploy itself consumed it
@@ -483,7 +501,12 @@ const processDeploy = async (
       } else {
         const sol =
           lamports === undefined ? undefined : PgWeb3.lamportsToSol(lamports);
-        left = { state: "kept", address: bufferAddress, sol };
+        left = {
+          state: "kept",
+          address: bufferAddress,
+          sol,
+          readBufferUrl,
+        };
       }
     }
     if (left.state !== "kept") await forgetOpenBuffer(bufferAddress);
@@ -498,6 +521,70 @@ const processDeploy = async (
   };
 
   /**
+   * Ask whether to close the buffer and reclaim its SOL, after `heading`. The
+   * answer settles the buffer: a rejected reclaim keeps it on record, and a
+   * question that never got its answer falls to the failure close.
+   */
+  const offerReclaim = async (heading: string, action: string) => {
+    const term = await PgTerminal.get();
+    // A stop while the question is open answers it, as "no" would
+    const answerNo = () => {
+      term.executeFromStr("no").catch((e: unknown) => {
+        log.error(e, { context: { action: "answer the reclaim on stop" } });
+      });
+    };
+    signal.addEventListener("abort", answerNo, { once: true });
+    let shouldCloseBufferAccount;
+    try {
+      shouldCloseBufferAccount = await term.waitForInput(
+        `${heading} Would you like to close the buffer account and reclaim SOL?`,
+        { confirm: true, default: "yes" }
+      );
+    } finally {
+      signal.removeEventListener("abort", answerNo);
+    }
+    isBufferSettled = true;
+    let msg;
+    if (shouldCloseBufferAccount) {
+      const left = await closeOrKeep(action);
+      // No deploy is in flight before the last write, so a buffer gone is closed
+      msg =
+        left.state === "kept"
+          ? bufferLeftLine(left)
+          : PgTerminal.success("Reclaim successful.");
+    } else {
+      msg = reclaimRejectedLineFor(readBufferUrl);
+    }
+
+    term.println(msg);
+  };
+
+  /**
+   * After a failed load: a caller with its own answers (the Deploy stage)
+   * shows no terminal question, so its buffer is closed unasked, and a buffer
+   * it could not close is named in the error the stage shows
+   * @returns the error the load fails with
+   */
+  const reclaimAfterFailedLoad = async (loadError: unknown) => {
+    const heading = PgTerminal.error("Writing the program failed.");
+    if (!PgDeployRun.answers) {
+      await offerReclaim(heading, "close the buffer after a failed load");
+      return loadError;
+    }
+    isBufferSettled = true;
+    const left = await closeOrKeep("close the buffer after a failed load");
+    if (left.state !== "kept") {
+      PgTerminal.println(
+        `${heading} ${PgTerminal.success("Reclaim successful.")}`
+      );
+      return loadError;
+    }
+    return new Error(`${toError(loadError).message} ${bufferLeftLine(left)}`, {
+      cause: loadError,
+    });
+  };
+
+  /**
    * After a failure the buffer is closed as on a stop: left open, it held the
    * whole program's rent at an address shown nowhere. A close racing a deploy
    * still in flight is safe, as both consume the buffer.
@@ -508,7 +595,7 @@ const processDeploy = async (
     // lands as a failed transaction, and the buffer would read as closed
     let account;
     try {
-      account = await connection.getAccountInfo(bufferKp.publicKey);
+      account = await bufferConnection.getAccountInfo(bufferKp.publicKey);
     } catch (e) {
       log.error(e, {
         context: { action: "read the buffer after a failed deploy" },
@@ -517,7 +604,11 @@ const processDeploy = async (
       // it surely exists
       if (!isBufferCreated) {
         PgTerminal.println(
-          bufferLeftLine({ state: "unknown", address: bufferAddress })
+          bufferLeftLine({
+            state: "unknown",
+            address: bufferAddress,
+            readBufferUrl,
+          })
         );
         return;
       }
@@ -550,7 +641,9 @@ const processDeploy = async (
         );
       },
       async () => {
-        const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
+        const bufferAcc = await bufferConnection.getAccountInfo(
+          bufferKp.publicKey
+        );
         return !!bufferAcc;
       }
     );
@@ -580,43 +673,40 @@ const processDeploy = async (
             )} not confirmed, retrying...`
           );
         },
-        onRateLimit: (retryAfter) => {
+        onRateLimit: (retryAfter, reason) => {
           PgTerminal.println(
-            `Warning: Reached rate-limits, waiting (${PgCommon.formatSeconds(
+            `Warning: Reached rate-limits (${reason}), waiting (${PgCommon.formatSeconds(
               retryAfter
             )})...`
           );
         },
       }
-    );
+    ).catch(async (e: unknown) => {
+      if (signal.aborted) throw await stopWithBuffer();
+      // The buffer already holds the program's rent: give it back before the
+      // load's failure stands
+      let failure = e;
+      try {
+        failure = await reclaimAfterFailedLoad(e);
+      } catch (closing) {
+        // An unsettled buffer is still closed by the failure close
+        log.error(closing, {
+          report: true,
+          context: {
+            action: "close the buffer after a failed load",
+            buffer: bufferAddress,
+          },
+        });
+      }
+      throw failure;
+    });
     if (loadBufferResult.cancelled) {
       // Stopped: no questions, the buffer is closed
       if (signal.aborted) throw await stopWithBuffer();
-      const term = await PgTerminal.get();
-      const shouldCloseBufferAccount = await term.waitForInput(
-        `${PgTerminal.warning(
-          "Cancelled deployment."
-        )} Would you like to close the buffer account and reclaim SOL?`,
-        { confirm: true, default: "yes" }
+      await offerReclaim(
+        PgTerminal.warning("Cancelled deployment."),
+        "close the buffer on cancel"
       );
-      // The person decided; a rejected reclaim keeps the buffer on record.
-      // A question that never got its answer falls to the failure close
-      isBufferSettled = true;
-      let msg;
-      if (shouldCloseBufferAccount) {
-        const left = await closeOrKeep("close the buffer on cancel");
-        // No deploy is in flight on a cancel, so a buffer gone is closed
-        msg =
-          left.state === "kept"
-            ? bufferLeftLine(left)
-            : PgTerminal.success("Reclaim successful.");
-      } else {
-        msg = `${PgTerminal.error(
-          "Reclaim rejected."
-        )} Run \`solana program close --buffers\` to close unused buffer accounts and reclaim SOL.`;
-      }
-
-      term.println(msg);
       throw new Error("Deployment cancelled");
     }
 
@@ -638,7 +728,9 @@ const processDeploy = async (
           );
         },
         async () => {
-          const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
+          const bufferAcc = await bufferConnection.getAccountInfo(
+            bufferKp.publicKey
+          );
           const isBufferAuthority = bufferAcc?.data
             .slice(5, 37)
             .equals(standardWallet.publicKey.toBuffer());
@@ -694,7 +786,9 @@ const processDeploy = async (
         );
       },
       async () => {
-        const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
+        const bufferAcc = await bufferConnection.getAccountInfo(
+          bufferKp.publicKey
+        );
         return !bufferAcc;
       }
     );
@@ -712,7 +806,9 @@ const processDeploy = async (
         );
       },
       async () => {
-        const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
+        const bufferAcc = await bufferConnection.getAccountInfo(
+          bufferKp.publicKey
+        );
         return !bufferAcc;
       }
     );
@@ -898,7 +994,7 @@ const keptLamportsOn =
  * @param checkConfirmation only confirm the transaction if this callback returns truthy
  * @returns the transaction signature
  */
-const sendAndConfirmTxWithRetriesFor =
+export const sendAndConfirmTxWithRetriesFor =
   (connection: PgWeb3.Connection) =>
   async (
     sendTx: () => Promise<string>,

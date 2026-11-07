@@ -277,6 +277,11 @@ jobs:
       - name: Colour literals
         run: yarn check-colors
 
+      # Every `src/tutorials/<slug>/tutorial.json` against its schema and
+      # rules; each error prints as its JSON path.
+      - name: Tutorial definitions
+        run: yarn tutorial:check
+
       # `openspec validate --all` over ../openspec: every active change has
       # its proposal, delta specs, design and tasks in the schema's shape.
       - name: Validate specs

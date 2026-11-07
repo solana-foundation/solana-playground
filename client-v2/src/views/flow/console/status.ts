@@ -18,7 +18,7 @@ type DotVariants<T extends StatusDotVariant> = T;
  * reads as an error. tsc fails here if the dot drops one of them (an
  * `Extract` would drop the tone too, silently). */
 export type ConsoleStatusTone = DotVariants<
-  "idle" | "running" | "success" | "error"
+  "idle" | "running" | "success" | "warning" | "error"
 >;
 
 export interface ConsoleStatus {

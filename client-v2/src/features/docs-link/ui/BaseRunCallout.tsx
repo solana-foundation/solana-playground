@@ -1,7 +1,7 @@
 import { CircleAlert, CircleCheck, Info, Wallet } from "lucide-react";
 import type { FC, ReactNode } from "react";
 
-import { FAUCET_URL } from "@/shared/lib/faucet";
+import { faucetUrlFor } from "@/shared/lib/faucet";
 import {
   Callout,
   CalloutAction,
@@ -182,7 +182,11 @@ const BaseRunCallout: FC<BaseRunCalloutProps> = ({
             </CalloutDescription>
             <CalloutActions>
               <CalloutAction asChild>
-                <a href={FAUCET_URL} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={faucetUrlFor("devnet")(shown.address)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Get devnet SOL
                 </a>
               </CalloutAction>

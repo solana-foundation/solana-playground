@@ -15,12 +15,14 @@ const draw = (
     onOpenChange?: (open: boolean) => void;
     onClear?: () => void;
     stop?: { run: "build" | "deploy"; onStop: () => void } | null;
+    progress?: number;
   }
 ) =>
   render(
     <BaseConsoleDrawer
       open={open}
       status={idle}
+      progress={handlers.progress}
       onOpenChange={handlers.onOpenChange ?? vi.fn()}
       onClear={handlers.onClear ?? vi.fn()}
       stop={handlers.stop ?? null}
@@ -131,6 +133,20 @@ it("shows the status text with a dot of its tone", () => {
       ?.getAttribute("data-variant")
   ).toBe("error");
 });
+
+it.each([
+  { progress: 0, shown: undefined },
+  { progress: 40, shown: "40" },
+])(
+  "draws a progress bar along the strip for $progress: $shown",
+  ({ progress, shown }) => {
+    draw(false, { progress });
+    expect(
+      screen.queryByRole("progressbar")?.getAttribute("aria-valuenow") ??
+        undefined
+    ).toBe(shown);
+  }
+);
 
 // The shell folds the panel to `BOTTOM_BAR_PX`; the bar draws itself `h-bar`
 // tall, from the design system's `--layout-bar`

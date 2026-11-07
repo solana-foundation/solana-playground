@@ -13,14 +13,17 @@ const log = createLogger("view:main-primary");
 
 const Primary = () => {
   const [el, setEl] = useState<ErrorBoundaryChildren>(null);
-  // Every view set gets a boundary of its own, keyed by this count: a
-  // boundary keeps an error it shows until its own Refresh, which keeps the
-  // key. A view still loading when a newer one is set never shows.
+  // A view set over an error gets a boundary of its own, keyed by this
+  // count: a boundary keeps an error it shows until its own Refresh, which
+  // keeps the key. Over a working view the key stays, so the same view set
+  // again (a route run again, as Home's path and the work's do) keeps its
+  // editor mounted. A view still loading when a newer one is set never shows.
   const [view, setView] = useState(0);
   const latest = useRef(0);
+  const boundary = useRef<ErrorBoundary>(null);
   const setElWithTransition = useCallback(async (nextEl: unknown) => {
     const call = ++latest.current;
-    setView(call);
+    if (boundary.current?.state.error) setView(call);
     if (PgCommon.isAsyncFunction(nextEl)) {
       setEl(null);
 
@@ -65,7 +68,9 @@ const Primary = () => {
   return (
     <div className="pg-scrollbar-all min-h-0 flex-1 overflow-hidden rounded-[12px] border border-border bg-surface-panel">
       <SpinnerWithBg className={VIEW_CLASSES} loading={!el} size="2rem">
-        <ErrorBoundary key={view}>{el}</ErrorBoundary>
+        <ErrorBoundary key={view} ref={boundary}>
+          {el}
+        </ErrorBoundary>
       </SpinnerWithBg>
     </div>
   );

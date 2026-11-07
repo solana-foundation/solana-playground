@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 
+import type { TutorialDefinition } from "../../entities/tutorial/model/definition/types";
 import type { Nullable, RequiredKey } from "../types";
 import {
   TUTORIAL_CATEGORIES,
@@ -70,6 +71,16 @@ export interface TutorialDataParam {
   importComponent?: () => Promise<{
     default: (props: Omit<TutorialData, "importComponent">) => JSX.Element;
   }>;
+  /**
+   * The conversation tutorial's definition, from its `tutorial.json`. A
+   * tutorial without one opens upstream's pages.
+   */
+  definition?: TutorialDefinition;
+  /**
+   * Every Markdown file in the tutorial's `docs/` folder, by file name
+   * (`idl.md`); the definition's `docs` says which of them it lists
+   */
+  docPages?: Readonly<Record<string, string>>;
 }
 
 /** Tutorial data with optional fields filled with defaults. */

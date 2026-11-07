@@ -102,12 +102,18 @@ const jumpTo = (el: HTMLElement, index: number) => {
 };
 
 /** The bar across the top of a page, the prototype's `PhoneBar` */
-const PhoneBar = ({ children }: { children: ReactNode }) => (
+const PhoneBar = ({
+  children,
+  isRuled = true,
+}: {
+  children: ReactNode;
+  isRuled?: boolean;
+}) => (
   <div
     data-testid="phone-bar"
     className={cn(
-      "relative z-2 flex h-phone-bar shrink-0 items-center gap-1 border-b border-border pr-2 pl-1.5",
-      "frosted"
+      "relative z-2 flex h-phone-bar shrink-0 items-center gap-1 pr-2 pl-1.5",
+      isRuled && "frosted border-b border-border"
     )}
   >
     {children}
@@ -327,7 +333,9 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
         inert={page !== "work"}
         className="flex h-full w-full shrink-0 snap-start flex-col"
       >
-        <PhoneBar>
+        {/* A page with its own large title (its `title` empty): no name and no
+            rule, since the heading right below already starts the page */}
+        <PhoneBar isRuled={screen.kind !== "page" || props.title !== ""}>
           <BarButton
             label="Menu"
             // The phone's way to the navigation, as the stock Sidebar's own
@@ -465,8 +473,9 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
               >
                 {PHONE_ICONS.back}
               </BarButton>
-              {/* `py-1` keeps the tabs' 48 px tap inside the strip, which
-                  clips both ways once it scrolls sideways */}
+              {/* A horizontal scroller clips vertically too, at its padding
+                  edge: 4 px over and under the 40 px pill keep the tabs'
+                  invisible `before` whole, so each still taps at 48 px */}
               <div className="min-w-0 flex-1 overflow-x-auto py-1">
                 {props.stageBar}
               </div>

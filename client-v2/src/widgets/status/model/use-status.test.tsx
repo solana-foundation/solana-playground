@@ -5,14 +5,6 @@ import { PgAnalyzerStatus } from "@/components/Editor/Monaco/languages/rust/rust
 
 import { useStatus } from "./use-status";
 
-/** An event that hands each subscriber `value` at once, as `PgConnection`'s do */
-const fires = vi.hoisted(
-  () => (value: unknown) => (cb: (v: unknown) => void) => {
-    cb(value);
-    return { dispose: () => {} };
-  }
-);
-
 const assistant = vi.hoisted(() => ({
   connection: null as null | {
     id: string;
@@ -22,12 +14,14 @@ const assistant = vi.hoisted(() => ({
   needsSignIn: false,
 }));
 
-vi.mock("@/utils", () => ({
-  PgConnection: {
-    onDidChangeCluster: fires("devnet"),
-    onDidChangeIsConnected: fires(true),
-    onDidChangeIsClusterDown: fires(false),
-  },
+vi.mock("@/utils", () => ({}));
+vi.mock("@/entities/cluster", () => ({
+  useSelectedConnection: () => ({
+    connection: undefined,
+    cluster: "devnet",
+    isConnected: true,
+    isClusterDown: false,
+  }),
 }));
 vi.mock("@/features/auth", () => ({
   PgSession: { onDidChange: () => ({ dispose: () => {} }) },

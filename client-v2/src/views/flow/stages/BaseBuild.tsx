@@ -400,18 +400,16 @@ const Succeeded = (p: BaseBuildProps) => (
 );
 
 /**
- * One compiler error, with Spec 04's Explain and Fix. A screen has one brand
- * action, so only the first error's Explain takes it; the rest are outlined.
- * Neither moves focus: the answer arrives in the side panel.
+ * One compiler error, with Spec 04's Explain and Fix. Every card's are
+ * outlined: a brand action on the first card only read as a stray style among
+ * equal ones. Neither moves focus: the answer arrives in the side panel.
  */
 const ErrorCard = ({
   view,
-  explain,
   onAsk,
   onOpenFile,
 }: {
   view: DiagnosticView;
-  explain: "brand" | "outline";
   onAsk: (prompt: string) => void;
   onOpenFile: (path: string) => void;
 }) => {
@@ -444,19 +442,13 @@ const ErrorCard = ({
         </DiagnosticSource>
       )}
       <DiagnosticFooter>
-        {explain === "brand" ? (
-          <BrandButton size="sm" onClick={() => onAsk(view.prompts.explain)}>
-            Explain
-          </BrandButton>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => onAsk(view.prompts.explain)}
-          >
-            Explain
-          </Button>
-        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onAsk(view.prompts.explain)}
+        >
+          Explain
+        </Button>
         <Button
           size="sm"
           variant="outline"
@@ -533,7 +525,6 @@ const Failed = (p: BaseBuildProps & FailedView) => {
           <ErrorCard
             key={i}
             view={view}
-            explain={i === 0 ? "brand" : "outline"}
             onAsk={ask}
             onOpenFile={p.onOpenFile}
           />
