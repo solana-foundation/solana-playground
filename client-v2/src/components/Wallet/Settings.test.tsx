@@ -8,14 +8,17 @@ import {
   resetLogger,
 } from "@/shared/lib/logger";
 
-import { PgCommand, PgView, PgWallet } from "../../utils";
+import { toggleWallet } from "../../commands/connect/connect-wallet";
+import { PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import type { Faucet } from "./hooks";
 import Settings from "./Settings";
 
+vi.mock("../../commands/connect/connect-wallet", () => ({
+  toggleWallet: vi.fn(),
+}));
 // The utils barrel needs build-time globals the unit runner does not define.
 vi.mock("../../utils", () => ({
-  PgCommand: { connect: { execute: vi.fn() } },
   PgView: {
     ids: { WALLET_RENAME_INPUT: "wallet-rename-input" },
     setModal: vi.fn(),
@@ -212,7 +215,7 @@ describe("wallet Settings menu", () => {
         icon: "",
         connected,
       } as never);
-      vi.mocked(PgCommand.connect.execute).mockRejectedValueOnce(failure);
+      vi.mocked(toggleWallet).mockRejectedValueOnce(failure);
       render(<Host />);
       await openMenu();
 

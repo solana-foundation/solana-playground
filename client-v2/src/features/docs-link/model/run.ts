@@ -1,3 +1,4 @@
+import { connectWallet } from "@/commands/connect/connect-wallet";
 import { isSetupRejected } from "@/commands/connect/setup-rejected";
 import { createLogger } from "@/shared/lib/logger";
 import { PgCommand, PgConnection, PgExplorer, PgWallet, PgWeb3 } from "@/utils";
@@ -211,13 +212,13 @@ const fundsFor =
  * to run with: the user closed the setup (the state is left alone), or
  * connect ended with no wallet (shown as `failed`)
  */
-const connectWallet = async (): Promise<WalletOrigin | undefined> => {
+const walletForRun = async (): Promise<WalletOrigin | undefined> => {
   if (PgWallet.state !== "setup" && PgWallet.state !== "disconnected") {
     return "existing";
   }
   const origin: WalletOrigin = PgWallet.state === "setup" ? "new" : "existing";
   try {
-    await PgCommand.connect.execute();
+    await connectWallet();
   } catch (error) {
     if (!isSetupRejected(error)) throw error;
     // The user closed the setup: nothing to run with, and they know why
@@ -292,7 +293,7 @@ export const PgClientRun = {
     isStarting = true;
     const since = switches;
     try {
-      const wallet = await connectWallet();
+      const wallet = await walletForRun();
       if (!wallet || switches !== since) return;
       if ((await fundsFor(since)(wallet)) !== "enough") return;
     } finally {
