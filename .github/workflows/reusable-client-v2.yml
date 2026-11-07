@@ -193,14 +193,7 @@ jobs:
         working-directory: client-v2
 
     steps:
-      # `client-v2/public` is not tracked: scripts/update-static.mjs copies
-      # it out of the `client/public` submodule and dates each tutorial
-      # from that submodule's history, so the submodule is checked out
-      # with full history.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          submodules: true
-          fetch-depth: 0
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -226,7 +219,7 @@ jobs:
         if: ${{ !inputs.use-wasm-stubs }}
         run: yarn install --frozen-lockfile
 
-      # Same cheap chain as `yarn dev`'s `generate-fast`: static assets, export barrels,
+      # Same cheap chain as `yarn dev`'s `generate-fast`: export barrels,
       # package and tutorial data, assistant context, so type-check and tests
       # see the generated files. The `build` job regenerates them in `build-fast`.
       - name: Generate
@@ -321,11 +314,7 @@ jobs:
         working-directory: client-v2
 
     steps:
-      # `build-fast` copies `client-v2/public` out of the `client/public` submodule and dates tutorials from its history.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          submodules: true
-          fetch-depth: 0
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -464,12 +453,7 @@ jobs:
         working-directory: client-v2
 
     steps:
-      # Same checkout as `checks`: `client-v2/public` is generated out of the
-      # `client/public` submodule, dated from its history.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          submodules: true
-          fetch-depth: 0
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:

@@ -923,11 +923,9 @@ example above, broken one way each:
 ## Trying it locally
 
 In a clone, from `client-v2/` (Node as pinned in the repository, Yarn 1).
-The check reads the other tutorials' names from `client/public`, a
-submodule that `yarn generate-fast` copies in:
+The check reads the other tutorials' names from `public/tutorials`:
 
 ```sh
-git submodule update --init ../client/public
 ../wasm/stub-packages.sh
 yarn install --frozen-lockfile
 yarn generate-fast

@@ -8,7 +8,7 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | [Prerequisites](#0-prerequisites) | macOS and Docker set-up, toolchains, branches |
 | [Builds](#1-builds) | wasm, client, client-v2 and its browser suite, server, compose images, real wasm packages |
 | [Client dev servers](#2-client-dev-servers-without-a-server) | client and client-v2 start with no build server running |
-| [Full suite with compose](#3-full-suite-with-docker-compose) | client and server together; client-server requests |
+| [Full suite with compose](#3-full-suite-with-docker-compose) | client-v2, server, and Postgres together; client-server requests |
 | [Static assets](#4-static-assets-default-rs-files-and-templates) | rust-analyzer `.rs` files in local, Vercel, and Docker builds; templates, tutorials |
 | [Release gate](#5-release-gate-unstable-and-stubs-stay-out-of-production) | unstable and the wasm stubs stay out of production |
 | [Optional: unstable server](#6-optional-unstable-server) | the server's unstable functionality, tested on purpose |
@@ -70,7 +70,6 @@ Expect: `x86_64`.
 
 - [ ] Node and yarn versions match `client/.nvmrc` and the `packageManager` field of `client/package.json`.
 - [ ] `rustup` is installed. The wasm toolchain comes from `wasm/rust-toolchain.toml`.
-- [ ] `git submodule update --init` has populated `client/public` (the assets submodule).
 - [ ] client-v2's wasm packages are real (B-7). `USE_WASM_STUBS=true` is the one exception, for UI-only work: the
       stubs fail C-6 and S-3.
 
@@ -88,41 +87,28 @@ scenario adds a service or a profile to that file; it never adds a second compos
 
 | Case | Profile |
 | --- | --- |
-| B-6, D-1, D-5, D-9 | `dev` |
-| D-2, D-3 | `prod` |
-| D-6 | `v2` |
+| B-6, D-2, D-3, D-5, D-6, D-9 | `v2` |
 | D-7 | `v2-prod` |
 | D-8, S-7 | `client-v2-standalone` |
 | U-4 | `v2-unstable` |
 
-The profiles for the upstream client (`client/`) stay in `compose.yaml` beside the client-v2 ones. A change for
-client-v2 adds profiles; it does not rename or remove these:
-
 | Profile | Runs |
 | --- | --- |
-| `dev` | client, server |
-| `prod` | production build of the client, server |
-| `client-standalone` | client without a server |
-| `server-standalone` | server that starts without the root `.env` |
+| `v2` | client-v2 dev server, server, Postgres |
+| `v2-prod` | client-v2 production bundle, server, Postgres |
+| `client-v2-standalone` | client-v2 without a server |
+| `server-standalone` | server |
+| `v2-unstable` | `v2` with the unstable server in place of `server-standalone` |
 
-The `v2` and `v2-prod` profiles run the `server-standalone` service too, and neither runs `server`.
-
-- [ ] `docker compose config --profiles` lists all four.
-- [ ] `docker compose --profile client-standalone config --services` includes `client-standalone` and no client-v2
-      service.
+- [ ] `docker compose config --profiles` lists all five.
 
 ### P-5. Docker builds and git worktrees
 
 In a git worktree, `.git` is a file that points to a path on the host (`gitdir: …/.git/worktrees/<name>`), which does
 not exist in an image, so git inside the image fails with `fatal: not a git repository`.
 
-- The upstream `client/Dockerfile` runs `git submodule update --init client/public`: build its images (the `dev`,
-  `prod`, and `client-standalone` profiles) from the primary checkout or from a clone
-  (`git clone --branch <branch> <worktree> <dir>`), never from a worktree under `.worktrees/`.
-- `client-v2/Dockerfile` reads no git data of the checkout. It clones the assets repository at the commit in
-  `client-v2/scripts/assets-commit.txt` and sets `ASSETS_DIR` for `update-static.mjs`, so the client-v2 profiles build
-  from a worktree too. `scripts/assets-commit.test.mjs` (`yarn test-api`) fails when that file differs from the
-  `client/public` submodule entry.
+- `client-v2/Dockerfile` reads no git data of the checkout, and `client-v2/public/` is tracked files that come in with
+  the build context, so every profile builds from a worktree too.
 
 ## 1. Builds
 
@@ -245,10 +231,10 @@ Expect: the same checks as the Chromium run, with the `grep` counting the lines 
 ### B-6. compose images
 
 ```sh
-docker compose --profile dev build
+docker compose --profile v2 build
 ```
 
-Expect: the `client`, `server`, and `wasm` images build for `linux/amd64`. Verify with
+Expect: the `client-v2`, `server-standalone`, and `wasm` images build for `linux/amd64`. Verify with
 `docker image inspect <image> --format '{{.Architecture}}'`, which prints `amd64`.
 
 ### B-7. client-v2: local packages are real
@@ -373,35 +359,18 @@ Expect:
 
 ## 3. Full suite with Docker Compose
 
-Precondition: P-1 done; port 3000 and 8080 free, and 5432 for the `v2` and `v2-prod` profiles.
+Precondition: P-1 done; ports 3000, 8080, and 5432 free.
 
-This section tests the stable server routes only; the unstable ones are [optional](#6-optional-unstable-server). The upstream client sends Build and
-Deploy to `/unstable/*` in any build that is not a production build (`PgServer` in `client/src/utils/server.ts`), and
-the compose server has no such routes, so its build and deploy cases run on the `prod` profile. client-v2 keeps the
-`experimental.unstable` setting off by default, so the `v2` and `v2-prod` profiles test the stable routes.
-
-### D-1. stack starts
-
-```sh
-docker compose --profile dev up --build
-```
-
-Expect:
-
-- [ ] `wasm` exits 0; `server` and `client` stay running.
-- [ ] the server log shows it listening on 8080.
-- [ ] the client answers on `http://localhost:3000` (`PG_CLIENT_PORT` overrides the port), and the C-1 checks for
-      the IDE, the terminal `help`, and the network tab pass.
-- [ ] D-9 passes: the server builds a program.
+This section tests the stable server routes only; the unstable ones are [optional](#6-optional-unstable-server).
+client-v2 keeps the `experimental.unstable` setting off by default, so the `v2` and `v2-prod` profiles test the stable
+routes.
 
 ### D-2. build a program
 
-```sh
-docker compose --profile prod up --build
-```
+Precondition: D-6 session.
 
-Steps: open `http://localhost:3000`; in Settings, set "Build server URL" to Local (a production build defaults to
-`https://api.solpg.io`); create an Anchor project and click Build.
+Steps: in Settings, set the server to Local (client-v2 defaults to the remote Foundation server); create an Anchor
+project and click Build.
 
 Expect: `POST http://localhost:8080/build` returns 200 in the network tab, with no `/unstable/` in the path; the terminal
 reports a successful build.
@@ -416,6 +385,8 @@ Expect: `GET http://localhost:8080/deploy/{uuid}` returns 200; the terminal prin
 <program ID>` in the playground terminal shows the program on the selected cluster.
 
 ### D-5. CORS
+
+Precondition: D-6 session, or any profile that runs `server-standalone`.
 
 ```sh
 curl -sI -X OPTIONS http://localhost:8080/build -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST'
@@ -440,11 +411,12 @@ server `REACT_APP_SERVER_URL` names, when it is set).
 
 Expect:
 
-- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running; no `server` service
-      exists.
+- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running.
+- [ ] the server log shows it listening on 8080.
+- [ ] the client answers on `http://localhost:3000` (`PG_CLIENT_V2_PORT` overrides the port).
 - [ ] the `grep -c` prints `0`: the `yarn start` guard found the real packages.
 - [ ] `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/sync` prints a status other than `404`.
-- [ ] the D-2 and D-3 steps pass against the client-v2 UI, and no request path contains `/unstable/`.
+- [ ] D-2, D-3, and D-9 pass, and no request path contains `/unstable/`.
 
 ### D-7. client-v2 production stack
 
@@ -484,7 +456,7 @@ Expect:
 
 ### D-9. the server builds a program, without a client
 
-Precondition: D-1 session, or any profile that runs `server`. The request body is what `buildRust` in
+Precondition: D-6 session, or any profile that runs `server-standalone`. The request body is what `buildRust` in
 `client/src/commands/build/build.ts` sends: `files` is a list of `[path, content]` pairs (`Files` in
 `server/src/utils.rs`). The `/src/lib.rs` path form is taken from the client and is unverified.
 
@@ -507,7 +479,7 @@ Expect:
 ## 4. Static assets: default `.rs` files and templates
 
 None of these come from the build server. The rust-analyzer files and tutorials are static files of the client
-(`client/public`, mirrored into `client-v2/public`); framework templates are bundled into the client JavaScript.
+(`client-v2/public`); framework templates are bundled into the client JavaScript.
 
 A status of `200` alone proves nothing for a crate file: the single-page-app fallback answers a missing file with
 `index.html` and `200`, and Rust Analyzer then panics with `Unexpected('<')`. Every crate check in section 4 also asserts
@@ -718,8 +690,8 @@ skipping. Restore the file.
 
 ### S-10. static assets
 
-The assets come from the `client/public` submodule (mirrored into `client-v2/public`). The paths in the S-10 command are one
-file per folder; if the submodule renames one, pick another file from the same folder.
+The assets are the tracked files in `client-v2/public`. The paths in the S-10 command are one file per folder; if a
+change renames one, pick another file from the same folder.
 
 ```sh
 for p in fonts/JetBrainsMono.woff2 icons/sidebar/build.png themes/dracula.json frameworks/anchor/icon.png \
@@ -1062,11 +1034,9 @@ different port is a different origin.
 
 | Group | Cases | Profile | Slot |
 | --- | --- | --- | --- |
-| upstream dev | D-1, D-5, D-9, C-3 | `dev` | 1 |
-| upstream prod | D-2, then D-3 | `prod` | 2 |
-| v2 stack | D-6, then D-7 | `v2`, then `v2-prod` | 3 |
+| v2 stack | D-6 with D-2, D-3, D-5, and D-9, then D-7 | `v2`, then `v2-prod` | 3 |
 | v2 standalone | D-8, S-7, S-1 to S-3, S-10 | `client-v2-standalone` | 4 |
-| local, no Docker | B-5, C-1, C-2, C-4, C-5, C-6, S-9 | none | `PORT` per dev server, from slot 5 |
+| local, no Docker | B-5, C-1 to C-6, S-9 | none | `PORT` per dev server, from slot 5 |
 | remote | S-6, R-2 | none | none |
 
 ### Slots
@@ -1075,10 +1045,10 @@ Slot `k` publishes the client on `13000 + 10k`, the server on `13001 + 10k`, and
 leaves the default ports (3000, 8080, and 5432) free for a developer's own stack.
 
 ```sh
-k=1
-COMPOSE_PROJECT_NAME=pg-slot$k PG_CLIENT_PORT=$((13000 + 10 * k)) PG_CLIENT_V2_PORT=$((13000 + 10 * k)) \
+k=3
+COMPOSE_PROJECT_NAME=pg-slot$k PG_CLIENT_V2_PORT=$((13000 + 10 * k)) \
   PG_PORT=$((13001 + 10 * k)) PG_POSTGRES_PORT=$((13002 + 10 * k)) \
-  docker compose --profile dev up --no-build -d
+  docker compose --profile v2 up --no-build -d
 ```
 
 In each case of a group, read `http://localhost:3000` and `http://localhost:8080` as the slot's client and server ports.
@@ -1119,8 +1089,7 @@ broad pattern such as `spec` gets past it: it catches the usual mistake, not eve
 ### Limits
 
 - [ ] Every group runs from its own clone: B-1 to B-5, the C cases, and S-9 write to `node_modules`, `public/`,
-      `target/`, `test-results/`, and `public/crates`. A worktree does not work for the upstream client's Docker builds
-      (P-5).
+      `target/`, `test-results/`, and `public/crates`.
 - [ ] Images are shared by name, so all groups test the commit B-6 built. Testing two commits at once needs two
       separate image builds, one after the other.
 - [ ] Run serially what shares global state: U-1 to U-4 (globally named `program-*` images) and D-3 (one funded

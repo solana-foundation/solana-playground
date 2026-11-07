@@ -26,13 +26,13 @@ Config: [`client-v2/.actrc`](../.actrc) for an x86-64 host and [`client-v2/.arm6
 
 ## Launching from a worktree
 
-A linked worktree's `.git` is a pointer into the primary checkout, which act does not copy, and `generate-fast` copies `client/public` from the primary checkout too. Mount both, read-only, at their own paths. `--container-options` on the command line replaces the one in `.actrc`, so `--group-add 0` is repeated:
+A linked worktree's `.git` is a pointer into the primary checkout, which act does not copy. Mount the primary checkout's `.git`, read-only, at its own path. `--container-options` on the command line replaces the one in `.actrc`, so `--group-add 0` is repeated:
 
 ```sh
 cd client-v2
 main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
 act --trust-project-actrc $(grep '^-' .arm64.actrc) workflow_call -C .. -W .github/workflows/reusable-client-v2.yml -j checks --input use-wasm-stubs=true \
-  --container-options "--group-add 0 -v $main/.git:$main/.git:ro -v $main/client/public:$main/client/public:ro"
+  --container-options "--group-add 0 -v $main/.git:$main/.git:ro"
 ```
 
 Drop the `$(grep ...)` part on an x86-64 host.
@@ -57,7 +57,7 @@ main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
 act --trust-project-actrc workflow_call -C .. -W .github/workflows/reusable-client-v2.yml -j build --input use-wasm-stubs=false \
   --local-repository actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9=$HOME/.cache/act-local/upload-artifact-v4.6.2 \
   --local-repository actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a=$HOME/.cache/act-local/upload-artifact-v4.6.2 \
-  --container-options "--group-add 0 -v $main/.git:$main/.git:ro -v $main/client/public:$main/client/public:ro"
+  --container-options "--group-add 0 -v $main/.git:$main/.git:ro"
 ```
 
 One shard of the `e2e` job, here Firefox shard 1, with the same flags; `-j e2e` also runs the `wasm` job first:
@@ -68,7 +68,7 @@ act --trust-project-actrc workflow_call -C .. -W .github/workflows/reusable-clie
   --env PORT=13999 \
   --local-repository actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9=$HOME/.cache/act-local/upload-artifact-v4.6.2 \
   --local-repository actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a=$HOME/.cache/act-local/upload-artifact-v4.6.2 \
-  --container-options "--group-add 0 -v $main/.git:$main/.git:ro -v $main/client/public:$main/client/public:ro"
+  --container-options "--group-add 0 -v $main/.git:$main/.git:ro"
 ```
 
 `--network host` (`.actrc`) puts the job's dev server on the host's ports, so `PORT` moves it off 3000 when a

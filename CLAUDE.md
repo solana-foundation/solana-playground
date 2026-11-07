@@ -187,18 +187,20 @@ Asked to build something in the client, look in `openspec/changes/` first.
   and `client-v2/scripts/wasm-stubs.mjs`. `client-v2.yml` runs on the real
   packages: the `wasm` job of `reusable-client-v2.yml` builds them once, cached
   under Vercel's `wasm_source_key`, and the other jobs download them.
-- **`client-v2/public/` is gitignored and generated**, not authored.
-  `scripts/update-static.mjs` copies it out of the `client/public` git submodule
-  and dates tutorials from that submodule's history — so the submodule needs
-  full history (`fetch-depth: 0`), not a shallow checkout. The client-v2
-  Docker image has no git data of the checkout: it clones the assets at the
-  commit in `client-v2/scripts/assets-commit.txt` and sets `ASSETS_DIR`. A
-  submodule bump updates that file too; `scripts/assets-commit.test.mjs`
-  (`yarn test-api`) fails until it does and prints the command.
-  Files under
-  `client-v2/static/` (the curated program gallery,
-  `static/programs/programs.json`) are copied over that mirror afterwards and
-  win; edit those, never `public/`.
+- **`client-v2/public/` is tracked files**, edited in place: the brand
+  icons, `manifest.json`, `og.png`, and the curated program gallery
+  (`programs/programs.json`). `index.html` stays upstream's file;
+  `craco.config.js` adds the brand icons and share card to its head when
+  webpack writes the page (`scripts/brand-head.mjs`), with the card's domain
+  from `SITE_URL`, else `VERCEL_PROJECT_PRODUCTION_URL`, else
+  `http://localhost:3000`. The rest started as upstream's assets repository at
+  the commit in `client-v2/scripts/assets-commit.txt`, which records where
+  the copy came from; an upstream sync brings asset changes in by hand.
+  A Markdown tutorial under `public/tutorials/` shows only when
+  `client-v2/src/tutorials/markdown-tutorials.json` lists its folder, with
+  its date; a listed folder that is missing fails the build. The `generate`
+  scripts write `public/crates`, `public/packages`, and each tutorial's
+  `content.json`; those stay gitignored.
 - **`docs/assistant-context.md` is the in-product assistant's context**, not
   Claude Code's. It is the source of truth; `yarn sync-assistant-context` copies
   it into `client-v2/src/views/sidebar/assistant/content/`. Edit the `docs/` copy.

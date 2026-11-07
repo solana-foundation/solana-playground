@@ -1434,8 +1434,7 @@ describe("writes past a project limit", () => {
           if (existsSync(filesDir)) found.push([`${base}/${name}`, filesDir]);
         }
       }
-      // Markdown tutorials ship from `public/`, which `yarn generate-fast`
-      // copies out of `client/public`
+      // Markdown tutorials ship from `public/`
       const pub = nodePath.join(root, "public/tutorials");
       for (const name of readdirSync(pub)) {
         const filesDir = nodePath.join(pub, name, "files");
