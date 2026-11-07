@@ -5,7 +5,6 @@ import { createMainSecondaryPage } from "../create";
 
 export const terminal = createMainSecondaryPage({
   name: "Terminal",
-  keybind: "Ctrl+`",
   getIsFocused: PgTerminal.isFocused,
   focus: PgTerminal.focus,
   actions: [

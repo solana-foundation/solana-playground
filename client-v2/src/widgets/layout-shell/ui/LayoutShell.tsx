@@ -5,6 +5,7 @@ import { useTheme } from "styled-components";
 import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { isEditable } from "@/shared/lib/is-editable";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgFlow } from "@/views/flow/state/stage";
@@ -124,13 +125,6 @@ export interface LayoutShellProps {
   /** The phone's status chip, in the work page's bar */
   phoneStatus?: ReactNode;
 }
-
-/** Whether a key pressed on `target` is typed into something */
-const isEditable = (target: EventTarget | null) =>
-  target instanceof Element &&
-  target.closest(
-    'input, textarea, select, [contenteditable]:not([contenteditable="false"])'
-  ) !== null;
 
 /**
  * The frame and the phone's pager, connected: the layout state and its
@@ -416,7 +410,8 @@ const LayoutShell = ({
   useKeybind(
     "Ctrl+R",
     () => {
-      if (isCovered(screenNow.current)) return;
+      // Under Home or a page the key is not the shell's: ⌘R reloads there
+      if (isCovered(screenNow.current)) return false;
       if (phone) {
         // The view is shown on Work: bring it into view first
         showPage("work", "key");
@@ -428,7 +423,7 @@ const LayoutShell = ({
   useKeybind(
     CONSOLE_KEY,
     () => {
-      if (isCovered(screenNow.current)) return;
+      if (isCovered(screenNow.current)) return false;
       if (phone) setPhoneConsoleOpen(!phoneConsoleNow.current, "key");
       else setOpen("console", { open: !state.open.console, via: "key" });
     },

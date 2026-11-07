@@ -1687,6 +1687,21 @@ describe("with Home", () => {
     expect(toggled()).toEqual([]);
   });
 
+  it("leaves ⌘R and ⌘J to the browser under Home", () => {
+    shell(home);
+    for (const key of ["r", "j"]) {
+      const ev = new KeyboardEvent("keydown", {
+        key,
+        metaKey: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(ev);
+      // A reload, the downloads list: the shell does nothing with them here
+      expect(ev.defaultPrevented).toBe(false);
+    }
+    expect(toggled()).toEqual([]);
+  });
+
   it("keeps the stage mounted under Home when told to keep the work", () => {
     const stageMounts = vi.fn();
     const Stage = () => {
