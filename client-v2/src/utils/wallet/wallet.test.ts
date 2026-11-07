@@ -46,6 +46,9 @@ const pick = () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  // Drops reports kept for the first `initLogger`, so a test's provider sees
+  // only its own
+  resetLogger();
 });
 
 describe("utils/wallet/wallet", () => {
