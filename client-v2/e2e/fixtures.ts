@@ -752,7 +752,7 @@ export const deployHelloWorldWith =
         .filter({ hasText: "Sign in with GitHub" })
     ).toBeVisible(LONG);
     await runInTerminal(page, "airdrop 5");
-    await expect(rows).toContainText("Airdrop successful.", LONG);
+    await expect(rows).toContainText("Airdrop successful", LONG);
     await runInTerminal(page, "build");
     await expect(rows).toContainText("Build successful.", LONG);
     await runInTerminal(page, "deploy");
