@@ -2,6 +2,7 @@ import { CircleAlert, ExternalLink } from "lucide-react";
 
 import type { FundingFailure } from "@/commands/deploy/run";
 import { networkInSentence, solOn } from "@/constants";
+import { FAUCET_URL } from "@/shared/lib/faucet";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   Callout,
@@ -14,9 +15,6 @@ import { CopyButton } from "@/shared/ui/copy-button";
 
 import { formatSol, shortKey } from "../model/format";
 
-/** Solana's web faucet; it serves devnet and testnet */
-export const WEB_FAUCET_URL = "https://faucet.solana.com";
-
 export interface BaseNotEnoughSolProps {
   cluster: string | undefined;
   reason: FundingFailure;
@@ -28,7 +26,10 @@ export interface BaseNotEnoughSolProps {
   /** What the airdrop said when it refused */
   cause: string | null;
   onRetry: () => void;
-  /** Deploy again, requesting an airdrop; offered when automatic airdrop is off */
+  /**
+   * Deploy again, requesting an airdrop: offered when automatic airdrop is
+   * off, and on Try again after the faucet refused
+   */
   onAirdrop: () => void;
   onSignIn: () => void;
 }
@@ -52,6 +53,11 @@ const FundingAction = ({ p }: { p: BaseNotEnoughSolProps }) => {
   }
   if (p.reason === "airdrop_off") {
     return <CalloutAction onClick={p.onAirdrop}>Request airdrop</CalloutAction>;
+  }
+  // The faucet refused the airdrop the user asked for: trying again asks it
+  // again, even with automatic airdrop off
+  if (p.reason === "airdrop_failed") {
+    return <CalloutAction onClick={p.onAirdrop}>Try again</CalloutAction>;
   }
   return <CalloutAction onClick={p.onRetry}>Try again</CalloutAction>;
 };
@@ -91,7 +97,7 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
         <FundingAction p={p} />
         {hasWebFaucet && (
           <CalloutAction asChild>
-            <a href={WEB_FAUCET_URL} target="_blank" rel="noopener noreferrer">
+            <a href={FAUCET_URL} target="_blank" rel="noopener noreferrer">
               Open faucet
               <ExternalLink data-icon="inline-end" />
             </a>

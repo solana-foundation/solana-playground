@@ -1,4 +1,13 @@
 import {
+  checkProjectLimits,
+  checkWriteTo,
+  isSyncedPath,
+  limitKind,
+  limitRule,
+  limitSummary,
+  type ProjectLimitExceeded,
+} from "../../entities/project";
+import {
   isMissing,
   report,
 } from "../../features/persistence/model/diagnostics";
@@ -8,6 +17,7 @@ import { PgLanguage } from "../language";
 import type { Disposable } from "../types";
 import { PgView } from "../view";
 import { PgFs } from "./fs";
+import { explorerTelemetry, type LimitActionParam } from "./telemetry";
 import type {
   CreatedWorkspace,
   EditorBuffers,
@@ -23,6 +33,32 @@ import { PgWorkspace } from "./workspace";
 import { forgetFlushed, writeWorkspaceFile } from "./workspace-file";
 
 const log = createLogger("explorer:explorer");
+
+/** What `createItem` takes beside the path and the content */
+type CreateItemOptions = {
+  skipNameValidation?: boolean;
+  override?: boolean;
+  openOptions?: OpenOptions;
+};
+
+/** Whether a written file opens in the editor, or only refreshes there */
+type OpenOptions = {
+  dontOpen?: boolean;
+  onlyRefreshIfAlreadyOpen?: boolean;
+};
+
+/**
+ * A create, rename or import the explorer refused because the project would
+ * be over a limit. Its own class so a dialog can show it beside its input
+ * rather than as a failure the team hears about. It carries the limit too,
+ * so a caller can say more than the message without parsing it.
+ */
+export class ExplorerLimitError extends Error {
+  constructor(readonly limit: ProjectLimitExceeded, message: string) {
+    super(message);
+    this.name = "ExplorerLimitError";
+  }
+}
 
 export class PgExplorer {
   /** Internal state */
@@ -293,72 +329,110 @@ export class PgExplorer {
   static async createItem(
     path: string,
     content: string = "",
-    opts?: {
-      skipNameValidation?: boolean;
-      override?: boolean;
-      openOptions?: {
-        dontOpen?: boolean;
-        onlyRefreshIfAlreadyOpen?: boolean;
-      };
-    }
+    opts?: CreateItemOptions
   ) {
-    const fullPath = this.convertToFullPath(path);
+    const fullPath = this._checkNewItemWith(opts)(path);
 
-    // Invalid name
-    if (
-      !opts?.skipNameValidation &&
-      !PgExplorer.isItemNameValid(PgExplorer.getItemNameFromPath(fullPath))
-    ) {
-      throw new Error(PgExplorer.errors.INVALID_NAME);
+    // Before anything is written, on the project as the write leaves it
+    // (`checkWriteTo`). A folder holds no bytes and is not counted.
+    if (PgExplorer.getItemTypeFromPath(fullPath).file) {
+      this._refuseOverLimit(
+        "create",
+        checkWriteTo(await this._syncedProjectFiles())(
+          this.getRelativePath(fullPath)
+        )(content)
+      );
     }
 
-    const files = this.files;
+    await this._writeItemWith(opts)(fullPath, content);
+  }
 
-    // Check whether the item already exists
-    if (files[fullPath] && !opts?.override) {
-      throw new Error(PgExplorer.errors.ALREADY_EXISTS);
-    }
+  /**
+   * Write a file the playground generates from work already done, such as
+   * the Sugar cache, which holds the links of uploads the user has paid for.
+   * Unlike `createItem`, the project's limits do not refuse it: refusing
+   * would lose that work. A project left over a limit stays local: sync's
+   * own check finds it before uploading and the sync banner names the limit. The file is overwritten, and
+   * `openOptions` say whether an open editor tab shows the new content.
+   */
+  static writeGeneratedFileWith(openOptions: OpenOptions) {
+    const opts = { override: true, openOptions };
+    return async (path: string, content: string) => {
+      const fullPath = this._checkNewItemWith(opts)(path);
+      if (!PgExplorer.getItemTypeFromPath(fullPath).file) {
+        throw new Error(`Not a file path: ${path}`);
+      }
+      await this._writeItemWith(opts)(fullPath, content);
+    };
+  }
 
-    const itemType = PgExplorer.getItemTypeFromPath(fullPath);
+  /** The full path of an item `createItem` may write, after its name checks */
+  private static _checkNewItemWith(opts: CreateItemOptions | undefined) {
+    return (path: string) => {
+      const fullPath = this.convertToFullPath(path);
 
-    // Ordering of `indexedDB` calls and state calls matter. If `indexedDB` call fails,
-    // state will not change. Can't say the same if the ordering was in reverse.
-    if (itemType.file) {
-      if (!this.isTemporary) {
-        await this.fs.writeFile(fullPath, content, { createParents: true });
-        // A new file is a change to the folder tree; replacing a file's
-        // content is not
-        if (!files[fullPath]) await this._saveTree("a create");
+      // Invalid name
+      if (
+        !opts?.skipNameValidation &&
+        !PgExplorer.isItemNameValid(PgExplorer.getItemNameFromPath(fullPath))
+      ) {
+        throw new Error(PgExplorer.errors.INVALID_NAME);
       }
 
-      files[fullPath] = {
-        content,
-        meta: files[fullPath]?.meta ?? {},
-      };
-
-      if (!opts?.openOptions || opts?.openOptions?.onlyRefreshIfAlreadyOpen) {
-        const isCurrentFile = this.currentFilePath === fullPath;
-
-        // Close the file if we are overriding to correctly display the new content
-        if (opts?.override && isCurrentFile) this.closeFile(fullPath);
-
-        // Open if it's the current file or there is no open options
-        if (!opts?.openOptions || isCurrentFile) this.openFile(fullPath);
-      }
-    }
-    // Folder
-    else {
-      if (!this.isTemporary) {
-        await this.fs.createDir(fullPath);
-        await this._saveTree("a create");
+      // Check whether the item already exists
+      if (this.files[fullPath] && !opts?.override) {
+        throw new Error(PgExplorer.errors.ALREADY_EXISTS);
       }
 
-      files[fullPath] = {};
-    }
+      return fullPath;
+    };
+  }
 
-    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_CREATE_ITEM);
+  /** The writes of `createItem` once its checks have passed */
+  private static _writeItemWith(opts: CreateItemOptions | undefined) {
+    return async (fullPath: string, content: string) => {
+      const files = this.files;
+      const itemType = PgExplorer.getItemTypeFromPath(fullPath);
 
-    await this.saveMeta();
+      // Ordering of `indexedDB` calls and state calls matter. If `indexedDB` call fails,
+      // state will not change. Can't say the same if the ordering was in reverse.
+      if (itemType.file) {
+        if (!this.isTemporary) {
+          await this.fs.writeFile(fullPath, content, { createParents: true });
+          // A new file is a change to the folder tree; replacing a file's
+          // content is not
+          if (!files[fullPath]) await this._saveTree("a create");
+        }
+
+        files[fullPath] = {
+          content,
+          meta: files[fullPath]?.meta ?? {},
+        };
+
+        if (!opts?.openOptions || opts?.openOptions?.onlyRefreshIfAlreadyOpen) {
+          const isCurrentFile = this.currentFilePath === fullPath;
+
+          // Close the file if we are overriding to correctly display the new content
+          if (opts?.override && isCurrentFile) this.closeFile(fullPath);
+
+          // Open if it's the current file or there is no open options
+          if (!opts?.openOptions || isCurrentFile) this.openFile(fullPath);
+        }
+      }
+      // Folder
+      else {
+        if (!this.isTemporary) {
+          await this.fs.createDir(fullPath);
+          await this._saveTree("a create");
+        }
+
+        files[fullPath] = {};
+      }
+
+      PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_CREATE_ITEM);
+
+      await this.saveMeta();
+    };
   }
 
   /**
@@ -412,6 +486,34 @@ export class PgExplorer {
         newPathExists = files.length > 0 || folders.length > 0;
       }
       if (newPathExists) throw new Error(PgExplorer.errors.ALREADY_EXISTS);
+    }
+
+    // A rename moves no bytes and adds no file, so only the path limit
+    // applies: a project already over another limit can still be tidied.
+    // Checked on every file path the rename produces. Renaming the workspace
+    // itself changes no path sync carries, and `getRelativePath` would strip
+    // the old name from paths that already hold the new one, so it is not
+    // checked; sync's own renames to the account's name come this way too.
+    const renamesWorkspace = PgCommon.isPathsEqual(
+      oldPath,
+      this.getCurrentWorkspacePath() ?? ""
+    );
+    const moved: Record<string, string> = {};
+    if (itemType.file) {
+      moved[this.getRelativePath(newPath)] = "";
+    } else if (!renamesWorkspace) {
+      const newPrefix = oldPath.endsWith("/")
+        ? PgCommon.appendSlash(newPath)
+        : newPath;
+      for (const path in this.files) {
+        if (!path.startsWith(oldPath)) continue;
+        if (!PgExplorer.getItemTypeFromPath(path).file) continue;
+        moved[this.getRelativePath(path.replace(oldPath, newPrefix))] = "";
+      }
+    }
+    const overPath = checkProjectLimits(moved);
+    if (overPath?.reason === "path-too-long") {
+      this._refuseOverLimit("rename", overPath);
     }
 
     // Before anything moves, so a pending autosave writes its edit at the old
@@ -574,6 +676,20 @@ export class PgExplorer {
     if (!opts?.skipNameValidation && !this.isWorkspaceNameValid(name)) {
       throw new Error(PgWorkspace.errors.INVALID_NAME);
     }
+
+    // Before the workspace exists: a refused import leaves nothing behind
+    let imported: Record<string, string> | null = null;
+    if (opts?.fromTemporary && this.isTemporary) {
+      imported = this._projectFiles();
+    } else if (opts?.files) {
+      imported = Object.fromEntries(
+        opts.files.map(([path, content]) => [
+          PgExplorer._workspaceRelative(name, path),
+          content,
+        ])
+      );
+    }
+    if (imported) this._refuseOverLimit("import", checkProjectLimits(imported));
 
     if (opts?.fromTemporary && this.isTemporary) {
       // The reason we are not just getting the necessary files and re-calling this
@@ -1044,6 +1160,101 @@ export class PgExplorer {
   /* ----------------------------- State methods ---------------------------- */
 
   /**
+   * The current project's files in the explorer's file map: workspace-relative
+   * paths to contents, folders left out. Holds no dot-prefixed file, so not
+   * the generated ones sync carries; `_syncedProjectFiles` adds those.
+   * `checkProjectLimits` drops the paths sync does not carry.
+   */
+  private static _projectFiles(): Record<string, string> {
+    // No prototype, as in `checkProjectLimits`: a root file named
+    // `__proto__` would otherwise go to the inherited setter, not the map
+    const files: Record<string, string> = Object.create(null);
+    for (const [path, item] of Object.entries(this.files)) {
+      if (item.content === undefined) continue;
+      files[this.getRelativePath(path)] = item.content;
+    }
+    return files;
+  }
+
+  /**
+   * `_projectFiles` plus every file sync carries that only the store has.
+   * `isItemNameValid` keeps dot-named entries out of the explorer's file map,
+   * yet sync and the server count them toward the project's size: the
+   * `SYNCED_WORKSPACE_FILES`, and a user's `.gitignore` or `.github/` that an
+   * import or another device wrote. Only those files are read; the rest come
+   * from memory. A temporary project has no store and none of them.
+   */
+  private static async _syncedProjectFiles(): Promise<Record<string, string>> {
+    const files = this._projectFiles();
+    const workspacePath = this.getCurrentWorkspacePath();
+    if (this.isTemporary || !workspacePath) return files;
+
+    const root = PgCommon.appendSlash(workspacePath);
+    const walk = async (dir: string): Promise<void> => {
+      let names: string[];
+      try {
+        names = await this.fs.readDir(dir);
+      } catch (e) {
+        // Not written yet: nothing to count
+        if (isMissing(e)) return;
+        throw e;
+      }
+      for (const name of names) {
+        const path = PgCommon.joinPaths(dir, name);
+        const relative = path.slice(root.length);
+        if (!isSyncedPath(relative)) continue;
+        if ((await this.fs.getMetadata(path)).isDirectory()) {
+          await walk(path);
+        } else if (!(relative in files)) {
+          files[relative] = await this.fs.readToString(path);
+        }
+      }
+    };
+    await walk(workspacePath);
+    return files;
+  }
+
+  /**
+   * A path `createWorkspace` was given, relative to the workspace `name`.
+   * Callers pass both `/name/src/lib.rs` and `src/lib.rs`.
+   */
+  private static _workspaceRelative(name: string, path: string) {
+    const root = PgCommon.joinPaths(
+      this.PATHS.ROOT_DIR_PATH,
+      PgCommon.appendSlash(name)
+    );
+    if (path.startsWith(root)) return path.slice(root.length);
+    return path.replace(/^\//, "");
+  }
+
+  /**
+   * Refuse a write whose project would be over `limit`, before anything is
+   * written. Every create, rename and import comes through the three methods
+   * that call this, so the New File dialog, the assistant's file writes, the
+   * terminal commands and the import flows all get the same refusal. The
+   * editor's saves and sync's restores do not: a refused autosave would lose
+   * typing, and a refused restore would strand a project stored over a limit
+   * after a later change to one; the sync banner reports both.
+   *
+   * The message is the limit's rule, or for an import, what is over it and
+   * the rule, since the files were not the user's last keystroke.
+   */
+  private static _refuseOverLimit(
+    action: LimitActionParam,
+    limit: ProjectLimitExceeded | null
+  ) {
+    if (!limit) return;
+    explorerTelemetry.track("explorer_limit_refused", {
+      action,
+      limit: limitKind(limit),
+    });
+    throw new ExplorerLimitError(
+      limit,
+      action === "import" ? limitSummary(limit) : limitRule(limit)
+    );
+  }
+
+  /**
    * Get all files as `TupleFiles`
    *
    * @returns all files as an array of [path, content] tuples
@@ -1184,13 +1395,18 @@ export class PgExplorer {
 
   /**
    * Close the file at the given path.
-
-   * This method mutates the existing tabs array.
+   *
+   * This method mutates the existing tabs array. A path with no tab is left
+   * alone, and no close event is dispatched for it.
    *
    * @param path file path
    */
   static closeFile(path: string) {
     path = this.convertToFullPath(path);
+
+    // Without this, `indexOf` gives -1 and `splice(-1, 1)` below removes the
+    // last tab, an unrelated one
+    if (!this.tabs.includes(path)) return;
 
     // If closing the current file, change the current file to the next tab
     if (this.currentFilePath === path) {

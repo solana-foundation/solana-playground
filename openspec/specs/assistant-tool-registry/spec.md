@@ -1,6 +1,7 @@
 # assistant-tool-registry Specification
 
 ## Purpose
+
 Defines the one declared set of built-in tools the assistant offers,
 readable by both the browser panel and the server rail, so the default agent
 and a user on their own key get the same assistant. The skills and MCP

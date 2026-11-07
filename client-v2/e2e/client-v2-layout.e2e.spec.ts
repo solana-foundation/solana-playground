@@ -538,7 +538,7 @@ test.describe("on a phone", () => {
     // Once its opening animation has settled
     await expect
       .poll(() => accountMenu.boundingBox())
-      .toEqual({ x: 0, y: 0, width: 390, height: 844 });
+      .toEqual({ x: 0, y: 0, width: PHONE.width, height: PHONE.height });
     await expect(
       accountMenu.getByRole("menuitem", { name: "Sign in with GitHub" })
     ).toBeInViewport();

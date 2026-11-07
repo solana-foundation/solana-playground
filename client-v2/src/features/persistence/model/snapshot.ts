@@ -1,3 +1,5 @@
+import { isSyncedPath, SYNCED_WORKSPACE_FILES } from "@/entities/project";
+
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
 // tests could not load this module.
@@ -5,26 +7,11 @@ import { PgFs } from "../../../utils/explorer/fs";
 import { isMissing } from "./diagnostics";
 
 /**
- * Workspace files that travel with the code.
- *
- * `program-info.json` carries the program keypair. Syncing it is deliberate:
- * without it the same project deploys to a different address on every device,
- * which is the thing users notice. This is a playground, the keys are
- * playground keys, and the UI says so. The two tutorial files are what let a
- * lesson resume on another device at the page it was left on, rather than at
- * the beginning.
- *
- * `.workspace/metadata.json` -- the open tabs and cursor positions -- is
- * deliberately *not* here. It is rewritten every time a project is opened, so
- * syncing it would make merely looking at a project a change the other device
- * has to reconcile, and two idle browsers would trade conflicts over where the
- * caret was.
+ * Workspace files that travel with the code. Declared by the project entity,
+ * whose limits count them toward a project's size but not its file count;
+ * re-exported for the sync code that already reads it from here.
  */
-export const SYNCED_WORKSPACE_FILES = [
-  ".workspace/program-info.json",
-  ".workspace/tutorial-storage.json",
-  ".tutorial.json",
-];
+export { SYNCED_WORKSPACE_FILES };
 
 /**
  * Whether a full path is one of the workspace files the snapshot carries.
@@ -43,10 +30,7 @@ export const isSyncedWorkspaceFile = (path: string) =>
 
 /** Keep user files and the named workspace files; drop everything else */
 export const filterSnapshotPaths = (paths: readonly string[]) =>
-  paths.filter(
-    (path) =>
-      SYNCED_WORKSPACE_FILES.includes(path) || !path.startsWith(".workspace/")
-  );
+  paths.filter(isSyncedPath);
 
 /** `path -> sha256` for every file in a snapshot */
 export type FileHashes = Record<string, string>;

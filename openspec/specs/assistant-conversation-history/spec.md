@@ -1,6 +1,7 @@
 # assistant-conversation-history Specification
 
 ## Purpose
+
 Says what a stored assistant thread keeps of each turn, and what a provider
 built for a stored thread sends the model as the conversation so far, so the
 model remembers what it did after a reload, on another device, or after a

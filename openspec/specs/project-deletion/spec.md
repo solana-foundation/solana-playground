@@ -1,6 +1,7 @@
 # project-deletion Specification
 
 ## Purpose
+
 Defines what deleting a project removes, on the device and in the signed-in
 user's account, and what the user is told before confirming the delete.
 

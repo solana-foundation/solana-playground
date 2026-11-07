@@ -23,8 +23,9 @@ interface BaseConsoleDrawerProps {
   /** The state the drawer asks for, which may be the one it is in */
   onOpenChange: (open: boolean) => void;
   onClear: () => void;
-  /** The run Stop names and the handler that stops it, while a build or a
-   * deploy runs; `null` otherwise */
+  /** The run Stop names and the handler that stops it, or `null` for no
+   * Stop; `runToStop` decides which run gets one (a build, never a deploy
+   * alone) */
   stop: { run: RunKind; onStop: () => void } | null;
   status: ConsoleStatus;
   /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere */
@@ -73,7 +74,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
       </ConsoleDrawerStatus>
       <ConsoleDrawerActions>
         <Kbd aria-hidden>{shortcut}</Kbd>
-        {/* Spec 13: while a build or a deploy runs, Clear is off with Stop
+        {/* Spec 13: while a build runs, Clear is off with Stop
             beside it; on a phone Stop takes Clear's place, a fingertip
             wide. Stop shows folded too: the strip is all a folded console
             shows. */}

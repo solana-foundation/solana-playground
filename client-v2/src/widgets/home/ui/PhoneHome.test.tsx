@@ -21,6 +21,7 @@ import {
 } from "@/shared/lib/telemetry";
 
 const utils = vi.hoisted(() => ({
+  ExplorerLimitError: class ExplorerLimitError extends Error {},
   PgTutorial: { all: [] as unknown[], open: vi.fn() },
   PgView: { setModal: vi.fn(), setToast: vi.fn() },
   PgCommon: { fetchJSON: vi.fn() },

@@ -186,6 +186,17 @@ when a session reads a file matching the `paths` in the frontmatter.
   with `reason: "no-files"` (`NO_FILES_REASON`), never a 409; the browser
   only meets it against a row emptied before the server checked, and answers
   with its whole file set once (`_push`, `whole`).
+- **The account cap is the server's alone.** An account syncs at most
+  `ACCOUNT_LIMITS` projects and tutorials, counted apart: live rows of the
+  kind holding a synced file. `writeProject` counts only for a write that
+  makes a project count (a create, or a swap whose `had_files` is false),
+  after its writes, under a per-account `pg_advisory_xact_lock` taken in a
+  statement of its own so the count's snapshot starts after the wait. Over
+  the cap it is a 413 `too-many-projects`, which the client raises as a
+  `too-large` `Conflict` with the limit: no mark is written, so the project
+  stays local through reconcile and sign-out, and the outstanding question
+  stops its pushes until "Try again". The client never counts and the
+  explorer never refuses a project for the cap.
 - **`/api/projects` still takes the pre-hoodieshq/solana-playground#40 client's body.** A tab open
   across that deploy sends `{snapshot: {files}, baseUpdatedAt, force: false}`
   and drops every status but 409 and 413 silently, so `describeWrite` reads
@@ -194,8 +205,8 @@ when a session reads a file matching the `paths` in the frontmatter.
 - **Only a visible tab pushes.** Tabs share IndexedDB but hold the _current_
   workspace in memory separately, so a backgrounded tab's snapshot goes stale.
   A tab flushes on `visibilitychange` -> `hidden` (not `beforeunload`, which is
-  too late, and not `keepalive`, which caps at ~64 KB against a 4 MB limit)
-  and reconciles before it may push again.
+  too late, and not `keepalive`, which caps at ~64 KB against a 1 MiB body
+  limit) and reconciles before it may push again.
 - **Tabs agree through the store and one Web Lock.** Uploads are built from
   disk (`snapshotOf`), never from a tab's memory, which can be behind another
   tab's write. Reconcile passes, pushes, merges, adopts and banner answers all

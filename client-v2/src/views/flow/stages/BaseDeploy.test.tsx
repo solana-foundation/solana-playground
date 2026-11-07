@@ -721,8 +721,10 @@ describe("BaseDeploy", () => {
     const card = screen.getByRole("alert", { name: "Not enough SOL" });
     expect(card.textContent).toContain("Not enough devnet SOL");
     expect(screen.queryByText("Deploy failed - see the console.")).toBeNull();
+    // The faucet refused: Try again asks it again
     fireEvent.click(within(card).getByRole("button", { name: "Try again" }));
-    expect(p.onDeploy).toHaveBeenCalledOnce();
+    expect(p.onAirdrop).toHaveBeenCalledOnce();
+    expect(p.onDeploy).not.toHaveBeenCalled();
   });
 
   it("offers the keypair backup under the result when asked to", () => {

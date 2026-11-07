@@ -7,6 +7,7 @@ import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { FieldError } from "@/shared/ui/field";
 import { ModalFrame, SubmitCancelled, useModalId } from "@/widgets/overlays";
 
 import { Eye, Github, ImportWorkspace } from "../../../../../components/Icons";
@@ -23,11 +24,13 @@ import {
   PgView,
 } from "../../../../../utils";
 import { IMPORTED } from "./imported";
+import { useLimitRefusal } from "./useLimitRefusal";
 
 export const ImportGithub = () => {
   // Handle user input
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const { limitError, guard } = useLimitRefusal();
 
   return (
     <ModalFrame
@@ -35,7 +38,7 @@ export const ImportGithub = () => {
       title
       buttonProps={{
         text: "Import",
-        onSubmit: async () => {
+        onSubmit: guard(async () => {
           try {
             await PgCommon.transition(
               isGistUrl(url) ? importGist(url, "dialog") : PgGithub.import(url)
@@ -47,11 +50,14 @@ export const ImportGithub = () => {
             if (e instanceof ImportCancelledError) throw new SubmitCancelled();
             throw e;
           }
-        },
+        }),
         disabled: !!error,
       }}
     >
       <div className="max-w-[39rem]">
+        <FieldError data-testid="explorer-limit-error" className="mb-2">
+          {limitError}
+        </FieldError>
         <div>
           <div className="mb-2 font-bold">GitHub or gist URL</div>
           <Input
@@ -85,11 +91,21 @@ export const ImportGithub = () => {
             <p>
               Program repositories can be viewed in playground by combining the
               playground URL with their GitHub URL. For example, from{" "}
-              <Link href={GITHUB_PROGRAM_URL}>this repository</Link>:
+              {/* The callout underlines its links; the link's own hover
+                  line would draw a second one under it */}
+              <Link
+                href={GITHUB_PROGRAM_URL}
+                className="hover:border-transparent"
+              >
+                this repository
+              </Link>
+              :
             </p>
 
             <p style={{ wordBreak: "break-all" }}>
-              <Link href={VIEW_URL}>{VIEW_URL}</Link>
+              <Link href={VIEW_URL} className="hover:border-transparent">
+                {VIEW_URL}
+              </Link>
             </p>
           </CalloutDescription>
         </Callout>
@@ -113,21 +129,31 @@ interface ExampleProps {
 
 const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
   const id = useModalId();
+  const title = `${framework.name} – ${framework.githubExample.name}`;
   return (
-    <div className="my-4 flex items-center justify-between">
-      <div className="flex w-fit items-center justify-center rounded-[12px] px-4 py-2">
+    // The name on its own line and the buttons under it: beside the buttons a
+    // name has no room, and rows of different lengths wrap unevenly
+    <div data-testid="github-example" className="my-3 flex flex-col gap-2">
+      <div className="flex min-w-0 items-center gap-2">
         <Img
           src={framework.icon}
-          className={cn("size-4", framework.circleImage && "rounded-[50%]")}
+          className={cn(
+            "size-4 shrink-0",
+            framework.circleImage && "rounded-[50%]"
+          )}
         />
-        <span className="ml-2 font-bold text-[color:var(--text-secondary)]">
-          {framework.name} - {framework.githubExample.name}
+        <span
+          title={title}
+          className="truncate font-bold text-[color:var(--text-secondary)]"
+        >
+          {title}
         </span>
       </div>
 
-      <div className="flex [&>*]:ml-6">
+      <div className="flex flex-wrap gap-2">
         <AsyncButton
           type="button"
+          size="sm"
           variant="outline"
           onClick={async () => {
             try {
@@ -147,6 +173,7 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
 
         <Button
           type="button"
+          size="sm"
           variant="outline"
           onClick={() => {
             PgRouter.navigate("/" + framework.githubExample.url);
@@ -157,7 +184,7 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
           <Eye data-icon="inline-end" />
         </Button>
 
-        <Button asChild variant="outline">
+        <Button asChild size="sm" variant="outline">
           <a
             href={framework.githubExample.url}
             target="_blank"

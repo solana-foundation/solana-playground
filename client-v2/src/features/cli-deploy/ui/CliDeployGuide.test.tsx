@@ -133,6 +133,22 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
     expect(commands()[0]).toContain("--url devnet");
   });
 
+  it("offers Mainnet, Devnet and Testnet, and opens on Playground's Testnet", () => {
+    renderGuide(
+      <CliDeployGuide
+        {...props({ from: "deploy-stage", cluster: "testnet", built: true })}
+      />
+    );
+
+    expect(
+      screen
+        .getAllByRole("radio")
+        .map((r) => r.textContent)
+        .filter((t) => ["Mainnet", "Devnet", "Testnet"].includes(t ?? ""))
+    ).toEqual(["Mainnet", "Devnet", "Testnet"]);
+    expect(commands()[0]).toContain("--url testnet");
+  });
+
   it("gives Anchor's commands for the picked cluster", () => {
     renderGuide(
       <CliDeployGuide

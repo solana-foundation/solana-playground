@@ -1,6 +1,7 @@
 # client-v2-failure-states Specification
 
 ## Purpose
+
 How client-v2's stages report a failure the person cannot fix from the
 message alone: what they say and how they reach the full log.
 

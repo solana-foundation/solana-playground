@@ -1,6 +1,7 @@
 # client-v2-lessons Specification
 
 ## Purpose
+
 How an open lesson looks, polished to the original design-system prototype:
 the one-row band, the page, the rail, the assistant's first offer, the
 lesson's row in the navigation, and the phone's band and bar.

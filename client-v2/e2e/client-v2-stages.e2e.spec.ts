@@ -194,14 +194,11 @@ test.describe("client-v2-stages: Interact", () => {
     await expect(
       panel.getByRole("button", { name: "Copy program id" })
     ).toBeVisible(LONG);
-    await expect(
-      panel
-        .getByRole("radiogroup", { name: "Instruction" })
-        .getByRole("radio", { name: "initialize" })
-    ).toBeChecked();
-    await expect(
-      panel.getByRole("button", { name: "Call initialize" })
-    ).toBeVisible();
+    // Every instruction is a card, folded on arrival; opened, it ends in Test
+    const card = panel.getByRole("button", { name: /^initialize/ });
+    await expect(card).toHaveAttribute("aria-expanded", "false");
+    await card.click();
+    await expect(panel.getByRole("button", { name: "Test" })).toBeVisible();
     await expect(panel.locator('[data-slot="stage-empty"]')).toHaveCount(0);
   });
 
@@ -219,18 +216,19 @@ test.describe("client-v2-stages: Interact", () => {
       ],
     });
 
-    const chip = panel
-      .getByRole("radiogroup", { name: "Instruction" })
-      .getByRole("radio", { name: longName });
-    await expect(chip).toBeVisible(LONG);
-    const form = panel.getByRole("region", { name: `${longName} form` });
-    const chipBox = await chip.boundingBox();
-    const formBox = await form.boundingBox();
-    if (!chipBox || !formBox) {
-      throw new Error("the instruction chip or its form has no box");
+    const card = panel.getByRole("button", {
+      name: new RegExp(`^${longName}`),
+    });
+    await expect(card).toBeVisible(LONG);
+    const nameBox = await card
+      .getByText(longName, { exact: true })
+      .boundingBox();
+    const cardBox = await card.boundingBox();
+    if (!nameBox || !cardBox) {
+      throw new Error("the instruction card or its name has no box");
     }
-    expect(chipBox.x + chipBox.width).toBeLessThanOrEqual(
-      formBox.x + formBox.width + 0.5
+    expect(nameBox.x + nameBox.width).toBeLessThanOrEqual(
+      cardBox.x + cardBox.width + 0.5
     );
   });
 });
@@ -354,7 +352,7 @@ test.describe("client-v2-stages on a phone", () => {
     // A long program id or meta line scrolls inside the stage, never the page
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth)
-    ).toBeLessThanOrEqual(390);
+    ).toBeLessThanOrEqual(PHONE.width);
   });
 });
 
@@ -365,7 +363,7 @@ test.describe("client-v2-search-field", () => {
   }) => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
-    await panel.getByRole("radio", { name: "initialize" }).click();
+    await panel.getByRole("button", { name: /^initialize/ }).click();
 
     // Reached by its id: `updateRefs` (InstructionInput) finds dependent
     // inputs by it, so SearchBar must keep it

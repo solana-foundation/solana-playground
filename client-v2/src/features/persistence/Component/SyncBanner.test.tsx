@@ -17,6 +17,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import type { LimitExceeded } from "@/entities/project";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   initTelemetry,
@@ -224,7 +225,7 @@ describe("SyncBanner wording", () => {
     });
     await act(async () => root.render(<SyncBanner />));
     expect(container.querySelector('[role="alert"] p')?.textContent).toBe(
-      "This project is over 4 MB. Remove or shrink its largest files, then try again."
+      "This project is over 1 MiB. Remove or shrink its largest files, then try again."
     );
   });
 
@@ -377,5 +378,70 @@ describe("SyncBanner titles and actions", () => {
   it("offers only Try again when the project is too large", async () => {
     await mount("too-large");
     expect(buttonLabels()).toEqual(["Try again"]);
+  });
+});
+
+describe("SyncBanner limit wording", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  /** The banner's text, and its one button, for a `too-large` conflict */
+  const bannerFor = async (limit?: LimitExceeded) => {
+    vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue(
+      limit
+        ? { projectId: "p1", kind: "too-large", limit }
+        : { projectId: "p1", kind: "too-large" }
+    );
+    act(() => root.unmount());
+    root = createRoot(container);
+    await act(async () => root.render(<SyncBanner />));
+    const banner = requireFor("the sync banner")(
+      container.querySelector('[data-testid="sync-banner"]')
+    );
+    expect(banner.getAttribute("role")).toBe("alert");
+    return {
+      text: banner.querySelector("p")?.textContent,
+      buttons: Array.from(banner.querySelectorAll("button")).map((b) =>
+        b.textContent?.trim()
+      ),
+    };
+  };
+
+  beforeEach(() => {
+    vi.spyOn(PgExplorer, "currentWorkspaceId", "get").mockReturnValue("p1");
+    vi.spyOn(PgExplorer, "onDidSwitchWorkspace").mockReturnValue({
+      dispose: () => undefined,
+    });
+    vi.spyOn(PgProjectSync, "onDidChangeConflicts").mockReturnValue({
+      dispose: () => undefined,
+    });
+    container = document.body.appendChild(document.createElement("div"));
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.restoreAllMocks();
+  });
+
+  it("names one file over the file size limit", async () => {
+    expect(
+      await bannerFor({
+        reason: "file-too-large",
+        limit: 131_072,
+        paths: ["src/lib.rs"],
+        sizes: { "src/lib.rs": 143_360 },
+      })
+    ).toEqual({
+      text: "src/lib.rs is 140 KB. A file can be at most 128 KB. Shrink or remove it, then try again.",
+      buttons: ["Try again"],
+    });
+  });
+
+  it("names the body cap when the refusal names no limit", async () => {
+    expect((await bannerFor()).text).toBe(
+      "This project is over 1 MiB. Remove or shrink its largest files, then try again."
+    );
   });
 });

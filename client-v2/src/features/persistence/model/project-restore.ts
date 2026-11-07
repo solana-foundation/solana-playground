@@ -8,7 +8,12 @@ import {
   isUsableSnapshot,
   PgProjectSync,
 } from "./project-sync";
-import { diffFiles, hashFiles, snapshotOf } from "./snapshot";
+import {
+  diffFiles,
+  hashFiles,
+  snapshotOf,
+  SYNCED_WORKSPACE_FILES,
+} from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { withSyncLock } from "./sync-lock";
 import type { SyncMark } from "./sync-mark";
@@ -73,6 +78,35 @@ const isClean = async (projectId: string, localName: string) =>
       await snapshotOf(localName)
     ).files
   );
+
+/**
+ * Whether sign-out may delete a local project: the account holds everything
+ * it has. `isClean`, and on top of it what `isClean` leaves out on purpose:
+ *
+ * - The generated workspace files. A build rewrites `program-info.json` with a
+ *   new keypair, which exists nowhere else until a push takes it, and a push
+ *   the limits refuse never does. Here an identical rewrite on open costs
+ *   nothing: its hash matches the mark.
+ * - An outstanding question. A refused push (`too-large`, a divergence)
+ *   writes no mark, so the mark cannot say what the refusal left unsent.
+ *   `deleted-elsewhere` included, on purpose: `settleDeletes` raises it
+ *   only for a copy holding work the account never had (a clean one it
+ *   deletes), and deleting is one of the question's two answers, which
+ *   sign-out must not give for the user. The copy stays local; the same
+ *   account signing in is asked again, since its mark still names a row that
+ *   is gone, and another account never uploads it
+ *   (`PgSyncMark.belongsToAnotherAccount`).
+ */
+const isReleasable = async (projectId: string, localName: string) => {
+  if (PgProjectSync.conflictFor(projectId)) return false;
+  const mark = await PgSyncMark.read(projectId);
+  const { files } = await snapshotOf(localName);
+  if (!(await isCleanAgainst(mark, localName, files))) return false;
+  const hashes = await hashFiles({ files });
+  return SYNCED_WORKSPACE_FILES.every(
+    (path) => hashes[path] === mark!.files[path]
+  );
+};
 
 /**
  * Give a project back the server's name, where an adopt or a merge left the
@@ -638,10 +672,10 @@ export const releaseLocalProjects = async (): Promise<string[]> =>
     for (const name of names) {
       try {
         const id = PgExplorer.workspaceIdOf(name);
-        // No id means nothing was ever synced under it, and `isClean` is
+        // No id means nothing was ever synced under it, and `isReleasable` is
         // false for a project with no mark -- either way it is not ours to
         // delete
-        if (!id || !(await isClean(id, name))) continue;
+        if (!id || !(await isReleasable(id, name))) continue;
 
         await PgExplorer.deleteWorkspace(name);
         removed.push(name);

@@ -1,6 +1,7 @@
 # client-v2-account Specification
 
 ## Purpose
+
 What the account row, the account menu's sign-in group and the sign-out
 question say in each sign-in state, and where each project in the
 navigation says its work lives, as Spec 02 sets them.
@@ -25,18 +26,22 @@ name or "Sign in", and one second line:
 The wallet is not on the account row; it stays in the menu's wallet group.
 
 #### Scenario: Signed out on a clean browser (manual)
+
 - **WHEN** a person opens Playground signed out
 - **THEN** the account row reads "Sign in" over "Saved in this browser", with or without a wallet connected
 
 #### Scenario: A sign-in under way (manual)
+
 - **WHEN** the person presses Sign in with GitHub and the popup is open
 - **THEN** the account row reads "Signing in…" over "Waiting for GitHub…" with a Cancel action, and the account menu reads "Waiting for GitHub…" with "Cancel sign-in"
 
 #### Scenario: The row after sign-in (manual)
+
 - **WHEN** account A's sign-in completes
 - **THEN** the row shows A's avatar, display name and @login
 
 #### Scenario: Signed in and offline (manual)
+
 - **WHEN** a signed-in person's browser goes offline
 - **THEN** the account row's line reads "Offline · saving here", and goes back to the @login when the network returns
 
@@ -53,10 +58,12 @@ out, the menu's sign-in item SHALL be disabled and read "You're offline".
 No raw string, such as "Could not start sign-in", reaches the person.
 
 #### Scenario: The server cannot start a sign-in (manual)
+
 - **WHEN** the person presses Sign in with GitHub on a build whose sign-in endpoint fails
 - **THEN** the account menu says "Sign-in isn't available. Your work is saved in this browser." over "Try again", and the person stays signed out
 
 #### Scenario: Offline, signed out (manual)
+
 - **WHEN** the network is off and the person opens the account menu signed out
 - **THEN** the sign-in item is disabled and reads "You're offline"
 
@@ -74,10 +81,12 @@ sign-out that fails SHALL leave the person signed in and say so. No
 "Sign out of GitHub?" remains.
 
 #### Scenario: Sign-out confirmation (manual)
+
 - **WHEN** the person opens the menu and presses Sign out, then Cancel
 - **THEN** "Sign out of Playground?" shows with the consequence line and focus on Cancel, then the menu's items return
 
 #### Scenario: Sign-out with leftovers (manual)
+
 - **WHEN** the person edits a synced project offline and signs out offline
 - **THEN** sign-out completes, the menu says 1 project stayed, and the project keeps its edit
 
@@ -92,6 +101,7 @@ emits nothing for the close: the sign-out is counted when it succeeds, and
 one that then fails ends the question with no event.
 
 #### Scenario: Cancelling counts once (manual)
+
 - **WHEN** the person presses Sign out, then Cancel
 - **THEN** one `session_sign_out_ended` with `outcome: "cancelled"` is sent
 
@@ -115,17 +125,21 @@ marker is text, so a screen reader reads it with the row. It gives way to
 the row's actions while the row is hovered or focused, as the pin does.
 
 #### Scenario: Signed out shows no markers (manual)
+
 - **WHEN** a signed-out person has projects in the browser
 - **THEN** no project row shows "This browser" or "Not synced"
 
 #### Scenario: Another account's project on a shared browser (manual)
+
 - **WHEN** account B signs in on a browser holding a project account A synced
 - **THEN** that project's row shows "This browser" and it is never uploaded to B
 
 #### Scenario: ACC-26 Signed in, offline (manual)
+
 - **WHEN** signed in, the person goes offline and edits a synced project
 - **THEN** the account row reads "Offline · saving here", the project shows "Not synced", and back online the marker clears with no question once the next upload or reconcile lands (an edit, a switch or a refocus)
 
 #### Scenario: A conflict on another project (manual)
+
 - **WHEN** a project has an unanswered sync conflict and the person opens another project
 - **THEN** the first project's row shows "Not synced"

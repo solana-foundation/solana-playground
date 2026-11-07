@@ -20,7 +20,7 @@ const log = createLogger("flow:stage");
 export type Stage = "write" | "build" | "deploy" | "interact";
 export type StageStatus = "upcoming" | "active" | "done" | "failed" | "running";
 
-/** A run the console strip can stop */
+/** A run the person can stop and the console strip reports as stopped */
 export type RunKind = "build" | "deploy";
 
 export interface FlowState {
@@ -56,6 +56,11 @@ export interface FlowState {
   /** Whether the open project has a program to build. Without one, only the
    * Write stage is offered (`stagesOf`). */
   hasProgram: boolean;
+  /** How many `airdrop` runs are in flight, for the console strip. The
+   * terminal, the wallet's button, the automatic airdrop and a deploy's
+   * top-up each start one, so two can overlap. It funds the wallet, not the
+   * project, so a project switch keeps it. */
+  airdrops: number;
 }
 
 /**
@@ -86,6 +91,8 @@ export type FlowEvent =
   /** The person stopped the deploy before its last step: the program on
    * chain is as it was, and the stage goes back to where it was */
   | { type: "deploy-stop" }
+  | { type: "airdrop-start" }
+  | { type: "airdrop-finish" }
   | { type: "set-stage"; stage: Stage }
   | { type: "workspace-change" }
   /** What the open project's files say: whether `src/` holds a program */
@@ -112,6 +119,7 @@ export const INITIAL_FLOW_STATE: FlowState = {
   stopped: null,
   // Nothing hides until the explorer has answered
   hasProgram: true,
+  airdrops: 0,
 };
 
 /** Every stage; `stagesOf` gives the ones the open project offers */
@@ -286,7 +294,17 @@ export class PgFlow {
         // The previous project's answer holds until `_readProgram` gives the
         // new one: a reset to "has a program" would flash the stages, and
         // move a phone off the preview a project with no program shows
-        return { ...INITIAL_FLOW_STATE, hasProgram: state.hasProgram };
+        return {
+          ...INITIAL_FLOW_STATE,
+          hasProgram: state.hasProgram,
+          airdrops: state.airdrops,
+        };
+      case "airdrop-start":
+        return { ...state, airdrops: state.airdrops + 1 };
+      case "airdrop-finish":
+        return state.airdrops
+          ? { ...state, airdrops: state.airdrops - 1 }
+          : state;
       case "restore": {
         // Seeds only forward: a stage the live session has already moved
         // off `upcoming` knows more about this run than the workspace's
@@ -380,6 +398,14 @@ export class PgFlow {
           ok: !("err" in result),
         });
       }),
+      PgCommand.airdrop.onDidStart(() =>
+        PgFlow._dispatch({ type: "airdrop-start" })
+      ),
+      // Not `onDidFinish`, which `airdrop --help` never sends: the strip
+      // would say "Airdropping…" for good
+      PgCommand.airdrop.onDidEnd(() =>
+        PgFlow._dispatch({ type: "airdrop-finish" })
+      ),
       PgExplorer.onDidSwitchWorkspace(() => {
         PgFlow._dispatch({ type: "workspace-change" });
         // After the reset, which keeps the previous project's answer only

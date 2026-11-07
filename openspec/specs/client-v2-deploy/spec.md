@@ -1,6 +1,7 @@
 # client-v2-deploy Specification
 
 ## Purpose
+
 The Flow's Deploy stage puts the built program on the picked network from the
 panel alone: it names who pays, shows the run's steps, asks its questions in
 the panel, and keeps a history whose links open each record's network.
@@ -78,7 +79,8 @@ testnet only). The reason and the card's first action SHALL be:
 - on a network without a faucet: "This network has no faucet. Send SOL to
   the wallet below." and "Try again" (runs the deploy again);
 - when the airdrop fails: "The faucet did not send SOL.", the faucet's
-  answer, and "Try again".
+  answer, and "Try again" (runs the deploy again and requests the airdrop
+  again);
 
 An airdrop the run requests, on that press, or without a question when the
 user turned automatic airdrop on, SHALL be the shortfall plus fee headroom,
@@ -99,7 +101,8 @@ airdrop question.
 - **WHEN** a wallet with 0 SOL deploys on devnet from the stage, the user
   presses "Request airdrop", and the faucet refuses the airdrop
 - **THEN** the "Not enough SOL" card shows the balance, the amount needed,
-  the address, "Try again" and "Open faucet", and the terminal asked nothing
+  the address, "Try again" and "Open faucet", and the terminal asked nothing;
+  pressing "Try again" requests the airdrop again, with automatic airdrop off
 
 ### Requirement: A failed last build asks in the panel
 
@@ -246,7 +249,8 @@ the network is known, SHALL title itself "Nothing on {network}" and SHALL say
 "This project has deploys on {other network}." with "Show {other network}" as a
 link when the settings offer that network. Pressing the link SHALL switch the
 connection to that network. The link SHALL be off while a deploy runs, because
-the running deploy's record takes the network read when it ends.
+a deploy stays on the network it started on (see "A deploy stays on the network
+it started on") and the stage would then show another one.
 
 #### Scenario: Deployed on devnet, mainnet picked (manual)
 
@@ -259,3 +263,35 @@ the running deploy's record takes the network read when it ends.
 
 - **WHEN** a deploy runs on the network picked
 - **THEN** "Show {other network}" is disabled
+
+### Requirement: A deploy stays on the network it started on
+
+A deploy SHALL send, simulate and confirm every transaction of its run on the
+connection it took when it started, and its record and `deploy_succeeded`
+SHALL name that connection's network, whatever network is picked while it runs.
+The airdrop is the exception: the faucet funds the network picked now, so a
+deploy that needs SOL SHALL end with "The network changed during the deploy,
+so an airdrop would fund another network. Deploy again." when the endpoint
+changed since it started, before it asks the faucet. When the starting
+connection's network cannot be read (a custom endpoint whose genesis hash does
+not answer), the run's network SHALL be unknown: the deploy goes on, and SHALL
+add no history record and send no `deploy_succeeded`, rather than name the
+network selected now. The scenarios are held by unit tests
+(`deploy-run.test.ts`, `bpf-loader-upgradeable.test.ts`, `deploy-history.test.ts`,
+`Deploy.test.tsx`).
+
+#### Scenario: The network changes during the first reads (manual)
+
+- **WHEN** the endpoint changes while a deploy reads its balance
+- **THEN** the buffer, its writes and the deploy or upgrade are sent and
+  confirmed on the starting network, and the record names it
+
+#### Scenario: The network changes before an airdrop (manual)
+
+- **WHEN** a deploy that needs SOL finds the endpoint changed since it started
+- **THEN** it ends with the network-changed error and requests no airdrop
+
+#### Scenario: The run's network cannot be read (manual)
+
+- **WHEN** a deploy succeeds on a custom endpoint whose network cannot be read
+- **THEN** the history gets no record and no `deploy_succeeded` is sent

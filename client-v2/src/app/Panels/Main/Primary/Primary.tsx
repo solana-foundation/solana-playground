@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 
@@ -13,16 +13,22 @@ const log = createLogger("view:main-primary");
 
 const Primary = () => {
   const [el, setEl] = useState<ErrorBoundaryChildren>(null);
+  // Every view set gets a boundary of its own, keyed by this count: a
+  // boundary keeps an error it shows until its own Refresh, which keeps the
+  // key. A view still loading when a newer one is set never shows.
+  const [view, setView] = useState(0);
+  const latest = useRef(0);
   const setElWithTransition = useCallback(async (nextEl: unknown) => {
+    const call = ++latest.current;
+    setView(call);
     if (PgCommon.isAsyncFunction(nextEl)) {
       setEl(null);
 
       const setContent = async () => {
-        setEl(
-          PgCommon.callIfNeeded(
-            await (nextEl as () => unknown)()
-          ) as ErrorBoundaryChildren
-        );
+        const content = PgCommon.callIfNeeded(
+          await (nextEl as () => unknown)()
+        ) as ErrorBoundaryChildren;
+        if (call === latest.current) setEl(content);
       };
 
       try {
@@ -32,7 +38,9 @@ const Primary = () => {
         // boundary do not see it: say it here. A view put back on a remount
         // (`PgView.announceMainPrimaryUnmount`) runs its route's loader again.
         log.error(e, { report: true });
-        setEl({ error: e as Error, refresh: setContent });
+        if (call === latest.current) {
+          setEl({ error: e as Error, refresh: setContent });
+        }
       }
     } else {
       setEl(PgCommon.callIfNeeded(nextEl) as ErrorBoundaryChildren);
@@ -57,7 +65,7 @@ const Primary = () => {
   return (
     <div className="pg-scrollbar-all min-h-0 flex-1 overflow-hidden rounded-[12px] border border-border bg-surface-panel">
       <SpinnerWithBg className={VIEW_CLASSES} loading={!el} size="2rem">
-        <ErrorBoundary>{el}</ErrorBoundary>
+        <ErrorBoundary key={view}>{el}</ErrorBoundary>
       </SpinnerWithBg>
     </div>
   );

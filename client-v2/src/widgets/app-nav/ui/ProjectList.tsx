@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 
 import { useTutorialProgress } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
-import { PgExplorer, PgTutorial, PgView } from "@/utils";
+import { ExplorerLimitError, PgExplorer, PgTutorial, PgView } from "@/utils";
 import { PgWorkspace } from "@/utils/explorer/workspace";
 import {
   DeleteWorkspace,
@@ -196,15 +196,23 @@ const ProjectList = ({
   );
 
   const fail = (entry: ProjectEntry, action: ProjectAction, e: unknown) => {
-    log.error(asError(e), {
-      report: true,
-      context: { action, isLesson: entry.isLesson },
-    });
+    // A project over a limit is refused a copy on purpose (the explorer
+    // sends its own event); the toast says which limit, and nothing is
+    // reported
+    const limit = e instanceof ExplorerLimitError ? e.message : null;
+    if (limit) {
+      log.warn("refused by a project limit", { context: { action, limit } });
+    } else {
+      log.error(asError(e), {
+        report: true,
+        context: { action, isLesson: entry.isLesson },
+      });
+    }
     navTelemetry.track("nav_project_action_failed", { action });
     PgView.setToast(
       () => (
         <span>
-          Could not {VERB[action]} {entry.name}.
+          Could not {VERB[action]} {entry.name}.{limit && ` ${limit}`}
         </span>
       ),
       { options: { name: `project-${action}-failed` } }

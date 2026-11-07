@@ -204,4 +204,27 @@ describe("features/fund-wallet/ui/BaseFundDialog", () => {
 
     expect(screen.getByText("Use at most 9 decimals.")).toBeTruthy();
   });
+
+  it("fills the balance less the fee when Max is pressed", () => {
+    const onAmountChange = vi.fn();
+    renderDialog({ payer: PAYER, onAmountChange });
+
+    fireEvent.click(screen.getByRole("button", { name: "Max" }));
+
+    expect(onAmountChange).toHaveBeenCalledWith("1.999");
+  });
+
+  it.each<FundPayer["balance"]>([0.0005, "loading", "unavailable"])(
+    "disables Max while the balance is %j",
+    (balance) => {
+      renderDialog({
+        payer: { name: PAYER.name, address: PAYER.address, balance },
+      });
+
+      expect(
+        (screen.getByRole("button", { name: "Max" }) as HTMLButtonElement)
+          .disabled
+      ).toBe(true);
+    }
+  );
 });

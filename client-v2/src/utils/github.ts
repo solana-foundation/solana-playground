@@ -95,11 +95,15 @@ export class PgGithub {
   /**
    * Get whether the given URL is a GitHub URL.
    *
+   * A single slash after `https:` passes too: react-router folds the double
+   * slash of `/https://github.com/…` when the app navigates to it, so the
+   * `/{githubUrl}` route gets `https:/github.com/…` (`parseUrl` reads both).
+   *
    * @param url URL to check
    * @returns whether the URL is a GitHub URL
    */
   static isValidUrl(url: string) {
-    return /^(https:\/\/)?(www\.)?github\.com\/.+?\/.+/.test(url);
+    return /^(https:\/\/?)?(www\.)?github\.com\/.+?\/.+/.test(url);
   }
 
   /**

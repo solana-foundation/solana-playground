@@ -4,6 +4,11 @@ import { PLATFORM_RPC_URLS } from "../shared/config/client-env";
 export enum Endpoint {
   PLAYNET = "http://playnet",
   LOCALNET = "http://localhost:8899",
+  /**
+   * `surfpool start`'s RPC. Its port is Localnet's; the host tells the two
+   * offered networks apart, and both resolve to the `localnet` cluster.
+   */
+  SURFPOOL = "http://127.0.0.1:8899",
   DEVNET = "https://api.devnet.solana.com",
   TESTNET = "https://api.testnet.solana.com",
   MAINNET_BETA = "https://api.mainnet-beta.solana.com",
@@ -42,7 +47,7 @@ export const UNKNOWN_NETWORK = "the network";
 
 /**
  * The network as a sentence names it: our clusters lowercase ("Not enough
- * devnet SOL"), any other name (Surfpool) as it is, `undefined` while the cluster
+ * devnet SOL"), any other name as it is, `undefined` while the cluster
  * is unknown, so a caller can drop the word ("Not enough SOL") rather than
  * print "the network SOL". Standalone labels such as pickers and chips keep
  * `clusterName`.
@@ -64,10 +69,18 @@ export const solOn = (network: string | undefined): string =>
   network === undefined ? "SOL" : `${network} SOL`;
 
 /** Cluster moniker an offered network talks to */
-type NetworkCluster = "devnet" | "mainnet-beta";
+type NetworkCluster = "mainnet-beta" | "devnet" | "testnet" | "localnet";
+
+/** What an offered network is stored under: its cluster, or `surfpool` */
+type NetworkKey = NetworkCluster | "surfpool";
 
 /** A network Settings offers: one of ours, named as the cluster */
 export interface Network {
+  /**
+   * What the network is stored under, unique among the networks: the
+   * cluster, except Surfpool's, which shares Localnet's cluster
+   */
+  key: NetworkKey;
   name: string;
   value: string;
   cluster: NetworkCluster;
@@ -77,24 +90,40 @@ export interface Network {
 interface PlatformRpcUrls {
   devnet?: string;
   mainnet?: string;
+  testnet?: string;
 }
 
 /**
- * The networks Settings offers: Devnet and Mainnet, each on the platform RPC
- * the env configures, else on the public one. The public RPCs rate-limit a
+ * The networks Settings offers, in its order: Mainnet, Devnet and Testnet,
+ * each on the platform RPC the env configures, else on the public one, then
+ * Localnet and Surfpool on their local defaults. The public RPCs rate-limit a
  * shared app, so they are only the fallback, never listed beside ours.
  */
-export const buildNetworks = (urls: PlatformRpcUrls): Network[] =>
-  (
+export const buildNetworks = (urls: PlatformRpcUrls): Network[] => [
+  // `||` not `??`: sourcing an env file leaves unfilled keys as "", which
+  // is not nullish and would win.
+  ...(
     [
-      // `||` not `??`: sourcing an env file leaves unfilled keys as "", which
-      // is not nullish and would win.
-      [urls.devnet || Endpoint.DEVNET, "devnet"],
       [urls.mainnet || Endpoint.MAINNET_BETA, "mainnet-beta"],
+      [urls.devnet || Endpoint.DEVNET, "devnet"],
+      [urls.testnet || Endpoint.TESTNET, "testnet"],
+      [Endpoint.LOCALNET, "localnet"],
     ] as const
-  ).map(([value, cluster]) => ({ name: clusterName(cluster), value, cluster }));
+  ).map(([value, cluster]) => ({
+    key: cluster,
+    name: clusterName(cluster),
+    value,
+    cluster,
+  })),
+  {
+    key: "surfpool",
+    name: "Surfpool",
+    value: Endpoint.SURFPOOL,
+    cluster: "localnet",
+  },
+];
 
-/** The networks Settings offers, Devnet first */
+/** The networks Settings offers, Mainnet first; Devnet is the default */
 export const NETWORKS = buildNetworks(PLATFORM_RPC_URLS);
 
 /** Default RPC endpoint: the offered Devnet */

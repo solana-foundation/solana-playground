@@ -1,6 +1,7 @@
 # client-v2-assistant-usage Specification
 
 ## Purpose
+
 What the assistant reports about each turn it sends to a model: which
 backend took it and how it ended, so AI usage and refusals can be measured
 without reading a prompt, a reply or a key.

@@ -1,8 +1,7 @@
 import BN from "bn.js";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
 import { cn } from "@/shared/lib/utils";
-import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 
 import { clusterName, UNKNOWN_NETWORK } from "../../../constants";
 import { useBalance, useBlockExplorer, useWallet } from "../../../hooks";
@@ -27,39 +26,66 @@ export interface InteractBodyProps {
   programId: string | null;
   /** The network the calls go to; null until the endpoint has been read */
   cluster: string | null;
-  /** Keeps Call off for a reason the stage shows, such as too little SOL */
-  callBlocked?: boolean;
+  /**
+   * The network, as said inside a sentence, whose SOL the fee payer lacks
+   * for one fee; every card's Test waits for it and says so
+   */
+  solNeededOn?: string;
 }
 
 /**
- * A deployed program's instructions as chips, the picked one's form and the
- * last call's result, with the calls before it in a column beside them on a
- * wide stage (under them on a narrow one), then the account and event lookups.
+ * A deployed program's instructions as cards that fold on their own, each
+ * card's latest call result under it, and the calls before it in
+ * a column beside them on a wide stage (under them on a narrow one), then
+ * the account and event lookups.
  */
 const InteractBody = ({
   idl,
   programId,
   cluster,
-  callBlocked,
+  solNeededOn,
 }: InteractBodyProps) => {
   // Used for both accounts and events data
   useBigNumberJson();
   useSyncInstructionStorage();
 
   const names = idl.instructions.map((ix) => ix.name);
-  const [picked, setPicked] = useState<string>();
-  // A pick the IDL no longer has (a rebuild renamed it) falls back to the first
-  const current = picked && names.includes(picked) ? picked : names[0];
-  const idlInstruction = idl.instructions.find((ix) => ix.name === current);
+  // Every card folded on arrival, each one folding on its own (see
+  // openspec/changes/archive/2026-11-06-interact-instruction-cards); a name
+  // a rebuild dropped simply matches no card
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (name: string, isOpen: boolean) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (isOpen) next.add(name);
+      else next.delete(name);
+      return next;
+    });
 
-  // The last call, kept with the program and network it went to: switching
-  // either hides it rather than showing it under another program's form
+  // A history row opens its card and brings it into view once it has opened
+  const cards = useRef(new Map<string, HTMLDivElement>());
+  const [scrollTo, setScrollTo] = useState<{ name: string }>();
+  useEffect(() => {
+    if (scrollTo) {
+      cards.current.get(scrollTo.name)?.scrollIntoView({ block: "nearest" });
+    }
+  }, [scrollTo]);
+  const openFromHistory = (name: string) => {
+    if (!names.includes(name)) return;
+    toggle(name, true);
+    setScrollTo({ name });
+  };
+
+  // Each card's last call, kept with the program and network it went to:
+  // switching either hides it rather than showing it under another
+  // program's card. One slot per card, so a result stays under the card
+  // that made it
   const target = `${programId}|${cluster}`;
-  const [last, setLast] = useState<{
-    target: string;
-    outcome: CallOutcome;
-  }>();
-  const outcome = last?.target === target ? last.outcome : undefined;
+  const [results, setResults] = useState<
+    Readonly<Record<string, { target: string; outcome: CallOutcome }>>
+  >({});
+  const resultOf = (name: string) =>
+    results[name]?.target === target ? results[name].outcome : undefined;
   const history = useCallHistory(programId, cluster);
   const callInFlight = useCallInFlight();
   const network = clusterName(cluster) ?? UNKNOWN_NETWORK;
@@ -76,63 +102,59 @@ const InteractBody = ({
             data-slot="interact-columns"
             className="grid grid-cols-1 gap-6 @min-[40rem]:grid-cols-[minmax(0,42rem)_18rem]"
           >
-            <div className="flex min-w-0 flex-col gap-6">
-              {names.length > 0 && (
-                <Segmented
-                  variant="chips"
-                  aria-label="Instruction"
-                  value={current}
-                  onValueChange={setPicked}
-                >
-                  {names.map((name) => (
-                    <SegmentedItem
-                      key={name}
-                      value={name}
-                      // A long name wraps inside the form's column: the
-                      // history track starts right after it
-                      className="h-auto min-h-7 max-w-full shrink py-1 text-left font-mono whitespace-normal [overflow-wrap:anywhere]"
+            {/* The cards stack close, as the sidebar Test list (`views/sidebar/test`) does */}
+            <div className="flex min-w-0 flex-col gap-2">
+              {idl.instructions.map((idlInstruction) => {
+                const outcome = resultOf(idlInstruction.name);
+                return (
+                  <Fragment key={idlInstruction.name}>
+                    <div
+                      ref={(el) => {
+                        if (el) cards.current.set(idlInstruction.name, el);
+                        else cards.current.delete(idlInstruction.name);
+                      }}
                     >
-                      {name}
-                    </SegmentedItem>
-                  ))}
-                </Segmented>
-              )}
+                      <Instruction
+                        key={JSON.stringify(idlInstruction)}
+                        idlInstruction={idlInstruction}
+                        open={open.has(idlInstruction.name)}
+                        onOpenChange={(isOpen) =>
+                          toggle(idlInstruction.name, isOpen)
+                        }
+                        solNeededOn={solNeededOn}
+                        callBlocked={callInFlight}
+                        feePayer={<FeePayer />}
+                        onCall={async (ix) => {
+                          const settled = await runCall(ix);
+                          setResults((prev) => ({
+                            ...prev,
+                            [ix.name]: { target, outcome: settled },
+                          }));
+                        }}
+                      />
+                    </div>
 
-              {idlInstruction && (
-                <section
-                  aria-label={`${idlInstruction.name} form`}
-                  className="rounded-xl border border-border bg-surface-panel p-4"
-                >
-                  <Instruction
-                    key={JSON.stringify(idlInstruction)}
-                    idlInstruction={idlInstruction}
-                    callBlocked={callBlocked || callInFlight}
-                    feePayer={<FeePayer />}
-                    onCall={async (ix) =>
-                      setLast({ target, outcome: await runCall(ix) })
-                    }
-                  />
-                </section>
-              )}
-
-              {outcome && (
-                <BaseCallResult
-                  outcome={outcome}
-                  cluster={network}
-                  txUrl={txUrl}
-                  onExplain={(failed) =>
-                    PgAssistant.requestPrompt(explainPrompt(failed))
-                  }
-                />
-              )}
+                    {outcome && (
+                      <BaseCallResult
+                        outcome={outcome}
+                        cluster={network}
+                        txUrl={txUrl}
+                        onExplain={(failed) =>
+                          PgAssistant.requestPrompt(explainPrompt(failed))
+                        }
+                      />
+                    )}
+                  </Fragment>
+                );
+              })}
             </div>
 
             <BaseCallHistory
               records={history}
               cluster={network}
               txUrl={txUrl}
-              // A row of an instruction a rebuild removed leaves the form alone
-              onOpen={(name) => names.includes(name) && setPicked(name)}
+              // A row of an instruction a rebuild removed leaves the cards alone
+              onOpen={openFromHistory}
               // The wide layout's history track is there before the first
               // call; the empty line keeps it from reading as a blank hole.
               // One column shows no history until then
@@ -177,7 +199,7 @@ const FeePayer = () => {
   const who = wallet.isPg ? "Playground wallet" : wallet.name;
   const sol = typeof balance === "number" ? `${+balance.toFixed(4)} SOL` : "—";
   return (
-    <p className="m-0 mt-4 text-xs text-muted-foreground">
+    <p className="m-0 text-xs text-muted-foreground">
       Fee payer · {who} · {sol}
     </p>
   );

@@ -8,6 +8,8 @@ export const EVENT_PREFIXES = {
   "cli-deploy": "cli",
   deploy: "deploy",
   "docs-link": "docs_link",
+  // The legacy `utils/explorer`, which has no slice yet
+  explorer: "explorer",
   feedback: "feedback",
   "fund-wallet": "fund",
   gist: "gist",

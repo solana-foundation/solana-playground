@@ -120,14 +120,20 @@ test("mainnet-deploy-warning: Mainnet picked in Settings", async ({
   ).toHaveCount(0);
 });
 
-test("mainnet-deploy-warning: Only Devnet and Mainnet are offered", async ({
+test("mainnet-deploy-warning: Five networks are offered, Mainnet first", async ({
   seededPage: page,
 }) => {
   await page.getByRole("button", { name: /^Change cluster/ }).click();
   const network = page
     .getByRole("region", { name: "Settings" })
     .getByRole("radiogroup", { name: "Network" });
-  await expect(network.getByRole("radio")).toHaveText(["Devnet", "Mainnet"]);
+  await expect(network.getByRole("radio")).toHaveText([
+    "Mainnet",
+    "Devnet",
+    "Testnet",
+    "Localnet",
+    "Surfpool",
+  ]);
 });
 
 test("mainnet-deploy-warning: Guide from the mainnet warning", async ({

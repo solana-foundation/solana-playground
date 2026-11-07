@@ -2,18 +2,21 @@ import { InfoIcon } from "lucide-react";
 import { FC, useState } from "react";
 
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { FieldError } from "@/shared/ui/field";
 import { ModalFrame } from "@/widgets/overlays";
 
 import Input from "../../../../../components/Input";
 import UploadArea from "../../../../../components/UploadArea";
 import { useMounted } from "../../../../../hooks";
 import {
+  ImportedFile,
   PgExplorer,
   PgFramework,
   PgView,
   TupleFiles,
 } from "../../../../../utils";
 import { IMPORTED } from "./imported";
+import { useLimitRefusal } from "./useLimitRefusal";
 
 interface ImportFsProps {
   name?: string;
@@ -27,29 +30,13 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
   const [files, setFiles] = useState(props.files);
   const [nameError, setNameError] = useState("");
   const [importError, setImportError] = useState(props.importError ?? "");
+  const { limitError, guard } = useLimitRefusal();
 
   const mounted = useMounted();
 
-  const onDrop = async (userFiles: Array<File & { path: string }>) => {
+  const onDrop = async (userFiles: ImportedFile[]) => {
     try {
-      const importFiles: TupleFiles = [];
-      for (const userFile of userFiles) {
-        const shouldSkip = /(\/\.|node_modules|target)/.test(userFile.path);
-        if (shouldSkip) continue;
-
-        const content = await userFile.text();
-        importFiles.push([userFile.path, content]);
-      }
-
-      // A dropped folder's name leads every path; a project with no program
-      // drops it rather than nest the project under it
-      const folders = new Set(
-        importFiles.map(([path]) => /^\/?([^/]+)\//.exec(path)?.[1])
-      );
-      const [root] = folders.size === 1 ? [...folders] : [];
-      const pgFiles = await PgFramework.convertToPlaygroundLayoutWith(
-        root ?? ""
-      )(root)(importFiles);
+      const pgFiles = await PgFramework.importFiles(userFiles);
 
       // Closed while the files were read: open it again with them
       if (!mounted.current) {
@@ -58,11 +45,16 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
         setFiles(pgFiles);
         setImportError("");
       }
-    } catch (e: any) {
+    } catch (e) {
+      // Something thrown that is not an `Error` must still say it failed
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : "Could not read the files.";
       if (!mounted.current) {
-        PgView.setModal(<ImportFs name={name} importError={e.message} />);
+        PgView.setModal(<ImportFs name={name} importError={message} />);
       } else {
-        setImportError(e.message);
+        setImportError(message);
       }
     }
   };
@@ -73,14 +65,17 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
       title="Import project"
       buttonProps={{
         text: "Import",
-        onSubmit: async () => {
+        onSubmit: guard(async () => {
           await PgExplorer.createWorkspace(name, { files });
           return IMPORTED;
-        },
+        }),
         disabled: !files || !!nameError || !!importError,
       }}
     >
       <div className="flex flex-col justify-center">
+        <FieldError data-testid="explorer-limit-error" className="mb-2">
+          {limitError}
+        </FieldError>
         <div className="mb-1">
           <div className="mb-2 font-bold">Project name</div>
           <Input

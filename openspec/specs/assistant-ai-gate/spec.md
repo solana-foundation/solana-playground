@@ -1,6 +1,7 @@
 # assistant-ai-gate Specification
 
 ## Purpose
+
 Where the assistant learns whether this deployment offers a hosted model, and
 what the panel shows and blocks while no model can answer the person using it,
 so the assistant either works or says why not before anything is typed.

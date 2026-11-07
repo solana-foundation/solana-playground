@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
+import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
@@ -28,7 +29,13 @@ import {
 } from "../../../../components/Icons";
 import LangIcon from "../../../../components/LangIcon";
 import { useKeybind } from "../../../../hooks";
-import { PgCommon, PgExplorer, PgTheme, PgView } from "../../../../utils";
+import {
+  ExplorerLimitError,
+  PgCommon,
+  PgExplorer,
+  PgTheme,
+  PgView,
+} from "../../../../utils";
 import ExplorerButtons from "./ExplorerButtons";
 import { ExplorerContextMenu } from "./ExplorerContextMenu";
 import { ReplaceItem } from "./Modals";
@@ -74,6 +81,7 @@ const SECTION_TOP_CLASSES =
 
 const SECTION_HEADER_CLASSES =
   "text-[0.7rem] font-semibold tracking-[0.1em] uppercase";
+const log = createLogger("explorer:folders");
 
 const Folders = () => {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -265,12 +273,26 @@ const ExplorerDndContext: FC<React.PropsWithChildren<unknown>> = ({
       await PgExplorer.renameItem(fromPath, newPath, {
         skipNameValidation: true,
       });
-    } catch (e: any) {
-      if (e.message === PgExplorer.errors.ALREADY_EXISTS) {
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "";
+      if (message === PgExplorer.errors.ALREADY_EXISTS) {
         await PgView.setModal(
           <ReplaceItem fromPath={fromPath} toPath={newPath} />
         );
+        return;
       }
+      // A limit or another refusal of the explorer's own: a drop has no
+      // dialog to show it in. Anything else was not expected.
+      if (
+        e instanceof ExplorerLimitError ||
+        Object.values(PgExplorer.errors).includes(message)
+      ) {
+        PgView.setToast(() => <span>{message}</span>, {
+          options: { name: "explorer-move-refused" },
+        });
+        return;
+      }
+      log.error(e, { report: true, context: { action: "move" } });
     }
   }, []);
 

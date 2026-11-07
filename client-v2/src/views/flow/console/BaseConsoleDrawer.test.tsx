@@ -78,7 +78,9 @@ it("clears without toggling", () => {
   expect(onOpenChange).not.toHaveBeenCalled();
 });
 
-// Spec 13: Stop shows while a build or a deploy runs, folded or open
+// The prop contract: the drawer draws whatever Stop it is handed, folded or
+// open. Which run gets one is `runToStop`'s rule (a build, never a deploy
+// alone).
 it.each([
   ["build", true],
   ["build", false],

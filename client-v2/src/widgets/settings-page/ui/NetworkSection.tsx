@@ -1,30 +1,32 @@
 import { useEffect, useState } from "react";
 
-import { DEFAULT_ENDPOINT } from "@/constants";
-import type { CustomRpc, SaveResult } from "@/entities/custom-rpc";
-import { checkRpcUrl, PgCustomRpcs } from "@/entities/custom-rpc";
+import { DEFAULT_ENDPOINT, NETWORKS } from "@/constants";
+import type { CustomRpc } from "@/entities/custom-rpc";
+import { fetchRpcHealth, isSameRpc, PgCustomRpcs } from "@/entities/custom-rpc";
 import { useRenderOnChange } from "@/hooks";
 import { Button } from "@/shared/ui/button";
 import { PgGlobal, PgSettings, PgView } from "@/utils";
 import type { ToastChildProps } from "@/utils/view";
 
 import { canSwitchNetwork } from "../model/network-hold";
+import { answerFor, saveCheckedWith } from "../model/save-custom-rpc";
 import { settingsTelemetry } from "../model/telemetry";
-import type { CustomRpcSaveAnswer } from "./BaseCustomRpcs";
 import BaseCustomRpcs from "./BaseCustomRpcs";
-import BaseNetworkChoice from "./BaseNetworkChoice";
+import BaseNetworkChoice, {
+  checkedChipKey,
+  chipKey,
+} from "./BaseNetworkChoice";
 
-/** The line under the URL field for a refused save (Spec 07's copy) */
-const refusal = (result: Exclude<SaveResult, { ok: true }>): string => {
-  switch (result.reason) {
-    case "format":
-      return "Enter a URL that starts with https://, or http:// for a local validator.";
-    case "duplicate":
-      return `Already saved as ${result.name}.`;
-    case "storage":
-      return "Could not save in this browser.";
-  }
-};
+/**
+ * Whether a running deploy holds the network on the RPC saved under `url`:
+ * it is the one in use, and a deploy is running or paused
+ */
+const isHeld = (url: string) =>
+  PgSettings.connection.endpoint === url &&
+  !canSwitchNetwork(PgGlobal.deployState);
+
+/** Save a custom RPC once its URL answers one health request (spec `client-v2-custom-rpcs`) */
+const saveChecked = saveCheckedWith(fetchRpcHealth)(isHeld);
 
 /** Say that a running deploy holds the network where it is */
 const toastNetworkHeld = () =>
@@ -33,12 +35,14 @@ const toastNetworkHeld = () =>
     { options: { name: "network-held-by-deploy" } }
   );
 
-const pick = (url: string) => {
+/** Move the network to `url`; false, with a toast, while a deploy holds it */
+const pick = (url: string): boolean => {
   if (!canSwitchNetwork(PgGlobal.deployState)) {
     toastNetworkHeld();
-    return;
+    return false;
   }
   PgSettings.connection.endpoint = url;
+  return true;
 };
 
 /**
@@ -85,16 +89,36 @@ const Removed = ({
 );
 
 /**
- * The Network section on the live settings: the chips, Devnet, Mainnet and
- * each saved custom RPC, and the list that adds, edits and removes them.
+ * The Network section on the live settings: the chips, the offered networks
+ * and each saved custom RPC, and the list that adds, edits and removes them.
  */
 const NetworkSection = () => {
-  // The chips follow an endpoint picked elsewhere too, such as the
-  // Connection section's Endpoint select
+  // The chips follow an endpoint picked elsewhere too, such as the terminal
   useRenderOnChange(PgSettings.onDidChangeConnectionEndpoint);
   const endpoint = PgSettings.connection.endpoint;
 
   const [rpcs, setRpcs] = useState<CustomRpc[]>(PgCustomRpcs.list);
+  // Which chip is checked when several share the endpoint's URL, kept
+  // across a reload: the checked one must not jump to another on load
+  const [chosen, setChosenState] = useState(PgCustomRpcs.chosen);
+  const setChosen = (key: string) => {
+    setChosenState(key);
+    PgCustomRpcs.choose(key);
+  };
+  // The check moves only with the network: a held pick keeps both
+  const choose = (rpc: CustomRpc) => {
+    if (pick(rpc.url)) setChosen(chipKey(rpc.name, rpc.url));
+  };
+  /** Whether `rpc` is the checked chip, not only one on the URL in use */
+  const isChecked = (rpc: CustomRpc) =>
+    checkedChipKey(rpcs, {
+      endpoint: PgSettings.connection.endpoint,
+      chosen,
+    }) === chipKey(rpc.name, rpc.url);
+  // A chip on the URL in use already moves the check, not the network
+  const handlePick = (url: string, key: string) => {
+    if (url === PgSettings.connection.endpoint || pick(url)) setChosen(key);
+  };
   useEffect(() => {
     const changes = PgCustomRpcs.onDidChange(() =>
       setRpcs(PgCustomRpcs.list())
@@ -110,59 +134,40 @@ const NetworkSection = () => {
     };
   }, []);
 
-  /** Report a save's result; a refusal becomes the line under the field */
-  const answerFor =
-    (mode: "add" | "edit") =>
-    (result: SaveResult): CustomRpcSaveAnswer => {
-      if (!result.ok) {
-        settingsTelemetry.track("settings_custom_rpc_refused", {
-          reason: result.reason,
-        });
-        return { ok: false, error: refusal(result) };
+  // A new RPC is picked at once, whether checked or saved through "Use anyway"
+  const handleAdd = async (input: CustomRpc) =>
+    answerFor(choose)("add")(await saveChecked(input, undefined));
+
+  // An edited RPC keeps the connection on it when its chip is the checked
+  // one as the edit starts; another chip on the same URL leaves the network
+  // alone. A new URL for the RPC in use would move the network, so
+  // `saveChecked` refuses it while a deploy runs, before the health request
+  // and again at the write; a rename still saves
+  const handleEdit = async (rpc: CustomRpc, input: CustomRpc) => {
+    const wasChecked = isChecked(rpc);
+    return answerFor((saved) => {
+      // Still on its URL: another chip picked during the check keeps the network
+      if (wasChecked && PgSettings.connection.endpoint === rpc.url) {
+        choose(saved);
       }
-      settingsTelemetry.track("settings_custom_rpc_saved", { mode });
-      return { ok: true };
-    };
-
-  // A new RPC is picked at once
-  const handleAdd = (input: CustomRpc) => {
-    const result = PgCustomRpcs.save(input);
-    if (result.ok) pick(result.rpc.url);
-    return answerFor("add")(result);
-  };
-
-  // An edited RPC keeps the connection on it when it was the one in use
-  const handleEdit = (rpc: CustomRpc, input: CustomRpc) => {
-    const wasPicked = PgSettings.connection.endpoint === rpc.url;
-    // A new URL for the RPC in use would move the network, so a running
-    // deploy refuses it before the list changes; a rename still saves
-    const check = checkRpcUrl(input.url);
-    if (
-      wasPicked &&
-      check.ok &&
-      check.url !== rpc.url &&
-      !canSwitchNetwork(PgGlobal.deployState)
-    ) {
-      return {
-        ok: false as const,
-        error: "A deploy is running. Change the URL when it ends.",
-      };
-    }
-    const result = PgCustomRpcs.replace(rpc.url, input);
-    if (result.ok && wasPicked) pick(result.rpc.url);
-    return answerFor("edit")(result);
+    })("edit")(await saveChecked(input, rpc));
   };
 
   const handleRemove = (rpc: CustomRpc) => {
-    const wasPicked = PgSettings.connection.endpoint === rpc.url;
+    // Another chip on the same URL keeps the network where it is
+    const wasPicked =
+      PgSettings.connection.endpoint === rpc.url &&
+      // Spelt as the chips compare it, the endpoint against the raw value
+      !NETWORKS.some((n) => n.value === rpc.url) &&
+      !rpcs.some((r) => r.url === rpc.url && !isSameRpc(r, rpc));
     // Removing the RPC in use moves the network to Devnet, so a running
     // deploy keeps it listed rather than leaving the connection on an RPC
     // the list no longer has
-    if (wasPicked && !canSwitchNetwork(PgGlobal.deployState)) {
+    if (isHeld(rpc.url)) {
       toastNetworkHeld();
       return;
     }
-    const removed = PgCustomRpcs.remove(rpc.url);
+    const removed = PgCustomRpcs.remove(rpc);
     if (!removed) {
       // Gone already (another tab), or the browser refused; the store
       // reported which
@@ -202,7 +207,12 @@ const NetworkSection = () => {
 
   return (
     <div className="flex flex-col gap-3">
-      <BaseNetworkChoice endpoint={endpoint} custom={rpcs} onPick={pick} />
+      <BaseNetworkChoice
+        endpoint={endpoint}
+        custom={rpcs}
+        chosen={chosen}
+        onPick={handlePick}
+      />
       <BaseCustomRpcs
         rpcs={rpcs}
         onAdd={handleAdd}

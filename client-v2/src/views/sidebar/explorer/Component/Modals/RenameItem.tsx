@@ -1,9 +1,11 @@
 import { FC, useEffect, useRef, useState } from "react";
 
+import { FieldError } from "@/shared/ui/field";
 import { ModalFrame } from "@/widgets/overlays";
 
 import Input from "../../../../../components/Input";
 import { PgCommon, PgExplorer } from "../../../../../utils";
+import { useLimitRefusal } from "./useLimitRefusal";
 
 interface RenameItemProps {
   path: string;
@@ -15,6 +17,7 @@ export const RenameItem: FC<React.PropsWithChildren<RenameItemProps>> = ({
   const itemName = PgExplorer.getItemNameFromPath(path);
   const [newName, setNewName] = useState(itemName);
   const [error, setError] = useState("");
+  const { limitError, guard } = useLimitRefusal();
 
   const rename = async () => {
     const newPath = PgCommon.joinPaths(
@@ -36,10 +39,13 @@ export const RenameItem: FC<React.PropsWithChildren<RenameItemProps>> = ({
       title={`Rename '${itemName}'`}
       buttonProps={{
         text: "Rename",
-        onSubmit: rename,
+        onSubmit: guard(rename),
         disabled: !!error,
       }}
     >
+      <FieldError data-testid="explorer-limit-error" className="mb-2">
+        {limitError}
+      </FieldError>
       <Input
         ref={inputRef}
         autoFocus

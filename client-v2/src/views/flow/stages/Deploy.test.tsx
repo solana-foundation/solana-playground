@@ -372,6 +372,7 @@ describe("Deploy stage", () => {
       signature: "sig",
       cost: 1,
       upgraded: false,
+      cluster: "devnet",
     });
     mocks.history = [
       {
@@ -460,6 +461,41 @@ describe("Deploy stage", () => {
 
     const failed = sent.events.find((e) => e.name === "deploy_failed");
     expect(failed?.params).toEqual({ cluster: "devnet", step: "write" });
+  });
+
+  it("reports a success on the network the deploy ran on", async () => {
+    // The run deployed to testnet; devnet is selected by the time it ends
+    mocks.execute.mockResolvedValue({
+      signature: "sig",
+      cost: 1,
+      upgraded: false,
+      cluster: "testnet",
+    });
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    const succeeded = sent.events.find((e) => e.name === "deploy_succeeded");
+    expect(succeeded?.params).toEqual({ cluster: "testnet", redeploy: false });
+  });
+
+  it("reports no success event when the deploy could not name its network", async () => {
+    // Devnet is selected, but the run's own network is unknown
+    mocks.execute.mockResolvedValue({
+      signature: "sig",
+      cost: 1,
+      upgraded: false,
+      // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` when the run's network is unknown
+      cluster: null,
+    });
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    expect(mocks.execute).toHaveBeenCalledOnce();
+    const names = sent.events.map((e) => e.name);
+    expect(names).not.toContain("deploy_succeeded");
+    expect(names).not.toContain("deploy_failed");
   });
 
   it("saves the keypair from the backup line, and keeps the line when the save fails", async () => {
@@ -611,6 +647,37 @@ describe("Deploy stage", () => {
     );
 
     expect(seen).toEqual([false, true]);
+  });
+
+  it("requests an airdrop again on Try again after the faucet refused", async () => {
+    mocks.wallet.current = pgWallet();
+    const seen = airdropAnswers();
+    mocks.execute
+      .mockImplementationOnce(async () => {
+        seen.push(PgDeployRun.answers?.airdrop);
+        throw airdropOff();
+      })
+      .mockImplementationOnce(async () => {
+        seen.push(PgDeployRun.answers?.airdrop);
+        throw new DeployFundingError({
+          reason: "airdrop_failed",
+          balance: 0,
+          needed: 1,
+          address: WALLET,
+          cause: "429",
+        });
+      });
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Request airdrop" }))
+    );
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    );
+
+    expect(seen).toEqual([false, true, true]);
   });
 
   it("requests an airdrop on the deploy that follows a sign-in from the card", async () => {

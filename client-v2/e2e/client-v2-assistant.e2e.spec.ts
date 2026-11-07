@@ -161,9 +161,10 @@ test("a command allowed on Home fails within seconds, with no terminal mounted",
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await sheet.getByRole("button", { name: "Allow" }).click({ timeout: 30_000 });
 
-  await expect(sheet.getByText("build errored")).toBeVisible({
-    timeout: 5_000,
-  });
+  await expect(
+    sheet.getByText("build could not run: The terminal is not open.")
+  ).toBeVisible({ timeout: 5_000 });
+  await expect(sheet.getByText("Failed", { exact: true })).toBeVisible();
   await expect.poll(() => calls.length).toBe(2);
   expect(calls[1]).toContain("The build could not run");
   expect(calls[1]).toContain("The terminal is not open.");
@@ -313,8 +314,8 @@ test.describe("Connect a model", () => {
       const box = requireFor("the dialog's bounding box")(
         await dialog.boundingBox()
       );
-      expect(box.width).toBeLessThan(1280);
-      expect(box.height).toBeLessThan(800);
+      expect(box.width).toBeLessThan(DESK.width);
+      expect(box.height).toBeLessThan(DESK.height);
 
       // With no default on the deployment, the form opens on Anthropic
       await dialog.locator("#assistant-api-key").fill("sk-ant-fake-key");

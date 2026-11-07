@@ -11,6 +11,13 @@ import {
 
 const log = createLogger("commands:deploy");
 
+/**
+ * The wallet that signs and the connection that sends (and, in `loadBuffer`,
+ * simulates and confirms). A deploy passes the connection it started on, so
+ * a network change mid-run cannot send its later transactions elsewhere.
+ */
+type SendOption = WalletOption & { connection?: PgWeb3.Connection };
+
 /** Wrapper around `BpfLoaderUpgradeableProgram` for easier interactions */
 export class BpfLoaderUpgradeable {
   /** Create and initialize a buffer account. */
@@ -18,9 +25,9 @@ export class BpfLoaderUpgradeable {
     buffer: PgWeb3.Signer,
     lamports: number,
     programLen: number,
-    opts?: WalletOption
+    opts?: SendOption
   ) {
-    const { wallet } = this._getOptions(opts);
+    const { wallet, connection } = this._getOptions(opts);
 
     const ixs = [
       PgWeb3.SystemProgram.createAccount({
@@ -37,16 +44,20 @@ export class BpfLoaderUpgradeable {
       }),
     ];
 
-    return await PgTx.send(ixs, { keypairSigners: [buffer], wallet });
+    return await PgTx.send(ixs, {
+      keypairSigners: [buffer],
+      wallet,
+      connection,
+    });
   }
 
   /** Update the buffer authority. */
   static async setBufferAuthority(
     bufferPk: PgWeb3.PublicKey,
     newAuthorityPk: PgWeb3.PublicKey,
-    opts?: WalletOption
+    opts?: SendOption
   ) {
-    const { wallet } = this._getOptions(opts);
+    const { wallet, connection } = this._getOptions(opts);
 
     const ix = PgWeb3.BpfLoaderUpgradeableProgram.setBufferAuthority({
       bufferPk,
@@ -54,7 +65,7 @@ export class BpfLoaderUpgradeable {
       newAuthorityPk,
     });
 
-    return await PgTx.send(ix, { wallet });
+    return await PgTx.send(ix, { wallet, connection });
   }
 
   /** Load programData to the initialized buffer account. */
@@ -67,14 +78,13 @@ export class BpfLoaderUpgradeable {
       onWrite?: (current: number, total: number) => void;
       onMissing?: (missingCount: number) => void;
       onRateLimit?: (retryAfter: number) => void;
-    } & WalletOption
+    } & SendOption
   ) {
     const programBytes = Buffer.from(bytes);
-    const { wallet } = this._getOptions(opts);
+    const { wallet, connection } = this._getOptions(opts);
     const { loadConcurrency } = PgCommon.setDefault(opts, {
       loadConcurrency: 8,
     });
-    const connection = PgConnection.current;
 
     // Maximal chunk of the data per tx
     const WRITE_CHUNK_SIZE =
@@ -92,7 +102,7 @@ export class BpfLoaderUpgradeable {
         bufferPk,
         authorityPk: wallet.publicKey,
       }),
-      { computeUnitLimit: PgWeb3.MAX_COMPUTE_UNIT_LIMIT, wallet }
+      { computeUnitLimit: PgWeb3.MAX_COMPUTE_UNIT_LIMIT, wallet, connection }
     );
 
     const loadBuffer = async (missingIndices: number[]) => {
@@ -124,7 +134,11 @@ export class BpfLoaderUpgradeable {
             });
 
             try {
-              lastTxHash = await PgTx.send(ix, { wallet, computeUnitLimit });
+              lastTxHash = await PgTx.send(ix, {
+                wallet,
+                connection,
+                computeUnitLimit,
+              });
               successCount++;
               const total = indices.length;
               const current = total - missingIndices.length + successCount;
@@ -173,7 +187,7 @@ export class BpfLoaderUpgradeable {
       // Wait for the last transaction to confirm
       if (lastTxHash) {
         try {
-          await PgTx.confirm(lastTxHash);
+          await PgTx.confirm(lastTxHash, { connection });
         } catch {
           const confirmations = connection.commitment === "finalized" ? 32 : 1;
           await PgCommon.sleep(confirmations * PgWeb3.DEFAULT_MS_PER_SLOT);
@@ -215,8 +229,8 @@ export class BpfLoaderUpgradeable {
   }
 
   /** Close the buffer account and withdraw funds. */
-  static async closeBuffer(bufferPk: PgWeb3.PublicKey, opts?: WalletOption) {
-    const { wallet } = this._getOptions(opts);
+  static async closeBuffer(bufferPk: PgWeb3.PublicKey, opts?: SendOption) {
+    const { wallet, connection } = this._getOptions(opts);
 
     const ix = PgWeb3.BpfLoaderUpgradeableProgram.close({
       closePk: bufferPk,
@@ -224,7 +238,7 @@ export class BpfLoaderUpgradeable {
       authorityPk: wallet.publicKey,
     });
 
-    return await PgTx.send(ix, { wallet });
+    return await PgTx.send(ix, { wallet, connection });
   }
 
   /** Create a program account from initialized buffer. */
@@ -232,15 +246,15 @@ export class BpfLoaderUpgradeable {
     program: PgWeb3.Signer,
     bufferPk: PgWeb3.PublicKey,
     maxDataLen: number,
-    opts?: WalletOption
+    opts?: SendOption
   ) {
-    const { wallet } = this._getOptions(opts);
+    const { wallet, connection } = this._getOptions(opts);
 
     const ixs = [
       PgWeb3.SystemProgram.createAccount({
         fromPubkey: wallet.publicKey,
         newAccountPubkey: program.publicKey,
-        lamports: await PgConnection.current.getMinimumBalanceForRentExemption(
+        lamports: await connection.getMinimumBalanceForRentExemption(
           PgWeb3.BpfLoaderUpgradeableProgram.PROGRAM_ACCOUNT_SIZE
         ),
         space: PgWeb3.BpfLoaderUpgradeableProgram.PROGRAM_ACCOUNT_SIZE,
@@ -255,16 +269,20 @@ export class BpfLoaderUpgradeable {
       }),
     ];
 
-    return await PgTx.send(ixs, { wallet, keypairSigners: [program] });
+    return await PgTx.send(ixs, {
+      wallet,
+      connection,
+      keypairSigners: [program],
+    });
   }
 
   /** Extend the program data account. */
   static async extendProgram(
     programPk: PgWeb3.PublicKey,
     additionalBytes: number,
-    opts?: WalletOption
+    opts?: SendOption
   ) {
-    const { wallet } = this._getOptions(opts);
+    const { wallet, connection } = this._getOptions(opts);
 
     const ix = PgWeb3.BpfLoaderUpgradeableProgram.extendProgram({
       programPk,
@@ -272,16 +290,16 @@ export class BpfLoaderUpgradeable {
       payerPk: wallet.publicKey,
     });
 
-    return await PgTx.send(ix, { wallet });
+    return await PgTx.send(ix, { wallet, connection });
   }
 
   /** Upgrade a program. */
   static async upgradeProgram(
     programPk: PgWeb3.PublicKey,
     bufferPk: PgWeb3.PublicKey,
-    opts?: WalletOption
+    opts?: SendOption
   ) {
-    const { wallet } = this._getOptions(opts);
+    const { wallet, connection } = this._getOptions(opts);
 
     const ix = PgWeb3.BpfLoaderUpgradeableProgram.upgrade({
       programPk,
@@ -290,13 +308,13 @@ export class BpfLoaderUpgradeable {
       spillPk: wallet.publicKey,
     });
 
-    return await PgTx.send(ix, { wallet });
+    return await PgTx.send(ix, { wallet, connection });
   }
 
-  /** Get the wallet option. */
-  private static _getOptions(opts?: WalletOption) {
+  /** Get the wallet and connection options. */
+  private static _getOptions(opts?: SendOption) {
     const wallet = opts?.wallet ?? PgWallet.current;
     if (!wallet) throw new Error("Wallet is not connected");
-    return { wallet };
+    return { wallet, connection: opts?.connection ?? PgConnection.current };
   }
 }

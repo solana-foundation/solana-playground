@@ -70,6 +70,29 @@ describe("PgConnection.clusterIsStale", () => {
     expect(PgConnection.clusterIsStale).toBe(false);
   });
 
+  // A custom RPC that is down or has an unknown genesis hash never reads, so
+  // the airdrop must be able to say so instead of "still loading" forever
+  it("marks the selected endpoint unreadable until a read succeeds", async () => {
+    const getCluster = vi
+      .spyOn(PgConnection, "getCluster")
+      .mockRejectedValueOnce(new Error("did not match any cluster"));
+
+    PgSettings.connection.endpoint = "http://unreadable";
+    await expect(PgConnection.readCluster()).rejects.toThrow("did not match");
+    expect(PgConnection.clusterIsStale).toBe(true);
+    expect(PgConnection.hasClusterReadFailed).toBe(true);
+
+    // Another endpoint is not the failed one: it is loading, not unreadable
+    PgSettings.connection.endpoint = "http://other";
+    expect(PgConnection.hasClusterReadFailed).toBe(false);
+
+    PgSettings.connection.endpoint = "http://unreadable";
+    getCluster.mockResolvedValueOnce("devnet");
+    await PgConnection.readCluster();
+    expect(PgConnection.hasClusterReadFailed).toBe(false);
+    getCluster.mockRestore();
+  });
+
   // Two networks picked in a row: the first, slow one may answer last, and
   // its answer is what `cluster` would keep
   it.each(["answers", "fails"])(

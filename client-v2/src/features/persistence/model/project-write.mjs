@@ -3,24 +3,32 @@
 // `.mjs` so Node can import it directly; `allowJs` lets the TypeScript side
 // import the same file (see `features/auth/config.mjs`).
 
+import { PROJECT_LIMITS } from "../../../entities/project/server.mjs";
+
 /**
  * The largest project write, in bytes of request body.
  *
- * Under the platform's cap, not ours to pick: a Vercel Function refuses a
- * request body over 4.5 MB with its own 413 before the handler runs
- * (https://vercel.com/docs/functions/limitations). It is a hard limit on every
- * plan. The half-megabyte below it is headroom for "MB" meaning either unit,
- * so that whatever the user is refused by is this limit and this message.
+ * Twice `PROJECT_LIMITS.projectBytes`, so a full upload of a project at the
+ * size limit fits with room for JSON escaping (the `sync-size-limits` change,
+ * "The body cap follows from the project limit"). The project limits, not
+ * this, are what a user meets: the browser checks them before every upload
+ * and the route again. This only stops a body no project under those limits
+ * produces, short of content made mostly of characters JSON escapes. It sits
+ * below Vercel's own cap: a Function refuses a request body over 4.5 MB with
+ * its own 413 before the handler runs (https://vercel.com/docs/functions/limitations),
+ * so a refusal for size the browser client meets is always this route's,
+ * never the platform's; a sender that skips the browser's check can still
+ * meet the platform's.
  *
  * The browser checks it before sending, the handler again on the way in; the
  * banner's `too-large` text names it.
  */
-export const MAX_PROJECT_BODY_BYTES = 4_000_000;
+export const MAX_PROJECT_BODY_BYTES = 2 * PROJECT_LIMITS.projectBytes;
 
 /** `MAX_PROJECT_BODY_BYTES` as the banner says it, derived so the two agree */
 export const MAX_PROJECT_BODY_LABEL = `${
-  MAX_PROJECT_BODY_BYTES / 1_000_000
-} MB`;
+  MAX_PROJECT_BODY_BYTES / (1024 * 1024)
+} MiB`;
 
 /**
  * The `reason` of the 400 a write gets when it would leave the project with
