@@ -34,10 +34,6 @@ export const keyOriginSignerProvider = (
         bytes,
       })
     );
-  const keep = async (publicKey: string) => {
-    await (await frame()).request({ type: "keep", publicKey });
-  };
-
   return {
     name: "key-origin",
     holdsKeysInPage: false,
@@ -53,19 +49,12 @@ export const keyOriginSignerProvider = (
     secretKeyFor() {
       throw new Error(CLI_KEY_ERROR);
     },
-    // Stored at once, not left a draft: a draft dies with the key page's
-    // frame, and the dialogs that offer the new key's file keep it open across
-    // reloads of neither. A key never added is dropped with `forgetKey`.
+    // The key page stores the key at once: the panel that offers the new
+    // key's file is a second key page instance with its own memory, so it
+    // sees only the store. A key no account takes is dropped with `forgetKey`.
     async makeKey() {
-      const publicKey = await (
-        await frame()
-      ).request<string>({
-        type: "create",
-      });
-      await keep(publicKey);
-      return publicKey;
+      return (await frame()).request<string>({ type: "create" });
     },
-    keepKey: keep,
     async forgetKey(publicKey) {
       await (await frame()).request({ type: "forget", publicKey });
     },
@@ -131,13 +120,6 @@ if (import.meta.vitest) {
       expect(Array.from(kept.keys())).toEqual([publicKey]);
       expect(provider.holdsKeysInPage).toBe(false);
       expect(provider.name).toBe("key-origin");
-    });
-
-    it("keepKey on a key already stored keeps it as it is", async () => {
-      const { kept, provider } = fakeKeyPage();
-      const publicKey = await provider.makeKey();
-      await provider.keepKey(publicKey);
-      expect(Array.from(kept.keys())).toEqual([publicKey]);
     });
 
     it("forgetKey drops the key from the key page", async () => {
