@@ -104,8 +104,25 @@ function LogoLockup({ className, ...props }: React.ComponentProps<"svg">) {
   )
 }
 
+/* The lockup's mark alone, the prototype's trimmed logo at the head of the
+   folded navigation: `LogoLockup`'s mark path without the words, its box
+   cropped to the mark (306 × 182) */
+function LogoLockupMark({ className, ...props }: React.ComponentProps<"svg">) {
+  return (
+    <svg
+      data-slot="logo-lockup-mark"
+      viewBox="0 0 306 182"
+      aria-hidden="true"
+      className={cn("w-7 shrink-0 fill-current", className)}
+      {...props}
+    >
+      <path d={LOCKUP_MARK} />
+    </svg>
+  )
+}
+
 function LogoText({ className, ...props }: React.ComponentProps<"span">) {
   return <span data-slot="logo-text" className={cn("tracking-tight", className)} {...props} />
 }
 
-export { Logo, LogoLockup, LogoMark, LogoPlay, LogoText }
+export { Logo, LogoLockup, LogoLockupMark, LogoMark, LogoPlay, LogoText }

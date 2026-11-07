@@ -70,6 +70,7 @@ const draw = (current?: NavPage, homeShown = false) =>
           collapsed={false}
           onToggle={() => {}}
           logo={null}
+          railLogo={undefined}
           projects={() => null}
           footer={null}
           railFooter={null}

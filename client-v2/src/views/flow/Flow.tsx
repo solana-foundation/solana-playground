@@ -16,7 +16,7 @@ import {
   type SettingsFocus,
   type SettingsRequest,
 } from "@/shared/lib/settings-request";
-import { LogoLockup } from "@/shared/ui/logo";
+import { LogoLockup, LogoLockupMark } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
 import { Tag } from "@/shared/ui/tag";
 import { PgCommon, PgExplorer, PgTutorial, PgView } from "@/utils";
@@ -562,6 +562,7 @@ const FlowFrame = () => {
                     </Tag>
                   </span>
                 }
+                railLogo={<LogoLockupMark aria-hidden="true" />}
                 projects={(open) => (
                   <ProjectList
                     onPicked={catalogPage.close}

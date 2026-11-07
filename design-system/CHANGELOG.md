@@ -3,6 +3,12 @@
 What changed in the components, newest first. One line per fix; the ticket
 id says where the decision lives.
 
+## 2026-11-07 · The lockup's mark alone (HOO-2725)
+
+- Logo: `LogoLockupMark`, the lockup's triangle-and-circle mark without the
+  words, its box cropped to the mark. The folded navigation wears it at its
+  head, as the prototype's rail does.
+
 ## 2026-11-07 · Overlays release focus before hiding the page (HOO-2684)
 
 - Dialog, Modal, Sheet, DropdownMenu, ContextMenu, Select: the content blurs
