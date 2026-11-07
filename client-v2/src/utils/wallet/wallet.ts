@@ -14,7 +14,6 @@ import { parseKeypairFile } from "./keypair-file";
 import { indexedDbStoreFor } from "./keystore";
 import {
   localSignerProviderWith,
-  publicKeyOf,
   type WalletSignerProvider,
 } from "./signer-provider";
 import type {
@@ -42,8 +41,8 @@ const defaultState: WalletState = {
  */
 let signerProvider: WalletSignerProvider = localSignerProviderWith(
   (publicKey) =>
-    PgWallet.accounts.find((account) =>
-      publicKeyOf(account.kp).equals(publicKey)
+    PgWallet.accounts.find(
+      (account) => account.publicKey === publicKey.toBase58()
     )?.kp
 );
 
@@ -361,7 +360,9 @@ const migrate = () => {
   if ((oldOrNewWallet as WalletState).accounts) return;
 
   const oldWallet = oldOrNewWallet as OldWalletState;
-  const newWallet: WalletState = {
+  // An account without its public key, as stored before accounts had one:
+  // reading the wallet fills it in from the keypair
+  const newWallet = {
     ...defaultState,
     state: oldWallet.setupCompleted
       ? oldWallet.connected
@@ -416,7 +417,7 @@ class _PgWallet {
     const accountIndex = PgWallet.accounts.findIndex((acc) => {
       return (
         (name && acc.name === name) ||
-        publicKeyOf(acc.kp).equals(keypair.publicKey)
+        acc.publicKey === keypair.publicKey.toBase58()
       );
     });
     if (accountIndex !== -1) {
@@ -429,6 +430,7 @@ class _PgWallet {
     PgWallet.accounts.push({
       kp: Array.from(keypair.secretKey),
       name,
+      publicKey: keypair.publicKey.toBase58(),
     });
 
     // Update the accounts
@@ -591,7 +593,7 @@ class _PgWallet {
   static create(account: WalletAccount): Wallet {
     return signerProvider.walletFor({
       name: account.name,
-      publicKey: publicKeyOf(account.kp),
+      publicKey: new PgWeb3.PublicKey(account.publicKey),
     });
   }
 

@@ -237,7 +237,14 @@ if (import.meta.vitest) {
 
     const walletOf = (name: string): SerializedWalletState => ({
       state: "pg",
-      accounts: [{ kp: Array.from({ length: 64 }, (_, i) => i), name }],
+      accounts: [
+        {
+          kp: Array.from({ length: 64 }, (_, i) => i),
+          name,
+          // The base58 of the keypair's last 32 bytes, 32 to 63
+          publicKey: "3ARMH9zfVCnU2TKiphU4xcEyWdA45fc1sjKEtYMdf3gr",
+        },
+      ],
       currentIndex: 0,
       standardName: NO_STANDARD,
     });
