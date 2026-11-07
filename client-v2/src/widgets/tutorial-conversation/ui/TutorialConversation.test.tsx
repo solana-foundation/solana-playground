@@ -37,6 +37,7 @@ vi.mock("@/features/tutorial-conversation", async () => ({
     edit: vi.fn(),
     onDidRequestFocus: vi.fn(),
     act: vi.fn(),
+    recheck: vi.fn(),
     explain: vi.fn(),
     answered: vi.fn(),
     showFix: vi.fn(),
@@ -54,6 +55,9 @@ vi.mock("@/features/tutorial-conversation", async () => ({
     r.act === "build" && !r.ok && r.reason === "unreachable",
   isSignedOut: (r: { act: string; ok: boolean; reason?: string }) =>
     r.act === "build" && !r.ok && r.reason === "signed_out",
+  isUnconfirmed: (
+    await import("@/features/tutorial-conversation/model/progress")
+  ).isUnconfirmed,
   realWorkspace: "realWorkspace",
   tutorialRunner: {
     run: vi.fn(async () => ({
@@ -1132,6 +1136,46 @@ describe("TutorialConversation keys and the pill", () => {
     );
     press();
     expect(PgConversation.act).toHaveBeenCalledWith("s1.build");
+    expect(PgConversation.explain).not.toHaveBeenCalled();
+  });
+
+  it("checks again on ⌘↵ when devnet has not read the call back", () => {
+    const unconfirmed: Turn = {
+      id: "result:s1.call:0",
+      kind: "result",
+      step: definition.steps[0].id,
+      at: 4,
+      whole: true,
+      beatId: "s1.call",
+      act: "call",
+      result: {
+        act: "call",
+        ok: false,
+        seconds: 4,
+        reason: "unconfirmed",
+        message:
+          "Devnet has not confirmed this transaction yet. Check again, or open it in Explorer.",
+        log: "",
+        unconfirmed: [{ signature: "5ig", calls: [] }],
+      },
+      took: 10,
+      planned: null,
+      open: true,
+    };
+    store.view.mockReturnValue({
+      turns: [unconfirmed],
+      live: unconfirmed,
+      steps: onStep2.steps,
+      placeholder: "Ask about this step",
+      nextAt: null,
+      finishAt: null,
+    });
+    render(
+      <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+    );
+    press();
+    expect(PgConversation.recheck).toHaveBeenCalledWith("s1.call");
+    expect(PgConversation.act).not.toHaveBeenCalled();
     expect(PgConversation.explain).not.toHaveBeenCalled();
   });
 

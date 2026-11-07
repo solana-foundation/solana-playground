@@ -320,6 +320,39 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     expect(devnet.programs()).toHaveLength(1);
   });
 
+  test("tutorial-runs: A slow devnet confirms late", async ({ page }) => {
+    test.skip(isLive, "steers the fakes");
+    test.setTimeout(300_000);
+    await start(page);
+    await passStepOne(page);
+    await next(page).click();
+    await passStepTwo(page);
+    await next(page).click();
+    await answer(page, beat("s3.q3", "ask"));
+    await act(page, "s3.run").click(LONG);
+    await won(page, "call-client");
+    await next(page).click();
+    await answer(page, beat("s4.q4", "ask"));
+    await act(page, "s4.ship").click(LONG);
+    await expect(feed(page).getByText("Upgraded").last()).toBeVisible(LONG);
+
+    // Devnet takes the call but has not indexed it when the reads run out
+    devnet.index = "lag";
+    await feed(page).getByRole("textbox", { name: "name" }).fill("Alex");
+    await act(page, "s4.call").click(LONG);
+    await expect(feed(page).getByText("Not confirmed yet")).toBeVisible(LONG);
+    await expect(feed(page).getByText("Call failed")).toHaveCount(0);
+    const sends = () =>
+      devnet.calls.filter((c) => c === "sendTransaction").length;
+    const sent = sends();
+
+    // Check again reads the same transaction, sends nothing, and passes
+    devnet.index = "ok";
+    await feed(page).getByRole("button", { name: "Check again" }).click();
+    await won(page, "greet-by-name");
+    expect(sends()).toBe(sent);
+  });
+
   // The Call panel is on the branch (HOO-2358, #357); the scenario below is
   // still to be written against it (HOO-2364)
   test.fixme(

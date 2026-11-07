@@ -105,6 +105,11 @@ const rentFor = (bytes: number) => (bytes + 128) * 6960;
 export interface FakeDevnet {
   /** Whether `requestAirdrop` pays ("ok") or answers the faucet's limit */
   faucet: "ok" | "refuse";
+  /**
+   * Whether `getTransaction` answers a landed transaction ("ok") or not yet
+   * ("lag"), as a slow devnet's index does
+   */
+  index: "ok" | "lag";
   /** Every JSON-RPC method the app called, in order */
   readonly calls: string[];
   /** What the app asked for that the fake does not model, in order */
@@ -154,6 +159,8 @@ export const fakeDevnet = async (page: Page): Promise<FakeDevnet> => {
   const fake: FakeDevnet = {
     // Read on every `requestAirdrop`, so a spec may flip it mid-run
     faucet: "ok",
+    // Read on every `getTransaction`, likewise
+    index: "ok",
     calls,
     unhandled,
     balance: (address) =>
@@ -589,7 +596,7 @@ export const fakeDevnet = async (page: Page): Promise<FakeDevnet> => {
       }
       case "getTransaction": {
         const tx = landed.get(params[0] as string);
-        if (!tx) {
+        if (!tx || fake.index === "lag") {
           // eslint-disable-next-line unicorn/no-null -- not seen
           return { result: null };
         }

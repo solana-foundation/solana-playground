@@ -2,6 +2,7 @@ export { tutorialTelemetry } from "./model/telemetry";
 export {
   freshProgress,
   isSignedOut,
+  isUnconfirmed,
   isUnreachable,
   parseProgress,
 } from "./model/progress";

@@ -117,6 +117,7 @@ const handlers = (): TurnHandlers => ({
   skip: vi.fn(),
   typeIt: vi.fn(),
   act: vi.fn(),
+  recheck: vi.fn(),
   explain: vi.fn(),
   fixMyself: vi.fn(),
   showFix: vi.fn(),

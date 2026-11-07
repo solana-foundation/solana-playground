@@ -35,6 +35,8 @@ export interface TurnHandlers {
   /** "Type it myself": the caret to where the answer lands; absent on the phone */
   typeIt?: (beatId: string) => void;
   act: (beatId: string, args?: Record<string, string>) => void;
+  /** "Check again" on a run or call devnet has not confirmed */
+  recheck: (beatId: string) => void;
   explain: (beatId: string) => void;
   fixMyself: (beatId: string) => void;
   /** "Show me the fix" after an unplanned failure's explanation */
@@ -338,6 +340,7 @@ const TurnView = ({
           onFixMyself={() => on.fixMyself(turn.beatId)}
           onShowLine={on.revealError}
           onRetry={() => on.act(turn.beatId)}
+          onRecheck={() => on.recheck(turn.beatId)}
           signedIn={signedIn}
           onSignIn={on.signIn}
         />

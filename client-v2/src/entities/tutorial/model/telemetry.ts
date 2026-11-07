@@ -139,8 +139,9 @@ export type TutorialEvents = {
    * An act or a Call panel call ended, or a reload interrupted one; the
    * engine fires it from its reducer. `action` is `build`, `deploy`,
    * `build_deploy`, `run`, `call` (the call act) or `call_panel`. `outcome`
-   * is `ok`, `failed`, `interrupted`, `no_wallet` or `no_funds` (the deploy's
-   * airdrop was refused, failed, or never reached the wallet). `step` is
+   * is `ok`, `failed`, `interrupted`, `no_wallet`, `no_funds` (the deploy's
+   * airdrop was refused, failed, or never reached the wallet) or
+   * `unconfirmed` (a run or call sent, and not read back from devnet). `step` is
    * 1-based. `seconds` is the run's whole seconds: from the press to the
    * result, from the press to the block for a deploy recognised after a
    * reload, and 0 for an interrupted run, whose length is not known.
@@ -149,7 +150,13 @@ export type TutorialEvents = {
     tutorial: string;
     step: number;
     action: "build" | "deploy" | "build_deploy" | "run" | "call" | "call_panel";
-    outcome: "ok" | "failed" | "interrupted" | "no_wallet" | "no_funds";
+    outcome:
+      | "ok"
+      | "failed"
+      | "interrupted"
+      | "no_wallet"
+      | "no_funds"
+      | "unconfirmed";
     seconds: number;
   };
 };

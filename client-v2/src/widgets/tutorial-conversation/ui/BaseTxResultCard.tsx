@@ -3,6 +3,7 @@ import {
   Check,
   ChevronDown,
   CircleX,
+  Clock,
   Copy,
   ExternalLink,
   Eye,
@@ -17,6 +18,7 @@ import type {
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
 import { PROGRAM_LOG, programLogText } from "@/shared/lib/program-log";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { shortKey } from "@/shared/lib/short-key";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
@@ -372,8 +374,73 @@ const FundsCard = ({
   );
 };
 
+/**
+ * A run or call devnet has not read back in the read window (HOO-2675): sent,
+ * so muted like "No transaction" and not red. The meta's short signature is
+ * the Explorer link (Almaz's 3.29 rule: no separate Explorer button), and
+ * while it is the live result Check again reads the same transactions again
+ * without sending
+ */
+const UnconfirmedCard = ({
+  result,
+  onRecheck,
+}: {
+  result: Extract<Failed, { reason: "unconfirmed" }>;
+  onRecheck?: () => void;
+}) => {
+  const last = result.unconfirmed[result.unconfirmed.length - 1];
+  return (
+    <Shell
+      icon={
+        <Clock
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+      }
+      title="Not confirmed yet"
+      meta={
+        // The link alone: the body already says why, and on a ~400 px card
+        // any words beside it truncated (design alignment, 7 Nov)
+        last && (
+          <span className="flex items-baseline gap-2">
+            <span aria-hidden="true">·</span>
+            <a
+              href={devnetExplorerUrl({ kind: "tx", value: last.signature })}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={last.signature}
+              className="shrink-0 font-mono underline-offset-2 hover:underline"
+            >
+              {`${shortKey(last.signature)} ↗`}
+            </a>
+          </span>
+        )
+      }
+      body={
+        <>
+          <p className={READ}>{result.message}</p>
+          {onRecheck && (
+            <div className="flex">
+              <Button onClick={onRecheck}>Check again</Button>
+            </div>
+          )}
+        </>
+      }
+    />
+  );
+};
+
 /** A run or call that failed, or that sent nothing */
-const FailedCard = ({ result }: { result: Failed }) => {
+const FailedCard = ({
+  result,
+  onRecheck,
+}: {
+  result: Failed;
+  onRecheck?: () => void;
+}) => {
+  if (result.reason === "unconfirmed") {
+    return <UnconfirmedCard result={result} onRecheck={onRecheck} />;
+  }
   if (result.reason === "no_transaction") {
     return (
       <Shell
@@ -446,14 +513,17 @@ const FailedCard = ({ result }: { result: Failed }) => {
 const BaseTxResultCard = ({
   result,
   account,
+  onRecheck,
 }: {
   result: TxResult;
   account?: AccountOnCard;
+  /** Check again on an unconfirmed result; absent when it is not live */
+  onRecheck?: () => void;
 }) =>
   result.ok ? (
     <LandedCard result={result} account={account} />
   ) : (
-    <FailedCard result={result} />
+    <FailedCard result={result} onRecheck={onRecheck} />
   );
 
 export default BaseTxResultCard;

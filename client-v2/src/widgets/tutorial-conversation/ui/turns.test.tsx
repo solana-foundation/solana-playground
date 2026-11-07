@@ -379,23 +379,67 @@ describe("BaseActCard", () => {
 
 describe("BaseResultCard", () => {
   /** The card for a run's or a call's result, with no failure open */
-  const txCard = (result: RunResult) =>
+  const txCard = (
+    result: RunResult,
+    { open = false, onRecheck = vi.fn() } = {}
+  ) =>
     render(
       // The app's root provides the tooltip Copy signature carries
       <TooltipProvider>
         <BaseResultCard
           result={result}
           planned={null}
-          open={false}
+          open={open}
           onExplain={vi.fn()}
           onFixMyself={vi.fn()}
           onShowLine={vi.fn()}
           onRetry={vi.fn()}
+          onRecheck={onRecheck}
           signedIn={false}
           onSignIn={vi.fn()}
         />
       </TooltipProvider>
     );
+
+  describe("a call devnet has not confirmed", () => {
+    const UNCONFIRMED: RunResult = {
+      act: "call",
+      ok: false,
+      seconds: 4,
+      reason: "unconfirmed",
+      message:
+        "Devnet has not confirmed this transaction yet. Check again, or open it in Explorer.",
+      log: "",
+      unconfirmed: [
+        { signature: "first", calls: [] },
+        { signature: "5ig", calls: [] },
+      ],
+    };
+
+    it("is not a failure: no red head, the message, the last signature as the meta's link", () => {
+      const { container } = txCard(UNCONFIRMED);
+      expect(screen.getByText("Not confirmed yet")).toBeTruthy();
+      expect(screen.queryByText("Call failed")).toBeNull();
+      expect(container.querySelector(".text-error")).toBeNull();
+      expect(screen.getByText(UNCONFIRMED.message)).toBeTruthy();
+      expect(screen.getByRole("link", { name: /↗/ }).getAttribute("href")).toBe(
+        "https://explorer.solana.com/tx/5ig?cluster=devnet"
+      );
+      expect(screen.queryByRole("link", { name: /Explorer/ })).toBeNull();
+    });
+
+    it("offers Check again while it is open, and only then", async () => {
+      const onRecheck = vi.fn();
+      const { unmount } = txCard(UNCONFIRMED, { open: true, onRecheck });
+      await userEvent.click(
+        screen.getByRole("button", { name: "Check again" })
+      );
+      expect(onRecheck).toHaveBeenCalledOnce();
+      unmount();
+      txCard(UNCONFIRMED);
+      expect(screen.queryByRole("button", { name: "Check again" })).toBeNull();
+    });
+  });
 
   const CHOP_ERROR =
     "Program log: AnchorError thrown in programs/lumberjack/src/lib.rs:31:9. Error Code: NotEnoughEnergy. Error Number: 6000. Error Message: Not enough energy.";
@@ -552,6 +596,7 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={vi.fn()}
+        onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
       />
@@ -579,6 +624,7 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={vi.fn()}
+        onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
       />
@@ -604,6 +650,7 @@ describe("BaseResultCard", () => {
         onFixMyself={onFixMyself}
         onShowLine={onShowLine}
         onRetry={vi.fn()}
+        onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
       />
@@ -642,6 +689,7 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={onRetry}
+        onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
       />
@@ -677,6 +725,7 @@ describe("BaseResultCard", () => {
           onFixMyself={vi.fn()}
           onShowLine={vi.fn()}
           onRetry={on.retry}
+          onRecheck={vi.fn()}
           signedIn={signedIn}
           onSignIn={on.signIn}
         />
@@ -731,6 +780,7 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={vi.fn()}
+        onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
       />
@@ -765,6 +815,7 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={vi.fn()}
         onRetry={vi.fn()}
+        onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
       />
@@ -784,6 +835,7 @@ describe("BaseResultCard", () => {
         onFixMyself={vi.fn()}
         onShowLine={onShowLine}
         onRetry={vi.fn()}
+        onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
       />
@@ -877,6 +929,7 @@ describe("TurnView", () => {
     skip: vi.fn(),
     typeIt: vi.fn(),
     act: vi.fn(),
+    recheck: vi.fn(),
     explain: vi.fn(),
     fixMyself: vi.fn(),
     showFix: vi.fn(),
@@ -1455,6 +1508,7 @@ describe("TurnView's last win", () => {
           skip: vi.fn(),
           typeIt: vi.fn(),
           act: vi.fn(),
+          recheck: vi.fn(),
           explain: vi.fn(),
           fixMyself: vi.fn(),
           showFix: vi.fn(),
@@ -1569,6 +1623,7 @@ describe("TurnView's chip answer", () => {
     skip: vi.fn(),
     typeIt: vi.fn(),
     act: vi.fn(),
+    recheck: vi.fn(),
     explain: vi.fn(),
     fixMyself: vi.fn(),
     next: vi.fn(),
