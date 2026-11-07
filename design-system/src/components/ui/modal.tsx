@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useReleaseFocus } from "@/hooks/use-release-focus"
 import { XIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dialog as DialogPrimitive } from "radix-ui"
@@ -26,8 +27,10 @@ function ModalContent({
   className,
   size = "default",
   children,
+  ref,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { size?: "default" | "narrow" | "wide" }) {
+  const [releaseFocus] = useReleaseFocus(ref)
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay
@@ -35,6 +38,7 @@ function ModalContent({
         className="fixed inset-0 z-50 bg-backdrop data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
       />
       <DialogPrimitive.Content
+        ref={releaseFocus}
         data-slot="modal-content"
         data-size={size}
         className={cn(

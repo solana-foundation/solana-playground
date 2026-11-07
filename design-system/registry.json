@@ -52,6 +52,18 @@
       ]
     },
     {
+      "name": "use-release-focus",
+      "type": "registry:hook",
+      "title": "useReleaseFocus",
+      "description": "For a modal overlay's content: [releaseFocus, returnFocus]. The ref blurs focus left outside the content as it mounts, so Radix hides the page with nothing focused in it; returnFocus, as onCloseAutoFocus, gives focus back where Radix's focus scope would have (ContextMenu).",
+      "files": [
+        {
+          "path": "src/hooks/use-release-focus.ts",
+          "type": "registry:hook"
+        }
+      ]
+    },
+    {
       "name": "use-mobile",
       "type": "registry:hook",
       "title": "useIsMobile",
@@ -242,7 +254,8 @@
         "lucide-react"
       ],
       "registryDependencies": [
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ]
     },
     {
@@ -317,7 +330,8 @@
         "lucide-react"
       ],
       "registryDependencies": [
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ]
     },
     {
@@ -342,7 +356,8 @@
       "description": "Stock shadcn sheet, as the design system ships it.",
       "registryDependencies": [
         "@playground/button",
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ],
       "files": [
         {
@@ -928,7 +943,8 @@
       "description": "The product's dialog: a card on a desk, a page of its own on a phone, and a wide size.",
       "registryDependencies": [
         "@playground/playground-tokens",
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ],
       "files": [
         {
@@ -948,7 +964,8 @@
       "description": "Stock shadcn dialog, as the design system ships it.",
       "registryDependencies": [
         "@playground/button",
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ],
       "files": [
         {
@@ -977,7 +994,8 @@
         "lucide-react"
       ],
       "registryDependencies": [
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ]
     },
     {
@@ -996,7 +1014,8 @@
         "lucide-react"
       ],
       "registryDependencies": [
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ]
     },
     {

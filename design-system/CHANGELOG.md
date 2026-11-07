@@ -3,6 +3,15 @@
 What changed in the components, newest first. One line per fix; the ticket
 id says where the decision lives.
 
+## 2026-11-07 · Overlays release focus before hiding the page (HOO-2684)
+
+- Dialog, Modal, Sheet, DropdownMenu, ContextMenu, Select: the content blurs
+  focus left outside it as it mounts (`useReleaseFocus`). Radix hid the page
+  with `aria-hidden` a render before moving focus in, so with the editor
+  focused Chrome refused the attribute and the page stayed reachable behind
+  the overlay. Where focus goes on close is unchanged: ContextMenu, which
+  returns it to what held it before, gets it back through `returnFocus`.
+
 ## 2026-11-05 · Core components polish (DES-129)
 
 - Input, Textarea, Select, NativeSelect: a hover state. The border lifts to
