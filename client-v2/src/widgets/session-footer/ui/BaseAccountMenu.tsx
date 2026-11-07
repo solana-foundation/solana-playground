@@ -392,8 +392,14 @@ const BaseAccountMenu = ({
           <>
             <DropdownMenuItem onSelect={() => pick("wallet")}>
               <Wallet />
-              <span className="font-mono">{shortAddress(wallet.address)}</span>
-              <span className="ml-auto text-success">
+              {/* One line each: the address gives way, the balance never wraps */}
+              <span
+                className="min-w-0 truncate font-mono"
+                title={wallet.address}
+              >
+                {shortAddress(wallet.address)}
+              </span>
+              <span className="ml-auto shrink-0 whitespace-nowrap text-success">
                 {formatBalance(wallet.balance)}
               </span>
             </DropdownMenuItem>
