@@ -4,14 +4,13 @@ import styled, { css } from "styled-components";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
-import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { ModalFrame } from "@/widgets/overlays";
 
 import { PgWallet, PgWeb3 } from "../../../utils";
 import Input from "../../Input";
 import { useBusyPanels, useDraftKey } from "../hooks";
-import { KeyPanel, KeyPanelUnavailable } from "../KeyPanel";
+import { SaveKeyPanel } from "./SaveKeyPanel";
 
 /** The Add dialog for the wallet's provider: keys in the page, or on the key origin */
 export const Add = () =>
@@ -39,7 +38,8 @@ const LocalAdd = () => {
 /**
  * Under the `key-origin` provider: the key is made in the key page when the
  * dialog opens and its file saved by the key page's panel; closing without
- * creating drops it (`useDraftKey`)
+ * creating drops it (`useDraftKey`). Closing after Create asks the same
+ * forget, which does nothing once an account holds the key.
  */
 const KeyOriginAdd = () => {
   const draft = useDraftKey();
@@ -54,23 +54,15 @@ const KeyOriginAdd = () => {
     >
       {(name) => (
         <>
-          {draft.isFailed ? (
-            <KeyPanelUnavailable className="mt-2" />
-          ) : draft.publicKey ? (
-            <KeyPanel
-              action="export"
-              publicKey={draft.publicKey}
-              name={name}
-              onError={setError}
-              onBusy={onBusy}
-              className="mt-2"
-            />
-          ) : (
-            // The key is being made: the button's place, as it will look
-            <Button type="button" variant="outline" disabled className="mt-2">
-              Save keypair
-            </Button>
-          )}
+          <SaveKeyPanel
+            isFailed={draft.isFailed}
+            exported={
+              draft.publicKey ? { publicKey: draft.publicKey, name } : undefined
+            }
+            onError={setError}
+            onBusy={onBusy}
+            className="mt-2"
+          />
           {error && <Desc>{error}</Desc>}
         </>
       )}

@@ -5,7 +5,6 @@ import styled, { css } from "styled-components";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
-import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { ModalFrame } from "@/widgets/overlays";
 
@@ -14,7 +13,8 @@ import { KeypairFileError } from "../../../utils/wallet/keypair-file";
 import { useBusyPanels, useDraftKey } from "../hooks";
 import { addImportedKey } from "../imported-key";
 import { importedText } from "../imported-text";
-import { KeyPanel, KeyPanelUnavailable } from "../KeyPanel";
+import { KeyPanel } from "../KeyPanel";
+import { SaveKeyPanel } from "./SaveKeyPanel";
 
 const log = createLogger("wallet:setup");
 
@@ -120,35 +120,14 @@ const KeyOriginSetup = () => {
     }
   };
 
-  // Before the first account, the key this dialog made; after an import, the
-  // current account, as the local Setup saves
-  const current = PgWallet.accounts[PgWallet.currentIndex];
-  const exported =
-    !PgWallet.accounts.length || !current
-      ? draft.publicKey && {
-          publicKey: draft.publicKey,
-          name: PgWallet.getNextAvailableAccountName(),
-        }
-      : { publicKey: current.publicKey, name: current.name };
-
   return (
     <SetupBody onSubmit={handleSetup} text={text} isHeld={isBusy}>
-      {draft.isFailed ? (
-        <KeyPanelUnavailable />
-      ) : exported ? (
-        <KeyPanel
-          action="export"
-          publicKey={exported.publicKey}
-          name={exported.name}
-          onError={setText}
-          onBusy={onBusy}
-        />
-      ) : (
-        // The key is being made: the button's place, as it will look
-        <Button type="button" variant="outline" disabled>
-          Save keypair
-        </Button>
-      )}
+      <SaveKeyPanel
+        isFailed={draft.isFailed}
+        exported={exportedFor(draft.publicKey)}
+        onError={setText}
+        onBusy={onBusy}
+      />
       <KeyPanel
         action="import"
         onImported={handleImported}
@@ -157,6 +136,21 @@ const KeyOriginSetup = () => {
       />
     </SetupBody>
   );
+};
+
+/**
+ * @param made the key the dialog made, once made
+ * @returns the account whose file Setup saves: before the first account, the
+ * key the dialog made; after an import, the current account, as the local
+ * Setup saves
+ */
+const exportedFor = (made: string | undefined) => {
+  const current = PgWallet.accounts[PgWallet.currentIndex];
+  if (PgWallet.accounts.length && current) {
+    return { publicKey: current.publicKey, name: current.name };
+  }
+  if (!made) return undefined;
+  return { publicKey: made, name: PgWallet.getNextAvailableAccountName() };
 };
 
 const importFailure = (err: unknown) =>
