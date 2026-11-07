@@ -171,7 +171,7 @@ test.describe("docs-open-link", () => {
       LONG
     );
     await page.locator("#docs-link-home").click();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/home$/);
   });
 });
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { isCatalogLinkPath } from "@/routes/catalog-paths";
+import { isHomePath, isStartPath } from "@/routes/catalog-paths";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgRouter } from "@/utils";
 
@@ -12,24 +12,18 @@ export type StartView = "pending" | "home" | "work";
 const log = createLogger("home:start");
 
 /**
- * How long `/` waits for the explorer before it gives up on Home: IndexedDB
- * held by another tab's upgrade never answers, and the stage would stay
- * empty for good.
+ * How long a start path waits for the explorer before it gives up on
+ * Home: IndexedDB held by another tab's upgrade never answers, and the
+ * stage would stay empty for good.
  */
 export const START_TIMEOUT_MS = 10_000;
 
 /**
- * Where Home can show: `/`, and the `/tutorials` and `/programs` links, which
- * open their page and go on to `/`
- */
-const isStartPath = (path: string) => path === "/" || isCatalogLinkPath(path);
-
-/**
- * Home is for a start on `/` (or a link to a page) with no project open. Any
- * other route opens straight on the work; on those the answer waits for the
- * explorer. Projects listed with none current is still Home: sync imports the
- * account's projects without opening them, and the work mounted then throws
- * in the explorer. `useStartView` leaves Home once one is opened.
+ * Home is for a start on Home's own path, or on `/` (or a link to a page)
+ * with no project open. Any other route opens straight on the work; on
+ * those the answer waits for the explorer. Projects listed with none
+ * current is still Home: sync imports the account's projects without
+ * opening them, and the work mounted then throws in the explorer. `useStartView` leaves Home once one is opened.
  */
 export const decideStart = ({
   path,
@@ -42,16 +36,17 @@ export const decideStart = ({
 }): StartView => {
   if (!isStartPath(path)) return "work";
   if (workspaces === undefined) return "pending";
+  if (isHomePath(path)) return "home";
   return workspaces.length && current ? "work" : "home";
 };
 
 /**
- * Whether the work can be drawn: anywhere but `/`, or on `/` with a project
- * open (a temporary one counts; it has no name). On `/` with none open the
- * explorer throws, so Home is the only page there.
+ * Whether the work can be drawn: anywhere but a start path, or on one with a
+ * project open (a temporary one counts; it has no name). There with none
+ * open the explorer throws, so Home is the only page.
  */
 const workDrawable = () =>
-  PgRouter.location.pathname !== "/" ||
+  !isStartPath(PgRouter.location.pathname) ||
   PgExplorer.isTemporary ||
   PgExplorer.currentWorkspaceName !== undefined;
 
@@ -75,9 +70,12 @@ export type PageView = {
   view: StartView;
   /**
    * Whether the work stays mounted under Home: whenever it can be drawn.
-   * Going back then finds the editor and the console as they were.
+   * Going back then finds the editor and the console as they were; a
+   * lesson's frame is drawn again by its route, at its saved page.
    */
   workKept: boolean;
+  /** How Home came to show, while it shows */
+  homeVia: HomeVia | undefined;
   /** Show Home from the work (the navigation's Home) */
   showHome: (via: HomeVia) => void;
   /** Go back to the work, when there is one to go back to */
@@ -92,8 +90,9 @@ export type PageView = {
  * one after another, so the route's own call later is harmless). After the
  * start Home comes back from the navigation (`showHome`) and on its own
  * whenever the page ends up on `/` with no project open: the last one
- * deleted, here, by another tab or by sync, or a way back to `/`. A route
- * other than `/` draws its own page without a project (a lesson's, before it
+ * deleted, here, by another tab or by sync, or a way back to `/`. Home's own
+ * path, `/home`, always shows Home, over the work when there is one. Any
+ * other route draws its own page without a project (a lesson's, before it
  * starts), so Home never shows there by itself.
  */
 export const useStartView = (): PageView => {
@@ -156,8 +155,8 @@ export const useStartView = (): PageView => {
   }, [view]);
 
   // Whatever shows, the explorer and the route decide whether the work can
-  // be drawn; the work cannot be drawn on `/` with no project open, so Home
-  // takes over there
+  // be drawn; the work cannot be drawn on a start path with no project
+  // open, so Home takes over there
   useEffect(() => {
     // A lesson's route goes to `/` by itself once its project, the last one,
     // is deleted; that arrival is the delete's, not a way back
@@ -183,7 +182,15 @@ export const useStartView = (): PageView => {
         lastDeleted = PgExplorer.allWorkspaceNames?.length === 0;
         check("last-deleted");
       }),
-      PgRouter.onDidChangePath(() => check("back")),
+      // Home's own path, come back to by Back or Forward, shows
+      // Home over the work as the navigation's Home does
+      PgRouter.onDidChangePath((path) => {
+        if (!isHomePath(path)) return check("back");
+        setWorkKept(workDrawable());
+        setShown((now) =>
+          now.view === "work" ? { view: "home", via: "back" } : now
+        );
+      }),
     ];
     return () => subs.forEach((s) => s.dispose());
   }, []);
@@ -214,14 +221,20 @@ export const useStartView = (): PageView => {
       const current = openProject();
       if (current && current !== over) leave();
     };
+    // Whether the path has moved since Home showed (normally to Home's own),
+    // after which Back to where it opened is a way out
+    let moved = false;
     const subs = [
       // A project made here, or the account's opened after arriving by sync
       PgExplorer.onDidCreateWorkspace(toWork),
       PgExplorer.onDidSwitchWorkspace(toWork),
-      // Called at once with the path Home opened on, which is no way out:
-      // Home from a lesson stays on the lesson's route
+      // Called at once with the path Home opened on, which is no way out
+      // until the path first moves off it. A route's work, or `/` with a
+      // project open, is; a page's link opens over Home and keeps it.
       PgRouter.onDidChangePath((path) => {
-        if (!isStartPath(path) && path !== from) leave();
+        if (path !== from) moved = true;
+        if (!moved) return;
+        if (!isStartPath(path) || (path === "/" && workDrawable())) leave();
       }),
     ];
     return () => subs.forEach((s) => s.dispose());
@@ -254,5 +267,5 @@ export const useStartView = (): PageView => {
     [view]
   );
 
-  return { view, workKept, showHome, leaveHome };
+  return { view, workKept, homeVia: via, showHome, leaveHome };
 };

@@ -437,12 +437,29 @@ describe("ProjectList", () => {
     expect(app.PgExplorer.switchWorkspace).not.toHaveBeenCalled();
   });
 
-  it("says a project was picked, the one already open included", () => {
+  it("says a project was picked, the one already open included", async () => {
     const onPicked = vi.fn();
     draw(onPicked);
     fireEvent.click(screen.getByRole("button", { name: "beta" }));
     fireEvent.click(screen.getByRole("button", { name: "alpha" }));
-    expect(onPicked).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(onPicked).toHaveBeenCalledTimes(2));
+  });
+
+  it("says a project was picked only once it is open", async () => {
+    let switched = () => {};
+    app.PgExplorer.switchWorkspace.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (switched = resolve))
+    );
+    const onPicked = vi.fn();
+    draw(onPicked);
+    fireEvent.click(screen.getByRole("button", { name: "alpha" }));
+    await waitFor(() =>
+      expect(app.PgExplorer.switchWorkspace).toHaveBeenCalledWith("alpha")
+    );
+    expect(onPicked).not.toHaveBeenCalled();
+
+    switched();
+    await waitFor(() => expect(onPicked).toHaveBeenCalledTimes(1));
   });
 
   it("hands export and delete to their dialogs, with the project's name", () => {

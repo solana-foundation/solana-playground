@@ -7,6 +7,7 @@ import {
 } from "@/features/docs-link";
 
 import { PgExplorer, PgRouter } from "../../utils";
+import { HOME_PATH } from "../catalog-paths";
 import { handleRoute } from "../common";
 
 /**
@@ -49,7 +50,7 @@ export const open = PgRouter.create({
           return (
             <BaseBrokenLink
               backHref={backHref}
-              onHome={() => PgRouter.navigate("/")}
+              onHome={() => PgRouter.navigate(HOME_PATH)}
             />
           );
         },

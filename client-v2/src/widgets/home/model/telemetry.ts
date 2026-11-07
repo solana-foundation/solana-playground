@@ -11,8 +11,9 @@ export type HomeQuickstart = "example" | "continue" | "new" | "tutorial";
 export type HomeRecentKind = "project" | "tutorial" | "current";
 /**
  * How Home came to show: the start, the navigation's Home, no project left
- * open on `/` (a delete, here, in another tab or by sync), or a way back to
- * `/` with no project open
+ * open on `/` (a delete, here, in another tab or by sync), or a way back by
+ * history: to `/` with no project open, or to Home's own path, over the work
+ * or not
  */
 export type HomeVia = "start" | "nav" | "last-deleted" | "back";
 /**
