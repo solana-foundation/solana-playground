@@ -52,19 +52,37 @@ const isValidKey = async (kp: number[]) => {
 };
 
 /**
+ * Keys other copies of the wallet hold, by how sure they are to be keys.
+ * Neither copy's merge may keep them, so each must reach the key page.
+ */
+export interface OtherKeys {
+  /**
+   * The keys of valid accounts in any copy (`localStorage`, the store): sent
+   * as they are, like the record's, so a bad one blocks the move instead of
+   * being dropped by the keyless rewrite
+   */
+  accounts: number[][];
+  /**
+   * The keys of damaged accounts and set-aside records: these stay intact
+   * in the set-aside record, so one that is not a key is left out
+   */
+  stray: number[][];
+}
+
+/**
  * Move the page's keys into the key page: copy, confirm, then drop.
  *
- * Every `kp` of the record and every valid one of `extraKeys` (the copies in
- * `localStorage`, damaged accounts, the set-aside record) is sent in one
- * `adopt`. The key page answers with every public key it holds; each key
- * sent must be among them, or the move throws `MoveIncomplete` and the
- * caller keeps every copy as it was. Only then is the record given back
- * without `kp`. A record's keys are sent as they are, so the key page is the
- * one to refuse a bad one; a bad extra key is left out instead, since it may
- * be a damaged copy that was never a key.
+ * Every `kp` of the record, every key of `others.accounts`, and every valid
+ * one of `others.stray` is sent in one `adopt`. The key page answers with
+ * every public key it holds; each key sent must be among them, or the move
+ * throws `MoveIncomplete` and the caller keeps every copy as it was. Only
+ * then is the record given back without `kp`. An account's key is sent as it
+ * is, so the key page is the one to refuse a bad one and the move fails; a
+ * bad stray key is left out instead, since it may be a damaged copy that was
+ * never a key, and the set-aside record keeps it.
  *
  * @param record the wallet as the page stores it
- * @param extraKeys keys other copies of the wallet hold
+ * @param others keys other copies of the wallet hold
  * @param frame the connection to the key page
  * @returns the record without key bytes, and the keys the key page confirmed
  * @throws `MoveIncomplete` when the key page lacks a key it was sent; any
@@ -73,12 +91,14 @@ const isValidKey = async (kp: number[]) => {
 /* eslint-disable max-params -- the plan's interface for the move; `MoveKeys` binds the frame */
 export const moveKeysOut = async (
   record: SerializedWalletState,
-  extraKeys: number[][],
+  others: OtherKeys,
   frame: KeyFrame
 ): Promise<Moved> => {
   const fromRecord = record.accounts.flatMap(({ kp }) => (kp ? [kp] : []));
-  const valid = await Promise.all(extraKeys.map(isValidKey));
-  const candidates = fromRecord.concat(extraKeys.filter((_, i) => valid[i]));
+  const valid = await Promise.all(others.stray.map(isValidKey));
+  const candidates = fromRecord
+    .concat(others.accounts)
+    .concat(others.stray.filter((_, i) => valid[i]));
   const byPublicKey = new Map<string, number[]>();
   for (const kp of candidates) {
     const publicKey = publicKeyOf(kp).toBase58();
@@ -267,11 +287,12 @@ if (import.meta.vitest) {
       };
     };
 
+    const NO_OTHERS: OtherKeys = { accounts: [], stray: [] };
+
     /** The move as `wallet.ts` hands it to the storage */
     const moveThrough =
-      (frame: KeyFrame) =>
-      (record: SerializedWalletState, extraKeys: number[][]) =>
-        moveKeysOut(record, extraKeys, frame);
+      (frame: KeyFrame) => (record: SerializedWalletState, others: OtherKeys) =>
+        moveKeysOut(record, others, frame);
 
     /** Every encoding a key could be logged in */
     const encodingsOf = (kp: number[]) => {
@@ -289,7 +310,7 @@ if (import.meta.vitest) {
         const record = walletAt(2)(accountsOf(3));
         const { frame, kept } = fakeKeyPage();
 
-        const result = await moveKeysOut(record, [], frame);
+        const result = await moveKeysOut(record, NO_OTHERS, frame);
 
         expect(result.record).toEqual(keyless(record));
         expect(result.record.currentIndex).toBe(2);
@@ -306,7 +327,7 @@ if (import.meta.vitest) {
           keys.filter((key) => key !== lost)
         );
 
-        const moving = moveKeysOut(record, [], frame);
+        const moving = moveKeysOut(record, NO_OTHERS, frame);
 
         await expect(moving).rejects.toBeInstanceOf(MoveIncomplete);
         await expect(moving).rejects.toThrow(lost);
@@ -325,7 +346,7 @@ if (import.meta.vitest) {
         const record = keyless(walletOf(accountsOf(2)));
         const { frame, request } = fakeKeyPage();
 
-        const result = await moveKeysOut(record, [], frame);
+        const result = await moveKeysOut(record, NO_OTHERS, frame);
 
         expect(result).toEqual({ record, moved: 0, keys: [] });
         expect(request).not.toHaveBeenCalled();
@@ -334,15 +355,15 @@ if (import.meta.vitest) {
       it("completes a move a reload cut short: the key page holds the keys, the record still has them", async () => {
         const record = walletOf(accountsOf(2));
         const { frame, kept } = fakeKeyPage();
-        await moveKeysOut(record, [], frame);
+        await moveKeysOut(record, NO_OTHERS, frame);
 
-        const again = await moveKeysOut(record, [], frame);
+        const again = await moveKeysOut(record, NO_OTHERS, frame);
 
         expect(again.record).toEqual(keyless(record));
         expect(kept.size).toBe(2);
       });
 
-      it("adopts the extra keys that are valid, and skips the others", async () => {
+      it("adopts the stray keys that are valid, and skips the others", async () => {
         const record = keyless(walletOf(accountsOf(1)));
         const extra = realKey();
         const junk = Array.from({ length: 64 }, (_, i) => i);
@@ -350,13 +371,29 @@ if (import.meta.vitest) {
 
         const result = await moveKeysOut(
           record,
-          [extra.kp, junk, [1, 2, 3], extra.kp],
+          { accounts: [], stray: [extra.kp, junk, [1, 2, 3], extra.kp] },
           frame
         );
 
         expect(adopts).toEqual([[extra.kp]]);
         expect(result.keys).toEqual([extra.kp]);
         expect(Array.from(kept.keys())).toEqual([extra.publicKey]);
+      });
+
+      it("sends another copy's account key that is not ed25519, and fails", async () => {
+        const record = keyless(walletOf(accountsOf(1)));
+        const { kp } = realKey();
+        const bad = realKey().kp.slice(0, 32).concat(kp.slice(32));
+        const { adopts, frame } = fakeKeyPage();
+
+        const moving = moveKeysOut(
+          record,
+          { accounts: [bad], stray: [] },
+          frame
+        );
+
+        await expect(moving).rejects.toThrow();
+        expect(adopts).toEqual([[bad]]);
       });
     });
 
@@ -481,6 +518,52 @@ if (import.meta.vitest) {
         });
         expect(store.held()).toEqual(keyless(walletOf([account])));
         expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+      });
+
+      /**
+       * An account whose `kp` ends in its public key, so it reads as valid,
+       * but starts with another key's seed: not a key the key page takes
+       */
+      const notEd25519 = () => {
+        const { kp, publicKey } = realKey();
+        const bad = realKey().kp.slice(0, 32).concat(kp.slice(32));
+        return { name: "Wallet 1", kp: bad, publicKey };
+      };
+
+      it("a key that is not ed25519, held only by the store under a keyless localStorage copy, blocks the move", async () => {
+        const account = notEd25519();
+        const record = walletOf([account]);
+        const store = memoryStore(record);
+        const text = JSON.stringify(keyless(record));
+        const local = memoryLocal(text);
+        const { frame } = fakeKeyPage();
+
+        const read = await walletStorageWith(store)(local).readMovingKeys(
+          moveThrough(frame)
+        );
+
+        expect(read).toEqual({ kind: "unavailable" });
+        expect(store.write).not.toHaveBeenCalled();
+        expect(store.held()).toEqual(record);
+        expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
+      });
+
+      it("a key that is not ed25519, held only by localStorage over a keyless store copy, blocks the move", async () => {
+        const account = notEd25519();
+        const record = walletOf([account]);
+        const store = memoryStore(keyless(record));
+        const text = JSON.stringify(record);
+        const local = memoryLocal(text);
+        const { frame } = fakeKeyPage();
+
+        const read = await walletStorageWith(store)(local).readMovingKeys(
+          moveThrough(frame)
+        );
+
+        expect(read).toEqual({ kind: "unavailable" });
+        expect(store.write).not.toHaveBeenCalled();
+        expect(store.held()).toEqual(keyless(record));
+        expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
       });
 
       it("moves a localStorage wallet's keys and clears the copy", async () => {

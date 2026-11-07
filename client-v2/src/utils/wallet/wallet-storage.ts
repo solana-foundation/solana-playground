@@ -276,11 +276,12 @@ const mergeWallets = (
  * Moves keys into the key page (`key-origin/move.ts`'s `moveKeysOut`, bound
  * to the frame): given the record and every other copy's keys, it gives the
  * record back without key bytes and the keys the key page confirmed, or
- * throws, and then nothing may be dropped.
+ * throws, and then nothing may be dropped. `others.accounts` must all be
+ * confirmed; a `others.stray` key that is not a key is left out.
  */
 export type MoveKeys = (
   record: SerializedWalletState,
-  extraKeys: number[][]
+  others: { accounts: number[][]; stray: number[][] }
 ) => Promise<{ record: SerializedWalletState; keys: number[][] }>;
 
 /** What a move is handed when no copy holds a wallet, only stray keys */
@@ -295,7 +296,7 @@ const NO_RECORD: SerializedWalletState = {
 /**
  * The key bytes in stored items: an account's `kp`, or those of the accounts
  * of a whole record set aside. Anything 64 bytes long counts; the move skips
- * the ones that are not keys.
+ * the ones that are not keys only among damaged and set-aside items.
  */
 const keysIn = (items: unknown[]): number[][] =>
   items.flatMap((item) => {
@@ -611,15 +612,19 @@ export const walletStorageWith =
       if (move) {
         try {
           const aside = await store.readAside();
-          const extraKeys = keysIn([
+          // A valid account's key is kept nowhere once the merge drops it,
+          // so it must be confirmed; a damaged one stays set aside intact
+          const accounts = keysIn([
             ...(fromLocal?.wallet.accounts ?? []),
-            ...(fromLocal?.damaged ?? []),
             ...(stored?.wallet.accounts ?? []),
+          ]);
+          const stray = keysIn([
+            ...(fromLocal?.damaged ?? []),
             ...(stored?.damaged ?? []),
             ...misshapen,
             ...aside,
           ]);
-          const moved = await move(merged ?? NO_RECORD, extraKeys);
+          const moved = await move(merged ?? NO_RECORD, { accounts, stray });
           if (merged) merged = moved.record;
           movedKeys = moved.keys;
         } catch (error) {
