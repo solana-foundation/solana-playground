@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 
 import type { RunResult } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
+import { isFaucetLimit } from "@/shared/lib/faucet-limit";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
 import { cn } from "@/shared/lib/utils";
@@ -26,11 +27,21 @@ import { CopyButton } from "@/shared/ui/copy-button";
 import { formatSeconds, Prose, READ } from "./Prose";
 import WalletAddress from "./WalletAddress";
 
-/** A deploy's or a build-and-deploy's result, landed or not */
-export type DeployResult = Extract<
-  RunResult,
-  { act: "deploy" | "buildDeploy" }
+/**
+ * A deploy's or a build-and-deploy's result, landed or not, or an airdrop's
+ * that did not land: an airdrop shares the deploy's failed cards, and one
+ * that landed posts no result card, its record says what it did (HOO-2677)
+ */
+export type DeployResult = Exclude<
+  Extract<RunResult, { act: "airdrop" | "deploy" | "buildDeploy" }>,
+  { act: "airdrop"; ok: true }
 >;
+
+/** Whether a result is drawn by this card */
+export const isDeployResult = (r: RunResult): r is DeployResult =>
+  r.act === "deploy" ||
+  r.act === "buildDeploy" ||
+  (r.act === "airdrop" && !r.ok);
 
 /** Where the faucet's card sends the learner for devnet SOL */
 export const FAUCET_URL = "https://faucet.solana.com";
@@ -48,6 +59,16 @@ export interface BaseDeployResultCardProps {
 /** Lamports as SOL, to four places at most */
 const sol = (lamports: number) =>
   String(Math.round((lamports / 1e9) * 10000) / 10000);
+
+/** An estimate reads as one: "about 2.81 SOL", never four decimals */
+const aboutSol = (lamports: number) =>
+  String(Math.round((lamports / 1e9) * 100) / 100);
+
+/** Why the airdrop failed, in words true to the cause (Design alignment, 7 Nov) */
+const airdropWhy = (message: string) =>
+  isFaucetLimit(message)
+    ? "The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
+    : "The airdrop didn't go through: try again in a minute, or top the wallet up yourself.";
 
 /** The red head every failed deploy shares, 48 tall while it waits on the learner */
 const FailedHead = ({ title, open }: { title: string; open: boolean }) => (
@@ -93,8 +114,9 @@ const FailedCard = ({
  * (`tutorial-v2`, `ResultCard.tsx`; where its SPEC table differs, the code
  * wins). Landed: one row, "Deployed to devnet" or "Upgraded <id>", whose
  * chevron opens what it did, the program's and the transaction's devnet
- * Explorer links, and Log, which opens the terminal. The faucet's red card
- * says how short the wallet is, gives its address to copy and the faucet;
+ * Explorer links, and Log, which opens the terminal. The red short-wallet
+ * card says how short the wallet is (and, after an airdrop, that the faucet
+ * is at its limit), gives its address to copy and the faucet;
  * the feed's Try again act card under it runs the deploy again. No wallet
  * offers to make one. Once the step moves on, a failure folds to its head.
  */
@@ -112,9 +134,13 @@ const BaseDeployResultCard = ({
           <p className={READ}>
             {`Your wallet has ${sol(
               result.balance
-            )} SOL, and this deploy needs about ${sol(
-              result.cost
-            )} SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself.`}
+            )} SOL, and this deploy needs about ${aboutSol(result.cost)} SOL. ${
+              // Only the airdrop asked the faucet; a deploy found the wallet
+              // short on its own
+              result.act === "airdrop"
+                ? airdropWhy(result.message)
+                : "Get devnet SOL from the faucet, or top the wallet up yourself."
+            }`}
           </p>
           {/* The whole address, to check against a faucet's field: it
               breaks across lines only where the card is too narrow for it */}
@@ -162,7 +188,10 @@ const BaseDeployResultCard = ({
       );
     case "failed":
       return (
-        <FailedCard title="Deploy failed" open={open}>
+        <FailedCard
+          title={result.act === "airdrop" ? "Airdrop failed" : "Deploy failed"}
+          open={open}
+        >
           <p className="break-words border-l-2 border-error/40 pl-3 font-mono text-[0.8125rem] text-foreground/90">
             {result.message}
           </p>

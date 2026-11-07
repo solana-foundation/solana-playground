@@ -137,7 +137,11 @@ const Lesson = ({ world }: { world: World }) => {
     apply(ref.current, action);
     redraw();
   };
-  const v = view(definition, ref.current.engine, { now: 1e12, loadedAt: 0 });
+  const v = view(definition, ref.current.engine, {
+    now: 1e12,
+    loadedAt: 0,
+    probing: [],
+  });
   return (
     <div role="log">
       {v.turns.map((turn) => (

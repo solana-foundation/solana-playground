@@ -43,13 +43,13 @@ place on a line SHALL show the log, with no line link.
 A deploy act SHALL deploy the last successful build to devnet through the BPF
 upgradeable loader, paid by the learner's Playground wallet. Its stages are
 "Writing buffer", "Deploying" and "Confirming". "Building" comes before them
-when the program changed since the last build, and "Funding your wallet" first
-of all when the balance is short; "n of m" counts every stage shown, three to
-five. The IDL does not go on chain yet: Anchor 1.x publishes it through the
+when the program changed since the last build; "n of m" counts every stage
+shown, three or four. There is no "Funding your wallet" stage: the deploy
+never funds the wallet (change `tutorial-airdrop-step`, HOO-2677). The IDL does not go on chain yet: Anchor 1.x publishes it through the
 Program Metadata Program, which Playground does not call, and nothing in a
 tutorial reads it from the chain (Slava, 3 Nov; a follow-up ticket brings the
 stage back). The first deploy SHALL write the program id into `declare_id!` and light
-that line. Before the first deploy:
+that line. A deploy that cannot be paid for:
 
 - **No wallet:** the deploy SHALL run nothing and post a red result card,
   "No wallet", with the line "A deploy pays from a Playground wallet. Create
@@ -57,23 +57,24 @@ that line. Before the first deploy:
   the Playground wallet and runs the deploy again. There is no connect
   option: a tutorial deploys from the Playground wallet, never an
   extension's.
-- **Too little balance:** the deploy SHALL top up the wallet by airdrop, the
-  way the editor's deploy does, as an extra first stage on the act card,
-  "Funding your wallet". The stage shows only when the balance is short, and
-  the terminal prints the airdrop line. There is no separate card. The top-up
-  needs no sign-in: the editor's `airdrop` command keeps its GitHub gate, but
-  a tutorial promises a wallet with free test SOL (Slava, 3 Nov).
-- **Airdrop refused or rate limited:** a failed result card SHALL post, red
-  like a failed build, titled "Not enough devnet SOL", with the line "Your
-  wallet has {balance} SOL, and this deploy needs about {cost} SOL. The devnet
+- **Too little balance:** the deploy SHALL NOT fund the wallet. The airdrop
+  act before every deploy act does, with no sign-in, and passes by itself
+  when the wallet already holds enough (change `tutorial-airdrop-step`,
+  HOO-2677). A deploy that still finds the wallet short, on the estimate
+  before the build or on the real binary, SHALL stop before writing the
+  buffer and post the red result card "Not enough devnet SOL".
+- **Not enough devnet SOL:** the card is red like a failed build, with the
+  line "Your wallet has {balance} SOL, and this deploy needs about {cost}
+  SOL. Get devnet SOL from the faucet, or top the wallet up yourself." Under
+  it sit "Your wallet" with the short address and Copy, and "Open faucet",
+  which opens `https://faucet.solana.com` in a new tab. The card has no Try again, and the act that hit it draws no
+  record over it: a live deploy act card follows it, "Checks your balance
+  again, then deploys" with the button "Try again" (Almaz's prototype, 3
+  Nov). A refused airdrop posts the same card, whose line ends "The devnet
   faucet is at its limit for now: try again in a minute, or top the wallet up
-  yourself." Under it sit "Your wallet" with the short address and Copy, and
-  "Open faucet", which opens `https://faucet.solana.com` in a new tab. The
-  card has no Try again, and the act that hit the faucet draws no record
-  over it: a live deploy act card follows it, "Asks the faucet again, then
-  deploys" with the button "Try again" (Almaz's prototype, 3 Nov). A deploy
-  that failed otherwise draws no record either and gets the same Try again
-  card with the act's own line. Typing "deploy" in the composer retries too.
+  yourself.", followed by its own live card, "Asks the faucet again". A deploy that failed otherwise draws no record
+  either and gets the same Try again card with the act's own line. Typing
+  "deploy" in the composer retries too.
 
 A deploy SHALL keep the program's keypair in the workspace, so the program
 keeps its address. Every later deploy of that tutorial's program SHALL upgrade
@@ -107,20 +108,20 @@ Explorer on the devnet cluster in a new tab.
 
 #### Scenario: First deploy with an empty wallet (manual)
 
-- **WHEN** a learner with a new wallet and 0 SOL presses Deploy on Hello
-  Anchor's step 2
-- **THEN** the card shows "Funding your wallet" (1 of 4), then the three
-  deploy stages to "4 of 4"
+- **WHEN** a learner with a new wallet and 0 SOL presses "Request airdrop",
+  then Deploy, on Hello Anchor's step 2
+- **THEN** the airdrop card lands with "Added {amount} SOL", and the deploy
+  card shows its three deploy stages to "3 of 3", with no "Funding your wallet"
 - **AND** the result's details link the program and the deploy's
   transaction to `https://explorer.solana.com/...?cluster=devnet`
 
 #### Scenario: The faucet is at its limit
 
-- **WHEN** the deploy's airdrop is refused
+- **WHEN** the airdrop before the deploy is refused
 - **THEN** a red card reads "Not enough devnet SOL" with the wallet's balance,
   the deploy's cost, the address with Copy, and "Open faucet"
-- **AND** a deploy act card under it, "Try again", runs the deploy again, as
-  typing "deploy" does
+- **AND** an airdrop act card under it, "Asks the faucet again" with "Try
+  again", asks the faucet again, and the deploy card follows once it pays
 
 #### Scenario: The upgrade keeps the address (manual)
 
@@ -181,15 +182,16 @@ the one they landed with and the goal SHALL be judged on it.
 
 No copy in a tutorial SHALL name Kora, promise 0 SOL or mention closing
 programs after 7 days. The definition and the cards SHALL use these strings,
-Almaz's of 28 Oct, verbatim, except the two lines on topping the wallet up:
-the learner's own airdrop pays, and a busy faucet sends them to
-faucet.solana.com. `{cost}` and `{fee}` are the real numbers from the deploy
+Almaz's of 28 Oct, verbatim, except the three lines on topping the wallet
+up, which are Design alignment's of 6 Nov: the learner's own airdrop act
+pays before the first deploy, and a busy faucet sends them to
+faucet.solana.com (change `tutorial-airdrop-step`). `{cost}` and `{fee}` are the real numbers from the deploy
 and the transaction.
 
 | Where                       | String                                                                                                                                                                                   |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Intro note                  | A devnet wallet is set up for you with free test SOL. Your progress stays in this browser                                                                                                |
-| Deploy explanation (step 2) | It costs devnet SOL, test money with no value. When your wallet runs low, Playground asks the devnet faucet for more, and if the faucet is busy you can get some at faucet.solana.com |
+| Intro note                  | A devnet wallet is set up for you, and you get free test SOL for it before the first deploy. Your progress stays in this browser |
+| Deploy explanation (step 2) | It costs devnet SOL, test money with no value. You get it from the devnet faucet with one button before the deploy, and if the faucet is busy, at faucet.solana.com. |
 | Deploy card context line    | From your Playground wallet · free devnet SOL                                                                                                                                            |
 | Deploy result               | {cost} test SOL from your wallet                                                                                                                                                         |
 | Terminal                    | Deploying from {wallet short} · {cost} SOL                                                                                                                                               |
@@ -198,7 +200,7 @@ and the transaction.
 | Finish card meta            | {N} steps · {time} · devnet only, nothing real spent                                                                                                                                     |
 | Finish receipt              | Fee {fee} devnet SOL                                                                                                                                                                     |
 | Finish chip                 | What is devnet SOL?                                                                                                                                                                      |
-| Its answer                  | Devnet is Solana's public test network. Its SOL is free and worth nothing, so you can deploy and call as much as you like. When your wallet runs low, Playground asks the devnet faucet for more; if the faucet is busy, get some yourself at faucet.solana.com |
+| Its answer                  | Devnet is Solana's public test network. Its SOL is free and worth nothing, so you can deploy and call as much as you like. You get it from the devnet faucet with one button; if the faucet is busy, get some yourself at faucet.solana.com. |
 
 There SHALL be no "Why 7 days?" chip.
 
@@ -274,8 +276,8 @@ parameters:
 
 - `tutorial`: the slug;
 - `step`: 1 to 6;
-- `action`: `build`, `deploy`, `build_deploy`, `run`, `call` (the call act)
-  or `call_panel` (a Call panel call);
+- `action`: `airdrop`, `build`, `deploy`, `build_deploy`, `run`, `call` (the
+  call act) or `call_panel` (a Call panel call);
 - `outcome`: `ok`, `failed`, `interrupted`, `no_wallet`, `no_funds` or
   `unconfirmed` (sent, devnet has not read it back yet);
 - `seconds`: the run's duration.
@@ -285,5 +287,5 @@ key or the wallet's secret.
 
 #### Scenario: A refused airdrop (manual)
 
-- **WHEN** a deploy stops because the airdrop was refused
-- **THEN** `tutorial_action_run` reaches the memory provider with `action: "deploy"` and `outcome: "no_funds"`
+- **WHEN** the faucet refuses the airdrop act before a deploy
+- **THEN** `tutorial_action_run` reaches the memory provider with `action: "airdrop"` and `outcome: "no_funds"`

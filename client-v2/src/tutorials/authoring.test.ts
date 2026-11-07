@@ -111,7 +111,7 @@ describe("tutorials/AUTHORING.md", () => {
       d.steps[1].goal = { kind: "refused", instruction: "echo" };
     },
     "argument named twice": (d) => {
-      d.steps[1].beats[1].call.args = ["text", { name: "text", value: "hi" }];
+      d.steps[1].beats[2].call.args = ["text", { name: "text", value: "hi" }];
     },
     "log is not a regular expression": (d) => {
       d.steps[1].goal.log = "(";
@@ -129,7 +129,20 @@ describe("tutorials/AUTHORING.md", () => {
       d.steps[1].beats[0].kind = "shout";
     },
     "call act without call": (d) => {
-      delete d.steps[1].beats[1].call;
+      delete d.steps[1].beats[2].call;
+    },
+    "deploy with no airdrop before it": (d) => {
+      d.steps[1].beats.shift();
+    },
+    "later deploy with no airdrop since the last": (d) => {
+      d.steps[1].beats.splice(2, 0, {
+        kind: "act",
+        id: "s2.ship",
+        act: "buildDeploy",
+        title: "Build and deploy",
+        context: "Upgrades {program} in place · from your wallet",
+        button: "Build and deploy",
+      });
     },
     "onFail without planned": (d) => {
       d.steps[0].onFail = [{ kind: "say", id: "f1.explain", text: "Why." }];

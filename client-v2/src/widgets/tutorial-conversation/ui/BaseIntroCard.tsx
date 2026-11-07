@@ -10,9 +10,9 @@ import { nothingFocused } from "./keys";
 import { usePhone } from "./phone";
 import { HEADING, Prose, READ, TITLE } from "./Prose";
 
-/** The wallet copy of `tutorial-runs`, Almaz's of 28 Oct, verbatim */
+/** The wallet copy of `tutorial-runs`: Design alignment's of 6 Nov, verbatim */
 export const INTRO_NOTE =
-  "A devnet wallet is set up for you with free test SOL. Your progress stays in this browser";
+  "A devnet wallet is set up for you, and you get free test SOL for it before the first deploy. Your progress stays in this browser";
 
 /** The loop every step runs, as the intro card names it */
 export const HOW_IT_GOES =

@@ -12,7 +12,7 @@ import { Button } from "@/shared/ui/button";
 
 import BaseActCard from "./BaseActCard";
 import BaseApplyCard from "./BaseApplyCard";
-import BaseDeployResultCard from "./BaseDeployResultCard";
+import BaseDeployResultCard, { isDeployResult } from "./BaseDeployResultCard";
 import BaseFinishCard from "./BaseFinishCard";
 import BaseIntroCard from "./BaseIntroCard";
 import BaseQuestionCard, {
@@ -318,7 +318,7 @@ const TurnView = ({
         />
       );
     case "result":
-      if (turn.result.act === "deploy" || turn.result.act === "buildDeploy") {
+      if (isDeployResult(turn.result)) {
         return (
           <BaseDeployResultCard
             result={turn.result}

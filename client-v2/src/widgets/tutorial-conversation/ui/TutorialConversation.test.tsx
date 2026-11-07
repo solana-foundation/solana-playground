@@ -93,7 +93,13 @@ vi.mock("@/views/flow/state/stage", () => ({
 }));
 vi.mock("@/utils", () => ({
   PgProgramInfo: { idl: null, pk: null },
-  PgWallet: { accounts: [], add: vi.fn() },
+  PgWallet: {
+    accounts: [],
+    add: vi.fn(),
+    // `useWallet` and `useBalance` poll every 10 ms without these
+    onDidChangeCurrent: () => ({ dispose: () => {} }),
+    onDidChangeBalance: () => ({ dispose: () => {} }),
+  },
 }));
 vi.mock("@/utils/explorer", () => ({
   PgExplorer: {
@@ -314,6 +320,7 @@ const loaded = (): ConversationState => ({
   },
   loadFailed: false,
   loadedAt: 1000,
+  probing: [],
 });
 
 const dispose = vi.fn();
@@ -339,6 +346,21 @@ beforeEach(() => {
 });
 
 describe("TutorialConversation", () => {
+  it("subscribes to the wallet it funds instead of polling for it, so nothing fires after it leaves", () => {
+    vi.useFakeTimers();
+    try {
+      const { unmount } = render(
+        <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+      );
+      unmount();
+      // A wallet hook whose event is missing re-arms a timer every 10 ms
+      // forever; one firing after the test environment is gone throws
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("starts the engine once with the real workspace, the tutorial's runner and 3.2's judge, and stops it on leaving", () => {
     const { rerender, unmount } = render(
       <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
@@ -421,6 +443,7 @@ describe("TutorialConversation", () => {
       engine: loaded().engine,
       loadFailed: false,
       loadedAt: 0,
+      probing: [],
     };
     store.view.mockReturnValue(null);
     render(
@@ -635,6 +658,7 @@ describe("TutorialConversation", () => {
       engine: initial,
       loadFailed: false,
       loadedAt: 0,
+      probing: [],
     };
     store.view.mockReturnValue(null);
     render(
@@ -1276,6 +1300,13 @@ describe("TutorialConversation on the phone", () => {
     lamports: 1_000_000,
     instructions: ["hello"],
   };
+  const airdropped: RunResult = {
+    act: "airdrop",
+    ok: true,
+    seconds: 2,
+    balance: 2_000_000_000,
+    airdropped: 2_000_000_000,
+  };
   /** Hello Anchor from Start to step 3's open question, as the engine plays it */
   const toStep3: Action[] = [
     { type: "start", at: at(1) },
@@ -1290,6 +1321,8 @@ describe("TutorialConversation on the phone", () => {
     { type: "ended", beatId: "s1.build", result: built, at: at(5) },
     { type: "next", at: at(6) },
     { type: "pick", beatId: "s2.q2", option: 0, at: at(7) },
+    { type: "act", beatId: "s2.airdrop", at: at(7.5) },
+    { type: "ended", beatId: "s2.airdrop", result: airdropped, at: at(7.7) },
     { type: "act", beatId: "s2.deploy", at: at(8) },
     { type: "ended", beatId: "s2.deploy", result: deployed, at: at(9) },
     { type: "next", at: at(10) },
@@ -1316,9 +1349,15 @@ describe("TutorialConversation on the phone", () => {
       (state, action) => reduce(ctx, state, action).state,
       INITIAL_ENGINE_STATE
     );
-    store.state = { context: ctx, engine, loadFailed: false, loadedAt: 0 };
+    store.state = {
+      context: ctx,
+      engine,
+      loadFailed: false,
+      loadedAt: 0,
+      probing: [],
+    };
     store.view.mockImplementation(() =>
-      viewOf(definition, engine, { now: at(1000), loadedAt: 0 })
+      viewOf(definition, engine, { now: at(1000), loadedAt: 0, probing: [] })
     );
   };
 
@@ -1531,6 +1570,7 @@ describe("useConversationSteps", () => {
       engine: loaded().engine,
       loadFailed: false,
       loadedAt: 0,
+      probing: [],
     };
     store.view.mockReturnValue(null);
     const { result } = renderHook(() => useConversationSteps());
@@ -1558,6 +1598,7 @@ describe("useConversationStartOver", () => {
       engine: loaded().engine,
       loadFailed: false,
       loadedAt: 0,
+      probing: [],
     };
     const { result } = renderHook(() => useConversationStartOver());
     expect(result.current.onStartOver).toBeUndefined();

@@ -94,7 +94,11 @@ const headOf = (
     if (r.reason === "signed_out") return { title: SIGN_IN_TO_BUILD, meta: "" };
     return { title: "Build failed", meta: errorMeta(r, expanded) };
   }
-  // A deploy or a build-and-deploy
+  // The view posts no card for a landed airdrop: its act card's record says
+  // what it did (`airdropRecord`)
+  if (r.act === "airdrop" && r.ok)
+    return { title: "Funded your wallet", meta: "" };
+  // A deploy or a build-and-deploy, or an airdrop that did not land
   if (r.ok) {
     return {
       title: r.upgraded ? `Upgraded ${r.programId}` : "Deployed",
@@ -105,7 +109,7 @@ const headOf = (
   const titles = {
     no_funds: "Not enough devnet SOL",
     no_wallet: "No wallet",
-    failed: "Deploy failed",
+    failed: r.act === "airdrop" ? "Airdrop failed" : "Deploy failed",
   } as const;
   return { title: titles[r.reason], meta: r.message };
 };

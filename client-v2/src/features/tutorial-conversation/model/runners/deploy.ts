@@ -4,11 +4,9 @@ import { shortKey } from "@/shared/lib/short-key";
 import type { RunStage } from "../ports";
 import type { RunResult } from "../progress";
 import type { FundingChain } from "./fund";
-import { fundForDeploy } from "./fund";
 
 /** The stages' labels, as the act card shows them */
 export const DEPLOY_STAGES = {
-  funding: "Funding your wallet",
   building: "Building",
   buffer: "Writing buffer",
   deploying: "Deploying",
@@ -53,6 +51,11 @@ export interface DeployPort {
   refusal(): string | null;
   /** The Playground wallet's address, or null when there is none */
   wallet(): string | null;
+  /**
+   * Makes the Playground wallet in this browser and returns its address: the
+   * airdrop card's press when there is none yet (HOO-2677)
+   */
+  createWallet(): string;
   /** Read twice, before and after the build, so it answers live */
   program(): ProgramState;
   /** Runs the build; a failure stops the deploy with its message */
@@ -88,10 +91,29 @@ export interface DeployPort {
 
 /**
  * The binary length the funding estimate assumes when the last one is not
- * known: above a tutorial's Anchor program, so the one announced airdrop
- * covers the deploy and a second, unannounced one is rare
+ * known: above a tutorial's Anchor program, so what the airdrop card funds
+ * covers the deploy after it, which checks the real binary and never
+ * airdrops itself
  */
 const DEFAULT_LENGTH = 400_000;
+
+/** A short wallet's message: the airdrop card before the deploy funds it */
+export const NOT_ENOUGH = "Not enough devnet SOL for the deploy";
+
+/**
+ * Lamports the next deploy needs, fee headroom included, on the last build's
+ * length or `DEFAULT_LENGTH`: what the airdrop card funds for, and what the
+ * deploy checks before it builds when that length is known and stands (HOO-2677)
+ */
+export const deployCost = async (port: DeployPort): Promise<number> => {
+  const program = port.program();
+  const onChain: OnChain = program.id
+    ? await port.onChain(program.id)
+    : { deployed: false };
+  return (
+    (await port.rent(program.length ?? DEFAULT_LENGTH, onChain)) + FEE_HEADROOM
+  );
+};
 
 const sol = (lamports: number) =>
   (lamports / 1_000_000_000).toFixed(lamports < 10_000_000 ? 4 : 2);
@@ -131,11 +153,14 @@ const blocker = (
 };
 
 /**
- * Deploys the workspace's program from the Playground wallet. Stages: Funding
- * your wallet (only when short), Building (only when stale or a
- * build-and-deploy), Writing buffer, Deploying, Confirming; "n of m" counts
- * what shows. A program on chain is upgraded in place, since the workspace
- * keeps its keypair. Every way it can stop is a result, never a throw: a
+ * Deploys the workspace's program from the Playground wallet. Stages:
+ * Building (only when stale or a build-and-deploy), Writing buffer, Deploying,
+ * Confirming; "n of m" counts what shows. It never airdrops: the lesson's
+ * airdrop card funds the wallet first, and a short wallet stops the deploy
+ * with `no_funds` (HOO-2677): before anything runs when the last build's
+ * length is known and stands, otherwise after the build, on the real binary.
+ * A program on chain is upgraded in place, since the workspace keeps its
+ * keypair. Every way it can stop is a result, never a throw: a
  * throw from the port is a failed deploy, and reported.
  */
 export const runDeploy = async (
@@ -155,17 +180,28 @@ export const runDeploy = async (
 
     const program = port.program();
     const stale = act === "buildDeploy" || program.stale;
-    const estimateLength = program.length ?? DEFAULT_LENGTH;
-    const before = await port.funding.balance(address);
-    const knownOnChain: OnChain = program.id
-      ? await port.onChain(program.id)
-      : { deployed: false };
-    const estimate =
-      (await port.rent(estimateLength, knownOnChain)) + FEE_HEADROOM;
-    const short = before < estimate;
+
+    const short = (balance: number, need: number) => ({
+      act,
+      ok: false as const,
+      seconds: (port.now() - started) / 1000,
+      reason: "no_funds" as const,
+      message: NOT_ENOUGH,
+      balance,
+      cost: need,
+      address,
+    });
+    // The estimate is trusted only on the length of a build that stands: an
+    // unknown length prices 400 KB and a rerun can change it, so either way
+    // the balance is checked against the real need after the build
+    let estimate: number | null = null;
+    if (program.length !== null && !stale) {
+      const before = await port.funding.balance(address);
+      estimate = await deployCost(port);
+      if (before < estimate) return short(before, estimate);
+    }
 
     const labels: string[] = [];
-    if (short) labels.push(DEPLOY_STAGES.funding);
     if (stale) labels.push(DEPLOY_STAGES.building);
     labels.push(
       DEPLOY_STAGES.buffer,
@@ -177,33 +213,6 @@ export const runDeploy = async (
       current = label;
       onStage({ label, index: ++index, count: labels.length });
     };
-
-    const fund = async (need: number) => {
-      const funded = await fundForDeploy({
-        chain: port.funding,
-        address,
-        need,
-        capSol: port.capSol,
-        onShort: (amount) => port.print(`Airdropping ${amount} SOL...`),
-      });
-      if (funded.ok) return null;
-      return {
-        act,
-        ok: false as const,
-        seconds: (port.now() - started) / 1000,
-        reason: "no_funds" as const,
-        message: funded.message,
-        balance: funded.balance,
-        cost: need,
-        address,
-      };
-    };
-
-    if (short) {
-      stage(DEPLOY_STAGES.funding);
-      const refused = await fund(estimate);
-      if (refused) return refused;
-    }
 
     if (stale) {
       stage(DEPLOY_STAGES.building);
@@ -229,12 +238,11 @@ export const runDeploy = async (
     const blocked = blocker(onChain, built, address);
     if (blocked) return failed(act, started, port.now(), "failed", blocked);
     const need = (await port.rent(bytes.length, onChain)) + FEE_HEADROOM;
-    // The estimate ran on an assumed length; when the binary outgrew it, or
-    // nothing was funded, the balance is checked against the real need
-    // (`fundForDeploy` airdrops only when it is still short)
-    if (need > estimate || !short) {
-      const refused = await fund(need);
-      if (refused) return refused;
+    // With no estimate checked, or a binary that outgrew it, the balance is
+    // checked against the real need
+    if (estimate === null || need > estimate) {
+      const balance = await port.funding.balance(address);
+      if (balance < need) return short(balance, need);
     }
     stage(DEPLOY_STAGES.buffer);
     port.print(`Deploying from ${shortKey(address)} · about ${sol(need)} SOL`);
@@ -313,6 +321,7 @@ if (import.meta.vitest) {
       const port: DeployPort = {
         refusal: () => null,
         wallet: () => WALLET,
+        createWallet: vi.fn(() => WALLET),
         program: () => ({
           id,
           keypair: fake.keypair ?? true,
@@ -402,11 +411,11 @@ if (import.meta.vitest) {
       expect(port.funding.balance).not.toHaveBeenCalled();
     });
 
-    it("funds an empty wallet as the first of five stages, then deploys", async () => {
-      // first look, funding's look, after the airdrop, the post-build check,
-      // before the buffer, after the deploy
+    it("deploys a funded wallet in four stages, with no funding stage", async () => {
+      // a stale build skips the first look: the post-build check, before the
+      // buffer, after the deploy
       const { port, lines } = portOf({
-        balances: [0, 0, 3 * SOL, 3 * SOL, 3 * SOL, 1.7 * SOL],
+        balances: [3 * SOL, 3 * SOL, 1.7 * SOL],
         deployed: false,
         stale: true,
         id: null,
@@ -414,11 +423,10 @@ if (import.meta.vitest) {
       const { stages, onStage } = collect();
       const result = await runDeploy(port, "deploy", onStage);
       expect(stages.map((s) => `${s.index}/${s.count} ${s.label}`)).toEqual([
-        "1/5 Funding your wallet",
-        "2/5 Building",
-        "3/5 Writing buffer",
-        "4/5 Deploying",
-        "5/5 Confirming",
+        "1/4 Building",
+        "2/4 Writing buffer",
+        "3/4 Deploying",
+        "4/4 Confirming",
       ]);
       expect(result).toEqual({
         act: "deploy",
@@ -431,8 +439,8 @@ if (import.meta.vitest) {
         instructions: ["hello"],
       });
       expect(port.deploy).toHaveBeenCalledWith("Buffer1111", 120_000);
-      expect(lines[0]).toMatch(/^Airdropping \d+ SOL\.\.\.$/);
-      expect(lines).toContain("Deploying from Wa11et…111111 · about 1.22 SOL");
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
+      expect(lines).toEqual(["Deploying from Wa11et…111111 · about 1.22 SOL"]);
     });
 
     it("upgrades a program on chain in place, with three stages when funded and built", async () => {
@@ -478,15 +486,12 @@ if (import.meta.vitest) {
       expect(port.build).toHaveBeenCalledTimes(1);
     });
 
-    it("answers a refused airdrop with no_funds, the balance, the cost and the address", async () => {
+    it("stops a short wallet with no_funds, the balance, the cost and the address, and never airdrops", async () => {
       const { port } = portOf({
         balances: [0.1 * SOL],
         deployed: false,
         stale: false,
         id: PROGRAM,
-        airdrop: async () => {
-          throw new Error("429 Too Many Requests");
-        },
       });
       const { stages, onStage } = collect();
       await expect(runDeploy(port, "deploy", onStage)).resolves.toEqual({
@@ -494,12 +499,15 @@ if (import.meta.vitest) {
         ok: false,
         seconds: 0,
         reason: "no_funds",
-        message: "429 Too Many Requests",
+        message: NOT_ENOUGH,
         balance: 0.1 * SOL,
         cost: 100_000 * 10_000 + FEE_HEADROOM,
         address: WALLET,
       });
-      expect(stages.map((s) => s.label)).toEqual(["Funding your wallet"]);
+      // Before the build: nothing runs for a deploy the wallet cannot pay
+      expect(stages).toEqual([]);
+      expect(port.build).not.toHaveBeenCalled();
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
       expect(port.writeBuffer).not.toHaveBeenCalled();
     });
 
@@ -534,17 +542,33 @@ if (import.meta.vitest) {
       });
     });
 
-    it("funds again when the built binary outgrew the estimate, and stops when refused", async () => {
-      // Covers the 400 000-byte estimate, not the 600 000-byte binary
+    it("checks the real need when the built binary outgrew the estimate, and never airdrops", async () => {
+      // 1.5 SOL covers the estimate on the last build's 100 000 bytes, not
+      // the 600 000-byte binary
+      const { port } = portOf({
+        balances: [1.5 * SOL],
+        deployed: false,
+        stale: false,
+        id: PROGRAM,
+        built: 600_000,
+      });
+      await expect(runDeploy(port, "deploy", () => {})).resolves.toMatchObject({
+        ok: false,
+        reason: "no_funds",
+        balance: 1.5 * SOL,
+        cost: 600_000 * 10_000 + FEE_HEADROOM,
+      });
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
+      expect(port.writeBuffer).not.toHaveBeenCalled();
+    });
+
+    it("checks an unknown-length program against the real binary's need, and never airdrops", async () => {
       const { port } = portOf({
         balances: [4.1 * SOL],
         deployed: false,
         stale: false,
         id: PROGRAM,
         built: 600_000,
-        airdrop: async () => {
-          throw new Error("429 Too Many Requests");
-        },
       });
       port.program = () => ({
         id: PROGRAM,
@@ -555,10 +579,101 @@ if (import.meta.vitest) {
       await expect(runDeploy(port, "deploy", () => {})).resolves.toMatchObject({
         ok: false,
         reason: "no_funds",
+        message: NOT_ENOUGH,
         balance: 4.1 * SOL,
         cost: 600_000 * 10_000 + FEE_HEADROOM,
       });
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
       expect(port.writeBuffer).not.toHaveBeenCalled();
+    });
+
+    it("deploys an unknown-length program when the wallet covers the real need, below the 400 KB estimate", async () => {
+      // 3 SOL: short of the airdrop card's 4.02 SOL estimate on 400 000
+      // bytes (`deployCost`), which the deploy does not check on an unknown
+      // length; enough for the real 120 000
+      const { port } = portOf({
+        balances: [3 * SOL],
+        deployed: true,
+        stale: false,
+        id: PROGRAM,
+      });
+      port.program = () => ({
+        id: PROGRAM,
+        keypair: true,
+        stale: false,
+        length: null,
+      });
+      await expect(
+        runDeploy(port, "buildDeploy", () => {})
+      ).resolves.toMatchObject({ ok: true, upgraded: true });
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
+    });
+
+    it("skips the estimate for a build that reruns, and checks the real need after it", async () => {
+      // The last build's length is known, but the build is about to change it
+      const { port } = portOf({
+        balances: [0.5 * SOL],
+        deployed: false,
+        stale: true,
+        id: PROGRAM,
+      });
+      const { stages, onStage } = collect();
+      await expect(runDeploy(port, "deploy", onStage)).resolves.toMatchObject({
+        ok: false,
+        reason: "no_funds",
+        balance: 0.5 * SOL,
+        cost: 120_000 * 10_000 + FEE_HEADROOM,
+      });
+      expect(port.build).toHaveBeenCalledTimes(1);
+      expect(stages.map((s) => s.label)).toEqual(["Building"]);
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
+      expect(port.writeBuffer).not.toHaveBeenCalled();
+    });
+
+    it("stops an unknown-length deploy short of the real need with no_funds, and never airdrops", async () => {
+      const { port } = portOf({
+        balances: [0.5 * SOL],
+        deployed: false,
+        stale: false,
+        id: PROGRAM,
+      });
+      port.program = () => ({
+        id: PROGRAM,
+        keypair: true,
+        stale: false,
+        length: null,
+      });
+      await expect(runDeploy(port, "deploy", () => {})).resolves.toMatchObject({
+        ok: false,
+        reason: "no_funds",
+        message: NOT_ENOUGH,
+        balance: 0.5 * SOL,
+        cost: 120_000 * 10_000 + FEE_HEADROOM,
+        address: WALLET,
+      });
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
+      expect(port.writeBuffer).not.toHaveBeenCalled();
+    });
+
+    it("prices the next deploy as the funding estimate", async () => {
+      const { port } = portOf({
+        balances: [0],
+        deployed: false,
+        stale: false,
+        id: PROGRAM,
+      });
+      await expect(deployCost(port)).resolves.toBe(
+        100_000 * 10_000 + FEE_HEADROOM
+      );
+      port.program = () => ({
+        id: null,
+        keypair: true,
+        stale: true,
+        length: null,
+      });
+      await expect(deployCost(port)).resolves.toBe(
+        400_000 * 10_000 + FEE_HEADROOM
+      );
     });
 
     it("stops when the build leaves no program id", async () => {

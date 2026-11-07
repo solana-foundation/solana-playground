@@ -61,7 +61,7 @@ const toFailure: Action[] = [
   { type: "ended", beatId: "s1.build", result: failed, at: 13000 },
 ];
 
-const LATE = { now: Date.now() + 1e9, loadedAt: 0 };
+const LATE = { now: Date.now() + 1e9, loadedAt: 0, probing: [] };
 
 const handlers = (): TurnHandlers => ({
   start: vi.fn(),

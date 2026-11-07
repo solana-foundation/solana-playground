@@ -1,7 +1,12 @@
 /* eslint-disable layers/curry-order, max-params -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import { isFaucetLimit } from "@/shared/lib/faucet-limit";
+import { createLogger, toError } from "@/shared/lib/logger";
+
 import { airdropTopUp } from "../../../../commands/deploy/airdrop-top-up";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
+
+const log = createLogger("tutorial-conversation:fund");
 
 /**
  * What funding needs from devnet, by address. The real one is
@@ -43,7 +48,8 @@ const SLOT_MS = 400;
  * with free test SOL, signed in or not (Slava, 3 Nov). One airdrop of the
  * shortfall plus headroom (`airdropTopUp`); a refusal, a rate limit or a
  * balance that never moves is a result, never a throw, so the act card can
- * post "Not enough devnet SOL" with the balance it read.
+ * post "Not enough devnet SOL" with the balance it read. Each is logged: the
+ * faucet's limit as a warning, anything else reported.
  */
 export const fundForDeploy = async ({
   chain,
@@ -62,11 +68,20 @@ export const fundForDeploy = async ({
   try {
     signature = await chain.airdrop(address, sol * LAMPORTS_PER_SOL);
   } catch (e) {
-    return {
-      ok: false,
-      balance: before,
-      message: e instanceof Error ? e.message : String(e),
-    };
+    const error = toError(e);
+    // The faucet's limit is expected: a warning, never a report. Neither
+    // line carries the wallet's address
+    if (isFaucetLimit(error.message)) {
+      log.warn("The devnet faucet refused an airdrop", {
+        context: { message: error.message },
+      });
+    } else {
+      log.error(error, {
+        report: true,
+        context: { stage: "Requesting an airdrop" },
+      });
+    }
+    return { ok: false, balance: before, message: error.message };
   }
   // An unconfirmed airdrop (a timeout) may still have landed, so the
   // balance decides either way; a confirmed one can read as the old balance
@@ -79,21 +94,31 @@ export const fundForDeploy = async ({
     }
     if (i < BALANCE_READS - 1) await wait(SLOT_MS);
   }
-  return {
-    ok: false,
-    balance: await chain.balance(address),
-    message: confirmed
-      ? "The airdrop did not reach the wallet"
-      : "The airdrop failed",
-  };
+  const message = confirmed
+    ? "The airdrop did not reach the wallet"
+    : "The airdrop failed";
+  log.warn(message, { report: true });
+  return { ok: false, balance: await chain.balance(address), message };
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi } = import.meta.vitest;
+  const { describe, it, expect, vi, beforeAll, beforeEach, afterEach } =
+    import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/fund", () => {
     const SOL = 1_000_000_000;
     const ADDRESS = "Wa11et1111111111111111111111111111111111111";
+    let logger: typeof import("@/shared/lib/logger");
+    let logged: ReturnType<typeof import("@/shared/lib/logger").memoryProvider>;
+
+    beforeAll(async () => {
+      logger = await import("@/shared/lib/logger");
+    });
+    beforeEach(() => {
+      logged = logger.memoryProvider();
+      logger.initLogger({ providers: [logged] });
+    });
+    afterEach(() => logger.resetLogger());
 
     /** A chain whose balances come from a list, the last one repeating */
     const chainOf = (
@@ -230,6 +255,78 @@ if (import.meta.vitest) {
         balance: 0,
         message: "The airdrop did not reach the wallet",
       });
+    });
+
+    /** Funds a 1.5 SOL deploy from 0.2 SOL over `chain` */
+    const fundShort = (chain: FundingChain) =>
+      fundForDeploy({
+        chain,
+        address: ADDRESS,
+        need: 1.5 * SOL,
+        capSol: 5,
+        onShort: () => {},
+        wait: noWait,
+      });
+
+    it("warns of a faucet limit without reporting it, and never logs the wallet", async () => {
+      await fundShort(
+        chainOf([0.2 * SOL], async () => {
+          throw new Error("429 Too Many Requests");
+        })
+      );
+      expect(logged.entries).toEqual([
+        expect.objectContaining({
+          ns: "tutorial-conversation:fund",
+          level: "warn",
+          report: false,
+          context: { message: "429 Too Many Requests" },
+        }),
+      ]);
+      expect(JSON.stringify(logged.entries)).not.toContain(ADDRESS);
+    });
+
+    it("reports an airdrop that threw for any other reason", async () => {
+      const failure = new Error("fetch failed");
+      await expect(
+        fundShort(
+          chainOf([0.2 * SOL], async () => {
+            throw failure;
+          })
+        )
+      ).resolves.toMatchObject({ ok: false, message: "fetch failed" });
+      expect(logged.entries).toEqual([
+        expect.objectContaining({
+          ns: "tutorial-conversation:fund",
+          level: "error",
+          error: failure,
+          report: true,
+        }),
+      ]);
+      expect(JSON.stringify(logged.entries)).not.toContain(ADDRESS);
+    });
+
+    it.each([
+      ["failed on chain", false, "The airdrop failed"],
+      [
+        "confirmed but never arrived",
+        true,
+        "The airdrop did not reach the wallet",
+      ],
+    ])("reports an airdrop that %s", async (_case, confirmed, message) => {
+      await fundShort(chainOf([0], async () => "sig", confirmed));
+      expect(logged.entries).toEqual([
+        expect.objectContaining({
+          ns: "tutorial-conversation:fund",
+          level: "warn",
+          message,
+          report: true,
+        }),
+      ]);
+    });
+
+    it("logs nothing when the airdrop lands", async () => {
+      await fundShort(chainOf([0, 2 * SOL]));
+      expect(logged.entries).toEqual([]);
     });
   });
 }

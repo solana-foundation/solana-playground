@@ -122,7 +122,8 @@ for; tasks with "after nothing" start at once.
       server logs; Hello Anchor's E0412 path in a component test (HOO-2355; fleet; M 1.5; after 3.1, 3.2;
       plan: [plans/4.1-build-act.md](plans/4.1-build-act.md))
 - [ ] 4.2 Deploy from the wallet: no-wallet path, "Funding your wallet" as
-      an extra first stage, the red "Not enough devnet SOL" card with its
+      an extra first stage (since dropped: the airdrop act funds the wallet,
+      change `tutorial-airdrop-step`, HOO-2677), the red "Not enough devnet SOL" card with its
       address row and Open faucet, Try again as the act card under it, the program keypair kept,
       upgrade in place, the result with devnet SOL spent and the program id
       and signature as Explorer and Transaction links in its details, the wallet copy, the redeploy nudge (split into its own PR, 3 Nov),

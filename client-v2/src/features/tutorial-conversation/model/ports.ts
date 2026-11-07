@@ -90,6 +90,12 @@ export interface Runner {
    * run's `at`: its start by the device's clock, in ms
    */
   recognise?(act: Act, startedAtMs: number): Promise<RunResult | null>;
+  /**
+   * Whether the Playground wallet already covers the next deploy: an airdrop
+   * card the lesson reaches then passes with no press (HOO-2677). False with
+   * no wallet; a throw is the store's to report
+   */
+  isFunded?(): Promise<boolean>;
 }
 
 /**
@@ -112,6 +118,7 @@ export const failedResult = (
         error: null,
         log: message,
       };
+    case "airdrop":
     case "deploy":
     case "buildDeploy":
       return { act, ok: false, seconds, reason: "failed", message };

@@ -76,7 +76,14 @@ export interface Ask {
   typed?: Text;
 }
 
-export type Act = "build" | "deploy" | "buildDeploy" | "run" | "call";
+/** `airdrop` funds the wallet for the deploy after it (HOO-2677) */
+export type Act =
+  | "airdrop"
+  | "build"
+  | "deploy"
+  | "buildDeploy"
+  | "run"
+  | "call";
 
 interface ActBase {
   kind: "act";
