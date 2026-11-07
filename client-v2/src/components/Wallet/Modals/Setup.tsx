@@ -11,7 +11,7 @@ import { ModalFrame } from "@/widgets/overlays";
 
 import { PgWallet, PgWeb3 } from "../../../utils";
 import { KeypairFileError } from "../../../utils/wallet/keypair-file";
-import { useDraftKey } from "../hooks";
+import { useBusyPanels, useDraftKey } from "../hooks";
 import { addImportedKey } from "../imported-key";
 import { importedText } from "../imported-text";
 import { KeyPanel, KeyPanelUnavailable } from "../KeyPanel";
@@ -102,6 +102,7 @@ const LocalSetup = () => {
 const KeyOriginSetup = () => {
   const [text, setText] = useState("");
   const draft = useDraftKey();
+  const { isBusy, onBusy } = useBusyPanels();
 
   const handleSetup = async () => {
     if (!PgWallet.accounts.length) {
@@ -110,9 +111,9 @@ const KeyOriginSetup = () => {
     return true; // Indicate the setup has been completed successfully
   };
 
-  const handleImported = (publicKey: string) => {
+  const handleImported = (publicKey: string, isNew: boolean) => {
     try {
-      setText(addImportedKey(publicKey));
+      setText(addImportedKey(publicKey, isNew));
     } catch (err) {
       log.error(err, { report: true });
       setText(importFailure(err));
@@ -131,7 +132,7 @@ const KeyOriginSetup = () => {
       : { publicKey: current.publicKey, name: current.name };
 
   return (
-    <SetupBody onSubmit={handleSetup} text={text}>
+    <SetupBody onSubmit={handleSetup} text={text} isHeld={isBusy}>
       {draft.isFailed ? (
         <KeyPanelUnavailable />
       ) : exported ? (
@@ -140,6 +141,7 @@ const KeyOriginSetup = () => {
           publicKey={exported.publicKey}
           name={exported.name}
           onError={setText}
+          onBusy={onBusy}
         />
       ) : (
         // The key is being made: the button's place, as it will look
@@ -147,7 +149,12 @@ const KeyOriginSetup = () => {
           Save keypair
         </Button>
       )}
-      <KeyPanel action="import" onImported={handleImported} onError={setText} />
+      <KeyPanel
+        action="import"
+        onImported={handleImported}
+        onError={setText}
+        onBusy={onBusy}
+      />
     </SetupBody>
   );
 };
@@ -160,10 +167,13 @@ const importFailure = (err: unknown) =>
 const SetupBody = ({
   onSubmit,
   text,
+  isHeld = false,
   children,
 }: {
   onSubmit: () => boolean | Promise<boolean>;
   text: string;
+  /** Continue waits, as while a key panel is busy */
+  isHeld?: boolean;
   children: ReactNode;
 }) => (
   <ModalFrame
@@ -172,6 +182,7 @@ const SetupBody = ({
     buttonProps={{
       text: "Continue",
       onSubmit,
+      disabled: isHeld,
     }}
   >
     <Content>

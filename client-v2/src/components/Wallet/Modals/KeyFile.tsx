@@ -5,6 +5,7 @@ import { createLogger } from "@/shared/lib/logger";
 import { ModalFrame } from "@/widgets/overlays";
 
 import { PgWallet } from "../../../utils";
+import { useBusyPanels } from "../hooks";
 import { addImportedKey } from "../imported-key";
 import { KeyPanel } from "../KeyPanel";
 
@@ -16,9 +17,10 @@ const log = createLogger("wallet:key-file");
  */
 export const ImportKey = () => {
   const [text, setText] = useState("");
-  const handleImported = (publicKey: string) => {
+  const { isBusy, onBusy } = useBusyPanels();
+  const handleImported = (publicKey: string, isNew: boolean) => {
     try {
-      setText(addImportedKey(publicKey));
+      setText(addImportedKey(publicKey, isNew));
     } catch (err) {
       log.error(err, { report: true });
       setText(
@@ -31,7 +33,7 @@ export const ImportKey = () => {
     <ModalFrame
       name="wallet-import"
       title="Import keypair"
-      buttonProps={{ text: "Done", noCancel: true }}
+      buttonProps={{ text: "Done", noCancel: true, disabled: isBusy }}
     >
       <MainContent>
         <Desc>Pick a .json file saved from Playground or the Solana CLI.</Desc>
@@ -39,6 +41,7 @@ export const ImportKey = () => {
           action="import"
           onImported={handleImported}
           onError={setText}
+          onBusy={onBusy}
           className="mt-4"
         />
         {text && <Desc>{text}</Desc>}
@@ -53,12 +56,13 @@ export const ImportKey = () => {
  */
 export const ExportKey = () => {
   const [text, setText] = useState("");
+  const { isBusy, onBusy } = useBusyPanels();
   const current = PgWallet.accounts[PgWallet.currentIndex];
   return (
     <ModalFrame
       name="wallet-export"
       title="Export keypair"
-      buttonProps={{ text: "Done", noCancel: true }}
+      buttonProps={{ text: "Done", noCancel: true, disabled: isBusy }}
     >
       <MainContent>
         <Desc>
@@ -72,6 +76,7 @@ export const ExportKey = () => {
             name={current.name}
             onError={setText}
             onExported={() => setText("")}
+            onBusy={onBusy}
             className="mt-4"
           />
         )}

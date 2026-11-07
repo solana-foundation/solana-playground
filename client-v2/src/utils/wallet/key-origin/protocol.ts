@@ -140,15 +140,18 @@ export type ThemeTokens = Partial<Record<typeof THEME_TOKENS[number], string>>;
 /**
  * What goes over the visible panel's port: the page sends `theme` and `name`
  * (the account's name, which the key file is named after), the panel sends the
- * rest. `imported` names the key the panel stored, never its bytes.
+ * rest. `imported` names the key the panel stored, never its bytes, and says
+ * whether the key page held it before; `escape` is Escape pressed in the
+ * panel, which the dialog around it never hears otherwise.
  */
 export type PanelMessage =
   | { type: "theme"; tokens: ThemeTokens }
   | { type: "name"; name: string }
-  | { type: "imported"; publicKey: string }
+  | { type: "imported"; publicKey: string; isNew: boolean }
   | { type: "exported" }
   | { type: "error"; message: string }
-  | { type: "busy"; busy: boolean };
+  | { type: "busy"; busy: boolean }
+  | { type: "escape" };
 
 /**
  * @param x a parsed value
@@ -173,8 +176,9 @@ export const isPanelMessage = (x: unknown): x is PanelMessage => {
     case "name":
       return isString(x.name);
     case "imported":
-      return isString(x.publicKey);
+      return isString(x.publicKey) && typeof x.isNew === "boolean";
     case "exported":
+    case "escape":
       return true;
     case "error":
       return isString(x.message);
@@ -267,10 +271,12 @@ if (import.meta.vitest) {
         { type: "theme", tokens: {} },
         { type: "theme", tokens: { hoverBg: "#111", ring: "#222" } },
         { type: "name", name: "Wallet 2" },
-        { type: "imported", publicKey: "abc" },
+        { type: "imported", publicKey: "abc", isNew: true },
+        { type: "imported", publicKey: "abc", isNew: false },
         { type: "exported" },
         { type: "error", message: "no" },
         { type: "busy", busy: true },
+        { type: "escape" },
       ];
       for (const message of good) expect(isPanelMessage(message)).toBe(true);
       const bad: unknown[] = [
@@ -280,6 +286,8 @@ if (import.meta.vitest) {
         { type: "theme", tokens: { colour: "#000" } },
         { type: "name" },
         { type: "imported" },
+        { type: "imported", publicKey: "abc" },
+        { type: "imported", publicKey: "abc", isNew: "yes" },
         { type: "error" },
         { type: "busy", busy: "yes" },
         { type: "other" },

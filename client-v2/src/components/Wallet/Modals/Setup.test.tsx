@@ -36,21 +36,29 @@ vi.mock("../KeyPanel", () => ({
     action: "import" | "export";
     publicKey?: string;
     name?: string;
-    onImported?: (publicKey: string) => void;
+    onImported?: (publicKey: string, isNew: boolean) => void;
     onError: (message: string) => void;
+    onBusy?: (busy: boolean) => void;
   }) => (
-    <button
-      type="button"
-      data-public-key={props.publicKey}
-      data-name={props.name}
-      onClick={() =>
-        props.action === "import"
-          ? props.onImported?.(IMPORTED)
-          : props.onError("No key for that account")
-      }
-    >
-      {props.action === "import" ? "Import keypair" : "Save keypair"} (panel)
-    </button>
+    <>
+      {props.action === "import" && (
+        <button type="button" onClick={() => props.onBusy?.(true)}>
+          panel busy
+        </button>
+      )}
+      <button
+        type="button"
+        data-public-key={props.publicKey}
+        data-name={props.name}
+        onClick={() =>
+          props.action === "import"
+            ? props.onImported?.(IMPORTED, true)
+            : props.onError("No key for that account")
+        }
+      >
+        {props.action === "import" ? "Import keypair" : "Save keypair"} (panel)
+      </button>
+    </>
   ),
   KeyPanelUnavailable: () => (
     <p>Key storage didn't load. Reload the page and try again.</p>
@@ -67,11 +75,15 @@ vi.mock("@/widgets/overlays", () => ({
     buttonProps,
   }: {
     children: React.ReactNode;
-    buttonProps: { text: string; onSubmit: () => unknown };
+    buttonProps: { text: string; onSubmit: () => unknown; disabled?: boolean };
   }) => (
     <div>
       {children}
-      <button type="button" onClick={() => void buttonProps.onSubmit()}>
+      <button
+        type="button"
+        disabled={buttonProps.disabled}
+        onClick={() => void buttonProps.onSubmit()}
+      >
         {buttonProps.text}
       </button>
     </div>
@@ -268,6 +280,18 @@ describe("wallet Setup under the key-origin provider", () => {
     );
 
     expect(await screen.findByText("No key for that account")).toBeTruthy();
+  });
+
+  it("holds Continue while a panel is busy", async () => {
+    renderSetup();
+    await screen.findByRole("button", { name: "Save keypair (panel)" });
+    const isHeld = () =>
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled");
+    expect(isHeld()).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "panel busy" }));
+
+    expect(isHeld()).toBe(true);
   });
 
   it("says the key storage did not load when the key cannot be made", async () => {

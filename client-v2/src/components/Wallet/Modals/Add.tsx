@@ -10,7 +10,7 @@ import { ModalFrame } from "@/widgets/overlays";
 
 import { PgWallet, PgWeb3 } from "../../../utils";
 import Input from "../../Input";
-import { useDraftKey } from "../hooks";
+import { useBusyPanels, useDraftKey } from "../hooks";
 import { KeyPanel, KeyPanelUnavailable } from "../KeyPanel";
 
 /** The Add dialog for the wallet's provider: keys in the page, or on the key origin */
@@ -44,11 +44,13 @@ const LocalAdd = () => {
 const KeyOriginAdd = () => {
   const draft = useDraftKey();
   const [error, setError] = useState("");
+  const { isBusy, onBusy } = useBusyPanels();
   return (
     <AddBody
       onSubmit={async (name) =>
         PgWallet.add({ name, publicKey: await draft.made() })
       }
+      isHeld={isBusy}
     >
       {(name) => (
         <>
@@ -60,11 +62,12 @@ const KeyOriginAdd = () => {
               publicKey={draft.publicKey}
               name={name}
               onError={setError}
+              onBusy={onBusy}
               className="mt-2"
             />
           ) : (
             // The key is being made: the button's place, as it will look
-            <Button type="button" variant="outline" disabled>
+            <Button type="button" variant="outline" disabled className="mt-2">
               Save keypair
             </Button>
           )}
@@ -78,9 +81,12 @@ const KeyOriginAdd = () => {
 /** What both Adds show: the name, the callout, and the key file's button */
 const AddBody = ({
   onSubmit,
+  isHeld = false,
   children,
 }: {
   onSubmit: (name: string) => unknown;
+  /** Create waits, as while a key panel is busy */
+  isHeld?: boolean;
   children: (name: string) => ReactNode;
 }) => {
   const [name, setName] = useState(() => {
@@ -97,7 +103,7 @@ const AddBody = ({
       buttonProps={{
         text: "Create",
         onSubmit: () => onSubmit(name),
-        disabled: !!error,
+        disabled: !!error || isHeld,
       }}
     >
       <MainContent>

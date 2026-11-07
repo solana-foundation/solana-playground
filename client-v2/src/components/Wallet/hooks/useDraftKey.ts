@@ -22,7 +22,8 @@ export const useDraftKey = () => {
 
   useEffect(() => {
     let isLive = true;
-    const made = PgWallet.makeKey();
+    // A throw while the wallet is unavailable is a failure like any other
+    const made = Promise.resolve().then(() => PgWallet.makeKey());
     making.current = made;
     made.then(
       (key) => {
