@@ -47,6 +47,10 @@ const utils = vi.hoisted(() => {
   };
 });
 
+// Runs `connect` with or without a terminal; its own tests cover which
+vi.mock("@/commands/connect/connect-wallet", () => ({
+  connectWallet: () => utils.PgCommand.connect.execute(),
+}));
 vi.mock("@/utils", () => ({
   PgCommand: utils.PgCommand,
   PgWallet: utils.PgWallet,

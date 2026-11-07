@@ -17,9 +17,10 @@ import { Icon } from "@/shared/ui/icon";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 
 import { NO_FAUCET } from "../../commands/airdrop/no-faucet";
+import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { isSignInFailure } from "../../features/auth";
 import { useCopy } from "../../hooks";
-import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
+import { Fn, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import Img from "../Img";
 import { useAirdrop, useDarken } from "./hooks";
@@ -191,15 +192,13 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
               key={standardWallet.name}
               variant={standardWallet.connected ? "destructive" : "default"}
               onSelect={() => {
-                PgCommand.connect
-                  .execute(standardWallet.name.toLowerCase())
-                  .catch(
-                    reportButtonFailure(
-                      standardWallet.connected
-                        ? `disconnect from ${standardWallet.name}`
-                        : `connect ${standardWallet.name}`
-                    )
-                  );
+                toggleWallet(standardWallet.name.toLowerCase()).catch(
+                  reportButtonFailure(
+                    standardWallet.connected
+                      ? `disconnect from ${standardWallet.name}`
+                      : `connect ${standardWallet.name}`
+                  )
+                );
               }}
             >
               {/* An image, which the item does not size as it does its icons */}
