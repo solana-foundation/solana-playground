@@ -4,12 +4,15 @@
 
 ### Requirement: The WASM CLIs say why they cannot use a key held on its own origin
 
-The `solana`, `spl-token` and `anchor` commands SHALL sign the built-in
-wallet's part of every transaction they send through the current signer
-provider, and SHALL never receive the wallet's secret key bytes in client-v2.
-Under the key-origin provider the key page signs; under the local provider the
-in-page key signs. The signature a command prints for a sent transaction SHALL
-be the one the cluster holds.
+Under the key origin, the `solana`, `spl-token` and `anchor` commands SHALL
+have the key page sign the built-in wallet's part of every transaction they
+send, at the send step, and SHALL never receive the wallet's secret key bytes.
+Under the local provider, where the page holds the key, they sign with it as
+before. The signature a command prints for a sent transaction SHALL be the one
+the cluster holds. A send whose wallet signature cannot be had (the key page
+refuses, the current wallet changed since the run started, or the signature is
+not over the transaction's bytes) SHALL end the command with a line saying so
+and SHALL send nothing.
 
 A run that asks for offline signing (`--sign-only`) SHALL end before the CLI
 starts with one line saying the key is kept on its own origin and naming what
@@ -41,6 +44,13 @@ Under the local provider it runs as before.
 - **WHEN** the key origin is on and the person runs `solana transfer <address>
   0.01 --sign-only --blockhash <hash>`
 - **THEN** the command ends with the key-origin line and prints no signature
+
+#### Scenario: The wallet changes while a command runs
+
+- **WHEN** the key origin is on and the current wallet changes between the
+  start of a command and its send
+- **THEN** the command ends with a line naming the wallet it started with, and
+  nothing is sent
 
 #### Scenario: The secret key stays out of the app page
 

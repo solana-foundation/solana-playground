@@ -62,7 +62,12 @@ Greptile reviews only PRs into `master` on the foundation repository, as
   the Flow view inside it. Default to this one.
 
 `server/` and `wasm/` are upstream's and out of scope per the project's
-own principles ("No backend changes").
+own principles ("No backend changes"), with one fork-owned exception in
+`wasm/`: the built-in wallet signs the CLIs' transactions at the send step
+under the key origin (OpenSpec `wallet-cli-signing`). On an upstream sync keep
+`solana-client/src/deferred_signer.rs` and its call in
+`send_transaction_with_config`, `utils/solana-playground-utils/src/wallet.rs`
+with the `wallet` feature, and the CLIs' `wallet_signer()` calls.
 
 ## Commit messages
 

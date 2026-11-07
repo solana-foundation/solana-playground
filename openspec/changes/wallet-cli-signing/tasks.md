@@ -23,8 +23,10 @@ All tasks are HOO-2723.
 ## 2. client-v2
 
 - [x] 2.1 `PgWallet.getPublicKeyBytes` and `PgWallet.signTransactionMessage`
-  through the signer provider; vitest under the local and the key-origin
-  providers, `getKeypairBytes` not called
+  through the signer provider; vitest: the exact message bytes signed under
+  the local provider without `secretKeyFor`, the wallet's `signTransaction`
+  path, and the refusals (no wallet, another wallet, unsigned, wrong bytes);
+  the key page itself is covered by the provider tests and by 3.1
 - [x] 2.2 Pre-check: refuse only `--sign-only` under the key origin; drop the
   `anchor idl` list; update `key-read.test.ts`
 

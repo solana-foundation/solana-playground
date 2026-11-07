@@ -21,7 +21,8 @@ as a transaction, so the CLIs must ask for a transaction signature.
 
 **Goals:**
 - One place where the wallet's real signature is obtained: the send step.
-- Same code path under both signer providers in client-v2.
+- Under the local provider nothing changes: the page holds the key, and
+  `--sign-only` keeps printing a real signature.
 - Upstream `client/`, which shares the WASM packages and has no new methods,
   keeps working unchanged.
 
@@ -43,16 +44,20 @@ marker, 64 bytes of `0xff`. It must not be `Signature::default()`, because
 would fail. `is_interactive()` is false.
 
 `solana-client` gets a small deferred-signing registry: `set_deferred_signer`
-takes a public key and an async function from message bytes to a `Signature`.
-`send_transaction_with_config` checks the transaction's required signer keys.
-Each slot that holds the registered key and the marker is filled with the
-awaited signature over `transaction.message_data()`. Slots of other signers
-are not touched. When nothing is registered, or no slot holds the marker,
-sending is unchanged.
+maps a public key to an async function from message bytes to a `Signature`.
+`send_transaction_with_config` checks the transaction's required signer slots.
+Each slot that holds the marker is filled with its key's awaited signature over
+`transaction.message_data()`. Slots of other signers are not touched. A marker
+whose key has no signer, or a signer that refuses, is a `ClientError` naming
+the key and saying the transaction was not sent: a marker sent as it is would
+only come back as the cluster's signature failure. A transaction with no
+marker is sent unchanged.
 
-The registry is a `thread_local` `RefCell`, because WASM on the page has one
-thread. Each CLI entry sets it at the start of a run and clears it at the end,
-so a run that panics cannot leave a signer for the next CLI.
+The registry is a `thread_local` map, because WASM on the page has one thread.
+No run clears it: runs of one CLI can overlap (the flow's `run-call.ts` starts
+`solana confirm` without awaiting it), and one run's cleanup would take the
+signer another run still needs. An entry holds a public key and a function
+that asks the page, never key material, and acts only on marker slots.
 
 *Alternatives:* fill the marker in each CLI before every `send_*` call (about
 40 call sites across three crates, easy to miss one). Or have `solana-client`
@@ -73,19 +78,25 @@ checks every `simulate_transaction` caller in the three crates for
 key bytes. It throws the same "Not connected" and "Not Playground Wallet"
 errors as `getKeypairBytes`.
 
-`PgWallet.signTransactionMessage(message: Uint8Array): Promise<Uint8Array>`
-builds a legacy `Transaction` with `Transaction.populate(Message.from(message))`
-and asks the current wallet to `signTransaction`. It returns the current
-wallet's signature from the result. This reuses the providers' existing
+`PgWallet.signTransactionMessage(message: Uint8Array, publicKey: string):
+Promise<Uint8Array>` takes the base58 key the run started with and refuses when
+the current wallet is another one or not the built-in wallet. It builds a
+legacy `Transaction` with `Transaction.populate(Message.from(message))`, which
+keeps the CLI's bytes, and asks the wallet to `signTransaction`. It checks the
+returned signature against the original message bytes with ed25519, as
+`sign-bridge.ts` does, so a wallet that signed anything else fails here with a
+named error. This reuses the providers' existing
 transaction path: the local `Keypair` and the key page both sign
 `kind: "transaction"`. No new protocol message is added.
 
 ### Feature detection for upstream `client/`
 
 Before choosing a signer, the Rust side checks that `PgWallet` has
-`signTransactionMessage` (`js_sys::Reflect`). Without it, the CLI builds a
-`Keypair` from `getKeypairBytes` as today. client-v2 always has the method, so
-in client-v2 the key bytes are never read.
+`signTransactionMessage` (`js_sys::Reflect`) and that `PgWallet.holdsKeysInPage()`
+is false. Otherwise the CLI builds a `Keypair` from `getKeypairBytes` as today:
+upstream's client has no such method, and under the local provider the page
+holds the key anyway. Deferring there too would print the marker as the
+wallet's signature on `--sign-only`, which never reaches the send step.
 
 ### Pre-check
 
