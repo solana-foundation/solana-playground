@@ -326,9 +326,15 @@ if (import.meta.vitest) {
 
     it("accepts each panel message and rejects the rest", () => {
       const good: unknown[] = [
-        { type: "theme", tokens: { bg: "#000", fontSize: "14px" } },
+        {
+          type: "theme",
+          tokens: { bg: "var(--background)", fontSize: "14px" },
+        },
         { type: "theme", tokens: {} },
-        { type: "theme", tokens: { hoverBg: "#111", ring: "#222" } },
+        {
+          type: "theme",
+          tokens: { hoverBg: "var(--surface-hover)", ring: "var(--ring)" },
+        },
         { type: "name", name: "Wallet 2" },
         { type: "imported", publicKey: "abc", isNew: true },
         { type: "imported", publicKey: "abc", isNew: false },
@@ -342,7 +348,7 @@ if (import.meta.vitest) {
         undefined,
         { type: "theme" },
         { type: "theme", tokens: { bg: 1 } },
-        { type: "theme", tokens: { colour: "#000" } },
+        { type: "theme", tokens: { colour: "var(--background)" } },
         { type: "name" },
         { type: "imported" },
         { type: "imported", publicKey: "abc" },

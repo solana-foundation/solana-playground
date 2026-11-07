@@ -583,7 +583,7 @@ if (import.meta.vitest) {
     it("points a panel frame at its panel, theme in the fragment", async () => {
       const { decodeTheme, panelRouteOf } = await import("./frame/panel");
       const theme = {
-        bg: "oklch(0.2 0 0)",
+        bg: "var(--surface-panel)",
         font: '"Stack Sans Text", sans-serif',
       };
       const exportUrl = new URL(
