@@ -200,6 +200,31 @@ describe("PgAssistant tool config", () => {
     ]);
   });
 
+  it("keeps a server added just before a reload that beats the folder tree's save", async () => {
+    PgAssistant.setMcpServers([
+      {
+        id: DOCS.id,
+        name: DOCS.name,
+        url: DOCS.url,
+        enabled: DOCS.enabled,
+        authToken: "token-secret",
+      },
+    ]);
+    await PgAssistant.whenPersisted();
+
+    reloadPage();
+    (
+      PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+    ).__reloadBeforeTreeSave();
+    serve({ skills: [], servers: [] });
+    await PgAssistant.initMcp();
+
+    expect(PgAssistant.localMcpServers.map((s) => s.id)).toEqual(["docs"]);
+    expect(PgAssistant.missingMcpCredentials.get("docs")).toEqual([
+      "authToken",
+    ]);
+  });
+
   it("reads a file that does not parse as no edits and leaves it until an edit", async () => {
     files().set(TOOL_CONFIG_PATH, "{ not json");
     serve({ skills: [skill("a", true)], servers: [] });
