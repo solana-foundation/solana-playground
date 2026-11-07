@@ -200,38 +200,36 @@ const handshakeWith =
  * Opens the hidden key page on `origin` and a private channel to it
  * (`handshakeWith`); everything after the handshake goes over that port.
  *
- * @param origin the key origin
  * @param opts the handshake's time limit, the document to put the frame in,
  * and what the connection does past the handshake
- * @returns the connection
+ * @returns a function of the key origin that answers the connection
  */
-export const connectKeyFrame = (
-  origin: string,
-  opts: { timeoutMs?: number; doc?: Document } & FrameOptions = {}
-): Promise<KeyFrame> => {
-  const {
-    timeoutMs = HANDSHAKE_TIMEOUT_MS,
-    doc = document,
-    ...frameOptions
-  } = opts;
-  const host = doc.defaultView ?? window;
-  const frame = hiddenFrame(doc, origin + KEY_PAGE_PATH);
-  // Never stopped: a failed handshake removes the frame instead
-  const connected = handshakeWith({
-    origin,
-    host,
-    timeoutMs,
-    signal: new AbortController().signal,
-  })(frame);
-  doc.body.append(frame);
-  return connected.then(
-    (port) => frameOverWith(frameOptions)(port, frame),
-    (error: unknown) => {
-      frame.remove();
-      throw error;
-    }
-  );
-};
+export const connectKeyFrameWith =
+  (opts: { timeoutMs?: number; doc?: Document } & FrameOptions) =>
+  (origin: string): Promise<KeyFrame> => {
+    const {
+      timeoutMs = HANDSHAKE_TIMEOUT_MS,
+      doc = document,
+      ...frameOptions
+    } = opts;
+    const host = doc.defaultView ?? window;
+    const frame = hiddenFrame(doc, origin + KEY_PAGE_PATH);
+    // Never stopped: a failed handshake removes the frame instead
+    const connected = handshakeWith({
+      origin,
+      host,
+      timeoutMs,
+      signal: new AbortController().signal,
+    })(frame);
+    doc.body.append(frame);
+    return connected.then(
+      (port) => frameOverWith(frameOptions)(port, frame),
+      (error: unknown) => {
+        frame.remove();
+        throw error;
+      }
+    );
+  };
 
 /** The visible panel a dialog shows: import a key file, or save one */
 export type KeyPanelRoute =
@@ -309,13 +307,13 @@ export const keyFrameWith = (requestTimeoutMs: number) => {
     const drop = () => {
       if (connection === attempt) connection = undefined;
     };
-    const attempt: Promise<KeyFrame> = connectKeyFrame(origin, {
+    const attempt: Promise<KeyFrame> = connectKeyFrameWith({
       requestTimeoutMs,
       onDead: () => {
         drop();
         void attempt.then((frame) => frame.close());
       },
-    }).then((frame) => ({
+    })(origin).then((frame) => ({
       request: frame.request,
       close: () => {
         drop();
@@ -345,8 +343,8 @@ if (import.meta.vitest) {
     });
 
     /** Starts a connection and returns the frame it appended */
-    const start = (timeoutMs?: number) => {
-      const connected = connectKeyFrame(ORIGIN, { timeoutMs });
+    const startWith = (timeoutMs: number) => () => {
+      const connected = connectKeyFrameWith({ timeoutMs })(ORIGIN);
       const frame = document.querySelector("iframe") as HTMLIFrameElement;
       const target = frame.contentWindow as Window;
       const handed: {
@@ -354,24 +352,27 @@ if (import.meta.vitest) {
         target: string;
         ports: MessagePort[];
       }[] = [];
+      // postMessage(message, targetOrigin, transfer): keep what was handed over
       vi.spyOn(target, "postMessage").mockImplementation(((
-        message: unknown,
-        to: string,
-        ports: MessagePort[]
+        ...[message, to, ports]: [unknown, string, MessagePort[]]
       ) => {
         handed.push({ message, target: to, ports });
       }) as never);
       return { connected, frame, target, handed };
     };
+    const start = startWith(HANDSHAKE_TIMEOUT_MS);
 
-    const ready = (source: unknown, origin: string, version = 1) => {
-      const event = new MessageEvent("message", {
-        data: { type: "pg-wallet-keys:ready", version },
-        origin,
-      });
-      Object.defineProperty(event, "source", { value: source });
-      window.dispatchEvent(event);
-    };
+    /** The key page's ready, as a page speaking protocol `version` sends it */
+    const readyWith =
+      (version: number) => (source: unknown, origin: string) => {
+        const event = new MessageEvent("message", {
+          data: { type: "pg-wallet-keys:ready", version },
+          origin,
+        });
+        Object.defineProperty(event, "source", { value: source });
+        window.dispatchEvent(event);
+      };
+    const ready = readyWith(KEY_PROTOCOL_VERSION);
 
     it("appends a hidden frame on the key page", () => {
       const { frame } = start();
@@ -421,7 +422,7 @@ if (import.meta.vitest) {
 
     it("ignores ready from another window or origin, then times out", async () => {
       vi.useFakeTimers();
-      const { connected, handed } = start(1000);
+      const { connected, handed } = startWith(1000)();
       const outcome = expect(connected).rejects.toMatchObject({
         reason: "timeout",
       });
@@ -437,8 +438,8 @@ if (import.meta.vitest) {
     });
 
     /** A connected frame, the key page's port, and the requests it saw */
-    const linked = async (opts: Parameters<typeof connectKeyFrame>[1]) => {
-      const pending = connectKeyFrame(ORIGIN, opts);
+    const linked = async (opts: Parameters<typeof connectKeyFrameWith>[0]) => {
+      const pending = connectKeyFrameWith(opts)(ORIGIN);
       const frame = document.querySelector("iframe") as HTMLIFrameElement;
       const target = frame.contentWindow as Window;
       const ports: MessagePort[] = [];
@@ -621,7 +622,7 @@ if (import.meta.vitest) {
 
     it("rejects on another protocol version", async () => {
       const { connected, target, handed } = start();
-      ready(target, ORIGIN, 2);
+      readyWith(2)(target, ORIGIN);
       await expect(connected).rejects.toMatchObject({ reason: "version" });
       expect(handed).toHaveLength(0);
       expect(document.querySelector("iframe")).toBeNull();

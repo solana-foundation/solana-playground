@@ -14,6 +14,9 @@ export interface KeyStore {
 const STORE_NAME = "keys";
 const LOCK_NAME = "pg-wallet-keys";
 
+/** The key origin's database of keys */
+export const KEY_DB_NAME = "pg-wallet-keys";
+
 /** Resolves on commit, so a write the browser aborts is a failure */
 const settled = (tx: IDBTransaction) =>
   new Promise<void>((resolve, reject) => {
@@ -29,7 +32,7 @@ const settled = (tx: IDBTransaction) =>
  *
  * @param name database name
  */
-export const indexedDbKeyStore = (name = "pg-wallet-keys"): KeyStore => {
+export const indexedDbKeyStore = (name: string): KeyStore => {
   let opened: Promise<IDBDatabase> | undefined;
   const open = () => {
     opened ??= new Promise<IDBDatabase>((resolve, reject) => {
@@ -116,11 +119,11 @@ if (import.meta.vitest) {
       Uint8Array.from({ length: 64 }, (_, i) => (i + seed) % 256);
 
     it("starts empty", async () => {
-      expect((await indexedDbKeyStore().all()).size).toBe(0);
+      expect((await indexedDbKeyStore(KEY_DB_NAME).all()).size).toBe(0);
     });
 
     it("stores keys and reads them back", async () => {
-      const store = indexedDbKeyStore();
+      const store = indexedDbKeyStore(KEY_DB_NAME);
       await store.put([
         ["a", secret(1)],
         ["b", secret(2)],
@@ -140,7 +143,7 @@ if (import.meta.vitest) {
     });
 
     it("replaces a key under the same public key and removes keys", async () => {
-      const store = indexedDbKeyStore();
+      const store = indexedDbKeyStore(KEY_DB_NAME);
       await store.put([["a", secret(1)]]);
       await store.put([["a", secret(9)]]);
       expect((await store.all()).get("a")).toEqual(secret(9));
@@ -154,13 +157,14 @@ if (import.meta.vitest) {
       const names: string[] = [];
       vi.stubGlobal("navigator", {
         locks: {
+          // eslint-disable-next-line layers/curry-order -- the shape of `navigator.locks.request`, which the store calls
           request: (name: string, task: () => Promise<unknown>) => {
             names.push(name);
             return task();
           },
         },
       });
-      const store = indexedDbKeyStore();
+      const store = indexedDbKeyStore(KEY_DB_NAME);
 
       await store.put([["a", secret(1)]]);
       await store.remove("a");
