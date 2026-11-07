@@ -4,9 +4,9 @@
 // runs on the origin that holds the keys.
 import { appOriginFor } from "../origin";
 import { awaitPortFor, serveWith } from "./channel";
-import { handlerWith } from "./handler";
+import { handlerWith, reportFailure } from "./handler";
 import { panelRouteOf, runPanelWith } from "./panel";
-import { indexedDbKeyStore, KEY_DB_NAME } from "./store";
+import { indexedDbKeyStore, KEY_DB_NAME, requestPersistence } from "./store";
 
 const appOrigin = appOriginFor(
   process.env.REACT_APP_WALLET_APP_ORIGIN,
@@ -21,6 +21,9 @@ const route = isHidden ? undefined : panelRouteOf(window.location.hash);
 // page does nothing: it never announces itself
 if (appOrigin && window.parent !== window && (isHidden || route)) {
   const store = indexedDbKeyStore(KEY_DB_NAME);
+  // The key origin holds the only copy of the keys, so the browser must not
+  // evict it under storage pressure
+  void requestPersistence(navigator.storage).catch(reportFailure);
   const handle = handlerWith(store);
   const connected = awaitPortFor(appOrigin, window.parent)(window);
   if (route) runPanelWith(handle, store)(route, connected);
