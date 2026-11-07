@@ -64,6 +64,43 @@ Setup, and SHALL write nothing to the page's record.
 - **THEN** signing with it fails with an error naming its public key, and the
   account is not removed
 
+### Requirement: Remove forgets an account's key only once the record is stored
+
+Removing an account SHALL first store the page's record without it, and only
+then ask the signer provider to forget its key. A record that could not be
+stored SHALL keep the key, and the user SHALL be told the save failed. A key
+that could not be forgotten SHALL be reported, and the user SHALL be told.
+
+#### Scenario: Remove stores the record, then forgets the key
+
+- **WHEN** the user removes an account and the record without it is stored
+- **THEN** the key page forgets the account's key
+
+#### Scenario: The record without the account cannot be stored
+
+- **WHEN** the user removes an account and the record cannot be stored
+- **THEN** the key is kept, and the user is told the save failed
+
+#### Scenario: The key cannot be forgotten
+
+- **WHEN** the record is stored but the key page fails to forget the key
+- **THEN** the failure is logged without key material, and the user is told
+  the removed account's key is still stored in this browser
+
+### Requirement: A keyless record under the local provider reads as unavailable
+
+A build with no key origin (the `local` provider) that reads a record whose
+accounts hold no key bytes, as one written under the key-origin provider
+does, SHALL put the wallet in the `unavailable` state and SHALL write nothing
+to the record.
+
+#### Scenario: The key origin setting is dropped after the move
+
+- **WHEN** a build without `REACT_APP_WALLET_KEY_ORIGIN` loads a record of
+  names and public keys only
+- **THEN** the wallet is `unavailable`, not Setup, and the record is
+  unchanged
+
 ## MODIFIED Requirements
 
 ### Requirement: A damaged account does not hide the others
