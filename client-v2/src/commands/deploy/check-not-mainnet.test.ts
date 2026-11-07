@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { UnknownClusterError } from "@/entities/cluster";
+
 import { PgConnection, TerminalLineError } from "../../utils";
 import { checkNotMainnet } from "./check-not-mainnet";
-import { MAINNET_DEPLOY_BLOCKED } from "./mainnet-block";
+import { DEPLOY_NETWORK_UNREAD, MAINNET_DEPLOY_BLOCKED } from "./mainnet-block";
 
 vi.mock("../../utils", async () => {
   const terminal = await import("../../utils/terminal");
@@ -41,10 +43,19 @@ describe("checkNotMainnet", () => {
     }
   );
 
-  // An endpoint that cannot be read is not refused on a guess: the deploy's
-  // own reads fail before any transaction
-  it("lets an unreadable endpoint through", async () => {
-    vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(new Error("down"));
+  // A network of its own is not mainnet
+  it("lets a genesis hash no cluster names through", async () => {
+    vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
+      new UnknownClusterError("Own1111")
+    );
     await expect(checkNotMainnet()).resolves.toBeUndefined();
+  });
+
+  // An endpoint that does not answer could be mainnet: nothing on a guess
+  it("refuses an endpoint that does not say which network it is", async () => {
+    vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
+      new Error("429 Too Many Requests")
+    );
+    await expect(checkNotMainnet()).rejects.toThrow(DEPLOY_NETWORK_UNREAD);
   });
 });

@@ -11,14 +11,19 @@ deploys go through the user's own machine. Ticket: HOO-2728.
 - The `deploy` command refuses when the connection's cluster is mainnet-beta,
   read from the endpoint itself (so a custom RPC whose genesis hash is
   mainnet's is refused too), before its wallet check and before any
-  transaction. Every caller goes through it: the Deploy stage, the terminal,
-  Program Pal and the explorer menu.
+  transaction, and again on the connection the run sends on (the network can
+  change while the wallet question waits). An endpoint that does not say
+  which network it serves is refused; one whose genesis names no known
+  cluster deploys. Every caller goes through it: the Deploy stage, the
+  terminal, Program Pal and the explorer menu. A tutorial's deploy, which
+  sends outside the command and was already devnet-only, also refuses while
+  the network's name is still the previous endpoint's.
 - On Mainnet the Deploy stage says "Deploys to mainnet are not available in
   the beta." in its line, and its pill is "Deploy from your machine", opening
   the CLI deploy guide on Mainnet. No "Who pays" line, and no separate
   "Deploy with the CLI" outline on Mainnet (the pill is that button).
 - Settings › Network: the Mainnet chip's line reads "Not available for
-  deploys" instead of "Deploys with real SOL".
+  deploys", led by an amber status dot, instead of "Deploys with real SOL".
 - **BREAKING (spec):** the "Mainnet uses real SOL" warning callout and its
   terminal line are removed; nothing reaches them once the deploy is refused.
 - Telemetry: `cli_guide_opened`'s `from` value `mainnet-warning` is renamed
@@ -44,9 +49,15 @@ None.
 ## Impact
 
 - Code: `client-v2/src/commands/deploy/` (the command and its mainnet
-  module), `views/flow/stages/BaseDeploy.tsx` and `Deploy.tsx`,
-  `features/cli-deploy` (guide source type), `widgets/settings-page`
-  (network chip line). Unit tests beside each, one e2e spec.
+  modules), `entities/cluster` (`UnknownClusterError`),
+  `views/flow/stages/BaseDeploy.tsx`, `features/cli-deploy` (guide source
+  type), `features/tutorial-conversation` (stale-name refusal),
+  `widgets/settings-page` (network chip line). Unit tests beside each, one
+  e2e spec.
+- Behaviour change beyond mainnet: a deploy to a custom RPC that does not
+  answer the genesis read is now refused; before, it went ahead with its
+  network unrecorded.
 - Out of scope: mainnet stays selectable for reading, Interact and the
-  wallet (HOO-2707); the airdrop's "no faucet" line is unchanged; IDL upload,
+  wallet (HOO-2707); the airdrop's "no faucet" line is unchanged; IDL upload
+  on mainnet (sent to Intake as a follow-up),
   `sugar` and the stubbed `solana`/`anchor` terminal commands are untouched.

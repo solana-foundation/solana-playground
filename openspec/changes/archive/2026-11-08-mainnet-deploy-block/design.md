@@ -20,8 +20,18 @@ mainnet commands.
   `PgConnection.cluster`. The cached value can lag a network switch or be
   unread, and a custom RPC's genesis hash is only known by asking. First,
   so the wallet question never asks for a wallet that would not be used.
-  A genesis hash that matches no known cluster passes: that network is not
-  mainnet (the deploy reads it again and fails on its own if unreachable).
+- **Checked again in `processDeploy`, on the connection it sends on**, before
+  the first send: the network can change while the wallet question waits.
+  That read also gives the deploy record its cluster, replacing a separate
+  read.
+- **An unknown genesis passes, an unread one is refused.** A genesis hash no
+  known cluster names (`UnknownClusterError`) is a network of its own, not
+  mainnet. An endpoint that does not answer (down, rate-limited, refusing the
+  method) could be mainnet, so the deploy is refused rather than sent on a
+  guess.
+- **The tutorial runner is the one path outside the command.** It was already
+  devnet-only by the cached name; it now also refuses while that name is
+  still the previous endpoint's (`clusterIsStale`).
 - **The refusal is a `TerminalLineError`**, one plain line, no stack, the
   same as other pre-check refusals.
 - **The stage reads `PgConnection.cluster`** for what it shows (it re-renders
@@ -32,6 +42,6 @@ mainnet commands.
 
 ## Risks / Trade-offs
 
-- [The endpoint is unreachable, so the genesis read throws] → the guard
-  lets it through; the deploy's own reads fail first, before any
-  transaction.
+- [A custom RPC that blocks `getGenesisHash` but serves everything else
+  can no longer deploy] → it says the network could not be read; the CLI
+  guide stays open to it.

@@ -2,49 +2,12 @@
 
 ## Purpose
 
-Tells a user who is about to deploy a program to mainnet from the browser that
-the deploy pays real SOL through a wallet kept in the page, and points them to
-deploying from their own machine instead. Says the same where mainnet is
-picked, and says plainly that mainnet has no faucet.
+Keeps program deploys off mainnet in the beta: the Playground wallet pays
+from a key kept in the browser, so the deploy command refuses mainnet and the
+Deploy stage points to deploying from the user's own machine. Says the same
+where mainnet is picked, and says plainly that mainnet has no faucet.
 
 ## Requirements
-
-### Requirement: The Deploy stage warns on mainnet
-
-While the connected cluster is mainnet-beta, the Flow's Deploy stage SHALL show
-a warning callout (`role="alert"`, `aria-label="Mainnet deploy warning"`)
-above the deploy action, built or not and whatever wallet is connected. Its
-title SHALL read "Mainnet uses real SOL"; its body SHALL say that the deploy
-pays from the Playground wallet, whose key is kept in this browser, and
-recommend deploying from the user's own machine with the Solana CLI or Anchor.
-On any other cluster the callout SHALL NOT show. The callout SHALL NOT
-disable the deploy action or ask for confirmation. The deploy action SHALL
-name the cluster "mainnet" ("Deploy to mainnet").
-
-#### Scenario: Deploy stage on mainnet shows the warning
-
-- **WHEN** the endpoint is mainnet-beta and the user opens the Deploy stage
-- **THEN** the "Mainnet deploy warning" callout is visible, names the
-  Playground wallet and recommends deploying from the user's own machine,
-  and "Deploy to mainnet" stays pressable
-
-#### Scenario: Deploy stage on devnet shows no warning
-
-- **WHEN** the endpoint is devnet and the user opens the Deploy stage
-- **THEN** no "Mainnet deploy warning" callout is present
-
-### Requirement: The deploy command warns on mainnet
-
-When the `deploy` command starts on mainnet-beta, it SHALL print the same
-warning to the terminal before its "Deploying..." line, whether the user
-typed the command or pressed the stage's deploy button. On any other cluster
-it SHALL print no such line.
-
-#### Scenario: Terminal deploy on mainnet (manual)
-
-- **WHEN** the endpoint is mainnet-beta and the user runs `deploy` in the
-  terminal
-- **THEN** the terminal prints the mainnet warning before "Deploying..."
 
 ### Requirement: No faucet on mainnet
 
@@ -65,19 +28,6 @@ faucet.
 - **WHEN** the endpoint is mainnet-beta and the user runs `airdrop`
 - **THEN** the terminal prints "This network has no faucet."
 
-### Requirement: The mainnet warning opens the CLI deploy guide
-
-In the Deploy stage's "Mainnet deploy warning" callout, the body's own words
-"deploy from your own machine" SHALL be a link button that opens the CLI
-deploy guide on Mainnet. The body's wording SHALL stay the terminal's; no
-words are added.
-
-#### Scenario: Guide from the mainnet warning
-
-- **WHEN** the endpoint is mainnet-beta and the user presses "deploy from
-  your own machine" in the mainnet warning
-- **THEN** the "Deploy from your machine" dialog opens with Mainnet picked
-
 ### Requirement: Settings offers five networks
 
 Settings › Network SHALL offer five network chips, "Mainnet", "Devnet",
@@ -88,9 +38,10 @@ cluster (`REACT_APP_MAINNET_RPC_URL`, `REACT_APP_DEVNET_RPC_URL`,
 `REACT_APP_TESTNET_RPC_URL`), or to the cluster's public RPC when none is
 configured. Localnet SHALL connect to `http://localhost:8899` and Surfpool to
 `http://127.0.0.1:8899`. No chip SHALL read "Mainnet
-Beta" or carry "(Platform)". While Mainnet is picked, the line "Deploys with
-real SOL" SHALL show under the chips and describe the group; Devnet shows no
-line, nor do Testnet, Localnet and Surfpool. An endpoint no chip names (a
+Beta" or carry "(Platform)". While Mainnet is picked, the line "Not available
+for deploys", led by an amber status dot, SHALL show under the chips and
+describe the group; Devnet shows
+no line, nor do Testnet, Localnet and Surfpool. An endpoint no chip names (a
 custom URL not saved, Playnet) SHALL leave no chip checked and keep its
 address.
 
@@ -98,9 +49,9 @@ address.
 
 - **WHEN** the user picks Mainnet in Settings › Network and opens the
   Deploy stage
-- **THEN** "Deploys with real SOL" describes the network chips, and the
-  "Mainnet deploy warning" callout shows
-- **AND** after picking Devnet the callout is gone
+- **THEN** "Not available for deploys" describes the network chips, and the
+  stage says deploys to mainnet are not available in the beta
+- **AND** after picking Devnet the stage offers "Deploy to devnet"
 
 #### Scenario: Five networks are offered, Mainnet first
 
@@ -120,3 +71,70 @@ address.
   and the deployment configures a platform mainnet RPC
 - **THEN** Settings opens with "Mainnet" checked and the connection uses the
   platform RPC
+
+### Requirement: Deploys to mainnet are refused
+
+When the `deploy` command starts while the connection's cluster, read from
+its endpoint, is mainnet-beta, it SHALL refuse before asking about a wallet
+and before sending any transaction, printing one terminal line that says
+deploys to mainnet are not available in the beta and to deploy from the
+user's own machine with the Solana CLI or Anchor. This SHALL hold for every
+caller: the Deploy stage, the terminal, Program Pal and the explorer menu,
+and for a custom RPC whose genesis hash is mainnet's. The command SHALL check
+again on the connection it sends on, before its first send, so a network
+changed to mainnet while a pre-check's question waits is refused too. An
+endpoint that does not answer which network it serves SHALL be refused with a
+line saying the network could not be read; one whose genesis hash names no
+known cluster is not mainnet and SHALL deploy. A tutorial's deploy SHALL refuse
+while the network's name is still the previous endpoint's. On every other
+cluster the command SHALL deploy as before.
+
+#### Scenario: Terminal deploy on mainnet
+
+- **WHEN** the endpoint is mainnet-beta and the user runs `deploy`
+- **THEN** the terminal prints the refusal line and no transaction is sent
+
+#### Scenario: Custom RPC on mainnet (manual)
+
+- **WHEN** the endpoint is a custom URL whose genesis hash is mainnet's and
+  `deploy` runs
+- **THEN** it is refused the same way
+
+#### Scenario: Network changed during the wallet question (manual)
+
+- **WHEN** `deploy` runs on devnet with no wallet, and the user picks Mainnet
+  while "Connect the Playground wallet?" waits, then answers yes
+- **THEN** the deploy is refused before any transaction
+
+#### Scenario: Endpoint that does not answer (manual)
+
+- **WHEN** the endpoint is a custom URL that does not answer the genesis read
+  and `deploy` runs
+- **THEN** the terminal says the network could not be read and nothing is sent
+
+#### Scenario: Devnet deploys (manual)
+
+- **WHEN** the endpoint is devnet and `deploy` runs
+- **THEN** no refusal line is printed and the deploy proceeds
+
+### Requirement: The Deploy stage points mainnet to the user's machine
+
+While the connected cluster is mainnet-beta, the Flow's Deploy stage SHALL
+say "Deploys to mainnet are not available in the beta." as its line, and its
+pill SHALL read "Deploy from your machine" and open the "Deploy from your
+machine" dialog with Mainnet picked, built or not. It SHALL show no "Who
+pays" line and no "Deploy to mainnet" action. Before the first deploy on
+mainnet, the summary's Network row SHALL keep Change.
+
+#### Scenario: Deploy stage on mainnet
+
+- **WHEN** the user picks Mainnet in Settings › Network and opens the Deploy
+  stage
+- **THEN** "Deploys to mainnet are not available in the beta." shows, no
+  "Deploy to mainnet" button is present, and pressing "Deploy from your
+  machine" opens the dialog with Mainnet picked
+
+#### Scenario: Deploy stage on devnet
+
+- **WHEN** the endpoint is devnet and the user opens the Deploy stage
+- **THEN** "Deploy to devnet" shows and the mainnet line does not

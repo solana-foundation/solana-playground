@@ -73,7 +73,22 @@ const CLUSTER_BY_GENESIS_HASH = new Map<string, Cluster>([
   ["5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d", "mainnet-beta"],
 ]);
 
-/** The public cluster `endpoint` serves, read from its genesis hash; throws for any other */
+/**
+ * An endpoint answered with a genesis hash that names no known cluster: a
+ * network of its own, not one that failed to answer
+ */
+export class UnknownClusterError extends Error {
+  constructor(genesisHash: string) {
+    super(`Genesis hash ${genesisHash} did not match any cluster`);
+    this.name = "UnknownClusterError";
+  }
+}
+
+/**
+ * The public cluster `endpoint` serves, read from its genesis hash. Throws
+ * `UnknownClusterError` for any other genesis, and the connection's own error
+ * when the endpoint does not answer.
+ */
 export const fetchClusterByGenesisHash = async (
   endpoint: string
 ): Promise<Cluster> => {
@@ -82,7 +97,7 @@ export const fetchClusterByGenesisHash = async (
   ).getGenesisHash();
   const cluster = CLUSTER_BY_GENESIS_HASH.get(genesisHash);
   if (!cluster) {
-    throw new Error(`Genesis hash ${genesisHash} did not match any cluster`);
+    throw new UnknownClusterError(genesisHash);
   }
   return cluster;
 };
