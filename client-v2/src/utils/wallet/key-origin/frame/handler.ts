@@ -43,6 +43,21 @@ const VERSIONED_FLAG = 0x80;
 class Refusal extends Error {}
 
 /**
+ * Logs a failure that is not a `Refusal` on the key page, named by its type
+ * only: a library's or browser's message is not ours to vouch for. The key
+ * page runs no app module, so the console is its one trace.
+ *
+ * @param error what was thrown
+ * @returns the text the app is sent in its place
+ */
+export const reportFailure = (error: unknown) => {
+  const kind = error instanceof Error ? error.name : typeof error;
+  // eslint-disable-next-line no-console -- the key page has no logger (see the JSDoc)
+  console.error("The key page failed:", kind);
+  return `The key page failed: ${kind}`;
+};
+
+/**
  * Whether bytes read as a serialized transaction message, legacy or v0. A
  * transaction message is signed as a transaction; signing it as a "message"
  * would let a page get a transaction signed without the transaction flow.
@@ -50,7 +65,7 @@ class Refusal extends Error {}
  * @param bytes the bytes to inspect
  * @returns whether the bytes are exactly one serialized message
  */
-export const looksLikeTransactionMessage = (bytes: Uint8Array) => {
+const looksLikeTransactionMessage = (bytes: Uint8Array) => {
   let at = 0;
   const byteAt = () => (at < bytes.length ? bytes[at++] : undefined);
   const skip = (count: number) => {
@@ -200,21 +215,17 @@ export const handlerWith = (store: KeyStore) => {
     try {
       return { id: request.id, ...(await answer(request)) };
     } catch (error) {
-      // Our own refusals are written to be sent; anything else is named by
-      // its type only, since a library's message is not ours to vouch for
+      // Our own refusals are written to be sent; anything else is logged and
+      // named by its type only
       const text =
-        error instanceof Refusal
-          ? error.message
-          : `The key page failed: ${
-              error instanceof Error ? error.name : typeof error
-            }`;
+        error instanceof Refusal ? error.message : reportFailure(error);
       return { id: request.id, ok: false, error: text };
     }
   };
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("utils/wallet/key-origin/frame/handler", () => {
     type Web3 = typeof import("../../../web3");
@@ -408,6 +419,50 @@ if (import.meta.vitest) {
       expect(
         looksLikeTransactionMessage(Uint8Array.from([0x81, 1, 0, 0]))
       ).toBe(false);
+    });
+
+    it("logs a failure of the store on the key page by its type only", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const failure = new DOMException(
+        "quota of 7,8,9 exceeded",
+        "QuotaExceededError"
+      );
+      const handle = handlerWith({
+        all: async () => new Map(),
+        put: async () => {
+          throw failure;
+        },
+        remove: async () => {},
+      });
+
+      expect(await ask(handle, { type: "create" })).toMatchObject({
+        ok: false,
+        error: "The key page failed: QuotaExceededError",
+      });
+      expect(error).toHaveBeenCalledWith(
+        "The key page failed:",
+        "QuotaExceededError"
+      );
+      expect(JSON.stringify(error.mock.calls)).not.toContain("7,8,9");
+      error.mockRestore();
+    });
+
+    it("does not log a refusal of its own", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const { store } = memoryStore();
+      const reply = await ask(handlerWith(store), {
+        type: "forget",
+        publicKey: "nothing",
+      });
+      await ask(handlerWith(store), {
+        type: "sign",
+        publicKey: "nothing",
+        kind: "message",
+        bytes: new Uint8Array(1),
+      });
+      expect(reply.ok).toBe(true);
+      expect(error).not.toHaveBeenCalled();
+      error.mockRestore();
     });
 
     it("never puts key bytes in a reply", async () => {

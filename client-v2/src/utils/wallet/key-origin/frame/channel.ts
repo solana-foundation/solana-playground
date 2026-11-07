@@ -6,6 +6,7 @@ import {
   type KeyReply,
   type KeyRequest,
 } from "../protocol";
+import { reportFailure } from "./handler";
 
 /**
  * Tells the app the key page is listening, then waits for the app's handshake
@@ -45,7 +46,8 @@ export const awaitPortFor =
 
 /**
  * Answers each well-formed request on `port` with `handle`; anything else on
- * the port is ignored.
+ * the port is ignored. A reply that cannot be posted (it cannot be cloned) is
+ * answered with a failure instead, so the app is not left waiting for it.
  *
  * @param handle the key page's request handler
  * @returns for the port the app handed over, a server of its requests
@@ -56,12 +58,21 @@ export const serveWith =
     port.onmessage = async (event: MessageEvent) => {
       const data: unknown = event.data;
       if (!isKeyRequest(data)) return;
-      port.postMessage(await handle(data));
+      try {
+        port.postMessage(await handle(data));
+      } catch (error) {
+        const failure: KeyReply = {
+          id: data.id,
+          ok: false,
+          error: reportFailure(error),
+        };
+        port.postMessage(failure);
+      }
     };
   };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("utils/wallet/key-origin/frame/channel", () => {
     const APP = "http://localhost:3006";
@@ -147,6 +158,32 @@ if (import.meta.vitest) {
         data: CONNECT,
       });
       expect(await connected).toBe(port);
+    });
+
+    it("answers a request whose reply cannot be sent with a failure", async () => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const channel = new MessageChannel();
+      serveWith(async (request) => ({
+        id: request.id,
+        ok: true,
+        // A function cannot be cloned, so posting it throws
+        result: (() => "pk") as never,
+      }))(channel.port1);
+      const reply = new Promise<unknown>((resolve) => {
+        channel.port2.onmessage = (event) => resolve(event.data);
+      });
+      channel.port2.postMessage({ id: 3, type: "create" });
+      expect(await reply).toEqual({
+        id: 3,
+        ok: false,
+        error: "The key page failed: DataCloneError",
+      });
+      expect(error).toHaveBeenCalledWith(
+        "The key page failed:",
+        "DataCloneError"
+      );
+      channel.port1.close();
+      channel.port2.close();
     });
 
     it("answers well-formed requests and drops the rest", async () => {

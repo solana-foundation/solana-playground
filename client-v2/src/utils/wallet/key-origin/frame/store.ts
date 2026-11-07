@@ -100,6 +100,19 @@ export const indexedDbKeyStore = (name: string): KeyStore => {
   };
 };
 
+/**
+ * Asks the browser not to evict the key origin's storage: it holds the only
+ * copy of the keys. The answer is the browser's to give (Chrome grants by
+ * engagement, Firefox may prompt).
+ *
+ * @param storage the browser's storage manager (`navigator.storage`), which
+ * an insecure context or an old browser lacks
+ * @returns whether the storage is persisted; `false` where it cannot be asked
+ */
+export const requestPersistence = async (
+  storage: Pick<StorageManager, "persist"> | undefined
+) => (storage?.persist ? storage.persist() : false);
+
 if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeEach, afterEach } = import.meta
     .vitest;
@@ -151,6 +164,16 @@ if (import.meta.vitest) {
       await store.remove("a");
       await store.remove("missing");
       expect((await store.all()).size).toBe(0);
+    });
+
+    it("asks the browser to keep the storage, where it can be asked", async () => {
+      const persist = vi.fn(async () => true);
+      expect(await requestPersistence({ persist })).toBe(true);
+      expect(persist).toHaveBeenCalledOnce();
+      expect(await requestPersistence(undefined)).toBe(false);
+      expect(
+        await requestPersistence({} as Pick<StorageManager, "persist">)
+      ).toBe(false);
     });
 
     it("writes under the pg-wallet-keys lock when there is one", async () => {
