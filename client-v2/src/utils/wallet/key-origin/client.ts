@@ -101,6 +101,9 @@ const frameOverWith =
           const timer = setTimeout(() => {
             if (!pending.delete(id)) return;
             reject(new KeyFrameUnavailable("timeout"));
+            // The key page counts as gone, so the requests still waiting on
+            // it fail for the same reason, not as a closed connection
+            rejectAll(new KeyFrameUnavailable("timeout"));
             onDead?.();
           }, requestTimeoutMs ?? REQUEST_TIMEOUT_MS);
           pending.set(id, {
@@ -114,7 +117,15 @@ const frameOverWith =
               reject(error);
             },
           });
-          port.postMessage({ ...body, id });
+          try {
+            port.postMessage({ ...body, id });
+          } catch (error) {
+            // Never sent, so nothing answers it: it must not wait out the
+            // timer, which would count a healthy key page as gone
+            clearTimeout(timer);
+            pending.delete(id);
+            reject(error);
+          }
         }),
       close: () => {
         if (isClosed) return;
@@ -204,7 +215,7 @@ const handshakeWith =
  * and what the connection does past the handshake
  * @returns a function of the key origin that answers the connection
  */
-export const connectKeyFrameWith =
+const connectKeyFrameWith =
   (opts: { timeoutMs?: number; doc?: Document } & FrameOptions) =>
   (origin: string): Promise<KeyFrame> => {
     const {
@@ -291,7 +302,7 @@ export const connectKeyPanel =
  * use; a failed attempt is not kept, and neither is a connection whose request
  * timed out, so the next call reconnects
  */
-export const keyFrameWith = (requestTimeoutMs: number) => {
+const keyFrameWith = (requestTimeoutMs: number) => {
   let connection: Promise<KeyFrame> | undefined;
   return (): Promise<KeyFrame> => {
     if (connection) return connection;
@@ -478,6 +489,28 @@ if (import.meta.vitest) {
       server.close();
     });
 
+    it("rejects a request it cannot send, and keeps the connection", async () => {
+      const onDead = vi.fn();
+      const { link, server, seen } = await linked({
+        requestTimeoutMs: 100,
+        onDead,
+      });
+      // A function cannot be cloned, so posting it throws
+      const unsendable = link.request({
+        type: "forget",
+        publicKey: (() => {}) as never,
+      });
+      await expect(unsendable).rejects.toThrow();
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(onDead).not.toHaveBeenCalled();
+
+      const next = link.request<string[]>({ type: "accounts" });
+      await vi.waitFor(() => expect(seen).toHaveLength(1));
+      server.postMessage({ id: seen[0].id, ok: true, result: [] });
+      expect(await next).toEqual([]);
+      server.close();
+    });
+
     it("rejects pending requests when a reply cannot be read", async () => {
       // The listeners the page's port gets, so a test can fire what the
       // browser fires there (jsdom's events do not reach Node's ports)
@@ -527,6 +560,24 @@ if (import.meta.vitest) {
       answer();
       await second;
       second.then((frame) => frame.close());
+    });
+
+    it("keyFrameWith fails the other waiting requests as a timeout when one times out", async () => {
+      vi.stubEnv("REACT_APP_WALLET_KEY_ORIGIN", ORIGIN);
+      const frameFor = keyFrameWith(30);
+      const connecting = frameFor();
+      const target = (document.querySelector("iframe") as HTMLIFrameElement)
+        .contentWindow as Window;
+      vi.spyOn(target, "postMessage").mockImplementation((() => {}) as never);
+      ready(target, ORIGIN);
+      const link = await connecting;
+
+      const first = link.request({ type: "accounts" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const second = link.request({ type: "accounts" });
+
+      await expect(first).rejects.toMatchObject({ reason: "timeout" });
+      await expect(second).rejects.toMatchObject({ reason: "timeout" });
     });
 
     it("points a panel frame at its panel, theme in the fragment", async () => {
