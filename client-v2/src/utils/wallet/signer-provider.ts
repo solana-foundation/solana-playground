@@ -73,8 +73,9 @@ export const publicKeyOf = (kp: number[]) =>
 /**
  * The signer provider that keeps the keys in the page, as the wallet always
  * has: every wallet carries its `keypair`, which project code reads as
- * `pg.wallet.keypair`. A key `makeKey` made lives in memory until an account
- * stores it in the record; keeping and forgetting are the record's own.
+ * `pg.wallet.keypair`. A key `makeKey` made lives in memory, where `add`
+ * copies it into the record, until `forgetKey` drops it; an account's key is
+ * the record's, so forgetting one an account holds changes nothing there.
  *
  * @param keyFor looks up an account's 64 secret key bytes by its public key
  * @returns the local signer provider
@@ -99,7 +100,9 @@ export const localSignerProviderWith = (
       drafts.set(publicKey, Array.from(keypair.secretKey));
       return publicKey;
     },
-    async forgetKey() {},
+    async forgetKey(publicKey) {
+      drafts.delete(publicKey);
+    },
     walletFor(account) {
       const keypair = keypairFor(account.publicKey);
 
@@ -241,6 +244,14 @@ if (import.meta.vitest) {
       const secretKey = provider.secretKeyFor(new PgWeb3.PublicKey(publicKey));
       expect(publicKeyOf(Array.from(secretKey)).toBase58()).toBe(publicKey);
       expect(provider.holdsKeysInPage).toBe(true);
+    });
+
+    it("forgetKey drops a key makeKey made, so it is no longer found", async () => {
+      const publicKey = new PgWeb3.PublicKey(await provider.makeKey());
+      await provider.forgetKey(publicKey.toBase58());
+      expect(() => provider.secretKeyFor(publicKey)).toThrow(
+        "No key for account"
+      );
     });
 
     it("secretKeyFor refuses a public key it holds no key for", () => {

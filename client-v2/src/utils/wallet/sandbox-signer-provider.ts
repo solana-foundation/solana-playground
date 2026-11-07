@@ -255,6 +255,21 @@ if (import.meta.vitest) {
       expect(asked).toEqual([]);
     });
 
+    it("refuses to make or forget a key, so project code cannot change the wallet's keys", async () => {
+      const asked: unknown[] = [];
+      const provider = sandboxSignerProviderWith(() => () => async (bytes) => {
+        asked.push(bytes);
+        return new Uint8Array(64);
+      });
+      await expect(provider.makeKey()).rejects.toThrow(
+        "Project code cannot add or remove the wallet's keys."
+      );
+      await expect(provider.forgetKey(publicKey.toBase58())).rejects.toThrow(
+        "Project code cannot add or remove the wallet's keys."
+      );
+      expect(asked).toEqual([]);
+    });
+
     describe("kitSignerWith", () => {
       let kit: typeof import("@solana/kit");
       beforeAll(async () => {
