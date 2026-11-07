@@ -6,6 +6,16 @@ const SWAPPED_HOST: Record<string, string> = {
 };
 
 /**
+ * `data:`, `file:` and `blob:` URLs give the string `"null"`, which an origin
+ * check would take for an opaque-origin sender.
+ *
+ * @param origin a URL's `origin`
+ * @returns the origin, or `null` when it is not a real one
+ */
+// eslint-disable-next-line unicorn/no-null -- as below
+const realOrigin = (origin: string) => (origin === "null" ? null : origin);
+
+/**
  * The origin a setting names. `"loopback"` is the other loopback host of the
  * page's own, same protocol and port, for development, where `localhost` and
  * `127.0.0.1` are different origins on one machine.
@@ -24,9 +34,9 @@ const originFor = (setting: string | undefined, here: Location | URL) => {
       if (!host) return null;
       const url = new URL(here.href);
       url.hostname = host;
-      return url.origin;
+      return realOrigin(url.origin);
     }
-    return new URL(setting).origin;
+    return realOrigin(new URL(setting).origin);
   } catch {
     // eslint-disable-next-line unicorn/no-null -- as above
     return null;
@@ -82,6 +92,19 @@ if (import.meta.vitest) {
           new URL("http://localhost:3006/")
         )
       ).toBe("https://wallet-keys.example.com");
+    });
+
+    it("gives nothing for a setting with no real origin", () => {
+      const here = new URL("http://localhost:3006/");
+      for (const setting of [
+        "data:text/html,x",
+        "file:///tmp/a",
+        "blob:null/1",
+      ]) {
+        expect(keyOriginFor(setting, here)).toBeNull();
+        expect(appOriginFor(setting, here)).toBeNull();
+      }
+      expect(keyOriginFor("loopback", new URL("file:///tmp/a"))).toBeNull();
     });
 
     it("gives nothing for loopback on another host or a bad URL", () => {
