@@ -265,8 +265,10 @@ export default defineConfig({
       BROWSER: "none",
       PORT: String(port),
       // `.env.development` turns the wallet's key origin on for `yarn dev`;
-      // the specs were written against keys in the page, so they keep them
-      // there unless the shell sets these.
+      // the specs were written against keys in the page, so a server started
+      // here keeps them there unless the shell sets these. A reused server
+      // (`decideDevServer`: this worktree's own `yarn dev`) was started
+      // without this env, so on it every spec runs with the key origin on.
       // `e2e/wallet-key-origin.e2e.spec.ts` starts a server of its own with
       // both on
       REACT_APP_WALLET_KEY_ORIGIN:

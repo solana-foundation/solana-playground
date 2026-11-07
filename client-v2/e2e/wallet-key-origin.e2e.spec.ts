@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import net from "node:net";
 import path from "node:path";
 import type { Frame, Page } from "@playwright/test";
-import { Keypair } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 
 import {
   expect,
@@ -392,4 +392,134 @@ test("wallet-storage: The key origin is blocked", async ({ page }) => {
   await expect
     .poll(async () => (await storedWallet(page))?.accounts[0]?.kp, LONG)
     .toBeUndefined();
+});
+
+/**
+ * One account seeded the old way, then loaded: resolves once its key has
+ * left the page and the wallet is connected
+ */
+const oneMovedAccount = async (page: Page) => {
+  const keypair = Keypair.generate();
+  const address = keypair.publicKey.toBase58();
+  await seedLocalWallet(page)({
+    state: "pg",
+    accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
+    currentIndex: 0,
+  });
+  await seedWorkspace(page);
+  await expect
+    .poll(async () => (await storedWallet(page))?.accounts[0]?.publicKey, LONG)
+    .toBe(address);
+  await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
+  return { address, keypair };
+};
+
+/**
+ * Opens a dialog from the wallet panel's Settings menu. Its trigger is the one
+ * "More" with a `title`; the assistant's and the project row's are labelled
+ */
+const openFromSettings = async (page: Page, item: "Export" | "Import") => {
+  await page.locator('button[title="More"]').click();
+  await page.getByRole("menuitem", { name: item }).click();
+};
+
+test("wallet-signing: Export from Settings", async ({ page }) => {
+  const { address } = await oneMovedAccount(page);
+  await openWalletPanel(page, address);
+
+  await openFromSettings(page, "Export");
+  const dialog = page.getByRole("dialog", { name: "Export keypair" });
+  await expect(dialog).toBeVisible();
+  const save = page
+    .frameLocator('iframe[title="Save keypair"]')
+    .getByRole("button", { name: "Save keypair" });
+  await expect(save).toBeEnabled(LONG);
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    save.click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("Wallet 1-keypair.json");
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const bytes: unknown = JSON.parse(Buffer.concat(chunks).toString());
+  expect(Array.isArray(bytes) && bytes.length).toBe(64);
+  expect(
+    Keypair.fromSecretKey(Uint8Array.from(bytes as number[])).publicKey
+  ).toEqual(new PublicKey(address));
+
+  // Escape with the focus inside the panel closes the dialog, as it does
+  // from the dialog's own document
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(dialog).toBeHidden();
+  await openFromSettings(page, "Export");
+  await expect(save).toBeEnabled(LONG);
+  const focusedInPanel = () =>
+    save.evaluate(
+      (button) => document.hasFocus() && document.activeElement === button
+    );
+  for (let i = 0; i < 10 && !(await focusedInPanel()); i++) {
+    await page.keyboard.press("Tab");
+  }
+  expect(await focusedInPanel()).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+});
+
+test("wallet-signing: Import a key file", async ({ page }) => {
+  const { address } = await oneMovedAccount(page);
+  await openWalletPanel(page, address);
+
+  const imported = Keypair.generate();
+  const importedAddress = imported.publicKey.toBase58();
+  await openFromSettings(page, "Import");
+  const dialog = page.getByRole("dialog", { name: "Import keypair" });
+  await expect(dialog).toBeVisible();
+  const panel = page.frameLocator('iframe[title="Import keypair"]');
+  await expect(
+    panel.getByRole("button", { name: "Import keypair" })
+  ).toBeEnabled(LONG);
+  await panel.locator('input[type="file"]').setInputFiles({
+    name: "imported-keypair.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(JSON.stringify(Array.from(imported.secretKey))),
+  });
+  await expect(dialog).toContainText(
+    `Imported ${importedAddress.slice(0, 4)}`,
+    LONG
+  );
+  await dialog.getByRole("button", { name: "Done" }).click();
+  await expect(dialog).toBeHidden();
+
+  // The account menu lists it
+  await page.getByText(/^Wallet \d+ - \(/).click();
+  await expect(
+    page.getByRole("menuitem", {
+      name: `Wallet 2 - (${importedAddress.slice(
+        0,
+        3
+      )}...${importedAddress.slice(-3)})`,
+    })
+  ).toBeVisible();
+
+  // The page's record has the account, and the key file's bytes stayed on
+  // the key page
+  await expect
+    .poll(
+      async () =>
+        (await storedWallet(page))?.accounts.map(({ publicKey }) => publicKey),
+      LONG
+    )
+    .toEqual([address, importedAddress]);
+  expect(JSON.stringify(await storedWallet(page))).not.toMatch(
+    SECRET_KEY_ARRAY
+  );
+  for (const value of await localValues(page)) {
+    expect(value).not.toMatch(SECRET_KEY_ARRAY);
+  }
+  const frame = keyFrame(page);
+  expect((await heldKeys(frame as Frame)).sort()).toEqual(
+    [address, importedAddress].sort()
+  );
 });
