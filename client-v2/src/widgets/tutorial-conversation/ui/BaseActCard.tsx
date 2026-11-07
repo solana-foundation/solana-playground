@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Axe,
   Check,
+  Droplets,
   Expand,
   Hammer,
   Play,
@@ -53,6 +54,7 @@ const NARROW_CTA = "@max-lg/act:w-full";
 const NARROW_HIDE = "@max-lg/act:hidden pointer-coarse:hidden";
 
 const ICONS: Record<Act, LucideIcon> = {
+  airdrop: Droplets,
   build: Hammer,
   deploy: Rocket,
   buildDeploy: Rocket,
@@ -68,6 +70,7 @@ const MOVE_ICONS: Record<AccountView["kind"], LucideIcon> = {
 
 /** What the record says the act did */
 const DONE: Record<Act, string> = {
+  airdrop: "Funded your wallet",
   build: "Built",
   deploy: "Deployed",
   buildDeploy: "Built and deployed",

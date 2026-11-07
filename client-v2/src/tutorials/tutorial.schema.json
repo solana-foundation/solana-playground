@@ -495,7 +495,7 @@
           "$ref": "#/definitions/id"
         },
         "act": {
-          "enum": ["build", "deploy", "buildDeploy", "run", "call"]
+          "enum": ["airdrop", "build", "deploy", "buildDeploy", "run", "call"]
         },
         "say": {
           "description": "The line posted above the act card.",

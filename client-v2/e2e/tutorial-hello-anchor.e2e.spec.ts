@@ -115,14 +115,23 @@ const passStepOne = async (page: Page) => {
   await spent(page, "s1.build", "f1.build");
 };
 
-/** Step 2: a deploy from a wallet made on the card, funded by the faucet */
+/** The airdrop card's line in a browser that has no wallet yet */
+const NEW_WALLET = "A new Playground wallet, made in this browser";
+
+/**
+ * Step 2: the airdrop card makes the wallet and the faucet funds it
+ * (HOO-2677), then the deploy pays from it
+ */
 const passStepTwo = async (page: Page) => {
   await answer(page, beat("s2.q2", "ask"));
+  await expect(feed(page).getByText(NEW_WALLET)).toBeVisible(LONG);
+  await act(page, "s2.airdrop").click(LONG);
+  await expect(
+    feed(page).getByText(/Made a wallet and added [\d.]+ SOL/)
+  ).toBeVisible(LONG);
   await act(page, "s2.deploy").click(LONG);
-  const create = feed(page).getByRole("button", { name: "Create wallet" });
-  await create.click(LONG);
   await won(page, "deploy");
-  await spent(page, "s2.deploy");
+  await spent(page, "s2.airdrop", "s2.deploy");
 };
 
 test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () => {
@@ -202,8 +211,17 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await won(page, "call-client");
     await next(page).click();
 
-    // Step 4: the new argument, an upgrade at the same address, the call
+    // Step 4: the new argument, an upgrade at the same address, the call.
+    // The airdrop card funds for the 400 KB estimate (the real port knows no
+    // binary length), which step 2's deploy left the wallet short of, so it
+    // asks the faucet; the deploy then checks only the real binary's need
     await answer(page, beat("s4.q4", "ask"));
+    await act(page, "s4.airdrop").click(LONG);
+    await expect(
+      feed(page)
+        .getByText(/Added [\d.]+ SOL/)
+        .last()
+    ).toBeVisible(LONG);
     await act(page, "s4.ship").click(LONG);
     await expect(feed(page).getByText("Upgraded").last()).toBeVisible(LONG);
     // The upgrade keeps the address
@@ -303,19 +321,22 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
 
     devnet.faucet = "refuse";
     await answer(page, beat("s2.q2", "ask"));
-    await act(page, "s2.deploy").click(LONG);
-    await feed(page).getByRole("button", { name: "Create wallet" }).click(LONG);
+    await act(page, "s2.airdrop").click(LONG);
     await expect(feed(page).getByText("Not enough devnet SOL")).toBeVisible(
       LONG
     );
     await expect(
       feed(page).getByRole("link", { name: /Open faucet/ })
     ).toBeVisible();
+    await expect(feed(page).getByText("Asks the faucet again")).toBeVisible();
     expect(devnet.programs()).toEqual([]);
 
-    // Try again, under the red card, deploys once the faucet pays
+    // Try again, under the red card, asks the faucet again; once it pays,
+    // the deploy follows
     devnet.faucet = "ok";
     await feed(page).getByRole("button", { name: "Try again" }).last().click();
+    await expect(feed(page).getByText(/Added [\d.]+ SOL/)).toBeVisible(LONG);
+    await act(page, "s2.deploy").click(LONG);
     await won(page, "deploy");
     expect(devnet.programs()).toHaveLength(1);
   });
@@ -332,7 +353,15 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await act(page, "s3.run").click(LONG);
     await won(page, "call-client");
     await next(page).click();
+    // Step 2's deploy left the wallet short of the 400 KB estimate, so step
+    // 4's airdrop card asks the faucet before the upgrade
     await answer(page, beat("s4.q4", "ask"));
+    await act(page, "s4.airdrop").click(LONG);
+    await expect(
+      feed(page)
+        .getByText(/Added [\d.]+ SOL/)
+        .last()
+    ).toBeVisible(LONG);
     await act(page, "s4.ship").click(LONG);
     await expect(feed(page).getByText("Upgraded").last()).toBeVisible(LONG);
 

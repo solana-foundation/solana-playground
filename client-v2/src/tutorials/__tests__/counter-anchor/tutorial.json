@@ -138,9 +138,18 @@
       "beats": [
         {
           "kind": "act",
+          "id": "s2.airdrop",
+          "act": "airdrop",
+          "say": "A deploy pays in devnet SOL. Get some for your wallet first.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
           "id": "s2.deploy",
           "act": "deploy",
-          "say": "Deploy it to devnet, Solana's test network. Your Playground wallet pays in devnet SOL, which is free.",
+          "say": "Deploy it to devnet, Solana's test network. Your Playground wallet pays with the SOL you just got.",
           "title": "Deploy to devnet",
           "context": "From your Playground wallet on devnet",
           "button": "Deploy"

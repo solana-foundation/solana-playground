@@ -28,6 +28,7 @@ import {
   watchBuildSource,
   watchDeploys,
 } from "@/features/tutorial-conversation";
+import { useBalance, useWallet } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
 import {
@@ -44,6 +45,10 @@ import { PgView } from "@/utils/view";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
+import {
+  airdropContextOf,
+  withAirdropContextFor,
+} from "../model/airdrop-context";
 import { explainPrompt, whenAnswered } from "../model/explain";
 import type { FeedMarks } from "../model/marks";
 import { marksOf } from "../model/marks";
@@ -698,6 +703,21 @@ export const TutorialConversation = ({
   onPhone.current = phone;
   // Until the session read answers, a refused build offers the sign-in
   const signedIn = useSignedIn() ?? false;
+  // The live airdrop card reads the wallet it funds
+  const wallet = useWallet();
+  const balance = useBalance();
+  const withAirdropLine = withAirdropContextFor(
+    airdropContextOf({
+      wallet: wallet
+        ? {
+            address: wallet.publicKey.toBase58(),
+            balance: typeof balance === "number" ? balance : undefined,
+            playground: !!wallet.isPg,
+          }
+        : undefined,
+      hasAccounts: PgWallet.accounts.length > 0,
+    })
+  );
   useSessionCheckOnRefusal(view?.live);
   useLockedPreview(state, phone);
   const on = useMemo<TurnHandlers>(
@@ -787,7 +807,7 @@ export const TutorialConversation = ({
         onBack={onBack}
         renderTurn={(turn, live) => (
           <TurnView
-            turn={turn}
+            turn={withAirdropLine(turn)}
             definition={context.definition}
             live={live}
             running={running}

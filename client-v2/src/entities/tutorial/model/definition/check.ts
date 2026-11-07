@@ -436,6 +436,30 @@ const ruleErrors = (
     }
   };
 
+  // A tutorial deploy pays from the wallet and no longer tops it up itself
+  // (HOO-2677): the learner asks the faucet on an airdrop card before every
+  // deploy, which passes by itself when the wallet is already funded
+  let hasAirdrop = false;
+  let deployed = false;
+  for (const [beat, at] of d.steps.flatMap((step, i) => beatsOf(step, i))) {
+    if (beat.kind !== "act") continue;
+    if (beat.act === "airdrop") hasAirdrop = true;
+    if (beat.act !== "deploy" && beat.act !== "buildDeploy") continue;
+    if (!hasAirdrop) {
+      const since = deployed
+        ? "since the last deploy"
+        : "before the first deploy";
+      errors.push({
+        path: at,
+        message: `an airdrop act ${since}, found none before ${JSON.stringify(
+          beat.id
+        )}`,
+      });
+    }
+    hasAirdrop = false;
+    deployed = true;
+  }
+
   d.steps.forEach((step, i) => {
     once(stepIds, step.id, `steps[${i}].id`, "step");
     continues(step, i);
@@ -742,6 +766,87 @@ if (import.meta.vitest) {
 
     it("passes a well-formed definition", () => {
       expect(lines(minimal())).toEqual([]);
+    });
+
+    describe("the airdrop before every deploy", () => {
+      const act = (id: string, kind: "airdrop" | "deploy" | "buildDeploy") => ({
+        kind: "act" as const,
+        id,
+        act: kind,
+        title: kind === "airdrop" ? "Get devnet SOL" : "Deploy to devnet",
+        context: "Devnet",
+        button: kind === "airdrop" ? "Request airdrop" : "Deploy",
+      });
+
+      it("refuses a first deploy with no airdrop before it, naming it", () => {
+        const d = minimal();
+        d.steps[0].beats.push(act("s1.deploy", "deploy"));
+        expect(lines(d)).toEqual([
+          'steps[0].beats[2]: an airdrop act before the first deploy, found none before "s1.deploy"',
+        ]);
+      });
+
+      it("passes an airdrop in the same step or an earlier one", () => {
+        const same = minimal();
+        same.steps[0].beats.push(
+          act("s1.airdrop", "airdrop"),
+          act("s1.deploy", "deploy")
+        );
+        expect(lines(same)).toEqual([]);
+
+        const earlier = minimal();
+        earlier.steps[0].beats.push(act("s1.airdrop", "airdrop"));
+        earlier.steps[1].beats.unshift(act("s2.deploy", "deploy"));
+        expect(lines(earlier)).toEqual([]);
+      });
+
+      it("refuses a later deploy with no airdrop since the last deploy, naming it", () => {
+        const d = minimal();
+        d.steps[0].beats.push(
+          act("s1.airdrop", "airdrop"),
+          act("s1.deploy", "deploy")
+        );
+        d.steps[1].beats.unshift(act("s2.ship", "buildDeploy"));
+        expect(lines(d)).toEqual([
+          'steps[1].beats[0]: an airdrop act since the last deploy, found none before "s2.ship"',
+        ]);
+      });
+
+      it("passes a later deploy with its own airdrop, and counts onFail beats after the main ones", () => {
+        const d = minimal();
+        d.steps[0].beats.push(
+          act("s1.airdrop", "airdrop"),
+          act("s1.deploy", "deploy")
+        );
+        d.steps[1].beats.unshift(
+          act("s2.airdrop", "airdrop"),
+          act("s2.ship", "buildDeploy")
+        );
+        expect(lines(d)).toEqual([]);
+
+        Object.assign(d.steps[1], {
+          planned: "On purpose.",
+          failsWith: "cannot find type",
+          onFail: [act("s2.retry", "deploy")],
+        });
+        expect(lines(d)).toEqual([
+          'steps[1].onFail[0]: an airdrop act since the last deploy, found none before "s2.retry"',
+        ]);
+      });
+
+      it("refuses an airdrop act that names an instruction", () => {
+        const d = minimal();
+        d.steps[0].beats.push({
+          kind: "act",
+          id: "s1.airdrop",
+          act: "airdrop",
+          title: "Get devnet SOL",
+          context: "Devnet",
+          button: "Request airdrop",
+          call: { instruction: "hello" },
+        } as never);
+        expect(lines(d).length).toBeGreaterThan(0);
+      });
     });
 
     it("names a wrong option with no reason by its path", () => {

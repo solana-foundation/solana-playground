@@ -44,13 +44,14 @@ import { PgView } from "../../../utils/view";
 import { PgCallPanel } from "./call-panel";
 import { TICK_MS } from "./clock";
 import { judgeGoal } from "./goals";
-import type { Runner, Workspace } from "./ports";
+import type { Judge, Runner, Workspace } from "./ports";
 import { memoryWorkspace, stubRunner } from "./ports";
 import type { RunResult } from "./progress";
 import { freshProgress } from "./progress";
 import {
   INITIAL_CONVERSATION_STATE,
   PgConversation,
+  PROBE_TIMEOUT_MS,
   STORAGE_KEY,
 } from "./store";
 
@@ -98,19 +99,28 @@ const OK_BUILD: RunResult = {
   seconds: 1.6,
   instructions: ["hello"],
 };
+/** A wallet the faucet topped up to 2 SOL */
+const AIRDROPPED: RunResult = {
+  act: "airdrop",
+  ok: true,
+  seconds: 1,
+  balance: 2_000_000_000,
+  airdropped: 2_000_000_000,
+};
 
 const open = (
   name: string | null,
   ports: {
     workspace?: Workspace;
     runner?: Runner;
+    judge?: Judge;
   } = {}
 ) => {
   setWorkspace(name);
   sub = PgConversation.init({
     workspace: ports.workspace ?? memoryWorkspace(),
     runner: ports.runner ?? stubRunner([]),
-    judge: judgeGoal,
+    judge: ports.judge ?? judgeGoal,
   });
 };
 
@@ -328,6 +338,7 @@ describe("PgConversation", () => {
     const workspace = memoryWorkspace({ "src/lib.rs": "" });
     const runner = stubRunner([
       { stages: ["Building"], result: OK_BUILD },
+      { result: AIRDROPPED },
       {
         result: {
           act: "deploy",
@@ -355,6 +366,8 @@ describe("PgConversation", () => {
     PgConversation.next();
     await settle();
     PgConversation.skip("s2.q2");
+    await settle();
+    PgConversation.act("s2.airdrop");
     await settle();
     PgConversation.act("s2.deploy");
     await settle();
@@ -760,7 +773,7 @@ describe("PgConversation", () => {
     const saved = freshProgress();
     saved.startedAt = 1000;
     saved.passed = ["write-program"];
-    saved.cursor = { kind: "step", stepId: "deploy", beat: 3, fail: false };
+    saved.cursor = { kind: "step", stepId: "deploy", beat: 4, fail: false };
     saved.beats = {
       "s2.why": { kind: "said", at: 2000 },
       "s2.q2": {
@@ -770,9 +783,13 @@ describe("PgConversation", () => {
         via: "button",
         wrong: [],
       },
+      "s2.airdrop": { kind: "said", at: 3000 },
       "s2.deploy": { kind: "said", at: 3500 },
     };
-    saved.runs = { "s2.deploy": [{ status: "started", at: 4000 }] };
+    saved.runs = {
+      "s2.airdrop": [{ status: "ok", at: 3100, took: 200, result: AIRDROPPED }],
+      "s2.deploy": [{ status: "started", at: 4000 }],
+    };
     saved.times = {
       "write-program": { from: 1000, to: 1900, via: "chat" },
       deploy: { from: 2000, to: null },
@@ -818,7 +835,7 @@ describe("PgConversation", () => {
     const saved = freshProgress();
     saved.startedAt = 1000;
     saved.passed = ["write-program"];
-    saved.cursor = { kind: "step", stepId: "deploy", beat: 3, fail: false };
+    saved.cursor = { kind: "step", stepId: "deploy", beat: 4, fail: false };
     saved.beats = {
       "s2.why": { kind: "said", at: 2000 },
       "s2.q2": {
@@ -828,9 +845,13 @@ describe("PgConversation", () => {
         via: "button",
         wrong: [],
       },
+      "s2.airdrop": { kind: "said", at: 3000 },
       "s2.deploy": { kind: "said", at: 3500 },
     };
-    saved.runs = { "s2.deploy": [{ status: "started", at: 4000 }] };
+    saved.runs = {
+      "s2.airdrop": [{ status: "ok", at: 3100, took: 200, result: AIRDROPPED }],
+      "s2.deploy": [{ status: "started", at: 4000 }],
+    };
     saved.times = {
       "write-program": { from: 1000, to: 1900, via: "chat" },
       deploy: { from: 2000, to: null },
@@ -1190,6 +1211,522 @@ describe("PgConversation", () => {
   });
 });
 
+describe("PgConversation's airdrop card", () => {
+  const SOL = 1_000_000_000;
+  const FOUND_FUNDED: RunResult = {
+    act: "airdrop",
+    ok: true,
+    seconds: 0.4,
+    balance: 3.2 * SOL,
+    airdropped: 0,
+  };
+
+  /** A runner whose `isFunded` answers as given; every run lands as `results` say */
+  const runnerWith = (
+    funded: NonNullable<Runner["isFunded"]>,
+    results: RunResult[] = [OK_BUILD, FOUND_FUNDED]
+  ) => {
+    const queue = results.slice();
+    const run = vi.fn<Runner["run"]>(async (act) => {
+      const next = queue.shift();
+      if (!next) throw new Error(`no result scripted for ${act}`);
+      return next;
+    });
+    return { run, isFunded: vi.fn(funded) };
+  };
+
+  /** Hello Anchor to step 2's airdrop card: built, Next, the question skipped */
+  const toAirdrop = async (runner: Runner) => {
+    open(NAME, { runner });
+    await settle();
+    PgConversation.start();
+    await settle();
+    PgConversation.pick("s1.q1", 1);
+    await settle();
+    PgConversation.act("s1.build");
+    await settle();
+    PgConversation.next();
+    await settle();
+    PgConversation.skip("s2.q2");
+    await settle();
+  };
+
+  const airdropRuns = () =>
+    PgConversation.state.engine.progress.runs["s2.airdrop"] ?? [];
+
+  it("presses a funded wallet's airdrop card itself, and its record names the balance", async () => {
+    const runner = runnerWith(async () => true);
+    await toAirdrop(runner);
+    expect(runner.isFunded).toHaveBeenCalledTimes(1);
+    expect(runner.run).toHaveBeenLastCalledWith(
+      "airdrop",
+      expect.objectContaining({ beatId: "s2.airdrop" }),
+      expect.any(Function)
+    );
+    expect(airdropRuns()).toMatchObject([{ status: "ok" }]);
+    expect(
+      PgConversation.view(LATER)?.turns.find((t) => t.id === "s2.airdrop")
+    ).toMatchObject({ act: { record: "Your wallet has 3.2 SOL" } });
+    expect(PgConversation.view(LATER)?.live?.id).toBe("s2.deploy");
+  });
+
+  it("leaves a wallet that is not funded its live card", async () => {
+    // The store's own timer re-renders as the card's turns arrive
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const runner = runnerWith(async () => false);
+      await toAirdrop(runner);
+      expect(runner.isFunded).toHaveBeenCalledTimes(1);
+      expect(airdropRuns()).toEqual([]);
+      expect(PgConversation.view(LATER)?.live).toMatchObject({
+        id: "s2.airdrop",
+        state: "live",
+      });
+      // Asked once per load: a re-render on the same card asks nothing
+      const changed = vi.fn();
+      const changes = PgConversation.onDidChange(changed);
+      vi.runOnlyPendingTimers();
+      await settle();
+      changes.dispose();
+      expect(changed.mock.calls.length).toBeGreaterThan(1);
+      expect(runner.isFunded).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports a probe that throws, posts nothing and keeps the card live", async () => {
+    const runner = runnerWith(async () => {
+      throw new Error("RPC down");
+    });
+    await toAirdrop(runner);
+    expect(airdropRuns()).toEqual([]);
+    expect(PgConversation.view(LATER)?.live?.id).toBe("s2.airdrop");
+    expect(
+      logged.entries.filter(
+        (e) => e.level === "error" && e.error?.message === "RPC down"
+      )
+    ).toMatchObject([{ report: true }]);
+  });
+
+  it("does not probe again for an airdrop that landed, after a reload either", async () => {
+    const runner = runnerWith(async () => true);
+    await toAirdrop(runner);
+    expect(runner.isFunded).toHaveBeenCalledTimes(1);
+    PgConversation.view(LATER);
+    close();
+    const again = runnerWith(async () => true, []);
+    open(NAME, { runner: again });
+    await settle();
+    expect(
+      PgConversation.state.engine.progress.runs["s2.airdrop"]
+    ).toMatchObject([{ status: "ok" }]);
+    expect(again.isFunded).not.toHaveBeenCalled();
+    expect(again.run).not.toHaveBeenCalled();
+  });
+
+  it("runs once when the learner presses while the probe is in flight", async () => {
+    let answer: (funded: boolean) => void = () => undefined;
+    const runner = runnerWith(
+      () => new Promise<boolean>((resolve) => (answer = resolve)),
+      [
+        OK_BUILD,
+        {
+          act: "airdrop",
+          ok: true,
+          seconds: 2,
+          balance: 2 * SOL,
+          airdropped: 2 * SOL,
+        },
+      ]
+    );
+    await toAirdrop(runner);
+    expect(runner.isFunded).toHaveBeenCalledTimes(1);
+    PgConversation.act("s2.airdrop");
+    await settle();
+    answer(true);
+    await settle();
+    expect(
+      runner.run.mock.calls.filter(([act]) => act === "airdrop")
+    ).toHaveLength(1);
+    expect(airdropRuns()).toMatchObject([{ status: "ok" }]);
+  });
+
+  it("asks again after a reload onto a card that never ran", async () => {
+    const runner = runnerWith(async () => false);
+    await toAirdrop(runner);
+    expect(runner.isFunded).toHaveBeenCalledTimes(1);
+    close();
+    const again = runnerWith(async () => true, [FOUND_FUNDED]);
+    open(NAME, { runner: again });
+    await settle();
+    expect(again.isFunded).toHaveBeenCalledTimes(1);
+    expect(airdropRuns()).toMatchObject([{ status: "ok" }]);
+  });
+
+  it("asks again after a reload onto a card the faucet refused, and presses it once funded", async () => {
+    const refused: RunResult = {
+      act: "airdrop",
+      ok: false,
+      seconds: 3,
+      reason: "no_funds",
+      message: "429 Too Many Requests",
+      balance: 0,
+      cost: 1.27 * SOL,
+      address: "WaLLet",
+    };
+    const runner = runnerWith(async () => false, [OK_BUILD, refused]);
+    await toAirdrop(runner);
+    PgConversation.act("s2.airdrop");
+    await settle();
+    expect(airdropRuns()).toMatchObject([{ status: "failed" }]);
+    // Within the session the refused card is not asked about again
+    expect(runner.isFunded).toHaveBeenCalledTimes(1);
+    close();
+    const again = runnerWith(async () => true, [FOUND_FUNDED]);
+    open(NAME, { runner: again });
+    await settle();
+    expect(again.isFunded).toHaveBeenCalledTimes(1);
+    expect(airdropRuns()).toMatchObject([
+      { status: "failed" },
+      { status: "ok" },
+    ]);
+  });
+
+  it("measures a refused airdrop as no_funds", async () => {
+    const refused: RunResult = {
+      act: "airdrop",
+      ok: false,
+      seconds: 3,
+      reason: "no_funds",
+      message: "429 Too Many Requests",
+      balance: 0,
+      cost: 1.27 * SOL,
+      address: "WaLLet",
+    };
+    const runner = runnerWith(async () => false, [OK_BUILD, refused]);
+    await toAirdrop(runner);
+    PgConversation.act("s2.airdrop");
+    await settle();
+    expect(
+      events.events
+        .filter((e) => e.name === "tutorial_action_run")
+        .map((e) => e.params)
+        .filter((p) => p.action === "airdrop")
+    ).toEqual([
+      expect.objectContaining({
+        tutorial: "hello-anchor",
+        step: 2,
+        action: "airdrop",
+        outcome: "no_funds",
+      }),
+    ]);
+  });
+
+  it("asks again after a reload interrupted the card's run", async () => {
+    const runner = {
+      run: vi.fn<Runner["run"]>(async (act) =>
+        act === "build" ? OK_BUILD : new Promise<RunResult>(() => undefined)
+      ),
+      isFunded: vi.fn(async () => false),
+    };
+    await toAirdrop(runner);
+    PgConversation.act("s2.airdrop");
+    await settle();
+    expect(airdropRuns()).toMatchObject([{ status: "started" }]);
+    // A page reload: the store starts from nothing and reads the save
+    close();
+    open(null);
+    await settle();
+    close();
+    const again = runnerWith(async () => true, [FOUND_FUNDED]);
+    open(NAME, { runner: again });
+    await settle();
+    expect(again.isFunded).toHaveBeenCalledTimes(1);
+    expect(airdropRuns()).toMatchObject([
+      { status: "interrupted" },
+      { status: "ok" },
+    ]);
+  });
+
+  it("asks again when a restart of the step reaches the card anew", async () => {
+    const runner = runnerWith(
+      async () => true,
+      [OK_BUILD, FOUND_FUNDED, FOUND_FUNDED]
+    );
+    await toAirdrop(runner);
+    expect(runner.isFunded).toHaveBeenCalledTimes(1);
+    PgConversation.restartStep();
+    await settle();
+    PgConversation.skip("s2.q2");
+    await settle();
+    expect(runner.isFunded).toHaveBeenCalledTimes(2);
+    expect(airdropRuns()).toMatchObject([{ status: "ok" }]);
+  });
+});
+
+describe("PgConversation's later airdrop card (designers, 7 Nov)", () => {
+  const SOL = 1_000_000_000;
+  const CALLED: RunResult = {
+    act: "call",
+    ok: true,
+    seconds: 1,
+    signatures: ["sig"],
+    line: "Program log: Hello, World!",
+    called: [{ instruction: "hello", args: {} }],
+  };
+  /** Any ok result but an airdrop's passes its step, so the Call panel can pass steps 2 and 3 */
+  const anyOk: Judge = (_goal, result) => result.ok && result.act !== "airdrop";
+
+  /** A runner whose `isFunded` answers as given; every run lands as `results` say */
+  const runnerWith = (
+    funded: NonNullable<Runner["isFunded"]>,
+    results: RunResult[]
+  ) => {
+    const queue = results.slice();
+    const run = vi.fn<Runner["run"]>(async (act) => {
+      const next = queue.shift();
+      if (!next) throw new Error(`no result scripted for ${act}`);
+      return next;
+    });
+    return { run, isFunded: vi.fn(funded) };
+  };
+
+  /** Hello Anchor to step 4's airdrop card, steps 2 and 3 passed from the Call panel */
+  const toLaterAirdrop = async (runner: Runner) => {
+    open(NAME, { runner, judge: anyOk });
+    await settle();
+    PgConversation.start();
+    await settle();
+    PgConversation.pick("s1.q1", 1);
+    await settle();
+    PgConversation.act("s1.build");
+    await settle();
+    PgConversation.next();
+    await settle();
+    PgConversation.passed("call_panel", CALLED);
+    await settle();
+    PgConversation.next();
+    await settle();
+    PgConversation.passed("call_panel", CALLED);
+    await settle();
+    PgConversation.next();
+    await settle();
+    PgConversation.pick("s4.q4", 1);
+    await settle();
+  };
+
+  const shown = () => PgConversation.view(LATER)?.turns.map((t) => t.id) ?? [];
+  const laterRuns = () =>
+    PgConversation.state.engine.progress.runs["s4.airdrop"] ?? [];
+
+  it("keeps the card and its say line out of the feed while it checks, and a funded wallet's never shows", async () => {
+    let answer: (funded: boolean) => void = () => undefined;
+    const runner = runnerWith(
+      () => new Promise<boolean>((resolve) => (answer = resolve)),
+      [
+        OK_BUILD,
+        {
+          act: "airdrop",
+          ok: true,
+          seconds: 0.4,
+          balance: 3.2 * SOL,
+          airdropped: 0,
+        },
+      ]
+    );
+    await toLaterAirdrop(runner);
+    expect(runner.isFunded).toHaveBeenCalledTimes(1);
+    expect(PgConversation.state.probing).toEqual(["s4.airdrop"]);
+    expect(shown()).not.toContain("s4.airdrop");
+    expect(shown()).not.toContain("say:s4.airdrop");
+    answer(true);
+    await settle();
+    expect(laterRuns()).toMatchObject([{ status: "ok" }]);
+    expect(PgConversation.state.probing).toEqual([]);
+    expect(shown()).not.toContain("s4.airdrop");
+    expect(shown()).not.toContain("say:s4.airdrop");
+    expect(PgConversation.view(LATER)?.live?.id).toBe("s4.ship");
+  });
+
+  it("shows the card and its say line once the check finds the wallet short", async () => {
+    const runner = runnerWith(async () => false, [OK_BUILD]);
+    await toLaterAirdrop(runner);
+    expect(PgConversation.state.probing).toEqual([]);
+    expect(shown()).toContain("say:s4.airdrop");
+    expect(PgConversation.view(LATER)?.live).toMatchObject({
+      id: "s4.airdrop",
+      state: "live",
+    });
+  });
+
+  it("shows the card when the check does not answer in time, and a late funded answer still presses it", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let answer: (funded: boolean) => void = () => undefined;
+      const runner = runnerWith(
+        () => new Promise<boolean>((resolve) => (answer = resolve)),
+        [
+          OK_BUILD,
+          {
+            act: "airdrop",
+            ok: true,
+            seconds: 0.4,
+            balance: 3.2 * SOL,
+            airdropped: 0,
+          },
+        ]
+      );
+      await toLaterAirdrop(runner);
+      expect(PgConversation.state.probing).toEqual(["s4.airdrop"]);
+      vi.advanceTimersByTime(PROBE_TIMEOUT_MS);
+      await settle();
+      expect(PgConversation.state.probing).toEqual([]);
+      expect(PgConversation.view(LATER)?.live?.id).toBe("s4.airdrop");
+      answer(true);
+      await settle();
+      expect(laterRuns()).toMatchObject([{ status: "ok" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows the card when the check throws", async () => {
+    const runner = runnerWith(async () => {
+      throw new Error("RPC down");
+    }, [OK_BUILD]);
+    await toLaterAirdrop(runner);
+    expect(PgConversation.state.probing).toEqual([]);
+    expect(PgConversation.view(LATER)?.live?.id).toBe("s4.airdrop");
+  });
+
+  /** The faucet's refusal, as the airdrop act answers it */
+  const REFUSED: RunResult = {
+    act: "airdrop",
+    ok: false,
+    seconds: 3,
+    reason: "no_funds",
+    message: "429 Too Many Requests",
+    balance: 0,
+    cost: 1.27 * SOL,
+    address: "WaLLet",
+  };
+  const airdropPresses = (runner: { run: ReturnType<typeof vi.fn> }) =>
+    runner.run.mock.calls.filter(([act]) => act === "airdrop");
+
+  it.each([
+    ["finds the wallet short", () => Promise.resolve(false)],
+    ["throws", () => Promise.reject(new Error("RPC down"))],
+  ])(
+    "shows the card when the check times out, and a late answer that %s presses nothing",
+    async (_case, late) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        // Resolved with the late answer's promise, so a rejection rejects it
+        let settleProbe: (answer: Promise<boolean>) => void = () => undefined;
+        const runner = runnerWith(
+          () => new Promise<boolean>((resolve) => (settleProbe = resolve)),
+          [OK_BUILD]
+        );
+        await toLaterAirdrop(runner);
+        expect(PgConversation.state.probing).toEqual(["s4.airdrop"]);
+        vi.advanceTimersByTime(PROBE_TIMEOUT_MS);
+        await settle();
+        expect(PgConversation.state.probing).toEqual([]);
+        expect(shown()).toContain("say:s4.airdrop");
+        expect(PgConversation.view(LATER)?.live).toMatchObject({
+          id: "s4.airdrop",
+          state: "live",
+        });
+        settleProbe(late());
+        await settle();
+        expect(airdropPresses(runner)).toEqual([]);
+        expect(laterRuns()).toEqual([]);
+        expect(PgConversation.state.probing).toEqual([]);
+        expect(PgConversation.view(LATER)?.live).toMatchObject({
+          id: "s4.airdrop",
+          state: "live",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+  );
+
+  it("reports a check that throws after it timed out, once", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let fail: (e: Error) => void = () => undefined;
+      const runner = runnerWith(
+        () => new Promise<boolean>((_resolve, reject) => (fail = reject)),
+        [OK_BUILD]
+      );
+      await toLaterAirdrop(runner);
+      vi.advanceTimersByTime(PROBE_TIMEOUT_MS);
+      await settle();
+      fail(new Error("RPC down"));
+      await settle();
+      expect(
+        logged.entries.filter(
+          (e) => e.level === "error" && e.error?.message === "RPC down"
+        )
+      ).toMatchObject([{ report: true }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a press after the check found the wallet short fails into a live retry card", async () => {
+    const runner = runnerWith(async () => false, [OK_BUILD, REFUSED]);
+    await toLaterAirdrop(runner);
+    expect(PgConversation.state.probing).toEqual([]);
+    PgConversation.act("s4.airdrop");
+    await settle();
+    expect(airdropPresses(runner)).toHaveLength(1);
+    expect(laterRuns()).toMatchObject([{ status: "failed" }]);
+    expect(PgConversation.state.probing).toEqual([]);
+    expect(shown()).toContain("s4.airdrop");
+    expect(PgConversation.view(LATER)?.live).toMatchObject({
+      id: "s4.airdrop:retry",
+      state: "live",
+    });
+    // Within the session the refused card is not asked about again
+    expect(runner.isFunded).toHaveBeenCalledTimes(1);
+  });
+
+  it("a press the check made that the faucet refuses shows the retry card", async () => {
+    const runner = runnerWith(async () => true, [OK_BUILD, REFUSED]);
+    await toLaterAirdrop(runner);
+    expect(airdropPresses(runner)).toHaveLength(1);
+    expect(laterRuns()).toMatchObject([{ status: "failed" }]);
+    expect(PgConversation.state.probing).toEqual([]);
+    expect(shown()).toContain("s4.airdrop");
+    expect(PgConversation.view(LATER)?.live).toMatchObject({
+      id: "s4.airdrop:retry",
+      state: "live",
+    });
+  });
+
+  it("presses nothing in another workspace when the check answers after a switch", async () => {
+    let answer: (funded: boolean) => void = () => undefined;
+    const runner = runnerWith(
+      () => new Promise<boolean>((resolve) => (answer = resolve)),
+      [OK_BUILD]
+    );
+    await toLaterAirdrop(runner);
+    expect(PgConversation.state.probing).toEqual(["s4.airdrop"]);
+    const written = writtenTo.length;
+    switchWorkspace("Scratch");
+    await settle();
+    answer(true);
+    await settle();
+    expect(airdropPresses(runner)).toEqual([]);
+    expect(PgConversation.state.context).toBeNull();
+    expect(PgConversation.state.probing).toEqual([]);
+    expect(writtenTo.slice(written)).toEqual([]);
+  });
+});
+
 describe("PgCallPanel", () => {
   const helloIdl = (args: string[]) =>
     ({
@@ -1208,6 +1745,7 @@ describe("PgCallPanel", () => {
   const runnerOf = (idl: Idl) => {
     const run = vi.fn<Runner["run"]>(async (act) => {
       if (act === "build") return OK_BUILD;
+      if (act === "airdrop") return AIRDROPPED;
       if (act === "deploy" || act === "buildDeploy") {
         return {
           act,
@@ -1247,6 +1785,8 @@ describe("PgCallPanel", () => {
     PgConversation.next();
     await settle();
     PgConversation.skip("s2.q2");
+    await settle();
+    PgConversation.act("s2.airdrop");
     await settle();
     PgConversation.act("s2.deploy");
     await settle();

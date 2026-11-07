@@ -204,16 +204,17 @@ m" counts every stage the run shows.
 #### Scenario: Deploy stages (manual)
 
 - **WHEN** the learner presses ⌘↵ on "Deploy to devnet"
-- **THEN** the card shows the deploy's stages in order with "1 of 4" to
-  "4 of 4"
+- **THEN** the card shows the deploy's stages in order with "1 of 3" to
+  "3 of 3"
 - **AND** a result card follows when the deploy lands or fails
 
-#### Scenario: Funding and a build first (manual)
+#### Scenario: A build first (manual)
 
-- **WHEN** the wallet is short and `lib.rs` changed since the last build, and
-  the learner presses "Build and deploy"
-- **THEN** the stages run "Funding your wallet" (1 of 6), "Building" (2 of
-  6), then the four deploy stages to "6 of 6"
+- **WHEN** the step's airdrop act has funded the wallet, `lib.rs` changed
+  since the last build, and the learner presses "Build and deploy"
+- **THEN** the stages run "Building" (1 of 4), "Writing buffer" (2 of 4),
+  "Deploying" (3 of 4) and "Confirming" (4 of 4); the deploy never funds the
+  wallet, the airdrop act before it does (change `tutorial-airdrop-step`)
 
 ### Requirement: A failed build explains itself
 

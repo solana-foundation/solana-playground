@@ -104,6 +104,13 @@ const goalRunner = (d: TutorialDefinition): Runner => {
   return {
     run: async (act, input) => {
       const results: Record<typeof act, RunResult> = {
+        airdrop: {
+          act: "airdrop",
+          ok: true,
+          seconds: 1,
+          balance: 2_000_000_000,
+          airdropped: 2_000_000_000,
+        },
         build: plannedBuilds.has(input.beatId)
           ? {
               act: "build",

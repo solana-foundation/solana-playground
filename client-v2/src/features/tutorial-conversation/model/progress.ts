@@ -389,17 +389,32 @@ export type RunResult =
       idl?: Idl;
     }
   | {
-      act: "deploy" | "buildDeploy";
+      act: "airdrop";
+      ok: true;
+      seconds: number;
+      /** Lamports the wallet holds once the airdrop showed, or already held */
+      balance: number;
+      /** Lamports the airdrop added; 0 for a wallet that was already funded */
+      airdropped: number;
+      /** The press made the Playground wallet before it asked the faucet */
+      madeWallet?: true;
+    }
+  | {
+      /** A deploy's failures, and an airdrop's, which share its cards */
+      act: "airdrop" | "deploy" | "buildDeploy";
       ok: false;
       seconds: number;
       reason: "failed" | "no_wallet";
       message: string;
     }
   | {
-      act: "deploy" | "buildDeploy";
+      act: "airdrop" | "deploy" | "buildDeploy";
       ok: false;
       seconds: number;
-      /** The airdrop was refused or rate limited and the wallet is short */
+      /**
+       * The wallet cannot pay for the deploy: the airdrop was refused or rate
+       * limited, or the deploy found it short
+       */
       reason: "no_funds";
       message: string;
       /** Lamports the wallet holds, the line's "{balance} SOL" */
@@ -517,6 +532,10 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 const isMs = (v: unknown): v is number => Number.isFinite(v);
 
+/** A count of lamports: a whole number, never negative */
+const isLamports = (v: unknown): v is number =>
+  Number.isSafeInteger(v) && (v as number) >= 0;
+
 const isMsOrNull = (v: unknown): v is number | null => v === null || isMs(v);
 
 const isStrings = (v: unknown): v is string[] =>
@@ -525,7 +544,16 @@ const isStrings = (v: unknown): v is string[] =>
 const isIndexes = (v: unknown): v is number[] =>
   Array.isArray(v) && v.every((n) => Number.isInteger(n));
 
-const ACTS: readonly Act[] = ["build", "deploy", "buildDeploy", "run", "call"];
+/** Every act a save may name; a `Record`, so a new act cannot be left out */
+const ACT_KINDS: Record<Act, true> = {
+  airdrop: true,
+  build: true,
+  deploy: true,
+  buildDeploy: true,
+  run: true,
+  call: true,
+};
+const ACTS = Object.keys(ACT_KINDS) as readonly Act[];
 const SKIP_VIAS: readonly SkipVia[] = ["button", "call_panel", "elsewhere"];
 
 const parseCursor = (v: unknown): Cursor | null => {
@@ -675,7 +703,9 @@ const isReading = (v: unknown): v is AccountReading =>
  * trust the type. A landed run's or call's `signatures` and `line`, which
  * the finish card draws, come back empty when they do not read as theirs,
  * and its `receipt` keeps only the fields that do, so the card can trust
- * them too.
+ * them too. A landed airdrop whose `balance` or `airdropped` is not a count
+ * of lamports is dropped: `airdropped === 0` decides whether a later card
+ * shows, and the record prints both.
  */
 const parseResult = (v: unknown): RunResult | null => {
   if (
@@ -694,6 +724,13 @@ const parseResult = (v: unknown): RunResult | null => {
     v.reason !== "signed_out"
   ) {
     return { ...v, reason: "compiler" } as unknown as RunResult;
+  }
+  if (
+    v.act === "airdrop" &&
+    v.ok &&
+    !(isLamports(v.balance) && isLamports(v.airdropped))
+  ) {
+    return null;
   }
   if ((v.act === "run" || v.act === "call") && v.ok) {
     const called = Array.isArray(v.called) ? v.called.filter(isCalled) : [];
@@ -992,6 +1029,40 @@ if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/progress", () => {
+    it("drops a landed airdrop whose balance or amount does not read as lamports", () => {
+      const saved = (balance: unknown, airdropped: unknown) =>
+        JSON.parse(
+          JSON.stringify(
+            Object.assign(freshProgress(), {
+              runs: {
+                "s2.airdrop": [
+                  {
+                    status: "ok",
+                    at: 1,
+                    took: 1,
+                    result: {
+                      act: "airdrop",
+                      ok: true,
+                      seconds: 1,
+                      balance,
+                      airdropped,
+                    },
+                  },
+                ],
+              },
+            })
+          )
+        );
+      const run = (v: unknown) => parseProgress(v)?.runs["s2.airdrop"]?.[0];
+      expect(run(saved(3_000_000_000, 0))).toMatchObject({
+        result: { balance: 3_000_000_000, airdropped: 0 },
+      });
+      expect(run(saved("3", 0))).toBeUndefined();
+      expect(run(saved(3_000_000_000, undefined))).toBeUndefined();
+      expect(run(saved(1, -1))).toBeUndefined();
+      expect(run(saved(1.5, 0))).toBeUndefined();
+    });
+
     it("keeps a sound account reading and drops one it cannot read", () => {
       const saved = (account: unknown) =>
         JSON.parse(
@@ -1178,6 +1249,30 @@ if (import.meta.vitest) {
 
     it("parses a midway save to itself", () => {
       expect(reload(midway())).toEqual(midway());
+    });
+
+    it("keeps a landed airdrop across a reload, so its card is not live again", () => {
+      const landed = Object.assign(freshProgress(), {
+        runs: {
+          "s2.airdrop": [
+            {
+              status: "ok",
+              at: 5000,
+              took: 2000,
+              result: {
+                act: "airdrop",
+                ok: true,
+                seconds: 2,
+                balance: 2_000_000_000,
+                airdropped: 0,
+              },
+            },
+          ],
+        },
+      });
+      expect(reload(landed)?.runs["s2.airdrop"]).toEqual(
+        landed.runs["s2.airdrop"]
+      );
     });
 
     it("is null for another version, a bad field or a missing cursor", () => {

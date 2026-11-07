@@ -137,6 +137,15 @@
       "beats": [
         {
           "kind": "act",
+          "id": "s2.airdrop",
+          "act": "airdrop",
+          "say": "A deploy pays in devnet SOL. Get some for your wallet first.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
           "id": "s2.deploy",
           "act": "deploy",
           "say": "Deploy, and you can make the map.",
@@ -247,6 +256,15 @@
             "block": "    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }",
             "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
           }
+        },
+        {
+          "kind": "act",
+          "id": "s3.airdrop",
+          "act": "airdrop",
+          "say": "Putting `grow` on devnet is an upgrade, and it pays in devnet SOL. Top the wallet up if it runs short.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
         },
         {
           "kind": "act",
@@ -367,6 +385,15 @@
         },
         {
           "kind": "act",
+          "id": "s4.airdrop",
+          "act": "airdrop",
+          "say": "The zero copy map goes to devnet as an upgrade, paid in devnet SOL. Top the wallet up if it runs short.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
           "id": "s4.ship",
           "act": "buildDeploy",
           "say": "Build and deploy the zero copy map.",
@@ -479,7 +506,7 @@
     "chips": [
       {
         "label": "What is devnet SOL?",
-        "answer": "Devnet is Solana's public test network. Its SOL is free and worth nothing, so you can deploy and call as much as you like. When your wallet runs low, Playground asks the devnet faucet for more; if the faucet is busy, get some yourself at faucet.solana.com."
+        "answer": "Devnet is Solana's public test network. Its SOL is free and worth nothing, so you can deploy and call as much as you like. You get it from the devnet faucet with one button; if the faucet is busy, get some yourself at faucet.solana.com."
       }
     ],
     "next": null

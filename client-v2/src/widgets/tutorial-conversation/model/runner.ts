@@ -35,6 +35,9 @@ export const announceDeploys = (
   workspace: () => string | undefined = () => undefined
 ): Runner => ({
   recognise: runner.recognise,
+  // The airdrop card's probe (HOO-2677), forwarded: without it no funded
+  // airdrop card would pass by itself
+  isFunded: runner.isFunded,
   run: async (act, input, onStage) => {
     if (act !== "deploy" && act !== "buildDeploy") {
       return runner.run(act, input, onStage);
@@ -113,6 +116,16 @@ if (import.meta.vitest) {
         )
       ).rejects.toThrow("boom");
       expect(thrown.deployFinished).toHaveBeenCalledWith(false);
+    });
+
+    it("keeps the runner's funded probe, so a funded airdrop card passes by itself", async () => {
+      const funded = vi.fn(async () => true);
+      const wrapped = announceDeploys(
+        { run: answering(true).run, isFunded: funded },
+        flow()
+      );
+      await expect(wrapped.isFunded?.()).resolves.toBe(true);
+      expect(funded).toHaveBeenCalledTimes(1);
     });
 
     it("drops the finish of a deploy whose workspace was left meanwhile", async () => {

@@ -34,7 +34,7 @@ import {
 import { route } from "./route";
 import { tutorialTelemetry } from "./telemetry";
 import type { ConversationView } from "./view";
-import { view } from "./view";
+import { isLaterAirdrop, view } from "./view";
 
 const log = createLogger("tutorial-conversation:store");
 
@@ -66,6 +66,12 @@ export interface ConversationState {
   loadFailed: boolean;
   /** When the save was loaded: turns from before it render whole */
   loadedAt: number;
+  /**
+   * Later airdrop acts whose funded check is pending, or whose press that
+   * check made still runs, by beat id: the feed hides them meanwhile
+   * (`ViewOptions.probing`). Never saved
+   */
+  probing: readonly string[];
 }
 
 export const INITIAL_CONVERSATION_STATE: ConversationState = {
@@ -73,10 +79,18 @@ export const INITIAL_CONVERSATION_STATE: ConversationState = {
   engine: INITIAL_ENGINE_STATE,
   loadFailed: false,
   loadedAt: 0,
+  probing: [],
 };
 
 /** The key under which the engine saves in the tutorial's storage */
 export const STORAGE_KEY = "conversation";
+
+/**
+ * How long a later airdrop card stays hidden waiting for the balance check:
+ * a devnet read that hangs must not leave the feed with nothing to press. A
+ * late "funded" still presses the card, now shown
+ */
+export const PROBE_TIMEOUT_MS = 5000;
 
 /**
  * The storage file of a tutorial's workspace, as a full path. Reads and
@@ -123,6 +137,7 @@ export class PgConversation {
       PgConversation._view = view(s.context.definition, s.engine, {
         now,
         loadedAt: s.loadedAt,
+        probing: s.probing,
       });
       PgConversation._viewOf = s;
       PgConversation._viewAt = now;
@@ -441,6 +456,8 @@ export class PgConversation {
   }
 
   private static async _load() {
+    // A fresh load asks again about a card still live and never run
+    PgConversation._asked.clear();
     const name = PgExplorer.currentWorkspaceName;
     const definition = name ? PgConversation._definitionOf(name) : null;
     if (!name || !definition) {
@@ -536,6 +553,7 @@ export class PgConversation {
       engine: { progress, stage: null },
       loadFailed,
       loadedAt: Date.now(),
+      probing: [],
     });
     if (loadFailed) {
       void PgConversation._tellLoadFailed(name);
@@ -711,9 +729,11 @@ export class PgConversation {
 
     if (engine !== s.engine) {
       // A new walk: the files go back to how it starts, and a scripted file
-      // effect still queued from the old one must not write over them
+      // effect still queued from the old one must not write over them. Its
+      // airdrop cards are live again, so the funded probe asks about them anew
       if (action.type === "startOver" || action.type === "restartStep") {
         PgConversation._walk++;
+        PgConversation._asked.clear();
       }
       // Start over is the one write allowed over a save that could not be
       // read: it is the learner's "discard it", and the only way out
@@ -737,9 +757,110 @@ export class PgConversation {
   }
 
   private static _set(next: ConversationState) {
-    PgConversation._state = next;
+    // The probe is asked before anyone renders, so a later airdrop it hides
+    // is never drawn first
+    const s = PgConversation._pressIfFunded(PgConversation._settled(next));
+    PgConversation._state = s;
     PgConversation._schedule();
-    for (const cb of PgConversation._listeners) cb(next);
+    for (const cb of PgConversation._listeners) cb(s);
+  }
+
+  /** `probing` without the acts whose press the probe made has ended */
+  private static _settled(s: ConversationState): ConversationState {
+    const runs = s.engine.progress.runs;
+    const probing = s.probing.filter((id) => {
+      const last = runs[id]?.at(-1);
+      return !last || last.status === "started";
+    });
+    return probing.length === s.probing.length ? s : { ...s, probing };
+  }
+
+  /** The store's state with one act no longer probing */
+  private static _unprobe(beatId: string) {
+    const s = PgConversation._state;
+    if (!s.probing.includes(beatId)) return;
+    PgConversation._set({
+      ...s,
+      probing: s.probing.filter((id) => id !== beatId),
+    });
+  }
+
+  /**
+   * The airdrop act the cursor just reached and nothing landed yet, by beat
+   * id: the one card `_pressIfFunded` may press. A card whose latest run
+   * failed or a reload interrupted counts, so a reload onto it checks the
+   * balance again. Null on any other beat, and while a run is in flight
+   */
+  private static _reachedAirdrop(s: ConversationState): string | null {
+    const p = s.engine.progress;
+    if (!s.context || s.loadFailed || p.cursor.kind !== "step") return null;
+    const { stepId, beat, fail } = p.cursor;
+    if (p.passed.includes(stepId)) return null;
+    const step = s.context.definition.steps.find((st) => st.id === stepId);
+    const reached = (fail ? step?.onFail ?? [] : step?.beats ?? [])[beat - 1];
+    if (reached?.kind !== "act" || reached.act !== "airdrop") return null;
+    if (!p.beats[reached.id]) return null;
+    const last = p.runs[reached.id]?.at(-1);
+    if (last?.status === "ok" || last?.status === "started") return null;
+    return reached.id;
+  }
+
+  /**
+   * A funded wallet's airdrop card passes by itself (HOO-2677): when the
+   * lesson reaches a live airdrop card, the runner is asked once whether the
+   * wallet covers the deploy, and if it does the card is pressed as the
+   * learner would press it. Not funded leaves the card live; a probe that
+   * throws is reported and leaves it live too. A press while the probe is in
+   * flight wins: the answer then finds a run and presses nothing. Asked once
+   * per card per walk (`_asked`).
+   *
+   * A later airdrop that never ran is hidden while the probe is out
+   * (`probing`), for at most PROBE_TIMEOUT_MS, and while the press it made
+   * runs, so a funded wallet's passes unseen (designers, 7 Nov). Returns the
+   * state with it marked.
+   */
+  private static _pressIfFunded(s: ConversationState): ConversationState {
+    const beatId = PgConversation._reachedAirdrop(s);
+    const isFunded = PgConversation._ports?.runner.isFunded;
+    if (!beatId || !isFunded || !s.context) return s;
+    const name = s.context.definition.name;
+    const key = `${name}:${beatId}`;
+    if (PgConversation._asked.has(key)) return s;
+    PgConversation._asked.add(key);
+    const isHidden =
+      isLaterAirdrop(s.context.definition, beatId) &&
+      !s.engine.progress.runs[beatId]?.length;
+    const isStillLive = () =>
+      PgExplorer.currentWorkspaceName === name &&
+      PgConversation._reachedAirdrop(PgConversation._state) === beatId;
+    // A check that hangs shows the card after PROBE_TIMEOUT_MS
+    const timer = isHidden
+      ? setTimeout(() => PgConversation._unprobe(beatId), PROBE_TIMEOUT_MS)
+      : undefined;
+    isFunded()
+      .finally(() => {
+        if (timer !== undefined) clearTimeout(timer);
+      })
+      .then((yes) => {
+        if (yes && isStillLive()) PgConversation.act(beatId);
+        // Short, or the card moved on: it shows; a press keeps it hidden
+        // until its run ends (`_settled`)
+        if (
+          !yes ||
+          PgConversation._state.engine.progress.runs[beatId]?.at(-1)?.status !==
+            "started"
+        ) {
+          PgConversation._unprobe(beatId);
+        }
+      })
+      .catch((e: unknown) => {
+        log.error(e, {
+          report: true,
+          context: { what: "check the wallet's balance", tutorial: name },
+        });
+        PgConversation._unprobe(beatId);
+      });
+    return isHidden ? { ...s, probing: s.probing.concat(beatId) } : s;
   }
 
   /** The next moment the feed changes on its own: a turn arriving, or the finish */
@@ -1194,6 +1315,12 @@ export class PgConversation {
   private static readonly _persisting = new Map<string, Promise<void>>();
   private static _state: ConversationState = INITIAL_CONVERSATION_STATE;
   private static _ports: Required<ConversationPorts> | null = null;
+  /**
+   * Airdrop cards the funded probe asked about since the last load or new
+   * walk, as `<tutorial>:<beatId>`: once per card per walk, not on every
+   * re-render
+   */
+  private static _asked = new Set<string>();
   private static _timer: ReturnType<typeof setTimeout> | null = null;
   private static _view: ConversationView | null = null;
   private static _viewOf: ConversationState | null = null;

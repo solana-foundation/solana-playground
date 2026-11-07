@@ -17,9 +17,11 @@ import {
   PgWallet,
   PgWeb3,
 } from "../../../../utils";
+import type { Runner } from "../ports";
 import type { RunResult } from "../progress";
 import type { ActRun } from "./act-runner";
 import { actRunner } from "./act-runner";
+import { isFundedForDeploy, runAirdropWith } from "./airdrop";
 import { runBuild } from "./build";
 import type { BuildSource } from "./build-source";
 import { trackBuildSource } from "./build-source";
@@ -201,6 +203,14 @@ export const realDeployPort = (): DeployPort => {
     wallet: () => {
       wallet = playgroundWallet();
       return wallet ? wallet.publicKey.toBase58() : null;
+    },
+    // As the no-wallet card's Create wallet makes it (`PgWallet.add` makes it
+    // the current wallet too)
+    createWallet: () => {
+      PgWallet.add();
+      wallet = playgroundWallet();
+      if (!wallet) throw new Error("The Playground wallet was not made");
+      return wallet.publicKey.toBase58();
     },
     program: () => ({
       id: PgProgramInfo.pk?.toBase58() ?? null,
@@ -405,29 +415,38 @@ export const runDeployOnDevnet: ActRun = async (act, _input, onStage) => {
  * The runner the tutorial frame passes to `PgConversation.init`. The build
  * act, whose ticket has not landed, answers "not wired yet".
  */
-export const tutorialRunner = actRunner(
-  {
-    build: runBuild,
-    deploy: runDeployOnDevnet,
-    buildDeploy: runDeployOnDevnet,
-    run: runOnDevnet(devnetFunding, DEVNET_FAUCET_SOL),
-    call: runOnDevnet(devnetFunding, DEVNET_FAUCET_SOL),
-  },
-  async (act, startedAtMs) => {
-    if (act !== "deploy" && act !== "buildDeploy") return null;
-    if (PgConnection.cluster !== "devnet") return null;
-    const recognised = await recogniseDeploy({
-      act,
-      programId: PgProgramInfo.pk?.toBase58() ?? null,
-      startedAtMs,
-      deploySlot: deploySlotOnChain,
-      blockTime: (slot) => PgConnection.current.getBlockTime(slot),
-      signatures: programSignatures,
-      instructions: builtInstructions(),
-    });
-    return recognised && withIdl(recognised);
-  }
-);
+export const tutorialRunner: Runner = {
+  ...actRunner(
+    {
+      airdrop: (_act, _input, onStage) =>
+        runAirdropWith(onStage)(realDeployPort()),
+      build: runBuild,
+      deploy: runDeployOnDevnet,
+      buildDeploy: runDeployOnDevnet,
+      run: runOnDevnet(devnetFunding, DEVNET_FAUCET_SOL),
+      call: runOnDevnet(devnetFunding, DEVNET_FAUCET_SOL),
+    },
+    async (act, startedAtMs) => {
+      if (act !== "deploy" && act !== "buildDeploy") return null;
+      if (PgConnection.cluster !== "devnet") return null;
+      const recognised = await recogniseDeploy({
+        act,
+        programId: PgProgramInfo.pk?.toBase58() ?? null,
+        startedAtMs,
+        deploySlot: deploySlotOnChain,
+        blockTime: (slot) => PgConnection.current.getBlockTime(slot),
+        signatures: programSignatures,
+        instructions: builtInstructions(),
+      });
+      return recognised && withIdl(recognised);
+    }
+  ),
+  // Off devnet the airdrop card stays for its press, which says why
+  isFunded: () =>
+    PgConnection.cluster === "devnet"
+      ? isFundedForDeploy(realDeployPort())
+      : Promise.resolve(false),
+};
 
 /** The deploy command and the open program, for `watchDeploys` */
 export const realDeployWatch = (): DeployWatchPort => ({
