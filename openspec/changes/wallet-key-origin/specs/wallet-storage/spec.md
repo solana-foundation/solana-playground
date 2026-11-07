@@ -157,3 +157,59 @@ where the first copy kept is never replaced, rather than lost.
   `localStorage` holds a wallet
 - **THEN** the record is set aside whole and the `localStorage` wallet moves
   into IndexedDB in its place
+
+### Requirement: An existing localStorage wallet is migrated without loss
+
+On load, a wallet found in `localStorage['wallet']`, in the current or the
+legacy single-key format, SHALL be copied to IndexedDB, read back and
+compared, and the `localStorage` entry SHALL be removed only after the copy
+reads back equal. If the copy fails or differs, the `localStorage` entry
+SHALL stay and the wallet SHALL load from it.
+
+#### Scenario: A wallet in localStorage moves to IndexedDB
+
+- **WHEN** a user whose wallet is in `localStorage['wallet']` loads the app
+- **THEN** the wallet's accounts are in IndexedDB with the same keypairs and
+  names
+- **AND** `localStorage['wallet']` is gone
+- **AND** the current account is the one that was current before
+
+#### Scenario: A legacy single-key wallet moves to IndexedDB
+
+- **WHEN** `localStorage['wallet']` holds the pre-accounts format (`sk`,
+  `setupCompleted`, `connected`)
+- **THEN** IndexedDB holds it as one account named `Wallet 1` with the same
+  keypair
+- **AND** `localStorage['wallet']` is gone
+
+#### Scenario: Two tabs load at once
+
+- **WHEN** two tabs load while `localStorage['wallet']` still holds a wallet
+- **THEN** one tab moves it at a time, and no account either tab saves is
+  overwritten by the other's move
+
+#### Scenario: A localStorage wallet cannot be read
+
+- **WHEN** `localStorage['wallet']` is not valid JSON or not a wallet's shape
+- **THEN** it is left in place and copied once to `localStorage['wallet.unreadable']`,
+  which no later write replaces
+- **AND** the wallet loads from IndexedDB
+
+#### Scenario: The copy fails
+
+- **WHEN** writing the wallet to IndexedDB fails, or reading it back differs
+  from what was written
+- **THEN** `localStorage['wallet']` keeps every account's key and name;
+  each account may gain its `publicKey`, read from its key
+- **AND** the wallet loads from it with every account
+
+#### Scenario: Both stores hold a wallet
+
+- **WHEN** IndexedDB already holds a wallet and `localStorage['wallet']` also
+  holds one (for example, written by a tab still running the previous
+  version)
+- **THEN** the stored wallet holds every account from both, one per public
+  key, `localStorage`'s accounts first, since a copy there is the newer one
+- **AND** `localStorage`'s current account and connection state win
+- **AND** an account only IndexedDB held keeps its name, renamed with a
+  numeric suffix if the name is taken
