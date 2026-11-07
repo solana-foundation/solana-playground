@@ -8,9 +8,11 @@ export const seahorse = createFramework({
   docs: {
     url: "https://www.seahorse.dev/using-seahorse/accounts",
   },
+  // program-examples dropped its Seahorse ports; the Anchor one stands in
+  // until the customer picks the examples to list
   githubExample: {
-    name: "Transfer SOL",
-    url: "https://github.com/solana-developers/program-examples/tree/main/basics/transfer-sol/seahorse",
+    name: "Transfer SOL (Anchor)",
+    url: "https://github.com/solana-developers/program-examples/tree/main/basics/transfer-sol/anchor",
   },
   getIsCurrent: (files) => {
     for (const [path, content] of files) {

@@ -89,12 +89,12 @@ const draw = () =>
     </Modal>
   );
 
-/** The row of the "Anchor - Hello" example */
+/** The row of the "Anchor – Hello" example */
 const exampleRow = () =>
   requireFor("the example's row")(
-    requireFor("the example's title container")(
-      screen.getByText("Anchor - Hello").closest("div")
-    ).parentElement
+    screen
+      .getByText("Anchor – Hello")
+      .closest<HTMLElement>('[data-testid="github-example"]')
   );
 
 /** The example's own Import, not the dialog's submit */

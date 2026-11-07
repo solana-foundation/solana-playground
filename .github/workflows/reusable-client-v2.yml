@@ -524,9 +524,10 @@ jobs:
       # config starts it (`webServer`), so there is no separate generate step.
       # On stubs the `@real-wasm` specs, which run the CLIs, are left out with
       # `--grep-invert`, not `test.skip`: a skip outside `e2e/known-skips.txt`
-      # fails `e2e-report`.
+      # fails `e2e-report`. The `@live-links` specs reach github.com, so a
+      # GitHub outage cannot turn a PR red: `client-v2-live-links.yml` runs them.
       - name: Browser tests
-        run: yarn test-e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }} ${{ inputs.use-wasm-stubs && '--grep-invert @real-wasm' || '' }}
+        run: yarn test-e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }} --grep-invert "${{ inputs.use-wasm-stubs && '@real-wasm|@live-links' || '@live-links' }}"
 
       # Traces, screenshots and the per-test error context of what failed.
       # Open a trace with `yarn playwright show-trace <file>`. `always()`,
