@@ -60,6 +60,7 @@ import { PgDeployHistory } from "./state/deploy-history";
 import type { FlowState } from "./state/stage";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
 import { useStagesOffered } from "./use-stages-offered";
+import { useViewPath } from "./use-view-path";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
@@ -297,6 +298,12 @@ const FlowFrame = () => {
   const page = useStartView();
   // The Tutorials or Programs page shown, if any (`widgets/catalog`)
   const catalog = useCatalogPage();
+  // Home, the page shown and the work, each on its own URL
+  useViewPath({
+    view: page.view,
+    homeVia: page.homeVia,
+    catalog: catalog ?? undefined,
+  });
 
   // A tutorial with a definition opens in its frame (`tutorial-flow-v2`
   // 2.1), its chat holding the conversation (3.3), whose engine runs Start

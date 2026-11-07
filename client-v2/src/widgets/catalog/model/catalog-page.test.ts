@@ -100,15 +100,10 @@ it("stays open through the explorer's own switches and creates", () => {
   expect(catalogPage.current()).toBe("tutorials");
 });
 
-it("closes when a tutorial's route opens, not on the start route", () => {
+// Paths open and close the page in `useViewPath` (views/flow), not here
+it("listens to no path of its own", () => {
   renderHook(() => useCatalogPage());
-  act(() => catalogPage.open("tutorials", "link"));
-
-  act(() => router.changed.forEach((cb) => cb("/")));
-  expect(catalogPage.current()).toBe("tutorials");
-
-  act(() => router.changed.forEach((cb) => cb("/tutorials/hello-anchor")));
-  expect(catalogPage.current()).toBeNull();
+  expect(router.changed).toEqual([]);
 });
 
 it("stops listening once unmounted", () => {

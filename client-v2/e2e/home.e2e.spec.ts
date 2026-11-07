@@ -149,7 +149,6 @@ test.describe("from an open project", () => {
     await page.keyboard.press("ControlOrMeta+Home");
     await page.keyboard.type("// kept ");
     await expect(firstLine(page)).toContainText("// kept");
-    const url = page.url();
     // The console open too: Home takes its node off the page, which its
     // terminal must not try to fit
     const errors: string[] = [];
@@ -164,7 +163,7 @@ test.describe("from an open project", () => {
 
     await navHome(page).click();
     await expect(home(page)).toBeVisible();
-    expect(page.url()).toBe(url);
+    await expect(page).toHaveURL(/\/home$/);
     await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
 
     // Past the terminal's resize throttle (200 ms)
@@ -173,6 +172,7 @@ test.describe("from an open project", () => {
 
     await projectRow(page, "alpha").click();
     await expect(home(page)).toBeHidden();
+    await expect(page).toHaveURL(/\/$/);
     await expect(firstLine(page)).toContainText("// kept");
     // The cursor is where the typing left it
     await focusEditor(page);
