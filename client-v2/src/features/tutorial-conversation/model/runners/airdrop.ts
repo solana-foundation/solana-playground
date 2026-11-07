@@ -1,8 +1,12 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import type { RunStage } from "../ports";
 import type { RunResult } from "../progress";
 import type { DeployPort } from "./deploy";
 import { deployCost } from "./deploy";
 import { fundForDeploy } from "./fund";
+
+const log = createLogger("tutorial-conversation:airdrop");
 
 /** The airdrop card's one stage, while the faucet answers */
 export const AIRDROP_STAGE = "Requesting airdrop";
@@ -14,19 +18,43 @@ export const AIRDROP_STAGE = "Requesting airdrop";
 export const isFundedForDeploy = async (port: DeployPort): Promise<boolean> => {
   const address = port.wallet();
   if (!address) return false;
+  return (await coveringBalance(port, address)) !== undefined;
+};
+
+/** The wallet's balance when it covers the next deploy; `undefined` when short */
+const coveringBalance = async (port: DeployPort, address: string) => {
   const [balance, cost] = await Promise.all([
     port.funding.balance(address),
     deployCost(port),
   ]);
-  return balance >= cost;
+  return balance >= cost ? balance : undefined;
+};
+
+/**
+ * Off devnet, the balance of a wallet that already covers the deploy, so the
+ * card passes with nothing airdropped; `undefined` when there is no wallet,
+ * it is short, or the cluster cannot be read, and the refusal stands
+ */
+const fundedOffDevnet = async (port: DeployPort, address: string | null) => {
+  if (!address) return undefined;
+  try {
+    return await coveringBalance(port, address);
+  } catch (e) {
+    // The refusal says what to do; an unreadable cluster adds nothing to it
+    log.debug("Could not read the wallet's balance off devnet", {
+      context: { error: e },
+    });
+    return undefined;
+  }
 };
 
 /**
  * The airdrop act (HOO-2677): funds the Playground wallet for the deploy after
  * it, with one airdrop of the shortfall plus headroom (`fundForDeploy`). No
  * wallet yet: the press makes one first. A funded wallet lands at once with
- * nothing airdropped. A refusal is `no_funds` with the facts the "Not enough
- * devnet SOL" card shows, never a throw.
+ * nothing airdropped, on any cluster: only the airdrop is devnet's, and the
+ * deploy after it still refuses elsewhere. A refusal is `no_funds` with the
+ * facts the "Not enough devnet SOL" card shows, never a throw.
  */
 export const runAirdropWith =
   (onStage: (stage: RunStage) => void) =>
@@ -35,6 +63,16 @@ export const runAirdropWith =
     const seconds = () => (port.now() - started) / 1000;
     const refusal = port.refusal();
     if (refusal) {
+      const balance = await fundedOffDevnet(port, port.wallet());
+      if (balance !== undefined) {
+        return {
+          act: "airdrop",
+          ok: true,
+          seconds: seconds(),
+          balance,
+          airdropped: 0,
+        };
+      }
       return {
         act: "airdrop",
         ok: false,
@@ -209,6 +247,41 @@ if (import.meta.vitest) {
         message: "Tutorials deploy to devnet.",
       });
       expect(port.createWallet).not.toHaveBeenCalled();
+    });
+
+    it("passes a funded wallet off devnet with nothing airdropped", async () => {
+      const { port } = portOf([3.2 * SOL]);
+      port.refusal = () => "Tutorials deploy to devnet.";
+      await expect(run(port)).resolves.toMatchObject({
+        act: "airdrop",
+        ok: true,
+        balance: 3.2 * SOL,
+        airdropped: 0,
+      });
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
+    });
+
+    it("refuses a short wallet off devnet and airdrops nothing", async () => {
+      const { port } = portOf([0.1 * SOL]);
+      port.refusal = () => "Tutorials deploy to devnet.";
+      await expect(run(port)).resolves.toMatchObject({
+        ok: false,
+        reason: "failed",
+        message: "Tutorials deploy to devnet.",
+      });
+      expect(port.funding.airdrop).not.toHaveBeenCalled();
+    });
+
+    it("refuses off devnet when the balance cannot be read", async () => {
+      const { port } = portOf([0]);
+      port.refusal = () => "Tutorials deploy to devnet.";
+      port.funding.balance = vi.fn(async () => {
+        throw new Error("fetch failed");
+      });
+      await expect(run(port)).resolves.toMatchObject({
+        ok: false,
+        message: "Tutorials deploy to devnet.",
+      });
     });
 
     describe("isFundedForDeploy", () => {
