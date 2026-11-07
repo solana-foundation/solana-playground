@@ -48,7 +48,7 @@ transaction, a message) by sending the bytes to be signed to the key page, a
 hidden frame on the key origin, over a `MessageChannel` set up by a handshake
 the page accepts only from that frame at that origin. The key page SHALL
 answer only the app origin it was built for. It SHALL offer listing its
-public keys, making a key, keeping a made key, signing a transaction message,
+public keys, making a key, signing a transaction message,
 signing a message, forgetting a key and taking in moved keys. No message
 between the page and the key page SHALL carry key bytes, except the one-time
 move from the page into the key page.
@@ -92,8 +92,9 @@ move from the page into the key page.
 ### Requirement: A new account's key is made in the key page
 
 Under the key-origin provider, a new account's key SHALL be made in the key
-page and stored there when the account is added. A key made for a dialog the
-user leaves without adding the account SHALL not be stored.
+page and stored there at once, when the dialog opens, so its key file can be
+saved before the account exists. A key made for a dialog the user leaves
+without adding the account SHALL be forgotten when the dialog closes.
 
 #### Scenario: Setup makes the first account
 
@@ -103,8 +104,9 @@ user leaves without adding the account SHALL not be stored.
 
 #### Scenario: The user closes Add without adding
 
-- **WHEN** the user opens Add, then closes it
-- **THEN** the key page stores no new key
+- **WHEN** the user opens Add, then closes it without adding the account
+- **THEN** the key page forgets the key it made for the dialog, and holds no
+  new key
 
 ### Requirement: Key files are read and written by the key origin
 
