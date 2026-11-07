@@ -39,6 +39,7 @@ const mocks = vi.hoisted(() => ({
     addFirst: vi.fn(),
     switch: vi.fn(),
     export: vi.fn(),
+    holdsKeysInPage: vi.fn(() => true),
     onDidChangeCurrent: vi.fn((cb: (w: unknown) => void) => {
       mocks.walletListeners.add(cb);
       cb(mocks.wallet.current);
@@ -49,6 +50,8 @@ const mocks = vi.hoisted(() => ({
   signIn: vi.fn(),
   signInFor: vi.fn(),
   automaticAirdrop: false,
+  setModal: vi.fn(),
+  ExportKey: () => undefined,
 }));
 
 const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
@@ -76,7 +79,11 @@ vi.mock("../../../utils", () => ({
       },
     },
   },
+  PgView: { setModal: mocks.setModal },
   PgWallet: mocks.wallet,
+}));
+vi.mock("../../../components/Wallet/Modals/KeyFile", () => ({
+  ExportKey: mocks.ExportKey,
 }));
 vi.mock("@/features/auth", () => ({
   PgSession: { signInFor: mocks.signInFor },
@@ -156,6 +163,7 @@ afterEach(() => {
   // eslint-disable-next-line unicorn/no-null -- `PgWallet.current` is `null` while no wallet is current
   mocks.wallet.current = null;
   mocks.wallet.accounts = [];
+  mocks.wallet.holdsKeysInPage.mockReturnValue(true);
   resetTelemetry();
   vi.clearAllMocks();
 });
@@ -540,6 +548,55 @@ describe("Deploy stage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Save keypair" }))
     );
     expect(mocks.wallet.export).toHaveBeenCalledTimes(2);
+    expect(screen.queryByLabelText("Keypair backup")).toBeNull();
+    expect(events()).toContain("deploy_backup_saved");
+  });
+
+  it("saves the keypair through the key panel under the key origin", async () => {
+    mocks.wallet.holdsKeysInPage.mockReturnValue(false);
+    mocks.wallet.current = {
+      isPg: true,
+      publicKey: {
+        toBase58: () => "KeyOrigin1111111111111111111111111111111111",
+      },
+    };
+    mocks.execute.mockResolvedValue({
+      signature: "s",
+      cost: 1,
+      upgraded: false,
+    });
+    mocks.history = [
+      {
+        id: "a",
+        workspace: "counter",
+        cluster: "devnet",
+        programId: "Prog111",
+        signature: "s",
+        at: 1,
+      },
+    ];
+    render(<Deploy onChangeNetwork={() => {}} />);
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole("button", { name: "Redeploy to devnet" })
+      )
+    );
+
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Save keypair" }))
+    );
+    expect(mocks.wallet.export).not.toHaveBeenCalled();
+    expect(mocks.setModal).toHaveBeenCalledWith(mocks.ExportKey, {
+      onExported: expect.any(Function),
+    });
+    // Opening the dialog is not a backup; saving the file is
+    expect(screen.getByLabelText("Keypair backup")).toBeTruthy();
+
+    const [, props] = mocks.setModal.mock.calls[0] as [
+      unknown,
+      { onExported: () => void }
+    ];
+    await act(async () => props.onExported());
     expect(screen.queryByLabelText("Keypair backup")).toBeNull();
     expect(events()).toContain("deploy_backup_saved");
   });

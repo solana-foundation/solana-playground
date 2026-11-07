@@ -161,6 +161,15 @@ describe("wallet ExportKey", () => {
     await waitFor(() => expect(screen.queryByText("panel failed")).toBeNull());
   });
 
+  it("tells its opener once the file is saved", () => {
+    const onExported = vi.fn();
+    renderIn(<ExportKey onExported={onExported} />);
+    fireEvent.click(screen.getByRole("button", { name: "panel error" }));
+    expect(onExported).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "panel result" }));
+    expect(onExported).toHaveBeenCalledTimes(1);
+  });
+
   it("holds Done while the panel is busy", () => {
     renderIn(<ExportKey />);
     fireEvent.click(screen.getByRole("button", { name: "panel busy" }));
