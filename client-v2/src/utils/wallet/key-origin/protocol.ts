@@ -97,6 +97,45 @@ export const isKeyReply = (x: unknown): x is KeyReply => {
   );
 };
 
+const SIGNATURE_LENGTH = 64;
+
+/**
+ * Takes a reply's `result` as the shape its request answers with. The wire
+ * check (`isKeyReply`) accepts any request's result shape, so each caller
+ * checks the one it asked for before using it.
+ *
+ * @param isResult whether a result has the request's shape
+ * @returns for the request, as the error names it, a function of the
+ * result, which gives it back typed
+ * @throws when the result has another shape
+ */
+const resultFor =
+  <T>(isResult: (x: unknown) => x is T) =>
+  (what: string) =>
+  (result: unknown): T => {
+    if (!isResult(result)) {
+      throw new Error(
+        `The wallet's key page answered ${what} with a reply of the wrong shape.`
+      );
+    }
+    return result;
+  };
+
+const isPublicKeys = (x: unknown): x is string[] =>
+  Array.isArray(x) && x.every(isString);
+
+const isSignature = (x: unknown): x is Uint8Array =>
+  x instanceof Uint8Array && x.length === SIGNATURE_LENGTH;
+
+/** A `create` reply's result: the new key's public key */
+export const createdKeyOf = resultFor(isString)("create");
+
+/** A `sign` reply's result: the 64 signature bytes */
+export const signatureOf = resultFor(isSignature)("sign");
+
+/** An `accounts` or `adopt` reply's result: every public key the key page holds */
+export const publicKeysOf = resultFor(isPublicKeys)("adopt");
+
 /**
  * @param x a message received from another window
  * @returns whether it is the key page's ready message
@@ -261,6 +300,28 @@ if (import.meta.vitest) {
         { ok: true, result: "a" },
       ];
       for (const reply of bad) expect(isKeyReply(reply)).toBe(false);
+    });
+
+    it("checks each request's result for the shape it answers with", () => {
+      const signature = new Uint8Array(64);
+      expect(createdKeyOf("pk")).toBe("pk");
+      expect(signatureOf(signature)).toBe(signature);
+      expect(publicKeysOf(["a", "b"])).toEqual(["a", "b"]);
+      const wrong: Array<[(x: unknown) => unknown, unknown]> = [
+        [createdKeyOf, ["pk"]],
+        [createdKeyOf, new Uint8Array(64)],
+        // eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
+        [createdKeyOf, null],
+        [signatureOf, new Uint8Array(63)],
+        [signatureOf, "sig"],
+        [signatureOf, Array.from(signature)],
+        [publicKeysOf, "a"],
+        [publicKeysOf, new Uint8Array(64)],
+        [publicKeysOf, [1]],
+      ];
+      for (const [check, result] of wrong) {
+        expect(() => check(result)).toThrow("a reply of the wrong shape");
+      }
     });
 
     it("accepts each panel message and rejects the rest", () => {
