@@ -210,10 +210,10 @@ Done:
   tutorials by level under a Start here banner, which features the first
   not completed ("Start here", "Continue · Step n of m", or "Completed" once
   all three are done); the other tutorials stay reachable from New project.
-  The New Workspace gallery (New project) starts a project from scratch, from
-  one of 10 programs that build on the default server, or from one of 16
-  tutorials. The cluster row, the account menu's Settings or Cmd+, open
-  Settings as a page of its
+  New project, a page of its own beside them (also at `/new`), starts a
+  project from scratch, from one of 10 programs that build on the default
+  server, or from one of 16 tutorials. The cluster row, the account menu's
+  Settings or Cmd+, open Settings as a page of its
   own over the whole window: a list of sections (Network, Project, Block
   Explorer, Build, Connection, Editor, Notification, Server, Test UI, UI,
   Wallet, Experimental) built from the existing settings registry, and "Back
@@ -294,7 +294,7 @@ Honesty rule for the demo — never present a mocked step as working.
   saves the IDL a successful build already produced; "Upload IDL" on
   Deploy and Interact replaces the IDL this browser uses -- neither
   generates anything or writes anything on-chain.
-- **Not view-only:** the Programs page's and the gallery's ecosystem program cards
+- **Not view-only:** the Programs page's and New project's ecosystem program cards
   import from GitHub through upstream's own mechanism (`PgGithub.import`)
   into a normal, editable project -- they open as a normal project; those
   targeting Anchor newer than the pinned 0.29 will not compile on this build

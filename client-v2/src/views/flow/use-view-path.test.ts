@@ -132,6 +132,13 @@ it("gives a page its own path, over Home or the work", () => {
   expect(moves()).toEqual([["/programs"]]);
 });
 
+it("gives New project `/new`, not its page's name", () => {
+  router.location.pathname = "/home";
+  const { rerender } = render({ view: "home", homeVia: "nav" });
+  rerender({ view: "home", homeVia: "nav", catalog: "new-project" });
+  expect(moves()).toEqual([["/new"]]);
+});
+
 it("goes back to Home's path when a page over Home closes", () => {
   router.location.pathname = "/tutorials";
   const { rerender } = render({
@@ -218,6 +225,9 @@ it("opens and closes a page on the path come to", () => {
 
   act(() => router.changed.forEach((cb) => cb("/tutorials")));
   expect(catalog.catalogPage.open).toHaveBeenCalledWith("tutorials", "link");
+
+  act(() => router.changed.forEach((cb) => cb("/new")));
+  expect(catalog.catalogPage.open).toHaveBeenCalledWith("new-project", "link");
 
   act(() => router.changed.forEach((cb) => cb("/tutorials/hello-anchor/1")));
   expect(catalog.catalogPage.close).toHaveBeenCalledTimes(1);

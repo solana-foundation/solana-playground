@@ -197,3 +197,32 @@ it("shows a failed start, reports it and accepts a retry", async () => {
   expect(utils.PgExplorer.createWorkspace).toHaveBeenCalledTimes(2);
   expect(named("new_project_started")).toHaveLength(1);
 });
+
+it("passes a failed start's message on, once it shows, and not a made one's", async () => {
+  utils.PgExplorer.createWorkspace.mockRejectedValueOnce(
+    new Error("Workspace already exists")
+  );
+  const onFailed = vi.fn();
+  render(<StartFromScratch onFailed={onFailed} />);
+
+  await act(async () => fireEvent.click(start()));
+  expect(onFailed.mock.calls).toEqual([["Workspace already exists"]]);
+
+  await act(async () => fireEvent.click(start()));
+  expect(onFailed).toHaveBeenCalledTimes(1);
+});
+
+it("passes on a start that fails after it was left", async () => {
+  let fail!: (e: unknown) => void;
+  utils.PgExplorer.createWorkspace.mockReturnValueOnce(
+    new Promise<void>((_, reject) => (fail = reject))
+  );
+  const onFailed = vi.fn();
+  const { unmount } = render(<StartFromScratch onFailed={onFailed} />);
+  await act(async () => fireEvent.click(start()));
+
+  unmount();
+  await act(async () => fail(new Error("Workspace already exists")));
+
+  expect(onFailed.mock.calls).toEqual([["Workspace already exists"]]);
+});

@@ -351,7 +351,7 @@ const FlowFrame = () => {
   );
 
   const page = useStartView();
-  // The Tutorials or Programs page shown, if any (`widgets/catalog`)
+  // The New project, Tutorials or Programs page shown, if any (`widgets/catalog`)
   const catalog = useCatalogPage();
   // Home, the page shown and the work, each on its own URL
   useViewPath({
@@ -545,8 +545,6 @@ const FlowFrame = () => {
                   // A phone's menu page would cover the page it just opened
                   closeSheet();
                 }}
-                onClosePage={catalogPage.close}
-                closeSheet={closeSheet}
                 phone={menuPage}
                 collapsed={collapsed}
                 onToggle={toggle}

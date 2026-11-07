@@ -44,7 +44,8 @@ const TABS: { value: CatalogPage; label: string }[] = [
 /**
  * The prototype's "What do you want to build?": start from scratch, then
  * Tutorials and Programs as one choice with a count each beside the search
- * field, then the chosen list's cards. The dialog around it is the caller's.
+ * field, then the chosen list's cards, as a page beside Tutorials and
+ * Programs, at their width.
  */
 const BaseNewProject = ({
   scratch,
@@ -56,7 +57,11 @@ const BaseNewProject = ({
   tutorials,
   grid,
 }: BaseNewProjectProps) => (
-  <div data-gallery-modal className="flex flex-col gap-4">
+  <section
+    data-new-project
+    aria-label="New project"
+    className="mx-auto flex w-full max-w-[46rem] flex-col gap-4 px-4 py-8"
+  >
     <p className="text-control font-read text-muted-foreground">
       Start clean, open a real program, or learn through a tutorial. Everything
       stays in this browser until you deploy.
@@ -109,17 +114,7 @@ const BaseNewProject = ({
         {...grid}
       />
     )}
-
-    {/* Sticks to the foot of the dialog's scroll area while the list runs
-        past it, so a cut-off card reads as "more below". Scrolled to the
-        end, it lays its height less the column's gap (8 px) over the last
-        row's bottom padding, never over its content */}
-    <div
-      data-scroll-fade
-      aria-hidden="true"
-      className="pointer-events-none sticky bottom-0 -mt-6 h-6 shrink-0 bg-gradient-to-t from-surface-panel to-transparent"
-    />
-  </div>
+  </section>
 );
 
 export default BaseNewProject;

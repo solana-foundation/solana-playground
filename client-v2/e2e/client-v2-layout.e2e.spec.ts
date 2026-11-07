@@ -10,6 +10,7 @@ import {
   home,
   json,
   leaveEditor,
+  newProjectPage,
   projectRow,
   runInTerminal,
   seedWorkspace,
@@ -749,8 +750,8 @@ test.describe("on a phone", () => {
     await expect(preview).toBeInViewport({ ratio: 1 });
   });
 
-  // The gallery is a dialog over the menu page; the project it starts opens
-  // on Work, not behind the menu that started it
+  // New project is a page in the content; the project it starts opens on
+  // Work, not behind the menu that started it
   test("client-v2-layout: A project started from the phone's menu", async ({
     page,
   }) => {
@@ -763,7 +764,7 @@ test.describe("on a phone", () => {
         .getByRole("region", { name: "Navigation" })
         .getByRole("button", { name: "New project", exact: true })
         .click();
-      const gallery = page.getByRole("dialog");
+      const gallery = newProjectPage(page);
       await gallery.getByLabel("Project name").fill(`from-the-menu-${width}`);
       await gallery.getByRole("button", { name: /^Start/ }).click();
 
@@ -1292,7 +1293,7 @@ test("client-v2-layout: Everything the header did", async ({
 
   // A second project, so there is one to switch back to
   await nav(page).getByRole("button", { name: "New project" }).click();
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await expect(gallery).toBeVisible();
   await gallery.getByLabel("Project name").fill("second");
   await gallery.getByRole("button", { name: /^Start/ }).click();
@@ -1379,7 +1380,7 @@ test("client-v2-layout: Programs from the navigation", async ({
     page.getByRole("button", { name: /^Open / }).first()
   ).toBeVisible();
   await expect(item).toHaveAttribute("data-active", "true");
-  await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
+  await expect(page.locator("[data-new-project]")).toHaveCount(0);
   expect(await onlyLineOf(page, lines, "catalog_shown")).toContain("via: nav");
 });
 

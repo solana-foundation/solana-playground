@@ -31,7 +31,6 @@ const fromNav = (name: string) => async (page: Page) => {
 };
 
 const DIALOGS: [string, (page: Page) => Promise<Locator>][] = [
-  ["New project", fromNav("New project")],
   ["Connect a wallet", fromNav("Connect a wallet")],
   ["Share", fromActions(/^Share/)],
   ["Export", fromActions(/^Export/)],
@@ -216,7 +215,7 @@ test("keyboard: Cmd+L is the browser's outside the terminal, the terminal's insi
 test("keyboard: Shift+Tab from a dialog's frame reaches its last control", async ({
   seededPage: page,
 }) => {
-  await fromNav("New project")(page);
+  await fromNav("Connect a wallet")(page);
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   // A press on the dialog's body leaves the focus on its frame

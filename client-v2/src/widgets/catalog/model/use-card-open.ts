@@ -28,7 +28,7 @@ export interface CardOpenOptions {
  * One Open at a time for a page's cards. A second Open while one runs is
  * refused, since two imports of one repository collide on its name and the
  * first to finish would close the page under the second. A finished Open is
- * counted and closes the page (`onOpened`; New project's dialog when the
+ * counted and closes the page (`onOpened`; New project's own page when the
  * cards sit there): the item it opened takes its place (and the lesson
  * already open changes no route that would). A failed one is logged,
  * counted and shown on its card; a cancelled one (`isCancel`) is none of

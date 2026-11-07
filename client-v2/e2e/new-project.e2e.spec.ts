@@ -6,6 +6,7 @@ import {
   expect,
   home,
   LONG,
+  newProjectPage,
   openGallery,
   PROGRAM,
   seedWorkspace,
@@ -15,44 +16,61 @@ import {
 import { lineOf, linesOn } from "./telemetry";
 import { DESK, PHONE } from "./viewports";
 
-/** The New project dialog, by its title */
-const dialog = (page: Page) =>
-  page.getByRole("dialog", { name: "What do you want to build?" });
-
 /** One of the two lists, by its name (its count follows the name) */
 const list = (page: Page, name: "Tutorials" | "Programs") =>
-  dialog(page).getByRole("radio", { name: new RegExp(`^${name}`) });
+  newProjectPage(page).getByRole("radio", { name: new RegExp(`^${name}`) });
+
+test("client-v2-layout: New project from the navigation", async ({
+  seededPage: page,
+}) => {
+  const lines = linesOn(page);
+  await openGallery(page);
+  await expect(newProjectPage(page)).toBeVisible();
+  // A page in the content area, under its own bar, and the item marked
+  // current: no dialog
+  await expect(
+    page.getByRole("dialog", { name: "What do you want to build?" })
+  ).toHaveCount(0);
+  await expect(
+    page
+      .locator('[data-slot="sidebar"]')
+      .getByRole("button", { name: "New project" })
+  ).toHaveAttribute("data-active", "true");
+  await expect
+    .poll(() => lineOf(lines, "catalog_shown"))
+    .toContain("new-project");
+});
 
 test("client-v2-layout: Starting an Anchor project from New project", async ({
   seededPage: page,
 }) => {
   await openGallery(page);
-  await expect(dialog(page)).toBeVisible();
+  await expect(newProjectPage(page)).toBeVisible();
   await expect(
-    dialog(page).getByRole("radio", { name: /Anchor/ })
+    newProjectPage(page).getByRole("radio", { name: /Anchor/ })
   ).toHaveAttribute("aria-checked", "true");
 
-  await dialog(page).getByLabel("Project name").fill("from-scratch");
-  await dialog(page)
+  await newProjectPage(page).getByLabel("Project name").fill("from-scratch");
+  await newProjectPage(page)
     .getByRole("button", { name: /^Start/ })
     .click();
 
-  await expect(dialog(page)).toBeHidden(LONG);
+  await expect(newProjectPage(page)).toBeHidden(LONG);
   await expect(currentProject(page)).toHaveText("from-scratch", LONG);
 });
 
-test("client-v2-layout: New project's controls line up and its list shows it scrolls", async ({
+test("client-v2-layout: New project's controls line up", async ({
   seededPage: page,
 }) => {
   await page.setViewportSize(DESK);
   await openGallery(page);
-  await expect(dialog(page)).toBeVisible();
+  await expect(newProjectPage(page)).toBeVisible();
 
   const boxes = await Promise.all(
     [
-      dialog(page).getByRole("radio", { name: /Anchor/ }),
-      dialog(page).getByLabel("Project name"),
-      dialog(page).getByRole("button", { name: /^Start/ }),
+      newProjectPage(page).getByRole("radio", { name: /Anchor/ }),
+      newProjectPage(page).getByLabel("Project name"),
+      newProjectPage(page).getByRole("button", { name: /^Start/ }),
     ].map(async (l) =>
       requireFor("a control's bounding box")(await l.boundingBox())
     )
@@ -64,34 +82,6 @@ test("client-v2-layout: New project's controls line up and its list shows it scr
   const [framework, name, start] = middles;
   expect(name).toBe(start);
   expect(framework).toBeLessThan(name);
-
-  // The list runs past the dialog's foot: a fade there says there is more
-  const body = dialog(page).locator('[data-slot="modal-body"]');
-  expect(await body.evaluate((b) => b.scrollHeight > b.clientHeight)).toBe(
-    true
-  );
-  const fade = dialog(page).locator("[data-scroll-fade]");
-  await expect(fade).toBeVisible();
-  const [fadeBox, bodyBox] = await Promise.all([
-    fade.boundingBox().then(requireFor("the fade's bounding box")),
-    body.boundingBox().then(requireFor("the body's bounding box")),
-  ]);
-  expect(
-    Math.abs(fadeBox.y + fadeBox.height - (bodyBox.y + bodyBox.height))
-  ).toBeLessThan(40);
-
-  // At the end of the list the fade covers none of the last card
-  await body.evaluate((b) => b.scrollTo(0, b.scrollHeight));
-  const last = dialog(page).locator('[data-slot="action-card"]').last();
-  const [lastBox, endFadeBox] = await Promise.all([
-    last
-      .locator('[data-slot="action-card-content"]')
-      .boundingBox()
-      .then(requireFor("the last card's bounding box")),
-    fade.boundingBox().then(requireFor("the fade's bounding box")),
-  ]);
-  expect(endFadeBox.y).toBeGreaterThanOrEqual(lastBox.y + lastBox.height - 1);
-  await last.getByRole("button", { name: /^Open / }).click({ trial: true });
 });
 
 test("client-v2-layout: Opening a program from New project", async ({
@@ -103,11 +93,11 @@ test("client-v2-layout: Opening a program from New project", async ({
 
   await list(page, "Programs").click();
   await expect(list(page, "Programs")).toHaveText("Programs1");
-  await dialog(page)
+  await newProjectPage(page)
     .getByRole("button", { name: `Open ${PROGRAM.name}` })
     .click();
 
-  await expect(dialog(page)).toBeHidden(LONG);
+  await expect(newProjectPage(page)).toBeHidden(LONG);
   await expect(page.locator("#root-dir")).toContainText("lib.rs", LONG);
 });
 
@@ -119,14 +109,14 @@ test("client-v2-layout: Starting a project is measured", async ({
 
   await list(page, "Programs").click();
   await list(page, "Tutorials").click();
-  await dialog(page)
+  await newProjectPage(page)
     .getByRole("radio", { name: /Native/ })
     .click();
-  await dialog(page).getByLabel("Project name").fill("measured");
-  await dialog(page)
+  await newProjectPage(page).getByLabel("Project name").fill("measured");
+  await newProjectPage(page)
     .getByRole("button", { name: /^Start/ })
     .click();
-  await expect(dialog(page)).toBeHidden(LONG);
+  await expect(newProjectPage(page)).toBeHidden(LONG);
 
   const switched = lines.filter((l) =>
     l.startsWith("[telemetry:event] catalog_tab_switched ")
@@ -142,7 +132,7 @@ test("client-v2-layout: Starting a project is measured", async ({
 test.describe("on a phone", () => {
   test.use({ viewport: PHONE });
 
-  // `seededPage` makes its project through the desktop Home's row, which a
+  // `seededPage` makes its project through the desktop Home's tile, which a
   // phone does not draw; New project needs no project open
   test("client-v2-layout: New project on a phone is a page", async ({
     page,
@@ -156,20 +146,18 @@ test.describe("on a phone", () => {
       .getByRole("button", { name: "New project" })
       .click();
 
-    await expect(dialog(page)).toBeVisible();
-    const box = await dialog(page).boundingBox();
-    expect(box).toEqual({
-      x: 0,
-      y: 0,
-      width: PHONE.width,
-      height: PHONE.height,
-    });
+    await expect(newProjectPage(page)).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Work" }).getByText("New project", {
+        exact: true,
+      })
+    ).toBeVisible();
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth)
     ).toBeLessThanOrEqual(PHONE.width);
     // Nothing inside the page runs off its side either, on either list
     const fits = () =>
-      dialog(page).evaluate((d) =>
+      newProjectPage(page).evaluate((d) =>
         [d]
           .concat(Array.from(d.querySelectorAll("*")))
           .every(
@@ -178,7 +166,7 @@ test.describe("on a phone", () => {
       );
     expect(await fits()).toBe(true);
 
-    const cards = dialog(page).locator('[data-slot="action-card"]');
+    const cards = newProjectPage(page).locator('[data-slot="action-card"]');
     await expect(cards.first()).toBeVisible();
     // A tutorial's card keeps its one button, drawn as the corner square
     await expect(cards.first().locator("[data-card-corner]")).toBeVisible();
@@ -190,4 +178,25 @@ test.describe("on a phone", () => {
     await expect(cards.first()).toBeVisible();
     expect(await fits()).toBe(true);
   });
+});
+
+test("client-v2-layout: New project by link", async ({ page }) => {
+  const lines = linesOn(page);
+  await page.goto("/new");
+
+  await expect(newProjectPage(page)).toBeVisible(LONG);
+  // The link opens the page, then gives way to `/`, as `/tutorials` does
+  await expect(page).toHaveURL(/\/$/);
+  await expect
+    .poll(() => lineOf(lines, "catalog_shown"))
+    .toContain("via: link");
+
+  // Home in the navigation is the way back
+  await page
+    .locator('[data-slot="sidebar"]')
+    // Exact: the logo is "Go to Home", in the same sidebar
+    .getByRole("button", { name: "Home", exact: true })
+    .click();
+  await expect(newProjectPage(page)).toBeHidden();
+  await expect(home(page)).toBeVisible();
 });
