@@ -166,7 +166,10 @@ const BaseCliDeployGuide = (p: BaseCliDeployGuideProps) => {
   });
   return (
     <Dialog open={p.open} onOpenChange={p.onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      {/* Anchor's commands make the guide taller than a short window: the
+          dialog stops at the window's edge and only the steps scroll, so
+          the title and the toggles stay in view (HOO-2701) */}
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Deploy from your machine</DialogTitle>
           <DialogDescription>
@@ -198,7 +201,9 @@ const BaseCliDeployGuide = (p: BaseCliDeployGuideProps) => {
             ))}
           </Segmented>
         </div>
-        <ol className="flex min-w-0 flex-col gap-4">
+        {/* `-m-1 p-1` keeps the copy buttons' focus rings clear of the
+            scroll clip on every side */}
+        <ol className="-m-1 flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto p-1">
           <Step title="1. Download the program">
             {/* The IDL can be loaded without a build, so its download does
                 not wait for one; step 3.1 names the file it saves */}
