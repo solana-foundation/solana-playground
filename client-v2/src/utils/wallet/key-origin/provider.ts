@@ -7,6 +7,7 @@ import {
 } from "../sandbox-signer-provider";
 import type { WalletSignerProvider } from "../signer-provider";
 import type { KeyFrame } from "./client";
+import { createdKeyOf, signatureOf } from "./protocol";
 
 /** What the WASM CLIs get in place of the built-in wallet's key bytes */
 export const CLI_KEY_ERROR =
@@ -26,14 +27,16 @@ export const keyOriginSignerProvider = (
   frame: () => Promise<KeyFrame>
 ): WalletSignerProvider => {
   const sign: SignThroughPage = (publicKey) => (kind) => (bytes) =>
-    frame().then((link) =>
-      link.request<Uint8Array>({
-        type: "sign",
-        publicKey: publicKey.toBase58(),
-        kind,
-        bytes,
-      })
-    );
+    frame()
+      .then((link) =>
+        link.request<unknown>({
+          type: "sign",
+          publicKey: publicKey.toBase58(),
+          kind,
+          bytes,
+        })
+      )
+      .then(signatureOf);
   return {
     name: "key-origin",
     holdsKeysInPage: false,
@@ -53,7 +56,7 @@ export const keyOriginSignerProvider = (
     // key's file is a second key page instance with its own memory, so it
     // sees only the store. A key no account takes is dropped with `forgetKey`.
     async makeKey() {
-      return (await frame()).request<string>({ type: "create" });
+      return createdKeyOf(await (await frame()).request({ type: "create" }));
     },
     async forgetKey(publicKey) {
       await (await frame()).request({ type: "forget", publicKey });
@@ -185,6 +188,25 @@ if (import.meta.vitest) {
       const wallet = provider.walletFor({ name: "Gone", publicKey });
       await expect(wallet.signMessage(new Uint8Array([1]))).rejects.toThrow(
         `No key for account ${publicKey.toBase58()}`
+      );
+    });
+
+    it("refuses a create or sign reply of the wrong shape", async () => {
+      const link: KeyFrame = {
+        request: async <T>(body: Parameters<KeyFrame["request"]>[0]) =>
+          (body.type === "sign" ? new Uint8Array(63) : ["pk"]) as T,
+        close: () => {},
+      };
+      const provider = keyOriginSignerProvider(async () => link);
+      await expect(provider.makeKey()).rejects.toThrow(
+        "answered create with a reply of the wrong shape"
+      );
+      const wallet = provider.walletFor({
+        name: "Wallet 1",
+        publicKey: PgWeb3.Keypair.generate().publicKey,
+      });
+      await expect(wallet.signMessage(new Uint8Array([1]))).rejects.toThrow(
+        "answered sign with a reply of the wrong shape"
       );
     });
 
