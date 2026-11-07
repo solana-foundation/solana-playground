@@ -9,6 +9,7 @@ import Input from "../../../../../components/Input";
 import UploadArea from "../../../../../components/UploadArea";
 import { useMounted } from "../../../../../hooks";
 import {
+  ImportedFile,
   PgExplorer,
   PgFramework,
   PgView,
@@ -33,26 +34,9 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
 
   const mounted = useMounted();
 
-  const onDrop = async (userFiles: Array<File & { path: string }>) => {
+  const onDrop = async (userFiles: ImportedFile[]) => {
     try {
-      const importFiles: TupleFiles = [];
-      for (const userFile of userFiles) {
-        const shouldSkip = /(\/\.|node_modules|target)/.test(userFile.path);
-        if (shouldSkip) continue;
-
-        const content = await userFile.text();
-        importFiles.push([userFile.path, content]);
-      }
-
-      // A dropped folder's name leads every path; a project with no program
-      // drops it rather than nest the project under it
-      const folders = new Set(
-        importFiles.map(([path]) => /^\/?([^/]+)\//.exec(path)?.[1])
-      );
-      const [root] = folders.size === 1 ? [...folders] : [];
-      const pgFiles = await PgFramework.convertToPlaygroundLayoutWith(
-        root ?? ""
-      )(root)(importFiles);
+      const pgFiles = await PgFramework.importFiles(userFiles);
 
       // Closed while the files were read: open it again with them
       if (!mounted.current) {
@@ -61,11 +45,16 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
         setFiles(pgFiles);
         setImportError("");
       }
-    } catch (e: any) {
+    } catch (e) {
+      // Something thrown that is not an `Error` must still say it failed
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : "Could not read the files.";
       if (!mounted.current) {
-        PgView.setModal(<ImportFs name={name} importError={e.message} />);
+        PgView.setModal(<ImportFs name={name} importError={message} />);
       } else {
-        setImportError(e.message);
+        setImportError(message);
       }
     }
   };

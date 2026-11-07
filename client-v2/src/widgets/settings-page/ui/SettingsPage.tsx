@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 
-import { ExportFile, Github, ImportFile } from "@/components/Icons";
+import { Github, ImportFile } from "@/components/Icons";
 import Link from "@/components/Link";
 import { useBlockExplorer, useProgramInfo, useWallet } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
@@ -11,7 +11,7 @@ import type {
 } from "@/shared/lib/settings-request";
 import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
-import { PgFramework, PgProgramInfo, PgSettings, PgView } from "@/utils";
+import { PgProgramInfo, PgSettings, PgView } from "@/utils";
 import {
   ImportFs,
   ImportGithub,
@@ -25,6 +25,7 @@ import AssistantKey from "./AssistantKey";
 import BaseSettingRow from "./BaseSettingRow";
 import type { SettingsSection } from "./BaseSettingsPage";
 import BaseSettingsPage from "./BaseSettingsPage";
+import ExportProject, { OpenProjectLine } from "./ExportProject";
 import NetworkSection from "./NetworkSection";
 import { SettingControl } from "./SettingControl";
 import SettingsBoundary from "./SettingsBoundary";
@@ -139,34 +140,29 @@ const Project = ({ phone, onImported }: ProjectProps) => {
     if (isImported(await PgView.setModal(dialog))) onImported();
   };
   return (
-    <div className={cn("flex gap-2", phone ? "flex-col" : "flex-wrap")}>
-      <AsyncButton
-        variant="outline"
-        className={phone ? PHONE_BUTTON : undefined}
-        onClick={() => PgFramework.exportWorkspace()}
-        onError={reportButtonFailure("export the project")}
-      >
-        <ExportFile data-icon="inline-start" />
-        Export project (zip)
-      </AsyncButton>
-      <AsyncButton
-        variant="outline"
-        className={phone ? PHONE_BUTTON : undefined}
-        onClick={open(ImportGithub)}
-        onError={reportButtonFailure("open the GitHub import")}
-      >
-        <Github data-icon="inline-start" />
-        From GitHub
-      </AsyncButton>
-      <AsyncButton
-        variant="outline"
-        className={phone ? PHONE_BUTTON : undefined}
-        onClick={open(ImportFs)}
-        onError={reportButtonFailure("open the file import")}
-      >
-        <ImportFile data-icon="inline-start" />
-        From files
-      </AsyncButton>
+    <div className="flex min-w-0 flex-col gap-3">
+      <OpenProjectLine phone={phone} />
+      <div className={cn("flex gap-2", phone ? "flex-col" : "flex-wrap")}>
+        <ExportProject className={phone ? PHONE_BUTTON : undefined} />
+        <AsyncButton
+          variant="outline"
+          className={phone ? PHONE_BUTTON : undefined}
+          onClick={open(ImportGithub)}
+          onError={reportButtonFailure("open the GitHub import")}
+        >
+          <Github data-icon="inline-start" />
+          From GitHub
+        </AsyncButton>
+        <AsyncButton
+          variant="outline"
+          className={phone ? PHONE_BUTTON : undefined}
+          onClick={open(ImportFs)}
+          onError={reportButtonFailure("open the file import")}
+        >
+          <ImportFile data-icon="inline-start" />
+          From files
+        </AsyncButton>
+      </div>
     </div>
   );
 };
