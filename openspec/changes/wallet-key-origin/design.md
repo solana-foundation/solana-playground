@@ -46,13 +46,19 @@ rest come from the 7 Nov call.
   project would isolate the key origin's files further; it costs a pipeline
   and a release that can drift from the app's protocol version.
 - **The app never runs on the key origin (my call).** A `vercel.json`
-  redirect sends every path but `/wallet-keys.html` and
+  `redirects` rule with a host condition (`^wallet-keys\.`) sends every path but `/wallet-keys.html` and
   `/static/js/wallet-keys*` to `/wallet-keys.html` on a host whose first
   label is `wallet-keys` (for example `wallet-keys.playground.solana.com`).
   It is a redirect because Vercel runs redirects before its files and
   functions, and rewrites only after them: as a rewrite, `index.html`, the
   app's scripts and `/api` would still answer on that host. Without the rule
   an app XSS opened on the key origin would read the keys.
+- **A record that is not a key blocks the move.** A record key that is not a
+  real ed25519 key leaves the wallet `unavailable` rather than being dropped,
+  so no key is lost. `localStorage['wallet.unreadable']` (unparseable text
+  kept for recovery) is neither moved nor cleared: it cannot be parsed into a
+  key, and deleting it would lose the recovery copy. This is a known gap: a
+  rare remnant on the app origin may hold key bytes.
 - **The key origin is same-site with the app in production.** A subdomain of
   the app's site keeps the frame's storage unpartitioned and under the same
   browser retention rules as the app's own (Safari's included). A preview on
@@ -66,13 +72,21 @@ rest come from the 7 Nov call.
   e2e) means the same port on the other loopback host: an app on
   `http://localhost:<port>` uses `http://127.0.0.1:<port>`, and the reverse.
   One dev server, two origins, no second port to allocate per worktree
-  **(my call; the ticket said a second port)**.
+  **(my call; the ticket said a second port)**. The e2e spec runs on loopback
+  against a second dev server started by a worker-scoped fixture, so the
+  other specs keep their keys in the page and the server compiles only when
+  this spec runs.
 - **The key page answers one app origin.** It is built with the app origin
   it serves (`REACT_APP_WALLET_APP_ORIGIN`, or the loopback pair), checks
-  `event.origin` on the handshake, and refuses anything else. Its CSP header
-  adds `frame-ancestors` with the same origins. Its CSP is `default-src
+  `event.origin` on the handshake, and refuses anything else. Its CSP is `default-src
   'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src
-  'none'; form-action 'none'; base-uri 'none'`.
+  'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'
+  https://*.vercel.app http://localhost:* http://127.0.0.1:*
+  https://playground.solana.com` (`vercel.json`). `frame-ancestors` is a fixed
+  list, the same in every environment, production included. It must be
+  updated by hand when the production app origin
+  (`REACT_APP_WALLET_APP_ORIGIN`) changes. The handshake's origin check is
+  the real gate; the header only narrows who may frame the page.
 - **The channel is the sandbox's handshake with an origin check.** The page
   makes the hidden frame (`width/height 0`, `aria-hidden`, off the tab
   order), waits for `{type: "ready"}` from `frame.contentWindow` at the key
@@ -82,10 +96,12 @@ rest come from the 7 Nov call.
 - **The API.** Requests carry an `id`; replies carry the same `id` and a
   result or an error message:
   - `accounts` → the base58 public keys the key page holds.
-  - `create` → makes a key, keeps it in the frame's memory as a draft, returns
-    its public key. `keep(publicKey)` stores a draft; a draft is dropped when
-    the frame unloads. The Setup and Add dialogs need it: they offer the key
-    file before the account is added.
+  - `create` → makes a key, stores it at once and returns its public key.
+    Setup and Add need the key before the account exists, so they can offer
+    the key file first. The panel is a second key-page instance with its own
+    memory and cannot see the hidden frame's drafts, so there are no
+    per-frame drafts. A dialog that closes without adding the account calls
+    `forget` for the key.
   - `sign(publicKey, kind, bytes)`: `kind` is `transaction` (the serialized
     message) or `message`; the reply is the 64-byte signature. A `message`
     whose bytes parse as a transaction message is refused, so a message
@@ -119,9 +135,13 @@ rest come from the 7 Nov call.
   render one button each, in the design system's secondary button look
   (theme colours passed in the fragment), inside the dialogs where the
   buttons are today. Import reads the file inside the key origin, stores the
-  key as a draft and posts its public key to the page; the page adds the
-  account with `keep`. Export downloads from a `blob:` URL of the key origin
-  (`allow-downloads` on the frame). No key file passes through the app page.
+  key directly in the shared store and posts its public key to the page; the
+  page then adds the account with `adopt`. Export downloads from a `blob:` URL of the key origin
+  (`allow-downloads` on the frame). Settings opens these panels in small
+  "Export keypair" and "Import keypair" dialogs. The export button reads
+  "Save keypair". The panel's font is the design system's font stack, which
+  falls back to system fonts. The design system's font is hosted by Google
+  and the key page loads nothing third-party; self-hosting it is a follow-up. No key file passes through the app page.
 - **The WASM CLIs refuse, with a reason.** Under the key-origin provider
   `getKeypairBytes` throws "The built-in wallet's key is kept on its own
   origin, so the solana, spl-token and anchor commands cannot sign with it.
@@ -134,14 +154,24 @@ rest come from the 7 Nov call.
   variable and falls back to the `local` provider; production changes only
   when the domain and the variable are set.
 - [A build that loses the variable after users moved] → their page record
-  has no keys; the wallet loads `unavailable`, never Setup, so nothing is
-  overwritten, and setting the variable back restores it.
+  has no keys. The local provider reads such a record as `unavailable`,
+  never Setup, and writes nothing, so nothing is overwritten. Setting the
+  variable back restores it.
 - [The key page and the app drift apart] → one build serves both, and the
   handshake carries a protocol version; a mismatch reads as `unavailable`.
 - [The WASM CLIs lose the built-in wallet] → a clear error and a ticket for
   an async signer; most users sign through the UI.
 - [Cross-site previews partition the frame's storage] → accepted: a preview
   is a test bed.
+- [Every wallet read waits for the key page] → a user whose saved state is
+  an extension wallet also waits, up to 10 s, when the key page is blocked or
+  slow, then reads `unavailable` for that load. This is what the spec says.
+  A follow-up could read the record first and need the key page only for the
+  built-in wallet or a record that still holds keys.
+- [Previews serve the whole app on the key origin] → the host rule matches
+  only hosts whose first label is `wallet-keys`, and a `*.vercel.app` preview
+  has no such host. A preview gives no XSS isolation, so a preview pass is
+  not proof of the production property.
 
 ## Migration Plan
 

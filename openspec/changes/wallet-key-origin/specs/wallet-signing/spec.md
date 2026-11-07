@@ -109,19 +109,22 @@ user leaves without adding the account SHALL not be stored.
 ### Requirement: Key files are read and written by the key origin
 
 Under the key-origin provider, importing and exporting a key file SHALL be
-done by a visible panel of the key page inside the wallet's dialogs: the file
+done by a visible panel of the key page inside the wallet's dialogs. Settings
+opens small dialogs for this, "Export keypair" and "Import keypair", each
+holding the panel. The file
 SHALL be read and the download made on the key origin, and the key bytes
 SHALL not reach the app page.
 
 #### Scenario: Export from Settings
 
-- **WHEN** the user presses "Download key file" in the wallet's settings
+- **WHEN** the user presses "Save keypair" in the "Export keypair" dialog that the
+  wallet's settings opens
 - **THEN** the browser saves `<name>-keypair.json` with the account's 64 key
   bytes, and no message to the app page carries them
 
 #### Scenario: Import a key file
 
-- **WHEN** the user picks a valid key file in the import panel
+- **WHEN** the user picks a valid key file in the panel of the "Import keypair" dialog
 - **THEN** the account is added with the file's public key, and the app page
   never receives the file's bytes
 
