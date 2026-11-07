@@ -72,8 +72,15 @@ keeping accurate.
 - Deploy goes to the cluster set in Settings → Connection: devnet by default,
   and the project snapshot names the current one. It costs SOL and needs a
   wallet funded on that cluster.
-- The default wallet is an in-browser keypair in local storage. Clearing
-  browser data destroys it along with the projects.
+- The default wallet is an in-browser keypair kept in the wallet's own
+  IndexedDB database, not in `localStorage`. Clearing site data destroys it
+  along with the projects.
+- Scripts and tests run in a sandbox that never holds the wallet's key.
+  `pg.wallet.keypair` signs (`tx.sign`, `sendAndConfirmTransaction`, Anchor's
+  `.signers`), but `pg.wallet.keypair.secretKey` throws: use
+  `pg.wallet.signTransaction` and `pg.wallet.signMessage` instead. Write
+  `await tx.sign(...)` when the code reads the signature or checks it before
+  sending.
 
 ## Environment limits worth naming out loud
 

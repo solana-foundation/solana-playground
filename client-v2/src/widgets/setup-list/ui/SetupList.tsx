@@ -6,7 +6,7 @@ import { isSignInFailure, PgSession } from "@/features/auth";
 import { useRenderOnChange, useWallet } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
 import { shortAddress } from "@/shared/lib/short-address";
-import { PgCommand, PgConnection, PgView } from "@/utils";
+import { PgCommand, PgConnection, PgView, PgWallet, PgWeb3 } from "@/utils";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
 import type { StepView, TodoStep } from "../model/steps";
@@ -57,15 +57,23 @@ const SetupList = ({
   useRenderOnChange(PgSession.onDidChange);
   useRenderOnChange(PgAssistant.onDidChange);
   const wallet = useWallet();
+  useRenderOnChange(PgWallet.onDidChangeState);
+  const isWalletUnavailable = PgWallet.state === "unavailable";
+  const walletAddress = (
+    wallet?.publicKey as PgWeb3.PublicKey | null | undefined
+  )?.toBase58();
   const user = PgSession.get();
 
   // Keyed by step, so a new step without a state does not compile
   const states: Record<TodoStep, { done: boolean; value?: string }> = {
     assistant: { done: PgAssistant.isConnected },
     github: { done: !!user, value: user?.login ?? undefined },
+    // A standard wallet being disconnected has dropped its key before the
+    // current wallet changes, and this list re-renders on the state change in
+    // between, so the key is read as possibly absent whatever the type says
     wallet: {
-      done: !!wallet,
-      value: wallet ? shortAddress(wallet.publicKey.toBase58()) : undefined,
+      done: !!wallet?.publicKey,
+      value: walletAddress ? shortAddress(walletAddress) : undefined,
     },
   };
   const steps: StepView[] = SETUP_STEPS.map((step): StepView => {
@@ -83,6 +91,9 @@ const SetupList = ({
         };
       }
       return { step, done: true, value };
+    }
+    if (step === "wallet" && isWalletUnavailable) {
+      return { step, done: false, problem: "unavailable" };
     }
     const { done, value } = states[step];
     return done ? { step, done, value } : { step, done };
@@ -126,7 +137,23 @@ const SetupList = ({
     },
   };
 
+  /** Read the wallet again, as the page load did, and count what came of it */
+  const retryWallet = () => {
+    // `refresh` may answer synchronously; this way a throw is caught too
+    Promise.resolve()
+      .then(() => PgWallet.refresh())
+      .catch((error: unknown) => {
+        log.error(error, { report: true, context: { step: "wallet" } });
+      })
+      .finally(() => {
+        setupTelemetry.track("setup_wallet_retried", {
+          outcome: PgWallet.state === "unavailable" ? "unavailable" : "loaded",
+        });
+      });
+  };
+
   const pick = (step: TodoStep) => {
+    if (step === "wallet" && isWalletUnavailable) return retryWallet();
     setupTelemetry.track("setup_item_picked", { item: step });
     actions[step]();
   };

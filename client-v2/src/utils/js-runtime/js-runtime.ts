@@ -1,24 +1,25 @@
-import * as anchor from "@coral-xyz/anchor";
-import * as mocha from "mocha/browser-entry";
-import { transpile } from "typescript";
-import * as util from "util";
+import { createLogger } from "@/shared/lib/logger";
 
 import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
 import { PgProgramInfo } from "../program-info";
-import { PgProgramInteraction } from "../program-interaction";
 import { PgTerminal } from "../terminal";
-import type { MergeUnion, OrString } from "../types";
-import { PgWallet, Wallet } from "../wallet";
-import type { PgWeb3 } from "../web3";
+import { PgWallet } from "../wallet";
+import { signRequestWith } from "../wallet/sign-bridge";
+import { formatOutputFor } from "./output";
+import { serveSandboxWith } from "./page-channel";
+import { prepareCode } from "./prepare-code";
+import type { SandboxWallet, ToSandbox } from "./protocol";
+import { relayRpcWith } from "./rpc-relay";
 import {
-  pgSignerFromFileWith,
-  reasonMessage,
-  showBigInts,
-  TRANSPILE_OPTIONS,
-  wrapScriptWith,
-} from "./kit";
-import { JsRuntimePackageName, PgJsRuntimePackage } from "./package";
+  connectWith,
+  LOAD_TIMEOUT_MS,
+  RELOADED_ERROR,
+  SANDBOX_URL,
+  watchReloadsOf,
+} from "./sandbox-frame";
+
+const log = createLogger("js-runtime:sandbox");
 
 /** Options to use when running a script/test */
 interface ExecuteParams {
@@ -30,28 +31,20 @@ interface ExecuteParams {
   isTest: boolean;
 }
 
-/**
- * The globals `mocha.setup({ ui: "bdd" })` defines (mocha 10), handed to test
- * code
- */
-const BDD_GLOBALS = [
-  "after",
-  "afterEach",
-  "before",
-  "beforeEach",
-  "context",
-  "describe",
-  "it",
-  "specify",
-  "xcontext",
-  "xdescribe",
-  "xit",
-  "xspecify",
-] as const;
-
-/** How a script run ended: the first uncaught error, if any */
+/** How a run ended: its first uncaught error, if any */
 export type RunResult = { ok: true } | { ok: false; error: string };
 
+/** What is running now, if anything */
+type Running = "client" | "tests" | undefined;
+
+/**
+ * Runs project code for `run` and `test` in a sandboxed frame
+ * (`runtime.html`, `sandbox="allow-scripts"`): an opaque origin with no
+ * access to the page, its storage or the wallet's keys. The page transpiles
+ * the code, sends it with the IDL, the program id, the endpoint and the
+ * wallets' public keys, prints what the sandbox prints, signs what it asks
+ * to have signed and carries out its RPC requests (`page-channel.ts`).
+ */
 export class PgJsRuntime {
   /**
    * Run or test JS/TS code.
@@ -63,574 +56,192 @@ export class PgJsRuntime {
     code,
     isTest,
   }: ExecuteParams): Promise<RunResult> {
-    let result: RunResult = { ok: true };
-    await this._executeBlocking(
-      async () => {
-        PgTerminal.println(`  ${fileName}:`);
-
-        // Get Iframe window
-        const iframeWindow = this._getIframeWindow();
-
-        // Remove everything from the iframe window object
-        for (const key in iframeWindow) {
-          try {
-            delete iframeWindow[key];
-          } catch {
-            // Not every key can be deleted from the window object
-          }
-        }
-
-        // Get globals
-        const { globals, endCode } = await this._getGlobals({ isTest });
-        const fail: NonNullable<IframeGlobals["__fail"]> = (reason) => {
-          const error = reasonMessage(reason);
-          if (result.ok) result = { ok: false, error };
-          return error;
-        };
-        globals.push(["__fail", fail]);
-
-        // Handle imports
-        const importResult = await this._getImports(code);
-        globals.push(...importResult.imports);
-        code = importResult.code;
-
-        // Set iframe globals
-        for (const [name, pkg] of globals) {
-          // @ts-ignore
-          iframeWindow[name] = pkg;
-        }
-
-        // `describe` is only available when as test
-        if (isTest && !code.includes("describe")) {
-          throw new Error(
-            `Tests must use '${PgTerminal.bold(
-              "describe"
-            )}' function. Use '${PgTerminal.bold(
-              "run"
-            )}' command to run the script.`
-          );
-        }
-
-        // Handle blacklisted globals
-        for (const keyword of BLACKLISTED_GLOBALS) {
-          if (code.includes(keyword)) {
-            throw new Error(`'${keyword}' is not allowed`);
-          }
-        }
-
-        code = wrapScriptWith(endCode)(code);
-
-        // Transpile the code
-        code = transpile(code, TRANSPILE_OPTIONS);
-
-        // Create script element in the iframe
-        const iframeDocument = iframeWindow.document;
-        const scriptEls = iframeDocument.getElementsByTagName("script");
-        if (scriptEls.length) iframeDocument.head.removeChild(scriptEls[0]);
-        const scriptEl = document.createElement("script");
-        iframeDocument.head.appendChild(scriptEl);
-
-        return new Promise<void>((res) => {
-          if (isTest) {
-            const intervalId = setInterval(() => {
-              if (mocha._state === "init") {
-                clearInterval(intervalId);
-                res();
-              }
-            }, 1000);
-          } else {
-            const { dispose } = PgCommon.onDidChange(
-              CLIENT_ON_DID_FINISH_RUNNING,
-              () => {
-                PgTerminal.println("");
-                dispose();
-                res();
-              }
-            );
-          }
-
-          // Inject the script to the iframe element
-          scriptEl.textContent = code;
-        });
-      },
-      { isTest }
-    );
-    // The run has ended: a rejection it left behind may print, but it no
-    // longer changes this result
-    delete (this._getIframeWindow() as IframeGlobals).__fail;
-    return result;
-  }
-
-  /**
-   * Wrapper method to control client running state.
-   *
-   * @param cb callback function to run
-   * @param isTest whether to execute as a test
-   */
-  private static async _executeBlocking(
-    cb: () => Promise<void>,
-    { isTest }: Pick<ExecuteParams, "isTest">
-  ) {
-    // Block creating multiple client/test instances at the same time
-    if (this._isClientRunning) {
-      if (isTest) throw new Error("Please wait for client to finish.");
-      throw new Error("Client is already running!");
-    }
-    if (mocha._state === "running") {
-      if (!isTest) throw new Error("Please wait for tests to finish.");
-      throw new Error("Tests are already running!");
-    }
-
-    try {
-      if (!isTest) this._isClientRunning = true;
-      await cb();
-    } catch (e) {
-      throw e;
-    } finally {
-      if (!isTest) this._isClientRunning = false;
-    }
-  }
-
-  /**
-   * Get or create the window object of the `Iframe` element.
-   *
-   * @returns `Iframe`'s window element
-   */
-  private static _getIframeWindow() {
-    if (this._IframeWindow) return this._IframeWindow;
-
-    const iframeEl = document.createElement("iframe");
-    iframeEl.style.display = "none";
-    document.body.appendChild(iframeEl);
-    const iframeWindow = iframeEl.contentWindow;
-    if (!iframeWindow) throw new Error("No iframe window");
-
-    // Non runtime errors e.g. syntax
-    // TODO(docs-link follow-up, run ids): an error thrown from a script's
-    // timer lands here too and ends its run early
-    iframeWindow.addEventListener("error", (ev) => {
-      PgTerminal.println(`    ${ev.message}`);
-      (iframeWindow as IframeGlobals).__fail?.(ev.message);
-
-      // This kind of error requires custom event dispatch to indicate the
-      // client has finished running, otherwise client will stay in the running
-      // state indefinitely.
-      PgCommon.createAndDispatchCustomEvent(CLIENT_ON_DID_FINISH_RUNNING);
-    });
-
-    // Promise/async errors
-    iframeWindow.addEventListener("unhandledrejection", (ev) => {
-      const message = reasonMessage(ev.reason);
-      PgTerminal.println(`    Uncaught error: ${message}`);
-      // TODO(docs-link follow-up, run ids): a rejection that lands after its
-      // script ended is printed but cannot turn that run red, and one that
-      // lands while the next run goes turns the next one red. `execute`
-      // clears `__fail` when a run ends, so only the second case remains
-      (iframeWindow as IframeGlobals).__fail?.(message);
-      // Does not require custom event dispatch to indicate running has finished
-    });
-
-    this._IframeWindow = iframeWindow;
-
-    return this._IframeWindow;
-  }
-
-  /**
-   * Get global variables.
-   *
-   * @param isTest whether to execute as a test
-   * @returns the globals and the end code to indicate when the execution is over
-   */
-  private static async _getGlobals({ isTest }: Pick<ExecuteParams, "isTest">) {
-    // Redefine console inside the iframe to log in the terminal
-    const log = (cb?: (text: string) => string) => {
-      return (...args: any[]) => {
-        const text = util.format(...showBigInts(args));
-        return PgTerminal.println("    " + (cb ? cb(text) : text));
-      };
-    };
-    const iframeConsole = {
-      log: log(),
-      info: log(PgTerminal.info),
-      warn: log(PgTerminal.warning),
-      error: log(PgTerminal.error),
-    };
-
-    const globals: [string, object][] = [
-      // Playground global
-      ["pg", this._getPg()],
-
-      // Namespaces
-      ["console", iframeConsole],
-
-      // https://github.com/solana-playground/solana-playground/issues/82
-      ["Uint8Array", Uint8Array],
-
-      // Functions
-      ["sleep", PgCommon.sleep],
-    ];
-
-    // Set global packages
-    await Promise.all(
-      PgCommon.entries(PACKAGES.global).map(
-        async ([packageName, importStyle]) => {
-          const style = importStyle as Partial<MergeUnion<typeof importStyle>>;
-          const pkg: { [name: string]: any } = await PgJsRuntimePackage.import(
-            packageName
-          );
-          this._overridePackage(packageName, pkg);
-
-          let global: typeof globals[number];
-          if (style.as) global = [style.as, pkg];
-          else if (style.named) global = [style.named, pkg[style.named]];
-          else if (style.default) global = [style.default, pkg.default ?? pkg];
-          else throw new Error("Unreachable");
-
-          globals.push(global);
-        }
-      )
-    );
-
-    let endCode: string;
-    if (isTest) {
-      endCode = "_run()";
-
-      // Mocha's BDD functions, which `mocha.setup` defines on the global
-      // object (see `mocha.d.ts` for why they are not typed as globals)
-      const bdd = globalThis as unknown as Record<
-        typeof BDD_GLOBALS[number],
-        Function | undefined
-      >;
-
-      // Setup mocha
-      if (bdd.describe !== undefined) {
-        // Reset suite
-        mocha.suite.suites = [];
-        mocha.suite.tests = [];
-      }
-
-      mocha.setup({
-        ui: "bdd",
-        timeout: "30000",
-        // Mocha disposes itself after the `run` function without this option
-        cleanReferencesAfterRun: false,
-        // Logs the test output to the browser console
-        reporter: "spec",
-      });
-
-      // Set mocha globals
-      globals.push(
-        ...BDD_GLOBALS.map((name): [string, object] => {
-          // Named here, rather than as "describe is not a function" in the
-          // user's own test
-          const fn = bdd[name];
-          if (typeof fn !== "function") {
-            throw new Error(`mocha.setup did not define \`${name}\``);
-          }
-          return [name, fn];
-        }),
-        ["_run", mocha.run]
+    if (this._running === "client") {
+      throw new Error(
+        isTest
+          ? "Please wait for client to finish."
+          : "Client is already running!"
       );
-    } else {
-      // Run only
-      endCode = "__end()";
-      globals.push([
-        "__end",
-        () => {
-          PgCommon.createAndDispatchCustomEvent(CLIENT_ON_DID_FINISH_RUNNING);
+    }
+    if (this._running === "tests") {
+      throw new Error(
+        isTest
+          ? "Tests are already running!"
+          : "Please wait for tests to finish."
+      );
+    }
+
+    this._running = isTest ? "tests" : "client";
+    try {
+      PgTerminal.println(`  ${fileName}:`);
+
+      // `describe` is only available when as test
+      if (isTest && !code.includes("describe")) {
+        throw new Error(
+          `Tests must use '${PgTerminal.bold(
+            "describe"
+          )}' function. Use '${PgTerminal.bold(
+            "run"
+          )}' command to run the script.`
+        );
+      }
+
+      const run = this._runMessage(prepareCode(code), isTest);
+      const { port, reloaded, stopWatching } = await this._openSandbox();
+      const ended = serveSandboxWith({
+        print: ({ level, text }) => {
+          const line = formatOutputFor(level)(text);
+          if (line !== undefined) PgTerminal.println(line);
         },
-      ]);
-    }
-
-    return { globals, endCode };
-  }
-
-  /**
-   * Handle user specified imports.
-   *
-   * @param code script/test code
-   * @returns the imported packages and the code without the import statements
-   */
-  private static async _getImports(code: string) {
-    const importRegex =
-      /import\s+(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["|'](.+)["|']/gm;
-    let importMatch: RegExpExecArray | null;
-
-    const imports: [string, object][] = [];
-    const setupImport = (pkg: { [key: string]: any }) => {
-      // `import as *` syntax
-      if (importMatch?.[3]) {
-        imports.push([importMatch[3], pkg]);
+        sign: async (request) => {
+          const reply = await signRequestWith(() =>
+            PgWallet.getConnectedWallets()
+          )(request);
+          if ("error" in reply)
+            log.warn(`sign request refused: ${reply.error}`);
+          return reply;
+        },
+        rpc: relayRpcWith(() => window.fetch)(window.location.origin),
+      })(port);
+      port.postMessage(run);
+      let error: string | undefined;
+      try {
+        // A frame that loads another document drops the run's sandbox,
+        // which then never posts `end`
+        const outcome = await Promise.race([
+          ended.then((ending) => ({ ended: true as const, error: ending })),
+          reloaded.then(() => ({ ended: false as const })),
+        ]);
+        if (!outcome.ended) {
+          port.close();
+          throw new Error(RELOADED_ERROR);
+        }
+        error = outcome.error;
+        // Kept open until the next run replaces the frame: a callback the
+        // code did not await may still print, sign or call the cluster, as
+        // in the old runtime
+        this._lastPort = port;
+      } finally {
+        stopWatching();
       }
 
-      // `import {}` syntax
-      else if (importMatch?.[4]) {
-        const namedImports = importMatch[4]
-          .substring(1, importMatch[4].length - 1)
-          .replace(/\n?/g, "")
-          .split(",")
-          .map((statement) => statement.trim())
-          .filter(Boolean)
-          .map((statement) => {
-            const result = /(\w+)(\s+as\s+(\w+))?/.exec(statement)!;
-            return { named: result[1], renamed: result[3] };
-          });
-        for (const { named, renamed } of namedImports) {
-          imports.push([renamed ?? named, pkg[named]]);
-        }
-      }
-
-      // `import Default` syntax
-      else if (importMatch?.[5]) {
-        imports.push([importMatch[5], pkg.default ?? pkg]);
-      }
-    };
-
-    do {
-      importMatch = importRegex.exec(code);
-      if (!importMatch) continue;
-
-      // TODO: Save packages after adding version support
-      const importPath = importMatch[6];
-      const getPackage = importPath.startsWith(".")
-        ? this._importFromPath
-        : PgJsRuntimePackage.import;
-      const rawPkg = await getPackage(importPath);
-      const pkg = this._overridePackage(importPath, rawPkg);
-      setupImport(pkg);
-    } while (importMatch);
-
-    // Remove import statements
-    // Need to do this after we setup all the imports because of the internal
-    // cursor index state the `regex.exec` has.
-    code = code.replace(importRegex, "");
-
-    return { code, imports };
+      if (!isTest) PgTerminal.println("");
+      return error === undefined ? { ok: true } : { ok: false, error };
+    } finally {
+      this._running = undefined;
+    }
   }
 
-  /**
-   * Import module from the given path.
-   *
-   * @param path import path
-   * @returns the imported module
-   */
-  private static async _importFromPath(path: string) {
-    // TODO: Remove after adding general support for local imports.
-    // Add a special case for Anchor's `target/types`
-    if (path.includes("target/types")) {
-      const idl = PgProgramInfo.callableIdl();
-      if (idl) return { IDL: idl };
-      throw new Error(PgProgramInfo.noCallableIdlMessage());
-    }
+  /** The `run` message: the code and what `pg` is built from */
+  private static _runMessage(code: string, isTest: boolean): ToSandbox {
+    const current = PgWallet.current;
+    const wallets: SandboxWallet[] = current
+      ? PgWallet.getConnectedWallets().map((wallet) => ({
+          name: wallet.name,
+          key: PgCommon.toCamelCase(wallet.name),
+          publicKey: wallet.publicKey.toBase58(),
+          isPg: !!wallet.isPg,
+        }))
+      : [];
+    const currentIndex = current
+      ? wallets.findIndex(
+          (wallet) => wallet.publicKey === current.publicKey.toBase58()
+        )
+      : -1;
 
-    throw new Error("File imports are not yet supported.");
-  }
-
-  /**
-   * Override the package.
-   *
-   * @param name package name
-   * @param pkg package
-   * @returns the overridden package
-   */
-  private static _overridePackage(
-    name: OrString<JsRuntimePackageName>,
-    pkg: any
-  ) {
-    // Kit: a docs script's `signerFromFile("wallet.json")` is the
-    // Playground wallet, since there is no file system to read a keypair from
-    if (name === "@solana/kit-plugin-signer") {
-      return {
-        ...pkg,
-        signerFromFile: pgSignerFromFileWith({
-          createKeyPairSignerFromBytes: async (bytes) => {
-            const kit = await import("@solana/kit");
-            return kit.createKeyPairSignerFromBytes(bytes);
-          },
-          signer: pkg.signer,
-        })(() => PgWallet.current),
-      };
-    }
-
-    // Anchor
-    if (name === "@coral-xyz/anchor" || name === "@project-serum/anchor") {
-      // Fix `Cannot assign to property 'workspace' of [object Module]`
-      pkg = { ...pkg };
-
-      const providerName =
-        name === "@coral-xyz/anchor" ? "AnchorProvider" : "Provider";
-
-      // Add `AnchorProvider.local()`
-      pkg[providerName].local = (
-        url?: string,
-        opts: PgWeb3.ConfirmOptions = anchor.AnchorProvider.defaultOptions()
-      ) => {
-        const connection = PgConnection.create({
-          endpoint: url ?? "http://localhost:8899",
-          commitment: opts.commitment,
-        });
-
-        const wallet = this._getPg().wallet;
-        if (!wallet) throw new Error("Wallet not connected");
-
-        const provider = new anchor.AnchorProvider(connection, wallet, opts);
-        return setAnchorWallet(provider);
-      };
-
-      // Add `AnchorProvider.env()`
-      pkg[providerName].env = () => {
-        const provider = this._getPg().program?.provider;
-        if (!provider) throw new Error("Provider not ready");
-        return setAnchorWallet(provider);
-      };
-
-      /**
-       * Override `provider.wallet` to have `payer` field with the wallet
-       * keypair in order to have the same behavior as local.
-       */
-      const setAnchorWallet = (provider: any) => {
-        if (provider.wallet.isPg) {
-          provider.wallet = {
-            ...provider.wallet,
-            payer: provider.wallet.keypair,
-          };
-        }
-
-        return provider;
-      };
-
-      // Add `anchor.workspace`
-      const idl = PgProgramInfo.callableIdl();
-      if (idl) {
-        const snakeCaseName = idl.name;
-        const names = [
-          PgCommon.toPascalFromSnake(snakeCaseName), // default before 0.29.0
-          PgCommon.toCamelFromSnake(snakeCaseName),
-          PgCommon.toKebabFromSnake(snakeCaseName),
-          snakeCaseName,
-        ];
-
-        pkg.workspace = {};
-        for (const workspaceName of names) {
-          if (pkg.workspace[workspaceName]) continue;
-          Object.defineProperty(pkg.workspace, workspaceName, {
-            get: () => {
-              let program = this._getPg().program;
-              if (program) {
-                const { idl: programIdl, programId } = program;
-                program = new anchor.Program(
-                  programIdl,
-                  programId,
-                  pkg.getProvider()
-                );
-              }
-              return program;
-            },
-          });
-        }
-      } else if (PgProgramInfo.readIdl()?.kind === "refused") {
-        // The program's names under `anchor.workspace` report why there is no
-        // program; every other key reads as on a plain object.
-        // TODO(HOO-1765 task 1.4): no unit test drives `_overridePackage`
-        // (it needs the iframe runtime); the manual check on the preview runs
-        // a script against a refused IDL
-        const raw = PgProgramInfo.idl as { metadata?: { name?: unknown } };
-        const snakeCaseName = raw.metadata?.name;
-        if (typeof snakeCaseName === "string") {
-          pkg.workspace = {};
-          const names = new Set([
-            PgCommon.toPascalFromSnake(snakeCaseName),
+    const idl = PgProgramInfo.callableIdl() ?? undefined;
+    const isIdlRefused = PgProgramInfo.readIdl()?.kind === "refused";
+    // A refused IDL still names the program, so its names can say why
+    const refusedName = (
+      PgProgramInfo.idl as { metadata?: { name?: unknown } } | null
+    )?.metadata?.name;
+    const snakeCaseName =
+      idl?.name ??
+      (isIdlRefused && typeof refusedName === "string"
+        ? refusedName
+        : undefined);
+    const workspaceNames = snakeCaseName
+      ? Array.from(
+          new Set([
+            PgCommon.toPascalFromSnake(snakeCaseName), // default before 0.29.0
             PgCommon.toCamelFromSnake(snakeCaseName),
             PgCommon.toKebabFromSnake(snakeCaseName),
             snakeCaseName,
-          ]);
-          for (const workspaceName of names) {
-            Object.defineProperty(pkg.workspace, workspaceName, {
-              get: () => {
-                throw new Error(PgProgramInfo.noCallableIdlMessage());
-              },
-            });
-          }
-        }
-      }
-    }
+          ])
+        )
+      : [];
 
-    return pkg;
+    return {
+      type: "run",
+      code,
+      isTest,
+      idl,
+      noIdl: PgProgramInfo.noCallableIdlMessage(),
+      isIdlRefused,
+      workspaceNames,
+      programId: PgProgramInfo.pk?.toBase58(),
+      endpoint: PgConnection.current.rpcEndpoint,
+      commitment: PgConnection.current.commitment ?? "confirmed",
+      wallets,
+      current: currentIndex === -1 ? undefined : currentIndex,
+    };
   }
 
   /**
-   * Get `pg` global object.
+   * Loads a fresh sandbox and opens its private channel. Every run gets a
+   * new frame and the last one is removed first, so no run sees another's
+   * globals, and the last run's code, gone with its frame, cannot answer the
+   * handshake meant for this one: a reused frame keeps its window, which the
+   * handshake's `source` check would accept from the old document too.
    *
-   * @returns the `pg` global object
+   * @returns the page's side of the channel, a promise that resolves if the
+   * frame loads another document during the run, and what stops watching
    */
-  private static _getPg() {
-    /** Utilities to be available under the `pg` namespace */
-    interface Pg {
-      /** Playground connection instance */
-      connection: PgWeb3.Connection;
-      /** Current connected wallet */
-      wallet?: Wallet;
-      /** All available wallets, including the standard wallets */
-      wallets?: Record<string, Wallet>;
-      /** Current project's program public key */
-      PROGRAM_ID?: PgWeb3.PublicKey;
-      /** Anchor program instance of the current project */
-      program?: anchor.Program;
+  private static async _openSandbox() {
+    // The previous run's frame is about to be replaced
+    this._lastPort?.close();
+    this._lastPort = undefined;
+    this._frame?.remove();
+    const frame = this._createFrame();
+    // Watched before the frame is pointed at the sandbox, so the sandbox's
+    // own `load` is the first one counted
+    const reloads = watchReloadsOf(frame);
+    const connected = connectWith(window)(LOAD_TIMEOUT_MS)(
+      () => frame.contentWindow
+    );
+    frame.src = SANDBOX_URL;
+    // Attached only now, with its `src` set: a frame attached without one
+    // loads `about:blank` first, which would count as a reload
+    document.body.appendChild(frame);
+    try {
+      const port = await connected;
+      return { port, reloaded: reloads.reloaded, stopWatching: reloads.stop };
+    } catch (error) {
+      reloads.stop();
+      log.error(error, { report: true });
+      throw error;
     }
-
-    // Playground utils namespace
-    const pg: Pg = { connection: PgConnection.current };
-
-    // Wallet
-    if (PgWallet.current) pg.wallet = PgWallet.current;
-
-    // Wallets
-    if (pg.wallet) {
-      pg.wallets = {};
-
-      for (const wallet of PgWallet.getConnectedWallets()) {
-        pg.wallets[PgCommon.toCamelCase(wallet.name)] = wallet;
-      }
-    }
-
-    // Program ID
-    if (PgProgramInfo.pk) pg.PROGRAM_ID = PgProgramInfo.pk;
-
-    // Anchor Program
-    if (pg.wallet && PgProgramInfo.callableIdl()) {
-      pg.program = PgProgramInteraction.getAnchorProgram();
-    } else if (PgProgramInfo.readIdl()?.kind === "refused") {
-      // A script that reaches for the program learns why there is none;
-      // not enumerable, so code that walks `pg` does not trip on it
-      Object.defineProperty(pg, "program", {
-        get: () => {
-          throw new Error(PgProgramInfo.noCallableIdlMessage());
-        },
-      });
-    }
-
-    return pg;
   }
 
-  /** Whether a script is currently running */
-  private static _isClientRunning: boolean;
+  /** The sandbox's frame, not yet attached to the page */
+  private static _createFrame() {
+    const frame = document.createElement("iframe");
+    // Scripts only: no same-origin access, top-level navigation, popups
+    // or forms, so the frame's origin is opaque
+    frame.setAttribute("sandbox", "allow-scripts");
+    frame.setAttribute("aria-hidden", "true");
+    frame.title = "Project code runtime";
+    frame.style.display = "none";
+    this._frame = frame;
+    return frame;
+  }
 
-  /** Cached `Iframe` `Window` object */
-  private static _IframeWindow: Window;
+  /** What is running now */
+  private static _running: Running;
+
+  /** The channel of the last run that ended, served until the next run */
+  private static _lastPort: MessagePort | undefined;
+
+  /** The current run's frame, or the last run's until the next one */
+  private static _frame: HTMLIFrameElement | undefined;
 }
-
-/** What a running script's iframe holds besides the window's own */
-type IframeGlobals = Window & { __fail?: (reason: unknown) => string };
-
-/** Keywords that are not allowed to be in the user code */
-const BLACKLISTED_GLOBALS = [
-  "window",
-  "globalThis",
-  "document",
-  "location",
-  "top",
-  "chrome",
-];
-
-/** Event name that will be dispatched when client code completes executing */
-const CLIENT_ON_DID_FINISH_RUNNING = "clientondidfinishrunning";

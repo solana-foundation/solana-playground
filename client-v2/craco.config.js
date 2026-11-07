@@ -39,7 +39,11 @@ class GoogleTagPlugin {
     compiler.hooks.compilation.tap("GoogleTagPlugin", (compilation) => {
       HtmlWebpackPlugin.getHooks(compilation).beforeEmit.tap(
         "GoogleTagPlugin",
-        (data) => ({ ...data, html: insertGoogleTag(data.html, this.id) })
+        // Only the app carries the tag: never the sandbox or the key page
+        (data) =>
+          data.outputName === "index.html"
+            ? { ...data, html: insertGoogleTag(data.html, this.id) }
+            : data
       );
     });
   }
@@ -94,6 +98,104 @@ class BundleModulesPlugin {
   }
 }
 
+/**
+ * The pages built beside CRA's `index.html`, each from its own entry, so they
+ * share no code with the app:
+ * - the sandboxed frame that `run` and `test` execute project code in
+ *   (`src/utils/js-runtime/sandbox`; `sandbox="allow-scripts"` makes its
+ *   origin opaque);
+ * - the key page, which holds the built-in wallet's keys on an origin of
+ *   their own (`src/utils/wallet/key-origin/frame`). `vercel.json` serves
+ *   nothing else on that origin, which `static/js/wallet-keys*` relies on:
+ *   its entry's file name starts with the entry's name.
+ */
+const SANDBOX_ENTRY = "sandbox";
+const SANDBOX_PAGE = "runtime.html";
+const KEY_PAGE_ENTRY = "wallet-keys";
+const KEY_PAGE = "wallet-keys.html";
+const PAGES = [
+  {
+    entry: SANDBOX_ENTRY,
+    page: SANDBOX_PAGE,
+    source: "src/utils/js-runtime/sandbox/index.ts",
+    template: "src/utils/js-runtime/sandbox/runtime.html",
+  },
+  {
+    entry: KEY_PAGE_ENTRY,
+    page: KEY_PAGE,
+    source: "src/utils/wallet/key-origin/frame/index.ts",
+    template: "src/utils/wallet/key-origin/frame/wallet-keys.html",
+  },
+];
+
+/** A page's headers in `vercel.json`, so the dev server and Vercel agree */
+const vercelHeadersOf = (page) => {
+  const rule = require("./vercel.json").headers.find(
+    (r) => r.source === `/${page}`
+  );
+  if (!rule) throw new Error(`craco: vercel.json has no headers for /${page}`);
+  return Object.fromEntries(
+    rule.headers.map((header) => [header.key, header.value])
+  );
+};
+
+/** The CSP `runtime.html` is served with */
+const RUNTIME_CSP = vercelHeadersOf(SANDBOX_PAGE)["Content-Security-Policy"];
+
+/** The CSP and CORP `wallet-keys.html` is served with */
+const KEY_PAGE_HEADERS = vercelHeadersOf(KEY_PAGE);
+
+/**
+ * Adds each page's entry and page beside CRA's, and keeps CRA's index.html
+ * to its own entry
+ */
+const addPageEntries = (webpackConfig, env) => {
+  webpackConfig.entry = {
+    main: webpackConfig.entry,
+    ...Object.fromEntries(
+      PAGES.map(({ entry, source }) => [entry, path.join(__dirname, source)])
+    ),
+  };
+
+  // Development names CRA's one entry `bundle.js`; several entries need
+  // several names
+  const filename = webpackConfig.output.filename;
+  if (typeof filename === "string" && !filename.includes("[name]")) {
+    const pageEntries = new Set(PAGES.map(({ entry }) => entry));
+    webpackConfig.output.filename = (pathData) =>
+      pageEntries.has(pathData.chunk.name)
+        ? `static/js/${pathData.chunk.name}.bundle.js`
+        : filename;
+  }
+
+  const appPage = webpackConfig.plugins.find(
+    (plugin) => plugin instanceof HtmlWebpackPlugin
+  );
+  if (!appPage) throw new Error("craco: expected CRA's HtmlWebpackPlugin");
+  appPage.userOptions.chunks = ["main"];
+
+  // The scripts the sandbox's page (`runtime.html`) loads, its entry and the
+  // chunks the entry imports, are cross-origin to its opaque origin. Loaded
+  // without CORS, their errors are muted: the browser reports every error as
+  // "Script error." and never fires `unhandledrejection` for their promises.
+  // The setting is the whole build's, so the app's lazy chunks load with
+  // CORS too, which same-origin requests pass as before
+  webpackConfig.output.crossOriginLoading = "anonymous";
+
+  for (const { entry, page, template } of PAGES) {
+    webpackConfig.plugins.push(
+      new HtmlWebpackPlugin({
+        filename: page,
+        template: path.join(__dirname, template),
+        chunks: [entry],
+        // The template writes the script tags, with `crossorigin`
+        inject: false,
+        minify: env === "production",
+      })
+    );
+  }
+};
+
 /** CRA's in-build type check and lint, by plugin class name */
 const BUILD_ONLY_CHECKS = [
   "ForkTsCheckerWebpackPlugin",
@@ -143,6 +245,36 @@ const trackerSwaps = (env) => {
   return swaps;
 };
 
+/**
+ * Keeps the entries every page gets out of one page's entry. The dev server
+ * (its socket client and `webpack/hot/dev-server`) and react-refresh add their
+ * clients to every entry as global entries; on the key page the socket client
+ * breaks its CSP's `connect-src 'none'`, which must stay that strict. So at
+ * seal the global entries move onto each other entry, ahead of its own as
+ * before, and the excluded entry keeps only its own.
+ */
+class ExcludeFromGlobalEntriesPlugin {
+  constructor(entryName) {
+    this.entryName = entryName;
+  }
+
+  apply(compiler) {
+    const name = "ExcludeFromGlobalEntriesPlugin";
+    compiler.hooks.thisCompilation.tap(name, (compilation) => {
+      compilation.hooks.seal.tap(name, () => {
+        const global = compilation.globalEntry;
+        for (const [entryName, entry] of compilation.entries) {
+          if (entryName === this.entryName) continue;
+          entry.dependencies.unshift(...global.dependencies);
+          entry.includeDependencies.unshift(...global.includeDependencies);
+        }
+        global.dependencies = [];
+        global.includeDependencies = [];
+      });
+    });
+  }
+}
+
 /** Bundles a stub wherever a module resolves to a file in `swaps` */
 class SwapFilesPlugin {
   constructor(swaps) {
@@ -180,6 +312,13 @@ module.exports = {
     configure: (webpackConfig, { env }) => {
       // tsconfig `paths` is the only `@/` mapping; react-scripts 5 strips it only in `init`, never in start or build
       webpackConfig.resolve.tsconfig = path.join(__dirname, "tsconfig.json");
+
+      addPageEntries(webpackConfig, env);
+      if (env === "development") {
+        webpackConfig.plugins.push(
+          new ExcludeFromGlobalEntriesPlugin(KEY_PAGE_ENTRY)
+        );
+      }
 
       // Here, not at the top: CRA's `config/env.js` has loaded `.env` by now
       warnAboutMissingObservabilityIds();
@@ -508,7 +647,7 @@ module.exports = {
   },
 
   devServer: (devServerConfig) => {
-    devServerConfig.headers = {
+    const headers = {
       ...devServerConfig.headers,
       "Cross-Origin-Embedder-Policy": "require-corp",
       "Cross-Origin-Opener-Policy": "same-origin",
@@ -516,6 +655,34 @@ module.exports = {
       // server from another worktree's on the same port (`decideDevServer`).
       // Percent-encoded: a header value must be ASCII, a path need not be.
       [DEV_SERVER_ROOT_HEADER]: encodeURIComponent(__dirname),
+    };
+    // As `vercel.json`
+    devServerConfig.headers = (req) => {
+      // `originalUrl`: the middleware is mounted on "*", which strips `path`
+      const urlPath = req.originalUrl.split("?")[0];
+      // The sandbox's opaque origin makes every script it loads
+      // cross-origin, which its COEP blocks without CORP; it loads them with
+      // `crossorigin`, so they need CORS too
+      if (urlPath.startsWith("/static/")) {
+        return {
+          ...headers,
+          "Cross-Origin-Resource-Policy": "cross-origin",
+          "Access-Control-Allow-Origin": "*",
+        };
+      }
+      // The sandbox's page is an opaque origin however it is framed, and
+      // only the app may frame it
+      if (urlPath === `/${SANDBOX_PAGE}`) {
+        return { ...headers, "Content-Security-Policy": RUNTIME_CSP };
+      }
+      // The key page: its own CSP, and CORP so the app's COEP lets it frame
+      // the page from the other loopback host. Only the headers: the dev
+      // server has no key-host redirect, so 127.0.0.1 serves the whole app
+      // too, which proves nothing about `vercel.json`'s `redirects`
+      if (urlPath === `/${KEY_PAGE}`) {
+        return { ...headers, ...KEY_PAGE_HEADERS };
+      }
+      return headers;
     };
 
     // Serve `api/*.mjs` from the dev server itself, so local API work needs

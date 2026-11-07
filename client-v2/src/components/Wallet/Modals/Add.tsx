@@ -1,5 +1,5 @@
 import { InfoIcon } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import styled, { css } from "styled-components";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -9,9 +9,78 @@ import { ModalFrame } from "@/widgets/overlays";
 
 import { PgWallet, PgWeb3 } from "../../../utils";
 import Input from "../../Input";
+import { useBusyPanels, useDraftKey } from "../hooks";
+import { SaveKeyPanel } from "./SaveKeyPanel";
 
-export const Add = () => {
+/** The Add dialog for the wallet's provider: keys in the page, or on the key origin */
+export const Add = () =>
+  PgWallet.holdsKeysInPage() ? <LocalAdd /> : <KeyOriginAdd />;
+
+/** Under the `local` provider: the keypair is made and saved in the page */
+const LocalAdd = () => {
   const [keypair] = useState(PgWeb3.Keypair.generate);
+  return (
+    <AddBody onSubmit={(name) => PgWallet.add({ name, keypair })}>
+      {(name) => (
+        <AsyncButton
+          type="button"
+          variant="outline"
+          onClick={() => PgWallet.export({ name, keypair })}
+          onError={reportButtonFailure("save the keypair")}
+        >
+          Save keypair
+        </AsyncButton>
+      )}
+    </AddBody>
+  );
+};
+
+/**
+ * Under the `key-origin` provider: the key is made in the key page when the
+ * dialog opens and its file saved by the key page's panel; closing without
+ * creating drops it (`useDraftKey`). Closing after Create asks the same
+ * forget, which does nothing once an account holds the key.
+ */
+const KeyOriginAdd = () => {
+  const draft = useDraftKey();
+  const [error, setError] = useState("");
+  const { isBusy, onBusy } = useBusyPanels();
+  return (
+    <AddBody
+      onSubmit={async (name) =>
+        PgWallet.add({ name, publicKey: await draft.made() })
+      }
+      isHeld={isBusy}
+    >
+      {(name) => (
+        <>
+          <SaveKeyPanel
+            isFailed={draft.isFailed}
+            exported={
+              draft.publicKey ? { publicKey: draft.publicKey, name } : undefined
+            }
+            onError={setError}
+            onBusy={onBusy}
+            className="mt-2"
+          />
+          {error && <Desc>{error}</Desc>}
+        </>
+      )}
+    </AddBody>
+  );
+};
+
+/** What both Adds show: the name, the callout, and the key file's button */
+const AddBody = ({
+  onSubmit,
+  isHeld = false,
+  children,
+}: {
+  onSubmit: (name: string) => unknown;
+  /** Create waits, as while a key panel is busy */
+  isHeld?: boolean;
+  children: (name: string) => ReactNode;
+}) => {
   const [name, setName] = useState(() => {
     // Passing `PgWallet.getNextAvailableAccountName` directly to the `useState`
     // makes the name incorrect (n+1 name)
@@ -25,8 +94,8 @@ export const Add = () => {
       title
       buttonProps={{
         text: "Create",
-        onSubmit: () => PgWallet.add({ name, keypair }),
-        disabled: !!error,
+        onSubmit: () => onSubmit(name),
+        disabled: !!error || isHeld,
       }}
     >
       <MainContent>
@@ -50,14 +119,7 @@ export const Add = () => {
             Saving the keypair will allow you to recover the wallet.
           </CalloutDescription>
         </Callout>
-        <AsyncButton
-          type="button"
-          variant="outline"
-          onClick={() => PgWallet.export({ name, keypair })}
-          onError={reportButtonFailure("save the keypair")}
-        >
-          Save keypair
-        </AsyncButton>
+        {children(name)}
       </MainContent>
     </ModalFrame>
   );

@@ -16,32 +16,56 @@ const CLIENT_DIR = path.join(
   ".."
 );
 
-/** Headers for every path, from the one `vercel.json` source this server mirrors */
-const ALL_PATHS = "/(.*)";
+/** The one pattern a mirrored header source may end with: the rest of the path */
+const REST_OF_PATH = "(.*)";
 
 /**
- * What `vercel.json` asks of this server: the headers on every response and
- * the SPA fallback. Throws on a header rule for another source, which would
- * otherwise be dropped without a word.
+ * A `vercel.json` header source as a matcher of request paths: a literal
+ * path, optionally ending in `(.*)`. Throws on any other pattern (`:param`,
+ * other groups), which this server would otherwise mismatch without a word.
+ *
+ * @param {string} source
+ * @returns {RegExp}
+ */
+const matcherOf = (source) => {
+  const literal = source.endsWith(REST_OF_PATH)
+    ? source.slice(0, -REST_OF_PATH.length)
+    : source;
+  if (!/^\/[\w./-]*$/.test(literal)) {
+    throw new Error(
+      `serve-build: vercel.json sets headers for ${source}, a source this server cannot match`
+    );
+  }
+  const escaped = literal.replaceAll(".", "\\.");
+  return new RegExp(`^${escaped}${literal === source ? "" : ".*"}$`);
+};
+
+/**
+ * What `vercel.json` asks of this server: the headers each path gets, every
+ * matching rule's in order, and the SPA fallback.
  *
  * @param {{headers?: {source: string, headers: {key: string, value: string}[]}[],
  *   rewrites?: {source: string, destination: string}[]}} config
+ * @returns {{headersFor: (urlPath: string) => Record<string, string>,
+ *   spaFallback: RegExp | undefined}}
  */
 export const platformRules = (config) => {
-  const headers = {};
-  for (const rule of config.headers ?? []) {
-    if (rule.source !== ALL_PATHS) {
-      throw new Error(
-        `serve-build: vercel.json sets headers for ${rule.source}; only ${ALL_PATHS} is mirrored`
-      );
-    }
-    for (const { key, value } of rule.headers) headers[key] = value;
-  }
+  const rules = (config.headers ?? []).map((rule) => ({
+    matcher: matcherOf(rule.source),
+    headers: rule.headers,
+  }));
   const spa = (config.rewrites ?? []).find(
     (r) => r.destination === "/index.html"
   );
   return {
-    headers,
+    headersFor: (urlPath) => {
+      const headers = {};
+      for (const rule of rules) {
+        if (!rule.matcher.test(urlPath)) continue;
+        for (const { key, value } of rule.headers) headers[key] = value;
+      }
+      return headers;
+    },
     spaFallback: spa ? new RegExp(`^${spa.source}$`) : undefined,
   };
 };
@@ -55,10 +79,10 @@ export const platformRules = (config) => {
  * @returns {import("express").Express}
  */
 export const createServer = ({ buildDir, config }) => {
-  const { headers, spaFallback } = platformRules(config);
+  const { headersFor, spaFallback } = platformRules(config);
   const app = express();
   app.use((req, res, next) => {
-    res.set(headers);
+    res.set(headersFor(req.path));
     next();
   });
   // Mounted as the dev server mounts it: the remainder in `url`, the whole path in `originalUrl`.

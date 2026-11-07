@@ -1,6 +1,7 @@
 import { PgCommon, PgTerminal, PgView, PgWallet } from "../../utils";
 import { createArgs, createCmd } from "../create";
 import { SETUP_REJECTED } from "./setup-rejected";
+import { WalletUnavailableError } from "./wallet-unavailable";
 
 export const connect = createCmd({
   name: "connect",
@@ -60,6 +61,24 @@ export const connect = createCmd({
           await confirm(() => PgWallet.current && !PgWallet.current.isPg);
         }
 
+        break;
+      }
+
+      case "unavailable": {
+        // Read it again, as Get set up's Try again does: once the list is
+        // dismissed or completed, this is the only way to retry
+        await PgWallet.refresh();
+        if (PgWallet.state === "unavailable")
+          throw new WalletUnavailableError();
+        if (PgWallet.state === "pg" || PgWallet.state === "sol") {
+          PgTerminal.println(PgTerminal.success("Wallet loaded."));
+          break;
+        }
+        // Readable again but not connected: go on as `connect` from there
+        // (Setup, or connecting the loaded wallet)
+        const handle = connect.handle;
+        if (!handle) throw new Error("connect has no handler");
+        await handle(input);
         break;
       }
 

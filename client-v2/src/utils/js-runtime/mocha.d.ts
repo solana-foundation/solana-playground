@@ -20,5 +20,5 @@ declare module "mocha/browser-entry" {
     cleanReferencesAfterRun: boolean;
     reporter: string;
   }): void;
-  export function run(): unknown;
+  export function run(onEnd: (failures: number) => void): unknown;
 }

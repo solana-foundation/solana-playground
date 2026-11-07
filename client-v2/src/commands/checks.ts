@@ -1,6 +1,7 @@
 // Common command validation checks
 
 import { PgCommand, PgTerminal, PgWallet, TerminalLineError } from "../utils";
+import { keyCommandLine } from "../utils/wallet/key-origin/cli-line";
 
 /** Check whether Playground Wallet is connected and ask to connect if not. */
 export const checkPgWallet = async () => {
@@ -38,3 +39,42 @@ const connect = async (question: string) => {
 
   await PgCommand.connect.execute();
 };
+
+/**
+ * Which run of a WASM CLI reads the built-in wallet's key bytes, named as the
+ * person typed it, or `undefined` for a run that never reads them.
+ */
+export type KeyRead = (tokens: readonly string[]) => string | undefined;
+
+/**
+ * End a run that would read the built-in wallet's key bytes while the key
+ * origin keeps them, before the wallet question and the WASM import: the CLI
+ * would otherwise fail inside WASM. Under the local provider it does nothing.
+ *
+ * @param readsKey which runs read the key
+ * @returns the pre-check
+ */
+export const checkKeyReadable =
+  (readsKey: KeyRead) => (tokens: readonly string[]) => {
+    if (PgWallet.holdsKeysInPage()) return;
+    const command = readsKey(tokens);
+    if (command) throw new TerminalLineError(keyCommandLine(`\`${command}\``));
+  };
+
+/**
+ * Whether the run only asks clap for help or the version: no arguments
+ * (`arg_required_else_help`), `help`, or a help or version flag. clap answers
+ * those before the CLI reads the key.
+ */
+const asksClapOnly = (tokens: readonly string[]) =>
+  tokens.length <= 1 ||
+  tokens[1] === "help" ||
+  tokens.some((t) => ["-h", "--help", "-V", "--version"].includes(t));
+
+/**
+ * `solana` and `spl-token` read the key on every run clap parses
+ * (`wasm/solana-cli/src/wasm.rs`, `wasm/spl-token-cli/src/wasm.rs`),
+ * `solana config` included.
+ */
+export const everyRunReadsKey: KeyRead = (tokens) =>
+  asksClapOnly(tokens) ? undefined : tokens[0];

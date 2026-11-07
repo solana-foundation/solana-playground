@@ -23,6 +23,7 @@ import {
   PgExplorer,
   PgGlobal,
   PgSettings,
+  PgView,
   PgWallet,
 } from "../../../utils";
 import type { DeployRecord } from "../state/deploy-history";
@@ -134,6 +135,19 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
     : undefined;
 
   const saveKeypair = () => {
+    // Under the key origin the page holds no key to save: the key page's panel
+    // saves the file, and only a saved file answers the backup line
+    if (!PgWallet.holdsKeysInPage()) {
+      void (async () => {
+        const { ExportKey } = await import(
+          "../../../components/Wallet/Modals/KeyFile"
+        );
+        await PgView.setModal(ExportKey, {
+          onExported: () => PgStageDeploy.answerBackup(true),
+        });
+      })().catch(reportButtonFailure("save the keypair"));
+      return;
+    }
     try {
       PgWallet.export();
     } catch (error) {

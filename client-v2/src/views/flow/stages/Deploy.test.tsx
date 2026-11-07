@@ -36,9 +36,10 @@ const mocks = vi.hoisted(() => ({
     },
     accounts: [] as unknown[],
     currentIndex: -1,
-    add: vi.fn(),
+    addFirst: vi.fn(),
     switch: vi.fn(),
     export: vi.fn(),
+    holdsKeysInPage: vi.fn(() => true),
     onDidChangeCurrent: vi.fn((cb: (w: unknown) => void) => {
       mocks.walletListeners.add(cb);
       cb(mocks.wallet.current);
@@ -49,6 +50,8 @@ const mocks = vi.hoisted(() => ({
   signIn: vi.fn(),
   signInFor: vi.fn(),
   automaticAirdrop: false,
+  setModal: vi.fn(),
+  ExportKey: () => undefined,
 }));
 
 const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
@@ -76,7 +79,11 @@ vi.mock("../../../utils", () => ({
       },
     },
   },
+  PgView: { setModal: mocks.setModal },
   PgWallet: mocks.wallet,
+}));
+vi.mock("../../../components/Wallet/Modals/KeyFile", () => ({
+  ExportKey: mocks.ExportKey,
 }));
 vi.mock("@/features/auth", () => ({
   PgSession: { signInFor: mocks.signInFor },
@@ -134,14 +141,14 @@ const render = (ui: ReactElement) =>
   rtlRender(<TooltipProvider>{ui}</TooltipProvider>);
 
 let sent: ReturnType<typeof memoryProvider>;
-/** The wallet `add` creates becomes current, and its listeners hear it */
+/** The wallet `addFirst` creates becomes current, and its listeners hear it */
 const becomeCurrent = () => {
   mocks.wallet.current = pgWallet();
   for (const cb of mocks.walletListeners) cb(mocks.wallet.current);
 };
 
 beforeEach(() => {
-  mocks.wallet.add.mockImplementation(becomeCurrent);
+  mocks.wallet.addFirst.mockImplementation(becomeCurrent);
   mocks.signInFor.mockReturnValue(mocks.signIn);
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
@@ -156,6 +163,7 @@ afterEach(() => {
   // eslint-disable-next-line unicorn/no-null -- `PgWallet.current` is `null` while no wallet is current
   mocks.wallet.current = null;
   mocks.wallet.accounts = [];
+  mocks.wallet.holdsKeysInPage.mockReturnValue(true);
   resetTelemetry();
   vi.clearAllMocks();
 });
@@ -304,7 +312,7 @@ describe("Deploy stage", () => {
   it("creates the Playground wallet it pays from, without a dialog", async () => {
     // The wallet becomes current only after its derivation settles, as
     // `PgWallet.current` does; the deploy's own wallet check must see it
-    mocks.wallet.add.mockImplementation(() => setTimeout(becomeCurrent));
+    mocks.wallet.addFirst.mockImplementation(() => setTimeout(becomeCurrent));
     let walletAtDeploy: string | undefined = "not run";
     mocks.execute.mockImplementation(async () => {
       walletAtDeploy = mocks.wallet.current?.publicKey.toBase58();
@@ -314,7 +322,7 @@ describe("Deploy stage", () => {
     await pressDeploy();
     await act(async () => new Promise((r) => setTimeout(r, 10)));
 
-    expect(mocks.wallet.add).toHaveBeenCalledOnce();
+    expect(mocks.wallet.addFirst).toHaveBeenCalledOnce();
     expect(mocks.wallet.switch).not.toHaveBeenCalled();
     expect(walletAtDeploy).toBe(WALLET);
   });
@@ -508,6 +516,55 @@ describe("Deploy stage", () => {
     expect(events()).toContain("deploy_backup_saved");
   });
 
+  it("saves the keypair through the key panel under the key origin", async () => {
+    mocks.wallet.holdsKeysInPage.mockReturnValue(false);
+    mocks.wallet.current = {
+      isPg: true,
+      publicKey: {
+        toBase58: () => "KeyOrigin1111111111111111111111111111111111",
+      },
+    };
+    mocks.execute.mockResolvedValue({
+      signature: "s",
+      cost: 1,
+      upgraded: false,
+    });
+    mocks.history = [
+      {
+        id: "a",
+        workspace: "counter",
+        cluster: "devnet",
+        programId: "Prog111",
+        signature: "s",
+        at: 1,
+      },
+    ];
+    render(<Deploy onChangeNetwork={() => {}} />);
+    await act(async () =>
+      fireEvent.click(
+        screen.getByRole("button", { name: "Redeploy to devnet" })
+      )
+    );
+
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Save keypair" }))
+    );
+    expect(mocks.wallet.export).not.toHaveBeenCalled();
+    expect(mocks.setModal).toHaveBeenCalledWith(mocks.ExportKey, {
+      onExported: expect.any(Function),
+    });
+    // Opening the dialog is not a backup; saving the file is
+    expect(screen.getByLabelText("Keypair backup")).toBeTruthy();
+
+    const [, props] = mocks.setModal.mock.calls[0] as [
+      unknown,
+      { onExported: () => void }
+    ];
+    await act(async () => props.onExported());
+    expect(screen.queryByLabelText("Keypair backup")).toBeNull();
+    expect(events()).toContain("deploy_backup_saved");
+  });
+
   it("offers no keypair backup for a wallet that is not the Playground's", async () => {
     mocks.wallet.current = {
       isPg: false,
@@ -676,7 +733,7 @@ describe("Deploy stage", () => {
     await pressDeploy();
 
     expect(mocks.wallet.switch).toHaveBeenCalledWith(0);
-    expect(mocks.wallet.add).not.toHaveBeenCalled();
+    expect(mocks.wallet.addFirst).not.toHaveBeenCalled();
   });
 
   it("starts nothing while a deploy typed in the terminal runs", async () => {
@@ -702,7 +759,7 @@ describe("Deploy stage", () => {
   it("gives up on a wallet that never connects, says so, and leaves nothing listening", async () => {
     vi.useFakeTimers();
     try {
-      mocks.wallet.add.mockImplementation(() => undefined);
+      mocks.wallet.addFirst.mockImplementation(() => undefined);
       render(<Deploy onChangeNetwork={() => {}} />);
 
       await pressDeploy();
