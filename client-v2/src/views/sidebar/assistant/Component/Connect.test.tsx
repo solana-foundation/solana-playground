@@ -484,4 +484,109 @@ describe("Connect", () => {
       "High"
     );
   });
+
+  describe("by keyboard", () => {
+    // A picked backend's model presets measure themselves; jsdom has no
+    // `ResizeObserver`
+    beforeEach(() => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        }
+      );
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    const radio = (name: RegExp) => screen.getByRole("radio", { name });
+
+    /**
+     * One arrow, held while Radix moves the focus: it moves it a task later
+     * and checks the radio only while an arrow is down, which a real key
+     * press outlasts and user-event's instant keyup does not
+     */
+    const arrow = async (
+      user: ReturnType<typeof userEvent.setup>,
+      key: "ArrowUp" | "ArrowDown"
+    ) => {
+      await user.keyboard(`{${key}>}`);
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      await user.keyboard(`{/${key}}`);
+    };
+
+    it("keeps the picked bar focused when a click folds the list", async () => {
+      const user = userEvent.setup();
+      renderConnect({ defaultBackend: "present" });
+      await user.click(
+        screen.getByRole("button", { name: /Bring your own key/ })
+      );
+      await user.click(radio(/Anthropic/));
+
+      expect(screen.getAllByRole("radio")).toHaveLength(2);
+      expect(document.activeElement).toBe(radio(/Anthropic/));
+    });
+
+    it("walks back to the default and out to the others with the arrows", async () => {
+      const user = userEvent.setup();
+      renderConnect({ defaultBackend: "present" });
+      await user.click(
+        screen.getByRole("button", { name: /Bring your own key/ })
+      );
+      await user.click(radio(/Anthropic/));
+
+      await arrow(user, "ArrowUp");
+      expect(checked()?.getAttribute("value")).toBe("default");
+      expect(document.activeElement).toBe(checked());
+      expect(screen.getAllByRole("radio")).toHaveLength(PROVIDERS.length);
+
+      await arrow(user, "ArrowDown");
+      expect(checked()?.getAttribute("value")).toBe("anthropic");
+      expect(document.activeElement).toBe(checked());
+    });
+
+    it("opens the folded list on an arrow from the default", async () => {
+      const user = userEvent.setup();
+      renderConnect({ defaultBackend: "present" });
+      await user.tab();
+      expect(document.activeElement).toBe(checked());
+      expect(screen.getAllByRole("radio")).toHaveLength(1);
+
+      await arrow(user, "ArrowDown");
+      expect(screen.getAllByRole("radio")).toHaveLength(PROVIDERS.length);
+      expect(
+        screen
+          .getByRole("button", { name: /Hide other backends/ })
+          .getAttribute("aria-expanded")
+      ).toBe("true");
+
+      await arrow(user, "ArrowDown");
+      expect(checked()?.getAttribute("value")).not.toBe("default");
+      expect(document.activeElement).toBe(checked());
+    });
+
+    it("reaches every backend by keyboard alone, through Bring your own key", async () => {
+      const user = userEvent.setup();
+      renderConnect({ defaultBackend: "present" });
+      await user.tab();
+      expect(document.activeElement).toBe(checked());
+      await user.tab();
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: /Bring your own key/ })
+      );
+      await user.keyboard("{Enter}");
+      await user.tab({ shift: true });
+
+      const seen = new Set<string | null | undefined>();
+      for (let i = 0; i < PROVIDERS.length; i++) {
+        await arrow(user, "ArrowDown");
+        expect(document.activeElement).toBe(checked());
+        seen.add(checked()?.getAttribute("value"));
+      }
+      expect(Array.from(seen).sort()).toEqual(
+        PROVIDERS.map((p) => p.id).sort()
+      );
+    });
+  });
 });
