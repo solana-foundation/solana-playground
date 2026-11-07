@@ -161,9 +161,10 @@ test("wallet-storage: The copy fails", async ({ page }) => {
 
   await seedWorkspace(page);
 
+  // The save on load writes it back as read: each account with its public key
   await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
   expect(JSON.parse((await localWallet(page)) ?? "{}").accounts).toEqual(
-    old.accounts
+    old.accounts.map(({ kp, name }) => ({ kp, name, publicKey: address }))
   );
 });
 
@@ -227,7 +228,7 @@ test("wallet-storage: A wallet in localStorage moves to IndexedDB", async ({
     .poll(() => page.evaluate(() => localStorage.getItem("wallet")), LONG)
     .toBeNull();
   expect((await storedWallet(page))?.accounts).toEqual([
-    { kp, name: "Wallet 1" },
+    { kp, name: "Wallet 1", publicKey: address },
   ]);
   await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
   await expect(walletStep(page)).toContainText(address.slice(-4));
@@ -237,7 +238,7 @@ test("wallet-storage: A wallet in localStorage moves to IndexedDB", async ({
   await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
   expect(await page.evaluate(() => localStorage.getItem("wallet"))).toBeNull();
   expect((await storedWallet(page))?.accounts).toEqual([
-    { kp, name: "Wallet 1" },
+    { kp, name: "Wallet 1", publicKey: address },
   ]);
 });
 
@@ -257,7 +258,7 @@ test("wallet-storage: A legacy single-key wallet moves to IndexedDB", async ({
     .poll(() => page.evaluate(() => localStorage.getItem("wallet")), LONG)
     .toBeNull();
   expect((await storedWallet(page))?.accounts).toEqual([
-    { kp: sk, name: "Wallet 1" },
+    { kp: sk, name: "Wallet 1", publicKey: address },
   ]);
   await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
 });
@@ -507,10 +508,16 @@ const walletWithDamagedAccount = (currentIndex: number) => {
     kp: Array.from(keypair.secretKey),
     name: `Wallet ${i + 1}`,
   }));
+  // An account read from the store carries the public key its keypair names
+  const read = valid.map(({ kp, name }, i) => ({
+    kp,
+    name,
+    publicKey: keypairs[i].publicKey.toBase58(),
+  }));
   return {
     addresses: keypairs.map((keypair) => keypair.publicKey.toBase58()),
     damaged,
-    valid,
+    read,
     wallet: {
       state: "pg",
       accounts: [valid[0], damaged, valid[1]],
@@ -526,14 +533,14 @@ const setAsideNotices = (page: Page) =>
   });
 
 test("wallet-storage: One of three accounts is damaged", async ({ page }) => {
-  const { addresses, damaged, valid, wallet } = walletWithDamagedAccount(2);
+  const { addresses, damaged, read, wallet } = walletWithDamagedAccount(2);
   await seedLocalWallet(page)(wallet);
 
   await seedWorkspace(page);
 
   await expect(walletStep(page)).toContainText(addresses[1].slice(0, 4), LONG);
   await expect.poll(() => localWallet(page), LONG).toBeNull();
-  expect((await storedWallet(page))?.accounts).toEqual(valid);
+  expect((await storedWallet(page))?.accounts).toEqual(read);
   expect(await storedSetAside(page)).toEqual([damaged]);
   await expect(setAsideNotices(page)).toHaveCount(1, LONG);
   await page.waitForTimeout(TOAST_RENDER_MS);
