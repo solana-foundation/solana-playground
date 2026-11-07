@@ -55,13 +55,19 @@ export const SECTION_DESCRIPTIONS: Record<SectionId, string> = {
 export const COMING_SOON = "Coming soon";
 
 /** The small title over a card, when a section holds more than one */
-export type GroupId = "links" | "transactions" | "buildServer" | "key";
+export type GroupId =
+  | "links"
+  | "transactions"
+  | "buildServer"
+  | "key"
+  | "sources";
 
 export const GROUPS: Record<GroupId, string> = {
   links: "Explorer and logs",
   transactions: "Transactions",
   buildServer: "Build server",
   key: "Your own key",
+  sources: "Skills and MCP servers",
 };
 
 /** How a setting reads on the page: its section, label and one help line */
