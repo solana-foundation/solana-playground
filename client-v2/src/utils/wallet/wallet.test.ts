@@ -188,6 +188,14 @@ describe("utils/wallet/wallet", () => {
       expect(secretKeyFor).toHaveBeenCalledWith(keypair.publicKey);
     });
 
+    it("getPublicKeyBytes gives the WASM CLIs the public key, not the key", () => {
+      const { secretKeyFor } = connect();
+      expect(PgWallet.getPublicKeyBytes()).toEqual(
+        Array.from(keypair.publicKey.toBytes())
+      );
+      expect(secretKeyFor).not.toHaveBeenCalled();
+    });
+
     it("export writes the current account's key file", () => {
       const { secretKeyFor } = connect();
       const exported = vi.spyOn(PgCommon, "export").mockReturnValue(undefined);

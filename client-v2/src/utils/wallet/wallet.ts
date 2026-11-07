@@ -952,6 +952,48 @@ class _PgWallet {
   }
 
   /**
+   * Get the public key bytes of the current wallet. The WASM CLIs sign with
+   * it and leave the wallet's signature to `signTransactionMessage`, so they
+   * never read the key.
+   *
+   * NOTE: Used by WASM packages (`wasm/utils/solana-playground-utils`).
+   */
+  static getPublicKeyBytes() {
+    if (!PgWallet.current) throw new Error("Not connected");
+    if (!PgWallet.current.isPg) throw new Error("Not Playground Wallet");
+
+    return Array.from(PgWallet.current.publicKey.toBytes());
+  }
+
+  /**
+   * Have the current wallet sign a legacy transaction message a WASM CLI is
+   * about to send. It goes through the wallet's `signTransaction`, so the key
+   * page signs it as a transaction under the key origin.
+   *
+   * NOTE: Used by WASM packages (`wasm/utils/solana-playground-utils`).
+   *
+   * @param message serialized legacy message
+   * @returns the current wallet's 64-byte signature over the message
+   */
+  static async signTransactionMessage(message: Uint8Array) {
+    const wallet = PgWallet.current;
+    if (!wallet) throw new Error("Not connected");
+
+    const tx = PgWeb3.Transaction.populate(
+      PgWeb3.Message.from(Buffer.from(message))
+    );
+    const signed = await wallet.signTransaction(tx);
+    const signature = signed.signatures.find((s) =>
+      s.publicKey.equals(wallet.publicKey)
+    )?.signature;
+    if (!signature) {
+      throw new Error("The wallet did not sign the transaction");
+    }
+
+    return Uint8Array.from(signature);
+  }
+
+  /**
    * Get the default name of the wallet account.
    *
    * @param index account index
