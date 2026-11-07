@@ -58,4 +58,19 @@ describe("checkNotMainnet", () => {
     );
     await expect(checkNotMainnet()).rejects.toThrow(DEPLOY_NETWORK_UNREAD);
   });
+
+  it("refuses an endpoint that does not answer in 15 s", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(PgConnection.getCluster).mockReturnValueOnce(
+        new Promise(() => {})
+      );
+      const check = checkNotMainnet();
+      const settled = expect(check).rejects.toThrow(DEPLOY_NETWORK_UNREAD);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await settled;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

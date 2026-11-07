@@ -103,7 +103,7 @@ export const fetchClusterByGenesisHash = async (
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("entities/cluster/api/connection", () => {
     it("shares one connection per endpoint and commitment", () => {
@@ -125,6 +125,37 @@ if (import.meta.vitest) {
       expect(getConnectionFor("processed")("https://first.test")).not.toBe(
         first
       );
+    });
+
+    // The deploy's mainnet guard (HOO-2728) rests on these three answers
+    describe("fetchClusterByGenesisHash", () => {
+      const answering = (answer: () => Promise<string>) =>
+        vi
+          .spyOn(Connection.prototype, "getGenesisHash")
+          .mockImplementationOnce(answer);
+
+      it("reads mainnet's genesis hash as mainnet-beta", async () => {
+        answering(async () => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
+        await expect(
+          fetchClusterByGenesisHash("https://genesis-mainnet.test")
+        ).resolves.toBe("mainnet-beta");
+      });
+
+      it("throws UnknownClusterError for a genesis no cluster names", async () => {
+        answering(async () => "Own1111");
+        await expect(
+          fetchClusterByGenesisHash("https://genesis-own.test")
+        ).rejects.toBeInstanceOf(UnknownClusterError);
+      });
+
+      it("passes a failed read on as itself, not as an unknown cluster", async () => {
+        answering(async () => {
+          throw new Error("fetch failed");
+        });
+        const read = fetchClusterByGenesisHash("https://genesis-down.test");
+        await expect(read).rejects.toThrow("fetch failed");
+        await expect(read).rejects.not.toBeInstanceOf(UnknownClusterError);
+      });
     });
 
     it("builds a new connection on every call with a fetch of its own", () => {

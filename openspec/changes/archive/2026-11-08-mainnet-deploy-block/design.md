@@ -1,6 +1,6 @@
 ## Context
 
-All deploy paths (the stage's pill, the terminal, Program Pal's bridge, the
+All deploy paths but the tutorial runner (the stage's pill, the terminal, Program Pal's bridge, the
 explorer's context menu) call `PgCommand.deploy.execute()`, so one guard in
 the command covers them. `PgConnection.cluster` is derived asynchronously
 and can be `null` or still name the previous network right after a switch.
