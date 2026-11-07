@@ -148,4 +148,36 @@ describe("BaseAssistantStatus after a Try again is answered", () => {
 
     expect(document.activeElement).toBe(screen.getByText("Ready"));
   });
+
+  it("names the hosted model it reports on, when the deployment says which", () => {
+    render(
+      <BaseAssistantStatus
+        hosted="present"
+        hostedName="GLM 5.3 Flash"
+        online
+        onRetry={() => Promise.resolve()}
+        phone={false}
+      />
+    );
+    expect(screen.getByText("GLM 5.3 Flash. No key needed.")).toBeTruthy();
+    expect(screen.getByText("Ready")).toBeTruthy();
+  });
+
+  it("does not read Ready while chat uses a model on the user's key (HOO-2695)", () => {
+    render(
+      <BaseAssistantStatus
+        hosted="present"
+        ownKey="Opus 5.5"
+        online
+        onRetry={() => Promise.resolve()}
+        phone={false}
+      />
+    );
+    expect(screen.queryByText("Ready")).toBeNull();
+    expect(screen.getByText("Not in use")).toBeTruthy();
+    expect(
+      screen.getByText("Available, but chat uses Opus 5.5 on your key.")
+    ).toBeTruthy();
+    expect(dot()).toBe("idle");
+  });
 });

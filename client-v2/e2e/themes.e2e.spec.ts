@@ -33,11 +33,26 @@ const openThemeSelect = async (page: Page) => {
   await page.keyboard.press("ArrowDown");
 };
 
-const pickTheme = async (page: Page, name: "Dark" | "Light") => {
+/** Pick Dark in Settings, the one theme offered (HOO-2695), and go back to the app */
+const pickDark = async (page: Page) => {
   await openThemeSelect(page);
-  await page.getByRole("option", { name, exact: true }).click();
+  await page.getByRole("option", { name: "Dark", exact: true }).click();
   // Back to the app, which the page covers, to read its colours
   await page.getByRole("button", { name: "Back to app" }).click();
+};
+
+/**
+ * Reload on the Light theme, as a user who picked it before it was taken
+ * off the select (HOO-2695): the theme still applies, so its colours are
+ * still checked, and switching away from it is the in-place switch
+ */
+const reloadOnLight = async (page: Page) => {
+  await page.evaluate(() => localStorage.setItem("theme", "Light"));
+  await page.reload();
+  await expect.poll(() => isDark(page)).toBe(false);
+  // The editor focuses itself once it reopens the file; wait, so it does not
+  // take keys meant for the terminal or the select
+  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
 };
 
 /**
@@ -78,26 +93,33 @@ test.describe("client-v2-themes", () => {
       page.locator(".monaco-editor textarea.inputarea")
     ).toBeFocused();
     await openThemeSelect(page);
-    await expect(page.getByRole("option")).toHaveText(["Dark", "Light"]);
+    await expect(page.getByRole("option")).toHaveText(["Dark", /^Light/]);
+    // Light was never designed: listed, marked, not offered (HOO-2695)
+    const light = page.getByRole("option", { name: /^Light/ });
+    await expect(light).toContainText("Coming soon");
+    await expect(light).toHaveAttribute("aria-disabled", "true");
   });
 
-  test("client-v2-themes: Switching to light", async ({ seededPage: page }) => {
+  test("client-v2-themes: Switching from a saved light to dark", async ({
+    seededPage: page,
+  }) => {
+    await reloadOnLight(page);
     await runHelp(page);
-    const darkEditor = await computed(page, EDITOR_TEXT, "color");
-    const darkTerminal = await computed(page, TERMINAL_TEXT, "color");
+    const lightEditor = await computed(page, EDITOR_TEXT, "color");
+    const lightTerminal = await computed(page, TERMINAL_TEXT, "color");
 
-    await pickTheme(page, "Light");
+    await pickDark(page);
 
-    await expect.poll(() => isDark(page)).toBe(false);
+    await expect.poll(() => isDark(page)).toBe(true);
     await expect
       .poll(() => computed(page, EDITOR_TEXT, "color"))
-      .not.toBe(darkEditor);
+      .not.toBe(lightEditor);
     await expect
       .poll(() => computed(page, TERMINAL_TEXT, "color"))
-      .not.toBe(darkTerminal);
+      .not.toBe(lightTerminal);
 
     await page.reload();
-    await expect.poll(() => isDark(page)).toBe(false);
+    await expect.poll(() => isDark(page)).toBe(true);
   });
 
   test("client-v2-themes: A saved Dracula theme", async ({
@@ -110,7 +132,7 @@ test.describe("client-v2-themes", () => {
 
     await expect.poll(() => isDark(page)).toBe(true);
     const notice = page.getByText(
-      "The Dracula theme was removed. Playground now uses Dark; Light is in Settings."
+      "The Dracula theme was removed. Playground now uses Dark."
     );
     await expect(notice).toBeVisible();
     await expect(home(page)).toBeHidden();
@@ -170,7 +192,7 @@ test.describe("client-v2-themes", () => {
       .not.toBe("rgba(234, 92, 0, 0.33)");
     await page.keyboard.press("Escape");
 
-    await pickTheme(page, "Light");
+    await reloadOnLight(page);
     await expectOnTokens();
   });
 
@@ -202,11 +224,12 @@ test.describe("client-v2-themes", () => {
   test("client-v2-themes: Theme change with a file open", async ({
     seededPage: page,
   }) => {
+    await reloadOnLight(page);
     const terminal = await runHelp(page);
     const editorBefore = await computed(page, EDITOR_TEXT, "color");
     const terminalBefore = await computed(page, TERMINAL_TEXT, "color");
 
-    await pickTheme(page, "Light");
+    await pickDark(page);
 
     await expect
       .poll(() => computed(page, EDITOR_TEXT, "color"))

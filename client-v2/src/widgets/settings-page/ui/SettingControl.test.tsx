@@ -254,3 +254,72 @@ describe("a setting of a few values, side by side", () => {
     expect(s.setValue).toHaveBeenCalledWith("None");
   });
 });
+
+describe("a setting not finished yet", () => {
+  it("shows a value that is not ready, marked so, and does not let it be picked", async () => {
+    const user = userEvent.setup();
+    let value = "Dark";
+    const setValue = vi.fn((v: string) => {
+      value = v;
+    });
+    render(
+      <SettingSetterSelect
+        id="ui.theme"
+        name="Theme"
+        default="Dark"
+        values={["Dark", "Light"]}
+        notReady={["Light"]}
+        getValue={() => value}
+        setValue={setValue}
+        onChange={() => ({ dispose: () => {} })}
+      />
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Theme" }));
+    const light = await screen.findByRole("option", { name: /Light/ });
+    expect(light.getAttribute("aria-disabled")).toBe("true");
+    expect(light.textContent).toContain("Coming soon");
+    await user.click(light);
+    expect(setValue).not.toHaveBeenCalled();
+  });
+
+  it("shows a switch that cannot be turned", async () => {
+    const setValue = vi.fn();
+    render(
+      <SettingControl
+        id="experimental.unstable"
+        name="Sandboxed builds"
+        default={false}
+        disabled
+        getValue={() => false}
+        setValue={setValue}
+        onChange={() => ({ dispose: () => {} })}
+      />
+    );
+
+    const box = screen.getByRole("switch", { name: "Sandboxed builds" });
+    expect((box as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(box);
+    expect(setValue).not.toHaveBeenCalled();
+  });
+
+  it("can still be turned off when it was on from before", async () => {
+    const setValue = vi.fn();
+    render(
+      <SettingControl
+        id="experimental.unstable"
+        name="Sandboxed builds"
+        default={false}
+        disabled
+        getValue={() => true}
+        setValue={setValue}
+        onChange={() => ({ dispose: () => {} })}
+      />
+    );
+
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Sandboxed builds" })
+    );
+    expect(setValue).toHaveBeenCalledWith(false);
+  });
+});

@@ -12,14 +12,21 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 import { Switch } from "@/shared/ui/switch";
+import { Tag } from "@/shared/ui/tag";
 import { PgCommon, PgView, RequiredKey, Setting as SettingType } from "@/utils";
 import { CustomSetting } from "@/views/flow/settings/CustomSetting";
+
+import { COMING_SOON } from "../model/sections";
 
 type SettingSetterProps = SettingType & {
   /** The control's id, which the row's label points at */
   controlId?: string;
   /** A few named choices side by side instead of a select */
   segmented?: boolean;
+  /** Shown but not settable, for a setting whose feature is not finished */
+  disabled?: boolean;
+  /** Values listed but not selectable, each tagged {@link COMING_SOON} */
+  notReady?: readonly string[];
 };
 
 /**
@@ -47,11 +54,13 @@ const SettingSetterSegmented: FC<SettingSetterSegmentedProps> = ({
   values,
   name,
   controlId,
+  disabled,
   getValue,
   setValue,
 }) => (
   <Segmented
     aria-label={name}
+    disabled={disabled}
     value={getValue()}
     onValueChange={(v) => {
       // A press on the current choice clears a toggle group; a setting keeps it
@@ -122,10 +131,12 @@ export const SettingSetterSelect: FC<
     // itself, on pointer and on Enter/Space. Any other pick goes through
     // `onValueChange`, so the two paths never both run.
     const reopens = o.value === CUSTOM_VALUE && value === CUSTOM_VALUE;
+    const isNotReady = setting.notReady?.includes(o.value) ?? false;
     return (
       <SelectItem
         key={o.value}
         value={o.value}
+        disabled={isNotReady}
         onPointerUp={reopens ? openCustom : undefined}
         onKeyDown={
           reopens
@@ -136,12 +147,14 @@ export const SettingSetterSelect: FC<
         }
       >
         {o.label}
+        {isNotReady && <Tag>{COMING_SOON}</Tag>}
       </SelectItem>
     );
   };
 
   return (
     <Select
+      disabled={setting.disabled}
       // A stored value no option has, and no Custom row to stand for it:
       // `""` keeps the select controlled and shows the empty trigger, where
       // `undefined` would hand the value to Radix's own state
@@ -212,10 +225,13 @@ type SettingSetterSwitchProps = Omit<SettingSetterProps, "values">;
 
 const SettingSetterSwitch: FC<
   React.PropsWithChildren<SettingSetterSwitchProps>
-> = ({ name, controlId, getValue, setValue }) => (
+> = ({ name, controlId, disabled, getValue, setValue }) => (
   <Switch
     id={controlId}
     aria-label={name}
+    // A setting that is not finished cannot be turned on; one already on
+    // from before can still be turned off, so it never holds the user there
+    disabled={disabled && !getValue()}
     checked={getValue()}
     onCheckedChange={setValue}
   />

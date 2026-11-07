@@ -175,6 +175,11 @@ export const probeDefaultBackend = (): Promise<DefaultBackend> => {
         recordProbeFailure();
       } else {
         PgAssistant.setDefaultProbe("answered");
+        // Only an answer changes the name: a failed ask says nothing about
+        // which model the deployment serves
+        PgAssistant.setHostedModel(
+          (backend.state === "present" && backend.model) || undefined
+        );
       }
       broadcast(backend);
       return backend;

@@ -2156,12 +2156,12 @@ test.describe("the settings page at 1440 by 900", () => {
         return hit === el && !!settingsRegion?.contains(middle);
       });
 
+    // Light as a user who picked it before it left the select (HOO-2695)
     for (const theme of ["Dark", "Light"]) {
       if (theme === "Light") {
-        await settingsPage(page)
-          .getByRole("combobox", { name: "Theme" })
-          .click();
-        await page.getByRole("option", { name: "Light", exact: true }).click();
+        await page.evaluate(() => localStorage.setItem("theme", "Light"));
+        await page.reload();
+        await page.locator("[data-settings-trigger]").first().click();
         await expect
           .poll(() =>
             page.evaluate(() =>
@@ -2172,7 +2172,7 @@ test.describe("the settings page at 1440 by 900", () => {
       }
       await expect(page.locator("#flow-stage-tab-interact")).toBeHidden();
       await expect(page.locator(".monaco-editor").first()).toBeHidden();
-      // Picking the theme scrolled the page down to the UI section
+      // Keep the heading in view whatever the page scrolled to
       await heading.scrollIntoViewIfNeeded();
       expect(await onTop(), theme).toBe(true);
     }

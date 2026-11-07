@@ -32,4 +32,12 @@ describe("widgets/settings-page/model/sections ROWS", () => {
     const ids = new Set<string>(SETTINGS.map((s) => s.id));
     expect(Object.keys(ROWS).filter((id) => !ids.has(id))).toEqual([]);
   });
+
+  it("marks what is not finished instead of offering it (HOO-2695)", () => {
+    expect(ROWS["ui.theme"]?.notReady).toEqual(["Light"]);
+    expect(ROWS["experimental.unstable"]).toMatchObject({
+      disabled: true,
+      tag: "Coming soon",
+    });
+  });
 });
