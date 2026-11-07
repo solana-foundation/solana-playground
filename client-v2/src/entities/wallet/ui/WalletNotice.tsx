@@ -2,7 +2,8 @@
 export type WalletNoticeKind =
   | "save-failed"
   | "set-aside"
-  | "first-account-failed";
+  | "first-account-failed"
+  | "forget-failed";
 
 /** Each notice's lead sentence, and what follows it */
 const NOTICES: Record<WalletNoticeKind, { title: string; detail?: string }> = {
@@ -17,6 +18,11 @@ const NOTICES: Record<WalletNoticeKind, { title: string; detail?: string }> = {
   "first-account-failed": {
     title: "Your wallet's first account could not be made.",
     detail: "Reload the page and try again.",
+  },
+  "forget-failed": {
+    title: "A removed account's key could not be deleted.",
+    detail:
+      "The account is gone from your wallet, but its key is still stored in this browser.",
   },
 };
 

@@ -10,8 +10,12 @@ import {
 } from "../decorators";
 import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
-import { type KeyFrame, keyFrame } from "./key-origin/client";
-import { moveKeysOut } from "./key-origin/move";
+import {
+  type KeyFrame,
+  keyFrame,
+  KeyFrameUnavailable,
+} from "./key-origin/client";
+import { moveKeysWith } from "./key-origin/move";
 import { keyOriginFor } from "./key-origin/origin";
 import { keyOriginSignerProvider } from "./key-origin/provider";
 import { parseKeypairFile } from "./keypair-file";
@@ -32,6 +36,7 @@ import {
   WALLET_LOCAL_KEY,
   type WalletRead,
   walletStorageWith,
+  type WriteOutcome,
 } from "./wallet-storage";
 
 const defaultState: WalletState = {
@@ -49,11 +54,12 @@ const defaultState: WalletState = {
  * page. Not looked up under Node, where the build imports this module
  * (`src/settings`) and there is no `window`.
  */
-const keyPage =
-  typeof window !== "undefined" &&
-  keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN, window.location)
-    ? keyFrame
-    : undefined;
+const keyOrigin =
+  typeof window === "undefined"
+    ? undefined
+    : keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN, window.location);
+
+const keyPage = keyOrigin ? keyFrame : undefined;
 
 /**
  * Holds the accounts' keys and signs with them (`signer-provider.ts`). Every
@@ -189,12 +195,16 @@ const keyOriginLog = createLogger("wallet:key-origin");
  * The wallet as read under the key-origin provider: only once the key page
  * answers. While it cannot be reached the wallet is `unavailable`, never
  * Setup, so nothing is written over the stored record; reading again (`Try
- * again`, `connect`) asks the key page again.
+ * again`, `connect`) asks the key page again. Each failure is reported: a
+ * misconfigured key origin or a protocol skew reads unavailable for every
+ * user.
  *
- * @param frame the connection to the key page
- * @returns a function of the read to run once the key page answers
+ * @param origin the key origin, which the report names
+ * @returns for the connection to the key page, a function of the read to run
+ * once the key page answers
  */
 export const readWith =
+  (origin: string) =>
   (frame: () => Promise<KeyFrame>) =>
   async (read: () => Promise<WalletState>): Promise<WalletState> => {
     try {
@@ -204,11 +214,10 @@ export const readWith =
       // naming them keeps it so
       const { name } = toError(error);
       const reason =
-        error instanceof Error && "reason" in error
-          ? String(error.reason)
-          : undefined;
-      keyOriginLog.warn(`wallet key page unreachable: ${name}`, {
-        context: { reason },
+        error instanceof KeyFrameUnavailable ? error.reason : undefined;
+      keyOriginLog.error(new Error(`wallet key page unreachable: ${name}`), {
+        report: true,
+        context: { what: "reach the wallet key page failed", reason, origin },
       });
       return { ...defaultState, state: "unavailable" };
     }
@@ -231,19 +240,50 @@ export const refuseKeylessRecord = (read: WalletRead): WalletRead =>
     ? { kind: "unavailable" }
     : read;
 
+/**
+ * Serialize the wallet and write it to storage.
+ *
+ * @param wallet the wallet's stored fields
+ * @returns where it landed (`WriteOutcome`); nothing for an unavailable
+ * wallet, which is never written
+ */
+const writeWallet = async (
+  wallet: Pick<
+    WalletState,
+    "accounts" | "currentIndex" | "state" | "standardName"
+  >
+): Promise<WriteOutcome | undefined> => {
+  // Saving it would replace the stored wallet that could not be read
+  if (wallet.state === "unavailable") return undefined;
+
+  // Don't use spread operator(...) because of the extra state
+  const serializedState: SerializedWalletState = {
+    accounts: wallet.accounts,
+    currentIndex: wallet.currentIndex,
+    state: wallet.state,
+    standardName: wallet.standardName,
+  };
+
+  const outcome = await walletStorage().write(serializedState);
+  // Before there is an account, a lost save costs nothing to be told about
+  if (outcome === "lost" && wallet.accounts.length) tell("save-failed");
+  if (outcome === "store") await requestPersistence();
+  return outcome;
+};
+
 const storage = {
   /** Read from storage and deserialize the data. */
   read(): Promise<WalletState> {
-    if (!keyPage) {
+    if (!keyOrigin || !keyPage) {
       return storage.readStored(
         walletStorage().read().then(refuseKeylessRecord)
       );
     }
     // The keys still in the page move into the key page under the read's
-    // lock, once it answers: copy, confirm, then drop (`moveKeysOut`)
-    const move: MoveKeys = async (record, extraKeys) =>
-      moveKeysOut(record, extraKeys, await keyPage());
-    return readWith(keyPage)(() =>
+    // lock, once it answers: copy, confirm, then drop (`moveKeysWith`)
+    const move: MoveKeys = async (record, others) =>
+      moveKeysWith(await keyPage())(record, others);
+    return readWith(keyOrigin)(keyPage)(() =>
       storage.readStored(walletStorage().readMovingKeys(move))
     );
   },
@@ -270,21 +310,7 @@ const storage = {
 
   /** Serialize the data and write to storage. */
   async write(wallet: WalletState) {
-    // Saving it would replace the stored wallet that could not be read
-    if (wallet.state === "unavailable") return;
-
-    // Don't use spread operator(...) because of the extra state
-    const serializedState: SerializedWalletState = {
-      accounts: wallet.accounts,
-      currentIndex: wallet.currentIndex,
-      state: wallet.state,
-      standardName: wallet.standardName,
-    };
-
-    const outcome = await walletStorage().write(serializedState);
-    // Before there is an account, a lost save costs nothing to be told about
-    if (outcome === "lost" && wallet.accounts.length) tell("save-failed");
-    if (outcome === "store") await requestPersistence();
+    await writeWallet(wallet);
   },
 };
 
@@ -306,11 +332,9 @@ const derive = () => ({
           const currentAccount = PgWallet.accounts[PgWallet.currentIndex];
           if (!currentAccount) {
             if (!PgWallet.accounts.length) {
-              // The next derive tries again; the user is told once a load
-              PgWallet.addFirst().catch((error: unknown) => {
-                accountLog.error(error, { report: true });
-                tell("first-account-failed");
-              });
+              // `addFirst` reports a failure and keeps it for the page load;
+              // the user is told once
+              PgWallet.addFirst().catch(() => tell("first-account-failed"));
             } else PgWallet.switch(0);
 
             return null;
@@ -478,7 +502,10 @@ const migrate = () => {
 
 const accountLog = createLogger("wallet:account");
 
-/** The first account being made, so a second caller does not make another */
+/**
+ * The first account being made, so a second caller does not make another;
+ * once it failed, the failure, until the page reloads or the provider changes
+ */
 let addingFirst: Promise<boolean> | undefined;
 
 /**
@@ -607,17 +634,26 @@ class _PgWallet {
   /**
    * The wallet's first account, for a wallet with none. Making its key is
    * asynchronous, so every caller meanwhile (a derive, Deploy) shares this
-   * attempt instead of adding a second account. A failure (the key page went
-   * away) leaves the wallet with no account, as before the attempt, and the
-   * next call tries again.
+   * attempt instead of adding a second account. A failure (the key page is
+   * down) leaves the wallet with no account, as before the attempt, is
+   * reported once, and is kept for the page load: every derive would
+   * otherwise wait out the key page's handshake and report again.
+   * `setSignerProvider` clears it.
    *
    * @returns what `addNew` resolves with
-   * @throws what `addNew` throws, to every caller that shared the attempt
+   * @throws what `addNew` threw, to every caller from then on
    */
   static addFirst() {
-    addingFirst ??= PgWallet.addNew().finally(() => {
-      addingFirst = undefined;
-    });
+    addingFirst ??= PgWallet.addNew().then(
+      (added) => {
+        addingFirst = undefined;
+        return added;
+      },
+      (error: unknown) => {
+        accountLog.error(error, { report: true });
+        throw error;
+      }
+    );
     return addingFirst;
   }
 
@@ -661,23 +697,39 @@ class _PgWallet {
   }
 
   /**
-   * Remove the account at the given index.
+   * Remove the account at the given index, then its key.
+   *
+   * The key goes only once the record without the account is stored: a key
+   * dropped under a record that still lists its account leaves an account
+   * with no key on reload. A record that could not be stored keeps the key
+   * (the user is told the save failed); a key that could not be dropped is
+   * reported and the user is told.
    *
    * @param index account index
    */
-  static remove(index: number = PgWallet.currentIndex) {
+  static async remove(index: number = PgWallet.currentIndex) {
     const [removed] = PgWallet.accounts.splice(index, 1);
+    const currentIndex = PgWallet.accounts.length - 1;
 
     // Update the accounts
-    PgWallet.update({
-      accounts: PgWallet.accounts,
-      currentIndex: PgWallet.accounts.length - 1,
-    });
+    PgWallet.update({ accounts: PgWallet.accounts, currentIndex });
 
-    if (removed) {
-      signerProvider
-        .forgetKey(removed.publicKey)
-        .catch(reportKeyFailure("forget", removed.publicKey));
+    if (!removed) return;
+    const outcome = await writeWallet({
+      state: PgWallet.state,
+      accounts: PgWallet.accounts,
+      currentIndex,
+      standardName: PgWallet.standardName,
+    });
+    if (outcome === undefined || outcome === "lost") {
+      tell("save-failed");
+      return;
+    }
+    try {
+      await signerProvider.forgetKey(removed.publicKey);
+    } catch (error) {
+      reportKeyFailure("forget", removed.publicKey)(error);
+      tell("forget-failed");
     }
   }
 
@@ -842,6 +894,7 @@ class _PgWallet {
 
   /**
    * Replace the provider that holds the accounts' keys and signs with them.
+   * A first account that failed (`addFirst`) is tried again.
    *
    * The local provider is the default. Set another before the wallet loads:
    * a wallet already derived keeps the provider it was made with.
@@ -850,6 +903,8 @@ class _PgWallet {
    */
   static setSignerProvider(provider: WalletSignerProvider) {
     signerProvider = provider;
+    // A failed first account was the old provider's
+    addingFirst = undefined;
   }
 
   /**

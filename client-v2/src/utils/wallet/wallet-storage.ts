@@ -273,7 +273,7 @@ const mergeWallets = (
 };
 
 /**
- * Moves keys into the key page (`key-origin/move.ts`'s `moveKeysOut`, bound
+ * Moves keys into the key page (`key-origin/move.ts`'s `moveKeysWith`, bound
  * to the frame): given the record and every other copy's keys, it gives the
  * record back without key bytes and the keys the key page confirmed, or
  * throws, and then nothing may be dropped. `others.accounts` must all be

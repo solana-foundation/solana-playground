@@ -5,12 +5,13 @@ import * as ed25519 from "@noble/ed25519";
 import { publicKeyOf } from "../signer-provider";
 import type { SerializedWalletState } from "../types";
 import type { KeyFrame } from "./client";
+import { publicKeysOf } from "./protocol";
 
 /**
  * The key page did not confirm every key it was sent. Its message names the
  * public keys it lacks, never their key bytes.
  */
-export class MoveIncomplete extends Error {
+class MoveIncomplete extends Error {
   constructor(readonly missing: string[]) {
     super(`The key page did not confirm the keys of ${missing.join(", ")}`);
     this.name = "MoveIncomplete";
@@ -18,7 +19,7 @@ export class MoveIncomplete extends Error {
 }
 
 /** What a move did: the record without key bytes, and the keys it moved */
-export interface Moved {
+interface Moved {
   record: SerializedWalletState;
   /** How many keys the key page confirmed */
   moved: number;
@@ -55,7 +56,7 @@ const isValidKey = async (kp: number[]) => {
  * Keys other copies of the wallet hold, by how sure they are to be keys.
  * Neither copy's merge may keep them, so each must reach the key page.
  */
-export interface OtherKeys {
+interface OtherKeys {
   /**
    * The keys of valid accounts in any copy (`localStorage`, the store): sent
    * as they are, like the record's, so a bad one blocks the move instead of
@@ -81,49 +82,47 @@ export interface OtherKeys {
  * bad stray key is left out instead, since it may be a damaged copy that was
  * never a key, and the set-aside record keeps it.
  *
- * @param record the wallet as the page stores it
- * @param others keys other copies of the wallet hold
  * @param frame the connection to the key page
- * @returns the record without key bytes, and the keys the key page confirmed
+ * @returns for the wallet as the page stores it and the keys other copies of
+ * the wallet hold, the record without key bytes and the keys the key page
+ * confirmed
  * @throws `MoveIncomplete` when the key page lacks a key it was sent; any
- * error the key page answers with
+ * error the key page answers with, or a reply that is not a list of public
+ * keys
  */
-/* eslint-disable max-params -- the plan's interface for the move; `MoveKeys` binds the frame */
-export const moveKeysOut = async (
-  record: SerializedWalletState,
-  others: OtherKeys,
-  frame: KeyFrame
-): Promise<Moved> => {
-  const fromRecord = record.accounts.flatMap(({ kp }) => (kp ? [kp] : []));
-  const valid = await Promise.all(others.stray.map(isValidKey));
-  const candidates = fromRecord
-    .concat(others.accounts)
-    .concat(others.stray.filter((_, i) => valid[i]));
-  const byPublicKey = new Map<string, number[]>();
-  for (const kp of candidates) {
-    const publicKey = publicKeyOf(kp).toBase58();
-    if (!byPublicKey.has(publicKey)) byPublicKey.set(publicKey, kp);
-  }
-  if (byPublicKey.size === 0) return { record, moved: 0, keys: [] };
+export const moveKeysWith =
+  (frame: KeyFrame) =>
+  async (record: SerializedWalletState, others: OtherKeys): Promise<Moved> => {
+    const fromRecord = record.accounts.flatMap(({ kp }) => (kp ? [kp] : []));
+    const valid = await Promise.all(others.stray.map(isValidKey));
+    const candidates = fromRecord
+      .concat(others.accounts)
+      .concat(others.stray.filter((_, i) => valid[i]));
+    const byPublicKey = new Map<string, number[]>();
+    for (const kp of candidates) {
+      const publicKey = publicKeyOf(kp).toBase58();
+      if (!byPublicKey.has(publicKey)) byPublicKey.set(publicKey, kp);
+    }
+    if (byPublicKey.size === 0) return { record, moved: 0, keys: [] };
 
-  const keys = [...byPublicKey.values()];
-  const held = await frame.request<string[]>({ type: "adopt", keys });
-  const confirmed = new Set(Array.isArray(held) ? held : []);
-  const missing = [...byPublicKey.keys()].filter(
-    (publicKey) => !confirmed.has(publicKey)
-  );
-  if (missing.length > 0) throw new MoveIncomplete(missing);
+    const keys = [...byPublicKey.values()];
+    const confirmed = new Set(
+      publicKeysOf(await frame.request({ type: "adopt", keys }))
+    );
+    const missing = [...byPublicKey.keys()].filter(
+      (publicKey) => !confirmed.has(publicKey)
+    );
+    if (missing.length > 0) throw new MoveIncomplete(missing);
 
-  return {
-    record: {
-      ...record,
-      accounts: record.accounts.map(({ kp: _kp, ...account }) => account),
-    },
-    moved: keys.length,
-    keys,
+    return {
+      record: {
+        ...record,
+        accounts: record.accounts.map(({ kp: _kp, ...account }) => account),
+      },
+      moved: keys.length,
+      keys,
+    };
   };
-};
-/* eslint-enable max-params */
 
 if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeAll, beforeEach, afterEach } =
@@ -289,11 +288,6 @@ if (import.meta.vitest) {
 
     const NO_OTHERS: OtherKeys = { accounts: [], stray: [] };
 
-    /** The move as `wallet.ts` hands it to the storage */
-    const moveThrough =
-      (frame: KeyFrame) => (record: SerializedWalletState, others: OtherKeys) =>
-        moveKeysOut(record, others, frame);
-
     /** Every encoding a key could be logged in */
     const encodingsOf = (kp: number[]) => {
       const bytes = Uint8Array.from(kp);
@@ -305,12 +299,12 @@ if (import.meta.vitest) {
       ];
     };
 
-    describe("moveKeysOut", () => {
+    describe("moveKeysWith", () => {
       it("three accounts move", async () => {
         const record = walletAt(2)(accountsOf(3));
         const { frame, kept } = fakeKeyPage();
 
-        const result = await moveKeysOut(record, NO_OTHERS, frame);
+        const result = await moveKeysWith(frame)(record, NO_OTHERS);
 
         expect(result.record).toEqual(keyless(record));
         expect(result.record.currentIndex).toBe(2);
@@ -327,7 +321,7 @@ if (import.meta.vitest) {
           keys.filter((key) => key !== lost)
         );
 
-        const moving = moveKeysOut(record, NO_OTHERS, frame);
+        const moving = moveKeysWith(frame)(record, NO_OTHERS);
 
         await expect(moving).rejects.toBeInstanceOf(MoveIncomplete);
         await expect(moving).rejects.toThrow(lost);
@@ -346,18 +340,30 @@ if (import.meta.vitest) {
         const record = keyless(walletOf(accountsOf(2)));
         const { frame, request } = fakeKeyPage();
 
-        const result = await moveKeysOut(record, NO_OTHERS, frame);
+        const result = await moveKeysWith(frame)(record, NO_OTHERS);
 
         expect(result).toEqual({ record, moved: 0, keys: [] });
         expect(request).not.toHaveBeenCalled();
       });
 
+      it("fails on an adopt reply that is not a list of public keys", async () => {
+        const record = walletOf(accountsOf(1));
+        const frame: KeyFrame = {
+          request: async <T>() => record.accounts[0].publicKey as T,
+          close: () => {},
+        };
+
+        await expect(moveKeysWith(frame)(record, NO_OTHERS)).rejects.toThrow(
+          "answered adopt with a reply of the wrong shape"
+        );
+      });
+
       it("completes a move a reload cut short: the key page holds the keys, the record still has them", async () => {
         const record = walletOf(accountsOf(2));
         const { frame, kept } = fakeKeyPage();
-        await moveKeysOut(record, NO_OTHERS, frame);
+        await moveKeysWith(frame)(record, NO_OTHERS);
 
-        const again = await moveKeysOut(record, NO_OTHERS, frame);
+        const again = await moveKeysWith(frame)(record, NO_OTHERS);
 
         expect(again.record).toEqual(keyless(record));
         expect(kept.size).toBe(2);
@@ -369,11 +375,10 @@ if (import.meta.vitest) {
         const junk = Array.from({ length: 64 }, (_, i) => i);
         const { adopts, frame, kept } = fakeKeyPage();
 
-        const result = await moveKeysOut(
-          record,
-          { accounts: [], stray: [extra.kp, junk, [1, 2, 3], extra.kp] },
-          frame
-        );
+        const result = await moveKeysWith(frame)(record, {
+          accounts: [],
+          stray: [extra.kp, junk, [1, 2, 3], extra.kp],
+        });
 
         expect(adopts).toEqual([[extra.kp]]);
         expect(result.keys).toEqual([extra.kp]);
@@ -386,11 +391,10 @@ if (import.meta.vitest) {
         const bad = realKey().kp.slice(0, 32).concat(kp.slice(32));
         const { adopts, frame } = fakeKeyPage();
 
-        const moving = moveKeysOut(
-          record,
-          { accounts: [bad], stray: [] },
-          frame
-        );
+        const moving = moveKeysWith(frame)(record, {
+          accounts: [bad],
+          stray: [],
+        });
 
         await expect(moving).rejects.toThrow();
         expect(adopts).toEqual([[bad]]);
@@ -405,7 +409,7 @@ if (import.meta.vitest) {
 
         const read = await walletStorageWith(store)(
           memoryLocal(undefined)
-        ).readMovingKeys(moveThrough(frame));
+        ).readMovingKeys(moveKeysWith(frame));
 
         expect(read).toEqual({
           kind: "wallet",
@@ -427,7 +431,7 @@ if (import.meta.vitest) {
         );
 
         const read = await walletStorageWith(store)(local).readMovingKeys(
-          moveThrough(frame)
+          moveKeysWith(frame)
         );
 
         expect(read).toEqual({ kind: "unavailable" });
@@ -457,7 +461,7 @@ if (import.meta.vitest) {
 
         const read = await walletStorageWith(store)(
           memoryLocal(undefined)
-        ).readMovingKeys(moveThrough(failing));
+        ).readMovingKeys(moveKeysWith(failing));
 
         expect(read).toEqual({ kind: "unavailable" });
         expect(store.write).not.toHaveBeenCalled();
@@ -471,7 +475,7 @@ if (import.meta.vitest) {
 
         const read = await walletStorageWith(store)(
           memoryLocal(undefined)
-        ).readMovingKeys(moveThrough(frame));
+        ).readMovingKeys(moveKeysWith(frame));
 
         expect(read).toEqual({ kind: "wallet", wallet: record, setAside: 0 });
         expect(request).not.toHaveBeenCalled();
@@ -485,8 +489,8 @@ if (import.meta.vitest) {
         const { adopts, frame } = fakeKeyPage();
 
         const [first, second] = await Promise.all([
-          walletStorageWith(store)(local).readMovingKeys(moveThrough(frame)),
-          walletStorageWith(store)(local).readMovingKeys(moveThrough(frame)),
+          walletStorageWith(store)(local).readMovingKeys(moveKeysWith(frame)),
+          walletStorageWith(store)(local).readMovingKeys(moveKeysWith(frame)),
         ]);
 
         expect(adopts).toEqual([record.accounts.map((a) => a.kp)]);
@@ -507,7 +511,7 @@ if (import.meta.vitest) {
         const { frame, kept } = fakeKeyPage();
 
         const read = await walletStorageWith(store)(local).readMovingKeys(
-          moveThrough(frame)
+          moveKeysWith(frame)
         );
 
         expect(Array.from(kept.keys())).toEqual([account.publicKey]);
@@ -539,7 +543,7 @@ if (import.meta.vitest) {
         const { frame } = fakeKeyPage();
 
         const read = await walletStorageWith(store)(local).readMovingKeys(
-          moveThrough(frame)
+          moveKeysWith(frame)
         );
 
         expect(read).toEqual({ kind: "unavailable" });
@@ -557,7 +561,7 @@ if (import.meta.vitest) {
         const { frame } = fakeKeyPage();
 
         const read = await walletStorageWith(store)(local).readMovingKeys(
-          moveThrough(frame)
+          moveKeysWith(frame)
         );
 
         expect(read).toEqual({ kind: "unavailable" });
@@ -573,7 +577,7 @@ if (import.meta.vitest) {
         const { frame, kept } = fakeKeyPage();
 
         await walletStorageWith(store)(local).readMovingKeys(
-          moveThrough(frame)
+          moveKeysWith(frame)
         );
 
         expect(kept.size).toBe(2);
@@ -590,7 +594,7 @@ if (import.meta.vitest) {
         const { frame, kept } = fakeKeyPage();
 
         await walletStorageWith(store)(memoryLocal(undefined)).readMovingKeys(
-          moveThrough(frame)
+          moveKeysWith(frame)
         );
 
         expect(Array.from(kept.keys()).sort()).toEqual(
@@ -617,7 +621,7 @@ if (import.meta.vitest) {
 
         const read = await walletStorageWith(store)(
           memoryLocal(undefined)
-        ).readMovingKeys(moveThrough(frame));
+        ).readMovingKeys(moveKeysWith(frame));
 
         expect(kept.has(other.publicKey)).toBe(true);
         expect(read).toEqual({
@@ -638,7 +642,7 @@ if (import.meta.vitest) {
         const { request, frame } = fakeKeyPage();
 
         const read = await walletStorageWith(store)(local).readMovingKeys(
-          moveThrough(frame)
+          moveKeysWith(frame)
         );
 
         expect(read).toEqual({ kind: "unavailable" });

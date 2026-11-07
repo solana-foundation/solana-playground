@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  initLogger,
+  memoryProvider,
+  resetLogger,
+} from "../../shared/lib/logger";
 import { requireFor } from "../../test-utils/require-for";
 import { PgCommon } from "../common";
+import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
 import { type KeyFrame, KeyFrameUnavailable } from "./key-origin/client";
 import { handlerWith } from "./key-origin/frame/handler";
@@ -10,7 +16,7 @@ import { KeypairFileError } from "./keypair-file";
 import { localSignerProviderWith, publicKeyOf } from "./signer-provider";
 import type { Wallet, WalletAccount, WalletState } from "./types";
 import { PgWallet, readWith, refuseKeylessRecord } from "./wallet";
-import type { WalletRead } from "./wallet-storage";
+import { WALLET_LOCAL_KEY, type WalletRead } from "./wallet-storage";
 
 // The connection module reads build-time globals the unit runner does not
 // define; `PgWallet.import` never touches it.
@@ -226,6 +232,15 @@ describe("utils/wallet/wallet", () => {
         get: () => "pg",
         configurable: true,
       });
+      Object.defineProperty(PgWallet, "currentIndex", {
+        get: () => accounts.length - 1,
+        configurable: true,
+      });
+      Object.defineProperty(PgWallet, "standardName", {
+        // eslint-disable-next-line unicorn/no-null -- the stored shape: no standard wallet
+        get: () => null,
+        configurable: true,
+      });
       const updates: Partial<WalletState>[] = [];
       vi.spyOn(PgWallet, "update").mockImplementation((update) => {
         updates.push(update);
@@ -234,10 +249,37 @@ describe("utils/wallet/wallet", () => {
     };
 
     afterEach(() => {
-      for (const prop of ["accounts", "state", "current"]) {
+      for (const prop of [
+        "accounts",
+        "state",
+        "current",
+        "currentIndex",
+        "standardName",
+      ]) {
         Reflect.deleteProperty(PgWallet, prop);
       }
+      localStorage.clear();
     });
+
+    /** The notices shown from here on: none is held for the toast host */
+    const shownNotices = () => {
+      PgWallet.releaseNotices();
+      const shown: unknown[] = [];
+      vi.spyOn(PgView, "setToast").mockImplementation(((
+        ...[, props]: [unknown, { componentProps: { notice: unknown } }]
+      ) => {
+        shown.push(props.componentProps.notice);
+      }) as never);
+      return shown;
+    };
+
+    /** The accounts the stored record lists, by public key */
+    const storedAccounts = () => {
+      const stored = localStorage.getItem(WALLET_LOCAL_KEY);
+      if (!stored) return undefined;
+      const record = JSON.parse(stored) as { accounts: WalletAccount[] };
+      return record.accounts.map((account) => account.publicKey);
+    };
 
     describe("under the key-origin provider", () => {
       it("addNew stores the account by public key, and its key in the key page", async () => {
@@ -285,33 +327,107 @@ describe("utils/wallet/wallet", () => {
         holdState([]);
         await PgWallet.addNew();
 
-        PgWallet.remove(0);
+        await PgWallet.remove(0);
 
-        await vi.waitFor(() => expect(kept.size).toBe(0));
+        expect(kept.size).toBe(0);
       });
 
-      it("addFirst shares one attempt between callers, and tries again after a failure", async () => {
+      it("remove stores the record without the account before it drops the key", async () => {
+        const { provider } = fakeKeyPage();
+        PgWallet.setSignerProvider(provider);
+        holdState([]);
+        await PgWallet.addNew();
+        const [publicKey] = PgWallet.accounts.map((a) => a.publicKey);
+        const storedAtForget: Array<string[] | undefined> = [];
+        const forget = provider.forgetKey;
+        vi.spyOn(provider, "forgetKey").mockImplementation((key) => {
+          storedAtForget.push(storedAccounts());
+          return forget(key);
+        });
+
+        await PgWallet.remove(0);
+
+        expect(storedAtForget).toEqual([[]]);
+        expect(storedAccounts()).not.toContain(publicKey);
+      });
+
+      it("remove keeps the key when the record could not be stored", async () => {
         const { kept, provider } = fakeKeyPage();
-        let failNext = true;
-        const make = provider.makeKey;
-        vi.spyOn(provider, "makeKey").mockImplementation(() =>
-          failNext ? Promise.reject(new KeyFrameUnavailable("timeout")) : make()
+        PgWallet.setSignerProvider(provider);
+        holdState([]);
+        await PgWallet.addNew();
+        const shown = shownNotices();
+        vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+          throw new Error("QuotaExceededError");
+        });
+
+        await PgWallet.remove(0);
+
+        expect(kept.size).toBe(1);
+        await vi.waitFor(() => expect(shown).toContain("save-failed"));
+      });
+
+      it("remove tells the user when the key page could not drop the key", async () => {
+        const { kept, provider } = fakeKeyPage();
+        PgWallet.setSignerProvider(provider);
+        holdState([]);
+        await PgWallet.addNew();
+        const shown = shownNotices();
+        vi.spyOn(provider, "forgetKey").mockRejectedValue(
+          new KeyFrameUnavailable("timeout")
         );
+
+        await PgWallet.remove(0);
+
+        expect(kept.size).toBe(1);
+        await vi.waitFor(() => expect(shown).toEqual(["forget-failed"]));
+      });
+
+      it("addFirst shares one attempt between callers", async () => {
+        const { kept, provider } = fakeKeyPage();
         PgWallet.setSignerProvider(provider);
         const { accounts } = holdState([]);
 
         const first = PgWallet.addFirst();
-        expect(PgWallet.addFirst()).toBe(first);
-        await expect(first).rejects.toBeInstanceOf(KeyFrameUnavailable);
-        expect(accounts).toHaveLength(0);
-
-        failNext = false;
-        const retry = PgWallet.addFirst();
-        expect(retry).not.toBe(first);
         const shared = PgWallet.addFirst();
-        expect(await retry).toBe(true);
+        expect(shared).toBe(first);
+        expect(await first).toBe(true);
         expect(await shared).toBe(true);
         expect(accounts).toHaveLength(1);
+        expect(kept.size).toBe(1);
+      });
+
+      it("addFirst keeps a failure for the page load, reported once, until the provider changes", async () => {
+        const logged = memoryProvider();
+        initLogger({ providers: [logged] });
+        const { kept, provider } = fakeKeyPage();
+        let failNext = true;
+        const make = provider.makeKey;
+        const makeKey = vi
+          .spyOn(provider, "makeKey")
+          .mockImplementation(() =>
+            failNext
+              ? Promise.reject(new KeyFrameUnavailable("timeout"))
+              : make()
+          );
+        PgWallet.setSignerProvider(provider);
+        const { accounts } = holdState([]);
+
+        const first = PgWallet.addFirst();
+        await expect(first).rejects.toBeInstanceOf(KeyFrameUnavailable);
+        failNext = false;
+        await expect(PgWallet.addFirst()).rejects.toBeInstanceOf(
+          KeyFrameUnavailable
+        );
+        expect(makeKey).toHaveBeenCalledOnce();
+        expect(accounts).toHaveLength(0);
+        expect(
+          logged.entries.filter((entry) => entry.ns === "wallet:account")
+        ).toEqual([expect.objectContaining({ level: "error", report: true })]);
+        resetLogger();
+
+        PgWallet.setSignerProvider(provider);
+        expect(await PgWallet.addFirst()).toBe(true);
         expect(kept.size).toBe(1);
       });
 
@@ -424,18 +540,57 @@ describe("utils/wallet/wallet", () => {
       standardName: null,
     };
 
+    const ORIGIN = "https://wallet-keys.example";
+
+    afterEach(() => resetLogger());
+
     it("reads unavailable, reading nothing, while the key page cannot be reached", async () => {
       const read = vi.fn(async () => stored);
-      const wallet = await readWith(() =>
+      const wallet = await readWith(ORIGIN)(() =>
         Promise.reject(new KeyFrameUnavailable("timeout"))
       )(read);
       expect(wallet.state).toBe("unavailable");
       expect(read).not.toHaveBeenCalled();
     });
 
+    it("reports an unreachable key page by its reason and origin only", async () => {
+      const logged = memoryProvider();
+      initLogger({ providers: [logged] });
+      await readWith(ORIGIN)(() =>
+        Promise.reject(new KeyFrameUnavailable("version"))
+      )(async () => stored);
+      await readWith(ORIGIN)(() =>
+        Promise.reject(new Error("key bytes 1,2,3 in a message"))
+      )(async () => stored);
+
+      expect(logged.entries).toEqual([
+        expect.objectContaining({
+          ns: "wallet:key-origin",
+          level: "error",
+          report: true,
+          context: {
+            what: "reach the wallet key page failed",
+            reason: "version",
+            origin: ORIGIN,
+          },
+        }),
+        expect.objectContaining({
+          level: "error",
+          report: true,
+          context: {
+            what: "reach the wallet key page failed",
+            reason: undefined,
+            origin: ORIGIN,
+          },
+        }),
+      ]);
+      expect(JSON.stringify(logged.entries)).not.toContain("1,2,3");
+      expect(String(logged.entries[1].error)).not.toContain("1,2,3");
+    });
+
     it("reads the stored wallet once the key page answers", async () => {
       const read = vi.fn(async () => stored);
-      const wallet = await readWith(async () => ({} as KeyFrame))(read);
+      const wallet = await readWith(ORIGIN)(async () => ({} as KeyFrame))(read);
       expect(wallet).toBe(stored);
     });
   });
