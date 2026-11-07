@@ -75,7 +75,7 @@ it("counts every tutorial whatever the query", () => {
   });
 });
 
-it("carries each tutorial's progress and what its caption needs", () => {
+it("carries each tutorial's progress and what its word over the name needs", () => {
   progress.set("Escrow", { state: "completed" });
   const { result } = renderHook(() => useTutorialList("", noOpen));
 

@@ -194,9 +194,9 @@ describe("ConnectDialog", () => {
     );
     const connect = within(footer).getByRole("button", { name: "Connect" });
     expect(within(body).queryByRole("button", { name: "Connect" })).toBeNull();
-    // The view's one call to action keeps the brand ring
-    expect(connect.getAttribute("data-slot")).toBe("brand-button");
-    expect(connect.getAttribute("data-variant")).toBe("ring");
+    // A solid fill, so it reads as the call to action even while disabled
+    expect(connect.getAttribute("data-slot")).toBe("button");
+    expect(connect.getAttribute("data-variant")).toBe("default");
     expect(connect.hasAttribute("disabled")).toBe(true);
 
     await user.type(
@@ -208,7 +208,7 @@ describe("ConnectDialog", () => {
     expect(connect.hasAttribute("disabled")).toBe(false);
   });
 
-  it("gives focus to the submit when the form has no field", async () => {
+  it("opens with the dialog focused and starts on Enter when the form has no field", async () => {
     backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
     // Start, the submit looked for here, shows only for a signed-in user
     await PgSession.refreshWith({
@@ -219,11 +219,18 @@ describe("ConnectDialog", () => {
     });
     renderHost();
 
+    const user = userEvent.setup();
+    const connect = vi.spyOn(PgAssistant, "connect");
     act(() => openConnectDialog("menu"));
 
+    // Nothing is ringed on open, Close included
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("dialog"))
+    );
+    expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
     // The keyless default has no field: Enter must start, not close
-    const start = screen.getByRole("button", { name: "Start" });
-    await waitFor(() => expect(document.activeElement).toBe(start));
+    await user.keyboard("{Enter}");
+    expect(connect).toHaveBeenCalledTimes(1);
   });
 
   it("offers sign-in as the submit for the default while signed out", async () => {
@@ -232,8 +239,12 @@ describe("ConnectDialog", () => {
 
     act(() => openConnectDialog("menu"));
 
-    const signIn = screen.getByRole("button", { name: "Sign in with GitHub" });
-    await waitFor(() => expect(document.activeElement).toBe(signIn));
+    expect(
+      screen.getByRole("button", { name: "Sign in with GitHub" })
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("dialog"))
+    );
     expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
   });
 
@@ -476,15 +487,10 @@ describe("ConnectDialog", () => {
     );
     // One column, 27rem on a desk
     expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("narrow");
-    // The dialog's title is the frame's; the form heads only its lead
+    // The dialog's title is the frame's, and the only heading
     expect(screen.queryByText("Back to chat")).toBeNull();
     expect(
-      screen.getByRole("heading", { name: "Connect a model" }).tagName
-    ).toBe("H2");
-    expect(
-      screen.getByRole("heading", {
-        name: "An assistant that can see your project",
-      }).tagName
-    ).toBe("H3");
+      screen.getAllByRole("heading").map((heading) => heading.tagName)
+    ).toEqual(["H2"]);
   });
 });

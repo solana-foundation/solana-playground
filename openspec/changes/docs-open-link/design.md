@@ -11,7 +11,7 @@ stand (`playground-ts-only-quickstart`, DES-203). It shows:
 - one callout above the code;
 - a funding card, and a broken-link page.
 
-Kat confirmed the stand on 3 Nov. The docs team ships the file. The stand's
+Cat McGee confirmed the stand on 3 Nov. The docs team ships the file. The stand's
 script is a stand-in, and is used here as the test fixture.
 
 What exists on `scope/typescript-2`:

@@ -1,0 +1,22 @@
+[
+  {
+    "title": "Program Structure",
+    "url": "https://www.anchor-lang.com/docs/basics/program-structure",
+    "file": "program-structure.md"
+  },
+  {
+    "title": "IDL",
+    "url": "https://www.anchor-lang.com/docs/basics/idl",
+    "file": "idl.md"
+  },
+  {
+    "title": "Programs",
+    "url": "https://solana.com/docs/core/programs",
+    "file": "programs.md"
+  },
+  {
+    "title": "Transactions",
+    "url": "https://solana.com/docs/core/transactions",
+    "file": "transactions.md"
+  }
+]

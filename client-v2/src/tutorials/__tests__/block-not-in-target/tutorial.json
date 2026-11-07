@@ -1,0 +1,135 @@
+{
+  "$schema": "../../tutorial.schema.json",
+  "version": 1,
+  "name": "Block Not In Target",
+  "description": "A broken fixture for yarn tutorial:check.",
+  "authors": [
+    {
+      "name": "Fleet"
+    }
+  ],
+  "level": "Beginner",
+  "framework": "Anchor",
+  "languages": ["Rust"],
+  "thumbnail": "/tutorials/hello-anchor/thumbnail.jpg",
+  "minutes": 5,
+  "intro": {
+    "promise": "You write hello.",
+    "log": "Program log: hi",
+    "files": {
+      "src/lib.rs": "use anchor_lang::prelude::*;\n\npub fn hello(name: String) {\n    msg!(name);\n}\n"
+    }
+  },
+  "steps": [
+    {
+      "id": "program",
+      "title": "Program",
+      "short": "Program",
+      "objective": "Write hello",
+      "learned": "Instructions",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": ""
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\npub fn hello(name: String) {\n    msg!(name);\n}\n"
+      },
+      "beats": [
+        {
+          "kind": "write",
+          "id": "s1.boil",
+          "text": "The import.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "use anchor_lang::prelude::*;"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s1.build",
+          "act": "build",
+          "title": "Build",
+          "context": "Compiles lib.rs",
+          "button": "Build"
+        }
+      ],
+      "goal": {
+        "kind": "build",
+        "instructions": ["hello"]
+      },
+      "win": {
+        "id": "s1.win",
+        "headline": "Built.",
+        "line": "One instruction."
+      },
+      "explain": "This step writes hello."
+    },
+    {
+      "id": "log",
+      "title": "Log",
+      "short": "Log",
+      "objective": "Log the name",
+      "learned": "The program log",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\npub fn hello(name: String) {\n    msg!(name);\n}\n"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\npub fn hello(name: String) {\n    msg!(name);\n}\n"
+      },
+      "beats": [
+        {
+          "kind": "say",
+          "id": "s2.a",
+          "text": "A program has no terminal."
+        },
+        {
+          "kind": "say",
+          "id": "s2.b",
+          "text": "It writes to the program log."
+        },
+        {
+          "kind": "say",
+          "id": "s2.c",
+          "text": "One line does it."
+        },
+        {
+          "kind": "ask",
+          "id": "s2.q",
+          "kicker": "Question",
+          "question": "Which line logs?",
+          "options": ["println!(name);", "msg!(name);", "console.log(name);"],
+          "code": true,
+          "answer": 1,
+          "right": "Yes.",
+          "why": [
+            "`println!` prints to a terminal.",
+            null,
+            "That's TypeScript."
+          ],
+          "hint": "Where does a program print?",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "msg!(\"Hello, {}!\", name);"
+          }
+        }
+      ],
+      "goal": {
+        "kind": "build"
+      },
+      "win": {
+        "id": "s2.win",
+        "headline": "Logged.",
+        "line": "It logs the name."
+      },
+      "explain": "This step logs the name."
+    }
+  ],
+  "finish": {
+    "headline": "Done.",
+    "line": "You logged a name.",
+    "learned": ["Instructions", "The program log"],
+    "chips": [],
+    "next": null
+  }
+}

@@ -223,7 +223,10 @@ const theme = {
 const shellTree = (
   home?: LayoutShellProps["home"],
   work: { keepWork?: boolean; stage?: ReactNode } = {},
-  cover?: LayoutShellProps["cover"]
+  // eslint-disable-next-line layers/curry-order -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  cover?: LayoutShellProps["cover"],
+  // eslint-disable-next-line layers/curry-order -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  tutorial?: LayoutShellProps["tutorial"]
 ) => (
   <ThemeProvider theme={theme}>
     <TooltipProvider>
@@ -282,6 +285,7 @@ const shellTree = (
         home={home}
         keepWork={work.keepWork}
         cover={cover}
+        tutorial={tutorial}
       />
     </TooltipProvider>
   </ThemeProvider>
@@ -483,6 +487,19 @@ it("should go back to the saved navigation on a wide screen", () => {
     screen.getByRole("button", { name: "Collapse navigation" })
   ).toBeTruthy();
   expect(toggled()).toEqual([]);
+});
+
+it("should leave the saved layout alone on Ctrl+R and Cmd+E in a tutorial's frame, which holds the files column open", () => {
+  render(
+    shellTree(undefined, {}, undefined, {
+      chat: <section>chat</section>,
+      nav: { fold: "rail", onOpenChange: vi.fn(), onClose: vi.fn() },
+    })
+  );
+  press({ key: "r", ctrlKey: true });
+  press({ key: "e", metaKey: true });
+  expect(toggled()).toEqual([]);
+  expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
 });
 
 it("should toggle the assistant by Ctrl+R", () => {
@@ -838,14 +855,14 @@ it("should open the console once when a deploy fails, not for one already failed
   // The reducer is the only way to set a deploy's status without a deploy
   const dispatch = (ev: Parameters<typeof PgFlow.reduce>[1]) =>
     PgFlow["_dispatch"](ev);
-  dispatch({ type: "deploy-start" });
-  dispatch({ type: "deploy-finish", ok: false });
+  dispatch({ type: "deploy-start", from: "command" });
+  dispatch({ type: "deploy-finish", ok: false, from: "command" });
   shell();
   expect(toggled()).toEqual([]);
 
   act(() => dispatch({ type: "workspace-change" }));
-  act(() => dispatch({ type: "deploy-start" }));
-  act(() => dispatch({ type: "deploy-finish", ok: false }));
+  act(() => dispatch({ type: "deploy-start", from: "command" }));
+  act(() => dispatch({ type: "deploy-finish", ok: false, from: "command" }));
   expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
 });
 
@@ -853,8 +870,8 @@ it("should not reopen the console for a change that leaves a deploy failed", () 
   const dispatch = (ev: Parameters<typeof PgFlow.reduce>[1]) =>
     PgFlow["_dispatch"](ev);
   shell();
-  act(() => dispatch({ type: "deploy-start" }));
-  act(() => dispatch({ type: "deploy-finish", ok: false }));
+  act(() => dispatch({ type: "deploy-start", from: "command" }));
+  act(() => dispatch({ type: "deploy-finish", ok: false, from: "command" }));
   press({ key: "j", ctrlKey: true });
   expect(consoleButton().getAttribute("aria-expanded")).toBe("false");
   act(() => dispatch({ type: "set-stage", stage: "build" }));
@@ -1515,6 +1532,56 @@ describe("on a phone", () => {
     act(() => resizeTo(390));
     fireEvent.click(button("Preview the build"));
     expect(PgFlow.state.stage).toBe("deploy");
+  });
+});
+
+describe("a tutorial below the frame's width", () => {
+  const tutorialPhone: LayoutShellProps["tutorial"] = {
+    chat: <section>chat column</section>,
+    nav: { fold: "rail", onOpenChange: vi.fn(), onClose: vi.fn() },
+    phone: {
+      head: <header>tutorial head</header>,
+      chat: <p>chat body</p>,
+      space: "chat",
+      onSpace: vi.fn(),
+    },
+  };
+  const inTutorial = () =>
+    render(shellTree(undefined, {}, undefined, tutorialPhone));
+
+  it.each([
+    ["phone", 390],
+    ["compact", 900],
+  ])("draws the tutorial's phone layout, not the pager (%s)", (_, at) => {
+    resizeTo(at);
+    inTutorial();
+    expect(screen.getByTestId("tutorial-phone")).toBeTruthy();
+    expect(screen.queryByTestId("phone-pager")).toBeNull();
+    expect(screen.getByText("chat body")).toBeTruthy();
+    expect(screen.queryByText("chat column")).toBeNull();
+  });
+
+  it("keeps the frame on a wide window", () => {
+    inTutorial();
+    expect(screen.queryByTestId("tutorial-phone")).toBeNull();
+    expect(screen.getByText("chat column")).toBeTruthy();
+  });
+
+  it("keeps the stage's node across a rotation over the frame's width", () => {
+    resizeTo(390);
+    inTutorial();
+    const stageNode = () =>
+      requireFor("the stage's node")(screen.getByText("stage").parentElement);
+    const before = stageNode();
+    expect(screen.getByRole("region", { name: "Code" }).contains(before)).toBe(
+      true
+    );
+    act(() => resizeTo(1440));
+    expect(screen.queryByTestId("tutorial-phone")).toBeNull();
+    expect(stageNode()).toBe(before);
+    act(() => resizeTo(390));
+    expect(screen.getByTestId("tutorial-phone")).toBeTruthy();
+    expect(stageNode()).toBe(before);
   });
 });
 

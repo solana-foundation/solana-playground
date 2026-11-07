@@ -1,1 +1,1 @@
-export { default } from "./EditorWithTabs";
+export { default, EditorTabsShown } from "./EditorWithTabs";

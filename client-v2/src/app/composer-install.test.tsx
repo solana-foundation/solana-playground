@@ -47,6 +47,27 @@ describe("composer: a controlled value", () => {
     );
   });
 
+  it("measures the field again when its placeholder changes", () => {
+    const measured = vi
+      .spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get")
+      .mockReturnValue(64);
+    const { rerender } = render(
+      <Composer>
+        <ComposerInput value="" onChange={() => {}} placeholder="A long one" />
+      </Composer>
+    );
+    const field = screen.getByRole("textbox");
+    expect(field.style.height).toBe("64px");
+    measured.mockReturnValue(44);
+    rerender(
+      <Composer>
+        <ComposerInput value="" onChange={() => {}} placeholder="Short" />
+      </Composer>
+    );
+    expect(field.style.height).toBe("44px");
+    measured.mockRestore();
+  });
+
   it("keeps Send disabled for a whitespace-only value", () => {
     render(
       <Composer>

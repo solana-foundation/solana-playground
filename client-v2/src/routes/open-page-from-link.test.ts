@@ -1,16 +1,10 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
-import {
-  initLogger,
-  memoryProvider as memoryLogs,
-  resetLogger,
-} from "@/shared/lib/logger";
-
-const utils = vi.hoisted(() => ({
-  PgRouter: { navigate: vi.fn() },
-  PgView: { setToast: vi.fn() },
+const common = vi.hoisted(() => ({
+  route: { dispose: vi.fn() },
+  handleRoute: vi.fn(),
 }));
-vi.mock("@/utils", () => utils);
+vi.mock("./common", () => ({ handleRoute: common.handleRoute }));
 const catalog = vi.hoisted(() => ({
   catalogPage: { open: vi.fn(), close: vi.fn() },
 }));
@@ -18,34 +12,16 @@ vi.mock("@/widgets/catalog", () => catalog);
 
 import { openPageFromLink } from "./open-page-from-link";
 
-let logged: ReturnType<typeof memoryLogs>;
 beforeEach(() => {
-  utils.PgRouter.navigate.mockReset().mockResolvedValue(undefined);
-  utils.PgView.setToast.mockReset();
+  common.handleRoute.mockReset().mockReturnValue(common.route);
   catalog.catalogPage.open.mockReset();
-  catalog.catalogPage.close.mockReset();
-  logged = memoryLogs();
-  initLogger({ providers: [logged] });
 });
-afterEach(() => resetLogger());
 
-it("opens the page and replaces the link with the start route", async () => {
-  openPageFromLink("programs");
-  await Promise.resolve();
+it("opens the page and mounts the work under it, keeping the link's path", () => {
+  const route = openPageFromLink("programs");
 
   expect(catalog.catalogPage.open).toHaveBeenCalledWith("programs", "link");
-  // Replaced, not pushed: Back must not land on the link, which would push
-  // `/` again and trap the user
-  expect(utils.PgRouter.navigate).toHaveBeenCalledWith("/", { replace: true });
-});
-
-it("closes the page, tells the user and reports a start route it cannot reach", async () => {
-  utils.PgRouter.navigate.mockRejectedValue(new Error("no router"));
-  openPageFromLink("tutorials");
-  await vi.waitFor(() => expect(logged.entries).toHaveLength(1));
-
-  expect(logged.entries[0].ns).toBe("catalog:link");
-  expect(logged.entries[0].report).toBe(true);
-  expect(catalog.catalogPage.close).toHaveBeenCalledTimes(1);
-  expect(utils.PgView.setToast).toHaveBeenCalledTimes(1);
+  // The work's route, disposed with the page's when the path moves on
+  expect(common.handleRoute).toHaveBeenCalledWith();
+  expect(route).toBe(common.route);
 });

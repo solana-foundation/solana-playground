@@ -13,8 +13,10 @@ export type OpenKind = "mount" | "later";
  * other field the user is typing in (the assistant's composer, a dialog's)
  * keeps focus, because nothing typed there asked for the open: sync
  * re-opening the workspace after an adoption, a merge or another tab's
- * write. The mount's open keeps focus wherever the user put it, a field or
- * a control: under load it lands late, after a click on the lesson band
+ * write. So does any control in an open dialog or popover (`isInDialog`),
+ * which focus leaving would close. The mount's open keeps focus wherever the
+ * user put it, a field or a control: under load it lands late, after a click
+ * on another control
  * already moved focus (the tree's field too: the new file the user is still
  * naming has not been created yet). It takes focus from the bare document,
  * so a fresh load lands in the editor, and from an item of the tree, whose
@@ -53,8 +55,11 @@ export const leavesFocusElsewhere = ({
     }
     return isFocusedElsewhere(editor, active);
   }
-  if (!isTypingElsewhere(editor, active)) return false;
-  return !(tree && active && tree.contains(active));
+  // A pick in the explorer's tree ends in the editor, the phone's Files
+  // sheet (a dialog) included
+  if (tree && active && tree.contains(active)) return false;
+  if (isInDialog(editor, active)) return true;
+  return isTypingElsewhere(editor, active);
 };
 
 /**
@@ -70,6 +75,16 @@ const isOffScreen = (editor: Element) => {
   // A pixel's leeway for a box at fractional coordinates
   return left < -1 || right > window.innerWidth + 1;
 };
+
+/**
+ * Focus sits in an open dialog or popover, such as a tutorial's file tree:
+ * an open nobody asked for from there (a step's start files re-opening its
+ * file) would close it
+ */
+const isInDialog = (editor: Element, active: Element | null) =>
+  !!active &&
+  !editor.contains(active) &&
+  active.closest('[role="dialog"], [role="alertdialog"]') !== null;
 
 /** Focus sits on something outside the editor, not on the bare document */
 const isFocusedElsewhere = (editor: Element, active: Element | null) =>
@@ -91,6 +106,7 @@ if (import.meta.vitest) {
       document.body.innerHTML =
         '<div id="root-dir"><input id="name" /><div id="item" tabindex="0"></div></div>' +
         '<textarea id="composer"></textarea><button id="button"></button>' +
+        '<div role="dialog"><button id="pick" role="treeitem"></button></div>' +
         '<div data-pager><div id="editor"><textarea id="inputarea"></textarea></div></div>';
       const get = (id: string) => document.getElementById(id)!;
       return {
@@ -100,6 +116,7 @@ if (import.meta.vitest) {
         item: get("item"),
         composer: get("composer"),
         button: get("button"),
+        pick: get("pick"),
         inputarea: get("inputarea"),
       };
     };
@@ -189,6 +206,24 @@ if (import.meta.vitest) {
             tree,
             active: document.body,
           })
+        ).toBe(false);
+      });
+
+      it("leaves focus in an open popover on a later open", () => {
+        const { editor, tree, pick } = page();
+        expect(
+          leavesFocusElsewhere({ open: "later", editor, tree, active: pick })
+        ).toBe(true);
+      });
+
+      it("takes focus from the explorer's tree inside a dialog on a later open", () => {
+        const { editor, tree, item } = page();
+        const sheet = document.createElement("div");
+        sheet.setAttribute("role", "dialog");
+        document.body.append(sheet);
+        sheet.append(tree);
+        expect(
+          leavesFocusElsewhere({ open: "later", editor, tree, active: item })
         ).toBe(false);
       });
 

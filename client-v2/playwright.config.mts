@@ -201,8 +201,10 @@ export default defineConfig({
   // Under the `e2e` shard job's `timeout-minutes` (client-v2.yml), so
   // Playwright itself ends a hung shard and still prints its summary; a
   // GitHub cancel keeps the traces but not the line saying which test was
-  // running.
-  globalTimeout: process.env.CI ? 15 * 60_000 : 0,
+  // running. 25 minutes, not 15, while scope/tutorial-flow's shards are
+  // uneven: shard 5 outgrew 15 with every test passing (#383, HOO-2585). It
+  // goes back once the shards are rebalanced.
+  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every page starts as a visitor who left the file tree open: a first
@@ -253,12 +255,17 @@ export default defineConfig({
     stderr: "pipe",
     // Blank, not unset: dotenv keeps a variable already set, so the platform
     // RPC URLs from `.env` stay out and Devnet and Mainnet fall back to the
-    // public endpoints the specs stub
+    // public endpoints the specs stub.
+    // `TUTORIAL_TEST_DOCS`: a tutorial that lists no doc pages of its own gets
+    // the test pages (`scripts/generate-tutorials.mjs`), so the doc tests
+    // still run should Hello Anchor's list go. Hello Anchor lists its own
+    // today, and the tests run on those
     env: {
       BROWSER: "none",
       PORT: String(port),
       REACT_APP_DEVNET_RPC_URL: "",
       REACT_APP_MAINNET_RPC_URL: "",
+      TUTORIAL_TEST_DOCS: "1",
     },
   },
 });

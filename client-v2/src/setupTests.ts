@@ -69,7 +69,7 @@ Object.defineProperty(globalThis, "fetch", {
 });
 
 // Webpack loads `.md` as raw text (`asset/source` in `craco.config.js`), and
-// the tutorials and lesson paths `require` it lazily. vitest hands `require`
+// the tutorials `require` it lazily. vitest hands `require`
 // straight to Node, past `vitest.config.ts`'s plugin, so Node is taught the
 // same rule: a `.md` file's export is its text. Only `.md`: webpack's rule also
 // covers `.rs`, `.py`, `.toml`, `.raw` and `.d.ts`, which no test loads; one

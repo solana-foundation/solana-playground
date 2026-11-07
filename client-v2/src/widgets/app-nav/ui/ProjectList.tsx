@@ -84,8 +84,8 @@ export type ProjectListProps = {
   /** The project already open was picked: no switch, the page shows it */
   onPickCurrent?: () => void;
   /**
-   * A project or lesson was picked to open, the one already open included:
-   * a page over the work makes way for it
+   * A project or lesson was picked and is open, the one already open
+   * included: a page over the work makes way for it
    */
   onPicked?: () => void;
   /**
@@ -214,14 +214,17 @@ const ProjectList = ({
   const perform = async (entry: ProjectEntry, action: ProjectAction) => {
     switch (action) {
       case "open":
-        onPicked?.();
         // Already open: the page may show Home over it, and goes back to it
         if (entry.name === PgExplorer.currentWorkspaceName) {
+          onPicked?.();
           onPickCurrent?.();
           return;
         }
         if (entry.isLesson) await PgTutorial.open(entry.name);
         else await PgExplorer.switchWorkspace(entry.name);
+        // Only once the pick is open: a page closed before it would send the
+        // address bar back to the project that was open
+        onPicked?.();
         return;
       case "pin":
       case "unpin": {

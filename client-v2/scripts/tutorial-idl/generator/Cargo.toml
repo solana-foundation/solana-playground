@@ -1,0 +1,9 @@
+[package]
+name = "tutorial-idl-generator"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anchor-lang-idl = { version = "=0.1.4", features = ["build"] }
+serde_json = "1"

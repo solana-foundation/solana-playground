@@ -162,7 +162,7 @@ it("says the open settings on the network indicator", () => {
   ).toBe("true");
 });
 
-it("draws three dots on the rail, named as their indicators", async () => {
+it("draws an icon per indicator on the rail, its state dot on the corner, named as their indicators", async () => {
   const onPick = vi.fn();
   render(
     <TooltipProvider>
@@ -178,10 +178,19 @@ it("draws three dots on the rail, named as their indicators", async () => {
   );
   const dot = screen.getByRole("button", { name: "Cluster: devnet" });
   expect(dot.hasAttribute("data-settings-trigger")).toBe(true);
-  expect(screen.getByRole("button", { name: "AI, off" })).toBeTruthy();
-  expect(
-    screen.getByRole("button", { name: /^Rust analyzer, starting/ })
-  ).toBeTruthy();
+  const ai = screen.getByRole("button", { name: "AI, off" });
+  const rust = screen.getByRole("button", { name: /^Rust analyzer, starting/ });
+  const icons = [dot, ai, rust].map((button) => button.querySelector("svg"));
+  expect(icons.map((icon) => icon?.getAttribute("data-glyph"))).toEqual([
+    "globe",
+    "star",
+    "brace",
+  ]);
+  expect([dotOf(dot), dotOf(ai), dotOf(rust)]).toEqual([
+    "success",
+    "idle",
+    "running",
+  ]);
   await userEvent.click(dot);
   expect(onPick).toHaveBeenCalledExactlyOnceWith(UP);
 });

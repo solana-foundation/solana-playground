@@ -1,7 +1,5 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
-import { isTutorialRoutePath } from "@/routes/catalog-paths";
-import { PgRouter } from "@/utils";
 import type { Disposable } from "@/utils/types";
 
 import type { CatalogPage, CatalogVia } from "./telemetry";
@@ -43,27 +41,17 @@ const subscribe = (cb: () => void) => {
 };
 
 /**
- * The page shown, for rendering. While mounted it also closes the page when
- * a tutorial's route opens. Not on `/`, which the link routes go to after
- * opening their page.
+ * The page shown, for rendering. Its path stays in the address bar while it
+ * shows; `useViewPath` (views/flow) keeps the two in step, so a path come to
+ * by Back or Forward opens or closes its page.
  *
  * The page closes only on what the user picks: a card's Open finishing
- * (`useCardOpen`), a tutorial's route, a project in the list (`onPicked`),
- * New project or Home in the navigation (`AppNav`), and the product asking
- * for the assistant, which is under the page (`LayoutShell`'s `cover`). The
- * explorer's own events close nothing: it switches to the open project on
- * every route's init, and sync switches and creates projects in the
- * background.
+ * (`useCardOpen`), a path other than the page's own (a tutorial's route
+ * among them), a project in the list (`onPicked`), New project or Home in the
+ * navigation (`AppNav`), and the product asking for the assistant, which is
+ * under the page (`LayoutShell`'s `cover`). The explorer's own events close
+ * nothing: it switches to the open project on every route's init, and sync
+ * switches and creates projects in the background.
  */
-export const useCatalogPage = (): CatalogPage | null => {
-  const page = useSyncExternalStore(subscribe, catalogPage.current);
-
-  useEffect(() => {
-    const sub = PgRouter.onDidChangePath((path) => {
-      if (isTutorialRoutePath(path)) catalogPage.close();
-    });
-    return () => sub.dispose();
-  }, []);
-
-  return page;
-};
+export const useCatalogPage = (): CatalogPage | null =>
+  useSyncExternalStore(subscribe, catalogPage.current);

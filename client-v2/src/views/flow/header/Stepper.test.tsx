@@ -85,9 +85,9 @@ describe("Stepper", () => {
     expect(build.getAttribute("data-slot")).toBe("stepper-item");
   });
 
-  it("says a failed build's count and the lesson target", () => {
-    render(<Stepper state={failedBuild} onSelect={() => {}} target="build" />);
-    const name = "Build: failed, 3 errors, current lesson target";
+  it("says a failed build's count", () => {
+    render(<Stepper state={failedBuild} onSelect={() => {}} />);
+    const name = "Build: failed, 3 errors";
     expect(screen.getByRole("tab", { name })).toBeTruthy();
     expect(
       screen.getByRole("tab", { name }).getAttribute("aria-selected")

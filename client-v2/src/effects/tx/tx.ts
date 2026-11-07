@@ -1,3 +1,5 @@
+import { isTxLinkedBySender } from "@/shared/lib/tx-links";
+
 import {
   PgCodec,
   PgConnection,
@@ -13,6 +15,9 @@ export const tx = () => {
   return PgTx.onDidSend((sentTx) => {
     // Check setting
     if (!PgSettings.notification.showTx) return;
+
+    // Don't repeat a link its sender shows (a tutorial card)
+    if (isTxLinkedBySender()) return;
 
     // Don't show on playnet
     if (PgConnection.cluster === "playnet") return;

@@ -11,6 +11,7 @@ export {
 export type { ReadState, SessionUser, SignInState } from "./model/session";
 export type { SignInFailure } from "./model/telemetry";
 export { SIGNED_OUT_REASON } from "./config.mjs";
+export { useSignedIn } from "./model/use-signed-in";
 
 /**
  * Command pre-check: throws while signed out. The airdrop runs it only where

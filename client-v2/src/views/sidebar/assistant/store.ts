@@ -7,8 +7,11 @@ import {
   mcpTelemetry,
   sameConnection,
 } from "@/features/mcp";
-import type { ModelProvider } from "@/shared/lib/ai";
-import type { ToolResultEvent } from "@/shared/lib/ai";
+import type {
+  ModelProvider,
+  ToolDefinition,
+  ToolResultEvent,
+} from "@/shared/lib/ai";
 import { redactKey } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
@@ -51,6 +54,25 @@ import {
 export { isToolCallRecord, type ToolCallRecord };
 
 const log = createLogger("assistant:store");
+
+/**
+ * What a surface hands the assistant to narrow it while it is shown, such as
+ * a tutorial: its own context, its own tools, and which of the assistant's
+ * tools may still run. The assistant never imports the surface.
+ */
+export interface AssistantMode {
+  /** A name for logs and refusals: `tutorial` */
+  name: string;
+  /** Sent with every turn as a system message, after the project's state */
+  context(): string;
+  /** Tools of the surface's own, offered beside the allowed ones */
+  tools: readonly ToolDefinition[];
+  /** Whether one of the assistant's own tools may run; a refused one answers
+   * the model with a refusal instead */
+  allows(name: string): boolean;
+  /** Why a refused tool cannot run here, and what to do instead, told to the model */
+  refusal: string;
+}
 
 /** A change the assistant wants to make, waiting on the user */
 export interface PatchApproval {
@@ -836,6 +858,33 @@ export class PgAssistant {
           })
         );
       });
+  }
+
+  /** The mode narrowing the assistant to one surface, or null (`AssistantMode`) */
+  static get mode(): AssistantMode | null {
+    // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+    return PgAssistant._modes[PgAssistant._modes.length - 1] ?? null;
+  }
+
+  /**
+   * Narrow the assistant while a surface is shown, as the tutorial feed does
+   * (`tutorial-flow-v2` 3.6). The next turn reads it; a turn in flight keeps
+   * the tools it started with.
+   *
+   * Modes stack: the latest set is the one in force. Clearing one, in any
+   * order, leaves the latest of those still set in force, so a surface
+   * unmounting never lifts another's narrowing.
+   *
+   * @returns clears this mode
+   */
+  static setMode(mode: AssistantMode): Disposable {
+    PgAssistant._modes.push(mode);
+    return {
+      dispose: () => {
+        const at = PgAssistant._modes.lastIndexOf(mode);
+        if (at !== -1) PgAssistant._modes.splice(at, 1);
+      },
+    };
   }
 
   /**
@@ -1897,6 +1946,8 @@ export class PgAssistant {
   private static _localServers: readonly McpServerEntry[] =
     LOCAL_MCP_SERVERS.map((server) => ({ ...server }));
   private static _mcpTools: Readonly<Record<string, readonly McpTool[]>> = {};
+  /** Every mode a surface has set and not cleared, the one in force last */
+  private static _modes: AssistantMode[] = [];
   /**
    * The turn in flight, if `beginTurn` registered one. `cut` once its thread
    * has closed, until the turn ends.

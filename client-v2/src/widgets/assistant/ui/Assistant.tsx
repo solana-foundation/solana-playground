@@ -2,7 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useReducer, useRef, useState } from "react";
 
 import { useTutorialBeforeStart } from "@/entities/tutorial";
-import { PgSession } from "@/features/auth";
+import { PgSession, useSignedIn } from "@/features/auth";
 import { Button } from "@/shared/ui/button";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
@@ -14,7 +14,6 @@ import { connectLabel } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
 import { headLabel } from "../model/head-label";
 import { assistantTelemetry } from "../model/telemetry";
-import { useSignedIn } from "../model/use-signed-in";
 import type { ConnectOpener } from "../model/use-turn";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";

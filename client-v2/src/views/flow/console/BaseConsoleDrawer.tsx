@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from "react";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
   ConsoleDrawer,
@@ -27,8 +28,15 @@ interface BaseConsoleDrawerProps {
    * deploy runs; `null` otherwise */
   stop: { run: RunKind; onStop: () => void } | null;
   status: ConsoleStatus;
-  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere */
-  shortcut: string;
+  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere; none on a touch layout */
+  shortcut?: string;
+  /**
+   * A tutorial's bar: the dot and its line only, no "Terminal" label, as
+   * the prototype draws it
+   */
+  bare?: boolean;
+  /** A line over the terminal before anything has run */
+  empty?: string | null;
   children?: ReactNode;
 }
 
@@ -47,6 +55,9 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   stop,
   status,
   shortcut,
+  bare = false,
+  // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  empty = null,
   children,
 }) => (
   <ConsoleDrawer
@@ -59,20 +70,29 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     <ConsoleDrawerBar triggerLabel="Terminal" className="shrink-0">
       <ConsoleDrawerStatus>
         <StatusDot variant={status.tone} />
-        <span
-          data-console-label
-          className="font-semibold tracking-wide text-foreground"
-        >
-          Terminal
-        </span>
+        {!bare && (
+          <span
+            data-console-label
+            className="font-semibold tracking-wide text-foreground"
+          >
+            Terminal
+          </span>
+        )}
         {status.text && (
-          <span className={status.tone === "error" ? "text-error" : undefined}>
+          <span
+            data-console-status
+            className={cn(
+              "truncate",
+              status.tone === "error" && "text-error",
+              status.tone === "warning" && "text-warning"
+            )}
+          >
             {status.text}
           </span>
         )}
       </ConsoleDrawerStatus>
       <ConsoleDrawerActions>
-        <Kbd aria-hidden>{shortcut}</Kbd>
+        {shortcut && <Kbd aria-hidden>{shortcut}</Kbd>}
         {/* Spec 13: while a build or a deploy runs, Clear is off with Stop
             beside it; on a phone Stop takes Clear's place, a fingertip
             wide. Stop shows folded too: the strip is all a folded console
@@ -113,6 +133,11 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
           too: an `auto` one is never narrower than the terminal's own width,
           so the terminal outgrows a narrowing stage and fit, which takes the
           scrollbar off that width, gets there one scrollbar per pass. */}
+      {empty && (
+        <p className="shrink-0 px-4 pt-3 font-mono text-code text-muted-foreground">
+          {empty}
+        </p>
+      )}
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
         {children}
       </div>

@@ -14,8 +14,8 @@ export const tutorials = PgRouter.create({
   path: "/tutorials/{name}/{page}",
   handle: ({ name, page }) => {
     if (name) return handleTutorial(name, page);
-    // The bare list is a page now: open it, over the work or Home on `/`
-    openPageFromLink("tutorials");
+    // The bare list is a page now: open it, over the work or Home
+    return openPageFromLink("tutorials");
   },
 });
 
@@ -81,25 +81,20 @@ const handleTutorial = (name: string, page: string) => {
       // Refresh tutorial state
       await PgTutorial.refresh();
 
-      // A tutorial the fork has given a lesson path gets Flow's own
-      // chrome instead: steps in the rail, the objective above the
-      // editor, the page in a reader. Upstream's component would put
-      // its markdown pane on the same edge as the assistant. Every
-      // other tutorial takes the branch below, unchanged.
-      // The barrel, not `./registry` -- importing it is what registers
-      // the paths, and this route can run before Flow has mounted.
-      // Whether a lesson path exists is all this one-shot callback
-      // decides -- it is fixed for the life of the tutorial. Whether the
-      // tutorial is *started* changes within the same routed session
-      // (Start runs inside upstream's own component, well after this
-      // callback has already returned), so `LessonRoute` makes that half
-      // of the decision itself, reactively. See its own comment.
-      const { getLessonPath } = await import("../../views/flow/lessons");
-      if (getLessonPath(tutorial.name)) {
-        const { default: LessonRoute } = await import(
-          "../../views/flow/lessons/LessonRoute"
-        );
-        return <LessonRoute tutorial={tutorial} />;
+      // A tutorial with a definition opens in the frame
+      // (`widgets/tutorial-frame`) with its conversation beside the editor.
+      // It has no About page: its workspace is created on the first open,
+      // holding the intro's preview, with the conversation's cursor on its
+      // intro card, so the main area is the editor alone. Every other
+      // tutorial takes upstream's component, unchanged.
+      if (tutorial.definition) {
+        const [{ openOnIntro }, { default: EditorWithTabs }] =
+          await Promise.all([
+            import("@/features/tutorial-conversation"),
+            import("../../components/EditorWithTabs"),
+          ]);
+        await openOnIntro(tutorial.definition);
+        return <EditorWithTabs />;
       }
 
       const { default: Tutorial } = await tutorial.importComponent();
