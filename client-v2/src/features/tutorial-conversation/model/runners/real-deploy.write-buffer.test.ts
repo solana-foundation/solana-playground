@@ -74,13 +74,15 @@ vi.mock("./real-run", () => ({
 }));
 vi.mock("./build", () => ({ runBuild: vi.fn() }));
 
+import { PgConnection } from "../../../../utils";
 import { realDeployPort } from "./real-deploy";
 
-/** A port that has passed its refusal and picked its wallet, as `runDeploy` asks them */
+/** A port that has passed its refusal and read its wallet and program, as `runDeploy` asks them */
 const startedPort = () => {
   const port = realDeployPort();
   expect(port.refusal()).toBeNull();
   expect(port.wallet()).toBe("Wa11et");
+  expect(port.program().id).toBe("Wa11et");
   return port;
 };
 
@@ -101,6 +103,29 @@ describe("realDeployPort().writeBuffer", () => {
     expect(rpc.readBuffer.getAccountInfo).toHaveBeenCalled();
     expect(rpc.selected.getAccountInfo).not.toHaveBeenCalled();
     expect(loader.loadBuffer.mock.calls[0][2]).toMatchObject({ onWrite });
+  });
+
+  it("sends on the connection the run started on after the settings switch it", async () => {
+    const port = startedPort();
+    const switched = {
+      rpcEndpoint: "https://other.test",
+      getMinimumBalanceForRentExemption: async () => 1,
+      getAccountInfo: vi.fn(async () => ({} as object | null)),
+    };
+    const mutable = PgConnection as { current: unknown };
+    mutable.current = switched;
+    try {
+      await port.writeBuffer(new Uint8Array(10), { deployed: false }, vi.fn());
+    } finally {
+      mutable.current = rpc.selected;
+    }
+
+    expect(loader.createBuffer.mock.calls[0]).toContainEqual(
+      expect.objectContaining({ connection: rpc.selected })
+    );
+    expect(loader.loadBuffer.mock.calls[0][2]).toMatchObject({
+      connection: rpc.selected,
+    });
   });
 
   it("prints how to reclaim a buffer it could not close after a failed write", async () => {

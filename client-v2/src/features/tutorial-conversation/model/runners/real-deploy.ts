@@ -37,15 +37,6 @@ import { runOnDevnet } from "./real-run";
 import { deploySlotOf, landedDeploy, recogniseDeploy } from "./recognise";
 import { targetGuardFor } from "./target";
 
-/** Sends and confirms on the connection the settings hold, as `PgTx` does */
-const sendAndConfirmTxWithRetries: ReturnType<
-  typeof sendAndConfirmTxWithRetriesFor
-> = (sendTx, checkConfirmation) =>
-  sendAndConfirmTxWithRetriesFor(PgConnection.current)(
-    sendTx,
-    checkConfirmation
-  );
-
 /** What a deploy step cannot go on without; saying which beats a `TypeError` */
 const needed = <T>(value: T | null | undefined, what: string): T => {
   if (value === null || value === undefined) {
@@ -69,9 +60,11 @@ const playgroundWallet = (): Wallet | null => {
 
 const pk = (address: string) => new PgWeb3.PublicKey(address);
 
+type Connection = PgWeb3.Connection;
+
 /** Buffers are read through the read-buffer RPC: the platform RPC does not return fresh buffers */
-const getReadBufferConnection = () =>
-  PgConnection.getReadBufferConnection(PgConnection.current);
+const readBufferOf = (conn: Connection) =>
+  PgConnection.getReadBufferConnection(conn);
 
 /** Devnet through the connection the settings hold, which `PgTx` sends on */
 export const devnetFunding: FundingChain = {
@@ -99,16 +92,20 @@ const onChainOf = async (id: string): Promise<OnChain> => {
 };
 
 /** Closes a buffer, returning its rent to the wallet that funded it */
-const closeBuffer = async (buffer: string, wallet: Wallet) => {
-  await sendAndConfirmTxWithRetries(
-    () => BpfLoaderUpgradeable.closeBuffer(pk(buffer), { wallet }),
-    async () => !(await getReadBufferConnection().getAccountInfo(pk(buffer)))
-  );
-};
+const closeBufferOn =
+  (conn: Connection) => async (buffer: string, wallet: Wallet) => {
+    await sendAndConfirmTxWithRetriesFor(conn)(
+      () =>
+        BpfLoaderUpgradeable.closeBuffer(pk(buffer), {
+          wallet,
+          connection: conn,
+        }),
+      async () => !(await readBufferOf(conn).getAccountInfo(pk(buffer)))
+    );
+  };
 
 /** The slot of the program's last deploy or upgrade; null when not on chain */
-const deploySlotOnChain = async (programId: string) => {
-  const conn = PgConnection.current;
+const deploySlotOn = (conn: Connection) => async (programId: string) => {
   const program = await conn.getAccountInfo(pk(programId));
   if (!program) return null;
   // The program account names its ProgramData account after a u32 tag
@@ -118,16 +115,14 @@ const deploySlotOnChain = async (programId: string) => {
   return data ? deploySlotOf(data.data) : null;
 };
 
-const programSignatures = async (programId: string) =>
-  (
-    await PgConnection.current.getSignaturesForAddress(pk(programId), {
-      limit: 20,
+const programSignaturesOn = (conn: Connection) => async (programId: string) =>
+  (await conn.getSignaturesForAddress(pk(programId), { limit: 20 })).map(
+    (s) => ({
+      signature: s.signature,
+      slot: s.slot,
+      failed: s.err !== null,
     })
-  ).map((s) => ({
-    signature: s.signature,
-    slot: s.slot,
-    failed: s.err !== null,
-  }));
+  );
 
 /**
  * Sends a deploy or upgrade from `buffer`. When its retries give up, a
@@ -135,6 +130,7 @@ const programSignatures = async (programId: string) =>
  * the consumed buffer) answers its signature instead of the failure.
  */
 const sendFromBuffer = async (
+  conn: Connection,
   send: () => Promise<string | undefined>,
   buffer: string,
   programId: string,
@@ -151,9 +147,9 @@ const sendFromBuffer = async (
   const landed = await landedDeploy({
     programId,
     bufferExists: async () =>
-      !!(await getReadBufferConnection().getAccountInfo(pk(buffer))),
-    deploySlot: deploySlotOnChain,
-    signatures: programSignatures,
+      !!(await readBufferOf(conn).getAccountInfo(pk(buffer))),
+    deploySlot: deploySlotOn(conn),
+    signatures: programSignaturesOn(conn),
   }).catch((e) => {
     log.error(e, {
       report: true,
@@ -199,16 +195,29 @@ export const watchBuildSource = () => {
  * The deploy port over the editor's loader calls. A tutorial runs on devnet
  * only: on any other cluster the deploy refuses with what to do, rather than
  * spend a local validator's SOL or change the learner's settings.
+ *
+ * Every send goes through the connection the run started on and the program
+ * `program()` last read, which runs after the build and before the first
+ * send: a project or network switched mid-run cannot redirect a retry or a
+ * later buffer write, and the guard stops the run at its next send.
  */
 export const realDeployPort = (): DeployPort => {
   let wallet: Wallet | null = null;
+  let runConnection: Connection | null = null;
+  let programPk: PgWeb3.PublicKey | null = null;
+  let programKp: PgWeb3.Keypair | null = null;
   const target = targetGuardFor("the deploy")(currentTarget);
+  const sending = () => {
+    target.ensure();
+    return needed(runConnection, "the devnet connection");
+  };
   return {
     refusal: () => {
       if (PgConnection.cluster !== "devnet") {
         return "Tutorials deploy to devnet. Switch the network to devnet in Settings and try again.";
       }
       target.capture();
+      runConnection = PgConnection.current;
       return null;
     },
     wallet: () => {
@@ -223,16 +232,20 @@ export const realDeployPort = (): DeployPort => {
       if (!wallet) throw new Error("The Playground wallet was not made");
       return wallet.publicKey.toBase58();
     },
-    program: () => ({
-      id: PgProgramInfo.pk?.toBase58() ?? null,
-      keypair: !!PgProgramInfo.kp,
-      stale:
-        !PgProgramInfo.uuid ||
-        !!PgProgramInfo.lastBuildFailed ||
-        // Not watching yet: no build was seen, so build
-        !buildSource?.isCurrent(),
-      length: null,
-    }),
+    program: () => {
+      programPk = PgProgramInfo.pk ?? null;
+      programKp = PgProgramInfo.kp ?? null;
+      return {
+        id: programPk?.toBase58() ?? null,
+        keypair: !!programKp,
+        stale:
+          !PgProgramInfo.uuid ||
+          !!PgProgramInfo.lastBuildFailed ||
+          // Not watching yet: no build was seen, so build
+          !buildSource?.isCurrent(),
+        length: null,
+      };
+    },
     // The build act's own run, so a build-and-deploy names the same error
     build: async () => {
       const built = await runBuild("build", { beatId: "deploy" }, () => {});
@@ -267,10 +280,10 @@ export const realDeployPort = (): DeployPort => {
     funding: devnetFunding,
     capSol: DEVNET_FAUCET_SOL,
     writeBuffer: async (bytes, onChain, onWrite) => {
-      target.ensure();
+      const conn = sending();
+      const send = sendAndConfirmTxWithRetriesFor(conn);
       const payer = needed(wallet, "a wallet");
-      const programPk = needed(PgProgramInfo.pk, "the program id");
-      const conn = PgConnection.current;
+      const program = needed(programPk, "the program id");
       const extra = additionalProgramLen({
         programLen: bytes.length,
         deployed: onChain.deployed,
@@ -279,13 +292,14 @@ export const realDeployPort = (): DeployPort => {
       // Before the buffer, not beside the upgrade: an extend in the upgrade's
       // block fails with "Program was deployed in this block already"
       if (extra > 0) {
-        await sendAndConfirmTxWithRetries(
+        await send(
           () =>
-            BpfLoaderUpgradeable.extendProgram(programPk, extra, {
+            BpfLoaderUpgradeable.extendProgram(program, extra, {
               wallet: payer,
+              connection: conn,
             }),
           async () => {
-            const now = await onChainOf(programPk.toBase58());
+            const now = await onChainOf(program.toBase58());
             return (
               now.deployed &&
               additionalProgramLen({
@@ -301,18 +315,20 @@ export const realDeployPort = (): DeployPort => {
       const bufferRent = await conn.getMinimumBalanceForRentExemption(
         PgWeb3.BpfLoaderUpgradeableProgram.getBufferAccountSize(bytes.length)
       );
-      await sendAndConfirmTxWithRetries(
+      await send(
         () =>
           BpfLoaderUpgradeable.createBuffer(buffer, bufferRent, bytes.length, {
             wallet: payer,
+            connection: conn,
           }),
         async () =>
-          !!(await getReadBufferConnection().getAccountInfo(buffer.publicKey))
+          !!(await readBufferOf(conn).getAccountInfo(buffer.publicKey))
       );
       try {
         target.ensure();
         await BpfLoaderUpgradeable.loadBuffer(buffer.publicKey, bytes, {
           wallet: payer,
+          connection: conn,
           onWrite,
           onRateLimit: (retryAfter, reason) =>
             PgTerminal.println(
@@ -323,17 +339,15 @@ export const realDeployPort = (): DeployPort => {
         // The buffer already holds its rent: give it back before the write's
         // failure stands, as `runDeploy` does for a failed deploy
         const address = buffer.publicKey.toBase58();
-        await closeBuffer(address, payer).catch((closing) => {
+        await closeBufferOn(conn)(address, payer).catch((closing) => {
           log.error(closing, {
             report: true,
             context: { stage: "Closing the buffer", buffer: address },
           });
-          const readBuffer = getReadBufferConnection();
+          const readBuffer = readBufferOf(conn);
           PgTerminal.println(
             unclosedBufferLineFor(
-              readBuffer === PgConnection.current
-                ? undefined
-                : readBuffer.rpcEndpoint
+              readBuffer === conn ? undefined : readBuffer.rpcEndpoint
             )(address)
           );
         });
@@ -342,45 +356,51 @@ export const realDeployPort = (): DeployPort => {
       return buffer.publicKey.toBase58();
     },
     deploy: async (buffer, length) => {
-      target.ensure();
+      const conn = sending();
+      const kp = needed(programKp, "the program keypair");
+      const payer = needed(wallet, "a wallet");
       return sendFromBuffer(
+        conn,
         () =>
-          sendAndConfirmTxWithRetries(
+          sendAndConfirmTxWithRetriesFor(conn)(
             () =>
-              BpfLoaderUpgradeable.deployProgram(
-                needed(PgProgramInfo.kp, "the program keypair"),
-                pk(buffer),
-                length,
-                { wallet: needed(wallet, "a wallet") }
-              ),
-            async () =>
-              !(await getReadBufferConnection().getAccountInfo(pk(buffer)))
+              BpfLoaderUpgradeable.deployProgram(kp, pk(buffer), length, {
+                wallet: payer,
+                connection: conn,
+              }),
+            async () => !(await readBufferOf(conn).getAccountInfo(pk(buffer)))
           ),
         buffer,
-        needed(PgProgramInfo.pk, "the program id").toBase58(),
+        kp.publicKey.toBase58(),
         "deploy"
       );
     },
     upgrade: async (buffer) => {
-      target.ensure();
+      const conn = sending();
+      const program = needed(programPk, "the program id");
+      const payer = needed(wallet, "a wallet");
       return sendFromBuffer(
+        conn,
         () =>
-          sendAndConfirmTxWithRetries(
+          sendAndConfirmTxWithRetriesFor(conn)(
             () =>
-              BpfLoaderUpgradeable.upgradeProgram(
-                needed(PgProgramInfo.pk, "the program id"),
-                pk(buffer),
-                { wallet: needed(wallet, "a wallet") }
-              ),
-            async () =>
-              !(await getReadBufferConnection().getAccountInfo(pk(buffer)))
+              BpfLoaderUpgradeable.upgradeProgram(program, pk(buffer), {
+                wallet: payer,
+                connection: conn,
+              }),
+            async () => !(await readBufferOf(conn).getAccountInfo(pk(buffer)))
           ),
         buffer,
-        needed(PgProgramInfo.pk, "the program id").toBase58(),
+        program.toBase58(),
         "upgrade"
       );
     },
-    closeBuffer: (buffer) => closeBuffer(buffer, needed(wallet, "a wallet")),
+    // The buffer was written on the run's connection, so it is closed there
+    closeBuffer: (buffer) =>
+      closeBufferOn(needed(runConnection, "the devnet connection"))(
+        buffer,
+        needed(wallet, "a wallet")
+      ),
     instructions: builtInstructions,
     print: (line) => PgTerminal.println(line),
     report: (error, stage) =>
@@ -455,9 +475,9 @@ export const tutorialRunner: Runner = {
         act,
         programId: PgProgramInfo.pk?.toBase58() ?? null,
         startedAtMs,
-        deploySlot: deploySlotOnChain,
+        deploySlot: deploySlotOn(PgConnection.current),
         blockTime: (slot) => PgConnection.current.getBlockTime(slot),
-        signatures: programSignatures,
+        signatures: programSignaturesOn(PgConnection.current),
         instructions: builtInstructions(),
       });
       return recognised && withIdl(recognised);
