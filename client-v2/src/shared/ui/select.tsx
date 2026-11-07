@@ -2,6 +2,7 @@ import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
 import * as React from "react";
 
+import { useReleaseFocus } from "@/shared/lib/hooks/use-release-focus";
 import { cn } from "@/shared/lib/utils";
 
 function Select({
@@ -60,11 +61,14 @@ function SelectContent({
   children,
   position = "item-aligned",
   align = "center",
+  ref,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const [releaseFocus] = useReleaseFocus(ref);
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
+        ref={releaseFocus}
         data-slot="select-content"
         data-align-trigger={position === "item-aligned"}
         className={cn(
