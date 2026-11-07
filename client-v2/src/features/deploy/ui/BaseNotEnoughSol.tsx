@@ -2,6 +2,7 @@ import { CircleAlert, ExternalLink } from "lucide-react";
 
 import type { FundingFailure } from "@/commands/deploy/run";
 import { networkInSentence, solOn } from "@/constants";
+import { FAUCET_URL } from "@/shared/lib/faucet";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   Callout,
@@ -13,9 +14,6 @@ import {
 import { CopyButton } from "@/shared/ui/copy-button";
 
 import { formatSol, shortKey } from "../model/format";
-
-/** Solana's web faucet; it serves devnet and testnet */
-export const WEB_FAUCET_URL = "https://faucet.solana.com";
 
 export interface BaseNotEnoughSolProps {
   cluster: string | undefined;
@@ -99,7 +97,7 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
         <FundingAction p={p} />
         {hasWebFaucet && (
           <CalloutAction asChild>
-            <a href={WEB_FAUCET_URL} target="_blank" rel="noopener noreferrer">
+            <a href={FAUCET_URL} target="_blank" rel="noopener noreferrer">
               Open faucet
               <ExternalLink data-icon="inline-end" />
             </a>

@@ -65,7 +65,8 @@ const running = (what: string, elapsedMs: number | null): ConsoleStatus => ({
  * arrive slightly after the `build-finish` event that sets `flow.build`) and
  * on every tick of a run.
  *
- * Precedence (most recent/relevant first): a run in progress, then a
+ * Precedence (most recent/relevant first): a run in progress (a build, a
+ * deploy, then an airdrop: a deploy's own top-up shows as the deploy), then a
  * stop, then a deploy result (it is always newer than the build that
  * unlocked it), then the last build's result, then nothing before the first
  * build. A project with no program never builds: where nothing else is
@@ -79,6 +80,8 @@ export const describeConsoleStatus = (
 ): ConsoleStatus => {
   if (flow.build === "running") return running("Building…", elapsedMs);
   if (flow.deploy === "running") return running("Deploying…", elapsedMs);
+  // A deploy's own top-up is named by the deploy, above
+  if (flow.airdrops > 0) return running("Airdropping…", elapsedMs);
   // A stop is newer than any result, and shows none (Spec 13)
   if (flow.stopped === "build") return { text: "Build stopped", tone: "idle" };
   if (flow.stopped === "deploy") {

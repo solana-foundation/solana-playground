@@ -3,11 +3,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { FAUCET_URL } from "@/shared/lib/faucet";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import type { RunState } from "../model/run";
 import BaseRunButton from "./BaseRunButton";
-import BaseRunCallout, { FAUCET_URL } from "./BaseRunCallout";
+import BaseRunCallout from "./BaseRunCallout";
 
 const SOURCE = {
   title: "Quickstart",
