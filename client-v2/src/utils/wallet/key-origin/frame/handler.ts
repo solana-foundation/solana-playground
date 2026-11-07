@@ -299,7 +299,7 @@ if (import.meta.vitest) {
       const handle = handlerWith(store);
       const publicKey = await created(handle);
 
-      expect([...kept.keys()]).toEqual([publicKey]);
+      expect(Array.from(kept.keys())).toEqual([publicKey]);
       expect(await ask(handlerWith(store), { type: "accounts" })).toMatchObject(
         { result: [publicKey] }
       );
