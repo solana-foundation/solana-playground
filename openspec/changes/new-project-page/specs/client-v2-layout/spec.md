@@ -32,12 +32,19 @@ the page. Each SHALL hold a search field that filters its cards by name and
 description (a program's by its categories too) and a grid of cards, two
 columns from 720 px and one below, each with an Open action. Opening a
 tutorial SHALL open it in the work; opening a program SHALL import it as a
-project and open it. A page SHALL close when one of its cards opens, when a
-tutorial's route opens, when another page, Home or a project in the project
-list is picked, when the product asks for the assistant over the work, and
-on nothing else the user did; a project open before
+project and open it. A page SHALL close when one of its cards opens, when
+the address moves to a path other than the page's own (a tutorial's route,
+Back or Forward among them), when another page, Home or a project in the project
+list is picked (once that project is open), when the product asks for the
+assistant over the work, and on nothing else the user did; a project open before
 the page SHALL come back as it was. The routes
-`/new`, `/tutorials` and `/programs` SHALL open their page.
+`/new`, `/tutorials` and `/programs` SHALL open their page and stay in the
+address while it shows, so each page is a history entry of its own: opening
+a page SHALL push its path, Back SHALL close it onto what it showed over,
+and a reload SHALL show it again. A page that closes on its own path SHALL
+move the address back to what it showed over: the open project's path, or,
+over Home, the path Home showed on. A shared project's address
+(a docs link, a gist) SHALL NOT change for a page.
 
 #### Scenario: Finding a tutorial by search
 
@@ -73,6 +80,18 @@ the page SHALL come back as it was. The routes
 
 - **WHEN** a user opens `/new`
 - **THEN** the New project page shows
+
+#### Scenario: Back from a page
+
+- **WHEN** a user with a project open on `/` opens New project, Tutorials or
+  Programs from the navigation, then goes Back
+- **THEN** the address is the page's own path while it shows, and Back
+  closes the page onto the project, on `/`
+
+#### Scenario: A page survives a reload
+
+- **WHEN** a user reloads while New project, Tutorials or Programs shows
+- **THEN** the same page shows again on the same path
 
 ### Requirement: The pages are measured
 
