@@ -185,8 +185,9 @@ export class PgFs {
    * a workspace (`PgExplorer.createItem`, `renameItem`, `deleteItem` and the
    * workspace methods call it). A file a workspace keeps beside its code
    * (`.workspace/*`, `.tutorial.json`) goes through `writeWorkspaceFile`,
-   * which flushes on its first write. It rewrites the whole tree, so never
-   * call it per write.
+   * which flushes on its first write, and a file under `/.config` through
+   * `writeConfigFile`, which flushes when the write creates it. It rewrites
+   * the whole tree, so never call it per write.
    */
   static async flush() {
     await this._fs.flush();

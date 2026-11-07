@@ -1,6 +1,11 @@
 // TODO(ui-migration 1.4): a feature importing a feature; marks are stored per signed-in account
 import { PgSession } from "@/features/auth";
 
+import {
+  removeConfigDir,
+  removeConfigFile,
+  writeConfigFile,
+} from "../../../utils/explorer/config-file";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { Disposable } from "../../../utils/types";
 import { report } from "./diagnostics";
@@ -288,9 +293,7 @@ export class PgSyncMark {
     if (!userId) return false;
 
     try {
-      await PgFs.writeFile(pathOf(userId, projectId), JSON.stringify(mark), {
-        createParents: true,
-      });
+      await writeConfigFile(pathOf(userId, projectId), JSON.stringify(mark));
       return true;
     } catch (e) {
       report(`write sync mark ${projectId}`, e);
@@ -365,7 +368,7 @@ export class PgSyncMark {
 
       let gone = true;
       try {
-        await PgFs.removeFile(pathOf(userId, projectId));
+        await removeConfigFile(pathOf(userId, projectId));
       } catch (e) {
         if (!isMissing(e)) {
           gone = false;
@@ -448,7 +451,7 @@ export class PgSyncMark {
     if (!userId) return;
 
     try {
-      await PgFs.removeDir(dirFor(userId), { recursive: true });
+      await removeConfigDir(dirFor(userId));
     } catch (e) {
       if (!isMissing(e)) report("clear sync marks", e);
     }
@@ -473,6 +476,51 @@ if (import.meta.vitest) {
           image: undefined,
           login: undefined,
         });
+      });
+
+      it("keeps a mark it just created through a reload before the folder tree is saved", async () => {
+        const mark = {
+          files: { "a.ts": "h1" },
+          name: "one",
+          updatedAt: "t1",
+          dirty: false,
+        };
+        await PgSyncMark.write("p1", mark);
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+
+        expect(await PgSyncMark.read("p1")).toEqual(mark);
+      });
+
+      it("forgets a mark it removed through a reload before the folder tree is saved", async () => {
+        await PgSyncMark.write("p1", {
+          files: { "a.ts": "h1" },
+          name: "one",
+          updatedAt: "t1",
+          dirty: false,
+        });
+        await PgSyncMark.remove("p1");
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+
+        expect(await PgSyncMark.exists("p1")).toBe(false);
+      });
+
+      it("forgets the marks it cleared through a reload before the folder tree is saved", async () => {
+        await PgSyncMark.write("p1", {
+          files: { "a.ts": "h1" },
+          name: "one",
+          updatedAt: "t1",
+          dirty: false,
+        });
+        await PgSyncMark.clear();
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+
+        expect(await PgSyncMark.exists("p1")).toBe(false);
       });
 
       it("round-trips per-file hashes", async () => {
