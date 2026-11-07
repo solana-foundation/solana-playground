@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
+import { useEffect } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
@@ -110,4 +111,27 @@ it("keeps a newer view over an older one that loads after it", async () => {
 
   expect(screen.getByText("Newer program")).toBeTruthy();
   expect(screen.queryByText("Older program")).toBeNull();
+});
+
+it("keeps a working view mounted when the same view is set again", async () => {
+  const mounted = vi.fn();
+  const unmounted = vi.fn();
+  const Editor = () => {
+    useEffect(() => {
+      mounted();
+      return unmounted;
+    }, []);
+    return <p>Editor</p>;
+  };
+  render(<Primary />);
+  void PgView.setMainPrimary(<Editor />);
+  expect(await screen.findByText("Editor")).toBeTruthy();
+
+  // A route run again, as Home's path and the work's are
+  void PgView.setMainPrimary(<Editor />);
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  expect(screen.getByText("Editor")).toBeTruthy();
+  expect(unmounted).not.toHaveBeenCalled();
+  expect(mounted).toHaveBeenCalledTimes(1);
 });
