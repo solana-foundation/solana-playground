@@ -215,10 +215,30 @@ export const readWith =
     return read();
   };
 
+/**
+ * The wallet as read under the local provider: a record with an account whose
+ * key is not in it reads `unavailable`. That is a build that lost the
+ * key-origin variable after the keys moved out; the keys are still in the key
+ * origin, so the wallet must not offer Setup, sign, or save over the record
+ * (`storage.write` skips an unavailable wallet). Setting the variable back
+ * restores it.
+ *
+ * @param read the storage's read
+ * @returns `read`, or an unavailable read
+ */
+export const refuseKeylessRecord = (read: WalletRead): WalletRead =>
+  read.kind === "wallet" && read.wallet.accounts.some((a) => !a.kp)
+    ? { kind: "unavailable" }
+    : read;
+
 const storage = {
   /** Read from storage and deserialize the data. */
   read(): Promise<WalletState> {
-    if (!keyPage) return storage.readStored(walletStorage().read());
+    if (!keyPage) {
+      return storage.readStored(
+        walletStorage().read().then(refuseKeylessRecord)
+      );
+    }
     // The keys still in the page move into the key page under the read's
     // lock, once it answers: copy, confirm, then drop (`moveKeysOut`)
     const move: MoveKeys = async (record, extraKeys) =>
@@ -683,10 +703,15 @@ class _PgWallet {
    * was chosen
    * @throws {KeypairFileError} when the file is not a keypair; any other
    * failure, such as an unreadable file, propagates as it is
-   * @throws while the wallet is unavailable, before the file picker opens
+   * @throws while the wallet is unavailable, or under a provider that keeps
+   * the keys out of the page (the key page's own panel imports there), before
+   * the file picker opens
    */
   static async import(name?: string) {
     refuseWhileUnavailable();
+    if (!signerProvider.holdsKeysInPage) {
+      throw new Error("Import the key file from the key panel.");
+    }
     try {
       return await PgCommon.import(
         async (ev) => {
