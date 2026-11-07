@@ -59,6 +59,18 @@ const keyOrigin =
     ? undefined
     : keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN, window.location);
 
+// Logged here, once per load, not in `origin.ts`: the key page imports that
+// module too, and its bundle carries no logger
+if (
+  typeof window !== "undefined" &&
+  process.env.REACT_APP_WALLET_KEY_ORIGIN &&
+  !keyOrigin
+) {
+  createLogger("wallet:key-origin").warn(
+    `REACT_APP_WALLET_KEY_ORIGIN="${process.env.REACT_APP_WALLET_KEY_ORIGIN}" names no usable origin from ${window.location.origin}; the keys stay in the page`
+  );
+}
+
 const keyPage = keyOrigin ? keyFrame : undefined;
 
 /**

@@ -38,6 +38,9 @@ const originFor = (setting: string | undefined, here: Location | URL) => {
     }
     return realOrigin(new URL(setting).origin);
   } catch {
+    // Not a URL, so unusable like a setting with no real origin. The key page
+    // imports this module and has no logger, so the app logs the bad setting
+    // once where it reads it (`wallet.ts`)
     // eslint-disable-next-line unicorn/no-null -- as above
     return null;
   }

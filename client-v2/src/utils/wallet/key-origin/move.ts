@@ -48,6 +48,8 @@ const isValidKey = async (kp: number[]) => {
     );
     return own.every((byte, i) => byte === kp[PUBLIC_KEY_LENGTH + i]);
   } catch {
+    // noble refuses bytes it cannot read as a seed: not a key, so the stray
+    // copy is left out of the move and stays in the set-aside record
     return false;
   }
 };
@@ -95,6 +97,9 @@ export const moveKeysWith =
   async (record: SerializedWalletState, others: OtherKeys): Promise<Moved> => {
     const fromRecord = record.accounts.flatMap(({ kp }) => (kp ? [kp] : []));
     const valid = await Promise.all(others.stray.map(isValidKey));
+    // An account key that does not derive its public half is sent anyway: the
+    // key page refuses it and the move fails on every load, by design, since
+    // the move never drops a key
     const candidates = fromRecord
       .concat(others.accounts)
       .concat(others.stray.filter((_, i) => valid[i]));
@@ -128,12 +133,12 @@ if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeAll, beforeEach, afterEach } =
     import.meta.vitest;
 
-  describe("utils/wallet/key-origin/move", async () => {
-    const { PgWeb3 } = await import("../../web3");
-    const { handlerWith } = await import("./frame/handler");
-    const { walletStorageWith, WALLET_LOCAL_KEY } = await import(
-      "../wallet-storage"
-    );
+  describe("utils/wallet/key-origin/move", () => {
+    let PgWeb3: typeof import("../../web3").PgWeb3;
+    let handlerWith: typeof import("./frame/handler").handlerWith;
+    type WalletStorage = typeof import("../wallet-storage");
+    let walletStorageWith: WalletStorage["walletStorageWith"];
+    let WALLET_LOCAL_KEY: WalletStorage["WALLET_LOCAL_KEY"];
     type Logger = typeof import("../../../shared/lib/logger");
     let initLogger: Logger["initLogger"];
     let memoryProvider: Logger["memoryProvider"];
@@ -141,6 +146,11 @@ if (import.meta.vitest) {
     let logged: ReturnType<Logger["memoryProvider"]>;
 
     beforeAll(async () => {
+      ({ PgWeb3 } = await import("../../web3"));
+      ({ handlerWith } = await import("./frame/handler"));
+      ({ walletStorageWith, WALLET_LOCAL_KEY } = await import(
+        "../wallet-storage"
+      ));
       ({ initLogger, memoryProvider, resetLogger } = await import(
         "../../../shared/lib/logger"
       ));

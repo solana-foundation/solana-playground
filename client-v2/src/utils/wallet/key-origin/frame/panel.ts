@@ -31,6 +31,8 @@ export const decodeTheme = (encoded: string | null): ThemeTokens => {
     const tokens: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return isThemeTokens(tokens) ? tokens : {};
   } catch {
+    // A fragment that is not base64 JSON: the panel draws in its own default
+    // colours, which a bad theme must not stop it from showing
     return {};
   }
 };
