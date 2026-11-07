@@ -34,7 +34,7 @@ marked it urgent, before Breakpoint (HOO-2680).
 - **New, import and export happen inside the key origin.** A new account's key
   is made in the key page. Import and export are a small visible panel of the
   key page inside the wallet's dialogs: its own "Import key file" input and
-  "Download key file" button, so a key file is read and written by the key
+  "Save keypair" button, so a key file is read and written by the key
   origin and never reaches the app page.
 - **The WASM CLIs** (`solana`, `spl-token`, `anchor`), which sign in Rust with
   the key's bytes read synchronously, say they cannot use a built-in wallet
