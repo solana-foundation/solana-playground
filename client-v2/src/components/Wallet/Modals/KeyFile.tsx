@@ -51,10 +51,15 @@ export const ImportKey = () => {
 };
 
 /**
- * Settings' Export under the `key-origin` provider: the key page's panel saves
- * the current account's file
+ * Export under the `key-origin` provider, from Settings or Deploy's backup
+ * line: the key page's panel saves the current account's file
  */
-export const ExportKey = () => {
+export const ExportKey = ({
+  onExported,
+}: {
+  /** Called once the panel has saved the file */
+  onExported?: () => void;
+}) => {
   const [text, setText] = useState("");
   const { isBusy, onBusy } = useBusyPanels();
   const current = PgWallet.accounts[PgWallet.currentIndex];
@@ -75,7 +80,10 @@ export const ExportKey = () => {
             publicKey={current.publicKey}
             name={current.name}
             onError={setText}
-            onExported={() => setText("")}
+            onExported={() => {
+              setText("");
+              onExported?.();
+            }}
             onBusy={onBusy}
             className="mt-4"
           />
