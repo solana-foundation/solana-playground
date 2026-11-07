@@ -266,6 +266,13 @@ export const isSignedOut = (r: RunResult): boolean =>
 export const isUnconfirmed = (r: RunResult): boolean =>
   (r.act === "run" || r.act === "call") && !r.ok && r.reason === "unconfirmed";
 
+/** A failed run or call the program could not match (HOO-2688) */
+export const isMismatch = (r: RunResult): boolean =>
+  (r.act === "call" || r.act === "run") &&
+  !r.ok &&
+  "mismatch" in r &&
+  r.mismatch === true;
+
 /** The compiler error a failed build's card shows, as the server's log names it */
 export interface BuildError {
   code: string | null;
@@ -444,6 +451,12 @@ export type RunResult =
        * run at all.
        */
       reason?: "no_wallet" | "no_transaction";
+      /**
+       * The call did not match the program on chain: the IDL has no such
+       * instruction, or the program refused it as one it does not know or
+       * cannot deserialize. `message` then says so (`MISMATCH`)
+       */
+      mismatch?: true;
       /**
        * What the program refused, when the transaction reached it; absent
        * when it never did (no wallet, a send that failed). A `refused` goal

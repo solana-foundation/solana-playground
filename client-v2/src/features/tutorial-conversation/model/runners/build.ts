@@ -1,7 +1,7 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
 import type { Act } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
-import { PgCommand, PgExplorer, PgProgramInfo } from "@/utils";
+import { PgCommand, PgExplorer } from "@/utils";
 import { isSignInRefusalError } from "@/utils/sign-in-refusal";
 import {
   PgBuildOutput,
@@ -12,6 +12,7 @@ import { pickBuildError } from "../build-error";
 import type { RunInput, RunStage } from "../ports";
 import { failedResult } from "../ports";
 import type { RunResult } from "../progress";
+import { builtInstructions } from "./built-instructions";
 
 /**
  * What `fetch` says when no answer reached the browser, in Chrome, Firefox
@@ -113,6 +114,6 @@ export const runBuild = async (
     act: "build",
     ok: true,
     seconds: seconds(),
-    instructions: PgProgramInfo.idl?.instructions.map((ix) => ix.name) ?? [],
+    instructions: builtInstructions(),
   };
 };

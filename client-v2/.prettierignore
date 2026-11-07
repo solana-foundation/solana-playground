@@ -3,6 +3,8 @@ build
 # Skip build folders inside src, e.g. src/commands/build
 !src/**/build
 public
+# Cargo output of the tutorial IDL generator:
+scripts/tutorial-idl/target
 
 # Declaration files:
 *.d.ts

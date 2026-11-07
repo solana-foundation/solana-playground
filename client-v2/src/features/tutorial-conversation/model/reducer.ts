@@ -20,6 +20,7 @@ import { TICK_MS } from "./clock";
 import { nextDeployed } from "./deployed-idl";
 import { holds, keyOf, typedKey } from "./landing";
 import type { Judge, RunInput } from "./ports";
+import { PROGRAM_FILE } from "./program-source";
 import type {
   ApplyFailure,
   ConversationProgress,
@@ -37,11 +38,13 @@ import {
   answerOf,
   freshProgress,
   hintOf,
+  isMismatch,
   isSignedOut,
   isUnconfirmed,
   isUnreachable,
 } from "./progress";
 import type { Word } from "./route";
+import { shippedIdl, shippedIdlAt } from "./shipped-idl";
 
 /**
  * The conversation engine's reducer: the lesson's rules over a definition
@@ -145,9 +148,11 @@ export type Action =
   | { type: "recognised"; beatId: string; result: RunResult; at: number }
   /**
    * The program deployed outside the cards, through the deploy command
-   * (`watchDeploys`): the Call panel reads its IDL. No step passes on it
+   * (`watchDeploys`): the Call panel reads its IDL. No step passes on it.
+   * `idl` is absent when the build returned none; the tutorial's shipped IDL
+   * then stands in
    */
-  | { type: "deployed"; idl: Idl; at: number }
+  | { type: "deployed"; idl?: Idl; at: number }
   /** A step's goal met outside the feed: a Call panel call or a client run */
   | {
       type: "passed";
@@ -900,20 +905,29 @@ const settledEvents = (
   return [];
 };
 
-/** A landed deploy's IDL, out of the result that goes on into the record */
-const takeDeployedIdl = (action: Action): { action: Action; idl?: Idl } => {
+/**
+ * A landed deploy's IDL, out of the result that goes on into the record: the
+ * tutorial's shipped one where it ships one, else the build's. Shipped as of
+ * the step whose act deployed, not the cursor's: a deploy recognised after
+ * the learner moved on deployed that step's program.
+ */
+const takeDeployedIdl = (
+  ctx: EngineContext,
+  state: EngineState,
+  action: Action
+): { action: Action; idl?: Idl } => {
   if (action.type !== "ended" && action.type !== "recognised")
     return { action };
   const { result } = action;
-  if (
-    !result.ok ||
-    (result.act !== "deploy" && result.act !== "buildDeploy") ||
-    !result.idl
-  ) {
+  if (!result.ok || (result.act !== "deploy" && result.act !== "buildDeploy"))
     return { action };
-  }
-  const { idl, ...rest } = result;
-  return { action: { ...action, result: rest }, idl };
+  const { idl: built, ...rest } = result;
+  const deployedAt = locate(ctx.definition, action.beatId)?.step.id;
+  const shipped = deployedAt
+    ? shippedIdlAt(ctx.definition, deployedAt)
+    : shippedIdl(ctx.definition, state.progress.cursor);
+  const idl = shipped ?? built;
+  return idl ? { action: { ...action, result: rest }, idl } : { action };
 };
 
 export const reduce = (
@@ -921,7 +935,7 @@ export const reduce = (
   state: EngineState,
   action: Action
 ): Reduced => {
-  const { action: plain, idl } = takeDeployedIdl(action);
+  const { action: plain, idl } = takeDeployedIdl(ctx, state, action);
   const raw = reduceAction(ctx, state, plain);
   // Kept only if the engine took the run: a result it dropped landed nothing
   const reduced =
@@ -1306,7 +1320,9 @@ const reduceAction = (
     }
 
     case "deployed": {
-      const deployed = nextDeployed(p.deployed, action.idl);
+      const idl = shippedIdl(definition, p.cursor) ?? action.idl;
+      if (!idl) return same(state);
+      const deployed = nextDeployed(p.deployed, idl);
       // The same IDL again leaves the save as it was
       if (
         p.deployed &&
@@ -1445,13 +1461,16 @@ const reduceAction = (
     case "showFix": {
       const run = lastRun(p, action.beatId);
       const found = locate(definition, action.beatId);
+      if (!run || run.status !== "failed" || run.fixedAt !== undefined) {
+        return same(state);
+      }
+      // An explained build failure, or a call the program could not match,
+      // which nothing explains first
+      const mismatch = isMismatch(run.result);
       if (
-        !run ||
-        run.status !== "failed" ||
-        run.result.act !== "build" ||
-        run.explainedAt === undefined ||
-        run.fixedAt !== undefined ||
-        !found
+        !found ||
+        (!mismatch &&
+          (run.result.act !== "build" || run.explainedAt === undefined))
       ) {
         return same(state);
       }
@@ -1459,16 +1478,17 @@ const reduceAction = (
       if (p.cursor.kind !== "step" || p.cursor.stepId !== step.id) {
         return same(state);
       }
-      const target = step.target[step.file];
+      // A mismatch is the program's, whatever the step's own file: restoring
+      // the client would mark it fixed and change nothing
+      const file = mismatch ? PROGRAM_FILE : step.file;
+      const target = step.target[file];
       if (passed(p, step) || target === undefined) return same(state);
       return {
         state: withLastRun(state, action.beatId, {
           ...run,
           fixedAt: action.at,
         }),
-        effects: [
-          { kind: "restore", files: { [step.file]: target }, remove: [] },
-        ],
+        effects: [{ kind: "restore", files: { [file]: target }, remove: [] }],
       };
     }
 
@@ -1738,8 +1758,13 @@ if (import.meta.vitest) {
     let hello: TutorialDefinition;
     let judgeGoal: typeof import("./goals").judgeGoal;
     beforeAll(async () => {
-      hello = (await import("../../../tutorials/hello-anchor/tutorial.json"))
-        .default as unknown as TutorialDefinition;
+      const shipped = (
+        await import("../../../tutorials/hello-anchor/tutorial.json")
+      ).default as unknown as TutorialDefinition;
+      // Without its shipped IDLs, so a deploy keeps the IDL it brought; the
+      // shipped ones are "a tutorial that ships its IDL"
+      hello = structuredClone(shipped);
+      for (const step of hello.steps) delete step.idl;
       judgeGoal = (await import("./goals")).judgeGoal;
     });
 
@@ -2634,6 +2659,237 @@ if (import.meta.vitest) {
           at: 8000,
         });
         expect(again.state).toBe(upgraded.state);
+      });
+
+      it("shows the program's lines after a call the program could not match", () => {
+        const step = hello.steps[2];
+        const act = step.beats.find((b) => b.kind === "act");
+        if (!act) throw new Error("the Client step has an act");
+        const progress = freshProgress();
+        progress.cursor = {
+          kind: "step",
+          stepId: step.id,
+          beat: 1,
+          fail: false,
+        };
+        progress.runs = {
+          [act.id]: [
+            {
+              status: "failed",
+              at: 2000,
+              took: 500,
+              result: {
+                act: "run",
+                ok: false,
+                seconds: 1,
+                message: "x",
+                log: "",
+                mismatch: true,
+              },
+            },
+          ],
+        };
+        const r = reduce(
+          ctx(),
+          { progress, stage: null },
+          { type: "showFix", beatId: act.id, at: 3000 }
+        );
+        // Not the step's own file, the client: the program is what differs
+        expect(r.effects).toEqual([
+          {
+            kind: "restore",
+            files: { "src/lib.rs": step.target["src/lib.rs"] },
+            remove: [],
+          },
+        ]);
+        expect(r.state.progress.runs[act.id].at(-1)).toMatchObject({
+          fixedAt: 3000,
+        });
+        // A step with no program to restore restores nothing, not its client
+        const withoutProgram = structuredClone(hello);
+        delete withoutProgram.steps[2].target["src/lib.rs"];
+        const noProgram: EngineContext = {
+          definition: withoutProgram,
+          slug: "hello-anchor",
+          judge: (_goal, result) => result.ok,
+        };
+        expect(
+          reduce(
+            noProgram,
+            { progress, stage: null },
+            { type: "showFix", beatId: act.id, at: 3000 }
+          ).effects
+        ).toEqual([]);
+      });
+
+      describe("a tutorial that ships its IDL", () => {
+        // What `yarn tutorial:idl` writes for Hello Anchor's first program
+        const SHIPPED = JSON.stringify({
+          address: "11111111111111111111111111111111",
+          metadata: { name: "hello_anchor", version: "0.1.0", spec: "0.1.0" },
+          instructions: [
+            {
+              name: "hello",
+              discriminator: [149, 118, 59, 220, 196, 127, 161, 179],
+              accounts: [],
+              args: [],
+            },
+          ],
+        });
+        const shipping = (): EngineContext => {
+          const definition = structuredClone(hello);
+          definition.steps[0].idl = SHIPPED;
+          return {
+            definition,
+            slug: "hello-anchor",
+            judge: (_goal, result) => result.ok,
+          };
+        };
+        const playIn = (c: EngineContext, actions: Action[]) =>
+          actions.reduce(
+            (st, a) => reduce(c, st, a).state,
+            INITIAL_ENGINE_STATE
+          );
+        const BARE_BUILD: RunResult = {
+          act: "build",
+          ok: true,
+          seconds: 1.6,
+          instructions: [],
+        };
+        const toDeploy: Action[] = [
+          start,
+          rightPick,
+          build(7000),
+          { type: "ended", beatId: "s1.build", result: BARE_BUILD, at: 8600 },
+          { type: "next", at: 9000 },
+          { type: "skip", beatId: "s2.q2", at: 9100 },
+          { type: "act", beatId: "s2.deploy", at: 9200 },
+        ];
+        const landedDeploy = (idl?: Idl): Action => {
+          const result: RunResult = {
+            act: "deploy",
+            ok: true,
+            seconds: 3,
+            programId: "p",
+            signature: "s",
+            upgraded: false,
+            lamports: 1,
+            instructions: [],
+          };
+          if (idl) result.idl = idl;
+          return { type: "ended", beatId: "s2.deploy", result, at: 9900 };
+        };
+        const names = (p: ConversationProgress) =>
+          p.deployed?.idl.instructions.map((ix) => ix.name);
+
+        it("never lends a build its instructions: the build goal reads the learner's", () => {
+          const p = playIn(shipping(), toDeploy).progress;
+          const record = p.runs["s1.build"].at(-1);
+          expect(
+            record && "result" in record && "instructions" in record.result
+              ? record.result.instructions
+              : null
+          ).toEqual([]);
+        });
+
+        // Step 4's program takes a name: Hello Anchor's second shipped IDL
+        const SHIPPED_NAME = SHIPPED.replace(
+          '"args":[]',
+          '"args":[{"name":"name","type":"string"}]'
+        );
+        const twoShipped = (): EngineContext => {
+          const definition = structuredClone(hello);
+          definition.steps[0].idl = SHIPPED;
+          definition.steps[3].idl = SHIPPED_NAME;
+          return {
+            definition,
+            slug: "hello-anchor",
+            judge: (_goal, result) => result.ok,
+          };
+        };
+        const at = (index: number): EngineState => {
+          const progress = freshProgress();
+          progress.cursor = {
+            kind: "step",
+            stepId: hello.steps[index].id,
+            beat: 0,
+            fail: false,
+          };
+          return { progress, stage: null };
+        };
+
+        it("upgrades from one shipped IDL to the next, naming what it added", () => {
+          const c = twoShipped();
+          const first = reduce(c, at(1), { type: "deployed", at: 6000 });
+          expect(names(first.state.progress)).toEqual(["hello"]);
+          expect(first.state.progress.deployed?.added).toEqual([]);
+          const moved = structuredClone(first.state);
+          moved.progress.cursor = at(3).progress.cursor;
+          const upgraded = reduce(c, moved, { type: "deployed", at: 7000 });
+          expect(
+            upgraded.state.progress.deployed?.idl.instructions[0].args
+          ).toEqual([{ name: "name", type: "string" }]);
+          expect(upgraded.state.progress.deployed?.added).toEqual([
+            "hello.name",
+          ]);
+          // The same deploy again saves nothing
+          const again = reduce(c, upgraded.state, {
+            type: "deployed",
+            at: 8000,
+          });
+          expect(again.state).toBe(upgraded.state);
+        });
+
+        it("keeps the IDL of the step that deployed, when the deploy is recognised later", () => {
+          const deployResult: RunResult = {
+            act: "deploy",
+            ok: true,
+            seconds: 3,
+            programId: "p",
+            signature: "s",
+            upgraded: false,
+            lamports: 1,
+            instructions: [],
+          };
+          // s2.deploy is step 2's act; the learner is on step 4 by now
+          const { idl } = takeDeployedIdl(twoShipped(), at(3), {
+            type: "recognised",
+            beatId: "s2.deploy",
+            result: deployResult,
+            at: 9000,
+          });
+          expect(idl?.instructions[0].args).toEqual([]);
+        });
+
+        it("keeps it on a landed deploy, whatever IDL the build returned", () => {
+          const noIdl = playIn(shipping(), toDeploy.concat(landedDeploy()));
+          expect(names(noIdl.progress)).toEqual(["hello"]);
+          const built = playIn(
+            shipping(),
+            toDeploy.concat(
+              landedDeploy({
+                version: "0.1.0",
+                name: "other",
+                instructions: [{ name: "bye", accounts: [], args: [] }],
+              } as Idl)
+            )
+          );
+          expect(names(built.progress)).toEqual(["hello"]);
+        });
+
+        it("keeps it for a terminal deploy that brought no IDL", () => {
+          const before = playIn(shipping(), [start, rightPick]);
+          const after = reduce(shipping(), before, {
+            type: "deployed",
+            at: 6000,
+          });
+          expect(names(after.state.progress)).toEqual(["hello"]);
+          // With nothing shipped and nothing built, nothing to keep
+          const bare = playIn(ctx(), [start, rightPick]);
+          expect(
+            reduce(ctx(), bare, { type: "deployed", at: 6000 }).state
+          ).toBe(bare);
+        });
       });
 
       it("counts a question once, whatever comes after it resolved", () => {

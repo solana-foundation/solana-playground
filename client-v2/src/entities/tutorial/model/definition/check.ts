@@ -29,6 +29,23 @@ const validator = () => {
   return compiled;
 };
 
+/** What is wrong with a step's shipped IDL, or null when it reads as one */
+const idlProblem = (idl: string): string | null => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(idl);
+  } catch {
+    return "an IDL as one JSON string, found one that does not parse";
+  }
+  const instructions =
+    typeof parsed === "object" && parsed !== null
+      ? (parsed as { instructions?: unknown }).instructions
+      : undefined;
+  return Array.isArray(instructions)
+    ? null
+    : "an IDL with a list of instructions, found none";
+};
+
 /**
  * Every problem in a parsed `tutorial.json`; empty when it is a definition.
  * The schema runs first; the rules a schema cannot express (a right index in
@@ -422,6 +439,10 @@ const ruleErrors = (
   d.steps.forEach((step, i) => {
     once(stepIds, step.id, `steps[${i}].id`, "step");
     continues(step, i);
+    if (step.idl !== undefined) {
+      const message = idlProblem(step.idl);
+      if (message) errors.push({ path: `steps[${i}].idl`, message });
+    }
     step.readOnly?.forEach((file, k) => {
       if (step.start[file] === undefined && step.target[file] === undefined) {
         errors.push({
@@ -1183,6 +1204,19 @@ if (import.meta.vitest) {
         "steps[0].win.stats: no such field, found a list of 0",
         "steps[1].matches: no such field, found a list of 1",
         'finish.chips[0].pattern: no such field, found "sol"',
+      ]);
+    });
+
+    it("needs a shipped IDL that reads as one", () => {
+      const d = minimal();
+      d.steps[0].idl = JSON.stringify({ instructions: [] });
+      d.steps[1].idl = "{not json";
+      expect(lines(d)).toEqual([
+        "steps[1].idl: an IDL as one JSON string, found one that does not parse",
+      ]);
+      d.steps[1].idl = JSON.stringify({ name: "p" });
+      expect(lines(d)).toEqual([
+        "steps[1].idl: an IDL with a list of instructions, found none",
       ]);
     });
 

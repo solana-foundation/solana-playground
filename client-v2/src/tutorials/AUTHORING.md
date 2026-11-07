@@ -62,7 +62,8 @@ tutorial.json
   categories, thumbnail, minutes
   intro: promise, log, files
   steps[1..6]: id, title, short, objective, learned, file, start, target,
-               readOnly?, beats, planned?, failsWith?, onFail?, goal, win, explain
+               idl?, readOnly?, beats, planned?, failsWith?, onFail?, goal, win,
+               explain
   finish: headline, line, learned, chips, next
   docs?: title, url, file
 ```
@@ -114,6 +115,7 @@ Every step carries whole files, never edits:
   appear in the target's file, its lines in a row, unless the write names
   its own `ref` (the planned failure, below).
 - `file`: the step's main file, the one the editor shows.
+- `idl`: generated, never written by hand. See "The program's IDL" below.
 - `readOnly`: files the learner cannot edit in this step. A step that only
   deploys and calls changes no file: its `target` equals its `start`, and
   its files may be read only.
@@ -755,6 +757,29 @@ Drop, because Playground does it for real or the live assistant does it:
 goal on an account's size, or a value read from the data of an account the
 lesson made earlier (the address carries over, the data does not). Do not invent a field: the check refuses any field the schema does not
 name. Tell the person which step needs what, and ask the Playground team.
+
+## The program's IDL
+
+An Anchor tutorial ships its program's IDL: the Call panel lists its
+instructions, and every call is encoded and decoded with it. The build does
+not return one on Anchor 1.1.2, so the tutorial cannot wait for it. Each step
+whose program's IDL changes carries `idl`, the IDL of
+its target `src/lib.rs` as one minified JSON string. It holds until the next
+step that carries one.
+
+Do not write it. After you change any step's program, in a clone of the
+repository, from `client-v2/`, with a Rust toolchain installed:
+
+```sh
+yarn tutorial:idl <slug>
+```
+
+It generates the IDL of every step's target program with the generator
+Anchor 1.1.2 uses, and writes `idl` only on the steps where it changes.
+Commit the result. If you cannot run it, say so in your pull request: the
+unit tests fail, naming the step, while its program and its IDL differ in an
+instruction, an argument or a plain argument's type. A change to accounts
+alone they do not see.
 
 ## Running the check
 

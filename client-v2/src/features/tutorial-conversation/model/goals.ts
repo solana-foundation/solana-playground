@@ -95,6 +95,8 @@ export type GoalGap =
   | { kind: "noInstruction"; instruction: string }
   | { kind: "notCalled"; instruction: string }
   | { kind: "logDiffers"; instruction: string }
+  /** A call to the program did not decode: the code no longer matches the step */
+  | { kind: "mismatch" }
   | { kind: "other" };
 
 /**
@@ -119,10 +121,13 @@ export const goalGap = (goal: Goal, result: RunResult): GoalGap => {
     const called = result.called.some((c) =>
       sameIdlName(c.instruction, instruction)
     );
-    // An instruction that did not decode may be the one the goal names
+    // An instruction to the program that the step's IDL does not decode may
+    // be the one the goal names, called under another name or shape: the
+    // learner's code and the step no longer agree, which is the one thing
+    // that can be said, so it is said instead of "not called"
     if (!called) {
       return result.undecoded
-        ? { kind: "other" }
+        ? { kind: "mismatch" }
         : { kind: "notCalled", instruction };
     }
     // No line at all is not a different line, so it isn't called one
@@ -249,11 +254,11 @@ if (import.meta.vitest) {
         });
       });
 
-      it("does not say not called when an instruction did not decode", () => {
+      it("says the code no longer matches when an instruction did not decode", () => {
         const undecoded = Object.assign(ran("run", [], null), {
           undecoded: true,
         });
-        expect(goalGap(LOG_HELLO, undecoded)).toEqual({ kind: "other" });
+        expect(goalGap(LOG_HELLO, undecoded)).toEqual({ kind: "mismatch" });
       });
 
       it("says the call landed with another log", () => {

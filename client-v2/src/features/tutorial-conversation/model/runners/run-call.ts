@@ -1,4 +1,6 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import type { Idl } from "@coral-xyz/anchor";
+
 import type { RunInput, RunStage } from "../ports";
 import type { RunResult, UnreadTx } from "../progress";
 import type { AccountData } from "./account-read";
@@ -67,8 +69,11 @@ export interface RunPort {
   ): Promise<{ captured: Captured[]; error: unknown }>;
   /** A sent transaction once confirmed, or null when it never was */
   landed(signature: string): Promise<Landed | null>;
-  /** An account's bytes and fields now, if it exists */
-  fetchAccount(address: string): Promise<AccountData | undefined>;
+  /** An account's bytes and fields now, if it exists, decoded by `idl` */
+  fetchAccount(
+    address: string,
+    idl: Idl | undefined
+  ): Promise<AccountData | undefined>;
   /**
    * The wire transaction's instructions to the program, decoded by its IDL;
    * `undecoded` when one of them could not be
@@ -84,6 +89,34 @@ export interface RunPort {
 }
 
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/**
+ * A failed call's line when the learner's program no longer matches what the
+ * step expects. The conversation adds the offer to show the lines (`view.ts`);
+ * the Call panel has no such action, so this line promises none.
+ */
+export const MISMATCH =
+  "Your code no longer matches what this step expects. Fix it in the editor and build and deploy again.";
+
+/** The call names an instruction the IDL it is sent through lacks */
+export class NoSuchInstructionError extends Error {
+  constructor(instruction: string) {
+    super(`The IDL has no \`${instruction}\``);
+    this.name = "NoSuchInstructionError";
+  }
+}
+
+/**
+ * Anchor's own refusals of an instruction it cannot match: 101
+ * `InstructionFallbackNotFound` (no instruction with that discriminator) and
+ * 102 `InstructionDidNotDeserialize` (its arguments are not the program's)
+ */
+const MISMATCH_CODES = new Set([101, 102]);
+
+const mismatched = (result: TxResult): TxResult =>
+  result.ok || result.reason === "no_funds" || result.reason === "unconfirmed"
+    ? result
+    : { ...result, message: MISMATCH, mismatch: true };
 
 /**
  * Runs `client.ts` (the run act) or sends one instruction (the call act)
@@ -196,6 +229,9 @@ const attempt = async (
   const { error } = sends;
 
   if (!captured.length) {
+    if (error instanceof NoSuchInstructionError) {
+      return mismatched(fail(messageOf(error)));
+    }
     if (error !== undefined) return fail(messageOf(error));
     return {
       act,
@@ -268,12 +304,18 @@ const landedResult = async (
   // check would not change that: the throw is the answer, not a slow devnet
   const unfinished = result.ok || result.reason === "unconfirmed";
   if (unfinished && error !== undefined) return fail(messageOf(error));
-  if (!result.ok || !input.account) return result;
+  if (!result.ok) {
+    const code = result.refused?.error?.code;
+    return code !== undefined && MISMATCH_CODES.has(code)
+      ? mismatched(result)
+      : result;
+  }
+  if (!input.account) return result;
   // The run landed whatever the read says: a card goes without, never the run
   const account = await readingOf({
     wrote: result.wrote ?? [],
     name: input.account,
-    fetchAccount: (key) => port.fetchAccount(key),
+    fetchAccount: (key) => port.fetchAccount(key, input.idl),
   }).catch((e) => {
     port.report(e, "Reading the account a run wrote to");
     return null;
@@ -400,7 +442,7 @@ if (import.meta.vitest) {
           { beatId: "chop", account: "player" },
           () => undefined
         );
-        expect(fetched).toHaveBeenCalledWith("Player1");
+        expect(fetched).toHaveBeenCalledWith("Player1", undefined);
         expect(result).toMatchObject({
           ok: true,
           account: { name: "player", address: "Player1", size: 32 },
@@ -556,6 +598,86 @@ if (import.meta.vitest) {
         act: "call",
         ok: false,
         refused: { instruction: "hello", error: { code: 6000, name: null } },
+      });
+    });
+
+    it("a call the program cannot match says the code no longer matches the step", async () => {
+      const refusedWith = (code: string, name: string) =>
+        portWith({
+          send: async () => ({
+            captured: [
+              {
+                kind: "refused",
+                encoded: "tx",
+                message: `custom program error: ${code}`,
+                log: [
+                  `Program ${PROGRAM} invoke [1]`,
+                  `Program log: AnchorError occurred. Error Code: ${name}. Error Number: ${Number(
+                    code
+                  )}. Error Message: x.`,
+                  `Program ${PROGRAM} failed: custom program error: ${code}`,
+                ],
+              },
+            ],
+            error: new Error("Simulation failed."),
+          }),
+        });
+      for (const [code, name] of [
+        ["0x65", "InstructionFallbackNotFound"],
+        ["0x66", "InstructionDidNotDeserialize"],
+      ]) {
+        expect(
+          (await stagesOf(refusedWith(code, name), "call")).result
+        ).toMatchObject({ ok: false, mismatch: true, message: MISMATCH });
+      }
+      // The program's own error is the lesson's, not a mismatch
+      const own = (await stagesOf(refusedWith("0x1770", "Custom"), "call"))
+        .result;
+      expect(own).not.toHaveProperty("mismatch");
+    });
+
+    it("never calls a run that could not be funded or confirmed a mismatch", () => {
+      const refused: TxResult = {
+        act: "call",
+        ok: false,
+        seconds: 1,
+        message: "m",
+        log: "",
+      };
+      const unconfirmed: TxResult = {
+        act: "call",
+        ok: false,
+        seconds: 1,
+        message: "m",
+        log: "",
+        reason: "unconfirmed",
+        unconfirmed: [],
+      };
+      const noFunds: TxResult = {
+        act: "call",
+        ok: false,
+        seconds: 1,
+        message: "m",
+        log: "",
+        reason: "no_funds",
+        funding: { balance: 0, cost: 1, address: "a" },
+      };
+      expect(mismatched(unconfirmed)).toBe(unconfirmed);
+      expect(mismatched(noFunds)).toBe(noFunds);
+      expect(mismatched(refused)).toMatchObject({ mismatch: true });
+    });
+
+    it("a call of an instruction the IDL lacks says the same", async () => {
+      const port = portWith({
+        send: async () => ({
+          captured: [],
+          error: new NoSuchInstructionError("hello"),
+        }),
+      });
+      expect((await stagesOf(port, "call")).result).toMatchObject({
+        ok: false,
+        mismatch: true,
+        message: MISMATCH,
       });
     });
 

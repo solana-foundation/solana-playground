@@ -232,10 +232,15 @@ export class PgConversation {
 
   /**
    * The program deployed outside the cards (`watchDeploys`): the Call panel
-   * and the call acts go on with its IDL
+   * and the call acts go on with its IDL, or the tutorial's shipped one when
+   * it ships one or the build returned none
    */
-  static deployed(idl: Idl) {
-    PgConversation._dispatch({ type: "deployed", idl, at: Date.now() });
+  static deployed(idl: Idl | undefined) {
+    PgConversation._dispatch({
+      type: "deployed",
+      ...(idl ? { idl } : {}),
+      at: Date.now(),
+    });
   }
 
   /**

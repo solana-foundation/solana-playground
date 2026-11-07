@@ -27,9 +27,9 @@ export interface DeployWatchPort {
 }
 
 /**
- * Tell `onIdl` the IDL of every landed deploy that went through the deploy
- * command: the terminal's `deploy`, the explorer's menu, the assistant and any
- * other caller. The cards deploy through their own runner
+ * Tell `onIdl` of every landed deploy that went through the deploy command,
+ * with its IDL, or undefined for a build that returned none: the terminal's
+ * `deploy`, the explorer's menu, the assistant and any other caller. The cards deploy through their own runner
  * (`runDeployOnDevnet`), hand their IDL to the engine themselves and never
  * reach the command. A deploy counts only if it started and finished in the
  * same workspace, on devnet: the Call panel talks to the devnet program, which
@@ -37,7 +37,7 @@ export interface DeployWatchPort {
  * after a switch shipped another workspace's program.
  */
 export const watchDeploys = (
-  onIdl: (idl: Idl) => void,
+  onIdl: (idl: Idl | undefined) => void,
   port: DeployWatchPort
 ): Disposable => {
   let started: { workspace?: string; cluster?: string } | undefined;
@@ -61,13 +61,11 @@ export const watchDeploys = (
           });
           return;
         }
+        // Anchor 1.1.2 builds bring none: the deploy still landed, and a
+        // tutorial that ships its IDL keeps that one (HOO-2688)
         const idl = port.idl();
-        if (!idl) {
-          log.info("A deploy landed without an IDL: the Call panel keeps its");
-          return;
-        }
         // The panel maps it on render: one it cannot read must not reach it
-        if (!parseDeployed({ idl, added: [] })) {
+        if (idl && !parseDeployed({ idl, added: [] })) {
           log.warn("A deploy landed with an IDL the Call panel cannot read");
           return;
         }
@@ -184,14 +182,15 @@ if (import.meta.vitest) {
       expect(onIdl).not.toHaveBeenCalled();
     });
 
-    it("ignores a program with no IDL, or one the panel cannot read", () => {
+    it("passes on a landed deploy with no IDL, and ignores one the panel cannot read", () => {
       const world = devnet();
       world.idl = undefined;
       const { onIdl, deploy } = watching(world);
       deploy(nothing, {});
+      expect(onIdl).toHaveBeenCalledWith(undefined);
       world.idl = { instructions: [{ name: "hello" }] } as unknown as Idl;
       deploy(nothing, {});
-      expect(onIdl).not.toHaveBeenCalled();
+      expect(onIdl).toHaveBeenCalledTimes(1);
     });
 
     it("reports a hand-off that throws, rather than lose it in the event", () => {

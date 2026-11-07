@@ -145,7 +145,11 @@ beforeEach(() => {
   exists = false;
   writtenTo = [];
   mockStorage();
-  vi.mocked(PgTutorial).all = [{ name: NAME, definition: hello }] as never;
+  // Without its shipped IDLs: these tests hold the panel to the IDL each
+  // deploy brought (the shipped one wins is the reducer's test)
+  const plain = structuredClone(hello);
+  for (const step of plain.steps) delete step.idl;
+  vi.mocked(PgTutorial).all = [{ name: NAME, definition: plain }] as never;
   logged = memoryProvider();
   initLogger({ providers: [logged] });
   events = memoryEvents();

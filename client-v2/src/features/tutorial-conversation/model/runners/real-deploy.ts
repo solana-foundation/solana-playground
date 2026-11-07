@@ -23,6 +23,7 @@ import { actRunner } from "./act-runner";
 import { runBuild } from "./build";
 import type { BuildSource } from "./build-source";
 import { trackBuildSource } from "./build-source";
+import { builtInstructions } from "./built-instructions";
 import type { DeployPort, OnChain } from "./deploy";
 import { runDeploy } from "./deploy";
 import type { DeployWatchPort } from "./deploy-watch";
@@ -348,8 +349,7 @@ export const realDeployPort = (): DeployPort => {
       );
     },
     closeBuffer: (buffer) => closeBuffer(buffer, needed(wallet, "a wallet")),
-    instructions: () =>
-      (PgProgramInfo.idl?.instructions ?? []).map((ix) => ix.name),
+    instructions: builtInstructions,
     print: (line) => PgTerminal.println(line),
     report: (error, stage) =>
       log.error(error, { report: true, context: { stage } }),
@@ -423,9 +423,7 @@ export const tutorialRunner = actRunner(
       deploySlot: deploySlotOnChain,
       blockTime: (slot) => PgConnection.current.getBlockTime(slot),
       signatures: programSignatures,
-      instructions: (PgProgramInfo.idl?.instructions ?? []).map(
-        (ix) => ix.name
-      ),
+      instructions: builtInstructions(),
     });
     return recognised && withIdl(recognised);
   }
