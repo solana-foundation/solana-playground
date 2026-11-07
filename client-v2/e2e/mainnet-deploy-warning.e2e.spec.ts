@@ -1,6 +1,13 @@
 import type { Page } from "@playwright/test";
 
-import { expect, json, LONG, test } from "./fixtures";
+import {
+  consoleTrigger,
+  expect,
+  json,
+  LONG,
+  runInTerminal,
+  test,
+} from "./fixtures";
 
 /**
  * The scenarios of `mainnet-deploy-warning`: in the beta a program is not
@@ -71,6 +78,23 @@ test("mainnet-deploy-warning: Deploy stage on mainnet", async ({
       .getByRole("radiogroup", { name: "Cluster" })
       .getByRole("radio", { name: "Mainnet" })
   ).toBeChecked();
+});
+
+test("mainnet-deploy-warning: Terminal deploy on mainnet", async ({
+  seededPage: page,
+}) => {
+  await reloadOn(page, "mainnet-beta");
+  const drawer = consoleTrigger(page);
+  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+    await drawer.click();
+  }
+  await runInTerminal(page, "deploy");
+
+  // Refused before the wallet question and before "Deploying..."
+  const terminal = page.locator(".xterm-rows").first();
+  await expect(terminal).toContainText(BLOCKED, LONG);
+  await expect(terminal).not.toContainText("Deploying...");
+  await expect(terminal).not.toContainText("Connect the Playground wallet?");
 });
 
 test("mainnet-deploy-warning: Deploy stage on devnet", async ({
