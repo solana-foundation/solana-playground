@@ -13,6 +13,17 @@ export const MAINNET_DEPLOY_BLOCKED_LINE =
 /** The `deploy` command's refusal on mainnet */
 export const MAINNET_DEPLOY_BLOCKED = `${MAINNET_DEPLOY_BLOCKED_LINE} Deploy from your own machine with the Solana CLI or Anchor: Deploy stage › Deploy from your machine.`;
 
-/** Whether the stage offers no deploy on `cluster`; `null` is not read yet */
+/**
+ * Whether a program deploy to `cluster` is refused: the stage's switch to the
+ * CLI guide, and the command's hard stop. `null` (not read yet) does not block.
+ */
 export const blocksDeploy = (cluster: string | null) =>
   cluster === "mainnet-beta";
+
+/**
+ * The `deploy` command's refusal when the endpoint did not say which network
+ * it is: a custom RPC that is down or refuses the genesis read could be
+ * mainnet, so nothing is sent on a guess
+ */
+export const DEPLOY_NETWORK_UNREAD =
+  "Could not read which network the endpoint serves, so nothing was deployed. Check the RPC in Settings › Network and try again.";

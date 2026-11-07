@@ -192,7 +192,7 @@ const deployedElsewhere = (
     ? p.history.find((r) => r.cluster !== p.cluster)
     : undefined;
 
-/** The stage's title: "Nothing on mainnet" while only other networks have deployments */
+/** The stage's title: "Nothing on testnet" while only other networks have deployments */
 const title = (p: BaseDeployProps, latest: DeployRecord | undefined) => {
   if (latest) return "Deploy";
   if (p.built && deployedElsewhere(p, latest)) {
@@ -497,6 +497,50 @@ const BeforeDeploySummary = ({
 );
 
 /**
+ * The stage's one way on: the CLI guide on mainnet, where deploys are refused
+ * in the beta (HOO-2728); Go to Build until there is a build; then the deploy.
+ * A faded Deploy beside a link read as three kinds of button for two steps.
+ */
+const DeployPill = ({
+  p,
+  blocked,
+  redeploy,
+}: {
+  p: BaseDeployProps;
+  blocked: boolean;
+  redeploy: boolean;
+}) => {
+  const running = p.view.kind === "running";
+  if (blocked) {
+    return (
+      <BrandButton onClick={() => p.onOpenCliGuide("mainnet-blocked")}>
+        Deploy from your machine
+        <BrandButtonIcon />
+      </BrandButton>
+    );
+  }
+  if (!p.built) {
+    return (
+      <BrandButton onClick={p.onGoToBuild}>
+        Go to Build
+        <BrandButtonIcon />
+      </BrandButton>
+    );
+  }
+  return (
+    <BrandButton
+      disabled={running}
+      aria-busy={running || undefined}
+      title={deployBlockedReason(p)}
+      onClick={p.onDeploy}
+    >
+      {deployLabel(p, redeploy)}
+      {!running && <BrandButtonIcon />}
+    </BrandButton>
+  );
+};
+
+/**
  * The Deploy stage, drawn from props alone; `Deploy` connects it. It reads
  * the network picked now: before the first deploy there it is the
  * prototype's empty stage, centred: the summary, then History when other
@@ -605,30 +649,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
           )}
         >
           {running && p.run.step && <BaseDeployProgress state={p.run} />}
-          {/* One pill, the way on: Go to Build until there is a build, then
-              the deploy. A faded Deploy beside a link read as three kinds of
-              button for two steps */}
-          {blocked ? (
-            <BrandButton onClick={() => p.onOpenCliGuide("mainnet-blocked")}>
-              Deploy from your machine
-              <BrandButtonIcon />
-            </BrandButton>
-          ) : p.built ? (
-            <BrandButton
-              disabled={running}
-              aria-busy={running || undefined}
-              title={deployBlockedReason(p)}
-              onClick={p.onDeploy}
-            >
-              {deployLabel(p, latest !== undefined)}
-              {!running && <BrandButtonIcon />}
-            </BrandButton>
-          ) : (
-            <BrandButton onClick={p.onGoToBuild}>
-              Go to Build
-              <BrandButtonIcon />
-            </BrandButton>
-          )}
+          <DeployPill p={p} blocked={blocked} redeploy={latest !== undefined} />
         </StageEmptyActions>
         {/* The other ways on, one kind of button: outlines in the
             pill's height and shape. They follow the pill in the page, so

@@ -8,21 +8,39 @@ and before sending any transaction, printing one terminal line that says
 deploys to mainnet are not available in the beta and to deploy from the
 user's own machine with the Solana CLI or Anchor. This SHALL hold for every
 caller: the Deploy stage, the terminal, Program Pal and the explorer menu,
-and for a custom RPC whose genesis hash is mainnet's. On every other cluster
-the command SHALL deploy as before.
+and for a custom RPC whose genesis hash is mainnet's. The command SHALL check
+again on the connection it sends on, before its first send, so a network
+changed to mainnet while a pre-check's question waits is refused too. An
+endpoint that does not answer which network it serves SHALL be refused with a
+line saying the network could not be read; one whose genesis hash names no
+known cluster is not mainnet and SHALL deploy. A tutorial's deploy SHALL refuse
+while the network's name is still the previous endpoint's. On every other
+cluster the command SHALL deploy as before.
 
 #### Scenario: Terminal deploy on mainnet
 
 - **WHEN** the endpoint is mainnet-beta and the user runs `deploy`
 - **THEN** the terminal prints the refusal line and no transaction is sent
 
-#### Scenario: Custom RPC on mainnet
+#### Scenario: Custom RPC on mainnet (manual)
 
 - **WHEN** the endpoint is a custom URL whose genesis hash is mainnet's and
   `deploy` runs
 - **THEN** it is refused the same way
 
-#### Scenario: Devnet deploys
+#### Scenario: Network changed during the wallet question (manual)
+
+- **WHEN** `deploy` runs on devnet with no wallet, and the user picks Mainnet
+  while "Connect the Playground wallet?" waits, then answers yes
+- **THEN** the deploy is refused before any transaction
+
+#### Scenario: Endpoint that does not answer (manual)
+
+- **WHEN** the endpoint is a custom URL that does not answer the genesis read
+  and `deploy` runs
+- **THEN** the terminal says the network could not be read and nothing is sent
+
+#### Scenario: Devnet deploys (manual)
 
 - **WHEN** the endpoint is devnet and `deploy` runs
 - **THEN** no refusal line is printed and the deploy proceeds
@@ -33,8 +51,8 @@ While the connected cluster is mainnet-beta, the Flow's Deploy stage SHALL
 say "Deploys to mainnet are not available in the beta." as its line, and its
 pill SHALL read "Deploy from your machine" and open the "Deploy from your
 machine" dialog with Mainnet picked, built or not. It SHALL show no "Who
-pays" line and no "Deploy to mainnet" action. The summary's Network row SHALL
-keep Change.
+pays" line and no "Deploy to mainnet" action. Before the first deploy on
+mainnet, the summary's Network row SHALL keep Change.
 
 #### Scenario: Deploy stage on mainnet
 
@@ -62,7 +80,8 @@ cluster (`REACT_APP_MAINNET_RPC_URL`, `REACT_APP_DEVNET_RPC_URL`,
 configured. Localnet SHALL connect to `http://localhost:8899` and Surfpool to
 `http://127.0.0.1:8899`. No chip SHALL read "Mainnet
 Beta" or carry "(Platform)". While Mainnet is picked, the line "Not available
-for deploys" SHALL show under the chips and describe the group; Devnet shows
+for deploys", led by an amber status dot, SHALL show under the chips and
+describe the group; Devnet shows
 no line, nor do Testnet, Localnet and Surfpool. An endpoint no chip names (a
 custom URL not saved, Playnet) SHALL leave no chip checked and keep its
 address.

@@ -6,6 +6,7 @@ import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
 
 import { PgTerminal } from "../../utils";
 import { isStopped } from "../../utils/stopped";
+import { MAINNET_DEPLOY_BLOCKED } from "./mainnet-block";
 import { PgDeployRun } from "./run";
 
 /** What each test sets: the run's stop, the wallet's balance, the terminal */
@@ -16,6 +17,8 @@ const env = vi.hoisted(() => ({
   bufferBalance: (async () => 0) as () => Promise<number>,
   /** The user has switched network since the deploy began */
   switchedNetwork: false,
+  /** What `PgConnection.getCluster` reads from the deploy's endpoint */
+  cluster: "devnet",
   waitForInput: (async () => true) as (msg: string) => Promise<unknown>,
   executeFromStr: (async () => undefined) as (cmd: string) => Promise<unknown>,
   /** What `getAccountInfo` returns for the buffer */
@@ -91,7 +94,7 @@ vi.mock("../../utils", () => ({
       };
     },
     getAirdropAmount: () => 5,
-    getCluster: async () => "devnet",
+    getCluster: async () => env.cluster,
     getReadBufferConnection: <T>(connection: T) => env.readBuffer ?? connection,
   },
   PgGlobal: {
@@ -122,6 +125,7 @@ vi.mock("../../utils", () => ({
     }),
   },
   PgTx: { send, confirm: async () => ({}) },
+  TerminalLineError: class TerminalLineError extends Error {},
   PgView: { setMainSecondaryProgress: vi.fn() },
   PgWallet: {
     get current() {
@@ -180,6 +184,7 @@ describe("commands/deploy", () => {
     env.balance = 0;
     env.bufferBalance = async () => 0;
     env.switchedNetwork = false;
+    env.cluster = "devnet";
     env.waitForInput = async () => true;
     env.executeFromStr = async () => undefined;
     // A live buffer whose authority is the Playground wallet
@@ -205,6 +210,21 @@ describe("commands/deploy", () => {
     openBuffers.forget.mockReset();
     openBuffers.forget.mockImplementation(async () => undefined);
     vi.mocked(PgTerminal.println).mockClear();
+  });
+
+  // HOO-2728: the network can move to mainnet while the pre-checks' wallet
+  // question waits, so the run reads its own connection again before a send
+  it("refuses before any send when its connection is on mainnet", async () => {
+    env.cluster = "mainnet-beta";
+    env.balance = 100e9;
+
+    const failure = await runDeploy();
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(MAINNET_DEPLOY_BLOCKED);
+    expect(airdrop).not.toHaveBeenCalled();
+    expect(createBuffer).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("asks for nothing more once stopped during the airdrop question", async () => {

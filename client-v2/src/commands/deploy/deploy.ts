@@ -23,7 +23,7 @@ import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
 import { airdropTopUp } from "./airdrop-top-up";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
-import { checkNotMainnet } from "./check-not-mainnet";
+import { checkNotMainnet, refuseMainnet } from "./check-not-mainnet";
 import { forgetOpenBuffer, recordOpenBuffer } from "./open-buffers";
 import type { DeployResult, FundingFailure } from "./run";
 import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
@@ -99,29 +99,6 @@ function throwIfNetworkChanged(connection: typeof PgConnection.current) {
     throw new Error(
       "The network changed during the deploy, so an airdrop would fund another network. Deploy again."
     );
-  }
-}
-
-/**
- * The network `connection` points at. Read from its own endpoint:
- * `PgConnection.cluster` is derived asynchronously and can still name the
- * previous network right after a switch.
- */
-async function clusterOf(
-  connection: typeof PgConnection.current
-): Promise<DeployResult["cluster"]> {
-  try {
-    return await PgConnection.getCluster(connection.rpcEndpoint);
-  } catch (error) {
-    // A custom endpoint whose genesis hash cannot be read: the deploy itself
-    // goes on, its network unknown. The network selected now may be another
-    // one, so a record under it would be the wrong-network record this
-    // function exists to prevent.
-    log.warn("could not read the deploy's cluster; it is not recorded", {
-      context: { error: String(error) },
-    });
-    // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` for an unknown network
-    return null;
   }
 }
 
@@ -231,6 +208,10 @@ const processDeploy = async (
   // connection and what the program info says about its network: a network
   // change from here on must not split it across two networks.
   const connection = PgConnection.current;
+  // Again on the run's own connection, before any send: the network can move
+  // to mainnet while the pre-checks' wallet question waits (HOO-2728). Read
+  // from its endpoint, so the record files under the network it went to.
+  const cluster = await refuseMainnet(connection.rpcEndpoint);
   // The platform RPC does not return fresh buffers
   const bufferConnection = PgConnection.getReadBufferConnection(connection);
   const readBufferUrl =
@@ -241,12 +222,11 @@ const processDeploy = async (
   const additionalLen = getAdditionalLen(programLen);
   const sendAndConfirmTxWithRetries =
     sendAndConfirmTxWithRetriesFor(connection);
-  const [userBalance, bufferBalance, cluster] = await Promise.all([
+  const [userBalance, bufferBalance] = await Promise.all([
     connection.getBalance(wallet.publicKey),
     connection.getMinimumBalanceForRentExemption(
       PgWeb3.BpfLoaderUpgradeableProgram.getBufferAccountSize(programLen)
     ),
-    clusterOf(connection),
   ]);
 
   // Nothing is sent yet; a stop here leaves nothing behind
