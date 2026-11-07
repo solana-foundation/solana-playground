@@ -162,18 +162,18 @@ describe("BaseDeploy", () => {
 
   // HOO-2728: no program deploy to mainnet in the beta; the stage's one way
   // on is the CLI guide, built or not, with a mainnet history or without
-  it.each([
-    ["built", { built: true, history: [] }],
-    ["not built", { built: false, history: [] }],
-    ["deployed there before", { built: true, history: [mainnetRecord] }],
-  ] as const)("points mainnet to the user's machine (%s)", (_, over) => {
+  it.each<{ name: string; built: boolean; history: DeployRecord[] }>([
+    { name: "built", built: true, history: [] },
+    { name: "not built", built: false, history: [] },
+    { name: "deployed there before", built: true, history: [mainnetRecord] },
+  ])("points mainnet to the user's machine ($name)", ({ built, history }) => {
     const onOpenCliGuide = vi.fn();
     const onDeploy = vi.fn();
     const { container } = render(
       <BaseDeploy
         {...props({
-          ...over,
-          history: [...over.history],
+          built,
+          history,
           cluster: "mainnet-beta",
           onOpenCliGuide,
         })}
