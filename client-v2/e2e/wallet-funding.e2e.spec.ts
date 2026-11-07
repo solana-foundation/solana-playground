@@ -292,6 +292,51 @@ test("client-v2-wallet-funding: Amount above the balance", async ({
   ).toBeDisabled();
 });
 
+test("client-v2-wallet-funding: Max then send", async ({
+  page,
+  seededPage,
+}) => {
+  void seededPage;
+  const phantom = await installFakeWallet(page, {
+    name: "Phantom",
+    sign: true,
+  });
+  const cluster = await stubDevnetFor(2 * SOL)(page, phantom.address);
+  await reloadSettled(page);
+  await openFund(page);
+  await dialog(page).getByRole("button", { name: "Connect Phantom" }).click();
+  await expect(dialog(page)).toContainText("2 SOL");
+
+  await dialog(page).getByRole("button", { name: "Max" }).click();
+
+  await expect(dialog(page).getByLabel("Amount (SOL)")).toHaveValue("1.999");
+  await dialog(page).getByRole("button", { name: "Send 1.999 SOL" }).click();
+  await expect(page.getByText(/^Sent 1\.999 SOL to Wallet 1\.$/)).toBeVisible(
+    LONG
+  );
+  const [transfer] = cluster.sent[0].instructions.map((ix) =>
+    SystemInstruction.decodeTransfer(ix)
+  );
+  expect(Number(transfer.lamports)).toBe(1_999_000_000);
+});
+
+test("client-v2-wallet-funding: Balance below the fee", async ({
+  page,
+  seededPage,
+}) => {
+  void seededPage;
+  const phantom = await installFakeWallet(page, { name: "Phantom" });
+  await stubDevnetFor(SOL / 2000)(page, phantom.address);
+  await reloadSettled(page);
+  await openFund(page);
+  await dialog(page).getByRole("button", { name: "Connect Phantom" }).click();
+
+  await expect(dialog(page)).toContainText("0.0005 SOL");
+  await expect(
+    dialog(page).getByRole("button", { name: "Max" })
+  ).toBeDisabled();
+});
+
 test("client-v2-wallet-funding: The user declines the transfer", async ({
   page,
   seededPage,
