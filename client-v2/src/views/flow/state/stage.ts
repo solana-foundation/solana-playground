@@ -20,7 +20,7 @@ const log = createLogger("flow:stage");
 export type Stage = "write" | "build" | "deploy" | "interact";
 export type StageStatus = "upcoming" | "active" | "done" | "failed" | "running";
 
-/** A run the console strip can stop */
+/** A run the person can stop and the console strip reports as stopped */
 export type RunKind = "build" | "deploy";
 
 export interface FlowState {

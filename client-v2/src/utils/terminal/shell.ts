@@ -485,7 +485,8 @@ export class PgShell {
           break;
 
         // CTRL+C does nothing at a prompt, nor at a question a command
-        // asks; the strip's Stop is the way out of a question
+        // asks; the strip's Stop is the way out of a build's question, and
+        // a deploy's question is answered
 
         case "\x05": // CTRL+E
           this._tty.setCursor(this._tty.input.length);
