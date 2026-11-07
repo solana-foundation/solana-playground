@@ -245,6 +245,36 @@ const trackerSwaps = (env) => {
   return swaps;
 };
 
+/**
+ * Keeps the entries every page gets out of one page's entry. The dev server
+ * (its socket client and `webpack/hot/dev-server`) and react-refresh add their
+ * clients to every entry as global entries; on the key page the socket client
+ * breaks its CSP's `connect-src 'none'`, which must stay that strict. So at
+ * seal the global entries move onto each other entry, ahead of its own as
+ * before, and the excluded entry keeps only its own.
+ */
+class ExcludeFromGlobalEntriesPlugin {
+  constructor(entryName) {
+    this.entryName = entryName;
+  }
+
+  apply(compiler) {
+    const name = "ExcludeFromGlobalEntriesPlugin";
+    compiler.hooks.thisCompilation.tap(name, (compilation) => {
+      compilation.hooks.seal.tap(name, () => {
+        const global = compilation.globalEntry;
+        for (const [entryName, entry] of compilation.entries) {
+          if (entryName === this.entryName) continue;
+          entry.dependencies.unshift(...global.dependencies);
+          entry.includeDependencies.unshift(...global.includeDependencies);
+        }
+        global.dependencies = [];
+        global.includeDependencies = [];
+      });
+    });
+  }
+}
+
 /** Bundles a stub wherever a module resolves to a file in `swaps` */
 class SwapFilesPlugin {
   constructor(swaps) {
@@ -284,6 +314,11 @@ module.exports = {
       webpackConfig.resolve.tsconfig = path.join(__dirname, "tsconfig.json");
 
       addPageEntries(webpackConfig, env);
+      if (env === "development") {
+        webpackConfig.plugins.push(
+          new ExcludeFromGlobalEntriesPlugin(KEY_PAGE_ENTRY)
+        );
+      }
 
       // Here, not at the top: CRA's `config/env.js` has loaded `.env` by now
       warnAboutMissingObservabilityIds();
