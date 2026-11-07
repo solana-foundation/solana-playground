@@ -59,7 +59,11 @@ vi.mock("../Icons", () => {
     Trash: Icon,
   };
 });
-vi.mock("../Img", () => ({ default: () => null }));
+vi.mock("../Img", () => ({
+  default: ({ className }: { className?: string }) => (
+    <i data-testid="wallet-icon" className={className} />
+  ),
+}));
 vi.mock("./Modals/Add", () => ({ Add: () => null }));
 
 const knownSignIn = vi.hoisted(() => new Error("popup blocked"));
@@ -239,6 +243,25 @@ describe("wallet Settings menu", () => {
 
     expect(screen.queryByRole("menuitem", { name: /Airdrop/ })).toBeNull();
     expect(screen.queryByText("This network has no faucet.")).toBeNull();
+  });
+
+  it("draws every wallet extension's icon at one size", async () => {
+    for (const name of ["Phantom", "Solflare", "SquadsX"]) {
+      PgWallet.standardWallets.push({
+        name,
+        icon: "",
+        connected: false,
+      } as never);
+    }
+    render(<Host />);
+    await openMenu();
+
+    const icons = screen.getAllByTestId("wallet-icon");
+    expect(icons).toHaveLength(3);
+    for (const icon of icons) {
+      expect(icon.classList).toContain("size-4");
+      expect(icon.classList).toContain("shrink-0");
+    }
   });
 
   it("says so when the imported file is not a keypair", async () => {

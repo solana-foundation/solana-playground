@@ -202,7 +202,12 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                   );
               }}
             >
-              <Img src={standardWallet.icon} alt={standardWallet.name} />
+              {/* An image, which the item does not size as it does its icons */}
+              <Img
+                src={standardWallet.icon}
+                alt={standardWallet.name}
+                className="size-4 shrink-0 rounded-sm"
+              />
               <MenuItemText>
                 {standardWallet.connected
                   ? `Disconnect from ${standardWallet.name}`
