@@ -411,12 +411,43 @@ describe("ProjectList", () => {
     expect(app.PgExplorer.switchWorkspace).not.toHaveBeenCalled();
   });
 
-  it("says a project was picked, the one already open included", () => {
+  it("says a project was picked, the one already open included", async () => {
     const onPicked = vi.fn();
     draw(onPicked);
     fireEvent.click(screen.getByRole("button", { name: "beta" }));
     fireEvent.click(screen.getByRole("button", { name: "alpha" }));
-    expect(onPicked).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(onPicked).toHaveBeenCalledTimes(2));
+  });
+
+  it("says a project was picked only once it is open", async () => {
+    // A page closed before the switch would send the address bar back to
+    // the project that was open
+    let opened!: () => void;
+    app.PgExplorer.switchWorkspace.mockReturnValueOnce(
+      new Promise<void>((resolve) => (opened = resolve))
+    );
+    const onPicked = vi.fn();
+    draw(onPicked);
+    fireEvent.click(screen.getByRole("button", { name: "alpha" }));
+    await waitFor(() =>
+      expect(app.PgExplorer.switchWorkspace).toHaveBeenCalledWith("alpha")
+    );
+    expect(onPicked).not.toHaveBeenCalled();
+
+    opened();
+    await waitFor(() => expect(onPicked).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the page when the pick fails to open", async () => {
+    app.PgExplorer.switchWorkspace.mockRejectedValueOnce(new Error("gone"));
+    const onPicked = vi.fn();
+    draw(onPicked);
+    fireEvent.click(screen.getByRole("button", { name: "alpha" }));
+    await waitFor(() =>
+      expect(app.PgExplorer.switchWorkspace).toHaveBeenCalledWith("alpha")
+    );
+    await act(async () => {});
+    expect(onPicked).not.toHaveBeenCalled();
   });
 
   it("hands export and delete to their dialogs, with the project's name", () => {

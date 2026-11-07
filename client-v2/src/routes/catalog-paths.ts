@@ -16,13 +16,27 @@ export const catalogPageOfPath = (path: string): LinkedPage | null => {
   return bare in LINKS ? LINKS[bare as keyof typeof LINKS] : null;
 };
 
-/** A tutorial's own route, `/tutorials/<name>[/<page>]`, which opens it in the work */
-export const isTutorialRoutePath = (path: string) =>
-  /^\/tutorials\/[^/]+/.test(path);
-
 /** Whether `path` is one of the links that open a page */
 export const isCatalogLinkPath = (path: string) =>
   catalogPageOfPath(path) !== null;
+
+/** The page's own path, which stays in the address bar while it shows */
+export const pathOfCatalogPage = (page: LinkedPage): keyof typeof LINKS =>
+  PATHS[page];
+
+/** `LINKS` read the other way; the tests below keep the two in step */
+const PATHS: Record<LinkedPage, keyof typeof LINKS> = {
+  "new-project": "/new",
+  tutorials: "/tutorials",
+  programs: "/programs",
+};
+
+/**
+ * Where Home can show: `/` and the pages' links, which show over Home or the
+ * work. The work cannot be drawn on these with no project open.
+ */
+export const isStartPath = (path: string) =>
+  path === "/" || isCatalogLinkPath(path);
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -43,13 +57,26 @@ if (import.meta.vitest) {
     });
 
     it.each([
-      ["/tutorials/hello-anchor", true],
-      ["/tutorials/hello-anchor/2", true],
-      ["/tutorials", false],
-      ["/tutorials/", false],
-      ["/", false],
-    ] as const)("reads %s as a tutorial's route: %s", (path, route) => {
-      expect(isTutorialRoutePath(path)).toBe(route);
+      ["/", true],
+      ["/tutorials", true],
+      ["/programs/", true],
+      ["/new", true],
+      ["/tutorials/hello-anchor/1", false],
+      ["/open", false],
+      ["/news", false],
+    ] as const)("reads %s as a start path: %s", (path, start) => {
+      expect(isStartPath(path)).toBe(start);
+    });
+
+    it.each(["new-project", "tutorials", "programs"] as const)(
+      "leads the page %s's own path back to the same page",
+      (page) => {
+        expect(catalogPageOfPath(pathOfCatalogPage(page))).toBe(page);
+      }
+    );
+
+    it("gives New project the path /new", () => {
+      expect(pathOfCatalogPage("new-project")).toBe("/new");
     });
   });
 }

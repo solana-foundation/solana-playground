@@ -16,11 +16,7 @@ const explorer = vi.hoisted(() => ({
   onDidCreateWorkspace: vi.fn(),
   onDidSwitchWorkspace: vi.fn(),
 }));
-const router = vi.hoisted(() => ({
-  changed: [] as Array<(path: string) => void>,
-  onDidChangePath: vi.fn(),
-}));
-vi.mock("@/utils", () => ({ PgExplorer: explorer, PgRouter: router }));
+vi.mock("@/utils", () => ({ PgExplorer: explorer }));
 
 import { catalogPage, useCatalogPage } from "./catalog-page";
 
@@ -37,8 +33,6 @@ beforeEach(() => {
   explorer.switched = [];
   explorer.onDidCreateWorkspace.mockImplementation(sub(explorer.created));
   explorer.onDidSwitchWorkspace.mockImplementation(sub(explorer.switched));
-  router.changed = [];
-  router.onDidChangePath.mockImplementation(sub(router.changed));
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
 });
@@ -98,24 +92,6 @@ it("stays open through the explorer's own switches and creates", () => {
   act(() => explorer.switched.forEach((cb) => cb()));
   act(() => explorer.created.forEach((cb) => cb()));
   expect(catalogPage.current()).toBe("tutorials");
-});
-
-it("closes when a tutorial's route opens, not on the start route", () => {
-  renderHook(() => useCatalogPage());
-  act(() => catalogPage.open("tutorials", "link"));
-
-  act(() => router.changed.forEach((cb) => cb("/")));
-  expect(catalogPage.current()).toBe("tutorials");
-
-  act(() => router.changed.forEach((cb) => cb("/tutorials/hello-anchor")));
-  expect(catalogPage.current()).toBeNull();
-});
-
-it("stops listening once unmounted", () => {
-  const { unmount } = renderHook(() => useCatalogPage());
-  unmount();
-
-  expect(router.changed).toEqual([]);
 });
 
 it("opens New project as a page of its own, from the lesson band too", () => {

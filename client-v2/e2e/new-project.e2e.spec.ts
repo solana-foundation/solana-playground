@@ -187,8 +187,8 @@ test("client-v2-layout: New project by link", async ({ page }) => {
   await page.goto("/new");
 
   await expect(newProjectPage(page)).toBeVisible(LONG);
-  // The link opens the page, then gives way to `/`, as `/tutorials` does
-  await expect(page).toHaveURL(/\/$/);
+  // The page keeps its own path while it shows, as `/tutorials` does
+  await expect(page).toHaveURL(/\/new\/?$/);
   await expect
     .poll(() => lineOf(lines, "catalog_shown"))
     .toContain("via: link");
@@ -201,4 +201,5 @@ test("client-v2-layout: New project by link", async ({ page }) => {
     .click();
   await expect(newProjectPage(page)).toBeHidden();
   await expect(home(page)).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
 });

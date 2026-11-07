@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { openConnectDialog } from "@/app/ConnectDialog";
 import { openShareGistDialogFor, ShareButton } from "@/app/ShareGistDialog";
+import { useViewPath } from "@/app/ViewPath";
 import Wallet from "@/components/Wallet";
 import { FeedbackHost } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
@@ -307,6 +308,8 @@ const FlowFrame = () => {
   const page = useStartView();
   // The New project, Tutorials or Programs page shown, if any (`widgets/catalog`)
   const catalog = useCatalogPage();
+  // The page shown on its own path, so Back, Forward and a reload follow it
+  useViewPath({ view: page.view, catalog: catalog ?? undefined });
 
   const described = describeStep(lesson);
 
