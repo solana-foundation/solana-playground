@@ -1,6 +1,3 @@
-import { type ChildProcess, spawn } from "node:child_process";
-import net from "node:net";
-import path from "node:path";
 import type { Frame, Page } from "@playwright/test";
 import { Keypair, PublicKey } from "@solana/web3.js";
 
@@ -13,7 +10,7 @@ import {
   seedLocalWallet,
   seedWorkspace,
   terminalRows,
-  test as base,
+  test,
 } from "./fixtures";
 
 /**
@@ -21,130 +18,13 @@ import {
  * (`utils/wallet/key-origin`): the app on `localhost` keeps its keys in a
  * hidden key page on `127.0.0.1`, the same port (`loopback`).
  *
- * The setting is compiled into the bundle, and every other spec runs on the
- * config's server with it off. So this spec starts a dev server of its own
- * with both settings on, once per worker; its tests run serially, so they stay
- * in one worker and, in CI, in one shard, and the server compiles once.
+ * The setting is compiled into the bundle, so this spec runs on the config's
+ * server only when the shell turns the key origin on, and then it is the only
+ * spec that runs (`playwright.config.mts`, `testMatch`); every other run leaves
+ * it out (`testIgnore`), with no skip to report. CI runs it in the
+ * `e2e-key-origin` job; locally, `yarn test-e2e:key-origin`. Its tests run
+ * serially, so they share one worker.
  */
-
-/** What the config seeds for every origin: the file tree open */
-const TREE_OPEN_LAYOUT = JSON.stringify({
-  v: 2,
-  open: { nav: true, files: true, assistant: true, console: false },
-});
-
-/** A first compile on a CI runner takes minutes; a hang still fails */
-const SERVER_START_MS = 10 * 60_000;
-
-/** A port no one is listening on, from the system */
-const freePort = () =>
-  new Promise<number>((resolve, reject) => {
-    const server = net.createServer();
-    server.on("error", reject);
-    server.listen(0, () => {
-      const { port } = server.address() as net.AddressInfo;
-      server.close(() => resolve(port));
-    });
-  });
-
-/** Stops the server and everything it started (its own process group) */
-const stop = (child: ChildProcess) => {
-  if (child.pid === undefined || child.exitCode !== null) return;
-  try {
-    process.kill(-child.pid, "SIGTERM");
-  } catch {
-    // Already gone
-  }
-};
-
-/**
- * `craco start`, not `yarn dev`: the config's server has already run the
- * generate steps in this checkout, and running them again would rewrite the
- * files that server is compiling from.
- */
-const startServer = async () => {
-  const port = await freePort();
-  const output: string[] = [];
-  const child = spawn(
-    path.join(__dirname, "../node_modules/.bin/craco"),
-    ["start"],
-    {
-      cwd: path.join(__dirname, ".."),
-      detached: true,
-      env: {
-        // eslint-disable-next-line layers/no-test-spread -- the server needs the runner's whole environment (PATH, NODE_OPTIONS, CI), which no list could name
-        ...process.env,
-        BROWSER: "none",
-        PORT: String(port),
-        REACT_APP_WALLET_KEY_ORIGIN: "loopback",
-        REACT_APP_WALLET_APP_ORIGIN: "loopback",
-        // As the config's server: the specs stub the public endpoints
-        REACT_APP_DEVNET_RPC_URL: "",
-        REACT_APP_MAINNET_RPC_URL: "",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    }
-  );
-  const keep = (chunk: Buffer) => {
-    output.push(chunk.toString());
-    if (output.length > 200) output.shift();
-  };
-  child.stdout?.on("data", keep);
-  child.stderr?.on("data", keep);
-
-  // The dev server holds every request until the first compile is done, so
-  // the key page answering means the app's bundle is ready too
-  const deadline = Date.now() + SERVER_START_MS;
-  for (;;) {
-    if (child.exitCode !== null) {
-      throw new Error(
-        `The key-origin dev server exited early:\n${output.join("")}`
-      );
-    }
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/wallet-keys.html`);
-      if (response.ok) break;
-    } catch {
-      // Not listening yet
-    }
-    if (Date.now() > deadline) {
-      stop(child);
-      throw new Error(
-        `The key-origin dev server did not start in ${SERVER_START_MS} ms:\n${output.join(
-          ""
-        )}`
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  return { child, origin: `http://localhost:${port}` };
-};
-
-const test = base.extend<object, { keyOriginApp: string }>({
-  keyOriginApp: [
-    // eslint-disable-next-line no-empty-pattern -- Playwright reads a fixture's dependencies from its destructured first argument, and this one has none
-    async ({}, use) => {
-      const { child, origin } = await startServer();
-      try {
-        await use(origin);
-      } finally {
-        stop(child);
-      }
-    },
-    { scope: "worker", timeout: SERVER_START_MS + 60_000 },
-  ],
-  baseURL: async ({ keyOriginApp }, use) => use(keyOriginApp),
-  storageState: async ({ keyOriginApp }, use) =>
-    use({
-      cookies: [],
-      origins: [
-        {
-          origin: keyOriginApp,
-          localStorage: [{ name: "layout", value: TREE_OPEN_LAYOUT }],
-        },
-      ],
-    }),
-});
 
 test.describe.configure({ mode: "serial" });
 

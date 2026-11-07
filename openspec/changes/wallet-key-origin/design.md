@@ -74,9 +74,12 @@ rest come from the 7 Nov call.
   `http://localhost:<port>` uses `http://127.0.0.1:<port>`, and the reverse.
   One dev server, two origins, no second port to allocate per worktree
   **(my call; the ticket said a second port)**. The e2e spec runs on loopback
-  against a second dev server started by a worker-scoped fixture, so the
-  other specs keep their keys in the page and the server compiles only when
-  this spec runs.
+  on the config's own dev server, in a run of its own: a shell that sets
+  `REACT_APP_WALLET_KEY_ORIGIN` (`yarn test-e2e:key-origin`, CI's
+  `e2e-key-origin` job) runs this spec alone, and every other run leaves it
+  out by `testIgnore`, so the other specs keep their keys in the page. A
+  second dev server started inside a shard compiled cold past the shard's
+  time limit on CI.
 - **The key page answers one app origin.** It is built with the app origin
   it serves (`REACT_APP_WALLET_APP_ORIGIN`, or the loopback pair), checks
   `event.origin` on the handshake, and refuses anything else. Its CSP is `default-src
