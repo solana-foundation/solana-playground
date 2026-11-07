@@ -2,6 +2,7 @@ import {
   Check,
   ChevronDown,
   CircleX,
+  Clock,
   Copy,
   ExternalLink,
   Play,
@@ -60,6 +61,49 @@ const sentenceOf = (result: Extract<TxResult, { ok: true }>) => {
   if (computeUnits !== undefined) return `The call ${parts[0]}.`;
   if (fee !== undefined) return `The ${parts[0].slice(4)}.`;
   return undefined;
+};
+
+/**
+ * A call devnet has not read back yet (HOO-2675): sent, not failed, so muted
+ * and not red, as the act card shows it. Check again reads what it sent; Call
+ * stays off, since sending again would repeat the call and its fee
+ */
+const UnconfirmedResult: FC<{
+  result: Extract<TxResult, { reason: "unconfirmed" }>;
+  onRecheck: (() => void) | undefined;
+}> = ({ result, onRecheck }) => {
+  const last = result.unconfirmed[result.unconfirmed.length - 1];
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <Clock
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground"
+        />
+        <span className="font-heading text-[1rem] leading-6 font-medium text-foreground">
+          Not confirmed yet
+        </span>
+      </div>
+      <p className="text-[0.875rem] leading-[1.125rem] text-muted-foreground">
+        {result.message}
+      </p>
+      <div className="flex flex-wrap items-center gap-4">
+        {onRecheck && <Button onClick={onRecheck}>Check again</Button>}
+        {last && (
+          <Button variant="ghost" size="xs" className={QUIET} asChild>
+            <a
+              href={devnetExplorerUrl({ kind: "tx", value: last.signature })}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink aria-hidden="true" className="size-3.5" />
+              Explorer
+            </a>
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 };
 
 /**
@@ -185,6 +229,8 @@ export interface BaseCallPanelProps {
   onPick: (instruction: string) => void;
   onType: (arg: string, value: string) => void;
   onCall: () => void;
+  /** Check again on a call devnet has not read back */
+  onRecheck: () => void;
 }
 
 /**
@@ -199,6 +245,7 @@ const BaseCallPanel: FC<BaseCallPanelProps> = ({
   onPick,
   onType,
   onCall,
+  onRecheck,
 }) => {
   if (!view) {
     return (
@@ -397,7 +444,16 @@ const BaseCallPanel: FC<BaseCallPanelProps> = ({
                       </p>
                     )}
                     <div className={cn(view.stale && "opacity-60")}>
-                      <CallResult result={view.result} />
+                      {view.result.act === "call" &&
+                      !view.result.ok &&
+                      view.result.reason === "unconfirmed" ? (
+                        <UnconfirmedResult
+                          result={view.result}
+                          onRecheck={view.canRecheck ? onRecheck : undefined}
+                        />
+                      ) : (
+                        <CallResult result={view.result} />
+                      )}
                     </div>
                   </>
                 )

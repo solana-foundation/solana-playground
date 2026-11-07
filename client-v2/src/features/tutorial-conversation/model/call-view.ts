@@ -5,6 +5,7 @@ import { sameIdlName } from "@/shared/lib/idl-name";
 import type { DeployedIdl } from "./deployed-idl";
 import { argKey } from "./deployed-idl";
 import type { RunResult } from "./progress";
+import { isUnconfirmed } from "./progress";
 
 /** A string argument stops here, as the tutorial's own programs expect */
 export const STRING_MAX = 32;
@@ -66,6 +67,12 @@ export interface CallView {
   /** Why the call cannot go at all, over the button that it keeps off */
   note: string | undefined;
   canCall: boolean;
+  /**
+   * The latest call on these fields went out but devnet has not read it back:
+   * Check again reads it, and Call stays off, since a second send would repeat
+   * its account change and its fee
+   */
+  canRecheck: boolean;
   calling: boolean;
   json: string;
   /** The latest call, when it answers the instruction shown on this deploy */
@@ -171,6 +178,7 @@ export const callView = (input: CallViewInput): CallView | undefined => {
   const moved =
     answers &&
     ix.args.some((a) => (typed[a.name] ?? "") !== (last.args[a.name] ?? ""));
+  const pending = answers && !moved && isUnconfirmed(last.result);
   return {
     program: programName(deployed.idl),
     instruction: ix.name,
@@ -186,7 +194,8 @@ export const callView = (input: CallViewInput): CallView | undefined => {
       .join(", ")}).rpc()`,
     fields,
     note,
-    canCall: !calling && !busy && !missing && !note,
+    canCall: !calling && !busy && !missing && !note && !pending,
+    canRecheck: !calling && !busy && Boolean(pending),
     calling,
     json: JSON.stringify(deployed.idl, undefined, 2),
     result: answers ? last.result : undefined,
@@ -354,6 +363,38 @@ if (import.meta.vitest) {
         );
         expect(v?.result).toBe(ok);
         expect(v?.stale).toBe('Last call, with name "Ada"');
+      });
+
+      it("keeps Call off for a call devnet has not read back, and offers Check again, until the fields move on", () => {
+        const pending: LastCall = {
+          instruction: "a",
+          args: { name: "Ada" },
+          deployed,
+          result: {
+            act: "call",
+            ok: false,
+            seconds: 1,
+            reason: "unconfirmed",
+            message: "Devnet has not confirmed this transaction yet.",
+            log: "",
+            unconfirmed: [],
+          },
+        };
+        const same = callView(
+          input({ deployed, last: pending, values, picked: "a" })
+        );
+        expect(same?.canCall).toBe(false);
+        expect(same?.canRecheck).toBe(true);
+        const moved = callView(
+          input({
+            deployed,
+            last: pending,
+            picked: "a",
+            values: { a: { name: "Bo" } },
+          })
+        );
+        expect(moved?.canCall).toBe(true);
+        expect(moved?.canRecheck).toBe(false);
       });
 
       it("writes numbers bare", () => {

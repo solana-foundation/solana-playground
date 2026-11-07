@@ -302,15 +302,49 @@ export class PgCallPanel {
   }
 
   /** Calls the instruction shown; the result stays in the panel */
-  static async call() {
+  static call() {
+    const view = PgCallPanel.view;
+    if (!view?.canCall) return Promise.resolve();
+    return PgCallPanel._send((call) => PgConversation.callFromPanel(call));
+  }
+
+  /**
+   * Check again on the latest call, which devnet has not read back: reads the
+   * transactions it sent and sends nothing
+   */
+  static recheck() {
+    const view = PgCallPanel.view;
+    const { last } = PgCallPanel._current();
+    const result = last?.result;
+    if (
+      !view?.canRecheck ||
+      !result ||
+      result.ok ||
+      !("unconfirmed" in result)
+    ) {
+      return Promise.resolve();
+    }
+    const { unconfirmed } = result;
+    return PgCallPanel._send((call) =>
+      PgConversation.recheckFromPanel(unconfirmed, call)
+    );
+  }
+
+  /** Runs the instruction shown through `run`; the result stays in the panel */
+  private static async _send(
+    run: (call: {
+      instruction: string;
+      args: Record<string, string>;
+    }) => Promise<RunResult>
+  ) {
     const view = PgCallPanel.view;
     const deployed = PgCallPanel._deployed();
-    if (!view || !deployed || !view.canCall) return;
+    if (!view || !deployed) return;
     const { instruction } = view;
     const args = Object.fromEntries(view.fields.map((f) => [f.name, f.value]));
     const tutorial = PgCallPanel._name();
     PgCallPanel._set({ calling: true });
-    const result = await PgConversation.callFromPanel({ instruction, args });
+    const result = await run({ instruction, args });
     // Another tutorial opened meanwhile: the panel on screen is its own
     const sameTutorial = PgCallPanel._name() === tutorial;
     if (sameTutorial) {

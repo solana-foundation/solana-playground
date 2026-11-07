@@ -17,6 +17,7 @@ const view = (over: Partial<CallView>): CallView => ({
   fields: over.fields ?? [],
   note: over.note,
   canCall: over.canCall ?? true,
+  canRecheck: over.canRecheck ?? false,
   calling: over.calling ?? false,
   json: '{ "name": "hello_anchor" }',
   result: over.result,
@@ -48,6 +49,7 @@ const panel = (props: Partial<BaseCallPanelProps>) => {
     onPick: vi.fn(),
     onType: vi.fn(),
     onCall: vi.fn(),
+    onRecheck: vi.fn(),
   };
   render(
     <TooltipProvider>
@@ -125,6 +127,26 @@ describe("BaseCallPanel", () => {
     await userEvent.type(screen.getByRole("textbox"), "{Enter}");
     expect(off.onCall).not.toHaveBeenCalled();
     expect(button("Call hello").disabled).toBe(true);
+  });
+
+  it("shows a call devnet has not read back as pending, with Check again", async () => {
+    const unconfirmed: RunResult = {
+      act: "call",
+      ok: false,
+      seconds: 1,
+      reason: "unconfirmed",
+      message: "Devnet has not confirmed this transaction yet.",
+      log: "",
+      unconfirmed: [{ signature: "5igSig", calls: [] }],
+    };
+    const { onRecheck } = panel({
+      view: view({ result: unconfirmed, canCall: false, canRecheck: true }),
+    });
+    expect(screen.getByText("Not confirmed yet")).toBeTruthy();
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(button("Call hello").disabled).toBe(true);
+    await userEvent.click(button("Check again"));
+    expect(onRecheck).toHaveBeenCalledTimes(1);
   });
 
   it("says Sending and Calling while a call goes", () => {

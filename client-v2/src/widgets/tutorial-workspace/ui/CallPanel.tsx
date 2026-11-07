@@ -31,6 +31,7 @@ const panelProps = (): BaseCallPanelProps => ({
   onPick: PgCallPanel.pick,
   onType: PgCallPanel.type,
   onCall: () => void PgCallPanel.call(),
+  onRecheck: () => void PgCallPanel.recheck(),
 });
 
 /** The panel over the editor while it is open */

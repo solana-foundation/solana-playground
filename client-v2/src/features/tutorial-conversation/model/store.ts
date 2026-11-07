@@ -20,6 +20,7 @@ import type {
   Cursor,
   PassedVia,
   RunResult,
+  UnreadTx,
 } from "./progress";
 import { freshProgress, parseProgress } from "./progress";
 import { WorkspaceMovedError } from "./real-workspace";
@@ -264,7 +265,28 @@ export class PgConversation {
    * only the win it may bring. Cards do not wait for it: one pressed mid-call
    * reports the capture as busy and can be pressed again.
    */
-  static async callFromPanel(
+  static callFromPanel(
+    call: NonNullable<RunInput["call"]>
+  ): Promise<RunResult> {
+    return PgConversation._runFromPanel((input) => input, call);
+  }
+
+  /**
+   * The panel's Check again on a call devnet has not read back: reads what it
+   * sent, sends nothing
+   */
+  static recheckFromPanel(
+    unconfirmed: UnreadTx[],
+    call: NonNullable<RunInput["call"]>
+  ): Promise<RunResult> {
+    return PgConversation._runFromPanel(
+      (input) => ({ ...input, recheck: unconfirmed }),
+      call
+    );
+  }
+
+  private static async _runFromPanel(
+    withInput: (input: RunInput) => RunInput,
     call: NonNullable<RunInput["call"]>
   ): Promise<RunResult> {
     const { context, engine } = PgConversation._state;
@@ -276,7 +298,7 @@ export class PgConversation {
     try {
       result = await ports.runner.run(
         "call",
-        panelInput(context.definition, engine.progress, call),
+        withInput(panelInput(context.definition, engine.progress, call)),
         () => {}
       );
     } catch (e) {

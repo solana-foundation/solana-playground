@@ -1935,6 +1935,43 @@ describe("PgCallPanel", () => {
     }
   });
 
+  it("offers Check again on a call devnet has not confirmed, which reads and sends nothing", async () => {
+    const { run } = await toDeployed(helloIdl([]));
+    PgConversation.next();
+    await settle();
+    PgCallPanel.show();
+    const unconfirmed = [
+      {
+        signature: "5ig",
+        calls: [{ instruction: "hello", args: {}, accounts: [], wrote: [] }],
+      },
+    ];
+    run.mockResolvedValueOnce({
+      act: "call",
+      ok: false,
+      seconds: 1,
+      reason: "unconfirmed",
+      message: "Devnet has not confirmed this transaction yet.",
+      log: "",
+      unconfirmed,
+    });
+    await PgCallPanel.call();
+    await settle();
+    expect(PgCallPanel.view?.canCall).toBe(false);
+    expect(PgCallPanel.view?.canRecheck).toBe(true);
+
+    await PgCallPanel.recheck();
+    await settle();
+    expect(run).toHaveBeenLastCalledWith(
+      "call",
+      expect.objectContaining({
+        call: { instruction: "hello", args: {} },
+        recheck: unconfirmed,
+      }),
+      expect.any(Function)
+    );
+  });
+
   it("passes step 3 from the panel, with the deployed IDL, and the win follows", async () => {
     const idl = helloIdl([]);
     const { run } = await toDeployed(idl);
