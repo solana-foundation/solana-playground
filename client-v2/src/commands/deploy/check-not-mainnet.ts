@@ -11,12 +11,28 @@ import {
 
 const log = createLogger("commands:deploy");
 
+/** How long a custom RPC's genesis read may take before the deploy is refused */
+const CLUSTER_READ_MS = 15_000;
+
+/** `read`, or a rejection once `ms` passed: a hung RPC holds no deploy */
+const within = <T>(read: Promise<T>, ms: number) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`no answer in ${ms / 1000} s`)),
+      ms
+    );
+  });
+  return Promise.race([read, timedOut]).finally(() => clearTimeout(timer));
+};
+
 /**
  * Refuse a deploy to mainnet-beta. The cluster is read from `endpoint`, not
  * `PgConnection.cluster`, which is derived asynchronously and can still name
  * the previous network; a custom RPC is resolved by its genesis hash. A
  * genesis hash that names no known cluster passes: that network is not
- * mainnet. An endpoint that does not answer is refused: it could be mainnet.
+ * mainnet. An endpoint that does not answer within 15 s, is rate-limited or
+ * refuses the method is refused: it could be mainnet.
  *
  * @returns the cluster read, `null` for a network of its own
  * @throws {TerminalLineError} on mainnet-beta, or when the network is unread
@@ -26,7 +42,7 @@ export const refuseMainnet = async (
 ): Promise<Cluster | null> => {
   let cluster: Cluster;
   try {
-    cluster = await PgConnection.getCluster(endpoint);
+    cluster = await within(PgConnection.getCluster(endpoint), CLUSTER_READ_MS);
   } catch (error) {
     // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` for a network of its own
     if (error instanceof UnknownClusterError) return null;

@@ -215,7 +215,8 @@ export const realDeployPort = (): DeployPort => {
     refusal: () => {
       // The name can still be the previous endpoint's right after a switch:
       // a custom RPC on mainnet would read as devnet (HOO-2728)
-      if (PgConnection.clusterIsStale) {
+      // A failed read keeps the name stale for good: that wait never ends
+      if (PgConnection.clusterIsStale && !PgConnection.hasClusterReadFailed) {
         return "The network is still loading. Try again in a moment.";
       }
       if (PgConnection.cluster !== "devnet") {
