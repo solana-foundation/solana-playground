@@ -142,6 +142,17 @@ const devServerDecision = (): "start" | "reuse" => {
 };
 const decision = devServerDecision();
 
+// The wallet's key origin is compiled into the bundle, so one server cannot
+// serve both kinds of spec. `e2e/wallet-key-origin.e2e.spec.ts` needs it on;
+// the rest were written against keys in the page. A run whose shell sets
+// `REACT_APP_WALLET_KEY_ORIGIN` (`yarn test-e2e:key-origin`, CI's
+// `e2e-key-origin` job) runs that spec alone; any other run leaves it out by
+// `testIgnore`, not `test.skip`, so the shards report no skip for it and
+// `e2e-report` needs no line in `e2e/known-skips.txt`. A second dev server
+// for the one spec compiled cold inside a shard's `globalTimeout` (HOO-2680).
+const KEY_ORIGIN_SPEC = "**/wallet-key-origin.e2e.spec.ts";
+const keyOriginRun = !!process.env.REACT_APP_WALLET_KEY_ORIGIN;
+
 /**
  * Browser-level tests. Kept out of `src` so vitest never collects them -
  * its `include` would otherwise try to run `.spec.ts` files under a runner
@@ -149,6 +160,11 @@ const decision = devServerDecision();
  */
 export default defineConfig({
   testDir: "./e2e",
+  // Playwright's own default, unless this is a key-origin run (above)
+  testMatch: keyOriginRun
+    ? KEY_ORIGIN_SPEC
+    : "**/*.@(spec|test).?(c|m)[jt]s?(x)",
+  testIgnore: keyOriginRun ? [] : KEY_ORIGIN_SPEC,
   // The dev server is slow to boot: wasm chunks plus the generate step
   //
   // Per test. 30s was under what the slowest specs actually need: the
@@ -266,11 +282,10 @@ export default defineConfig({
       PORT: String(port),
       // `.env.development` turns the wallet's key origin on for `yarn dev`;
       // the specs were written against keys in the page, so a server started
-      // here keeps them there unless the shell sets these. A reused server
-      // (`decideDevServer`: this worktree's own `yarn dev`) was started
-      // without this env, so on it every spec runs with the key origin on.
-      // `e2e/wallet-key-origin.e2e.spec.ts` starts a server of its own with
-      // both on
+      // here keeps them there unless the shell sets these, and a shell that
+      // sets them runs the key-origin spec alone (`keyOriginRun`). A reused
+      // server (`decideDevServer`: this worktree's own `yarn dev`) was started
+      // without this env, so on it every spec runs with the key origin on
       REACT_APP_WALLET_KEY_ORIGIN:
         process.env.REACT_APP_WALLET_KEY_ORIGIN ?? "",
       REACT_APP_WALLET_APP_ORIGIN:

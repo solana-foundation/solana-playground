@@ -547,17 +547,112 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+  # The wallet's key origin is compiled into the bundle, and the other specs
+  # were written against keys in the page, so its spec runs here, on a dev
+  # server built with both settings on, and no shard runs it
+  # (`playwright.config.mts`, `keyOriginRun`). A second server started inside
+  # a shard compiled cold past the shard's `globalTimeout` (HOO-2680). The
+  # steps are a shard's (see `e2e` for why each is there); `e2e-report`
+  # checks this job's report on its own.
+  e2e-key-origin:
+    name: e2e (key origin)
+    needs: wasm
+    if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    # A shard's setup (about 4 minutes, more on a slow apt mirror) and one
+    # spec of five serial tests.
+    timeout-minutes: 30
+    env:
+      REACT_APP_WALLET_KEY_ORIGIN: loopback
+      REACT_APP_WALLET_APP_ORIGIN: loopback
+
+    defaults:
+      run:
+        working-directory: client-v2
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: client-v2/.nvmrc
+          cache: "yarn"
+          cache-dependency-path: "client-v2/yarn.lock"
+
+      - name: Stub the WASM packages and install
+        if: inputs.use-wasm-stubs
+        run: bash scripts/setup-wasm.sh
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: ${{ !inputs.use-wasm-stubs }}
+        with:
+          name: wasm-pkg
+          path: wasm
+
+      - name: Install
+        if: ${{ !inputs.use-wasm-stubs }}
+        run: yarn install --frozen-lockfile
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !inputs.use-wasm-stubs }}
+        with:
+          path: client-v2/public/crates
+          key: ${{ needs.wasm.outputs.crates-key }}
+          fail-on-cache-miss: true
+
+      - name: Playwright version
+        id: playwright
+        run: echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: yarn playwright install --with-deps chromium
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
+
+      - name: Install Playwright system dependencies
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: yarn playwright install-deps chromium
+
+      # The env above narrows the run to the key-origin spec
+      # (`playwright.config.mts`, `keyOriginRun`). `--shard=1/1` only so the
+      # json report carries `config.shard`, which `e2e-report` requires.
+      - name: Browser tests
+        run: yarn test-e2e --shard=1/1 ${{ inputs.use-wasm-stubs && '--grep-invert @real-wasm' || '' }}
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: playwright-key-origin-results
+          path: client-v2/test-results/
+          retention-days: 7
+          if-no-files-found: warn
+
   # The skip check, once over every shard's report: run per shard, it would
   # warn "stale known skip" from every shard that does not hold the listed
   # test. `always()`, so a red shard's report is still read, and a shard
   # whose report never arrived fails here instead of passing by absence. The
   # checks are `scripts/e2e-report.mjs`, tested by `scripts/e2e-report.test.mjs`
-  # (`yarn test-api`).
+  # (`yarn test-api`). The `e2e-key-origin` job's report is checked by a
+  # second pass of the same script, after the shards'.
   e2e-report:
     name: e2e-report
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: e2e
+    needs: [e2e, e2e-key-origin]
     if: always()
 
     defaults:
@@ -599,6 +694,22 @@ jobs:
       - name: Check the shards and their skips
         run: node scripts/e2e-report.mjs shard-reports e2e/known-skips.txt
 
+      # The `e2e-key-origin` job's report, a run of its own (`--shard=1/1`),
+      # so it is checked apart from the shards' 1..N. It expects no skip at
+      # all: `/dev/null` is an empty known-skips list, where the shards' list
+      # would warn "stale known skip" for every title this run never holds.
+      # A missing report fails here as a missing shard does above.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: always()
+        with:
+          pattern: playwright-key-origin-results
+          merge-multiple: false
+          path: client-v2/key-origin-reports
+
+      - name: Check the key-origin run and its skips
+        if: always()
+        run: node scripts/e2e-report.mjs key-origin-reports /dev/null
+
   # A called workflow whose jobs were skipped still concludes `success`, and
   # the caller sees only that conclusion. This job fails the workflow unless
   # every job ran and succeeded, `wasm` alone being skipped on the stubs.
@@ -607,16 +718,16 @@ jobs:
     name: gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [wasm, checks, build, e2e, e2e-report]
+    needs: [wasm, checks, build, e2e, e2e-key-origin, e2e-report]
     if: always()
     steps:
       - name: Every job ran and succeeded
         env:
           STUBS: ${{ inputs.use-wasm-stubs }}
           WASM: ${{ needs.wasm.result }}
-          OTHERS: ${{ needs.checks.result }} ${{ needs.build.result }} ${{ needs.e2e.result }} ${{ needs.e2e-report.result }}
+          OTHERS: ${{ needs.checks.result }} ${{ needs.build.result }} ${{ needs.e2e.result }} ${{ needs.e2e-key-origin.result }} ${{ needs.e2e-report.result }}
         run: |
-          echo "wasm: $WASM; checks, build, e2e, e2e-report: $OTHERS"
+          echo "wasm: $WASM; checks, build, e2e, e2e-key-origin, e2e-report: $OTHERS"
           expected=success
           [ "$STUBS" = true ] && expected=skipped
           [ "$WASM" = "$expected" ] || exit 1
