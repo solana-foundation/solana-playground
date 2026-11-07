@@ -2,8 +2,8 @@ import { Pencil, Plus, Trash2 } from "lucide-react";
 import type { FormEvent } from "react";
 import { useId, useState } from "react";
 
-import type { CustomRpc } from "@/entities/custom-rpc";
-import { isSameRpc, maskRpcUrl, RPC_NAME_MAX } from "@/entities/custom-rpc";
+import type { CustomRpc } from "@/entities/cluster";
+import { isSameRpc, maskRpcUrl, RPC_NAME_MAX } from "@/entities/cluster";
 import { createLogger } from "@/shared/lib/logger";
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";

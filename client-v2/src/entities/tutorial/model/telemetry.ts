@@ -71,13 +71,16 @@ export type TutorialEvents = {
    * card), `client` (a client run) or `call_panel`. `step` is 1-based;
    * `seconds` is whole seconds from entering the step to its pass, time away
    * from the tab included. A passed step stays passed, so this fires once
-   * per step until Start over.
+   * per step until Start over. `reason` is `exists` when the step passed
+   * because the account its goal creates already existed, and absent on any
+   * other pass.
    */
   tutorial_step_passed: {
     tutorial: string;
     step: number;
     via: "chat" | "client" | "call_panel";
     seconds: number;
+    reason?: "exists";
   };
   /**
    * Reset on an appended wrote card put the live step back as it was

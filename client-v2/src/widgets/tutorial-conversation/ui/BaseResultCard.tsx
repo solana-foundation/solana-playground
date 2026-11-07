@@ -22,6 +22,8 @@ export interface BaseResultCardProps {
   result: RunResult;
   /** The account the run left, for a run or a call */
   account?: AccountOnCard;
+  /** The line for an account the goal creates that was already there; the card then reads as a pass */
+  exists?: string;
   /** The definition's line for the failure it plans, when this is it */
   planned: Text | null;
   /** A failure still waiting for Explain or "I'll fix it myself" */
@@ -141,6 +143,7 @@ const iconTone = (ok: boolean, signedOut: boolean) => {
 const BaseResultCard = ({
   result,
   account,
+  exists,
   planned,
   open,
   onExplain,
@@ -160,6 +163,7 @@ const BaseResultCard = ({
       <BaseTxResultCard
         result={result}
         account={account}
+        exists={exists}
         onRecheck={open ? onRecheck : undefined}
       />
     );

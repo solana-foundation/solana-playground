@@ -166,7 +166,17 @@ export type Beat = SayBeat | WriteBeat | Ask | ActBeat;
 export type Goal =
   | { kind: "build"; instructions?: string[] }
   | { kind: "deploy" }
-  | { kind: "call"; instruction: string; args?: string[]; log?: string }
+  | {
+      kind: "call";
+      instruction: string;
+      args?: string[];
+      log?: string;
+      /**
+       * The account `instruction` creates with Anchor's `init`, as the IDL
+       * names it: the goal also passes when that account already exists
+       */
+      creates?: string;
+    }
   /**
    * A call of `instruction` the program refused, matched by its error (each
    * of the name and code given) and by `log` over the transaction's log;
@@ -189,6 +199,8 @@ export interface Win {
   headline: Text;
   line: Text;
   callPanelLine?: Text;
+  /** In place of `line` when the goal's `creates` account already existed; only with `creates` */
+  existsLine?: Text;
   extra?: "openTest";
 }
 

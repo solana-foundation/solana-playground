@@ -32,8 +32,7 @@ test("client-v2-layout: Finding a tutorial by search", async ({
   seededPage: page,
 }) => {
   await navItem(page, "Tutorials").click();
-  // The start lists Hello Anchor, Lumberjack and Zero Copy; Lumberjack has
-  // no definition yet, so it still opens on its About screen
+  // The start lists Hello Anchor, Lumberjack and Zero Copy
   await search(page, "tutorials").fill("energy");
 
   await expect(
@@ -46,10 +45,10 @@ test("client-v2-layout: Finding a tutorial by search", async ({
   await page.getByRole("button", { name: "Open Lumberjack" }).click();
   await expect(page).toHaveURL(/\/tutorials\/lumberjack/, LONG);
   await expect(search(page, "tutorials")).toBeHidden();
-  // An unstarted tutorial opens on its About screen, in the stage
-  await expect(
-    page.getByRole("button", { name: "Start", exact: true })
-  ).toBeVisible(LONG);
+  // An unstarted conversation tutorial opens on its intro
+  await expect(page.getByRole("button", { name: /Start step 1/ })).toBeVisible(
+    LONG
+  );
 });
 
 test("client-v2-layout: A program opens as a project", async ({ page }) => {

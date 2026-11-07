@@ -20,6 +20,7 @@ import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
 
 import hello from "../../../tutorials/hello-anchor/tutorial.json";
+import lumberjack from "../../../tutorials/lumberjack/tutorial.json";
 import BaseActCard from "./BaseActCard";
 import BaseApplyCard from "./BaseApplyCard";
 import BaseFinishCard from "./BaseFinishCard";
@@ -289,6 +290,20 @@ describe("BaseActCard", () => {
     );
   });
 
+  it("shows how far a long stage has got beside n of m", () => {
+    card({
+      state: "running",
+      stage: {
+        beatId: "s1.deploy",
+        label: "Writing buffer",
+        index: 1,
+        count: 3,
+        detail: "40 of 200 transactions",
+      },
+    });
+    expect(screen.getByText("· 40 of 200 transactions")).toBeTruthy();
+  });
+
   it("waits while another act runs", () => {
     card({ disabled: true });
     expect(
@@ -381,13 +396,18 @@ describe("BaseResultCard", () => {
   /** The card for a run's or a call's result, with no failure open */
   const txCard = (
     result: RunResult,
-    { open = false, onRecheck = vi.fn() } = {}
+    {
+      open = false,
+      onRecheck = vi.fn(),
+      exists,
+    }: { open?: boolean; onRecheck?: () => void; exists?: string } = {}
   ) =>
     render(
       // The app's root provides the tooltip Copy signature carries
       <TooltipProvider>
         <BaseResultCard
           result={result}
+          exists={exists}
           planned={null}
           open={open}
           onExplain={vi.fn()}
@@ -400,6 +420,28 @@ describe("BaseResultCard", () => {
         />
       </TooltipProvider>
     );
+
+  it("reads as a pass for a call refused because the player already exists", () => {
+    const { container } = txCard(
+      {
+        act: "call",
+        ok: false,
+        seconds: 1,
+        message: "custom program error: 0x0",
+        log: "",
+        refused: { instruction: "initPlayer", error: { code: 0, name: null } },
+        exists: {
+          instruction: "init_player",
+          account: "player",
+          address: "Player1",
+        },
+      },
+      { exists: "`player` already exists on devnet, so nothing was created." }
+    );
+    expect(screen.getByText("Already exists")).toBeTruthy();
+    expect(screen.queryByText("Call failed")).toBeNull();
+    expect(container.querySelector(".text-error")).toBeNull();
+  });
 
   describe("a call devnet has not confirmed", () => {
     const UNCONFIRMED: RunResult = {
@@ -533,7 +575,7 @@ describe("BaseResultCard", () => {
     ).toBe("Wa11etCopy");
     expect(
       screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
-    ).toBe("https://faucet.solana.com");
+    ).toBe("https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet");
     unmount();
     txCard({
       act: "call",
@@ -1261,6 +1303,46 @@ describe("BaseWinCard", () => {
       screen.getByRole("button", { name: "Write it in client.ts" })
     );
     expect(onWriteInClient).toHaveBeenCalledTimes(1);
+  });
+
+  describe("on Lumberjack's step 2", () => {
+    const create = (lumberjack as unknown as TutorialDefinition).steps[1];
+    /** The paragraph that reads `text`, as Prose draws it without backticks */
+    const paragraph = (text: NonNullable<typeof create.win.existsLine>) => {
+      const plain = textOf(text, false).replace(/`/g, "");
+      return screen.queryByText(
+        (_, el) => el?.tagName === "P" && el.textContent === plain
+      );
+    };
+    const winOf = (reason: "exists" | undefined) =>
+      render(
+        <BaseWinCard
+          win={create.win}
+          index={2}
+          next="Chop"
+          via="call_panel"
+          reason={reason}
+          live
+          onNext={vi.fn()}
+          onWriteInClient={vi.fn()}
+        />
+      );
+
+    it("explains a player that already existed, then offers Next", () => {
+      winOf("exists");
+      const existsLine = requireFor("the existsLine")(create.win.existsLine);
+      expect(paragraph(existsLine)).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Next: Chop" })).toBeTruthy();
+    });
+
+    it("says nothing of an existing player after a pass that created it", () => {
+      winOf(undefined);
+      const existsLine = requireFor("the existsLine")(create.win.existsLine);
+      expect(paragraph(existsLine)).toBeNull();
+      expect(
+        paragraph(requireFor("the callPanelLine")(create.win.callPanelLine))
+      ).toBeTruthy();
+    });
   });
 
   it("shows no Open Call without an opener", () => {

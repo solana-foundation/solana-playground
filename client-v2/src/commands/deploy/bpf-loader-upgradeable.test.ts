@@ -34,7 +34,10 @@ vi.mock("../../utils", () => {
       get current() {
         return selected;
       },
+      getReadBufferConnection: <T>(connection: T) => connection,
+      getSendTxPerSecond: () => undefined,
     },
+    PgPlaynet: { isUrlPlaynet: () => false },
     PgTx: {
       send: vi.fn(async () => "sig"),
       simulate: vi.fn(async () => ({ unitsConsumed: 1 })),
@@ -61,6 +64,12 @@ vi.mock("../../utils", () => {
     },
   };
 });
+// The loader's writes go through a connection it builds to the same RPC
+vi.mock("@/entities/cluster", () => ({
+  getUnretriedConnectionFor: () => (endpoint: string) => ({
+    rpcEndpoint: endpoint,
+  }),
+}));
 
 const pk = { toBase58: () => "buffer" } as never;
 const signer = { publicKey: pk } as never;
@@ -126,13 +135,15 @@ describe("BpfLoaderUpgradeable", () => {
         }),
     ],
   ] as const)(
-    "sends %s on the connection it is given, not the selected one",
+    "sends %s to the RPC of the connection it is given, not the selected one",
     async (_, call) => {
       await call();
 
-      const used = connectionsUsed();
+      const used = connectionsUsed() as { rpcEndpoint: string }[];
       expect(used.length).toBeGreaterThan(0);
-      expect(used.every((c) => c === theDeploys)).toBe(true);
+      expect(used.every((c) => c.rpcEndpoint === theDeploys.rpcEndpoint)).toBe(
+        true
+      );
     }
   );
 

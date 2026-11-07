@@ -2,8 +2,11 @@
 // never touches, so its tests stay out of the modules (AGENTS.md)
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
+
 import { PgTerminal } from "../../utils";
 import { isStopped } from "../../utils/stopped";
+import { PgDeployRun } from "./run";
 
 /** What each test sets: the run's stop, the wallet's balance, the terminal */
 const env = vi.hoisted(() => ({
@@ -26,6 +29,14 @@ const env = vi.hoisted(() => ({
   onDeployState: (() => undefined) as (state: string) => void,
   /** What the terminal handle printed: the cancel's lines */
   termLines: [] as string[],
+  /** What `PgConnection.getReadBufferConnection` answers; the selected connection when unset */
+  readBuffer: undefined as
+    | {
+        rpcEndpoint: string;
+        getBalance: () => Promise<number>;
+        getAccountInfo: () => Promise<{ data: Buffer } | null>;
+      }
+    | undefined,
 }));
 /** A wallet's key: its address, and the 32 bytes a buffer stores as authority */
 const keyOf = vi.hoisted(() => (address: string) => ({
@@ -81,6 +92,7 @@ vi.mock("../../utils", () => ({
     },
     getAirdropAmount: () => 5,
     getCluster: async () => "devnet",
+    getReadBufferConnection: <T>(connection: T) => env.readBuffer ?? connection,
   },
   PgGlobal: {
     deployState: "ready",
@@ -177,6 +189,7 @@ describe("commands/deploy", () => {
     env.accountReadFails = false;
     env.standard = false;
     env.termLines = [];
+    env.readBuffer = undefined;
     airdrop.mockClear();
     send.mockClear();
     loadBuffer.mockReset();
@@ -245,6 +258,104 @@ describe("commands/deploy", () => {
     expect(closeBuffer).toHaveBeenCalledTimes(1);
     expect((failure as Error).message).toContain("buffer account was closed");
     expect(openBuffers.forget).toHaveBeenCalledWith("Buf1111");
+  });
+
+  /** A load that fails without a stop */
+  const failTheLoad = () => {
+    env.balance = 10_000_000_000;
+    loadBuffer.mockImplementation(async () => {
+      throw new Error("The RPC kept refusing buffer writes");
+    });
+  };
+
+  it("closes the buffer without asking when the Deploy stage's load fails", async () => {
+    failTheLoad();
+    const asked = vi.fn(async () => true);
+    env.waitForInput = asked;
+
+    const failure = await PgDeployRun.runWith({
+      confirmStaleBuild: async () => true,
+      airdrop: true,
+    })(runDeploy);
+
+    expect(asked).not.toHaveBeenCalled();
+    expect(closeBuffer).toHaveBeenCalledTimes(1);
+    expect((failure as Error).message).toBe(
+      "The RPC kept refusing buffer writes"
+    );
+  });
+
+  it("names the buffer and the close command, and reports, when the Deploy stage's close fails", async () => {
+    failTheLoad();
+    closeBuffer.mockImplementation(async () => {
+      throw new Error("blockhash not found");
+    });
+    env.readBuffer = {
+      rpcEndpoint: "https://read.test",
+      getBalance: async () => 1_421_676_960,
+      getAccountInfo: async () => env.bufferAccount,
+    };
+    const logged = memoryProvider();
+    initLogger({ providers: [logged] });
+
+    try {
+      const failure = await PgDeployRun.runWith({
+        confirmStaleBuild: async () => true,
+        airdrop: true,
+      })(runDeploy);
+
+      expect((failure as Error).message).toBe(
+        "The RPC kept refusing buffer writes Its buffer Buf1111 still holds " +
+          "1.42 SOL. Run `solana program close --buffers -u 'https://read.test'` " +
+          "to get it back."
+      );
+      expect(
+        logged.entries.some(
+          (entry) => entry.report && entry.context?.buffer === "Buf1111"
+        )
+      ).toBe(true);
+    } finally {
+      resetLogger();
+    }
+  });
+
+  it("answers the reclaim question no when stopped, without waiting for the person", async () => {
+    failTheLoad();
+    let answer: (value: boolean) => void = () => undefined;
+    env.waitForInput = (msg) =>
+      new Promise((res) => {
+        if (!msg.includes("reclaim SOL")) return res(true);
+        answer = res;
+        env.controller.abort();
+      });
+    const executed: string[] = [];
+    env.executeFromStr = async (cmd) => {
+      executed.push(cmd);
+      answer(cmd === "yes");
+    };
+
+    await runDeploy();
+
+    expect(executed).toEqual(["no"]);
+    expect(closeBuffer).not.toHaveBeenCalled();
+  });
+
+  it("reads a kept buffer's balance through the read-buffer RPC", async () => {
+    stopKeepingTheBuffer();
+    // The selected connection reads the fresh buffer as empty, as the platform RPC does
+    env.bufferBalance = async () => 0;
+    env.readBuffer = {
+      rpcEndpoint: "https://read.test",
+      getBalance: async () => 1_421_676_960,
+      getAccountInfo: async () => env.bufferAccount,
+    };
+
+    const failure = await runDeploy();
+
+    expect((failure as Error).message).toContain(
+      "Its buffer Buf1111 still holds 1.42 SOL. Run " +
+        "`solana program close --buffers -u 'https://read.test'`"
+    );
   });
 
   /** A stop whose buffer close fails every retry, so the buffer is kept */
@@ -338,19 +449,29 @@ describe("commands/deploy", () => {
       expect(openBuffers.forget).toHaveBeenCalledWith("Buf1111");
     });
 
-    it("closes the buffer when the load fails", async () => {
+    it("closes the buffer on a yes when the load fails, then fails with the load's error", async () => {
       env.balance = 10_000_000_000;
       loadBuffer.mockRejectedValue(new Error("write transaction dropped"));
 
       const failure = await runDeploy();
 
-      expect((failure as Error).message).toContain("write transaction dropped");
+      expect((failure as Error).message).toBe("write transaction dropped");
       expect(isStopped(failure)).toBe(false);
       expect(closeBuffer).toHaveBeenCalledTimes(1);
-      expect(printed().join("\n")).toContain(
-        "Its buffer account was closed and the SOL returned."
-      );
+      expect(env.termLines).toContain("Reclaim successful.");
       expect(openBuffers.forget).toHaveBeenCalledWith("Buf1111");
+    });
+
+    it("keeps the buffer and its record on a no after a failed load", async () => {
+      env.balance = 10_000_000_000;
+      loadBuffer.mockRejectedValue(new Error("write transaction dropped"));
+      env.waitForInput = async () => false;
+
+      await runDeploy();
+
+      expect(closeBuffer).not.toHaveBeenCalled();
+      expect(openBuffers.forget).not.toHaveBeenCalled();
+      expect(env.termLines.join("\n")).toContain("Reclaim rejected.");
     });
 
     it("closes the buffer when the deploy transaction fails", async () => {
@@ -373,7 +494,7 @@ describe("commands/deploy", () => {
       const failure = await runDeploy();
 
       expect((failure as Error).message).toContain("write transaction dropped");
-      expect(printed().join("\n")).toContain(
+      expect(env.termLines.join("\n")).toContain(
         "Its buffer Buf1111 still holds 1.42 SOL."
       );
       expect(openBuffers.forget).not.toHaveBeenCalled();

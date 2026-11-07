@@ -2,7 +2,7 @@ import { FileCode, Send } from "lucide-react";
 import { useEffect } from "react";
 
 import type { Win } from "@/entities/tutorial";
-import type { PassedVia } from "@/features/tutorial-conversation";
+import type { PassedVia, PassReason } from "@/features/tutorial-conversation";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Kbd } from "@/shared/ui/kbd";
@@ -22,6 +22,8 @@ export interface BaseWinCardProps {
   next: string | null;
   /** How the step passed: a Call panel pass reads its own line */
   via: PassedVia;
+  /** `exists`: the account the goal creates was already there, and the win reads `existsLine` */
+  reason?: PassReason;
   /** The card acts: the win is live and Next not yet pressed */
   live: boolean;
   onNext: () => void;
@@ -40,7 +42,8 @@ export interface BaseWinCardProps {
  * definition's headline and line, and "Next: <step>" with ↵. Enter presses
  * Next while the card is live and nothing else holds focus, as on the intro.
  * A pass from the Call panel reads the definition's `callPanelLine` and
- * offers "Write it in client.ts"; a win that asks for it offers "Open Call".
+ * offers "Write it in client.ts"; a pass on an account that already existed
+ * reads `existsLine` over both; a win that asks for it offers "Open Call".
  * The last step's win has no Next: the finish follows it. Once Next is
  * pressed the card is a record: the check, the tag and the headline, with
  * "Open Call" and "Write it in client.ts" kept as small buttons, since they
@@ -51,6 +54,7 @@ const BaseWinCard = ({
   index,
   next,
   via,
+  reason,
   live,
   onNext,
   onOpenCall,
@@ -77,7 +81,8 @@ const BaseWinCard = ({
     return () => document.removeEventListener("keydown", onKey);
   }, [canNext, onNext]);
 
-  const line = fromPanel && win.callPanelLine ? win.callPanelLine : win.line;
+  let line = fromPanel && win.callPanelLine ? win.callPanelLine : win.line;
+  if (reason === "exists" && win.existsLine) line = win.existsLine;
   const writeInClient = fromPanel && (
     <Button
       variant="outline"

@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 
 import type { RunResult } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
+import { DEVNET_FAUCET_SOL, faucetUrlWith } from "@/shared/lib/faucet";
 import { isFaucetLimit } from "@/shared/lib/faucet-limit";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
@@ -42,9 +43,6 @@ export const isDeployResult = (r: RunResult): r is DeployResult =>
   r.act === "deploy" ||
   r.act === "buildDeploy" ||
   (r.act === "airdrop" && !r.ok);
-
-/** Where the faucet's card sends the learner for devnet SOL */
-export const FAUCET_URL = "https://faucet.solana.com";
 
 export interface BaseDeployResultCardProps {
   result: DeployResult;
@@ -158,7 +156,13 @@ const BaseDeployResultCard = ({
           </div>
           <div className="flex max-sm:flex-col max-sm:items-stretch">
             <Button asChild variant="ghost">
-              <a href={FAUCET_URL} target="_blank" rel="noreferrer">
+              <a
+                href={faucetUrlWith(DEVNET_FAUCET_SOL)("devnet")(
+                  result.address
+                )}
+                target="_blank"
+                rel="noreferrer"
+              >
                 Open faucet
                 <ExternalLink aria-hidden="true" className="size-4" />
               </a>

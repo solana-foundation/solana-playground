@@ -698,6 +698,11 @@
             "log": {
               "description": "A pattern the call's program log must match.",
               "$ref": "#/definitions/pattern"
+            },
+            "creates": {
+              "description": "The account the instruction creates with Anchor's `init`, as the IDL names it. The goal also passes when that account already exists, and the win then needs `existsLine`.",
+              "type": "string",
+              "minLength": 1
             }
           }
         },
@@ -768,6 +773,10 @@
         },
         "callPanelLine": {
           "description": "The line instead of `line` when the step passed from the Call panel.",
+          "$ref": "#/definitions/text"
+        },
+        "existsLine": {
+          "description": "The line instead of `line` and `callPanelLine` when the step passed because the account its goal `creates` already existed. Only on a step whose goal has `creates`, which needs it.",
           "$ref": "#/definitions/text"
         },
         "extra": {

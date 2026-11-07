@@ -24,13 +24,14 @@ import type {
   AccountReading,
   ConversationProgress,
   PassedVia,
+  PassReason,
   Proposal,
   Resolution,
   RunRecord,
   RunResult,
   Wrote,
 } from "./progress";
-import { answerOf, isMismatch } from "./progress";
+import { answerOf, existsLine, existsOf, isMismatch } from "./progress";
 import type { EngineState, Stage } from "./reducer";
 import { hasRepeatEnded } from "./reducer";
 import { wordOf } from "./route";
@@ -407,6 +408,8 @@ export type Turn = TurnBase &
         open: boolean;
         /** The account as this run left it */
         account?: AccountOnCard;
+        /** The line for an account the goal creates that was already there (`existsLine`) */
+        exists?: string;
       }
     | {
         kind: "win";
@@ -416,6 +419,8 @@ export type Turn = TurnBase &
         done: boolean;
         took: number;
         via: PassedVia;
+        /** The account the goal creates already existed: the win reads `existsLine` */
+        reason?: PassReason;
         last: boolean;
       }
     | {
@@ -587,6 +592,12 @@ const pressOf = (act: ActBeat, run: RunRecord): Press | null => {
     };
   }
   return null;
+};
+
+/** A result card's line for an account the goal creates that was already there */
+const existsOn = (result: RunResult): { exists?: string } => {
+  const exists = existsOf(result);
+  return exists ? { exists: existsLine(exists) } : {};
 };
 
 /** The act's view with the newest reading of its account, if there is one */
@@ -949,6 +960,7 @@ export const view = (
                 took: run.took,
                 planned: planned ? step.planned ?? null : null,
                 open,
+                ...existsOn(run.result),
                 ...(b.account &&
                 (run.result.act === "run" || run.result.act === "call") &&
                 run.result.ok &&
@@ -1058,6 +1070,7 @@ export const view = (
         done: !onIt,
         took: time.to - time.from,
         via: time.via ?? "chat",
+        ...(time.reason ? { reason: time.reason } : {}),
         last: step.id === last.id,
       });
     }

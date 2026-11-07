@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { DEFAULT_ENDPOINT, NETWORKS } from "@/constants";
-import type { CustomRpc } from "@/entities/custom-rpc";
-import { fetchRpcHealth, isSameRpc, PgCustomRpcs } from "@/entities/custom-rpc";
+import type { CustomRpc } from "@/entities/cluster";
+import { fetchRpcHealth, isSameRpc, PgCustomRpcs } from "@/entities/cluster";
 import { useRenderOnChange } from "@/hooks";
 import { Button } from "@/shared/ui/button";
 import { PgGlobal, PgSettings, PgView } from "@/utils";

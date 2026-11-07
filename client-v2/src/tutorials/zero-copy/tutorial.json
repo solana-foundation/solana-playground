@@ -195,13 +195,15 @@
       ],
       "goal": {
         "kind": "call",
-        "instruction": "init_map"
+        "instruction": "init_map",
+        "creates": "map"
       },
       "win": {
         "id": "s2.win",
         "headline": "Your map is on devnet",
         "line": "10 KB, as much as one instruction can create, and your wallet paid its rent.",
-        "callPanelLine": "You created the map from the Call panel, which Playground built from the IDL."
+        "callPanelLine": "You created the map from the Call panel, which Playground built from the IDL.",
+        "existsLine": "Your map was already on devnet: this wallet ran this step before. Anchor's `init` creates an account only once, so `init_map` can't make it again. The next step works on the map you have."
       },
       "explain": "This step puts the program on devnet and calls `init_map`, which creates your 10 KB map at an address derived from your wallet. Your wallet pays the rent."
     },

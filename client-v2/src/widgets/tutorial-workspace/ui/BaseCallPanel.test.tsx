@@ -21,6 +21,7 @@ const view = (over: Partial<CallView>): CallView => ({
   calling: over.calling ?? false,
   json: '{ "name": "hello_anchor" }',
   result: over.result,
+  exists: over.exists,
   stale: over.stale,
 });
 
@@ -197,6 +198,29 @@ describe("BaseCallPanel", () => {
     expect(screen.getByText("Not enough energy").className).toContain(
       "text-error"
     );
+  });
+
+  it("shows a player that already exists as a pass, not in red", () => {
+    panel({
+      view: view({
+        result: {
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "custom program error: 0x0",
+          log: "",
+          exists: { instruction: "init_player", account: "player" },
+        },
+        exists: "`player` already exists on devnet, so nothing was created.",
+      }),
+    });
+    expect(screen.getByText("Already exists")).toBeTruthy();
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(
+      screen.getByText(
+        "player already exists on devnet, so nothing was created."
+      ).className
+    ).not.toContain("text-error");
   });
 
   it("says why Call is off, over it", () => {

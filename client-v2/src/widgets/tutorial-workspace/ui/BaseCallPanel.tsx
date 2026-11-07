@@ -111,7 +111,11 @@ const UnconfirmedResult: FC<{
  * (the request right above names the call), what came back on a well, and
  * the sentence with one row of quiet controls under it.
  */
-const CallResult: FC<{ result: RunResult }> = ({ result }) => {
+const CallResult: FC<{
+  result: RunResult;
+  /** The line for an account the goal creates that was already there */
+  exists: string | undefined;
+}> = ({ result, exists }) => {
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -120,14 +124,18 @@ const CallResult: FC<{ result: RunResult }> = ({ result }) => {
   }, [copied]);
   // eslint-disable-next-line unicorn/no-null -- React.FC takes null, not undefined
   if (result.act !== "call") return null;
-  const failed = !result.ok;
+  // An account the goal creates, already there, passes: no red
+  const failed = !result.ok && exists === undefined;
   const signature = result.ok
     ? result.signatures[result.signatures.length - 1]
     : undefined;
   const said = result.ok && result.line !== null;
-  const words = result.ok
+  let words = result.ok
     ? said && `${PROGRAM_LOG}${programLogText(result.line ?? "")}`
     : result.message;
+  if (exists !== undefined) words = exists.replaceAll("`", "");
+  let status = failed ? "Failed" : "Confirmed";
+  if (exists !== undefined) status = "Already exists";
   const failedLog = !result.ok && result.log ? result.log.split("\n") : [];
   const log = result.ok ? result.receipt?.log ?? [] : failedLog;
   const sentence = result.ok ? sentenceOf(result) : undefined;
@@ -146,7 +154,7 @@ const CallResult: FC<{ result: RunResult }> = ({ result }) => {
           <Check aria-hidden="true" className="size-4 shrink-0 text-success" />
         )}
         <span className="font-heading text-[1rem] leading-6 font-medium text-foreground">
-          {failed ? "Failed" : "Confirmed"}
+          {status}
         </span>
       </div>
       {words && (
@@ -452,7 +460,7 @@ const BaseCallPanel: FC<BaseCallPanelProps> = ({
                           onRecheck={view.canRecheck ? onRecheck : undefined}
                         />
                       ) : (
-                        <CallResult result={view.result} />
+                        <CallResult result={view.result} exists={view.exists} />
                       )}
                     </div>
                   </>

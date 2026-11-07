@@ -46,13 +46,56 @@ const idlProblem = (idl: string): string | null => {
     : "an IDL with a list of instructions, found none";
 };
 
+/** Names equal across snake and camel spelling, as an IDL may write either */
+const sameName = (a: string, b: string) =>
+  a.replaceAll("_", "").toLowerCase() === b.replaceAll("_", "").toLowerCase();
+
+interface IdlAccountItem {
+  name?: unknown;
+  accounts?: IdlAccountItem[];
+}
+
+const accountNames = (items: IdlAccountItem[]): string[] =>
+  items.flatMap((a) => [
+    ...(typeof a.name === "string" ? [a.name] : []),
+    ...(Array.isArray(a.accounts) ? accountNames(a.accounts) : []),
+  ]);
+
+/**
+ * The account names the IDL shipped at or before step `until` gives an
+ * instruction; undefined when no IDL is shipped by then, or it lacks the
+ * instruction, which other rules name
+ */
+const idlAccountsOf = (
+  steps: Step[],
+  until: number,
+  instruction: string
+): string[] | undefined => {
+  const raw = steps
+    .slice(0, until + 1)
+    .map((s) => s.idl)
+    .filter((idl): idl is string => idl !== undefined)
+    .at(-1);
+  if (raw === undefined || idlProblem(raw)) return undefined;
+  const parsed = JSON.parse(raw) as {
+    instructions: { name?: unknown; accounts?: IdlAccountItem[] }[];
+  };
+  const ix = parsed.instructions.find(
+    (i) => typeof i.name === "string" && sameName(i.name, instruction)
+  );
+  return ix && Array.isArray(ix.accounts)
+    ? accountNames(ix.accounts)
+    : undefined;
+};
+
 /**
  * Every problem in a parsed `tutorial.json`; empty when it is a definition.
  * The schema runs first; the rules a schema cannot express (a right index in
  * range, a reason per wrong option and none for the right one, blocks found
  * in their target, instructions some step's target defines, a `next` in
  * `known`, ids used once, patterns that compile, read-only files the step
- * has, a call act's argument names used once, doc files that exist and link
+ * has, a call act's argument names used once, a goal's `creates` the IDL
+ * lists and an `existsLine` exactly with it, doc files that exist and link
  * only to `https`) run only on a definition
  * the schema accepts, since they read its shape. The folder-name error leads,
  * then the rules' errors in step order.
@@ -610,6 +653,31 @@ const ruleErrors = (
     } else if (goal.kind === "call" || goal.kind === "refused") {
       instruction(goal.instruction, `steps[${i}].goal.instruction`);
       pattern(goal.log, `steps[${i}].goal.log`);
+    }
+    const creates = goal.kind === "call" ? goal.creates : undefined;
+    if (creates === undefined && step.win.existsLine !== undefined) {
+      errors.push({
+        path: `steps[${i}].win.existsLine`,
+        message:
+          "an `existsLine` only on a step whose goal has `creates`, found one",
+      });
+    }
+    if (creates !== undefined && goal.kind === "call") {
+      if (step.win.existsLine === undefined) {
+        errors.push({
+          path: `steps[${i}].win.existsLine`,
+          message: "an `existsLine` for the goal's `creates`, found none",
+        });
+      }
+      const accounts = idlAccountsOf(d.steps, i, goal.instruction);
+      if (accounts && !accounts.some((name) => sameName(name, creates))) {
+        errors.push({
+          path: `steps[${i}].goal.creates`,
+          message: `an account of \`${
+            goal.instruction
+          }\` in the step's IDL, found ${JSON.stringify(creates)}`,
+        });
+      }
     }
   });
 
@@ -1178,6 +1246,49 @@ if (import.meta.vitest) {
         expect(lines(d)).toEqual([
           'steps[1].goal.instruction: an instruction a step\'s target defines, found "goodbye"',
           'steps[1].goal.log: a regular expression, found "("',
+        ]);
+      });
+    });
+
+    describe("checkDefinition", () => {
+      const IDL = JSON.stringify({
+        instructions: [
+          {
+            name: "hello",
+            accounts: [{ name: "player" }, { name: "signer" }],
+            args: [],
+          },
+        ],
+      });
+      const creating = (creates: string, existsLine?: string) => {
+        const d = minimal();
+        d.steps[1].idl = IDL;
+        d.steps[1].goal = { kind: "call", instruction: "hello", creates };
+        if (existsLine !== undefined) d.steps[1].win.existsLine = existsLine;
+        return d;
+      };
+
+      it("accepts a `creates` the step's IDL lists, with an `existsLine`", () => {
+        expect(lines(creating("player", "It was there."))).toEqual([]);
+      });
+
+      it("rejects `creates` without an `existsLine`", () => {
+        expect(lines(creating("player"))).toEqual([
+          "steps[1].win.existsLine: an `existsLine` for the goal's `creates`, found none",
+        ]);
+      });
+
+      it("rejects an `existsLine` without `creates`", () => {
+        const d = minimal();
+        d.steps[1].win.existsLine = "It was there.";
+        expect(lines(d)).toEqual([
+          "steps[1].win.existsLine: an `existsLine` only on a step whose goal has `creates`, found one",
+        ]);
+      });
+
+      it("rejects a `creates` the IDL does not list for the instruction", () => {
+        expect(lines(creating("map", "It was there."))).toEqual([
+          'steps[1].goal.creates: an account of `hello` in the step\'s IDL, found "map"',
         ]);
       });
     });

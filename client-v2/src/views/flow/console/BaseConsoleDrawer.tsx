@@ -29,6 +29,8 @@ interface BaseConsoleDrawerProps {
    * alone) */
   stop: { run: RunKind; onStop: () => void } | null;
   status: ConsoleStatus;
+  /** How far a long command (a deploy's buffer writes) has got, 0 to 100; 0 draws no bar */
+  progress?: number;
   /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere; none on a touch layout */
   shortcut?: string;
   /**
@@ -55,6 +57,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   onClear,
   stop,
   status,
+  progress = 0,
   shortcut,
   bare = false,
   // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
@@ -68,7 +71,22 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     contentId={CONSOLE_BODY_ID}
     className="h-full bg-surface"
   >
-    <ConsoleDrawerBar triggerLabel="Terminal" className="shrink-0">
+    <ConsoleDrawerBar triggerLabel="Terminal" className="relative shrink-0">
+      {progress > 0 && (
+        <div
+          role="progressbar"
+          aria-label="Progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress)}
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.5"
+        >
+          <div
+            className="h-full bg-primary transition-[width] duration-300"
+            style={{ width: `${Math.min(progress, 100)}%` }}
+          />
+        </div>
+      )}
       <ConsoleDrawerStatus>
         <StatusDot variant={status.tone} />
         {!bare && (

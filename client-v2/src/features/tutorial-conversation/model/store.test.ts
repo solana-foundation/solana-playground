@@ -446,6 +446,35 @@ describe("PgConversation", () => {
     expect(vi.mocked(writeWorkspaceFile).mock.calls.length).toBe(before + 2);
   });
 
+  it("passes on how far a stage has got", async () => {
+    let release: (r: RunResult) => void = () => {};
+    const runner: Runner = {
+      run: (_act, _input, onStage) =>
+        new Promise<RunResult>((r) => {
+          release = r;
+          onStage({
+            label: "Writing buffer",
+            index: 1,
+            count: 2,
+            detail: "40 of 200 transactions",
+          });
+        }),
+    };
+    open(NAME, { runner });
+    await settle();
+    PgConversation.start();
+    await settle();
+    PgConversation.pick("s1.q1", 1);
+    await settle();
+    PgConversation.act("s1.build");
+    await settle();
+    expect(PgConversation.state.engine.stage?.detail).toBe(
+      "40 of 200 transactions"
+    );
+    release(OK_BUILD);
+    await settle();
+  });
+
   it.each([
     ["beats", { "s9.gone": { kind: "said", at: 1 } }],
     ["runs", { "s9.gone": [{ status: "interrupted", at: 1 }] }],

@@ -1,5 +1,6 @@
-import { clusterName, Endpoint, NETWORKS } from "@/constants/connection";
 import { createLogger } from "@/shared/lib/logger";
+
+import { CLUSTERS, Endpoint, offeredOf } from "./clusters";
 
 const log = createLogger("custom-rpc:store");
 
@@ -152,9 +153,9 @@ const normalised = (value: string) => {
  * chip, its name and its address, is refused. An endpoint a chip offers is
  * never adopted: its chip lists it already.
  */
-const CHIPS: ReadonlyArray<CustomRpc> = NETWORKS.map((n) => ({
-  name: n.name,
-  url: normalised(n.value),
+const CHIPS: ReadonlyArray<CustomRpc> = offeredOf(CLUSTERS).map((c) => ({
+  name: c.name,
+  url: normalised(c.url),
 }));
 
 /**
@@ -162,16 +163,16 @@ const CHIPS: ReadonlyArray<CustomRpc> = NETWORKS.map((n) => ({
  * profile may hold it re-spelled: Localnet, Surfpool and the Testnet chip,
  * all custom RPCs before they had chips (HOO-2707)
  */
-const ADOPTED_CHIPS = NETWORKS.filter(
-  (n) => n.cluster === "localnet" || n.cluster === "testnet"
+const ADOPTED_CHIPS = offeredOf(CLUSTERS).filter(
+  (c) => c.cluster === "localnet" || c.cluster === "testnet"
 );
 
 /**
  * The public Testnet, named as its cluster when saved with no name: a
  * custom RPC of its own once the Testnet chip is on a platform RPC
  */
-const CLUSTERS = new Map<string, string>([
-  [normalised(Endpoint.TESTNET), clusterName("testnet")],
+const CLUSTER_NAMES = new Map<string, string>([
+  [normalised(Endpoint.TESTNET), CLUSTERS.testnet.name],
 ]);
 
 /**
@@ -196,7 +197,7 @@ export const isSameRpc = (a: CustomRpc, b: CustomRpc): boolean =>
   a.name === b.name && a.url === b.url;
 
 /** A listed RPC's name when the user gave none: its cluster's, else its host */
-const defaultName = (url: string) => CLUSTERS.get(url) ?? hostOf(url);
+const defaultName = (url: string) => CLUSTER_NAMES.get(url) ?? hostOf(url);
 
 /** Name a stored or typed entry: trimmed, capped, a default when empty */
 const nameOf = (name: string, url: string) =>
@@ -401,14 +402,12 @@ export const PgCustomRpcs = {
     const list = readStored();
     if (!list) return undefined;
     if (CHIPS.some((r) => r.url === check.url)) {
-      const local = ADOPTED_CHIPS.find(
-        (n) => normalised(n.value) === check.url
-      );
+      const local = ADOPTED_CHIPS.find((c) => normalised(c.url) === check.url);
       const respell =
         local &&
-        local.value !== endpoint &&
+        local.url !== endpoint &&
         !list.some((r) => r.url === check.url);
-      return respell ? local.value : undefined;
+      return respell ? local.url : undefined;
     }
     if (list.some((r) => r.url === check.url)) return check.url;
     return write([...list, { name: defaultName(check.url), url: check.url }])
@@ -465,12 +464,12 @@ if (import.meta.vitest) {
 
   /** The offered network under `key`, wherever the list puts it */
   const offered = (key: string) => {
-    const network = NETWORKS.find((n) => n.key === key);
-    if (!network) throw new Error(`No offered network ${key}`);
-    return network;
+    const chip = offeredOf(CLUSTERS).find((c) => c.key === key);
+    if (!chip) throw new Error(`No offered network ${key}`);
+    return { name: chip.name, value: chip.url };
   };
 
-  describe("entities/custom-rpc/model/custom-rpcs", () => {
+  describe("entities/cluster/model/custom-rpcs", () => {
     beforeEach(() => {
       localStorage.clear();
     });

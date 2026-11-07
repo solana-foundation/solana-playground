@@ -1,3 +1,4 @@
+import { Connection } from "@solana/web3.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PgConnection } from "./connection";
@@ -26,10 +27,10 @@ describe("PgConnection.getCluster", () => {
     "http://127.0.0.1:8899",
     "http://127.0.0.1:18899",
   ])("reads %s as localnet without an RPC call", async (endpoint) => {
-    const create = vi.spyOn(PgConnection, "create");
+    const getGenesisHash = vi.spyOn(Connection.prototype, "getGenesisHash");
 
     await expect(PgConnection.getCluster(endpoint)).resolves.toBe("localnet");
-    expect(create).not.toHaveBeenCalled();
+    expect(getGenesisHash).not.toHaveBeenCalled();
   });
 
   it("reads the public devnet URL as devnet, not localnet", async () => {
@@ -44,10 +45,9 @@ describe("PgConnection.getCluster", () => {
     "https://localhost.example.com",
     "https://rpc.example.com/?proxy=127.0.0.1",
   ])("does not read %s as localnet", async (endpoint) => {
-    const getGenesisHash = vi.fn(async () => "unknown-genesis");
-    vi.spyOn(PgConnection, "create").mockReturnValue({
-      getGenesisHash,
-    } as never);
+    const getGenesisHash = vi
+      .spyOn(Connection.prototype, "getGenesisHash")
+      .mockResolvedValue("unknown-genesis");
 
     await expect(PgConnection.getCluster(endpoint)).rejects.toThrow(
       "did not match any cluster"

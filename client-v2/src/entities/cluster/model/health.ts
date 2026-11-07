@@ -63,7 +63,7 @@ export const fetchRpcHealth = fetchRpcHealthWithin(RPC_CHECK_TIMEOUT_MS);
 if (import.meta.vitest) {
   const { describe, it, expect, vi, afterEach, beforeAll } = import.meta.vitest;
 
-  describe("entities/custom-rpc/model/health", () => {
+  describe("entities/cluster/model/health", () => {
     let logger: typeof import("@/shared/lib/logger");
     beforeAll(async () => {
       logger = await import("@/shared/lib/logger");

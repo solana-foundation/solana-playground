@@ -3,6 +3,8 @@ import * as mocha from "mocha/browser-entry";
 import { transpile } from "typescript";
 import * as util from "util";
 
+import { getConnectionFor } from "@/entities/cluster";
+
 import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
 import { PgProgramInfo } from "../program-info";
@@ -465,10 +467,9 @@ export class PgJsRuntime {
         url?: string,
         opts: PgWeb3.ConfirmOptions = anchor.AnchorProvider.defaultOptions()
       ) => {
-        const connection = PgConnection.create({
-          endpoint: url ?? "http://localhost:8899",
-          commitment: opts.commitment,
-        });
+        const connection = getConnectionFor(opts.commitment)(
+          url ?? "http://localhost:8899"
+        );
 
         const wallet = this._getPg().wallet;
         if (!wallet) throw new Error("Wallet not connected");

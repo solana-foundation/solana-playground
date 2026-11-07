@@ -2,7 +2,7 @@ import { CircleAlert, ExternalLink } from "lucide-react";
 
 import type { FundingFailure } from "@/commands/deploy/run";
 import { networkInSentence, solOn } from "@/constants";
-import { FAUCET_URL } from "@/shared/lib/faucet";
+import { faucetUrlFor, isFaucetCluster } from "@/shared/lib/faucet";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   Callout,
@@ -65,7 +65,10 @@ const FundingAction = ({ p }: { p: BaseNotEnoughSolProps }) => {
 /** The deploy stopped because the paying wallet holds too little SOL */
 const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
   const network = networkInSentence(p.cluster);
-  const hasWebFaucet = p.cluster === "devnet" || p.cluster === "testnet";
+  const faucetUrl =
+    p.cluster !== undefined && isFaucetCluster(p.cluster)
+      ? faucetUrlFor(p.cluster)(p.address)
+      : undefined;
 
   return (
     <Callout variant="error" role="alert" aria-label="Not enough SOL">
@@ -95,9 +98,9 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
       </CalloutDescription>
       <CalloutActions>
         <FundingAction p={p} />
-        {hasWebFaucet && (
+        {faucetUrl && (
           <CalloutAction asChild>
-            <a href={FAUCET_URL} target="_blank" rel="noopener noreferrer">
+            <a href={faucetUrl} target="_blank" rel="noopener noreferrer">
               Open faucet
               <ExternalLink data-icon="inline-end" />
             </a>

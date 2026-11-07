@@ -3,7 +3,6 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { FAUCET_URL } from "@/shared/lib/faucet";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import type { RunState } from "../model/run";
@@ -134,7 +133,7 @@ describe("BaseRunCallout", () => {
     expect(card?.textContent).toContain("0.02 SOL");
     expect(
       screen.getByRole("link", { name: "Get devnet SOL" }).getAttribute("href")
-    ).toBe(FAUCET_URL);
+    ).toBe("https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet");
     // Thumb sized on a phone, as the actions beside it are
     expect(
       screen.getByRole("button", { name: "Copy address" }).className

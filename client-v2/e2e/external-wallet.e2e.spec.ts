@@ -56,7 +56,7 @@ test("client-v2-external-wallet: An installed wallet is offered", async ({
   await openWalletMenu(page);
 
   await expect(
-    page.getByRole("menuitem", { name: "Connect to Phantom" })
+    page.getByRole("menuitem", { name: "Connect Phantom Wallet" })
   ).toBeVisible();
 });
 
@@ -84,7 +84,7 @@ test("client-v2-external-wallet: A wallet that registers late", async ({
 
   await openWalletMenu(page);
   await expect(
-    page.getByRole("menuitem", { name: "Connect to Backpack" })
+    page.getByRole("menuitem", { name: "Connect Backpack Wallet" })
   ).toBeVisible();
 });
 
@@ -101,11 +101,9 @@ test("client-v2-external-wallet: A wallet without Solana support", async ({
   await openWalletMenu(page);
 
   await expect(
-    page.getByRole("menuitem", { name: "Connect to Phantom" })
+    page.getByRole("menuitem", { name: "Connect Phantom Wallet" })
   ).toBeVisible();
-  await expect(
-    page.getByRole("menuitem", { name: "Connect to EvmOnly" })
-  ).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: /EvmOnly/ })).toHaveCount(0);
 });
 
 test("client-v2-external-wallet: Connect from the terminal", async ({

@@ -8,6 +8,7 @@ import type {
   Beat,
   Block,
   CallArg,
+  Goal,
   QuestionResult,
   Step,
   TutorialDefinition,
@@ -26,6 +27,7 @@ import type {
   ConversationProgress,
   Cursor,
   PassedVia,
+  PassReason,
   Proposal,
   Resolution,
   RunRecord,
@@ -36,6 +38,7 @@ import type {
 } from "./progress";
 import {
   answerOf,
+  existsOf,
   freshProgress,
   hintOf,
   isMismatch,
@@ -57,6 +60,7 @@ import { shippedIdl, shippedIdlAt } from "./shipped-idl";
  * the planned-failure rule); where it differs, `plans/3.1-conversation-engine.md`
  * says why.
  */
+// TODO(HOO-2362): model the lesson as an explicit state machine (states, events, allowed transitions) in its own OpenSpec change; the rules are spread across this reducer's cases
 
 export interface EngineContext {
   definition: TutorialDefinition;
@@ -78,6 +82,8 @@ export interface Stage {
   /** 1-based, of `count` */
   index: number;
   count: number;
+  /** How far a long stage has got, as the runner's `RunStage` reports it */
+  detail?: string;
 }
 
 export const INITIAL_ENGINE_STATE: EngineState = {
@@ -125,6 +131,7 @@ export type Action =
       label: string;
       index: number;
       count: number;
+      detail?: string;
       at: number;
     }
   | {
@@ -253,6 +260,8 @@ export type Effect =
         step: number;
         via: PassedVia;
         seconds: number;
+        /** Only when the account the goal creates already existed */
+        reason?: PassReason;
       };
     }
   | {
@@ -524,6 +533,7 @@ export const panelInput = (
   call: NonNullable<RunInput["call"]>
 ): RunInput => {
   const goal = stepAt(definition, p.cursor)?.goal;
+  const creates = createsOf(goal);
   return {
     beatId: "call-panel",
     call: Object.keys(p.accounts).length
@@ -535,8 +545,22 @@ export const panelInput = (
     sameIdlName(goal.instruction, call.instruction)
       ? { log: goal.log }
       : {}),
+    ...(creates && sameIdlName(creates.instruction, call.instruction)
+      ? { creates }
+      : {}),
   };
 };
+
+/** A goal a failed result can pass: a refusal, or a call whose account may already exist */
+const acceptsFailure = (goal: Goal): boolean =>
+  goal.kind === "refused" ||
+  (goal.kind === "call" && goal.creates !== undefined);
+
+/** The live `call` goal's instruction and the account it creates, if it names one */
+const createsOf = (goal: Goal | undefined): RunInput["creates"] =>
+  goal?.kind === "call" && goal.creates !== undefined
+    ? { instruction: goal.instruction, account: goal.creates }
+    : undefined;
 
 /** A run in flight on an act card: the panel waits for it */
 export const running = (p: ConversationProgress) =>
@@ -652,7 +676,8 @@ const pass = (
   p: ConversationProgress,
   step: Step,
   at: number,
-  via: PassedVia
+  via: PassedVia,
+  reason: PassReason | undefined
 ): ConversationProgress => {
   const beats = { ...p.beats };
   for (const fail of [false, true]) {
@@ -678,7 +703,10 @@ const pass = (
   return {
     ...p,
     passed: p.passed.includes(step.id) ? p.passed : [...p.passed, step.id],
-    times: { ...p.times, [step.id]: { from, to: at, via } },
+    times: {
+      ...p.times,
+      [step.id]: reason ? { from, to: at, via, reason } : { from, to: at, via },
+    },
     beats,
   };
 };
@@ -779,17 +807,24 @@ const withProgress = (
   effects: Effect[] = []
 ): Reduced => ({ state: { ...state, progress }, effects });
 
-/** The step passes (see `pass`), and `tutorial_step_passed` says how and how long */
+/**
+ * The step passes on `result` (see `pass`), and `tutorial_step_passed` says
+ * how, how long, and when the account the goal creates already existed
+ */
 const passStep = (
   ctx: EngineContext,
   state: EngineState,
   p: ConversationProgress,
   step: Step,
   at: number,
-  via: PassedVia
+  via: PassedVia,
+  result: RunResult
 ): Reduced => {
   const from = p.times[step.id]?.from ?? at;
-  return withProgress(state, pass(ctx, p, step, at, via), [
+  const reason: PassReason | undefined = existsOf(result)
+    ? "exists"
+    : undefined;
+  return withProgress(state, pass(ctx, p, step, at, via, reason), [
     {
       kind: "event",
       name: "tutorial_step_passed",
@@ -799,6 +834,7 @@ const passStep = (
         via,
         // Two devices' clocks can disagree; a pass never takes negative time
         seconds: Math.max(0, Math.round((at - from) / 1000)),
+        ...(reason ? { reason } : {}),
       },
     },
   ]);
@@ -1154,6 +1190,10 @@ const reduceAction = (
       if (step.goal.kind === "call" && step.goal.log !== undefined) {
         input.log = step.goal.log;
       }
+      const creates = createsOf(step.goal);
+      if (creates && (beat.act === "run" || beat.act === "call")) {
+        input.creates = creates;
+      }
       // The planned failure is a build of the step's own beats; the second
       // build, inside `onFail`, shows whatever error it meets
       if (beat.act === "build" && step.failsWith && !found.fail) {
@@ -1210,9 +1250,9 @@ const reduceAction = (
       if (action.startedAt !== undefined && action.startedAt !== run.at) {
         return same(state);
       }
-      const { beatId, label, index, count } = action;
+      const { beatId, label, index, count, detail } = action;
       return {
-        state: { ...state, stage: { beatId, label, index, count } },
+        state: { ...state, stage: { beatId, label, index, count, detail } },
         effects: [],
       };
     }
@@ -1229,11 +1269,12 @@ const reduceAction = (
       const { step, beat } = found;
       const took = action.at - run.at;
       const result = action.result;
-      // A refusal the step's goal names is its own outcome: it passes the
-      // step below, and is no failure to explain
+      // A failure the step's goal accepts (a refusal it names, or the account
+      // it creates already there) is its own outcome: it passes the step
+      // below, and is no failure to explain
       const refused =
         !result.ok &&
-        step.goal.kind === "refused" &&
+        acceptsFailure(step.goal) &&
         !passed(p, step) &&
         ctx.judge(step.goal, result);
       const measured = actionRunOf(
@@ -1273,7 +1314,7 @@ const reduceAction = (
       ) {
         const via: PassedVia = beat.act === "run" ? "client" : "chat";
         return withEffect(
-          passStep(ctx, cleared, recorded, step, action.at, via),
+          passStep(ctx, cleared, recorded, step, action.at, via, result),
           measured
         );
       }
@@ -1378,7 +1419,15 @@ const reduceAction = (
       const reduced =
         !step || passed(p, step) || !ctx.judge(step.goal, action.result)
           ? unmoved
-          : passStep(ctx, state, known, step, action.at, action.via);
+          : passStep(
+              ctx,
+              state,
+              known,
+              step,
+              action.at,
+              action.via,
+              action.result
+            );
       if (action.via !== "call_panel") return reduced;
       // Every call from the panel counts, one that passes nothing too
       return withEffect(
@@ -1754,7 +1803,6 @@ const reduceAction = (
 
 if (import.meta.vitest) {
   const { describe, it, expect, beforeAll } = import.meta.vitest;
-  type Goal = import("@/entities/tutorial").Goal;
   type Refusal = import("./progress").Refusal;
 
   describe("features/tutorial-conversation/model/reducer", () => {
@@ -3056,6 +3104,7 @@ if (import.meta.vitest) {
             label: "Building",
             index: 1,
             count: 1,
+            detail: "half way",
             at: 7100,
           },
         ]).state;
@@ -3064,6 +3113,7 @@ if (import.meta.vitest) {
           label: "Building",
           index: 1,
           count: 1,
+          detail: "half way",
         });
         const ended = reduce(ctx(), midRun, {
           type: "ended",
@@ -4894,6 +4944,12 @@ if (import.meta.vitest) {
             ],
             { kind: "call", instruction: "paint" }
           ),
+          // Zero Copy's create step (HOO-2362)
+          step("create", [act("s2.create", "init_map", undefined, "Create")], {
+            kind: "call",
+            instruction: "init_map",
+            creates: "map",
+          }),
         ],
         finish: {
           headline: "Done",
@@ -4996,6 +5052,86 @@ if (import.meta.vitest) {
           kind: "event",
           name: "tutorial_step_passed",
           params: { tutorial: "refusals", step: 1, via: "chat", seconds: 2 },
+        });
+      });
+
+      describe("the create step", () => {
+        const MAP = {
+          instruction: "init_map",
+          account: "map",
+          address: "Map1",
+        };
+        const inUse = (exists: typeof MAP | undefined): RunResult =>
+          exists
+            ? {
+                act: "call",
+                ok: false,
+                seconds: 1,
+                message: "custom program error: 0x0",
+                log: "",
+                refused: {
+                  instruction: "init_map",
+                  error: { code: 0, name: null },
+                },
+                exists,
+              }
+            : {
+                act: "call",
+                ok: false,
+                seconds: 1,
+                message: "custom program error: 0x0",
+                log: "",
+                refused: {
+                  instruction: "init_map",
+                  error: { code: 0, name: null },
+                },
+              };
+
+        it("sends the account its goal creates with the call", () => {
+          const { effects } = run([press("s2.create", 2000)], at(4));
+          expect(effects).toContainEqual(
+            expect.objectContaining({
+              kind: "run",
+              input: expect.objectContaining({
+                creates: { instruction: "init_map", account: "map" },
+              }),
+            })
+          );
+        });
+
+        it("passes on a map that already exists, recorded refused, with reason exists", () => {
+          const out = inUse(MAP);
+          const { progress, effects } = run(
+            [press("s2.create", 2000), ended("s2.create", 2000, out)],
+            at(4)
+          );
+          expect(progress.runs["s2.create"]).toEqual([
+            { status: "refused", at: 2000, took: 900, result: out },
+          ]);
+          expect(progress.times.create).toMatchObject({ reason: "exists" });
+          expect(effects).toContainEqual({
+            kind: "event",
+            name: "tutorial_step_passed",
+            params: {
+              tutorial: "refusals",
+              step: 5,
+              via: "chat",
+              seconds: 2,
+              reason: "exists",
+            },
+          });
+        });
+
+        it("stays failed on a call refused for another reason", () => {
+          const { progress } = run(
+            [
+              press("s2.create", 2000),
+              ended("s2.create", 2000, inUse(undefined)),
+            ],
+            at(4)
+          );
+          expect(progress.runs["s2.create"]?.[0]?.status).toBe("failed");
+          expect(progress.passed).not.toContain("create");
         });
       });
 

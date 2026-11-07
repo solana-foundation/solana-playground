@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_ENDPOINT } from "@/constants";
-import { PgCustomRpcs } from "@/entities/custom-rpc";
+import { PgCustomRpcs } from "@/entities/cluster";
 
 // The real `@/utils` needs the app's build-time globals; the section only
 // reads the deploy state, the endpoint and the toast from it

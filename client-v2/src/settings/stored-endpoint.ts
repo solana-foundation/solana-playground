@@ -1,8 +1,12 @@
 // Loaded by `utils/settings.ts` before everything else, so this file only
 // imports modules whose own imports end at `shared/config/client-env`, which
 // imports nothing.
-import type { Network } from "../constants/connection";
-import { Endpoint, NETWORKS } from "../constants/connection";
+import type {
+  ClusterKey,
+  Clusters,
+  ClusterSelection,
+} from "../entities/cluster/model/clusters";
+import { CLUSTERS, offeredOf } from "../entities/cluster/model/clusters";
 import { SERVER_URL } from "../shared/config/client-env";
 import { FOUNDATION_ENDPOINT, LOCAL_ENDPOINT } from "./server/default-endpoint";
 
@@ -37,41 +41,77 @@ type StoredEndpoint = { option: string } | { option: "custom"; url: string };
  * on a public URL or under a platform key the network list no longer offers
  * reads back as the offered network.
  *
- * @param networks the networks Settings offers
+ * @param clusters every endpoint of ours ({@link CLUSTERS})
  * @param configuredServer the build server `REACT_APP_SERVER_URL` names, if
  * any -- ours too, so it follows the env like the rest
  */
 export const buildEndpointOptions = (
-  networks: ReadonlyArray<Network>,
+  clusters: Clusters,
   configuredServer?: string
-): EndpointOptions => ({
-  "connection.endpoint": [
-    ...networks.map((n) => ({ key: n.key, url: n.value })),
-    // The public URLs, stored under the offered network's key
-    { key: "mainnet-beta", url: Endpoint.MAINNET_BETA },
-    { key: "devnet", url: Endpoint.DEVNET },
-    { key: "testnet", url: Endpoint.TESTNET },
-    // Keys the platform options were stored under before HOO-2488
-    ...networks
-      .filter((n) => n.cluster !== "localnet")
-      .map((n) => ({ key: `${n.key}-platform`, url: n.value })),
-    // Not offered, still keyed: code paths set Playnet
-    { key: "playnet", url: Endpoint.PLAYNET },
-  ],
-  "server.endpoint": [
-    // First, so a profile on the configured server follows the env even
-    // when the env names a listed one -- production sets it to the
-    // Foundation's (`Dockerfile`). A listed option picked by hand that
-    // equals it follows the env too; it was the default anyway.
-    ...(configuredServer ? [{ key: "configured", url: configuredServer }] : []),
-    { key: "foundation", url: FOUNDATION_ENDPOINT },
-    { key: "local", url: LOCAL_ENDPOINT },
-    // No `solpg` (api.solpg.io): a profile stored under that key reads as
-    // the default, like any key whose option is gone (`fromStoredEndpoints`)
-  ],
-});
+): EndpointOptions => {
+  const offered = offeredOf(clusters);
+  // The chips a platform RPC can take: Mainnet, Devnet and Testnet
+  const remote = offered.filter((c) => c.cluster !== "localnet");
+  return {
+    "connection.endpoint": [
+      ...offered.map((c) => ({ key: c.key, url: c.url })),
+      // The public URLs, stored under the offered network's key
+      ...remote.map((c) => ({ key: c.key, url: c.publicUrl })),
+      // Keys the platform options were stored under before HOO-2488
+      ...remote.map((c) => ({ key: `${c.key}-platform`, url: c.url })),
+      // Not offered, still keyed: code paths set Playnet
+      ...Object.values(clusters)
+        .filter((c) => !c.isOffered)
+        .map((c) => ({ key: c.key, url: c.url })),
+    ],
+    "server.endpoint": [
+      // First, so a profile on the configured server follows the env even
+      // when the env names a listed one -- production sets it to the
+      // Foundation's (`Dockerfile`). A listed option picked by hand that
+      // equals it follows the env too; it was the default anyway.
+      ...(configuredServer
+        ? [{ key: "configured", url: configuredServer }]
+        : []),
+      { key: "foundation", url: FOUNDATION_ENDPOINT },
+      { key: "local", url: LOCAL_ENDPOINT },
+      // No `solpg` (api.solpg.io): a profile stored under that key reads as
+      // the default, like any key whose option is gone (`fromStoredEndpoints`)
+    ],
+  };
+};
 
-const ENDPOINT_OPTIONS = buildEndpointOptions(NETWORKS, SERVER_URL);
+const ENDPOINT_OPTIONS = buildEndpointOptions(CLUSTERS, SERVER_URL);
+
+const isClusterKey = (key: string): key is ClusterKey =>
+  Object.hasOwn(CLUSTERS, key);
+
+/**
+ * What a connection endpoint is stored as: the key of the first entry with
+ * its address, where that key reads back as the same address. An address
+ * whose key reads back as another one is custom: the public Devnet picked as
+ * a custom RPC beside Devnet on a platform RPC (HOO-2690) must stay the
+ * public one after a reload.
+ */
+const selectionOfWith =
+  (options: ReadonlyArray<EndpointOption>) =>
+  (url: string): ClusterSelection => {
+    const known = options.find((o) => o.url === url);
+    const readsBack =
+      known && options.find((o) => o.key === known.key)?.url === url;
+    return readsBack && isClusterKey(known.key)
+      ? { key: known.key }
+      : { cluster: "custom", url };
+  };
+
+/** What a build server is stored as, by the same reads-back rule */
+const storedServerWith =
+  (options: ReadonlyArray<EndpointOption>) =>
+  (url: string): StoredEndpoint => {
+    const known = options.find((o) => o.url === url);
+    const readsBack =
+      known && options.find((o) => o.key === known.key)?.url === url;
+    return readsBack ? { option: known.key } : { option: "custom", url };
+  };
 
 type State = Record<string, unknown>;
 
@@ -117,10 +157,9 @@ const isAddress = (value: unknown): value is string => {
 
 /**
  * Settings as they go into `localStorage`: an address we provide becomes
- * its option's key, so rotating it in the env reaches every profile. An
- * address whose key reads back as another one is stored as custom: the
- * public Devnet picked as a custom RPC beside Devnet on a platform RPC
- * (HOO-2690) must stay the public one after a reload.
+ * its option's key, so rotating it in the env reaches every profile; a
+ * connection endpoint goes through its {@link ClusterSelection}, so only a
+ * custom RPC stores a URL.
  *
  * @param state the settings in memory
  * @param options the addresses we provide
@@ -128,19 +167,22 @@ const isAddress = (value: unknown): value is string => {
 export const toStoredEndpoints = (
   state: State,
   options: EndpointOptions = ENDPOINT_OPTIONS
-): State =>
-  ENDPOINT_SETTINGS.reduce(
-    (acc, id) =>
-      mapSetting(acc, id, (url): StoredEndpoint => {
-        const known = options[id].find((o) => o.url === url);
-        const readsBack =
-          known && options[id].find((o) => o.key === known.key)?.url === url;
-        return readsBack
-          ? { option: known.key }
-          : { option: "custom", url: url as string };
-      }),
-    state
+): State => {
+  const selectionOf = selectionOfWith(options["connection.endpoint"]);
+  const withConnection = mapSetting(
+    state,
+    "connection.endpoint",
+    (url): StoredEndpoint => {
+      const selection = selectionOf(url as string);
+      return "url" in selection
+        ? { option: "custom", url: selection.url }
+        : { option: selection.key };
+    }
   );
+  return mapSetting(withConnection, "server.endpoint", (url) =>
+    storedServerWith(options["server.endpoint"])(url as string)
+  );
+};
 
 /**
  * Settings as they come out of `localStorage`, with every endpoint an
@@ -263,12 +305,12 @@ if (import.meta.vitest) {
   const { describe, it, expect, beforeAll } = import.meta.vitest;
   describe("settings/stored-endpoint", () => {
     let SERVER_ENDPOINT_OPTIONS: typeof import("./server/default-endpoint").SERVER_ENDPOINT_OPTIONS;
-    let buildNetworks: typeof import("../constants/connection").buildNetworks;
+    let clustersFor: typeof import("../entities/cluster/model/clusters").clustersFor;
     let options: EndpointOptions;
     let onPublicTestnet: EndpointOptions;
     beforeAll(async () => {
       ({ SERVER_ENDPOINT_OPTIONS } = await import("./server/default-endpoint"));
-      ({ buildNetworks } = await import("../constants/connection"));
+      ({ clustersFor } = await import("../entities/cluster/model/clusters"));
       options = buildEndpointOptions(
         networks({
           devnet: PLATFORM_DEVNET,
@@ -288,12 +330,27 @@ if (import.meta.vitest) {
     const PLATFORM_MAINNET = "https://mainnet.rpc.test/?api-key=old";
     const PLATFORM_TESTNET = "https://testnet.rpc.test/?api-key=old";
 
-    /** The offered networks, the remote ones on the given URLs */
+    /** Each endpoint's public URL, which no env changes */
+    const Endpoint = {
+      PLAYNET: CLUSTERS.playnet.publicUrl,
+      LOCALNET: CLUSTERS.localnet.publicUrl,
+      SURFPOOL: CLUSTERS.surfpool.publicUrl,
+      DEVNET: CLUSTERS.devnet.publicUrl,
+      TESTNET: CLUSTERS.testnet.publicUrl,
+      MAINNET_BETA: CLUSTERS["mainnet-beta"].publicUrl,
+    };
+
+    /** Every endpoint of ours, the remote ones on the given URLs */
     const networks = (urls: {
-      devnet: string;
-      mainnet: string;
+      devnet?: string;
+      mainnet?: string;
       testnet?: string;
-    }) => buildNetworks(urls);
+    }) =>
+      clustersFor({
+        devnet: { rpcUrl: urls.devnet },
+        "mainnet-beta": { rpcUrl: urls.mainnet },
+        testnet: { rpcUrl: urls.testnet },
+      });
 
     /** An entry that is both its key's reading and its address's key */
     const canonical = (id: keyof EndpointOptions) =>
@@ -378,7 +435,10 @@ if (import.meta.vitest) {
       });
 
       it("keys the build server the env configures, and follows it", () => {
-        const configured = buildEndpointOptions([], "https://build.test/a");
+        const configured = buildEndpointOptions(
+          networks({}),
+          "https://build.test/a"
+        );
         const stored = JSON.parse(
           JSON.stringify(
             toStoredEndpoints(
@@ -389,7 +449,10 @@ if (import.meta.vitest) {
         );
 
         expect(at(stored, "server.endpoint")).toEqual({ option: "configured" });
-        const moved = buildEndpointOptions([], "https://build.test/b");
+        const moved = buildEndpointOptions(
+          networks({}),
+          "https://build.test/b"
+        );
         expect(
           fromStoredEndpoints(stored, defaults, moved).server.endpoint
         ).toBe("https://build.test/b");
@@ -411,7 +474,10 @@ if (import.meta.vitest) {
       it("stores the configured build server as `configured` even when it is a listed one", () => {
         // Production sets REACT_APP_SERVER_URL to the Foundation's server
         // (`Dockerfile`); a profile on it must follow the env when it moves
-        const configured = buildEndpointOptions([], FOUNDATION_ENDPOINT);
+        const configured = buildEndpointOptions(
+          networks({}),
+          FOUNDATION_ENDPOINT
+        );
         const stored = JSON.parse(
           JSON.stringify(
             toStoredEndpoints(
@@ -422,14 +488,20 @@ if (import.meta.vitest) {
         );
 
         expect(at(stored, "server.endpoint")).toEqual({ option: "configured" });
-        const moved = buildEndpointOptions([], "https://build.test/new");
+        const moved = buildEndpointOptions(
+          networks({}),
+          "https://build.test/new"
+        );
         expect(
           fromStoredEndpoints(stored, defaults, moved).server.endpoint
         ).toBe("https://build.test/new");
       });
 
       it("falls back to the default build server when its stored option is gone", () => {
-        const configured = buildEndpointOptions([], "https://build.test/a");
+        const configured = buildEndpointOptions(
+          networks({}),
+          "https://build.test/a"
+        );
         const stored = JSON.parse(
           JSON.stringify(
             toStoredEndpoints(
@@ -439,7 +511,7 @@ if (import.meta.vitest) {
           )
         );
 
-        const unconfigured = buildEndpointOptions([]);
+        const unconfigured = buildEndpointOptions(networks({}));
         expect(
           fromStoredEndpoints(stored, defaults, unconfigured).server.endpoint
         ).toBe(defaults.server.endpoint);

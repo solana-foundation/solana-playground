@@ -10,6 +10,17 @@ const WALLET = "Wa11et1111111111111111111111111111111111111";
 const balance = vi.fn(async () => 10_000_000_000);
 const waitForInput = vi.fn(async () => true);
 
+const chain = vi.hoisted(() => ({
+  /** What `getReadBufferConnection` answers; the selected connection when unset */
+  readBuffer: undefined as
+    | { getAccountInfo: () => Promise<object | undefined> }
+    | undefined,
+  /** Buffer reads through the selected connection */
+  selectedReads: 0,
+  /** A confirmation's `err`; once set, every send's own check decides whether it landed */
+  confirmErr: undefined as string | undefined,
+}));
+
 vi.mock("../../features/auth", () => ({
   PgSession: { get: vi.fn(() => ({ id: "u1" })) },
 }));
@@ -44,11 +55,16 @@ vi.mock("../../utils", () => {
       cluster: "devnet",
       getCluster: vi.fn(async () => "devnet"),
       getAirdropAmount: vi.fn((): number | null => 5),
+      getReadBufferConnection: <T>(connection: T) =>
+        chain.readBuffer ?? connection,
       current: {
         getBalance: (...args: unknown[]) => balance(...(args as [])),
         getMinimumBalanceForRentExemption: async (len: number) => len,
-        // eslint-disable-next-line unicorn/no-null -- web3's `getAccountInfo` answers `null` for no account
-        getAccountInfo: async () => null,
+        getAccountInfo: async () => {
+          chain.selectedReads++;
+          // eslint-disable-next-line unicorn/no-null -- web3's `getAccountInfo` answers `null` for no account
+          return null;
+        },
       },
     },
     PgGlobal: {
@@ -74,8 +90,10 @@ vi.mock("../../utils", () => {
       bold: (t: string) => t,
       get: async () => ({ waitForInput, println: vi.fn() }),
     },
-    // eslint-disable-next-line unicorn/no-null -- an RPC confirmation's `err` is `null` on success
-    PgTx: { confirm: vi.fn(async () => ({ err: null })) },
+    PgTx: {
+      // eslint-disable-next-line unicorn/no-null -- an RPC confirmation's `err` is `null` on success
+      confirm: vi.fn(async () => ({ err: chain.confirmErr ?? null })),
+    },
     PgView: { setMainSecondaryProgress: vi.fn() },
     PgWallet: { current: { publicKey: pk, isPg: true } },
     PgWeb3: {
@@ -128,6 +146,9 @@ const runChecks = async () => {
 beforeEach(() => {
   for (const sub of subscriptions.splice(0)) sub.dispose();
   vi.clearAllMocks();
+  chain.readBuffer = undefined;
+  chain.selectedReads = 0;
+  chain.confirmErr = undefined;
   balance.mockResolvedValue(10_000_000_000);
   Object.assign(PgProgramInfo, {
     lastBuildFailed: false,
@@ -455,6 +476,47 @@ describe("deploy run", () => {
     expect(result).toMatchObject({ signature: "sig-upgrade", upgraded: true });
     expect(upgrades).toContain(true);
   });
+
+  it.each([
+    {
+      last: "deploy",
+      onChain: { deployed: false, upgradable: true, programDataLen: 0 },
+      signature: "sig-deploy",
+    },
+    {
+      last: "upgrade",
+      onChain: { deployed: true, upgradable: true, programDataLen: 1000 },
+      signature: "sig-upgrade",
+    },
+  ] as const)(
+    "checks the buffer through the read-buffer RPC on the way to the $last",
+    async ({ last, onChain, signature }) => {
+      Object.assign(PgProgramInfo, { onChain });
+      const { BpfLoaderUpgradeable } = await import("./bpf-loader-upgradeable");
+      let bufferExists = false;
+      vi.mocked(BpfLoaderUpgradeable.createBuffer).mockImplementationOnce(
+        async () => {
+          bufferExists = true;
+          return "sig-buffer";
+        }
+      );
+      vi.mocked(
+        last === "deploy"
+          ? BpfLoaderUpgradeable.deployProgram
+          : BpfLoaderUpgradeable.upgradeProgram
+      ).mockImplementationOnce(async () => {
+        bufferExists = false;
+        return signature;
+      });
+      chain.readBuffer = {
+        getAccountInfo: async () => (bufferExists ? {} : undefined),
+      };
+      chain.confirmErr = "unconfirmed";
+
+      await expect(handleDeploy()).resolves.toMatchObject({ signature });
+      expect(chain.selectedReads).toBe(0);
+    }
+  );
 
   it("goes back to no run after a failure", async () => {
     const { BpfLoaderUpgradeable } = await import("./bpf-loader-upgradeable");

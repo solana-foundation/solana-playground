@@ -5,6 +5,7 @@ import { isProgramLog } from "@/shared/lib/program-log";
 
 import type {
   Called,
+  Exists,
   Receipt,
   ReceiptAccount,
   Refusal,
@@ -219,6 +220,38 @@ export const refusalOf = (
   return {
     instruction,
     error: custom ? { code: parseInt(custom, 16), name: null } : null,
+  };
+};
+
+/** The System Program's line when the account to create is already there */
+const IN_USE = /^(?:Allocate|Create Account): account .*already in use$/;
+const IN_USE_ADDRESS = /address: (\w+)/;
+
+/**
+ * The existing account behind a refusal of the instruction that creates it:
+ * the System Program's "already in use" with its error 0, in that
+ * instruction. Undefined for any other refusal, or with nothing to create
+ */
+export const existingOf = (
+  log: string[],
+  refused: Refusal | undefined,
+  creates: { instruction: string; account: string } | undefined
+): Exists | undefined => {
+  if (
+    !creates ||
+    !refused ||
+    refused.error?.code !== 0 ||
+    !sameIdlName(refused.instruction, creates.instruction)
+  ) {
+    return undefined;
+  }
+  const line = log.find((l) => IN_USE.test(l));
+  if (line === undefined) return undefined;
+  const address = IN_USE_ADDRESS.exec(line)?.[1];
+  return {
+    instruction: creates.instruction,
+    account: creates.account,
+    ...(address === undefined ? {} : { address }),
   };
 };
 
@@ -531,6 +564,46 @@ if (import.meta.vitest) {
           error: null,
         });
         expect(refusalOf([], PROGRAM, [hello()])).toBeUndefined();
+      });
+    });
+
+    describe("existingOf", () => {
+      const SYSTEM = "11111111111111111111111111111111";
+      const PLAYER = "3azZ1111111111111111111111111111111111111111";
+      /** Lumberjack's `init_player` on a player that exists, as devnet logged it (HOO-2362) */
+      const initLog = (systemLine: string, code: string) => [
+        `Program ${PROGRAM} invoke [1]`,
+        "Program log: Instruction: InitPlayer",
+        `Program ${SYSTEM} invoke [2]`,
+        systemLine,
+        `Program ${SYSTEM} failed: custom program error: ${code}`,
+        `Program ${PROGRAM} failed: custom program error: ${code}`,
+      ];
+      const init: DecodedCall = {
+        instruction: "initPlayer",
+        args: {},
+        accounts: [],
+        wrote: [],
+      };
+      const CREATES = { instruction: "init_player", account: "player" };
+      const existing = (log: string[]) =>
+        existingOf(log, refusalOf(log, PROGRAM, [init]), CREATES);
+
+      it("names the account the System Program found already in use", () => {
+        const log = initLog(
+          `Allocate: account Address { address: ${PLAYER}, base: None } already in use`,
+          "0x0"
+        );
+        expect(existing(log)).toEqual({
+          instruction: "init_player",
+          account: "player",
+          address: PLAYER,
+        });
+      });
+
+      it("finds none in another refusal with error 0, whose log names no account in use", () => {
+        const log = initLog("Program log: Error: something else", "0x0");
+        expect(existing(log)).toBeUndefined();
       });
     });
 

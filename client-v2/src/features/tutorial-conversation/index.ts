@@ -1,5 +1,7 @@
 export { tutorialTelemetry } from "./model/telemetry";
 export {
+  existsLine,
+  existsOf,
   freshProgress,
   isSignedOut,
   isUnconfirmed,
@@ -13,7 +15,9 @@ export type {
   Called,
   ConversationProgress,
   Cursor,
+  Exists,
   PassedVia,
+  PassReason,
   ApplyFailure,
   Proposal,
   Receipt,

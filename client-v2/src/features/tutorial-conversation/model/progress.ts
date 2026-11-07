@@ -129,9 +129,37 @@ export interface StepTime {
   to: number | null;
   /** How the step passed: an act card, a client run or the Call panel */
   via?: PassedVia;
+  /** The account the goal creates already existed; absent on any other pass */
+  reason?: PassReason;
 }
 
 export type PassedVia = "chat" | "client" | "call_panel";
+
+/** Why a step passed other than on its own result landing */
+export type PassReason = "exists";
+
+/**
+ * The account a goal's instruction creates was already on chain, so nothing
+ * was created: the System Program refused the call as "already in use", or a
+ * client run found the account at its seeds' address and sent nothing
+ */
+export interface Exists {
+  instruction: string;
+  /** The account's IDL name, as the goal's `creates` gives it */
+  account: string;
+  /** Absent when the System Program's log line named none */
+  address?: string;
+}
+
+/** What the result card and the Call panel say about an existing account */
+export const existsLine = (exists: Exists): string =>
+  `\`${exists.account}\` already exists on devnet, so nothing was created.`;
+
+/** The existing account a failed run or call found, if any */
+export const existsOf = (r: RunResult): Exists | undefined =>
+  (r.act === "run" || r.act === "call") && !r.ok && "exists" in r
+    ? r.exists
+    : undefined;
 
 /**
  * A beat's state once the lesson has reached it. A `say` is `said`; a
@@ -221,11 +249,15 @@ export interface Wrote {
  * flight; a reload turns it into `interrupted` (`parseProgress`), since a
  * run never resumes and is never repeated by the engine.
  */
+// TODO(HOO-2362): operate run statuses through an enum or typed invariants, not string literals compared by hand
 export type RunRecord =
   | { status: "started"; at: number }
   | { status: "interrupted"; at: number }
   | { status: "ok"; at: number; took: number; result: RunResult }
-  /** A run or call the program refused, as the step's `refused` goal expected */
+  /**
+   * A failed run or call the step's goal accepts: a refusal its `refused`
+   * goal names, or the account its `call` goal `creates` already existing
+   */
   | { status: "refused"; at: number; took: number; result: RunResult }
   | {
       status: "failed";
@@ -479,6 +511,11 @@ export type RunResult =
        * log: Anchor's error, else the custom code the runtime names.
        */
       refused?: Refusal;
+      /**
+       * The account the live goal's `creates` names was already there, which
+       * a `call` goal with `creates` accepts
+       */
+      exists?: Exists;
     }
   | {
       act: "run" | "call";
@@ -685,6 +722,12 @@ const isRefusal = (v: unknown): v is Refusal =>
       Number.isInteger(v.error.code) &&
       (v.error.name === null || typeof v.error.name === "string")));
 
+const isExists = (v: unknown): v is Exists =>
+  isRecord(v) &&
+  typeof v.instruction === "string" &&
+  typeof v.account === "string" &&
+  (v.address === undefined || typeof v.address === "string");
+
 /** An account reading as the cards draw it */
 const isReading = (v: unknown): v is AccountReading =>
   isRecord(v) &&
@@ -699,7 +742,7 @@ const isReading = (v: unknown): v is AccountReading =>
  * tickets own its other fields, and the cards read them by act. The
  * exceptions are what `judgeGoal` reads: a call's `called`, which comes back
  * as no call when it is missing or does not read as one, and a failed call's
- * `refused`, dropped when it does not read as a refusal, so the judge can
+ * `refused` and `exists`, each dropped when it does not read as one, so the judge can
  * trust the type. A landed run's or call's `signatures` and `line`, which
  * the finish card draws, come back empty when they do not read as theirs,
  * and its `receipt` keeps only the fields that do, so the card can trust
@@ -751,11 +794,16 @@ const parseResult = (v: unknown): RunResult | null => {
       ? { ...rest, signatures, line, called, receipt: kept }
       : { ...rest, signatures, line, called }) as unknown as RunResult;
   }
-  if ((v.act === "run" || v.act === "call") && "refused" in v) {
-    const { refused, ...rest } = v;
-    return (isRefusal(refused)
-      ? { ...rest, refused }
-      : rest) as unknown as RunResult;
+  if (
+    (v.act === "run" || v.act === "call") &&
+    ("refused" in v || "exists" in v)
+  ) {
+    const { refused, exists, ...rest } = v;
+    return Object.assign(
+      rest,
+      isRefusal(refused) ? { refused } : {},
+      isExists(exists) ? { exists } : {}
+    ) as unknown as RunResult;
   }
   return v as unknown as RunResult;
 };
@@ -848,13 +896,14 @@ const parseRun = (v: unknown): RunRecord | null => {
         : null;
     }
     case "refused": {
-      // Only a failed call that carries its refusal was ever recorded refused
+      // Only a failed call that carries its refusal or an existing account
+      // was ever recorded refused
       const result = parseResult(v.result);
       return result &&
         isMs(v.took) &&
         !result.ok &&
         (result.act === "run" || result.act === "call") &&
-        result.refused
+        (result.refused || existsOf(result))
         ? { status: "refused", at, took: v.took, result }
         : null;
     }
@@ -972,6 +1021,7 @@ const parseTime = (v: unknown): StepTime | null => {
   if (!isRecord(v) || !isMs(v.from) || !isMsOrNull(v.to)) return null;
   const time: StepTime = { from: v.from, to: v.to };
   if (VIAS.includes(v.via as PassedVia)) time.via = v.via as PassedVia;
+  if (v.reason === "exists") time.reason = "exists";
   return time;
 };
 
@@ -1480,6 +1530,41 @@ if (import.meta.vitest) {
           },
         },
       ]);
+    });
+
+    it("reloads a pass on an existing account: its record and its reason", () => {
+      const exists: RunRecord = {
+        status: "refused",
+        at: 2000,
+        took: 900,
+        result: {
+          act: "run",
+          ok: false,
+          seconds: 0.9,
+          reason: "no_transaction",
+          message: "client.ts sent no transaction. See the terminal.",
+          log: "",
+          exists: {
+            instruction: "init_player",
+            account: "player",
+            address: "Player1",
+          },
+        },
+      };
+      const saved = midway({
+        runs: { "s2.run": [exists] },
+        times: {
+          deploy: { from: 1500, to: 2900, via: "client", reason: "exists" },
+        },
+      });
+      const reloaded = reload(saved);
+      expect(reloaded?.runs["s2.run"]).toEqual([exists]);
+      expect(reloaded?.times.deploy).toEqual({
+        from: 1500,
+        to: 2900,
+        via: "client",
+        reason: "exists",
+      });
     });
 
     it("drops the entries it cannot read, names each, and keeps the rest", () => {

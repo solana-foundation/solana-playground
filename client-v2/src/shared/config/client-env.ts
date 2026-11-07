@@ -19,6 +19,20 @@ export const PLATFORM_RPC_URLS = {
   testnet: process.env.REACT_APP_TESTNET_RPC_URL,
 };
 
+/** RPC endpoints program buffer accounts are read through, one per cluster; unset or `""` reads through the selected endpoint */
+export const READ_BUFFER_RPC_URLS = {
+  devnet: process.env.REACT_APP_DEVNET_READ_BUFFER_RPC_URL,
+  testnet: process.env.REACT_APP_TESTNET_READ_BUFFER_RPC_URL,
+  mainnet: process.env.REACT_APP_MAINNET_READ_BUFFER_RPC_URL,
+};
+
+/** The most buffer writes per second a deploy sends on the cluster, set just below the RPC plan's `sendTransaction` limit; unset or not above 0 caps nothing */
+export const SEND_TX_PER_SECOND = {
+  devnet: process.env.REACT_APP_DEVNET_SEND_TX_PER_SECOND,
+  testnet: process.env.REACT_APP_TESTNET_SEND_TX_PER_SECOND,
+  mainnet: process.env.REACT_APP_MAINNET_SEND_TX_PER_SECOND,
+};
+
 /**
  * Error reporting, analytics and the console log level; each unset turns its
  * part off. A getter, read when called, because tests stub these per case.

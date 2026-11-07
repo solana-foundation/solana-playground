@@ -374,6 +374,11 @@ The question that repairs a planned failure has the kicker `Fix it`. Its
 `call`. `say` is the line above the card; `title`, `context` and `button` are
 the card's.
 
+A `deploy` or `buildDeploy` act never says the program is not on devnet yet.
+A learner who starts the lesson over has it there already, and the deploy is
+an upgrade, which the card reads as "Upgraded …". Say what the deploy does:
+"Deploy it to devnet, and a client can call it."
+
 ```json beat
 {
   "kind": "act",
@@ -520,7 +525,15 @@ the failure. `onFail` holds the beats after the learner presses Explain: a
   made: a counter prints `Counter is now 2` the second time, so its goal's
   `log` is `"Counter is now \\d+"` in JSON, not `1`. Make the goal the
   call that works on every run (`increment`), never the call that creates
-  the account (`initialize`); that one needs care of its own, below.
+  the account (`initialize`); that one needs care of its own, below. When
+  the step is about creating the account, as Lumberjack's `init_player`
+  is, name the account in `creates`:
+  `{ "kind": "call", "instruction": "init_player", "creates": "player" }`.
+  The goal then also passes when the account already exists: the call is
+  refused because the account is in use, or a client run sends nothing
+  because it found the account at the address its seeds give. The account
+  must be one the step's `idl` lists for the instruction, and the win needs
+  `existsLine`, below.
 - `{ "kind": "refused", "instruction": "chop_tree", "error": { "name": "NotEnoughEnergy", "code": 6000 } }`:
   the program refused a call of the instruction with this error. Give the
   error's `name` (the variant of your `#[error_code]` enum), its `code`
@@ -554,7 +567,11 @@ Keep such calls to the step that creates the account.
 compiles"), `line` says what that means. A headline, like a step's
 `objective`, carries no closing period. `callPanelLine` replaces `line`
 when the learner passed the step from the Call panel; `"extra": "openTest"`
-adds an "Open Call" button. No values that only a live run knows (a program
+adds an "Open Call" button. `existsLine` replaces both when the step passed
+because the account its goal `creates` already existed. In two or three
+sentences it says why (this wallet ran the step before), that Anchor's
+`init` creates an account only once, and what the next step does with the
+account. A win has `existsLine` exactly when its goal has `creates`. No values that only a live run knows (a program
 id, a fee, a time, a counter that grows on every call); a value the program
 prints the same on every call, like `Hello, World!`, is fine.
 
@@ -868,6 +885,9 @@ example above, broken one way each:
 - `steps[1].goal.log: a regular expression, found "("`
   `log` is a regular expression. Escape `( ) [ ] { } . * + ? | ^ $` when you
   mean the character itself, written `\\(` inside JSON.
+- ``steps[1].win.existsLine: an `existsLine` for the goal's `creates`, found none``
+  The goal names the account it creates, and the win does not say what
+  happens when that account already exists. Write `existsLine`.
 - `name: a name whose slug is the folder's, "echo-anchor", found "Echo Program"`
   The folder and the name disagree. Rename one.
 - `steps[0]: needs "title", found none`

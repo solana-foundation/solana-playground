@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94 */
-import { readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { describe, expect, it } from "vitest";
 
@@ -49,9 +49,10 @@ const quotedErrors = (): string[] => {
   const section = AUTHORING.split(/^## /m).find((s) =>
     s.startsWith("Reading the check's errors")
   );
-  return Array.from((section ?? "").matchAll(/^- `([^`]+)`$/gm)).map(
-    (m) => m[1]
-  );
+  // Double backticks quote an error that holds a backtick itself
+  return Array.from(
+    (section ?? "").matchAll(/^- (?:`([^`]+)`|``(.+?)``)$/gm)
+  ).map((m) => m[1] ?? m[2]);
 };
 
 describe("tutorials/AUTHORING.md", () => {
@@ -112,6 +113,9 @@ describe("tutorials/AUTHORING.md", () => {
     },
     "argument named twice": (d) => {
       d.steps[1].beats[2].call.args = ["text", { name: "text", value: "hi" }];
+    },
+    "creates without an existsLine": (d) => {
+      d.steps[1].goal.creates = "user";
     },
     "log is not a regular expression": (d) => {
       d.steps[1].goal.log = "(";
@@ -214,5 +218,54 @@ describe("tutorials/AUTHORING.md", () => {
     expect(fences.length).toBe(
       blocks("beat").length + blocks("tutorial").length
     );
+  });
+});
+
+/** Every tutorial's definition in this folder, with its folder's name */
+const definitions = (): [string, TutorialDefinition][] =>
+  readdirSync(__dirname, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => [d.name, join(__dirname, d.name, "tutorial.json")])
+    .filter(([, file]) => existsSync(file))
+    .map(([name, file]) => [
+      name,
+      JSON.parse(readFileSync(file, "utf8")) as TutorialDefinition,
+    ]);
+
+/** A claim that the program has not reached devnet: "isn't on devnet yet" */
+const NOT_ON_DEVNET =
+  /\b(?:isn't|is not|not)\b[^.]*\bdevnet\b[^.]*\byet\b|\bnot (?:yet )?deployed\b/i;
+
+describe("tutorials' deploy copy", () => {
+  // AUTHORING.md, "`act`": started over, the program is on devnet and the
+  // deploy is an upgrade
+  it("never says the program is not on devnet yet", () => {
+    const claims = definitions().flatMap(([name, definition]) =>
+      definition.steps
+        .flatMap((s) => s.beats)
+        .flatMap((b) => {
+          if (b.kind !== "act") return [];
+          if (b.act !== "deploy" && b.act !== "buildDeploy") return [];
+          return (
+            [b.say, b.title, b.context]
+              // A `Text` may word itself apart for the phone: both are read
+              .flatMap((text) =>
+                typeof text === "object" ? [text.text, text.phone] : [text]
+              )
+              .filter((text) => text !== undefined && NOT_ON_DEVNET.test(text))
+              .map((text) => `${name}: ${b.id}: ${text}`)
+          );
+        })
+    );
+
+    expect(claims).toEqual([]);
+  });
+
+  it("reads the line Sergey found as such a claim", () => {
+    expect(
+      NOT_ON_DEVNET.test(
+        "Your program is built, but it isn't on devnet yet. Deploy it, and a client can call it."
+      )
+    ).toBe(true);
   });
 });

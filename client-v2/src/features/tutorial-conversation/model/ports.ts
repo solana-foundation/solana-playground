@@ -57,6 +57,11 @@ export interface RunInput {
   /** The account the act draws: read from the chain once the run landed */
   account?: string;
   /**
+   * The live `call` goal's instruction and the account it `creates`: the run
+   * says when that account already exists. Absent when the goal has no `creates`
+   */
+  creates?: { instruction: string; account: string };
+  /**
    * "Check again" on an unconfirmed run or call: the transactions it sent, to
    * read from devnet again. Nothing is funded or sent.
    */
@@ -69,6 +74,8 @@ export interface RunStage {
   /** 1-based */
   index: number;
   count: number;
+  /** How far a long stage has got, e.g. "40 of 200 transactions"; a stage reports again as it moves */
+  detail?: string;
 }
 
 /**

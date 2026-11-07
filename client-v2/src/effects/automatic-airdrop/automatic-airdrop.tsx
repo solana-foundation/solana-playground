@@ -1,5 +1,6 @@
 import { isAirdropSignInGated } from "../../commands/airdrop/sign-in-gate";
 import { PgSession } from "../../features/auth";
+import { faucetUrlFor, isFaucetCluster } from "../../shared/lib/faucet";
 import { createLogger } from "../../shared/lib/logger";
 import {
   Cluster,
@@ -52,10 +53,21 @@ export const automaticAirdrop = () => {
           log.info("no terminal mounted, airdrop deferred");
           return;
         }
+        // Off for this cluster until a reload; the terminal said why
+        log.warn("automatic airdrop failed, off for this cluster", {
+          context: { cluster, error: String(e) },
+        });
         errorCache.add(cluster);
         PgTerminal.println(
           [
             "Note: This was an automatic airdrop request.",
+            ...(isFaucetCluster(cluster)
+              ? [
+                  `Visit ${faucetUrlFor(cluster)(
+                    PgWallet.current?.publicKey.toBase58()
+                  )} to obtain SOL.`,
+                ]
+              : []),
             `To disable, run \`${PgCommand.setting.name} set wallet.automaticAirdrop false\`.`,
           ].join(" ")
         );

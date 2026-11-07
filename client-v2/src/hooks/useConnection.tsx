@@ -1,8 +1,8 @@
+import { useSelectedConnection } from "@/entities/cluster";
+
 import { PgConnection } from "../utils";
-import { useRenderOnChange } from "./useRenderOnChange";
 
 /** Get access to Playnet compatible globally synced `Connection` object. */
-export const useConnection = () => {
-  useRenderOnChange(PgConnection.onDidChangeIsConnected);
-  return useRenderOnChange(PgConnection.onDidChangeCurrent);
-};
+export const useConnection = () =>
+  // Falls back to the derived value until the store has mirrored it
+  useSelectedConnection().connection ?? PgConnection.current;

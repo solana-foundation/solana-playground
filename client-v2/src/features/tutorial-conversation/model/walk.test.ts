@@ -37,6 +37,10 @@ import helloProgramStructure from "../../../tutorials/hello-anchor/docs/program-
 import helloPrograms from "../../../tutorials/hello-anchor/docs/programs.md";
 import helloTransactions from "../../../tutorials/hello-anchor/docs/transactions.md";
 import hello from "../../../tutorials/hello-anchor/tutorial.json";
+import lumberjackCustomErrors from "../../../tutorials/lumberjack/docs/custom-errors.md";
+import lumberjackPdas from "../../../tutorials/lumberjack/docs/pdas.md";
+import lumberjackSysvarAccounts from "../../../tutorials/lumberjack/docs/sysvar-accounts.md";
+import lumberjack from "../../../tutorials/lumberjack/tutorial.json";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { writeWorkspaceFile } from "../../../utils/explorer/workspace-file";
 import { PgTutorial } from "../../../utils/tutorial/tutorial";
@@ -66,8 +70,18 @@ const settle = async () => {
   for (let i = 0; i < 8; i++) await new Promise((r) => setImmediate(r));
 };
 
-/** A goal passes on a result of its own kind */
+/**
+ * A goal passes on a result of its own kind; a `refused` goal only on a
+ * refusal of its own instruction
+ */
 const byKind: Judge = (goal, result) => {
+  if (goal.kind === "refused") {
+    return (
+      !result.ok &&
+      "refused" in result &&
+      result.refused?.instruction === goal.instruction
+    );
+  }
   if (!result.ok) return false;
   if (goal.kind === "build") return result.act === "build";
   if (goal.kind === "deploy")
@@ -85,21 +99,35 @@ const goalInstructions = (goal: Goal): string[] => {
   return [];
 };
 
+/** How many presses of a call land before the program refuses it */
+const LANDED_BEFORE_REFUSAL = 5;
+
 /**
  * A runner that answers each act with a passing result of its kind, except
- * the first build of a step that plans a failure, which fails
+ * the first build of a step that plans a failure, which fails with the log
+ * line its `failsWith` names, and a call on a step whose goal is a refusal,
+ * which lands `LANDED_BEFORE_REFUSAL` times and is then refused
  */
 const goalRunner = (d: TutorialDefinition): Runner => {
-  const plannedBuilds = new Set(
+  const plannedBuilds = new Map(
     d.steps
       .filter((s) => s.planned !== undefined)
-      .map(
-        (s) =>
-          s.beats.find(
-            (b): b is ActBeat => b.kind === "act" && b.act === "build"
-          )?.id
-      )
+      .map((s) => [
+        s.beats.find((b): b is ActBeat => b.kind === "act" && b.act === "build")
+          ?.id,
+        s.failsWith ?? "",
+      ])
   );
+  const refusals = new Map(
+    d.steps.flatMap((s) =>
+      s.goal.kind === "refused"
+        ? s.beats
+            .filter((b): b is ActBeat => b.kind === "act" && b.act === "call")
+            .map((b) => [b.id, s.goal] as const)
+        : []
+    )
+  );
+  const presses = new Map<string, number>();
   const instructions = instructionsOf(d);
   return {
     run: async (act, input) => {
@@ -125,7 +153,7 @@ const goalRunner = (d: TutorialDefinition): Runner => {
                 column: 1,
                 message: "planned",
               },
-              log: "error[E0412]: cannot find type `Hello` in this scope",
+              log: plannedBuilds.get(input.beatId) ?? "",
             }
           : { act: "build", ok: true, seconds: 1, instructions },
         deploy: {
@@ -165,10 +193,46 @@ const goalRunner = (d: TutorialDefinition): Runner => {
           called: [],
         },
       };
+      const goal = refusals.get(input.beatId);
+      if (act === "call" && goal?.kind === "refused") {
+        const n = (presses.get(input.beatId) ?? 0) + 1;
+        presses.set(input.beatId, n);
+        if (n > LANDED_BEFORE_REFUSAL) {
+          const refusal: Extract<RunResult, { refused?: unknown }> = {
+            act: "call",
+            ok: false,
+            seconds: 1,
+            message: "Transaction failed",
+            log: "",
+            refused: {
+              instruction: goal.instruction,
+              // As the program names it: Anchor numbers custom errors
+              // from 6000
+              error: goal.error
+                ? {
+                    code: goal.error.code ?? 6000,
+                    name: goal.error.name ?? null,
+                  }
+                : null,
+            },
+          };
+          return refusal;
+        }
+      }
       return results[act];
     },
   };
 };
+
+/** The call acts of steps whose goal is a refusal, by beat */
+const refusedCalls = (d: TutorialDefinition) =>
+  d.steps.flatMap((s) =>
+    s.goal.kind === "refused"
+      ? s.beats
+          .filter((b): b is ActBeat => b.kind === "act" && b.act === "call")
+          .map((b) => [b.id] as const)
+      : []
+  );
 
 /** Each file of a step's target, as the workspace holds it at the step's win */
 const expectTarget = (
@@ -268,6 +332,17 @@ describe.each([
       },
     },
   ],
+  [
+    "Lumberjack, with a refusal on a repeating card",
+    {
+      json: lumberjack,
+      docs: {
+        "custom-errors.md": lumberjackCustomErrors,
+        "pdas.md": lumberjackPdas,
+        "sysvar-accounts.md": lumberjackSysvarAccounts,
+      },
+    },
+  ],
 ])("%s through the engine", (_name, { json, docs }) => {
   it("passes the check", () => {
     const d = json as unknown as TutorialDefinition;
@@ -281,8 +356,19 @@ describe.each([
     const d = json as unknown as TutorialDefinition;
     await walk(d);
 
-    const saved = file[STORAGE_KEY] as { passed: string[] };
+    const saved = file[STORAGE_KEY] as {
+      passed: string[];
+      runs: Record<string, { status: string }[]>;
+    };
     expect(saved.passed).toEqual(d.steps.map((s) => s.id));
+    // A refusal passed its step only after the presses that landed
+    for (const [beatId] of refusedCalls(d)) {
+      expect(saved.runs[beatId].map((r) => r.status)).toEqual(
+        Array.from({ length: LANDED_BEFORE_REFUSAL + 1 }, (_, i) =>
+          i < LANDED_BEFORE_REFUSAL ? "ok" : "refused"
+        )
+      );
+    }
     expect(logged.entries.filter((e) => e.level === "error")).toEqual([]);
     expect(PgView.setToast).not.toHaveBeenCalled();
   });

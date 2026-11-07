@@ -5,6 +5,7 @@ import { createLogger } from "@/shared/lib/logger";
 
 import type { Judge } from "./ports";
 import type { Called, RunResult } from "./progress";
+import { existsOf } from "./progress";
 
 const goalsLog = createLogger("tutorial-conversation:goals");
 
@@ -22,6 +23,8 @@ const goalsLog = createLogger("tutorial-conversation:goals");
  *   fails). Arguments are read from what the
  *   deployed program decoded, which is what keeps a call before the upgrade
  *   from passing step 4: its log `Hello, World!` matches `Hello, .+!` too.
+ *   A goal with `creates` also passes on a failed run or call whose
+ *   `exists` names the goal's instruction and that account.
  * - `refused`: a run or call the program refused in the goal's instruction,
  *   matching the goal's error if it names one (each of its name and code
  *   given) and the goal's log pattern over the whole transaction log if it
@@ -30,6 +33,7 @@ const goalsLog = createLogger("tutorial-conversation:goals");
  */
 export const judgeGoal: Judge = (goal, result) => {
   if (goal.kind === "refused") return refusalMeets(goal, result);
+  if (goal.kind === "call" && !result.ok) return existsMeets(goal, result);
   if (!result.ok) return false;
   switch (goal.kind) {
     case "build":
@@ -79,6 +83,17 @@ const refusalMeets = (goal: RefusedGoal, result: RunResult): boolean => {
     if (name !== undefined && refused.error.name !== name) return false;
   }
   return goal.log === undefined || logMatches(goal.log, result.log);
+};
+
+/** The account the goal's instruction creates was already there */
+const existsMeets = (goal: CallGoal, result: RunResult): boolean => {
+  const exists = existsOf(result);
+  return (
+    goal.creates !== undefined &&
+    exists !== undefined &&
+    sameIdlName(exists.instruction, goal.instruction) &&
+    sameIdlName(exists.account, goal.creates)
+  );
 };
 
 /** The call names the goal's instruction and carries each required argument, non-blank */
@@ -507,6 +522,64 @@ if (import.meta.vitest) {
         expect(judgeGoal(goal, ran("call", [hello({})], "("))).toBe(false);
         expect(judgeGoal(goal, ran("call", [hello({})], "("))).toBe(false);
         expect(errors()).toHaveLength(1);
+      });
+    });
+
+    describe("judgeGoal", () => {
+      // Lumberjack's step 2 (HOO-2362)
+      const CREATE_PLAYER: Goal = {
+        kind: "call",
+        instruction: "init_player",
+        creates: "player",
+      };
+      const failedWith = (
+        exists: import("./progress").Exists | undefined
+      ): RunResult =>
+        exists
+          ? {
+              act: "call",
+              ok: false,
+              seconds: 1,
+              message: "custom program error: 0x0",
+              log: "",
+              refused: {
+                instruction: "initPlayer",
+                error: { code: 0, name: null },
+              },
+              exists,
+            }
+          : {
+              act: "call",
+              ok: false,
+              seconds: 1,
+              message: "custom program error: 0x0",
+              log: "",
+              refused: {
+                instruction: "initPlayer",
+                error: { code: 0, name: null },
+              },
+            };
+      const PLAYER = {
+        instruction: "init_player",
+        account: "player",
+        address: "Player1",
+      };
+
+      it("passes a goal with creates when its account already exists", () => {
+        expect(judgeGoal(CREATE_PLAYER, failedWith(PLAYER))).toBe(true);
+      });
+
+      it("fails a goal with creates on a call refused for another reason", () => {
+        expect(judgeGoal(CREATE_PLAYER, failedWith(undefined))).toBe(false);
+      });
+
+      it("fails a goal without creates on an existing account", () => {
+        expect(
+          judgeGoal(
+            { kind: "call", instruction: "init_player" },
+            failedWith(PLAYER)
+          )
+        ).toBe(false);
       });
     });
 

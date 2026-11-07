@@ -179,7 +179,9 @@ const sendCall = async (
   deployed: RunInput["idl"]
 ) => {
   // The program on chain answers to the IDL it was deployed with: a build
-  // since then must not change what is sent
+  // since then must not change what is sent. The definition names the
+  // instruction as Rust does (`chop_tree`), the IDL as the Anchor that wrote
+  // it does (`chopTree`), as the goals compare them
   const idl = deployed ?? PgProgramInfo.callableIdl();
   // No IDL at all is the tutorial's fault, not the learner's code: it fails
   // with its own message, never as a mismatch
@@ -254,6 +256,24 @@ export const realRunPort = (funding: FundingChain, capSol: number): RunPort => {
       return { captured, error };
     },
     landed: landedOnDevnet,
+    createdAddress: async (creates, deployed) => {
+      const idl = deployed ?? PgProgramInfo.callableIdl();
+      const idlIx = idl?.instructions.find((ix) =>
+        sameIdlName(ix.name, creates.instruction)
+      );
+      if (!idlIx) return undefined;
+      // The same derivation the Call panel sends with
+      const ix = createGeneratableInstruction(idlIx);
+      const account = ix.values.accounts.find((a) =>
+        sameIdlName(a.name, creates.account)
+      );
+      if (account?.generator.type !== "From seed") return undefined;
+      // Loaded here, as `sendCall` loads the program interaction: only a run that sent nothing needs it
+      const { generateValue } = await import(
+        "../../../../utils/program-interaction/generator"
+      );
+      return generateValue(account.generator, ix.values);
+    },
     fetchAccount: fetchOnDevnet,
     decode: (encoded, deployed) => {
       const programId = PgProgramInfo.pk?.toBase58();

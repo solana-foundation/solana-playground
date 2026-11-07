@@ -72,16 +72,20 @@ beforeEach(() => {
 });
 
 describe("features/tutorial-conversation/model/runners/real-deploy: tutorialRunner.isFunded", () => {
-  it.each([["localnet"], ["mainnet-beta"], [undefined]])(
-    "answers false on %s without reading the chain",
-    async (cluster) => {
-      h.cluster = cluster;
-      h.balance = 100 * SOL;
-      await expect(tutorialRunner.isFunded?.()).resolves.toBe(false);
-      expect(h.getBalance).not.toHaveBeenCalled();
-      expect(h.rentRead).not.toHaveBeenCalled();
-    }
-  );
+  it("answers false while the cluster is unknown, without reading the chain", async () => {
+    h.cluster = undefined;
+    h.balance = 100 * SOL;
+    await expect(tutorialRunner.isFunded?.()).resolves.toBe(false);
+    expect(h.getBalance).not.toHaveBeenCalled();
+    expect(h.rentRead).not.toHaveBeenCalled();
+  });
+
+  it("off devnet, answers true for a wallet that covers the deploy, so the airdrop card passes", async () => {
+    h.cluster = "localnet";
+    h.balance = 100 * SOL;
+    await expect(tutorialRunner.isFunded?.()).resolves.toBe(true);
+    expect(h.getBalance).toHaveBeenCalled();
+  });
 
   it("on devnet, answers true for a wallet that covers the deploy", async () => {
     h.balance = 5 * SOL;

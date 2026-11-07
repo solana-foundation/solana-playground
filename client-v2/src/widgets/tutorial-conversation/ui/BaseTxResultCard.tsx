@@ -16,6 +16,7 @@ import type {
   RunResult,
 } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
+import { faucetUrlFor } from "@/shared/lib/faucet";
 import { PROGRAM_LOG, programLogText } from "@/shared/lib/program-log";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
@@ -149,8 +150,6 @@ const QUIET =
 
 /** Code in the details' sentence, on the prototype's ringed chip */
 const CHIP = "bg-black/35 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.18)]";
-
-const FAUCET_URL = "https://faucet.solana.com";
 
 /** lamports as SOL, to at most four places */
 const solOf = (lamports: number) =>
@@ -362,7 +361,11 @@ const FundsCard = ({
           </div>
           <div className="flex">
             <Button variant="secondary" asChild>
-              <a href={FAUCET_URL} target="_blank" rel="noopener noreferrer">
+              <a
+                href={faucetUrlFor("devnet")(address)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
                 Open faucet
                 <ExternalLink aria-hidden="true" className="size-4" />
               </a>
@@ -433,13 +436,38 @@ const UnconfirmedCard = ({
 /** A run or call that failed, or that sent nothing */
 const FailedCard = ({
   result,
+  exists,
   onRecheck,
 }: {
   result: Failed;
+  exists?: string;
   onRecheck?: () => void;
 }) => {
   if (result.reason === "unconfirmed") {
     return <UnconfirmedCard result={result} onRecheck={onRecheck} />;
+  }
+  // The goal accepts it: the account it creates was already there
+  if (exists !== undefined) {
+    return (
+      <Shell
+        icon={
+          <Check aria-hidden="true" className="size-4 shrink-0 text-success" />
+        }
+        title="Already exists"
+        meta={
+          "exists" in result && result.exists ? (
+            <code className="font-mono text-[0.8125rem]">
+              {result.exists.account}
+            </code>
+          ) : null
+        }
+        body={
+          <p className={READ}>
+            <Prose text={exists} codeClassName={CHIP} />
+          </p>
+        }
+      />
+    );
   }
   if (result.reason === "no_transaction") {
     return (
@@ -513,17 +541,20 @@ const FailedCard = ({
 const BaseTxResultCard = ({
   result,
   account,
+  exists,
   onRecheck,
 }: {
   result: TxResult;
   account?: AccountOnCard;
+  /** The line for an account the goal creates that was already there */
+  exists?: string;
   /** Check again on an unconfirmed result; absent when it is not live */
   onRecheck?: () => void;
 }) =>
   result.ok ? (
     <LandedCard result={result} account={account} />
   ) : (
-    <FailedCard result={result} onRecheck={onRecheck} />
+    <FailedCard result={result} exists={exists} onRecheck={onRecheck} />
   );
 
 export default BaseTxResultCard;

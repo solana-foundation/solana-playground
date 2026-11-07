@@ -53,8 +53,9 @@ x-client-v2: &client-v2
   environment: &client-v2-environment
     DATABASE_URL: postgres://solpg:solpg@postgres:5432/solpg?sslmode=disable
     SYNC_ENABLED: "true"
-    # The browser runs on the host, so it reaches both through their published ports
-    AUTH_BASE_URL: http://localhost:${PG_CLIENT_V2_PORT:-3000}
+    # The browser runs on the host, so it reaches the client and the build server through their published ports
+    # The API accepts writes only from this origin (the local GitHub OAuth app calls back on 127.0.0.1); the shell's AUTH_BASE_URL overrides it
+    AUTH_BASE_URL: ${AUTH_BASE_URL:-http://127.0.0.1:${PG_CLIENT_V2_PORT:-3000}}
     REACT_APP_SERVER_URL: http://localhost:${PG_PORT:-8080}
     # The dev server listens on 3000 inside; hot reload must dial the published port
     WDS_SOCKET_PORT: ${PG_CLIENT_V2_PORT:-3000}

@@ -334,6 +334,7 @@ const TurnView = ({
         <BaseResultCard
           result={turn.result}
           account={turn.account}
+          exists={turn.exists}
           planned={turn.planned}
           open={turn.open && live}
           onExplain={() => on.explain(turn.beatId)}
@@ -354,6 +355,7 @@ const TurnView = ({
           index={index + 1}
           next={turn.last ? null : next}
           via={turn.via}
+          reason={turn.reason}
           live={live && !turn.done}
           onNext={on.next}
           onOpenCall={on.openCall}

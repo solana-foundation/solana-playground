@@ -42,6 +42,13 @@ for (const name of tutorials) {
   );
 }
 
+/**
+ * An object key as prettier writes it (`quoteProps: "as-needed"`): bare when
+ * it is an identifier (`lumberjack`), quoted otherwise (`"hello-anchor"`)
+ */
+const keyOf = (name) =>
+  /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
+
 // Conversation tutorial definitions: one static import of every
 // `src/tutorials/<slug>/tutorial.json` and of each Markdown page in its
 // `docs/` folder, so a new folder needs no code. The loader
@@ -142,13 +149,13 @@ for (const [i, slug] of definitionSlugs.entries()) {
   const docs = pages.length
     ? [
         "{",
-        ...pages.map((page, j) => `      ${JSON.stringify(page)}: m${i}_${j},`),
+        ...pages.map((page, j) => `      ${keyOf(page)}: m${i}_${j},`),
         "    }",
       ].join("\n")
     : "{}";
   entries.push(
     [
-      `  ${JSON.stringify(slug)}: {`,
+      `  ${keyOf(slug)}: {`,
       isTested ? `    json: { ...d${i}, docs: l${i} },` : `    json: d${i},`,
       `    thumbnail: ${bundled ? `t${i}` : "undefined"},`,
       `    docPages: ${docs},`,

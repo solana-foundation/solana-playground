@@ -179,7 +179,8 @@ for; tasks with "after nothing" start at once.
       [plans/6.2-hello-anchor.md](plans/6.2-hello-anchor.md)
 - [ ] 6.3 Lumberjack (Intermediate) as a definition from Almaz's script.
       Verify: the check passes; a full run on devnet (HOO-2362; Natalia;
-      M 1.5; after 1.2 and Almaz's script, due Fri 30 Oct)
+      M 1.5; after 1.2 and Almaz's script, due Fri 30 Oct;
+      plan: [plans/6.3-lumberjack.md](plans/6.3-lumberjack.md))
 - [ ] 6.4 Zero Copy (Advanced) as a definition from Almaz's script, with the
       deploy and rent costs confirmed on devnet. Verify: the check passes; a
       full run on devnet (HOO-2363; Natalia; L 2.5; after 1.2 and

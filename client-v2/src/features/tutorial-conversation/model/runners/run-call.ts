@@ -2,7 +2,7 @@
 import type { Idl } from "@coral-xyz/anchor";
 
 import type { RunInput, RunStage } from "../ports";
-import type { RunResult, UnreadTx } from "../progress";
+import type { Exists, RunResult, UnreadTx } from "../progress";
 import type { AccountData } from "./account-read";
 import { readingOf } from "./account-read";
 import type { Captured } from "./capture";
@@ -10,7 +10,7 @@ import { isRetriedSend } from "./capture";
 import type { FundingChain } from "./fund";
 import { fundForDeploy } from "./fund";
 import type { DecodedCall, SentTx } from "./transactions";
-import { resultOf } from "./transactions";
+import { existingOf, resultOf } from "./transactions";
 
 /** A run's or a call's result */
 type TxResult = Extract<RunResult, { act: "run" | "call" }>;
@@ -69,6 +69,15 @@ export interface RunPort {
   ): Promise<{ captured: Captured[]; error: unknown }>;
   /** A sent transaction once confirmed, or null when it never was */
   landed(signature: string): Promise<Landed | null>;
+  /**
+   * The address `idl` derives for the account `creates` names from its seeds,
+   * with the wallet and the deployed program; undefined for an account with
+   * no seeds, whose address would be a guess
+   */
+  createdAddress(
+    creates: NonNullable<RunInput["creates"]>,
+    idl: Idl | undefined
+  ): Promise<string | undefined>;
   /** An account's bytes and fields now, if it exists, decoded by `idl` */
   fetchAccount(
     address: string,
@@ -233,6 +242,8 @@ const attempt = async (
       return mismatched(fail(messageOf(error)));
     }
     if (error !== undefined) return fail(messageOf(error));
+    const exists =
+      act === "run" ? await existingAccount(port, input) : undefined;
     return {
       act,
       ok: false,
@@ -243,6 +254,7 @@ const attempt = async (
           ? "client.ts sent no transaction. See the terminal."
           : "The call sent no transaction.",
       log: "",
+      ...(exists ? { exists } : {}),
     };
   }
 
@@ -263,6 +275,30 @@ const attempt = async (
     );
   }
   return landedResult(port, act, input, sent, programId, seconds, fail, error);
+};
+
+/**
+ * The account the live goal `creates`, when a client run sent nothing because
+ * it found it: read at the address its seeds give. A lookup that fails is
+ * reported and finds nothing, so the run stays "No transaction"
+ */
+const existingAccount = async (
+  port: RunPort,
+  input: RunInput
+): Promise<Exists | undefined> => {
+  const { creates } = input;
+  if (!creates) return undefined;
+  try {
+    const address = await port.createdAddress(creates, input.idl);
+    if (address === undefined) return undefined;
+    const found = await port.fetchAccount(address, input.idl);
+    return found
+      ? { instruction: creates.instruction, account: creates.account, address }
+      : undefined;
+  } catch (e) {
+    port.report(e, "Looking up the account a run would create");
+    return undefined;
+  }
 };
 
 /**
@@ -306,9 +342,18 @@ const landedResult = async (
   if (unfinished && error !== undefined) return fail(messageOf(error));
   if (!result.ok) {
     const code = result.refused?.error?.code;
-    return code !== undefined && MISMATCH_CODES.has(code)
-      ? mismatched(result)
-      : result;
+    if (code !== undefined && MISMATCH_CODES.has(code)) {
+      return mismatched(result);
+    }
+    if (result.reason === undefined) {
+      const exists = existingOf(
+        result.log.split("\n"),
+        result.refused,
+        input.creates
+      );
+      if (exists) return { ...result, exists };
+    }
+    return result;
   }
   if (!input.account) return result;
   // The run landed whatever the read says: a card goes without, never the run
@@ -365,6 +410,8 @@ if (import.meta.vitest) {
       airdrop?: FundingChain["airdrop"];
       send?: RunPort["send"];
       landed?: RunPort["landed"];
+      createdAddress?: RunPort["createdAddress"];
+      fetchAccount?: RunPort["fetchAccount"];
       wallet?: string | null;
       programId?: string | null;
       refusal?: string | null;
@@ -393,7 +440,8 @@ if (import.meta.vitest) {
             error: undefined,
           })),
         landed: over.landed ?? (async () => HELLO_TX),
-        fetchAccount: async () => undefined,
+        createdAddress: over.createdAddress ?? (async () => undefined),
+        fetchAccount: over.fetchAccount ?? (async () => undefined),
         decode: () => ({ calls: [HELLO_CALL] }),
         print: () => {},
         report: vi.fn(),
@@ -415,6 +463,7 @@ if (import.meta.vitest) {
         capSol: 5,
         send: async () => ({ captured: [CHOP], error: undefined }),
         landed: async () => HELLO_TX,
+        createdAddress: async () => undefined,
         fetchAccount: fetchIt,
         decode: () => ({
           calls: [
@@ -574,6 +623,73 @@ if (import.meta.vitest) {
         message: "Account `user` not provided.",
       });
       expect(result).not.toHaveProperty("reason");
+    });
+
+    describe("runOrCall", () => {
+      const CREATES = { instruction: "init_player", account: "player" };
+      const runWith = (port: RunPort, act: "run" | "call") =>
+        runOrCall(
+          port,
+          act,
+          { beatId: "s2.run", creates: CREATES },
+          () => undefined
+        );
+
+      it("names the player a client run found at its seeds' address, having sent nothing", async () => {
+        const fetched = vi.fn(async () => ({ size: 32, fields: {} }));
+        const port = portWith({
+          send: async () => ({ captured: [], error: undefined }),
+          createdAddress: async () => "Player1",
+          fetchAccount: fetched,
+        });
+        expect(await runWith(port, "run")).toMatchObject({
+          ok: false,
+          reason: "no_transaction",
+          exists: {
+            instruction: "init_player",
+            account: "player",
+            address: "Player1",
+          },
+        });
+        expect(fetched).toHaveBeenCalledWith("Player1", undefined);
+      });
+
+      it("keeps no transaction when a client run sent nothing and found no player", async () => {
+        const port = portWith({
+          send: async () => ({ captured: [], error: undefined }),
+          createdAddress: async () => "Player1",
+        });
+        expect(await runWith(port, "run")).not.toHaveProperty("exists");
+      });
+
+      it("names the player the System Program refused to create as already in use", async () => {
+        const log = [
+          `Program ${PROGRAM} invoke [1]`,
+          "Program 11111111111111111111111111111111 invoke [2]",
+          "Allocate: account Address { address: Player1, base: None } already in use",
+          "Program 11111111111111111111111111111111 failed: custom program error: 0x0",
+          `Program ${PROGRAM} failed: custom program error: 0x0`,
+        ];
+        const port = portWith({
+          send: async () => ({
+            captured: [{ kind: "refused", encoded: "tx", message: "0x0", log }],
+            error: new Error("Simulation failed."),
+          }),
+        });
+        port.decode = () => ({
+          calls: [
+            { instruction: "initPlayer", args: {}, accounts: [], wrote: [] },
+          ],
+        });
+        expect(await runWith(port, "call")).toMatchObject({
+          ok: false,
+          exists: {
+            instruction: "init_player",
+            account: "player",
+            address: "Player1",
+          },
+        });
+      });
     });
 
     it("a refused send fails with the program's refusal, so the step does not pass", async () => {

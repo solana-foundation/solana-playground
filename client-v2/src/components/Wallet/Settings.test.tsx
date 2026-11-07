@@ -241,6 +241,21 @@ describe("wallet Settings menu", () => {
     expect(screen.queryByText("This network has no faucet.")).toBeNull();
   });
 
+  it.each([
+    ["Phantom", "Connect Phantom Wallet"],
+    ["Coinbase Wallet", "Connect Coinbase Wallet"],
+  ])("names a wallet extension %s once, as a wallet", async (name, label) => {
+    PgWallet.standardWallets.push({
+      name,
+      icon: "",
+      connected: false,
+    } as never);
+    render(<Host />);
+    await openMenu();
+
+    expect(screen.getByRole("menuitem", { name: label })).toBeTruthy();
+  });
+
   it("says so when the imported file is not a keypair", async () => {
     vi.mocked(PgWallet.import).mockRejectedValueOnce(new KeypairFileError());
     render(<Host />);

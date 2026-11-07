@@ -5,7 +5,7 @@ import { sameIdlName } from "@/shared/lib/idl-name";
 import type { DeployedIdl } from "./deployed-idl";
 import { argKey } from "./deployed-idl";
 import type { RunResult } from "./progress";
-import { isUnconfirmed } from "./progress";
+import { existsLine, existsOf, isUnconfirmed } from "./progress";
 
 /** A string argument stops here, as the tutorial's own programs expect */
 export const STRING_MAX = 32;
@@ -77,6 +77,8 @@ export interface CallView {
   json: string;
   /** The latest call, when it answers the instruction shown on this deploy */
   result: RunResult | undefined;
+  /** That call's line when the account the goal creates was already there (`existsLine`) */
+  exists: string | undefined;
   /** The fields moved on since that call: what it was sent with, and it dims */
   stale: string | undefined;
 }
@@ -179,6 +181,7 @@ export const callView = (input: CallViewInput): CallView | undefined => {
     answers &&
     ix.args.some((a) => (typed[a.name] ?? "") !== (last.args[a.name] ?? ""));
   const pending = answers && !moved && isUnconfirmed(last.result);
+  const exists = answers ? existsOf(last.result) : undefined;
   return {
     program: programName(deployed.idl),
     instruction: ix.name,
@@ -199,6 +202,7 @@ export const callView = (input: CallViewInput): CallView | undefined => {
     calling,
     json: JSON.stringify(deployed.idl, undefined, 2),
     result: answers ? last.result : undefined,
+    exists: exists ? existsLine(exists) : undefined,
     stale: moved ? sentWith(last.args) : undefined,
   };
 };

@@ -34,6 +34,7 @@ import {
 } from "@/shared/lib/telemetry";
 
 import hello from "../../../tutorials/hello-anchor/tutorial.json";
+import lumberjack from "../../../tutorials/lumberjack/tutorial.json";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { writeWorkspaceFile } from "../../../utils/explorer/workspace-file";
 import { PgTutorial } from "../../../utils/tutorial/tutorial";
@@ -43,7 +44,7 @@ import { judgeGoal } from "./goals";
 import type { Runner } from "./ports";
 import { memoryWorkspace, stubRunner } from "./ports";
 import type { RunResult } from "./progress";
-import { parseProgress } from "./progress";
+import { freshProgress, parseProgress } from "./progress";
 import { PgConversation, STORAGE_KEY } from "./store";
 import type { ConversationView, Turn } from "./view";
 import { INTERRUPTED, view } from "./view";
@@ -486,5 +487,65 @@ describe("Hello Anchor through the engine", () => {
     expect((file[STORAGE_KEY] as { restartedAt: number }).restartedAt).toBe(
       restartedAt
     );
+  });
+});
+
+describe("Lumberjack's step 2, on a player that already exists,", () => {
+  it("passes from the Call panel and sends reason exists on tutorial_step_passed", async () => {
+    vi.mocked(PgTutorial).all = [
+      { name: "Lumberjack", definition: lumberjack },
+    ] as never;
+    file[STORAGE_KEY] = Object.assign(freshProgress(), {
+      startedAt: 1000,
+      passed: ["player"],
+      cursor: { kind: "step", stepId: "create", beat: 0, fail: false },
+      times: {
+        player: { from: 1000, to: 2000, via: "chat" },
+        create: { from: 2000, to: null },
+      },
+    });
+    const inUse: RunResult = {
+      act: "call",
+      ok: false,
+      seconds: 1,
+      message: "custom program error: 0x0",
+      log: "",
+      refused: { instruction: "initPlayer", error: { code: 0, name: null } },
+      exists: {
+        instruction: "init_player",
+        account: "player",
+        address: "Player1",
+      },
+    };
+    const runner = stubRunner([{ result: inUse }]);
+    setWorkspace("Lumberjack");
+    sub = PgConversation.init({
+      workspace: memoryWorkspace(),
+      runner,
+      judge: judgeGoal,
+    });
+    await settle();
+
+    await PgConversation.callFromPanel({ instruction: "initPlayer", args: {} });
+    await settle();
+
+    expect(runner.runs[0]?.input.creates).toEqual({
+      instruction: "init_player",
+      account: "player",
+    });
+    expect(PgConversation.state.engine.progress.passed).toContain("create");
+    expect(
+      events.events
+        .filter((e) => e.name === "tutorial_step_passed")
+        .map((e) => e.params)
+    ).toEqual([
+      {
+        tutorial: "lumberjack",
+        step: 2,
+        via: "call_panel",
+        seconds: expect.any(Number),
+        reason: "exists",
+      },
+    ]);
   });
 });

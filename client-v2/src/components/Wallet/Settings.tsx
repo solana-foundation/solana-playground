@@ -117,7 +117,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          // Wide enough for "Disconnect from <wallet>" on one line
+          // Wide enough for "Disconnect <wallet> Wallet" on one line
           className="min-w-56"
           onCloseAutoFocus={(ev) => {
             if (!choseRename.current) return;
@@ -211,11 +211,16 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                   );
               }}
             >
-              <Img src={standardWallet.icon} alt={standardWallet.name} />
+              {/* An image, which the item does not size as it does its icons */}
+              <Img
+                src={standardWallet.icon}
+                alt={standardWallet.name}
+                className="size-4 shrink-0 rounded-sm"
+              />
               <MenuItemText>
                 {standardWallet.connected
-                  ? `Disconnect from ${standardWallet.name}`
-                  : `Connect to ${standardWallet.name}`}
+                  ? `Disconnect ${walletOf(standardWallet.name)}`
+                  : `Connect ${walletOf(standardWallet.name)}`}
               </MenuItemText>
             </DropdownMenuItem>
           ))}
@@ -224,6 +229,10 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
     </Wrapper>
   );
 };
+
+/** A wallet's name as the menu says it: "Phantom Wallet", "Coinbase Wallet" */
+const walletOf = (name: string) =>
+  /\bwallet$/i.test(name) ? name : `${name} Wallet`;
 
 const Wrapper = styled.div`
   position: absolute;

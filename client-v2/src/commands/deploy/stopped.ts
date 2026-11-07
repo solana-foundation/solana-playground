@@ -7,8 +7,38 @@ export type StoppedBuffer =
   /** Reads empty after a failed close: closed, or consumed by the deploy */
   | { state: "gone" }
   /** A create that failed, on an account that could not be read */
-  | { state: "unknown"; address: string }
-  | { state: "kept"; address: string; sol: number | undefined };
+  | {
+      state: "unknown";
+      address: string;
+      /** The RPC {@link closeBuffersCommandFor} names, when buffer reads use one */
+      readBufferUrl: string | undefined;
+    }
+  | {
+      state: "kept";
+      address: string;
+      sol: number | undefined;
+      /** The RPC {@link closeBuffersCommandFor} names, when buffer reads use one */
+      readBufferUrl: string | undefined;
+    };
+
+/** `value` as one single-quoted shell word, so zsh does not glob a URL's `?` */
+const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * The terminal command that closes a wallet's buffers. It names the read-buffer
+ * RPC when buffer reads use one, because the selected RPC may not list fresh buffers.
+ */
+export const closeBuffersCommandFor = (readBufferUrl: string | undefined) =>
+  readBufferUrl
+    ? `solana program close --buffers -u ${shellQuote(readBufferUrl)}`
+    : "solana program close --buffers";
+
+/** What the terminal says of a buffer whose close failed after a failed load */
+export const unclosedBufferLineFor =
+  (readBufferUrl: string | undefined) => (address: string) =>
+    `Its buffer ${address} could not be closed. Run \`${closeBuffersCommandFor(
+      readBufferUrl
+    )}\` to reclaim its SOL.`;
 
 /**
  * The words for an amount a kept buffer holds, to two decimals as the session
@@ -55,12 +85,16 @@ export const bufferLeftLine = (buffer: StoppedBuffer) => {
     case "unknown":
       return [
         `Could not check whether its buffer ${buffer.address} was created.`,
-        "If it holds SOL, run `solana program close --buffers` to get it back.",
+        `If it holds SOL, run \`${closeBuffersCommandFor(
+          buffer.readBufferUrl
+        )}\` to get it back.`,
       ].join(" ");
     case "kept":
       return [
         `Its buffer ${buffer.address} still holds ${heldWords(buffer.sol)}.`,
-        "Run `solana program close --buffers` to get it back.",
+        `Run \`${closeBuffersCommandFor(
+          buffer.readBufferUrl
+        )}\` to get it back.`,
       ].join(" ");
   }
 };

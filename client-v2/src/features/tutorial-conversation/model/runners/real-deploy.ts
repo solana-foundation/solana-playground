@@ -1,9 +1,11 @@
 /* eslint-disable max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import { DEVNET_FAUCET_SOL } from "@/shared/lib/faucet";
 import { createLogger } from "@/shared/lib/logger";
 
 import { additionalProgramLen } from "../../../../commands/deploy/additional-len";
 import { BpfLoaderUpgradeable } from "../../../../commands/deploy/bpf-loader-upgradeable";
 import { sendAndConfirmTxWithRetriesFor } from "../../../../commands/deploy/deploy";
+import { unclosedBufferLineFor } from "../../../../commands/deploy/stopped";
 import type { Wallet } from "../../../../utils";
 import {
   PgCommand,
@@ -54,9 +56,6 @@ const needed = <T>(value: T | null | undefined, what: string): T => {
 
 const log = createLogger("tutorial-conversation:deploy");
 
-/** The faucet amount on devnet, in whole SOL (`PgConnection.getAirdropAmount`) */
-export const DEVNET_FAUCET_SOL = 5;
-
 /**
  * The Playground wallet that pays: the current account, or the first. A
  * tutorial deploys from it even while a standard wallet is connected, so a
@@ -69,6 +68,10 @@ const playgroundWallet = (): Wallet | null => {
 };
 
 const pk = (address: string) => new PgWeb3.PublicKey(address);
+
+/** Buffers are read through the read-buffer RPC: the platform RPC does not return fresh buffers */
+const getReadBufferConnection = () =>
+  PgConnection.getReadBufferConnection(PgConnection.current);
 
 /** Devnet through the connection the settings hold, which `PgTx` sends on */
 export const devnetFunding: FundingChain = {
@@ -97,10 +100,9 @@ const onChainOf = async (id: string): Promise<OnChain> => {
 
 /** Closes a buffer, returning its rent to the wallet that funded it */
 const closeBuffer = async (buffer: string, wallet: Wallet) => {
-  const conn = PgConnection.current;
   await sendAndConfirmTxWithRetries(
     () => BpfLoaderUpgradeable.closeBuffer(pk(buffer), { wallet }),
-    async () => !(await conn.getAccountInfo(pk(buffer)))
+    async () => !(await getReadBufferConnection().getAccountInfo(pk(buffer)))
   );
 };
 
@@ -149,7 +151,7 @@ const sendFromBuffer = async (
   const landed = await landedDeploy({
     programId,
     bufferExists: async () =>
-      !!(await PgConnection.current.getAccountInfo(pk(buffer))),
+      !!(await getReadBufferConnection().getAccountInfo(pk(buffer))),
     deploySlot: deploySlotOnChain,
     signatures: programSignatures,
   }).catch((e) => {
@@ -264,7 +266,7 @@ export const realDeployPort = (): DeployPort => {
     },
     funding: devnetFunding,
     capSol: DEVNET_FAUCET_SOL,
-    writeBuffer: async (bytes, onChain) => {
+    writeBuffer: async (bytes, onChain, onWrite) => {
       target.ensure();
       const payer = needed(wallet, "a wallet");
       const programPk = needed(PgProgramInfo.pk, "the program id");
@@ -304,33 +306,43 @@ export const realDeployPort = (): DeployPort => {
           BpfLoaderUpgradeable.createBuffer(buffer, bufferRent, bytes.length, {
             wallet: payer,
           }),
-        async () => !!(await conn.getAccountInfo(buffer.publicKey))
+        async () =>
+          !!(await getReadBufferConnection().getAccountInfo(buffer.publicKey))
       );
       try {
         target.ensure();
         await BpfLoaderUpgradeable.loadBuffer(buffer.publicKey, bytes, {
           wallet: payer,
-          onRateLimit: (retryAfter) =>
+          onWrite,
+          onRateLimit: (retryAfter, reason) =>
             PgTerminal.println(
-              `Warning: Reached rate-limits, waiting ${retryAfter}s...`
+              `Warning: Reached rate-limits (${reason}), waiting ${retryAfter}s...`
             ),
         });
       } catch (e) {
         // The buffer already holds its rent: give it back before the write's
         // failure stands, as `runDeploy` does for a failed deploy
-        await closeBuffer(buffer.publicKey.toBase58(), payer).catch((closing) =>
+        const address = buffer.publicKey.toBase58();
+        await closeBuffer(address, payer).catch((closing) => {
           log.error(closing, {
             report: true,
-            context: { stage: "Closing the buffer" },
-          })
-        );
+            context: { stage: "Closing the buffer", buffer: address },
+          });
+          const readBuffer = getReadBufferConnection();
+          PgTerminal.println(
+            unclosedBufferLineFor(
+              readBuffer === PgConnection.current
+                ? undefined
+                : readBuffer.rpcEndpoint
+            )(address)
+          );
+        });
         throw e;
       }
       return buffer.publicKey.toBase58();
     },
     deploy: async (buffer, length) => {
       target.ensure();
-      const conn = PgConnection.current;
       return sendFromBuffer(
         () =>
           sendAndConfirmTxWithRetries(
@@ -341,7 +353,8 @@ export const realDeployPort = (): DeployPort => {
                 length,
                 { wallet: needed(wallet, "a wallet") }
               ),
-            async () => !(await conn.getAccountInfo(pk(buffer)))
+            async () =>
+              !(await getReadBufferConnection().getAccountInfo(pk(buffer)))
           ),
         buffer,
         needed(PgProgramInfo.pk, "the program id").toBase58(),
@@ -350,7 +363,6 @@ export const realDeployPort = (): DeployPort => {
     },
     upgrade: async (buffer) => {
       target.ensure();
-      const conn = PgConnection.current;
       return sendFromBuffer(
         () =>
           sendAndConfirmTxWithRetries(
@@ -360,7 +372,8 @@ export const realDeployPort = (): DeployPort => {
                 pk(buffer),
                 { wallet: needed(wallet, "a wallet") }
               ),
-            async () => !(await conn.getAccountInfo(pk(buffer)))
+            async () =>
+              !(await getReadBufferConnection().getAccountInfo(pk(buffer)))
           ),
         buffer,
         needed(PgProgramInfo.pk, "the program id").toBase58(),
@@ -450,11 +463,11 @@ export const tutorialRunner: Runner = {
       return recognised && withIdl(recognised);
     }
   ),
-  // Off devnet the airdrop card stays for its press, which says why
+  // A funded wallet passes the airdrop card on any known cluster; the deploy after it still refuses off devnet
   isFunded: () =>
-    PgConnection.cluster === "devnet"
-      ? isFundedForDeploy(realDeployPort())
-      : Promise.resolve(false),
+    PgConnection.cluster === undefined
+      ? Promise.resolve(false)
+      : isFundedForDeploy(realDeployPort()),
 };
 
 /** The deploy command and the open program, for `watchDeploys` */
