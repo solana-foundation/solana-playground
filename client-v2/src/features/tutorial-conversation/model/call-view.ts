@@ -180,7 +180,7 @@ export const callView = (input: CallViewInput): CallView | undefined => {
   const moved =
     answers &&
     ix.args.some((a) => (typed[a.name] ?? "") !== (last.args[a.name] ?? ""));
-  const pending = answers && !moved && isUnconfirmed(last.result);
+  const isPending = answers && !moved && isUnconfirmed(last.result);
   const exists = answers ? existsOf(last.result) : undefined;
   return {
     program: programName(deployed.idl),
@@ -197,8 +197,8 @@ export const callView = (input: CallViewInput): CallView | undefined => {
       .join(", ")}).rpc()`,
     fields,
     note,
-    canCall: !calling && !busy && !missing && !note && !pending,
-    canRecheck: !calling && !busy && Boolean(pending),
+    canCall: !calling && !busy && !missing && !note && !isPending,
+    canRecheck: !calling && !busy && Boolean(isPending),
     calling,
     json: JSON.stringify(deployed.idl, undefined, 2),
     result: answers ? last.result : undefined,

@@ -1,3 +1,7 @@
+import { createLogger } from "../logger";
+
+const log = createLogger("rpc:rate-limit");
+
 /** A rate-limit answer from an RPC: who sent it and what it said */
 export type RateLimit = { provider: string; reason: string };
 
@@ -23,6 +27,9 @@ const bodyAnswerOf = (message: string): RpcAnswer | undefined => {
     body = JSON.parse(message.slice(start, end + 1));
   } catch {
     // Braces that are not JSON are text of the message, not an RPC body
+    log.debug("A failed RPC call's message holds no JSON body", {
+      context: { message },
+    });
     return undefined;
   }
   if (!isRecord(body) || !isRecord(body.error)) return undefined;
