@@ -211,7 +211,7 @@ Done:
   not completed ("Start here", "Continue · Step n of m", or "Completed" once
   all three are done); the other tutorials stay reachable from New project.
   The New Workspace gallery (New project) starts a project from scratch, from
-  one of 11 programs that build on the default server, or from one of 16
+  one of 10 programs that build on the default server, or from one of 16
   tutorials. The cluster row, the account menu's Settings or Cmd+, open
   Settings as a page of its
   own over the whole window: a list of sections (Network, Project, Block

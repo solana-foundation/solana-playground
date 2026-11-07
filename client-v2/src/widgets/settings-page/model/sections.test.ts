@@ -10,6 +10,7 @@ vi.mock("@/utils", async () => {
     PgCommon,
     PgSettings: {},
     PgBlockExplorer: { all: [] },
+    DEFAULT_BLOCK_EXPLORER: "Solana Explorer",
     PgTheme: { onDidChangeFontFamily: event, onDidChangeThemeName: event },
   };
 });
