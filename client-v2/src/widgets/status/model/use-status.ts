@@ -8,7 +8,10 @@ import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { PgConnection } from "@/utils";
 import { PgFlow } from "@/views/flow/state/stage";
-import { displayModelName } from "@/views/sidebar/assistant/model/labels";
+import {
+  displayModelName,
+  hostedModelName,
+} from "@/views/sidebar/assistant/model/labels";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
 import type {
@@ -53,6 +56,11 @@ const aiInput = (): AiInput => {
   }
   const until = PgAssistant.limitReachedUntil;
   if (until !== undefined) return { kind: "limit", until };
+  // The hosted default is named by the model the deployment serves; its id,
+  // "default", is no model's name
+  if (connection.id === "default") {
+    return { kind: "ready", model: hostedModelName(PgAssistant.hostedModel) };
+  }
   const model =
     connection.endpoint?.model ?? connection.settings?.model ?? connection.id;
   return { kind: "ready", model: displayModelName(model) };

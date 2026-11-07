@@ -57,16 +57,46 @@ const STATES: Record<
 };
 
 /**
+ * Present: Ready on the hosted model, named when the deployment names it, or
+ * Not in use while chat runs on the user's own key (HOO-2695)
+ */
+const presentState = (
+  hostedName: string | undefined,
+  ownKey: string | undefined
+) => {
+  if (ownKey) {
+    return {
+      dot: "idle" as const,
+      word: "Not in use",
+      help: `Available, but chat uses ${ownKey} on your key.`,
+    };
+  }
+  if (hostedName) {
+    return { ...STATES.present, help: `${hostedName}. No key needed.` };
+  }
+  return STATES.present;
+};
+
+/**
  * The Assistant section's first row: whether the hosted model is there, in
  * words, with a Try again while it is not answering
  */
 const BaseAssistantStatus = ({
   hosted,
+  hostedName,
+  ownKey,
   online,
   onRetry,
   phone,
 }: {
   hosted: HostedModel;
+  /** The hosted model's name, when the deployment says which model it is */
+  hostedName?: string;
+  /**
+   * The model chat uses on the user's own key, when one is connected: the
+   * hosted model is then there but not in use, and Ready would read as if it were
+   */
+  ownKey?: string;
   /** Whether the browser has a network */
   online: boolean;
   /** Ask the hosted model again; settles once it has answered */
@@ -74,7 +104,8 @@ const BaseAssistantStatus = ({
   phone: boolean;
 }) => {
   const shown: Shown = hosted === "unreachable" && !online ? "offline" : hosted;
-  const state = STATES[shown];
+  const state =
+    shown === "present" ? presentState(hostedName, ownKey) : STATES[shown];
   // When a Try again last settled: a retry that is answered "unreachable"
   // again changes nothing else on the row, so the help line says it asked
   const [askedAt, setAskedAt] = useState<Date>();
@@ -133,7 +164,7 @@ const BaseAssistantStatus = ({
             tabIndex={-1}
             className={cn(
               "flex items-center gap-2 outline-none text-caption text-muted-foreground max-md:text-control",
-              shown === "present" && "text-foreground"
+              shown === "present" && !ownKey && "text-foreground"
             )}
           >
             <StatusDot variant={state.dot} />

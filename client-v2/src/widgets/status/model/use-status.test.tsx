@@ -26,6 +26,7 @@ const assistant = vi.hoisted(() => ({
   needsSignIn: false,
   defaultProbe: "unasked" as string,
   limitReachedUntil: undefined as number | undefined,
+  hostedModel: undefined as string | undefined,
 }));
 
 vi.mock("@/utils", () => ({
@@ -57,6 +58,9 @@ vi.mock("@/views/sidebar/assistant/store", () => ({
     get defaultProbe() {
       return assistant.defaultProbe;
     },
+    get hostedModel() {
+      return assistant.hostedModel;
+    },
     get limitReachedUntil() {
       return assistant.limitReachedUntil;
     },
@@ -73,6 +77,7 @@ afterEach(() => {
   assistant.needsSignIn = false;
   assistant.defaultProbe = "unasked";
   assistant.limitReachedUntil = undefined;
+  assistant.hostedModel = undefined;
   PgAnalyzerStatus.set({ kind: "idle" });
 });
 
@@ -87,6 +92,13 @@ it("names the connected model by its display name", () => {
     id: "anthropic",
     settings: { model: "claude-opus-5-5" },
   };
+  expect(wordsOf().current[1].words).toBe("Opus 5.5");
+});
+
+it("names the hosted default by its model, never by the backend's id", () => {
+  assistant.connection = { id: "default" };
+  expect(wordsOf().current[1].words).toBe("Default model");
+  assistant.hostedModel = "claude-opus-5-5";
   expect(wordsOf().current[1].words).toBe("Opus 5.5");
 });
 

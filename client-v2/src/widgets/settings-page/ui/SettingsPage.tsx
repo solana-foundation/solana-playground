@@ -77,6 +77,10 @@ interface SettingsPageProps {
   focus: SettingsFocus;
   /** Whether the hosted model answers, as the assistant's probe says */
   hosted: HostedModel;
+  /** The hosted model's name, when the deployment says which model it is */
+  hostedName?: string;
+  /** The model chat uses on the user's own key, while one is connected */
+  ownKey?: string;
   /** Ask the hosted model again: the Try again on its row */
   onRetryHosted: () => Promise<unknown>;
   /** ⌘, is the key's own, handled where it is bound */
@@ -96,6 +100,8 @@ const subscribeToModals = (onChange: () => void) =>
 const LiveSettingsPage = ({
   focus,
   hosted,
+  hostedName,
+  ownKey,
   onRetryHosted,
   onClose,
 }: SettingsPageProps) => {
@@ -111,7 +117,7 @@ const LiveSettingsPage = ({
   );
 
   const rows = settingRows(PgSettings.all);
-  const rowOf = ({ setting, label, help, tag }: Row) => {
+  const rowOf = ({ setting, label, help, tag, disabled, notReady }: Row) => {
     const controlId = `setting-${setting.id}`;
     const note =
       phone && setting.id === "editor.keybinding" ? PHONE_EDITOR_NOTE : help;
@@ -128,6 +134,8 @@ const LiveSettingsPage = ({
             name={label}
             controlId={controlId}
             segmented={SEGMENTED.has(setting.id)}
+            disabled={disabled}
+            notReady={notReady}
           />
         }
         // A switch or a few side by side fit beside the text
@@ -175,6 +183,8 @@ const LiveSettingsPage = ({
       <BaseSettingsCard>
         <BaseAssistantStatus
           hosted={hosted}
+          hostedName={hostedName}
+          ownKey={ownKey}
           online={online}
           onRetry={onRetryHosted}
           phone={phone}
@@ -195,7 +205,11 @@ const LiveSettingsPage = ({
       <>
         {cardsOf("advanced")}
         <BaseSettingsCard title={GROUPS.key}>
-          <AssistantKey phone={phone} />
+          <AssistantKey
+            phone={phone}
+            ownKey={ownKey}
+            isHostedAvailable={hosted === "present"}
+          />
         </BaseSettingsCard>
       </>
     ),

@@ -6,7 +6,7 @@ import { openShareGistDialogFor, ShareButton } from "@/app/ShareGistDialog";
 import Wallet from "@/components/Wallet";
 import { FeedbackHost } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
-import { useKeybind } from "@/hooks";
+import { useKeybind, useRenderOnChange } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
@@ -19,9 +19,12 @@ import {
 import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
 import { PgExplorer, PgView } from "@/utils";
+import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
 import {
   Assistant,
+  displayModelName,
+  modelShown,
   probeDefaultBackend,
   retryDefaultBackend,
   useDefaultBackend,
@@ -172,14 +175,28 @@ const shareFromCodeHead = (name: string) =>
  * the page is open and the frame does not re-render on its answer.
  */
 const LiveSettings = (
-  props: Omit<ComponentProps<typeof SettingsPage>, "hosted" | "onRetryHosted">
-) => (
-  <SettingsPage
-    {...props}
-    hosted={useDefaultBackend().state}
-    onRetryHosted={retryHosted}
-  />
-);
+  props: Omit<
+    ComponentProps<typeof SettingsPage>,
+    "hosted" | "hostedName" | "ownKey" | "onRetryHosted"
+  >
+) => {
+  const backend = useDefaultBackend();
+  useRenderOnChange(PgAssistant.onDidChange);
+  // Named as the composer's model button names them, so Settings and the
+  // chat never disagree about which model answers (HOO-2695)
+  const current = modelShown(PgAssistant.connection, backend);
+  return (
+    <SettingsPage
+      {...props}
+      hosted={backend.state}
+      hostedName={
+        PgAssistant.hostedModel && displayModelName(PgAssistant.hostedModel)
+      }
+      ownKey={current.kind === "keyed" ? current.label : undefined}
+      onRetryHosted={retryHosted}
+    />
+  );
+};
 
 /**
  * The row's Try again. The probe answers its own failures and tells every
