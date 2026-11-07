@@ -51,7 +51,7 @@ export const BaseReader: FC<BaseReaderProps> = ({ title, body, onClose }) => {
         {/* The objective alone, as the prototype's page heads itself: the
             band above already says which step this is */}
         <div className="flex items-center justify-between gap-4 border-b px-4 py-3">
-          <DialogTitle className="min-w-0 font-sans text-sm font-medium">
+          <DialogTitle className="min-w-0 font-sans text-sm font-headline">
             {title}
           </DialogTitle>
           <DialogPrimitive.Close asChild>

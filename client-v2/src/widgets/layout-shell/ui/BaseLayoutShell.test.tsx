@@ -209,6 +209,7 @@ const props = (
       onFilesOpenChange: vi.fn(),
       stageOn: "work",
       consoleOpen: false,
+      onConsoleClose: vi.fn(),
     },
   };
 };
@@ -889,6 +890,8 @@ describe("widening the assistant", () => {
     );
     expect(lastOf(seen).wide).toBe(false);
     expect(lastOf(seen).canWiden).toBe(true);
+    // The column at the left, not a Sheet
+    expect(lastOf(seen).inSheet).toBe(false);
 
     act(() => lastOf(seen).setWide(true));
     expect(panel.resize).toHaveBeenLastCalledWith(PANEL_SIZES.assistant.max);
@@ -979,6 +982,7 @@ describe("widening the assistant", () => {
     expect(panel.resize).not.toHaveBeenCalled();
     expect(lastOf(seen).wide).toBe(false);
     expect(lastOf(seen).canWiden).toBe(false);
+    expect(lastOf(seen).inSheet).toBe(true);
   });
 
   it("should do nothing while the panel is folded", () => {
@@ -1040,6 +1044,8 @@ describe("widening the assistant", () => {
     act(() => lastOf(seen).setWide(true));
     expect(panel.resize).not.toHaveBeenCalled();
     expect(lastOf(seen).wide).toBe(false);
+    // A page, not the right Sheet
+    expect(lastOf(seen).inSheet).toBe(false);
   });
 
   it("should not offer Widen under Home, where the assistant is its Sheet", () => {
@@ -1055,6 +1061,8 @@ describe("widening the assistant", () => {
       />
     );
     expect(lastOf(seen).canWiden).toBe(false);
+    // Under Home the assistant is the right Sheet at every width
+    expect(lastOf(seen).inSheet).toBe(true);
     act(() => lastOf(seen).setWide(true));
     expect(panel.resize).not.toHaveBeenCalled();
     expect(lastOf(seen).wide).toBe(false);

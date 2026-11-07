@@ -1,0 +1,27 @@
+# Changelog
+
+What changed in the components, newest first. One line per fix; the ticket
+id says where the decision lives.
+
+## 2026-11-07 · Overlays release focus before hiding the page (HOO-2684)
+
+- Dialog, Modal, Sheet, DropdownMenu, ContextMenu, Select: the content blurs
+  focus left outside it as it mounts (`useReleaseFocus`). Radix hid the page
+  with `aria-hidden` a render before moving focus in, so with the editor
+  focused Chrome refused the attribute and the page stayed reachable behind
+  the overlay. Where focus goes on close is unchanged: ContextMenu, which
+  returns it to what held it before, gets it back through `returnFocus`.
+
+## 2026-11-05 · Core components polish (DES-129)
+
+- Input, Textarea, Select, NativeSelect: a hover state. The border lifts to
+  `muted-foreground/60`; a disabled or invalid field keeps its own border.
+- Checkbox, RadioGroupItem: a hover state. Unchecked, the border lifts as on
+  a field; checked, the fill goes to `primary/80`, as on the default Button.
+- Switch: a hover state. Off, the track goes to `muted-foreground/40`; on, to
+  `primary/80`. A disabled switch does not react.
+- Segmented `chips`: hover lifts the border to `border-strong`, as `gradient`
+  already did.
+- AsyncButton: while it waits it keeps its full colour instead of dimming to
+  the disabled 50%, so busy reads apart from unavailable. It still takes no
+  clicks.

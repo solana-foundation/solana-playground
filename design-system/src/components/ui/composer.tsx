@@ -29,7 +29,7 @@ function Composer({
           if (!busy && !empty) onSubmit?.(e)
         }}
         className={cn(
-          "group/composer @container/composer flex w-full min-w-0 flex-col rounded-2xl border border-border bg-surface-panel shadow-composer transition-[border-color,box-shadow] duration-150 hover:border-muted-foreground/20 focus-within:border-primary/45 focus-within:ring-3 focus-within:ring-primary/12",
+          "group/composer @container/composer flex w-full min-w-0 flex-col rounded-2xl border border-border bg-surface-panel shadow-composer transition-[border-color,box-shadow] duration-150 hover:border-muted-foreground/20 focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/12",
           className
         )}
         {...props}
@@ -43,7 +43,7 @@ function ComposerBanner({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="composer-banner"
-      className={cn("flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs text-muted-foreground max-md:text-control max-md:font-read", className)}
+      className={cn("flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs font-read text-muted-foreground max-md:text-control", className)}
       {...props}
     />
   )
@@ -121,7 +121,7 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
         }
       }}
       className={cn(
-        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-[350] text-foreground outline-none placeholder:text-subtle max-md:min-h-12 max-md:text-body max-md:font-read",
+        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-read text-foreground outline-none placeholder:text-subtle max-md:min-h-12 max-md:text-body",
         className
       )}
       {...props}
@@ -143,7 +143,7 @@ function ComposerAdd({ className, ...props }: React.ComponentProps<"button">) {
       data-slot="composer-add"
       aria-label="Add context"
       className={cn(
-        "grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:size-12",
+        "-mr-1 grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:size-12",
         className
       )}
       {...props}
@@ -154,14 +154,16 @@ function ComposerAdd({ className, ...props }: React.ComponentProps<"button">) {
 }
 
 /* The model you are talking to, named in the box and never hidden in settings.
-   On a phone it is as tall as + and Send beside it, a thumb's target. */
+   On a phone it is as tall as + and Send beside it, a thumb's target. Its
+   name sits 16 px from the + glyph (the + gives back 4 px of the row's gap,
+   the left padding is 6), so the two read as one control group. */
 function ComposerModel({ className, ...props }: React.ComponentProps<"button">) {
   return (
     <button
       type="button"
       data-slot="composer-model"
       className={cn(
-        "inline-flex h-8 max-md:h-12 items-center gap-1.5 rounded-lg px-2.5 text-xs font-act text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5",
+        "inline-flex h-8 max-md:h-12 items-center gap-1.5 rounded-lg pr-2.5 pl-1.5 text-xs font-act text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5",
         className
       )}
       {...props}

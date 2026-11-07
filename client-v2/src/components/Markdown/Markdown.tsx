@@ -5,10 +5,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "@/shared/lib/utils";
+import { Icon } from "@/shared/ui/icon";
 
 import { PgCommon, PgRouter } from "../../utils";
 import CodeBlock from "../CodeBlock";
-import { HyperLink } from "../Icons";
 import Img from "../Img";
 import Link, { LinkProps } from "../Link";
 
@@ -134,7 +134,7 @@ const Header: FC<React.PropsWithChildren<HeaderProps>> = ({
       onClick={() => (PgRouter.location.hash = hash)}
       className="relative cursor-pointer [&>:first-child]:absolute [&>:first-child]:top-0 [&>:first-child]:bottom-0 [&>:first-child]:-left-6 [&>:first-child]:my-auto [&>:first-child]:opacity-0 [&>:first-child]:transition-opacity [&>:first-child]:duration-50 [&>:first-child]:ease-linear [&:hover>:first-child]:opacity-100"
     >
-      <HyperLink />
+      <Icon name="link" size={16} />
       <H {...rest} id={HEADER_ELEMENT_ID_PREFIX + hash} />
     </div>
   );

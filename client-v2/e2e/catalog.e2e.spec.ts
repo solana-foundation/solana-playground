@@ -109,14 +109,15 @@ test("client-v2-layout: The pages by link", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Open e2e-counter" })
   ).toBeVisible();
-  await expect(page).toHaveURL(/\/$/);
+  // The page keeps its own path while it shows
+  await expect(page).toHaveURL(/\/programs\/?$/);
   await expect(home(page)).toBeHidden();
   await expect
     .poll(() => lineOf(lines, "catalog_shown"))
     .toContain("via: link");
 });
 
-test("Back from a page's link returns past it", async ({
+test("Back from a page's link returns to the page before it", async ({
   seededPage: page,
 }) => {
   await page.goto("/tutorials/hello-anchor");
@@ -125,10 +126,11 @@ test("Back from a page's link returns past it", async ({
   ).toBeVisible(LONG);
   await page.goto("/tutorials");
   await expect(search(page, "tutorials")).toBeVisible(LONG);
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/tutorials\/?$/);
 
   await page.goBack();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/);
+  await expect(search(page, "tutorials")).toBeHidden();
 });
 
 // The explorer switches to the open project on every route's init; that

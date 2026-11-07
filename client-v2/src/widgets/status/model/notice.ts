@@ -54,6 +54,24 @@ export const stageNotice = (
   return undefined;
 };
 
+/**
+ * Why Deploy and Interact's action is held, if it is. The notice's condition,
+ * whatever the stage, so the status and the buttons cannot disagree.
+ */
+export const networkHold = (
+  network: NetworkInput,
+  online: boolean
+): string | undefined => {
+  switch (noticeCondition(network, online)) {
+    case "offline":
+      return "You're offline";
+    case "cluster-down":
+      return `${capitalize(network.name)} is not responding`;
+    default:
+      return undefined;
+  }
+};
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -115,6 +133,14 @@ if (import.meta.vitest) {
 
     it("shows nothing with nothing wrong", () => {
       expect(stageNotice(undefined, "devnet", "deploy")).toBeUndefined();
+    });
+
+    it("gives Deploy and Interact the reason they wait, if any", () => {
+      expect(networkHold(DOWN, false)).toBe("You're offline");
+      expect(networkHold(DOWN, true)).toBe("Devnet is not responding");
+      expect(networkHold(STALLED, true)).toBe("Devnet is not responding");
+      expect(networkHold(UP, true)).toBeUndefined();
+      expect(networkHold(CONNECTING, true)).toBeUndefined();
     });
   });
 }

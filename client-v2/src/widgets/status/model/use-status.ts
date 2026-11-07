@@ -7,11 +7,26 @@ import { useRenderOnChange } from "@/hooks";
 import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { PgConnection } from "@/utils";
-import { displayModelName } from "@/views/sidebar/assistant/model/labels";
+import { PgFlow } from "@/views/flow/state/stage";
+import {
+  displayModelName,
+  hostedModelName,
+} from "@/views/sidebar/assistant/model/labels";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
-import type { AiInput, NetworkInput, StatusIndicator } from "./indicators";
-import { aiIndicator, analyzerIndicator, networkIndicator } from "./indicators";
+import type {
+  AiInput,
+  NetworkInput,
+  RunUnderWay,
+  StatusIndicator,
+} from "./indicators";
+import {
+  aiIndicator,
+  analyzerIndicator,
+  holdingReload,
+  networkIndicator,
+} from "./indicators";
+import { networkHold } from "./notice";
 
 const subscribeAnalyzer = (cb: () => void) =>
   PgAnalyzerStatus.onDidChange(() => cb()).dispose;
@@ -19,11 +34,32 @@ const subscribeAnalyzer = (cb: () => void) =>
 const useAnalyzer = (): AnalyzerState =>
   useSyncExternalStore(subscribeAnalyzer, PgAnalyzerStatus.get);
 
+const subscribeFlow = (cb: () => void) =>
+  PgFlow.onDidChange(() => cb()).dispose;
+
+/** The build or the deploy running now, which a reload would throw away */
+const useRunUnderWay = (): RunUnderWay | undefined => {
+  const flow = useSyncExternalStore(subscribeFlow, () => PgFlow.state);
+  if (flow.build === "running") return "build";
+  return flow.deploy === "running" ? "deploy" : undefined;
+};
+
 /** The AI as the indicator reads it, from the live connection and session */
 const aiInput = (): AiInput => {
   const connection = PgAssistant.connection;
+  // Only with nothing connected: a connected backend is asked by its turns
+  if (!connection && PgAssistant.defaultProbe === "unreachable") {
+    return { kind: "unreachable" };
+  }
   if (!connection || PgAssistant.needsSignIn) {
     return { kind: "off", needsSignIn: PgAssistant.needsSignIn };
+  }
+  const until = PgAssistant.limitReachedUntil;
+  if (until !== undefined) return { kind: "limit", until };
+  // The hosted default is named by the model the deployment serves; its id,
+  // "default", is no model's name
+  if (connection.id === "default") {
+    return { kind: "ready", model: hostedModelName(PgAssistant.hostedModel) };
   }
   const model =
     connection.endpoint?.model ?? connection.settings?.model ?? connection.id;
@@ -38,6 +74,10 @@ export const useNetworkInput = (): NetworkInput => {
   return { name: cluster ?? "unknown", isConnected, slotStalled };
 };
 
+/** Why Deploy and Interact's action is held right now, if it is */
+export const useNetworkHold = (): string | undefined =>
+  networkHold(useNetworkInput(), useOnline());
+
 /** The network, the AI and the Rust analyzer, in that order, kept current */
 export const useStatus = (): StatusIndicator[] => {
   const network = useNetworkInput();
@@ -45,14 +85,16 @@ export const useStatus = (): StatusIndicator[] => {
   useRenderOnChange(PgSession.onDidChange);
   const analyzer = useAnalyzer();
   const online = useOnline();
+  const run = useRunUnderWay();
   const since = analyzer.kind === "starting" ? analyzer.since : undefined;
   // Ticks only while the analyzer starts; the model reads the seconds from it
   const elapsed = useElapsed(since);
   const now = since === undefined ? Date.now() : since + (elapsed ?? 0);
 
+  const rust = analyzerIndicator(analyzer, now, online);
   return [
     networkIndicator(network, online),
     aiIndicator(aiInput(), online),
-    analyzerIndicator(analyzer, now, online),
+    run ? holdingReload(rust, run) : rust,
   ];
 };

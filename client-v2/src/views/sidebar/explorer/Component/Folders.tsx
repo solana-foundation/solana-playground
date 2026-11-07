@@ -16,16 +16,9 @@ import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
+import { Icon } from "@/shared/ui/icon";
 
 import Dnd, { DragEndEvent, DragStartEvent } from "../../../../components/Dnd";
-import {
-  Plus,
-  Rocket,
-  ShortArrow,
-  TestTube,
-  Triangle,
-  Wrench,
-} from "../../../../components/Icons";
 import LangIcon from "../../../../components/LangIcon";
 import { useKeybind } from "../../../../hooks";
 import { PgCommon, PgExplorer, PgTheme, PgView } from "../../../../utils";
@@ -124,7 +117,7 @@ const Folders = () => {
                     onClick={ctxMenu.runBuild}
                     failureAction="build"
                     disabled={ctxMenu.buildLoading}
-                    icon={<Wrench />}
+                    icon={<Icon name="build" />}
                   >
                     Build
                   </SectionButton>
@@ -132,7 +125,7 @@ const Folders = () => {
                     onClick={ctxMenu.runDeploy}
                     failureAction="deploy"
                     disabled={ctxMenu.deployState !== "ready"}
-                    icon={<Rocket />}
+                    icon={<Icon name="deploy" />}
                   >
                     Deploy
                   </SectionButton>
@@ -141,7 +134,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.addProgram}
                   failureAction="add a program"
-                  icon={<Plus />}
+                  icon={<Icon name="add" />}
                 >
                   Add
                 </SectionButton>
@@ -161,7 +154,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.runClientFolder}
                   failureAction="run the client"
-                  icon={<Triangle rotate="90deg" />}
+                  icon={<Icon name="run" />}
                   title="Run All (in client dir)"
                 >
                   Run
@@ -170,7 +163,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.addClient}
                   failureAction="add a client"
-                  icon={<Plus />}
+                  icon={<Icon name="add" />}
                 >
                   Add client
                 </SectionButton>
@@ -180,7 +173,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.runTestFolder}
                   failureAction="run the tests"
-                  icon={<TestTube />}
+                  icon={<Icon name="test" />}
                   title="Test All (in tests dir)"
                 >
                   Test
@@ -189,7 +182,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.addTests}
                   failureAction="add tests"
-                  icon={<Plus />}
+                  icon={<Icon name="add" />}
                 >
                   Add tests
                 </SectionButton>
@@ -457,16 +450,18 @@ const Folder = forwardRef<HTMLDivElement, FolderProps>(
       ref={ref}
       data-path={path}
       className={cn(
-        // The chevron: sized and turned from the row, as `ShortArrow` takes
-        // no class
-        "[&_svg]:size-[0.875rem] [&_svg]:[transition:transform_50ms_linear]",
+        // The chevron turns from the row, which knows whether it is open
+        "[&_svg]:[transition:transform_50ms_linear]",
         "[&.open_svg]:[transform:rotate(90deg)]",
         className
       )}
       {...props}
     >
       <div className="h-full" style={{ width: indentOf(depth) }} />
-      <ShortArrow color="textSecondary" />
+      <Icon
+        name="chevron-right"
+        className="size-4 text-[color:var(--text-secondary)]"
+      />
       <span className="ml-2 text-[color:var(--text-secondary)]">{name}</span>
     </div>
   )

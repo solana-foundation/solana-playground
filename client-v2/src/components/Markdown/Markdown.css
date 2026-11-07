@@ -920,7 +920,12 @@
   padding: 16px;
   font-size: 85%;
   line-height: 1.45;
-  overflow: auto;
+  /* Always keep room for the horizontal scrollbar. Without it, the bar comes
+   * in once a streamed line outgrows the block and moves the reply below
+   * (HOO-2694). Set here because this unlayered rule beats CodeBlock's
+   * Tailwind classes. */
+  overflow-x: scroll;
+  overflow-y: hidden;
 }
 
 .pg-markdown pre code,

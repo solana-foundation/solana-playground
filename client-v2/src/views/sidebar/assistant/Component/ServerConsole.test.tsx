@@ -24,7 +24,7 @@ it("flips Show more and Show less and says which state it is in", () => {
     docs: [{ name: "search", description: "x".repeat(300), inputSchema: {} }],
   });
 
-  render(<ServerConsole server={server} providerName="Anthropic" />);
+  render(<ServerConsole server={server} providerName="Anthropic" scope="" />);
   fireEvent.change(screen.getByRole("combobox"), {
     target: { value: "search" },
   });

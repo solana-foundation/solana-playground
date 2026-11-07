@@ -181,7 +181,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 w-full shrink-0 rounded-none border-0 border-t border-border px-3.5 text-[0.8125rem] font-normal text-muted-foreground underline max-md:h-auto max-md:min-h-[calc(3.25rem+env(safe-area-inset-bottom,0px))] max-md:px-5 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:text-control max-md:font-act max-md:no-underline"
+            className="h-7 w-full shrink-0 rounded-none border-0 border-t border-border px-3.5 text-[0.8125rem] font-act text-muted-foreground underline max-md:h-auto max-md:min-h-[calc(3.25rem+env(safe-area-inset-bottom,0px))] max-md:px-5 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:text-control max-md:no-underline"
             title={`Nothing has proved this step yet — ${frontierStep.verifiedBy}. Moving on now is recorded as a skip, and clears itself if you come back and prove it.`}
             onClick={() => PgLesson.pass()}
           >

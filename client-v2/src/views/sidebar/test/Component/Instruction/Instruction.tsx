@@ -16,6 +16,7 @@ import {
   CollapsibleContent,
   CollapsibleHeading,
 } from "@/shared/ui/collapsible";
+import { useNetworkHold } from "@/widgets/status";
 
 import { useWallet } from "../../../../../hooks";
 import { PgCommon } from "../../../../../utils";
@@ -124,10 +125,11 @@ const Instruction: FC<InstructionProps> = ({
   };
 
   const wallet = useWallet();
+  const network = useNetworkHold();
   // A block from outside the form says itself, in the stage's callout
   const held = callBlocked
     ? undefined
-    : heldBecause({ wallet: !!wallet, filled: !disabled });
+    : heldBecause({ network, wallet: !!wallet, filled: !disabled });
 
   return (
     <InstructionProvider
@@ -206,7 +208,7 @@ const Instruction: FC<InstructionProps> = ({
         <AsyncButton
           onClick={call}
           onError={reportButtonFailure(`call ${instruction.name}`)}
-          disabled={!wallet || disabled || callBlocked}
+          disabled={callBlocked || held !== undefined}
           loadingText="Calling…"
         >
           Call {instruction.name}
@@ -241,12 +243,15 @@ const Instruction: FC<InstructionProps> = ({
  * for"); undefined once it can run
  */
 const heldBecause = ({
+  network,
   wallet,
   filled,
 }: {
+  network: string | undefined;
   wallet: boolean;
   filled: boolean;
 }) => {
+  if (network) return network;
   if (!wallet) return "Connect a wallet to call";
   if (!filled) return "Fill every field to call";
   return undefined;

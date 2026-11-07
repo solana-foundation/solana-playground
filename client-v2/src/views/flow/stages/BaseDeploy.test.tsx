@@ -958,3 +958,46 @@ describe("BaseDeploy before a deploy on this network", () => {
     expect(screen.queryByRole("button", { name: /^Show / })).toBeNull();
   });
 });
+
+describe("BaseDeploy while the network is down", () => {
+  const ready = { built: true, history: [] as DeployRecord[] };
+
+  it("holds the pill and gives the reason on it", () => {
+    const onDeploy = vi.fn();
+    render(
+      <BaseDeploy
+        {...props(ready)}
+        networkHold="Devnet is not responding"
+        onDeploy={onDeploy}
+      />
+    );
+    const pill = screen.getByRole("button", { name: /Deploy to devnet/ });
+    expect(pill).toHaveProperty("disabled", true);
+    expect(pill.getAttribute("title")).toBe("Devnet is not responding");
+    fireEvent.click(pill);
+    expect(onDeploy).not.toHaveBeenCalled();
+  });
+
+  it("keeps Go to Build on for a program not built", () => {
+    render(
+      <BaseDeploy
+        {...props({ built: false, history: [] })}
+        networkHold="You're offline"
+      />
+    );
+    expect(screen.getByRole("button", { name: /Go to Build/ })).toHaveProperty(
+      "disabled",
+      false
+    );
+    expect(
+      screen.queryByRole("button", { name: /Deploy to devnet/ })
+    ).toBeNull();
+  });
+
+  it("leaves the pill on while the network answers", () => {
+    render(<BaseDeploy {...props(ready)} />);
+    expect(
+      screen.getByRole("button", { name: /Deploy to devnet/ })
+    ).toHaveProperty("disabled", false);
+  });
+});

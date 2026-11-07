@@ -9,7 +9,7 @@ import {
 import { Spinner } from "@/shared/ui/spinner";
 
 import type { AccountView } from "../model/account";
-import { accountLabel, accountUser } from "../model/account";
+import { accountImage, accountLabel } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
 
 export interface BaseRailFooterProps {
@@ -55,7 +55,7 @@ const BaseRailFooter = ({
                   <Spinner aria-label="Sending feedback" />
                 ) : (
                   <AccountAvatar
-                    image={accountUser(account)?.image}
+                    image={accountImage(account)}
                     sending={false}
                     className="size-4"
                   />

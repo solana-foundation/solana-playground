@@ -1,6 +1,11 @@
 import type { Page } from "@playwright/test";
 
-import { expect, startTutorialFromAbout, test } from "./fixtures";
+import {
+  expect,
+  newProjectPage,
+  startTutorialFromAbout,
+  test,
+} from "./fixtures";
 import {
   currentProject,
   home,
@@ -122,7 +127,7 @@ const readConfig = (page: Page) =>
 const addWorkspace = async (page: Page, name: string) => {
   await openGallery(page);
 
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await expect(gallery).toBeVisible();
   await gallery.getByLabel("Project name").fill(name);
   await gallery.getByRole("button", { name: /^Start/ }).click();
@@ -250,7 +255,7 @@ test("every project in a migrated config still opens", async ({ page }) => {
  * A tutorial workspace is named after the tutorial, and `PgTutorial.start()`
  * is what calls `PgExplorer.createWorkspace()` -- opening the card alone only
  * reaches upstream's About screen. An empty profile opens it from Home; a
- * profile with a project, through the gallery the navigation opens.
+ * profile with a project, through the New project page the navigation opens.
  */
 const startTutorial = async (page: Page, from: "home" | "navigation") => {
   if (from === "home") {
@@ -259,9 +264,7 @@ const startTutorial = async (page: Page, from: "home" | "navigation") => {
       .getByRole("button", { name: "Open Hello Anchor" })
       .click();
   } else {
-    const gallery = page.getByRole("dialog", {
-      name: "What do you want to build?",
-    });
+    const gallery = newProjectPage(page);
     await openGallery(page);
     await expect(gallery).toBeVisible();
 

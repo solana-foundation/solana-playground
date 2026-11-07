@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { isCatalogLinkPath } from "@/routes/catalog-paths";
+import { isStartPath } from "@/routes/catalog-paths";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgRouter } from "@/utils";
 
@@ -17,12 +17,6 @@ const log = createLogger("home:start");
  * empty for good.
  */
 export const START_TIMEOUT_MS = 10_000;
-
-/**
- * Where Home can show: `/`, and the `/tutorials` and `/programs` links, which
- * open their page and go on to `/`
- */
-const isStartPath = (path: string) => path === "/" || isCatalogLinkPath(path);
 
 /**
  * Home is for a start on `/` (or a link to a page) with no project open. Any
@@ -46,12 +40,13 @@ export const decideStart = ({
 };
 
 /**
- * Whether the work can be drawn: anywhere but `/`, or on `/` with a project
- * open (a temporary one counts; it has no name). On `/` with none open the
- * explorer throws, so Home is the only page there.
+ * Whether the work can be drawn: anywhere but a start path, or on one with a
+ * project open (a temporary one counts; it has no name). On `/` or a page's
+ * own path with none open the explorer throws, so Home is the only page
+ * there (under the page, on a page's path).
  */
 const workDrawable = () =>
-  PgRouter.location.pathname !== "/" ||
+  !isStartPath(PgRouter.location.pathname) ||
   PgExplorer.isTemporary ||
   PgExplorer.currentWorkspaceName !== undefined;
 

@@ -17,6 +17,7 @@ import {
 } from "@/shared/lib/telemetry";
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { PgConnection } from "@/utils";
 
 import {
   aiIndicator,
@@ -44,7 +45,13 @@ const INDICATORS = [
   analyzerIndicator({ kind: "starting", since: 0 }, 1_000, true),
 ];
 
-vi.mock("../model/use-status", () => ({ useStatus: () => INDICATORS }));
+let current = INDICATORS;
+afterEach(() => {
+  current = INDICATORS;
+});
+// The real one loads the whole runtime; Try again only asks it to recheck
+vi.mock("@/utils", () => ({ PgConnection: { recheck: vi.fn() } }));
+vi.mock("../model/use-status", () => ({ useStatus: () => current }));
 
 let sent: ReturnType<typeof memoryProvider>;
 beforeEach(() => {
@@ -71,6 +78,7 @@ it("measures a pick in the row and runs the network's and the AI's action", asyn
       settingsOpen={false}
       onOpenNetwork={onOpenNetwork}
       onConnectAi={onConnectAi}
+      onRetryAi={vi.fn()}
     />
   );
   await userEvent.click(screen.getByRole("button", { name: "AI, off" }));
@@ -94,6 +102,7 @@ it("measures a pick on the rail", async () => {
       settingsOpen={false}
       onOpenNetwork={vi.fn()}
       onConnectAi={vi.fn()}
+      onRetryAi={vi.fn()}
     />
   );
   await userEvent.click(
@@ -106,7 +115,13 @@ it("measures a pick on the rail", async () => {
 
 it("measures the sheet opening and a row's action", async () => {
   const onConnectAi = vi.fn();
-  render(<StatusChip onOpenNetwork={vi.fn()} onConnectAi={onConnectAi} />);
+  render(
+    <StatusChip
+      onOpenNetwork={vi.fn()}
+      onConnectAi={onConnectAi}
+      onRetryAi={vi.fn()}
+    />
+  );
   await userEvent.click(
     screen.getByRole("button", { name: "Status, starting" })
   );
@@ -118,4 +133,58 @@ it("measures the sheet opening and a row's action", async () => {
   expect(eventsNamed("status_indicator_picked")).toEqual([
     { indicator: "ai", state: "ready", from: "sheet" },
   ]);
+});
+
+it("asks the cluster and the hosted model again on Try again, and measures what it found", async () => {
+  current = [
+    networkIndicator(
+      // eslint-disable-next-line unicorn/no-null -- PgConnection's tri-state: null is "not known yet"
+      { name: "devnet", isConnected: false, slotStalled: null },
+      true
+    ),
+    aiIndicator({ kind: "unreachable" }, true),
+    INDICATORS[2],
+  ];
+  const recheck = vi.mocked(PgConnection.recheck).mockResolvedValue(false);
+  const onRetryAi = vi.fn(() => Promise.resolve(true));
+  const onOpenNetwork = vi.fn();
+  inNav(
+    <StatusRow
+      settingsOpen={false}
+      onOpenNetwork={onOpenNetwork}
+      onConnectAi={vi.fn()}
+      onRetryAi={onRetryAi}
+    />
+  );
+
+  // A panel opens instead of the settings
+  await userEvent.click(
+    screen.getByRole("button", { name: /^Change cluster, currently devnet,/ })
+  );
+  expect(onOpenNetwork).not.toHaveBeenCalled();
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Try again" })
+  );
+  expect(recheck).toHaveBeenCalledOnce();
+  await vi.waitFor(() =>
+    expect(eventsNamed("status_retried")).toEqual([
+      { indicator: "network", from: "row", answered: false },
+    ])
+  );
+  await userEvent.keyboard("{Escape}");
+
+  await userEvent.click(
+    screen.getByRole("button", { name: "AI, not responding" })
+  );
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Try again" })
+  );
+  expect(onRetryAi).toHaveBeenCalledOnce();
+  await vi.waitFor(() =>
+    expect(eventsNamed("status_retried")).toEqual([
+      { indicator: "network", from: "row", answered: false },
+      { indicator: "ai", from: "row", answered: true },
+    ])
+  );
+  recheck.mockReset();
 });

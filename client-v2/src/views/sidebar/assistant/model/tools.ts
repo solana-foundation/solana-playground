@@ -1,3 +1,4 @@
+import { NetworkRefusedError } from "@/commands/deploy/network-refused";
 import { solOn, UNKNOWN_NETWORK } from "@/constants";
 import { bindToolFor } from "@/entities/agent-tools";
 import { formatSol } from "@/features/deploy";
@@ -198,6 +199,10 @@ export const createTools = (
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+      if (e instanceof NetworkRefusedError) {
+        PgAssistant.setApprovalOutcome(approvalId, "deploy did not start");
+        return `The deploy did not start, and nothing was sent: ${message}`;
+      }
       PgAssistant.setApprovalOutcome(approvalId, "deploy failed");
       return `The deployment failed: ${message}`;
     }

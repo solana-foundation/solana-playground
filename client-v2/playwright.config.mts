@@ -198,11 +198,14 @@ export default defineConfig({
         ["json", { outputFile: "test-results/report.json" }],
       ]
     : "line",
-  // Under the `e2e` shard job's `timeout-minutes` (client-v2.yml), so
+  // Under the `e2e` shard job's `timeout-minutes` (reusable-client-v2.yml), so
   // Playwright itself ends a hung shard and still prints its summary; a
   // GitHub cancel keeps the traces but not the line saying which test was
-  // running.
-  globalTimeout: process.env.CI ? 15 * 60_000 : 0,
+  // running. 25 minutes, not 15: on run 42259738085 (2026-11-06, seven
+  // shards) the slowest shard's `Browser tests` step took 14.7 minutes, so
+  // 15 would end a healthy shard. Lower it when the shards are measured well
+  // under 15 again.
+  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every page starts as a visitor who left the file tree open: a first

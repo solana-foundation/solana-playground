@@ -190,26 +190,15 @@ const SYNTAX = {
   string: "text-syntax-string",
 }
 
-/* The syntax colours are tuned for the product's dark ground; on paper the
-   status inks stand in, so a specimen drawn in both reads in both */
-const SYNTAX_BOTH = {
-  comment: "text-muted-foreground dark:text-syntax-comment",
-  keyword: "text-primary dark:text-syntax-keyword",
-  type: "text-info dark:text-syntax-type",
-  number: "text-primary dark:text-syntax-number",
-  function: "text-success dark:text-syntax-function",
-  string: "text-warning dark:text-syntax-string",
-}
-
-function highlight(line: string, palette: typeof SYNTAX = SYNTAX) {
-  if (line.trim().startsWith("//")) return <span className={palette.comment}>{line}</span>
+function highlight(line: string) {
+  if (line.trim().startsWith("//")) return <span className={SYNTAX.comment}>{line}</span>
   const parts = line.split(/(\s+|[(){}<>;:,.!#[\]&'"]+)/)
   return parts.map((part, i) => {
-    if (KEYWORDS.has(part)) return <span key={i} className={palette.keyword}>{part}</span>
-    if (TYPES.has(part)) return <span key={i} className={palette.type}>{part}</span>
-    if (/^\d+$/.test(part)) return <span key={i} className={palette.number}>{part}</span>
-    if (/^[a-z_]+$/.test(part) && parts[i + 1]?.startsWith("(")) return <span key={i} className={palette.function}>{part}</span>
-    if (/"$/.test(parts[i - 1] ?? "") && part && !/^"/.test(part)) return <span key={i} className={palette.string}>{part}</span>
+    if (KEYWORDS.has(part)) return <span key={i} className={SYNTAX.keyword}>{part}</span>
+    if (TYPES.has(part)) return <span key={i} className={SYNTAX.type}>{part}</span>
+    if (/^\d+$/.test(part)) return <span key={i} className={SYNTAX.number}>{part}</span>
+    if (/^[a-z_]+$/.test(part) && parts[i + 1]?.startsWith("(")) return <span key={i} className={SYNTAX.function}>{part}</span>
+    if (/"$/.test(parts[i - 1] ?? "") && part && !/^"/.test(part)) return <span key={i} className={SYNTAX.string}>{part}</span>
     return <span key={i}>{part}</span>
   })
 }
@@ -359,7 +348,7 @@ function MergeLines({ rows, side, start = 1 }: { rows: MergeRow[]; side: "left" 
         return (
           <div key={i} className={cn("relative flex h-5 items-center", cell.state && mergeHunkVariants({ state: cell.state }))}>
             <span className="flex w-10 shrink-0 items-center justify-end pr-3 text-xs text-subtle tabular-nums select-none">{number}</span>
-            <code className="min-w-0 flex-1 overflow-hidden whitespace-pre text-foreground">{highlight(cell.text, SYNTAX_BOTH)}</code>
+            <code className="min-w-0 flex-1 overflow-hidden whitespace-pre text-foreground">{highlight(cell.text)}</code>
           </div>
         )
       })}
@@ -1037,7 +1026,7 @@ function PlaygroundComponents() {
         </DropdownMenu>
       </Block>
 
-      <Block id="editor-tabs" title="Editor tabs" source="playground" registry="editor-tabs" note="The open files over the editor. The current one sits on the editor's ground with a purple line along its top. Close shows on hover and on the current tab." className="block">
+      <Block id="editor-tabs" title="Editor tabs" source="playground" registry="editor-tabs" note="The open files over the editor. The current one sits on the editor's ground, with no line of its own. Close shows on hover and on the current tab." className="block">
         <EditorTabs className="max-w-xl rounded-t-xl">
           <EditorTab active>
             <EditorTabTrigger><FileCode2 /><EditorTabLabel>lib.rs</EditorTabLabel></EditorTabTrigger>
@@ -1124,7 +1113,7 @@ function PlaygroundBlocks() {
             <StatusDot variant="success" size="lg" />
             Deployed to devnet
           </div>
-          <div className="flex items-center gap-2 rounded-lg bg-surface-base px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg bg-surface-well px-3 py-2">
             <span className="text-caption text-subtle">Program id</span>
             <code className="font-mono text-code text-foreground" title={PROGRAM_ID}>7Hq5…Xk2P</code>
             <CopyButton value={PROGRAM_ID} label="Copy the program id" className="ml-auto" />

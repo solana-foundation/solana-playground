@@ -36,7 +36,7 @@ export const useModalId = () => {
 
 /**
  * The id of the dialog around a component that also renders outside one
- * (Start from scratch sits on Home as well as in the gallery), or `null`
+ * (a component drawn both in a dialog and on a page), or `null`
  * there: outside a dialog there is nothing of its own to close.
  */
 export const useModalIdIfAny = () => useContext(ModalIdContext);

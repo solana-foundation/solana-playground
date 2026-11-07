@@ -16,11 +16,7 @@ const explorer = vi.hoisted(() => ({
   onDidCreateWorkspace: vi.fn(),
   onDidSwitchWorkspace: vi.fn(),
 }));
-const router = vi.hoisted(() => ({
-  changed: [] as Array<(path: string) => void>,
-  onDidChangePath: vi.fn(),
-}));
-vi.mock("@/utils", () => ({ PgExplorer: explorer, PgRouter: router }));
+vi.mock("@/utils", () => ({ PgExplorer: explorer }));
 
 import { catalogPage, useCatalogPage } from "./catalog-page";
 
@@ -37,8 +33,6 @@ beforeEach(() => {
   explorer.switched = [];
   explorer.onDidCreateWorkspace.mockImplementation(sub(explorer.created));
   explorer.onDidSwitchWorkspace.mockImplementation(sub(explorer.switched));
-  router.changed = [];
-  router.onDidChangePath.mockImplementation(sub(router.changed));
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
 });
@@ -100,20 +94,23 @@ it("stays open through the explorer's own switches and creates", () => {
   expect(catalogPage.current()).toBe("tutorials");
 });
 
-it("closes when a tutorial's route opens, not on the start route", () => {
-  renderHook(() => useCatalogPage());
-  act(() => catalogPage.open("tutorials", "link"));
+it("opens New project as a page of its own, from the lesson band too", () => {
+  catalogPage.open("new-project", "lesson");
 
-  act(() => router.changed.forEach((cb) => cb("/")));
-  expect(catalogPage.current()).toBe("tutorials");
-
-  act(() => router.changed.forEach((cb) => cb("/tutorials/hello-anchor")));
-  expect(catalogPage.current()).toBeNull();
+  expect(catalogPage.current()).toBe("new-project");
+  expect(sent.events).toEqual([
+    { name: "catalog_shown", params: { page: "new-project", via: "lesson" } },
+  ]);
 });
 
-it("stops listening once unmounted", () => {
-  const { unmount } = renderHook(() => useCatalogPage());
-  unmount();
+it("closes a page by name only while that page shows", () => {
+  catalogPage.open("new-project", "nav");
+  catalogPage.open("tutorials", "nav");
 
-  expect(router.changed).toEqual([]);
+  // New project's Open or Start finishing after the user moved on
+  catalogPage.closePage("new-project");
+  expect(catalogPage.current()).toBe("tutorials");
+
+  catalogPage.closePage("tutorials");
+  expect(catalogPage.current()).toBeNull();
 });

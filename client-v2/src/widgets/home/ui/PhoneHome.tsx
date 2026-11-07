@@ -4,7 +4,7 @@ import { PgExplorer, PgFramework, PgTutorial } from "@/utils";
 
 import { runExample } from "../model/example";
 import { useSessionRetry } from "../model/session-retry";
-import type { PageTile } from "../model/telemetry";
+import type { HomeTile } from "../model/telemetry";
 import { homeTelemetry } from "../model/telemetry";
 import { useProgramCount } from "../model/use-program-count";
 import { useVisit } from "../model/use-visit";
@@ -17,8 +17,8 @@ export interface PhoneHomeProps {
   onAsk: () => void;
   /** Continue was picked: go back to the project open under Home */
   onContinue: () => void;
-  /** Open the Tutorials or Programs page, in Home's place */
-  onOpenPage: (page: PageTile) => void;
+  /** Open the Tutorials or Programs page, in Home's place (the phone has no New project tile) */
+  onOpenPage: (page: Exclude<HomeTile, "new-project">) => void;
 }
 
 const log = createLogger("home:actions");

@@ -73,8 +73,8 @@ export const session = (): Disposable => {
    * project afterwards. True when the user has just signed in from the header,
    * where landing on their newest work is the point of signing in; false when
    * a cookie was merely restored on load, where it would yank them off
-   * whatever URL they opened, or when the sign-in started in the assistant
-   * panel, mid-task.
+   * whatever URL they opened, or when the sign-in has an origin
+   * (`SignInOrigin`), mid-task.
    */
   const adopt = async ({ openLatest }: { openLatest: boolean }) => {
     let result;
@@ -283,8 +283,10 @@ export const session = (): Disposable => {
       }
       // A sign-in with an origin happens mid-task on the open project: a prompt
       // the assistant panel holds, the deploy the funding card runs next, or
-      // the files the share dialog posts
-      const isMidTask = PgSession.signingInFrom !== undefined;
+      // the files the share dialog posts; the account whose session ended
+      // picks up where it stopped
+      const isMidTask =
+        PgSession.signingInFrom !== undefined || PgSession.isResuming;
       void adopt({ openLatest: !restoring && !isMidTask }).catch((e) =>
         report("adopt", e)
       );
@@ -293,6 +295,7 @@ export const session = (): Disposable => {
     if (restoring || PgSession.readState === "answered") restored = true;
   };
   const onChange = PgSession.onDidChange(onSessionChange);
+  const otherTabs = PgSession.followOtherTabs();
   // Effects mount after a delay, and Home starts the page's read as it draws:
   // a read that settled before this effect existed fired its change unheard
   if (PgSession.hasRead) onSessionChange();
@@ -310,6 +313,7 @@ export const session = (): Disposable => {
   return {
     dispose: () => {
       onChange.dispose();
+      otherTabs.dispose();
       PgSession.setOnSignOut(undefined);
       // Nothing is left to release the gate once this is gone
       releaseHold();

@@ -289,6 +289,13 @@ export interface PromptRequest {
   send: boolean;
 }
 
+/**
+ * Where asking the deployment for its hosted model stands: not asked yet, in
+ * flight, failed (no answer, an error status or a bad body), or answered,
+ * whether with a model or with none
+ */
+export type DefaultProbe = "unasked" | "checking" | "unreachable" | "answered";
+
 /** What the panel is doing right now */
 export type AssistantStatus =
   /** Waiting for the user to type */
@@ -425,11 +432,15 @@ export class PgAssistant {
       ...connection,
       apiKey: connection.apiKey.trim(),
     };
+    const sameBackend = isSame(PgAssistant._connection, next);
     // A turn still running on the old backend is cut, not carried over: it
     // would go on spending the old key, and every reply it starts from here
     // would be stamped with the new backend's `origin`, which `threadBackend`
     // then trusts to pick where the next send goes
-    if (!isSame(PgAssistant._connection, next)) PgAssistant._cutTurn();
+    if (!sameBackend) PgAssistant._cutTurn();
+    // Another backend is not under the hosted default's limit
+    if (!sameBackend) PgAssistant._clearLimit();
+    PgAssistant._forgetProbeFailure();
     PgAssistant._connection = next;
     PgAssistant._pickingBackend = false;
     // So a later load can offer this backend again: its parameters, never
@@ -510,6 +521,78 @@ export class PgAssistant {
     return isDefaultBackend(PgAssistant._connection?.id) && !PgSession.get();
   }
 
+  /**
+   * When the hosted default's free daily limit comes back, as of the last
+   * turn it refused under that limit in this tab: the next 00:00 UTC, or undefined
+   * once that has passed, nothing was refused, another backend was connected,
+   * the backend was forgotten, or someone else has signed in, since the
+   * allowance is per user. No endpoint reports the allowance, so a reload
+   * forgets it until the next refusal.
+   */
+  static get limitReachedUntil(): number | undefined {
+    const limit = PgAssistant._limitReached;
+    if (!limit || limit.userId !== PgSession.get()?.id) return undefined;
+    return Date.now() < limit.until ? limit.until : undefined;
+  }
+
+  /**
+   * Record a turn the hosted default refused under its daily cap or spent
+   * pool. Nothing is recorded when another backend is connected by the time
+   * the refusal arrives: the limit is the hosted default's, and a key of the
+   * user's own is not under it.
+   */
+  static markLimitReached() {
+    if (!isDefaultBackend(PgAssistant._connection?.id)) return;
+    const at = new Date(Date.now());
+    const until = Date.UTC(
+      at.getUTCFullYear(),
+      at.getUTCMonth(),
+      at.getUTCDate() + 1
+    );
+    PgAssistant._clearLimit();
+    PgAssistant._limitReached = { until, userId: PgSession.get()?.id };
+    PgAssistant._armLimitTimer(until);
+    PgAssistant._emitOnly();
+  }
+
+  /**
+   * A turn on the hosted default went through, so whatever refused the last
+   * one has lifted: a spent pool can refill well before 00:00 UTC.
+   */
+  static limitLifted() {
+    if (!PgAssistant._limitReached) return;
+    PgAssistant._clearLimit();
+    PgAssistant._emitOnly();
+  }
+
+  /** Where asking the deployment for its hosted model stands, for the status */
+  static get defaultProbe(): DefaultProbe {
+    return PgAssistant._defaultProbe;
+  }
+
+  /** Set by the default-backend probe as it asks and as it hears back */
+  static setDefaultProbe(probe: DefaultProbe) {
+    if (PgAssistant._defaultProbe === probe) return;
+    PgAssistant._defaultProbe = probe;
+    PgAssistant._emitOnly();
+  }
+
+  /**
+   * The model the deployment's hosted default serves, by id, as its status
+   * named it; `undefined` before it answers, or when it named none. The status and
+   * Settings name the hosted model from it rather than say "default".
+   */
+  static get hostedModel(): string | undefined {
+    return PgAssistant._hostedModel;
+  }
+
+  /** Set by the default-backend probe once the deployment has named its model */
+  static setHostedModel(model: string | undefined) {
+    if (PgAssistant._hostedModel === model) return;
+    PgAssistant._hostedModel = model;
+    PgAssistant._emitOnly();
+  }
+
   /** Mark Connect a model closed without changing anything */
   static keepBackend() {
     PgAssistant._pickingBackend = false;
@@ -528,6 +611,8 @@ export class PgAssistant {
    */
   static disconnect() {
     PgAssistant._connection = null;
+    PgAssistant._clearLimit();
+    PgAssistant._forgetProbeFailure();
     PgAssistant._pickingBackend = false;
     // Disconnecting is the user saying *not* to reconnect; without this the
     // next load would quietly undo it
@@ -1890,6 +1975,15 @@ export class PgAssistant {
     readonly CredentialField[]
   > = new Map();
   private static _turnBusy = false;
+  private static _limitReached:
+    | {
+        until: number;
+        userId: string | undefined;
+      }
+    | undefined;
+  private static _limitTimer: ReturnType<typeof setTimeout> | undefined;
+  private static _defaultProbe: DefaultProbe = "unasked";
+  private static _hostedModel: string | undefined;
   private static _gatewayServers: readonly McpServerEntry[] = [];
   // Kept apart from the gateway's list, which `loadMcpServers` replaces whole
   private static _gatewayServersOff: ReadonlySet<string> = new Set();
@@ -2033,6 +2127,36 @@ export class PgAssistant {
   private static _emit() {
     PgAssistant._persist();
     PgAssistant._emitOnly();
+  }
+
+  /**
+   * Nothing else renders the status when the limit comes back, in a tab left
+   * open. A timer can fire before the wall clock reaches `until` (the clock
+   * was set back, or a sleep skewed it), so it waits again rather than tell
+   * the status about a limit that still holds.
+   */
+  private static _armLimitTimer(until: number) {
+    PgAssistant._limitTimer = setTimeout(() => {
+      if (Date.now() < until) PgAssistant._armLimitTimer(until);
+      else PgAssistant._emitOnly();
+    }, until - Date.now());
+  }
+
+  /**
+   * A failed asking of the deployment is about the moment it happened; once
+   * the user connects or forgets a backend, the AI reads Off until a send
+   * asks again, rather than a red "Not responding" from before. Each caller
+   * emits after its own change.
+   */
+  private static _forgetProbeFailure() {
+    if (PgAssistant._defaultProbe === "unreachable") {
+      PgAssistant._defaultProbe = "unasked";
+    }
+  }
+
+  private static _clearLimit() {
+    if (PgAssistant._limitTimer) clearTimeout(PgAssistant._limitTimer);
+    PgAssistant._limitReached = undefined;
   }
 
   /** Notify without writing back — for changes that came *from* storage */
@@ -2190,6 +2314,134 @@ if (import.meta.vitest) {
         expect(PgAssistant.markUndoStranded(id, "stranded")).toBe(false);
 
         expect(undoOf(id)).toBeUndefined();
+      });
+    });
+
+    describe("PgAssistant defaultProbe", () => {
+      afterEach(() => {
+        PgAssistant.disconnect();
+        PgAssistant.setDefaultProbe("unasked");
+      });
+
+      it("forgets a failed asking once a backend is connected or forgotten", () => {
+        // The deployment did not answer, then the user brought a key and
+        // forgot it: the old failure is no longer what the AI reads
+        PgAssistant.setDefaultProbe("unreachable");
+        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+        expect(PgAssistant.defaultProbe).toBe("unasked");
+        PgAssistant.setDefaultProbe("unreachable");
+        PgAssistant.disconnect();
+        expect(PgAssistant.defaultProbe).toBe("unasked");
+      });
+
+      it("keeps an answer the deployment gave", () => {
+        PgAssistant.setDefaultProbe("answered");
+        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+        PgAssistant.disconnect();
+        expect(PgAssistant.defaultProbe).toBe("answered");
+      });
+    });
+
+    describe("PgAssistant limitReachedUntil", () => {
+      // The limit is the hosted default's, so a refusal is only ever marked on it
+      beforeEach(() => {
+        PgAssistant.connect({ id: "default", apiKey: "" });
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+        PgAssistant.disconnect();
+      });
+
+      it("holds until the next 00:00 UTC, then reads undefined", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 22, 30));
+        PgAssistant.markLimitReached();
+        expect(PgAssistant.limitReachedUntil).toBe(Date.UTC(2026, 10, 5));
+        vi.setSystemTime(Date.UTC(2026, 10, 5, 0, 0));
+        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+      });
+
+      it("tells the status when the limit comes back, in a tab left open", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 23, 0));
+        PgAssistant.markLimitReached();
+        const listener = vi.fn();
+        const sub = PgAssistant.onDidChange(listener);
+        vi.advanceTimersByTime(60 * 60 * 1000);
+        expect(listener).toHaveBeenCalledOnce();
+        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        sub.dispose();
+      });
+
+      it("clears on connecting another backend, not on the same one", () => {
+        PgAssistant.connect({ id: "default", apiKey: "" });
+        PgAssistant.markLimitReached();
+        PgAssistant.connect({ id: "default", apiKey: "" });
+        expect(PgAssistant.limitReachedUntil).toBeDefined();
+        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+      });
+
+      it("does not hold for someone else signing in", async () => {
+        await PgSession.refreshWith({
+          id: "u1",
+          name: "One",
+          image: undefined,
+          login: undefined,
+        });
+        PgAssistant.markLimitReached();
+        expect(PgAssistant.limitReachedUntil).toBeDefined();
+        await PgSession.refreshWith({
+          id: "u2",
+          name: "Two",
+          image: undefined,
+          login: undefined,
+        });
+        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        PgSession.reset();
+      });
+
+      it("clears on Forget key", () => {
+        PgAssistant.markLimitReached();
+        PgAssistant.disconnect();
+        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+      });
+
+      it("is not marked on a backend other than the hosted default", () => {
+        // A default turn refused after the user had already switched to a key
+        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+        PgAssistant.markLimitReached();
+        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+      });
+
+      it("lifts once a turn on the hosted default goes through", () => {
+        PgAssistant.markLimitReached();
+        const listener = vi.fn();
+        const sub = PgAssistant.onDidChange(listener);
+        PgAssistant.limitLifted();
+        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(listener).toHaveBeenCalledOnce();
+        PgAssistant.limitLifted();
+        expect(listener).toHaveBeenCalledOnce();
+        sub.dispose();
+      });
+
+      it("waits again when its timer fires before the clock reaches 00:00 UTC", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 23, 0));
+        PgAssistant.markLimitReached();
+        const listener = vi.fn();
+        const sub = PgAssistant.onDidChange(listener);
+        // The wall clock is set back a minute while the timer runs
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 22, 59));
+        vi.advanceTimersByTime(60 * 60 * 1000);
+        expect(PgAssistant.limitReachedUntil).toBeDefined();
+        expect(listener).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(60 * 1000);
+        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(listener).toHaveBeenCalledOnce();
+        sub.dispose();
       });
     });
 

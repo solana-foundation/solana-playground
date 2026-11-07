@@ -182,8 +182,6 @@ export type SidebarPageParam<N extends string> = {
   icon: string;
   /** Title of the page, defaults to `name` */
   title?: string;
-  /** Keybind for the page */
-  keybind?: string;
   /** Route to navigate to */
   route?: RoutePath;
   /** Handle the page logic */

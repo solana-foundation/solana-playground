@@ -1015,7 +1015,7 @@ thread above the composer stays as it is until 5.18 (HOO-1794).
 
 ```
 widgets/assistant
-├─ AssistantHead: project name | More (⋮) | Widen | Hide
+├─ AssistantHead: model in use | More (⋮) | Widen | Hide
 │    More: Sources and tools (S), Connect a model… (K),
 │          Forget key (a keyed backend only),
 │          Clear conversation (disabled until HOO-1741)
@@ -1042,7 +1042,8 @@ widgets/assistant
   `views/`, as New project's frame (5.13) is: a legacy root takes no new UI
   and the boundary check does not read it. The widget's tests stand in for
   the dialog (Sergey's review of #35, 2026-10-22).
-- **The head.** The project's name, then More, Widen and Hide. Hide is the
+- **The head.** The model in use (or why no model can answer), then More,
+  Widen and Hide. Hide is the
   shell's "Collapse assistant", label kept. Widen sizes the assistant panel
   to its maximum (560 px) and back; it is not saved in the layout, and it is
   not offered below `LAYOUT_BREAKPOINTS.compact`, where the assistant is a
@@ -1332,7 +1333,7 @@ SidebarProvider (no padding)
    │                   hides to 0 px
    ├─ 1 px handle
    └─ Panel work
-      ├─ StageBar (44 px): [project name when the assistant is hidden] ...
+      ├─ StageBar (44 px): project name ...
       │                    Files · Assistant · Documentation
       ├─ stage tabs (54 px, no line): Write | Build | Deploy | Interact, full width
       └─ Group horizontal (id layout-work)
@@ -1350,7 +1351,7 @@ SidebarProvider (no padding)
   The sync banner keeps its gutter.
 - **Bars.** Every bar is 44 px with a 1 px bottom line, as the navigation's
   head, except over the stage, where the bar and the stage tabs read as one
-  head and the bar drops its line (DES-216). Over the assistant it is 5.17's `AssistantHead` (the project's name,
+  head and the bar drops its line (DES-216). Over the assistant it is 5.17's `AssistantHead` (the model in use,
   More, Widen or Narrow, and "Collapse assistant"), sized to the bar and not
   redrawn. Over the stage, `StageBar` holds the stage's toggles on the
   right: "Collapse project panel" / "Expand project panel" (⌘E; the files
@@ -1358,8 +1359,10 @@ SidebarProvider (no padding)
   (solana.com/docs, a new tab). The assistant's toggle reads "Hide the
   assistant" while the assistant is open and "Expand assistant" while it is
   hidden, so the head's "Collapse assistant" stays the one button by that
-  name. While the assistant is out of view (hidden on a wide window, its
-  Sheet closed below 1024 px), the project's name shows at the bar's left.
+  name. The bar's left names the project whether the assistant shows or
+  not, cut with an ellipsis when the bar is narrow: the head names the
+  model, so the project would otherwise have no name on screen while the
+  assistant is open (HOO-2697).
 - **Stage tabs.** The `Stepper` leaves the bar and becomes a 54 px row of
   its own under it (8 px above the segments, 12 px below them, no bottom
   line: DES-216), spanning the files column and the stage, its four
@@ -1676,17 +1679,32 @@ they are answered. One PR.
   a panel on its own when its size drops, 5.1) and Monaco and xterm do not
   re-measure. The page is a sibling of the shell in `Flow`, fixed over the
   whole window, so nothing of the shell's tree changes.
-- **The sections**, in order: Network, Project, Block Explorer, Build,
-  Connection, Editor, Notification, Server, Test UI, UI, Wallet, and a twelfth,
-  Experimental, for `experimental.unstable` (D37; Slava, 2026-10-20: a setting
-  is not dropped for want of a section in the prototype). Network and Project
-  are the overlay's own (the network chips; Export, From GitHub, From files);
-  the rest come from `PgSettings.all`, grouped by the id's prefix as before.
-  The overlay's Explorer links (Wallet, Program, Program IDL) sit in Block
-  Explorer, shown only when there is a wallet or a program. A setting is a row:
-  name and description at the left, the control at the right; on a phone a
-  select goes under them, full width, while a switch stays at the right, as
-  the prototype's checkbox does. A boolean is a `Switch` (5.3), where the
+- **The sections**, in order: Network, Assistant, Editor, Build, Wallet,
+  Appearance, Keyboard shortcuts, Project and Advanced, the nine of the
+  designed Settings (Spec 07, DES-128, #369); a phone leaves out Keyboard
+  shortcuts, having no keyboard for them. They replaced the first cut's
+  twelve (Network, Project, Block Explorer, Build, Connection, Editor,
+  Notification, Server, Test UI, UI, Wallet, Experimental), which grouped
+  `PgSettings.all` by the id's prefix. Network's chips, Assistant's
+  hosted-model row, the shortcuts and Project's Export and imports are the
+  page's own; every other row comes from `PgSettings.all` through `ROWS`
+  (`model/sections.ts`), which maps each setting id to its section, label,
+  one help line, tag and titled card, in page order. A row's place no longer
+  follows its id: `ui.font` sits in Editor with a sample in the font,
+  `notification.showTx` and `testUi.showTxDetailsInTerminal` in Network's
+  "Explorer and logs" card, and `server.endpoint` and `experimental.unstable`
+  in Advanced's "Build server" card (`experimental.unstable` keeps its row,
+  D37; Slava, 2026-10-20: a setting is not dropped for want of a section).
+  `connection.endpoint` maps to no row: the Endpoint select is removed, and
+  the network chips, with Custom for any other URL, set the endpoint. A
+  setting `ROWS` lacks goes to the end of Advanced under its own name and is
+  reported once; `model/sections.test.ts` fails when `ROWS` and the real
+  setting ids part. The user's key sits last, in Advanced. The overlay's
+  Explorer links (Wallet, Program, Program IDL) sit in Network's "Explorer
+  and logs" card, shown only when there is a wallet or a program. A setting
+  is a row: name and description at the left, the control at the right; on
+  a phone a select goes under them, full width, while a switch stays at the
+  right, as the prototype's checkbox does. A boolean is a `Switch` (5.3), where the
   prototype draws a checkbox.
 - **Sections do not fold.** The prototype's sections are flat, so the
   upstream `Collapsible` groups go. The fold scenario in `client-v2-elements`

@@ -12,71 +12,81 @@ export const connect = createCmd({
       values: () => PgWallet.standardWallets.map((w) => w.name.toLowerCase()),
     },
   ]),
-  handle: async (input) => {
-    switch (PgWallet.state) {
-      case "pg": {
-        const { changed } = await toggleStandardIfNeeded(input.args.wallet);
-        if (!changed) {
-          PgWallet.state = "disconnected";
-          PgTerminal.println(PgTerminal.bold("Disconnected."));
-          await confirm(() => !PgWallet.current);
-        } else {
-          await confirm(() => PgWallet.current);
-        }
-
-        break;
-      }
-
-      case "sol": {
-        if (!PgWallet.current) {
-          throw new Error("Not connected");
-        }
-        if (PgWallet.current.isPg) {
-          throw new Error("Current wallet is not a Solana wallet");
-        }
-
-        const { changed } = await toggleStandardIfNeeded(input.args.wallet);
-        if (!changed) {
-          await PgWallet.current.disconnect();
-          PgWallet.state = "pg";
-          PgTerminal.println(
-            PgTerminal.bold(`Disconnected from ${PgWallet.current.name}.`)
-          );
-          await confirm(() => PgWallet.current?.isPg);
-        } else {
-          await confirm(() => PgWallet.current && !PgWallet.current.isPg);
-        }
-
-        break;
-      }
-
-      case "disconnected": {
-        const { changed } = await toggleStandardIfNeeded(input.args.wallet);
-        if (!changed) {
-          PgWallet.state = "pg";
-          PgTerminal.println(PgTerminal.success("Connected."));
-          await confirm(() => PgWallet.current?.isPg);
-        } else {
-          await confirm(() => PgWallet.current && !PgWallet.current.isPg);
-        }
-
-        break;
-      }
-
-      case "setup": {
-        const { Setup } = await import("../../components/Wallet/Modals/Setup");
-        const setupCompleted = await PgView.setModal<boolean>(Setup);
-        if (!setupCompleted) throw new Error(SETUP_REJECTED);
-
-        const { changed } = await toggleStandardIfNeeded(input.args.wallet);
-        if (!changed) PgWallet.state = "pg";
-
-        PgTerminal.println(PgTerminal.success("Setup completed."));
-        await confirm(() => PgWallet.current?.isPg);
-      }
-    }
-  },
+  handle: (input) => connectTo(input.args.wallet),
 });
+
+/**
+ * What `connect` does. It needs no terminal: its lines go through
+ * `PgTerminal.println`, which drops them while none is mounted.
+ *
+ * @param walletName the standard wallet to toggle (lower case), or none to
+ * toggle the Playground wallet: off when it is on, on from no wallet, the
+ * setup or an extension wallet
+ */
+export const connectTo = async (walletName: string | undefined) => {
+  switch (PgWallet.state) {
+    case "pg": {
+      const { changed } = await toggleStandardIfNeeded(walletName);
+      if (!changed) {
+        PgWallet.state = "disconnected";
+        PgTerminal.println(PgTerminal.bold("Disconnected."));
+        await confirm(() => !PgWallet.current);
+      } else {
+        await confirm(() => PgWallet.current);
+      }
+
+      break;
+    }
+
+    case "sol": {
+      if (!PgWallet.current) {
+        throw new Error("Not connected");
+      }
+      if (PgWallet.current.isPg) {
+        throw new Error("Current wallet is not a Solana wallet");
+      }
+
+      const { changed } = await toggleStandardIfNeeded(walletName);
+      if (!changed) {
+        await PgWallet.current.disconnect();
+        PgWallet.state = "pg";
+        PgTerminal.println(
+          PgTerminal.bold(`Disconnected from ${PgWallet.current.name}.`)
+        );
+        await confirm(() => PgWallet.current?.isPg);
+      } else {
+        await confirm(() => PgWallet.current && !PgWallet.current.isPg);
+      }
+
+      break;
+    }
+
+    case "disconnected": {
+      const { changed } = await toggleStandardIfNeeded(walletName);
+      if (!changed) {
+        PgWallet.state = "pg";
+        PgTerminal.println(PgTerminal.success("Connected."));
+        await confirm(() => PgWallet.current?.isPg);
+      } else {
+        await confirm(() => PgWallet.current && !PgWallet.current.isPg);
+      }
+
+      break;
+    }
+
+    case "setup": {
+      const { Setup } = await import("../../components/Wallet/Modals/Setup");
+      const setupCompleted = await PgView.setModal<boolean>(Setup);
+      if (!setupCompleted) throw new Error(SETUP_REJECTED);
+
+      const { changed } = await toggleStandardIfNeeded(walletName);
+      if (!changed) PgWallet.state = "pg";
+
+      PgTerminal.println(PgTerminal.success("Setup completed."));
+      await confirm(() => PgWallet.current?.isPg);
+    }
+  }
+};
 
 /**
  * Connect to or disconnect from a standard wallet based on given input.

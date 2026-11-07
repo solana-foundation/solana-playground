@@ -40,7 +40,7 @@ test.describe("on a desktop window", () => {
       region.getByRole("button", { name: /^Open (?!a program)/ })
     ).toHaveCount(4);
 
-    await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
+    await expect(page.locator("[data-new-project]")).toHaveCount(0);
     await expect(page.locator(".monaco-editor")).toHaveCount(0);
   });
 
@@ -100,7 +100,7 @@ test.describe("on a desktop window", () => {
       page.getByRole("searchbox", { name: "Search programs" })
     ).toBeVisible();
     await expect(home(page)).toBeHidden();
-    await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
+    await expect(page.locator("[data-new-project]")).toHaveCount(0);
     await expect
       .poll(() => lineOf(lines, "catalog_shown"))
       .toContain("via: home");
@@ -134,7 +134,10 @@ test.describe("on a desktop window", () => {
 
 /** The navigation's Home item, apart from Home's own region of that name */
 const navHome = (page: Page) =>
-  page.locator('[data-slot="sidebar"]').getByRole("button", { name: "Home" });
+  page
+    .locator('[data-slot="sidebar"]')
+    // Exact: the logo is "Go to Home", in the same sidebar
+    .getByRole("button", { name: "Home", exact: true });
 
 /** Focus the editor without a click, which would move its cursor */
 const focusEditor = (page: Page) =>
@@ -173,7 +176,7 @@ test.describe("from an open project", () => {
     await navHome(page).click();
     await expect(home(page)).toBeVisible();
     expect(page.url()).toBe(url);
-    await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
+    await expect(page.locator("[data-new-project]")).toHaveCount(0);
 
     // Past the terminal's resize throttle (200 ms)
     await page.waitForTimeout(500);
@@ -208,7 +211,7 @@ test.describe("from an open project", () => {
       .click();
 
     await expect(home(page)).toBeVisible(LONG);
-    await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
+    await expect(page.locator("[data-new-project]")).toHaveCount(0);
     await expect(page.locator(".monaco-editor")).toHaveCount(0);
 
     await startProject(page, "beta");

@@ -14,8 +14,8 @@ export const tutorials = PgRouter.create({
   path: "/tutorials/{name}/{page}",
   handle: ({ name, page }) => {
     if (name) return handleTutorial(name, page);
-    // The bare list is a page now: open it, over the work or Home on `/`
-    openPageFromLink("tutorials");
+    // The bare list is a page now: open it, over the work or Home
+    return openPageFromLink("tutorials");
   },
 });
 

@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import { requireFor } from "../../../test-utils/require-for";
 import {
   PgCommandManager,
@@ -43,7 +45,11 @@ vi.mock("../../../shared/lib/logger", () => ({
 // exist only in a booted app, and the drawer's imports pull it in. This
 // stubs only what the drawer calls: every other `Pg*` export is undefined.
 vi.mock("@/utils", () => ({
-  PgTerminal: { clear: vi.fn(), setConsoleOpen: vi.fn() },
+  PgTerminal: {
+    clear: vi.fn(),
+    setConsoleOpen: vi.fn(),
+    get: vi.fn(() => Promise.resolve({ getText: () => "" })),
+  },
   PgCommon: { getOS: vi.fn(() => "MacOS") },
   PgExplorer: {
     onDidSwitchWorkspace: vi.fn(() => ({ dispose: () => {} })),
@@ -99,6 +105,7 @@ const flowState = (
   deployBeforeRun: null,
   stopped: null,
   hasProgram: true,
+  sourceChanged: false,
 });
 
 /** A flow before anything ran, in a project with no program */
@@ -113,6 +120,11 @@ beforeEach(() => {
   flow.state = flowState("upcoming");
   flow.listener = null;
   vi.mocked(PgTerminal.clear).mockReset().mockResolvedValue(undefined);
+  vi.mocked(PgTerminal.get)
+    .mockReset()
+    .mockResolvedValue({ getText: () => "" } as Awaited<
+      ReturnType<typeof PgTerminal.get>
+    >);
   logError.mockReset();
 });
 
@@ -192,6 +204,50 @@ it("should report a clear that fails", async () => {
   await vi.waitFor(() => expect(logError).toHaveBeenCalledTimes(1));
   expect(logError.mock.calls[0][0]).toBe(failure);
   expect(logError.mock.calls[0][1].report).toBe(true);
+});
+
+it("should hand Copy the log as it is once the run ends", async () => {
+  let text = "Building…";
+  vi.mocked(PgTerminal.get).mockResolvedValue({
+    getText: () => text,
+  } as Awaited<ReturnType<typeof PgTerminal.get>>);
+  flow.state = flowState("running");
+  // Copy shows once there is a log, and its tooltip needs the provider
+  render(<ConsoleDrawer open={true} onToggle={vi.fn()} />, {
+    wrapper: TooltipProvider,
+  });
+  await vi.waitFor(() => expect(lastDrawerProps().log).toBe("Building…"));
+
+  text = "Building…\nBuild successful";
+  act(() =>
+    requireFor("the flow listener ConsoleDrawer subscribed")(flow.listener)(
+      flowState("done")
+    )
+  );
+
+  await vi.waitFor(() =>
+    expect(lastDrawerProps().log).toBe("Building…\nBuild successful")
+  );
+});
+
+it("should not hand Copy a log that was cleared", async () => {
+  let text = "old run";
+  vi.mocked(PgTerminal.get).mockResolvedValue({
+    getText: () => text,
+  } as Awaited<ReturnType<typeof PgTerminal.get>>);
+  vi.mocked(PgTerminal.clear).mockImplementation(() => {
+    text = "";
+    return Promise.resolve();
+  });
+  // Copy shows once there is a log, and its tooltip needs the provider
+  render(<ConsoleDrawer open={true} onToggle={vi.fn()} />, {
+    wrapper: TooltipProvider,
+  });
+  await vi.waitFor(() => expect(lastDrawerProps().log).toBe("old run"));
+
+  fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+
+  await vi.waitFor(() => expect(lastDrawerProps().log).toBe(""));
 });
 
 it("should toggle on a request for the other state only", () => {

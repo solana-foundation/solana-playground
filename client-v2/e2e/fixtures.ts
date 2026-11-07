@@ -19,20 +19,27 @@ export const home = (page: Page) =>
 export const homeRegion = (page: Page) =>
   page.getByRole("region", { name: "Home" });
 
+/** The New project page, which covers Home or the work while it shows */
+export const newProjectPage = (page: Page) =>
+  page.getByRole("region", { name: "New project" });
+
 /**
- * Makes a project from Home's New project tile, through the same Start from
- * scratch the New project dialog holds (`features/new-project`).
+ * Makes a project from Home's New project tile, through Start from scratch on
+ * the New project page it opens (`features/new-project`).
  *
- * Scoped to Home's region: the navigation has a "New project" item of the
- * same name.
+ * The tile is scoped to Home's region: the navigation has a "New project"
+ * item of the same name.
  */
 // eslint-disable-next-line layers/curry-order, max-params -- 15 call sites in other specs pass `(page, name, LONG)`; they move to `startProjectWith(timeout)(page, name)` together
 export const startProject = async (page: Page, name: string, timeout = {}) => {
   await expect(home(page)).toBeVisible(timeout);
-  const region = homeRegion(page);
-  await region.getByRole("button", { name: /^New project/ }).click();
-  await region.getByLabel("Project name").fill(name);
-  await region.getByRole("button", { name: /^Start/ }).click();
+  await homeRegion(page)
+    .getByRole("button", { name: /^New project/ })
+    .click();
+  const created = newProjectPage(page);
+  await created.getByLabel("Project name").fill(name);
+  await created.getByRole("button", { name: /^Start/ }).click();
+  await expect(created).toBeHidden(timeout);
   await expect(home(page)).toBeHidden(timeout);
 };
 
@@ -118,7 +125,11 @@ export const HELP_TAIL = "Run test(s)";
 export const runInTerminal = async (page: Page, command: string) => {
   await expect(page.locator(".xterm-rows").first()).toHaveText(/\$\s*$/);
   const input = page.getByLabel("Terminal input").first();
-  await input.click();
+  // Focused, not clicked: xterm sizes its helper textarea only while the
+  // terminal has the focus, and a console that opened on its own (a wallet's
+  // setup, a run) keeps the focus where it was, so the textarea is 0 x 0 and
+  // never reads as visible for a click
+  await input.focus();
   await expect(input).toBeFocused();
   await page.keyboard.type(command);
   await page.keyboard.press("Enter");
@@ -503,7 +514,7 @@ export const projectMenu = async (page: Page, name: string) => {
   return menu;
 };
 
-/** Opens the gallery through the navigation's New project item */
+/** Opens the New project page through the navigation's New project item */
 export const openGallery = async (page: Page) => {
   await page
     .locator('[data-slot="sidebar"]')
@@ -512,12 +523,12 @@ export const openGallery = async (page: Page) => {
 };
 
 /**
- * Starts another project from the gallery, opened from the navigation, while
+ * Starts another project from the New project page, opened from the navigation, while
  * a project is open; a fresh profile starts from Home instead (`startProject`)
  */
 export const startAnotherProject = async (page: Page, name: string) => {
   await openGallery(page);
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await expect(gallery).toBeVisible(LONG);
   await gallery.getByLabel("Project name").fill(name);
   await gallery.getByRole("button", { name: /^Start/ }).click();

@@ -17,7 +17,7 @@ const defaultName = (framework: FrameworkName) =>
 
 export interface StartFromScratchProps {
   /**
-   * Runs once a project has been made: New project closes its dialog here.
+   * Runs once a project has been made: New project closes its page here.
    * Home passes nothing, since the new project replaces Home by itself
    */
   onStarted?: () => void;
@@ -25,6 +25,11 @@ export interface StartFromScratchProps {
   held?: boolean;
   /** Hears when making a project starts and ends, so others can wait */
   onRunning?: (running: boolean) => void;
+  /**
+   * Hears a failed Start's message, after the field shows it: New project
+   * toasts it once its page was left, when no field is left to show it
+   */
+  onFailed?: (message: string) => void;
 }
 
 /**
@@ -36,6 +41,7 @@ const StartFromScratch = ({
   onStarted,
   held = false,
   onRunning,
+  onFailed,
 }: StartFromScratchProps) => {
   const [framework, setFramework] = useState<FrameworkName | undefined>(
     PgFramework.all[0]?.name
@@ -63,10 +69,10 @@ const StartFromScratch = ({
       onRunning?.(false);
       log.error(e, { report: true, context: { framework } });
       newProjectTelemetry.track("new_project_start_failed", { framework });
-      setStart({
-        state: "failed",
-        error: e instanceof Error ? e.message : "Could not create the project",
-      });
+      const error =
+        e instanceof Error ? e.message : "Could not create the project";
+      setStart({ state: "failed", error });
+      onFailed?.(error);
       return;
     }
 

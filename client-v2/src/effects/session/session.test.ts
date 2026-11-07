@@ -501,6 +501,17 @@ describe("the session effect", () => {
       effect.dispose();
     });
 
+    it("keeps the open project when signing in again after the session ended", async () => {
+      const effect = await signedOutAfterLoad();
+      vi.spyOn(PgSession, "isResuming", "get").mockReturnValue(true);
+
+      await PgSession.signIn();
+      await settle();
+
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
     it("opens the newest project when the sign-in started from the header", async () => {
       const effect = await signedOutAfterLoad();
 

@@ -189,7 +189,10 @@ describe("PgCommandManager.stop", () => {
     await Promise.resolve();
     expect(PgCommandManager.stop()).toBe(false);
     expect(println).toHaveBeenCalledWith(
-      "^C\nThis step can't be stopped. Wait for it to finish."
+      `^C\n${PgTerminal.warning(
+        "This step can't be stopped. Wait for it to finish."
+      )}`,
+      { noColor: true }
     );
 
     finish();
@@ -207,7 +210,10 @@ describe("PgCommandManager.stop", () => {
     await Promise.resolve();
     expect(PgCommandManager.stop()).toBe(false);
     expect(println).toHaveBeenCalledWith(
-      "^C\n`probe` can't be stopped. Wait for it to finish."
+      `^C\n${PgTerminal.warning(
+        "`probe` can't be stopped. Wait for it to finish."
+      )}`,
+      { noColor: true }
     );
 
     finish();

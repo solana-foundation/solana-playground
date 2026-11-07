@@ -106,7 +106,9 @@ const BaseCustomRpcs = ({
         <Button
           variant="ghost"
           size="sm"
-          className="self-start max-md:h-12"
+          // Pulled out by its own left padding, so the plus lines up with
+          // the saved RPCs' names and the hover box keeps its size
+          className="-ml-1.5 self-start max-md:h-12"
           onClick={() => setEditing("new")}
         >
           <Plus data-icon="inline-start" />

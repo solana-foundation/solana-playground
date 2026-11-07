@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
-import { WalletName } from "./Wallet";
+import Wallet, { WalletName } from "./Wallet";
 
 // The utils barrel needs build-time globals the unit runner does not define.
 const wallets = vi.hoisted(() => ({
@@ -12,6 +12,7 @@ const wallets = vi.hoisted(() => ({
   update: vi.fn(),
   standard: [] as { name: string; icon: string }[],
   isPg: true,
+  show: false,
 }));
 vi.mock("../../utils", () => ({
   PgCommon: {
@@ -49,7 +50,7 @@ vi.mock("../../hooks", () => ({
   }),
   useKeybind: vi.fn(),
   useOnClickOutside: vi.fn(),
-  useRenderOnChange: vi.fn(),
+  useRenderOnChange: () => wallets.show,
 }));
 vi.mock("./hooks", () => ({
   useDarken: () => ({ darken: vi.fn(), lighten: vi.fn() }),
@@ -61,23 +62,36 @@ vi.mock("./Balance", () => ({ default: () => null }));
 vi.mock("./Send", () => ({ default: () => null }));
 vi.mock("./Settings", () => ({ default: () => null }));
 vi.mock("./Transactions", () => ({ default: () => null }));
-vi.mock("react-rnd", () => ({ Rnd: () => null }));
+vi.mock("react-rnd", () => ({
+  Rnd: ({ style }: { style?: React.CSSProperties }) => (
+    <div data-testid="wallet-window" style={style} />
+  ),
+}));
 vi.mock("../FadeIn", () => ({ default: () => null }));
 vi.mock("../ErrorBoundary", () => ({ default: () => null }));
 vi.mock("../Input", () => ({ default: () => null }));
-vi.mock("../Img", () => ({ default: () => null }));
+vi.mock("../Img", () => ({
+  default: ({ className }: { className?: string }) => (
+    <i data-testid="wallet-icon" className={className} />
+  ),
+}));
 vi.mock("../Icons", () => ({
   Close: () => null,
   ShortArrow: () => <svg aria-hidden />,
 }));
 
-// Every theme path the styled wrappers read answers with the same stand-in
-const theme: DefaultTheme = new Proxy({} as DefaultTheme, { get: () => theme });
+// Every theme path the styled wrappers read answers with the same stand-in,
+// which prints as "0" where a wrapper puts it in its CSS
+const theme: DefaultTheme = new Proxy({} as DefaultTheme, {
+  get: (_, key) =>
+    key === Symbol.toPrimitive || key === "toString" ? () => "0" : theme,
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
   wallets.standard = [];
   wallets.isPg = true;
+  wallets.show = false;
 });
 
 const renderName = () =>
@@ -124,6 +138,28 @@ describe("WalletName accounts menu", () => {
       standardName: "Phantom",
     });
     expect(wallets.switch).not.toHaveBeenCalled();
+  });
+
+  it("draws a standard wallet's icon at the menu's icon size", async () => {
+    wallets.standard = [{ name: "Phantom", icon: "phantom.svg" }];
+    await openAccounts();
+
+    const icon = screen.getByTestId("wallet-icon");
+    expect(icon.classList).toContain("size-4");
+    expect(icon.classList).toContain("shrink-0");
+  });
+});
+
+describe("Wallet window", () => {
+  it("takes z-index 30: over the cards' z-10, under the z-40 pages and z-50 dialogs", () => {
+    wallets.show = true;
+    render(
+      <ThemeProvider theme={theme}>
+        <Wallet />
+      </ThemeProvider>
+    );
+
+    expect(screen.getByTestId("wallet-window").style.zIndex).toBe("30");
   });
 });
 

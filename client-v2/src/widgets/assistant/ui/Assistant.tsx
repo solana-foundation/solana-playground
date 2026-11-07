@@ -2,11 +2,11 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useReducer, useRef, useState } from "react";
 
 import { useTutorialBeforeStart } from "@/entities/tutorial";
-import { PgSession } from "@/features/auth";
 import { Button } from "@/shared/ui/button";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
+import { useMcpSources } from "../../../views/sidebar/assistant/model/use-mcp-sources";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { aiOff } from "../model/ai-off";
 import { modelShown } from "../model/choice";
@@ -55,6 +55,8 @@ export interface AssistantWiden {
   wide: boolean;
   setWide(wide: boolean): void;
   canWiden: boolean;
+  /** Shown as the right Sheet, so Collapse points right */
+  inSheet: boolean;
 }
 
 export interface AssistantProps {
@@ -73,7 +75,7 @@ export interface AssistantProps {
  * or Sources and tools in their place.
  */
 export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
-  const { wide, setWide, canWiden } = widen;
+  const { wide, setWide, canWiden, inSheet } = widen;
   const [view, setView] = useState<View>("chat");
   // Here, above both views, so a turn and a prompt waiting in the composer
   // outlive a visit to Sources; the thread and the composer share this one
@@ -112,19 +114,8 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
   // Ask the gateway what it serves and what those servers offer. Has to happen
   // here rather than only in Sources: `createTools` reads the result, so a
   // model connected before this ran would be offered no MCP tool at all, with
-  // nothing on screen to say why. Asked again for each account: the gateway
-  // lists `signedIn` sources only to a signed-in caller.
-  useEffect(() => {
-    PgAssistant.initMcp();
-    let user = PgSession.get()?.id;
-    return PgSession.onDidChange(() => {
-      const next = PgSession.get()?.id;
-      // `onDidChange` also fires for a sign-in's progress, which changes no account
-      if (next === user) return;
-      user = next;
-      PgAssistant.initMcp();
-    }).dispose;
-  }, []);
+  // nothing on screen to say why.
+  useMcpSources();
 
   // A prompt raised while Sources is open (a tool call there, say) lands in
   // the composer, which is no use while Sources still covers it
@@ -151,6 +142,7 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
         onWiden={() => setWide(!wide)}
         onHide={onHide}
         canWiden={canWiden}
+        side={inSheet ? "right" : "left"}
         // Read on every render `useTurn` makes for a change in the store
         deleteKey={PgAssistant.keyHold}
         onDeleteKey={() => {

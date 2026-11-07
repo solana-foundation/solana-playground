@@ -5,6 +5,7 @@ import { useTheme } from "styled-components";
 import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { isEditable } from "@/shared/lib/is-editable";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgFlow } from "@/views/flow/state/stage";
@@ -79,6 +80,8 @@ export interface LayoutShellProps {
    * Sheet. `toggle` folds the panel or closes the Sheet; `wide` and `setWide`
    * size the panel to its maximum and back for the visit (`AssistantWide`),
    * and `canWiden` says when that can happen: never for the Sheet.
+   * `inSheet` says the assistant is the right Sheet, so its Collapse points
+   * right.
    */
   assistant: (
     panel: { open: boolean; toggle: () => void } & AssistantWide
@@ -122,13 +125,6 @@ export interface LayoutShellProps {
   /** The phone's status chip, in the work page's bar */
   phoneStatus?: ReactNode;
 }
-
-/** Whether a key pressed on `target` is typed into something */
-const isEditable = (target: EventTarget | null) =>
-  target instanceof Element &&
-  target.closest(
-    'input, textarea, select, [contenteditable]:not([contenteditable="false"])'
-  ) !== null;
 
 /**
  * The frame and the phone's pager, connected: the layout state and its
@@ -414,7 +410,8 @@ const LayoutShell = ({
   useKeybind(
     "Ctrl+R",
     () => {
-      if (isCovered(screenNow.current)) return;
+      // Under Home or a page the key is not the shell's: ⌘R reloads there
+      if (isCovered(screenNow.current)) return false;
       if (phone) {
         // The view is shown on Work: bring it into view first
         showPage("work", "key");
@@ -426,7 +423,7 @@ const LayoutShell = ({
   useKeybind(
     CONSOLE_KEY,
     () => {
-      if (isCovered(screenNow.current)) return;
+      if (isCovered(screenNow.current)) return false;
       if (phone) setPhoneConsoleOpen(!phoneConsoleNow.current, "key");
       else setOpen("console", { open: !state.open.console, via: "key" });
     },
@@ -567,11 +564,12 @@ const LayoutShell = ({
       ? () => onShare(shareName)
       : undefined;
 
-  // The bar names the project while the assistant is out of view, since its
-  // head cannot; under Home it names Home, as the phone's bar does
-  let barTitle: string | null = null;
-  if (homeShown) barTitle = homeTitle;
-  else if (!assistantShown) barTitle = PgExplorer.currentWorkspaceName ?? null;
+  // The bar names the project whether the assistant shows or not: the
+  // assistant's head names the model, so a toggle that took the name away
+  // left the work unnamed. Under Home it names Home, as the phone's bar does
+  const barTitle = homeShown
+    ? homeTitle
+    : PgExplorer.currentWorkspaceName ?? null;
 
   return (
     <BaseLayoutShell
@@ -649,6 +647,7 @@ const LayoutShell = ({
         stageOn: stagePageOf(flowStage),
         consoleOpen: phoneConsole,
         onShare: phoneShare,
+        onConsoleClose: (via) => setPhoneConsoleOpen(false, via),
       }}
       stageBar={
         <BaseStageBar
@@ -691,7 +690,7 @@ const LayoutShell = ({
           else setOpen("console", { open: !state.open.console, via: "button" });
         },
       })}
-      assistant={({ wide, setWide, canWiden }) =>
+      assistant={({ wide, setWide, canWiden, inSheet }) =>
         assistant({
           open: assistantShown,
           toggle: () => setAssistant(!assistantShown, "button"),
@@ -706,6 +705,7 @@ const LayoutShell = ({
             return changed;
           },
           canWiden,
+          inSheet,
         })
       }
       cover={

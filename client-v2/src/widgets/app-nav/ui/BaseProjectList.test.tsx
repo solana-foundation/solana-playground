@@ -142,13 +142,15 @@ describe("BaseProjectList", () => {
     ).toBe("page");
   });
 
-  /** The prototype keeps the open project's "⋮" in view, not on hover only */
-  it("shows the open project's actions without a hover", () => {
+  /** The prototype keeps the open project's "⋮" in view, not on hover only.
+   * jsdom matches no media query, so this checks only which rows carry the
+   * fine-pointer hide class; the pointer itself is the browser's to judge */
+  it("marks only the other projects' actions to hide under a fine pointer", () => {
     draw({});
     const hidden = (name: string) =>
       screen
         .getByRole("button", { name: `Actions for ${name}` })
-        .className.includes("md:opacity-0");
+        .className.includes("md:pointer-fine:opacity-0");
     expect(hidden("alpha")).toBe(false);
     expect(hidden("beta")).toBe(true);
   });
