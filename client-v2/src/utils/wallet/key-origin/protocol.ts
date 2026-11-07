@@ -10,7 +10,6 @@ export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
 export type KeyRequest = { id: number } & (
   | { type: "accounts" }
   | { type: "create" }
-  | { type: "keep"; publicKey: string }
   | {
       type: "sign";
       publicKey: string;
@@ -22,13 +21,13 @@ export type KeyRequest = { id: number } & (
 );
 
 /**
- * The key page's answer: `accounts` and `adopt` give public keys, `create` a
- * public key, `sign` the 64 signature bytes, `keep` and `forget` `null`.
- * Never key bytes.
+ * The key page's answer: `accounts` and `adopt` give public keys, `create` the
+ * public key of the key it made and stored, `sign` the 64 signature bytes,
+ * `forget` `null`. Never key bytes.
  */
 export type KeyReply = {
   id: number;
-} & ( // eslint-disable-next-line unicorn/no-null -- `keep` and `forget` answer "nothing" on the wire
+} & ( // eslint-disable-next-line unicorn/no-null -- `forget` answers "nothing" on the wire
   | { ok: true; result: string[] | string | Uint8Array | null }
   | { ok: false; error: string }
 );
@@ -65,7 +64,6 @@ export const isKeyRequest = (x: unknown): x is KeyRequest => {
     case "accounts":
     case "create":
       return true;
-    case "keep":
     case "forget":
       return isString(x.publicKey);
     case "sign":
@@ -199,7 +197,6 @@ if (import.meta.vitest) {
       const requests: unknown[] = [
         { id: 1, type: "accounts" },
         { id: 2, type: "create" },
-        { id: 3, type: "keep", publicKey: "abc" },
         {
           id: 4,
           type: "sign",
@@ -221,7 +218,8 @@ if (import.meta.vitest) {
         { id: 1 },
         { id: 1, type: "nope" },
         { type: "accounts" },
-        { id: 1, type: "keep" },
+        { id: 1, type: "keep", publicKey: "abc" },
+        { id: 1, type: "forget" },
         {
           id: 1,
           type: "sign",

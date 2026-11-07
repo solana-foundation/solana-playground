@@ -118,17 +118,16 @@ const publicKeyOfSecret = async (secret: Uint8Array) =>
   ed25519.getPublicKey(secret.slice(0, PUBLIC_KEY_LENGTH));
 
 /**
- * The key page's request handler: drafts live in memory until the app keeps
- * them, kept keys live in the store, and no reply carries key bytes.
+ * The key page's request handler: every key it makes or adopts goes straight
+ * into the store, and no reply carries key bytes. A key made and never added
+ * is dropped by the app with `forget`.
  *
- * @param store where kept keys are stored
+ * @param store where the keys are stored
  * @returns a function that answers one request
  */
 export const handlerWith = (store: KeyStore) => {
-  const drafts = new Map<string, Uint8Array>();
-
   const secretFor = async (publicKey: string) => {
-    const secret = (await store.all()).get(publicKey) ?? drafts.get(publicKey);
+    const secret = (await store.all()).get(publicKey);
     if (!secret) throw unknownAccount(publicKey);
     return secret;
   };
@@ -148,23 +147,8 @@ export const handlerWith = (store: KeyStore) => {
         secret.set(priv);
         secret.set(pub, PUBLIC_KEY_LENGTH);
         const publicKey = base58Encode(pub);
-        drafts.set(publicKey, secret);
+        await store.put([[publicKey, secret]]);
         return { ok: true, result: publicKey };
-      }
-      case "keep": {
-        const secret = drafts.get(request.publicKey);
-        if (!secret) {
-          // Already kept (a repeated keep) is as good as kept
-          if ((await store.all()).has(request.publicKey)) {
-            // eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
-            return { ok: true, result: null };
-          }
-          throw unknownAccount(request.publicKey);
-        }
-        await store.put([[request.publicKey, secret]]);
-        drafts.delete(request.publicKey);
-        // eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
-        return { ok: true, result: null };
       }
       case "sign": {
         const secret = await secretFor(request.publicKey);
@@ -184,7 +168,6 @@ export const handlerWith = (store: KeyStore) => {
         return { ok: true, result: signature };
       }
       case "forget":
-        drafts.delete(request.publicKey);
         await store.remove(request.publicKey);
         // eslint-disable-next-line unicorn/no-null -- the wire's "nothing"
         return { ok: true, result: null };
@@ -282,11 +265,10 @@ if (import.meta.vitest) {
       }
     });
 
-    it("creates a key, keeps it and signs", async () => {
+    it("creates a key and signs", async () => {
       const { store } = memoryStore();
       const handle = handlerWith(store);
       const publicKey = await created(handle);
-      await ask(handle, { type: "keep", publicKey });
       const bytes = Uint8Array.from([1, 2, 3]);
 
       const reply = await ask(handle, {
@@ -310,32 +292,23 @@ if (import.meta.vitest) {
       ).toBe(true);
     });
 
-    it("signs with a draft, which is not stored until kept", async () => {
-      const { store } = memoryStore();
+    // The panel that offers the new key's file is another key page instance,
+    // which sees only the store
+    it("stores a key it creates at once", async () => {
+      const { store, kept } = memoryStore();
       const handle = handlerWith(store);
       const publicKey = await created(handle);
 
-      expect(await ask(handle, { type: "accounts" })).toMatchObject({
-        result: [],
-      });
-      const signed = await ask(handle, {
-        type: "sign",
-        publicKey,
-        kind: "message",
-        bytes: Uint8Array.from([5]),
-      });
-      expect(signed.ok).toBe(true);
-      await ask(handle, { type: "keep", publicKey });
-      expect(await ask(handle, { type: "accounts" })).toMatchObject({
-        result: [publicKey],
-      });
+      expect([...kept.keys()]).toEqual([publicKey]);
+      expect(await ask(handlerWith(store), { type: "accounts" })).toMatchObject(
+        { result: [publicKey] }
+      );
     });
 
     it("forgets a key", async () => {
       const { store } = memoryStore();
       const handle = handlerWith(store);
       const publicKey = await created(handle);
-      await ask(handle, { type: "keep", publicKey });
 
       await ask(handle, { type: "forget", publicKey });
 
@@ -441,9 +414,8 @@ if (import.meta.vitest) {
       const { store, kept } = memoryStore();
       const handle = handlerWith(store);
       const keys = await Promise.all([1, 2].map(secretKey));
-      const publicKey = await created(handle);
-      await ask(handle, { type: "keep", publicKey });
       const replies = [
+        await ask(handle, { type: "create" }),
         await ask(handle, {
           type: "adopt",
           keys: keys.map((k) => Array.from(k)),

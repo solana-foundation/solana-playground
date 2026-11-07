@@ -462,11 +462,11 @@ const accountLog = createLogger("wallet:account");
 let addingFirst: Promise<boolean> | undefined;
 
 /**
- * Tell of a key the provider failed to keep or drop: by public key only,
+ * Tell of a key the provider failed to drop: by public key only,
  * which names the account and is not key material
  */
 const reportKeyFailure =
-  (action: "keep" | "forget", publicKey: string) => (error: unknown) => {
+  (action: "forget", publicKey: string) => (error: unknown) => {
     accountLog.error(error, { report: true, context: { action, publicKey } });
   };
 
@@ -490,7 +490,8 @@ class _PgWallet {
    *
    * Under a provider that keeps the keys out of the page
    * (`holdsKeysInPage === false`) the account is its name and public key: its
-   * key is the provider's, kept with `keepKey`, and a keypair is refused.
+   * key is the provider's, stored by `makeKey` or the key panel's import, and
+   * a keypair is refused.
    *
    * @param params.name name of the account
    * @param params.publicKey public key of a key the provider holds (from
@@ -544,9 +545,6 @@ class _PgWallet {
       PgWallet.accounts.push({ kp, name, publicKey });
     } else {
       PgWallet.accounts.push({ name, publicKey });
-      signerProvider
-        .keepKey(publicKey)
-        .catch(reportKeyFailure("keep", publicKey));
     }
 
     // Update the accounts

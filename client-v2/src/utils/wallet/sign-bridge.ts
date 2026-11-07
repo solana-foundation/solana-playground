@@ -17,8 +17,8 @@ const reasonOf = (error: unknown) =>
   error instanceof Error ? error.message : "The wallet refused to sign";
 
 /**
- * Signs for the sandbox with the page's wallets: the local provider's for a
- * built-in account, the connected standard wallet for `pg.wallets.<name>`.
+ * Signs for the sandbox with the page's wallets: the page's signer provider's
+ * for a built-in account, the connected standard wallet for `pg.wallets.<name>`.
  * Only the signature goes back, and only once it verifies against the bytes
  * the sandbox asked about, so a wallet that changed the transaction cannot
  * hand back a signature for something else.

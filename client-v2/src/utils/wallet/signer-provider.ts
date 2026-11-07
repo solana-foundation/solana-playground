@@ -40,12 +40,6 @@ export interface WalletSignerProvider {
    */
   makeKey(): Promise<string>;
   /**
-   * Keep the key of an account just added; a key already kept stays as it is.
-   *
-   * @param publicKey base58 public key of the account
-   */
-  keepKey(publicKey: string): Promise<void>;
-  /**
    * Drop the key of an account removed, or of a key made and never added.
    *
    * @param publicKey base58 public key of the key
@@ -105,7 +99,6 @@ export const localSignerProviderWith = (
       drafts.set(publicKey, Array.from(keypair.secretKey));
       return publicKey;
     },
-    async keepKey() {},
     async forgetKey() {},
     walletFor(account) {
       const keypair = keypairFor(account.publicKey);
