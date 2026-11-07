@@ -98,6 +98,8 @@ const isPublicKeyText = (value: unknown): value is string => {
   try {
     return new PgWeb3.PublicKey(value).toBase58() === value;
   } catch {
+    // web3 throws on text that is not base58 or not 32 bytes: not a public
+    // key, so the account reads as damaged and is set aside
     return false;
   }
 };

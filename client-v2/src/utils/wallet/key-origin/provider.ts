@@ -65,14 +65,25 @@ export const keyOriginSignerProvider = (
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
 
-  describe("utils/wallet/key-origin/provider", async () => {
-    const ed25519 = await import("@noble/ed25519");
-    const { PgWeb3 } = await import("../../web3");
-    const { SECRET_KEY_ERROR } = await import("../sandbox-signer-provider");
-    const { handlerWith } = await import("./frame/handler");
-    const { KeyFrameUnavailable } = await import("./client");
+  describe("utils/wallet/key-origin/provider", () => {
+    let ed25519: typeof import("@noble/ed25519");
+    let PgWeb3: typeof import("../../web3").PgWeb3;
+    let SECRET_KEY_ERROR: typeof import("../sandbox-signer-provider").SECRET_KEY_ERROR;
+    let handlerWith: typeof import("./frame/handler").handlerWith;
+    let KeyFrameUnavailable: typeof import("./client").KeyFrameUnavailable;
+    /** Any base58 hash: the transactions are signed, never sent */
+    let blockhash: string;
+
+    beforeAll(async () => {
+      ed25519 = await import("@noble/ed25519");
+      ({ PgWeb3 } = await import("../../web3"));
+      ({ SECRET_KEY_ERROR } = await import("../sandbox-signer-provider"));
+      ({ handlerWith } = await import("./frame/handler"));
+      ({ KeyFrameUnavailable } = await import("./client"));
+      blockhash = PgWeb3.Keypair.generate().publicKey.toBase58();
+    });
 
     /** A key page over an in-memory store, reached as a `KeyFrame` */
     const fakeKeyPage = () => {
@@ -109,7 +120,6 @@ if (import.meta.vitest) {
       return { kept, provider, publicKey, wallet };
     };
 
-    const blockhash = PgWeb3.Keypair.generate().publicKey.toBase58();
     const transferFrom = (publicKey: InstanceType<typeof PgWeb3.PublicKey>) =>
       PgWeb3.SystemProgram.transfer({
         fromPubkey: publicKey,
