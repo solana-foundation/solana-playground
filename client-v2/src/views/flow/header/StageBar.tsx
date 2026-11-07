@@ -37,7 +37,7 @@ const StageBar: FC = () => {
       keybind: `Ctrl+${i + 1}`,
       handle: () => {
         // A stage the open project does not offer has no tab to go to
-        if (!stagesOf(PgFlow.state).includes(stage)) return;
+        if (!stagesOf(PgFlow.state).includes(stage)) return false;
         PgFlow.setStage(stage);
         // Focus follows the shortcut, so the keyboard user lands on the tab
         // they just selected rather than being left wherever they were

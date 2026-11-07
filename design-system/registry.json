@@ -64,6 +64,18 @@
       ]
     },
     {
+      "name": "frame-focus",
+      "type": "registry:lib",
+      "title": "shiftTabFromFrame",
+      "description": "For a modal overlay's content onKeyDown: Shift+Tab from the content's own frame goes to its last control, where Radix's focus trap would leave it nowhere.",
+      "files": [
+        {
+          "path": "src/lib/frame-focus.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "use-mobile",
       "type": "registry:hook",
       "title": "useIsMobile",
@@ -944,7 +956,8 @@
       "registryDependencies": [
         "@playground/playground-tokens",
         "@playground/utils",
-        "@playground/use-release-focus"
+        "@playground/use-release-focus",
+        "@playground/frame-focus"
       ],
       "files": [
         {
@@ -965,7 +978,8 @@
       "registryDependencies": [
         "@playground/button",
         "@playground/utils",
-        "@playground/use-release-focus"
+        "@playground/use-release-focus",
+        "@playground/frame-focus"
       ],
       "files": [
         {

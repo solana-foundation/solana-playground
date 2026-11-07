@@ -93,9 +93,9 @@ export class PgTerminal {
 
   /** Get whether the terminal is focused or in blur. */
   static isFocused() {
-    return document
-      .getElementsByClassName("terminal xterm xterm-dom-renderer-owner-1")[0]
-      ?.classList.contains("focus");
+    // By where focus is, not by the renderer's class: that names the first
+    // terminal only, and a remount renames it
+    return Boolean(document.activeElement?.closest(".xterm"));
   }
 
   /** Dispatch enable terminal custom event; dropped while none is mounted. */
