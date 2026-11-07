@@ -43,19 +43,6 @@ const PASSED =
 const hasNameArgument = (lib: string) =>
   /fn\s+hello\s*(<[^>]*>)?\s*\([^)]*\bname\s*:\s*String\b/.test(lib);
 
-/** Anchor 0.29's IDL of the `hello` that `lib` declares */
-const idlOf = (lib: string) => ({
-  version: "0.1.0",
-  name: "hello_anchor",
-  instructions: [
-    {
-      name: "hello",
-      accounts: [],
-      args: hasNameArgument(lib) ? [{ name: "name", type: "string" }] : [],
-    },
-  ],
-});
-
 export const fakeBuildServer = async (page: Page): Promise<FakeBuildServer> => {
   const builds: string[] = [];
   const unhandled: string[] = [];
@@ -91,8 +78,11 @@ export const fakeBuildServer = async (page: Page): Promise<FakeBuildServer> => {
       });
     }
     const code = hasNameArgument(lib) ? HELLO_NAME : HELLO_WORLD;
+    // No IDL, as an Anchor 1.1.2 build brings none: the tutorial calls
+    // through the one it ships (HOO-2688)
     return route.fulfill({
-      json: { stderr: PASSED, uuid: UUIDS[code], idl: idlOf(lib) },
+      // eslint-disable-next-line unicorn/no-null -- the server's JSON for a build with no IDL
+      json: { stderr: PASSED, uuid: UUIDS[code], idl: null },
     });
   });
   await page.route("**/deploy/*", (route) => {

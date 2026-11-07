@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   },
   workspace: "Hello Anchor" as string | undefined,
   idl: null as null | { instructions: { name: string }[] },
+  source: undefined as string | undefined,
 }));
 
 vi.mock("@/utils", () => ({
@@ -19,6 +20,9 @@ vi.mock("@/utils", () => ({
     get currentWorkspaceName() {
       return h.workspace;
     },
+    convertToFullPath: (path: string) => `/ws/${path}`,
+    getFileContent: (path: string) =>
+      path === "/ws/src/lib.rs" ? h.source : undefined,
   },
   PgProgramInfo: {
     get idl() {
@@ -74,6 +78,7 @@ beforeEach(() => {
   h.latest = null;
   h.workspace = "Hello Anchor";
   h.idl = null;
+  h.source = undefined;
 });
 
 describe("features/tutorial-conversation/model/runners/build", () => {
@@ -87,6 +92,16 @@ describe("features/tutorial-conversation/model/runners/build", () => {
       instructions: ["hello"],
     });
     expect(stages).toEqual([{ label: "Building", index: 1, count: 1 }]);
+  });
+
+  it("reads the learner's program for the instructions when the build returned no IDL", async () => {
+    answers("    Finished release [optimized] target(s) in 3.92s", false);
+    h.source =
+      "#[program]\nmod p {\n    pub fn hi(_ctx: Context<Hello>) -> Result<()> { Ok(()) }\n}\n";
+    expect(await run().result).toMatchObject({ instructions: ["hi"] });
+    // No source either: none, so a goal naming one fails as `noInstruction`
+    h.source = undefined;
+    expect(await run().result).toMatchObject({ instructions: [] });
   });
 
   it("shows the planned E0412 at line 9, not the macro symptom at line 5", async () => {

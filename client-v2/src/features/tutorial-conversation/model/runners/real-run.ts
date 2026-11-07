@@ -24,7 +24,7 @@ import type { Sender } from "./capture";
 import { captureSends } from "./capture";
 import type { FundingChain } from "./fund";
 import type { Landed, RunPort } from "./run-call";
-import { runOrCall } from "./run-call";
+import { NoSuchInstructionError, runOrCall } from "./run-call";
 import type { Target } from "./target";
 import { targetGuardFor } from "./target";
 import type { DecodedCall } from "./transactions";
@@ -57,7 +57,12 @@ const decodeCalls = (
   programId: string,
   idl: Idl | null
 ): { calls: DecodedCall[]; undecoded?: true } => {
-  if (!idl) return { calls: [], undecoded: true };
+  if (!idl) {
+    log.warn("No IDL to decode a call to the tutorial's program with", {
+      context: { programId },
+    });
+    return { calls: [], undecoded: true };
+  }
   const tx = PgWeb3.VersionedTransaction.deserialize(
     Buffer.from(encoded, "base64")
   );
@@ -71,7 +76,14 @@ const decodeCalls = (
     const decoded = coder.decode(Buffer.from(ix.data));
     if (!decoded) {
       log.warn(
-        "An instruction to the tutorial's program its IDL cannot decode"
+        "An instruction to the tutorial's program its IDL cannot decode",
+        {
+          context: {
+            programId,
+            discriminator: Array.from(ix.data.slice(0, 8)),
+            known: idl.instructions.map((i) => i.name),
+          },
+        }
       );
       undecoded = true;
       continue;
@@ -131,7 +143,8 @@ const landedOnDevnet = async (signature: string): Promise<Landed | null> => {
 
 /** An account with the fields the deployed IDL decodes, if it decodes */
 const fetchOnDevnet = async (
-  address: string
+  address: string,
+  deployed: Idl | undefined
 ): Promise<AccountData | undefined> => {
   // A node behind the landing answers null for an account just created
   let info = null;
@@ -143,7 +156,9 @@ const fetchOnDevnet = async (
     );
   }
   if (!info) return undefined;
-  const idl = PgProgramInfo.idl as Idl | null;
+  // The IDL the run was sent through (`input.idl`: the tutorial's shipped one
+  // or the build's), else the stored program's
+  const idl = deployed ?? PgProgramInfo.callableIdl();
   let fields: Record<string, string> = {};
   try {
     if (idl) {
@@ -166,14 +181,13 @@ const sendCall = async (
   // The program on chain answers to the IDL it was deployed with: a build
   // since then must not change what is sent
   const idl = deployed ?? PgProgramInfo.callableIdl();
-  const idlIx = idl?.instructions.find((ix) =>
+  // No IDL at all is the tutorial's fault, not the learner's code: it fails
+  // with its own message, never as a mismatch
+  if (!idl) throw new Error("There is no IDL to call this program with.");
+  const idlIx = idl.instructions.find((ix) =>
     sameIdlName(ix.name, call.instruction)
   );
-  if (!idlIx) {
-    throw new Error(
-      `The deployed program has no \`${call.instruction}\`. Build and deploy it again.`
-    );
-  }
+  if (!idlIx) throw new NoSuchInstructionError(call.instruction);
   // Loaded here, not at the top: its storage reads `sessionStorage` on
   // import, which throws where the browser refuses storage and would take
   // the whole app down with it, as the Test panel's lazy load never did
@@ -224,6 +238,12 @@ export const realRunPort = (funding: FundingChain, capSol: number): RunPort => {
         PgWeb3.Connection.prototype as unknown as Sender,
         async () => {
           if (act === "run") {
+            // client.ts calls through `pg.program`, built from the stored
+            // IDL, which an Anchor 1.1.2 build leaves empty: the deployed one
+            // (the tutorial's shipped IDL) stands in, as the build's would
+            if (input.idl && !PgProgramInfo.callableIdl()) {
+              PgProgramInfo.update({ idl: input.idl });
+            }
             await PgCommand.run.execute(CLIENT_FILE);
             return;
           }
@@ -237,12 +257,15 @@ export const realRunPort = (funding: FundingChain, capSol: number): RunPort => {
     fetchAccount: fetchOnDevnet,
     decode: (encoded, deployed) => {
       const programId = PgProgramInfo.pk?.toBase58();
-      if (!programId) return { calls: [], undecoded: true };
+      if (!programId) {
+        log.warn("No program id to decode a call with");
+        return { calls: [], undecoded: true };
+      }
       try {
         return decodeCalls(
           encoded,
           programId,
-          (deployed ?? PgProgramInfo.idl) as Idl | null
+          deployed ?? PgProgramInfo.callableIdl()
         );
       } catch (e) {
         // The result still lands; only its `called` is short, which fails a

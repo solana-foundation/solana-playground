@@ -289,6 +289,8 @@ describe("Hello Anchor through the engine", () => {
         beatId: "s4.call",
         call: { instruction: "hello", args: { name: "Alex" } },
         log: "Hello, .+!",
+        // The call goes through the IDL the tutorial ships, not the build's
+        idl: expect.objectContaining({ name: "hello_anchor" }),
       },
     });
     expect(liveView().live).toMatchObject({

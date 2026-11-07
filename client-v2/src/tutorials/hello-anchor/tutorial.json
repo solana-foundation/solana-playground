@@ -36,6 +36,7 @@
       "target": {
         "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n"
       },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"hello_anchor\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"hello\",\"discriminator\":[149,118,59,220,196,127,161,179],\"accounts\":[],\"args\":[]}]}",
       "beats": [
         {
           "kind": "write",
@@ -300,6 +301,7 @@
         "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>, name: String) -> Result<()> {\n        msg!(\"Hello, {}!\", name);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n",
         "client/client.ts": "// Call the hello instruction\nconst txHash = await pg.program.methods.hello().rpc();\nconsole.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n"
       },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"hello_anchor\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"hello\",\"discriminator\":[149,118,59,220,196,127,161,179],\"accounts\":[],\"args\":[{\"name\":\"name\",\"type\":\"string\"}]}]}",
       "beats": [
         {
           "kind": "say",

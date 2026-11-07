@@ -204,6 +204,12 @@ export type Step = PlannedFailure & {
   target: Files;
   /** Files the learner cannot edit in this step */
   readOnly?: string[];
+  /**
+   * The Anchor IDL of the step's target program, minified to one JSON string
+   * and generated with Anchor 1.1.2 (`yarn tutorial:idl`). It holds until the
+   * next step that carries one; only a step whose program's IDL changes does
+   */
+  idl?: string;
   beats: Beat[];
   goal: Goal;
   win: Win;
