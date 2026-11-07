@@ -26,7 +26,7 @@ describe("Settings › Project export", () => {
       "Exports my-anchor-app, the project open now."
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Export project (zip)" })
+      screen.getByRole("button", { name: "Export project" })
     );
     expect(exportWorkspace).toHaveBeenCalledWith({ name: "my-anchor-app" });
   });

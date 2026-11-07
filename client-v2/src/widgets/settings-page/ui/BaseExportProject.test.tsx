@@ -13,7 +13,7 @@ import BaseExportProject, { BaseOpenProjectLine } from "./BaseExportProject";
 
 const button = () =>
   screen.getByRole<HTMLButtonElement>("button", {
-    name: "Export project (zip)",
+    name: "Export project",
   });
 
 describe("BaseOpenProjectLine", () => {
@@ -38,6 +38,12 @@ describe("BaseOpenProjectLine", () => {
 });
 
 describe("BaseExportProject", () => {
+  it("reads Export: its row already says Export project and the zip", () => {
+    render(<BaseExportProject name="my-anchor-app" onExport={vi.fn()} />);
+
+    expect(button().textContent).toBe("Export");
+  });
+
   it("exports the project it is given", async () => {
     const onExport = vi.fn(async () => {});
     render(<BaseExportProject name="my-anchor-app" onExport={onExport} />);
