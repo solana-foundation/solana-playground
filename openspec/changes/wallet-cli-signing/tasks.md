@@ -16,7 +16,7 @@ All tasks are HOO-2723.
   or falls back to the key bytes (depends on 1.1); host `cargo test` for the
   marker and `try_sign` passing `is_signed`
 - [x] 1.3 `solana-cli`, `spl-token-cli`, `anchor-cli`: use `wallet_signer()`;
-  clear the registry at the end of every run; check `simulate_transaction`
+  no run clears the registry (runs overlap); check `simulate_transaction`
   callers for `sig_verify: true` (depends on 1.2); `cargo check
   --target wasm32-unknown-unknown` for the three crates
 
