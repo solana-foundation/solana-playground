@@ -131,6 +131,23 @@ when a session reads a file matching the `paths` in the frontmatter.
   only files the snapshot deliberately carries were the only ones nothing ever
   scheduled an upload for. `PgFs.onDidWriteFile` exists for these three files;
   the sync effect filters `PgFs.onDidWriteFile` with `isSyncedWorkspaceFile`.
+- **A file under `/.config` is written with `writeConfigFile`**
+  (`utils/explorer/config-file.ts`), never a bare `PgFs.writeFile`.
+  lightning-fs saves its folder tree 500 ms after the last write, so a reload
+  inside that window loses a file just created: the chat thread, the thread
+  index, a sync mark, base or claim, the assistant's tool config, a deploy's
+  open-buffer record (HOO-2726).
+  `writeConfigFile` flushes the tree when its write creates the file, and only
+  then; a rename there goes through `renameConfigFile`, which flushes after it,
+  since a rename changes only the tree. A removal goes through
+  `removeConfigFile` or `removeConfigDir`, which flush after it: lightning-fs
+  deletes the content at once, so a reload before the save leaves a ghost
+  that exists, is listed and reads as `undefined`, and a ghost sync mark keeps
+  its project out of `pushNeverSynced`. The mock's `__reloadBeforeTreeSave`
+  drops what a flush has not saved, puts renamed files back and turns removed
+  ones into ghosts. One exception:
+  `PgExplorer._saveWorkspaces` writes `/.config/workspaces.json` itself and
+  flushes after every write.
 - **Never do filesystem work per filesystem write.** The dirty flag is written
   at most once per debounce window. Writing the flag per write put a read on
   the same lightning-fs queue as the writes that triggered it and made

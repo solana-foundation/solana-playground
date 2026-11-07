@@ -30,6 +30,28 @@ describe("open buffers", () => {
     expect(await listOpenBuffers()).toEqual([]);
   });
 
+  it("keeps a record it just made through a reload before the folder tree is saved", async () => {
+    await recordOpenBuffer(buffer("BufR"));
+    (
+      PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+    ).__reloadBeforeTreeSave();
+
+    expect(await listOpenBuffers()).toEqual([buffer("BufR")]);
+    await forgetOpenBuffer("BufR");
+  });
+
+  it("forgets a record it dropped through a reload before the folder tree is saved", async () => {
+    await recordOpenBuffer(buffer("BufF"));
+    await forgetOpenBuffer("BufF");
+    (
+      PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+    ).__reloadBeforeTreeSave();
+
+    expect(await PgFs.exists("/.config/deploy/open-buffers/BufF.json")).toBe(
+      false
+    );
+  });
+
   // `setBufferAuthority` hands the close to the standard wallet
   it("replaces an earlier record of the same buffer", async () => {
     await recordOpenBuffer(buffer("BufC"));

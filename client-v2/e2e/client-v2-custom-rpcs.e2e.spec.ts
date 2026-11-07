@@ -328,16 +328,15 @@ test("client-v2-custom-rpcs: Removing an RPC not in use keeps the network", asyn
   ).toHaveAttribute("aria-checked", "true");
 });
 
-test("client-v2-custom-rpcs: No endpoint select in Connection", async ({
+test("client-v2-custom-rpcs: No endpoint select in Settings", async ({
   seededPage: page,
 }) => {
   const settings = await openSettings(page);
+  // Commitment, the connection setting that keeps a row, sits in Advanced
+  const advanced = settings.getByRole("region", { name: "Advanced" });
   await expect(
-    settings.getByRole("heading", { level: 2, name: "Connection" })
+    advanced.getByRole("combobox", { name: "Commitment" })
   ).toBeVisible();
-  await expect(
-    settings.getByRole("combobox", { name: "Commitment" })
-  ).toHaveCount(1);
   await expect(
     settings.getByRole("combobox", { name: "Endpoint" })
   ).toHaveCount(0);
