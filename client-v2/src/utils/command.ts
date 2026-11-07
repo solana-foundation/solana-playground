@@ -43,8 +43,12 @@ export type CommandParam<
   name: N;
   /** Description that will be seen in the `help` command */
   description: string;
-  /* Only process the command if the condition passes */
-  preChecks?: Arrayable<() => SyncOrAsync<void>>;
+  /**
+   * Only process the command if the condition passes. Each gets the input's
+   * tokens, the command's name first, for a check that depends on what was
+   * asked (a subcommand that reads the wallet's key).
+   */
+  preChecks?: Arrayable<(tokens: readonly string[]) => SyncOrAsync<void>>;
   /**
    * Whether the handler honours its input's `signal`: a stop (Ctrl+C, the
    * console strip's Stop) aborts it, and the handler ends with a
@@ -436,7 +440,7 @@ export class PgCommandManager {
           // Handle checks
           if (cmd.preChecks) {
             const preChecks = PgCommon.toArray(cmd.preChecks);
-            for (const preCheck of preChecks) await preCheck();
+            for (const preCheck of preChecks) await preCheck(tokens);
           }
 
           // Early continue if it's not the end of the command
