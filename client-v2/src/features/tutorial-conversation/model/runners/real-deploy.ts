@@ -39,7 +39,10 @@ import { targetGuardFor } from "./target";
 const sendAndConfirmTxWithRetries: ReturnType<
   typeof sendAndConfirmTxWithRetriesFor
 > = (sendTx, checkConfirmation) =>
-  sendAndConfirmTxWithRetriesFor(PgConnection.current)(sendTx, checkConfirmation);
+  sendAndConfirmTxWithRetriesFor(PgConnection.current)(
+    sendTx,
+    checkConfirmation
+  );
 
 /** What a deploy step cannot go on without; saying which beats a `TypeError` */
 const needed = <T>(value: T | null | undefined, what: string): T => {
