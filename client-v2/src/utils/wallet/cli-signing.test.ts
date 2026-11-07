@@ -1,8 +1,9 @@
 // @vitest-environment node -- noble checks `instanceof Uint8Array`, which jsdom's realm fails
 //
-// The WASM CLIs sign the built-in wallet's slot through `PgWallet` at the
-// send step, never with its key bytes (`wasm/utils/solana-playground-utils`,
-// `wallet.rs`).
+// Under the key origin the WASM CLIs sign the built-in wallet's slot through
+// `PgWallet` at the send step, never with its key bytes
+// (`wasm/utils/solana-playground-utils`, `wallet.rs`).
+import * as ed25519 from "@noble/ed25519";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PgWeb3 } from "../web3";
@@ -15,30 +16,34 @@ import { PgWallet } from "./wallet";
 vi.mock("../connection", () => ({ PgConnection: {} }));
 
 const keypair = PgWeb3.Keypair.generate();
+const walletKey = keypair.publicKey.toBase58();
 
-/** A CLI's serialized message, which `from` pays for */
-const messageFrom = (from: PgWeb3.PublicKey) =>
-  new PgWeb3.Transaction({
-    feePayer: from,
+/**
+ * A message as the Rust CLI compiles it, which `from` pays for: its two
+ * writable non-signers in descending order, which web3.js's own compile
+ * would sort the other way, so a re-compile would change the bytes.
+ */
+const messageFrom = (from: PgWeb3.PublicKey) => {
+  const [low, high] = [
+    PgWeb3.Keypair.generate().publicKey,
+    PgWeb3.Keypair.generate().publicKey,
+  ].sort((a, b) => a.toBase58().localeCompare(b.toBase58()));
+  return new PgWeb3.Message({
+    header: {
+      numRequiredSignatures: 1,
+      numReadonlySignedAccounts: 0,
+      numReadonlyUnsignedAccounts: 1,
+    },
+    accountKeys: [from, high, low, PgWeb3.SystemProgram.programId],
     recentBlockhash: PgWeb3.Keypair.generate().publicKey.toBase58(),
-  })
-    .add(
-      PgWeb3.SystemProgram.transfer({
-        fromPubkey: from,
-        toPubkey: PgWeb3.Keypair.generate().publicKey,
-        lamports: 1,
-      })
-    )
-    .serializeMessage();
+    instructions: [{ programIdIndex: 3, accounts: [0, 1, 2], data: "" }],
+  }).serialize();
+};
 
-/** Whether `signature` is `signer`'s over `message` */
-const isSignatureOver =
-  (message: Uint8Array, signer: PgWeb3.PublicKey) =>
-  (signature: Uint8Array) => {
-    const tx = PgWeb3.Transaction.populate(PgWeb3.Message.from(message));
-    tx.addSignature(signer, Buffer.from(signature));
-    return tx.verifySignatures();
-  };
+/** Whether `signature` is the wallet's over exactly `message`'s bytes */
+const isWalletSignatureOver =
+  (message: Uint8Array) => (signature: Uint8Array) =>
+    ed25519.verify(signature, message, keypair.publicKey.toBytes());
 
 /** Make `wallet` the current one, as `derivable` would */
 const connect = (wallet: Wallet) =>
@@ -47,13 +52,35 @@ const connect = (wallet: Wallet) =>
     configurable: true,
   });
 
+/** A built-in wallet for the key whose `signTransaction` is `sign` */
+const walletSigningWith = (
+  sign: (tx: PgWeb3.Transaction) => Promise<PgWeb3.Transaction>
+) =>
+  ({
+    isPg: true,
+    name: "Wallet 1",
+    publicKey: keypair.publicKey,
+    signTransaction: <T extends AnyTransaction>(tx: T) =>
+      sign(tx as PgWeb3.Transaction),
+  } as unknown as Wallet);
+
 afterEach(() => {
   Reflect.deleteProperty(PgWallet, "current");
   vi.restoreAllMocks();
 });
 
 describe("utils/wallet/wallet signing for the WASM CLIs", () => {
-  it("signTransactionMessage returns the wallet's signature over the message", async () => {
+  it("exposes the methods the WASM side looks up by name", () => {
+    for (const name of [
+      "signTransactionMessage",
+      "getPublicKeyBytes",
+      "holdsKeysInPage",
+    ]) {
+      expect(typeof Reflect.get(PgWallet, name)).toBe("function");
+    }
+  });
+
+  it("signTransactionMessage signs the CLI's exact message bytes", async () => {
     const provider = localSignerProviderWith((publicKey) =>
       publicKey.equals(keypair.publicKey)
         ? Array.from(keypair.secretKey)
@@ -61,43 +88,73 @@ describe("utils/wallet/wallet signing for the WASM CLIs", () => {
     );
     const secretKeyFor = vi.spyOn(provider, "secretKeyFor");
     PgWallet.setSignerProvider(provider);
-    connect(
-      PgWallet.create({
-        name: "Wallet 1",
-        publicKey: keypair.publicKey.toBase58(),
-      })
-    );
+    connect(PgWallet.create({ name: "Wallet 1", publicKey: walletKey }));
     const message = messageFrom(keypair.publicKey);
 
-    const signature = await PgWallet.signTransactionMessage(message);
+    const signature = await PgWallet.signTransactionMessage(message, walletKey);
 
     expect(signature).toHaveLength(64);
-    expect(isSignatureOver(message, keypair.publicKey)(signature)).toBe(true);
+    expect(await isWalletSignatureOver(message)(signature)).toBe(true);
     expect(secretKeyFor).not.toHaveBeenCalled();
   });
 
-  it("signTransactionMessage asks the wallet's signTransaction, which the key page answers", async () => {
-    const signTransaction = vi.fn(async <T extends AnyTransaction>(tx: T) => {
-      (tx as PgWeb3.Transaction).partialSign(keypair);
+  it("signTransactionMessage asks the wallet's signTransaction once", async () => {
+    const sign = vi.fn(async (tx: PgWeb3.Transaction) => {
+      tx.partialSign(keypair);
       return tx;
     });
-    connect({
-      isPg: true,
-      name: "Wallet 1",
-      publicKey: keypair.publicKey,
-      signTransaction,
-    } as unknown as Wallet);
+    connect(walletSigningWith(sign));
     const message = messageFrom(keypair.publicKey);
 
-    const signature = await PgWallet.signTransactionMessage(message);
+    const signature = await PgWallet.signTransactionMessage(message, walletKey);
 
-    expect(signTransaction).toHaveBeenCalledTimes(1);
-    expect(isSignatureOver(message, keypair.publicKey)(signature)).toBe(true);
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(await isWalletSignatureOver(message)(signature)).toBe(true);
   });
 
   it("signTransactionMessage refuses when no wallet is connected", async () => {
     await expect(
-      PgWallet.signTransactionMessage(messageFrom(keypair.publicKey))
+      PgWallet.signTransactionMessage(messageFrom(keypair.publicKey), walletKey)
     ).rejects.toThrow("Not connected");
+  });
+
+  it("signTransactionMessage refuses once another wallet is current", async () => {
+    const sign = vi.fn();
+    connect(walletSigningWith(sign));
+    const other = PgWeb3.Keypair.generate().publicKey.toBase58();
+
+    await expect(
+      PgWallet.signTransactionMessage(messageFrom(keypair.publicKey), other)
+    ).rejects.toThrow(`The wallet this command started with (${other})`);
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it("signTransactionMessage refuses a transaction the wallet left unsigned", async () => {
+    connect(walletSigningWith(async (tx) => tx));
+
+    await expect(
+      PgWallet.signTransactionMessage(messageFrom(keypair.publicKey), walletKey)
+    ).rejects.toThrow(`The wallet ${walletKey} did not sign the transaction`);
+  });
+
+  it("signTransactionMessage refuses a signature over other bytes", async () => {
+    connect(
+      walletSigningWith(async (tx) => {
+        tx.addSignature(
+          keypair.publicKey,
+          Buffer.from(
+            await ed25519.sign(
+              messageFrom(keypair.publicKey),
+              keypair.secretKey.slice(0, 32)
+            )
+          )
+        );
+        return tx;
+      })
+    );
+
+    await expect(
+      PgWallet.signTransactionMessage(messageFrom(keypair.publicKey), walletKey)
+    ).rejects.toThrow("does not match the transaction it was asked to sign");
   });
 });

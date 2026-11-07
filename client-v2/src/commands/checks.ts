@@ -51,7 +51,7 @@ export type KeyRead = (tokens: readonly string[]) => string | undefined;
  * origin keeps it, before the wallet question and the WASM import. Under the
  * local provider it does nothing.
  *
- * @param readsKey which runs read the key
+ * @param readsKey which runs need the key in the page
  * @returns the pre-check
  */
 export const checkKeyReadable =
@@ -64,7 +64,7 @@ export const checkKeyReadable =
 /**
  * Whether the run only asks clap for help or the version: no arguments
  * (`arg_required_else_help`), `help`, or a help or version flag. clap answers
- * those before the CLI reads the key.
+ * those before the CLI signs anything.
  */
 const isClapOnlyAsk = (tokens: readonly string[]) =>
   tokens.length <= 1 ||
@@ -72,10 +72,11 @@ const isClapOnlyAsk = (tokens: readonly string[]) =>
   tokens.some((t) => ["-h", "--help", "-V", "--version"].includes(t));
 
 /**
- * `solana` and `spl-token` sign the wallet's slot at the send step, through
- * `PgWallet.signTransactionMessage` (`wasm/utils/solana-playground-utils`,
- * `wallet.rs`). A `--sign-only` run prints signatures without sending, so
- * the key page is never asked and the run needs the key itself.
+ * Under the key origin `solana` and `spl-token` sign the wallet's slot at the
+ * send step, through `PgWallet.signTransactionMessage`
+ * (`wasm/utils/solana-playground-utils`, `wallet.rs`). A `--sign-only` run
+ * prints signatures without sending, so nothing would ask the key page and
+ * the run would need the key itself.
  */
 export const signsOffline: KeyRead = (tokens) =>
   isClapOnlyAsk(tokens) || !tokens.includes("--sign-only")

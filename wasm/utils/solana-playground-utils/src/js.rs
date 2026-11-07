@@ -75,11 +75,19 @@ extern "C" {
     #[wasm_bindgen(static_method_of = PgWallet, js_name = "getPublicKeyBytes")]
     pub fn public_key_bytes() -> Vec<u8>;
 
-    /// Have the current wallet sign serialized legacy message bytes; resolves
-    /// to its 64-byte signature.
+    /// Whether the page holds the wallet's keys (the local signer provider).
+    #[cfg(feature = "wallet")]
+    #[wasm_bindgen(static_method_of = PgWallet, js_name = "holdsKeysInPage")]
+    pub fn holds_keys_in_page() -> bool;
+
+    /// Have the wallet with the given base58 public key sign serialized legacy
+    /// message bytes; resolves to its 64-byte signature.
     #[cfg(feature = "wallet")]
     #[wasm_bindgen(static_method_of = PgWallet, js_name = "signTransactionMessage", catch)]
-    pub async fn sign_transaction_message(message: &[u8]) -> Result<JsValue, JsValue>;
+    pub async fn sign_transaction_message(
+        message: &[u8],
+        public_key: &str,
+    ) -> Result<JsValue, JsValue>;
 
     /// The `PgWallet` export itself, to ask which methods it has.
     #[cfg(feature = "wallet")]

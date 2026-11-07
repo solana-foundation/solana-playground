@@ -17,8 +17,8 @@ export interface SignerAccount {
  * Holds the built-in wallet's secret keys and signs with them.
  *
  * Every use of an account's key, whether to sign, to hand `pg.wallet.keypair`
- * to project code, to export the key file or to give the WASM CLIs their
- * keypair, goes through the provider, so a provider that keeps the keys out of
+ * to project code, to export the key file or to sign for the WASM CLIs,
+ * goes through the provider, so a provider that keeps the keys out of
  * the page can replace the local one without touching those callers. The
  * wallet's `keypair` and the synchronous `secretKeyFor` are what only the local
  * provider can give as they are; a provider that keeps the keys elsewhere
@@ -54,7 +54,8 @@ export interface WalletSignerProvider {
   walletFor(account: SignerAccount): PlaygroundWallet;
   /**
    * The account's 64 secret key bytes (private key, then public key), for the
-   * key file export and the WASM CLIs. The caller gets its own copy.
+   * key file export, and for the WASM CLIs where the page holds the key. The
+   * caller gets its own copy.
    *
    * @throws when the provider holds no key for the public key
    */

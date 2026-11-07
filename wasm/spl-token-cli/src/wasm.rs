@@ -3,7 +3,7 @@ use std::{panic, str::FromStr};
 use solana_extra_wasm::program::spl_token;
 use solana_playground_utils_wasm::{
     js::{PgSettings, PgTerminal},
-    wallet::{clear_wallet_signer, wallet_signer},
+    wallet::wallet_signer,
 };
 use wasm_bindgen::prelude::*;
 
@@ -18,7 +18,6 @@ use crate::{
 pub async fn run_spl_token(cmd: String) {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    clear_wallet_signer();
     let default_decimals = format!("{}", spl_token::native_mint::DECIMALS);
     let default_program_id = spl_token::id().to_string();
 
@@ -67,5 +66,4 @@ pub async fn run_spl_token(cmd: String) {
             PgTerminal::log_wasm(&e.to_string());
         }
     };
-    clear_wallet_signer();
 }

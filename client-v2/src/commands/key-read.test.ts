@@ -3,8 +3,9 @@
 //
 // Under the key origin the CLIs sign the built-in wallet's slot through the
 // key page at the send step. Only a `--sign-only` run, which prints signatures
-// without sending, needs the key itself: it ends with one line before it
-// starts. Every other run, and every run under the local provider, goes on.
+// without sending, would need the key itself: it ends with one line before it
+// starts. Every other run goes on, and under the local provider, where the CLI
+// signs with the key bytes, so does `--sign-only`.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const env = vi.hoisted(() => ({ hasKeysInPage: false }));
@@ -86,7 +87,7 @@ describe("commands that need the wallet's key, under the key origin", () => {
     "anchor idl upgrade 11111111111111111111111111111111",
     "anchor idl fetch",
     "sugar launch",
-  ])("`%s` signs at send and goes on", async (input) => {
+  ])("`%s` goes on", async (input) => {
     const cmd = { solana, "spl-token": splToken, anchor, sugar }[
       input.split(" ")[0] as "solana"
     ];

@@ -1,5 +1,5 @@
 use clap::Parser;
-use solana_playground_utils_wasm::{js::PgTerminal, wallet::clear_wallet_signer};
+use solana_playground_utils_wasm::js::PgTerminal;
 use wasm_bindgen::prelude::*;
 
 use crate::commands::idl::{process_idl, IdlCommand};
@@ -22,7 +22,6 @@ pub async fn run_anchor(cmd: &str) {
 
     let args = cmd.split_ascii_whitespace().collect::<Vec<&str>>();
 
-    clear_wallet_signer();
     match Cli::try_parse_from(args) {
         Ok(cli) => match cli {
             Cli::Idl { subcmd } => {
@@ -33,5 +32,4 @@ pub async fn run_anchor(cmd: &str) {
         },
         Err(e) => PgTerminal::log_wasm(&e.to_string()),
     }
-    clear_wallet_signer();
 }

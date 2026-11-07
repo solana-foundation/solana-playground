@@ -1,16 +1,15 @@
 //! The built-in wallet as a `Signer` for the WASM CLIs.
 //!
-//! Where the app can sign a transaction message for the wallet
-//! (`PgWallet.signTransactionMessage`, client-v2), the CLI never sees the
+//! Where the app keeps the wallet's key off the page and signs a transaction
+//! message for it (client-v2 under the key origin), the CLI never sees the
 //! secret key: [`PgWalletSigner`] writes a marker and the client asks the app
-//! for the real signature when it sends. Elsewhere (upstream's client) the CLI
-//! signs with the key bytes, as before.
+//! for the real signature when it sends. Where the page holds the key (the
+//! local provider, upstream's client), the CLI signs with the key bytes as
+//! before, so `--sign-only` still prints a real signature.
 
 use std::rc::Rc;
 
-use solana_client_wasm::deferred_signer::{
-    clear_deferred_signer, deferred_signature, set_deferred_signer,
-};
+use solana_client_wasm::deferred_signer::{deferred_signature, set_deferred_signer};
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{Keypair, Signature},
@@ -28,7 +27,9 @@ pub struct PgWalletSigner {
 }
 
 impl PgWalletSigner {
-    pub fn new(pubkey: Pubkey) -> Self {
+    /// Only [`wallet_signer`] makes one, so its key always has a deferred
+    /// signer registered.
+    pub(crate) fn new(pubkey: Pubkey) -> Self {
         Self { pubkey }
     }
 }
@@ -83,17 +84,17 @@ impl Signer for WalletSigner {
     }
 }
 
-/// Whether the app signs for the wallet (client-v2) instead of handing out
-/// its key bytes.
+/// Whether the app signs for the wallet because the key is off the page.
+/// Upstream's client has no `signTransactionMessage` and holds the key.
 fn app_signs() -> bool {
-    js_sys::Reflect::get(&PG_WALLET, &JsValue::from_str("signTransactionMessage"))
+    let signs = js_sys::Reflect::get(&PG_WALLET, &JsValue::from_str("signTransactionMessage"))
         .map(|f| f.is_function())
-        .unwrap_or(false)
+        .unwrap_or(false);
+    signs && !PgWallet::holds_keys_in_page()
 }
 
 /// The current built-in wallet as a signer. Where the app signs, this also
-/// registers it as the client's deferred signer; [`clear_wallet_signer`] ends
-/// that at the end of the run.
+/// registers the app as the client's deferred signer for the wallet's key.
 pub fn wallet_signer() -> WalletSigner {
     if !app_signs() {
         return WalletSigner::Key(Keypair::from_bytes(&PgWallet::keypair_bytes()).unwrap());
@@ -102,9 +103,9 @@ pub fn wallet_signer() -> WalletSigner {
     let pubkey = Pubkey::try_from(PgWallet::public_key_bytes().as_slice()).unwrap();
     set_deferred_signer(
         pubkey,
-        Rc::new(|message: Vec<u8>| {
+        Rc::new(move |message: Vec<u8>| {
             Box::pin(async move {
-                let signature = PgWallet::sign_transaction_message(&message)
+                let signature = PgWallet::sign_transaction_message(&message, &pubkey.to_string())
                     .await
                     .map_err(|e| error_message(&e))?;
                 Signature::try_from(js_sys::Uint8Array::new(&signature).to_vec().as_slice())
@@ -115,16 +116,17 @@ pub fn wallet_signer() -> WalletSigner {
     WalletSigner::Deferred(PgWalletSigner::new(pubkey))
 }
 
-/// End the run's deferred signing, so the next CLI starts without it.
-pub fn clear_wallet_signer() {
-    clear_deferred_signer();
-}
-
-/// The message of a rejected promise.
+/// The message of a rejected promise: an `Error`'s, a string, or an
+/// object's `message` field (a standard wallet's rejection).
 fn error_message(e: &JsValue) -> String {
     e.dyn_ref::<js_sys::Error>()
         .map(|e| String::from(e.message()))
         .or_else(|| e.as_string())
+        .or_else(|| {
+            js_sys::Reflect::get(e, &JsValue::from_str("message"))
+                .ok()
+                .and_then(|m| m.as_string())
+        })
         .unwrap_or_else(|| format!("{e:?}"))
 }
 

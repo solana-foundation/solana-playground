@@ -10,7 +10,7 @@ use solana_client_wasm::utils::rpc_config::RpcSendTransactionConfig;
 use solana_extra_wasm::transaction_status::UiTransactionEncoding;
 use solana_playground_utils_wasm::{
     js::{PgSettings, PgTerminal},
-    wallet::{clear_wallet_signer, wallet_signer, WalletSigner},
+    wallet::{wallet_signer, WalletSigner},
 };
 use solana_remote_wallet::remote_wallet::RemoteWalletManager;
 use wasm_bindgen::prelude::*;
@@ -24,7 +24,6 @@ use crate::{
 pub async fn run_solana(cmd: String) {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    clear_wallet_signer();
     let args = cmd.split_ascii_whitespace().collect::<Vec<&str>>();
     let match_result = get_clap("solana-cli-wasm", "Blockchain, Rebuilt for Scale", "1.11.0")
         .try_get_matches_from(args);
@@ -68,7 +67,6 @@ pub async fn run_solana(cmd: String) {
             PgTerminal::log_wasm(&e.to_string());
         }
     };
-    clear_wallet_signer();
 }
 
 fn parse_settings(matches: &ArgMatches, endpoint: &str, commitment: &str) -> bool {

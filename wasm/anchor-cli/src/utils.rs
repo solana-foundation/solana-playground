@@ -27,7 +27,8 @@ pub fn get_client() -> WasmClient {
     )
 }
 
-/// The built-in wallet, which signs its slot at send where the app holds the key
+/// The built-in wallet: it signs at send through the app where the key is off
+/// the page, else with the key bytes
 pub fn get_keypair() -> WalletSigner {
     wallet_signer()
 }

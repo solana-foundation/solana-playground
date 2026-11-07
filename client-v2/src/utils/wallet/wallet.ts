@@ -1,3 +1,5 @@
+import * as ed25519 from "@noble/ed25519";
+
 import type { WalletNoticeKind } from "../../entities/wallet";
 import { createLogger, toError } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
@@ -941,8 +943,9 @@ class _PgWallet {
   /**
    * Get the keypair bytes of the current wallet.
    *
-   * NOTE: It looks like this method is not being used, but it's being used by
-   * WASM packages.
+   * NOTE: Used by WASM packages built against a `PgWallet` without
+   * `signTransactionMessage`, and by client-v2's CLIs under the local provider,
+   * where the page holds the key anyway; under the key origin they never call it.
    */
   static getKeypairBytes() {
     if (!PgWallet.current) throw new Error("Not connected");
@@ -952,9 +955,9 @@ class _PgWallet {
   }
 
   /**
-   * Get the public key bytes of the current wallet. The WASM CLIs sign with
-   * it and leave the wallet's signature to `signTransactionMessage`, so they
-   * never read the key.
+   * Get the public key bytes of the current wallet. Under the key origin the
+   * WASM CLIs take it as their wallet signer's public key and leave the
+   * signature to `signTransactionMessage`, so they never read the key.
    *
    * NOTE: Used by WASM packages (`wasm/utils/solana-playground-utils`).
    */
@@ -966,18 +969,27 @@ class _PgWallet {
   }
 
   /**
-   * Have the current wallet sign a legacy transaction message a WASM CLI is
-   * about to send. It goes through the wallet's `signTransaction`, so the key
-   * page signs it as a transaction under the key origin.
+   * Have the built-in wallet a WASM CLI started with sign the legacy
+   * transaction message it is about to send. It goes through the wallet's
+   * `signTransaction`, so the key page signs it as a transaction under the key
+   * origin. The signature is checked against the bytes the CLI sent, so a
+   * wallet that signed anything else is an error here, not a rejection from
+   * the cluster.
    *
    * NOTE: Used by WASM packages (`wasm/utils/solana-playground-utils`).
    *
    * @param message serialized legacy message
-   * @returns the current wallet's 64-byte signature over the message
+   * @param publicKey base58 public key of the wallet the CLI started with
+   * @returns the wallet's 64-byte signature over the message
    */
-  static async signTransactionMessage(message: Uint8Array) {
+  static async signTransactionMessage(message: Uint8Array, publicKey: string) {
     const wallet = PgWallet.current;
     if (!wallet) throw new Error("Not connected");
+    if (!wallet.isPg || wallet.publicKey.toBase58() !== publicKey) {
+      throw new Error(
+        `The wallet this command started with (${publicKey}) is no longer the current wallet`
+      );
+    }
 
     const tx = PgWeb3.Transaction.populate(
       PgWeb3.Message.from(Buffer.from(message))
@@ -987,7 +999,17 @@ class _PgWallet {
       s.publicKey.equals(wallet.publicKey)
     )?.signature;
     if (!signature) {
-      throw new Error("The wallet did not sign the transaction");
+      throw new Error(`The wallet ${publicKey} did not sign the transaction`);
+    }
+    const isValid = await ed25519.verify(
+      Uint8Array.from(signature),
+      Uint8Array.from(message),
+      wallet.publicKey.toBytes()
+    );
+    if (!isValid) {
+      throw new Error(
+        `The wallet's signature for ${publicKey} does not match the transaction it was asked to sign`
+      );
     }
 
     return Uint8Array.from(signature);
