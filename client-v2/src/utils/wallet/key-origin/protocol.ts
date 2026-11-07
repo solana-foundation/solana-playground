@@ -46,7 +46,11 @@ const isRecord = (x: unknown): x is Record<string, unknown> =>
 
 const isString = (x: unknown): x is string => typeof x === "string";
 
-const isSecretKey = (x: unknown) =>
+/**
+ * @param x a parsed value
+ * @returns whether it is a key's 64 secret bytes as numbers
+ */
+export const isSecretKey = (x: unknown): x is number[] =>
   Array.isArray(x) &&
   x.length === SECRET_KEY_LENGTH &&
   x.every((b) => Number.isInteger(b) && b >= 0 && b <= 255);
@@ -112,6 +116,67 @@ export const isKeyHandshake = (x: unknown): x is KeyHandshake =>
   isRecord(x) &&
   x.type === "pg-wallet-keys:connect" &&
   typeof x.version === "number";
+
+/** The design tokens the key page's panel button is drawn with */
+export const THEME_TOKENS = [
+  "bg",
+  "fg",
+  "border",
+  "radius",
+  "font",
+  "focus",
+  "height",
+  "padding",
+  "fontSize",
+  "fontWeight",
+] as const;
+
+/** Values of the panel's design tokens, as CSS values; any may be missing */
+export type ThemeTokens = Partial<Record<typeof THEME_TOKENS[number], string>>;
+
+/**
+ * What goes over the visible panel's port: the page sends `theme`, the panel
+ * sends the rest. `imported` names the key the panel stored, never its bytes.
+ */
+export type PanelMessage =
+  | { type: "theme"; tokens: ThemeTokens }
+  | { type: "imported"; publicKey: string }
+  | { type: "exported" }
+  | { type: "error"; message: string }
+  | { type: "busy"; busy: boolean };
+
+/**
+ * @param x a parsed value
+ * @returns whether it is a set of theme tokens: known names, string values
+ */
+export const isThemeTokens = (x: unknown): x is ThemeTokens =>
+  isRecord(x) &&
+  Object.entries(x).every(
+    ([name, value]) =>
+      (THEME_TOKENS as readonly string[]).includes(name) && isString(value)
+  );
+
+/**
+ * @param x a message received over the panel's port
+ * @returns whether it is a well-formed panel message
+ */
+export const isPanelMessage = (x: unknown): x is PanelMessage => {
+  if (!isRecord(x)) return false;
+  switch (x.type) {
+    case "theme":
+      return isThemeTokens(x.tokens);
+    case "imported":
+      return isString(x.publicKey);
+    case "exported":
+      return true;
+    case "error":
+      return isString(x.message);
+    case "busy":
+      return typeof x.busy === "boolean";
+    default:
+      return false;
+  }
+};
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -187,6 +252,29 @@ if (import.meta.vitest) {
         { ok: true, result: "a" },
       ];
       for (const reply of bad) expect(isKeyReply(reply)).toBe(false);
+    });
+
+    it("accepts each panel message and rejects the rest", () => {
+      const good: unknown[] = [
+        { type: "theme", tokens: { bg: "#000", fontSize: "14px" } },
+        { type: "theme", tokens: {} },
+        { type: "imported", publicKey: "abc" },
+        { type: "exported" },
+        { type: "error", message: "no" },
+        { type: "busy", busy: true },
+      ];
+      for (const message of good) expect(isPanelMessage(message)).toBe(true);
+      const bad: unknown[] = [
+        undefined,
+        { type: "theme" },
+        { type: "theme", tokens: { bg: 1 } },
+        { type: "theme", tokens: { colour: "#000" } },
+        { type: "imported" },
+        { type: "error" },
+        { type: "busy", busy: "yes" },
+        { type: "other" },
+      ];
+      for (const message of bad) expect(isPanelMessage(message)).toBe(false);
     });
 
     it("recognises the ready and handshake messages", () => {
