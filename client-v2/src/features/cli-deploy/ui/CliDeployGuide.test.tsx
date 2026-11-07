@@ -113,10 +113,10 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
     ]);
   });
 
-  it("opens on Mainnet from the mainnet warning", () => {
+  it("opens on Mainnet from the Deploy stage on mainnet", () => {
     renderGuide(
       <CliDeployGuide
-        {...props({ from: "mainnet-warning", cluster: "devnet", built: true })}
+        {...props({ from: "mainnet-blocked", cluster: "devnet", built: true })}
       />
     );
 
@@ -282,7 +282,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
   it("copies Anchor's two lines as one script", async () => {
     renderGuide(
       <CliDeployGuide
-        {...props({ from: "mainnet-warning", cluster: "devnet", built: true })}
+        {...props({ from: "mainnet-blocked", cluster: "devnet", built: true })}
       />
     );
     pick("Anchor");
@@ -305,7 +305,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
   it("gives the Program Metadata IDL upload for the picked cluster", () => {
     renderGuide(
       <CliDeployGuide
-        {...props({ from: "mainnet-warning", cluster: "devnet", built: true })}
+        {...props({ from: "mainnet-blocked", cluster: "devnet", built: true })}
       />
     );
 

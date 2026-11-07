@@ -4,7 +4,7 @@ import { NETWORKS as OFFERED } from "@/constants";
 import type { CustomRpc } from "@/entities/cluster";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 
-const REAL_SOL = "Deploys with real SOL";
+const NO_DEPLOYS = "Not available for deploys";
 
 /** A chip; `line` says how its network deploys, only Mainnet has one so far */
 interface Chip {
@@ -17,7 +17,7 @@ const NETWORKS: ReadonlyArray<Chip> = OFFERED.map(
   ({ name, value, cluster }) => ({
     label: name,
     endpoint: value,
-    line: cluster === "mainnet-beta" ? REAL_SOL : undefined,
+    line: cluster === "mainnet-beta" ? NO_DEPLOYS : undefined,
   })
 );
 

@@ -9,6 +9,7 @@ import {
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { MAINNET_DEPLOY_BLOCKED_LINE } from "@/commands/deploy/mainnet-block";
 import type { DeployRunState } from "@/commands/deploy/run";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
@@ -38,6 +39,7 @@ const recordFor =
     at: Date.UTC(2026, 9, 15),
   });
 const record = recordFor("devnet");
+const mainnetRecord = recordFor("mainnet-beta")("m1", "msig");
 
 const IDLE_RUN: DeployRunState = {
   // eslint-disable-next-line unicorn/no-null -- `DeployRunState.step` is `null` while no deploy runs
@@ -129,9 +131,6 @@ const endsWithPill = (container: HTMLElement) => {
   );
 };
 
-const mainnetWarning = () =>
-  screen.queryByRole("alert", { name: "Mainnet deploy warning" });
-
 describe("BaseDeploy", () => {
   it("places the Program id block under the payer line before a deploy", () => {
     render(<BaseDeploy {...props({ built: true, history: [] })} />);
@@ -161,63 +160,92 @@ describe("BaseDeploy", () => {
     expect(history.contains(block)).toBe(false);
   });
 
-  it("warns on mainnet without holding Deploy", () => {
+  // HOO-2728: no program deploy to mainnet in the beta; the stage's one way
+  // on is the CLI guide, built or not, with a mainnet history or without
+  it.each([
+    ["built", { built: true, history: [] }],
+    ["not built", { built: false, history: [] }],
+    ["deployed there before", { built: true, history: [mainnetRecord] }],
+  ] as const)("points mainnet to the user's machine (%s)", (_, over) => {
+    const onOpenCliGuide = vi.fn();
+    const onDeploy = vi.fn();
     const { container } = render(
       <BaseDeploy
         {...props({
-          built: true,
-          history: [],
+          ...over,
+          history: [...over.history],
           cluster: "mainnet-beta",
+          onOpenCliGuide,
         })}
+        onDeploy={onDeploy}
       />
     );
 
-    const warning = mainnetWarning();
-    expect(warning?.textContent).toContain("Mainnet uses real SOL");
-    expect(warning?.textContent).toContain("Playground wallet");
-    expect(warning?.textContent).toContain("your own machine");
-    const deploy = screen.getByRole("button", {
-      name: "Deploy to mainnet",
-    });
-    expect(deploy).toHaveProperty("disabled", false);
+    expect(screen.getByText(MAINNET_DEPLOY_BLOCKED_LINE)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /Deploy to mainnet|Redeploy/ })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Deploy with the CLI" })
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Go to Build" })).toBeNull();
+    expect(screen.queryByLabelText("Who pays")).toBeNull();
     expect(endsWithPill(container)).toBe(true);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Deploy from your machine" })
+    );
+    expect(onOpenCliGuide).toHaveBeenCalledWith("mainnet-blocked");
+    expect(onDeploy).not.toHaveBeenCalled();
   });
 
-  it("opens the CLI guide from the warning's own words", () => {
-    const onOpenCliGuide = vi.fn();
+  it("keeps Change on the Network row on mainnet", () => {
+    const onChangeNetwork = vi.fn();
     render(
       <BaseDeploy
         {...props({
           built: true,
           history: [],
           cluster: "mainnet-beta",
-          onOpenCliGuide,
+        })}
+        onChangeNetwork={onChangeNetwork}
+      />
+    );
+
+    fireEvent.click(
+      within(screen.getByLabelText("Network")).getByRole("button", {
+        name: "Change",
+      })
+    );
+    expect(onChangeNetwork).toHaveBeenCalled();
+  });
+
+  it("says the mainnet line instead of other networks' deploys", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          history: [record("a", "5sig")],
+          cluster: "mainnet-beta",
         })}
       />
     );
 
-    const warning = screen.getByRole("alert", {
-      name: "Mainnet deploy warning",
-    });
-    expect(warning.textContent).toContain(
-      "For a program that matters, deploy from your own machine with the Solana CLI or Anchor."
-    );
-    fireEvent.click(
-      within(warning).getByRole("button", {
-        name: "deploy from your own machine",
-      })
-    );
-    expect(onOpenCliGuide).toHaveBeenCalledWith("mainnet-warning");
+    expect(screen.getByText(MAINNET_DEPLOY_BLOCKED_LINE)).toBeTruthy();
+    expect(screen.queryByText(/This project has deploys on/)).toBeNull();
+    // The devnet deployment stays listed, under its own network
+    const history = screen.getByRole("region", { name: "History" });
+    expect(within(history).getByText("Devnet")).toBeTruthy();
   });
 
-  it.each(["devnet", "mainnet-beta"])(
+  it.each(["devnet", "testnet"])(
     "offers the CLI guide beside Deploy on %s",
     (cluster) => {
       const onOpenCliGuide = vi.fn();
       render(
         <BaseDeploy
           {...props({
-            built: false,
+            built: true,
             history: [],
             cluster,
             onOpenCliGuide,
@@ -225,49 +253,16 @@ describe("BaseDeploy", () => {
         />
       );
 
+      expect(screen.queryByText(MAINNET_DEPLOY_BLOCKED_LINE)).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Deploy from your machine" })
+      ).toBeNull();
       fireEvent.click(
         screen.getByRole("button", { name: "Deploy with the CLI" })
       );
       expect(onOpenCliGuide).toHaveBeenCalledWith("deploy-stage");
     }
   );
-
-  it("warns on mainnet before a build too", () => {
-    render(
-      <BaseDeploy
-        {...props({
-          built: false,
-          history: [],
-          cluster: "mainnet-beta",
-        })}
-      />
-    );
-
-    expect(mainnetWarning()).toBeTruthy();
-  });
-
-  it("keeps the warning beside a failed deploy's alert", () => {
-    render(
-      <BaseDeploy
-        {...props({
-          built: true,
-          view: FAILED,
-          history: [record("a", NONE)],
-          cluster: "mainnet-beta",
-        })}
-      />
-    );
-
-    expect(mainnetWarning()).toBeTruthy();
-    expect(screen.getAllByRole("alert")).toHaveLength(2);
-  });
-
-  // eslint-disable-next-line unicorn/no-null -- `BaseDeployProps.cluster` is `null` until the endpoint has been read
-  it.each(["devnet", null])("does not warn on %s", (cluster) => {
-    render(<BaseDeploy {...props({ built: true, history: [], cluster })} />);
-
-    expect(mainnetWarning()).toBeNull();
-  });
 
   it("offers no Deploy until a build succeeded", () => {
     const { container } = render(
@@ -450,7 +445,7 @@ describe("BaseDeploy", () => {
       <BaseDeploy
         {...props({
           built: true,
-          cluster: "mainnet-beta",
+          cluster: "testnet",
           history: [record("a", "5sig")],
         })}
       />
@@ -461,13 +456,13 @@ describe("BaseDeploy", () => {
       container.querySelector('[data-slot="stage-empty-meta"]')
     ).toBeNull();
     expect(screen.getByLabelText("Network").textContent).toBe(
-      "NetworkMainnetChange"
+      "NetworkTestnetChange"
     );
     expect(
-      screen.getByRole("heading", { name: "Nothing on mainnet" })
+      screen.getByRole("heading", { name: "Nothing on testnet" })
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Deploy to mainnet" })
+      screen.getByRole("button", { name: "Deploy to testnet" })
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Redeploy/ })).toBeNull();
     expect(screen.queryByRole("status", { name: "Deploy result" })).toBeNull();
@@ -664,7 +659,7 @@ describe("BaseDeploy", () => {
   });
 
   // eslint-disable-next-line unicorn/no-null -- `BaseDeployProps.cluster` is `null` until the endpoint has been read
-  it.each(["mainnet-beta", "testnet", null])(
+  it.each(["testnet", null])(
     "promises no free SOL before the first deploy on %s",
     (cluster) => {
       render(
