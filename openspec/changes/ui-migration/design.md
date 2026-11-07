@@ -1015,7 +1015,7 @@ thread above the composer stays as it is until 5.18 (HOO-1794).
 
 ```
 widgets/assistant
-├─ AssistantHead: project name | More (⋮) | Widen | Hide
+├─ AssistantHead: model in use | More (⋮) | Widen | Hide
 │    More: Sources and tools (S), Connect a model… (K),
 │          Forget key (a keyed backend only),
 │          Clear conversation (disabled until HOO-1741)
@@ -1042,7 +1042,8 @@ widgets/assistant
   `views/`, as New project's frame (5.13) is: a legacy root takes no new UI
   and the boundary check does not read it. The widget's tests stand in for
   the dialog (Sergey's review of #35, 2026-10-22).
-- **The head.** The project's name, then More, Widen and Hide. Hide is the
+- **The head.** The model in use (or why no model can answer), then More,
+  Widen and Hide. Hide is the
   shell's "Collapse assistant", label kept. Widen sizes the assistant panel
   to its maximum (560 px) and back; it is not saved in the layout, and it is
   not offered below `LAYOUT_BREAKPOINTS.compact`, where the assistant is a
@@ -1332,7 +1333,7 @@ SidebarProvider (no padding)
    │                   hides to 0 px
    ├─ 1 px handle
    └─ Panel work
-      ├─ StageBar (44 px): [project name when the assistant is hidden] ...
+      ├─ StageBar (44 px): project name ...
       │                    Files · Assistant · Documentation
       ├─ stage tabs (54 px, no line): Write | Build | Deploy | Interact, full width
       └─ Group horizontal (id layout-work)
@@ -1350,7 +1351,7 @@ SidebarProvider (no padding)
   The sync banner keeps its gutter.
 - **Bars.** Every bar is 44 px with a 1 px bottom line, as the navigation's
   head, except over the stage, where the bar and the stage tabs read as one
-  head and the bar drops its line (DES-216). Over the assistant it is 5.17's `AssistantHead` (the project's name,
+  head and the bar drops its line (DES-216). Over the assistant it is 5.17's `AssistantHead` (the model in use,
   More, Widen or Narrow, and "Collapse assistant"), sized to the bar and not
   redrawn. Over the stage, `StageBar` holds the stage's toggles on the
   right: "Collapse project panel" / "Expand project panel" (⌘E; the files
@@ -1358,8 +1359,10 @@ SidebarProvider (no padding)
   (solana.com/docs, a new tab). The assistant's toggle reads "Hide the
   assistant" while the assistant is open and "Expand assistant" while it is
   hidden, so the head's "Collapse assistant" stays the one button by that
-  name. While the assistant is out of view (hidden on a wide window, its
-  Sheet closed below 1024 px), the project's name shows at the bar's left.
+  name. The bar's left names the project whether the assistant shows or
+  not, cut with an ellipsis when the bar is narrow: the head names the
+  model, so the project would otherwise have no name on screen while the
+  assistant is open (HOO-2697).
 - **Stage tabs.** The `Stepper` leaves the bar and becomes a 54 px row of
   its own under it (8 px above the segments, 12 px below them, no bottom
   line: DES-216), spanning the files column and the stage, its four
