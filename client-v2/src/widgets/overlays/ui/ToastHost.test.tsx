@@ -384,3 +384,21 @@ describe("the toaster's theme", () => {
     expect(toasterTheme()).toBe("dark");
   });
 });
+
+it("should put the toaster on the page's body, above any dialog", () => {
+  // The app's frame is its own stacking context, so a toaster left inside it
+  // stays under a dialog, which portals to the body, whatever its z-index
+  const { container } = render(
+    <div style={{ isolation: "isolate" }}>
+      <ToastHost />
+    </div>
+  );
+  show({ name: "demo", id: "b", duration: "persistent" });
+
+  const toaster = requireFor("the toaster")(
+    document.querySelector<HTMLElement>("[data-sonner-toaster]")
+  );
+  expect(container.contains(toaster)).toBe(false);
+  // Sonner wraps its list in a section; that section is the body's own child
+  expect(toaster.closest("section")?.parentElement).toBe(document.body);
+});

@@ -1,6 +1,7 @@
 # client-v2-wallet Specification
 
 ## Purpose
+
 What the wallet panel tells the person about the wallet it shows.
 
 ## Requirements

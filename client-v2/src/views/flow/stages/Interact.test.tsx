@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   customPk: "the user's custom id" as string | undefined,
   workspaceId: "w1",
   update: vi.fn(),
+  // eslint-disable-next-line unicorn/no-null -- `callableIdl()` answers `null` with no IDL
+  callable: null as object | null,
 }));
 
 vi.mock("./interact-surface", () => ({
@@ -17,7 +19,12 @@ vi.mock("./interact-surface", () => ({
   interactSurface: () => mocks.surface,
 }));
 vi.mock("./IdlActions", () => ({ default: () => undefined }));
-vi.mock("./InteractBody", () => ({ default: () => undefined }));
+// Echoes the network it is told the wallet lacks SOL on
+vi.mock("./InteractBody", () => ({
+  default: ({ solNeededOn }: { solNeededOn?: string }) => (
+    <span data-testid="interact-body">{solNeededOn ?? "none"}</span>
+  ),
+}));
 vi.mock("../../sidebar/assistant/bridge/build-output", () => ({
   // eslint-disable-next-line unicorn/no-null -- `PgBuildOutput.latest` is `null` before any build
   PgBuildOutput: { latest: null, onDidChange: mocks.noop },
@@ -43,8 +50,7 @@ vi.mock("../../../utils", () => ({
     get customPk() {
       return mocks.customPk;
     },
-    // eslint-disable-next-line unicorn/no-null -- `callableIdl()` answers `null` with no IDL
-    callableIdl: () => null,
+    callableIdl: () => mocks.callable,
     getPkStr: () => "6PNd3SmUcvQEHfcTiQkpprF4mmXzR7Ez7JwJfnJDAVkj",
     // eslint-disable-next-line unicorn/no-null -- `readIdl()` answers `null` with no IDL
     readIdl: () => null,
@@ -92,6 +98,14 @@ describe("Interact", () => {
     mocks.history = [];
     mocks.workspaceId = "w1";
     mocks.update.mockClear();
+    // eslint-disable-next-line unicorn/no-null -- `callableIdl()` answers `null` with no IDL
+    mocks.callable = null;
+  });
+
+  it("tells the form which network the wallet lacks SOL on", () => {
+    mocks.callable = { instructions: [] };
+    renderInteract();
+    expect(screen.getByTestId("interact-body").textContent).toBe("devnet");
   });
 
   const pickADeployment = () => {

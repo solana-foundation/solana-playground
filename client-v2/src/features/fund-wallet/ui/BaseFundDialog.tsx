@@ -18,10 +18,15 @@ import {
   FieldError,
   FieldLabel,
 } from "@/shared/ui/field";
-import { Input } from "@/shared/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/shared/ui/input-group";
 
 import type { Receiver, SendCheck } from "../model/fund";
-import { canSend, formatSol, parseAmount } from "../model/fund";
+import { canSend, formatSol, maxAmount, parseAmount } from "../model/fund";
 
 /** The amount field's id, which the spec and the tests find it by */
 export const AMOUNT_ID = "fund-amount";
@@ -172,6 +177,8 @@ const BaseFundDialog = ({
   const unconfirmed =
     failure?.kind === "send-unconfirmed" || failure?.kind === "send-pending";
   const shown = failure ? failureText(failure) : undefined;
+  const max =
+    typeof payer?.balance === "number" ? maxAmount(payer.balance) : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -227,14 +234,24 @@ const BaseFundDialog = ({
             </p>
             <Field data-invalid={note.error || undefined}>
               <FieldLabel htmlFor={AMOUNT_ID}>Amount (SOL)</FieldLabel>
-              <Input
-                id={AMOUNT_ID}
-                inputMode="decimal"
-                autoComplete="off"
-                value={amount}
-                aria-invalid={note.error || undefined}
-                onChange={(event) => onAmountChange(event.target.value)}
-              />
+              <InputGroup>
+                <InputGroupInput
+                  id={AMOUNT_ID}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={amount}
+                  aria-invalid={note.error || undefined}
+                  onChange={(event) => onAmountChange(event.target.value)}
+                />
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    disabled={max === undefined}
+                    onClick={() => max && onAmountChange(max)}
+                  >
+                    Max
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
               {note.error ? (
                 <FieldError>{note.text}</FieldError>
               ) : (

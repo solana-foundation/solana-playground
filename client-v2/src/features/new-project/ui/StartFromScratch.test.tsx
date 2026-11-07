@@ -15,6 +15,7 @@ import {
 } from "@/shared/lib/telemetry";
 
 const utils = vi.hoisted(() => ({
+  ExplorerLimitError: class ExplorerLimitError extends Error {},
   getDefaultFiles: vi.fn(),
   PgExplorer: {
     isWorkspaceNameValid: (name: string) => !name.includes("("),

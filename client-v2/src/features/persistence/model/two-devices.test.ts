@@ -1,6 +1,7 @@
 import type { Mock } from "vitest";
 
 // TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
+import { isSyncedPath } from "@/entities/project";
 import { PgSession } from "@/features/auth";
 import { requireFor } from "@/test-utils/require-for";
 
@@ -136,6 +137,16 @@ const fakeFetch = async (url: string, init?: RequestInit) => {
       : { ...held, ...(body.changed ?? {}) };
     for (const path of body.removed ?? []) delete files[path];
 
+    // Refused as a bad request, as `api/projects.mjs` does
+    const sent = Object.keys(body.files ?? body.changed ?? {});
+    if (sent.some((path) => !isSyncedPath(path))) {
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({ error: "A path under .workspace/ is not synced" }),
+      };
+    }
+
     // Refused and rolled back, as `saveProject` does
     if (!Object.keys(files).length) {
       return {
@@ -168,6 +179,12 @@ const fakeFetch = async (url: string, init?: RequestInit) => {
       : { ok: false, status: 404, json: async () => ({}) };
   }
   return { ok: true, json: async () => ({ projects: live }) };
+};
+
+/** The divergent question up for a project, or `undefined` */
+const divergentFor = (projectId: string) => {
+  const conflict = PgProjectSync.conflictFor(projectId);
+  return conflict?.kind === "divergent" ? conflict : undefined;
 };
 
 const storedFiles = () =>
@@ -401,7 +418,7 @@ describe("a tutorial started on one browser, opened on another", () => {
     expect(result.conflicts).toEqual([]);
     expect(importWorkspace).not.toHaveBeenCalled();
     // and having recorded the agreement, it does not push it back up
-    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
+    expect(await PgProjectSync.pushCurrent()).toBe("unchanged");
   });
 
   it("asks when the second browser's copy has different work in it", async () => {
@@ -480,7 +497,7 @@ describe("work that never reached the server", () => {
     });
     expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
     // and the project syncs normally again afterwards
-    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
+    expect(await PgProjectSync.pushCurrent()).toBe("unchanged");
   });
 
   it("takes the other device's copy when the user picks that", async () => {
@@ -569,6 +586,84 @@ describe("both devices changed it", () => {
       "tests/t.rs": "their test",
     });
     expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
+  });
+
+  it("keeps the limit banner for a merge whose result is over a limit", async () => {
+    /** `count` files under `dir`, each under the limits on its own */
+    const filesIn = (dir: string, count: number) =>
+      Object.fromEntries(
+        Array.from({ length: count }, (_, i) => [`${dir}/f${i}.rs`, "x"])
+      );
+    const agreed = filesIn("src", 30);
+    // Each side under the 50-file limit, the two together over it
+    await startFrom(agreed, Object.assign({}, agreed, filesIn("theirs", 15)));
+    localFilesAre(HELLO.name, Object.assign({}, agreed, filesIn("mine", 15)));
+    captureWrites();
+
+    expect(await PgProjectSync.pushCurrent()).toBe("conflict");
+
+    // A version question here would ask about a merge nobody can upload
+    expect(PgProjectSync.conflictFor(HELLO.id)).toEqual({
+      projectId: HELLO.id,
+      kind: "too-large",
+      limit: { reason: "too-many-files", limit: 50, count: 60 },
+    });
+  });
+
+  it("leaves out an unsynced .workspace/ file the account copy holds", async () => {
+    // A row stored before the server refused such paths
+    await startFrom(
+      { "src/lib.rs": "lib", "tests/t.rs": "test" },
+      {
+        "src/lib.rs": "lib",
+        "tests/t.rs": "their test",
+        ".workspace/metadata.json": "{}",
+      }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "my lib", "tests/t.rs": "test" });
+    captureWrites();
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+
+    expect(serverRow(HELLO.id).snapshot).toEqual({
+      files: {
+        "src/lib.rs": "my lib",
+        "tests/t.rs": "their test",
+        ".workspace/metadata.json": "{}",
+      },
+    });
+    expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
+  });
+
+  it("does not read a merge's refused upload as merged", async () => {
+    await startFrom(
+      { "src/lib.rs": "lib", "tests/t.rs": "test" },
+      { "src/lib.rs": "lib", "tests/t.rs": "their test" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "my lib", "tests/t.rs": "test" });
+    captureWrites();
+    // The first PUT is refused for the other device's write; the merge's own
+    // upload is refused as a bad request
+    const online = global.fetch;
+    let puts = 0;
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT" && ++puts === 2) {
+        return {
+          ok: false,
+          status: 400,
+          json: async (): Promise<unknown> => ({
+            error: "A path under .workspace/ is not synced",
+          }),
+        };
+      }
+      return online(url, init);
+    }) as unknown as typeof fetch;
+
+    expect(await PgProjectSync.pushCurrent()).toBe("conflict");
+    expect(PgProjectSync.conflictFor(HELLO.id)).toEqual({
+      projectId: HELLO.id,
+      kind: "divergent",
+    });
   });
 
   it("merges edits to different lines of one file without asking", async () => {
@@ -668,7 +763,7 @@ describe("both devices changed it", () => {
       divergentOn(HELLO.id, ["src/lib.rs"])
     );
     // Only the line both changed is in question
-    expect(PgProjectSync.conflictFor(HELLO.id)?.files).toEqual([
+    expect(divergentFor(HELLO.id)?.files).toEqual([
       expect.objectContaining({
         kind: "lines",
         chunks: [
@@ -726,7 +821,7 @@ describe("both devices changed it", () => {
     });
     const replace = captureWrites();
     expect(await PgProjectSync.pushCurrent()).toBe("conflict");
-    expect(PgProjectSync.conflictFor(HELLO.id)?.paths).toEqual(["src/lib.rs"]);
+    expect(divergentFor(HELLO.id)?.paths).toEqual(["src/lib.rs"]);
 
     // While the banner is up, the other device edits the same line of the
     // file this one had merged cleanly
@@ -759,9 +854,8 @@ describe("both devices changed it", () => {
     // Hunk by hunk, as the view does it: every settled line, and both sides
     // of each conflict, this device's first
     const [file] = requireFor("the conflict's files")(
-      requireFor("a conflict for the project")(
-        PgProjectSync.conflictFor(HELLO.id)
-      ).files
+      requireFor("a divergent conflict for the project")(divergentFor(HELLO.id))
+        .files
     );
     if (file.kind !== "lines") throw new Error("expected a line conflict");
     const content = file.chunks
@@ -810,7 +904,7 @@ describe("both devices changed it", () => {
     expect(replace).toHaveBeenCalledWith(HELLO.name, { "src/lib.rs": content });
     expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
     expect(uploads()).toBe(before);
-    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
+    expect(await PgProjectSync.pushCurrent()).toBe("unchanged");
   });
 
   // Separate files, so the merge needs no base content: these call the merge
@@ -1464,7 +1558,7 @@ describe("a row emptied before the server refused it", () => {
     });
     // and the mark now agrees with it, so nothing more goes up
     (global.fetch as Mock).mockClear();
-    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
+    expect(await PgProjectSync.pushCurrent()).toBe("unchanged");
   });
 });
 

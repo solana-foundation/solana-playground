@@ -3,13 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import { checkSignedIn } from "../../features/auth";
 import { PgConnection } from "../../utils";
 import { airdrop } from "./airdrop";
-import { NO_FAUCET } from "./no-faucet";
+import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
 
 // Only what `airdrop.handle` reads before it asks the RPC for SOL
 vi.mock("../../utils", () => ({
   PgCommon: {},
-  // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` and `getAirdropAmount()` are `null` before the cluster is read or where there is no faucet
-  PgConnection: { cluster: null, getAirdropAmount: vi.fn() },
+  PgConnection: {
+    // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is `null` before the cluster is read
+    cluster: null,
+    getAirdropAmountOn: vi.fn(),
+    readCluster: vi.fn(),
+  },
   PgTerminal: { println: vi.fn(), info: (text: string) => text },
   PgTx: {},
   PgWallet: {},
@@ -35,20 +39,20 @@ const checkOn = async (cluster: string | null) => {
 
 const runOn = (
   cluster: string | null,
-  amount: ReturnType<typeof PgConnection.getAirdropAmount>
+  amount: ReturnType<typeof PgConnection.getAirdropAmountOn>
 ) => {
   Object.defineProperty(PgConnection, "cluster", {
     value: cluster,
     configurable: true,
   });
-  vi.mocked(PgConnection.getAirdropAmount).mockReturnValue(amount);
+  vi.mocked(PgConnection.getAirdropAmountOn).mockReturnValue(amount);
   if (!airdrop.handle) throw new Error("airdrop has no handler");
   return airdrop.handle({ args: {} } as never);
 };
 
 describe("airdrop", () => {
   it("says the network has no faucet on mainnet", async () => {
-    // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` and `getAirdropAmount()` are `null` before the cluster is read or where there is no faucet
+    // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` and `getAirdropAmountOn()` are `null` before the cluster is read or where there is no faucet
     await expect(runOn("mainnet-beta", null)).rejects.toThrow(NO_FAUCET);
   });
 
@@ -65,8 +69,66 @@ describe("airdrop", () => {
     });
   });
 
+  it("ends the wait when the selected endpoint's network cannot be read", async () => {
+    Object.defineProperty(PgConnection, "clusterIsStale", {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(PgConnection, "hasClusterReadFailed", {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(PgConnection.readCluster).mockRejectedValueOnce(
+      new Error("fetch failed")
+    );
+    const run = runOn("devnet", 1);
+    await expect(run).rejects.toThrow(COULD_NOT_READ_NETWORK);
+    await expect(run).rejects.not.toThrow("still loading");
+    expect(PgConnection.readCluster).toHaveBeenCalledTimes(1);
+    Object.defineProperty(PgConnection, "clusterIsStale", {
+      value: false,
+      configurable: true,
+    });
+    Object.defineProperty(PgConnection, "hasClusterReadFailed", {
+      value: false,
+      configurable: true,
+    });
+  });
+
+  it("goes on when the network reads on the second try", async () => {
+    Object.defineProperty(PgConnection, "hasClusterReadFailed", {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(PgConnection.readCluster).mockClear();
+    vi.mocked(PgConnection.readCluster).mockResolvedValueOnce("localnet");
+    // Past the read, the handler reaches the faucet check
+    // eslint-disable-next-line unicorn/no-null -- `getAirdropAmountOn()` is `null` where there is no faucet
+    await expect(runOn("localnet", null)).rejects.toThrow(NO_FAUCET);
+    expect(PgConnection.readCluster).toHaveBeenCalledTimes(1);
+    Object.defineProperty(PgConnection, "hasClusterReadFailed", {
+      value: false,
+      configurable: true,
+    });
+  });
+
+  it("takes the faucet and the sign-in from the network the retry read", async () => {
+    Object.defineProperty(PgConnection, "hasClusterReadFailed", {
+      value: true,
+      configurable: true,
+    });
+    vi.mocked(PgConnection.readCluster).mockResolvedValueOnce("devnet");
+
+    // The derivable still says localnet; the retry read devnet, which gates
+    await expect(runOn("localnet", 100)).rejects.toThrow("Sign in with GitHub");
+    Object.defineProperty(PgConnection, "hasClusterReadFailed", {
+      value: false,
+      configurable: true,
+    });
+  });
+
   it("does not claim there is no faucet before the cluster is read", async () => {
-    // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` and `getAirdropAmount()` are `null` before the cluster is read or where there is no faucet
+    // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` and `getAirdropAmountOn()` are `null` before the cluster is read or where there is no faucet
     const run = runOn(null, null);
     await expect(run).rejects.toThrow("still loading");
     await expect(run).rejects.not.toThrow(NO_FAUCET);

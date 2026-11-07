@@ -1,6 +1,7 @@
 # client-v2-build Specification
 
 ## Purpose
+
 What the production build of `client-v2` must produce and within which limits,
 so that it completes on the standard deploy machine and its output behaves as
 the development build does.

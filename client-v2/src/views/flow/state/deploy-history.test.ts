@@ -162,6 +162,51 @@ describe("PgDeployHistory.init wiring", () => {
 describe("PgDeployHistory deploy result", () => {
   beforeEach(() => localStorage.clear());
 
+  it("records the network the deploy ran on, not the one selected at its end", async () => {
+    const { PgCommand, PgConnection, PgExplorer, PgGlobal, PgProgramInfo } =
+      await mockedUtils();
+    let deployCallback = undefined as ((result: unknown) => void) | undefined;
+    PgCommand.deploy.onDidFinish.mockImplementation((cb) => {
+      deployCallback = cb;
+      return { dispose: vi.fn() };
+    });
+    PgGlobal.deployState = "ready";
+    PgExplorer.currentWorkspaceName = "w";
+    PgProgramInfo.getPkStr.mockReturnValue("Prog111");
+
+    const sub = PgDeployHistory.init();
+    // The deploy ran on devnet; the user switched to testnet before it ended
+    PgConnection.cluster = "testnet";
+    requireFor("the deploy listener")(deployCallback)({
+      ok: { signature: "sig1", cost: 1, upgraded: false, cluster: "devnet" },
+    });
+
+    expect(PgDeployHistory.list("w").map((r) => r.cluster)).toEqual(["devnet"]);
+    sub.dispose();
+  });
+
+  it("records nothing when the deploy could not name its network, not the one selected", async () => {
+    const { PgCommand, PgConnection, PgExplorer, PgGlobal, PgProgramInfo } =
+      await mockedUtils();
+    let deployCallback = undefined as ((result: unknown) => void) | undefined;
+    PgCommand.deploy.onDidFinish.mockImplementation((cb) => {
+      deployCallback = cb;
+      return { dispose: vi.fn() };
+    });
+    PgGlobal.deployState = "ready";
+    PgConnection.cluster = "devnet";
+    PgExplorer.currentWorkspaceName = "w";
+    PgProgramInfo.getPkStr.mockReturnValue("Prog111");
+
+    const sub = PgDeployHistory.init();
+    requireFor("the deploy listener")(deployCallback)({
+      ok: { signature: "sig1", cost: 1, upgraded: false, cluster: NONE },
+    });
+
+    expect(PgDeployHistory.list("w")).toEqual([]);
+    sub.dispose();
+  });
+
   it("keeps the signature, cost and upgrade the deploy reported", async () => {
     const { PgCommand, PgConnection, PgExplorer, PgGlobal, PgProgramInfo } =
       await mockedUtils();
@@ -179,7 +224,12 @@ describe("PgDeployHistory deploy result", () => {
     if (!deployCallback)
       throw new Error("the deploy finish was not subscribed");
     deployCallback({
-      ok: { signature: "sig1", cost: 1_500_000_000, upgraded: true },
+      ok: {
+        signature: "sig1",
+        cost: 1_500_000_000,
+        upgraded: true,
+        cluster: "devnet",
+      },
     });
 
     const [record] = PgDeployHistory.list("w");

@@ -1,6 +1,7 @@
 # client-v2-ai Specification
 
 ## Purpose
+
 Defines what `@/shared/lib/ai` guarantees to any caller that talks to a model
 through it: how a turn runs and stops, how failures surface, how MCP servers
 are reached, and where a connection's key may appear.

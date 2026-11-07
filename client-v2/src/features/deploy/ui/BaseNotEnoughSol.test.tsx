@@ -2,10 +2,11 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { FAUCET_URL } from "@/shared/lib/faucet";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import type { BaseNotEnoughSolProps } from "./BaseNotEnoughSol";
-import BaseNotEnoughSol, { WEB_FAUCET_URL } from "./BaseNotEnoughSol";
+import BaseNotEnoughSol from "./BaseNotEnoughSol";
 
 const ADDRESS = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 
@@ -39,7 +40,7 @@ const renderCard = (props: Partial<BaseNotEnoughSolProps>) => {
 
 describe("BaseNotEnoughSol", () => {
   it("names the network, the amounts, the address and the faucet's answer", () => {
-    const { card, onRetry } = renderCard({ cause: "429 Too Many Requests" });
+    const { card } = renderCard({ cause: "429 Too Many Requests" });
 
     expect(card.textContent).toContain("Not enough devnet SOL");
     expect(card.textContent).toContain(
@@ -49,9 +50,7 @@ describe("BaseNotEnoughSol", () => {
     expect(card.textContent).toContain("429 Too Many Requests");
     expect(
       screen.getByRole("link", { name: "Open faucet" }).getAttribute("href")
-    ).toBe(WEB_FAUCET_URL);
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(onRetry).toHaveBeenCalledOnce();
+    ).toBe(FAUCET_URL);
   });
 
   it("offers Request airdrop in place of Try again while automatic airdrop is off", () => {
@@ -66,6 +65,14 @@ describe("BaseNotEnoughSol", () => {
     fireEvent.click(screen.getByRole("button", { name: "Request airdrop" }));
     expect(onAirdrop).toHaveBeenCalledOnce();
     expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it("deploys again without an airdrop on Try again where there is no faucet", () => {
+    const { onAirdrop, onRetry } = renderCard({ reason: "no_faucet" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledOnce();
+    expect(onAirdrop).not.toHaveBeenCalled();
   });
 
   it("offers sign-in in place of Try again when signed out", () => {

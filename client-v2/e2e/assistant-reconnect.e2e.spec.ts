@@ -696,6 +696,10 @@ test.describe("assistant-own-key", () => {
     const second = await page.context().newPage();
     await signIn(second);
     await second.goto("/");
+    // `goto` returns at `load`, before the lazy app has started; on CI, with
+    // the real rust-analyzer loading in the first tab, that takes over the
+    // 10 s a `fill` waits
+    await expect(composer(second)).toBeVisible(LONG);
     await composer(second).fill("hi");
     await composer(second).press("Enter");
 

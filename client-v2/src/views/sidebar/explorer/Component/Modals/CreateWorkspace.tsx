@@ -1,6 +1,7 @@
 import { FC, useState } from "react";
 
 import { cn } from "@/shared/lib/utils";
+import { FieldError } from "@/shared/ui/field";
 import { ModalFrame } from "@/widgets/overlays";
 
 import Img from "../../../../../components/Img";
@@ -11,11 +12,13 @@ import {
   PgExplorer,
   PgFramework,
 } from "../../../../../utils";
+import { useLimitRefusal } from "./useLimitRefusal";
 
 export const CreateWorkspace = () => {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<FrameworkName | null>(null);
+  const { limitError, guard } = useLimitRefusal();
 
   const createWorkspace = async () => {
     const { getDefaultFiles, defaultOpenFile } = PgFramework.get(selected!);
@@ -28,11 +31,14 @@ export const CreateWorkspace = () => {
       name="create-workspace"
       buttonProps={{
         text: "Create",
-        onSubmit: createWorkspace,
+        onSubmit: guard(createWorkspace),
         disabled: !!error || !selected,
       }}
     >
       <div className="flex flex-col justify-center">
+        <FieldError data-testid="explorer-limit-error" className="mb-2">
+          {limitError}
+        </FieldError>
         <div>
           <div className="mb-2 text-[0.875rem] font-bold">Project name</div>
           <Input

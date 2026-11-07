@@ -83,13 +83,17 @@ export class PgDeployHistory {
       if (PgGlobal.deployState !== "ready") return;
       if ("err" in result) return; // Ignore deploy errors
 
-      const programId = PgProgramInfo.getPkStr();
-      const workspace = PgExplorer.currentWorkspaceName;
-      const cluster = PgConnection.cluster;
-      if (!programId || !workspace || !cluster) return;
-
       // A finish from a command that reports no result keeps what it can
       const ran = result.ok;
+      const programId = PgProgramInfo.getPkStr();
+      const workspace = PgExplorer.currentWorkspaceName;
+      // The network the deploy ran on: the user may have selected another
+      // one before it finished. A run that could not name its network is not
+      // recorded, since the one selected now may not be it; only a finish
+      // with no result at all falls back to the selected network.
+      const cluster = ran ? ran.cluster : PgConnection.cluster;
+      if (!programId || !workspace || !cluster) return;
+
       PgDeployHistory.add({
         workspace,
         cluster,

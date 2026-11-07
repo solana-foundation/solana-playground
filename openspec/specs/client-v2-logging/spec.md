@@ -1,6 +1,7 @@
 # client-v2-logging Specification
 
 ## Purpose
+
 How code in `client-v2` logs, how each entry names its origin, which providers
 receive it, and which entries reach Sentry, so that a failure in a user's
 browser or in an `api/` function reaches the team with enough context to find
@@ -181,8 +182,7 @@ stays a `panic` even when the terminal printed it.
 #### Scenario: The browser's ResizeObserver loop notice (manual)
 
 - **WHEN** a fresh load of the development server lays out the panels and the
-  browser reports `ResizeObserver loop completed with undelivered
-  notifications.`
+  browser reports `ResizeObserver loop completed with undelivered notifications.`
 - **THEN** the console shows no `logger:global` entry for it (C-4 in
   `docs/testing.md`)
 

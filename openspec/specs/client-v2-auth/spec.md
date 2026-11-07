@@ -1,6 +1,7 @@
 # client-v2-auth Specification
 
 ## Purpose
+
 What `features/auth` reports about sign-in and sign-out, so the share of
 sign-ins that fail, and the step they fail at, can be measured.
 

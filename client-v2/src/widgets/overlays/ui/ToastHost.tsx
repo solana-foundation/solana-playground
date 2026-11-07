@@ -1,5 +1,6 @@
 import type { ErrorInfo, ReactNode } from "react";
 import { Component, useCallback, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import { useSetStatic } from "@/hooks/useSetStatic";
@@ -81,7 +82,9 @@ const modeNow = () =>
  * left and clear of the rail.
  *
  * The toaster sits above the dialogs and the Sheets (`z-[60]`,
- * over their `z-50`). The legacy layer sat under the modal backdrop; this one
+ * over their `z-50`), portalled to the body as they are: the app's frame is
+ * its own stacking context (`isolate` in Flow), and a toaster left inside it
+ * stayed under any dialog's backdrop whatever its z-index. The legacy layer sat under the modal backdrop; this one
  * does not, on purpose: a toast must stay visible and usable whatever is
  * open, a persistent one included. A modal
  * layer sets `pointer-events: none` on the body, so the toaster turns it back
@@ -126,7 +129,7 @@ export const ToastHost = () => {
     toast.dismiss(id);
   });
 
-  return (
+  return createPortal(
     <Toaster
       className="toaster group z-[60]! pointer-events-auto"
       theme={mode}
@@ -138,6 +141,7 @@ export const ToastHost = () => {
         bottom: "1rem",
       }}
       mobileOffset={{ left: "1rem", bottom: "1rem" }}
-    />
+    />,
+    document.body
   );
 };

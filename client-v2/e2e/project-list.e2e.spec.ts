@@ -12,7 +12,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
-import { PHONE } from "./viewports";
+import { DESK, PHONE } from "./viewports";
 
 /**
  * The navigation's project list (HOO-2069), one test per scenario of the
@@ -115,8 +115,8 @@ const pinnedRowGeometry = (page: Page, name: string) =>
   });
 
 for (const [layout, viewport] of [
-  ["desk", { width: 1280, height: 800 }],
-  ["phone", { width: 390, height: 844 }],
+  ["desk", DESK],
+  ["phone", PHONE],
 ] as const) {
   // HOO-2500: the pin is drawn over the row, so a pinned row's name must
   // truncate before it and before the "⋮"
@@ -308,8 +308,8 @@ test("client-v2-layout: Pinning by key", async ({ seededPage: page }) => {
 });
 
 for (const [layout, viewport] of [
-  ["desk", { width: 1280, height: 800 }],
-  ["phone", { width: 390, height: 844 }],
+  ["desk", DESK],
+  ["phone", PHONE],
 ] as const) {
   // HOO-2546: the "⋮" sits on the row's middle at both row heights. The pin
   // is no longer measured: it moved into the name's line, on its baseline

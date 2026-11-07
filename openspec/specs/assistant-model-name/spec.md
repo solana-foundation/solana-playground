@@ -1,6 +1,7 @@
 # assistant-model-name Specification
 
 ## Purpose
+
 How the assistant names the model it talks to, in its head, its composer and its model menu, and what its composer does while no model is available.
 
 ## Requirements

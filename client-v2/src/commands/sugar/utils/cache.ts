@@ -25,15 +25,15 @@ export class CandyCache {
     }
   }
 
+  /**
+   * Save the cache, which holds the links of uploads already paid for, so
+   * the project's limits never refuse it (`writeGeneratedFileWith`)
+   */
   async syncFile(onlyRefreshIfAlreadyOpen: boolean = true) {
-    await PgExplorer.createItem(
-      PgSugar.PATHS.CANDY_MACHINE_CACHE_FILEPATH,
-      PgCommon.prettyJSON(this),
-      {
-        override: true,
-        openOptions: { dontOpen: true, onlyRefreshIfAlreadyOpen },
-      }
-    );
+    await PgExplorer.writeGeneratedFileWith({
+      dontOpen: true,
+      onlyRefreshIfAlreadyOpen,
+    })(PgSugar.PATHS.CANDY_MACHINE_CACHE_FILEPATH, PgCommon.prettyJSON(this));
   }
 
   updateItemAtIndex(index: number, newValue: Partial<CacheItem>) {

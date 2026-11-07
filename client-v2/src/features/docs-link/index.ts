@@ -19,7 +19,7 @@ export { default as BaseBrokenLink } from "./ui/BaseBrokenLink";
 export type { BaseBrokenLinkProps } from "./ui/BaseBrokenLink";
 export { default as BaseRunButton } from "./ui/BaseRunButton";
 export type { BaseRunButtonProps } from "./ui/BaseRunButton";
-export { default as BaseRunCallout, FAUCET_URL } from "./ui/BaseRunCallout";
+export { default as BaseRunCallout } from "./ui/BaseRunCallout";
 export type { BaseRunCalloutProps, RunSourceInfo } from "./ui/BaseRunCallout";
 export { default as RunButton } from "./ui/RunButton";
 export { default as RunCallout } from "./ui/RunCallout";

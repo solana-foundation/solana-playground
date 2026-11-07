@@ -1,6 +1,7 @@
 # client-v2-overlays Specification
 
 ## Purpose
+
 What client-v2 draws over the work (dialogs, toasts, tooltips) and how each tells the user how long it stays and what it waits on.
 
 ## Requirements

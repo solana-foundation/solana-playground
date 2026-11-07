@@ -36,6 +36,7 @@ const STATUS_LABEL: Record<ApprovalStatus, string> = {
   allowed: "Applied",
   denied: "Declined",
   unanswered: "Not answered",
+  failed: "Failed",
 };
 
 /** A patch's words for the same statuses (Spec 04): it is discarded, not declined */
@@ -50,9 +51,13 @@ const OUTCOME: Record<Exclude<ApprovalStatus, "pending">, string> = {
   allowed: "Done",
   denied: "Not applied",
   unanswered: "Not applied: the session ended before you answered",
+  failed: "Failed",
 };
 
-/** An undo that did not finish is a warning; a patch still applied, a success */
+/**
+ * An undo that did not finish is a warning, a tool that failed an error, a
+ * patch still applied a success
+ */
 const outcomeTone = ({
   status,
   undone,
@@ -63,6 +68,7 @@ const outcomeTone = ({
   stranded: boolean;
 }) => {
   if (stranded) return "text-warning";
+  if (status === "failed") return "text-destructive";
   if (status === "allowed" && !undone) return "text-success";
   return "text-muted-foreground";
 };
@@ -120,7 +126,10 @@ export const BaseApprovalCard = ({
         {patch ? <PatchStat request={request} /> : <span className="ml-auto" />}
         <Badge
           variant={pending ? "default" : "outline"}
-          className={cn(status === "allowed" && !undone && "text-success")}
+          className={cn(
+            status === "allowed" && !undone && "text-success",
+            status === "failed" && "text-destructive"
+          )}
         >
           {undone ? "Undone" : labels[status]}
         </Badge>

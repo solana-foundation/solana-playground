@@ -31,6 +31,8 @@ const argsOf = ({ ns, message, error, context }: LogEntry): unknown[] => {
 export const consoleProvider = ({
   level = defaultLevel(),
 }: { level?: Level } = {}): LogProvider => ({
+  // The pre-init default is a console provider, so it printed them already
+  replay: false,
   log: (entry) => {
     if (!atLeast(entry.level, level)) return;
     console[METHOD[entry.level]](...argsOf(entry));

@@ -1,6 +1,7 @@
 # project-export Specification
 
 ## Purpose
+
 Lets a user take a project out of the Playground as a zip, converted so it
 works locally: a program project to its framework's layout, a project with
 no program to a Node project that installs and runs.
@@ -19,18 +20,21 @@ to the plain zip with the toast "Could not convert the layout; exported it
 as is.".
 
 #### Scenario: A project with an Anchor program (manual)
+
 - **WHEN** the user converts and exports a project whose `src/lib.rs` is an
   Anchor program
 - **THEN** the zip is the one the Anchor conversion produced before this
   change, and the dialog shows its README
 
 #### Scenario: A project with no program
+
 - **WHEN** the user converts and exports a project that holds only
   `client/` and `tests/` files
 - **THEN** the zip holds the TypeScript profile's files, no toast says the
   conversion failed, and the dialog shows the profile's README
 
 #### Scenario: Export without changes (manual)
+
 - **WHEN** the user exports a project with no program without changes
 - **THEN** the zip holds the project's files unchanged
 
@@ -45,12 +49,14 @@ current text ("Convert the project layout?"). The buttons "Convert and
 export" and "Export without changes" SHALL keep their labels in both.
 
 #### Scenario: The dialog for a TypeScript project
+
 - **WHEN** the user opens the export dialog on a project with no program
 - **THEN** it reads "Make it a Node project?" and names `package.json`,
   `tsconfig.json`, the endpoint (for example `https://api.devnet.solana.com`)
   and `~/.config/solana/id.json`
 
 #### Scenario: The dialog for a program project (manual)
+
 - **WHEN** the user opens the export dialog on a project with a program
 - **THEN** it reads "Convert the project layout?"
 
@@ -83,6 +89,7 @@ the shim. After `npm install`, `npm run client` and `npm test`
 SHALL run the project's client and tests with no other change.
 
 #### Scenario: A client and its tests run locally (manual)
+
 - **WHEN** a project with `client/client.ts`, which logs
   `pg.wallet.publicKey` and `await pg.connection.getSlot()`, and
   `tests/basic.test.ts`, which asserts with `assert`, is exported with the
@@ -91,10 +98,12 @@ SHALL run the project's client and tests with no other change.
   `npm test` passes (manual)
 
 #### Scenario: A project's own README is kept (manual)
+
 - **WHEN** a project with no program holds `README.md` at its root
 - **THEN** the exported `README.md` is the project's, unchanged
 
 #### Scenario: A project's own package.json is completed (manual)
+
 - **WHEN** a project with no program holds `client/client.ts` and a root
   `package.json` with its own name, a `start` script and
   `@solana/web3.js` at its own version
@@ -103,6 +112,7 @@ SHALL run the project's client and tests with no other change.
   so `npm install` and `npm run client` run the client
 
 #### Scenario: A project's own playground.ts is kept (manual)
+
 - **WHEN** a project with no program holds a root `playground.ts` of its own
 - **THEN** that file is exported unchanged, the shim is
   `playground-shim.ts`, and the client imports `pg` from
@@ -125,18 +135,21 @@ the file is missing it SHALL fail with a message naming the path and
 secret key. The README SHALL name both variables and their defaults.
 
 #### Scenario: The exported cluster (manual)
+
 - **WHEN** the Playground is connected to devnet and a project with no
   program is exported with the TypeScript profile
 - **THEN** `playground.ts` falls back to `https://api.devnet.solana.com`
   and reads `SOLANA_RPC_URL` first
 
 #### Scenario: A private RPC URL stays out of the zip (manual)
+
 - **WHEN** the Playground is on devnet through a platform or custom RPC URL
   that carries an API key, and a project with no program is exported
 - **THEN** no exported file and no dialog text holds that URL, and
   `playground.ts` falls back to `https://api.devnet.solana.com`
 
 #### Scenario: A client that never uses the wallet (manual)
+
 - **WHEN** an exported client uses only `pg.connection` and no keypair file
   exists
 - **THEN** it runs without reading a keypair
@@ -159,12 +172,14 @@ The `project-export` slice SHALL send these events:
   zip that did not download SHALL NOT be retried as is.
 
 #### Scenario: A TypeScript export is counted (manual)
+
 - **WHEN** the user converts and exports a project with no program holding
   two files
 - **THEN** `export_downloaded` is sent with `profile` `typescript` and
   `files` 7 (the two files and the five the profile adds)
 
 #### Scenario: An unknown framework falls back (manual)
+
 - **WHEN** "Convert and export" meets a program no framework recognises
 - **THEN** `export_convert_failed` is sent with `profile` `unknown` and
   `reason` `unknown-framework`, then `export_downloaded` with `profile`

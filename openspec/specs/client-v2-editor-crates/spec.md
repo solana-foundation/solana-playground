@@ -1,6 +1,7 @@
 # client-v2-editor-crates Specification
 
 ## Purpose
+
 The crate files the editor's Rust Analyzer loads from `/crates/`: which files
 every deployment serves, and how they are produced from pinned inputs.
 

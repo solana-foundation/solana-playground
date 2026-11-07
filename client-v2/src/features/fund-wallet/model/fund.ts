@@ -63,6 +63,10 @@ export const parseAmount = (text: string): ParsedAmount => {
   return { ok: true, sol: lamports / LAMPORTS_PER_SOL, lamports };
 };
 
+/** Lamports a wallet holding `balance` SOL can send, keeping `FEE_RESERVE_SOL` */
+const spendableLamports = (balance: number) =>
+  Math.round((balance - FEE_RESERVE_SOL) * LAMPORTS_PER_SOL);
+
 /**
  * Whether `text` can go from a wallet holding `balance` SOL (`undefined` while
  * it loads), keeping `FEE_RESERVE_SOL` for the fee
@@ -74,10 +78,24 @@ export const canSend = (
   const amount = parseAmount(text);
   if (!amount.ok) return amount;
   if (balance === undefined) return { ok: false, problem: "checking" };
-  const spendable = Math.round((balance - FEE_RESERVE_SOL) * LAMPORTS_PER_SOL);
-  if (amount.lamports > spendable)
+  if (amount.lamports > spendableLamports(balance))
     return { ok: false, problem: "above-balance" };
   return { ok: true, lamports: amount.lamports };
+};
+
+/**
+ * The most `canSend` accepts from `balance` SOL, as the amount field writes it;
+ * `undefined` when nothing is left above the fee
+ */
+export const maxAmount = (balance: number): string | undefined => {
+  const lamports = spendableLamports(balance);
+  // `!(… > 0)`, not `<= 0`: a NaN balance has nothing to send either
+  if (!(lamports > 0)) return undefined;
+  const whole = Math.floor(lamports / LAMPORTS_PER_SOL);
+  const fraction = String(lamports % LAMPORTS_PER_SOL)
+    .padStart(9, "0")
+    .replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : String(whole);
 };
 
 /** How wallets word a user's "no": Phantom, Solflare, Backpack, WalletConnect */
@@ -184,6 +202,22 @@ if (import.meta.vitest) {
         problem: "above-balance",
       });
     });
+
+    it.each([
+      [2, "1.999"],
+      [1.000000001, "0.999000001"],
+      [0.0011, "0.0001"],
+    ])("maxAmount(%j) is %j, and canSend takes it", (balance, text) => {
+      expect(maxAmount(balance)).toBe(text);
+      expect(canSend(text, balance).ok).toBe(true);
+    });
+
+    it.each([0, 0.0005, 0.001, Number.NaN])(
+      "maxAmount(%j) is undefined: nothing above the fee",
+      (balance) => {
+        expect(maxAmount(balance)).toBeUndefined();
+      }
+    );
 
     it("canSend reports the amount's own problem first", () => {
       expect(canSend("abc", undefined)).toEqual({

@@ -1,6 +1,7 @@
 import { CircleAlert, CircleCheck, Info, Wallet } from "lucide-react";
 import type { FC, ReactNode } from "react";
 
+import { FAUCET_URL } from "@/shared/lib/faucet";
 import {
   Callout,
   CalloutAction,
@@ -18,9 +19,6 @@ export interface RunSourceInfo {
   /** The page the link came from, already checked to be `https:` */
   from?: string;
 }
-
-/** Where "Get devnet SOL" goes until Playground has a faucet of its own */
-export const FAUCET_URL = "https://faucet.solana.com";
 
 export interface BaseRunCalloutProps {
   state: RunState;

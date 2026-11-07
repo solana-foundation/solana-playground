@@ -2,24 +2,50 @@ import { FrownIcon, InfoIcon } from "lucide-react";
 import { useEffect } from "react";
 
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
-import {
-  Collapsible,
-  CollapsibleChevron,
-  CollapsibleContent,
-  CollapsibleHeading,
-} from "@/shared/ui/collapsible";
 import { ModalFrame, useModalId } from "@/widgets/overlays";
 
 import Markdown from "../../../components/Markdown";
 import { PgCommon, PgConnection, PgView } from "../../../utils";
 
-export const Local = () => {
+/** How each `PgCommon.getOS` answer is written in the steps */
+const OS_LABEL: Record<
+  NonNullable<ReturnType<typeof PgCommon.getOS>>,
+  string
+> = {
+  Windows: "Windows",
+  MacOS: "macOS",
+  Linux: "Linux",
+};
+
+/** Surfpool's steps: its own install and `surfpool start` */
+const SURFPOOL_STEPS = `**1. Install Surfpool:**
+
+\`\`\`sh
+curl -sL https://run.surfpool.run/ | bash
+\`\`\`
+
+[Other installation methods](https://docs.surfpool.run)
+
+**2. Start Surfpool:**
+
+\`\`\`sh
+surfpool start
+\`\`\`
+`;
+
+/**
+ * The note shown while a local network does not answer: Localnet's steps
+ * (`solana-test-validator`), or Surfpool's when its chip is the one picked
+ */
+export const Local = ({ surfpool = false }: { surfpool?: boolean }) => {
+  const os = PgCommon.getOS();
+  const network = surfpool ? "Surfpool" : "Localnet";
   const id = useModalId();
 
   // Close when connected; by id, as another dialog may sit on this one
   useEffect(() => {
     const { dispose } = PgConnection.onDidChangeIsConnected((isConnected) => {
-      if (isConnected) PgView.closeModal(null, id);
+      if (isConnected) PgView.closeModal(undefined, id);
     });
     return dispose;
   }, [id]);
@@ -27,33 +53,35 @@ export const Local = () => {
   return (
     <ModalFrame
       name="localnet-unreachable"
-      title="Connect to Localnet"
+      title={`Connect to ${network}`}
       // No field to land on, so Radix would ring the header's Close on open
       openFocus="dialog"
     >
       <Callout variant="error">
         <FrownIcon />
-        <CalloutDescription>Unable to connect to Localnet</CalloutDescription>
+        <CalloutDescription>Unable to connect to {network}</CalloutDescription>
       </Callout>
 
       <div className="pt-4 pb-2">
         <div className="text-[0.875rem] font-bold">How to connect</div>
         <div className="mt-2 text-[0.75rem] text-[var(--text-secondary)]">
-          Here are the steps for connecting to Localnet from playground.
+          Here are the steps for connecting to {network} from Playground.
         </div>
 
         {/* The markdown sheet resets its own margin, unlayered, so the gap
             sits on a wrapper */}
         <div className="mt-6">
           <Markdown codeFontOnly>
-            {require("./steps.md")
-              .replace("<OS_NAME>", PgCommon.getOS() ?? "Other")
-              .replace(
-                "<OS_INSTALLATION>",
-                PgCommon.getOS() === "Windows"
-                  ? require("./install-windows.md")
-                  : require("./install-unix.md")
-              )}
+            {surfpool
+              ? SURFPOOL_STEPS
+              : require("./steps.md")
+                  .replace("<OS_NAME>", (os && OS_LABEL[os]) ?? "Other")
+                  .replace(
+                    "<OS_INSTALLATION>",
+                    os === "Windows"
+                      ? require("./install-windows.md")
+                      : require("./install-unix.md")
+                  )}
           </Markdown>
         </div>
 
@@ -65,33 +93,28 @@ export const Local = () => {
 
 const Issues = () => {
   const browser = PgCommon.getBrowser();
+  // eslint-disable-next-line unicorn/no-null -- tsc rejects a component that may return undefined (TS2786)
   if (browser === "Firefox") return null;
 
   return (
-    <Collapsible>
-      <CollapsibleHeading>
-        <CollapsibleChevron />
-        Having issues?
-      </CollapsibleHeading>
-      <CollapsibleContent className="mt-2">
-        <Callout variant="info">
-          <InfoIcon />
-          <CalloutDescription className="[&_p+p]:mt-4">
+    <div className="mt-4">
+      <Callout variant="info">
+        <InfoIcon />
+        <CalloutDescription className="[&_p+p]:mt-4">
+          <p>
+            If you have a running test validator, it means your browser is
+            blocking localhost access and you'll need to enable it in order to
+            connect.
+          </p>
+          {browser === "Brave" && (
             <p>
-              If you have a running test validator, it means your browser is
-              blocking localhost access and you'll need to enable it in order to
-              connect.
+              For <strong>Brave Browser</strong>: Click the Brave icon at the
+              right side of the browser URL bar and drop the shields for this
+              website.
             </p>
-            {browser === "Brave" && (
-              <p>
-                For <strong>Brave Browser</strong>: Click the Brave icon at the
-                right side of the browser URL bar and drop the shields for this
-                website.
-              </p>
-            )}
-          </CalloutDescription>
-        </Callout>
-      </CollapsibleContent>
-    </Collapsible>
+          )}
+        </CalloutDescription>
+      </Callout>
+    </div>
   );
 };

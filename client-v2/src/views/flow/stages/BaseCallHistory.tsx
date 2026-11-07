@@ -10,7 +10,7 @@ export interface BaseCallHistoryProps {
   records: CallRecord[];
   cluster: string;
   txUrl: (signature: string) => string;
-  /** Picks the row's instruction in the form */
+  /** Opens the row's instruction card and brings it into view */
   onOpen: (instruction: string) => void;
   /**
    * Keep the heading and an empty line before the first call, for a layout

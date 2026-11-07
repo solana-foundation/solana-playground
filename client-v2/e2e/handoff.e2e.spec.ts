@@ -60,7 +60,7 @@ test.describe("on a phone", () => {
     // The sheet fits the phone: nothing on the page scrolls sideways
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth)
-    ).toBeLessThanOrEqual(390);
+    ).toBeLessThanOrEqual(PHONE.width);
 
     await sheet(page)
       .getByRole("button", { name: "Stay on the phone" })

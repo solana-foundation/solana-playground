@@ -2,7 +2,7 @@
 export type CliTool = "solana" | "anchor";
 
 /** The cluster the guide deploys to */
-export type CliCluster = "devnet" | "mainnet";
+export type CliCluster = "mainnet" | "devnet" | "testnet";
 
 /** The guide's cluster for Playground's, or `undefined` for one it has no line for */
 export const cliClusterOf = (
@@ -10,13 +10,15 @@ export const cliClusterOf = (
 ): CliCluster | undefined => {
   if (cluster === "devnet") return "devnet";
   if (cluster === "mainnet-beta") return "mainnet";
+  if (cluster === "testnet") return "testnet";
   return undefined;
 };
 
 /** The `--url` the Solana CLI takes for each cluster */
 const SOLANA_URL: Record<CliCluster, string> = {
-  devnet: "devnet",
   mainnet: "mainnet-beta",
+  devnet: "devnet",
+  testnet: "testnet",
 };
 
 /**
@@ -52,8 +54,9 @@ export const deployCommands = (p: {
  * not be the cluster step 3 deployed to.
  */
 const RPC_URL: Record<CliCluster, string> = {
-  devnet: "https://api.devnet.solana.com",
   mainnet: "https://api.mainnet-beta.solana.com",
+  devnet: "https://api.devnet.solana.com",
+  testnet: "https://api.testnet.solana.com",
 };
 
 /** What a command block of step 3.1 is for */
@@ -120,6 +123,30 @@ if (import.meta.vitest) {
       ).toEqual([
         "solana program deploy hello.so --program-id hello-keypair.json --url mainnet-beta",
       ]);
+    });
+
+    it("gives Testnet's commands their own cluster", () => {
+      expect(
+        deployCommands({ tool: "solana", cluster: "testnet", name: "hello" })
+      ).toEqual([
+        "solana program deploy hello.so --program-id hello-keypair.json --url testnet",
+      ]);
+      expect(
+        deployCommands({ tool: "anchor", cluster: "testnet", name: "hello" })[1]
+      ).toBe("anchor deploy --provider.cluster testnet");
+      expect(
+        idlCommands({
+          tool: "solana",
+          cluster: "testnet",
+          name: "hello",
+          programId: undefined,
+        })[0].lines[0]
+      ).toContain("--rpc https://api.testnet.solana.com");
+    });
+
+    it("reads Playground's testnet as the guide's, and has no line for Localnet", () => {
+      expect(cliClusterOf("testnet")).toBe("testnet");
+      expect(cliClusterOf("localnet")).toBeUndefined();
     });
 
     it("copies into target/deploy before anchor deploy", () => {

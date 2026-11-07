@@ -16,6 +16,10 @@ vi.mock("../../../utils", () => ({
       onDidStart: vi.fn(() => ({ dispose: vi.fn() })),
       onDidFinish: vi.fn(() => ({ dispose: vi.fn() })),
     },
+    airdrop: {
+      onDidStart: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidEnd: vi.fn(() => ({ dispose: vi.fn() })),
+    },
   },
   PgExplorer: {
     onDidSwitchWorkspace: vi.fn(() => ({ dispose: vi.fn() })),
@@ -76,6 +80,7 @@ describe("PgFlow.reduce", () => {
       buildFailure: null,
       deployBeforeRun: null,
       stopped: null,
+      airdrops: 0,
       hasProgram: true,
     });
   });
@@ -208,6 +213,51 @@ describe("PgFlow.reduce", () => {
     expect(next.hasProgram).toBe(false);
     expect(next.stage).toBe("write");
     expect(next.build).toBe("upcoming");
+  });
+});
+
+describe("PgFlow.reduce, an airdrop", () => {
+  it("marks the airdrop running from its start to its finish", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "airdrop-start",
+    });
+    expect(running.airdrops).toBe(1);
+    expect(PgFlow.reduce(running, { type: "airdrop-finish" }).airdrops).toBe(0);
+  });
+
+  it("stays running until the last of two overlapping airdrops finishes", () => {
+    // The wallet's button and a typed `airdrop` each start a run of their own
+    const start = { type: "airdrop-start" } as const;
+    const two = PgFlow.reduce(PgFlow.reduce(INITIAL_FLOW_STATE, start), start);
+    const one = PgFlow.reduce(two, { type: "airdrop-finish" });
+    expect(one.airdrops).toBe(1);
+    expect(PgFlow.reduce(one, { type: "airdrop-finish" }).airdrops).toBe(0);
+  });
+
+  it("never counts below none: a finish with no start changes nothing", () => {
+    expect(PgFlow.reduce(INITIAL_FLOW_STATE, { type: "airdrop-finish" })).toBe(
+      INITIAL_FLOW_STATE
+    );
+  });
+
+  it("leaves the stages as they were", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "airdrop-start",
+    });
+    expect(running.stage).toBe(INITIAL_FLOW_STATE.stage);
+    expect(running.build).toBe(INITIAL_FLOW_STATE.build);
+    expect(running.deploy).toBe(INITIAL_FLOW_STATE.deploy);
+    expect(running.interact).toBe(INITIAL_FLOW_STATE.interact);
+    expect(running.stopped).toBe(INITIAL_FLOW_STATE.stopped);
+  });
+
+  it("keeps running across a project switch: the wallet is not the project's", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "airdrop-start",
+    });
+    expect(PgFlow.reduce(running, { type: "workspace-change" }).airdrops).toBe(
+      1
+    );
   });
 });
 
@@ -359,6 +409,28 @@ error: could not compile \`hello\` due to previous error`;
 });
 
 describe("PgFlow.init wiring", () => {
+  it("follows the airdrop command from its start to its end", async () => {
+    const { PgCommand } = await import("../../../utils");
+    const listen = (mock: Mock) => {
+      const box: { cb?: () => void } = {};
+      mock.mockImplementationOnce((cb: () => void) => {
+        box.cb = cb;
+        return { dispose: vi.fn() };
+      });
+      return box;
+    };
+    const start = listen(vi.mocked(PgCommand.airdrop.onDidStart));
+    // `onDidEnd`, which a run that printed only its help sends too
+    const finish = listen(vi.mocked(PgCommand.airdrop.onDidEnd));
+
+    const sub = PgFlow.init();
+    requireFor("the airdrop start listener PgFlow.init subscribed")(start.cb)();
+    expect(PgFlow.state.airdrops).toBe(1);
+    requireFor("the airdrop end listener PgFlow.init subscribed")(finish.cb)();
+    expect(PgFlow.state.airdrops).toBe(0);
+    sub.dispose();
+  });
+
   it("maps a stopped build or deploy to a stop, not a failure", async () => {
     const { PgCommand, PgExplorer, PgGlobal } = await import("../../../utils");
     PgGlobal.deployState = "ready";

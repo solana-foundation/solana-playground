@@ -1,6 +1,7 @@
 # mainnet-deploy-warning Specification
 
 ## Purpose
+
 Tells a user who is about to deploy a program to mainnet from the browser that
 the deploy pays real SOL through a wallet kept in the page, and points them to
 deploying from their own machine instead. Says the same where mainnet is
@@ -77,16 +78,21 @@ words are added.
   your own machine" in the mainnet warning
 - **THEN** the "Deploy from your machine" dialog opens with Mainnet picked
 
-### Requirement: Settings offers Devnet and Mainnet
+### Requirement: Settings offers five networks
 
-Settings › Network SHALL offer exactly two network chips, "Devnet" and
-"Mainnet", in that order, in the radio group labelled "Network". Each SHALL
-connect to the platform RPC the deployment configures for that cluster, or to
-the cluster's public RPC when none is configured. No chip SHALL read "Mainnet
+Settings › Network SHALL offer five network chips, "Mainnet", "Devnet",
+"Testnet", "Localnet" and "Surfpool", in that order, in the radio group
+labelled "Network"; Devnet SHALL be the default. Mainnet, Devnet and Testnet
+SHALL each connect to the platform RPC the deployment configures for that
+cluster (`REACT_APP_MAINNET_RPC_URL`, `REACT_APP_DEVNET_RPC_URL`,
+`REACT_APP_TESTNET_RPC_URL`), or to the cluster's public RPC when none is
+configured. Localnet SHALL connect to `http://localhost:8899` and Surfpool to
+`http://127.0.0.1:8899`. No chip SHALL read "Mainnet
 Beta" or carry "(Platform)". While Mainnet is picked, the line "Deploys with
 real SOL" SHALL show under the chips and describe the group; Devnet shows no
-line. An endpoint neither chip names (a custom URL, Testnet, Localnet,
-Playnet) SHALL leave no chip checked and keep its address.
+line, nor do Testnet, Localnet and Surfpool. An endpoint no chip names (a
+custom URL not saved, Playnet) SHALL leave no chip checked and keep its
+address.
 
 #### Scenario: Mainnet picked in Settings
 
@@ -96,11 +102,17 @@ Playnet) SHALL leave no chip checked and keep its address.
   "Mainnet deploy warning" callout shows
 - **AND** after picking Devnet the callout is gone
 
-#### Scenario: Only Devnet and Mainnet are offered
+#### Scenario: Five networks are offered, Mainnet first
 
 - **WHEN** the user opens Settings › Network
-- **THEN** the "Network" radio group holds exactly the radios "Devnet" and
-  "Mainnet"
+- **THEN** the "Network" radio group holds the radios "Mainnet", "Devnet",
+  "Testnet", "Localnet" and "Surfpool", in that order
+
+#### Scenario: Testnet picked in Settings (manual)
+
+- **WHEN** the user picks Testnet in Settings › Network
+- **THEN** the connection moves to Testnet's RPC and the cluster reads as
+  testnet
 
 #### Scenario: A stored public pick opens on its chip (manual)
 

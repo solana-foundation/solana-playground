@@ -111,7 +111,9 @@ const derive = () => ({
   /** Current cluster name based on the current endpoint */
   cluster: createDerivable({
     derive: () => _PgConnection.readCluster(),
-    onChange: PgSettings.onDidChangeConnectionEndpoint,
+    // A "Try again" re-reads a cluster whose read failed, as the airdrop's
+    // retry does
+    onChange: [PgSettings.onDidChangeConnectionEndpoint, onAskAgain],
   }),
 
   /** Whether the cluster is down. `null` indicates potential connection error. */
@@ -232,6 +234,21 @@ class _PgConnection {
     return _PgConnection._clusterEndpoint !== PgSettings.connection.endpoint;
   }
 
+  /** The endpoint whose last cluster read failed, until a read of it succeeds */
+  private static _clusterFailedEndpoint: string | undefined;
+
+  /**
+   * Whether the selected endpoint's cluster read failed: a custom RPC that is
+   * down, or one whose genesis hash names no known cluster. `clusterIsStale`
+   * stays true for it, so this is what tells a wait that will never end from
+   * one that will.
+   */
+  static get hasClusterReadFailed() {
+    return (
+      _PgConnection._clusterFailedEndpoint === PgSettings.connection.endpoint
+    );
+  }
+
   /**
    * Read the selected endpoint's cluster, remembering which endpoint it was.
    *
@@ -254,6 +271,7 @@ class _PgConnection {
         log.warn("could not read the selected endpoint's cluster", {
           context: { error: String(e) },
         });
+        _PgConnection._clusterFailedEndpoint = endpoint;
         throw e;
       }
       log.info(
@@ -266,6 +284,7 @@ class _PgConnection {
     }
     if (hasEndpointChanged()) return _PgConnection.readCluster();
     _PgConnection._clusterEndpoint = endpoint;
+    _PgConnection._clusterFailedEndpoint = undefined;
     return cluster;
   }
 
@@ -374,7 +393,12 @@ class _PgConnection {
    * @returns airdrop amount in SOL
    */
   static getAirdropAmount() {
-    switch (PgConnection.cluster) {
+    return _PgConnection.getAirdropAmountOn(PgConnection.cluster);
+  }
+
+  /** {@link getAirdropAmount} on `cluster`, read by the caller */
+  static getAirdropAmountOn(cluster: Cluster | null) {
+    switch (cluster) {
       case "playnet":
         return 1000;
       case "localnet":

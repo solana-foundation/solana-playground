@@ -158,10 +158,15 @@ test.describe("on a phone", () => {
 
     await expect(dialog(page)).toBeVisible();
     const box = await dialog(page).boundingBox();
-    expect(box).toEqual({ x: 0, y: 0, width: 390, height: 844 });
+    expect(box).toEqual({
+      x: 0,
+      y: 0,
+      width: PHONE.width,
+      height: PHONE.height,
+    });
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth)
-    ).toBeLessThanOrEqual(390);
+    ).toBeLessThanOrEqual(PHONE.width);
     // Nothing inside the page runs off its side either, on either list
     const fits = () =>
       dialog(page).evaluate((d) =>

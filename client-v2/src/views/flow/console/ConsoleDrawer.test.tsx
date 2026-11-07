@@ -98,6 +98,7 @@ const flowState = (
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  airdrops: 0,
   hasProgram: true,
 });
 
@@ -261,6 +262,8 @@ describe("the strip's clock", () => {
     act(() => vi.advanceTimersByTime(2_000));
 
     expect(screen.getByText("Deploying… \u00b7 2 s")).toBeTruthy();
+    // A deploy alone offers no Stop (spec: No Stop while a deploy runs)
+    expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
   });
 
   it("should stop counting once the run is over", () => {

@@ -1,6 +1,7 @@
 # client-v2-layout Specification
 
 ## Purpose
+
 How client-v2 lays out the app and its navigation: the project list, New project and the controls they hold, and what each row and field says about its state.
 
 ## Requirements
@@ -11,7 +12,7 @@ Start from scratch SHALL be a short form: a title, then a "Framework" row and
 a "Name" row, each with its label, Start at the end of the Name row. A
 message about the project name SHALL show under the name field, linked to it
 with `aria-describedby`, and SHALL name the rule ("Use letters, numbers,
-spaces, - or _."); showing it SHALL move nothing above it. The field SHALL be
+spaces, - or \_."); showing it SHALL move nothing above it. The field SHALL be
 marked invalid with a red edge while the message shows. A valid name SHALL
 get no edge of its own: the field stays quiet while the name is fine.
 Whether a name is taken SHALL still be checked on Start only, and typing
@@ -20,7 +21,7 @@ SHALL clear the message.
 #### Scenario: An invalid name (manual)
 
 - **WHEN** a user types `my.project` and presses Start
-- **THEN** the message "Use letters, numbers, spaces, - or _." shows under the
+- **THEN** the message "Use letters, numbers, spaces, - or \_." shows under the
   name field, the field is `aria-invalid` and described by the message, and
   no project is created
 
