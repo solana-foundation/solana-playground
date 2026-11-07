@@ -18,9 +18,9 @@ last upstream sync commit on foundation/master. Both subject forms are read:
 `client/` is upstream's client, which the fork keeps at foundation/master's state until it is deleted (HOO-2686).
 The script restores it after the merge and refuses to commit while it differs.
 
-Run every command from a checkout of this repository. The script is
-[scripts/sync-upstream.sh](scripts/sync-upstream.sh); `S` below stands for
-`bash .claude/skills/sync-upstream/scripts/sync-upstream.sh`.
+Run every command from a checkout of this repository, with Node 22 or later. The script is
+[scripts/sync-upstream.mjs](scripts/sync-upstream.mjs) and needs no dependencies; `S` below stands for
+`node .claude/skills/sync-upstream/scripts/sync-upstream.mjs`.
 
 ## Steps
 
@@ -105,8 +105,8 @@ Env overrides: `UPSTREAM_REMOTE`, `UPSTREAM_BRANCH`, `TARGET_REMOTE`, `TARGET_BR
 `dryrun/merge-<to8>`, and may set `SYNC_NO_SIGN=1` to commit unsigned; `publish` refuses that commit. Remove the
 dry run's worktree and branch afterwards.
 
-`bash .claude/skills/sync-upstream/scripts/test-message.sh` checks the message format against the merged commit
-a7a8a1f9 and the subject parser against both subject forms.
+`node --test .claude/skills/sync-upstream/scripts/sync-upstream.test.mjs` checks the message format against the
+merged commit a7a8a1f9, the subject parser against both subject forms, and the `GUARDS` matching.
 
 ## Common mistakes
 
