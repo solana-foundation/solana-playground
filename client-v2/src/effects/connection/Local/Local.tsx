@@ -17,8 +17,29 @@ const OS_LABEL: Record<
   Linux: "Linux",
 };
 
-export const Local = () => {
+/** Surfpool's steps: its own install and `surfpool start` */
+const SURFPOOL_STEPS = `**1. Install Surfpool:**
+
+\`\`\`sh
+curl -sL https://run.surfpool.run/ | bash
+\`\`\`
+
+[Other installation methods](https://docs.surfpool.run)
+
+**2. Start Surfpool:**
+
+\`\`\`sh
+surfpool start
+\`\`\`
+`;
+
+/**
+ * The note shown while a local network does not answer: Localnet's steps
+ * (`solana-test-validator`), or Surfpool's when its chip is the one picked
+ */
+export const Local = ({ surfpool = false }: { surfpool?: boolean }) => {
   const os = PgCommon.getOS();
+  const network = surfpool ? "Surfpool" : "Localnet";
   const id = useModalId();
 
   // Close when connected; by id, as another dialog may sit on this one
@@ -32,33 +53,35 @@ export const Local = () => {
   return (
     <ModalFrame
       name="localnet-unreachable"
-      title="Connect to Localnet"
+      title={`Connect to ${network}`}
       // No field to land on, so Radix would ring the header's Close on open
       openFocus="dialog"
     >
       <Callout variant="error">
         <FrownIcon />
-        <CalloutDescription>Unable to connect to Localnet</CalloutDescription>
+        <CalloutDescription>Unable to connect to {network}</CalloutDescription>
       </Callout>
 
       <div className="pt-4 pb-2">
         <div className="text-[0.875rem] font-bold">How to connect</div>
         <div className="mt-2 text-[0.75rem] text-[var(--text-secondary)]">
-          Here are the steps for connecting to Localnet from Playground.
+          Here are the steps for connecting to {network} from Playground.
         </div>
 
         {/* The markdown sheet resets its own margin, unlayered, so the gap
             sits on a wrapper */}
         <div className="mt-6">
           <Markdown codeFontOnly>
-            {require("./steps.md")
-              .replace("<OS_NAME>", (os && OS_LABEL[os]) ?? "Other")
-              .replace(
-                "<OS_INSTALLATION>",
-                os === "Windows"
-                  ? require("./install-windows.md")
-                  : require("./install-unix.md")
-              )}
+            {surfpool
+              ? SURFPOOL_STEPS
+              : require("./steps.md")
+                  .replace("<OS_NAME>", (os && OS_LABEL[os]) ?? "Other")
+                  .replace(
+                    "<OS_INSTALLATION>",
+                    os === "Windows"
+                      ? require("./install-windows.md")
+                      : require("./install-unix.md")
+                  )}
           </Markdown>
         </div>
 

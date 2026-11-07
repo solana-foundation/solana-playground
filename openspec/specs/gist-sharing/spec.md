@@ -1,6 +1,7 @@
 # gist-sharing Specification
 
 ## Purpose
+
 Lets a user put a project on their own GitHub account as a gist, secret by default, and
 defines the gist format that lets the same project be opened again exactly.
 
@@ -16,15 +17,18 @@ any other project or lesson SHALL NOT offer Share, and `G` SHALL do nothing
 in its menu.
 
 #### Scenario: Opening the share dialog from the menu
+
 - **WHEN** "counter" is the open project and the user opens its row's actions
   menu and picks Share
 - **THEN** a dialog titled "Share counter as a gist" opens
 
 #### Scenario: Opening the share dialog by its key
+
 - **WHEN** the open project's actions menu is open and the user presses `G`
 - **THEN** the share dialog for that project opens
 
 #### Scenario: Another project's row
+
 - **WHEN** the user opens the actions menu of a project that is not open
 - **THEN** the menu has no Share item, and pressing `G` opens no dialog
 
@@ -45,15 +49,18 @@ after the choice, and "Creating gist…" while the request runs, with the
 choice locked.
 
 #### Scenario: Nothing is sent on open
+
 - **WHEN** the share dialog opens
 - **THEN** no request to `/api/gists` has been made, Secret is selected, and
   the dialog shows a "Create secret gist" button
 
 #### Scenario: Sharing a public gist
+
 - **WHEN** the user picks Public and presses "Create public gist"
 - **THEN** the request to `/api/gists` carries `public: true`
 
 #### Scenario: Sharing with the default
+
 - **WHEN** the user presses "Create secret gist" without touching the choice
 - **THEN** the request to `/api/gists` carries `public: false`
 
@@ -82,6 +89,7 @@ the dialog and cancels the sign-in. A sign-in that ends without a session SHALL 
 the dialog open with the reason shown.
 
 #### Scenario: Signed out, the prompt comes first
+
 - **WHEN** a signed-out user picks Share on the open project "counter"
 - **THEN** a dialog titled "Sign in to share" opens with the line "Your
   project goes to a gist on your GitHub account.", a "Sign in with GitHub"
@@ -89,6 +97,7 @@ the dialog open with the reason shown.
   `/api/gists` has been made
 
 #### Scenario: Signed out, then signed in
+
 - **WHEN** the user presses "Sign in with GitHub" in the prompt and completes
   sign-in
 - **THEN** the dialog becomes "Share counter as a gist" with Secret selected
@@ -96,11 +105,13 @@ the dialog open with the reason shown.
   made
 
 #### Scenario: Signed in, no prompt
+
 - **WHEN** a signed-in user picks Share on "counter"
 - **THEN** the dialog opens titled "Share counter as a gist", without the
   prompt
 
 #### Scenario: Sign-in cancelled
+
 - **WHEN** the user presses "Sign in with GitHub" and, while the popup waits
   and the button reads "Cancel sign-in", presses it
 - **THEN** the sign-in stops, the dialog stays open on the prompt saying
@@ -108,16 +119,19 @@ the dialog open with the reason shown.
   GitHub" starts a new sign-in
 
 #### Scenario: Closing the dialog while sign-in waits
+
 - **WHEN** the user presses "Sign in with GitHub" and, while it waits,
   presses the header's Close
 - **THEN** the sign-in stops, the dialog closes, and no gist is created
 
 #### Scenario: A sign-in that cannot start
+
 - **WHEN** the user presses "Sign in with GitHub" and sign-in cannot start
 - **THEN** the prompt stays open and says "Could not start sign-in", and no
   gist is created
 
 #### Scenario: Cancel leaves without signing in
+
 - **WHEN** the user presses Cancel in the prompt
 - **THEN** the dialog closes and no sign-in starts
 
@@ -152,6 +166,7 @@ on GitHub" link that opens the gist in a new tab. The gist's own URL SHALL
 NOT be shown as the link to send.
 
 #### Scenario: Successful share
+
 - **WHEN** `/api/gists` answers `201` with the URL `https://gist.github.com/a/b`
   and id `b`
 - **THEN** the dialog is titled "Shared as a secret gist", shows
@@ -226,7 +241,7 @@ project always gives the same names.
 
 - **WHEN** a project holding `src/lib.rs` and `client/client.ts` is flattened
 - **THEN** the gist holds `src__lib.rs` and `client__client.ts`
-- Pinned by client-v2/src/features/gist/lib/format.ts: "nested paths become __
+- Pinned by client-v2/src/features/gist/lib/format.ts: "nested paths become \_\_
   names"
 
 #### Scenario: A clash (manual)
@@ -240,8 +255,7 @@ project always gives the same names.
 ### Requirement: Carry a manifest that reverses the flattening
 
 Every exported gist SHALL hold `.playground.json`:
-`{"version": 1, "name": <project name>, "files": {<gist name>: <path>},
-"empty": [<path>]}`. Empty files, which a gist cannot hold, SHALL be listed in
+`{"version": 1, "name": <project name>, "files": {<gist name>: <path>}, "empty": [<path>]}`. Empty files, which a gist cannot hold, SHALL be listed in
 `empty` and not uploaded. Opening the gist SHALL give back exactly the
 exported paths and contents.
 
@@ -328,6 +342,7 @@ token. It SHALL answer:
   token cannot be read for a reason other than a missing grant
 
 #### Scenario: Creating a gist (manual)
+
 - **WHEN** a signed-in user whose token has the `gist` scope posts a valid
   body with `public: false`
 - **THEN** GitHub receives `POST /gists` with `public: false` and the files,
@@ -336,18 +351,22 @@ token. It SHALL answer:
   client-v2/src/features/gist/model/create-gist.test.mjs
 
 #### Scenario: Creating a public gist (manual)
+
 - **WHEN** the body carries `public: true`
 - **THEN** GitHub receives `POST /gists` with `public: true`
 
 #### Scenario: A body without visibility (manual)
+
 - **WHEN** the body has no `public` field
 - **THEN** GitHub receives `public: false`
 
 #### Scenario: A visibility that is not a boolean (manual)
+
 - **WHEN** the body carries `public: "yes"`
 - **THEN** the route answers `400` and calls GitHub not at all
 
 #### Scenario: A token without the scope (manual)
+
 - **WHEN** GitHub answers `404` or `403` and its `X-OAuth-Scopes` header does
   not list `gist`
 - **THEN** the route answers `403 {reason: "needs-gist-scope"}`
@@ -355,6 +374,7 @@ token. It SHALL answer:
   404 from a token without the gist scope as needs-gist-scope"
 
 #### Scenario: Signed out (manual)
+
 - **WHEN** the request carries no session
 - **THEN** the route answers `401 {reason: "signed-out"}` and calls GitHub not
   at all
@@ -378,23 +398,24 @@ The `gist` slice SHALL send these events under the prefix `gist`:
 - `gist_link_copied` when a copy of the Playground link in the shared state
   succeeds, with `copied: "playground"`
 
-A sign-in the user cancels SHALL count as `gist_export_failed` with `reason:
-"sign-in-failed"`. No event SHALL carry a file name, path, content, the gist's
+A sign-in the user cancels SHALL count as `gist_export_failed` with `reason: "sign-in-failed"`. No event SHALL carry a file name, path, content, the gist's
 id or URL, or a GitHub login.
 
 #### Scenario: A successful share is counted
+
 - **WHEN** a user opens Share from the header and shares a three-file project
   as a secret gist
-- **THEN** `gist_export_started` is sent with `files: 3`, `visibility:
-  "secret"`, `source: "header"`, and `gist_export_succeeded` with `files: 3`,
+- **THEN** `gist_export_started` is sent with `files: 3`, `visibility: "secret"`, `source: "header"`, and `gist_export_succeeded` with `files: 3`,
   `visibility: "secret"`
 
 #### Scenario: A failure is counted by reason
+
 - **WHEN** the route answers `429` for a public gist
 - **THEN** `gist_export_failed` is sent with `reason: "rate-limited"`,
   `visibility: "public"`
 
 #### Scenario: A copy is counted
+
 - **WHEN** the user copies the Playground link
 - **THEN** `gist_link_copied` is sent with `copied: "playground"`
 
@@ -408,10 +429,12 @@ and `https://gist.github.com/<id>`, either with a `#file-...` anchor,
 other URL is not a gist URL.
 
 #### Scenario: Owner, id and revision are read from the URL
+
 - **WHEN** the URL is `https://gist.github.com/alice/0123abcd/9f8e7d`
 - **THEN** it is a gist URL with owner `alice`, id `0123abcd` and revision `9f8e7d`
 
 #### Scenario: A repository URL is not a gist URL
+
 - **WHEN** the URL is `https://github.com/alice/repo`
 - **THEN** it is not a gist URL, and repository import handles it as today
 
@@ -425,14 +448,17 @@ exists, it SHALL open that project and create none, and when the URL names
 the owner it SHALL do so without a request to GitHub.
 
 #### Scenario: Importing a gist from the dialog
+
 - **WHEN** a signed-out user enters a public gist URL in the import dialog and presses Import
 - **THEN** a project named `gist-<owner>/<id>` is created with the gist's files and opened
 
 #### Scenario: Saving a gist opened from a link
+
 - **WHEN** a user who opened a gist link imports the same gist URL from the dialog
 - **THEN** a project named `gist-<owner>/<id>` is created and opened, beside the user's other projects
 
 #### Scenario: Importing the same gist twice
+
 - **WHEN** the user imports a gist whose project already exists
 - **THEN** that project opens and no new project is created
 
@@ -443,6 +469,7 @@ gist URL, as an unsaved view of the gist's files, the way `/{githubUrl}`
 opens a repository.
 
 #### Scenario: Opening a gist link signed out
+
 - **WHEN** a signed-out user opens `/gist/<id>` for a public gist
 - **THEN** the gist's files show in the explorer as an unsaved view and no project is created
 
@@ -456,14 +483,17 @@ answer that is not a gist, and any other failed request with its status. A file 
 downloaded whole rather than imported cut.
 
 #### Scenario: A missing gist
+
 - **WHEN** the gist id does not exist, in the dialog or behind a link
 - **THEN** the import fails with a message that the gist was not found and the link may be out of date, shown in the dialog or in place of the view
 
 #### Scenario: GitHub's hourly limit is reached
+
 - **WHEN** GitHub answers 403 with no requests remaining
 - **THEN** the import fails with a message to try again later
 
 #### Scenario: A large file in a gist
+
 - **WHEN** the gist API marks a file as truncated
 - **THEN** the file's whole content is downloaded and imported
 
@@ -479,6 +509,7 @@ carries `layout`: `manifest` or `loose`. `gist_import_failed` carries
 or `request-failed`.
 
 #### Scenario: A failed import is counted with its reason
+
 - **WHEN** an import from the dialog fails because the gist does not exist
 - **THEN** `gist_import_failed` is sent with `from: dialog` and `reason: not-found`
 
@@ -492,6 +523,7 @@ behind a link alike. A gist with neither SHALL be refused with reason
 TypeScript or JavaScript to open."
 
 #### Scenario: A hand-made gist of TypeScript
+
 - **WHEN** the user imports a gist without `.playground.json` that holds
   `client.ts` and `client.test.ts`
 - **THEN** a project is created holding `client/client.ts` and
@@ -499,10 +531,12 @@ TypeScript or JavaScript to open."
   `layout: loose`
 
 #### Scenario: A hand-made gist of TypeScript behind a link
+
 - **WHEN** the user opens `/gist/<id>` for a gist that holds only `client.ts`
 - **THEN** the view shows `client.ts` and the stepper offers only Write
 
 #### Scenario: A gist with nothing to open
+
 - **WHEN** the user imports a gist that holds only `notes.md`
 - **THEN** the import fails, and `gist_import_failed` is sent with
   `reason: no-program`
@@ -518,12 +552,14 @@ picker, which opens the same dialog, and the open project's row in the
 project list stays a way in.
 
 #### Scenario: Sharing from the header
+
 - **WHEN** the project "counter" is open on desktop and the user presses
   Share in the header
 - **THEN** the share dialog for "counter" opens, and nothing is sent to
   `/api/gists`
 
 #### Scenario: No header Share on a phone
+
 - **WHEN** a project is open below the phone breakpoint
 - **THEN** no element with id `flow-share` is rendered
 
@@ -535,6 +571,7 @@ refuses SHALL show no toast, and the dialog SHALL say the link could not be
 copied.
 
 #### Scenario: Copying the Playground link
+
 - **WHEN** the gist is made and the user presses Copy link
 - **THEN** the clipboard holds `<origin>/gist/<id>` and a "Link copied" toast
   shows

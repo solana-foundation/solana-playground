@@ -1,6 +1,7 @@
 # client-v2-themes Specification
 
 ## Purpose
+
 How the theme's base colours apply where a part names none.
 
 ## Requirements

@@ -1,6 +1,7 @@
 # client-v2-deploy Specification
 
 ## Purpose
+
 The Flow's Deploy stage puts the built program on the picked network from the
 panel alone: it names who pays, shows the run's steps, asks its questions in
 the panel, and keeps a history whose links open each record's network.

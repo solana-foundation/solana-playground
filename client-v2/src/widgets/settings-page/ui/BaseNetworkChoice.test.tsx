@@ -33,11 +33,11 @@ describe("BaseNetworkChoice", () => {
     act(() => screen.getByRole("radio", { name: "Devnet" }).focus());
     await userEvent.keyboard("{ArrowRight}");
     expect(onPick).toHaveBeenCalledWith(
-      Endpoint.MAINNET_BETA,
-      chipKey("Mainnet", Endpoint.MAINNET_BETA)
+      Endpoint.TESTNET,
+      chipKey("Testnet", Endpoint.TESTNET)
     );
     expect(document.activeElement).toBe(
-      screen.getByRole("radio", { name: "Mainnet" })
+      screen.getByRole("radio", { name: "Testnet" })
     );
   });
 
@@ -145,12 +145,27 @@ describe("BaseNetworkChoice", () => {
     expect(onPick).not.toHaveBeenCalled();
   });
 
-  it("offers exactly Devnet and Mainnet", () => {
+  it("offers Mainnet, Devnet, Testnet, Localnet and Surfpool, in that order", () => {
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
     expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual([
-      "Devnet",
       "Mainnet",
+      "Devnet",
+      "Testnet",
+      "Localnet",
+      "Surfpool",
     ]);
+  });
+
+  it.each([
+    ["Testnet", Endpoint.TESTNET],
+    ["Localnet", Endpoint.LOCALNET],
+    ["Surfpool", Endpoint.SURFPOOL],
+  ])("checks %s on its address, with no line under it", (name, endpoint) => {
+    render(<BaseNetworkChoice endpoint={endpoint} onPick={() => {}} />);
+    expect(
+      screen.getByRole("radio", { name }).getAttribute("aria-checked")
+    ).toBe("true");
+    expect(screen.queryByText("Deploys with real SOL")).toBeNull();
   });
 
   it("offers Mainnet, described as deploying with real SOL", () => {
@@ -185,7 +200,7 @@ describe("BaseNetworkChoice", () => {
       chipKey("Mainnet", Endpoint.MAINNET_BETA)
     );
   });
-  it("puts a chip for each saved RPC after Devnet and Mainnet, under its name", () => {
+  it("puts a chip for each saved RPC after the offered networks, under its name", () => {
     render(
       <BaseNetworkChoice
         endpoint="https://h.test/"
@@ -197,8 +212,11 @@ describe("BaseNetworkChoice", () => {
       />
     );
     expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual([
-      "Devnet",
       "Mainnet",
+      "Devnet",
+      "Testnet",
+      "Localnet",
+      "Surfpool",
       "Helius",
       "Triton",
     ]);

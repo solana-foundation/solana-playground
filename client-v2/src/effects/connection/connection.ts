@@ -1,5 +1,6 @@
 import { createLogger } from "@/shared/lib/logger";
 
+import { Endpoint } from "../../constants";
 import {
   PgCommon,
   PgConnection,
@@ -23,9 +24,22 @@ export const connection = () => {
     if (PgConnection.cluster !== "localnet") return;
     executeOnce("local", async () => {
       const { Local } = await import("./Local");
-      await PgView.setModal(Local);
+      await PgView.setModal(Local, {
+        surfpool: isSurfpool(PgConnection.current.rpcEndpoint),
+      });
     });
   }, [PgConnection.onDidChange, PgWallet.onDidChangeCurrent]);
+};
+
+/** Whether the endpoint is the offered Surfpool, which reads as `localnet` */
+const isSurfpool = (endpoint: string) => {
+  try {
+    return new URL(endpoint).href === new URL(Endpoint.SURFPOOL).href;
+  } catch {
+    // Never the endpoint itself: an RPC URL often holds an API key
+    log.info("the endpoint does not parse; not reading it as Surfpool");
+    return false;
+  }
 };
 
 // Only show each helper once to not be annoying with pop-ups

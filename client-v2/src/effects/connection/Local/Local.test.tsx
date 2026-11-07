@@ -50,6 +50,14 @@ describe("Connect to Localnet", () => {
     );
   });
 
+  it("gives Surfpool's own steps when Surfpool is the network picked", () => {
+    render(<Local surfpool />);
+
+    expect(screen.queryByText("Unable to connect to Surfpool")).not.toBeNull();
+    expect(screen.queryByText(/surfpool start/)).not.toBeNull();
+    expect(screen.queryByText(/solana-test-validator/)).toBeNull();
+  });
+
   it("shows the browser-blocking note without an accordion", () => {
     render(<Local />);
 

@@ -1,6 +1,7 @@
 # project-without-program Specification
 
 ## Purpose
+
 Lets a user bring TypeScript work with no Solana program into the
 Playground, and keeps the dev loop from offering stages such a project
 cannot use.
@@ -18,18 +19,21 @@ this change, and one that holds Rust or Python no framework recognises SHALL
 be refused as before, never imported without its program.
 
 #### Scenario: A client and its tests
+
 - **WHEN** the user imports a repository that holds `index.ts`,
   `lib/rpc.ts` and `tests/rpc.test.ts` and no program
 - **THEN** a project is created and opened, holding
   `client/index.ts`, `client/lib/rpc.ts` and `tests/rpc.test.ts`
 
 #### Scenario: A repository with an Anchor program
+
 - **WHEN** the user imports a repository with `programs/<name>/src/lib.rs`
   and a TypeScript client
 - **THEN** the project is laid out exactly as an Anchor repository was
   before this change
 
 #### Scenario: A program no framework recognises
+
 - **WHEN** the user imports a repository with `onchain/src/lib.rs`, which
   no framework recognises, and `client.ts`
 - **THEN** the import fails with "This doesn't look like a Solana
@@ -37,6 +41,7 @@ be refused as before, never imported without its program.
   and nothing is imported
 
 #### Scenario: A repository with neither
+
 - **WHEN** the user imports a repository that holds no program and no
   TypeScript or JavaScript file
 - **THEN** the import fails with "No program code found in
@@ -64,21 +69,25 @@ as nothing to open. A relative import that crosses from `client/` to
 of a leading folder the placement drops, is not rewritten.
 
 #### Scenario: Folders are kept
+
 - **WHEN** a repository with no program holds `src/app/main.ts`,
   `test/unit/math.ts`, `client/run.ts`, `README.md` and `package.json`
 - **THEN** the project holds `client/src/app/main.ts`,
   `tests/unit/math.ts` and `client/run.ts`, and nothing else
 
 #### Scenario: A folder of a repository
+
 - **WHEN** the user imports `github.com/<owner>/<repo>/tree/main/token/client`,
   holding `index.ts` and `tests/a.ts`
 - **THEN** the project holds `client/index.ts` and `tests/a.ts`
 
 #### Scenario: Two files for one place
+
 - **WHEN** a repository with no program holds `a.ts` and `client/a.ts`
 - **THEN** the project holds both, as `client/a.ts` and `client/client/a.ts`
 
 #### Scenario: An IDL and a fixture are kept
+
 - **WHEN** a repository with no program holds `src/index.ts` importing
   `../idl/x.json`, `idl/x.json`, `tests/a.test.ts` importing
   `./fixtures/a.json`, `tests/fixtures/a.json` and `tsconfig.json`
@@ -86,6 +95,7 @@ of a leading folder the placement drops, is not rewritten.
   `tests/a.test.ts` and `tests/fixtures/a.json`, and no `tsconfig.json`
 
 #### Scenario: A test file outside a tests folder
+
 - **WHEN** a repository with no program holds `lib/math.spec.ts`
 - **THEN** the project holds `tests/lib/math.spec.ts`
 
@@ -122,6 +132,7 @@ the right wording until something is printed to the terminal, and SHALL be
 left alone after that.
 
 #### Scenario: An imported TypeScript project
+
 - **WHEN** the user opens a project that holds only `client/` and
   `tests/` files
 - **THEN** the stepper shows the Write tab and no Build, Deploy or
@@ -129,11 +140,13 @@ left alone after that.
   leaves the Write stage shown
 
 #### Scenario: A project with no program on a phone
+
 - **WHEN** a project with no program is open below the phone breakpoint
 - **THEN** no "Development loop" tablist is rendered, and the label "Client
   project" shows
 
 #### Scenario: The preview of a project with no program on a phone
+
 - **WHEN** a project with no program is open at 390x844 and the user taps
   "Preview the build"
 - **THEN** the Preview page is in the viewport and stays, the label "Client
@@ -141,33 +154,39 @@ left alone after that.
   here." are in the viewport, and the Work page is not
 
 #### Scenario: Entering the Preview opens the console (manual)
+
 - **WHEN** a project with no program is open at 390x844 with the console
   folded and the user taps "Preview the build"
 - **THEN** the console is open, reported by `layout_panel_toggled` with
   `via: "auto"`
 
 #### Scenario: The terminal's welcome in a project with no program (manual)
+
 - **WHEN** a project with no program is open and nothing has been printed to
   the terminal
 - **THEN** the terminal reads "Output from your client and your commands
   shows here." and no line names Build or Deploy
 
 #### Scenario: The welcome follows the program answer (manual)
+
 - **WHEN** nothing has been printed to the terminal and the user switches
   between a project with a program and one with none
 - **THEN** the terminal holds only the welcome worded for the open project
 
 #### Scenario: The welcome is left alone after output (manual)
+
 - **WHEN** something has been printed to the terminal and the user switches
   between a project with a program and one with none
 - **THEN** the printed text stays and the welcome is not reprinted
 
 #### Scenario: A program is added
+
 - **WHEN** the user creates `src/lib.rs` in a project with no program
 - **THEN** the Build, Deploy and Interact tabs appear and the "Client
   project" label goes
 
 #### Scenario: A project with a program
+
 - **WHEN** the user opens a project whose `src/` holds `lib.rs`
 - **THEN** the stepper shows Write, Build, Deploy and Interact as before
 
@@ -180,10 +199,12 @@ Where a fine pointer is primary, the hint SHALL show as before. Menu shortcuts
 (`DropdownMenuShortcut`) are not `Kbd` and this requirement does not cover them.
 
 #### Scenario: The console strip on a phone (manual)
+
 - **WHEN** the console strip is shown on a device whose primary pointer is
   coarse
 - **THEN** no key hint is displayed beside it
 
 #### Scenario: A desktop with a mouse (manual)
+
 - **WHEN** the same strip is shown with a fine primary pointer
 - **THEN** its key hint is displayed

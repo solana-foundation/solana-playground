@@ -1,13 +1,14 @@
 # assistant-server-env Specification
 
 ## Purpose
+
 Names the assistant's server-side environment variables, so a Vercel project
 reads as Playground's AI settings, and keeps a deployment that still sets the
 old names working until it is renamed.
 
 ## Requirements
 
-### Requirement: The assistant's variables use the PG_AI_ prefix
+### Requirement: The assistant's variables use the PG*AI* prefix
 
 `agentEnv` SHALL read each of its settings from `PG_AI_<NAME>`: `API_KEY`,
 `NEWCOMER_API_KEY`, `BASE_URL`, `MODEL`, `REASONING_EFFORT`, `PROVIDERS`,
@@ -25,7 +26,7 @@ the defaults and validation they had under `AGENT_<NAME>`.
 - **WHEN** `PG_AI_PROVIDERS` is set to an empty string
 - **THEN** `agentEnv().PROVIDERS` is an empty list, whatever the base URL
 
-### Requirement: The old AGENT_ names are a deprecated fallback
+### Requirement: The old AGENT\_ names are a deprecated fallback
 
 When `PG_AI_<NAME>` is not set at all, `agentEnv` SHALL read `AGENT_<NAME>`
 and log one warning per old name per process, naming the new variable. A

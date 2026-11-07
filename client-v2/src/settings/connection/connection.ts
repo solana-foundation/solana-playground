@@ -15,7 +15,7 @@ export const connection = [
     id: "connection.endpoint",
     description:
       "RPC URL that lets you interact with a specific Solana cluster",
-    // Only our networks; any other address, Localnet included, is a custom one
+    // Only the offered networks; any other address is a custom one
     values: NETWORKS.map(({ name, value }) => ({ name, value })),
     default: DEFAULT_ENDPOINT,
     custom: {

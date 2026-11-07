@@ -57,15 +57,19 @@ const TOOLS: Record<CliTool, string> = {
   anchor: "Anchor",
 };
 
+/** The cluster toggle, in Settings' order */
 const CLUSTERS: Record<CliCluster, string> = {
-  devnet: "Devnet",
   mainnet: "Mainnet",
+  devnet: "Devnet",
+  testnet: "Testnet",
 };
 
 const PAYER: Record<CliCluster, string> = {
+  mainnet: "It pays real SOL from your CLI wallet (solana config get).",
   devnet:
     "It pays from your CLI wallet (solana config get). On Devnet, solana airdrop 2 --url devnet funds it.",
-  mainnet: "It pays real SOL from your CLI wallet (solana config get).",
+  testnet:
+    "It pays from your CLI wallet (solana config get). On Testnet, solana airdrop 1 --url testnet funds it.",
 };
 
 /**

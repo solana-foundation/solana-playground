@@ -65,7 +65,7 @@ const normalised = (value: string) => {
 };
 
 /**
- * The network chips, Devnet and Mainnet, each under its normalised address.
+ * The network chips Settings offers, each under its normalised address.
  * A custom RPC may use a chip's address under a name of its own (HOO-2690:
  * Devnet on a platform RPC, the public Devnet beside it); only a copy of a
  * chip, its name and its address, is refused. An endpoint a chip offers is
@@ -76,10 +76,21 @@ const CHIPS: ReadonlyArray<CustomRpc> = NETWORKS.map((n) => ({
   url: normalised(n.value),
 }));
 
-/** Clusters with no chip of their own, named as the cluster when listed */
+/**
+ * The chips whose address an older `adopt` listed as a custom RPC, so a
+ * profile may hold it re-spelled: Localnet, Surfpool and the Testnet chip,
+ * all custom RPCs before they had chips (HOO-2707)
+ */
+const ADOPTED_CHIPS = NETWORKS.filter(
+  (n) => n.cluster === "localnet" || n.cluster === "testnet"
+);
+
+/**
+ * The public Testnet, named as its cluster when saved with no name: a
+ * custom RPC of its own once the Testnet chip is on a platform RPC
+ */
 const CLUSTERS = new Map<string, string>([
   [normalised(Endpoint.TESTNET), clusterName("testnet")],
-  [normalised(Endpoint.LOCALNET), clusterName("localnet")],
 ]);
 
 /**
@@ -144,6 +155,9 @@ const readStored = (): CustomRpc[] | undefined => {
     return undefined;
   }
   const list: CustomRpc[] = [];
+  // A copy of a chip is no loss: Localnet and the public Testnet were
+  // listed as custom RPCs before they had chips of their own (HOO-2707)
+  let copies = 0;
   for (const entry of parsed) {
     const { name, url } = (entry ?? {}) as { name?: unknown; url?: unknown };
     const check = typeof url === "string" ? checkRpcUrl(url) : undefined;
@@ -153,13 +167,17 @@ const readStored = (): CustomRpc[] | undefined => {
       url: check.url,
     };
     const copy = (r: CustomRpc) => isSameRpc(r, rpc);
-    if (CHIPS.some(copy) || list.some(copy)) continue;
+    if (CHIPS.some(copy)) {
+      copies++;
+      continue;
+    }
+    if (list.some(copy)) continue;
     list.push(rpc);
   }
-  if (list.length < parsed.length) {
+  if (list.length + copies < parsed.length) {
     log.warn("dropped saved custom RPCs that are not valid", {
       report: true,
-      context: { dropped: parsed.length - list.length },
+      context: { dropped: parsed.length - list.length - copies },
     });
   }
   return list;
@@ -286,17 +304,31 @@ export const PgCustomRpcs = {
 
   /**
    * List the connection's endpoint when nothing offers it, named by its
-   * host (or its cluster: Testnet, Localnet), so a profile on a custom URL
+   * host (the public Testnet by its cluster), so a profile on a custom URL
    * from before, or one set elsewhere, sees it. Answers the URL it is listed
-   * under, which may be spelled differently from `endpoint`; `undefined`
-   * when a chip offers the endpoint or it is not an RPC we would save.
+   * under, which may be spelled differently from `endpoint`: a local or
+   * Testnet chip's address in another spelling that no saved RPC lists
+   * answers the chip's own (`http://localhost:8899/`, adopted before
+   * Localnet had a chip).
+   * `undefined` when a chip offers the endpoint as it is, or it is not an
+   * RPC we would save.
    */
   adopt(endpoint: string): string | undefined {
     const check = checkRpcUrl(endpoint);
-    if (!check.ok || CHIPS.some((r) => r.url === check.url)) return undefined;
+    if (!check.ok) return undefined;
     // Opening Settings must not write over a list that does not read
     const list = readStored();
     if (!list) return undefined;
+    if (CHIPS.some((r) => r.url === check.url)) {
+      const local = ADOPTED_CHIPS.find(
+        (n) => normalised(n.value) === check.url
+      );
+      const respell =
+        local &&
+        local.value !== endpoint &&
+        !list.some((r) => r.url === check.url);
+      return respell ? local.value : undefined;
+    }
     if (list.some((r) => r.url === check.url)) return check.url;
     return write([...list, { name: defaultName(check.url), url: check.url }])
       ? check.url
@@ -349,6 +381,13 @@ export const PgCustomRpcs = {
 if (import.meta.vitest) {
   const { describe, it, expect, beforeEach, afterEach, vi } = import.meta
     .vitest;
+
+  /** The offered network under `key`, wherever the list puts it */
+  const offered = (key: string) => {
+    const network = NETWORKS.find((n) => n.key === key);
+    if (!network) throw new Error(`No offered network ${key}`);
+    return network;
+  };
 
   describe("entities/custom-rpc/model/custom-rpcs", () => {
     beforeEach(() => {
@@ -548,7 +587,10 @@ if (import.meta.vitest) {
         ).toEqual({ ok: false, reason: "format" });
         expect(
           PgCustomRpcs.check(
-            { name: NETWORKS[1].name, url: NETWORKS[1].value },
+            {
+              name: offered("mainnet-beta").name,
+              url: offered("mainnet-beta").value,
+            },
             undefined
           )
         ).toEqual({ ok: false, reason: "duplicate", name: "Mainnet" });
@@ -623,13 +665,57 @@ if (import.meta.vitest) {
         );
       });
 
-      it("lists Testnet and Localnet, which have no chip, under their names", () => {
-        PgCustomRpcs.adopt("https://api.testnet.solana.com");
-        PgCustomRpcs.adopt("http://localhost:8899");
-        expect(PgCustomRpcs.list()).toEqual([
-          { name: "Testnet", url: "https://api.testnet.solana.com/" },
-          { name: "Localnet", url: "http://localhost:8899/" },
-        ]);
+      it("moves a profile on Localnet's address, adopted before it had a chip, onto the chip", () => {
+        localStorage.setItem(
+          "customRpcs",
+          JSON.stringify([{ name: "Localnet", url: "http://localhost:8899/" }])
+        );
+        expect(PgCustomRpcs.adopt("http://localhost:8899/")).toBe(
+          "http://localhost:8899"
+        );
+        expect(PgCustomRpcs.list()).toEqual([]);
+      });
+
+      it.each([
+        { name: "Surfpool", chip: "http://127.0.0.1:8899" },
+        { name: "the public Testnet", chip: "https://api.testnet.solana.com" },
+      ])(
+        "moves a profile on $name's address, re-spelled, onto its chip",
+        ({ chip }) => {
+          expect(PgCustomRpcs.adopt(`${chip}/`)).toBe(chip);
+        }
+      );
+
+      it("keeps a profile on a chip's address re-spelled when a saved RPC lists it", () => {
+        add("My local", "http://localhost:8899/");
+        expect(PgCustomRpcs.adopt("http://localhost:8899/")).toBeUndefined();
+        expect(PgCustomRpcs.list().map((r) => r.name)).toEqual(["My local"]);
+      });
+
+      it("still reports a lost entry beside a dropped copy of a chip", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        localStorage.setItem(
+          "customRpcs",
+          JSON.stringify([
+            { name: "Localnet", url: "http://localhost:8899" },
+            { name: "Broken", url: "not a url" },
+          ])
+        );
+        expect(PgCustomRpcs.list()).toEqual([]);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(JSON.stringify(warn.mock.calls[0])).toContain('"dropped":1');
+        warn.mockRestore();
+      });
+
+      it("drops an adopted copy of a chip without reporting it", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        localStorage.setItem(
+          "customRpcs",
+          JSON.stringify([{ name: "Localnet", url: "http://localhost:8899" }])
+        );
+        expect(PgCustomRpcs.list()).toEqual([]);
+        expect(warn).not.toHaveBeenCalled();
+        warn.mockRestore();
       });
 
       it("leaves an endpoint out when a saved RPC lists it, under any name", () => {
@@ -641,8 +727,11 @@ if (import.meta.vitest) {
       });
 
       it.each([
-        ["the offered Devnet", () => NETWORKS[0].value],
-        ["the offered Mainnet", () => NETWORKS[1].value],
+        ["the offered Devnet", () => offered("devnet").value],
+        ["the offered Mainnet", () => offered("mainnet-beta").value],
+        ["the offered Testnet", () => offered("testnet").value],
+        ["Localnet", () => "http://localhost:8899"],
+        ["Surfpool", () => "http://127.0.0.1:8899"],
         ["Playnet", () => "http://playnet"],
         ["a value that is not an RPC", () => "devnet"],
       ])("leaves %s out", (_, endpoint) => {
@@ -652,20 +741,20 @@ if (import.meta.vitest) {
     });
 
     it("saves a chip's address under a name of its own, and the public Devnet beside Devnet", () => {
-      expect(add("My Devnet", NETWORKS[0].value).ok).toBe(true);
-      expect(add("", NETWORKS[1].value).ok).toBe(true);
+      expect(add("My Devnet", offered("devnet").value).ok).toBe(true);
+      expect(add("", offered("mainnet-beta").value).ok).toBe(true);
       expect(add("Public Devnet", "https://api.devnet.solana.com").ok).toBe(
         true
       );
       expect(PgCustomRpcs.list().map((r) => r.name)).toEqual([
         "My Devnet",
-        hostOf(NETWORKS[1].value),
+        hostOf(offered("mainnet-beta").value),
         "Public Devnet",
       ]);
     });
 
     it("refuses a copy of a chip, its name and its address, naming its network", () => {
-      expect(add("Devnet", NETWORKS[0].value)).toEqual({
+      expect(add("Devnet", offered("devnet").value)).toEqual({
         ok: false,
         reason: "duplicate",
         name: "Devnet",
@@ -676,12 +765,12 @@ if (import.meta.vitest) {
       localStorage.setItem(
         "customRpcs",
         JSON.stringify([
-          { name: "Mine", url: NETWORKS[0].value },
-          { name: "Devnet", url: NETWORKS[0].value },
+          { name: "Mine", url: offered("devnet").value },
+          { name: "Devnet", url: offered("devnet").value },
         ])
       );
       expect(PgCustomRpcs.list()).toEqual([
-        { name: "Mine", url: new URL(NETWORKS[0].value).href },
+        { name: "Mine", url: new URL(offered("devnet").value).href },
       ]);
     });
 

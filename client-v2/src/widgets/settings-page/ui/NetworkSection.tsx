@@ -89,8 +89,8 @@ const Removed = ({
 );
 
 /**
- * The Network section on the live settings: the chips, Devnet, Mainnet and
- * each saved custom RPC, and the list that adds, edits and removes them.
+ * The Network section on the live settings: the chips, the offered networks
+ * and each saved custom RPC, and the list that adds, edits and removes them.
  */
 const NetworkSection = () => {
   // The chips follow an endpoint picked elsewhere too, such as the terminal

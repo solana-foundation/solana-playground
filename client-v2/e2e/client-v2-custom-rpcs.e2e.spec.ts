@@ -84,8 +84,11 @@ test("client-v2-custom-rpcs: Two saved RPCs survive a reload", async ({
   });
   await addRpc(page, { name: "Triton", url: "https://triton.rpc.test/" });
   await expect(network(page).getByRole("radio")).toHaveText([
-    "Devnet",
     "Mainnet",
+    "Devnet",
+    "Testnet",
+    "Localnet",
+    "Surfpool",
     "Helius",
     "Triton",
   ]);
@@ -93,8 +96,11 @@ test("client-v2-custom-rpcs: Two saved RPCs survive a reload", async ({
   await page.reload();
   await openSettings(page);
   await expect(network(page).getByRole("radio")).toHaveText([
-    "Devnet",
     "Mainnet",
+    "Devnet",
+    "Testnet",
+    "Localnet",
+    "Surfpool",
     "Helius",
     "Triton",
   ]);
@@ -153,8 +159,11 @@ test("client-v2-custom-rpcs: A value that is not an https URL is refused", async
     await settings.getByRole("button", { name: "Cancel" }).click();
   }
   await expect(network(page).getByRole("radio")).toHaveText([
-    "Devnet",
     "Mainnet",
+    "Devnet",
+    "Testnet",
+    "Localnet",
+    "Surfpool",
   ]);
 });
 
@@ -170,7 +179,7 @@ test("client-v2-custom-rpcs: A local validator over plain HTTP is accepted", asy
   await openSettings(page);
   await addRpc(page, { name: "Local", url: "http://localhost:8899" });
   await expect(
-    network(page).getByRole("radio", { name: "Local" })
+    network(page).getByRole("radio", { name: "Local", exact: true })
   ).toHaveAttribute("aria-checked", "true");
 });
 
@@ -282,8 +291,11 @@ test("client-v2-custom-rpcs: Removing an RPC not in use keeps the network", asyn
 
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(network(page).getByRole("radio")).toHaveText([
-    "Devnet",
     "Mainnet",
+    "Devnet",
+    "Testnet",
+    "Localnet",
+    "Surfpool",
     "Helius",
     "Triton",
   ]);

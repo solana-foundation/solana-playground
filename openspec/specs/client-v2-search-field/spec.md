@@ -1,6 +1,7 @@
 # client-v2-search-field Specification
 
 ## Purpose
+
 The search field offers values to pick from a list under it, such as an
 Interact instruction's generated values and an account's address, and says
 when what was typed is not valid.

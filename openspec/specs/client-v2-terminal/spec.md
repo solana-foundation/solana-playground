@@ -1,6 +1,7 @@
 # client-v2-terminal Specification
 
 ## Purpose
+
 How the terminal answers a command it does not know, how it asks a yes or
 no question, the wallet question included, and what it says when a command
 cannot reach the network or stays quiet.

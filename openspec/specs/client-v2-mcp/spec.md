@@ -1,6 +1,7 @@
 # client-v2-mcp Specification
 
 ## Purpose
+
 The browser MCP client of client-v2: the connections it keeps to MCP servers, directly or through the
 `/api/mcp` gateway, and the events it reports about them.
 

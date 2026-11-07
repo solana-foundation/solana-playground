@@ -1,6 +1,7 @@
 # assistant-tool-config Specification
 
 ## Purpose
+
 What of the user's skill and MCP server configuration survives a reload, how it layers over the deployment's defaults,
 and what never reaches storage.
 

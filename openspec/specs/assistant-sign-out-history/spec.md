@@ -1,6 +1,7 @@
 # assistant-sign-out-history Specification
 
 ## Purpose
+
 What the person is told, when they sign out or are signed out, about where the
 assistant's conversation is kept: in this browser only, or in the account too.
 

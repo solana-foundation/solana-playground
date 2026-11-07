@@ -1,6 +1,7 @@
 # client-v2-command-stop Specification
 
 ## Purpose
+
 How a person stops a build or a deploy that is running, from the terminal or
 from the console strip, and what the terminal says a stop left behind.
 
@@ -111,8 +112,7 @@ recorded in the history.
 - **WHEN** a deploy is stopped after its buffer exists and closing the buffer
   fails
 - **THEN** the terminal prints "Stopped. The program was not deployed. Its
-  buffer <address> still holds its SOL. Run `solana program close
-  --buffers` to get it back.", in two sentences with no semicolon
+  buffer <address> still holds its SOL. Run `solana program close --buffers` to get it back.", in two sentences with no semicolon
 
 ### Requirement: A command that cannot stop says so
 

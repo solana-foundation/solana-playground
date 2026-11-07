@@ -1,6 +1,7 @@
 # client-v2-status Specification
 
 ## Purpose
+
 Says whether the network, the AI and the Rust analyzer are ready, in one
 pattern on every width, so a slow start never reads as a broken one and a
 person can name what is not ready from the indicator alone.
@@ -150,8 +151,7 @@ indicator or a sheet row's action, with `indicator` (`network`, `ai`, `rust`),
 an idle indicator as `ready`) and `from` (`row`, `rail`, `sheet`); and
 `status_sheet_opened` each time the phone's sheet opens, with `worst`
 (`ready`, `working`, `not-ready`). Connect a model opened from the AI
-indicator SHALL send the assistant's `assistant_connect_opened` with `via:
-"status"`. The stage notice SHALL send `status_notice_shown` once each time a
+indicator SHALL send the assistant's `assistant_connect_opened` with `via: "status"`. The stage notice SHALL send `status_notice_shown` once each time a
 notice appears, with `notice` (`offline`, `cluster-down`);
 `status_notice_dismissed` each time a user presses its Dismiss, with `notice`
 (`offline`, `cluster-down`); and `status_notice_action` each time a user
