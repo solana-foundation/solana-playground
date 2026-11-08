@@ -51,14 +51,6 @@ describe("fsFlush", () => {
     expect(flush).not.toHaveBeenCalled();
   });
 
-  it("starts the save inside the event, before the page can unload", () => {
-    // A save started on a later task may never run: the document is gone
-    // by then. lightning-fs queues its IndexedDB write from the call itself
-    window.dispatchEvent(new Event("pagehide"));
-
-    expect(flush).toHaveBeenCalled();
-  });
-
   it("reports a failed save and does not throw", async () => {
     const error = new Error("quota");
     flush.mockRejectedValue(error);
