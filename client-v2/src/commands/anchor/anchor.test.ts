@@ -1,0 +1,114 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { UnknownClusterError } from "@/entities/cluster";
+
+import { PgConnection, PgPackage, TerminalLineError } from "../../utils";
+import {
+  IDL_NETWORK_UNREAD,
+  MAINNET_IDL_BLOCKED,
+} from "../deploy/mainnet-block";
+import { anchor, isIdlWrite } from "./anchor";
+
+const runAnchor = vi.fn();
+
+vi.mock("../../utils", async () => {
+  const terminal = await import("../../utils/terminal");
+  return {
+    TerminalLineError: terminal.TerminalLineError,
+    PgConnection: {
+      // The cached cluster: the refusal must not trust it
+      cluster: "devnet",
+      current: { rpcEndpoint: "https://cached.example.com" },
+      getCluster: vi.fn(),
+    },
+    // The endpoint the WASM Anchor CLI sends to
+    PgSettings: { connection: { endpoint: "https://rpc.example.com" } },
+    PgPackage: { import: vi.fn() },
+  };
+});
+
+type Handle = NonNullable<typeof anchor.handle>;
+
+const run = (raw: string) => anchor.handle!({ raw } as Parameters<Handle>[0]);
+
+describe("isIdlWrite", () => {
+  it.each([
+    "anchor idl init",
+    "anchor idl upgrade",
+    "anchor idl write-buffer",
+    "anchor idl set-buffer 11111111111111111111111111111111",
+    "anchor idl close",
+    "anchor idl set-authority -n 11111111111111111111111111111111",
+    "anchor idl erase-authority",
+    "  anchor   idl   init   Prog1111  ",
+  ])("counts `%s` as a write", (raw) => {
+    expect(isIdlWrite(raw)).toBe(true);
+  });
+
+  it.each([
+    "anchor idl fetch",
+    "anchor idl authority",
+    "anchor idl",
+    "anchor --help",
+    "anchor idl init --help",
+    "anchor idl upgrade -h",
+  ])("lets `%s` through as a read", (raw) => {
+    expect(isIdlWrite(raw)).toBe(false);
+  });
+});
+
+describe("anchor", () => {
+  beforeEach(() => {
+    vi.mocked(PgConnection.getCluster).mockReset();
+    runAnchor.mockReset();
+    vi.mocked(PgPackage.import).mockResolvedValue({ runAnchor } as never);
+  });
+
+  it("refuses an IDL write on mainnet-beta before the CLI loads", async () => {
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
+
+    const result = run("anchor idl init");
+
+    await expect(result).rejects.toBeInstanceOf(TerminalLineError);
+    await expect(result).rejects.toThrow(MAINNET_IDL_BLOCKED);
+    expect(PgConnection.getCluster).toHaveBeenCalledWith(
+      "https://rpc.example.com"
+    );
+    expect(PgPackage.import).not.toHaveBeenCalled();
+    expect(runAnchor).not.toHaveBeenCalled();
+  });
+
+  // A custom RPC that is down could be mainnet: nothing on a guess
+  it("refuses an IDL write when the endpoint does not say its network", async () => {
+    vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
+      new Error("429 Too Many Requests")
+    );
+    await expect(run("anchor idl upgrade")).rejects.toThrow(IDL_NETWORK_UNREAD);
+    expect(runAnchor).not.toHaveBeenCalled();
+  });
+
+  it.each(["devnet", "testnet", "localnet"] as const)(
+    "runs an IDL write on %s",
+    async (cluster) => {
+      vi.mocked(PgConnection.getCluster).mockResolvedValue(cluster);
+      await run("anchor idl init");
+      expect(runAnchor).toHaveBeenCalledWith("anchor idl init");
+    }
+  );
+
+  // Surfpool and other networks of their own
+  it("runs an IDL write on a network no cluster names", async () => {
+    vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
+      new UnknownClusterError("Own1111")
+    );
+    await run("anchor idl init");
+    expect(runAnchor).toHaveBeenCalledWith("anchor idl init");
+  });
+
+  it("runs a read on mainnet-beta without reading the network", async () => {
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
+    await run("anchor idl fetch");
+    expect(PgConnection.getCluster).not.toHaveBeenCalled();
+    expect(runAnchor).toHaveBeenCalledWith("anchor idl fetch");
+  });
+});
