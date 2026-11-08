@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   report: vi.fn(),
   markShown: vi.fn(),
+  markUnavailable: vi.fn(),
   flow: { build: "done", deploy: "active" },
   // eslint-disable-next-line unicorn/no-null -- `useProgramInfo()` answers `null` for a failed chain read, no keypair and no build
   programInfo: { onChain: null, pk: null, uuid: null as string | null },
@@ -91,6 +92,9 @@ vi.mock("@/commands/deploy/check-not-mainnet", async () => {
       if (mocks.endpointCluster === "mainnet-beta") {
         throw new MainnetDeployRefusedError();
       }
+      if (mocks.endpointCluster === "unread") {
+        throw new Error("Could not read which network the endpoint serves");
+      }
     },
   };
 });
@@ -133,12 +137,16 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
   reportButtonFailure: (action: string) =>
     action === "deploy" ? mocks.report : vi.fn(),
   markFailureShown: mocks.markShown,
+  markUnavailableHere: mocks.markUnavailable,
 }));
 
 import { PgStageDeploy } from "@/features/deploy";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
-import { MAINNET_DEPLOY_BLOCKED } from "../../../commands/deploy/mainnet-block";
+import {
+  MAINNET_DEPLOY_BLOCKED,
+  MAINNET_DEPLOY_WAY_OUT,
+} from "../../../commands/deploy/mainnet-block";
 import {
   DeployCancelledError,
   DeployFundingError,
@@ -783,11 +791,28 @@ describe("Deploy stage", () => {
 
     expect(mocks.wallet.add).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
-    expect(mocks.report).toHaveBeenCalledWith(
-      expect.objectContaining({ message: MAINNET_DEPLOY_BLOCKED })
+    const [refusal] = mocks.report.mock.calls[0] ?? [];
+    expect((refusal as Error | undefined)?.message).toBe(
+      MAINNET_DEPLOY_BLOCKED
+    );
+    // The toast names the way on, not "Could not deploy."
+    expect(mocks.markUnavailable).toHaveBeenCalledWith(
+      refusal,
+      MAINNET_DEPLOY_WAY_OUT
     );
     expect(events()).not.toContain("deploy_started");
     expect(events()).not.toContain("deploy_failed");
+  });
+
+  // The command refuses an unread network in the terminal, with its own line
+  it("leaves an endpoint that did not answer to the deploy command", async () => {
+    mocks.wallet.current = pgWallet();
+    mocks.endpointCluster = "unread";
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    expect(mocks.execute).toHaveBeenCalledOnce();
   });
 
   it("names the checks when a deploy fails before any step", async () => {

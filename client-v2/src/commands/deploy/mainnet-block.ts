@@ -12,6 +12,10 @@ import { TerminalLineError } from "@/utils/terminal/line-error";
 export const MAINNET_DEPLOY_BLOCKED_LINE =
   "Deploys to mainnet are not available in the beta.";
 
+/** The stage toast's way on, completing "Can't deploy here: …" */
+export const MAINNET_DEPLOY_WAY_OUT =
+  "on mainnet, deploy from your machine with the Solana CLI or Anchor";
+
 /** The `deploy` command's refusal on mainnet */
 export const MAINNET_DEPLOY_BLOCKED = `${MAINNET_DEPLOY_BLOCKED_LINE} Deploy from your own machine with the Solana CLI or Anchor: Deploy stage › Deploy from your machine.`;
 

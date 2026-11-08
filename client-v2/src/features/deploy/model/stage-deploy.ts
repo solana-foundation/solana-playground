@@ -1,13 +1,19 @@
 import { useSyncExternalStore } from "react";
 
-import { MainnetDeployRefusedError } from "@/commands/deploy/mainnet-block";
+import {
+  MAINNET_DEPLOY_WAY_OUT,
+  MainnetDeployRefusedError,
+} from "@/commands/deploy/mainnet-block";
 import {
   DeployCancelledError,
   DeployFundingError,
   PgDeployRun,
 } from "@/commands/deploy/run";
 import { createLogger } from "@/shared/lib/logger";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import {
+  markUnavailableHere,
+  reportButtonFailure,
+} from "@/shared/lib/report-button-failure";
 import type { Cluster } from "@/utils";
 import { isStopped } from "@/utils/stopped";
 
@@ -156,12 +162,16 @@ export class PgStageDeploy {
       let reachedRun = false;
       let result: Awaited<ReturnType<typeof PgCommand.deploy.execute>>;
       try {
-        // First, as the command's own pre-check: a refused deploy creates no
-        // wallet and is no deploy attempt (HOO-2728)
+        // First, as the command's own pre-check: a mainnet deploy creates no
+        // wallet and is no deploy attempt (HOO-2728). Only that refusal stops
+        // here; an endpoint that did not answer is the command's to refuse,
+        // in the terminal, with its own line.
         const { checkNotMainnet } = await import(
           "@/commands/deploy/check-not-mainnet"
         );
-        await checkNotMainnet();
+        await checkNotMainnet().catch((error: unknown) => {
+          if (error instanceof MainnetDeployRefusedError) throw error;
+        });
         if (cluster) {
           deployTelemetry.track("deploy_started", { cluster, redeploy });
         }
@@ -297,6 +307,10 @@ export class PgStageDeploy {
     }
     PgStageDeploy._set({ phase: "idle" });
     run.onFailed?.(error);
+    // Nothing broke: the toast names the way on, not "Could not deploy."
+    if (error instanceof MainnetDeployRefusedError) {
+      markUnavailableHere(error, MAINNET_DEPLOY_WAY_OUT);
+    }
     reportButtonFailure("deploy")(error);
   }
 

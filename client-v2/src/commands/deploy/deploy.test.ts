@@ -6,7 +6,7 @@ import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
 
 import { PgTerminal } from "../../utils";
 import { isStopped } from "../../utils/stopped";
-import { MAINNET_DEPLOY_BLOCKED } from "./mainnet-block";
+import { MainnetDeployRefusedError } from "./mainnet-block";
 import { PgDeployRun } from "./run";
 
 /** What each test sets: the run's stop, the wallet's balance, the terminal */
@@ -231,8 +231,8 @@ describe("commands/deploy", () => {
 
     const failure = await runDeploy();
 
-    expect(failure).toBeInstanceOf(Error);
-    expect((failure as Error).message).toBe(MAINNET_DEPLOY_BLOCKED);
+    // By type: the stage counts no failure for exactly this error
+    expect(failure).toBeInstanceOf(MainnetDeployRefusedError);
     expect(airdrop).not.toHaveBeenCalled();
     expect(createBuffer).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
