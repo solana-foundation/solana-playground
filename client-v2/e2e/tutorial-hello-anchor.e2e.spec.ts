@@ -253,6 +253,10 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await expect(
       finished.getByText("Program log: Hello, Alex!").first()
     ).toBeVisible();
+    // It leads on to the next tutorial of Home's Start here, Lumberjack
+    await expect(
+      feed(page).getByRole("button", { name: "Next: Lumberjack", exact: true })
+    ).toBeVisible();
   });
 
   test("tutorial-conversation: A wrong pick, then the right one", async ({

@@ -405,7 +405,7 @@
       },
       {
         "label": "What should I build next?",
-        "answer": "Counter PDA Tutorial is a good next one: it stores a number on chain and changes it, so you meet accounts for real.",
+        "answer": "Lumberjack is a good next one: it keeps a player's state on chain and refills energy over time, so you meet accounts for real.",
         "follow": "nextTutorial"
       },
       {
@@ -413,7 +413,7 @@
         "answer": "Devnet is Solana's public test network. Its SOL is free and worth nothing, so you can deploy and call as much as you like. You get it from the devnet faucet with one button; if the faucet is busy, get some yourself at faucet.solana.com."
       }
     ],
-    "next": "counter-pda-tutorial"
+    "next": "lumberjack"
   },
   "docs": [
     {

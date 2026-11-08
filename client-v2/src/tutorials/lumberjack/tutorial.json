@@ -512,11 +512,11 @@
     "chips": [
       {
         "label": "What should I build next?",
-        "answer": "Battle Coins is a good next one: your game mints a token of its own with metadata, rewards players with it and burns it to heal them.",
+        "answer": "Zero Copy is a good next one: it makes accounts bigger than a program's memory, so a game map can outgrow the heap.",
         "follow": "nextTutorial"
       }
     ],
-    "next": "battle-coins"
+    "next": "zero-copy"
   },
   "docs": [
     {

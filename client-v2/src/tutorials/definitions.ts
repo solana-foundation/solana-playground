@@ -2,6 +2,7 @@
 // that reads the build's globals on import, which a unit test does not have
 import { slugOf } from "@/entities/tutorial/model/definition/check";
 import { loadDefinitionsWith } from "@/entities/tutorial/model/definition/load";
+import { START_LADDER } from "@/entities/tutorial/model/start-ladder";
 
 import type { TutorialData } from "../utils/tutorial/types";
 import { DEFINITION_FILES } from "./_definitions/generated";
@@ -69,7 +70,7 @@ if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("tutorials/definitions", () => {
-    /** The Markdown tutorial Hello Anchor's finish suggests next */
+    /** A Markdown tutorial, listed after the conversation ones */
     const counterPda = { name: "Counter PDA Tutorial" } as TutorialData;
 
     it("lists Hello Anchor from its tutorial.json", () => {
@@ -118,12 +119,24 @@ if (import.meta.vitest) {
       ]);
     });
 
-    it("leaves out a definition whose next names no listed tutorial, keeps one with none", () => {
-      // Without Counter PDA Tutorial among the others, Hello Anchor's next
-      // names nothing; Zero Copy's next is null, so it stays
-      const names = definitionTutorials([]).map((t) => t.name);
-      expect(names).not.toContain("Hello Anchor");
-      expect(names).toContain("Zero Copy");
+    it("leads each shipped tutorial's finish to the next of the Start here ladder", () => {
+      // The finish card, its "What should I build next?" chip and Home's
+      // Start here name one tutorial after each lesson; the last names none.
+      // A conversation tutorial off the ladder fails here until it is placed
+      const ladder: string[] = START_LADDER.map((l) => l.name);
+      const listed = definitionTutorials([]);
+      expect(listed.map((t) => t.name).sort()).toEqual(ladder.slice().sort());
+      for (const t of listed) {
+        const after = ladder[ladder.indexOf(t.name) + 1];
+        const finish = t.definition?.finish;
+        expect(finish?.next ?? undefined).toBe(after && slugOf(after));
+        const chip = finish?.chips.find((c) => c.follow === "nextTutorial");
+        if (after) {
+          expect(chip?.answer).toMatch(new RegExp(`^${after} is a good next`));
+        } else {
+          expect(chip).toBeUndefined();
+        }
+      }
     });
 
     it("lists Zero Copy under Advanced, in four steps", () => {

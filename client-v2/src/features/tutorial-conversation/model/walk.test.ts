@@ -346,8 +346,8 @@ describe.each([
 ])("%s through the engine", (_name, { json, docs }) => {
   it("passes the check", () => {
     const d = json as unknown as TutorialDefinition;
-    // Hello Anchor's next is upstream's Counter PDA Tutorial, which only the
-    // catalog knows
+    // A definition's next names another tutorial, which this check of one
+    // definition does not load
     const known = new Set(d.finish.next === null ? [] : [d.finish.next]);
     expect(checkDefinition(d, known, { docs })).toEqual([]);
   });
