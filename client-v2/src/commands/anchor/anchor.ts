@@ -45,6 +45,8 @@ export const anchor = createCmd({
     // read from the endpoint the WASM CLI sends to, not the cached cluster,
     // and Settings holds it until the command ends: the CLI reads it again
     // for every transaction (`idl init` writes after its create confirms).
+    // A boolean is enough: the terminal is disabled while a command runs
+    // (`PgTerm.process`), so no second write starts meanwhile.
     PgGlobal.idlWriting = true;
     try {
       const endpoint = PgSettings.connection.endpoint;

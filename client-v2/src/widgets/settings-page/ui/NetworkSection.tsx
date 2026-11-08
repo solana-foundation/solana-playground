@@ -18,8 +18,8 @@ import BaseNetworkChoice, {
 } from "./BaseNetworkChoice";
 
 /**
- * Whether a running deploy holds the network on the RPC saved under `url`:
- * it is the one in use, and a deploy is running or paused
+ * Whether the network is held on the RPC saved under `url`: it is the one in
+ * use, and a deploy runs or waits paused, or an `anchor idl` write runs
  */
 const isHeld = (url: string) =>
   PgSettings.connection.endpoint === url && !canSwitchNetwork(PgGlobal);
@@ -46,7 +46,7 @@ const toastNetworkHeld = () => {
   );
 };
 
-/** Move the network to `url`; false, with a toast, while a deploy holds it */
+/** Move the network to `url`; false, with a toast, while a deploy or an IDL write holds it */
 const pick = (url: string): boolean => {
   if (!canSwitchNetwork(PgGlobal)) {
     toastNetworkHeld();
@@ -62,7 +62,7 @@ const pick = (url: string): boolean => {
  */
 const adoptEndpoint = (endpoint: string) => {
   const listed = PgCustomRpcs.adopt(endpoint);
-  // A re-spelling of the same RPC waits for a running deploy silently: the
+  // A re-spelling of the same RPC waits for a held network silently: the
   // user asked for nothing, so no toast
   if (!listed || listed === endpoint) return;
   if (!canSwitchNetwork(PgGlobal)) return;
