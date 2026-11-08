@@ -2272,3 +2272,195 @@ describe("useTurn's turn events", () => {
     });
   });
 });
+
+describe("useTurn across a remount", () => {
+  // HOO-2739: Back to tutorials unmounts the tutorial chat, and with it the
+  // hook; the way back mounts a new one
+
+  it("keeps a keyed draft for the next hook with the same key", () => {
+    const first = renderHook(() => useTurn({ open, draftKey: "tutorial:a" }));
+    act(() => first.result.current.setInput("half a question"));
+    first.unmount();
+
+    const again = renderHook(() => useTurn({ open, draftKey: "tutorial:a" }));
+    expect(again.result.current.input).toBe("half a question");
+    const other = renderHook(() => useTurn({ open, draftKey: "tutorial:b" }));
+    expect(other.result.current.input).toBe("");
+    // The panel's hook keeps no draft of its own across a remount
+    expect(renderHook(() => useTestTurn()).result.current.input).toBe("");
+  });
+
+  it("never shows one account's draft to the next, mounted or not", async () => {
+    const first = renderHook(() => useTurn({ open, draftKey: "tutorial:f" }));
+    act(() => first.result.current.setInput("my private question"));
+    first.unmount();
+
+    // Signed out and another account in, with no chat mounted meanwhile
+    act(() => PgSession.reset());
+    await act(() =>
+      PgSession.refreshWith({
+        id: "u2",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      })
+    );
+    const other = renderHook(() => useTurn({ open, draftKey: "tutorial:f" }));
+    expect(other.result.current.input).toBe("");
+
+    // And with the chat mounted while the account changes
+    act(() => other.result.current.setInput("u2's question"));
+    await act(() => PgSession.refreshWith(USER));
+    expect(other.result.current.input).toBe("my private question");
+  });
+
+  it("keeps what was typed before the session read for the account it finds", async () => {
+    act(() => PgSession.reset());
+    const chat = renderHook(() => useTurn({ open, draftKey: "tutorial:g" }));
+    act(() => chat.result.current.setInput("typed early"));
+
+    await act(() => PgSession.refreshWith(USER));
+    expect(chat.result.current.input).toBe("typed early");
+    // Still the read account's only: the next one in does not see it
+    await act(() =>
+      PgSession.refreshWith({
+        id: "u3",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      })
+    );
+    expect(chat.result.current.input).toBe("");
+    await act(() => PgSession.refreshWith(USER));
+    chat.unmount();
+    const again = renderHook(() => useTurn({ open, draftKey: "tutorial:g" }));
+    expect(again.result.current.input).toBe("typed early");
+  });
+
+  it("drops what a chat no longer on screen typed before the session read", async () => {
+    act(() => PgSession.reset());
+    const chat = renderHook(() => useTurn({ open, draftKey: "tutorial:h" }));
+    act(() => chat.result.current.setInput("whose is this?"));
+    chat.unmount();
+
+    await act(() => PgSession.refreshWith(USER));
+    const later = renderHook(() => useTurn({ open, draftKey: "tutorial:h" }));
+    expect(later.result.current.input).toBe("");
+  });
+
+  it("forgets a keyed draft once it is cleared", () => {
+    const first = renderHook(() => useTurn({ open, draftKey: "tutorial:c" }));
+    act(() => first.result.current.setInput("sent already"));
+    act(() => first.result.current.setInput(""));
+    first.unmount();
+
+    const again = renderHook(() => useTurn({ open, draftKey: "tutorial:c" }));
+    expect(again.result.current.input).toBe("");
+  });
+
+  it("does not bring back a question once it is sent", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    const first = renderHook(() => useTurn({ open, draftKey: "tutorial:d" }));
+    act(() => first.result.current.setInput("what is a PDA?"));
+    await act(() => first.result.current.send("what is a PDA?"));
+    first.unmount();
+
+    const again = renderHook(() => useTurn({ open, draftKey: "tutorial:d" }));
+    expect(again.result.current.input).toBe("");
+  });
+
+  it("is idle after a turn that ended while no hook was mounted", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    let finish!: () => void;
+    provider.send.mockImplementation(
+      () => new Promise<void>((resolve) => (finish = resolve))
+    );
+    const first = renderHook(() => useTestTurn());
+    act(() => {
+      void first.result.current.send("hi");
+    });
+    first.unmount();
+    await act(async () => finish());
+
+    const { result } = renderHook(() => useTestTurn());
+    expect(result.current.phase).toBe("idle");
+    provider.send.mockImplementation(() => Promise.resolve());
+    expect(await act(() => result.current.send("again"))).toBe("sent");
+  });
+
+  it("keeps the key held while a turn outlives its chat", async () => {
+    PgAssistant.connect({ id: "anthropic", apiKey: "sk-ant-fake" });
+    let finish!: () => void;
+    provider.send.mockImplementation(
+      () => new Promise<void>((resolve) => (finish = resolve))
+    );
+    const first = renderHook(() => useTestTurn());
+    act(() => {
+      void first.result.current.send("hi");
+    });
+    first.unmount();
+    expect(PgAssistant.keyHold).toBe("busy");
+
+    await act(async () => finish());
+    expect(PgAssistant.keyHold).toBe("ready");
+  });
+
+  it("says Stopped for a busy model that answers once its chat is gone", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    let busy!: () => void;
+    provider.send.mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          busy = () => reject(new ModelBusyError(30, "The model is busy."));
+        })
+    );
+    const first = renderHook(() => useTestTurn());
+    act(() => {
+      void first.result.current.send("hi");
+    });
+    first.unmount();
+    await act(async () => busy());
+
+    expect(lastItem()).toMatchObject({ kind: "notice", text: "Stopped." });
+    const { result } = renderHook(() => useTestTurn());
+    expect(result.current.phase).toBe("idle");
+  });
+
+  it("starts one turn for two chats sending while the default is probed", async () => {
+    defaultBackend(true);
+    const panel = renderHook(() => useTestTurn());
+    const chat = renderHook(() => useTurn({ open, draftKey: "tutorial:e" }));
+
+    await act(async () => {
+      await Promise.all([
+        panel.result.current.send("first"),
+        chat.result.current.send("second"),
+      ]);
+    });
+
+    expect(provider.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops from a remounted hook the turn an earlier one started", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockImplementation(untilAborted);
+    const first = renderHook(() => useTestTurn());
+    act(() => {
+      void first.result.current.send("hi");
+    });
+    const signal: AbortSignal = provider.send.mock.calls[0][1].signal;
+    first.unmount();
+
+    const { result } = renderHook(() => useTestTurn());
+    expect(result.current.phase).toBe("running");
+    act(() => result.current.stop());
+
+    expect(signal.aborted).toBe(true);
+    expect(
+      PgAssistant.items.some(
+        (item) => item.kind === "notice" && item.text === "Stopped."
+      )
+    ).toBe(true);
+    await waitFor(() => expect(result.current.phase).toBe("idle"));
+  });
+});

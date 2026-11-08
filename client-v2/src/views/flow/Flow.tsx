@@ -95,7 +95,8 @@ const log = createLogger("flow:settings");
  * has no assistant panel (`LayoutShellProps.tutorial`), so the one live
  * assistant turn is held here while the chat shows, and the panel's own
  * holds it again once the frame goes. Mounted once, through `chatNode`,
- * which the frame and the phone layout both show.
+ * which the frame and the phone layout both show. A turn still running when
+ * it unmounts keeps its Stop: the turn is the page's, not the hook's.
  */
 const TutorialChat = ({
   onAllTutorials,
@@ -104,7 +105,14 @@ const TutorialChat = ({
   onAllTutorials: () => void;
   onOpenMenu: () => void;
 }) => {
-  const turn = useTurn({ open: openConnectDialog });
+  // Keyed by the tutorial, so its draft is still there after Back to
+  // tutorials, which unmounts this chat, and the way back (HOO-2739)
+  const turn = useTurn({
+    open: openConnectDialog,
+    draftKey: PgTutorial.current
+      ? `tutorial:${PgTutorial.current.name}`
+      : undefined,
+  });
   // The composer counts a question only once the assistant has it
   const send = (text: string) =>
     turn.send(text).then((outcome) => outcome === "sent");

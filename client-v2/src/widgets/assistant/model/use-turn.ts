@@ -182,7 +182,52 @@ export type ConnectOpener = (via: ConnectVia, preset?: ConnectPreset) => void;
 
 export interface TurnOptions {
   open: ConnectOpener;
+  /**
+   * Keeps what the composer holds for the next hook with the same key, so a
+   * chat that unmounts and comes back (a tutorial's, across Back to
+   * tutorials) still holds its draft. Without one the draft is the hook's own.
+   */
+  draftKey?: string;
 }
+
+/**
+ * Drafts by account and `draftKey`, for this page's life; an empty one is
+ * dropped. By account, so one signed in after another in the same tab never
+ * finds the last one's half-typed question, whether or not a chat was
+ * mounted when the account changed.
+ */
+const drafts = new Map<string, string>();
+/** Whose a draft typed before the page has read the session is */
+const UNREAD = "unread";
+const draftSlot = (draftKey: string | undefined) => {
+  if (draftKey === undefined) return undefined;
+  const owner = PgSession.hasRead
+    ? PgSession.get()?.id ?? "signed-out"
+    : UNREAD;
+  return `${owner}\u0000${draftKey}`;
+};
+const earlySlot = (draftKey: string) => `${UNREAD}\u0000${draftKey}`;
+/**
+ * The draft for `draftKey` under the account signed in. One typed before the
+ * session was read by a chat no longer on screen is dropped once the read
+ * lands: nothing says whose it is, and the next account to open that chat
+ * must not get it. A chat on screen across the read keeps it (`useTurn`).
+ */
+const draftOf = (draftKey: string | undefined) => {
+  const slot = draftSlot(draftKey);
+  if (slot === undefined || draftKey === undefined) return "";
+  if (PgSession.hasRead) drafts.delete(earlySlot(draftKey));
+  return drafts.get(slot) ?? "";
+};
+
+/**
+ * The turn in flight, whichever hook started it, and a send still finding
+ * its backend. Both are the page's, not a hook's: a chat that unmounts
+ * mid-turn and mounts again still has its Stop, and two hooks mounted at
+ * once (the panel and a tutorial's chat) cannot both start a turn.
+ */
+const liveTurn: { current?: AbortController } = {};
+const startingTurn = { current: false };
 
 /**
  * Where the turn is. `stopping` is a turn that was stopped, by the user
@@ -336,13 +381,44 @@ const unconnectedPreset = (): ConnectPreset | undefined => {
  */
 const restored = new WeakSet<Connection>();
 
-export const useTurn = ({ open }: TurnOptions): Turn => {
+export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
   // A session ending or starting changes whether the default can take a turn
   useEffect(() => PgSession.onDidChange(render).dispose, []);
 
-  const [input, setInput] = useState("");
+  const slot = draftSlot(draftKey);
+  const [draft, setDraft] = useState(() => ({
+    slot,
+    input: draftOf(draftKey),
+  }));
+  // Typed here while the session was still being read: it is the account's
+  // the read found, and stays on screen rather than blanking mid-typing
+  const carried =
+    draftKey !== undefined &&
+    slot !== undefined &&
+    draft.slot === earlySlot(draftKey) &&
+    slot !== draft.slot;
+  if (carried) {
+    if (draft.input) drafts.set(slot, draft.input);
+    drafts.delete(earlySlot(draftKey));
+    setDraft({ slot, input: draft.input });
+  }
+  // Another chat or another account: it shows that one's draft
+  const input =
+    draft.slot === slot || carried ? draft.input : draftOf(draftKey);
+  // Through a ref: `onDidRequestPrompt` subscribes once and keeps the first
+  // render's `setInput`
+  const key = useRef(draftKey);
+  key.current = draftKey;
+  const setInput = (value: string) => {
+    const at = draftSlot(key.current);
+    if (at !== undefined) {
+      if (value) drafts.set(at, value);
+      else drafts.delete(at);
+    }
+    setDraft({ slot: at, input: value });
+  };
   const [focusRequest, focus] = useReducer((n: number) => n + 1, 0);
   // A prompt that arrived with no backend waits in the composer. Saying so is
   // the panel's job, not the conversation's: a notice item would outlive the
@@ -362,11 +438,20 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     context: ReadonlySet<string>;
     instance: Provider;
   } | null>(null);
-  const turn = useRef<AbortController | null>(null);
+  const turn = liveTurn;
   // Set from the first `send` until its turn starts, so a second send in the
   // meantime (a double Enter, a suggestion clicked twice) cannot start another
   // while the first is still finding a backend
-  const starting = useRef(false);
+  const starting = startingTurn;
+  // A turn outlives the hook that started it (`liveTurn`); what it ends on
+  // after the unmount is said in the thread, since no composer is left to show it
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // A message waiting on a busy model. The ref is what the handlers read: a
   // send through `startRef` holds an older render's state. The state draws it
@@ -381,10 +466,9 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
 
   // The store says what a live turn is doing; the controller says whether a
   // turn is over, since a stopped one still has to unwind. A turn the store
-  // records but this hook has no controller for was started before the hook
-  // remounted. The store's status may already read idle (a closed thread, a
-  // backend change), so its record is all that says the turn still runs; it
-  // shows as stopping because this hook cannot stop it
+  // records with no controller here was cut off by the store (a closed
+  // thread, a backend change), which resets its status to idle, so its record
+  // is all that says the turn still runs; it shows as stopping
   const phaseOf = (): TurnPhase => {
     if (turn.current?.signal.aborted) return "stopping";
     if (PgAssistant.status !== "idle") return PgAssistant.status;
@@ -400,7 +484,14 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   useEffect(() => {
     PgAssistant.markTurnBusy(busy);
   }, [busy]);
-  useEffect(() => () => PgAssistant.markTurnBusy(false), []);
+  // A turn still running when the chat unmounts keeps the key held; its own
+  // end releases it (`runTurn`)
+  useEffect(
+    () => () => {
+      if (!liveTurn.current) PgAssistant.markTurnBusy(false);
+    },
+    []
+  );
 
   const connection = usableConnection();
   // Connecting answers the hint; a later disconnect must not bring it back
@@ -482,8 +573,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   /**
    * Whether a turn, a send still finding its backend, or a message waiting on
    * a busy model is under way.
-   * `PgAssistant.turnRunning` covers a turn this hook has no controller for,
-   * and one whose status a closed thread reset; see `turnRunning`.
+   * `PgAssistant.turnRunning` covers a turn the store cut off, whose status a
+   * closed thread reset; see `turnRunning`.
    */
   const occupied = () =>
     starting.current ||
@@ -622,7 +713,16 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       if (!controller.signal.aborted && !(e instanceof ModelBusyError)) {
         trackTurnFailureFor(current.id)(e);
       }
-      if (!controller.signal.aborted && e instanceof ModelBusyError) {
+      if (
+        !controller.signal.aborted &&
+        e instanceof ModelBusyError &&
+        !mounted.current
+      ) {
+        // No composer is left to count down: the wait ends as a Stop, as it
+        // does when the chat unmounts during one
+        PgAssistant.addNotice("Stopped.");
+        assistantTelemetry.track("assistant_turn_stopped", {});
+      } else if (!controller.signal.aborted && e instanceof ModelBusyError) {
         waitOnBusyWith(current.id)(outgoing, e);
       } else if (
         !controller.signal.aborted &&
@@ -672,9 +772,13 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         log.error(e, { report: true, context: { stopped: true } });
       }
     } finally {
-      if (turn.current === controller) turn.current = null;
+      if (turn.current === controller) turn.current = undefined;
       const finished = PgAssistant.endTurn(controller);
       PgAssistant.setStatus("idle");
+      // Its hook is gone, so no effect of it releases the key it held
+      if (!mounted.current && !liveTurn.current) {
+        PgAssistant.markTurnBusy(false);
+      }
       focus();
 
       // End of turn is the natural commit point: the exchange is complete and
