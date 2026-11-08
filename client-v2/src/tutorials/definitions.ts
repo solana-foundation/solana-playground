@@ -2,7 +2,6 @@
 // that reads the build's globals on import, which a unit test does not have
 import { slugOf } from "@/entities/tutorial/model/definition/check";
 import { loadDefinitionsWith } from "@/entities/tutorial/model/definition/load";
-import { START_LADDER } from "@/entities/tutorial/model/start-ladder";
 
 import type { TutorialData } from "../utils/tutorial/types";
 import { DEFINITION_FILES } from "./_definitions/generated";
@@ -67,9 +66,17 @@ export const listTutorials = (others: TutorialData[]): TutorialData[] => {
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
 
   describe("tutorials/definitions", () => {
+    let START_LADDER: typeof import("@/entities/tutorial/model/start-ladder").START_LADDER;
+
+    beforeAll(async () => {
+      ({ START_LADDER } = await import(
+        "@/entities/tutorial/model/start-ladder"
+      ));
+    });
+
     /** A Markdown tutorial, listed after the conversation ones */
     const counterPda = { name: "Counter PDA Tutorial" } as TutorialData;
 
