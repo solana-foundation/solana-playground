@@ -19,6 +19,9 @@ const setVisibility = (state: DocumentVisibilityState) => {
   document.dispatchEvent(new Event("visibilitychange"));
 };
 
+/** Lets a settled save release its guard: a macrotask, past every microtask */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 describe("fsFlush", () => {
   let disposable: { dispose: () => void };
 
@@ -47,8 +50,7 @@ describe("fsFlush", () => {
 
   it("saves nothing when the page becomes visible", async () => {
     setVisibility("hidden");
-    await vi.waitFor(() => expect(flush).toHaveBeenCalledTimes(1));
-    await Promise.resolve();
+    await settle();
     flush.mockClear();
 
     setVisibility("visible");
@@ -67,6 +69,17 @@ describe("fsFlush", () => {
     expect(report.mock.calls[0][1]).toBe(error);
   });
 
+  it("saves again on the next hide after a save failed", async () => {
+    flush.mockRejectedValueOnce(new Error("quota"));
+    setVisibility("hidden");
+    await settle();
+    setVisibility("visible");
+
+    setVisibility("hidden");
+
+    expect(flush).toHaveBeenCalledTimes(2);
+  });
+
   it("saves once when pagehide follows the hidden change of one unload", () => {
     flush.mockReturnValue(new Promise(() => undefined));
 
@@ -78,8 +91,7 @@ describe("fsFlush", () => {
 
   it("saves again on the next hide once the last save settled", async () => {
     setVisibility("hidden");
-    await vi.waitFor(() => expect(flush).toHaveBeenCalledTimes(1));
-    await Promise.resolve();
+    await settle();
     setVisibility("visible");
 
     setVisibility("hidden");
