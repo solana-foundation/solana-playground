@@ -41,6 +41,7 @@ import lumberjackCustomErrors from "../../../tutorials/lumberjack/docs/custom-er
 import lumberjackPdas from "../../../tutorials/lumberjack/docs/pdas.md";
 import lumberjackSysvarAccounts from "../../../tutorials/lumberjack/docs/sysvar-accounts.md";
 import lumberjack from "../../../tutorials/lumberjack/tutorial.json";
+import zeroCopy from "../../../tutorials/zero-copy/tutorial.json";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { writeWorkspaceFile } from "../../../utils/explorer/workspace-file";
 import { PgTutorial } from "../../../utils/tutorial/tutorial";
@@ -224,6 +225,45 @@ const goalRunner = (d: TutorialDefinition): Runner => {
   };
 };
 
+/** The beats of call acts that name the account their own call creates */
+const ownCreates = (d: TutorialDefinition): Set<string> =>
+  new Set(
+    d.steps.flatMap((s) =>
+      s.beats
+        .filter(
+          (b): b is ActBeat =>
+            b.kind === "act" && b.act === "call" && b.call.creates !== undefined
+        )
+        .map((b) => b.id)
+    )
+  );
+
+/**
+ * The runner of a second pass with the same wallet: a call act's own
+ * one-time call is refused by the System Program, since the account it
+ * creates is already on devnet. Goals' `creates` are `goals.ts`'s to judge.
+ */
+const secondPass = (d: TutorialDefinition, runner: Runner): Runner => ({
+  run: async (act, input, onStage) => {
+    const { creates } = input;
+    if (act !== "call" || !creates || !ownCreates(d).has(input.beatId)) {
+      return runner.run(act, input, onStage);
+    }
+    return {
+      act: "call",
+      ok: false,
+      seconds: 1,
+      message: "custom program error: 0x0",
+      log: "",
+      refused: {
+        instruction: creates.instruction,
+        error: { code: 0, name: null },
+      },
+      exists: { instruction: creates.instruction, account: creates.account },
+    };
+  },
+});
+
 /** The call acts of steps whose goal is a refusal, by beat */
 const refusedCalls = (d: TutorialDefinition) =>
   d.steps.flatMap((s) =>
@@ -249,7 +289,7 @@ const expectTarget = (
 };
 
 /** Answers whatever the conversation waits on, until the finish */
-const walk = async (d: TutorialDefinition) => {
+const walk = async (d: TutorialDefinition, runner: Runner) => {
   const workspace = memoryWorkspace(
     Object.assign({}, d.steps[0].start) as Record<string, string>
   );
@@ -258,7 +298,7 @@ const walk = async (d: TutorialDefinition) => {
   vi.mocked(PgTutorial).all = [{ name: d.name, definition: d }] as never;
   sub = PgConversation.init({
     workspace,
-    runner: goalRunner(d),
+    runner,
     judge: byKind,
   });
   await settle();
@@ -354,7 +394,7 @@ describe.each([
 
   it("walks from the intro to the finish", async () => {
     const d = json as unknown as TutorialDefinition;
-    await walk(d);
+    await walk(d, goalRunner(d));
 
     const saved = file[STORAGE_KEY] as {
       passed: string[];
@@ -371,5 +411,32 @@ describe.each([
     }
     expect(logged.entries.filter((e) => e.level === "error")).toEqual([]);
     expect(PgView.setToast).not.toHaveBeenCalled();
+  });
+});
+
+describe("A second pass with the same wallet (HOO-2730)", () => {
+  it("goes past the counter that already exists and reaches increment", async () => {
+    const d = counter as unknown as TutorialDefinition;
+    await walk(d, secondPass(d, goalRunner(d)));
+
+    const saved = file[STORAGE_KEY] as {
+      passed: string[];
+      runs: Record<string, { status: string }[]>;
+    };
+    expect(saved.runs["s2.init"].map((r) => r.status)).toEqual(["refused"]);
+    expect(saved.runs["s2.inc"].map((r) => r.status)).toEqual(["ok"]);
+    expect(saved.passed).toEqual(d.steps.map((s) => s.id));
+  });
+
+  it("goes past Zero Copy's big map that already exists and reaches paint", async () => {
+    const d = zeroCopy as unknown as TutorialDefinition;
+    await walk(d, secondPass(d, goalRunner(d)));
+
+    const saved = file[STORAGE_KEY] as {
+      passed: string[];
+      runs: Record<string, { status: string }[]>;
+    };
+    expect(saved.runs["s4.create"].map((r) => r.status)).toEqual(["refused"]);
+    expect(saved.passed).toEqual(d.steps.map((s) => s.id));
   });
 });
