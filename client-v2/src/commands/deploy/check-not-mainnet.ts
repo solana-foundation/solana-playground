@@ -4,8 +4,8 @@ import { createLogger } from "@/shared/lib/logger";
 import type { Cluster } from "../../utils";
 import { PgConnection, TerminalLineError } from "../../utils";
 import {
-  blocksDeploy,
   DEPLOY_NETWORK_UNREAD,
+  isDeployBlocked,
   MAINNET_DEPLOY_BLOCKED,
 } from "./mainnet-block";
 
@@ -15,18 +15,22 @@ const log = createLogger("commands:deploy");
 const CLUSTER_READ_MS = 15_000;
 
 /** `read`, or a rejection once `ms` passed: a hung RPC holds no deploy */
-const within = <T>(read: Promise<T>, ms: number) => {
-  let timer: number | undefined;
-  const timedOut = new Promise<never>((_, reject) => {
-    timer = window.setTimeout(
-      () => reject(new Error(`no answer in ${ms / 1000} s`)),
-      ms
+const withinFor =
+  (ms: number) =>
+  <T>(read: Promise<T>) => {
+    let timer: number | undefined;
+    const timedOut = new Promise<never>((_, reject) => {
+      timer = window.setTimeout(
+        () => reject(new Error(`no answer in ${ms / 1000} s`)),
+        ms
+      );
+    });
+    return Promise.race([read, timedOut]).finally(() =>
+      window.clearTimeout(timer)
     );
-  });
-  return Promise.race([read, timedOut]).finally(() =>
-    window.clearTimeout(timer)
-  );
-};
+  };
+
+const withinClusterRead = withinFor(CLUSTER_READ_MS);
 
 /**
  * Refuse a deploy to mainnet-beta. The cluster is read from `endpoint`, not
@@ -44,7 +48,7 @@ export const refuseMainnet = async (
 ): Promise<Cluster | null> => {
   let cluster: Cluster;
   try {
-    cluster = await within(PgConnection.getCluster(endpoint), CLUSTER_READ_MS);
+    cluster = await withinClusterRead(PgConnection.getCluster(endpoint));
   } catch (error) {
     // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` for a network of its own
     if (error instanceof UnknownClusterError) return null;
@@ -53,7 +57,7 @@ export const refuseMainnet = async (
     });
     throw new TerminalLineError(DEPLOY_NETWORK_UNREAD);
   }
-  if (blocksDeploy(cluster)) {
+  if (isDeployBlocked(cluster)) {
     throw new TerminalLineError(MAINNET_DEPLOY_BLOCKED);
   }
   return cluster;

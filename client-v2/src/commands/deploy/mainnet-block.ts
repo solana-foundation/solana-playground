@@ -17,7 +17,7 @@ export const MAINNET_DEPLOY_BLOCKED = `${MAINNET_DEPLOY_BLOCKED_LINE} Deploy fro
  * Whether a program deploy to `cluster` is refused: the stage's switch to the
  * CLI guide, and the command's hard stop. `null` (not read yet) does not block.
  */
-export const blocksDeploy = (cluster: string | null) =>
+export const isDeployBlocked = (cluster: string | null) =>
   cluster === "mainnet-beta";
 
 /**
