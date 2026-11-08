@@ -43,6 +43,12 @@ const makeRes = () => {
       this.ended = true;
       this.emit("close");
     },
+    destroyed: false,
+    destroy(err) {
+      this.destroyed = true;
+      this.destroyError = err;
+      this.emit("close");
+    },
   });
   Object.defineProperty(res, "body", {
     get() {
@@ -278,6 +284,88 @@ describe("/api/build-server", () => {
     );
     assert.equal(d.fetch.mock.calls[0].arguments[1].body, undefined);
     assert.equal(d.query.mock.callCount(), 0);
+  });
+
+  /** A deploy answer whose body yields `sent`, then fails */
+  const cutOffDeploy = (sent) =>
+    mock.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              for (const b of sent) c.enqueue(b);
+            },
+            pull(c) {
+              c.error(new TypeError("terminated"));
+            },
+          }),
+          {
+            status: 200,
+            headers: { "content-type": "application/octet-stream" },
+          }
+        )
+    );
+
+  it("destroys, never ends, a deploy cut off after some bytes", async () => {
+    const res = makeRes();
+
+    await handleWith(deps({ fetch: cutOffDeploy([new Uint8Array([1, 2])]) }))(
+      makeReq({ method: "GET", path: `deploy/${UUID}` }),
+      res
+    );
+
+    assert.equal(res.ended, false);
+    assert.equal(res.destroyed, true);
+  });
+
+  it("answers 502 for a deploy cut off before its first byte", async () => {
+    const res = makeRes();
+
+    await handleWith(deps({ fetch: cutOffDeploy([]) }))(
+      makeReq({ method: "GET", path: `deploy/${UUID}` }),
+      res
+    );
+
+    assert.equal(res.statusCode, 502);
+    assert.equal(res.ended, true);
+  });
+
+  it("keeps no listeners behind while waiting on a slow caller", async () => {
+    let left = 30;
+    const res = makeRes();
+    let most = 0;
+    res.write = function (chunk) {
+      most = Math.max(most, this.listenerCount("close"));
+      this.headersSent = true;
+      this.chunks.push(Buffer.from(chunk));
+      queueMicrotask(() => this.emit("drain"));
+      return false;
+    };
+    const d = deps({
+      fetch: mock.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              pull(c) {
+                if (left-- > 0) c.enqueue(new Uint8Array([7]));
+                else c.close();
+              },
+            }),
+            {
+              status: 200,
+              headers: { "content-type": "application/octet-stream" },
+            }
+          )
+      ),
+    });
+
+    await handleWith(d)(
+      makeReq({ method: "GET", path: `deploy/${UUID}` }),
+      res
+    );
+
+    // Ending the response clears them anyway: count while it streams
+    assert.ok(most <= 1, `${most} close listeners at once`);
   });
 
   it("aborts the server request when the caller leaves", async () => {

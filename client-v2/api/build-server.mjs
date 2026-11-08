@@ -77,25 +77,43 @@ const sendJson = (res, status, body) => {
 };
 
 /**
+ * Wait until a full write buffer drains or the caller leaves, whichever comes
+ * first, and leave neither listener behind.
+ *
+ * @param {import("node:http").ServerResponse} res
+ */
+const writable = (res) =>
+  new Promise((resolve) => {
+    const done = () => {
+      res.off("drain", done);
+      res.off("close", done);
+      resolve();
+    };
+    res.on("drain", done);
+    res.on("close", done);
+  });
+
+/**
  * Copy the server's body to the caller, waiting on a full write buffer, until
- * either side stops.
+ * either side stops. A body the server cuts off is never ended as if whole:
+ * the relay sends no `content-length`, so a normal end would hand the browser
+ * a short program binary that reads as complete. Before the first byte it is
+ * a 502; after, the connection is destroyed.
  *
  * @param {import("node:http").ServerResponse} res
  * @param {ReadableStream<Uint8Array>} body
  */
 const pipe = async (res, body) => {
   const reader = body.getReader();
+  let failure;
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done || res.destroyed) break;
-      if (!res.write(value)) {
-        await new Promise((resolve) => {
-          res.once("drain", resolve);
-          res.once("close", resolve);
-        });
-      }
+      if (!res.write(value)) await writable(res);
     }
+  } catch (e) {
+    failure = e;
   } finally {
     reader.cancel().catch((e) =>
       // The stream is done with either way; nothing is left to tell
@@ -103,8 +121,21 @@ const pipe = async (res, body) => {
         context: { message: String(e?.message ?? e) },
       })
     );
-    if (!res.writableEnded) res.end();
   }
+  if (failure === undefined) {
+    if (!res.writableEnded) res.end();
+    return;
+  }
+  log.warn("build server's answer was cut off", {
+    context: { message: String(failure?.message ?? failure) },
+  });
+  if (res.destroyed) return;
+  if (!res.headersSent) {
+    return sendJson(res, 502, {
+      error: "The build server's answer was cut off. Try again.",
+    });
+  }
+  res.destroy(failure);
 };
 
 /**
