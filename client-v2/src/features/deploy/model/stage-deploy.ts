@@ -171,6 +171,9 @@ export class PgStageDeploy {
         );
         await checkNotMainnet().catch((error: unknown) => {
           if (error instanceof MainnetDeployRefusedError) throw error;
+          log.info("network unread before the wallet; the command refuses it", {
+            context: { error: String(error) },
+          });
         });
         if (cluster) {
           deployTelemetry.track("deploy_started", { cluster, redeploy });
