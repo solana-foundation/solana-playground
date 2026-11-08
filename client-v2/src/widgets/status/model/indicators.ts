@@ -1,4 +1,5 @@
 import type { AnalyzerState } from "@/components/Editor/Monaco/languages/rust/rust-analyzer/status";
+import { clusterName } from "@/entities/cluster";
 
 /**
  * One indicator's state. `not-ready` waits on something outside it (offline,
@@ -72,6 +73,9 @@ export type AiInput =
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** A cluster's name as the network chips show it: "Mainnet" for `mainnet-beta` */
+export const shownClusterName = (name: string) => capitalize(clusterName(name));
+
 const NETWORK_ACTION: StatusAction = {
   kind: "network",
   text: "Change network",
@@ -81,7 +85,7 @@ export const networkIndicator = (
   { name, isConnected, slotStalled }: NetworkInput,
   online: boolean
 ): StatusIndicator => {
-  const shown = capitalize(name);
+  const shown = shownClusterName(name);
   const view = (
     state: StatusState,
     suffix: string | undefined,
@@ -120,10 +124,10 @@ export const networkIndicator = (
   }
   // Playnet is not asked until it has started (`PgConnection.getIsConnected`),
   // so its `null` can last: grey, not a pulse that never ends
-  if (isConnected == null && name === "playnet") {
+  if (isConnected == undefined && name === "playnet") {
     return view("idle", undefined, "Playnet starts when a command needs it.");
   }
-  if (isConnected == null) return view("working", "connecting", undefined);
+  if (isConnected == undefined) return view("working", "connecting", undefined);
   return view("ready", undefined, undefined);
 };
 
@@ -308,6 +312,17 @@ if (import.meta.vitest) {
           "Change cluster, currently devnet",
           "Cluster: devnet",
           "Devnet · Ready",
+        ]);
+      });
+
+      // HOO-2488: the chips' name, never "Mainnet-beta"; the settings
+      // trigger's names keep the moniker its lookups use
+      it("shows mainnet-beta as Mainnet", () => {
+        const n = networkIndicator({ ...UP, name: "mainnet-beta" }, true);
+        expect([n.words, n.tip, n.label]).toEqual([
+          "Mainnet",
+          "Mainnet · Ready",
+          "Change cluster, currently mainnet-beta",
         ]);
       });
 

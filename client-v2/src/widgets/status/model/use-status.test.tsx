@@ -16,6 +16,7 @@ const assistant = vi.hoisted(() => ({
 
 vi.mock("@/utils", () => ({}));
 vi.mock("@/entities/cluster", () => ({
+  clusterName: (cluster: string) => cluster,
   useSelectedConnection: () => ({
     connection: undefined,
     cluster: "devnet",

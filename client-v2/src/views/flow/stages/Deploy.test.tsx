@@ -49,6 +49,8 @@ const mocks = vi.hoisted(() => ({
   signIn: vi.fn(),
   signInFor: vi.fn(),
   automaticAirdrop: false,
+  /** The network the deploy's endpoint answers for, read before any send */
+  endpointCluster: "devnet",
 }));
 
 const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
@@ -78,6 +80,20 @@ vi.mock("../../../utils", () => ({
   },
   PgWallet: mocks.wallet,
 }));
+// The real check reads the endpoint's genesis hash; here the endpoint
+// answers for `mocks.endpointCluster`
+vi.mock("@/commands/deploy/check-not-mainnet", async () => {
+  const { MainnetDeployRefusedError } = await import(
+    "@/commands/deploy/mainnet-block"
+  );
+  return {
+    checkNotMainnet: async () => {
+      if (mocks.endpointCluster === "mainnet-beta") {
+        throw new MainnetDeployRefusedError();
+      }
+    },
+  };
+});
 vi.mock("@/features/auth", () => ({
   PgSession: { signInFor: mocks.signInFor },
   isSignInFailure: () => false,
@@ -122,6 +138,7 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
 import { PgStageDeploy } from "@/features/deploy";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
+import { MAINNET_DEPLOY_BLOCKED } from "../../../commands/deploy/mainnet-block";
 import {
   DeployCancelledError,
   DeployFundingError,
@@ -156,6 +173,7 @@ afterEach(() => {
   // eslint-disable-next-line unicorn/no-null -- `PgWallet.current` is `null` while no wallet is current
   mocks.wallet.current = null;
   mocks.wallet.accounts = [];
+  mocks.endpointCluster = "devnet";
   resetTelemetry();
   vi.clearAllMocks();
 });
@@ -753,6 +771,23 @@ describe("Deploy stage", () => {
     await act(async () => PgStageDeploy.start());
 
     expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  // HOO-2728: the stage shows the CLI guide on mainnet, but the network can
+  // move there before the press is read; the refusal comes before the wallet
+  it("refuses a mainnet deploy before creating a wallet, and counts no failure", async () => {
+    mocks.endpointCluster = "mainnet-beta";
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    expect(mocks.wallet.add).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.report).toHaveBeenCalledWith(
+      expect.objectContaining({ message: MAINNET_DEPLOY_BLOCKED })
+    );
+    expect(events()).not.toContain("deploy_started");
+    expect(events()).not.toContain("deploy_failed");
   });
 
   it("names the checks when a deploy fails before any step", async () => {

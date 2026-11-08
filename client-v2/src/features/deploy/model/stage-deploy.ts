@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 
+import { MainnetDeployRefusedError } from "@/commands/deploy/mainnet-block";
 import {
   DeployCancelledError,
   DeployFundingError,
@@ -155,6 +156,12 @@ export class PgStageDeploy {
       let reachedRun = false;
       let result: Awaited<ReturnType<typeof PgCommand.deploy.execute>>;
       try {
+        // First, as the command's own pre-check: a refused deploy creates no
+        // wallet and is no deploy attempt (HOO-2728)
+        const { checkNotMainnet } = await import(
+          "@/commands/deploy/check-not-mainnet"
+        );
+        await checkNotMainnet();
         if (cluster) {
           deployTelemetry.track("deploy_started", { cluster, redeploy });
         }
@@ -281,7 +288,8 @@ export class PgStageDeploy {
       }
       return;
     }
-    if (cluster) {
+    // A mainnet refusal is the beta's rule, not a failed deploy
+    if (cluster && !(error instanceof MainnetDeployRefusedError)) {
       deployTelemetry.track("deploy_failed", {
         cluster,
         step: (run.reachedRun && PgDeployRun.lastStep) || "checks",
