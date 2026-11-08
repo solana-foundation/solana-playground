@@ -6,7 +6,7 @@ import { PgConnection, TerminalLineError } from "../../utils";
 import {
   DEPLOY_NETWORK_UNREAD,
   isDeployBlocked,
-  MAINNET_DEPLOY_BLOCKED,
+  MainnetDeployRefusedError,
 } from "./mainnet-block";
 
 const log = createLogger("commands:deploy");
@@ -41,7 +41,8 @@ const withinClusterRead = withinFor(CLUSTER_READ_MS);
  * refuses the method is refused: it could be mainnet.
  *
  * @returns the cluster read, `null` for a network of its own
- * @throws {TerminalLineError} on mainnet-beta, or when the network is unread
+ * @throws {MainnetDeployRefusedError} on mainnet-beta
+ * @throws {TerminalLineError} when the network is unread
  */
 export const refuseMainnet = async (
   endpoint: string
@@ -57,9 +58,7 @@ export const refuseMainnet = async (
     });
     throw new TerminalLineError(DEPLOY_NETWORK_UNREAD);
   }
-  if (isDeployBlocked(cluster)) {
-    throw new TerminalLineError(MAINNET_DEPLOY_BLOCKED);
-  }
+  if (isDeployBlocked(cluster)) throw new MainnetDeployRefusedError();
   return cluster;
 };
 
