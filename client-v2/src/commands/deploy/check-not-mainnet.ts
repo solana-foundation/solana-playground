@@ -44,24 +44,26 @@ const withinClusterRead = withinFor(CLUSTER_READ_MS);
  *   (`MainnetDeployRefusedError` for a deploy)
  * @throws {TerminalLineError} when the network is unread
  */
-export const refuseMainnet = async (
-  endpoint: string,
-  refusal: MainnetRefusal
-): Promise<Cluster | null> => {
-  let cluster: Cluster;
-  try {
-    cluster = await withinClusterRead(PgConnection.getCluster(endpoint));
-  } catch (error) {
-    // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` for a network of its own
-    if (error instanceof UnknownClusterError) return null;
-    log.warn("could not read the endpoint's network; send refused", {
-      context: { send: refusal.send, error: String(error) },
-    });
-    throw new TerminalLineError(refusal.unread);
-  }
-  if (isDeployBlocked(cluster)) throw refusal.blocked();
-  return cluster;
-};
+export const refuseMainnetWith =
+  (refusal: MainnetRefusal) =>
+  async (endpoint: string): Promise<Cluster | null> => {
+    let cluster: Cluster;
+    try {
+      cluster = await withinClusterRead(PgConnection.getCluster(endpoint));
+    } catch (error) {
+      // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` for a network of its own
+      if (error instanceof UnknownClusterError) return null;
+      log.warn("could not read the endpoint's network; send refused", {
+        context: { send: refusal.send, error: String(error) },
+      });
+      throw new TerminalLineError(refusal.unread);
+    }
+    if (isDeployBlocked(cluster)) throw refusal.blocked();
+    return cluster;
+  };
+
+/** A deploy's refusal on mainnet-beta, as {@link refuseMainnetWith} */
+export const refuseMainnet = refuseMainnetWith(DEPLOY_REFUSAL);
 
 /**
  * The `deploy` command's first pre-check: the early refusal, before the
@@ -69,5 +71,5 @@ export const refuseMainnet = async (
  * any send, since the network can change while the question waits.
  */
 export const checkNotMainnet = async () => {
-  await refuseMainnet(PgConnection.current.rpcEndpoint, DEPLOY_REFUSAL);
+  await refuseMainnet(PgConnection.current.rpcEndpoint);
 };

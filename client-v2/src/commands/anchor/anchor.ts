@@ -1,8 +1,10 @@
 import { PgPackage, PgSettings, TerminalLineError } from "../../utils";
 import { checkPgWallet } from "../checks";
 import { createCmd } from "../create";
-import { refuseMainnet } from "../deploy/check-not-mainnet";
+import { refuseMainnetWith } from "../deploy/check-not-mainnet";
 import { IDL_REFUSAL } from "../deploy/mainnet-block";
+
+const refuseIdlWriteOnMainnet = refuseMainnetWith(IDL_REFUSAL);
 
 /**
  * The `anchor idl` subcommands that only read or print. Every other one is
@@ -30,7 +32,7 @@ export const anchor = createCmd({
     // read from the endpoint the WASM CLI sends to, not the cached cluster.
     const write = isIdlWrite(input.raw);
     const endpoint = PgSettings.connection.endpoint;
-    if (write) await refuseMainnet(endpoint, IDL_REFUSAL);
+    if (write) await refuseIdlWriteOnMainnet(endpoint);
 
     const { runAnchor } = await PgPackage.import("anchor-cli", {
       log: true,
