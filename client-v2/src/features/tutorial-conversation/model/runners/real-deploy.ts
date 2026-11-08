@@ -224,10 +224,10 @@ export const realDeployPort = (): DeployPort => {
       wallet = playgroundWallet();
       return wallet ? wallet.publicKey.toBase58() : null;
     },
-    // As the no-wallet card's Create wallet makes it (`PgWallet.add` makes it
-    // the current wallet too)
-    createWallet: () => {
-      PgWallet.add();
+    // As the no-wallet card's Create wallet makes it (`PgWallet.addFirst`
+    // makes it the current wallet too)
+    createWallet: async () => {
+      await PgWallet.addFirst();
       wallet = playgroundWallet();
       if (!wallet) throw new Error("The Playground wallet was not made");
       return wallet.publicKey.toBase58();

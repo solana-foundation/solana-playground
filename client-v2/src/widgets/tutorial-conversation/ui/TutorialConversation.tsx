@@ -402,12 +402,17 @@ const runner = announceDeploys(
 );
 
 /**
- * "Create wallet" on a deploy that found none: the Playground wallet, made in
- * this browser as the Setup modal makes it (`PgWallet.add` makes it the
- * current wallet too), then the deploy runs again.
+ * "Create wallet" on a deploy that found none: the Playground wallet, made as
+ * Deploy makes it (`PgWallet.addFirst`, whose key the signer provider makes
+ * and which becomes the current wallet), then the deploy runs again.
  */
-const createWallet = (beatId: string) => {
-  if (!PgWallet.accounts.length) PgWallet.add();
+const createWallet = async (beatId: string) => {
+  try {
+    if (!PgWallet.accounts.length) await PgWallet.addFirst();
+  } catch (error) {
+    reportButtonFailure("create wallet")(error);
+    return;
+  }
   PgConversation.act(beatId);
 };
 

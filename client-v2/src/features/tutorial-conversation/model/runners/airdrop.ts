@@ -82,7 +82,7 @@ export const runAirdropWith =
       };
     }
     const existing = port.wallet();
-    const address = existing ?? port.createWallet();
+    const address = existing ?? (await port.createWallet());
     const cost = await deployCost(port);
     const funded = await fundForDeploy({
       chain: port.funding,
@@ -142,7 +142,7 @@ if (import.meta.vitest) {
       const port = {
         refusal: noRefusal,
         wallet: chain.wallet,
-        createWallet: vi.fn(() => WALLET),
+        createWallet: vi.fn(async () => WALLET),
         program: () => ({
           id: PROGRAM,
           keypair: true,

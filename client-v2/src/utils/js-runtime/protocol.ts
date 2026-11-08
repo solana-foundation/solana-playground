@@ -111,11 +111,18 @@ export const isHandshake = (data: unknown): boolean =>
  */
 type CarriesBytes<T> = T extends ArrayBuffer | ArrayBufferView
   ? true
-  : T extends readonly (infer E)[]
-  ? number extends E
-    ? true
-    : CarriesBytes<E>
-  : T extends object
+  : ArrayCarriesBytes<T>;
+
+/** An array of numbers carries bytes; any other array, if its items do */
+type ArrayCarriesBytes<T> = T extends readonly (infer E)[]
+  ? ItemsCarryBytes<E>
+  : ObjectCarriesBytes<T>;
+
+/** Whether an array with items `E` carries bytes */
+type ItemsCarryBytes<E> = number extends E ? true : CarriesBytes<E>;
+
+/** An object carries bytes if any of its fields does */
+type ObjectCarriesBytes<T> = T extends object
   ? { [K in keyof T]-?: CarriesBytes<T[K]> }[keyof T]
   : false;
 
