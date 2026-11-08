@@ -8,7 +8,7 @@ import { Button } from "@/shared/ui/button";
 import { PgGlobal, PgSettings, PgView } from "@/utils";
 import type { ToastChildProps } from "@/utils/view";
 
-import { canSwitchNetwork } from "../model/network-hold";
+import { canSwitchNetwork, networkHeldBy } from "../model/network-hold";
 import { answerFor, saveCheckedWith } from "../model/save-custom-rpc";
 import { settingsTelemetry } from "../model/telemetry";
 import BaseCustomRpcs from "./BaseCustomRpcs";
@@ -22,22 +22,33 @@ import BaseNetworkChoice, {
  * it is the one in use, and a deploy is running or paused
  */
 const isHeld = (url: string) =>
-  PgSettings.connection.endpoint === url &&
-  !canSwitchNetwork(PgGlobal.deployState);
+  PgSettings.connection.endpoint === url && !canSwitchNetwork(PgGlobal);
 
 /** Save a custom RPC once its URL answers one health request (spec `client-v2-custom-rpcs`) */
 const saveChecked = saveCheckedWith(fetchRpcHealth)(isHeld);
 
-/** Say that a running deploy holds the network where it is */
-const toastNetworkHeld = () =>
+/** Say what holds the network where it is: a deploy or an IDL write */
+const toastNetworkHeld = () => {
+  if (networkHeldBy(PgGlobal) === "idl") {
+    PgView.setToast(
+      () => (
+        <span>
+          An anchor idl command is running. Change the network when it ends.
+        </span>
+      ),
+      { options: { name: "network-held-by-idl" } }
+    );
+    return;
+  }
   PgView.setToast(
     () => <span>A deploy is running. Change the network when it ends.</span>,
     { options: { name: "network-held-by-deploy" } }
   );
+};
 
 /** Move the network to `url`; false, with a toast, while a deploy holds it */
 const pick = (url: string): boolean => {
-  if (!canSwitchNetwork(PgGlobal.deployState)) {
+  if (!canSwitchNetwork(PgGlobal)) {
     toastNetworkHeld();
     return false;
   }
@@ -54,7 +65,7 @@ const adoptEndpoint = (endpoint: string) => {
   // A re-spelling of the same RPC waits for a running deploy silently: the
   // user asked for nothing, so no toast
   if (!listed || listed === endpoint) return;
-  if (!canSwitchNetwork(PgGlobal.deployState)) return;
+  if (!canSwitchNetwork(PgGlobal)) return;
   PgSettings.connection.endpoint = listed;
 };
 

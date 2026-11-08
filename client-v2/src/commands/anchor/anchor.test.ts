@@ -4,6 +4,7 @@ import { UnknownClusterError } from "@/entities/cluster";
 
 import {
   PgConnection,
+  PgGlobal,
   PgPackage,
   PgSettings,
   TerminalLineError,
@@ -20,6 +21,7 @@ vi.mock("../../utils", async () => {
   const terminal = await import("../../utils/terminal");
   return {
     TerminalLineError: terminal.TerminalLineError,
+    PgGlobal: { idlWriting: false },
     PgConnection: {
       // The cached cluster: the refusal must not trust it
       cluster: "devnet",
@@ -71,6 +73,7 @@ describe("isIdlWrite", () => {
 describe("anchor", () => {
   beforeEach(() => {
     PgSettings.connection.endpoint = "https://rpc.example.com";
+    PgGlobal.idlWriting = false;
     vi.mocked(PgConnection.getCluster).mockReset();
     runAnchor.mockReset();
     vi.mocked(PgPackage.import).mockResolvedValue({ runAnchor } as never);
@@ -134,5 +137,43 @@ describe("anchor", () => {
 
     await expect(run("anchor idl init")).rejects.toThrow(IDL_NETWORK_UNREAD);
     expect(runAnchor).not.toHaveBeenCalled();
+  });
+
+  // `idl init` writes after its create confirms, reading the endpoint again:
+  // Settings must not move the network meanwhile (Greptile on PR 131)
+  it("holds the network for the whole IDL write and releases it after", async () => {
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("devnet");
+    const held: boolean[] = [];
+    vi.mocked(PgConnection.getCluster).mockImplementationOnce(async () => {
+      held.push(PgGlobal.idlWriting);
+      return "devnet";
+    });
+    runAnchor.mockImplementationOnce(async () => {
+      held.push(PgGlobal.idlWriting);
+    });
+
+    await run("anchor idl init");
+
+    expect(held).toEqual([true, true]);
+    expect(PgGlobal.idlWriting).toBe(false);
+  });
+
+  it("releases the network when an IDL write is refused or fails", async () => {
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
+    await expect(run("anchor idl init")).rejects.toThrow(MAINNET_IDL_BLOCKED);
+    expect(PgGlobal.idlWriting).toBe(false);
+
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("devnet");
+    runAnchor.mockRejectedValueOnce(new Error("blockhash not found"));
+    await expect(run("anchor idl upgrade")).rejects.toThrow("blockhash");
+    expect(PgGlobal.idlWriting).toBe(false);
+  });
+
+  it("does not hold the network for a read", async () => {
+    runAnchor.mockImplementationOnce(async () => {
+      expect(PgGlobal.idlWriting).toBe(false);
+    });
+    await run("anchor idl fetch");
+    expect(runAnchor).toHaveBeenCalledOnce();
   });
 });

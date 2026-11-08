@@ -1,4 +1,9 @@
-import { PgPackage, PgSettings, TerminalLineError } from "../../utils";
+import {
+  PgGlobal,
+  PgPackage,
+  PgSettings,
+  TerminalLineError,
+} from "../../utils";
 import { checkPgWallet } from "../checks";
 import { createCmd } from "../create";
 import { refuseMainnetWith } from "../deploy/check-not-mainnet";
@@ -28,21 +33,35 @@ export const anchor = createCmd({
   needsConnection: true,
   preChecks: checkPgWallet,
   handle: async (input) => {
-    // Mainnet IDL writes are refused in the beta (HOO-2737). The network is
-    // read from the endpoint the WASM CLI sends to, not the cached cluster.
-    const write = isIdlWrite(input.raw);
-    const endpoint = PgSettings.connection.endpoint;
-    if (write) await refuseIdlWriteOnMainnet(endpoint);
-
-    const { runAnchor } = await PgPackage.import("anchor-cli", {
-      log: true,
-    });
-    // The CLI's first load can take a while: an endpoint switched meanwhile
-    // was never checked, so nothing is sent to it
-    if (write && PgSettings.connection.endpoint !== endpoint) {
-      throw new TerminalLineError(IDL_REFUSAL.unread);
+    if (!isIdlWrite(input.raw)) {
+      const { runAnchor } = await PgPackage.import("anchor-cli", {
+        log: true,
+      });
+      await runAnchor(input.raw);
+      return;
     }
 
-    await runAnchor(input.raw);
+    // Mainnet IDL writes are refused in the beta (HOO-2737). The network is
+    // read from the endpoint the WASM CLI sends to, not the cached cluster,
+    // and Settings holds it until the command ends: the CLI reads it again
+    // for every transaction (`idl init` writes after its create confirms).
+    PgGlobal.idlWriting = true;
+    try {
+      const endpoint = PgSettings.connection.endpoint;
+      await refuseIdlWriteOnMainnet(endpoint);
+
+      const { runAnchor } = await PgPackage.import("anchor-cli", {
+        log: true,
+      });
+      // Settings is held, but not every network switch goes through it: an
+      // endpoint changed while the CLI loaded was never checked
+      if (PgSettings.connection.endpoint !== endpoint) {
+        throw new TerminalLineError(IDL_REFUSAL.unread);
+      }
+
+      await runAnchor(input.raw);
+    } finally {
+      PgGlobal.idlWriting = false;
+    }
   },
 });
