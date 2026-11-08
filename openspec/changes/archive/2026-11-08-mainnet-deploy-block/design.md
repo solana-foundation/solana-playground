@@ -34,6 +34,15 @@ mainnet commands.
   still the previous endpoint's (`clusterIsStale`).
 - **The refusal is a `TerminalLineError`**, one plain line, no stack, the
   same as other pre-check refusals.
+- **The Deploy stage runs the same check before it connects a wallet.**
+  A press that reaches the stage while the network moves to Mainnet is
+  refused before `deploy_started` and before a Playground wallet is created.
+  Only the mainnet refusal stops there; an endpoint that does not answer is
+  left to the command, which refuses it in the terminal with its own line.
+- **A mainnet refusal is not a failed deploy.** It is a
+  `MainnetDeployRefusedError`, which the stage does not track as
+  `deploy_failed`; its toast reads "Can't deploy here: on mainnet, deploy
+  from your machine…" instead of "Could not deploy."
 - **The stage reads `PgConnection.cluster`** for what it shows (it re-renders
   on cluster change); the command's guard is the hard stop.
 - **The pill becomes "Deploy from your machine" on Mainnet** rather than a

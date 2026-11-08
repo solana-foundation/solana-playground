@@ -124,10 +124,10 @@ export const networkIndicator = (
   }
   // Playnet is not asked until it has started (`PgConnection.getIsConnected`),
   // so its `null` can last: grey, not a pulse that never ends
-  if (isConnected == undefined && name === "playnet") {
+  if (isConnected == null && name === "playnet") {
     return view("idle", undefined, "Playnet starts when a command needs it.");
   }
-  if (isConnected == undefined) return view("working", "connecting", undefined);
+  if (isConnected == null) return view("working", "connecting", undefined);
   return view("ready", undefined, undefined);
 };
 
@@ -318,7 +318,10 @@ if (import.meta.vitest) {
       // HOO-2488: the chips' name, never "Mainnet-beta"; the settings
       // trigger's names keep the moniker its lookups use
       it("shows mainnet-beta as Mainnet", () => {
-        const n = networkIndicator({ ...UP, name: "mainnet-beta" }, true);
+        const n = networkIndicator(
+          { name: "mainnet-beta", isConnected: true, slotStalled: false },
+          true
+        );
         expect([n.words, n.tip, n.label]).toEqual([
           "Mainnet",
           "Mainnet · Ready",
