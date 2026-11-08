@@ -120,15 +120,18 @@ test("client-v2-layout: A page over a lesson goes back to it", async ({
   test.setTimeout(120_000);
   await stubPrograms(page);
   await page.goto("/tutorials/hello-anchor");
-  const start = page.getByRole("button", { name: "Start", exact: true });
+  const start = page
+    .getByRole("complementary", { name: "Tutorial chat" })
+    .getByRole("button", { name: "Start step 1" });
   await expect(start).toBeVisible(LONG);
 
   await navItem(page, "Programs").click();
   await expect(page).toHaveURL(/\/programs\/?$/);
 
   // The lesson's route draws its page again
+  // The lesson's route carries its page number once the frame opens it
   await page.goBack();
-  await expect(page).toHaveURL(/\/tutorials\/hello-anchor\/?$/);
+  await expect(page).toHaveURL(/\/tutorials\/hello-anchor(\/1)?\/?$/);
   await expect(
     page.getByRole("searchbox", { name: "Search programs" })
   ).toBeHidden();

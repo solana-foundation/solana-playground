@@ -25,7 +25,7 @@ const catalog = vi.hoisted(() => ({
 }));
 vi.mock("@/widgets/catalog", () => catalog);
 
-import type { CatalogPage } from "@/widgets/catalog";
+import type { ShownPage } from "@/widgets/catalog";
 import type { HomeVia, StartView } from "@/widgets/home";
 
 import { useViewPath } from "./use-view-path";
@@ -33,7 +33,7 @@ import { useViewPath } from "./use-view-path";
 type Shown = {
   view: StartView;
   homeVia?: HomeVia;
-  catalog?: CatalogPage;
+  catalog?: ShownPage;
 };
 const render = (initial: Shown) =>
   renderHook(
