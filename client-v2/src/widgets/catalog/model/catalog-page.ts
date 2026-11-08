@@ -8,11 +8,15 @@ import { catalogTelemetry } from "./telemetry";
 type Listener = (page: ShownPage | null) => void;
 
 let current: ShownPage | null = null;
+// Counts the times a page was shown, so a late finish can tell the visit
+// that started it from a later one of the same page
+let visit = 0;
 const listeners = new Set<Listener>();
 
 const set = (next: ShownPage | null) => {
   if (current === next) return;
   current = next;
+  if (next !== null) visit += 1;
   listeners.forEach((cb) => cb(next));
 };
 
@@ -22,6 +26,8 @@ const set = (next: ShownPage | null) => {
  */
 export const catalogPage = {
   current: (): ShownPage | null => current,
+  /** Which showing of a page this is; changes each time a page is shown */
+  visit: (): number => visit,
   /** Show `page`; reported only when the page shown changes */
   open: (page: ShownPage, via: CatalogVia) => {
     if (current === page) return;

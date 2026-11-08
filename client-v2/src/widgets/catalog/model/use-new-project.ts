@@ -4,6 +4,7 @@ import { PgTutorial } from "@/utils";
 
 import type { BaseNewProjectProps } from "../ui/BaseNewProject";
 import { toastOpenFailed, toastStartFailed } from "../ui/open-failed-toast";
+import { catalogPage } from "./catalog-page";
 import { importProgram, isImportCancel } from "./program-open";
 import type { CatalogPage } from "./telemetry";
 import { catalogTelemetry } from "./telemetry";
@@ -54,9 +55,12 @@ export const useNewProject = (
   const shown = useRef(tab);
   shown.current = tab;
   // Only this visit closes the page: an Open from an earlier one that ends
-  // after the page was left and opened again must not close the new visit
+  // after the page was left and opened again must not close the new visit.
+  // Kept by the store, not by this mount: the page remounts within one visit
+  // (Start from scratch switches the project under it)
+  const visit = useRef(catalogPage.visit());
   const closeIfOpen = () => {
-    if (open.current) close();
+    if (catalogPage.visit() === visit.current) close();
   };
   const failedOn = (list: CatalogPage) => (message: string) => {
     if (!open.current || shown.current !== list) toastOpenFailed(message);

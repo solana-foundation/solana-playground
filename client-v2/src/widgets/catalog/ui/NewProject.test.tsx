@@ -81,6 +81,7 @@ vi.mock("@/features/new-project", () => ({
   },
 }));
 
+import { catalogPage } from "../model/catalog-page";
 import type { CatalogPage } from "../model/telemetry";
 import { useNewProject } from "../model/use-new-project";
 import NewProjectView from "./NewProject";
@@ -373,10 +374,26 @@ it("leaves a reopened page open when an Open from the earlier visit ends", async
 
   // Left, then opened again while the first Open still runs
   unmount();
+  catalogPage.close();
+  catalogPage.open("new-project", "nav");
   render(<NewProject />);
   await act(async () => open.release());
 
   expect(close).not.toHaveBeenCalled();
+});
+
+it("closes the page when an Open ends after it remounted in the same visit", async () => {
+  const open = held();
+  utils.PgTutorial.open.mockReturnValueOnce(open.promise);
+  const { unmount } = render(<NewProject />);
+  fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }));
+
+  // The project switch under the page remounts it; the visit goes on
+  unmount();
+  render(<NewProject />);
+  await act(async () => open.release());
+
+  expect(close).toHaveBeenCalledTimes(1);
 });
 
 it("toasts an Open that fails while its list is not the one shown", async () => {
