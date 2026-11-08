@@ -94,6 +94,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.clearAllMocks();
+  // Back to the local provider, even after a test that failed under the key-origin one
+  vi.mocked(PgWallet.holdsKeysInPage).mockReturnValue(true);
   resetLogger();
   told.length = 0;
   airdropHook.faucet = "none";
@@ -281,7 +283,6 @@ describe("wallet Settings menu", () => {
 
     expect(PgWallet.import).not.toHaveBeenCalled();
     expect(PgWallet.export).not.toHaveBeenCalled();
-    vi.mocked(PgWallet.holdsKeysInPage).mockReturnValue(true);
   });
 
   it("says so when the imported file is not a keypair", async () => {

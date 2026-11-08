@@ -45,7 +45,10 @@ export const pickedDiagnostic = () => {
 /** What the output and the program say at the moment a verdict is read */
 const verdicts = (): Verdicts => ({
   failedLine: pickedDiagnostic()?.line ?? null,
-  // A stored IDL `readIdl` refuses may lack `instructions`; it names none
+  // `idl` can hold a shape `readIdl` refuses, with no `instructions`;
+  // `callableIdl()` is null for it, so the verdict names no instructions.
+  // TODO(SF#94 follow-up): say why in the build line (`noCallableIdlMessage`)
+  // rather than "0 instructions"
   instructions:
     PgProgramInfo.callableIdl()?.instructions.map((ix) => ix.name) ?? [],
 });

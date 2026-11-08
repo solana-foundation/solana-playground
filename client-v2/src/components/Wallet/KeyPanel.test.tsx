@@ -39,8 +39,8 @@ const fakePanel = () => {
 
 afterEach(() => {
   document.documentElement.classList.remove("dark");
-  // Drops reports kept for the first `initLogger`, so a test's provider sees
-  // only its own
+  // Drops reports kept for the first `initLogger`, so a test's log provider
+  // sees only its own
   resetLogger();
 });
 

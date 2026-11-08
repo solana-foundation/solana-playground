@@ -46,8 +46,8 @@ const pick = () => {
 
 afterEach(() => {
   vi.restoreAllMocks();
-  // Drops reports kept for the first `initLogger`, so a test's provider sees
-  // only its own
+  // Drops reports kept for the first `initLogger`, so a test's log provider
+  // sees only its own
   resetLogger();
 });
 
@@ -544,8 +544,6 @@ describe("utils/wallet/wallet", () => {
     };
 
     const ORIGIN = "https://wallet-keys.example";
-
-    afterEach(() => resetLogger());
 
     it("reads unavailable, reading nothing, while the key page cannot be reached", async () => {
       const read = vi.fn(async () => stored);
