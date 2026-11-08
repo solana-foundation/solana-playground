@@ -58,7 +58,28 @@ describe("fsFlush", () => {
     window.dispatchEvent(new Event("pagehide"));
     await vi.waitFor(() => expect(report).toHaveBeenCalledTimes(1));
 
+    expect(report.mock.calls[0][0]).toMatch(/flush the file tree/);
     expect(report.mock.calls[0][1]).toBe(error);
+  });
+
+  it("saves once when pagehide follows the hidden change of one unload", () => {
+    flush.mockReturnValue(new Promise(() => undefined));
+
+    setVisibility("hidden");
+    window.dispatchEvent(new Event("pagehide"));
+
+    expect(flush).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves again on the next hide once the last save settled", async () => {
+    setVisibility("hidden");
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    setVisibility("visible");
+
+    setVisibility("hidden");
+
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledTimes(2));
   });
 
   it("stops listening once disposed", () => {

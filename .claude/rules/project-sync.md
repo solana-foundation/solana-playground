@@ -148,12 +148,14 @@ when a session reads a file matching the `paths` in the frontmatter.
   ones into ghosts. One exception:
   `PgExplorer._saveWorkspaces` writes `/.config/workspaces.json` itself and
   flushes after every write.
-- **A save on unload never lands, so the save at creation stays.**
-  `effects/fs-flush` saves the tree when the page is hidden, for a page then
-  frozen or discarded. A reload or a close is not covered: Chromium aborts an
-  IndexedDB transaction still open when the document unloads, so a flush
-  started in `pagehide` (or the `hidden` change an unload brings) is lost
-  (HOO-2738, measured). Never drop a flush at creation in favour of it.
+- **A save on unload never lands in Chromium, so the save at creation
+  stays.** `effects/fs-flush` saves the tree when the page is hidden, for a
+  page then frozen or discarded. A reload or a close is not covered: Chromium
+  aborts an IndexedDB transaction still open when the document unloads, so a
+  flush started in `pagehide` (or the `hidden` change an unload brings) is
+  lost (HOO-2738, measured with a write and an immediate `page.reload()`).
+  Other engines are unmeasured. Never drop a flush at creation in favour of
+  it.
 - **Never do filesystem work per filesystem write.** The dirty flag is written
   at most once per debounce window. Writing the flag per write put a read on
   the same lightning-fs queue as the writes that triggered it and made
