@@ -207,7 +207,13 @@ const processDeploy = async (
   // how much SOL user needs before creating the buffer. The run keeps this
   // connection and what the program info says about its network: a network
   // change from here on must not split it across two networks.
+  // Taken together, before the network read below: a network change during
+  // that read refreshes the program info for the other network.
   const connection = PgConnection.current;
+  const onChain = PgProgramInfo.onChain;
+  if (!onChain) throw new Error("Failed to get on-chain program info");
+  const programExists = onChain.deployed;
+  const additionalLen = additionalLenFor(onChain)(programLen);
   // Again on the run's own connection, before any send: the network can move
   // to mainnet while the pre-checks' wallet question waits (HOO-2728). Read
   // from its endpoint, so the record files under the network it went to.
@@ -216,10 +222,6 @@ const processDeploy = async (
   const bufferConnection = PgConnection.getReadBufferConnection(connection);
   const readBufferUrl =
     bufferConnection === connection ? undefined : bufferConnection.rpcEndpoint;
-  const onChain = PgProgramInfo.onChain;
-  if (!onChain) throw new Error("Failed to get on-chain program info");
-  const programExists = onChain.deployed;
-  const additionalLen = getAdditionalLen(programLen);
   const sendAndConfirmTxWithRetries =
     sendAndConfirmTxWithRetriesFor(connection);
   const [userBalance, bufferBalance] = await Promise.all([
@@ -806,16 +808,15 @@ const fetchProgramDataLenOn =
     return (await connection.getAccountInfo(programDataPk))?.data.length;
   };
 
-/** {@link additionalProgramLen} for the current program */
-const getAdditionalLen = (programLen: number) => {
-  const onChain = PgProgramInfo.onChain;
-  if (!onChain) throw new Error("Failed to get on-chain program info");
-  return additionalProgramLen({
-    programLen,
-    deployed: onChain.deployed,
-    onChainLen: onChain.programDataLen,
-  });
-};
+/** {@link additionalProgramLen} for the program as `onChain` read it */
+const additionalLenFor =
+  (onChain: NonNullable<typeof PgProgramInfo.onChain>) =>
+  (programLen: number) =>
+    additionalProgramLen({
+      programLen,
+      deployed: onChain.deployed,
+      onChainLen: onChain.programDataLen,
+    });
 
 /**
  * Load buffer with the ability to pause, resume and cancel on demand, and to

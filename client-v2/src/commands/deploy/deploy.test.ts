@@ -19,6 +19,10 @@ const env = vi.hoisted(() => ({
   switchedNetwork: false,
   /** What `PgConnection.getCluster` reads from the deploy's endpoint */
   cluster: "devnet",
+  /** Runs while `getCluster` reads: the user switching network meanwhile */
+  duringClusterRead: () => undefined as void,
+  /** What `PgProgramInfo.onChain` holds for the selected network */
+  onChain: { deployed: false } as { deployed: boolean },
   waitForInput: (async () => true) as (msg: string) => Promise<unknown>,
   executeFromStr: (async () => undefined) as (cmd: string) => Promise<unknown>,
   /** What `getAccountInfo` returns for the buffer */
@@ -94,7 +98,10 @@ vi.mock("../../utils", () => ({
       };
     },
     getAirdropAmount: () => 5,
-    getCluster: async () => env.cluster,
+    getCluster: async () => {
+      env.duringClusterRead();
+      return env.cluster;
+    },
     getReadBufferConnection: <T>(connection: T) => env.readBuffer ?? connection,
   },
   PgGlobal: {
@@ -107,7 +114,9 @@ vi.mock("../../utils", () => ({
   },
   PgProgramInfo: {
     importedProgram: { bytes: new Uint8Array(10) },
-    onChain: { deployed: false },
+    get onChain() {
+      return env.onChain;
+    },
     pk: {},
   },
   PgServer: { deploy: vi.fn() },
@@ -185,6 +194,8 @@ describe("commands/deploy", () => {
     env.bufferBalance = async () => 0;
     env.switchedNetwork = false;
     env.cluster = "devnet";
+    env.duringClusterRead = () => undefined;
+    env.onChain = { deployed: false };
     env.waitForInput = async () => true;
     env.executeFromStr = async () => undefined;
     // A live buffer whose authority is the Playground wallet
@@ -225,6 +236,19 @@ describe("commands/deploy", () => {
     expect(airdrop).not.toHaveBeenCalled();
     expect(createBuffer).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
+  });
+
+  // The network read waits on the RPC; a switch meanwhile refreshes the
+  // program info for the other network, which must not pick deploy or upgrade
+  it("deploys as the program info read with its connection, not after a switch", async () => {
+    env.balance = 100e9;
+    env.duringClusterRead = () => {
+      env.onChain = { deployed: true };
+    };
+
+    await runDeploy();
+
+    expect(deployProgram).toHaveBeenCalled();
   });
 
   it("asks for nothing more once stopped during the airdrop question", async () => {

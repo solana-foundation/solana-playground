@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { blocksDeploy, MAINNET_DEPLOY_BLOCKED } from "./mainnet-block";
+import { isDeployBlocked, MAINNET_DEPLOY_BLOCKED } from "./mainnet-block";
 
-describe("blocksDeploy", () => {
+describe("isDeployBlocked", () => {
   it("blocks mainnet-beta only", () => {
-    expect(blocksDeploy("mainnet-beta")).toBe(true);
-    expect(blocksDeploy("devnet")).toBe(false);
-    expect(blocksDeploy("localnet")).toBe(false);
+    expect(isDeployBlocked("mainnet-beta")).toBe(true);
+    expect(isDeployBlocked("devnet")).toBe(false);
+    expect(isDeployBlocked("localnet")).toBe(false);
     // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is `null` until the first endpoint is read
-    expect(blocksDeploy(null)).toBe(false);
+    expect(isDeployBlocked(null)).toBe(false);
   });
 });
 

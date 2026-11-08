@@ -32,7 +32,7 @@ import {
 import { StatusDot } from "@/shared/ui/status-dot";
 
 import {
-  blocksDeploy,
+  isDeployBlocked,
   MAINNET_DEPLOY_BLOCKED_LINE,
 } from "../../../commands/deploy/mainnet-block";
 import type { DeployRecord } from "../state/deploy-history";
@@ -171,7 +171,7 @@ const payerLine = (p: BaseDeployProps) => {
  * now; a project deployed only on other networks gets `ElsewhereLine` instead.
  */
 const description = (p: BaseDeployProps, latest: DeployRecord | undefined) => {
-  if (blocksDeploy(p.cluster)) return MAINNET_DEPLOY_BLOCKED_LINE;
+  if (isDeployBlocked(p.cluster)) return MAINNET_DEPLOY_BLOCKED_LINE;
   if (!p.built) return "Build the program first.";
   if (latest) {
     return "The program id stays constant across deploys; redeploying upgrades it in place.";
@@ -188,7 +188,7 @@ const deployedElsewhere = (
   p: BaseDeployProps,
   latest: DeployRecord | undefined
 ) =>
-  latest === undefined && p.cluster && !blocksDeploy(p.cluster)
+  latest === undefined && p.cluster && !isDeployBlocked(p.cluster)
     ? p.history.find((r) => r.cluster !== p.cluster)
     : undefined;
 
@@ -483,7 +483,7 @@ const BeforeDeploySummary = ({
       )}
       {p.idlName && <IdlRow name={p.idlName} />}
     </dl>
-    {p.built && !running && !blocksDeploy(p.cluster) && (
+    {p.built && !running && !isDeployBlocked(p.cluster) && (
       <p
         aria-label="Who pays"
         className="m-0 border-t border-border px-4 py-2.5 text-caption font-read text-muted-foreground"
@@ -503,15 +503,15 @@ const BeforeDeploySummary = ({
  */
 const DeployPill = ({
   p,
-  blocked,
+  isBlocked,
   redeploy,
 }: {
   p: BaseDeployProps;
-  blocked: boolean;
+  isBlocked: boolean;
   redeploy: boolean;
 }) => {
   const running = p.view.kind === "running";
-  if (blocked) {
+  if (isBlocked) {
     return (
       <BrandButton onClick={() => p.onOpenCliGuide("mainnet-blocked")}>
         Deploy from your machine
@@ -572,7 +572,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
   const elsewhere = p.built ? deployedElsewhere(p, latest) : undefined;
   const { view } = p;
   const running = view.kind === "running";
-  const blocked = blocksDeploy(p.cluster);
+  const isBlocked = isDeployBlocked(p.cluster);
 
   return (
     <div className={STAGE_FRAME}>
@@ -592,7 +592,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
           </StageEmptyDescription>
         )}
         {!latest && <BeforeDeploySummary p={p} running={running} />}
-        {latest && p.built && !running && !blocked && (
+        {latest && p.built && !running && !isBlocked && (
           <p
             aria-label="Who pays"
             className="text-caption text-muted-foreground"
@@ -649,7 +649,11 @@ const BaseDeploy = (p: BaseDeployProps) => {
           )}
         >
           {running && p.run.step && <BaseDeployProgress state={p.run} />}
-          <DeployPill p={p} blocked={blocked} redeploy={latest !== undefined} />
+          <DeployPill
+            p={p}
+            isBlocked={isBlocked}
+            redeploy={latest !== undefined}
+          />
         </StageEmptyActions>
         {/* The other ways on, one kind of button: outlines in the
             pill's height and shape. They follow the pill in the page, so
@@ -668,7 +672,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             </Button>
           )}
           {p.idlUpload}
-          {!blocked && (
+          {!isBlocked && (
             <Button
               variant="outline"
               onClick={() => p.onOpenCliGuide("deploy-stage")}
