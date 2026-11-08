@@ -45,7 +45,12 @@ describe("fsFlush", () => {
     expect(flush).toHaveBeenCalledTimes(1);
   });
 
-  it("saves nothing when the page becomes visible", () => {
+  it("saves nothing when the page becomes visible", async () => {
+    setVisibility("hidden");
+    await vi.waitFor(() => expect(flush).toHaveBeenCalledTimes(1));
+    await Promise.resolve();
+    flush.mockClear();
+
     setVisibility("visible");
 
     expect(flush).not.toHaveBeenCalled();
