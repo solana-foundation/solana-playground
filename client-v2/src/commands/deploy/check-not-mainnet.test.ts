@@ -4,7 +4,11 @@ import { UnknownClusterError } from "@/entities/cluster";
 
 import { PgConnection, TerminalLineError } from "../../utils";
 import { checkNotMainnet } from "./check-not-mainnet";
-import { DEPLOY_NETWORK_UNREAD, MAINNET_DEPLOY_BLOCKED } from "./mainnet-block";
+import {
+  DEPLOY_NETWORK_UNREAD,
+  MAINNET_DEPLOY_BLOCKED,
+  MainnetDeployRefusedError,
+} from "./mainnet-block";
 
 vi.mock("../../utils", async () => {
   const terminal = await import("../../utils/terminal");
@@ -29,6 +33,8 @@ describe("checkNotMainnet", () => {
     const check = checkNotMainnet();
 
     await expect(check).rejects.toBeInstanceOf(TerminalLineError);
+    // The Deploy stage tells this class apart from a failed deploy
+    await expect(check).rejects.toBeInstanceOf(MainnetDeployRefusedError);
     await expect(check).rejects.toThrow(MAINNET_DEPLOY_BLOCKED);
     expect(PgConnection.getCluster).toHaveBeenCalledWith(
       "https://rpc.example.com"

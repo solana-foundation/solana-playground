@@ -1,29 +1,23 @@
-import { PgPackage, PgSettings } from "../../utils";
+import { PgPackage, PgSettings, TerminalLineError } from "../../utils";
 import { checkPgWallet } from "../checks";
 import { createCmd } from "../create";
 import { refuseMainnet } from "../deploy/check-not-mainnet";
 import { IDL_REFUSAL } from "../deploy/mainnet-block";
 
 /**
- * The `anchor idl` subcommands that send a transaction signed by the
- * Playground wallet; `fetch` and `authority` only read
+ * The `anchor idl` subcommands that only read or print. Every other one is
+ * taken as a send from the Playground wallet (`init`, `upgrade`, `close` and
+ * the buffer and authority writes in wasm/anchor-cli/src/commands/idl.rs), so
+ * a subcommand added there later is refused on mainnet until listed here.
  */
-const IDL_WRITES = new Set([
-  "init",
-  "upgrade",
-  "write-buffer",
-  "set-buffer",
-  "close",
-  "set-authority",
-  "erase-authority",
-]);
+const IDL_READS = new Set(["fetch", "authority", "help"]);
 
 /** Whether `raw` (`anchor idl <sub> ...`) sends a transaction; help only prints */
 export const isIdlWrite = (raw: string) => {
   const words = raw.trim().split(/\s+/);
   const [, group, sub] = words;
   if (words.includes("--help") || words.includes("-h")) return false;
-  return group === "idl" && IDL_WRITES.has(sub);
+  return group === "idl" && sub !== undefined && !IDL_READS.has(sub);
 };
 
 export const anchor = createCmd({
@@ -34,13 +28,18 @@ export const anchor = createCmd({
   handle: async (input) => {
     // Mainnet IDL writes are refused in the beta (HOO-2737). The network is
     // read from the endpoint the WASM CLI sends to, not the cached cluster.
-    if (isIdlWrite(input.raw)) {
-      await refuseMainnet(PgSettings.connection.endpoint, IDL_REFUSAL);
-    }
+    const write = isIdlWrite(input.raw);
+    const endpoint = PgSettings.connection.endpoint;
+    if (write) await refuseMainnet(endpoint, IDL_REFUSAL);
 
     const { runAnchor } = await PgPackage.import("anchor-cli", {
       log: true,
     });
+    // The CLI's first load can take a while: an endpoint switched meanwhile
+    // was never checked, so nothing is sent to it
+    if (write && PgSettings.connection.endpoint !== endpoint) {
+      throw new TerminalLineError(IDL_REFUSAL.unread);
+    }
 
     await runAnchor(input.raw);
   },

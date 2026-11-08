@@ -8,10 +8,10 @@ import { DEPLOY_REFUSAL, isDeployBlocked } from "./mainnet-block";
 
 const log = createLogger("commands:deploy");
 
-/** How long a custom RPC's genesis read may take before the deploy is refused */
+/** How long a custom RPC's genesis read may take before the send is refused */
 const CLUSTER_READ_MS = 15_000;
 
-/** `read`, or a rejection once `ms` passed: a hung RPC holds no deploy */
+/** `read`, or a rejection once `ms` passed: a hung RPC holds no send */
 const withinFor =
   (ms: number) =>
   <T>(read: Promise<T>) => {
@@ -30,8 +30,9 @@ const withinFor =
 const withinClusterRead = withinFor(CLUSTER_READ_MS);
 
 /**
- * Refuse a deploy, or another send from the Playground wallet (`refusal`
- * names its lines), to mainnet-beta. The cluster is read from `endpoint`, not
+ * Refuse a send from the Playground wallet to mainnet-beta: a deploy, an
+ * `anchor idl` write. `refusal` supplies the error thrown on mainnet and the
+ * line for an unread network. The cluster is read from `endpoint`, not
  * `PgConnection.cluster`, which is derived asynchronously and can still name
  * the previous network; a custom RPC is resolved by its genesis hash. A
  * genesis hash that names no known cluster passes: that network is not
@@ -45,7 +46,7 @@ const withinClusterRead = withinFor(CLUSTER_READ_MS);
  */
 export const refuseMainnet = async (
   endpoint: string,
-  refusal: MainnetRefusal = DEPLOY_REFUSAL
+  refusal: MainnetRefusal
 ): Promise<Cluster | null> => {
   let cluster: Cluster;
   try {
@@ -54,7 +55,7 @@ export const refuseMainnet = async (
     // eslint-disable-next-line unicorn/no-null -- `DeployResult.cluster` is `null` for a network of its own
     if (error instanceof UnknownClusterError) return null;
     log.warn("could not read the endpoint's network; send refused", {
-      context: { error: String(error) },
+      context: { send: refusal.send, error: String(error) },
     });
     throw new TerminalLineError(refusal.unread);
   }
@@ -68,5 +69,5 @@ export const refuseMainnet = async (
  * any send, since the network can change while the question waits.
  */
 export const checkNotMainnet = async () => {
-  await refuseMainnet(PgConnection.current.rpcEndpoint);
+  await refuseMainnet(PgConnection.current.rpcEndpoint, DEPLOY_REFUSAL);
 };

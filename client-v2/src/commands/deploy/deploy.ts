@@ -24,6 +24,7 @@ import { additionalProgramLen } from "./additional-len";
 import { airdropTopUp } from "./airdrop-top-up";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
 import { checkNotMainnet, refuseMainnet } from "./check-not-mainnet";
+import { DEPLOY_REFUSAL } from "./mainnet-block";
 import { forgetOpenBuffer, recordOpenBuffer } from "./open-buffers";
 import type { DeployResult, FundingFailure } from "./run";
 import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
@@ -217,7 +218,7 @@ const processDeploy = async (
   // Again on the run's own connection, before any send: the network can move
   // to mainnet while the pre-checks' wallet question waits (HOO-2728). Read
   // from its endpoint, so the record files under the network it went to.
-  const cluster = await refuseMainnet(connection.rpcEndpoint);
+  const cluster = await refuseMainnet(connection.rpcEndpoint, DEPLOY_REFUSAL);
   // The platform RPC does not return fresh buffers
   const bufferConnection = PgConnection.getReadBufferConnection(connection);
   const readBufferUrl =

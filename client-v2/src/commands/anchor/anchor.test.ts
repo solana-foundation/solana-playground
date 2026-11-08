@@ -2,7 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UnknownClusterError } from "@/entities/cluster";
 
-import { PgConnection, PgPackage, TerminalLineError } from "../../utils";
+import {
+  PgConnection,
+  PgPackage,
+  PgSettings,
+  TerminalLineError,
+} from "../../utils";
 import {
   IDL_NETWORK_UNREAD,
   MAINNET_IDL_BLOCKED,
@@ -29,7 +34,10 @@ vi.mock("../../utils", async () => {
 
 type Handle = NonNullable<typeof anchor.handle>;
 
-const run = (raw: string) => anchor.handle!({ raw } as Parameters<Handle>[0]);
+const run = (raw: string) => {
+  if (!anchor.handle) throw new Error("`anchor` has no handler");
+  return anchor.handle({ raw } as Parameters<Handle>[0]);
+};
 
 describe("isIdlWrite", () => {
   it.each([
@@ -41,6 +49,8 @@ describe("isIdlWrite", () => {
     "anchor idl set-authority -n 11111111111111111111111111111111",
     "anchor idl erase-authority",
     "  anchor   idl   init   Prog1111  ",
+    // A subcommand a later CLI adds is refused until it is listed as a read
+    "anchor idl create-buffer",
   ])("counts `%s` as a write", (raw) => {
     expect(isIdlWrite(raw)).toBe(true);
   });
@@ -52,6 +62,7 @@ describe("isIdlWrite", () => {
     "anchor --help",
     "anchor idl init --help",
     "anchor idl upgrade -h",
+    "anchor idl help init",
   ])("lets `%s` through as a read", (raw) => {
     expect(isIdlWrite(raw)).toBe(false);
   });
@@ -59,6 +70,7 @@ describe("isIdlWrite", () => {
 
 describe("anchor", () => {
   beforeEach(() => {
+    PgSettings.connection.endpoint = "https://rpc.example.com";
     vi.mocked(PgConnection.getCluster).mockReset();
     runAnchor.mockReset();
     vi.mocked(PgPackage.import).mockResolvedValue({ runAnchor } as never);
@@ -110,5 +122,17 @@ describe("anchor", () => {
     await run("anchor idl fetch");
     expect(PgConnection.getCluster).not.toHaveBeenCalled();
     expect(runAnchor).toHaveBeenCalledWith("anchor idl fetch");
+  });
+
+  // The CLI's first load can outlast a switch to mainnet in Settings
+  it("refuses an IDL write when the endpoint changed while the CLI loaded", async () => {
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("devnet");
+    vi.mocked(PgPackage.import).mockImplementationOnce(async () => {
+      PgSettings.connection.endpoint = "https://api.mainnet-beta.solana.com";
+      return { runAnchor } as never;
+    });
+
+    await expect(run("anchor idl init")).rejects.toThrow(IDL_NETWORK_UNREAD);
+    expect(runAnchor).not.toHaveBeenCalled();
   });
 });

@@ -1,11 +1,11 @@
 import { TerminalLineError } from "@/utils/terminal/line-error";
 
 /**
- * Mainnet deploys are refused in the beta (HOO-2728): `processDeploy` pays
- * from a Playground wallet whose key is kept in the browser, and the beta
- * deploys to devnet, testnet and local networks only. Mainnet stays
- * selectable for reading and Interact; its deploys go through the CLI deploy
- * guide, from the user's own machine.
+ * Mainnet sends from the Playground wallet, whose key is kept in the browser,
+ * are refused in the beta: program deploys (HOO-2728, `processDeploy`) and the
+ * terminal's `anchor idl` writes (HOO-2737). The beta sends to devnet, testnet
+ * and local networks only. Mainnet stays selectable for reading and Interact;
+ * its deploys go through the CLI deploy guide, from the user's own machine.
  */
 
 /** The Deploy stage's line on mainnet */
@@ -32,8 +32,9 @@ export class MainnetDeployRefusedError extends TerminalLineError {
 }
 
 /**
- * Whether a program deploy to `cluster` is refused: the stage's switch to the
- * CLI guide, and the command's hard stop. `null` (not read yet) does not block.
+ * Whether a send from the Playground wallet to `cluster` is refused: the
+ * Deploy stage's switch to the CLI guide, and the hard stop of `deploy` and
+ * `anchor idl` writes. `null` (not read yet) does not block.
  */
 export const isDeployBlocked = (cluster: string | null) =>
   cluster === "mainnet-beta";
@@ -46,12 +47,7 @@ export const isDeployBlocked = (cluster: string | null) =>
 export const DEPLOY_NETWORK_UNREAD =
   "Could not read which network the endpoint serves, so nothing was deployed. Check the RPC in Settings › Network and try again.";
 
-/**
- * The terminal's `anchor idl` writes are refused on mainnet for the same
- * reason (HOO-2737): they pay from the same browser-held wallet. Deploy's
- * "Upload IDL" button is not one of them: it only loads a file into this
- * browser.
- */
+/** The `anchor idl` writes' refusal on mainnet */
 export const MAINNET_IDL_BLOCKED =
   "Writing an IDL to mainnet is not available in the beta. Run `anchor idl` from your own machine: Deploy stage › Deploy from your machine.";
 
@@ -59,18 +55,33 @@ export const MAINNET_IDL_BLOCKED =
 export const IDL_NETWORK_UNREAD =
   "Could not read which network the endpoint serves, so nothing was sent. Check the RPC in Settings › Network and try again.";
 
-/** How a send is refused: the error on mainnet, the line on an unread network */
+/**
+ * How a mainnet send is refused. `blocked` makes an error rather than holding
+ * a line: the deploy's is an identifiable subclass, which the Deploy stage
+ * tells apart from a failed deploy.
+ */
 export interface MainnetRefusal {
-  blocked: () => TerminalLineError;
-  unread: string;
+  /** Names the send in the log of an unread network */
+  readonly send: string;
+  /** The error thrown on mainnet-beta */
+  readonly blocked: () => TerminalLineError;
+  /** The line when the endpoint did not say which network it serves */
+  readonly unread: string;
 }
 
-export const DEPLOY_REFUSAL: MainnetRefusal = {
+/** A program deploy's refusal */
+export const DEPLOY_REFUSAL: MainnetRefusal = Object.freeze({
+  send: "deploy",
   blocked: () => new MainnetDeployRefusedError(),
   unread: DEPLOY_NETWORK_UNREAD,
-};
+});
 
-export const IDL_REFUSAL: MainnetRefusal = {
+/**
+ * An `anchor idl` write's refusal. Deploy's and Interact's "Upload IDL" button
+ * needs none: it loads a file into this browser and writes nothing on chain.
+ */
+export const IDL_REFUSAL: MainnetRefusal = Object.freeze({
+  send: "anchor idl write",
   blocked: () => new TerminalLineError(MAINNET_IDL_BLOCKED),
   unread: IDL_NETWORK_UNREAD,
-};
+});
