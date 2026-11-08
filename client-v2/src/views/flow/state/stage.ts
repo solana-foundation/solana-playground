@@ -1,4 +1,4 @@
-import { PgSession, SIGNED_OUT_REASON } from "@/features/auth";
+import { PgSession } from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
 
 import { emptyFileOf } from "../../../commands/build/empty-source";
@@ -10,6 +10,7 @@ import {
   PgGlobal,
   PgProgramInfo,
 } from "../../../utils";
+import { isSignInRefusalError } from "../../../utils/sign-in-refusal";
 import { isStopped } from "../../../utils/stopped";
 import {
   PgBuildOutput,
@@ -196,17 +197,15 @@ const deployStage = (from: DeployFrom, state: FlowState): Stage =>
  * mock.
  */
 const buildFailureOf = (err: unknown): BuildFailure => {
-  const { answered, message, reason } = (err ?? {}) as {
+  const { answered, message } = (err ?? {}) as {
     answered?: unknown;
     message?: unknown;
-    reason?: unknown;
   };
   const text = typeof message === "string" ? message : String(err);
   const emptyFile = emptyFileOf(err);
   if (emptyFile)
     return { kind: "empty-source", message: text, file: emptyFile };
-  if (reason === SIGNED_OUT_REASON)
-    return { kind: "signed-out", message: text };
+  if (isSignInRefusalError(err)) return { kind: "signed-out", message: text };
   return { kind: answered === false ? "no-answer" : "other", message: text };
 };
 

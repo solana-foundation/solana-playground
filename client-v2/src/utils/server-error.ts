@@ -1,4 +1,4 @@
-import { SIGNED_OUT_REASON } from "@/features/auth";
+import { isSignInRefusalError } from "./sign-in-refusal";
 
 /** `PgServerError.body` when the refusal's body could not be read */
 export const UNREADABLE_BODY = "<unreadable response body>";
@@ -47,7 +47,7 @@ export class PgServerError extends Error {
     this.status = init.status;
     this.body = init.body;
     this.reason = init.refusal?.reason;
-    this.isPlain = this.reason === SIGNED_OUT_REASON;
+    this.isPlain = isSignInRefusalError(this);
   }
 
   /**
