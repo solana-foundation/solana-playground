@@ -27,7 +27,7 @@ export interface NewProjectState {
 
 /**
  * New project's state, held by its page. Whatever opens or starts from here
- * closes the page (`close`). A failure stays where it happened, or comes up
+ * closes the page (`close`), if this visit still shows it. A failure stays where it happened, or comes up
  * as a toast where nothing shows it: the page was left, or the failing card's
  * list is not the one shown. One Open or Start at a time across both lists.
  */
@@ -53,17 +53,22 @@ export const useNewProject = (
   // Open's callbacks are the render's that started it
   const shown = useRef(tab);
   shown.current = tab;
+  // Only this visit closes the page: an Open from an earlier one that ends
+  // after the page was left and opened again must not close the new visit
+  const closeIfOpen = () => {
+    if (open.current) close();
+  };
   const failedOn = (list: CatalogPage) => (message: string) => {
     if (!open.current || shown.current !== list) toastOpenFailed(message);
   };
 
   const tutorialOpen = useCardOpen("tutorials", {
-    onOpened: close,
+    onOpened: closeIfOpen,
     onFailed: failedOn("tutorials"),
   });
   const programOpen = useCardOpen("programs", {
     isCancel: isImportCancel,
-    onOpened: close,
+    onOpened: closeIfOpen,
     onFailed: failedOn("programs"),
   });
   const busy = tutorialOpen.busy || programOpen.busy;
@@ -111,6 +116,6 @@ export const useNewProject = (
     onStartFailed: (message) => {
       if (!open.current) toastStartFailed(message);
     },
-    closePage: close,
+    closePage: closeIfOpen,
   };
 };

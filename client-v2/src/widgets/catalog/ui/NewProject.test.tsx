@@ -365,6 +365,20 @@ it("toasts an Open that fails after the page was left", async () => {
   expect(utils.PgView.setToast).toHaveBeenCalledTimes(1);
 });
 
+it("leaves a reopened page open when an Open from the earlier visit ends", async () => {
+  const open = held();
+  utils.PgTutorial.open.mockReturnValueOnce(open.promise);
+  const { unmount } = render(<NewProject />);
+  fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }));
+
+  // Left, then opened again while the first Open still runs
+  unmount();
+  render(<NewProject />);
+  await act(async () => open.release());
+
+  expect(close).not.toHaveBeenCalled();
+});
+
 it("toasts an Open that fails while its list is not the one shown", async () => {
   const open = held();
   utils.PgTutorial.open.mockReturnValueOnce(open.promise);
