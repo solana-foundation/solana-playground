@@ -8,7 +8,7 @@ export interface DocsLink {
   code: string;
   /** Shown above the code, as "From {host}: {title}" */
   title: string;
-  /** The `https:` page the link came from */
+  /** The `https:` page on `solana.com` the link came from */
   from?: string;
   /** Devnet SOL the script needs before it can run */
   sol?: number;
@@ -44,20 +44,28 @@ const NAME_REGEX = /^[A-Za-z0-9._-]+\.(ts|js)$/;
 export const DOCS_HOME = "https://solana.com/docs";
 
 /**
- * Read a URL only when it is `https:`, so a link can never point a button at
- * `javascript:` or a plain-HTTP page.
+ * Read a URL only when it is an `https:` page on `solana.com` or one of its
+ * subdomains. A link is anyone's to craft, so anything else would let it point
+ * "Back to the docs" at `javascript:` or at someone else's site.
  *
- * @param value the URL as the link gives it
- * @returns the URL, or `undefined`
+ * @param value the URL as the link or the referrer gives it
+ * @returns the URL as the parser normalised it, or `undefined`
  */
-const httpsUrlOf = (value: string | null): string | undefined => {
+const solanaPageOf = (value: string | null): string | undefined => {
   if (!value) return undefined;
+  let url: URL;
   try {
-    return new URL(value).protocol === "https:" ? value : undefined;
+    url = new URL(value);
   } catch {
     // Not a URL at all: the link has no usable source
     return undefined;
   }
+  if (url.protocol !== "https:" || url.username || url.password) {
+    return undefined;
+  }
+  const isSolana =
+    url.hostname === "solana.com" || url.hostname.endsWith(".solana.com");
+  return isSolana ? url.href : undefined;
 };
 
 const toBase64Url = (bytes: Uint8Array) => {
@@ -155,7 +163,7 @@ const inflateCode = (
  */
 export const decodeDocsLink = (fragment: string): DecodedDocsLink => {
   const params = new URLSearchParams(fragment.replace(/^#/, ""));
-  const from = httpsUrlOf(params.get("from"));
+  const from = solanaPageOf(params.get("from"));
   const fail = (reason: DocsLinkFailure): DecodedDocsLink => ({
     ok: false,
     reason,
@@ -214,20 +222,13 @@ export const encodeDocsLink = (
  * Where "Back to the docs" goes: the link's own page, else the page the user
  * came from when it is Solana's, else the docs' home.
  *
- * @param from the link's `from`, already checked to be `https:`
+ * @param from the link's `from`, already checked to be a Solana page
  * @param referrer `document.referrer`
  * @returns the URL to go to
  */
 export const backToDocsHref = (from: string | undefined, referrer: string) => {
   if (from) return from;
-  const fromReferrer = httpsUrlOf(referrer);
-  if (fromReferrer) {
-    const { hostname } = new URL(fromReferrer);
-    if (hostname === "solana.com" || hostname.endsWith(".solana.com")) {
-      return fromReferrer;
-    }
-  }
-  return DOCS_HOME;
+  return solanaPageOf(referrer) ?? DOCS_HOME;
 };
 
 if (import.meta.vitest) {
@@ -340,9 +341,22 @@ if (import.meta.vitest) {
       expect(decoded.ok || decoded.reason).toBe("size");
     });
 
-    it("never uses a source that is not https", () => {
-      const decoded = decodeDocsLink("v=1&from=javascript%3Aalert(1)");
-      expect(decoded.ok || decoded.from).toBeUndefined();
+    it("never uses a source that is not an https Solana page", () => {
+      const fromOfEncoded = (encoded: string) => {
+        const decoded = decodeDocsLink(`v=1&from=${encoded}`);
+        return decoded.ok || decoded.from;
+      };
+      const fromOf = (from: string) => fromOfEncoded(encodeURIComponent(from));
+      expect(fromOfEncoded("javascript%3Aalert(1)")).toBeUndefined();
+      expect(fromOf("http://solana.com/docs")).toBeUndefined();
+      expect(fromOf("https://evil.example/docs")).toBeUndefined();
+      expect(fromOf("https://notsolana.com/docs")).toBeUndefined();
+      expect(fromOf("https://solana.com.evil.example/docs")).toBeUndefined();
+      expect(fromOf("https://solana.com@evil.example/docs")).toBeUndefined();
+      expect(fromOf("https://user@solana.com/docs")).toBeUndefined();
+      expect(fromOf("https://docs.solana.com/intro")).toBe(
+        "https://docs.solana.com/intro"
+      );
     });
 
     it("sends Back to the docs to the best page it knows", () => {

@@ -12,7 +12,8 @@ Playground SHALL open `/open#<params>`, where `<params>` is URL-encoded
   or `.js`; required.
 - `title`: shown as the project's title; optional, `name` without its
   extension by default.
-- `from`: the `https:` page the link came from; optional.
+- `from`: the `https:` page the link came from, on `solana.com` or one of
+  its subdomains; optional. Any other value SHALL be ignored, as if absent.
 - `sol`: a minimum devnet balance in SOL that the script needs, a positive
   decimal; optional.
 
@@ -56,7 +57,7 @@ have been cut off when it was copied. Open the page in the docs again and use
 its Open in Playground button." It SHALL offer two actions:
 
 - "Back to the docs" (`docs-link-back`) SHALL go, in this order of preference,
-  to the link's `from` when it reads as an `https:` URL, to
+  to the link's `from` when it reads as an `https:` `solana.com` page, to
   `document.referrer` when that is a `solana.com` page, and otherwise to
   `https://solana.com/docs`.
 - "Go to Home" (`docs-link-home`) SHALL go to `/`.
