@@ -51,6 +51,15 @@ const foundOrNone = foundOrNoneWith(0);
  */
 export type WriteOutcome = "store" | "local" | "local-store-stale" | "lost";
 
+/**
+ * Whether a write is the copy the next read loads as written: `local-store-stale`
+ * is in `localStorage`, but the next read merges the store's older copy into
+ * it, so an account it drops can come back. Anything new to `WriteOutcome`
+ * reads as not saved until it is added here.
+ */
+export const isSavedForGood = (outcome: WriteOutcome) =>
+  outcome === "store" || outcome === "local";
+
 /** The part of `Storage` the wallet uses */
 type LocalStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -383,16 +392,21 @@ const withoutMovedWith =
  */
 export const walletStorageWith =
   (store: WalletStore) => (local: LocalStorage) => {
-    let isDegraded = false;
     /**
-     * Whether the store, given up for `localStorage`, may still hold a copy:
-     * it failed after IndexedDB answered, rather than IndexedDB being absent
+     * Where writes go: the store, or `localStorage` for the rest of this
+     * page's life, either because IndexedDB is absent (`store-gone`) or
+     * because the store failed after IndexedDB answered, so it may still hold
+     * an older copy the next read merges back (`store-stale`)
      */
-    let isStoreStale = false;
-    /** Fall back to `localStorage` for the rest of this page's life */
-    const degradeWith = (isStale: boolean) => {
-      isDegraded = true;
-      isStoreStale = isStoreStale || isStale;
+    let target: "store" | "store-gone" | "store-stale" = "store";
+    const isDegraded = () => target !== "store";
+    /**
+     * Fall back to `localStorage` for good. A stale store stays stale: once
+     * degraded, no write reaches the store again to bring it up to date.
+     */
+    const degrade = (error: unknown) => {
+      if (target === "store-stale") return;
+      target = isIndexedDbMissing(error) ? "store-gone" : "store-stale";
     };
     let writes = Promise.resolve();
     /** The newest save that has not landed in either store */
@@ -520,7 +534,7 @@ export const walletStorageWith =
 
     const fallBack = (state: SerializedWalletState): WriteOutcome => {
       if (!writeLocal(state)) return "lost";
-      return isStoreStale ? "local-store-stale" : "local";
+      return target === "store-stale" ? "local-store-stale" : "local";
     };
 
     /** Read the store, telling a record of the wrong shape from a wallet */
@@ -594,7 +608,7 @@ export const walletStorageWith =
 
     const migrate = async (move: MoveKeys | undefined): Promise<WalletRead> => {
       const fromLocal = readLocal();
-      if (isDegraded) {
+      if (isDegraded()) {
         if (isMoveBlocked(move, fromLocal)) return UNAVAILABLE;
         return foundOrNone(fromLocal?.wallet);
       }
@@ -614,7 +628,7 @@ export const walletStorageWith =
         if (fromLocal && fromLocal.damaged.length > 0) {
           keepUnreadable(fromLocal.text);
         }
-        degradeWith(!isIndexedDbMissing(error));
+        degrade(error);
         return foundOrNone(fromLocal?.wallet);
       }
       const stored =
@@ -677,9 +691,13 @@ export const walletStorageWith =
           // A store record that could not be set aside, and no copy to fall
           // back to: not degraded, so Try again asks the store again
           if (!fromLocal && misshapen.length > 0) return UNAVAILABLE;
+          // Under the key-origin provider the moved keys are still in the
+          // copies nothing rewrites: the move is not done, so the wallet does
+          // not load, and the next read tries again
+          if (movedKeys.length > 0) return UNAVAILABLE;
           // Nothing moves and nothing is rewritten, so the damaged accounts
           // stay where they were
-          degradeWith(true);
+          degrade(error);
           return foundOrNone(merged);
         }
         reportDamaged("Damaged wallet accounts set aside", new Error("shape"));
@@ -708,16 +726,26 @@ export const walletStorageWith =
       }
 
       const moved = merged ?? fromLocal.wallet;
-      // `localStorage` holds key bytes on the app's origin: until its copy is
-      // gone, the move is not done and the wallet does not load, and the next
-      // read tries again (nothing degrades, so it asks the store again)
+      // Under the key-origin provider, `localStorage` may hold key bytes on
+      // the app's origin, which the key page now holds too
       const isLocalHoldingKeys = isMoveBlocked(move, fromLocal);
+      // The store's own record keeps its key bytes when it refuses the write,
+      // and nothing here can clear them
+      const isStoreHoldingKeys =
+        move !== undefined &&
+        stored !== undefined &&
+        hasKeys([...stored.wallet.accounts, ...stored.damaged]);
       try {
         await copyToStore(moved);
       } catch (error) {
         reportFailureFor(moved)("Wallet not moved out of localStorage", error);
-        if (isLocalHoldingKeys) return UNAVAILABLE;
-        degradeWith(true);
+        // The record without key bytes replaces the copy that held them, so
+        // the wallet loads from `localStorage` with no key left on the app's
+        // origin. If even that fails, the move is not done: the wallet does
+        // not load, nothing degrades, and the next read asks the store again.
+        if (isStoreHoldingKeys) return UNAVAILABLE;
+        if (isLocalHoldingKeys && !writeLocal(moved)) return UNAVAILABLE;
+        degrade(error);
         return found(moved);
       }
 
@@ -743,9 +771,14 @@ export const walletStorageWith =
        * Read the wallet as `read` does, under the key-origin provider: every
        * key in every copy is moved into the key page first, under the same
        * lock, and the copies are written without key bytes only once it
-       * confirmed them all. A move that fails, or a store that cannot be
-       * read while `localStorage` holds keys, reads `unavailable` and writes
-       * nothing, so the next read tries again.
+       * confirmed them all. The wallet reads `unavailable`, and the next read
+       * tries again, while key bytes would stay on the app's origin: a move
+       * that fails, a store that cannot be read while `localStorage` holds
+       * keys, a store that refuses its record without key bytes, damaged
+       * accounts that cannot be set aside, or a `localStorage` copy that can
+       * be neither moved, rewritten without its keys, nor removed. A
+       * `localStorage` wallet the store refuses is rewritten without key
+       * bytes and loads from there.
        *
        * @param move moves keys into the key page
        */
@@ -763,13 +796,13 @@ export const walletStorageWith =
           .then(() =>
             // Under the lock, so another tab's move cannot land on top of it
             store.exclusive(async (): Promise<WriteOutcome> => {
-              if (isDegraded) return fallBack(state);
+              if (isDegraded()) return fallBack(state);
               try {
                 await store.write(state);
                 if (unsaved === state) settleKept(state);
                 return "store";
               } catch (error) {
-                degradeWith(!isIndexedDbMissing(error));
+                degrade(error);
                 reportFailureFor(state)("Wallet not saved to the store", error);
                 return fallBack(state);
               }
@@ -1184,6 +1217,13 @@ if (import.meta.vitest) {
       expect(await storage.write(walletOf([account(1, "Wallet 1")]))).toBe(
         "local-store-stale"
       );
+    });
+
+    it("counts only store and local writes as saved for good", () => {
+      expect(isSavedForGood("store")).toBe(true);
+      expect(isSavedForGood("local")).toBe(true);
+      expect(isSavedForGood("local-store-stale")).toBe(false);
+      expect(isSavedForGood("lost")).toBe(false);
     });
 
     it("answers local for a write that fell back because IndexedDB is missing", async () => {

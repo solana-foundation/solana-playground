@@ -129,7 +129,9 @@ done by a visible panel of the key page inside the wallet's dialogs. Settings
 opens small dialogs for this, "Export keypair" and "Import keypair", each
 holding the panel. The file
 SHALL be read and the download made on the key origin, and the key bytes
-SHALL not reach the app page.
+SHALL not reach the app page. While the panel is busy, its dialog SHALL not
+be dismissed or submitted, for at most a minute, after which the panel says
+the key page stopped answering.
 
 #### Scenario: Export from Settings
 
@@ -143,6 +145,11 @@ SHALL not reach the app page.
 - **WHEN** the user picks a valid key file in the panel of the "Import keypair" dialog
 - **THEN** the account is added with the file's public key, and the app page
   never receives the file's bytes
+
+#### Scenario: The dialog stays open while the panel works
+
+- **WHEN** the user presses Escape while the panel reads a picked key file
+- **THEN** the dialog stays open, and the import's result reaches it
 
 #### Scenario: Import a file that is not a key
 

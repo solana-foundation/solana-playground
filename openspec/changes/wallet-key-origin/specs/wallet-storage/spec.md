@@ -25,7 +25,11 @@ record, in `localStorage['wallet']` and in the set-aside copies SHALL be sent
 to the key page, stored there and read back. The page SHALL drop its key bytes
 only after the key page has confirmed every account's public key. If any step
 fails, the page's record SHALL stay as it was and the next load SHALL try
-again. The move SHALL run under the wallet's cross-tab lock.
+again. While a copy on the app's origin still holds key bytes the key page
+already confirmed, the wallet SHALL be `unavailable` and the next read SHALL
+finish the move. A `localStorage` wallet the store refuses SHALL be rewritten
+in `localStorage` without key bytes and SHALL load from there. The move SHALL
+run under the wallet's cross-tab lock.
 
 #### Scenario: Three accounts move
 
@@ -40,6 +44,20 @@ again. The move SHALL run under the wallet's cross-tab lock.
 - **WHEN** the key page's reply lacks one of the moved public keys
 - **THEN** the page's record keeps every key, and the failure is logged
   without key material
+
+#### Scenario: The store refuses the record without keys
+
+- **WHEN** the key page confirms every key, but the store refuses the record
+  without key bytes
+- **THEN** the wallet is `unavailable`, the store keeps its record, and the
+  next read that the store accepts loads the wallet without key bytes
+
+#### Scenario: The store refuses a localStorage wallet
+
+- **WHEN** the key page confirms the keys of a `localStorage` wallet, but the
+  store refuses the copy
+- **THEN** `localStorage['wallet']` is rewritten without key bytes, and the
+  wallet loads from it
 
 #### Scenario: Two tabs load at once
 
@@ -68,8 +86,10 @@ Setup, and SHALL write nothing to the page's record.
 
 Removing an account SHALL first store the page's record without it, and only
 then ask the signer provider to forget its key. A record that could not be
-stored SHALL keep the key, and the user SHALL be told the save failed. A key
-that could not be forgotten SHALL be reported, and the user SHALL be told.
+stored SHALL keep the key, and the user SHALL be told the save failed. A record
+that landed in `localStorage` while the store may still list the account
+counts as not stored, since the next read merges the account back. A key that
+could not be forgotten SHALL be reported, and the user SHALL be told.
 
 #### Scenario: Remove stores the record, then forgets the key
 
@@ -79,6 +99,12 @@ that could not be forgotten SHALL be reported, and the user SHALL be told.
 #### Scenario: The record without the account cannot be stored
 
 - **WHEN** the user removes an account and the record cannot be stored
+- **THEN** the key is kept, and the user is told the save failed
+
+#### Scenario: The record lands only in localStorage while the store lists the account
+
+- **WHEN** the user removes an account, the store refuses the record, and
+  `localStorage` takes it
 - **THEN** the key is kept, and the user is told the save failed
 
 #### Scenario: The key cannot be forgotten
@@ -202,6 +228,9 @@ SHALL stay and the wallet SHALL load from it.
 - **THEN** `localStorage['wallet']` keeps every account's key and name;
   each account may gain its `publicKey`, read from its key
 - **AND** the wallet loads from it with every account
+- **AND** under the key-origin provider, once the key page holds the keys,
+  `localStorage['wallet']` keeps every account's name and public key and no
+  key bytes instead
 
 #### Scenario: Both stores hold a wallet
 

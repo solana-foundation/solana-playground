@@ -157,6 +157,37 @@ describe("components/Wallet/KeyPanel", () => {
     expect(onBusy.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 
+  it("gives up on a panel that stays busy, and says so", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { connect, panel, srcs } = fakePanel();
+      const onBusy = vi.fn();
+      const onError = vi.fn();
+      render(
+        <BaseKeyPanel
+          action="import"
+          origin={ORIGIN}
+          connect={connect}
+          readTokens={readTokens}
+          onBusy={onBusy}
+          onError={onError}
+        />
+      );
+      await waitFor(() => expect(srcs).toHaveLength(1));
+      panel.postMessage({ type: "busy", busy: true });
+      await waitFor(() => expect(onBusy).toHaveBeenCalledWith(true));
+
+      vi.advanceTimersByTime(60_000);
+
+      expect(onBusy.mock.calls).toEqual([[true], [false]]);
+      expect(onError).toHaveBeenCalledWith(
+        "The key page stopped answering. Try again."
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("passes Escape pressed in the panel on to the dialog", async () => {
     const { connect, panel, srcs } = fakePanel();
     const keys: string[] = [];

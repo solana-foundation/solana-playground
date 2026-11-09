@@ -42,9 +42,11 @@ export const useModalId = () => {
 export const useModalIdIfAny = () => useContext(ModalIdContext);
 
 /**
- * Set by `ModalHost` for the top dialog: while its submit runs, the dialog
- * cannot be dismissed (Escape, a press outside, the header's Close), so the
- * submit's answer reaches the dialog that asked for it.
+ * Set by `ModalHost` for the top dialog: while its submit runs, or a key
+ * panel inside it is busy (`useBusyPanels`), the dialog cannot be dismissed
+ * (Escape, a press outside, the header's Close), so the answer reaches the
+ * dialog that asked for it. One flag, last writer wins: today a dialog's
+ * submit is disabled while its panels are busy, so the two never overlap.
  */
 export const ModalDismissContext = createContext<(blocked: boolean) => void>(
   () => {}

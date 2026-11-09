@@ -45,6 +45,13 @@ export const KeyPanelUnavailable = ({ className }: { className?: string }) => (
  */
 const RING_PX = 3;
 
+/**
+ * How long the key page may stay busy. Its tasks are one file read or one
+ * IndexedDB request; a page that hangs or crashes mid-task would otherwise
+ * keep the dialog closed to Escape and its submit held until a reload.
+ */
+const BUSY_LIMIT_MS = 60_000;
+
 /** The elements the panel's look is read from */
 export type ThemeProbes = {
   /** A hidden design-system outline button with the panel's label */
@@ -164,9 +171,23 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
           };
     let isLive = true;
     let isBusy = false;
+    let busyLimit: number | undefined;
     const setBusy = (busy: boolean) => {
       if (busy === isBusy) return;
       isBusy = busy;
+      clearTimeout(busyLimit);
+      if (busy) {
+        busyLimit = window.setTimeout(() => {
+          log.warn("key panel stayed busy", {
+            report: true,
+            context: { action },
+          });
+          resultsRef.current.onError(
+            "The key page stopped answering. Try again."
+          );
+          setBusy(false);
+        }, BUSY_LIMIT_MS);
+      }
       resultsRef.current.onBusy?.(busy);
     };
     let port: MessagePort | undefined;
