@@ -39,7 +39,7 @@ somewhere under `src/`, a legacy root's included.
 | Use: run tests or a client script | `run_finished` | `run_errored` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | pending (funnel-events) |
 | Use: send an instruction | `interact_sent`, `interact_succeeded` | `interact_failed` | `runCall` in `views/flow/stages/run-call.ts` | features/program-interact |
 | Export the project | `project_exported` | `project_export_failed` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `Project` in `widgets/settings-page/ui/SettingsPage.tsx` | pending (funnel-events) |
-| Follow a tutorial | `tutorial_started`, `tutorial_finished` | `tutorial_definition_rejected`, `tutorial_action_run` (an `outcome` other than `ok`) | `open`, `reducer` and `store` in `features/tutorial-conversation/model/`; `load` in `entities/tutorial/model/definition/load.ts` | entities/tutorial |
+| Follow a tutorial | `tutorial_started`, `tutorial_finished` | `tutorial_definition_rejected`, `tutorial_action_run` (its outcome other than ok) | `open`, `reducer` and `store` in `features/tutorial-conversation/model/`; `load` in `entities/tutorial/model/definition/load.ts` | entities/tutorial |
 | Ask the assistant | `assistant_turn_sent`, `assistant_turn_answered` | `assistant_turn_failed` | `useTurn` in `widgets/assistant/model/use-turn.ts` | widgets/assistant |
 | Assistant: apply a change | `assistant_patch_written` | `assistant_patch_write_failed` | the `write_file` tool in `views/sidebar/assistant/model/tools.ts` | widgets/assistant |
 
