@@ -69,7 +69,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("utils/wallet/wallet signing for the WASM CLIs", () => {
+describe("utils/wallet/wallet signTransactionMessage and its lookups for the WASM CLIs", () => {
   it("exposes the methods the WASM side looks up by name", () => {
     for (const name of [
       "signTransactionMessage",
@@ -80,7 +80,7 @@ describe("utils/wallet/wallet signing for the WASM CLIs", () => {
     }
   });
 
-  it("signTransactionMessage signs the CLI's exact message bytes", async () => {
+  it("signs the CLI's exact message bytes", async () => {
     const provider = localSignerProviderWith((publicKey) =>
       publicKey.equals(keypair.publicKey)
         ? Array.from(keypair.secretKey)
@@ -98,7 +98,7 @@ describe("utils/wallet/wallet signing for the WASM CLIs", () => {
     expect(secretKeyFor).not.toHaveBeenCalled();
   });
 
-  it("signTransactionMessage asks the wallet's signTransaction once", async () => {
+  it("asks the wallet's signTransaction once", async () => {
     const sign = vi.fn(async (tx: PgWeb3.Transaction) => {
       tx.partialSign(keypair);
       return tx;
@@ -112,13 +112,13 @@ describe("utils/wallet/wallet signing for the WASM CLIs", () => {
     expect(await isWalletSignatureOver(message)(signature)).toBe(true);
   });
 
-  it("signTransactionMessage refuses when no wallet is connected", async () => {
+  it("refuses when no wallet is connected", async () => {
     await expect(
       PgWallet.signTransactionMessage(messageFrom(keypair.publicKey), walletKey)
     ).rejects.toThrow("Not connected");
   });
 
-  it("signTransactionMessage refuses once another wallet is current", async () => {
+  it("refuses once another wallet is current", async () => {
     const sign = vi.fn();
     connect(walletSigningWith(sign));
     const other = PgWeb3.Keypair.generate().publicKey.toBase58();
@@ -129,7 +129,7 @@ describe("utils/wallet/wallet signing for the WASM CLIs", () => {
     expect(sign).not.toHaveBeenCalled();
   });
 
-  it("signTransactionMessage refuses a transaction the wallet left unsigned", async () => {
+  it("refuses a transaction the wallet left unsigned", async () => {
     connect(walletSigningWith(async (tx) => tx));
 
     await expect(
@@ -137,7 +137,7 @@ describe("utils/wallet/wallet signing for the WASM CLIs", () => {
     ).rejects.toThrow(`The wallet ${walletKey} did not sign the transaction`);
   });
 
-  it("signTransactionMessage refuses a signature over other bytes", async () => {
+  it("refuses a signature over other bytes", async () => {
     connect(
       walletSigningWith(async (tx) => {
         tx.addSignature(
