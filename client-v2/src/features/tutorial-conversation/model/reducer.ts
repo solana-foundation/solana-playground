@@ -5010,6 +5010,35 @@ if (import.meta.vitest) {
             ],
             { kind: "call", instruction: "increment", creates: "tally" }
           ),
+          // A one-time call in the fix path, after the step's first try failed
+          {
+            id: "fix",
+            title: "fix",
+            short: "fix",
+            objective: "fix",
+            learned: "fix",
+            file: "src/lib.rs",
+            start: { "src/lib.rs": "" },
+            target: { "src/lib.rs": "" },
+            beats: [act("s6.go", "increment", undefined, "Go")],
+            goal: { kind: "call", instruction: "increment" },
+            win: { id: "fix.win", headline: "Won", line: "Won." },
+            explain: "fix",
+            planned: "It fails to build.",
+            failsWith: "error\\[E0425\\]",
+            onFail: [
+              {
+                kind: "act",
+                id: "s6.init",
+                act: "call",
+                title: "Init",
+                context: "Sends initialize",
+                button: "Init",
+                call: { instruction: "initialize", creates: "counter" },
+              },
+              act("s6.inc", "increment", undefined, "Increment"),
+            ],
+          },
         ],
         finish: {
           headline: "Done",
@@ -5298,6 +5327,69 @@ if (import.meta.vitest) {
           );
           expect(progress.runs["s4.init"]?.[0]?.status).toBe("failed");
           expect(progress.beats["s4.inc"]).toBeUndefined();
+        });
+
+        it("records a second press on the existing account refused again, and leaves the next card where the first posted it", () => {
+          const first = run(
+            [
+              press("s4.init", 2000),
+              ended("s4.init", 2000, refusedInit(COUNTER)),
+            ],
+            at(5)
+          ).progress.beats["s4.inc"];
+          const { progress } = run(
+            [
+              press("s4.init", 2000),
+              ended("s4.init", 2000, refusedInit(COUNTER)),
+              press("s4.init", 4000),
+              ended("s4.init", 4000, refusedInit(COUNTER)),
+            ],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]?.map((r) => r.status)).toEqual([
+            "refused",
+            "refused",
+          ]);
+          expect(first).toMatchObject({ kind: "said" });
+          expect(progress.beats["s4.inc"]).toEqual(first);
+          expect(progress.passed).not.toContain("count");
+        });
+
+        it("records the existing account refused inside onFail and posts the fix path's next card", () => {
+          const { steps } = realCtx.definition;
+          const fix = steps.findIndex((s) => s.id === "fix");
+          expect(fix).toBeGreaterThan(-1);
+          // The cursor in the fix path (`onFail`), its one-time call posted
+          const from: EngineState = {
+            progress: {
+              version: 1,
+              passed: steps.slice(0, fix).map((s) => s.id),
+              finishedAt: null,
+              startedAt: 1000,
+              restartedAt: null,
+              said: [],
+              proposals: [],
+              accounts: {},
+              cursor: { kind: "step", stepId: "fix", beat: 1, fail: true },
+              beats: {
+                "s6.go": { kind: "said", at: 1000 },
+                "s6.init": { kind: "said", at: 1500 },
+              },
+              runs: {},
+              times: { fix: { from: 1000, to: null } },
+            },
+            stage: null,
+          };
+          const { progress } = run(
+            [
+              press("s6.init", 2000),
+              ended("s6.init", 2000, refusedInit(COUNTER)),
+            ],
+            from
+          );
+          expect(progress.runs["s6.init"]?.[0]?.status).toBe("refused");
+          expect(progress.beats["s6.inc"]).toMatchObject({ kind: "said" });
+          expect(progress.passed).not.toContain("fix");
         });
       });
 
