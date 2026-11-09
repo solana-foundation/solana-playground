@@ -18,29 +18,6 @@ const SHARED = new Set(
 /** The only package the key page may load */
 const PACKAGES = new Set(["@noble/ed25519"]);
 
-/**
- * The extra pages `craco.config.js` builds (its `PAGES`), read from its text
- * so the test builds nothing: entry name -> entry file
- */
-const cracoPages = () => {
-  const source = fs.readFileSync(path.join(cwd, "craco.config.js"), "utf8");
-  const constants = new Map(
-    Array.from(source.matchAll(/^const (\w+) = "([^"]+)";$/gm), ([, n, v]) => [
-      n,
-      v,
-    ])
-  );
-  const valueOf = (token) =>
-    token.startsWith('"') ? token.slice(1, -1) : constants.get(token);
-  const pages = new Map();
-  const pattern =
-    /entry: (\w+|"[^"]+"),\s*page: (?:\w+|"[^"]+"),\s*source: "([^"]+)"/g;
-  for (const [, entry, file] of source.matchAll(pattern)) {
-    pages.set(valueOf(entry), path.join(cwd, file));
-  }
-  return pages;
-};
-
 const isVitestBlock = (node) =>
   ts.isIfStatement(node) && node.expression.getText() === "import.meta.vitest";
 
@@ -115,10 +92,6 @@ const graphOf = (entry) => {
 };
 
 describe("the key page's entry", () => {
-  it("is built from key-origin/frame/index.ts", () => {
-    assert.equal(cracoPages().get("wallet-keys"), path.join(FRAME, "index.ts"));
-  });
-
   it("loads only key-origin/frame, protocol.ts, origin.ts and @noble/ed25519", () => {
     const { files, packages } = graphOf(path.join(FRAME, "index.ts"));
     const outside = [...files].filter(

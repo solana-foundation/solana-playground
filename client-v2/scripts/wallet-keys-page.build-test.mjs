@@ -50,3 +50,23 @@ test("the key page loads only files the key host serves", async () => {
     );
   }
 });
+
+test("the key page runs the key-origin frame entry and no app module", async () => {
+  const html = await fs.readFile(path.join(BUILD, "wallet-keys.html"), "utf8");
+  const scripts = loadedBy(html).filter((u) => u.endsWith(".js"));
+  const js = (
+    await Promise.all(
+      scripts.map((url) => fs.readFile(path.join(BUILD, url), "utf8"))
+    )
+  ).join("\n");
+  // `frame/store.ts`'s KEY_DB_NAME: only the frame entry opens the key store
+  assert.ok(
+    js.includes('"pg-wallet-keys"'),
+    "wallet-keys.html does not run key-origin/frame/index.ts (craco.config.js PAGES)"
+  );
+  // A log line of the app's `wallet-storage.ts`, which must never load here
+  assert.ok(
+    !js.includes("Wallet not saved to the store"),
+    "wallet-keys.html loads the app's wallet code"
+  );
+});
