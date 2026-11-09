@@ -2,6 +2,7 @@ import { initLogger, memoryProvider, resetLogger } from "../shared/lib/logger";
 import { PgExplorer } from "./explorer";
 import { writeWorkspaceFile } from "./explorer/workspace-file";
 import { PgProgramInfo } from "./program-info";
+import { PgWeb3 } from "./web3";
 
 // `settings.ts`, reached through the connection module, reads a global that
 // only exists once the app has booted
@@ -16,8 +17,14 @@ vi.mock("./package", () => ({ PgPackage: {} }));
 vi.mock("./command", () => ({
   PgCommand: { deploy: { onDidFinish: () => ({ dispose: () => {} }) } },
 }));
+// `fetch` reads the program through `current`; each test sets the answers
+const rpc = vi.hoisted(() => ({ getAccountInfo: vi.fn() }));
 vi.mock("./connection", () => ({
-  PgConnection: { onDidChange: () => ({ dispose: () => {} }) },
+  PgConnection: {
+    onDidChange: () => ({ dispose: () => {} }),
+    current: rpc,
+    isReady: () => true,
+  },
 }));
 
 // Its own tests cover when it flushes and which folders it creates
@@ -76,6 +83,92 @@ describe("PgProgramInfo storage", () => {
     } finally {
       init.dispose();
       resetLogger();
+    }
+  });
+});
+
+describe("PgProgramInfo.fetch", () => {
+  const programId = PgWeb3.Keypair.generate().publicKey;
+  const programDataPk = PgWeb3.Keypair.generate().publicKey;
+  const authority = PgWeb3.Keypair.generate().publicKey;
+
+  /** The upgradeable loader's program account: a tag, then the data's address */
+  const programAccount = {
+    owner: PgWeb3.BpfLoaderUpgradeableProgram.programId,
+    data: Buffer.concat([Buffer.from([2, 0, 0, 0]), programDataPk.toBuffer()]),
+  };
+
+  /** The program data's header: tag, slot, then the authority as an option */
+  const header = Buffer.concat([
+    Buffer.from([3, 0, 0, 0]),
+    Buffer.alloc(8),
+    Buffer.from([1]),
+    authority.toBuffer(),
+  ]);
+
+  afterEach(() => {
+    rpc.getAccountInfo.mockReset();
+  });
+
+  it("reads only the program data's header and takes its length from the RPC's space", async () => {
+    rpc.getAccountInfo
+      .mockResolvedValueOnce(programAccount)
+      .mockResolvedValueOnce({ data: header, space: 6_987_853 });
+
+    const onChain = await PgProgramInfo.fetch(programId);
+
+    expect(rpc.getAccountInfo).toHaveBeenCalledTimes(2);
+    expect(rpc.getAccountInfo.mock.calls[1]).toEqual([
+      programDataPk,
+      { dataSlice: { offset: 0, length: 45 } },
+    ]);
+    expect(onChain).toEqual({
+      deployed: true,
+      upgradable: true,
+      authority,
+      programDataLen: 6_987_853,
+    });
+  });
+
+  it("reads the whole program data when the RPC sends no space", async () => {
+    const whole = Buffer.concat([header, Buffer.alloc(100)]);
+    rpc.getAccountInfo
+      .mockResolvedValueOnce(programAccount)
+      .mockResolvedValueOnce({ data: header })
+      .mockResolvedValueOnce({ data: whole });
+
+    const onChain = await PgProgramInfo.fetch(programId);
+
+    expect(rpc.getAccountInfo.mock.calls[2]).toEqual([programDataPk]);
+    expect(onChain).toEqual({
+      deployed: true,
+      upgradable: true,
+      authority,
+      programDataLen: whole.length,
+    });
+  });
+});
+
+describe("PgProgramInfo.onChain", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("stays unknown, not failed, while there is no program id", async () => {
+    vi.spyOn(PgExplorer, "isInitialized", "get").mockReturnValue(true);
+    vi.spyOn(PgExplorer, "currentWorkspaceName", "get").mockReturnValue("w");
+    vi.spyOn(PgExplorer.fs, "readToJSON").mockRejectedValue(new Error("none"));
+
+    const init = await PgProgramInfo.init();
+    try {
+      await PgProgramInfo.refresh();
+      // A failed fetch is `null`, which Interact reads as "can't reach the
+      // network"; with no id there was nothing to fetch
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(PgProgramInfo.pk).toBeFalsy();
+      expect(PgProgramInfo.onChain).toBeUndefined();
+    } finally {
+      init.dispose();
     }
   });
 });

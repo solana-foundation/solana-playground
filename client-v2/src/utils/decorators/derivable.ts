@@ -1,6 +1,9 @@
+import { createLogger } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
 import type { Disposable } from "../types";
 import { addInit, addOnDidChange, getChangePropName, PROPS } from "./common";
+
+const log = createLogger("utils:derivable");
 
 /** Derivable state properties */
 export type DerivableState<T> = {
@@ -62,7 +65,12 @@ export function derivable<T extends Derivable>(
 
           try {
             return await entry.derive(value);
-          } catch {
+          } catch (e) {
+            // A failed derivation reads as `null` (a fetch that could not
+            // reach the network, for one); quiet, since a caller shows it
+            log.debug("Derivation failed", {
+              context: { prop, reason: String(e) },
+            });
             return null;
           }
         };

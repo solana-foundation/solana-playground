@@ -143,7 +143,12 @@ const derive = () => ({
 
   /** On-chain data of the program */
   onChain: createDerivable({
-    derive: () => _PgProgramInfo.fetch(),
+    // No id, nothing to fetch: `undefined` reads as not known yet, while the
+    // `null` a failed fetch leaves reads as "can't reach the network"
+    // (Typed by hand: inferring it through `PgProgramInfo.pk` would make the
+    // class's type depend on itself)
+    derive: (): ReturnType<typeof _PgProgramInfo.fetch> | undefined =>
+      PgProgramInfo.pk ? _PgProgramInfo.fetch() : undefined,
     onChange: ["pk", PgConnection.onDidChange, PgCommand.deploy.onDidFinish],
   }),
 });
@@ -154,6 +159,28 @@ const migrate = () => {
   // is already stored in `indexedDB`
   localStorage.removeItem("programInfo");
 };
+
+/** The program data's header: tag (4), slot (8), authority option (1 + 32) */
+const PROGRAM_DATA_HEADER_LEN = 45;
+
+/**
+ * The program data's full length. The RPC reports it as `space` beside a
+ * sliced read (web3.js passes the field through without typing it); an RPC
+ * that does not is asked for the whole account, as before the slice.
+ */
+const programDataLenWith =
+  (conn: typeof PgConnection.current) =>
+  async (
+    programDataPk: InstanceType<typeof PgWeb3.PublicKey>,
+    sliced: object
+  ) => {
+    if ("space" in sliced && typeof sliced.space === "number") {
+      return sliced.space;
+    }
+    const whole = await conn.getAccountInfo(programDataPk);
+    if (!whole) throw new Error("The program data account is gone");
+    return whole.data.length;
+  };
 
 @initable({ onDidInit })
 @derivable(derive)
@@ -222,7 +249,12 @@ class _PgProgramInfo {
 
     const programDataPkBuffer = programAccountInfo.data.slice(4);
     const programDataPk = new PgWeb3.PublicKey(programDataPkBuffer);
-    const programDataAccountInfo = await conn.getAccountInfo(programDataPk);
+    // Only the header: a large program's data runs to megabytes (Drift's is
+    // 7 MB, 9 MB as base64), and reading it whole kept Interact on "can't
+    // reach the network" for half a minute
+    const programDataAccountInfo = await conn.getAccountInfo(programDataPk, {
+      dataSlice: { offset: 0, length: PROGRAM_DATA_HEADER_LEN },
+    });
     if (!programDataAccountInfo) return { deployed, upgradable: true };
 
     // Check if program authority exists
@@ -236,7 +268,10 @@ class _PgProgramInfo {
       deployed,
       upgradable,
       authority,
-      programDataLen: programDataAccountInfo.data.length,
+      programDataLen: await programDataLenWith(conn)(
+        programDataPk,
+        programDataAccountInfo
+      ),
     };
   }
 
