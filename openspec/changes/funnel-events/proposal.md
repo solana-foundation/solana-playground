@@ -38,6 +38,17 @@ site, and the project's rules send agents to them.
   None of these events has reached `master` or production, so no recorded
   data changes meaning. `deploy_sol_needed_shown` and `deploy_backup_*` do
   not change.
+- The funnel table gains a Failure events column, and the check reads
+  trackers anywhere under `src/`, legacy roots included (HOO-2598).
+- New slices `features/program-build` (prefix `build`) and
+  `features/program-interact` (prefix `interact`), with the names
+  `wbdi-flow` gives them. Events added: `build_started {framework}`,
+  `build_succeeded {framework, has_idl}`, `build_failed {framework, reason}`
+  from the `build` command; `interact_sent {cluster}`,
+  `interact_succeeded {cluster}`, `interact_failed {cluster, phase}` from
+  `runCall`.
+- `widgets/assistant` adds `assistant_patch_written` and
+  `assistant_patch_write_failed {reason}`, sent from the `write_file` tool.
 - No event is renamed or removed in any other slice.
 - `openspec/config.yaml` and `client-v2/CLAUDE.md` extend the telemetry rule
   to the legacy roots and point agents at the funnel table.
@@ -51,6 +62,13 @@ site, and the project's rules send agents to them.
 - `client-v2-project-files`: the events sent when a project is imported,
   viewed from a GitHub link, or exported.
 - `client-v2-run`: the events sent when tests or a client script run.
+
+### Modified Capabilities (HOO-2598)
+
+- `client-v2-build`: "Build events".
+- `client-v2-interact`: "Instruction call events".
+- `client-v2-assistant-usage`: "An approved patch is reported once it is
+  written".
 
 ### Modified Capabilities
 
@@ -86,11 +104,12 @@ site, and the project's rules send agents to them.
   browser history events"), switched on in GA4 admin (HOO-2409), with no
   code.
 - Out of scope:
-  - Build, IDL, and Interact events: `wbdi-flow` owns them. Its "Deploy
-    telemetry" requirement is aligned with these names in a follow-up (ticket
+  - IDL events and the Build and Interact screens' control events:
+    `wbdi-flow` owns them. Its "Deploy telemetry" requirement is aligned with these names in a follow-up (ticket
     to file); this change does not edit `wbdi-flow`.
   - Tutorial events (`tutorial-flow-v2` on `scope/tutorial-flow-2`) and
-    assistant turn events (`assistant-usage-events`, #62).
+    assistant turn events (`assistant-usage-events`, #62). Both are on
+    `master` now, and the funnel table lists them.
   - Sharing, which is also left out of the funnel table. The share route
     never matches (`routes/share/share.tsx`) and nothing opens the Share
     dialog, so no share event can fire.

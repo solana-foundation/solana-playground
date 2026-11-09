@@ -1,8 +1,9 @@
 # Tasks
 
-The team implements these on `scope/users-work-2`. Every task is HOO-2411
-unless it says "ticket to file", and each is one PR. Task 1.1 goes first;
-the others depend on it and may run at the same time, except 4.2, which
+The team implements these on `scope/users-work-2`, except 1.1 and group 5,
+which go to foundation `master` in one PR. Every task is HOO-2411 unless it
+names another ticket or says "ticket to file", and each is one PR. Task 1.1
+goes first; the others depend on it and may run at the same time, except 4.2, which
 depends on 4.1. Each task declares, describes and emits its events, with
 memory-provider tests (one per branch, `it.each` for a table), and replaces
 its rows' `pending (funnel-events)` mark in the funnel table with the slice.
@@ -11,15 +12,18 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
 
 - [ ] 1.1 Extend `src/app/slice-structure.test.ts` with the funnel check of
       [design.md](design.md): collect every name declared through
-      `createTracker<...>()` under `features/`, `widgets/` and `entities/`,
-      read the Events column of the table in
+      `createTracker<...>()` anywhere under `src/`, legacy roots included,
+      read the Events and Failure events columns of the table in
       `openspec/specs/client-v2-funnels/spec.md` (or this change's delta
-      while that file does not exist), and fail with the missing names when
-      a row's Source is neither `GA4` nor `pending (...)`. Satisfies
+      while that file does not exist), fail with the missing names when
+      a row's Source is neither `GA4` nor `pending (...)`, and fail with the
+      step when its Failure events cell names no event and is not
+      `none: <why>`. HOO-2598. Satisfies
       `client-v2-funnels`, "Each funnel step names its events and the code
-      that sends them". Verify by renaming a declared event and by removing
-      a `pending` mark, each failing with the name, both reverted; and that
-      `yarn run check` passes
+      that sends them". Verify by renaming a declared event, by removing
+      a `pending` mark and by emptying a Failure events cell, each failing
+      with the name or the step, all reverted; and that `yarn run check`
+      passes
 
 ## 2. Project files
 
@@ -79,6 +83,31 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
       failure. Satisfies "A stage deploy whose wallet does not connect is
       counted": declare, describe and emit, with memory-provider tests
       that a stage deploy sends each event once (depends on 4.1)
+
+## 5. Main-flow steps in legacy roots (HOO-2598)
+
+One PR into foundation `master` with 1.1; plan:
+[plans/5-main-flow-events.md](plans/5-main-flow-events.md). Each task declares, describes and
+emits its events with memory-provider tests, one per branch.
+
+- [ ] 5.1 Add `features/program-build` with prefix `build` (`wbdi-flow` 1.1,
+      events only) and send `build_started`, `build_succeeded` and
+      `build_failed` from the `build` command (`commands/build/build.ts`).
+      Satisfies `client-v2-build`, "Build events": tests for each
+      `framework`, each `reason`, a stop and an empty program file (depends
+      on 1.1)
+- [ ] 5.2 Add `features/program-interact` with prefix `interact` and send
+      `interact_sent`, `interact_succeeded` and `interact_failed` from
+      `runCall` (`views/flow/stages/run-call.ts`). Satisfies
+      `client-v2-interact`, "Instruction call events": tests for a landed
+      call, a failed transaction, an unknown confirmation, a send that
+      throws, and `custom` (depends on 1.1)
+- [ ] 5.3 Declare `assistant_patch_written` and
+      `assistant_patch_write_failed` in `widgets/assistant` and send them
+      from the `write_file` tool (`views/sidebar/assistant/model/tools.ts`).
+      Satisfies `client-v2-assistant-usage`, "An approved patch is reported
+      once it is written": tests for a write, a limit refusal, another
+      failure and a denial (depends on 1.1)
 
 ## Workflow follow-up
 
