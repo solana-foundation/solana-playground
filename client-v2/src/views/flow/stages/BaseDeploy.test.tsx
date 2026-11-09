@@ -20,6 +20,7 @@ import type { DeployView } from "./deploy-view";
 import { IDLE_VIEW } from "./deploy-view";
 
 const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
+const GUIDE = "Build the IDL locally";
 
 const SHORT_ID = "6PNd…AVkj";
 const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
@@ -95,6 +96,7 @@ const props = (state: {
   onShowNetwork: vi.fn(),
   idlName: undefined,
   idlUpload: <button>Upload IDL</button>,
+  idlGuide: <button aria-label={GUIDE}>{GUIDE}</button>,
   programKeypair: <section aria-label="Program id" />,
   onOpenCliGuide: state.onOpenCliGuide ?? vi.fn(),
 });
@@ -740,8 +742,8 @@ describe("BaseDeploy", () => {
     expect(p.onSaveKeypair).toHaveBeenCalledOnce();
   });
 
-  /** The prototype's first deploy: the pill, Upload IDL and the CLI guide under it */
-  it("before the first deploy it has no history, only Upload IDL and the CLI guide", () => {
+  /** The prototype's first deploy: the pill, the IDL actions and the CLI guide under it */
+  it("before the first deploy it has no history, only the IDL actions and the CLI guide", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: true, history: [] })} />
     );
@@ -755,13 +757,14 @@ describe("BaseDeploy", () => {
       [...actions.querySelectorAll("button")].map((b) => b.textContent)
     ).toEqual(["Deploy to devnet"]);
     expect(screen.getByRole("button", { name: "Upload IDL" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: GUIDE })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Deploy with the CLI" })
     ).toBeTruthy();
   });
 
-  /** After a deploy the stage reports: the history, and Upload IDL beside the pill */
-  it("after a deploy it shows the history and keeps Upload IDL", () => {
+  /** After a deploy the stage reports: the history, and the IDL actions beside the pill */
+  it("after a deploy it shows the history and keeps the IDL actions", () => {
     const { container } = render(
       <BaseDeploy
         {...props({
@@ -776,6 +779,7 @@ describe("BaseDeploy", () => {
       container.querySelector('[data-slot="stage-empty-actions"]')
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Upload IDL" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: GUIDE })).toBeTruthy();
   });
 
   const FUNDING: DeployView = {

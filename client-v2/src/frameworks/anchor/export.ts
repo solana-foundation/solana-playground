@@ -6,6 +6,7 @@ import {
   getRustDependencies,
   IMPORT_STATEMENT_REGEX,
 } from "../common";
+import { getIdlBuildFeature } from "./idl-build-feature";
 
 /**
  * {@link Framework.importFromPlayground}
@@ -88,6 +89,7 @@ no-idl = []
 no-log-ix-name = []
 cpi = ["no-entrypoint"]
 default = []
+${getIdlBuildFeature(frameworkFiles)}
 
 ${await getRustDependencies(frameworkFiles)}
 `,
@@ -140,9 +142,6 @@ ${
 ${programName} = "${PgProgramInfo.pk.toBase58()}"`
     : ""
 }
-
-[registry]
-url = "https://api.apr.dev"
 
 [provider]
 cluster = "Localnet"

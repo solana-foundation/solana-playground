@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
 
-import { PLANNED } from "../src/features/tutorial-conversation/model/build-logs.fixture";
+import { PLANNED_1_1_2 } from "../src/features/tutorial-conversation/model/build-logs.fixture";
 
 /**
  * The build server for the tutorial specs, answered in the test. A build of
- * Hello Anchor's `lib.rs` fails with the server's real E0412 log while the
+ * Hello Anchor's `lib.rs` fails with the Anchor 1.1.2 server's real log while the
  * file has no `struct Hello`, as the step plans, and passes otherwise with an
  * Anchor IDL read off `lib.rs`: `hello`, with a `name: string` argument once
  * its signature takes one. A deploy downloads a few KB of program bytes whose
@@ -74,7 +74,7 @@ export const fakeBuildServer = async (page: Page): Promise<FakeBuildServer> => {
     if (!/struct Hello\b/.test(lib.replace(/\/\/.*$/gm, ""))) {
       return route.fulfill({
         // eslint-disable-next-line unicorn/no-null -- the server's JSON for a failed build
-        json: { stderr: PLANNED, uuid: null, idl: null },
+        json: { stderr: PLANNED_1_1_2, uuid: null, idl: null },
       });
     }
     const code = hasNameArgument(lib) ? HELLO_NAME : HELLO_WORLD;

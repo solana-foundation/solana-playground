@@ -89,6 +89,8 @@ export interface BaseBuildProps {
   onStop: () => void;
   /** The build's downloads (IDL, program binary), links under Build succeeded's pills */
   idlActions: ReactNode;
+  /** "Build the IDL locally": in Download IDL's place without an IDL, after the downloads with one */
+  idlGuide: ReactNode;
 }
 
 /**
@@ -422,14 +424,14 @@ const successLine = ({ sourceChanged, hasIdl }: BaseBuildProps) => {
   }
   return hasIdl
     ? "The program and its IDL are ready to deploy."
-    : "The program is ready to deploy.";
+    : "The program is ready to deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.";
 };
 
 const Succeeded = (p: BaseBuildProps) => (
   <Surface
     icon={<CircleCheck className="text-success" />}
     title="Build succeeded"
-    meta={p.ms === null ? null : `Built in ${msLabel(p.ms)}`}
+    meta={p.ms === null ? undefined : `Built in ${msLabel(p.ms)}`}
     description={successLine(p)}
     actions={
       <>
@@ -449,9 +451,11 @@ const Succeeded = (p: BaseBuildProps) => (
         )}
         {/* The stage's downloads, as links under the pills like
             Unreached's Show full log. Download IDL draws itself only while
-            the app holds an IDL */}
+            the app holds an IDL; without one, the guide takes its place */}
         <div className="flex w-full flex-wrap justify-center gap-2">
+          {!p.hasIdl && p.idlGuide}
           {p.idlActions}
+          {p.hasIdl && p.idlGuide}
         </div>
       </>
     }

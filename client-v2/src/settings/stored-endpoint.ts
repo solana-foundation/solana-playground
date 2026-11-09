@@ -8,7 +8,7 @@ import type {
 } from "../entities/cluster/model/clusters";
 import { CLUSTERS, offeredOf } from "../entities/cluster/model/clusters";
 import { SERVER_URL } from "../shared/config/client-env";
-import { FOUNDATION_ENDPOINT, LOCAL_ENDPOINT } from "./server/default-endpoint";
+import { LOCAL_ENDPOINT } from "./server/default-endpoint";
 
 /** The settings whose value is an address */
 const ENDPOINT_SETTINGS = ["connection.endpoint", "server.endpoint"] as const;
@@ -65,14 +65,15 @@ export const buildEndpointOptions = (
         .map((c) => ({ key: c.key, url: c.url })),
     ],
     "server.endpoint": [
-      // First, so a profile on the configured server follows the env even
-      // when the env names a listed one -- production sets it to the
-      // Foundation's (`Dockerfile`). A listed option picked by hand that
-      // equals it follows the env too; it was the default anyway.
+      // The env's server under both keys a profile may hold: `configured`, and
+      // `foundation`, the "Solana Foundation" option the env now supplies.
+      // Without the env neither resolves, and the profile gets the default.
       ...(configuredServer
-        ? [{ key: "configured", url: configuredServer }]
+        ? [
+            { key: "configured", url: configuredServer },
+            { key: "foundation", url: configuredServer },
+          ]
         : []),
-      { key: "foundation", url: FOUNDATION_ENDPOINT },
       { key: "local", url: LOCAL_ENDPOINT },
       // No `solpg` (api.solpg.io): a profile stored under that key reads as
       // the default, like any key whose option is gone (`fromStoredEndpoints`)
@@ -365,7 +366,7 @@ if (import.meta.vitest) {
         endpoint: Endpoint.DEVNET as string,
         commitment: "confirmed",
       },
-      server: { endpoint: FOUNDATION_ENDPOINT },
+      server: { endpoint: LOCAL_ENDPOINT },
       ui: { theme: "Solana" },
     };
 
@@ -392,21 +393,21 @@ if (import.meta.vitest) {
     describe("stored endpoints", () => {
       it("stores an address we provide as the option's key, not the address", () => {
         const stored = toStoredEndpoints(
-          state(PLATFORM_DEVNET, FOUNDATION_ENDPOINT),
+          state(PLATFORM_DEVNET, LOCAL_ENDPOINT),
           options
         );
 
         expect(at(stored, "connection.endpoint")).toEqual({
           option: "devnet",
         });
-        expect(at(stored, "server.endpoint")).toEqual({ option: "foundation" });
+        expect(at(stored, "server.endpoint")).toEqual({ option: "local" });
         expect(JSON.stringify(stored)).not.toContain("api-key");
       });
 
       it("round-trips every option we provide", () => {
         for (const { url } of canonical("connection.endpoint")) {
           expect(
-            roundTrip(state(url, FOUNDATION_ENDPOINT)).connection.endpoint
+            roundTrip(state(url, LOCAL_ENDPOINT)).connection.endpoint
           ).toBe(url);
         }
         for (const { url } of options["server.endpoint"]) {
@@ -471,30 +472,27 @@ if (import.meta.vitest) {
         }
       });
 
-      it("stores the configured build server as `configured` even when it is a listed one", () => {
-        // Production sets REACT_APP_SERVER_URL to the Foundation's server
-        // (`Dockerfile`); a profile on it must follow the env when it moves
-        const configured = buildEndpointOptions(
-          networks({}),
-          FOUNDATION_ENDPOINT
-        );
-        const stored = JSON.parse(
-          JSON.stringify(
-            toStoredEndpoints(
-              state(Endpoint.DEVNET, FOUNDATION_ENDPOINT),
-              configured
-            )
-          )
-        );
+      // Scenario "A stored choice without the variable" (client-v2-build-server-endpoint)
+      it("resolves a stored Foundation choice to the variable, or to the default without it", () => {
+        const stored = {
+          connection: { endpoint: { option: "devnet" } },
+          server: { endpoint: { option: "foundation" } },
+        };
 
-        expect(at(stored, "server.endpoint")).toEqual({ option: "configured" });
-        const moved = buildEndpointOptions(
-          networks({}),
-          "https://build.test/new"
-        );
         expect(
-          fromStoredEndpoints(stored, defaults, moved).server.endpoint
-        ).toBe("https://build.test/new");
+          fromStoredEndpoints(
+            stored,
+            defaults,
+            buildEndpointOptions(networks({}), "https://server.example")
+          ).server.endpoint
+        ).toBe("https://server.example");
+        expect(
+          fromStoredEndpoints(
+            stored,
+            defaults,
+            buildEndpointOptions(networks({}))
+          ).server.endpoint
+        ).toBe(LOCAL_ENDPOINT);
       });
 
       it("falls back to the default build server when its stored option is gone", () => {
@@ -897,7 +895,7 @@ if (import.meta.vitest) {
       });
 
       it("leaves every other setting alone", () => {
-        const s = state(PLATFORM_MAINNET, FOUNDATION_ENDPOINT);
+        const s = state(PLATFORM_MAINNET, LOCAL_ENDPOINT);
         const stored = toStoredEndpoints(s, options);
 
         expect(stored.ui).toEqual(s.ui);

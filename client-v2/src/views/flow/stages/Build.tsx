@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { DownloadProgram } from "@/features/cli-deploy";
+import { IdlBuildGuide } from "@/features/idl-build-guide";
 import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { requestConsole } from "@/widgets/layout-shell";
@@ -104,6 +105,7 @@ const Build = () => {
           <DownloadProgram from="build-stage" look="link" />
         </>
       }
+      idlGuide={<IdlBuildGuide surface="build" />}
     />
   );
 };

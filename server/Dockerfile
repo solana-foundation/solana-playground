@@ -52,7 +52,7 @@ RUN cargo build --release
 FROM rust
 
 ARG USER=solpg
-ARG SOLANA_VERSION="1.17.34"
+ARG SOLANA_VERSION="3.1.10"
 
 # Install Solana
 RUN sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"

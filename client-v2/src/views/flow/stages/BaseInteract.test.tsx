@@ -26,6 +26,7 @@ const found = <T,>(value: T | null, what: string): T => {
 };
 
 const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
+const GUIDE = "Build the IDL locally";
 
 const SURFACES: InteractSurface[] = [
   "no-project",
@@ -62,6 +63,7 @@ const props = (
   network: "cluster" in over ? over.cluster : "devnet",
   onGoTo: over.onGoTo ?? vi.fn(),
   idlLoad: <button>Upload IDL</button>,
+  idlGuide: <button aria-label={GUIDE}>{GUIDE}</button>,
   form: <div>FORM</div>,
   programId: over.programId,
   builtAfterDeploy: over.builtAfterDeploy ?? false,
@@ -111,24 +113,22 @@ describe("BaseInteract", () => {
     expect(onGoTo).toHaveBeenCalledWith("deploy");
   });
 
-  it("one Upload IDL in every surface", () => {
+  it("one Upload IDL and one IDL guide in every surface", () => {
     for (const surface of SURFACES) {
       const { container, unmount } = render(
         <BaseInteract {...props(surface)} />
       );
-      expect(
-        screen.getAllByRole("button", { name: "Upload IDL" })
-      ).toHaveLength(1);
-      if (
-        surface === "no-idl" ||
-        surface === "not-built" ||
-        surface === "not-deployed"
-      ) {
-        expect(
-          within(actions(container)).getByRole("button", {
-            name: "Upload IDL",
-          })
-        ).toBeTruthy();
+      for (const name of ["Upload IDL", GUIDE]) {
+        expect(screen.getAllByRole("button", { name })).toHaveLength(1);
+        if (
+          surface === "no-idl" ||
+          surface === "not-built" ||
+          surface === "not-deployed"
+        ) {
+          expect(
+            within(actions(container)).getByRole("button", { name })
+          ).toBeTruthy();
+        }
       }
       unmount();
     }
@@ -229,11 +229,9 @@ describe("BaseInteract", () => {
     ).toBe(hasAction);
   });
 
-  it("a program with no IDL asks for its IDL", () => {
+  it("a program with no IDL says the build does not produce one", () => {
     render(<BaseInteract {...props("no-idl")} />);
-    expect(
-      screen.getByText("Upload its IDL to call it from a form.")
-    ).toBeTruthy();
+    expect(screen.getByText(/build does not produce an IDL/)).toBeTruthy();
   });
 
   it("an unreachable network shows the error notice", () => {

@@ -11,6 +11,11 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import {
+  featuresByCrate,
+  renamedDependencies,
+  withFeatures,
+} from "./crate-features.mjs";
+import {
   CLIENT_PATH,
   exists,
   REPO_ROOT_PATH,
@@ -42,6 +47,8 @@ const CLI_VERSION = "0.3.0";
 const key = crypto
   .createHash("sha256")
   .update(await fs.readFile(fileURLToPath(import.meta.url)))
+  .update("\0")
+  .update(await fs.readFile(new URL("./crate-features.mjs", import.meta.url)))
   .update("\0")
   .update(await fs.readFile(LOCK_FILE_PATH))
   .digest("hex");
@@ -94,24 +101,44 @@ const registry = await getRegistry();
 /** `Cargo.lock` file for dependencies */
 const lockFile = await parseLockFile(LOCK_FILE_PATH);
 
-/** Cached crate names */
+/** The lock's resolution, as `cargo metadata` reports it */
+const metadata = JSON.parse(
+  capture("cargo", [
+    "metadata",
+    "--format-version",
+    "1",
+    "--locked",
+    "--offline",
+    "--manifest-path",
+    path.join(path.dirname(LOCK_FILE_PATH), "Cargo.toml"),
+  ])
+);
+
+/** The features the lock's resolution enables, per `name@version` */
+const features = featuresByCrate(metadata);
+
+/** The dependencies each crate reaches under another name, per `name@version` */
+const renamed = renamedDependencies(metadata);
+
+/** Served (snake case) crate names */
 const cachedCrates = [];
 
+/** The `name@version` each served name was generated from */
+const servedBy = new Map();
+
 /**
- * Crates to skip.
+ * Crates not to generate, plus the reached crates `syn-file-expand-cli` failed to read.
  *
- * [`mpl-token-metadata`] adds `r#` prefix to the module declarations for some
- * reason which results in `syn-file-expand-cli` trying to find instruction
- * files starting with `r#`.
- *
- * [`mpl-token-metadata`]: https://github.com/metaplex-foundation/mpl-token-metadata/blob/4e5bcca44000f151fe64682826bbe2eb61cd7b87/clients/rust/src/generated/instructions/mod.rs#L8
+ * `mpl-token-metadata` (every release since 3.x) declares its generated modules as raw identifiers (`mod r#name`),
+ * and `syn-file-expand-cli` looks for `r#name.rs`, which does not exist.
  */
+// TODO(HOO-2753): resolve `r#name` to `name.rs` during expansion, then serve `mpl-token-metadata`
 const skippedCrates = ["mpl-token-metadata"];
 
 await clearSupportedCrates();
 
 const crates = await getCrates();
-await generateDependencies(crates);
+await generateDependencies(crates, false);
 
 await fs.writeFile(
   path.join(CRATES_PATH, "versions.json"),
@@ -152,55 +179,95 @@ async function clearSupportedCrates() {
 }
 
 /**
- * Generate dependencies recursively.
- *
- * NOTE: Currently only proc macro transitive dependencies are supported.
+ * Generate dependencies recursively: every crate the supported crates reach,
+ * since `solana-program` re-exports separate crates (`solana-pubkey`, ...).
  *
  * @param {{ [name: string]: string }} versions crates map to get dependencies from
- * @param {boolean} transitive  whether the dependency is a transitive dependency
+ * @param {boolean} onlyProcMacros whether `versions` are a proc macro's dependencies
  */
-async function generateDependencies(versions, transitive) {
+async function generateDependencies(versions, onlyProcMacros) {
   for (const name in versions) {
-    if (cachedCrates.includes(name) || skippedCrates.includes(name)) continue;
+    await generateCrate(name, name, versions[name], onlyProcMacros);
+  }
+}
 
-    const version = versions[name];
-    const dirPath = registry.find(`${name}-${version}`);
-    if (!dirPath) {
-      // `cargo fetch` downloaded every locked crate, so a miss is a broken setup
-      throw new Error(
-        `Crate \`${name}(v${version})\` not found in ${registry.root}`
-      );
-    }
+/**
+ * Generate one crate as `<servedAs>.rs` and `<servedAs>.toml`, then what it reaches.
+ *
+ * @param {string} servedAs the name the editor looks the crate up by: its own, or a dependent's alias for it
+ * @param {string} name the crate's package name
+ * @param {string} version the crate's locked version
+ * @param {boolean} onlyProcMacros whether the crate is a proc macro's dependency
+ */
+// TODO(HOO-2754): key crates by name and version so renamed and multi-version dependencies resolve generally
+async function generateCrate(servedAs, name, version, onlyProcMacros) {
+  const snakeCaseName = servedAs.replaceAll("-", "_");
+  const served = servedBy.get(snakeCaseName);
+  // An alias that names two crates cannot be served by name alone; a crate's
+  // own name taken by another version keeps the first, as before aliases
+  if (served && served !== `${name}@${version}` && servedAs !== name) {
+    throw new Error(
+      `\`${snakeCaseName}\` names both ${served} and ${name}@${version}`
+    );
+  }
+  if (served || skippedCrates.includes(name)) return;
 
-    // Get transitive deps
-    if (transitive) {
-      // Only get proc macro transitive deps for now
-      const cargoToml = await fs.readFile(path.join(dirPath, "Cargo.toml"));
-      if (!cargoToml.includes("proc-macro = true")) continue;
-    }
+  const dirPath = registry.find(`${name}-${version}`);
+  if (!dirPath) {
+    // `cargo fetch` downloaded every locked crate, so a miss is a broken setup
+    throw new Error(
+      `Crate \`${name}(v${version})\` not found in ${registry.root}`
+    );
+  }
 
-    // Generate crate
-    const snakeCaseName = name.replaceAll("-", "_");
+  const cargoToml = await fs.readFile(path.join(dirPath, "Cargo.toml"), "utf8");
+  const isProcMacro = /^proc-macro\s*=\s*true/m.test(cargoToml);
+  // A proc macro's other dependencies (`syn`, `quote`) run at compile time;
+  // the editor expands the macro without them
+  if (onlyProcMacros && !isProcMacro) return;
+  const libPath = /^\[lib\][^[]*?^path\s*=\s*"([^"]+)"/ms.exec(cargoToml)?.[1];
+
+  // Generate crate
+  try {
     run(cliPath, [
-      path.join(dirPath, "src", "lib.rs"),
+      path.join(dirPath, libPath ?? path.join("src", "lib.rs")),
       "--loopify",
       "--cfg-true-by-default",
       "--output",
       path.join(CRATES_PATH, `${snakeCaseName}.rs`),
     ]);
+  } catch (e) {
+    // A supported crate must generate; a reached one the tool cannot expand
+    // leaves only the paths through it unresolved in the editor
+    if (Object.hasOwn(crates, name)) throw e;
+    console.warn(`Skipping \`${name}(v${version})\`: ${e.message}`);
+    skippedCrates.push(name);
+    return;
+  }
 
-    // Get `Cargo.toml`
-    await fs.copyFile(
-      path.join(dirPath, "Cargo.toml.orig"),
-      path.join(CRATES_PATH, `${snakeCaseName}.toml`)
-    );
+  // Get `Cargo.toml`, with the features Rust Analyzer must enable
+  const manifest = await fs.readFile(
+    path.join(dirPath, "Cargo.toml.orig"),
+    "utf8"
+  );
+  await fs.writeFile(
+    path.join(CRATES_PATH, `${snakeCaseName}.toml`),
+    withFeatures(features.get(`${name}@${version}`) ?? [])(
+      // The wasm's `cargo_toml` 0.14 rejects edition 2024 and panics; its Rust Analyzer reads it as 2021 anyway
+      manifest.replace(/^edition\s*=\s*"2024"/m, 'edition = "2021"')
+    )
+  );
 
-    // Cache crate
-    cachedCrates.push(name);
-    console.log({ name, version });
+  // Cache crate
+  cachedCrates.push(snakeCaseName);
+  servedBy.set(snakeCaseName, `${name}@${version}`);
+  console.log(
+    servedAs === name ? { name, version } : { name, version, servedAs }
+  );
 
-    // Generate transitive dependencies
-    await generateDependencies(getDependencies(name, version), true);
+  await generateDependencies(getDependencies(name, version), isProcMacro);
+  for (const dep of renamed.get(`${name}@${version}`) ?? []) {
+    await generateCrate(dep.alias, dep.name, dep.version, isProcMacro);
   }
 }
 
@@ -272,6 +339,21 @@ async function getRegistry() {
   }
 
   return { root, find: (crate) => sources.get(crate) };
+}
+
+/** Run a command, throw with its output when it fails, and return its stdout. */
+function capture(command, args) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  if (result.status !== 0) {
+    const reason = result.error ?? result.signal ?? `exit ${result.status}`;
+    throw new Error(
+      `\`${command} ${args.join(" ")}\` failed (${reason}):\n${result.stderr}`
+    );
+  }
+  return result.stdout;
 }
 
 /** Run a command and throw with its output when it fails. */

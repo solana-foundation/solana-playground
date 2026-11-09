@@ -12,31 +12,14 @@ overflow-checks = true
 incremental = true
 
 [dependencies]
-anchor-lang = { version = "*", features = ["anchor-debug", "allow-missing-optionals", "init-if-needed"] }
-anchor-spl = { version = "*", features = ["dex", "governance", "metadata"] }
-arrayref = "*"
-borsh = "*"
-borsh-derive = "*"
-bytemuck = "*"
-bytemuck_derive = "*"
-mpl-bubblegum = "*"
-mpl-token-auth-rules = { version = "*", features = ["no-entrypoint"] }
-mpl-token-metadata = "*"
-num-derive = "*"
-num-traits = "*"
-pyth-sdk = "*"
-pyth-sdk-solana = "*"
-serde = "*"
-solana-program = "*"
-spl-account-compression = { version = "*", features = ["cpi"] }
-spl-associated-token-account = "*"
-spl-pod = "*"
-spl-tlv-account-resolution = "*"
-spl-token = "*"
-spl-token-2022 = "*"
-spl-token-metadata-interface = "*"
-spl-transfer-hook-interface = "*"
-spl-type-length-value = "*"
-switchboard-solana = "*"
-switchboard-v2 = "*"
-thiserror = "*"
+anchor-lang = { version = "=1.1.2", features = ["allow-missing-optionals", "event-cpi", "init-if-needed", "lazy-account"] }
+anchor-spl = { version = "=1.1.2", features = ["governance", "memo", "metadata"] }
+borsh = { version = "=1.8.1", features = ["derive"] }
+bytemuck = { version = "=1.25.2", features = ["derive", "min_const_generics"] }
+solana-program = "=3.0.0"
+spl-associated-token-account-interface = "=2.0.0"
+spl-token-2022-interface = "=2.1.0"
+spl-token-interface = "=2.0.0"
+
+[lints.rust]
+unexpected_cfgs = "allow"

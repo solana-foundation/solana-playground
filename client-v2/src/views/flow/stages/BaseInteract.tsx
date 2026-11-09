@@ -48,6 +48,8 @@ export interface BaseInteractProps {
   onGoTo: (stage: Extract<Stage, "build" | "deploy">) => void;
   /** The "Upload IDL" action (`IdlActions mode="upload"`) */
   idlLoad: ReactNode;
+  /** "Build the IDL locally", beside Upload IDL */
+  idlGuide: ReactNode;
   /**
    * Why an Anchor IDL of spec 0.1.0 (Anchor 0.30 on) cannot be called
    * (`readIdl`'s reason), shown on the `bad-idl` surface; absent for any
@@ -99,7 +101,8 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
   "not-built": NOTHING_TO_CALL,
   "no-idl": {
     title: "This program has no IDL",
-    description: () => "Upload its IDL to call it from a form.",
+    description: () =>
+      "The Playground's build does not produce an IDL. Build the IDL on your machine, then upload it to call the program's instructions.",
   },
   "no-program-id": {
     title: "No program id",
@@ -153,12 +156,20 @@ const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
             focus, as Deploy's Upload IDL */}
         <div className="flex justify-center [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:rounded-full [&_[data-slot=button]]:px-5 max-md:[&_[data-slot=button]]:h-12 max-md:[&_[data-slot=button]]:w-full max-md:[&>div]:w-full">
           {p.idlLoad}
+          {p.idlGuide}
         </div>
       </>
     );
   }
-  if (surface === "no-idl") return p.idlLoad;
-  return null;
+  if (surface === "no-idl") {
+    return (
+      <>
+        {p.idlLoad}
+        {p.idlGuide}
+      </>
+    );
+  }
+  return undefined;
 };
 
 const Empty = ({
@@ -319,7 +330,12 @@ const BaseInteract = (p: BaseInteractProps) => (
           </NativeSelect>
         </label>
         {/* In `no-idl` and before a deploy the stage's own foot offers it */}
-        {p.surface !== "no-idl" && !isNothingToCall(p.surface) && p.idlLoad}
+        {p.surface !== "no-idl" && !isNothingToCall(p.surface) && (
+          <>
+            {p.idlLoad}
+            {p.idlGuide}
+          </>
+        )}
       </div>
     </div>
     <div className={STAGE_FRAME}>

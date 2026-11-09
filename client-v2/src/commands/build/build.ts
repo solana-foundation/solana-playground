@@ -48,9 +48,10 @@ export const build = createCmd({
       // `stderr` so deploy can warn before reusing a stale binary.
       const failed = result.stderr.includes("error: could not compile");
       PgProgramInfo.update({
-        idl: result.idl,
         uuid: result.uuid ?? undefined,
         lastBuildFailed: failed,
+        // The stable server builds no IDL; a `null` keeps the one the user uploaded
+        ...(result.idl && { idl: result.idl }),
       });
       // `improveOutput` is lossy by design; the assistant needs the raw text.
       // The workspace travels with it: one output is kept for the session, so

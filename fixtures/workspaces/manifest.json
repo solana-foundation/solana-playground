@@ -1,0 +1,97 @@
+[
+  {
+    "name": "anchor-project",
+    "dir": "anchor-project",
+    "framework": "anchor"
+  },
+  {
+    "name": "Hello Anchor",
+    "dir": "hello-anchor",
+    "framework": "anchor"
+  },
+  {
+    "name": "Hello Solana",
+    "dir": "hello-solana",
+    "framework": "native"
+  },
+  {
+    "name": "Hello Seahorse",
+    "dir": "hello-seahorse",
+    "framework": "seahorse"
+  },
+  {
+    "name": "Bank Simulator",
+    "dir": "bank-simulator",
+    "framework": "anchor"
+  },
+  {
+    "name": "Battle Coins",
+    "dir": "battle-coins",
+    "framework": "anchor"
+  },
+  {
+    "name": "Boss Battle",
+    "dir": "boss-battle",
+    "framework": "anchor"
+  },
+  {
+    "name": "Counter PDA Tutorial",
+    "dir": "counter-pda-tutorial",
+    "framework": "anchor"
+  },
+  {
+    "name": "Expense Tracker",
+    "dir": "expense-tracker",
+    "framework": "anchor"
+  },
+  {
+    "name": "Faucet Seahorse",
+    "dir": "faucet-seahorse",
+    "framework": "seahorse"
+  },
+  {
+    "name": "Lumberjack",
+    "dir": "lumberjack",
+    "framework": "anchor"
+  },
+  {
+    "name": "Spl Token Vault",
+    "dir": "spl-token-vault",
+    "framework": "anchor"
+  },
+  {
+    "name": "Tiny Adventure",
+    "dir": "tiny-adventure",
+    "framework": "anchor"
+  },
+  {
+    "name": "Tiny Adventure Two",
+    "dir": "tiny-adventure-two",
+    "framework": "anchor"
+  },
+  {
+    "name": "Zero Copy",
+    "dir": "zero-copy",
+    "framework": "anchor"
+  },
+  {
+    "name": "Tictactoe Seahorse",
+    "dir": "tictactoe-seahorse",
+    "framework": "seahorse"
+  },
+  {
+    "name": "Todo App Seahorse",
+    "dir": "todo-app-seahorse",
+    "framework": "seahorse"
+  },
+  {
+    "name": "seahorse-project",
+    "dir": "seahorse-project",
+    "framework": "seahorse"
+  },
+  {
+    "name": "native-project",
+    "dir": "native-project",
+    "framework": "native"
+  }
+]

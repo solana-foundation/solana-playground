@@ -5,6 +5,7 @@ import { isSignInFailure, PgSession } from "@/features/auth";
 import type { GuideFrom } from "@/features/cli-deploy";
 import { CliDeployGuide } from "@/features/cli-deploy";
 import { PgStageDeploy, useDeployRun, useStageDeploy } from "@/features/deploy";
+import { IdlBuildGuide } from "@/features/idl-build-guide";
 import { ProgramKeypair } from "@/features/program-keypair";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -209,6 +210,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         }
         onShowNetwork={showNetwork}
         idlUpload={<IdlActions mode="upload-button" />}
+        idlGuide={<IdlBuildGuide surface="deploy" />}
         idlName={idlName}
         // Keyed on the project: an open dialog or a note never carries over
         // to another project's keypair

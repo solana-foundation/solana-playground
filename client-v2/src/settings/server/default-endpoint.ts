@@ -1,36 +1,32 @@
-/** A build server on this machine -- upstream's development default */
+import { SERVER_URL } from "../../shared/config/client-env";
+
+/** A build server on this machine, and the default when `REACT_APP_SERVER_URL` is empty */
 export const LOCAL_ENDPOINT = "http://localhost:8080";
 
-/** The Solana Foundation's own deployment, and what a fresh profile uses */
-export const FOUNDATION_ENDPOINT =
-  "https://playground-server-dot-analytics-324114.de.r.appspot.com";
+type EndpointOption = { name: string; value: string };
 
 /**
- * What the picker offers, in this order -- the default first. The custom
- * URL field comes after these, from the setting itself.
+ * What the picker offers, in this order, the default first. The Solana
+ * Foundation's server is the deployment's `REACT_APP_SERVER_URL`, so its host
+ * lives in deployment configuration only; without the variable it is not
+ * offered. The custom URL field comes after these, from the setting itself.
  *
  * Upstream's own backend, `api.solpg.io`, is not offered: it is Acheron's
  * capacity, not Solana's, and whoever needs it enters it as a
  * custom server.
  */
-export const SERVER_ENDPOINT_OPTIONS: ReadonlyArray<{
-  name: string;
-  value: string;
-}> = [
-  { name: "Solana Foundation", value: FOUNDATION_ENDPOINT },
+const serverEndpointOptionsFor = (
+  foundation: string | undefined
+): ReadonlyArray<EndpointOption> => [
+  ...(foundation ? [{ name: "Solana Foundation", value: foundation }] : []),
   { name: "Local", value: LOCAL_ENDPOINT },
 ];
 
+export const SERVER_ENDPOINT_OPTIONS = serverEndpointOptionsFor(SERVER_URL);
+
 /**
- * Which build server a fresh profile talks to.
- *
- * The Foundation's server in every environment, development included.
- * Upstream defaults development to a local server, but nothing in this
- * repository starts one, so the first build of a fresh checkout used to
- * fail in milliseconds against a port with nothing behind it; the
- * Foundation's server allowlists `localhost:3000`, so development can
- * reach it directly. Running a server locally is a picker entry away, or
- * `REACT_APP_SERVER_URL=http://localhost:8080`.
+ * Which build server a fresh profile talks to: the deployment's
+ * `REACT_APP_SERVER_URL`, or a local server when it is empty.
  *
  * `||` not `??`: sourcing an env file leaves unfilled keys as "", which is
  * not nullish and would win.
@@ -40,69 +36,43 @@ export const SERVER_ENDPOINT_OPTIONS: ReadonlyArray<{
  * follows `REACT_APP_SERVER_URL` when it changes, and one that picked
  * another option keeps that option.
  */
-export const defaultServerEndpoint = (env: {
-  REACT_APP_SERVER_URL?: string;
-  NODE_ENV?: string;
-}) => env.REACT_APP_SERVER_URL || FOUNDATION_ENDPOINT;
+export const defaultServerEndpoint = (env: { REACT_APP_SERVER_URL?: string }) =>
+  env.REACT_APP_SERVER_URL || LOCAL_ENDPOINT;
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("settings/server/default-endpoint", () => {
-    describe("SERVER_ENDPOINT_OPTIONS", () => {
-      it("leads with the server the default points at", () => {
-        expect(SERVER_ENDPOINT_OPTIONS[0]).toEqual({
-          name: "Solana Foundation",
-          value: FOUNDATION_ENDPOINT,
-        });
-      });
-
-      it("does not offer upstream's api.solpg.io", () => {
-        expect(SERVER_ENDPOINT_OPTIONS).toEqual([
-          { name: "Solana Foundation", value: FOUNDATION_ENDPOINT },
+    describe("serverEndpointOptionsFor", () => {
+      // Scenario "The variable is set" (client-v2-build-server-endpoint)
+      it("lists the Foundation with the variable's URL, then Local, and not api.solpg.io", () => {
+        expect(serverEndpointOptionsFor("https://server.example")).toEqual([
+          { name: "Solana Foundation", value: "https://server.example" },
           { name: "Local", value: LOCAL_ENDPOINT },
         ]);
       });
 
-      it("keeps a local server selectable", () => {
-        expect(LOCAL_ENDPOINT).toBe("http://localhost:8080");
-        expect(
-          SERVER_ENDPOINT_OPTIONS.find((o) => o.value === LOCAL_ENDPOINT)?.name
-        ).toBe("Local");
+      it("does not list the Foundation when the variable is empty", () => {
+        expect(serverEndpointOptionsFor("").map((o) => o.name)).toEqual([
+          "Local",
+        ]);
       });
     });
 
     describe("defaultServerEndpoint", () => {
-      it("is the Foundation's server in every environment", () => {
-        for (const NODE_ENV of ["production", "development", "test"]) {
-          expect(defaultServerEndpoint({ NODE_ENV })).toBe(FOUNDATION_ENDPOINT);
-        }
-      });
-
-      it("never defaults to api.solpg.io", () => {
-        for (const NODE_ENV of ["production", "development", "test"]) {
-          expect(defaultServerEndpoint({ NODE_ENV })).not.toBe(
-            "https://api.solpg.io"
-          );
-        }
-      });
-
-      it("lets REACT_APP_SERVER_URL win", () => {
+      it("is the variable's URL when it is set", () => {
         expect(
           defaultServerEndpoint({
-            NODE_ENV: "development",
-            REACT_APP_SERVER_URL: "http://localhost:8080",
+            REACT_APP_SERVER_URL: "https://server.example",
           })
-        ).toBe(LOCAL_ENDPOINT);
+        ).toBe("https://server.example");
       });
 
-      it("ignores an empty REACT_APP_SERVER_URL", () => {
-        expect(
-          defaultServerEndpoint({
-            NODE_ENV: "development",
-            REACT_APP_SERVER_URL: "",
-          })
-        ).toBe(FOUNDATION_ENDPOINT);
+      // Scenario "A fresh checkout" (client-v2-build-server-endpoint)
+      it("is a local server when the variable is empty", () => {
+        expect(defaultServerEndpoint({ REACT_APP_SERVER_URL: "" })).toBe(
+          LOCAL_ENDPOINT
+        );
       });
     });
   });

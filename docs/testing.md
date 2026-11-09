@@ -312,15 +312,18 @@ Expect: an error page or message, not a blank screen.
 
 Precondition: `master`; B-7; nothing listens on port 8080.
 
-client-v2 defaults its server endpoint to the remote Foundation server, not to `localhost`. To test the "no server"
-case, point it at the local port:
+Without `REACT_APP_SERVER_URL`, client-v2 defaults its server endpoint to `http://localhost:8080` and logs a warning
+naming the variable. Leave the variable empty in `client-v2/.env` for this case:
 
 ```sh
-REACT_APP_SERVER_URL=http://localhost:8080 yarn --cwd client-v2 dev
+REACT_APP_SERVER_URL= yarn --cwd client-v2 dev
 curl -s http://localhost:3000/api/health
 ```
 
 Expect:
+
+- [ ] the browser console shows the `settings:server` warning naming `REACT_APP_SERVER_URL`, and Settings lists no
+      "Solana Foundation" build server.
 
 - [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the console, the IDE, the terminal `help`, and
       the network tab pass.
@@ -416,7 +419,7 @@ docker compose --profile v2 logs | grep -c 'local dev stub'
 ```
 
 Steps: in Settings, check that `experimental.unstable` is off and set the server to Local (client-v2 defaults to the
-remote Foundation server).
+server `REACT_APP_SERVER_URL` names, when it is set).
 
 Expect:
 
@@ -736,7 +739,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST <production server URL>/unstabl
 curl -s -o /dev/null -w '%{http_code}\n' -X POST <production server URL>/build
 ```
 
-The production server URL is `FOUNDATION_ENDPOINT` in `client-v2/src/settings/server/default-endpoint.ts`.
+The production server URL is the Vercel projects' `REACT_APP_SERVER_URL`; ask a maintainer for it.
 
 Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which proves the URL is right.
 

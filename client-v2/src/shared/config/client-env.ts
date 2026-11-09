@@ -6,7 +6,7 @@
 // sites: a literal comparison there is what lets the minifier drop
 // development-only branches from the production bundle.
 
-/** Build server override; unset means the Solana Foundation's server */
+/** The deployment's build server, listed as "Solana Foundation"; unset means a local server */
 export const SERVER_URL = process.env.REACT_APP_SERVER_URL;
 
 /** Default of `experimental.unstable`; only `"true"` turns it on */

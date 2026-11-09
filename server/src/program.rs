@@ -5,7 +5,6 @@ use std::{
     sync::LazyLock,
 };
 
-use anchor_syn::idl::{parse::file::parse as parse_idl, types::Idl};
 use anyhow::anyhow;
 use regex::Regex;
 
@@ -37,16 +36,13 @@ pub const MAX_STDERR_LEN: usize = 1024 * 1024 * 1024; // 1 MiB
 /// Only Rust source files starting with `/src` are allowed to be passed in, an error is returned
 /// otherwise.
 ///
-/// NOTE: This function doesn't return an error in the case of a compiler error.
+/// NOTE: This function doesn't return an error in the case of a compiler error, only for other
+/// build failures.
+///
+/// No IDL is produced: Anchor 1.x builds one only by compiling and running user code
+/// (`idl-build`), which this route does not do.
 // TODO: Remove
-pub fn build(
-    concurrency_id: usize,
-    program_name: &str,
-    files: &Files,
-    seeds_feature: bool,
-    no_docs: bool,
-    safety_checks: bool,
-) -> anyhow::Result<(String, Option<Idl>)> {
+pub fn build(concurrency_id: usize, program_name: &str, files: &Files) -> anyhow::Result<String> {
     // Check file count
     if files.len() > MAX_FILE_AMOUNT {
         return Err(anyhow!(
@@ -68,7 +64,7 @@ pub fn build(
         }
     }
 
-    // Copy `Cargo.*` files into a separate directory (only once)
+    // Copy `Cargo.toml` into a separate directory (only once)
     let concurrency_path = Path::new(PROGRAMS_DIR).join(concurrency_id.to_string());
     let concurrency_ready_path = concurrency_path.join("ready");
     if !fs::exists(&concurrency_ready_path)? {
@@ -78,13 +74,15 @@ pub fn build(
             Path::new(PROGRAMS_DIR).join("Cargo.toml"),
             concurrency_path.join("Cargo.toml"),
         )?;
-        fs::copy(
-            Path::new(PROGRAMS_DIR).join("Cargo.lock"),
-            concurrency_path.join("Cargo.lock"),
-        )?;
         fs::write(concurrency_ready_path, [])?;
         info!("Initialized concurrency id {concurrency_id}");
     }
+
+    // A slot that survives an image upgrade would otherwise keep the old lock beside the new manifest
+    fs::copy(
+        Path::new(PROGRAMS_DIR).join("Cargo.lock"),
+        concurrency_path.join("Cargo.lock"),
+    )?;
 
     // Remove existing files
     //
@@ -134,6 +132,7 @@ pub fn build(
         .arg("--sbf-out-dir")
         .arg(&program_path)
         .arg("--offline")
+        .args(["--", "--locked"])
         .output()?;
 
     // Check output length
@@ -144,28 +143,21 @@ pub fn build(
         ));
     }
 
-    // Check compile errors
     let stderr = String::from_utf8(output.stderr)?;
-    if stderr.rfind("error: could not compile").is_some() {
-        return Ok((stderr, None));
+    check_build_output(output.status.success(), stderr)
+}
+
+/// Marks the compiler errors the client shows to the user as a failed build
+const COMPILE_ERROR_MARKER: &str = "error: could not compile";
+
+/// Return the stderr of a build that succeeded or failed to compile, and an error otherwise.
+fn check_build_output(success: bool, stderr: String) -> anyhow::Result<String> {
+    // The client reads failure only from the compile error marker, so any other failure would pass as success
+    if !success && !stderr.contains(COMPILE_ERROR_MARKER) {
+        return Err(anyhow!("Build failed: {stderr}"));
     }
 
-    // Generate IDL if it's an Anchor program
-    let lib_path = program_path.join("src").join("lib.rs");
-    let ret = fs::read_to_string(&lib_path)?
-        .contains("anchor_lang")
-        .then(|| {
-            parse_idl(
-                lib_path,
-                "0.1.0".into(),
-                seeds_feature,
-                no_docs,
-                safety_checks,
-            )
-        })
-        .transpose()
-        .map_or_else(|e| (format!("IDL error: {e}"), None), |idl| (stderr, idl));
-    Ok(ret)
+    Ok(stderr)
 }
 
 /// Read the program ELF and return its bytes.
@@ -186,4 +178,24 @@ pub fn get_out_path() -> PathBuf {
 /// Get the path to the program output directory.
 pub fn get_program_out_path(uuid: &str) -> PathBuf {
     get_out_path().join(uuid)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_build_output_passes_success_and_compile_errors() {
+        assert!(check_build_output(true, String::new()).is_ok());
+        let compile_error = format!("{COMPILE_ERROR_MARKER} `solpg`");
+        assert_eq!(
+            check_build_output(false, compile_error.clone()).unwrap(),
+            compile_error
+        );
+    }
+
+    #[test]
+    fn check_build_output_rejects_other_failures() {
+        assert!(check_build_output(false, "error: no matching package".into()).is_err());
+    }
 }

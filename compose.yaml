@@ -149,6 +149,8 @@ services:
       args:
         USER: solpg
         HAS_SERVER: false
+        # The build server to use, from the shell; empty means a local one
+        REACT_APP_SERVER_URL: ${REACT_APP_SERVER_URL:-}
       additional_contexts:
         solana-playground-wasm: service:wasm
     # `.dockerignore` keeps client-v2/.env out of the image

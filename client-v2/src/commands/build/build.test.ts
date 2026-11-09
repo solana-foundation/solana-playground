@@ -90,6 +90,41 @@ describe("commands/build/build", () => {
     expect(output).not.toContain("\x1b");
   });
 
+  // Spec client-v2-idl-build-guide: "A build without an IDL keeps the IDL the browser holds"
+  describe("idl", () => {
+    beforeEach(() => {
+      utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
+      utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    it("keeps the held IDL when the build returns none", async () => {
+      // eslint-disable-next-line unicorn/no-null -- the build response carries `null` for no IDL
+      utils.PgServer.build.mockResolvedValue({ stderr: "", idl: null });
+
+      await run();
+
+      expect(utils.PgProgramInfo.update).toHaveBeenCalledTimes(1);
+      expect(utils.PgProgramInfo.update.mock.calls[0][0]).not.toHaveProperty(
+        "idl"
+      );
+    });
+
+    it("replaces the held IDL with the one the build returns", async () => {
+      const idl = {
+        address: "",
+        metadata: { name: "b", version: "0.1.0", spec: "0.1.0" },
+        instructions: [],
+      };
+      utils.PgServer.build.mockResolvedValue({ stderr: "", idl });
+
+      await run();
+
+      expect(utils.PgProgramInfo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ idl })
+      );
+    });
+  });
+
   describe("stopped", () => {
     beforeEach(() => {
       utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);

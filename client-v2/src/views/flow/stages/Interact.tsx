@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { IdlReading } from "@/entities/idl";
+import { IdlBuildGuide } from "@/features/idl-build-guide";
 import { createLogger } from "@/shared/lib/logger";
 
 import { useAirdrop } from "../../../components/Wallet/hooks/useAirdrop";
@@ -170,6 +171,7 @@ const Interact = () => {
       network={networkInSentence(cluster)}
       onGoTo={(stage) => PgFlow.setStage(stage)}
       idlLoad={<IdlActions mode="upload" />}
+      idlGuide={<IdlBuildGuide surface="interact" />}
       idlRefusal={idlRefusal(PgProgramInfo.readIdl())}
       programId={programId ?? undefined}
       builtAfterDeploy={builtAfterDeploy(buildAt, deployAt)}

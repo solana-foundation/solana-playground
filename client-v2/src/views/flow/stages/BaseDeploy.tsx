@@ -115,6 +115,8 @@ export interface BaseDeployProps {
   networkHold?: string;
   /** The secondary "Upload IDL" action (`IdlActions mode="upload-button"`) */
   idlUpload: ReactNode;
+  /** "Build the IDL locally", beside Upload IDL */
+  idlGuide: ReactNode;
   /**
    * The folded "Program id" block (`ProgramKeypair`): the last row of the
    * facts card before the first deploy on the network picked; after one, the
@@ -676,6 +678,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             </Button>
           )}
           {p.idlUpload}
+          {p.idlGuide}
           <Button
             variant="outline"
             onClick={() => p.onOpenCliGuide("deploy-stage")}
