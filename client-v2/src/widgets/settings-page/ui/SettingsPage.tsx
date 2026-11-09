@@ -275,6 +275,7 @@ const Project = ({ phone, onImported }: ProjectProps) => {
       <BaseSettingRow
         name={exportRow.name}
         description={exportRow.description}
+        descriptionTestId="settings-open-project"
         phone={phone}
         control={<ExportProject className={phone ? PHONE_BUTTON : undefined} />}
       />

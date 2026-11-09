@@ -12,6 +12,8 @@ import { Tag } from "@/shared/ui/tag";
 interface BaseSettingRowProps {
   name: string;
   description?: string;
+  /** The help line's test id, kept when a line moves into a row */
+  descriptionTestId?: string;
   /** A tag after the name, such as "Experimental" */
   tag?: string;
   control: ReactNode;
@@ -30,6 +32,7 @@ interface BaseSettingRowProps {
 const BaseSettingRow = ({
   name,
   description,
+  descriptionTestId,
   tag,
   control,
   controlId,
@@ -59,6 +62,7 @@ const BaseSettingRow = ({
         </FieldLabel>
         {description && (
           <FieldDescription
+            data-testid={descriptionTestId}
             className={cn("text-xs", phone && "text-caption font-read")}
           >
             {description}
