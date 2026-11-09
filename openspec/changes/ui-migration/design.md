@@ -1696,7 +1696,7 @@ they are answered. One PR.
   in Advanced's "Build server" card (`experimental.unstable` keeps its row,
   D37; Slava, 2026-10-20: a setting is not dropped for want of a section).
   `connection.endpoint` maps to no row: the Endpoint select is removed, and
-  the network chips, with Custom for any other URL, set the endpoint. A
+  the network chips `client-v2-custom-rpcs` lists set the endpoint. A
   setting `ROWS` lacks goes to the end of Advanced under its own name and is
   reported once; `model/sections.test.ts` fails when `ROWS` and the real
   setting ids part. The user's key sits last, in Advanced. The overlay's

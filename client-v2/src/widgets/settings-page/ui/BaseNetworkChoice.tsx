@@ -62,7 +62,7 @@ export const checkedChipKey = (
 };
 
 /**
- * The network card's rows: the chips, Devnet and Mainnet, then each saved
+ * The network card's rows: the chips, the offered networks, then each saved
  * custom RPC under its name; then `children` (the saved RPCs' list); then
  * the card's foot, how a deploy works on the checked network. An endpoint no
  * chip lists (Playnet, or a URL not saved yet) leaves none checked and no

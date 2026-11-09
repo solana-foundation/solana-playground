@@ -117,3 +117,36 @@ whether the stage's content is shorter or taller than the screen.
 - **WHEN** the Interact stage of a project that has never been deployed is
   shown on a 390 px wide screen
 - **THEN** the Go to Deploy button sits at the foot of the stage
+
+### Requirement: A stage whose code did not load says so in its panel
+
+Build, Deploy and Interact load their code on demand. When that code does not
+arrive, the stage's own panel SHALL show the failure while the tabs and the
+editor stay up, and SHALL say the user's code is unchanged. Online the title
+SHALL read "<Stage> couldn't load" with Try again and Reload page; offline it
+SHALL read "<Stage> needs a connection" with Try again alone, since a reload
+offline would lose the app. Online, a Try again that fails too SHALL point the
+user to Reload page. A stage that failed offline SHALL load again by itself when the
+network returns. A failure with a network SHALL be reported to production
+monitoring once per stage per page load; a failure offline, a retry the
+returning network started, and a repeat SHALL only be logged.
+
+#### Scenario: The code does not arrive with a network
+
+- **WHEN** the user opens Deploy online and its code fails to load
+- **THEN** the panel reads "Deploy couldn't load" with Try again and Reload
+  page, and the failure is reported once
+
+#### Scenario: Try again fails too
+
+- **WHEN** the user, online, presses Try again and the load fails again
+- **THEN** the panel tells the user to reload the page, and nothing more is
+  reported
+
+#### Scenario: Offline, then the network returns
+
+- **WHEN** the user opens Build offline and its code fails to load
+- **THEN** the panel reads "Build needs a connection" with Try again only, and
+  nothing is reported
+- **WHEN** the network returns
+- **THEN** the stage loads again without a press
