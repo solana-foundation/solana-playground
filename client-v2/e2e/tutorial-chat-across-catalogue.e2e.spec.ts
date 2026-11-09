@@ -47,8 +47,11 @@ for (const width of widths) {
     await stubAiStatus(page, "z-ai/glm-5.3-flash:US");
     await page.route("**/api/agent", async (route) => {
       await held;
-      // Rejects once the test has closed the page: nothing left to answer
-      await route.abort().catch(() => {});
+      // May reject when the page has already closed: nothing left to answer
+      await route.abort().catch((error: unknown) => {
+        // eslint-disable-next-line no-console -- e2e has no app logger; the rejection is expected once the page is gone
+        console.info("route.abort rejected after the page closed:", error);
+      });
     });
 
     await page.setViewportSize(WIDE_DESK);

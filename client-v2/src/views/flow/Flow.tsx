@@ -325,7 +325,7 @@ const FlowFrame = () => {
   // shown by whichever of the two is drawn, as the stage and the console are:
   // crossing the frame's width moves the node, so `useTurn` stays mounted and
   // keeps the composer's draft and the Stop of an answer streaming. Mounted
-  // only while one of them is drawn (`chatShown`)
+  // only while one of them is drawn (`isChatShown`)
   const chatNode = useOutletNode("flex min-h-0 flex-1 flex-col");
   const chatOutlet = (
     <Outlet node={chatNode} className="flex min-h-0 flex-1 flex-col" />
@@ -353,7 +353,7 @@ const FlowFrame = () => {
   // chat stay mounted: on wide Home the assistant panel holds the one live
   // turn, and a chat out of the page would still answer Enter, starting or
   // advancing a step nobody sees
-  const chatShown =
+  const isChatShown =
     tutorial.frame !== undefined &&
     page.view === "work" &&
     (inFrame || catalog === null);
@@ -664,7 +664,7 @@ const FlowFrame = () => {
         <SettingsPage focus={settings.focus} onClose={closeSettings} />
       )}
 
-      {chatShown && (
+      {isChatShown && (
         <OutletContent node={chatNode}>
           <TutorialChat
             onAllTutorials={() => catalogPage.open("tutorials", "nav")}
