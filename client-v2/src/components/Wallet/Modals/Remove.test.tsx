@@ -12,7 +12,7 @@ vi.mock("../../../utils", () => ({
     currentIndex: 0,
     export: vi.fn(),
     remove: vi.fn(),
-    holdsKeysInPage: vi.fn(),
+    hasKeysInPage: vi.fn(),
   },
 }));
 
@@ -81,7 +81,7 @@ const setAccounts = (accounts: typeof CURRENT[]) =>
 
 beforeEach(() => {
   setAccounts([CURRENT]);
-  vi.mocked(PgWallet.holdsKeysInPage).mockReturnValue(false);
+  vi.mocked(PgWallet.hasKeysInPage).mockReturnValue(false);
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -89,7 +89,7 @@ afterEach(() => {
 
 describe("wallet Remove", () => {
   it("saves the keypair from the page under the local provider", async () => {
-    vi.mocked(PgWallet.holdsKeysInPage).mockReturnValue(true);
+    vi.mocked(PgWallet.hasKeysInPage).mockReturnValue(true);
     renderRemove();
 
     fireEvent.click(screen.getByRole("button", { name: "Save keypair" }));

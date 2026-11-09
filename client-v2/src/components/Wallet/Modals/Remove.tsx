@@ -34,7 +34,7 @@ export const Remove = () => {
             You can recover the wallet later if you save the keypair.
           </CalloutDescription>
         </Callout>
-        {PgWallet.holdsKeysInPage() ? (
+        {PgWallet.hasKeysInPage() ? (
           <AsyncButton
             type="button"
             variant="outline"

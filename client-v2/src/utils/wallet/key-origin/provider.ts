@@ -38,7 +38,7 @@ export const keyOriginSignerProvider = (
       .then(signatureOf);
   return {
     name: "key-origin",
-    holdsKeysInPage: false,
+    hasKeysInPage: false,
     walletFor(account) {
       return {
         isPg: true,
@@ -130,7 +130,7 @@ if (import.meta.vitest) {
       const { kept, provider } = fakeKeyPage();
       const publicKey = await provider.makeKey();
       expect(Array.from(kept.keys())).toEqual([publicKey]);
-      expect(provider.holdsKeysInPage).toBe(false);
+      expect(provider.hasKeysInPage).toBe(false);
       expect(provider.name).toBe("key-origin");
     });
 

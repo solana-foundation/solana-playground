@@ -31,7 +31,7 @@ export interface WalletSignerProvider {
    * Whether the page holds the keys: the account record keeps `kp`, and key
    * bytes can be handed out (`secretKeyFor`)
    */
-  readonly holdsKeysInPage: boolean;
+  readonly hasKeysInPage: boolean;
   /**
    * Make a new key that `walletFor` and `secretKeyFor` find before any
    * account names it.
@@ -93,7 +93,7 @@ export const localSignerProviderWith = (
 
   return {
     name: "local",
-    holdsKeysInPage: true,
+    hasKeysInPage: true,
     async makeKey() {
       const keypair = PgWeb3.Keypair.generate();
       const publicKey = keypair.publicKey.toBase58();
@@ -243,7 +243,7 @@ if (import.meta.vitest) {
       expect(wallet.publicKey.toBase58()).toBe(publicKey);
       const secretKey = provider.secretKeyFor(new PgWeb3.PublicKey(publicKey));
       expect(publicKeyOf(Array.from(secretKey)).toBase58()).toBe(publicKey);
-      expect(provider.holdsKeysInPage).toBe(true);
+      expect(provider.hasKeysInPage).toBe(true);
     });
 
     it("forgetKey drops a key makeKey made, so it is no longer found", async () => {

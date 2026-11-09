@@ -6,13 +6,13 @@
 // that never reads it, and every run under the local provider, goes on.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const env = vi.hoisted(() => ({ holdsKeysInPage: false }));
+const env = vi.hoisted(() => ({ hasKeysInPage: false }));
 
 vi.mock("../utils", async () => {
   const { TerminalLineError } = await import("../utils/terminal/line-error");
   return {
     PgPackage: {},
-    PgWallet: { holdsKeysInPage: () => env.holdsKeysInPage },
+    PgWallet: { hasKeysInPage: () => env.hasKeysInPage },
     TerminalLineError,
   };
 });
@@ -49,7 +49,7 @@ const refusalOf = async (
 };
 
 beforeEach(() => {
-  env.holdsKeysInPage = false;
+  env.hasKeysInPage = false;
 });
 
 describe("commands that read the wallet's key, under the key origin", () => {
@@ -104,7 +104,7 @@ describe("under the local provider", () => {
   it.each(["solana balance", "spl-token accounts", "anchor idl init"])(
     "`%s` goes on",
     async (input) => {
-      env.holdsKeysInPage = true;
+      env.hasKeysInPage = true;
       const cmd = { solana, "spl-token": splToken, anchor }[
         input.split(" ")[0] as "solana"
       ];

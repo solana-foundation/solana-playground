@@ -314,7 +314,7 @@ const keysIn = (items: unknown[]): number[][] =>
   });
 
 /** Whether any copy read holds key bytes */
-const holdsKeys = (items: unknown[]) => keysIn(items).length > 0;
+const hasKeys = (items: unknown[]) => keysIn(items).length > 0;
 
 /**
  * The item without the key bytes of `moved`, the keys the key page
@@ -577,7 +577,7 @@ export const walletStorageWith =
     ) =>
       move !== undefined &&
       fromLocal !== undefined &&
-      holdsKeys([...fromLocal.wallet.accounts, ...fromLocal.damaged]);
+      hasKeys([...fromLocal.wallet.accounts, ...fromLocal.damaged]);
 
     /** Take the moved keys' bytes out of the set-aside record */
     const clearMovedAside = async (keys: number[][]) => {

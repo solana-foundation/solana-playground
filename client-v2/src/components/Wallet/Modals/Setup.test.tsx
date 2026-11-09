@@ -22,7 +22,7 @@ vi.mock("../../../utils", () => ({
     import: vi.fn(),
     remove: vi.fn(),
     getNextAvailableAccountName: () => "Wallet 1",
-    holdsKeysInPage: vi.fn(() => true),
+    hasKeysInPage: vi.fn(() => true),
     makeKey: vi.fn(),
     forgetKey: vi.fn(),
   },
@@ -203,7 +203,7 @@ describe("wallet Setup under the key-origin provider", () => {
 
   beforeEach(() => {
     accounts = [];
-    vi.mocked(PgWallet.holdsKeysInPage).mockReturnValue(false);
+    vi.mocked(PgWallet.hasKeysInPage).mockReturnValue(false);
     vi.mocked(PgWallet.makeKey).mockResolvedValue(MADE);
     vi.mocked(PgWallet.forgetKey).mockResolvedValue();
     Object.defineProperty(PgWallet, "accounts", {
@@ -216,7 +216,7 @@ describe("wallet Setup under the key-origin provider", () => {
     });
   });
   afterEach(() => {
-    vi.mocked(PgWallet.holdsKeysInPage).mockReturnValue(true);
+    vi.mocked(PgWallet.hasKeysInPage).mockReturnValue(true);
     Object.defineProperty(PgWallet, "accounts", {
       value: [{ name: "Wallet 1", kp: [] }],
       configurable: true,

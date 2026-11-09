@@ -31,7 +31,7 @@ vi.mock("../../utils", () => ({
     currentIndex: -1,
     import: vi.fn(),
     export: vi.fn(),
-    holdsKeysInPage: vi.fn(() => true),
+    hasKeysInPage: vi.fn(() => true),
   },
 }));
 
@@ -95,7 +95,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.clearAllMocks();
   // Back to the local provider, even after a test that failed under the key-origin one
-  vi.mocked(PgWallet.holdsKeysInPage).mockReturnValue(true);
+  vi.mocked(PgWallet.hasKeysInPage).mockReturnValue(true);
   resetLogger();
   told.length = 0;
   airdropHook.faucet = "none";
@@ -266,7 +266,7 @@ describe("wallet Settings menu", () => {
   });
 
   it("opens the key page's panels for Import and Export under the key-origin provider", async () => {
-    vi.mocked(PgWallet.holdsKeysInPage).mockReturnValue(false);
+    vi.mocked(PgWallet.hasKeysInPage).mockReturnValue(false);
     const { ImportKey, ExportKey } = await import("./Modals/KeyFile");
     render(<Host />);
 

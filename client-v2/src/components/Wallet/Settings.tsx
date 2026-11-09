@@ -193,7 +193,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           )}
           <DropdownMenuItem
             onSelect={
-              PgWallet.holdsKeysInPage()
+              PgWallet.hasKeysInPage()
                 ? importWallet
                 : () =>
                     openModal("import", async () => {
@@ -208,7 +208,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           {isPg && (
             <DropdownMenuItem
               onSelect={
-                PgWallet.holdsKeysInPage()
+                PgWallet.hasKeysInPage()
                   ? () => PgWallet.export()
                   : () =>
                       openModal("export", async () => {

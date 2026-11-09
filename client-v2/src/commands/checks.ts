@@ -56,7 +56,7 @@ export type KeyRead = (tokens: readonly string[]) => string | undefined;
  */
 export const checkKeyReadable =
   (readsKey: KeyRead) => (tokens: readonly string[]) => {
-    if (PgWallet.holdsKeysInPage()) return;
+    if (PgWallet.hasKeysInPage()) return;
     const command = readsKey(tokens);
     if (command) throw new TerminalLineError(keyCommandLine(`\`${command}\``));
   };
@@ -66,7 +66,7 @@ export const checkKeyReadable =
  * (`arg_required_else_help`), `help`, or a help or version flag. clap answers
  * those before the CLI reads the key.
  */
-const asksClapOnly = (tokens: readonly string[]) =>
+const isClapOnlyAsk = (tokens: readonly string[]) =>
   tokens.length <= 1 ||
   tokens[1] === "help" ||
   tokens.some((t) => ["-h", "--help", "-V", "--version"].includes(t));
@@ -77,4 +77,4 @@ const asksClapOnly = (tokens: readonly string[]) =>
  * `solana config` included.
  */
 export const everyRunReadsKey: KeyRead = (tokens) =>
-  asksClapOnly(tokens) ? undefined : tokens[0];
+  isClapOnlyAsk(tokens) ? undefined : tokens[0];

@@ -438,7 +438,7 @@ describe("utils/wallet/wallet", () => {
         const { kept, provider } = fakeKeyPage();
         PgWallet.setSignerProvider(provider);
         holdState([]);
-        expect(PgWallet.holdsKeysInPage()).toBe(false);
+        expect(PgWallet.hasKeysInPage()).toBe(false);
 
         const dropped = await PgWallet.makeKey();
         const added = await PgWallet.makeKey();

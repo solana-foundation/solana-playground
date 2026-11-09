@@ -20,7 +20,7 @@ const log = createLogger("wallet:setup");
 
 /** The Setup dialog for the wallet's provider: keys in the page, or on the key origin */
 export const Setup = () =>
-  PgWallet.holdsKeysInPage() ? <LocalSetup /> : <KeyOriginSetup />;
+  PgWallet.hasKeysInPage() ? <LocalSetup /> : <KeyOriginSetup />;
 
 /** Under the `local` provider: the keypair is made and saved in the page */
 const LocalSetup = () => {

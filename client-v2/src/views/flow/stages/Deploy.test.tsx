@@ -39,7 +39,7 @@ const mocks = vi.hoisted(() => ({
     addFirst: vi.fn(),
     switch: vi.fn(),
     export: vi.fn(),
-    holdsKeysInPage: vi.fn(() => true),
+    hasKeysInPage: vi.fn(() => true),
     onDidChangeCurrent: vi.fn((cb: (w: unknown) => void) => {
       mocks.walletListeners.add(cb);
       cb(mocks.wallet.current);
@@ -163,7 +163,7 @@ afterEach(() => {
   // eslint-disable-next-line unicorn/no-null -- `PgWallet.current` is `null` while no wallet is current
   mocks.wallet.current = null;
   mocks.wallet.accounts = [];
-  mocks.wallet.holdsKeysInPage.mockReturnValue(true);
+  mocks.wallet.hasKeysInPage.mockReturnValue(true);
   resetTelemetry();
   vi.clearAllMocks();
 });
@@ -553,7 +553,7 @@ describe("Deploy stage", () => {
   });
 
   it("saves the keypair through the key panel under the key origin", async () => {
-    mocks.wallet.holdsKeysInPage.mockReturnValue(false);
+    mocks.wallet.hasKeysInPage.mockReturnValue(false);
     mocks.wallet.current = {
       isPg: true,
       publicKey: {

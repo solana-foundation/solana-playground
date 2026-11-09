@@ -65,7 +65,7 @@ export const reportFailure = (error: unknown) => {
  * @param bytes the bytes to inspect
  * @returns whether the bytes are exactly one serialized message
  */
-const looksLikeTransactionMessage = (bytes: Uint8Array) => {
+const isTransactionMessage = (bytes: Uint8Array) => {
   let at = 0;
   const byteAt = () => (at < bytes.length ? bytes[at++] : undefined);
   const skip = (count: number) => {
@@ -167,10 +167,7 @@ export const handlerWith = (store: KeyStore) => {
       }
       case "sign": {
         const secret = await secretFor(request.publicKey);
-        if (
-          request.kind === "message" &&
-          looksLikeTransactionMessage(request.bytes)
-        ) {
+        if (request.kind === "message" && isTransactionMessage(request.bytes)) {
           throw new Refusal("This message is a transaction");
         }
         const signature = await ed25519.sign(
@@ -225,10 +222,15 @@ export const handlerWith = (store: KeyStore) => {
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi } = import.meta.vitest;
+  const { describe, it, expect, vi, beforeAll } = import.meta.vitest;
 
   describe("utils/wallet/key-origin/frame/handler", () => {
-    type Web3 = typeof import("../../../web3");
+    let PgWeb3: typeof import("../../../web3").PgWeb3;
+
+    beforeAll(async () => {
+      ({ PgWeb3 } = await import("../../../web3"));
+    });
+
     const memoryStore = () => {
       const kept = new Map<string, Uint8Array>();
       const store: KeyStore = {
@@ -264,7 +266,6 @@ if (import.meta.vitest) {
     };
 
     it("encodes base58 like web3", async () => {
-      const { PgWeb3 } = (await import("../../../web3")) as Web3;
       for (const bytes of [
         Uint8Array.from({ length: 32 }, (_, i) => i * 7),
         new Uint8Array(32),
@@ -293,7 +294,6 @@ if (import.meta.vitest) {
         throw new Error("expected a signature");
       }
       expect(reply.result).toHaveLength(64);
-      const { PgWeb3 } = (await import("../../../web3")) as Web3;
       expect(
         await ed25519.verify(
           reply.result,
@@ -372,7 +372,6 @@ if (import.meta.vitest) {
     });
 
     it("refuses to sign a transaction message as a message", async () => {
-      const { PgWeb3 } = (await import("../../../web3")) as Web3;
       const { store } = memoryStore();
       const handle = handlerWith(store);
       const publicKey = await created(handle);
@@ -394,7 +393,7 @@ if (import.meta.vitest) {
         legacy.compileToV0Message().serialize(),
       ]) {
         const bytes = Uint8Array.from(message);
-        expect(looksLikeTransactionMessage(bytes)).toBe(true);
+        expect(isTransactionMessage(bytes)).toBe(true);
         expect(
           await ask(handle, { type: "sign", publicKey, kind: "message", bytes })
         ).toMatchObject({ ok: false, error: "This message is a transaction" });
@@ -413,12 +412,12 @@ if (import.meta.vitest) {
 
     it("does not take ordinary text for a transaction message", () => {
       expect(
-        looksLikeTransactionMessage(new TextEncoder().encode("Sign in to x"))
+        isTransactionMessage(new TextEncoder().encode("Sign in to x"))
       ).toBe(false);
-      expect(looksLikeTransactionMessage(new Uint8Array(0))).toBe(false);
-      expect(
-        looksLikeTransactionMessage(Uint8Array.from([0x81, 1, 0, 0]))
-      ).toBe(false);
+      expect(isTransactionMessage(new Uint8Array(0))).toBe(false);
+      expect(isTransactionMessage(Uint8Array.from([0x81, 1, 0, 0]))).toBe(
+        false
+      );
     });
 
     it("logs a failure of the store on the key page by its type only", async () => {

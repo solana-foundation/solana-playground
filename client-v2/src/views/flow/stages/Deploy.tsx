@@ -137,7 +137,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
   const saveKeypair = () => {
     // Under the key origin the page holds no key to save: the key page's panel
     // saves the file, and only a saved file answers the backup line
-    if (!PgWallet.holdsKeysInPage()) {
+    if (!PgWallet.hasKeysInPage()) {
       void (async () => {
         const { ExportKey } = await import(
           "../../../components/Wallet/Modals/KeyFile"

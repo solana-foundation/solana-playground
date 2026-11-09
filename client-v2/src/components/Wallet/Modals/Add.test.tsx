@@ -13,7 +13,7 @@ vi.mock("../../../utils", () => ({
     add: vi.fn(),
     getNextAvailableAccountName: () => "Wallet 2",
     validateAccountName: () => true,
-    holdsKeysInPage: () => false,
+    hasKeysInPage: () => false,
     makeKey: vi.fn(),
     forgetKey: vi.fn(),
   },

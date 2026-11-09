@@ -546,7 +546,7 @@ class _PgWallet {
    * Add a new account.
    *
    * Under a provider that keeps the keys out of the page
-   * (`holdsKeysInPage === false`) the account is its name and public key: its
+   * (`hasKeysInPage === false`) the account is its name and public key: its
    * key is the provider's, stored by `makeKey` or the key panel's import, and
    * a keypair is refused.
    *
@@ -565,11 +565,11 @@ class _PgWallet {
     keypair?: PgWeb3.Keypair;
   }) {
     refuseWhileUnavailable();
-    const holdsKeysInPage = signerProvider.holdsKeysInPage;
-    if (!holdsKeysInPage && params?.keypair) {
+    const hasKeysInPage = signerProvider.hasKeysInPage;
+    if (!hasKeysInPage && params?.keypair) {
       throw new Error("Import the key file from the key panel.");
     }
-    if (!holdsKeysInPage && !params?.publicKey) {
+    if (!hasKeysInPage && !params?.publicKey) {
       throw new Error("A new account's key comes from PgWallet.addNew.");
     }
     const name = params?.name ?? PgWallet.getNextAvailableAccountName();
@@ -593,7 +593,7 @@ class _PgWallet {
     }
 
     // Add the account
-    if (holdsKeysInPage) {
+    if (hasKeysInPage) {
       const kp = keypair
         ? Array.from(keypair.secretKey)
         : Array.from(
@@ -673,8 +673,8 @@ class _PgWallet {
    * `add({ publicKey })`, and imports and exports key files through the key
    * page's panel.
    */
-  static holdsKeysInPage() {
-    return signerProvider.holdsKeysInPage;
+  static hasKeysInPage() {
+    return signerProvider.hasKeysInPage;
   }
 
   /**
@@ -775,7 +775,7 @@ class _PgWallet {
    */
   static async import(name?: string) {
     refuseWhileUnavailable();
-    if (!signerProvider.holdsKeysInPage) {
+    if (!signerProvider.hasKeysInPage) {
       throw new Error("Import the key file from the key panel.");
     }
     try {
@@ -808,7 +808,7 @@ class _PgWallet {
    * page's own panel exports the key file there
    */
   static export(params?: { name?: string; keypair?: PgWeb3.Keypair }) {
-    if (!signerProvider.holdsKeysInPage) {
+    if (!signerProvider.hasKeysInPage) {
       throw new Error("Export the key file from the key panel.");
     }
     params ??= {};

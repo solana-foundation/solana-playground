@@ -187,7 +187,7 @@ export const sandboxSignerProviderWith = (
   sign: SignThroughPage
 ): WalletSignerProvider => ({
   name: "sandbox",
-  holdsKeysInPage: false,
+  hasKeysInPage: false,
   makeKey: refuseKeys,
   forgetKey: refuseKeys,
   walletFor(account: SignerAccount): PlaygroundWallet {

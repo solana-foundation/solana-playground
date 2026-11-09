@@ -114,12 +114,17 @@ export const requestPersistence = async (
 ) => (storage?.persist ? storage.persist() : false);
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi, beforeEach, afterEach } = import.meta
-    .vitest;
+  const { describe, it, expect, vi, beforeAll, beforeEach, afterEach } =
+    import.meta.vitest;
 
   describe("utils/wallet/key-origin/frame/store", () => {
-    beforeEach(async () => {
-      const { IDBFactory } = await import("fake-indexeddb");
+    let IDBFactory: typeof import("fake-indexeddb").IDBFactory;
+
+    beforeAll(async () => {
+      ({ IDBFactory } = await import("fake-indexeddb"));
+    });
+
+    beforeEach(() => {
       // A fresh, empty IndexedDB per test
       vi.stubGlobal("indexedDB", new IDBFactory());
     });

@@ -300,9 +300,17 @@ export const runPanelWith =
   };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
 
   describe("utils/wallet/key-origin/frame/panel", () => {
+    let ed25519: typeof import("@noble/ed25519");
+    let handlerWith: typeof import("./handler").handlerWith;
+
+    beforeAll(async () => {
+      ed25519 = await import("@noble/ed25519");
+      ({ handlerWith } = await import("./handler"));
+    });
+
     const encode = (value: unknown) =>
       btoa(
         String.fromCharCode(...new TextEncoder().encode(JSON.stringify(value)))
@@ -404,8 +412,6 @@ if (import.meta.vitest) {
     });
 
     it("imports a key file through adopt, and refuses one whose halves differ", async () => {
-      const ed25519 = await import("@noble/ed25519");
-      const { handlerWith } = await import("./handler");
       const kept = new Map<string, Uint8Array>();
       const store: KeyStore = {
         all: async () => new Map(kept),

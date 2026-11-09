@@ -14,7 +14,7 @@ import { SaveKeyPanel } from "./SaveKeyPanel";
 
 /** The Add dialog for the wallet's provider: keys in the page, or on the key origin */
 export const Add = () =>
-  PgWallet.holdsKeysInPage() ? <LocalAdd /> : <KeyOriginAdd />;
+  PgWallet.hasKeysInPage() ? <LocalAdd /> : <KeyOriginAdd />;
 
 /** Under the `local` provider: the keypair is made and saved in the page */
 const LocalAdd = () => {
