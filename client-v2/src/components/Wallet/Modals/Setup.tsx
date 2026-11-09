@@ -166,7 +166,7 @@ const SetupBody = ({
 }: {
   onSubmit: () => boolean | Promise<boolean>;
   text: string;
-  /** Continue waits, as while a key panel is busy */
+  /** Continue and Cancel wait, as while a key panel is busy */
   isHeld?: boolean;
   children: ReactNode;
 }) => (
@@ -176,7 +176,7 @@ const SetupBody = ({
     buttonProps={{
       text: "Continue",
       onSubmit,
-      disabled: isHeld,
+      isHeld,
     }}
   >
     <Content>

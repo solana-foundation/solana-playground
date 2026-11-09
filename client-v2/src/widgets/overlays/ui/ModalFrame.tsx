@@ -37,6 +37,12 @@ export type ModalSubmit = {
    */
   noCancel?: boolean;
   disabled?: boolean;
+  /**
+   * Another part of the dialog still works, such as a key panel saving or
+   * importing: the submit and Cancel wait, as Escape and a press outside do
+   * through `useBlockDismiss`, so closing cannot drop that work's result
+   */
+  isHeld?: boolean;
   /** `brand` for the view's one call to action; see `SubmitVariant` */
   variant?: SubmitVariant;
   /** Drawn before the label, at the button's icon size; the spinner takes its place while busy */
@@ -161,7 +167,14 @@ export const ModalFrame = ({
   }, [busy, isTop, blockDismiss]);
 
   const submit = async () => {
-    if (!buttonProps || buttonProps.disabled || submitting.current) return;
+    if (
+      !buttonProps ||
+      buttonProps.disabled ||
+      buttonProps.isHeld ||
+      submitting.current
+    ) {
+      return;
+    }
     if (!buttonProps.onSubmit) {
       PgView.closeModal(null, id);
       return;
@@ -209,6 +222,7 @@ export const ModalFrame = ({
 
   let status: SubmitStatus = "ready";
   if (busy) status = "busy";
+  else if (buttonProps?.isHeld) status = "held";
   else if (buttonProps?.disabled) status = "disabled";
 
   return (

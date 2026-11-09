@@ -191,6 +191,16 @@ it("should disable the submit and Cancel while busy", () => {
   expect((cancel as HTMLButtonElement).disabled).toBe(true);
 });
 
+it("should disable the submit and Cancel, without a spinner, while held", () => {
+  renderFrame({ submit: submitOf("held", vi.fn(), vi.fn()) });
+
+  const submit = screen.getByRole("button", { name: /Rename/ });
+  const cancel = screen.getByRole("button", { name: "Cancel" });
+  expect((submit as HTMLButtonElement).disabled).toBe(true);
+  expect((cancel as HTMLButtonElement).disabled).toBe(true);
+  expect(submit.querySelector("[data-slot='spinner']")).toBeNull();
+});
+
 it("should keep an accessible name and show no heading when the title is hidden", () => {
   renderFrame({ title: { text: "Solana Playground", hidden: true } });
 

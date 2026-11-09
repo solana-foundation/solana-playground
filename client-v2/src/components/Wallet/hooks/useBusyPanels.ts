@@ -6,8 +6,9 @@ import { useBlockDismiss } from "@/widgets/overlays";
  * Whether any key panel in a dialog is busy. While one is, this hook blocks
  * the dialog's dismissal itself (Escape, a press outside, the header's
  * Close, through `ModalHost`'s `useBlockDismiss`), and the caller holds its
- * submit with `isBusy`: either would close the dialog, and the panel's port
- * with it, before the panel's result reaches the dialog.
+ * submit and Cancel by passing `isBusy` as the frame's `isHeld`: any of them
+ * would close the dialog, and the panel's port with it, before the panel's
+ * result reaches the dialog.
  *
  * @returns whether one is (for the submit), and the `onBusy` to give each
  * panel

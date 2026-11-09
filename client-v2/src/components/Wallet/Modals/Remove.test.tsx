@@ -41,13 +41,18 @@ vi.mock("@/widgets/overlays", () => ({
     buttonProps,
   }: {
     children: React.ReactNode;
-    buttonProps: { text: string; onSubmit: () => unknown; disabled?: boolean };
+    buttonProps: {
+      text: string;
+      onSubmit: () => unknown;
+      disabled?: boolean;
+      isHeld?: boolean;
+    };
   }) => (
     <div>
       {children}
       <button
         type="button"
-        disabled={buttonProps.disabled}
+        disabled={buttonProps.disabled || buttonProps.isHeld}
         onClick={() => void buttonProps.onSubmit()}
       >
         {buttonProps.text}

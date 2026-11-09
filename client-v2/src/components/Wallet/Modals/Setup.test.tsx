@@ -76,16 +76,24 @@ vi.mock("@/widgets/overlays", () => ({
     buttonProps,
   }: {
     children: React.ReactNode;
-    buttonProps: { text: string; onSubmit: () => unknown; disabled?: boolean };
+    buttonProps: {
+      text: string;
+      onSubmit: () => unknown;
+      disabled?: boolean;
+      isHeld?: boolean;
+    };
   }) => (
     <div>
       {children}
       <button
         type="button"
-        disabled={buttonProps.disabled}
+        disabled={buttonProps.disabled || buttonProps.isHeld}
         onClick={() => void buttonProps.onSubmit()}
       >
         {buttonProps.text}
+      </button>
+      <button type="button" disabled={buttonProps.isHeld}>
+        Cancel
       </button>
     </div>
   ),
@@ -288,6 +296,18 @@ describe("wallet Setup under the key-origin provider", () => {
     await screen.findByRole("button", { name: "Save keypair (panel)" });
     const isHeld = () =>
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled");
+    expect(isHeld()).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "panel busy" }));
+
+    expect(isHeld()).toBe(true);
+  });
+
+  it("holds Cancel while a panel is busy, so an import's result still lands", async () => {
+    renderSetup();
+    await screen.findByRole("button", { name: "Save keypair (panel)" });
+    const isHeld = () =>
+      screen.getByRole("button", { name: "Cancel" }).hasAttribute("disabled");
     expect(isHeld()).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "panel busy" }));

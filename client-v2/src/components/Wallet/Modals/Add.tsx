@@ -77,7 +77,7 @@ const AddBody = ({
   children,
 }: {
   onSubmit: (name: string) => unknown;
-  /** Create waits, as while a key panel is busy */
+  /** Create and Cancel wait, as while a key panel is busy */
   isHeld?: boolean;
   children: (name: string) => ReactNode;
 }) => {
@@ -95,7 +95,8 @@ const AddBody = ({
       buttonProps={{
         text: "Create",
         onSubmit: () => onSubmit(name),
-        disabled: !!error || isHeld,
+        disabled: !!error,
+        isHeld,
       }}
     >
       <MainContent>

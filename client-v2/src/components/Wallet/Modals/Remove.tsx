@@ -22,7 +22,7 @@ export const Remove = () => {
         variant: "destructive",
         onSubmit: () => PgWallet.remove(),
         // Not while the panel saves the key file of the account it removes
-        disabled: isBusy,
+        isHeld: isBusy,
       }}
     >
       <MainContent>
