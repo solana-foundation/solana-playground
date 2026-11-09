@@ -1,3 +1,9 @@
+import type {
+  BuildFailedReason,
+  BuildFramework,
+} from "@/features/program-build";
+import { buildTelemetry } from "@/features/program-build";
+
 import {
   PgCommon,
   PgExplorer,
@@ -11,7 +17,7 @@ import {
   PgWeb3,
   TupleFiles,
 } from "../../utils";
-import { STOPPED, throwIfStopped } from "../../utils/stopped";
+import { isStopped, STOPPED, throwIfStopped } from "../../utils/stopped";
 import { isMacroSymptomText } from "../../views/flow/stages/build-report";
 import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 import { createCmd } from "../create";
@@ -34,8 +40,12 @@ export const build = createCmd({
     PgGlobal.update({ buildLoading: true });
     PgTerminal.println(PgTerminal.info("Building..."));
 
+    let framework: BuildFramework | undefined;
     try {
-      const result = await buildProgram(signal).catch((e: unknown) => {
+      const files = getBuildFiles();
+      framework = frameworkOf(files);
+      buildTelemetry.track("build_started", { framework });
+      const result = await buildProgram(files, signal).catch((e: unknown) => {
         // The aborted request fails; say it was stopped, not that it failed.
         // Only "Stopped.": the server may still finish, its reply is not kept
         throwIfStopped(signal, STOPPED);
@@ -47,6 +57,14 @@ export const build = createCmd({
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.
       const failed = result.stderr.includes("error: could not compile");
+      if (failed) {
+        buildTelemetry.track("build_failed", { framework, reason: "compile" });
+      } else {
+        buildTelemetry.track("build_succeeded", {
+          framework,
+          has_idl: !!result.idl,
+        });
+      }
       PgProgramInfo.update({
         idl: result.idl,
         uuid: result.uuid ?? undefined,
@@ -57,20 +75,69 @@ export const build = createCmd({
       // without it the next project inherits this report.
       PgBuildOutput.set(result.stderr, PgExplorer.currentWorkspaceName ?? null);
       PgTerminal.println(improveOutput(result.stderr));
+    } catch (e) {
+      // A stop is no outcome; a build that never started sends nothing
+      if (framework && !isStopped(e)) {
+        buildTelemetry.track("build_failed", {
+          framework,
+          reason: reasonOf(e),
+        });
+      }
+      throw e;
     } finally {
       PgGlobal.update({ buildLoading: false });
     }
   },
 });
 
+/** Seahorse's compiler refused the Python sources */
+class SeahorseCompileError extends Error {
+  constructor() {
+    super("Seahorse compile failed");
+    this.name = "SeahorseCompileError";
+  }
+}
+
+/**
+ * What the build's sources are written with, for its events: Python is
+ * Seahorse, a Rust file using `anchor_lang` is Anchor, any other Rust Native.
+ * By the file name and content, not `PgLanguage` or `PgFramework`: the
+ * command's tests stand the utils barrel in with a mock.
+ *
+ * @param files the files the build sends
+ * @returns the framework
+ */
+export const frameworkOf = (files: TupleFiles): BuildFramework => {
+  if (files.some(([path]) => path.endsWith(".py"))) return "seahorse";
+  if (files.some(([, content]) => content.includes("anchor_lang"))) {
+    return "anchor";
+  }
+  return "native";
+};
+
+/**
+ * Why a build did not succeed, for `build_failed`. A server error is read by
+ * shape (`answered`), as `buildFailureOf` in `views/flow/state/stage.ts`
+ * reads it.
+ *
+ * @param err what the build threw
+ * @returns the reason
+ */
+const reasonOf = (err: unknown): BuildFailedReason => {
+  if (err instanceof SeahorseCompileError) return "compile";
+  return (err as { answered?: unknown } | null)?.answered === false
+    ? "network"
+    : "server";
+};
+
 /**
  * Compile the current project.
  *
+ * @param buildFiles the files `getBuildFiles` gathered
  * @param signal aborts the request to the build server
  * @returns the build response
  */
-const buildProgram = async (signal: AbortSignal) => {
-  const buildFiles = getBuildFiles();
+const buildProgram = async (buildFiles: TupleFiles, signal: AbortSignal) => {
   const pythonFiles = buildFiles.filter(
     ([path]) => PgLanguage.getFromPath(path)?.name === "Python"
   );
@@ -212,7 +279,7 @@ const buildPython = async (pythonFiles: TupleFiles, signal: AbortSignal) => {
     const compiledContent = compileSeahorse(content, seahorseProgramName);
 
     if (compiledContent.length === 0) {
-      throw new Error("Seahorse compile failed");
+      throw new SeahorseCompileError();
     }
 
     // Seahorse compile outputs a flattened array like [filepath, content, filepath, content]

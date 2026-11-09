@@ -20,6 +20,8 @@ export const EVENT_PREFIXES = {
   observability: "obs",
   overlays: "overlay",
   persistence: "sync",
+  "program-build": "build",
+  "program-interact": "interact",
   "program-keypair": "keypair",
   "project-export": "export",
   "session-footer": "session",

@@ -16,7 +16,11 @@ const utils = vi.hoisted(() => ({
   PgGlobal: { update: vi.fn() },
   PgProgramInfo: { update: vi.fn(), getPkStr: () => "Pk11111111111111" },
   PgServer: { build: vi.fn() },
-  PgTerminal: { println: vi.fn(), info: (text: string) => text },
+  PgTerminal: {
+    println: vi.fn(),
+    info: (text: string) => text,
+    success: (text: string) => text,
+  },
   PgSettings: { build: { flags: {} } },
 }));
 vi.mock("../../utils", () => utils);
@@ -29,6 +33,9 @@ const { PgBuildOutput } = await import(
   "../../views/sidebar/assistant/bridge/build-output"
 );
 const { isStopped } = await import("../../utils/stopped");
+const { initTelemetry, memoryProvider, resetTelemetry } = await import(
+  "../../shared/lib/telemetry"
+);
 
 /** Runs the command's handler as the command manager would */
 const run = (signal = new AbortController().signal) =>
@@ -39,10 +46,21 @@ const run = (signal = new AbortController().signal) =>
 const PROGRAM = "use anchor_lang::prelude::*;";
 
 describe("commands/build/build", () => {
+  let tracked: ReturnType<typeof memoryProvider>;
+
   beforeEach(() => {
     vi.clearAllMocks();
     utils.PgExplorer.files = {};
+    resetTelemetry();
+    tracked = memoryProvider();
+    initTelemetry({ providers: [tracked] });
   });
+
+  /** The build events sent, as `[name, params]` */
+  const buildEvents = () =>
+    tracked.events
+      .filter((event) => event.name.startsWith("build_"))
+      .map((event) => [event.name, event.params]);
 
   it.each([
     ["empty", ""],
@@ -58,6 +76,7 @@ describe("commands/build/build", () => {
     expect(utils.PgExplorer.getFileContent).toHaveBeenCalledWith("src/lib.rs");
     expect(utils.PgServer.build).not.toHaveBeenCalled();
     expect(utils.PgGlobal.update).not.toHaveBeenCalled();
+    expect(buildEvents()).toEqual([]);
     // Deploy reads it, and must not go on with the old binary
     expect(utils.PgProgramInfo.update).toHaveBeenCalledWith({
       lastBuildFailed: true,
@@ -103,6 +122,10 @@ describe("commands/build/build", () => {
       expect(utils.PgGlobal.update).toHaveBeenLastCalledWith({
         buildLoading: false,
       });
+      // A stop is no outcome: the build reads as started, never failed
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+      ]);
     });
 
     it("drops a reply that arrives after the stop", async () => {
@@ -117,6 +140,9 @@ describe("commands/build/build", () => {
       expect(isStopped(err)).toBe(true);
       expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
       expect(PgBuildOutput.set).not.toHaveBeenCalled();
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+      ]);
     });
 
     it("still fails a request that fails without a stop", async () => {
@@ -129,5 +155,89 @@ describe("commands/build/build", () => {
       expect(isStopped(err)).toBe(false);
       expect((err as Error).message).toBe("Server request failed");
     });
+  });
+
+  describe("events", () => {
+    const NATIVE = "use solana_program::entrypoint;";
+
+    beforeEach(() => {
+      utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
+      utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    it("counts a build the compiler passed, with its IDL", async () => {
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "Finished release",
+        uuid: "u",
+        idl: { instructions: [] },
+      });
+
+      await run();
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_succeeded", { framework: "anchor", has_idl: true }],
+      ]);
+    });
+
+    it("counts a native build that returned no IDL", async () => {
+      utils.PgExplorer.files = { "/p/src/lib.rs": { content: NATIVE } };
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "Finished release",
+        uuid: null,
+        idl: null,
+      });
+
+      await run();
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "native" }],
+        ["build_succeeded", { framework: "native", has_idl: false }],
+      ]);
+    });
+
+    it("counts a compile error as a failed build", async () => {
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "error[E0425]: x\nerror: could not compile `solpg`",
+        uuid: null,
+        idl: null,
+      });
+
+      await run();
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_failed", { framework: "anchor", reason: "compile" }],
+      ]);
+    });
+
+    // By shape, as `buildFailureOf` reads a `PgServerError`
+    it.each([
+      ["network", { answered: false }],
+      ["server", { answered: true }],
+      ["server", {}],
+    ])("counts a refused request as %s", async (reason, shape) => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Server request failed"), shape)
+      );
+
+      await run().catch(() => undefined);
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_failed", { framework: "anchor", reason }],
+      ]);
+    });
+  });
+});
+
+describe("commands/build/build frameworkOf", () => {
+  it.each([
+    ["seahorse", [["/src/fizz.py", "from seahorse.prelude import *"]]],
+    ["anchor", [["/src/lib.rs", "use anchor_lang::prelude::*;"]]],
+    ["native", [["/src/lib.rs", "use solana_program::entrypoint;"]]],
+  ] as const)("reads %s", async (framework, files) => {
+    const { frameworkOf } = await import("./build");
+    expect(frameworkOf(files.map(([p, c]) => [p, c]))).toBe(framework);
   });
 });
