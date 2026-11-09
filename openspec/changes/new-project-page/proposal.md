@@ -41,6 +41,10 @@ None.
   "The navigation opens the gallery and the pages", "Tutorials and Programs
   are pages", "The pages are measured" and "A start with no project opens on
   Home" follow it.
+- `client-v2-tutorials`: "The Tutorials page leads with a heading, a search
+  and a filter" puts New project's Tutorials list on the start ladder (Hello
+  Anchor, Lumberjack, Zero Copy) with the Tutorials page and Home, instead of
+  keeping every registered tutorial.
 
 ## Impact
 

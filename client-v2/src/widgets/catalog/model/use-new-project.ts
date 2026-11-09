@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { startTutorials } from "@/entities/tutorial";
 import { PgTutorial } from "@/utils";
 
 import type { BaseNewProjectProps } from "../ui/BaseNewProject";
@@ -76,7 +77,13 @@ export const useNewProject = (
     onFailed: failedOn("programs"),
   });
   const busy = tutorialOpen.busy || programOpen.busy;
-  const tutorials = useTutorialList(query, tutorialOpen.cardOpen);
+  // The start ladder only, as Home and the Tutorials page: the tutorials
+  // walked through end to end, so a new user is pointed at a path that works
+  const tutorials = useTutorialList(
+    query,
+    tutorialOpen.cardOpen,
+    startTutorials(PgTutorial.all)
+  );
   const programs = useProgramList(query, programOpen.cardOpen);
   const held = busy || starting;
   // Each list refuses its own second Open; this refuses the other's while

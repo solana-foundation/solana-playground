@@ -119,7 +119,10 @@ named "New project", that holds the line "Start clean, open a real program,
 or learn through a tutorial. Everything stays in this browser until you
 deploy.", then Start from scratch (a framework, a project name and Start), then
 Tutorials and Programs as one choice with a count each beside a search
-field, then the chosen list's cards as the pages draw them. No dialog named
+field, then the chosen list's cards as the pages draw them. The Tutorials
+list and its count SHALL hold only the start ladder's tutorials (Hello
+Anchor, Lumberjack and Zero Copy, as the Tutorials page and Home list them);
+every other registered tutorial keeps its link. No dialog named
 "What do you want to build?" SHALL exist. The navigation's New project,
 Home's New project tile and the empty editor's Start a project SHALL open
 the page. Start SHALL make a project from the framework's starter and close the
@@ -133,6 +136,13 @@ chevron.
 - **WHEN** a user opens New project from the navigation, keeps Anchor,
   names the project and presses Start
 - **THEN** the page closes and the new project is the current one
+
+#### Scenario: New project lists only the ready tutorials
+
+- **WHEN** a user opens New project while Hello Solana and Hello Seahorse are
+  registered beside Hello Anchor, Lumberjack and Zero Copy
+- **THEN** the Tutorials count reads 3 and the cards are Hello Anchor,
+  Lumberjack and Zero Copy
 
 #### Scenario: Opening a program from New project
 

@@ -41,6 +41,27 @@ test("client-v2-layout: New project from the navigation", async ({
     .toContain("new-project");
 });
 
+test("client-v2-layout: New project lists only the ready tutorials", async ({
+  seededPage: page,
+}) => {
+  await openGallery(page);
+  await expect(newProjectPage(page)).toBeVisible();
+
+  await expect(list(page, "Tutorials")).toHaveText("Tutorials3");
+  const cards = newProjectPage(page).getByRole("button", {
+    name: /^(Open|Continue) /,
+  });
+  await expect(cards).toHaveText(["", "", ""]);
+  for (const name of ["Hello Anchor", "Lumberjack", "Zero Copy"]) {
+    await expect(
+      newProjectPage(page).getByRole("button", { name: `Open ${name}` })
+    ).toBeVisible();
+  }
+  await expect(
+    newProjectPage(page).getByRole("button", { name: "Open Hello Solana" })
+  ).toHaveCount(0);
+});
+
 test("client-v2-layout: Starting an Anchor project from New project", async ({
   seededPage: page,
 }) => {

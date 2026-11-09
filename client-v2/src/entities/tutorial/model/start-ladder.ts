@@ -1,8 +1,8 @@
 /**
  * The tutorials the start offers, in the order a new developer takes them:
- * one per level, all Anchor. Home and the Tutorials page list
- * only these; every other tutorial stays registered, so its link and New
- * project's list keep it. What the Start here banner says of a lesson, as the
+ * one per level, all Anchor. Home, the Tutorials page and New project list
+ * only these; every other tutorial stays registered, so its link keeps
+ * working. What the Start here banner says of a lesson, as the
  * tutorial-v2 prototype's lessons write it (`lessons/<slug>.ts`): `line`
  * before a start, `done` once finished (its `headline`, no full stop); a
  * definition has neither, and two of the three are not definitions yet.

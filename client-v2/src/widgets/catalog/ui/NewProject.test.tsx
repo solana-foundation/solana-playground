@@ -47,6 +47,8 @@ vi.mock("@/utils", () => utils);
 // Each tutorial's progress, by name: new unless a test says otherwise
 const progress = vi.hoisted(() => new Map<string, unknown>());
 vi.mock("@/entities/tutorial", async () => ({
+  startTutorials: (await import("@/entities/tutorial/model/start-ladder"))
+    .startTutorials,
   TutorialCover: (await import("@/entities/tutorial/ui/art/TutorialCover"))
     .default,
   useTutorialProgress: () => (name: string) =>
@@ -162,15 +164,51 @@ it("draws each tutorial as the tutorial card, with its level and framework", asy
   await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
 });
 
+it("offers only the start ladder's tutorials, and counts only those", async () => {
+  utils.PgTutorial.all.push(
+    {
+      name: "Hello Solana",
+      description: "Hello world without a framework",
+      thumbnail: "/solana.png",
+      level: "Beginner",
+      framework: "Native",
+      authors: [{ name: "acheron" }],
+      pageCount: 4,
+    },
+    {
+      name: "Lumberjack",
+      description: "A game on Solana",
+      thumbnail: "/lumberjack.png",
+      level: "Intermediate",
+      framework: "Anchor",
+      authors: [{ name: "Jonas Hahn" }],
+      pageCount: 5,
+    }
+  );
+  render(<NewProject />);
+
+  expect(choice(/Tutorials/).textContent).toBe("Tutorials2");
+  expect(
+    screen.getByRole("button", { name: "Open Hello Anchor" })
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Open Lumberjack" })).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Open Hello Solana" })
+  ).toBeNull();
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
+  utils.PgTutorial.all.pop();
+  utils.PgTutorial.all.pop();
+});
+
 it("shows a failed tutorial Open on its own card and frees the others", async () => {
   utils.PgTutorial.all.push({
-    name: "Hello Solana",
-    description: "Hello world without a framework",
-    thumbnail: "/solana.png",
-    level: "Beginner",
-    framework: "Native",
-    authors: [{ name: "acheron" }],
-    pageCount: 4,
+    name: "Lumberjack",
+    description: "A game on Solana",
+    thumbnail: "/lumberjack.png",
+    level: "Intermediate",
+    framework: "Anchor",
+    authors: [{ name: "Jonas Hahn" }],
+    pageCount: 5,
   });
   utils.PgTutorial.open.mockRejectedValueOnce(new Error("gone"));
   render(<NewProject />);
@@ -183,9 +221,9 @@ it("shows a failed tutorial Open on its own card and frees the others", async ()
       b.closest<HTMLElement>('[data-slot="action-card"]')
     );
   expect(within(card(anchor)).getByRole("alert").textContent).toBe("gone");
-  const solana = screen.getByRole("button", { name: "Open Hello Solana" });
-  expect(within(card(solana)).queryByRole("alert")).toBeNull();
-  expect(solana).toHaveProperty("disabled", false);
+  const other = screen.getByRole("button", { name: "Open Lumberjack" });
+  expect(within(card(other)).queryByRole("alert")).toBeNull();
+  expect(other).toHaveProperty("disabled", false);
   expect(close).not.toHaveBeenCalled();
   expect(utils.PgView.setToast).not.toHaveBeenCalled();
   utils.PgTutorial.all.pop();
