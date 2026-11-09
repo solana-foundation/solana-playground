@@ -361,7 +361,7 @@ add GCP_SERVICE_ACCOUNT_EMAIL preview "$PREVIEW_SA"
 npx vercel env rm DATABASE_URL preview --yes
 ```
 
-Run from a directory linked to the project (`make vercel-link-preview`). For Preview the CLI may ask for a Git
+Run from a directory linked to the project (`make vercel-link`). For Preview the CLI may ask for a Git
 branch; leave it empty, for every branch. The dashboard (Settings → Environment Variables) does the same. Leave `SYNC_ENABLED` off on
 Preview until step 16 has seen the database answer.
 

@@ -2,6 +2,8 @@
 
 Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, and `master-production`, `scope/*`, `integration/*` and `new-face-polish-<n>` to a preview. Every other branch is skipped by `vercel.json`'s `ignoreCommand` (`scripts/vercel-ignore-build.mjs`); a ticket branch gets a preview from the `preview` label or a local deploy. A Git-integration preview reads the shared preview database its Preview environment names; `preview.yml` and the Makefile also deploy previews, built outside Vercel (on a runner, or wherever `make` runs), each with a database of its own ([Preview databases](preview-databases.md), and [Neon preview databases](neon.md) while the Neon path remains). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
 
+The Foundation's Vercel project is not always reachable, so the team deploys previews from a laptop to its own Vercel project with `make deploy-client-to-vercel-preview`. The Makefile refuses any linked project but the one `VERCEL_DEPLOY_PROJECT_ID` names ([One-time setup](#one-time-setup)).
+
 ## Release checklist: `client-v2` to production
 
 Nothing below has been run end to end yet — see [Known gaps](#known-gaps). The
@@ -136,14 +138,22 @@ Both paths build `client-v2`, each from its own setting:
 2. Build Machine: Enhanced on Enterprise; default on Pro.
 3. Production Branch: `master`. Ignored Build Step: leave it; `vercel.json`'s `ignoreCommand` overrides it.
 4. A Vercel token, only if you need one — see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
-5. Link the local checkout (from repo root):
+5. Set `VERCEL_DEPLOY_PROJECT_ID` in `client-v2/.env` to the Project ID (the project's Settings → General) the Makefile may deploy to. Two teams each have a project named `solana-playground`, and the name alone does not say which one a link points at. `vercel-link-preview`, `vercel-link-production`, the preview, production, and fast production deploys, and `migrate-production-db` first print the linked team and project from `.vercel/project.json` and stop unless the project is `VERCEL_DEPLOY_PROJECT_ID`, and `vercel-link` runs the same check after it links; each stops too when the variable is unset. A value exported in the shell wins over the file.
+6. Set `VERCEL_DEPLOY_TEAM` in `client-v2/.env` to the slug or ID of the team that owns that project, for example `hoodies`. `vercel teams ls` prints the slug in its `id` column; the team's dashboard URL, `vercel.com/<slug>`, carries it too. Only linking reads it.
+7. Log in to the Vercel CLI with an account in that team (from repo root). The target runs the CLI version pinned as `VERCEL_CLI`; the session it stores serves every target that runs without `VERCEL_TOKEN`:
 
    ```sh
-   VERCEL_PROJECT_ID=prj_xxx make -f client-v2/Makefile.vercel vercel-bootstrap
+   make -f client-v2/Makefile.vercel vercel-login
    ```
 
-   The root `Makefile` includes `client-v2/Makefile.vercel`, so a bare `make <target>` from the repo root runs the same targets, and `make help` lists them.
-6. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable); see [Neon preview databases](neon.md#configuration).
+8. Link the local checkout (from repo root):
+
+   ```sh
+   make -f client-v2/Makefile.vercel vercel-link
+   ```
+
+   No token is needed. The target runs `vercel link --team "$VERCEL_DEPLOY_TEAM" --project "$VERCEL_DEPLOY_PROJECT_ID"`, which links an existing project and never creates one, in a temporary directory under `.vercel/`, and copies only `orgId` and `projectId` into `.vercel/project.json`, because `vercel link` also writes a `.env.local` with an OIDC token and edits `.gitignore` in the directory it links. The root `Makefile` includes `client-v2/Makefile.vercel`, so a bare `make <target>` from the repo root runs the same targets, and `make help` lists them.
+9. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable); see [Neon preview databases](neon.md#configuration).
 
 Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://github.com/solana-playground/solana-playground/blob/cd5555155c61572c8c49fb351890519af9e493ef/.env.example#L3) environment variable or CORS will reject every request.
 
@@ -212,10 +222,9 @@ CLI uses the session from `vercel login`, so local deploys need no token at all.
 The targets that link first (`vercel-link-preview`, `vercel-link-production`,
 and the preview and full production deploys) run `vercel whoami` with the same
 credentials, and stop with the fix when they are rejected. Run
-`make -f client-v2/Makefile.vercel vercel-auth` to run only that check.
-
-`vercel-bootstrap` is the exception to both: it calls the REST API with `curl`,
-and a raw HTTP request has no stored login to fall back on.
+`make -f client-v2/Makefile.vercel vercel-auth` to run only that check; it needs
+no link, so it works before `vercel-link`.
+`vercel-link` prints the same fix when `vercel link` fails.
 
 **A project-scoped token cannot drive the CLI.** Choosing a single project in
 Account Settings → Tokens creates one, and it denies every user-level request.
@@ -226,9 +235,9 @@ The CLI calls `/v2/user` and `/v3/user/tokens/current` on startup and enumerates
 Error: Could not retrieve Project Settings. To link your Project, remove the `.vercel` directory and deploy again.
 ```
 
-The `.vercel` directory is fine. The tell is that the same token works for
-`vercel-bootstrap`, because `/v9/projects/<id>` is project-level — when `curl`
-succeeds and the CLI does not, suspect the scope, not the link.
+The `.vercel` directory is fine. The tell is that the same token works for a raw
+`curl` of `/v9/projects/<id>`, which is project-level: when `curl` succeeds and
+the CLI does not, suspect the scope, not the link.
 
 Selecting **All Projects** creates a team-scoped token, which does work, at the
 cost of org-wide CLI access. Vercel has had project-scoped CLI support open since
@@ -617,6 +626,8 @@ It pulls the **Production** environment's `DATABASE_URL_UNPOOLED` into
 which is resolved for the checked-out git branch and so can name a preview
 branch's database instead (it did: run from `master-2.0` it checked
 `preview/master-2.0` and reported nothing pending while `main` had no schema).
+It refuses to run unless the linked project is the one
+`VERCEL_DEPLOY_PROJECT_ID` names ([One-time setup](#one-time-setup)).
 It prints the target host first, then the pending migrations, then requires a
 typed `yes`. It skips the prompt entirely when nothing is pending, so the warning
 never becomes something to click through.
