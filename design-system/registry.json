@@ -52,6 +52,30 @@
       ]
     },
     {
+      "name": "use-release-focus",
+      "type": "registry:hook",
+      "title": "useReleaseFocus",
+      "description": "For a modal overlay's content: [releaseFocus, returnFocus]. The ref blurs focus left outside the content as it mounts, so Radix hides the page with nothing focused in it; returnFocus, as onCloseAutoFocus, gives focus back where Radix's focus scope would have (ContextMenu).",
+      "files": [
+        {
+          "path": "src/hooks/use-release-focus.ts",
+          "type": "registry:hook"
+        }
+      ]
+    },
+    {
+      "name": "frame-focus",
+      "type": "registry:lib",
+      "title": "shiftTabFromFrame",
+      "description": "For a modal overlay's content onKeyDown: Shift+Tab from the content's own frame goes to its last control, where Radix's focus trap would leave it nowhere.",
+      "files": [
+        {
+          "path": "src/lib/frame-focus.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "use-mobile",
       "type": "registry:hook",
       "title": "useIsMobile",
@@ -242,7 +266,8 @@
         "lucide-react"
       ],
       "registryDependencies": [
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ]
     },
     {
@@ -317,7 +342,8 @@
         "lucide-react"
       ],
       "registryDependencies": [
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ]
     },
     {
@@ -342,7 +368,8 @@
       "description": "Stock shadcn sheet, as the design system ships it.",
       "registryDependencies": [
         "@playground/button",
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ],
       "files": [
         {
@@ -432,6 +459,24 @@
       ]
     },
     {
+      "name": "icon",
+      "type": "registry:ui",
+      "title": "Icon",
+      "description": "The product's one line icon set: the four stages, the status glyphs and the core actions, on a 24 grid at stroke 1.5, in 16, 20 and 24 px.",
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/icon.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "status-dot",
       "type": "registry:ui",
       "title": "Status dot",
@@ -478,7 +523,8 @@
       "registryDependencies": [
         "@playground/button",
         "@playground/spinner",
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -909,7 +955,9 @@
       "description": "The product's dialog: a card on a desk, a page of its own on a phone, and a wide size.",
       "registryDependencies": [
         "@playground/playground-tokens",
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus",
+        "@playground/frame-focus"
       ],
       "files": [
         {
@@ -929,7 +977,9 @@
       "description": "Stock shadcn dialog, as the design system ships it.",
       "registryDependencies": [
         "@playground/button",
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus",
+        "@playground/frame-focus"
       ],
       "files": [
         {
@@ -958,7 +1008,8 @@
         "lucide-react"
       ],
       "registryDependencies": [
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ]
     },
     {
@@ -977,7 +1028,8 @@
         "lucide-react"
       ],
       "registryDependencies": [
-        "@playground/utils"
+        "@playground/utils",
+        "@playground/use-release-focus"
       ]
     },
     {

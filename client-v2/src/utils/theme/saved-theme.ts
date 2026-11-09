@@ -43,7 +43,7 @@ export const resolveSavedTheme = (saved: string | null): SavedTheme => {
 
 /** The notice for a user whose saved theme was removed */
 export const removedThemeMessage = (name: RemovedTheme) =>
-  `The ${name} theme was removed. Playground now uses Dark; Light is in Settings.`;
+  `The ${name} theme was removed. Playground now uses Dark.`;
 
 /** The removed theme waiting to be told about, or `null` */
 let held: RemovedTheme | null = null;
@@ -112,9 +112,9 @@ if (import.meta.vitest) {
     });
 
     describe("removedThemeMessage", () => {
-      it("names the theme and where Light is", () => {
+      it("names the removed theme and Dark", () => {
         expect(removedThemeMessage("Dracula")).toBe(
-          "The Dracula theme was removed. Playground now uses Dark; Light is in Settings."
+          "The Dracula theme was removed. Playground now uses Dark."
         );
       });
     });

@@ -12,6 +12,7 @@ import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
+import { useNetworkHold } from "@/widgets/status";
 
 import { useWallet } from "../../../../../hooks";
 import { PgCommon } from "../../../../../utils";
@@ -138,12 +139,18 @@ const Instruction: FC<InstructionProps> = ({
   const wallet = useWallet();
   const { args, accounts } = instruction.values;
   const hasInputs = args.length > 0 || accounts.length > 0;
+  const network = useNetworkHold();
   // Another call in flight holds Test on every card with no reason line:
   // the running card's "Testing…" is the only sign. The card's own reasons
   // return once that call settles
   const held = callBlocked
     ? undefined
-    : heldBecause({ wallet: !!wallet, solNeededOn, filled: !disabled });
+    : heldBecause({
+        network,
+        wallet: !!wallet,
+        solNeededOn,
+        filled: !disabled,
+      });
 
   return (
     <InstructionProvider
@@ -263,18 +270,22 @@ const plural = (n: number, word: string) =>
   n ? `${n} ${word}${n === 1 ? "" : "s"}` : "";
 
 /**
- * Why Test is held, said beside it; nothing once it can run. The fee comes
- * before the fields: filling them does not help while it cannot be paid
+ * Why Test is held, said beside it; nothing once it can run. A network that
+ * is down comes first, then the fee before the fields: filling them does not
+ * help while it cannot be paid
  */
 const heldBecause = ({
+  network,
   wallet,
   solNeededOn,
   filled,
 }: {
+  network: string | undefined;
   wallet: boolean;
   solNeededOn?: string;
   filled: boolean;
 }) => {
+  if (network) return network;
   if (!wallet) return "Connect a wallet to test";
   if (solNeededOn) return `Add ${solNeededOn} SOL to test`;
   if (!filled) return "Fill every field to test";

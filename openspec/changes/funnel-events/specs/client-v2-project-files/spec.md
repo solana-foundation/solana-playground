@@ -107,15 +107,14 @@ error, never from an error message.
 
 ### Requirement: A project opened from a GitHub link is counted
 
-`githubDefault` in `routes/github/github.tsx` SHALL send `project_viewed`,
-with no parameters, once `PgGithub.getFiles` has returned the repository's
-files, and `project_view_failed {reason}` when it throws, with the reasons
-of `project_import_failed`. `/github/<URL>` redirects to that route and
-sends nothing itself.
+The `github` route (`/github/<owner>/<repo>…`) in `routes/github/github.tsx`
+SHALL send `project_viewed`, with no parameters, once `PgGithub.getFiles`
+has returned the repository's files, and `project_view_failed {reason}` when
+it throws, with the reasons of `project_import_failed`.
 
 #### Scenario: A GitHub link opens (manual)
 
-- **WHEN** a user opens the Playground at `/github/https://github.com/coral-xyz/xnft`
+- **WHEN** a user opens the Playground at `/github/coral-xyz/xnft`
 - **THEN** `project_viewed` is sent once
 
 #### Scenario: A GitHub link that does not exist (manual)
@@ -146,15 +145,15 @@ to the project as it is sends `false`.
 
 ### Requirement: The settings page's export is counted
 
-The "Export project (zip)" button of `Project` in
-`widgets/settings-page/ui/SettingsPage.tsx` SHALL send
+The Export button (named "Export project") of the `Project` section's
+Export project row in `widgets/settings-page/ui/SettingsPage.tsx` SHALL send
 `project_exported {from: "settings", converted: false}` once
 `PgFramework.exportWorkspace` resolves, and
 `project_export_failed {from: "settings"}` when it rejects.
 
 #### Scenario: Export from the settings page fails (manual)
 
-- **WHEN** a user presses "Export project (zip)" and the zip cannot be made
+- **WHEN** a user presses Export in Settings and the zip cannot be made
 - **THEN** `project_export_failed` is sent with `from: "settings"`
 
 ### Requirement: No project event names the project

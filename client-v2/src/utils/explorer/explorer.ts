@@ -95,6 +95,7 @@ export class PgExplorer {
     ON_DID_MOVE_ITEM: "explorerondidmoveitem",
     ON_DID_DELETE_ITEM: "explorerondiddeleteitem",
     ON_DID_SAVE_FILE: "explorerondidsavefile",
+    ON_DID_RELOAD_FILES: "explorerondidreloadfiles",
     ON_DID_OPEN_FILE: "explorerondidopenfile",
     ON_DID_CLOSE_FILE: "explorerondidclosefile",
     ON_DID_SET_TABS: "explorerondidsettabs",
@@ -1673,6 +1674,18 @@ export class PgExplorer {
    */
   static onDidSaveFile(cb: () => unknown) {
     return PgCommon.onDidChange(PgExplorer.events.ON_DID_SAVE_FILE, cb);
+  }
+
+  /**
+   * Runs after the current workspace's contents are taken from the store: what
+   * another tab wrote. Not a save, so it schedules no upload of what that tab
+   * already uploaded.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidReloadFiles(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_RELOAD_FILES, cb);
   }
 
   static onDidDeleteItem(cb: (path: string) => unknown) {

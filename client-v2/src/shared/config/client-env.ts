@@ -26,7 +26,7 @@ export const READ_BUFFER_RPC_URLS = {
   mainnet: process.env.REACT_APP_MAINNET_READ_BUFFER_RPC_URL,
 };
 
-/** The most buffer writes per second a deploy sends on the cluster, set just below the RPC plan's `sendTransaction` limit; unset or not above 0 caps nothing */
+/** The most buffer writes per second a deploy sends on the cluster, set just below the RPC plan's `sendTransaction` limit; only a positive number overrides `DEFAULT_SEND_TX_PER_SECOND` in `entities/cluster` */
 export const SEND_TX_PER_SECOND = {
   devnet: process.env.REACT_APP_DEVNET_SEND_TX_PER_SECOND,
   testnet: process.env.REACT_APP_TESTNET_SEND_TX_PER_SECOND,

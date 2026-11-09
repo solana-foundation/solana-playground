@@ -84,4 +84,113 @@ describe("the PgFs mock", () => {
       code: "ENOENT",
     });
   });
+
+  describe("a reload before the folder tree is saved", () => {
+    const reloadBeforeTreeSave = () =>
+      (
+        PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+      ).__reloadBeforeTreeSave();
+
+    // Saved, so what an earlier test left unsaved does not leak in
+    beforeEach(() => PgFs.flush());
+
+    it("loses a file created since the last flush", async () => {
+      await PgFs.writeFile("/.config/new.json", "1");
+
+      reloadBeforeTreeSave();
+
+      expect(files().has("/.config/new.json")).toBe(false);
+    });
+
+    it("keeps a file that existed before, with its new content", async () => {
+      await PgFs.writeFile("/.config/old.json", "1");
+      await PgFs.flush();
+      await PgFs.writeFile("/.config/old.json", "2");
+
+      reloadBeforeTreeSave();
+
+      expect(files().get("/.config/old.json")).toBe("2");
+    });
+
+    it("keeps a file seeded straight into the store", async () => {
+      files().set("/.config/seeded.json", "1");
+
+      reloadBeforeTreeSave();
+
+      expect(files().get("/.config/seeded.json")).toBe("1");
+    });
+
+    it("keeps a file created before a flush", async () => {
+      await PgFs.writeFile("/.config/flushed.json", "1");
+      await PgFs.flush();
+
+      reloadBeforeTreeSave();
+
+      expect(files().get("/.config/flushed.json")).toBe("1");
+    });
+
+    it("puts a renamed file back under its old name", async () => {
+      await PgFs.writeFile("/.config/a.json", "1");
+      await PgFs.flush();
+      await PgFs.rename("/.config/a.json", "/.config/b.json");
+      await PgFs.rename("/.config/b.json", "/.config/c.json");
+
+      reloadBeforeTreeSave();
+
+      expect(Array.from(files().entries())).toEqual([["/.config/a.json", "1"]]);
+    });
+
+    it("leaves a ghost of a saved file removed since the last flush", async () => {
+      await PgFs.writeFile("/.config/gone.json", "1");
+      await PgFs.flush();
+      await PgFs.removeFile("/.config/gone.json");
+
+      reloadBeforeTreeSave();
+
+      expect(await PgFs.exists("/.config/gone.json")).toBe(true);
+      expect(await PgFs.readDir("/.config")).toEqual(["gone.json"]);
+      expect(await PgFs.readToString("/.config/gone.json")).toBeUndefined();
+    });
+
+    it("leaves no ghost of a removal saved by a flush", async () => {
+      await PgFs.writeFile("/.config/gone.json", "1");
+      await PgFs.flush();
+      await PgFs.removeDir("/.config", { recursive: true });
+      await PgFs.flush();
+
+      reloadBeforeTreeSave();
+
+      expect(await PgFs.exists("/.config/gone.json")).toBe(false);
+    });
+
+    it("leaves no ghost of a file created and removed since the flush", async () => {
+      await PgFs.writeFile("/.config/brief.json", "1");
+      await PgFs.removeFile("/.config/brief.json");
+
+      reloadBeforeTreeSave();
+
+      expect(await PgFs.exists("/.config/brief.json")).toBe(false);
+    });
+
+    it("reads a ghost written again as a stored file", async () => {
+      await PgFs.writeFile("/.config/back.json", "1");
+      await PgFs.flush();
+      await PgFs.removeFile("/.config/back.json");
+      reloadBeforeTreeSave();
+
+      await PgFs.writeFile("/.config/back.json", "2");
+      reloadBeforeTreeSave();
+
+      expect(await PgFs.readToString("/.config/back.json")).toBe("2");
+    });
+
+    it("loses a file created and renamed since the last flush", async () => {
+      await PgFs.writeFile("/.config/a.json", "1");
+      await PgFs.rename("/.config/a.json", "/.config/b.json");
+
+      reloadBeforeTreeSave();
+
+      expect(files().size).toBe(0);
+    });
+  });
 });

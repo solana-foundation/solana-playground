@@ -1,5 +1,6 @@
 import type { MockInstance } from "vitest";
 
+import { PgSession } from "../../features/auth";
 import { PgAccountList } from "../../features/persistence/model/account-list";
 import * as restore from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
@@ -200,6 +201,22 @@ describe("the project-sync effect", () => {
     expect(PgSyncMark.markDirty).toHaveBeenCalledWith("p1");
     vi.advanceTimersByTime(3000);
     expect(push).toHaveBeenCalledTimes(1);
+  });
+
+  it("flags an edit again once the session has changed", async () => {
+    // The mark may have been written clean by a sign-in's reconcile, or the
+    // first flag may have found nobody to write it for
+    const user = { id: "u1", name: "t", image: undefined, login: "t" };
+    effect = projectSync();
+    dispatch(PgExplorer.events.ON_DID_SAVE_FILE);
+    dispatch(PgExplorer.events.ON_DID_SAVE_FILE);
+    expect(PgSyncMark.markDirty).toHaveBeenCalledTimes(1);
+
+    await PgSession.refreshWith(user);
+    dispatch(PgExplorer.events.ON_DID_SAVE_FILE);
+
+    expect(PgSyncMark.markDirty).toHaveBeenCalledTimes(2);
+    PgSession.reset();
   });
 
   it("records an edit before attempting to upload it", () => {
@@ -575,6 +592,29 @@ describe("deleting a workspace here", () => {
 
     expect(PgAccountList.state).toBe("holds");
     PgAccountList.forget();
+  });
+
+  it("settles nothing while a session has ended: no delete can reach the account", async () => {
+    vi.spyOn(PgSession, "expiredUser", "get").mockReturnValue({
+      id: "u1",
+      name: "t",
+      image: undefined,
+      login: "t",
+    });
+    vi.spyOn(PgSyncMark, "projectIds").mockResolvedValue(["deleted-here"]);
+    const markRemove = vi
+      .spyOn(PgSyncMark, "remove")
+      .mockResolvedValue(undefined);
+    vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue(undefined);
+    const forget = vi.spyOn(PgThreadIndex, "forget").mockResolvedValue(true);
+    registered([]);
+
+    effect = projectSync();
+    dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(markRemove).not.toHaveBeenCalled();
+    expect(forget).not.toHaveBeenCalled();
   });
 
   it("leaves a project another tab created that this tab has not listed", async () => {

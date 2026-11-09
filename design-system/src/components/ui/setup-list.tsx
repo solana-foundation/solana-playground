@@ -27,7 +27,7 @@ function SetupListTrigger({
       data-slot="setup-list-trigger"
       className={cn(
         /* Below md the title is a fingertip tall, in the label type */
-        "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-xs font-normal text-subtle outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring max-md:h-12 max-md:flex-none max-md:rounded-xl max-md:px-3 max-md:text-caption max-md:font-label",
+        "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-xs font-label text-subtle outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring max-md:h-12 max-md:flex-none max-md:rounded-xl max-md:px-3 max-md:text-caption",
         className
       )}
       {...props}
@@ -113,7 +113,7 @@ function SetupListValue({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="setup-list-value"
-      className={cn("ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-warning [&_svg]:size-3", className)}
+      className={cn("ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-warning-ink [&_svg]:size-3", className)}
       {...props}
     />
   )

@@ -72,10 +72,12 @@ const BaseEditorHead = ({
   filesKey,
   terminalKey,
 }: BaseEditorHeadProps) => (
+  // 1 px on the right: the 32 px toggles hold their 18 px icon 7 px in, so
+  // the last icon ends 8 px from the edge, under the stepper's right edge
   <div
     id="editor-head"
     data-slot="editor-head"
-    className="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-surface-base pr-1.5"
+    className="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-surface-base pr-px"
   >
     {/* No display class of its own, so `hidden` takes it off the page. The
       row fills the head: the head draws the fill and the bottom line, so the

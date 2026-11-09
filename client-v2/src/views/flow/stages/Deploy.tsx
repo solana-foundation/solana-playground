@@ -9,6 +9,7 @@ import { ProgramKeypair } from "@/features/program-keypair";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { requestConsole } from "@/widgets/layout-shell";
+import { useNetworkHold } from "@/widgets/status";
 
 import {
   useBalance,
@@ -99,6 +100,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
   const wallet = useWallet();
   const balance = useBalance();
   const deployState = useRenderOnChange(PgGlobal.onDidChangeDeployState);
+  const networkHold = useNetworkHold();
   useRenderOnChange(PgConnection.onDidChangeCluster);
 
   useEffect(() => {
@@ -170,6 +172,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
       <BaseDeploy
         cluster={PgConnection.cluster}
         built={built}
+        networkHold={networkHold}
         view={view}
         details={details}
         history={history}

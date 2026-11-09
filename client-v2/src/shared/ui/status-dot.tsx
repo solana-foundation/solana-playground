@@ -5,29 +5,34 @@ import { cn } from "@/shared/lib/utils";
 
 /* The product's one vocabulary for state: a dot. It renders no words, so
    callers add them where it matters. Running pulses; everything else sits
-   still. */
-const statusDotVariants = cva("inline-block shrink-0 rounded-full", {
-  variants: {
-    variant: {
-      idle: "bg-subtle",
-      success: "bg-success",
-      warning: "bg-warning",
-      error: "bg-error",
-      info: "bg-info",
-      running: "bg-brand-purple animate-pulse-dot motion-reduce:animate-none",
-      target: "bg-brand-purple",
+   still. Centred on its line box it sits high, since Stack Sans has a tall
+   ascent over a short descent; 0.035em drops it between the capitals' and
+   the lowercase middles, at any text size. */
+const statusDotVariants = cva(
+  "inline-block shrink-0 translate-y-[0.035em] rounded-full",
+  {
+    variants: {
+      variant: {
+        idle: "bg-subtle",
+        success: "bg-success",
+        warning: "bg-warning",
+        error: "bg-error",
+        info: "bg-info",
+        running: "bg-brand-purple animate-pulse-dot motion-reduce:animate-none",
+        target: "bg-brand-purple",
+      },
+      size: {
+        sm: "size-[5px]",
+        default: "size-1.5",
+        lg: "size-[7px]",
+      },
     },
-    size: {
-      sm: "size-[5px]",
-      default: "size-1.5",
-      lg: "size-[7px]",
+    defaultVariants: {
+      variant: "idle",
+      size: "default",
     },
-  },
-  defaultVariants: {
-    variant: "idle",
-    size: "default",
-  },
-});
+  }
+);
 
 function StatusDot({
   className,

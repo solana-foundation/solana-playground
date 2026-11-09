@@ -84,7 +84,8 @@ SHALL reject:
 - a wrong option with no reason;
 - a step whose goal names an instruction that no step's target defines;
 - a `write` or `ask` block that does not appear in its step's target;
-- a `next` slug that names no tutorial;
+- a `next` slug that names no tutorial of the start ladder (Hello Anchor,
+  Lumberjack, Zero Copy): a finish recommends only those;
 - two beats sharing an id;
 - a doc whose Markdown file is missing;
 - a doc address or a Markdown link that is not `https`.

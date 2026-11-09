@@ -1,3 +1,4 @@
+import { FileCode2, FileJson } from "lucide-react";
 import {
   ComponentPropsWithoutRef,
   forwardRef,
@@ -17,8 +18,11 @@ import { MenuItemText } from "@/shared/ui/menu-extras";
 
 import { PgExplorer } from "../../utils";
 import type { SortableItemCommonProps } from "../Dnd/Sortable";
-import LangIcon from "../LangIcon";
 import { BaseEditorTab, EditorTabDrag } from "./BaseEditorTab";
+
+/** A tab draws the design system's line icons, as its Editor tabs block
+ * does: a config file gets the braces, everything else the code file */
+const isConfigFile = (path: string) => /\.(json|toml)$/i.test(path);
 
 type SortableFlags = Partial<
   Pick<SortableItemCommonProps, "isDragging" | "isDragOverlay">
@@ -98,7 +102,7 @@ const Tab = forwardRef<HTMLDivElement, TabProps>(
             ref={ref}
             path={path}
             name={fileName}
-            icon={<LangIcon path={path} />}
+            icon={isConfigFile(path) ? <FileJson /> : <FileCode2 />}
             current={path === PgExplorer.currentFilePath}
             menuOpen={isSelected}
             onSelect={changeTab}

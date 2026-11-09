@@ -219,6 +219,22 @@ describe("AssistantComposer, context chips", () => {
     expect(screen.queryByText("other.rs")).toBeNull();
   });
 
+  // HOO-2694: the chip is not a default; it shows while the program has a
+  // callable IDL, whose summary the bridge sends (a refused IDL sends only its
+  // name and the reason, and shows no chip)
+  it("names the idl only while the program has a callable IDL", async () => {
+    const { PgProgramInfo } = await import("../../../utils/program-info");
+    const { unmount } = render(<Harness />);
+    expect(screen.queryByText("idl")).toBeNull();
+    unmount();
+
+    vi.spyOn(PgProgramInfo, "callableIdl").mockReturnValue(
+      {} as ReturnType<typeof PgProgramInfo.callableIdl>
+    );
+    render(<Harness />);
+    expect(screen.getByText("idl")).toBeTruthy();
+  });
+
   it("keeps a removed file out until it is added back, and reports it", async () => {
     const send = vi.fn(() => Promise.resolve());
     vi.spyOn(

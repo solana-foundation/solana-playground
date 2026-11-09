@@ -110,6 +110,28 @@ it("says why a sign-in failed above Sign in with GitHub, for the rail too", asyn
   expect(items()[0]).toBe("Tryagain");
 });
 
+const ENDED = { status: "expired", user: TESTER } as const;
+
+it("offers Sign in again first after a session ended", async () => {
+  const onPick = await open(view({ session: ENDED }));
+  expect(items()[0]).toBe("Signinagain");
+  expect(screen.queryByRole("menuitem", { name: "Sign out" })).toBeNull();
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Sign in again" })
+  );
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("sign-in");
+});
+
+it("says offline over Sign in again, and turns it off", async () => {
+  await open(view({ session: ENDED, online: false }));
+  expect(items()[0]).toBe("You'reoffline");
+  expect(
+    screen
+      .getByRole("menuitem", { name: "You're offline" })
+      .getAttribute("aria-disabled")
+  ).toBe("true");
+});
+
 it("retries a failed sign-in from Try again", async () => {
   const onPick = await open(
     view({
@@ -224,6 +246,21 @@ it("shows a connected wallet and offers to disconnect it", async () => {
   expect(screen.queryByRole("menuitem", { name: "Connect wallet" })).toBeNull();
   await userEvent.click(screen.getByRole("menuitem", { name: /7Hq5…Xk2P/ }));
   expect(onPick).toHaveBeenCalledExactlyOnceWith("wallet");
+});
+
+it("keeps a large balance and the address on one line each", async () => {
+  await open(
+    view({
+      wallet: { address: WALLET.address, balance: 940000, name: WALLET.name },
+    })
+  );
+  const balance = screen.getByText("940000.00 SOL");
+  expect(balance.classList).toContain("whitespace-nowrap");
+  expect(balance.classList).toContain("shrink-0");
+  const address = screen.getByText("7Hq5…Xk2P");
+  expect(address.classList).toContain("truncate");
+  // A flex item truncates only once it may shrink below its text
+  expect(address.classList).toContain("min-w-0");
 });
 
 it("names the extension wallet it disconnects, which hands back to the Playground wallet", async () => {
@@ -369,6 +406,15 @@ it("as a phone's page, signed out, pins Sign in with GitHub at its foot with wha
   const signIns = screen.getAllByRole("menuitem", {
     name: "Sign in with GitHub",
   });
+  expect(signIns).toHaveLength(1);
+  expect(signIns[0].closest("[data-account-foot]")).toBeTruthy();
+  await userEvent.click(signIns[0]);
+  expect(onPick).toHaveBeenCalledWith("sign-in");
+});
+
+it("as a phone's page, after a session ended, pins Sign in again at its foot", async () => {
+  const onPick = await openPage(view({ session: ENDED }));
+  const signIns = screen.getAllByRole("menuitem", { name: "Sign in again" });
   expect(signIns).toHaveLength(1);
   expect(signIns[0].closest("[data-account-foot]")).toBeTruthy();
   await userEvent.click(signIns[0]);
