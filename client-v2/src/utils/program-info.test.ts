@@ -149,6 +149,70 @@ describe("PgProgramInfo.fetch", () => {
   });
 });
 
+describe("PgProgramInfo.fetch, edge cases", () => {
+  const programId = PgWeb3.Keypair.generate().publicKey;
+  const programDataPk = PgWeb3.Keypair.generate().publicKey;
+  const authority = PgWeb3.Keypair.generate().publicKey;
+  const programAccount = {
+    owner: PgWeb3.BpfLoaderUpgradeableProgram.programId,
+    data: Buffer.concat([Buffer.from([2, 0, 0, 0]), programDataPk.toBuffer()]),
+  };
+  /** The program data's header with the authority option set to `tag` */
+  const headerWith = (tag: number) =>
+    Buffer.concat([
+      Buffer.from([3, 0, 0, 0]),
+      Buffer.alloc(8),
+      Buffer.from([tag]),
+      authority.toBuffer(),
+    ]);
+
+  afterEach(() => {
+    rpc.getAccountInfo.mockReset();
+  });
+
+  it("reads a program with no authority as not upgradable, with one read of its data", async () => {
+    rpc.getAccountInfo
+      .mockResolvedValueOnce(programAccount)
+      .mockResolvedValueOnce({ data: headerWith(0), space: 1000 });
+
+    const onChain = await PgProgramInfo.fetch(programId);
+
+    expect(onChain).toEqual({ deployed: true, upgradable: false });
+    expect(rpc.getAccountInfo).toHaveBeenCalledTimes(2);
+  });
+
+  it("answers as for no program data when the account closes between the reads", async () => {
+    rpc.getAccountInfo
+      .mockResolvedValueOnce(programAccount)
+      .mockResolvedValueOnce({ data: headerWith(1) })
+      .mockResolvedValueOnce(null);
+
+    const onChain = await PgProgramInfo.fetch(programId);
+
+    expect(onChain).toEqual({ deployed: true, upgradable: true });
+  });
+
+  it("reads the whole program data when the RPC's space is not a usable length", async () => {
+    const whole = Buffer.concat([headerWith(1), Buffer.alloc(10)]);
+    for (const space of ["123", 0]) {
+      rpc.getAccountInfo
+        .mockReset()
+        .mockResolvedValueOnce(programAccount)
+        .mockResolvedValueOnce({ data: headerWith(1), space })
+        .mockResolvedValueOnce({ data: whole });
+
+      const onChain = await PgProgramInfo.fetch(programId);
+
+      expect(onChain).toEqual({
+        deployed: true,
+        upgradable: true,
+        authority,
+        programDataLen: whole.length,
+      });
+    }
+  });
+});
+
 describe("PgProgramInfo.onChain", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -163,7 +227,8 @@ describe("PgProgramInfo.onChain", () => {
     try {
       await PgProgramInfo.refresh();
       // A failed fetch is `null`, which Interact reads as "can't reach the
-      // network"; with no id there was nothing to fetch
+      // network"; with no id there was nothing to fetch. The wait lets the
+      // derivation, which runs on a zero-delay debounce, settle first
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(PgProgramInfo.pk).toBeFalsy();
       expect(PgProgramInfo.onChain).toBeUndefined();

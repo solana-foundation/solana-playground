@@ -66,8 +66,9 @@ export function derivable<T extends Derivable>(
           try {
             return await entry.derive(value);
           } catch (e) {
-            // A failed derivation reads as `null` (a fetch that could not
-            // reach the network, for one); quiet, since a caller shows it
+            // A failure becomes `null` for the caller to present (Interact's
+            // "can't reach the network", for `PgProgramInfo.onChain`), so it
+            // is logged at debug only
             log.debug("Derivation failed", {
               context: { prop, reason: String(e) },
             });
