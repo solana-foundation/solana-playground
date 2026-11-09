@@ -51,8 +51,8 @@
 
 **Interfaces:**
 - Consumes: Task 1.
-- Produces: `pub struct PgWalletSigner { pubkey: Pubkey }` implementing `Signer` (marker signature, `is_interactive() == false`); `pub enum WalletSigner { Key(Keypair), Deferred(PgWalletSigner) }` implementing `Signer`; `pub fn wallet_signer() -> WalletSigner` (registers the deferred signer when `PgWallet.signTransactionMessage` exists and `PgWallet.holdsKeysInPage()` is false, else `Key` from `getKeypairBytes`).
-- JS bindings: `PgWallet.getPublicKeyBytes(): number[]`, `PgWallet.holdsKeysInPage(): boolean`, `PgWallet.signTransactionMessage(message: Uint8Array, publicKey: string): Promise<Uint8Array>` (`catch`).
+- Produces: `pub struct PgWalletSigner { pubkey: Pubkey }` implementing `Signer` (marker signature, `is_interactive() == false`); `pub enum WalletSigner { Key(Keypair), Deferred(PgWalletSigner) }` implementing `Signer`; `pub fn wallet_signer() -> WalletSigner` (registers the deferred signer when `PgWallet.signTransactionMessage` exists and `PgWallet.hasKeysInPage()` is false, else `Key` from `getKeypairBytes`).
+- JS bindings: `PgWallet.getPublicKeyBytes(): number[]`, `PgWallet.hasKeysInPage(): boolean`, `PgWallet.signTransactionMessage(message: Uint8Array, publicKey: string): Promise<Uint8Array>` (`catch`).
 
 - [x] Tests (host): `the_marker_passes_try_sign` (`Transaction::try_sign` with it succeeds and the slot is the marker).
 - [x] Implement behind the `wallet` feature; wasm-bindgen imports compile on the host, so host tests build.

@@ -92,7 +92,7 @@ transaction path: the local `Keypair` and the key page both sign
 ### Feature detection for upstream `client/`
 
 Before choosing a signer, the Rust side checks that `PgWallet` has
-`signTransactionMessage` (`js_sys::Reflect`) and that `PgWallet.holdsKeysInPage()`
+`signTransactionMessage` (`js_sys::Reflect`) and that `PgWallet.hasKeysInPage()`
 is false. Otherwise the CLI builds a `Keypair` from `getKeypairBytes` as today:
 upstream's client has no such method, and under the local provider the page
 holds the key anyway. Deferring there too would print the marker as the

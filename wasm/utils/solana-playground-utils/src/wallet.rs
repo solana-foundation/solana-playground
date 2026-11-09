@@ -90,7 +90,7 @@ fn app_signs() -> bool {
     let signs = js_sys::Reflect::get(&PG_WALLET, &JsValue::from_str("signTransactionMessage"))
         .map(|f| f.is_function())
         .unwrap_or(false);
-    signs && !PgWallet::holds_keys_in_page()
+    signs && !PgWallet::has_keys_in_page()
 }
 
 /// The current built-in wallet as a signer. Where the app signs, this also

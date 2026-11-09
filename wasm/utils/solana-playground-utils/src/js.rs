@@ -77,8 +77,8 @@ extern "C" {
 
     /// Whether the page holds the wallet's keys (the local signer provider).
     #[cfg(feature = "wallet")]
-    #[wasm_bindgen(static_method_of = PgWallet, js_name = "holdsKeysInPage")]
-    pub fn holds_keys_in_page() -> bool;
+    #[wasm_bindgen(static_method_of = PgWallet, js_name = "hasKeysInPage")]
+    pub fn has_keys_in_page() -> bool;
 
     /// Have the wallet with the given base58 public key sign serialized legacy
     /// message bytes; resolves to its 64-byte signature.

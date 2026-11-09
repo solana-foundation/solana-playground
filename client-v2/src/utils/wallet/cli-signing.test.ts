@@ -74,7 +74,7 @@ describe("utils/wallet/wallet signing for the WASM CLIs", () => {
     for (const name of [
       "signTransactionMessage",
       "getPublicKeyBytes",
-      "holdsKeysInPage",
+      "hasKeysInPage",
     ]) {
       expect(typeof Reflect.get(PgWallet, name)).toBe("function");
     }
