@@ -355,6 +355,40 @@ describe("PgGithub.isValidUrl", () => {
   });
 });
 
+describe("PgGithub.routePath", () => {
+  it("puts GitHub's path after /github/, with or without the URL's scheme", () => {
+    const path =
+      "/github/solana-foundation/program-examples/tree/main/basics/create-account/anchor";
+    expect(
+      PgGithub.routePath(
+        "https://github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor"
+      )
+    ).toBe(path);
+    expect(
+      PgGithub.routePath(
+        "github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor/"
+      )
+    ).toBe(path);
+    // The folded form react-router hands the older route
+    expect(PgGithub.routePath("https:/www.github.com/a/b")).toBe("/github/a/b");
+  });
+
+  it("is a URL the GitHub route accepts again", () => {
+    const path = PgGithub.routePath("https://github.com/a/b/tree/main/c");
+    expect(
+      PgGithub.isValidUrl(`github.com/${path.slice("/github/".length)}`)
+    ).toBe(true);
+    expect(
+      PgGithub.parseUrl(`github.com/${path.slice("/github/".length)}`)
+    ).toEqual({
+      owner: "a",
+      repo: "b",
+      ref: "main",
+      path: "c",
+    });
+  });
+});
+
 describe("PgGithub.parseUrl", () => {
   it("reads the URL the router folded as it reads the full one", () => {
     const url =

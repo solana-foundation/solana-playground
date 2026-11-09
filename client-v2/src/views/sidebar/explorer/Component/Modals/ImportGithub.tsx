@@ -80,9 +80,18 @@ export const ImportGithub = () => {
         <div className="my-4">
           <div className="font-bold">Examples</div>
           <div className="mt-2">
-            {PgFramework.all.map((framework) => (
-              <Example key={framework.name} framework={framework} />
-            ))}
+            {PgFramework.all.map(
+              (framework) =>
+                framework.githubExample && (
+                  <Example
+                    key={framework.name}
+                    name={framework.name}
+                    icon={framework.icon}
+                    circleImage={framework.circleImage}
+                    example={framework.githubExample}
+                  />
+                )
+            )}
           </div>
         </div>
 
@@ -90,8 +99,8 @@ export const ImportGithub = () => {
           <InfoIcon />
           <CalloutDescription className="[&_p+p]:mt-4">
             <p>
-              Program repositories can be viewed in playground by combining the
-              playground URL with their GitHub URL. For example, from{" "}
+              Program repositories can be viewed in playground at /github/
+              followed by their GitHub path. For example, from{" "}
               {/* The callout underlines its links; the link's own hover
                   line would draw a second one under it */}
               <Link
@@ -122,26 +131,29 @@ const isImportableUrl = (url: string) =>
 const GITHUB_PROGRAM_URL =
   "https://github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor";
 
-const VIEW_URL = PgRouter.getPathUrl(GITHUB_PROGRAM_URL);
+/** The explainer's example: where the app opens that repository */
+const VIEW_URL = PgRouter.getPathUrl(PgGithub.routePath(GITHUB_PROGRAM_URL));
 
 interface ExampleProps {
-  framework: Framework;
+  /** The framework's name, icon and image shape */
+  name: Framework["name"];
+  icon: Framework["icon"];
+  circleImage: Framework["circleImage"];
+  /** The framework's example, so the row never reads an absent one */
+  example: NonNullable<Framework["githubExample"]>;
 }
 
-const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
+const Example: FC<ExampleProps> = ({ name, icon, circleImage, example }) => {
   const id = useModalId();
-  const title = `${framework.name} – ${framework.githubExample.name}`;
+  const title = `${name} – ${example.name}`;
   return (
     // The name on its own line and the buttons under it: beside the buttons a
     // name has no room, and rows of different lengths wrap unevenly
     <div data-testid="github-example" className="my-3 flex flex-col gap-2">
       <div className="flex min-w-0 items-center gap-2">
         <Img
-          src={framework.icon}
-          className={cn(
-            "size-4 shrink-0",
-            framework.circleImage && "rounded-[50%]"
-          )}
+          src={icon}
+          className={cn("size-4 shrink-0", circleImage && "rounded-[50%]")}
         />
         <span
           title={title}
@@ -158,7 +170,7 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
           variant="outline"
           onClick={async () => {
             try {
-              await PgGithub.import(framework.githubExample.url);
+              await PgGithub.import(example.url);
             } catch (e) {
               // Closing the program selection is a choice, not a failure
               if (e instanceof ImportCancelledError) return;
@@ -177,7 +189,7 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
           size="sm"
           variant="outline"
           onClick={() => {
-            PgRouter.navigate("/" + framework.githubExample.url);
+            PgRouter.navigate(PgGithub.routePath(example.url));
             PgView.closeModal(IMPORTED, id);
           }}
         >
@@ -186,11 +198,7 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
         </Button>
 
         <Button asChild size="sm" variant="outline">
-          <a
-            href={framework.githubExample.url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a href={example.url} target="_blank" rel="noopener noreferrer">
             Open in GitHub
             <Github data-icon="inline-end" />
           </a>
