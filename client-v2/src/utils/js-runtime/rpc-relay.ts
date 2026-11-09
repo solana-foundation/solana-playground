@@ -42,8 +42,11 @@ const sentTransactionOf = (body: string | undefined): string | undefined => {
   let message: unknown;
   try {
     message = JSON.parse(body);
-  } catch {
+  } catch (error) {
     // Not JSON, so not a send: the relay carries it out as it is
+    log.debug("request body is not JSON; relayed as is", {
+      context: { reason: reasonOf(error) },
+    });
     return undefined;
   }
   const { method, params } = (message ?? {}) as {
@@ -64,8 +67,11 @@ const isRpcError = (body: string) => {
     return (
       (JSON.parse(body) as { error?: unknown } | null)?.error !== undefined
     );
-  } catch {
+  } catch (error) {
     // Not JSON-RPC at all: whatever threw on it is not a refusal
+    log.debug("reply body is not JSON; not a refusal", {
+      context: { reason: reasonOf(error) },
+    });
     return false;
   }
 };

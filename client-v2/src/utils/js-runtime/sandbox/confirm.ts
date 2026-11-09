@@ -56,13 +56,13 @@ export const patchConfirmTransaction = (web3: Web3) => {
     for (;;) {
       const { context, value } = await this.getSignatureStatuses([signature]);
       const status = value[0];
-      if (status) {
-        if (status.err) return { context, value: { err: status.err } };
-        const reached = RANK[status.confirmationStatus ?? "processed"] ?? 0;
-        if (reached >= (RANK[target] ?? 2)) {
-          // eslint-disable-next-line unicorn/no-null -- web3.js's result shape
-          return { context, value: { err: null } };
-        }
+      const reached = RANK[status?.confirmationStatus ?? "processed"] ?? 0;
+      // Success and failure alike count only at the commitment asked for, as
+      // in web3.js: a failure seen at `processed` may sit on a fork that is
+      // dropped, and the transaction can still land elsewhere
+      if (status && reached >= (RANK[target] ?? 2)) {
+        // eslint-disable-next-line unicorn/no-null -- web3.js's result shape
+        return { context, value: { err: status.err ?? null } };
       }
 
       if (lastValidBlockHeight !== undefined) {

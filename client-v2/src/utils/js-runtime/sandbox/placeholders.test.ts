@@ -395,6 +395,35 @@ describe("sandbox confirmTransaction", () => {
     expect(statuses).toHaveBeenCalledTimes(2);
   });
 
+  it("reports a failure only once it reaches the commitment", async () => {
+    const connection = new web3.Connection("http://localhost:1", "confirmed");
+    const failedAt = (confirmationStatus: "processed" | "confirmed") => ({
+      context: { slot: 2 },
+      value: [
+        {
+          slot: 2,
+          confirmations: 1,
+          err: { InstructionError: [0, "Custom"] },
+          confirmationStatus,
+        },
+      ],
+    });
+    const statuses = vi
+      .spyOn(connection, "getSignatureStatuses")
+      .mockResolvedValueOnce(failedAt("processed"))
+      .mockResolvedValue(failedAt("confirmed"));
+    vi.spyOn(connection, "getBlockHeight").mockResolvedValue(10);
+
+    const result = await connection.confirmTransaction({
+      signature: "sig",
+      blockhash,
+      lastValidBlockHeight: 100,
+    });
+
+    expect(result.value.err).toEqual({ InstructionError: [0, "Custom"] });
+    expect(statuses).toHaveBeenCalledTimes(2);
+  });
+
   it("throws once the blockhash expires", async () => {
     const connection = new web3.Connection("http://localhost:1", "confirmed");
     vi.spyOn(connection, "getSignatureStatuses").mockResolvedValue({
