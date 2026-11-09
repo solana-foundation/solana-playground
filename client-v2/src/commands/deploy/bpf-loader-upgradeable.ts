@@ -21,7 +21,7 @@ const log = createLogger("commands:deploy");
  */
 type SendOption = WalletOption & { connection?: PgWeb3.Connection };
 
-// The write rates are guesses for an RPC whose `sendTransaction` limit the env does not set (`PgConnection.getSendTxPerSecond`)
+// The write rates are guesses for an RPC whose cluster has no send cap (`PgConnection.getSendTxPerSecond`)
 
 /** Buffer writes per second across all workers when a load starts */
 const START_WRITES_PER_SECOND = 4;
@@ -29,7 +29,7 @@ const START_WRITES_PER_SECOND = 4;
 /** The rate a run of rate limits halves it down to */
 const MIN_WRITES_PER_SECOND = 1;
 
-/** The rate a run of landed writes raises it up to, when the env sets no send cap for the cluster */
+/** The rate a run of landed writes raises it up to, when the cluster has no send cap */
 const MAX_WRITES_PER_SECOND = 20;
 
 /** Writes per second added after {@link WRITES_PER_STEP} landed writes in a row */

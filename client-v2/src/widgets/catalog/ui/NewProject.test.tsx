@@ -47,29 +47,40 @@ vi.mock("@/utils", () => utils);
 // Each tutorial's progress, by name: new unless a test says otherwise
 const progress = vi.hoisted(() => new Map<string, unknown>());
 vi.mock("@/entities/tutorial", async () => ({
+  startTutorials: (await import("@/entities/tutorial/model/start-ladder"))
+    .startTutorials,
   TutorialCover: (await import("@/entities/tutorial/ui/art/TutorialCover"))
     .default,
   useTutorialProgress: () => (name: string) =>
     progress.get(name) ?? { state: "new" },
+}));
+// What New project gave Start from scratch for a failure, kept past unmount
+const scratch = vi.hoisted(() => ({
+  onFailed: undefined as ((message: string) => void) | undefined,
 }));
 vi.mock("@/features/new-project", () => ({
   // Stands in for Start from scratch: it waits on `held`, says when it runs
   StartFromScratch: ({
     held,
     onRunning,
+    onFailed,
   }: {
     held: boolean;
     onRunning: (running: boolean) => void;
-  }) => (
-    <button
-      type="button"
-      data-testid="scratch"
-      disabled={held}
-      onClick={() => onRunning(true)}
-    >
-      Start
-    </button>
-  ),
+    onFailed: (message: string) => void;
+  }) => {
+    scratch.onFailed = onFailed;
+    return (
+      <button
+        type="button"
+        data-testid="scratch"
+        disabled={held}
+        onClick={() => onRunning(true)}
+      >
+        Start
+      </button>
+    );
+  },
 }));
 
 import { catalogPage } from "../model/catalog-page";
@@ -77,11 +88,10 @@ import type { CatalogPage } from "../model/telemetry";
 import { useNewProject } from "../model/use-new-project";
 import NewProjectView from "./NewProject";
 
-/** The dialog's component: it holds the state, as `NewWorkspaceModal` does */
-/** Closes the dialog New project sits in, as `NewWorkspaceModal` gives it */
+/** Closes the page New project is, as `NewProjectPage` gives it */
 const close = vi.fn();
 
-/** The dialog's component: it holds the state, as `NewWorkspaceModal` does */
+/** The page's component: it holds the state, as `NewProjectPage` does */
 const NewProject = ({ initialTab }: { initialTab?: CatalogPage }) => (
   <NewProjectView project={useNewProject(close, initialTab)} />
 );
@@ -154,15 +164,51 @@ it("draws each tutorial as the tutorial card, with its level and framework", asy
   await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
 });
 
+it("offers only the start ladder's tutorials, and counts only those", async () => {
+  utils.PgTutorial.all.push(
+    {
+      name: "Hello Solana",
+      description: "Hello world without a framework",
+      thumbnail: "/solana.png",
+      level: "Beginner",
+      framework: "Native",
+      authors: [{ name: "acheron" }],
+      pageCount: 4,
+    },
+    {
+      name: "Lumberjack",
+      description: "A game on Solana",
+      thumbnail: "/lumberjack.png",
+      level: "Intermediate",
+      framework: "Anchor",
+      authors: [{ name: "Jonas Hahn" }],
+      pageCount: 5,
+    }
+  );
+  render(<NewProject />);
+
+  expect(choice(/Tutorials/).textContent).toBe("Tutorials2");
+  expect(
+    screen.getByRole("button", { name: "Open Hello Anchor" })
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Open Lumberjack" })).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Open Hello Solana" })
+  ).toBeNull();
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
+  utils.PgTutorial.all.pop();
+  utils.PgTutorial.all.pop();
+});
+
 it("shows a failed tutorial Open on its own card and frees the others", async () => {
   utils.PgTutorial.all.push({
-    name: "Hello Solana",
-    description: "Hello world without a framework",
-    thumbnail: "/solana.png",
-    level: "Beginner",
-    framework: "Native",
-    authors: [{ name: "acheron" }],
-    pageCount: 4,
+    name: "Lumberjack",
+    description: "A game on Solana",
+    thumbnail: "/lumberjack.png",
+    level: "Intermediate",
+    framework: "Anchor",
+    authors: [{ name: "Jonas Hahn" }],
+    pageCount: 5,
   });
   utils.PgTutorial.open.mockRejectedValueOnce(new Error("gone"));
   render(<NewProject />);
@@ -175,10 +221,11 @@ it("shows a failed tutorial Open on its own card and frees the others", async ()
       b.closest<HTMLElement>('[data-slot="action-card"]')
     );
   expect(within(card(anchor)).getByRole("alert").textContent).toBe("gone");
-  const solana = screen.getByRole("button", { name: "Open Hello Solana" });
-  expect(within(card(solana)).queryByRole("alert")).toBeNull();
-  expect(solana).toHaveProperty("disabled", false);
+  const other = screen.getByRole("button", { name: "Open Lumberjack" });
+  expect(within(card(other)).queryByRole("alert")).toBeNull();
+  expect(other).toHaveProperty("disabled", false);
   expect(close).not.toHaveBeenCalled();
+  expect(utils.PgView.setToast).not.toHaveBeenCalled();
   utils.PgTutorial.all.pop();
 });
 
@@ -240,7 +287,7 @@ it("counts programs it could not read as ? and offers Try again", async () => {
   ).toBeTruthy();
 });
 
-it("closes the dialog once a card opens, and only then", async () => {
+it("closes the page once a card opens, and only then", async () => {
   render(<NewProject />);
   const open = screen.getByRole("button", { name: "Open Hello Anchor" });
 
@@ -251,19 +298,6 @@ it("closes the dialog once a card opens, and only then", async () => {
 
   await act(async () => fireEvent.click(open));
   expect(close).toHaveBeenCalledTimes(1);
-});
-
-it("leaves the catalog's pages alone: it closes its dialog, not a page", async () => {
-  const pageClose = vi.spyOn(catalogPage, "close");
-  render(<NewProject />);
-
-  await act(async () =>
-    fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }))
-  );
-
-  expect(close).toHaveBeenCalledTimes(1);
-  expect(pageClose).not.toHaveBeenCalled();
-  pageClose.mockRestore();
 });
 
 it("keeps a failed program list off the Tutorials list", async () => {
@@ -317,7 +351,7 @@ it("holds every card while Start makes a project", async () => {
   await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
 });
 
-it("keeps the dialog for a cancelled import, and says nothing", async () => {
+it("keeps the page for a cancelled import, and says nothing", async () => {
   utils.PgGithub.import.mockRejectedValueOnce(new utils.ImportCancelledError());
   render(<NewProject initialTab="programs" />);
 
@@ -328,7 +362,7 @@ it("keeps the dialog for a cancelled import, and says nothing", async () => {
   expect(screen.queryByRole("alert")).toBeNull();
 });
 
-it("shows a failed import on its card and keeps the dialog", async () => {
+it("shows a failed import on its card and keeps the page", async () => {
   utils.PgGithub.import.mockRejectedValueOnce(new Error("Rate limited"));
   render(<NewProject initialTab="programs" />);
 
@@ -358,7 +392,7 @@ it("keeps one query for both lists and counts each list whole", async () => {
   expect(choice(/Programs/).textContent).toBe("Programs1");
 });
 
-it("toasts an Open that fails after the dialog was dismissed", async () => {
+it("toasts an Open that fails after the page was left", async () => {
   const open = held();
   utils.PgTutorial.open.mockReturnValueOnce(open.promise);
   const { unmount } = render(<NewProject />);
@@ -367,5 +401,61 @@ it("toasts an Open that fails after the dialog was dismissed", async () => {
   unmount();
   await act(async () => open.fail(new Error("gone")));
 
+  expect(utils.PgView.setToast).toHaveBeenCalledTimes(1);
+});
+
+it("leaves a reopened page open when an Open from the earlier visit ends", async () => {
+  const open = held();
+  utils.PgTutorial.open.mockReturnValueOnce(open.promise);
+  const { unmount } = render(<NewProject />);
+  fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }));
+
+  // Left, then opened again while the first Open still runs
+  unmount();
+  catalogPage.close();
+  catalogPage.open("new-project", "nav");
+  render(<NewProject />);
+  await act(async () => open.release());
+
+  expect(close).not.toHaveBeenCalled();
+});
+
+it("closes the page when an Open ends after it remounted in the same visit", async () => {
+  const open = held();
+  utils.PgTutorial.open.mockReturnValueOnce(open.promise);
+  const { unmount } = render(<NewProject />);
+  fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }));
+
+  // The project switch under the page remounts it; the visit goes on
+  unmount();
+  render(<NewProject />);
+  await act(async () => open.release());
+
+  expect(close).toHaveBeenCalledTimes(1);
+});
+
+it("toasts an Open that fails while its list is not the one shown", async () => {
+  const open = held();
+  utils.PgTutorial.open.mockReturnValueOnce(open.promise);
+  render(<NewProject />);
+  fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }));
+
+  fireEvent.click(choice(/Programs/));
+  await screen.findByRole("button", { name: "Open drift" });
+  await act(async () => open.fail(new Error("gone")));
+
+  expect(utils.PgView.setToast).toHaveBeenCalledTimes(1);
+  expect(close).not.toHaveBeenCalled();
+});
+
+it("toasts a Start that fails after the page was left, and only then", async () => {
+  const { unmount } = render(<NewProject />);
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
+
+  act(() => scratch.onFailed?.("Workspace already exists"));
+  expect(utils.PgView.setToast).not.toHaveBeenCalled();
+
+  unmount();
+  scratch.onFailed?.("Workspace already exists");
   expect(utils.PgView.setToast).toHaveBeenCalledTimes(1);
 });

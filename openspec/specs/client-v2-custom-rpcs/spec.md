@@ -94,12 +94,12 @@ The saved RPCs SHALL be stored in this browser only, names and URLs, under a `lo
 
 ### Requirement: The Network row is the only network control
 
-Settings SHALL offer the network only in the Network row (its chips and the custom RPC list). No other section SHALL show a control for the RPC endpoint; the Connection section keeps its other rows.
+Settings SHALL offer the network only in the Network row (its chips and the custom RPC list). No other section SHALL show a control for the RPC endpoint; the other connection settings keep their rows (Commitment sits in Advanced).
 
-#### Scenario: No endpoint select in Connection
+#### Scenario: No endpoint select in Settings
 
-- **WHEN** a person opens Settings and reads the Connection section
-- **THEN** it has no "Endpoint" row and no control offering Custom
+- **WHEN** a person opens Settings
+- **THEN** Advanced shows the Commitment row, and no section has an "Endpoint" row or a control offering Custom
 - **AND** the Network row's chips still pick the network
 
 ### Requirement: A custom RPC URL is checked for an answer before it is saved

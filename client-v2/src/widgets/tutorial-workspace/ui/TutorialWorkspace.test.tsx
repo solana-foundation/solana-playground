@@ -11,6 +11,7 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { PgExplorer } from "@/utils";
 
 const { useEditorLines, callPanel, noop } = vi.hoisted(() => ({
   noop: () => ({ dispose: () => {} }),
@@ -33,6 +34,8 @@ vi.mock("@/utils", () => ({
     getOS: () => "MacOS",
   },
   PgExplorer: {
+    currentWorkspaceName: "Hello Anchor",
+    isTemporary: false,
     getProjectRootPath: () => "/project",
     convertToFullPath: (path: string) => `/project/${path}`,
     files: { "/project/src/lib.rs": {} },
@@ -130,6 +133,24 @@ describe("TutorialWorkspace", () => {
     workspace("frame");
     expect(screen.queryByTestId("tutorial-phone-code-head")).toBeNull();
     expect(screen.getByRole("button", { name: /Terminal/ })).toBeTruthy();
+  });
+
+  it("draws the frame with no project open, as after deleting the last one", () => {
+    // The explorer throws on a path while no workspace is current, and the
+    // delete re-renders the frame before the route leaves the lesson
+    const explorer = PgExplorer as unknown as Record<string, unknown>;
+    const { convertToFullPath } = explorer;
+    explorer.currentWorkspaceName = undefined;
+    explorer.convertToFullPath = () => {
+      throw new Error("Current workspace not found");
+    };
+    try {
+      workspace("frame");
+      expect(screen.getByTestId("tutorial-workspace")).toBeTruthy();
+    } finally {
+      explorer.currentWorkspaceName = "Hello Anchor";
+      explorer.convertToFullPath = convertToFullPath;
+    }
   });
 
   it("draws nothing around the stage with no layout", () => {

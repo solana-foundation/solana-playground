@@ -273,6 +273,9 @@ step's win SHALL have no Next. The finish card SHALL follow 400 ms later with:
 - "What you learned";
 - the meta line "<n> steps · <time> · devnet only, nothing real spent";
 - a primary "Next: <tutorial>" and "All tutorials", and no "See summary".
+  "Next" SHALL name only a start ladder tutorial (Hello Anchor, Lumberjack,
+  Zero Copy); a definition whose `next` names any other, or none, shows
+  "All tutorials" alone.
 
 Neither the win card nor the finish card SHALL show stat pills, and the
 definition SHALL carry none.

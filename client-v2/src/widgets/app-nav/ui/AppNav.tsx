@@ -1,16 +1,13 @@
 import type { ReactNode } from "react";
 
-import { PgView } from "@/utils";
-import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
-
 import type { NavItem } from "../model/nav-item";
 import { navTelemetry } from "../model/telemetry";
 import type { BaseAppNavProps } from "./BaseAppNav";
 import BaseAppNav from "./BaseAppNav";
 import Handoff from "./Handoff";
 
-/** The items that open a page of their own */
-export type NavPage = Extract<NavItem, "tutorials" | "programs">;
+/** The items that open a page of their own: all but Home */
+export type NavPage = Exclude<NavItem, "home">;
 
 export type AppNavProps = Omit<
   BaseAppNavProps,
@@ -28,28 +25,18 @@ export type AppNavProps = Omit<
   /** Home shows; its item is marked current when no page covers it */
   homeShown: boolean;
   onOpenPage: (page: NavPage) => void;
-  onClosePage: () => void;
-  /**
-   * Makes way for what the navigation opens over the work: on a phone it
-   * brings Work into view, so a project the gallery starts is not behind the
-   * menu page
-   */
-  closeSheet: () => void;
 };
 
 /**
  * Home goes to the page (`onHome`), which closes a page that shows and then
  * shows Home, keeps it, or over a shared project goes back to the work.
- * Tutorials and Programs open their pages. New project closes a page that
- * shows, leaves the navigation (`closeSheet`) and opens the gallery.
+ * New project, Tutorials and Programs open their pages.
  */
 const AppNav = ({
   onHome,
   current,
   homeShown,
   onOpenPage,
-  onClosePage,
-  closeSheet,
   projects,
   ...props
 }: AppNavProps) => {
@@ -59,17 +46,7 @@ const AppNav = ({
       onHome();
       return;
     }
-    if (item === "tutorials" || item === "programs") {
-      onOpenPage(item);
-      return;
-    }
-    // The pick leaves the page whether or not a project follows: the
-    // gallery takes the user's attention from it
-    if (current) onClosePage();
-    closeSheet();
-    // Settles when the modal closes and never rejects: a gallery that fails
-    // to render is reported and told by `ModalHost`'s boundary
-    void PgView.setModal(NewWorkspaceModal);
+    onOpenPage(item);
   };
 
   const marked = current ?? (homeShown ? "home" : undefined);

@@ -10,7 +10,7 @@ export const anchor = createFramework({
   },
   githubExample: {
     name: "Create Account",
-    url: "https://github.com/solana-developers/program-examples/tree/main/basics/create-account/anchor",
+    url: "https://github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor",
   },
   getIsCurrent: (files) => {
     // Return false for Seahorse workspaces, otherwise this would return a

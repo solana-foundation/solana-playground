@@ -146,6 +146,8 @@ vi.mock("@/entities/tutorial", async () => {
     tutorialTelemetry: (await import("@/entities/tutorial/model/telemetry"))
       .tutorialTelemetry,
     slugOf: (await import("@/entities/tutorial/model/definition/check")).slugOf,
+    isOnStartLadder: (await import("@/entities/tutorial/model/start-ladder"))
+      .isOnStartLadder,
     docForLink: docs.docForLink,
     requestDoc: docs.requestDoc,
     requestCode: docs.requestCode,
@@ -1634,6 +1636,31 @@ describe("useConversationStartOver", () => {
         next: "lumberjack",
       });
       expect(PgTutorial.open).toHaveBeenCalledWith("Lumberjack");
+    });
+
+    it("recommends no tutorial off the start ladder, even one that is listed", async () => {
+      store.view.mockReturnValue(finished);
+      const offLadder = structuredClone(definition);
+      offLadder.finish.next = "battle-coins";
+      const state = loaded();
+      state.context = {
+        definition: offLadder,
+        slug: "hello-anchor",
+        judge: () => true,
+      };
+      store.state = state;
+      vi.mocked(PgTutorial.all).push({ name: "Battle Coins" } as never);
+      render(
+        <TooltipProvider>
+          <TutorialConversation onAllTutorials={vi.fn()} onOpenMenu={vi.fn()} />
+        </TooltipProvider>
+      );
+
+      expect(
+        screen.getByRole("button", { name: "All tutorials" })
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /^Next: / })).toBeNull();
+      vi.mocked(PgTutorial.all).pop();
     });
 
     it("counts no next tutorial when its open fails, and says so", async () => {

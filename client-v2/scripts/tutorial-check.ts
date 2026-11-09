@@ -14,6 +14,10 @@ import {
   formatError,
   slugOf,
 } from "../src/entities/tutorial/model/definition/check";
+import {
+  isOnStartLadder,
+  START_LADDER,
+} from "../src/entities/tutorial/model/start-ladder";
 
 const CLIENT = path.join(__dirname, "..");
 const TUTORIALS = path.join(CLIENT, "src", "tutorials");
@@ -97,6 +101,24 @@ const targets = (arg: string | undefined): string[] => {
   return [dir];
 };
 
+/**
+ * A `finish.next` that names a tutorial off the start ladder: a finish
+ * recommends only the tutorials walked through end to end
+ */
+const offLadder = (json: unknown) => {
+  const next = (json as { finish?: { next?: unknown } } | null)?.finish?.next;
+  if (typeof next !== "string" || isOnStartLadder(next)) return [];
+  const ladder = START_LADDER.map((l) => slugOf(l.name)).join(", ");
+  return [
+    {
+      path: "finish.next",
+      message: `a tutorial of the start ladder (${ladder}), found ${JSON.stringify(
+        next
+      )}`,
+    },
+  ];
+};
+
 let failed = 0;
 for (const dir of targets(process.argv[2])) {
   const slug = path.basename(dir);
@@ -111,7 +133,7 @@ for (const dir of targets(process.argv[2])) {
   const errors = checkDefinition(json, known, {
     slug,
     docs: docsOf(dir),
-  });
+  }).concat(offLadder(json));
   if (errors.length === 0) {
     console.log(`${slug}: ok`);
     continue;

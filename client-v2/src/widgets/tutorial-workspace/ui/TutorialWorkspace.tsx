@@ -144,8 +144,14 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
     () => (definition ? tutorialFiles(definition) : []),
     [definition]
   );
+  // Deleting the last project re-renders the frame before the route leaves
+  // the lesson, and with no project open the explorer has no path to give
+  const hasProject =
+    PgExplorer.isTemporary || PgExplorer.currentWorkspaceName !== undefined;
   const present = new Set(
-    files.filter((f) => PgExplorer.files[PgExplorer.convertToFullPath(f)])
+    hasProject
+      ? files.filter((f) => PgExplorer.files[PgExplorer.convertToFullPath(f)])
+      : []
   );
   // The pages the tutorial lists and carries; one whose Markdown is not in
   // the bundle never shows (the loader rejects such a tutorial anyway).

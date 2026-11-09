@@ -9,7 +9,7 @@ import {
 } from "@/routes/catalog-paths";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgRouter, PgTutorial } from "@/utils";
-import type { CatalogPage } from "@/widgets/catalog";
+import type { ShownPage } from "@/widgets/catalog";
 import { catalogPage } from "@/widgets/catalog";
 import type { HomeVia, StartView } from "@/widgets/home";
 
@@ -53,7 +53,7 @@ export const useViewPath = ({
 }: {
   view: StartView;
   homeVia: HomeVia | undefined;
-  catalog: CatalogPage | undefined;
+  catalog: ShownPage | undefined;
 }) => {
   // A path come to opens or closes its page
   useEffect(() => {
@@ -68,7 +68,7 @@ export const useViewPath = ({
   // What the user picks moves the path: only what changed, since a pick
   // that navigates itself (a card's Open, a project's row) closes the page
   // after its path has already moved on
-  const was = useRef<{ view: StartView; catalog?: CatalogPage }>(undefined);
+  const was = useRef<{ view: StartView; catalog?: ShownPage }>(undefined);
   // Home's path while it shows: `/` for Home there by itself, else its own
   const homeAt = useRef<string | undefined>(undefined);
   useEffect(() => {

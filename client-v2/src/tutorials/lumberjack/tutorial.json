@@ -512,7 +512,7 @@
     "chips": [
       {
         "label": "What should I build next?",
-        "answer": "Zero Copy is a good next one: it makes accounts bigger than a program's memory, so a game map can outgrow the heap.",
+        "answer": "Zero Copy is a good next one: it makes an account bigger than a program's memory and reads it without copying it.",
         "follow": "nextTutorial"
       }
     ],

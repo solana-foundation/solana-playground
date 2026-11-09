@@ -1,7 +1,7 @@
 import { FC, useMemo } from "react";
 
 import { useRenderOnChange } from "@/hooks";
-import { Checkbox } from "@/shared/ui/checkbox";
+import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import {
   Select,
   SelectContent,
@@ -11,19 +11,83 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
+import { Switch } from "@/shared/ui/switch";
+import { Tag } from "@/shared/ui/tag";
 import { PgCommon, PgView, RequiredKey, Setting as SettingType } from "@/utils";
 import { CustomSetting } from "@/views/flow/settings/CustomSetting";
 
-type SettingSetterProps = SettingType;
+import { COMING_SOON } from "../model/sections";
 
-/** The control that sets one setting: a select when it has values, else a checkbox */
+type SettingSetterProps = SettingType & {
+  /** The control's id, which the row's label points at */
+  controlId?: string;
+  /** A few named choices side by side instead of a select */
+  segmented?: boolean;
+  /** Shown but not settable, for a setting whose feature is not finished */
+  disabled?: boolean;
+  /** Values listed but not selectable, each tagged {@link COMING_SOON} */
+  notReady?: readonly string[];
+};
+
+/**
+ * The control that sets one setting: a select when it has values (or a
+ * segmented control when asked), else a switch
+ */
 export const SettingControl: FC<
   React.PropsWithChildren<SettingSetterProps>
-> = ({ values, ...props }) => {
+> = ({ values, segmented, ...props }) => {
   useRenderOnChange(props.onChange);
+  if (values && segmented) {
+    return <SettingSetterSegmented values={values} {...props} />;
+  }
   if (values) return <SettingSetterSelect values={values} {...props} />;
-  return <SettingSetterCheckBox {...props} />;
+  return <SettingSetterSwitch {...props} />;
 };
+
+type SettingSetterSegmentedProps = RequiredKey<
+  Omit<SettingSetterProps, "segmented">,
+  "values"
+>;
+
+/** A setting with a few plain values, all in sight */
+const SettingSetterSegmented: FC<SettingSetterSegmentedProps> = ({
+  values,
+  name,
+  controlId,
+  disabled,
+  getValue,
+  setValue,
+}) => (
+  <Segmented
+    aria-label={name}
+    disabled={disabled}
+    value={getValue()}
+    onValueChange={(v) => {
+      // A press on the current choice clears a toggle group; a setting keeps it
+      if (v) setValue(v);
+    }}
+  >
+    {PgCommon.callIfNeeded(values)
+      .map(convertValue)
+      .map((o) =>
+        isGroup(o) ? null : (
+          <SegmentedItem
+            key={o.value}
+            value={o.value}
+            // The row's label names this id, and a label can target a
+            // button but not the group's div: the current choice takes it.
+            // A label outranks a button's text in its name, so the chip names
+            // itself; the group carries the setting's name
+            id={o.value === getValue() ? controlId : undefined}
+            aria-label={o.label}
+            className="max-md:h-11 max-md:px-4"
+          >
+            {o.label}
+          </SegmentedItem>
+        )
+      )}
+  </Segmented>
+);
 
 type SettingSetterSelectProps = RequiredKey<SettingSetterProps, "values">;
 
@@ -67,10 +131,12 @@ export const SettingSetterSelect: FC<
     // itself, on pointer and on Enter/Space. Any other pick goes through
     // `onValueChange`, so the two paths never both run.
     const reopens = o.value === CUSTOM_VALUE && value === CUSTOM_VALUE;
+    const isNotReady = setting.notReady?.includes(o.value) ?? false;
     return (
       <SelectItem
         key={o.value}
         value={o.value}
+        disabled={isNotReady}
         onPointerUp={reopens ? openCustom : undefined}
         onKeyDown={
           reopens
@@ -81,12 +147,14 @@ export const SettingSetterSelect: FC<
         }
       >
         {o.label}
+        {isNotReady && <Tag>{COMING_SOON}</Tag>}
       </SelectItem>
     );
   };
 
   return (
     <Select
+      disabled={setting.disabled}
       // A stored value no option has, and no Custom row to stand for it:
       // `""` keeps the select controlled and shows the empty trigger, where
       // `undefined` would hand the value to Radix's own state
@@ -97,8 +165,9 @@ export const SettingSetterSelect: FC<
       }}
     >
       <SelectTrigger
+        id={setting.controlId}
         aria-label={setting.name}
-        className="w-full max-md:text-body max-md:font-read max-md:data-[size=default]:h-12"
+        className="w-full max-md:text-body font-read max-md:data-[size=default]:h-12"
       >
         <SelectValue />
       </SelectTrigger>
@@ -152,14 +221,18 @@ const findOption = (entries: Entry[], v: unknown): Option | undefined => {
   }
 };
 
-type SettingSetterCheckBoxProps = Omit<SettingSetterProps, "values">;
+type SettingSetterSwitchProps = Omit<SettingSetterProps, "values">;
 
-const SettingSetterCheckBox: FC<
-  React.PropsWithChildren<SettingSetterCheckBoxProps>
-> = ({ name, getValue, setValue }) => (
-  <Checkbox
+const SettingSetterSwitch: FC<
+  React.PropsWithChildren<SettingSetterSwitchProps>
+> = ({ name, controlId, disabled, getValue, setValue }) => (
+  <Switch
+    id={controlId}
     aria-label={name}
+    // A setting that is not finished cannot be turned on; one already on
+    // from before can still be turned off, so it never holds the user there
+    disabled={disabled && !getValue()}
     checked={getValue()}
-    onCheckedChange={(checked) => setValue(checked === true)}
+    onCheckedChange={setValue}
   />
 );

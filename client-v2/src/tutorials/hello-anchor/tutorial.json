@@ -405,7 +405,7 @@
       },
       {
         "label": "What should I build next?",
-        "answer": "Lumberjack is a good next one: it keeps a player's state on chain and refills energy over time, so you meet accounts for real.",
+        "answer": "Lumberjack is a good next one: it keeps a player's wood and energy in an account on chain and changes them, so you meet accounts for real.",
         "follow": "nextTutorial"
       },
       {

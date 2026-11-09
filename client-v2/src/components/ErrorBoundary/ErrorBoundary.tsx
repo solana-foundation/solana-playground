@@ -2,10 +2,10 @@ import { Component, type JSX, ReactNode } from "react";
 
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
+import { Icon } from "@/shared/ui/icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import type { Fn } from "../../utils";
-import { Refresh } from "../Icons";
 import Fallback from "./Fallback";
 import ThrowError from "./ThrowError";
 
@@ -88,7 +88,7 @@ class ErrorBoundary extends Component<Props, State> {
                   aria-label="Refresh"
                   onClick={refresh}
                 >
-                  <Refresh color="error" />
+                  <Icon name="refresh" className="text-error" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Refresh</TooltipContent>
@@ -102,7 +102,7 @@ class ErrorBoundary extends Component<Props, State> {
           {FbElement}
 
           <Button variant="ghost" onClick={refresh}>
-            <Refresh data-icon="inline-start" />
+            <Icon name="refresh" data-icon="inline-start" />
             Refresh
           </Button>
         </Wrapper>

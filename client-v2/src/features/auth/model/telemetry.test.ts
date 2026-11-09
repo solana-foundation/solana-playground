@@ -123,6 +123,24 @@ describe("auth telemetry", () => {
     ]);
   });
 
+  it("should track a session expired once, however many reads follow", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as Response);
+    await PgSession.refreshWith({
+      id: "u1",
+      name: undefined,
+      image: undefined,
+      login: undefined,
+    });
+
+    await PgSession.refresh();
+    await PgSession.refresh();
+
+    expect(names()).toEqual(["auth_session_expired"]);
+  });
+
   it("should track a sign-out the server accepted", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true } as Response);
 

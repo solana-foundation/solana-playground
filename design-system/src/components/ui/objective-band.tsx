@@ -78,7 +78,7 @@ function ObjectiveText({ className, ...props }: React.ComponentProps<"p">) {
   return (
     <p
       data-slot="objective-text"
-      className={cn("min-w-0 truncate font-heading text-sm font-medium text-foreground", className)}
+      className={cn("min-w-0 truncate font-heading text-sm font-headline text-foreground", className)}
       {...props}
     />
   )
@@ -202,7 +202,7 @@ function ObjectivePrimary({
       size="sm"
       data-slot="objective-primary"
       className={cn(
-        size === "phone" ? "h-12 px-5 text-[0.9375rem] font-act" : "ml-1 text-[0.8125rem] font-medium",
+        size === "phone" ? "h-12 px-5 text-[0.9375rem] font-act" : "ml-1 text-[0.8125rem] font-act",
         className
       )}
       {...props}

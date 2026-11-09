@@ -55,10 +55,46 @@ type BlockExplorer = Omit<
   opens(cluster: Cluster | null): boolean;
 };
 
+/**
+ * The `blockExplorer.name` setting's default, and the explorer links open
+ * when the stored one is no longer offered
+ */
+export const DEFAULT_BLOCK_EXPLORER = "Solana Explorer";
+
+/**
+ * The explorer named `name`, or the default when `name` is no longer offered:
+ * a dropped explorer (Solana FM) stays in a user's stored settings.
+ *
+ * @param all the offered explorers
+ * @param name the name the settings hold
+ */
+export const findBlockExplorer = (all: BlockExplorer[], name: string) => {
+  const explorer =
+    all.find((be) => be.name === name) ??
+    all.find((be) => be.name === DEFAULT_BLOCK_EXPLORER);
+  if (!explorer) {
+    throw new Error(`"${DEFAULT_BLOCK_EXPLORER}" is not a block explorer`);
+  }
+  return explorer;
+};
+
+/**
+ * The explorer links open for the stored `name`. A fallback is stored too, so
+ * the settings page shows the explorer links open; storing it runs this again
+ * with a name that is offered, which writes nothing.
+ *
+ * @param name the name the settings hold
+ */
+export const resolveBlockExplorer = (name: string) => {
+  const explorer = findBlockExplorer(_PgBlockExplorer.all, name);
+  if (explorer.name !== name) PgSettings.blockExplorer.name = explorer.name;
+  return explorer;
+};
+
 const derive = () => ({
   /** The current block explorer based on user's block explorer setting */
   current: createDerivable({
-    derive: (name) => _PgBlockExplorer.all.find((be) => be.name === name)!,
+    derive: resolveBlockExplorer,
     onChange: PgSettings.onDidChangeBlockExplorerName,
     infallible: true,
   }),

@@ -89,6 +89,7 @@ if (import.meta.vitest) {
       telemetry.resetTelemetry();
     });
 
+    // Hello Anchor's next is Lumberjack
     const KNOWN = new Set(["hello-anchor", "lumberjack"]);
 
     /** Hello Anchor with two schema errors: no minutes, a level no one has */

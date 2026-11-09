@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 
 import type { McpServerEntry } from "@/features/mcp";
 import {
@@ -107,51 +107,61 @@ const skillNote = (skill: SkillEntry) => {
 const SkillRow = ({
   skill,
   checked,
+  scope,
 }: {
   skill: SkillEntry;
   checked: boolean;
-}) => (
-  <Field orientation="horizontal">
-    <Checkbox
-      id={`skill-${skill.id}`}
-      aria-labelledby={`skill-${skill.id}-name`}
-      aria-describedby={
-        isCommunity(skill)
-          ? `skill-${skill.id}-note skill-${skill.id}-about`
-          : `skill-${skill.id}-note`
-      }
-      checked={isAlwaysOn(skill) || checked}
-      // Checked and disabled shows it is on and cannot be switched off
-      disabled={isAlwaysOn(skill)}
-      onCheckedChange={(value) =>
-        PgAssistant.setSkillEnabled(skill.id, value === true)
-      }
-    />
-    {/* FieldContent switches the row to top alignment, so the box sits by the name, as in the server rows */}
-    <FieldContent>
-      <SourceLabel
-        htmlFor={`skill-${skill.id}`}
-        name={skill.name}
-        note={skillNote(skill)}
+  /** The view's own prefix, so two views on screen never share an id */
+  scope: string;
+}) => {
+  const id = `${scope}skill-${skill.id}`;
+  return (
+    <Field orientation="horizontal">
+      <Checkbox
+        id={id}
+        aria-labelledby={`${id}-name`}
+        aria-describedby={
+          isCommunity(skill) ? `${id}-note ${id}-about` : `${id}-note`
+        }
+        checked={isAlwaysOn(skill) || checked}
+        // Checked and disabled shows it is on and cannot be switched off
+        disabled={isAlwaysOn(skill)}
+        onCheckedChange={(value) =>
+          PgAssistant.setSkillEnabled(skill.id, value === true)
+        }
       />
+      {/* FieldContent switches the row to top alignment, so the box sits by the name, as in the server rows */}
+      <FieldContent>
+        <SourceLabel htmlFor={id} name={skill.name} note={skillNote(skill)} />
+        {isCommunity(skill) && (
+          // The tip's content exists only while open, so the checkbox reads this copy
+          <span id={`${id}-about`} className="sr-only">
+            {skill.description}
+          </span>
+        )}
+      </FieldContent>
       {isCommunity(skill) && (
-        // The tip's content exists only while open, so the checkbox reads this copy
-        <span id={`skill-${skill.id}-about`} className="sr-only">
-          {skill.description}
-        </span>
+        <HelpTip label={`About ${skill.name}`} className="mt-0.5 shrink-0">
+          {/* One block: the tooltip lays out its children as flex items */}
+          <p className="leading-relaxed">{skill.description}</p>
+        </HelpTip>
       )}
-    </FieldContent>
-    {isCommunity(skill) && (
-      <HelpTip label={`About ${skill.name}`} className="mt-0.5 shrink-0">
-        {/* One block: the tooltip lays out its children as flex items */}
-        <p className="leading-relaxed">{skill.description}</p>
-      </HelpTip>
-    )}
-  </Field>
-);
+    </Field>
+  );
+};
 
-const Grounding = () => {
+interface GroundingProps {
+  /**
+   * Inside a Settings card: no scroll or grow of its own, the page scrolls.
+   * The panel's Sources and tools view leaves it off.
+   */
+  embedded?: boolean;
+}
+
+const Grounding = ({ embedded = false }: GroundingProps) => {
   useRenderOnChange(PgAssistant.onDidChange);
+  // Settings and the panel can both be on screen, each with these controls
+  const scope = useId();
 
   const enabledSkills = PgAssistant.enabledSkillIds;
   const foundationSkills = PgAssistant.skills.filter(
@@ -221,7 +231,12 @@ const Grounding = () => {
   };
 
   return (
-    <div className="flex min-h-0 grow flex-col gap-7 overflow-y-auto px-4 py-5">
+    <div
+      className={cn(
+        "flex flex-col gap-7 px-4 py-5",
+        !embedded && "min-h-0 grow overflow-y-auto"
+      )}
+    >
       {!takesTools && (
         <FieldSet>
           <FieldLegend>Skills and MCP servers</FieldLegend>
@@ -269,6 +284,7 @@ const Grounding = () => {
                 key={skill.id}
                 skill={skill}
                 checked={enabledSkills.includes(skill.id)}
+                scope={scope}
               />
             ))}
           </FieldGroup>
@@ -301,6 +317,7 @@ const Grounding = () => {
                       key={skill.id}
                       skill={skill}
                       checked={enabledSkills.includes(skill.id)}
+                      scope={scope}
                     />
                   ))}
                 </FieldGroup>
@@ -321,46 +338,50 @@ const Grounding = () => {
           </FieldDescription>
 
           <FieldGroup data-slot="checkbox-group">
-            {servers.map((server) => (
-              <Field key={server.id} orientation="horizontal">
-                <Checkbox
-                  id={`mcp-server-${server.id}`}
-                  aria-labelledby={`mcp-server-${server.id}-name`}
-                  aria-describedby={`mcp-server-${server.id}-note`}
-                  checked={server.enabled}
-                  onCheckedChange={(checked) =>
-                    toggle(server, checked === true)
-                  }
-                />
-                <FieldContent>
-                  <SourceLabel
-                    htmlFor={`mcp-server-${server.id}`}
-                    name={server.name || server.id}
-                    note={
-                      PgAssistant.gatewayMcpServers.some(
-                        (s) => s.id === server.id
-                      )
-                        ? "served by the gateway"
-                        : "added below"
+            {servers.map((server) => {
+              const id = `${scope}mcp-server-${server.id}`;
+              return (
+                <Field key={server.id} orientation="horizontal">
+                  <Checkbox
+                    id={id}
+                    aria-labelledby={`${id}-name`}
+                    aria-describedby={`${id}-note`}
+                    checked={server.enabled}
+                    onCheckedChange={(checked) =>
+                      toggle(server, checked === true)
                     }
                   />
-                  {server.enabled && (
-                    <Collapsible className="pt-1 text-sm">
-                      <CollapsibleHeading className="font-medium">
-                        <CollapsibleChevron />
-                        Call a tool
-                      </CollapsibleHeading>
-                      <CollapsibleContent className="pt-2">
-                        <ServerConsole
-                          server={server}
-                          providerName={providerName}
-                        />
-                      </CollapsibleContent>
-                    </Collapsible>
-                  )}
-                </FieldContent>
-              </Field>
-            ))}
+                  <FieldContent>
+                    <SourceLabel
+                      htmlFor={id}
+                      name={server.name || server.id}
+                      note={
+                        PgAssistant.gatewayMcpServers.some(
+                          (s) => s.id === server.id
+                        )
+                          ? "served by the gateway"
+                          : "added below"
+                      }
+                    />
+                    {server.enabled && (
+                      <Collapsible className="pt-1 text-sm">
+                        <CollapsibleHeading className="font-medium">
+                          <CollapsibleChevron />
+                          Call a tool
+                        </CollapsibleHeading>
+                        <CollapsibleContent className="pt-2">
+                          <ServerConsole
+                            server={server}
+                            providerName={providerName}
+                            scope={scope}
+                          />
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+                  </FieldContent>
+                </Field>
+              );
+            })}
           </FieldGroup>
 
           {servers.length === 0 && (

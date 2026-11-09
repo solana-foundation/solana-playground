@@ -9,6 +9,7 @@
     "build:inject": "tailwindcss -i src/styles/inject.css -o dist/ds-inject.css --minify",
     "build:registry": "shadcn build -o registry-dist/r",
     "registry:serve": "node scripts/serve-registry.mjs",
+    "icons:export": "node scripts/export-icons.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

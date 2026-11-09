@@ -37,7 +37,7 @@ const StageBar: FC = () => {
       keybind: `Ctrl+${i + 1}`,
       handle: () => {
         // A stage the open project does not offer has no tab to go to
-        if (!stagesOf(PgFlow.state).includes(stage)) return;
+        if (!stagesOf(PgFlow.state).includes(stage)) return false;
         PgFlow.setStage(stage);
         // Focus follows the shortcut, so the keyboard user lands on the tab
         // they just selected rather than being left wherever they were
@@ -53,7 +53,7 @@ const StageBar: FC = () => {
       className={cn(
         // The stepper's thumb and items stack with z-index; `isolate` keeps
         // them inside the row, so they never rise over a window opened above
-        // the work area (the wallet, z-index 1), which the full-width row
+        // the work area (the wallet, z-index 30), which the full-width row
         // reaches
         "isolate flex min-w-0 shrink-0 items-center justify-center gap-2 bg-transparent font-sans",
         // In the frame, a 54 px row: the 34 px stepper keeps 8 px from the bar

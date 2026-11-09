@@ -18,6 +18,11 @@ type AuthEvents = {
   auth_sign_in_failed: { reason: SignInFailure };
   /** The server accepted the user's sign-out; a failed one tracks nothing. */
   auth_signed_out: NoParams;
+  /**
+   * A session read found that a session ended without a sign-out; once per tab
+   * when that state starts.
+   */
+  auth_session_expired: NoParams;
 };
 
 export const authTelemetry = createTracker<AuthEvents>();
