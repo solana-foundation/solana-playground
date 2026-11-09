@@ -156,6 +156,9 @@ export class PgStageDeploy {
       // The stage's state says "unknown" with `undefined`; the connection's `null` stays here
       const cluster = PgConnection.cluster ?? undefined;
       const workspace = PgExplorer.currentWorkspaceName;
+      // The network the press was for. The endpoint, not `cluster`: a custom
+      // RPC's cluster name can arrive late without the network changing
+      const endpoint = PgSettings.connection.endpoint;
       const redeploy = PgProgramInfo.onChain?.deployed === true;
       // A step recorded by an earlier run says nothing about this one, which
       // may fail before it reaches the deploy command
@@ -184,7 +187,7 @@ export class PgStageDeploy {
         // opened meanwhile is never deployed without its own press.
         if (
           PgExplorer.currentWorkspaceName !== workspace ||
-          (PgConnection.cluster ?? undefined) !== cluster
+          PgSettings.connection.endpoint !== endpoint
         ) {
           log.info("project or network changed before the deploy; stopped", {
             context: { workspace, cluster },

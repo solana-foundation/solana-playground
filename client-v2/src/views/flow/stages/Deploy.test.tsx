@@ -75,6 +75,7 @@ vi.mock("../../../utils", () => ({
   },
   PgProgramInfo: { update: mocks.update },
   PgSettings: {
+    connection: { endpoint: "https://api.devnet.solana.com" },
     wallet: {
       get automaticAirdrop() {
         return mocks.automaticAirdrop;
@@ -843,6 +844,28 @@ describe("Deploy stage", () => {
       phase: "stopped",
       stop: { kind: "cancelled" },
     });
+  });
+
+  // A custom RPC's cluster name can arrive during the read; the endpoint,
+  // and so the network, is the same one the press was for
+  it("deploys when only the cluster's name arrived during the network read", async () => {
+    const utils = (await import("../../../utils")) as unknown as {
+      PgConnection: { cluster: string | undefined };
+    };
+    mocks.wallet.current = pgWallet();
+    mocks.execute.mockResolvedValue(undefined);
+    mocks.duringNetworkRead = () => {
+      utils.PgConnection.cluster = "testnet";
+    };
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    try {
+      await pressDeploy();
+    } finally {
+      utils.PgConnection.cluster = "devnet";
+    }
+
+    expect(mocks.execute).toHaveBeenCalledOnce();
   });
 
   it("names the checks when a deploy fails before any step", async () => {
