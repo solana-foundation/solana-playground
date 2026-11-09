@@ -98,9 +98,9 @@ export class PgGithub {
   /**
    * Get whether the given URL is a GitHub URL.
    *
-   * A single slash after `https:` passes too: react-router folds the double
-   * slash of `/https://github.com/…` when the app navigates to it, so the
-   * `/{githubUrl}` route gets `https:/github.com/…` (`parseUrl` reads both).
+   * A URL without its scheme passes, as the import dialog's field takes one;
+   * so does a single slash after `https:`, the form react-router folds
+   * `https://` into inside a path (`parseUrl` reads both).
    *
    * @param url URL to check
    * @returns whether the URL is a GitHub URL
@@ -113,7 +113,8 @@ export class PgGithub {
    * The app's own path that opens the given GitHub URL: `/github/` and
    * GitHub's path after it (`/github/<owner>/<repo>/tree/<ref>/<folder>`),
    * a catch-all segment a file-based router serves too. Takes a URL with or
-   * without its scheme, as {@link isValidUrl} does.
+   * without its scheme, as {@link isValidUrl} does, since the import
+   * dialog's field takes both.
    *
    * @param url GitHub URL
    * @returns the route path

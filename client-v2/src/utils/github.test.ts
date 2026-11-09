@@ -369,7 +369,7 @@ describe("PgGithub.routePath", () => {
         "github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor/"
       )
     ).toBe(path);
-    // The folded form react-router hands the older route
+    // The folded form react-router makes of `https://` in a path
     expect(PgGithub.routePath("https:/www.github.com/a/b")).toBe("/github/a/b");
   });
 

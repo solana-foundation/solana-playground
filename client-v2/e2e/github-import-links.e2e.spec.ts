@@ -73,7 +73,7 @@ const dialogLinks = async (page: Page) => {
   return Array.from(new Set(links.concat(server))).sort();
 };
 
-test("github-import: The import and build server dialogs offer the recorded links", async ({
+test("client-v2-routes: The import and build server dialogs offer the recorded links", async ({
   page,
 }) => {
   await page.goto("/");
@@ -122,27 +122,25 @@ const stubExamples = async (page: Page) => {
   );
 };
 
-// The older form, a GitHub URL after the origin, is what upstream's docs and
-// shared links carry; it forwards to `/github/…` without a history entry
-test("github-import: A GitHub URL after the origin forwards to the github route", async ({
+/** The examples program's own `/github/` address */
+const PROGRAM_ROUTE = `/github/solana-foundation/program-examples/tree/main/${PROGRAM_PATH}`;
+
+test("client-v2-routes: A folder of the examples repository opens", async ({
   page,
 }) => {
   await stubExamples(page);
-  await page.goto(
-    `/https://github.com/solana-foundation/program-examples/tree/main/${PROGRAM_PATH}`
-  );
+  await page.goto(PROGRAM_ROUTE);
 
-  await expect(page).toHaveURL(
-    `/github/solana-foundation/program-examples/tree/main/${PROGRAM_PATH}`,
-    LONG
-  );
   await expect(page.locator(".monaco-editor .view-lines")).toContainText(
     "entrypoint!(process_instruction)",
     LONG
   );
+  await expect(page).toHaveURL(PROGRAM_ROUTE);
 });
 
-test("github-import: An example's Open shows its program", async ({ page }) => {
+test("client-v2-routes: An example's Open shows its program", async ({
+  page,
+}) => {
   await stubExamples(page);
   await page.goto("/");
 
@@ -157,10 +155,11 @@ test("github-import: An example's Open shows its program", async ({ page }) => {
     "entrypoint!(process_instruction)",
     LONG
   );
+  await expect(page).toHaveURL(PROGRAM_ROUTE);
 });
 
 // A failed route's error stayed in the main view over the next route's
-test("github-import: A failed open leaves no error for the next one", async ({
+test("client-v2-routes: A folder with no program says so, then gets out of the way", async ({
   page,
 }) => {
   await stubExamples(page);

@@ -3,7 +3,7 @@
 ## Purpose
 
 The addresses of the client outside its pages and the work: what each path
-opens, which older forms forward where, and how the app writes a link to one.
+opens and how the app writes a link to one.
 The page paths (`/home`, `/new`, `/tutorials`, `/programs`) and the work's
 path are `client-v2-layout`'s ("Home, the pages and the work have their own
 addresses").
@@ -38,23 +38,6 @@ no program code SHALL show the import's own refusal ("No program code found
   code, then opens an example from the import dialog
 - **THEN** the stage says "No program code found" for the first, and the
   example's program shows with no trace of that message
-
-### Requirement: The older GitHub address forwards to /github/
-
-A GitHub URL written after the origin, `/https://github.com/<path>` (and its
-folded form, `/https:/github.com/<path>`, and `/github.com/<path>`), SHALL
-open the same program as `/github/<path>` by forwarding to that address,
-replacing its own history entry so Back from the program does not return to
-the older address. Upstream's tutorial content and shared links SHALL keep
-opening this way.
-
-#### Scenario: A GitHub URL after the origin forwards to the github route
-
-- **WHEN** a user opens
-  `/https://github.com/solana-foundation/program-examples/tree/main/basics/hello-solana/native/program`
-- **THEN** the address becomes
-  `/github/solana-foundation/program-examples/tree/main/basics/hello-solana/native/program`
-  and the editor shows that program's `lib.rs`
 
 ### Requirement: The import dialog links the /github/ address
 

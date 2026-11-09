@@ -17,17 +17,3 @@ export const github = PgRouter.create({
     });
   },
 });
-
-/**
- * The older form, a GitHub URL after the origin
- * (`/https://github.com/<owner>/<repo>…`), which upstream's docs and shared
- * links still use: forwarded to `/github/…`, replacing the history entry so
- * Back does not return to it.
- */
-export const githubDefault = PgRouter.create({
-  path: "/{githubUrl}",
-  validate: ({ githubUrl }) => PgGithub.isValidUrl(githubUrl),
-  handle: ({ githubUrl }) => {
-    PgRouter.navigate(PgGithub.routePath(githubUrl), { replace: true });
-  },
-});
