@@ -799,7 +799,16 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
             phone={tutorialPhone}
             stageNode={stageNode}
             consoleNode={consoleNode}
-            consoleOpen={props.consoleState.open}
+            // At phone width the console is the visit's, as on the pager
+            // (`props.phone.consoleOpen`): its bar, `CONSOLE_KEY` and the
+            // workspace's auto-open write that flag, not the saved layout's
+            // `consoleState.open`. In the compact band the drawer follows
+            // that saved flag, which the bar writes there
+            consoleOpen={
+              props.viewport === "phone"
+                ? props.phone.consoleOpen
+                : props.consoleState.open
+            }
             tablet={props.viewport === "compact"}
           />
         </SidebarProvider>

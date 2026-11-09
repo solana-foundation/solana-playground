@@ -1648,4 +1648,36 @@ describe("in a tutorial", () => {
     expect(screen.queryByText("chat slot")).toBeNull();
     expect(screen.getByRole("region", { name: "Work" })).toBeTruthy();
   });
+
+  // The tutorial's phone layout draws its drawer from the flag its bar
+  // writes: the visit's (`phone.consoleOpen`) at phone width, the saved
+  // layout's (`consoleState.open`) in the compact band
+  it.each([
+    ["phone", { phoneFlag: true, savedFlag: false }],
+    ["compact", { phoneFlag: false, savedFlag: true }],
+  ] as const)(
+    "sizes the tutorial phone's console drawer by the flag of its width (%s)",
+    (viewport, flags) => {
+      const shell = inTutorial(viewport, tutorialNav(), {
+        consoleOpen: flags.savedFlag,
+      });
+      shell.phone.consoleOpen = flags.phoneFlag;
+      shell.tutorial = {
+        chat: <section>chat slot</section>,
+        nav: tutorialNav(),
+        phone: {
+          head: <header>tutorial head</header>,
+          chat: <p>chat body</p>,
+          space: "code",
+          onSpace: vi.fn(),
+        },
+      };
+      render(<BaseLayoutShell {...shell} />);
+      const drawer = screen.getByRole("region", { name: "Code" })
+        .lastElementChild as HTMLElement;
+      // Open: no bar-height style, the open drawer's cap
+      expect(drawer.style.height).toBe("");
+      expect(drawer.className).toContain("max-h-[42dvh]");
+    }
+  );
 });

@@ -1567,6 +1567,30 @@ describe("a tutorial below the frame's width", () => {
     expect(screen.getByText("chat column")).toBeTruthy();
   });
 
+  // The drawer follows the state its bar writes, at both widths
+  it.each([
+    ["phone", 390],
+    ["compact", 900],
+  ])("opens and folds the console drawer from its control (%s)", (_, at) => {
+    resizeTo(at);
+    inTutorial();
+    const drawer = () =>
+      requireFor("the console's outlet")(
+        screen.getByRole("region", { name: "Code" }).lastElementChild
+      );
+    expect(drawer().className).not.toContain("42dvh");
+    fireEvent.click(consoleButton());
+    expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+    expect(drawer().className).toContain("42dvh");
+    fireEvent.click(consoleButton());
+    expect(consoleButton().getAttribute("aria-expanded")).toBe("false");
+    expect(drawer().className).not.toContain("42dvh");
+    expect(toggled()).toEqual([
+      { panel: "console", open: true, via: "button" },
+      { panel: "console", open: false, via: "button" },
+    ]);
+  });
+
   it("keeps the stage's node across a rotation over the frame's width", () => {
     resizeTo(390);
     inTutorial();

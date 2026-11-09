@@ -141,6 +141,31 @@ test.describe("tutorial: Hello Anchor on a phone, on a stubbed build server and 
     await act(page, "s2.deploy").click(LONG);
     await wonOnThePhone(page, "deploy");
     expect(devnet.programs()).toHaveLength(1);
+
+    // The terminal drawer's bar opens and folds it in Code: the drawer
+    // follows the phone's own console state, the one the bar writes. (It did
+    // not open by itself: Code was inert behind Chat when the deploy landed)
+    await page.getByRole("button", { name: /^Show the code/ }).click();
+    await showing(page, "code");
+    const terminal = code(page).getByRole("button", { name: "Terminal" });
+    // The drawer is Code's last child; folded it is its bar alone (28 px)
+    const drawerHeight = () =>
+      code(page)
+        .locator("> div")
+        .last()
+        .evaluate((el) => el.getBoundingClientRect().height);
+    await expect(terminal).toHaveAttribute("aria-expanded", "false");
+    await expect.poll(drawerHeight).toBeLessThan(40);
+    await terminal.click();
+    await expect(terminal).toHaveAttribute("aria-expanded", "true");
+    // Open, it takes its share of the space: the bar alone reads expanded on
+    // the bug this guards, with the body still clipped to the bar
+    await expect.poll(drawerHeight).toBeGreaterThan(120);
+    await terminal.click();
+    await expect(terminal).toHaveAttribute("aria-expanded", "false");
+    await expect.poll(drawerHeight).toBeLessThan(40);
+    await page.getByRole("button", { name: "Back to the chat" }).click();
+    await showing(page, "chat");
     await next(page).click();
 
     // Step 3: a wrong pick, then a reload, which opens on Chat, still the
