@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 
+import type { InteractCluster } from "@/features/program-interact";
+import { interactTelemetry } from "@/features/program-interact";
 import { createLogger } from "@/shared/lib/logger";
 
 import {
@@ -83,7 +85,17 @@ const getIdlErrors = (): IdlError[] => {
 // eslint-disable-next-line unicorn/no-null -- `CallRecord` persists an absent signature or failing line as null
 const toStored = <T>(value: T | undefined) => value ?? null;
 
-const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
+/**
+ * Sends the call and reports how it went, sending its events on the way.
+ *
+ * @param ix the instruction to call
+ * @param cluster the cluster the call goes to, for its events
+ * @returns the call's outcome
+ */
+const send = async (
+  ix: GeneratableInstruction,
+  cluster: InteractCluster
+): Promise<CallOutcome> => {
   let signature: string | undefined;
   // The connection the call goes out on: a network switch while the wallet
   // asks must not confirm a landed call on another cluster as failed
@@ -94,9 +106,13 @@ const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
     signature = await PgCommon.transition(
       PgProgramInteraction.test(ix, PgProgramInteraction.getAnchorProgram())
     );
+    interactTelemetry.track("interact_sent", { cluster });
     const confirmed = await PgTx.confirm(signature, { connection });
     const logs = await readLogsWith(connection)(signature);
     const ok = !confirmed?.err;
+    if (ok) interactTelemetry.track("interact_succeeded", { cluster });
+    else
+      interactTelemetry.track("interact_failed", { cluster, phase: "confirm" });
     return {
       instruction: ix.name,
       ok,
@@ -111,6 +127,11 @@ const send = async (ix: GeneratableInstruction): Promise<CallOutcome> => {
           ),
     };
   } catch (e: any) {
+    // A signature with a thrown error: sent, but its confirmation is unknown
+    interactTelemetry.track("interact_failed", {
+      cluster,
+      phase: signature ? "confirm" : "send",
+    });
     const raw: string = e?.message ?? String(e);
     // An RPC refusal is named rather than shown in web3's words, which tell
     // a learner to catch the exception
@@ -177,7 +198,9 @@ export const runCall = async (
   print(PgTerminal.info(`Calling \`${ix.name}\`...`));
 
   moveInFlight(1);
-  const outcome = await send(ix).finally(() => moveInFlight(-1));
+  const outcome = await send(ix, cluster ?? "custom").finally(() =>
+    moveInFlight(-1)
+  );
 
   // Nothing after the send may turn a finished call into a rejection
   try {

@@ -41,6 +41,12 @@ vi.mock("../../../utils/program-interaction", () => ({
   PgProgramInteraction: { test: h.test, getAnchorProgram: () => ({}) },
 }));
 
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
+
 import { PgCallHistory } from "../state/call-history";
 import { runCall, useCallInFlight } from "./run-call";
 
@@ -292,5 +298,72 @@ describe("runCall", () => {
 
     expect(PgCallHistory.list("P", "devnet")).toHaveLength(1);
     expect(PgCallHistory.list("P", "testnet")).toHaveLength(0);
+  });
+});
+
+describe("runCall events", () => {
+  let tracked: ReturnType<typeof memoryProvider>;
+
+  beforeEach(() => {
+    resetTelemetry();
+    tracked = memoryProvider();
+    initTelemetry({ providers: [tracked] });
+    h.getTransaction.mockResolvedValue({ meta: { logMessages: [] } });
+  });
+
+  const sent = () => tracked.events.map((event) => [event.name, event.params]);
+
+  it("counts a call that lands as sent and succeeded", async () => {
+    h.test.mockResolvedValue("sig");
+    h.confirm.mockResolvedValue(undefined);
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([
+      ["interact_sent", { cluster: "devnet" }],
+      ["interact_succeeded", { cluster: "devnet" }],
+    ]);
+  });
+
+  it.each([
+    ["the program rejects", () => h.confirm.mockResolvedValue({ err: {} })],
+    [
+      "whose confirmation fails",
+      () => h.confirm.mockRejectedValue(new Error("timeout")),
+    ],
+  ])("counts a sent call %s as failed at confirm", async (_, arrange) => {
+    h.test.mockResolvedValue("sig");
+    arrange();
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([
+      ["interact_sent", { cluster: "devnet" }],
+      ["interact_failed", { cluster: "devnet", phase: "confirm" }],
+    ]);
+  });
+
+  it("counts a call that never went out as failed at send", async () => {
+    h.test.mockRejectedValue(new Error("User rejected the request."));
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([
+      ["interact_failed", { cluster: "devnet", phase: "send" }],
+    ]);
+  });
+
+  it("names a custom endpoint's cluster custom, never null", async () => {
+    // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is null on an endpoint that names no cluster
+    h.cluster = null;
+    h.test.mockResolvedValue("sig");
+    h.confirm.mockResolvedValue(undefined);
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([
+      ["interact_sent", { cluster: "custom" }],
+      ["interact_succeeded", { cluster: "custom" }],
+    ]);
   });
 });
