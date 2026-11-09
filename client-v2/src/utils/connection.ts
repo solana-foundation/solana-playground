@@ -170,7 +170,7 @@ const getClusterOf = (connection: PgWeb3.Connection): Cluster | undefined =>
     ? PgConnection.cluster ?? undefined
     : undefined);
 
-/** The send cap of `connection`'s cluster; `undefined` when the env sets none there */
+/** The send cap of `connection`'s cluster; `undefined` for a cluster with none or a cluster not known */
 const sendTxPerSecondWith =
   (clusters: Clusters) => (connection: PgWeb3.Connection) => {
     const cluster = getClusterOf(connection);

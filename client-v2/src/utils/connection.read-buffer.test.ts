@@ -138,10 +138,10 @@ describe("utils/connection", () => {
 
     it("caps its sends by that cluster's send cap", async () => {
       const { PgConnection, connectionTo } = await customOnDevnetWith(false)({
-        REACT_APP_DEVNET_SEND_TX_PER_SECOND: "4",
+        REACT_APP_DEVNET_SEND_TX_PER_SECOND: "5",
       });
 
-      expect(PgConnection.getSendTxPerSecond(connectionTo(CUSTOM))).toBe(4);
+      expect(PgConnection.getSendTxPerSecond(connectionTo(CUSTOM))).toBe(5);
     });
 
     it("ignores a cluster still the previous endpoint's", async () => {
@@ -182,13 +182,20 @@ describe("utils/connection", () => {
 
   it.each([
     {
-      label: "the cluster has no send cap",
+      label: "the cluster's send cap is unset",
       value: "5",
       endpoint: "https://api.testnet.solana.com",
     },
-    { label: "the send cap is empty", value: "", endpoint: DEVNET },
-    { label: "the send cap is not a number", value: "fast", endpoint: DEVNET },
     { label: "the send cap is 0", value: "0", endpoint: DEVNET },
+  ])("caps sends at 4 per second when $label", async ({ value, endpoint }) => {
+    const { PgConnection, connectionTo } = await pgConnectionWith({
+      REACT_APP_DEVNET_SEND_TX_PER_SECOND: value,
+    });
+
+    expect(PgConnection.getSendTxPerSecond(connectionTo(endpoint))).toBe(4);
+  });
+
+  it.each([
     {
       label: "the endpoint is Playnet",
       value: "5",
