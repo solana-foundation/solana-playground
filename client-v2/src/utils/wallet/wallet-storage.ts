@@ -43,8 +43,13 @@ const foundOrNoneWith =
 
 const foundOrNone = foundOrNoneWith(0);
 
-/** Where a write landed: the store, the `localStorage` fallback, or nowhere */
-export type WriteOutcome = "store" | "local" | "lost";
+/**
+ * Where a write landed: the store; the `localStorage` fallback, with no store
+ * behind it (`local`); the fallback while the store, which failed, may still
+ * hold an older copy that the next read merges back (`local-store-stale`); or
+ * nowhere
+ */
+export type WriteOutcome = "store" | "local" | "local-store-stale" | "lost";
 
 /** The part of `Storage` the wallet uses */
 type LocalStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -379,6 +384,16 @@ const withoutMovedWith =
 export const walletStorageWith =
   (store: WalletStore) => (local: LocalStorage) => {
     let isDegraded = false;
+    /**
+     * Whether the store, given up for `localStorage`, may still hold a copy:
+     * it failed after IndexedDB answered, rather than IndexedDB being absent
+     */
+    let isStoreStale = false;
+    /** Fall back to `localStorage` for the rest of this page's life */
+    const degradeWith = (isStale: boolean) => {
+      isDegraded = true;
+      isStoreStale = isStoreStale || isStale;
+    };
     let writes = Promise.resolve();
     /** The newest save that has not landed in either store */
     let unsaved: SerializedWalletState | undefined;
@@ -503,8 +518,10 @@ export const walletStorageWith =
       }
     };
 
-    const fallBack = (state: SerializedWalletState): WriteOutcome =>
-      writeLocal(state) ? "local" : "lost";
+    const fallBack = (state: SerializedWalletState): WriteOutcome => {
+      if (!writeLocal(state)) return "lost";
+      return isStoreStale ? "local-store-stale" : "local";
+    };
 
     /** Read the store, telling a record of the wrong shape from a wallet */
     const readStore = async (): Promise<StoreRead> => {
@@ -529,15 +546,21 @@ export const walletStorageWith =
       }
     };
 
-    /** Remove the `localStorage` copy unless someone rewrote it meanwhile */
+    /**
+     * Remove the `localStorage` copy unless someone rewrote it meanwhile
+     *
+     * @returns whether `localStorage` no longer holds `text`
+     */
     const removeLocal = (text: string) => {
       try {
         if (local.getItem(WALLET_LOCAL_KEY) === text) {
           local.removeItem(WALLET_LOCAL_KEY);
         }
+        return true;
       } catch (error) {
         // The store holds the wallet; the next load merges and retries this
         reportFailure("Wallet left in localStorage", error);
+        return false;
       }
     };
 
@@ -591,7 +614,7 @@ export const walletStorageWith =
         if (fromLocal && fromLocal.damaged.length > 0) {
           keepUnreadable(fromLocal.text);
         }
-        isDegraded = true;
+        degradeWith(!isIndexedDbMissing(error));
         return foundOrNone(fromLocal?.wallet);
       }
       const stored =
@@ -656,7 +679,7 @@ export const walletStorageWith =
           if (!fromLocal && misshapen.length > 0) return UNAVAILABLE;
           // Nothing moves and nothing is rewritten, so the damaged accounts
           // stay where they were
-          isDegraded = true;
+          degradeWith(true);
           return foundOrNone(merged);
         }
         reportDamaged("Damaged wallet accounts set aside", new Error("shape"));
@@ -675,6 +698,9 @@ export const walletStorageWith =
               "Wallet not rewritten without its damaged accounts or keys",
               error
             );
+            // The store still holds key bytes on the app's origin: the move
+            // is not done, so the wallet does not load until a read finishes it
+            if (isMoved) return UNAVAILABLE;
           }
         }
         await clearMovedAside(movedKeys);
@@ -682,15 +708,22 @@ export const walletStorageWith =
       }
 
       const moved = merged ?? fromLocal.wallet;
+      // `localStorage` holds key bytes on the app's origin: until its copy is
+      // gone, the move is not done and the wallet does not load, and the next
+      // read tries again (nothing degrades, so it asks the store again)
+      const isLocalHoldingKeys = isMoveBlocked(move, fromLocal);
       try {
         await copyToStore(moved);
       } catch (error) {
-        isDegraded = true;
         reportFailureFor(moved)("Wallet not moved out of localStorage", error);
+        if (isLocalHoldingKeys) return UNAVAILABLE;
+        degradeWith(true);
         return found(moved);
       }
 
-      removeLocal(fromLocal.text);
+      if (!removeLocal(fromLocal.text) && isLocalHoldingKeys) {
+        return UNAVAILABLE;
+      }
       await clearMovedAside(movedKeys);
       return found(moved);
     };
@@ -736,7 +769,7 @@ export const walletStorageWith =
                 if (unsaved === state) settleKept(state);
                 return "store";
               } catch (error) {
-                isDegraded = true;
+                degradeWith(!isIndexedDbMissing(error));
                 reportFailureFor(state)("Wallet not saved to the store", error);
                 return fallBack(state);
               }
@@ -1142,11 +1175,22 @@ if (import.meta.vitest) {
       );
     });
 
-    it("answers local for a write that fell back to localStorage", async () => {
+    it("answers local-store-stale for a write that fell back after the store failed", async () => {
       const store = memoryStore(undefined);
       const storage = walletStorageWith(store)(memoryLocal(undefined));
       await storage.read();
       store.write.mockRejectedValueOnce(new Error("quota"));
+
+      expect(await storage.write(walletOf([account(1, "Wallet 1")]))).toBe(
+        "local-store-stale"
+      );
+    });
+
+    it("answers local for a write that fell back because IndexedDB is missing", async () => {
+      const store = memoryStore(undefined);
+      store.read.mockRejectedValue(new Error("indexedDB is not available"));
+      const storage = walletStorageWith(store)(memoryLocal(undefined));
+      await storage.read();
 
       expect(await storage.write(walletOf([account(1, "Wallet 1")]))).toBe(
         "local"

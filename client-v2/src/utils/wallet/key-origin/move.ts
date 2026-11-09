@@ -595,6 +595,54 @@ if (import.meta.vitest) {
         expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
       });
 
+      it("a store that does not take the keyless record keeps the wallet unavailable until a read finishes the move", async () => {
+        const record = walletOf(accountsOf(2));
+        const store = memoryStore(record);
+        store.write.mockRejectedValueOnce(new Error("quota"));
+        const { frame, kept } = fakeKeyPage();
+        const storage = walletStorageWith(store)(memoryLocal(undefined));
+
+        const first = await storage.readMovingKeys(moveKeysWith(frame));
+
+        expect(first).toEqual({ kind: "unavailable" });
+        expect(store.held()).toEqual(record);
+        expect(kept.size).toBe(2);
+
+        const second = await storage.readMovingKeys(moveKeysWith(frame));
+
+        expect(second).toEqual({
+          kind: "wallet",
+          wallet: keyless(record),
+          setAside: 0,
+        });
+        expect(store.held()).toEqual(keyless(record));
+      });
+
+      it("a store that does not take a localStorage wallet keeps its keys in localStorage and the wallet unavailable", async () => {
+        const record = walletOf(accountsOf(1));
+        const store = memoryStore(undefined);
+        store.write.mockRejectedValueOnce(new Error("quota"));
+        const text = JSON.stringify(record);
+        const local = memoryLocal(text);
+        const { frame } = fakeKeyPage();
+        const storage = walletStorageWith(store)(local);
+
+        const first = await storage.readMovingKeys(moveKeysWith(frame));
+
+        expect(first).toEqual({ kind: "unavailable" });
+        expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
+
+        // Not degraded: the next read asks the store again and finishes
+        const second = await storage.readMovingKeys(moveKeysWith(frame));
+
+        expect(second).toEqual({
+          kind: "wallet",
+          wallet: keyless(record),
+          setAside: 0,
+        });
+        expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+      });
+
       it("moves the valid keys of set-aside accounts, clears their bytes, and keeps the rest as it was", async () => {
         const [account] = accountsOf(1);
         const { kp: damagedKp, publicKey: damagedKey } = realKey();

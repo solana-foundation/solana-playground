@@ -709,11 +709,14 @@ class _PgWallet {
   /**
    * Remove the account at the given index, then its key.
    *
-   * The key goes only once the record without the account is stored: a key
-   * dropped under a record that still lists its account leaves an account
-   * with no key on reload. A record that could not be stored keeps the key
-   * (the user is told the save failed); a key that could not be dropped is
-   * reported and the user is told.
+   * The key goes only once every record that could bring the account back
+   * is stored without it: a key dropped under a record that still lists its
+   * account leaves an account with no key on reload. A save that landed in
+   * `localStorage` while the store may still hold the account
+   * (`local-store-stale`) keeps the key, since the next read merges the
+   * account back; so does a save that landed nowhere (the user is told it
+   * failed). A key that could not be dropped is reported and the user is
+   * told.
    *
    * @param index account index
    */
@@ -735,6 +738,7 @@ class _PgWallet {
       tell("save-failed");
       return;
     }
+    if (outcome === "local-store-stale") return;
     try {
       await signerProvider.forgetKey(removed.publicKey);
     } catch (error) {
