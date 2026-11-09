@@ -13,6 +13,7 @@ import {
 import { keyOriginFor } from "../../utils/wallet/key-origin/origin";
 import {
   isPanelMessage,
+  PANEL_LABEL,
   type PanelMessage,
   type ThemeTokens,
 } from "../../utils/wallet/key-origin/protocol";
@@ -37,12 +38,6 @@ export const KeyPanelUnavailable = ({ className }: { className?: string }) => (
     {KEY_PANEL_UNAVAILABLE}
   </p>
 );
-
-/** The label of each panel's button: the key page draws the same words */
-const LABEL: Record<KeyPanelRoute["mode"], string> = {
-  import: "Import keypair",
-  export: "Save keypair",
-};
 
 /**
  * How far the focus ring reaches past the button (`ring-3`); the frame is that
@@ -295,7 +290,7 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
         // theme's at once, not the first frame of a fade
         className="invisible transition-none"
       >
-        {LABEL[action]}
+        {PANEL_LABEL[action]}
       </Button>
       <span
         ref={hoverRef}
@@ -309,7 +304,7 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
       />
       <iframe
         ref={frameRef}
-        title={LABEL[action]}
+        title={PANEL_LABEL[action]}
         sandbox="allow-scripts allow-same-origin allow-downloads"
         scrolling="no"
         className="absolute border-0 bg-transparent"

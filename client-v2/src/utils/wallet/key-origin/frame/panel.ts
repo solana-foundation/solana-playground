@@ -5,6 +5,7 @@ import {
   isThemeTokens,
   type KeyReply,
   type KeyRequest,
+  PANEL_LABEL,
   type PanelMessage,
   type ThemeTokens,
 } from "../protocol";
@@ -199,11 +200,6 @@ export const escapeHandler =
 /** How long a key file's `blob:` URL outlives the click that downloads it */
 const REVOKE_AFTER_MS = 10_000;
 
-const LABEL: Record<PanelRoute["mode"], string> = {
-  import: "Import keypair",
-  export: "Save keypair",
-};
-
 /**
  * Draws the panel's one button and runs it once the app's port arrives. The
  * button stays disabled until then, since its result has nowhere to go.
@@ -224,7 +220,7 @@ export const runPanelWith =
 
     const button = doc.createElement("button");
     button.type = "button";
-    button.textContent = LABEL[route.mode];
+    button.textContent = PANEL_LABEL[route.mode];
     button.disabled = true;
     doc.body.append(button);
 

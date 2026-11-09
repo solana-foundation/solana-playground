@@ -155,6 +155,15 @@ export const isKeyHandshake = (x: unknown): x is KeyHandshake =>
   typeof x.version === "number";
 
 /** The design tokens the key page's panel button is drawn with */
+/**
+ * The label of each panel's button. The key page draws it, and the app's
+ * hidden sizing button carries the same words, so both reserve one width
+ */
+export const PANEL_LABEL: Record<"import" | "export", string> = {
+  import: "Import keypair",
+  export: "Save keypair",
+};
+
 export const THEME_TOKENS = [
   "bg",
   "fg",
