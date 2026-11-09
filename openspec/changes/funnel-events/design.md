@@ -55,11 +55,7 @@ See [proposal.md](proposal.md), "Why". Facts this design rests on, read on
 - Moving legacy code into the slices. The legacy roots import the slices'
   trackers and call `tracker.track` without a scope, which the telemetry
   spec allows for code outside React.
-- IDL, share and the Build and Interact screens' control events
-  (`wbdi-flow`). The outcome events of Build, an instruction call and an
-  applied assistant patch are goals (HOO-2598): they live in legacy roots
-  the slice rule never reached, so no audit found them missing until
-  HOO-2411's.
+- Build, IDL, Interact, tutorial, assistant turn and share events.
 - Page views: GA4's Enhanced Measurement sends `page_view` on every history
   change once "page changes based on browser history events" is on in GA4
   admin (HOO-2409). No code and no redaction.
@@ -79,43 +75,14 @@ code. `slice-structure.test.ts` catches a renamed or removed name.
 ### The funnel table is the step-to-name map, checked by the slice test
 
 `slice-structure.test.ts` already parses every `createTracker<...>()` map
-with the TypeScript AST. It gains a collector of every declared name in any
-non-test source file under `src/`: the slices, and the legacy roots, which
-hold trackers of their own (`utils/explorer/telemetry.ts`) and whose steps
-the slice rule never checked. One test reads the table from
-`openspec/specs/client-v2-funnels/spec.md`, or from this change's delta
+with the TypeScript AST. It gains a collector of every declared name under
+`features/`, `widgets/` and `entities/` (`tutorial-flow-v2` declares its
+tutorial events in `entities/tutorial`), and one test that reads the table
+from `openspec/specs/client-v2-funnels/spec.md`, or from this change's delta
 while the main spec does not exist. It takes the backticked names of the
-Events and Failure events columns and fails on each one no tracker
-declares, unless the row's Source is `GA4` or starts with `pending (`. The
-same names must also appear double-quoted in some non-test source file: a
-map declares its keys bare, so a quoted name is where a `track` call sends
-it, and a declared event nothing sends fails. A row whose cells are not five
-fails loudly, since a stray pipe would shift Source and hide the row. A
-second test fails on a step whose Failure events cell has no backticked
-name and does not start with `none:`, so each step says how it fails or why
-it cannot. The Code column is for agents and reviewers; the test does not
-read it.
-
-### Build and instruction-call events are sent from the shared code
-
-The `build` command is what the Build stage, the terminal, the assistant and
-a tutorial's build act all run, and `runCall` is the Interact stage's only
-send, so the events go there, through trackers of two new slices,
-`features/program-build` (`build`) and `features/program-interact`
-(`interact`), the slices `wbdi-flow` names for these screens. Each holds only
-its `model/telemetry.ts` for now; `wbdi-flow` grows them. The names and
-parameters are `wbdi-flow`'s "Build telemetry" and "Interact telemetry", plus
-`interact_succeeded`: a funnel needs the success as its own event, and
-`interact_sent` minus the confirm failures is not one GA4 can chart.
-`interact_failed`'s `validation` and `simulation` phases wait for the
-Simulate task that adds them.
-
-### The patch is counted after the write
-
-`assistant_approval_answered` is the user's answer; whether the file was
-written is the `write_file` tool's, after `bridge.applyPatch` resolves or
-throws. Both new events join the `assistant` tracker, the slice that owns the
-assistant's other events.
+Events column and fails on each one no tracker declares, unless the row's
+Source is `GA4` or starts with `pending (`. The Code column is for agents
+and reviewers; the test does not read it.
 
 The rows this change adds start as `pending (funnel-events)`; each
 implementing task replaces its row's mark with the slice.

@@ -10,6 +10,41 @@
 
 **Spec:** `openspec/changes/funnel-events/specs/client-v2-funnels/spec.md`, `specs/client-v2-build/spec.md`, `specs/client-v2-interact/spec.md`, `specs/client-v2-assistant-usage/spec.md`; `design.md`, "The funnel table is the step-to-name map" and the two HOO-2598 sections.
 
+## Design (kept here, not in design.md: an umbrella task leaves it closed)
+
+#### The funnel check reads both columns, over all of `src/`
+
+`declaredEvents` collects every `createTracker<...>()` key in any non-test
+source file under `src/`, legacy roots included (`utils/explorer/telemetry.ts`
+holds one). Each named event must also appear double-quoted in some non-test
+source file: a map declares its keys bare, so a quoted name is where a `track`
+call sends it. A step whose Failure events cell names no event and does not
+start with `none:` fails, and a row that is not five cells fails loudly.
+
+#### Build and instruction-call events are sent from the shared code
+
+The `build` command is what the Build stage, the terminal, the assistant and
+a tutorial's build act all run, and `runCall` is the Interact stage's only
+send, so the events go there, through trackers of two new slices,
+`features/program-build` (`build`) and `features/program-interact`
+(`interact`), the slices `wbdi-flow` names for these screens. Each holds only
+its `model/telemetry.ts` for now; `wbdi-flow` grows them. The names and
+parameters are `wbdi-flow`'s "Build telemetry" and "Interact telemetry", plus
+`interact_succeeded`: a funnel needs the success as its own event, and
+`interact_sent` minus the confirm failures is not one GA4 can chart.
+`interact_failed`'s `validation` and `simulation` phases wait for the
+Simulate task that adds them.
+
+#### The patch is counted after the write
+
+`assistant_approval_answered` is the user's answer; whether the file was
+written is the `write_file` tool's, after `bridge.applyPatch` resolves or
+throws. Both new events join the `assistant` tracker, the slice that owns the
+assistant's other events.
+
+The rows this change adds start as `pending (funnel-events)`; each
+implementing task replaces its row's mark with the slice.
+
 ## Global Constraints
 
 - Event names start with a prefix registered in `shared/lib/telemetry/prefixes.ts`, at most 40 characters; parameters are primitives.
@@ -78,7 +113,7 @@
 - Produces: `assistant_patch_written: NoParams`, `assistant_patch_write_failed: {reason: "limit" | "other"}`; `limit` when the error is `ExplorerLimitError` (by `name`, the tests mock the explorer).
 
 - [ ] Tests: allow + write → written once; `applyPatch` rejects with a limit error → failed `limit`; other error → `other`; deny → neither.
-- [ ] Implement around `bridge.applyPatch`; import `assistantTelemetry` from `@/widgets/assistant` unless that cycles, else from its `model/telemetry` with a comment why.
+- [ ] Implement around `bridge.applyPatch`; import `assistantTelemetry` from `@/widgets/assistant/model/telemetry`: the barrel loads the UI and the utils barrel, and the suites importing these tools fail to load (comment at the import).
 - [ ] Run tests; commit `feat(client-v2): count an applied assistant patch (HOO-2598)`.
 
 ### Task 5: Close out

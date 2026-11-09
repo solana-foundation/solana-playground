@@ -3,10 +3,11 @@ import { bindToolFor } from "@/entities/agent-tools";
 import { formatSol } from "@/features/deploy";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
-// The tracker's own module, not the widget's barrel, a deliberate exception to
-// "import through the public API": the barrel brings the widget's UI and the
-// utils barrel into this model module (its tests then fail to load), and its
-// `useTurn` reaches `provider`, which imports these tools
+// The tracker's own module, not the widget's barrel: the
+// barrel loads the widget's UI and the utils barrel into this model module,
+// and every suite that imports these tools (tools, tools-registry, the
+// composer's) then fails to load. Back to `@/widgets/assistant` once the
+// tracker has an entry of its own or this module moves into a slice
 import { assistantTelemetry } from "@/widgets/assistant/model/telemetry";
 
 import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
