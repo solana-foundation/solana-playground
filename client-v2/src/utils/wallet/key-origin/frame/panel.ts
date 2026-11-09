@@ -8,7 +8,7 @@ import {
   type PanelMessage,
   type ThemeTokens,
 } from "../protocol";
-import { base58Encode } from "./handler";
+import { base58Encode, reportFailure } from "./handler";
 import type { KeyStore } from "./store";
 
 /** What the fragment asks the panel to show */
@@ -30,9 +30,11 @@ export const decodeTheme = (encoded: string | null): ThemeTokens => {
     const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
     const tokens: unknown = JSON.parse(new TextDecoder().decode(bytes));
     return isThemeTokens(tokens) ? tokens : {};
-  } catch {
+  } catch (error) {
     // A fragment that is not base64 JSON: the panel draws in its own default
-    // colours, which a bad theme must not stop it from showing
+    // colours, which a bad theme must not stop it from showing. Only the
+    // error's name is logged, never the fragment
+    reportFailure(error);
     return {};
   }
 };
@@ -81,8 +83,10 @@ export const keyFileBytes = (text: string) => {
   try {
     const parsed: unknown = JSON.parse(text);
     return isSecretKey(parsed) ? parsed : undefined;
-  } catch {
-    // The parser's message quotes the file, which is the key: never pass it on
+  } catch (error) {
+    // The parser's message quotes the file, which is the key: never pass it
+    // on. `reportFailure` logs the error's name alone
+    reportFailure(error);
     return undefined;
   }
 };
@@ -210,7 +214,8 @@ const LABEL: Record<PanelRoute["mode"], string> = {
  * over, a running panel in the key page's document
  */
 export const runPanelWith =
-  (handle: (request: KeyRequest) => Promise<KeyReply>, store: KeyStore) =>
+  (handle: (request: KeyRequest) => Promise<KeyReply>) =>
+  (store: KeyStore) =>
   (route: PanelRoute, connected: Promise<MessagePort>) => {
     const doc = document;
     const importKeyFile = importKeyFileWith(handle);

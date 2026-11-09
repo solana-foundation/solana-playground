@@ -46,7 +46,7 @@ const startPanelWith =
       received.push(event.data);
     closers.push(() => channel.port2.close());
     const connected = deferred<MessagePort>();
-    runPanelWith(handle, store)(route, connected.promise);
+    runPanelWith(handle)(store)(route, connected.promise);
     const button = document.querySelector("button");
     const input = document.querySelector<HTMLInputElement>("input[type=file]");
     if (!button || !input) throw new Error("the panel drew no button or input");

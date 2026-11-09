@@ -2,6 +2,7 @@
 
 import * as ed25519 from "@noble/ed25519";
 
+import { createLogger } from "../../../shared/lib/logger";
 import { publicKeyOf } from "../signer-provider";
 import type { SerializedWalletState } from "../types";
 import type { KeyFrame } from "./client";
@@ -27,6 +28,8 @@ interface Moved {
   keys: number[][];
 }
 
+const log = createLogger("wallet:key-move");
+
 const SECRET_KEY_LENGTH = 64;
 const PUBLIC_KEY_LENGTH = 32;
 
@@ -47,9 +50,13 @@ const isValidKey = async (kp: number[]) => {
       Uint8Array.from(kp.slice(0, PUBLIC_KEY_LENGTH))
     );
     return own.every((byte, i) => byte === kp[PUBLIC_KEY_LENGTH + i]);
-  } catch {
+  } catch (error) {
     // noble refuses bytes it cannot read as a seed: not a key, so the stray
-    // copy is left out of the move and stays in the set-aside record
+    // copy is left out of the move and stays in the set-aside record. Only
+    // the error's name is logged: its message may quote the bytes
+    log.warn("Stray key not read as ed25519", {
+      context: { error: error instanceof Error ? error.name : typeof error },
+    });
     return false;
   }
 };

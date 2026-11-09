@@ -8,8 +8,7 @@ import { handlerWith, reportFailure } from "./handler";
 import { panelRouteOf, runPanelWith } from "./panel";
 import { indexedDbKeyStore, KEY_DB_NAME, requestPersistence } from "./store";
 
-const appOrigin = appOriginFor(
-  process.env.REACT_APP_WALLET_APP_ORIGIN,
+const appOrigin = appOriginFor(process.env.REACT_APP_WALLET_APP_ORIGIN)(
   window.location
 );
 
@@ -25,7 +24,7 @@ if (appOrigin && window.parent !== window && (isHidden || route)) {
   // evict it under storage pressure
   void requestPersistence(navigator.storage).catch(reportFailure);
   const handle = handlerWith(store);
-  const connected = awaitPortFor(appOrigin, window.parent)(window);
-  if (route) runPanelWith(handle, store)(route, connected);
+  const connected = awaitPortFor(appOrigin)(window.parent)(window);
+  if (route) runPanelWith(handle)(store)(route, connected);
   else void connected.then(serveWith(handle));
 }

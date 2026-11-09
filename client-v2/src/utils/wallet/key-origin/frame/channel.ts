@@ -19,7 +19,8 @@ import { reportFailure } from "./handler";
  * @returns for the key page's window, the port the app handed over
  */
 export const awaitPortFor =
-  (appOrigin: string, parent: Window) =>
+  (appOrigin: string) =>
+  (parent: Window) =>
   (self: Window): Promise<MessagePort> =>
     new Promise((resolve) => {
       const handleMessage = (event: MessageEvent) => {
@@ -112,7 +113,7 @@ if (import.meta.vitest) {
 
     it("posts ready to the app origin only", () => {
       const { posted, parent, self } = windows();
-      void awaitPortFor(APP, parent)(self);
+      void awaitPortFor(APP)(parent)(self);
       expect(posted).toEqual([
         {
           message: {
@@ -126,7 +127,7 @@ if (import.meta.vitest) {
 
     it("takes the port of the app's handshake and ignores the rest", async () => {
       const { parent, self } = windows();
-      const connected = awaitPortFor(APP, parent)(self);
+      const connected = awaitPortFor(APP)(parent)(self);
       let settled = false;
       void connected.then(() => (settled = true));
 

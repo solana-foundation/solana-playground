@@ -287,7 +287,8 @@ export const keyPanelUrl =
  * @throws {KeyFrameUnavailable} when the panel does not answer in time
  */
 export const connectKeyPanel =
-  (origin: string, timeoutMs: number) =>
+  (origin: string) =>
+  (timeoutMs: number) =>
   (frame: HTMLIFrameElement, signal: AbortSignal) =>
   (src: string): Promise<MessagePort> => {
     const host = frame.ownerDocument.defaultView ?? window;
@@ -306,8 +307,7 @@ const keyFrameWith = (requestTimeoutMs: number) => {
   let connection: Promise<KeyFrame> | undefined;
   return (): Promise<KeyFrame> => {
     if (connection) return connection;
-    const origin = keyOriginFor(
-      process.env.REACT_APP_WALLET_KEY_ORIGIN,
+    const origin = keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN)(
       window.location
     );
     if (!origin) {
@@ -620,7 +620,7 @@ if (import.meta.vitest) {
     it("connects a panel frame the caller owns, and leaves it on a timeout", async () => {
       const frame = document.createElement("iframe");
       document.body.append(frame);
-      const connected = connectKeyPanel(ORIGIN, 1000)(
+      const connected = connectKeyPanel(ORIGIN)(1000)(
         frame,
         new AbortController().signal
       )(ORIGIN + "/wallet-keys.html#panel/import");
@@ -645,7 +645,7 @@ if (import.meta.vitest) {
       const silent = document.createElement("iframe");
       document.body.append(silent);
       const timedOut = expect(
-        connectKeyPanel(ORIGIN, 1000)(silent, new AbortController().signal)(
+        connectKeyPanel(ORIGIN)(1000)(silent, new AbortController().signal)(
           ORIGIN + "/wallet-keys.html"
         )
       ).rejects.toBeInstanceOf(KeyFrameUnavailable);
@@ -658,7 +658,7 @@ if (import.meta.vitest) {
       const frame = document.createElement("iframe");
       document.body.append(frame);
       const controller = new AbortController();
-      const stopped = connectKeyPanel(ORIGIN, 1000)(frame, controller.signal)(
+      const stopped = connectKeyPanel(ORIGIN)(1000)(frame, controller.signal)(
         ORIGIN + "/wallet-keys.html#panel/import"
       );
       const target = frame.contentWindow as Window;

@@ -24,7 +24,7 @@ const realOrigin = (origin: string) => (origin === "null" ? null : origin);
  * @param here where the page is
  * @returns the origin, or `null` when there is none or the setting is unusable
  */
-const originFor = (setting: string | undefined, here: Location | URL) => {
+const originFor = (setting: string | undefined) => (here: Location | URL) => {
   // eslint-disable-next-line unicorn/no-null -- "no origin" is the caller's switch
   if (!setting) return null;
   try {
@@ -51,47 +51,40 @@ const originFor = (setting: string | undefined, here: Location | URL) => {
  * @param here where the app page is
  * @returns the origin of the key page, or `null` when keys stay in the app
  */
-export const keyOriginFor = (
-  setting: string | undefined,
-  here: Location | URL
-) => originFor(setting, here);
+export const keyOriginFor = originFor;
 
 /**
  * @param setting the app origin setting
  * @param here where the key page is
  * @returns the origin of the app the key page serves, or `null` when unset
  */
-export const appOriginFor = (
-  setting: string | undefined,
-  here: Location | URL
-) => originFor(setting, here);
+export const appOriginFor = originFor;
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("utils/wallet/key-origin/origin", () => {
     it("swaps the loopback host", () => {
-      expect(keyOriginFor("loopback", new URL("http://localhost:3006/x"))).toBe(
+      expect(keyOriginFor("loopback")(new URL("http://localhost:3006/x"))).toBe(
         "http://127.0.0.1:3006"
       );
-      expect(keyOriginFor("loopback", new URL("http://127.0.0.1:3006/x"))).toBe(
+      expect(keyOriginFor("loopback")(new URL("http://127.0.0.1:3006/x"))).toBe(
         "http://localhost:3006"
       );
-      expect(appOriginFor("loopback", new URL("https://localhost/x"))).toBe(
+      expect(appOriginFor("loopback")(new URL("https://localhost/x"))).toBe(
         "https://127.0.0.1"
       );
     });
 
     it("gives nothing for no setting", () => {
       const here = new URL("http://localhost:3006/");
-      expect(keyOriginFor(undefined, here)).toBeNull();
-      expect(keyOriginFor("", here)).toBeNull();
+      expect(keyOriginFor(undefined)(here)).toBeNull();
+      expect(keyOriginFor("")(here)).toBeNull();
     });
 
     it("takes the origin of a URL setting", () => {
       expect(
-        keyOriginFor(
-          "https://wallet-keys.example.com/a",
+        keyOriginFor("https://wallet-keys.example.com/a")(
           new URL("http://localhost:3006/")
         )
       ).toBe("https://wallet-keys.example.com");
@@ -104,18 +97,18 @@ if (import.meta.vitest) {
         "file:///tmp/a",
         "blob:null/1",
       ]) {
-        expect(keyOriginFor(setting, here)).toBeNull();
-        expect(appOriginFor(setting, here)).toBeNull();
+        expect(keyOriginFor(setting)(here)).toBeNull();
+        expect(appOriginFor(setting)(here)).toBeNull();
       }
-      expect(keyOriginFor("loopback", new URL("file:///tmp/a"))).toBeNull();
+      expect(keyOriginFor("loopback")(new URL("file:///tmp/a"))).toBeNull();
     });
 
     it("gives nothing for loopback on another host or a bad URL", () => {
       expect(
-        keyOriginFor("loopback", new URL("https://playground.example.com/"))
+        keyOriginFor("loopback")(new URL("https://playground.example.com/"))
       ).toBeNull();
       expect(
-        keyOriginFor("not a url", new URL("http://localhost/"))
+        keyOriginFor("not a url")(new URL("http://localhost/"))
       ).toBeNull();
     });
   });

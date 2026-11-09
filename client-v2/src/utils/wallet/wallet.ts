@@ -58,7 +58,7 @@ const defaultState: WalletState = {
 // `location`, so both are checked
 const here = typeof window === "undefined" ? undefined : window.location;
 const keyOrigin = here
-  ? keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN, here)
+  ? keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN)(here)
   : undefined;
 
 // Logged here, once per load, not in `origin.ts`: the key page imports that

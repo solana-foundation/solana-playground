@@ -325,14 +325,13 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
 };
 
 const connectPanel = (origin: string) =>
-  connectKeyPanel(origin, HANDSHAKE_TIMEOUT_MS);
+  connectKeyPanel(origin)(HANDSHAKE_TIMEOUT_MS);
 
 /** The key page's panel on the build's key origin (`BaseKeyPanel`) */
 export const KeyPanel = (props: KeyPanelProps) => (
   <BaseKeyPanel
     {...props}
-    origin={keyOriginFor(
-      process.env.REACT_APP_WALLET_KEY_ORIGIN,
+    origin={keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN)(
       window.location
     )}
     connect={connectPanel}
