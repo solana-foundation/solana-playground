@@ -131,19 +131,19 @@ network returns. A failure with a network SHALL be reported to production
 monitoring once per stage per page load; a failure offline, a retry the
 returning network started, and a repeat SHALL only be logged.
 
-#### Scenario: The code does not arrive with a network
+#### Scenario: The code does not arrive with a network (manual)
 
 - **WHEN** the user opens Deploy online and its code fails to load
 - **THEN** the panel reads "Deploy couldn't load" with Try again and Reload
   page, and the failure is reported once
 
-#### Scenario: Try again fails too
+#### Scenario: Try again fails too (manual)
 
 - **WHEN** the user, online, presses Try again and the load fails again
 - **THEN** the panel tells the user to reload the page, and nothing more is
   reported
 
-#### Scenario: Offline, then the network returns
+#### Scenario: Offline, then the network returns (manual)
 
 - **WHEN** the user opens Build offline and its code fails to load
 - **THEN** the panel reads "Build needs a connection" with Try again only, and
