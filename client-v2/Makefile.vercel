@@ -71,12 +71,12 @@ endef
 dotenv = $(shell sed -n 's/^$(1)=//p' $(CLIENT_DIR)/.env 2>/dev/null | head -1 | tr -d '"'"'"'"')
 NEON_API_KEY ?= $(call dotenv,NEON_API_KEY)
 NEON_PROJECT_ID ?= $(call dotenv,NEON_PROJECT_ID)
-# An empty value counts as unset, so a stale `export VAR=` in a shell profile does not hide the file's value.
+# An empty value counts as unset; `override` because make ignores a plain assignment to a variable set empty on its command line.
 ifeq ($(strip $(VERCEL_DEPLOY_TEAM)),)
-VERCEL_DEPLOY_TEAM := $(call dotenv,VERCEL_DEPLOY_TEAM)
+override VERCEL_DEPLOY_TEAM := $(call dotenv,VERCEL_DEPLOY_TEAM)
 endif
 ifeq ($(strip $(VERCEL_DEPLOY_PROJECT_ID)),)
-VERCEL_DEPLOY_PROJECT_ID := $(call dotenv,VERCEL_DEPLOY_PROJECT_ID)
+override VERCEL_DEPLOY_PROJECT_ID := $(call dotenv,VERCEL_DEPLOY_PROJECT_ID)
 endif
 export NEON_API_KEY NEON_PROJECT_ID VERCEL_DEPLOY_TEAM VERCEL_DEPLOY_PROJECT_ID
 

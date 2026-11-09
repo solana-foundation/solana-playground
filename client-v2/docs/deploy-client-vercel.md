@@ -645,16 +645,18 @@ It refuses to run unless the linked project is the one
 `VERCEL_DEPLOY_PROJECT_ID` names ([One-time setup](#one-time-setup)).
 The team keeps that variable on its staging project, so the production
 database the Git integration deploys against is migrated only with that
-project's ID set for the run, and the checkout linked to it:
+project's ID set for the run, and the checkout linked to it. Linking also needs
+the team that owns that project, which is not the staging team:
 
 ```sh
-VERCEL_DEPLOY_PROJECT_ID=prj_… make vercel-link
+VERCEL_DEPLOY_TEAM=<production team> VERCEL_DEPLOY_PROJECT_ID=prj_… make vercel-link
 VERCEL_DEPLOY_PROJECT_ID=prj_… make migrate-production-db
 make vercel-link
 ```
 
 Skip the first `vercel-link` when `.vercel/project.json` already links that
-project. The last one links the staging project back, since the targets in
+project. Only linking reads the team, so the migration takes the project ID
+alone. The last one links the staging project back, since the targets in
 [One-time setup](#one-time-setup) step 5 refuse a link to another project.
 `deploy-client-to-vercel-production`, `deploy-client-to-vercel-prod-fast`,
 and `vercel-link-production` take the production project's ID the same way.

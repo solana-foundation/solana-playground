@@ -365,8 +365,8 @@ npx vercel env rm DATABASE_URL preview --yes
 ```
 
 Run from a directory linked to the project the Git integration deploys, which is not the staging project
-`VERCEL_DEPLOY_PROJECT_ID` holds: `VERCEL_DEPLOY_PROJECT_ID=prj_… make vercel-link` with that project's ID
-([Migrations](deploy-client-vercel.md#migrations)). For Preview the CLI may ask for a Git
+`VERCEL_DEPLOY_PROJECT_ID` holds: `VERCEL_DEPLOY_TEAM=<its team> VERCEL_DEPLOY_PROJECT_ID=prj_… make vercel-link`
+with that project's team and ID ([Migrations](deploy-client-vercel.md#migrations)). For Preview the CLI may ask for a Git
 branch; leave it empty, for every branch. The dashboard (Settings → Environment Variables) does the same. Leave `SYNC_ENABLED` off on
 Preview until step 16 has seen the database answer.
 
