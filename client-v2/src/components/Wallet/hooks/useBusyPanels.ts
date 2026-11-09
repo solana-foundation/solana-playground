@@ -1,8 +1,12 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { useBlockDismiss } from "@/widgets/overlays";
 
 /**
  * Whether any key panel in a dialog is busy, so the dialog holds its submit
- * meanwhile: a submit then would close the dialog and lose the panel's result
+ * and its dismissal (Escape, a press outside, the header's Close) meanwhile:
+ * either would close the dialog, and the panel's port with it, before the
+ * panel's result reaches the dialog
  *
  * @returns whether one is, and the `onBusy` to give each panel
  */
@@ -12,5 +16,12 @@ export const useBusyPanels = () => {
     (busy: boolean) => setCount((n) => Math.max(0, n + (busy ? 1 : -1))),
     []
   );
-  return { isBusy: count > 0, onBusy };
+  const isBusy = count > 0;
+  const blockDismiss = useBlockDismiss();
+  useEffect(() => {
+    if (!isBusy) return;
+    blockDismiss(true);
+    return () => blockDismiss(false);
+  }, [isBusy, blockDismiss]);
+  return { isBusy, onBusy };
 };

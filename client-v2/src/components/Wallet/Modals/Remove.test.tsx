@@ -35,6 +35,7 @@ vi.mock("../KeyPanel", () => ({
 }));
 
 vi.mock("@/widgets/overlays", () => ({
+  useBlockDismiss: () => () => {},
   ModalFrame: ({
     children,
     buttonProps,

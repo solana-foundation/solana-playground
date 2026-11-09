@@ -70,6 +70,7 @@ const IMPORTED = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 // The frame is the overlay system's; what is under test is the body, and
 // what Continue does.
 vi.mock("@/widgets/overlays", () => ({
+  useBlockDismiss: () => () => {},
   ModalFrame: ({
     children,
     buttonProps,

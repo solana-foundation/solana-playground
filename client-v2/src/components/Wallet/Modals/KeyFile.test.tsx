@@ -61,7 +61,10 @@ vi.mock("../KeyPanel", () => ({
   ),
 }));
 
+const blockDismiss = vi.hoisted(() => vi.fn());
+
 vi.mock("@/widgets/overlays", () => ({
+  useBlockDismiss: () => blockDismiss,
   ModalFrame: ({
     children,
     buttonProps,
@@ -141,6 +144,18 @@ describe("wallet ImportKey", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "panel busy" }));
     expect(isDoneDisabled()).toBe(true);
+  });
+
+  it("cannot be dismissed while the panel is busy, so the import is not lost", () => {
+    blockDismiss.mockClear();
+    const { unmount } = renderIn(<ImportKey />);
+    expect(blockDismiss).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "panel busy" }));
+    expect(blockDismiss).toHaveBeenLastCalledWith(true);
+
+    unmount();
+    expect(blockDismiss).toHaveBeenLastCalledWith(false);
   });
 });
 
