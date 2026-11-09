@@ -9,36 +9,31 @@ vi.hoisted(() => {
 });
 vi.mock("@/utils/package", () => ({ PgPackage: {} }));
 
-import BaseExportProject, { BaseOpenProjectLine } from "./BaseExportProject";
+import BaseExportProject, { exportRowCopyOf } from "./BaseExportProject";
 
 const button = () =>
   screen.getByRole<HTMLButtonElement>("button", {
     name: "Export project",
   });
 
-describe("BaseOpenProjectLine", () => {
+describe("exportRowCopyOf", () => {
   it("names the project Export takes", () => {
-    render(<BaseOpenProjectLine name="my-anchor-app" phone={false} />);
-
-    const line = screen.getByTestId("settings-open-project");
-    expect(line.textContent).toBe(
-      "Exports my-anchor-app, the project open now."
-    );
-    // Truncated on one line; the whole name stays in the title
-    expect(line.title).toBe(line.textContent);
+    expect(exportRowCopyOf("my-anchor-app")).toEqual({
+      name: "Export current project",
+      description: 'All files of "my-anchor-app" as a zip.',
+    });
   });
 
-  it("says when no project is open", () => {
-    render(<BaseOpenProjectLine phone={false} />);
-
-    expect(screen.getByTestId("settings-open-project").textContent).toBe(
-      "No project is open."
-    );
+  it("says why Export is disabled when no project is open", () => {
+    expect(exportRowCopyOf(undefined)).toEqual({
+      name: "Export current project",
+      description: "No project is open.",
+    });
   });
 });
 
 describe("BaseExportProject", () => {
-  it("reads Export: its row already says Export project and the zip", () => {
+  it("reads Export: its row already says Export current project and the zip", () => {
     render(<BaseExportProject name="my-anchor-app" onExport={vi.fn()} />);
 
     expect(button().textContent).toBe("Export");

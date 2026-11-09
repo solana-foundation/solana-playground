@@ -1,38 +1,25 @@
 import { ExportFile } from "@/components/Icons";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 
-interface BaseOpenProjectLineProps {
-  /** The open project, if any */
-  name?: string;
-  phone: boolean;
+/** The Export current project row's name and help line */
+export interface ExportRowCopy {
+  name: string;
+  description: string;
 }
 
 /**
- * The line above the Project section's buttons that names what Export
- * project takes, since the page shows no other sign of it (HOO-2691)
+ * The row's help line names the project Export takes, since the page shows
+ * no other sign of it (HOO-2691); without one, it says why Export is disabled.
  */
-export const BaseOpenProjectLine = ({
-  name,
-  phone,
-}: BaseOpenProjectLineProps) => {
-  const text = name
-    ? `Exports ${name}, the project open now.`
-    : "No project is open.";
-  return (
-    <p
-      data-testid="settings-open-project"
-      title={text}
-      className={cn(
-        "truncate text-xs text-muted-foreground",
-        phone && "text-control font-read"
-      )}
-    >
-      {text}
-    </p>
-  );
-};
+export const exportRowCopyOf = (
+  project: string | undefined
+): ExportRowCopy => ({
+  name: "Export current project",
+  description: project
+    ? `All files of "${project}" as a zip.`
+    : "No project is open.",
+});
 
 interface BaseExportProjectProps {
   /** The project to export; the button is disabled without one */
@@ -45,7 +32,7 @@ interface BaseExportProjectProps {
 /**
  * Settings › Export project: downloads the project as is. Its zip is what
  * Import › From files takes back. It reads "Export" because its row already
- * says "Export project" and "Every file as a zip".
+ * says "Export current project" and names the project its zip holds.
  */
 const BaseExportProject = ({
   name,

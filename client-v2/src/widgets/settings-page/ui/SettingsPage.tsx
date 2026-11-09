@@ -40,7 +40,7 @@ import type { SettingsSection } from "./BaseSettingsPage";
 import BaseSettingsPage from "./BaseSettingsPage";
 import BaseShortcuts from "./BaseShortcuts";
 import CodeSample from "./CodeSample";
-import ExportProject, { OpenProjectLine } from "./ExportProject";
+import ExportProject, { useExportRowCopy } from "./ExportProject";
 import NetworkSection from "./NetworkSection";
 import { SettingControl } from "./SettingControl";
 import SettingsBoundary from "./SettingsBoundary";
@@ -268,13 +268,13 @@ const Project = ({ phone, onImported }: ProjectProps) => {
     if (isImported(await PgView.setModal(dialog))) onImported();
   };
   const size = phone ? "default" : "sm";
+  // Names what Export takes: the page shows no other sign of it (HOO-2691)
+  const exportRow = useExportRowCopy();
   return (
     <>
-      {/* Names what Export takes: the page shows no other sign of it (HOO-2691) */}
-      <OpenProjectLine phone={phone} />
       <BaseSettingRow
-        name="Export project"
-        description="Every file as a zip."
+        name={exportRow.name}
+        description={exportRow.description}
         phone={phone}
         control={<ExportProject className={phone ? PHONE_BUTTON : undefined} />}
       />
