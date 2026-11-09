@@ -17,7 +17,7 @@ const slices = () =>
       .filter((slice) => existsSync(join(SRC, slice, "index.ts")));
   });
 
-/** The event maps passed to `createTracker<...>()` in `file`, `null` for one that is not a type literal */
+/** The event maps passed to `createTracker<...>()` in `file`, `undefined` for one that is not a type literal */
 const eventMaps = (file: string) => {
   const source = ts.createSourceFile(
     file,
@@ -51,7 +51,7 @@ const eventMaps = (file: string) => {
     source,
     literals: maps.map((map) => {
       const literal = resolve(map);
-      return literal && ts.isTypeLiteralNode(literal) ? literal : null;
+      return literal && ts.isTypeLiteralNode(literal) ? literal : undefined;
     }),
   };
 };
@@ -126,9 +126,9 @@ const TELEMETRY_LIB = join("shared", "lib", "telemetry");
  * source file anywhere under `src`: the slices and the legacy roots, whose
  * funnel steps the slice rule above never reached.
  */
-let declared: Set<string> | undefined;
+let declaredCache: Set<string> | undefined;
 const declaredEvents = (): Set<string> =>
-  (declared ??= new Set(
+  (declaredCache ??= new Set(
     filesUnder(SRC)
       .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
       .filter((file) => !file.startsWith(TELEMETRY_LIB))
@@ -166,7 +166,7 @@ interface FunnelRow {
 
 /** Backticked names in a table cell */
 const namesIn = (cell: string) =>
-  [...cell.matchAll(/`([a-z][a-z0-9_]*)`/g)].map((match) => match[1]);
+  Array.from(cell.matchAll(/`([a-z][a-z0-9_]*)`/g), (match) => match[1]);
 
 /** The rows of the funnel table, whose header starts `| Step | Events | Failure events |` */
 const funnelRows = (): FunnelRow[] => {
@@ -209,7 +209,7 @@ it.each(funnelRows().map((row) => [row.step, row] as const))(
     if (isUntracked(row)) return;
     const declared = declaredEvents();
     expect(
-      [...row.events, ...row.failures].filter((name) => !declared.has(name))
+      row.events.concat(row.failures).filter((name) => !declared.has(name))
     ).toEqual([]);
   }
 );
