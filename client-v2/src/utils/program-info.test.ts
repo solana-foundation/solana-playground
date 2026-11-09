@@ -185,6 +185,7 @@ describe("PgProgramInfo.fetch, edge cases", () => {
     rpc.getAccountInfo
       .mockResolvedValueOnce(programAccount)
       .mockResolvedValueOnce({ data: headerWith(1) })
+      // eslint-disable-next-line unicorn/no-null -- web3.js answers a missing account with null
       .mockResolvedValueOnce(null);
 
     const onChain = await PgProgramInfo.fetch(programId);
