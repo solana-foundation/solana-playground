@@ -143,9 +143,12 @@ const declaredEvents = (): Set<string> =>
   ));
 
 /**
- * Every double-quoted snake_case literal in a non-test source file: an event
- * name in quotes is a `track` call's (a map declares its keys bare), so a
- * declared name that never appears here is never sent
+ * Every snake_case string literal in a non-test source file, outside its
+ * in-source test block (`if (import.meta.vitest)`), whose expectations name
+ * events too: an event name in quotes is a `track` call's (a map declares its
+ * keys bare), so a declared name that never appears here is never sent.
+ * Literals, not `track` calls: some sends pass a name held elsewhere
+ * (`tutorialTelemetry.track(effect.name, ...)`)
  */
 let quotedCache: Set<string> | undefined;
 const quotedNames = (): Set<string> =>
@@ -153,15 +156,32 @@ const quotedNames = (): Set<string> =>
     filesUnder(SRC)
       .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
       .filter((file) => !file.startsWith(TELEMETRY_LIB))
-      .flatMap((file) =>
-        Array.from(
-          readFileSync(join(SRC, file), "utf8").matchAll(
-            /"([a-z][a-z0-9_]*)"/g
-          ),
-          (match) => match[1]
-        )
-      )
+      .flatMap((file) => sentLiterals(join(SRC, file)))
   ));
+
+/** The in-source test block's guard */
+const isInSourceTests = (node: ts.Node) =>
+  ts.isIfStatement(node) && node.expression.getText() === "import.meta.vitest";
+
+/** The snake_case string literals in `file`, its in-source tests left out */
+const sentLiterals = (file: string): string[] => {
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true
+  );
+  const names: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (isInSourceTests(node)) return;
+    if (ts.isStringLiteralLike(node) && /^[a-z][a-z0-9_]*$/.test(node.text)) {
+      names.push(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return names;
+};
 
 /** The funnel table: the main spec once archived, the change's delta until then */
 const FUNNEL_SPECS = [

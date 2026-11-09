@@ -87,85 +87,87 @@ const getIdlErrors = (): IdlError[] => {
 const toStored = <T>(value: T | undefined) => value ?? null;
 
 /**
- * Sends the call and reports how it went, sending its events on the way.
+ * Sends a call to `cluster` and reports how it went, sending its events on
+ * the way.
  *
- * @param ix the instruction to call
  * @param cluster the cluster the call goes to, for its events
- * @returns the call's outcome
+ * @returns a function that sends `ix` and resolves to the call's outcome
  */
-const send = async (
-  ix: GeneratableInstruction,
-  cluster: InteractCluster
-): Promise<CallOutcome> => {
-  let signature: string | undefined;
-  // Whether this call's outcome event went out: a throw after it is not the call's
-  let reported = false;
-  // The connection the call goes out on: a network switch while the wallet
-  // asks must not confirm a landed call on another cluster as failed
-  const connection = PgConnection.current;
-  // The IDL of the program the call went to, read before a switch can move it
-  const idlErrors = getIdlErrors();
-  try {
-    signature = await PgCommon.transition(
-      PgProgramInteraction.test(ix, PgProgramInteraction.getAnchorProgram())
-    );
-    interactTelemetry.track("interact_sent", { cluster });
-    const confirmed = await PgTx.confirm(signature, { connection });
-    const ok = !confirmed?.err;
-    if (ok) interactTelemetry.track("interact_succeeded", { cluster });
-    else
-      interactTelemetry.track("interact_failed", { cluster, phase: "confirm" });
-    reported = true;
-    const logs = await readLogsWith(connection)(signature);
-    return {
-      instruction: ix.name,
-      ok,
-      signature,
-      logs,
-      failingLine: ok
-        ? undefined
-        : programFailureLine(logs) ??
-          nameTxErrorWith(idlErrors)(confirmed?.err) ??
-          failingLineWith(`Transaction failed: ${describe(confirmed?.err)}`)(
-            logs
-          ),
-    };
-  } catch (e: any) {
-    // A signature with a thrown error: sent, but its confirmation is unknown
-    if (!reported) {
-      if (!signature && isWalletRejection(e)) {
-        interactTelemetry.track("interact_cancelled", { cluster });
-      } else {
+const sendWith =
+  (cluster: InteractCluster) =>
+  async (ix: GeneratableInstruction): Promise<CallOutcome> => {
+    let signature: string | undefined;
+    // Whether this call's outcome event went out: a throw after it is not the call's
+    let isReported = false;
+    // The connection the call goes out on: a network switch while the wallet
+    // asks must not confirm a landed call on another cluster as failed
+    const connection = PgConnection.current;
+    // The IDL of the program the call went to, read before a switch can move it
+    const idlErrors = getIdlErrors();
+    try {
+      signature = await PgCommon.transition(
+        PgProgramInteraction.test(ix, PgProgramInteraction.getAnchorProgram())
+      );
+      interactTelemetry.track("interact_sent", { cluster });
+      const confirmed = await PgTx.confirm(signature, { connection });
+      const ok = !confirmed?.err;
+      if (ok) interactTelemetry.track("interact_succeeded", { cluster });
+      else
         interactTelemetry.track("interact_failed", {
           cluster,
-          phase: signature ? "confirm" : "send",
+          phase: "confirm",
         });
-      }
-    }
-    const raw: string = e?.message ?? String(e);
-    // An RPC refusal is named rather than shown in web3's words, which tell
-    // a learner to catch the exception
-    const named = nameSendErrorWith(idlErrors)(e);
-    const message = KNOWN_ERRORS[raw] ?? named ?? raw;
-    // A preflight failure (`SendTransactionError`) carries the simulation's
-    // logs; anything else is not the program's answer and is logged
-    const logs: string[] = Array.isArray(e?.logs) ? e.logs : [];
-    if (!logs.length)
-      log.warn("A call failed before the program answered", {
-        context: { instruction: ix.name, error: e },
-      });
-    return {
-      instruction: ix.name,
-      ok: false,
-      signature,
-      logs,
+      isReported = true;
+      const logs = await readLogsWith(connection)(signature);
+      return {
+        instruction: ix.name,
+        ok,
+        signature,
+        logs,
+        failingLine: ok
+          ? undefined
+          : programFailureLine(logs) ??
+            nameTxErrorWith(idlErrors)(confirmed?.err) ??
+            failingLineWith(`Transaction failed: ${describe(confirmed?.err)}`)(
+              logs
+            ),
+      };
+    } catch (e: any) {
       // A signature with a thrown error: sent, but its confirmation is unknown
-      failingLine: signature
-        ? `Could not confirm the call: ${message}`
-        : programFailureLine(logs) ?? named ?? failingLineWith(message)(logs),
-    };
-  }
-};
+      if (!isReported) {
+        if (!signature && isWalletRejection(e)) {
+          interactTelemetry.track("interact_cancelled", { cluster });
+        } else {
+          interactTelemetry.track("interact_failed", {
+            cluster,
+            phase: signature ? "confirm" : "send",
+          });
+        }
+      }
+      const raw: string = e?.message ?? String(e);
+      // An RPC refusal is named rather than shown in web3's words, which tell
+      // a learner to catch the exception
+      const named = nameSendErrorWith(idlErrors)(e);
+      const message = KNOWN_ERRORS[raw] ?? named ?? raw;
+      // A preflight failure (`SendTransactionError`) carries the simulation's
+      // logs; anything else is not the program's answer and is logged
+      const logs: string[] = Array.isArray(e?.logs) ? e.logs : [];
+      if (!logs.length)
+        log.warn("A call failed before the program answered", {
+          context: { instruction: ix.name, error: e },
+        });
+      return {
+        instruction: ix.name,
+        ok: false,
+        signature,
+        logs,
+        // A signature with a thrown error: sent, but its confirmation is unknown
+        failingLine: signature
+          ? `Could not confirm the call: ${message}`
+          : programFailureLine(logs) ?? named ?? failingLineWith(message)(logs),
+      };
+    }
+  };
 
 /** Calls under way: outside the form, which a chip or a stage switch remounts */
 let inFlight = 0;
@@ -208,7 +210,7 @@ export const runCall = async (
   print(PgTerminal.info(`Calling \`${ix.name}\`...`));
 
   moveInFlight(1);
-  const outcome = await send(ix, cluster ?? "custom").finally(() =>
+  const outcome = await sendWith(cluster ?? "custom")(ix).finally(() =>
     moveInFlight(-1)
   );
 

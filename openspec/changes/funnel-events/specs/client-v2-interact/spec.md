@@ -1,5 +1,14 @@
 # Spec Delta
 
+## Purpose
+
+What the product reports when a user calls an instruction, so the funnel
+can count calls that land and tell a refused wallet from a failed call.
+
+Every scenario is marked `(manual)`: events leave the browser only through
+GA4, which no Playwright test reads. A unit test through the memory provider
+holds each one, and each can be checked in GA4's DebugView.
+
 ## ADDED Requirements
 
 ### Requirement: Instruction call events
@@ -19,25 +28,25 @@ names none. No event carries the instruction name, the program id, an
 address or a signature. These are `wbdi-flow`'s "Interact telemetry" events;
 its `validation` and `simulation` phases arrive with its Simulate task.
 
-#### Scenario: A call that lands
+#### Scenario: A call that lands (manual)
 
 - **WHEN** a call on Devnet confirms without an error
 - **THEN** the memory provider records `interact_sent` and then
   `interact_succeeded`, each with `{ cluster: "devnet" }`
 
-#### Scenario: A failed confirmation is tracked
+#### Scenario: A failed confirmation is tracked (manual)
 
 - **WHEN** a sent transaction fails on Devnet
 - **THEN** the memory provider records `interact_sent`, then
   `interact_failed` with `{ cluster: "devnet", phase: "confirm" }`
 
-#### Scenario: The user says no in the wallet
+#### Scenario: The user says no in the wallet (manual)
 
 - **WHEN** the wallet throws "User rejected the request." before signing
 - **THEN** the memory provider records `interact_cancelled` with
   `{ cluster: "devnet" }` and no `interact_failed`
 
-#### Scenario: A call the wallet never sends
+#### Scenario: A call the wallet never sends (manual)
 
 - **WHEN** the send throws before a signature comes back, and not because the
   user said no

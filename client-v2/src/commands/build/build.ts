@@ -107,9 +107,9 @@ class SeahorseCompileError extends Error {
  */
 export const frameworkOf = (files: TupleFiles): BuildFramework => {
   if (files.some(([path]) => path.endsWith(".py"))) return "seahorse";
-  const usesAnchor = ([path, content]: [string, string]) =>
+  const isAnchorSource = ([path, content]: [string, string]) =>
     path.endsWith(".rs") && /\banchor_lang::/.test(content);
-  if (files.some(usesAnchor)) return "anchor";
+  if (files.some(isAnchorSource)) return "anchor";
   return "native";
 };
 

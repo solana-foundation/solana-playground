@@ -1,5 +1,15 @@
 # Spec Delta
 
+## Purpose
+
+What the product reports when a program is built, so the funnel can count
+builds that succeed and tell a compile error from a build server that
+failed.
+
+Every scenario is marked `(manual)`: events leave the browser only through
+GA4, which no Playwright test reads. A unit test through the memory provider
+holds each one, and each can be checked in GA4's DebugView.
+
 ## ADDED Requirements
 
 ### Requirement: Build events
@@ -19,20 +29,20 @@ sent, sends nothing. The Build stage, the terminal, the assistant and a
 tutorial all run this command, so each build is counted once whatever started
 it. No event carries file names, the program id or compiler output.
 
-#### Scenario: A compile error is tracked
+#### Scenario: A compile error is tracked (manual)
 
 - **WHEN** a build of an Anchor project fails with a compiler error
 - **THEN** the memory provider records `build_started` with
   `{ framework: "anchor" }`, then `build_failed` with
   `{ framework: "anchor", reason: "compile" }`
 
-#### Scenario: A build server that does not answer
+#### Scenario: A build server that does not answer (manual)
 
 - **WHEN** the build request gets no answer
 - **THEN** the memory provider records `build_failed` with
   `reason: "network"`
 
-#### Scenario: A stopped build
+#### Scenario: A stopped build (manual)
 
 - **WHEN** the user stops a build in flight
 - **THEN** the memory provider records `build_started` and no outcome

@@ -180,16 +180,18 @@ describe("write_file events", () => {
       .filter((event) => event.name.startsWith("assistant_patch_"))
       .map((event) => [event.name, event.params]);
 
-  /** Runs one write, answering its card with `allow` */
-  const answer = async (b: PlaygroundBridge, allow: boolean) => {
+  /** Runs one write, answering its card with `isAllowed` */
+  const answerWith = (isAllowed: boolean) => async (b: PlaygroundBridge) => {
     const pending = writeFile(b).run({ path: "src/lib.rs", content: "new" });
     await Promise.resolve();
-    PgAssistant.resolveApproval(latestCard(), allow);
+    PgAssistant.resolveApproval(latestCard(), isAllowed);
     await pending;
   };
+  const approve = answerWith(true);
+  const decline = answerWith(false);
 
   it("counts an approved patch once it is written", async () => {
-    await answer(bridge("old"), true);
+    await approve(bridge("old"));
 
     expect(patchEvents()).toEqual([["assistant_patch_written", {}]]);
   });
@@ -206,7 +208,7 @@ describe("write_file events", () => {
     const b = bridge("old");
     vi.mocked(b.applyPatch).mockRejectedValue(error);
 
-    await answer(b, true);
+    await approve(b);
 
     expect(patchEvents()).toEqual([
       ["assistant_patch_write_failed", { reason }],
@@ -223,7 +225,7 @@ describe("write_file events", () => {
   });
 
   it("counts nothing for a denied patch", async () => {
-    await answer(bridge("old"), false);
+    await decline(bridge("old"));
 
     expect(patchEvents()).toEqual([]);
   });
