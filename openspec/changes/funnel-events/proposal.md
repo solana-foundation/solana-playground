@@ -106,7 +106,10 @@ site, and the project's rules send agents to them.
 - Out of scope:
   - IDL events and the Build and Interact screens' control events:
     `wbdi-flow` owns them. Its "Deploy telemetry" requirement is aligned with these names in a follow-up (ticket
-    to file); this change does not edit `wbdi-flow`.
+    to file). This change edits `wbdi-flow` in two places only: its
+    "Interact telemetry" gains `interact_succeeded`, and its Build
+    telemetry and task 1.1 point at this change's "Build events" and task
+    5.1, which now send them.
   - Tutorial events (`tutorial-flow-v2` on `scope/tutorial-flow-2`) and
     assistant turn events (`assistant-usage-events`, #62). Both are on
     `master` now, and the funnel table lists them.

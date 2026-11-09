@@ -46,7 +46,7 @@
 
 **Files:**
 - Create: `client-v2/src/features/program-build/index.ts`, `model/telemetry.ts`
-- Create: `client-v2/src/commands/build/framework-of.ts` (with in-source tests)
+- `frameworkOf` lives in `commands/build/build.ts`, exported for its test
 - Modify: `shared/lib/telemetry/prefixes.ts` (`"program-build": "build"`), `commands/build/build.ts`, `commands/build/build.test.ts`
 
 **Interfaces:**
