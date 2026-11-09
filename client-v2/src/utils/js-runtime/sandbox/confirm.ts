@@ -58,8 +58,10 @@ export const patchConfirmTransaction = (web3: Web3) => {
       const status = value[0];
       const reached = RANK[status?.confirmationStatus ?? "processed"] ?? 0;
       // Success and failure alike count only at the commitment asked for, as
-      // in web3.js: a failure seen at `processed` may sit on a fork that is
-      // dropped, and the transaction can still land elsewhere
+      // web3.js's subscription path notifies, and unlike its one-shot status
+      // check, which rejects on any `err`: a failure seen at `processed` may
+      // sit on a fork that is dropped, and the transaction can still land
+      // elsewhere
       if (status && reached >= (RANK[target] ?? 2)) {
         // eslint-disable-next-line unicorn/no-null -- web3.js's result shape
         return { context, value: { err: status.err ?? null } };

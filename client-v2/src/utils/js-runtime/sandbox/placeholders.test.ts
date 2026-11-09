@@ -424,6 +424,30 @@ describe("sandbox confirmTransaction", () => {
     expect(statuses).toHaveBeenCalledTimes(2);
   });
 
+  it("throws on expiry when a failure never reaches the commitment", async () => {
+    const connection = new web3.Connection("http://localhost:1", "confirmed");
+    vi.spyOn(connection, "getSignatureStatuses").mockResolvedValue({
+      context: { slot: 2 },
+      value: [
+        {
+          slot: 2,
+          confirmations: 0,
+          err: { InstructionError: [0, "Custom"] },
+          confirmationStatus: "processed",
+        },
+      ],
+    });
+    vi.spyOn(connection, "getBlockHeight").mockResolvedValue(101);
+
+    await expect(
+      connection.confirmTransaction({
+        signature: "sig",
+        blockhash,
+        lastValidBlockHeight: 100,
+      })
+    ).rejects.toThrow(web3.TransactionExpiredBlockheightExceededError);
+  });
+
   it("throws once the blockhash expires", async () => {
     const connection = new web3.Connection("http://localhost:1", "confirmed");
     vi.spyOn(connection, "getSignatureStatuses").mockResolvedValue({
