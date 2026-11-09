@@ -1,5 +1,6 @@
 import {
   errorFieldsOf,
+  isSendTransactionError,
   isWalletRejection,
 } from "@/shared/lib/wallet-rejection";
 
@@ -105,13 +106,16 @@ export const maxAmount = (balance: number): string | undefined => {
 
 const NETWORK = /failed to (fetch|send)|network|timed? ?out|blockhash/i;
 
-/** Errors from the cluster, never from the user: read before any wording */
-const NETWORK_NAMES = new Set(["SendTransactionError", "TransferFailedError"]);
+/** This dialog's own error for a transfer the cluster refused */
+const TRANSFER_FAILED = "TransferFailedError";
 
 export const classify = (error: unknown): FailureReason => {
   const { name, message } = errorFieldsOf(error);
   if (name === "TransferNotConfirmedError") return "unconfirmed";
-  if (NETWORK_NAMES.has(name)) return "network";
+  // From the cluster, never from the user: read before any wording
+  if (isSendTransactionError(error) || name === TRANSFER_FAILED) {
+    return "network";
+  }
   if (isWalletRejection(error)) return "rejected";
   if (NETWORK.test(message)) return "network";
   return "unknown";

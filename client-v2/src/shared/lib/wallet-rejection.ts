@@ -4,9 +4,6 @@ const REJECTION = /reject|denied|declin|cancel/i;
 /** EIP-1193's "user rejected", which several Solana wallets reuse */
 const USER_REJECTED_CODE = 4001;
 
-/** Errors from the cluster, never from the user, whatever their wording */
-const CLUSTER_ERRORS = new Set(["SendTransactionError", "TransferFailedError"]);
-
 /** Name, code and message of whatever was thrown: wallets also throw plain objects */
 export const errorFieldsOf = (error: unknown) => {
   if (typeof error !== "object" || error === null) {
@@ -21,6 +18,16 @@ export const errorFieldsOf = (error: unknown) => {
 };
 
 /**
+ * Whether web3 threw for the cluster's answer (a preflight or send failure):
+ * never the user's "no", whatever its wording
+ *
+ * @param error what was thrown
+ * @returns whether it is web3's `SendTransactionError`
+ */
+export const isSendTransactionError = (error: unknown) =>
+  errorFieldsOf(error).name === "SendTransactionError";
+
+/**
  * Whether a wallet threw because the user said no to it: EIP-1193's 4001, or
  * a wallet's wording of a refusal. A cluster error never is, however worded.
  *
@@ -28,8 +35,8 @@ export const errorFieldsOf = (error: unknown) => {
  * @returns whether the user declined
  */
 export const isWalletRejection = (error: unknown) => {
-  const { name, code, message } = errorFieldsOf(error);
-  if (CLUSTER_ERRORS.has(name)) return false;
+  const { code, message } = errorFieldsOf(error);
+  if (isSendTransactionError(error)) return false;
   return code === USER_REJECTED_CODE || REJECTION.test(message);
 };
 
