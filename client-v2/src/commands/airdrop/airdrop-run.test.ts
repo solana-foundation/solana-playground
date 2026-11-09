@@ -121,9 +121,8 @@ describe("airdrop, once the faucet answers", () => {
 
     await expect(run()).rejects.toThrow("Balance did not change");
 
-    expect(printed.some((line) => line.includes("faucet.solana.com"))).toBe(
-      false
-    );
+    // The start line alone: no faucet note follows it
+    expect(printed).toEqual(["Airdropping 5 SOL..."]);
   });
 
   it("adds no faucet note to any other failure", async () => {
@@ -132,8 +131,7 @@ describe("airdrop, once the faucet answers", () => {
 
     await expect(run()).rejects.toThrow("fetch failed");
 
-    expect(printed.some((line) => line.includes("faucet.solana.com"))).toBe(
-      false
-    );
+    // The start line alone: no faucet note follows it
+    expect(printed).toEqual(["Airdropping 5 SOL..."]);
   });
 });
