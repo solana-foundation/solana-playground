@@ -12,7 +12,7 @@ export const seahorse = createFramework({
   // until the customer picks the examples to list
   githubExample: {
     name: "Transfer SOL (Anchor)",
-    url: "https://github.com/solana-developers/program-examples/tree/main/basics/transfer-sol/anchor",
+    url: "https://github.com/solana-foundation/program-examples/tree/main/basics/transfer-sol/anchor",
   },
   getIsCurrent: (files) => {
     for (const [path, content] of files) {

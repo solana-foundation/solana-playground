@@ -340,7 +340,7 @@ describe("PgGithub.isValidUrl", () => {
     // react-router turns `/https://github.com/…` into `/https:/github.com/…`
     expect(
       PgGithub.isValidUrl(
-        "https:/github.com/solana-developers/program-examples/tree/main/basics"
+        "https:/github.com/solana-foundation/program-examples/tree/main/basics"
       )
     ).toBe(true);
   });
@@ -358,12 +358,12 @@ describe("PgGithub.isValidUrl", () => {
 describe("PgGithub.parseUrl", () => {
   it("reads the URL the router folded as it reads the full one", () => {
     const url =
-      "github.com/solana-developers/program-examples/tree/main/basics";
+      "github.com/solana-foundation/program-examples/tree/main/basics";
     expect(PgGithub.parseUrl(`https:/${url}`)).toEqual(
       PgGithub.parseUrl(`https://${url}`)
     );
     expect(PgGithub.parseUrl(`https:/${url}`)).toEqual({
-      owner: "solana-developers",
+      owner: "solana-foundation",
       repo: "program-examples",
       ref: "main",
       path: "basics",

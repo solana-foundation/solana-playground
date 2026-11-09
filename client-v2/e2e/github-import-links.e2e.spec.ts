@@ -55,9 +55,9 @@ const buildServerLink = async (page: Page) => {
  * server's tip. A change to any of them is a change to this list.
  */
 const LINKS = [
-  "https://github.com/solana-developers/program-examples/tree/main/basics/create-account/anchor",
-  "https://github.com/solana-developers/program-examples/tree/main/basics/hello-solana/native/program",
-  "https://github.com/solana-developers/program-examples/tree/main/basics/transfer-sol/anchor",
+  "https://github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor",
+  "https://github.com/solana-foundation/program-examples/tree/main/basics/hello-solana/native/program",
+  "https://github.com/solana-foundation/program-examples/tree/main/basics/transfer-sol/anchor",
   "https://github.com/solana-foundation/solana-playground/tree/master/server",
 ];
 
@@ -82,9 +82,16 @@ test("github-import: Every recorded link resolves on GitHub @live-links", async 
   page,
 }) => {
   for (const url of LINKS) {
-    const response = await page.request.get(url, { maxRedirects: 5 });
-    // Soft, so one run names every dead link
-    expect.soft(response.status(), url).toBe(200);
+    // Its own timeout: GitHub's tree pages answer slower than the config's
+    // `actionTimeout`, and a thrown timeout would end the loop before the
+    // links after it were checked. Soft, so one run names every dead link.
+    const status = await page.request
+      .get(url, { maxRedirects: 5, timeout: LONG.timeout })
+      .then(
+        (response) => response.status(),
+        (error: Error) => error.message
+      );
+    expect.soft(status, url).toBe(200);
   }
 });
 
@@ -97,7 +104,7 @@ entrypoint!(process_instruction);
 /** Serves the examples repository with one native program */
 const stubExamples = async (page: Page) => {
   await page.route(
-    "https://api.github.com/repos/solana-developers/program-examples/**",
+    "https://api.github.com/repos/solana-foundation/program-examples/**",
     (r) =>
       json(r, {
         truncated: false,
@@ -112,7 +119,7 @@ const stubExamples = async (page: Page) => {
       })
   );
   await page.route(
-    "https://raw.githubusercontent.com/solana-developers/program-examples/**",
+    "https://raw.githubusercontent.com/solana-foundation/program-examples/**",
     (r) => r.fulfill({ status: 200, contentType: "text/plain", body: LIB_RS })
   );
 };
@@ -142,7 +149,7 @@ test("github-import: A failed open leaves no error for the next one", async ({
 }) => {
   await stubExamples(page);
   await page.goto(
-    "/https://github.com/solana-developers/program-examples/tree/main/basics/gone"
+    "/https://github.com/solana-foundation/program-examples/tree/main/basics/gone"
   );
   await expect(page.getByText(/No program code found/)).toBeVisible(LONG);
 
