@@ -75,6 +75,10 @@ export type AssistantEvents = {
   assistant_file_chip_removed: NoParams;
   /** The user added a file to the assistant's context; `via` says from where (only the composer's + › Add a file so far). */
   assistant_context_file_added: { via: "menu" };
+  /** An approved patch was written to its file by the `write_file` tool. Never the path or the content. */
+  assistant_patch_written: NoParams;
+  /** Writing an approved patch threw: a project limit refused it (`limit`) or anything else did (`other`). Never the path, the content or the error's text. */
+  assistant_patch_write_failed: { reason: "limit" | "other" };
   /** An applied patch was taken back and its file written back; `via` says from where (only the card's Undo patch so far). */
   assistant_patch_undone: { via: "card" };
 };

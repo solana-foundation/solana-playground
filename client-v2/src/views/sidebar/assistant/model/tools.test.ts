@@ -1,3 +1,8 @@
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { requireFor } from "@/test-utils/require-for";
 
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
@@ -157,6 +162,61 @@ describe("write_file", () => {
     expect(
       failedItem?.kind === "approval" && PgPatchUndo.canWith(b)(failedItem)
     ).toBe(false);
+  });
+});
+
+describe("write_file events", () => {
+  let tracked: ReturnType<typeof memoryProvider>;
+
+  beforeEach(() => {
+    resetTelemetry();
+    tracked = memoryProvider();
+    initTelemetry({ providers: [tracked] });
+  });
+
+  /** The patch write events sent, as `[name, params]` */
+  const patchEvents = () =>
+    tracked.events
+      .filter((event) => event.name.startsWith("assistant_patch_"))
+      .map((event) => [event.name, event.params]);
+
+  /** Runs one write, answering its card with `allow` */
+  const answer = async (b: PlaygroundBridge, allow: boolean) => {
+    const pending = writeFile(b).run({ path: "src/lib.rs", content: "new" });
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), allow);
+    await pending;
+  };
+
+  it("counts an approved patch once it is written", async () => {
+    await answer(bridge("old"), true);
+
+    expect(patchEvents()).toEqual([["assistant_patch_written", {}]]);
+  });
+
+  it.each([
+    [
+      "limit",
+      Object.assign(new Error("A file can be at most 128 KB."), {
+        name: "ExplorerLimitError",
+      }),
+    ],
+    ["other", new Error("disk")],
+  ])("counts a write that throws as failed, %s", async (reason, error) => {
+    const b = bridge("old");
+    vi.mocked(b.applyPatch).mockRejectedValue(error);
+
+    await answer(b, true);
+
+    expect(patchEvents()).toEqual([
+      ["assistant_patch_write_failed", { reason }],
+    ]);
+  });
+
+  it("counts nothing for a denied patch", async () => {
+    await answer(bridge("old"), false);
+
+    expect(patchEvents()).toEqual([]);
   });
 });
 
