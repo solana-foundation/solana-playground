@@ -21,7 +21,8 @@ are in each slice's spec. A step that cannot fail, or whose failure is not the
 product's, names `none: <why>` as its failure events. A Source of
 `pending (<change>)` marks events that change has yet to send; `GA4` marks an
 event GA4 sends itself. Every other name SHALL be declared by a tracker
-somewhere under `src/`, a legacy root's included.
+somewhere under `src/`, a legacy root's included, and SHALL appear quoted in
+source outside its declaration, where a `track` call names it.
 
 | Step | Events | Failure events | Code | Source |
 | --- | --- | --- | --- | --- |
@@ -55,6 +56,13 @@ somewhere under `src/`, a legacy root's included.
 - **WHEN** a change removes `build_failed` from `features/program-build` and
   leaves the table as it is
 - **THEN** `src/app/slice-structure.test.ts` fails and names `build_failed`
+
+#### Scenario: A track call is removed (manual)
+
+- **WHEN** a change deletes the `track("interact_succeeded", ...)` call in
+  `runCall` and keeps the declaration
+- **THEN** `src/app/slice-structure.test.ts` fails and names
+  `interact_succeeded`
 
 #### Scenario: A step lists no failure (manual)
 

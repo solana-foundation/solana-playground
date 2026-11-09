@@ -213,6 +213,15 @@ describe("write_file events", () => {
     ]);
   });
 
+  it("counts nothing for a patch that would change nothing", async () => {
+    await writeFile(bridge("same")).run({
+      path: "src/lib.rs",
+      content: "same",
+    });
+
+    expect(patchEvents()).toEqual([]);
+  });
+
   it("counts nothing for a denied patch", async () => {
     await answer(bridge("old"), false);
 

@@ -9,10 +9,16 @@ const utils = vi.hoisted(() => ({
     files: {} as Record<string, { content: string }>,
     getCurrentSrcPath: () => "/p/src/",
     getRelativePath: (path: string) => path.slice("/p/".length),
+    getItemNameFromPath: (path: string) => path.split("/").pop() ?? "",
     PATHS: { ROOT_DIR_PATH: "/" },
   },
   PgCommon: { joinPaths: (...paths: string[]) => paths.join("") },
-  PgLanguage: { getFromPath: () => ({ name: "Rust" }) },
+  PgLanguage: {
+    getFromPath: (path: string) => ({
+      name: path.endsWith(".py") ? "Python" : "Rust",
+    }),
+  },
+  PgPackage: { import: vi.fn() },
   PgGlobal: { update: vi.fn() },
   PgProgramInfo: { update: vi.fn(), getPkStr: () => "Pk11111111111111" },
   PgServer: { build: vi.fn() },
@@ -211,6 +217,40 @@ describe("commands/build/build", () => {
       ]);
     });
 
+    it("sends one outcome when keeping the result throws after it", async () => {
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "Finished release",
+        uuid: "u",
+        idl: undefined,
+      });
+      vi.mocked(PgBuildOutput.set).mockImplementationOnce(() => {
+        throw new Error("storage full");
+      });
+
+      await expect(run()).rejects.toThrow("storage full");
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_succeeded", { framework: "anchor", has_idl: false }],
+      ]);
+    });
+
+    it("counts Seahorse's own compile error as compile", async () => {
+      utils.PgExplorer.getFileContent.mockReturnValue(undefined);
+      utils.PgExplorer.files = {
+        "/p/src/fizz.py": { content: "from seahorse.prelude import *" },
+      };
+      utils.PgPackage.import.mockResolvedValue({ compileSeahorse: () => [] });
+
+      await expect(run()).rejects.toThrow("Seahorse compile failed");
+
+      expect(utils.PgServer.build).not.toHaveBeenCalled();
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "seahorse" }],
+        ["build_failed", { framework: "seahorse", reason: "compile" }],
+      ]);
+    });
+
     // By shape, as `buildFailureOf` reads a `PgServerError`
     it.each([
       ["network", { answered: false }],
@@ -236,6 +276,14 @@ describe("commands/build/build frameworkOf", () => {
     ["seahorse", [["/src/fizz.py", "from seahorse.prelude import *"]]],
     ["anchor", [["/src/lib.rs", "use anchor_lang::prelude::*;"]]],
     ["native", [["/src/lib.rs", "use solana_program::entrypoint;"]]],
+    ["native", [["/src/lib.rs", "// not anchor_lang, a native program"]]],
+    [
+      "seahorse",
+      [
+        ["/src/fizz.py", "from seahorse.prelude import *"],
+        ["/src/lib.rs", "use anchor_lang::prelude::*;"],
+      ],
+    ],
   ] as const)("reads %s", async (framework, files) => {
     const { frameworkOf } = await import("./build");
     expect(frameworkOf(files.map(([p, c]) => [p, c]))).toBe(framework);

@@ -142,6 +142,27 @@ const declaredEvents = (): Set<string> =>
       })
   ));
 
+/**
+ * Every double-quoted snake_case literal in a non-test source file: an event
+ * name in quotes is a `track` call's (a map declares its keys bare), so a
+ * declared name that never appears here is never sent
+ */
+let quotedCache: Set<string> | undefined;
+const quotedNames = (): Set<string> =>
+  (quotedCache ??= new Set(
+    filesUnder(SRC)
+      .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
+      .filter((file) => !file.startsWith(TELEMETRY_LIB))
+      .flatMap((file) =>
+        Array.from(
+          readFileSync(join(SRC, file), "utf8").matchAll(
+            /"([a-z][a-z0-9_]*)"/g
+          ),
+          (match) => match[1]
+        )
+      )
+  ));
+
 /** The funnel table: the main spec once archived, the change's delta until then */
 const FUNNEL_SPECS = [
   join("openspec", "specs", "client-v2-funnels", "spec.md"),
@@ -180,10 +201,13 @@ const funnelRows = (): FunnelRow[] => {
   const rows: FunnelRow[] = [];
   for (const line of lines.slice(header + 2)) {
     if (!line.startsWith("|")) break;
-    const [step, events, failures, , source] = line
+    const cells = line
       .split("|")
       .slice(1, -1)
       .map((cell) => cell.trim());
+    // A cell with a pipe of its own would shift Source and hide the row
+    if (cells.length !== 5) throw new Error(`not five cells: ${line}`);
+    const [step, events, failures, , source] = cells;
     rows.push({
       step,
       events: namesIn(events),
@@ -210,6 +234,17 @@ it.each(funnelRows().map((row) => [row.step, row] as const))(
     const declared = declaredEvents();
     expect(
       row.events.concat(row.failures).filter((name) => !declared.has(name))
+    ).toEqual([]);
+  }
+);
+
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should send every event the funnel step %s names from somewhere",
+  (_, row) => {
+    if (isUntracked(row)) return;
+    const quoted = quotedNames();
+    expect(
+      row.events.concat(row.failures).filter((name) => !quoted.has(name))
     ).toEqual([]);
   }
 );

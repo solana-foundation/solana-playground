@@ -17,7 +17,7 @@ import {
   PgWeb3,
   TupleFiles,
 } from "../../utils";
-import { isStopped, STOPPED, throwIfStopped } from "../../utils/stopped";
+import { STOPPED, throwIfStopped } from "../../utils/stopped";
 import { isMacroSymptomText } from "../../views/flow/stages/build-report";
 import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 import { createCmd } from "../create";
@@ -40,15 +40,19 @@ export const build = createCmd({
     PgGlobal.update({ buildLoading: true });
     PgTerminal.println(PgTerminal.info("Building..."));
 
-    let framework: BuildFramework | undefined;
     try {
       const files = getBuildFiles();
-      framework = frameworkOf(files);
+      const framework = frameworkOf(files);
       buildTelemetry.track("build_started", { framework });
       const result = await buildProgram(files, signal).catch((e: unknown) => {
         // The aborted request fails; say it was stopped, not that it failed.
-        // Only "Stopped.": the server may still finish, its reply is not kept
+        // Only "Stopped.": the server may still finish, its reply is not kept.
+        // A stop is no outcome, so it sends no event
         throwIfStopped(signal, STOPPED);
+        buildTelemetry.track("build_failed", {
+          framework,
+          reason: reasonOf(e),
+        });
         throw e;
       });
       // A reply that lands after a stop is dropped: nothing of it is kept
@@ -57,6 +61,8 @@ export const build = createCmd({
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.
       const failed = result.stderr.includes("error: could not compile");
+      // The one outcome of this build: what follows keeps its result, and a
+      // throw there is not the build's
       if (failed) {
         buildTelemetry.track("build_failed", { framework, reason: "compile" });
       } else {
@@ -75,15 +81,6 @@ export const build = createCmd({
       // without it the next project inherits this report.
       PgBuildOutput.set(result.stderr, PgExplorer.currentWorkspaceName ?? null);
       PgTerminal.println(improveOutput(result.stderr));
-    } catch (e) {
-      // A stop is no outcome; a build that never started sends nothing
-      if (framework && !isStopped(e)) {
-        buildTelemetry.track("build_failed", {
-          framework,
-          reason: reasonOf(e),
-        });
-      }
-      throw e;
     } finally {
       PgGlobal.update({ buildLoading: false });
     }
@@ -100,7 +97,8 @@ class SeahorseCompileError extends Error {
 
 /**
  * What the build's sources are written with, for its events: Python is
- * Seahorse, a Rust file using `anchor_lang` is Anchor, any other Rust Native.
+ * Seahorse, a Rust file naming an `anchor_lang::` path is Anchor, any other
+ * Rust Native.
  * By the file name and content, not `PgLanguage` or `PgFramework`: the
  * command's tests stand the utils barrel in with a mock.
  *
@@ -109,9 +107,9 @@ class SeahorseCompileError extends Error {
  */
 export const frameworkOf = (files: TupleFiles): BuildFramework => {
   if (files.some(([path]) => path.endsWith(".py"))) return "seahorse";
-  if (files.some(([, content]) => content.includes("anchor_lang"))) {
-    return "anchor";
-  }
+  const usesAnchor = ([path, content]: [string, string]) =>
+    path.endsWith(".rs") && /\banchor_lang::/.test(content);
+  if (files.some(usesAnchor)) return "anchor";
   return "native";
 };
 

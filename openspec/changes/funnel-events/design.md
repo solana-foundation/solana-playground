@@ -86,7 +86,11 @@ the slice rule never checked. One test reads the table from
 `openspec/specs/client-v2-funnels/spec.md`, or from this change's delta
 while the main spec does not exist. It takes the backticked names of the
 Events and Failure events columns and fails on each one no tracker
-declares, unless the row's Source is `GA4` or starts with `pending (`. A
+declares, unless the row's Source is `GA4` or starts with `pending (`. The
+same names must also appear double-quoted in some non-test source file: a
+map declares its keys bare, so a quoted name is where a `track` call sends
+it, and a declared event nothing sends fails. A row whose cells are not five
+fails loudly, since a stray pipe would shift Source and hide the row. A
 second test fails on a step whose Failure events cell has no backticked
 name and does not start with `none:`, so each step says how it fails or why
 it cannot. The Code column is for agents and reviewers; the test does not

@@ -97,6 +97,8 @@ const send = async (
   cluster: InteractCluster
 ): Promise<CallOutcome> => {
   let signature: string | undefined;
+  // Whether this call's outcome event went out: a throw after it is not the call's
+  let reported = false;
   // The connection the call goes out on: a network switch while the wallet
   // asks must not confirm a landed call on another cluster as failed
   const connection = PgConnection.current;
@@ -108,11 +110,12 @@ const send = async (
     );
     interactTelemetry.track("interact_sent", { cluster });
     const confirmed = await PgTx.confirm(signature, { connection });
-    const logs = await readLogsWith(connection)(signature);
     const ok = !confirmed?.err;
     if (ok) interactTelemetry.track("interact_succeeded", { cluster });
     else
       interactTelemetry.track("interact_failed", { cluster, phase: "confirm" });
+    reported = true;
+    const logs = await readLogsWith(connection)(signature);
     return {
       instruction: ix.name,
       ok,
@@ -128,10 +131,11 @@ const send = async (
     };
   } catch (e: any) {
     // A signature with a thrown error: sent, but its confirmation is unknown
-    interactTelemetry.track("interact_failed", {
-      cluster,
-      phase: signature ? "confirm" : "send",
-    });
+    if (!reported)
+      interactTelemetry.track("interact_failed", {
+        cluster,
+        phase: signature ? "confirm" : "send",
+      });
     const raw: string = e?.message ?? String(e);
     // An RPC refusal is named rather than shown in web3's words, which tell
     // a learner to catch the exception

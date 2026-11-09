@@ -8,8 +8,8 @@
 `features/program-interact` tracker, `interact_sent { cluster }` once the
 transaction has gone out (a signature came back), `interact_succeeded
 { cluster }` when it confirmed without an error, and `interact_failed
-{ cluster, phase }` when it did not: `phase` is `send` when nothing went out
-and `confirm` when the transaction failed or its confirmation is unknown.
+{ cluster, phase }` when it did not: `phase` is `send` when no signature came
+back and `confirm` when the transaction failed or its confirmation is unknown.
 `cluster` is the cluster the call went to, or `custom` when the endpoint
 names none. No event carries the instruction name, the program id, an
 address or a signature. These are `wbdi-flow`'s "Interact telemetry" events;
