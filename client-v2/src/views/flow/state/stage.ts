@@ -554,12 +554,17 @@ export class PgFlow {
   /**
    * In memory only: this runs on every change to the tree or a file, and
    * nothing here may touch the filesystem. By the workspace's name, as
-   * `ownOutput` keeps the report.
+   * `ownOutput` keeps the report. A temporary project's build is kept under no
+   * name, which is also the name with no project open, so that state is
+   * checked first: it has no source to read.
    */
   private static _recheckSource() {
     const built = PgFlow._built;
+    const hasProject =
+      PgExplorer.isTemporary || PgExplorer.currentWorkspaceName !== undefined;
     const changed =
       built !== undefined &&
+      hasProject &&
       built.workspace === PgExplorer.currentWorkspaceName &&
       built.source !== PgFlow._currentSource().source;
     if (changed !== PgFlow._state.sourceChanged) {

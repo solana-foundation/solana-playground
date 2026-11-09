@@ -1513,6 +1513,33 @@ describe("PgFlow source tracking", () => {
     w.sub.dispose();
   });
 
+  // A temporary project's build is kept under no name, which is also the name
+  // of no project at all: deleting the last saved one must not read a source
+  it("reads no source once no project is open after a temporary project's build", async () => {
+    const w = await wire();
+    const explorer = w.PgExplorer as unknown as {
+      currentWorkspaceName: string | undefined;
+      isTemporary: boolean;
+      getCurrentSrcPath: Mock;
+    };
+    explorer.currentWorkspaceName = undefined;
+    explorer.isTemporary = true;
+    w.buildStarts();
+    w.buildReports();
+
+    explorer.isTemporary = false;
+    explorer.getCurrentSrcPath.mockImplementation(() => {
+      throw new Error("Current workspace not found");
+    });
+    try {
+      expect(() => w.fire("delete")).not.toThrow();
+      expect(PgFlow.state.sourceChanged).toBe(false);
+    } finally {
+      explorer.getCurrentSrcPath.mockImplementation(() => "/proj/src/");
+      w.sub.dispose();
+    }
+  });
+
   it("forgets the baseline in another project", async () => {
     const w = await wire();
     w.buildStarts();
