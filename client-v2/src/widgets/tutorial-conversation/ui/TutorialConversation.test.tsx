@@ -154,7 +154,7 @@ vi.mock("@/entities/tutorial", async () => {
 // The listed tutorials, for the finish card's "Next: <tutorial>"
 vi.mock("@/utils/tutorial", () => ({
   PgTutorial: {
-    all: [{ name: "Counter PDA Tutorial" }],
+    all: [{ name: "Lumberjack" }],
     open: vi.fn(async () => {}),
   },
 }));
@@ -1627,13 +1627,13 @@ describe("useConversationStartOver", () => {
         </TooltipProvider>
       );
       await userEvent.click(
-        screen.getByRole("button", { name: "Next: Counter PDA Tutorial" })
+        screen.getByRole("button", { name: "Next: Lumberjack" })
       );
       expect(track).toHaveBeenCalledWith("tutorial_next_opened", {
         tutorial: "hello-anchor",
-        next: "counter-pda-tutorial",
+        next: "lumberjack",
       });
-      expect(PgTutorial.open).toHaveBeenCalledWith("Counter PDA Tutorial");
+      expect(PgTutorial.open).toHaveBeenCalledWith("Lumberjack");
     });
 
     it("counts no next tutorial when its open fails, and says so", async () => {
@@ -1647,11 +1647,9 @@ describe("useConversationStartOver", () => {
         </TooltipProvider>
       );
       await userEvent.click(
-        screen.getByRole("button", { name: "Next: Counter PDA Tutorial" })
+        screen.getByRole("button", { name: "Next: Lumberjack" })
       );
-      expect(reportButtonFailure).toHaveBeenCalledWith(
-        "open Counter PDA Tutorial"
-      );
+      expect(reportButtonFailure).toHaveBeenCalledWith("open Lumberjack");
       expect(refuse).toHaveBeenCalledWith(failed);
       expect(track).not.toHaveBeenCalledWith(
         "tutorial_next_opened",
