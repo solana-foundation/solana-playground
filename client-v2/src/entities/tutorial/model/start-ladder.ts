@@ -1,3 +1,5 @@
+import { slugOf } from "./definition/check";
+
 /**
  * The tutorials the start offers, in the order a new developer takes them:
  * one per level, all Anchor. Home, the Tutorials page and New project list
@@ -25,6 +27,14 @@ export const START_LADDER = [
   },
 ] as const;
 
+/**
+ * Whether a tutorial, by slug, is on the ladder: the only tutorials a finish
+ * may recommend next (`finish.next`), as `yarn tutorial:check` enforces and
+ * the finish card's "Next" obeys
+ */
+export const isOnStartLadder = (slug: string) =>
+  START_LADDER.some((l) => slugOf(l.name) === slug);
+
 /** What the banner says of a ladder tutorial before a start and once done */
 export const ladderLine = (
   name: string
@@ -51,6 +61,14 @@ if (import.meta.vitest) {
           named("Zero Copy", "Hello Seahorse", "Lumberjack", "Hello Anchor")
         ).map((t) => t.name)
       ).toEqual(["Hello Anchor", "Lumberjack", "Zero Copy"]);
+    });
+
+    it("names its three tutorials by slug, and no other", () => {
+      expect(
+        ["hello-anchor", "lumberjack", "zero-copy"].every(isOnStartLadder)
+      ).toBe(true);
+      expect(isOnStartLadder("battle-coins")).toBe(false);
+      expect(isOnStartLadder("Lumberjack")).toBe(false);
     });
 
     it("leaves out a ladder tutorial that is not registered", () => {

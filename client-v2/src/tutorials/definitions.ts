@@ -118,18 +118,13 @@ if (import.meta.vitest) {
       ]);
     });
 
-    it("leaves out a definition whose next names no listed tutorial, keeps one with none", () => {
-      // Without Battle Coins among the others, Lumberjack's next names
-      // nothing; Zero Copy's next is null, so it stays
+    it("keeps the whole ladder with no other tutorial: each next is a definition or none", () => {
+      // Hello Anchor's next is Lumberjack, Lumberjack's Zero Copy, Zero
+      // Copy's none
       const names = definitionTutorials([]).map((t) => t.name);
-      expect(names).not.toContain("Lumberjack");
-      expect(names).toContain("Zero Copy");
-    });
-
-    it("accepts another definition as a next", () => {
-      // Hello Anchor's next is Lumberjack, a definition itself
-      const names = definitionTutorials([]).map((t) => t.name);
-      expect(names).toContain("Hello Anchor");
+      expect(names).toEqual(
+        expect.arrayContaining(["Hello Anchor", "Lumberjack", "Zero Copy"])
+      );
     });
 
     it("lists Zero Copy under Advanced, in four steps", () => {
