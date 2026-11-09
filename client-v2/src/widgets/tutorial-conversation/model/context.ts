@@ -86,7 +86,7 @@ export const describeTutorial = (facts: TutorialFacts): string => {
     }
     lines.push(
       "This tutorial's doc pages, which open beside the code: " +
-        definition.docs.map(describeDoc(facts.docPages)).join("; ") +
+        definition.docs.map(describeDocFor(facts.docPages)).join("; ") +
         ". When one of them covers what you explain, link it as a Markdown " +
         "link with its address exactly as listed: the section that covers " +
         "it when one does, the page otherwise. When you also name the page " +
@@ -140,7 +140,7 @@ const whereOf = (
  * doc page's sections"); the title and address alone for a page with no
  * section or no Markdown
  */
-const describeDoc =
+const describeDocFor =
   (docPages: TutorialFacts["docPages"]) =>
   (doc: Doc): string => {
     const markdown = docPages?.[doc.file];

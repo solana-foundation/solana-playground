@@ -394,19 +394,19 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   }));
   // Typed here while the session was still being read: it is the account's
   // the read found, and stays on screen rather than blanking mid-typing
-  const carried =
+  const isCarried =
     draftKey !== undefined &&
     slot !== undefined &&
     draft.slot === earlySlot(draftKey) &&
     slot !== draft.slot;
-  if (carried) {
+  if (isCarried) {
     if (draft.input) drafts.set(slot, draft.input);
     drafts.delete(earlySlot(draftKey));
     setDraft({ slot, input: draft.input });
   }
   // Another chat or another account: it shows that one's draft
   const input =
-    draft.slot === slot || carried ? draft.input : draftOf(draftKey);
+    draft.slot === slot || isCarried ? draft.input : draftOf(draftKey);
   // Through a ref: `onDidRequestPrompt` subscribes once and keeps the first
   // render's `setInput`
   const key = useRef(draftKey);

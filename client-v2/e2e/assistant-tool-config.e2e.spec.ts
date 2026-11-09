@@ -70,7 +70,7 @@ const readStored = (page: Page) =>
  */
 const savedTreeState = (page: Page) =>
   page.evaluate(async () => {
-    let sawTree = false;
+    let hasSeenTree = false;
     for (const { name } of await indexedDB.databases()) {
       if (!name) continue;
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -89,7 +89,7 @@ const savedTreeState = (page: Page) =>
             get.onerror = () => reject(get.error);
           });
           if (!(root instanceof Map)) continue;
-          sawTree = true;
+          hasSeenTree = true;
           const config = root.get("/")?.get(".config");
           if (config instanceof Map && config.has("assistant-tools.json")) {
             return "listed";
@@ -99,7 +99,7 @@ const savedTreeState = (page: Page) =>
         db.close();
       }
     }
-    return sawTree ? "not-yet" : "no-tree";
+    return hasSeenTree ? "not-yet" : "no-tree";
   });
 
 /** Waits until a reload would read the stored file back */
