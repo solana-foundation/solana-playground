@@ -191,8 +191,10 @@ for; tasks with "after nothing" start at once.
       ones as the manual case T-1 in `docs/testing.md`; the wrong pick,
       planned failure, faucet limit and Call panel paths (the Call panel spec
       is a fixme until HOO-2358 lands). Verify: the specs run green
-      in CI's e2e job (HOO-2364 desktop, fleet; HOO-2510 phone; M 1.5; after 3.5, 4.1, 4.2,
-      4.4, 5.1, 6.2; plan: [plans/6.5-e2e-desktop.md](plans/6.5-e2e-desktop.md))
+      in CI's e2e job (HOO-2364 desktop, fleet; HOO-2510 phone, #470; the
+      Call panel path is still a fixme; M 1.5; after 3.5, 4.1, 4.2,
+      4.4, 5.1, 6.2; plans: [plans/6.5-e2e-desktop.md](plans/6.5-e2e-desktop.md),
+      [plans/6.5-e2e-phone.md](plans/6.5-e2e-phone.md))
 
 ## 7. Cleanup
 
