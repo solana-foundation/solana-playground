@@ -458,12 +458,12 @@ if (import.meta.vitest) {
         expect(store.held()).toEqual(record);
         expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
         expect(logged.entries).toHaveLength(1);
-        const log = JSON.stringify(logged.entries, (_, value: unknown) =>
+        const logText = JSON.stringify(logged.entries, (_, value: unknown) =>
           value instanceof Error ? `${value.name}: ${value.message}` : value
         );
         for (const account of record.accounts) {
           for (const encoded of encodingsOf(account.kp as number[])) {
-            expect(log).not.toContain(encoded);
+            expect(logText).not.toContain(encoded);
           }
         }
       });
