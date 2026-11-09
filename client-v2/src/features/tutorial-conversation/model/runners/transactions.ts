@@ -670,12 +670,13 @@ if (import.meta.vitest) {
         ],
       };
       const CREATES = { instruction: "init_player", account: "player" };
-      const existing = (log: string[], calls: DecodedCall[] = [init]) =>
+      const existingFor = (calls: DecodedCall[]) => (log: string[]) =>
         existingOf(
           [{ kind: "refused", log, message: "0x0", calls }],
           refusalOf(log, PROGRAM, calls),
           CREATES
         );
+      const existing = existingFor([init]);
 
       it("names the account the System Program found already in use", () => {
         expect(existing(initLog(inUse(PLAYER), "0x0"))).toEqual({
@@ -702,7 +703,7 @@ if (import.meta.vitest) {
           wrote: [{ name: "player", address: VAULT }],
         };
         expect(
-          existing(initLog(inUse(PLAYER), "0x0"), [other])
+          existingFor([other])(initLog(inUse(PLAYER), "0x0"))
         ).toBeUndefined();
       });
 
@@ -713,7 +714,7 @@ if (import.meta.vitest) {
           address: PLAYER,
         };
         // The call did not decode: `refusalOf` names it from Anchor's line
-        expect(existing(initLog(inUse(PLAYER), "0x0"), [])).toEqual(found);
+        expect(existingFor([])(initLog(inUse(PLAYER), "0x0"))).toEqual(found);
         // It decoded, with nothing written at all
         const bare: DecodedCall = {
           instruction: "initPlayer",
@@ -721,7 +722,9 @@ if (import.meta.vitest) {
           accounts: [{ name: "Player", address: PLAYER }],
           wrote: [],
         };
-        expect(existing(initLog(inUse(PLAYER), "0x0"), [bare])).toEqual(found);
+        expect(existingFor([bare])(initLog(inUse(PLAYER), "0x0"))).toEqual(
+          found
+        );
       });
 
       it("finds the account in a transaction that landed with an error", () => {
@@ -791,7 +794,7 @@ if (import.meta.vitest) {
           wrote: [{ name: "vault", address: VAULT }],
         };
         expect(
-          existing(initLog(inUse(VAULT), "0x0"), [vaultOnly])
+          existingFor([vaultOnly])(initLog(inUse(VAULT), "0x0"))
         ).toBeUndefined();
       });
 

@@ -5230,31 +5230,29 @@ if (import.meta.vitest) {
           account: "counter",
           address: "Counter1",
         };
-        const refusedInit = (exists?: typeof COUNTER): RunResult =>
-          exists
-            ? {
-                act: "call",
-                ok: false,
-                seconds: 1,
-                message: "custom program error: 0x0",
-                log: "",
-                refused: {
-                  instruction: "initialize",
-                  error: { code: 0, name: null },
-                },
-                exists,
-              }
-            : {
-                act: "call",
-                ok: false,
-                seconds: 1,
-                message: "custom program error: 0x0",
-                log: "",
-                refused: {
-                  instruction: "initialize",
-                  error: { code: 0, name: null },
-                },
-              };
+        const refusedInit = (exists: typeof COUNTER): RunResult => ({
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "custom program error: 0x0",
+          log: "",
+          refused: {
+            instruction: "initialize",
+            error: { code: 0, name: null },
+          },
+          exists,
+        });
+        const refusedBare: RunResult = {
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "custom program error: 0x0",
+          log: "",
+          refused: {
+            instruction: "initialize",
+            error: { code: 0, name: null },
+          },
+        };
 
         it("sends the account its own call creates", () => {
           const { effects } = run([press("s4.init", 2000)], at(5));
@@ -5322,7 +5320,7 @@ if (import.meta.vitest) {
 
         it("stays failed and posts nothing on any other refusal", () => {
           const { progress } = run(
-            [press("s4.init", 2000), ended("s4.init", 2000, refusedInit())],
+            [press("s4.init", 2000), ended("s4.init", 2000, refusedBare)],
             at(5)
           );
           expect(progress.runs["s4.init"]?.[0]?.status).toBe("failed");
