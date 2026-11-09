@@ -10,7 +10,7 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
 
 ## 1. The funnel check
 
-- [ ] 1.1 Extend `src/app/slice-structure.test.ts` with the funnel check of
+- [x] 1.1 Extend `src/app/slice-structure.test.ts` with the funnel check of
       [design.md](design.md): collect every name declared through
       `createTracker<...>()` anywhere under `src/`, legacy roots included,
       read the Events and Failure events columns of the table in
@@ -90,19 +90,19 @@ One PR into foundation `master` with 1.1; plan:
 [plans/5-main-flow-events.md](plans/5-main-flow-events.md). Each task declares, describes and
 emits its events with memory-provider tests, one per branch.
 
-- [ ] 5.1 Add `features/program-build` with prefix `build` (`wbdi-flow` 1.1,
+- [x] 5.1 Add `features/program-build` with prefix `build` (`wbdi-flow` 1.1,
       events only) and send `build_started`, `build_succeeded` and
       `build_failed` from the `build` command (`commands/build/build.ts`).
       Satisfies `client-v2-build`, "Build events": tests for each
       `framework`, each `reason`, a stop and an empty program file (depends
       on 1.1)
-- [ ] 5.2 Add `features/program-interact` with prefix `interact` and send
+- [x] 5.2 Add `features/program-interact` with prefix `interact` and send
       `interact_sent`, `interact_succeeded` and `interact_failed` from
       `runCall` (`views/flow/stages/run-call.ts`). Satisfies
       `client-v2-interact`, "Instruction call events": tests for a landed
       call, a failed transaction, an unknown confirmation, a send that
       throws, and `custom` (depends on 1.1)
-- [ ] 5.3 Declare `assistant_patch_written` and
+- [x] 5.3 Declare `assistant_patch_written` and
       `assistant_patch_write_failed` in `widgets/assistant` and send them
       from the `write_file` tool (`views/sidebar/assistant/model/tools.ts`).
       Satisfies `client-v2-assistant-usage`, "An approved patch is reported
