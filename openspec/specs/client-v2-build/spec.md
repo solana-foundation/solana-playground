@@ -304,6 +304,15 @@ when the bundle lacks any of the six real packages.
   wasm-bindgen module of any of the six packages
 - **THEN** it exits non-zero and names each stub file and each missing package
 
+#### Scenario: The fast production deploy on a stub (manual)
+
+- **WHEN** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`
+  runs with `USE_WASM_STUBS=true`, or with a `wasm/<name>/pkg/package.json`
+  or `client-v2/node_modules/@solana-playground/<name>/package.json` whose
+  version is `0.0.0-stub`, for any of the six packages
+- **THEN** it exits non-zero before it pulls, builds, or deploys, naming the
+  variable or the stub manifest
+
 ### Requirement: The wasm stubs require USE_WASM_STUBS=true
 
 The wasm stubs SHALL be written only when `USE_WASM_STUBS` is the exact string

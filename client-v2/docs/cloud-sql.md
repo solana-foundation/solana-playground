@@ -189,7 +189,8 @@ Stop the proxy (`kill %1`). `github-ci` and `vercel-preview` get nothing here.
 Set the variables on Production while it still reads Neon, and check them on a deployment that takes no domain.
 Build locally and deploy the output: a Vercel build with no cache does not finish inside the build time limit
 ([Deploy](deploy-client-vercel.md#deploy)). From the repository root, with the CLI version pinned as `VERCEL_CLI` in
-`client-v2/Makefile.vercel`:
+`client-v2/Makefile.vercel`, and `VERCEL_DEPLOY_PROJECT_ID` naming the project the Git integration deploys
+([Migrations](deploy-client-vercel.md#migrations)):
 
 ```sh
 make -f client-v2/Makefile.vercel vercel-link-production
@@ -223,7 +224,9 @@ freeze is needed, and this guide does not give it.
    production`, and remove `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
 5. Redeploy production. `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, and a sign-in and a project
    edit on the production domain write a row to `solpg`.
-6. Return to the repository root with `cd ..`, then run `make -f client-v2/Makefile.vercel migrate-production-db`. It names `solpg` and reports nothing to apply.
+6. Return to the repository root with `cd ..`, then run `make -f client-v2/Makefile.vercel migrate-production-db`
+   with `VERCEL_DEPLOY_PROJECT_ID` set to the ID of the project the Git integration deploys and the checkout linked
+   to it ([Migrations](deploy-client-vercel.md#migrations)). It names `solpg` and reports nothing to apply.
 
 From then on, `migrate-production-db` migrates `solpg`: it reads `DB_PROVIDER` and the `CLOUD_SQL_*` variables from
 the Production environment it pulls, prints the database and instance, starts the proxy as `gcloud`'s active
@@ -361,7 +364,9 @@ add GCP_SERVICE_ACCOUNT_EMAIL preview "$PREVIEW_SA"
 npx vercel env rm DATABASE_URL preview --yes
 ```
 
-Run from a directory linked to the project (`make vercel-link`). For Preview the CLI may ask for a Git
+Run from a directory linked to the project the Git integration deploys, which is not the staging project
+`VERCEL_DEPLOY_PROJECT_ID` holds: `VERCEL_DEPLOY_PROJECT_ID=prj_… make vercel-link` with that project's ID
+([Migrations](deploy-client-vercel.md#migrations)). For Preview the CLI may ask for a Git
 branch; leave it empty, for every branch. The dashboard (Settings → Environment Variables) does the same. Leave `SYNC_ENABLED` off on
 Preview until step 16 has seen the database answer.
 
