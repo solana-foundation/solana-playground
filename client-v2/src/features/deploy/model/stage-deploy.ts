@@ -179,6 +179,19 @@ export class PgStageDeploy {
           deployTelemetry.track("deploy_started", { cluster, redeploy });
         }
         await ensurePlaygroundWallet(PgWallet);
+        // Both waits above can be long (a slow endpoint, a new wallet). The
+        // press was for the project and network open when it was made; one
+        // opened meanwhile is never deployed without its own press.
+        if (
+          PgExplorer.currentWorkspaceName !== workspace ||
+          (PgConnection.cluster ?? undefined) !== cluster
+        ) {
+          log.info("project or network changed before the deploy; stopped", {
+            context: { workspace, cluster },
+          });
+          PgStageDeploy._set({ phase: "stopped", stop: { kind: "cancelled" } });
+          return;
+        }
         reachedRun = true;
         result = await PgDeployRun.runWith({
           confirmStaleBuild: PgStageDeploy._askStaleBuild,

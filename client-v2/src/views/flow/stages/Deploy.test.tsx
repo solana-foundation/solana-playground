@@ -52,6 +52,8 @@ const mocks = vi.hoisted(() => ({
   automaticAirdrop: false,
   /** The network the deploy's endpoint answers for, read before any send */
   endpointCluster: "devnet",
+  /** Runs while the network is read, as a user acting during a slow read */
+  duringNetworkRead: undefined as (() => void) | undefined,
 }));
 
 const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
@@ -89,6 +91,7 @@ vi.mock("@/commands/deploy/check-not-mainnet", async () => {
   );
   return {
     checkNotMainnet: async () => {
+      mocks.duringNetworkRead?.();
       if (mocks.endpointCluster === "mainnet-beta") {
         throw new MainnetDeployRefusedError();
       }
@@ -182,6 +185,7 @@ afterEach(() => {
   mocks.wallet.current = null;
   mocks.wallet.accounts = [];
   mocks.endpointCluster = "devnet";
+  mocks.duringNetworkRead = undefined;
   resetTelemetry();
   vi.clearAllMocks();
 });
@@ -813,6 +817,32 @@ describe("Deploy stage", () => {
     await pressDeploy();
 
     expect(mocks.execute).toHaveBeenCalledOnce();
+  });
+
+  // The network read can wait on a slow endpoint; the press was for the
+  // project open when it was made, never for the one open after the wait
+  it("does not deploy a project opened while the network was read", async () => {
+    const utils = (await import("../../../utils")) as unknown as {
+      PgExplorer: { currentWorkspaceName: string };
+    };
+    mocks.wallet.current = pgWallet();
+    mocks.duringNetworkRead = () => {
+      utils.PgExplorer.currentWorkspaceName = "other";
+    };
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    try {
+      await pressDeploy();
+    } finally {
+      utils.PgExplorer.currentWorkspaceName = "counter";
+    }
+
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.report).not.toHaveBeenCalled();
+    expect(PgStageDeploy.state).toEqual({
+      phase: "stopped",
+      stop: { kind: "cancelled" },
+    });
   });
 
   it("names the checks when a deploy fails before any step", async () => {
