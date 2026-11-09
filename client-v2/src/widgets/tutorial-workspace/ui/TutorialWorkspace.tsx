@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import { EditorTabsShown } from "@/components/EditorWithTabs";
-import type { Doc } from "@/entities/tutorial";
+import type { Doc, DocRequest } from "@/entities/tutorial";
 import { onCodeRequest, onDocRequest } from "@/entities/tutorial";
 import { PgCallPanel } from "@/features/tutorial-conversation";
 import { useRenderOnChange } from "@/hooks";
@@ -27,6 +27,7 @@ import { tutorialWorkspaceTelemetry } from "../model/telemetry";
 import { autoOpenReason, resetsDeploys } from "../model/terminal";
 import { createdIn, tabsOf, treeRows, tutorialFiles } from "../model/tree";
 import BaseDockedTree from "./BaseDockedTree";
+import type { DocSectionRequest } from "./BaseDocPage";
 import BaseDocPage from "./BaseDocPage";
 import BaseFilesSheet from "./BaseFilesSheet";
 import BasePhoneCodeHead from "./BasePhoneCodeHead";
@@ -159,11 +160,20 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
   );
   const [openDocs, setOpenDocs] = useState<string[]>([]);
   const [doc, setDoc] = useState<string>();
+  // The section the last doc link named, with the page it named, so a page
+  // that mounts later never scrolls to another page's section; a pick in
+  // the tree or on a tab names none, and that page opens at its top (or,
+  // already in front, stays where it is)
+  const [section, setSection] = useState<
+    DocSectionRequest & { file: string }
+  >();
+  const sectionSeq = useRef(0);
   useEffect(() => {
     setOpenDocs(readOpenDocs()[name] ?? []);
     // The page that was in front comes back in front, as a reload restores
-    // the rest of the workspace
+    // the rest of the workspace; no link asked for a section of it
     setDoc(readFrontDoc(name));
+    setSection(undefined);
   }, [name]);
   const docTabs = docs.filter((d) => openDocs.includes(d.file));
   const frontDoc = docTabs.find((d) => d.file === doc);
@@ -244,8 +254,14 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
     tutorialWorkspaceTelemetry.track("tutorial_workspace_file_opened", { via });
   };
 
-  /** Brings a doc page to the front; false for a page this tutorial lacks */
-  const showDoc = (file: string, via: DocOpenVia): boolean => {
+  /**
+   * Brings a doc page to the front, at the section the request names;
+   * false for a page this tutorial lacks
+   */
+  const showDoc = (
+    { file, section: asked }: DocRequest,
+    via: DocOpenVia
+  ): boolean => {
     if (!docs.some((d) => d.file === file)) {
       // The link matched the definition's list, but the bundle has no page
       log.warn("asked for a doc page this tutorial does not carry", {
@@ -261,6 +277,13 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
     }
     // A page opened leaves the panel, as a file does
     PgCallPanel.close();
+    // Also for the page already in front: a second link scrolls it again
+    sectionSeq.current += 1;
+    setSection(
+      asked === undefined
+        ? undefined
+        : { file, id: asked, seq: sectionSeq.current }
+    );
     if (file === front) return true;
     setDoc(file);
     writeFrontDoc(name, file);
@@ -268,6 +291,8 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
       tutorialWorkspaceTelemetry.track("tutorial_workspace_doc_opened", {
         doc: file,
         via,
+        // Absent, not undefined: the event's line and its tests read keys
+        ...(asked === undefined ? {} : { section: asked }),
       });
     }
     return true;
@@ -287,7 +312,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
   showDocNow.current = showDoc;
   useEffect(() => {
     if (!active) return;
-    return onDocRequest((file) => showDocNow.current(file, "assistant"));
+    return onDocRequest((request) => showDocNow.current(request, "assistant"));
   }, [active]);
 
   // The code comes back in front of a page whenever the lesson shows it: a
@@ -425,7 +450,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
           docs={{
             tabs: docTabs,
             active: PgCallPanel.isOpen ? undefined : front,
-            onOpen: (file) => showDoc(file, "tab"),
+            onOpen: (file) => showDoc({ file }, "tab"),
             onClose: closeDoc,
           }}
           tree={{
@@ -436,7 +461,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
             onToggle: toggleTree,
             onClose: () => setTreeOpen(false),
             onPick: (path) => openFile(path, "tree"),
-            onPickDoc: (file) => showDoc(file, "tree"),
+            onPickDoc: (file) => showDoc({ file }, "tree"),
             onDock: () => dock(true),
           }}
           call={<CallButton />}
@@ -454,7 +479,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
             open={dockedShown}
             rows={rows}
             onPick={(path) => openFile(path, "tree")}
-            onPickDoc={(file) => showDoc(file, "tree")}
+            onPickDoc={(file) => showDoc({ file }, "tree")}
             onUndock={() => dock(false)}
           />
         )}
@@ -473,12 +498,13 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
           </div>
           {active && frontDoc && (
             <div className="absolute inset-0 z-10 flex">
-              {/* One page per doc, so each opens at its top */}
+              {/* One page per doc: a remount starts at the top unless `section` asks for a heading */}
               <BaseDocPage
                 key={frontDoc.file}
                 title={frontDoc.title}
                 url={frontDoc.url}
                 markdown={frontDoc.markdown}
+                section={section?.file === frontDoc.file ? section : undefined}
                 phone={phone}
               />
             </div>
@@ -494,7 +520,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
             onOpenChange={setFilesOpen}
             rows={rows}
             onPick={(path) => openFile(path, "tree")}
-            onPickDoc={(file) => showDoc(file, "tree")}
+            onPickDoc={(file) => showDoc({ file }, "tree")}
           />
           <CallSheet />
         </>

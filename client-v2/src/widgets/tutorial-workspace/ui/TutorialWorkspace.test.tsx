@@ -5,6 +5,11 @@ import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requestDoc } from "@/entities/tutorial";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 const { useEditorLines, callPanel, noop } = vi.hoisted(() => ({
@@ -132,14 +137,14 @@ describe("TutorialWorkspace", () => {
     expect(screen.queryByTestId("tutorial-workspace")).toBeNull();
     expect(screen.queryByTestId("tutorial-phone-code-head")).toBeNull();
     expect(screen.getByTestId("stage-content")).toBeTruthy();
-    expect(requestDoc("idl.md")).toBe(false);
+    expect(requestDoc({ file: "idl.md" })).toBe(false);
   });
 
   it("brings a doc page the assistant asks for to the front on the phone", () => {
     workspace("phone");
     let isShown = false;
     act(() => {
-      isShown = requestDoc("idl.md");
+      isShown = requestDoc({ file: "idl.md" });
     });
     expect(isShown).toBe(true);
     expect(
@@ -148,6 +153,59 @@ describe("TutorialWorkspace", () => {
     expect(
       screen.getByTestId("tutorial-phone-code-head").textContent
     ).toContain("IDL");
+  });
+
+  it("opens a doc at the section a link named, and says so in the event", () => {
+    // Dropped first: the collector buffers what earlier tests sent
+    resetTelemetry();
+    const events = memoryProvider();
+    initTelemetry({ providers: [events] });
+    try {
+      workspace("frame");
+      let isShown = false;
+      act(() => {
+        isShown = requestDoc({ file: "idl.md", section: "discriminators" });
+      });
+      expect(isShown).toBe(true);
+      expect(
+        screen.getByTestId("tutorial-doc-page").getAttribute("aria-label")
+      ).toBe("IDL");
+      const opened = events.events.filter(
+        (e) => e.name === "tutorial_workspace_doc_opened"
+      );
+      expect(opened.map((e) => e.params)).toStrictEqual([
+        { doc: "idl.md", via: "assistant", section: "discriminators" },
+      ]);
+
+      // The page already in front: a second section scrolls, no event
+      act(() => {
+        requestDoc({ file: "idl.md", section: "accounts" });
+      });
+      expect(
+        events.events.filter((e) => e.name === "tutorial_workspace_doc_opened")
+      ).toHaveLength(1);
+    } finally {
+      resetTelemetry();
+    }
+  });
+
+  it("sends no section key for a page picked in the tree", async () => {
+    resetTelemetry();
+    const events = memoryProvider();
+    initTelemetry({ providers: [events] });
+    try {
+      workspace("phone");
+      await userEvent.click(screen.getByRole("button", { name: "Files" }));
+      await userEvent.click(screen.getByRole("treeitem", { name: "IDL" }));
+      const opened = events.events.filter(
+        (e) => e.name === "tutorial_workspace_doc_opened"
+      );
+      expect(opened.map((e) => e.params)).toStrictEqual([
+        { doc: "idl.md", via: "tree" },
+      ]);
+    } finally {
+      resetTelemetry();
+    }
   });
 
   it("lists the files and the docs in the phone's Files sheet", async () => {

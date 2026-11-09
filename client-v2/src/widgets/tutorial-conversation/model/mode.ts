@@ -4,6 +4,7 @@ import type { ToolInput } from "@/shared/lib/ai";
 import { uuid } from "@/shared/lib/ids";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer } from "@/utils/explorer";
+import { PgTutorial } from "@/utils/tutorial";
 import { READING_TOOLS } from "@/views/sidebar/assistant/model/reading-tools";
 import type { AssistantMode } from "@/views/sidebar/assistant/store";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
@@ -56,8 +57,21 @@ export const tutorialMode = ({
   context: () => {
     const { context, engine } = PgConversation.state;
     if (!context) return "The learner is not in a tutorial right now.";
+    // The pages of the tutorial the context names, not of the route's
+    // current one: the two differ while a navigation settles
+    const tutorial = PgTutorial.all.find(
+      (t) => t.name === context.definition.name
+    );
+    if (!tutorial) {
+      // The context then lists its doc pages without sections, which reads
+      // like pages that have none
+      log.warn("the context names a tutorial the list does not hold", {
+        context: { tutorial: context.definition.name },
+      });
+    }
     return describeTutorial({
       definition: context.definition,
+      docPages: tutorial?.docPages,
       progress: engine.progress,
       live: PgConversation.view()?.live ?? null,
       openFiles: PgExplorer.tabs.map((tab) => PgExplorer.getRelativePath(tab)),

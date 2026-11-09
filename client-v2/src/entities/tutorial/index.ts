@@ -15,12 +15,15 @@ export { checkDefinition, formatError, slugOf } from "./model/definition/check";
 export { loadDefinitionsWith } from "./model/definition/load";
 export {
   docForLink,
+  docRequestFor,
   onCodeRequest,
   onDocRequest,
   onDocShown,
   requestCode,
   requestDoc,
+  sectionOf,
 } from "./model/docs";
+export type { DocRequest } from "./model/docs";
 export type { LoadedDefinition } from "./model/definition/load";
 export type {
   Act,

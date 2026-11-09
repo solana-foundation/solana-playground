@@ -24,6 +24,9 @@ vi.mock("../Icons", () => ({ HyperLink: () => null }));
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
+import { sectionsOf } from "@/shared/lib/markdown-sections";
+
+import { DEFINITION_FILES } from "../../tutorials/_definitions/generated";
 import Markdown from "./Markdown";
 
 (
@@ -66,6 +69,48 @@ describe("Markdown", () => {
 
     const block = container.querySelector('[data-testid="code-block"]');
     expect(block?.getAttribute("data-type")).toBe("string");
+  });
+
+  it("gives headings their site's ids with headingIds, and none without", async () => {
+    const page =
+      "# Program Structure\n\n## `#[derive(Accounts)]` macro\n\n## declare_id! macro";
+    await act(async () => {
+      root.render(<Markdown headingIds>{page}</Markdown>);
+    });
+    expect(
+      Array.from(container.querySelectorAll("h1,h2")).map((h) => h.id)
+    ).toEqual([
+      "program-structure",
+      "deriveaccounts-macro",
+      "declare_id-macro",
+    ]);
+
+    await act(async () => {
+      root.render(<Markdown>{page}</Markdown>);
+    });
+    expect(
+      Array.from(container.querySelectorAll("h1,h2")).map((h) => h.id)
+    ).toEqual(["", "", ""]);
+  });
+
+  // The assistant's context lists a page's sections from a scan of its
+  // Markdown; the ids it writes must be the ones the rendered page carries
+  it("gives every tutorial doc page the ids the context's scan predicts", async () => {
+    const pages = Object.values(DEFINITION_FILES).flatMap((file) =>
+      Object.values(file.docPages ?? {})
+    );
+    expect(pages.length).toBeGreaterThan(0);
+    const renderPage = (markdown: string) =>
+      act(async () => {
+        root.render(<Markdown headingIds>{markdown}</Markdown>);
+      });
+    for (const markdown of pages) {
+      await renderPage(markdown);
+      const rendered = Array.from(
+        container.querySelectorAll("h2,h3,h4,h5,h6")
+      ).map((h) => ({ title: h.textContent, id: h.id }));
+      expect(rendered).toEqual(sectionsOf(markdown));
+    }
   });
 
   // react-markdown 9 hands a lone text child to `h2` as a string, which the

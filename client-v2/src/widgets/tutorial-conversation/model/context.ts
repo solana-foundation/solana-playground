@@ -1,11 +1,15 @@
 /* eslint-disable unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94 */
-import type { TutorialDefinition } from "@/entities/tutorial";
+import type { Doc, TutorialDefinition } from "@/entities/tutorial";
 import type {
   ConversationProgress,
   RunRecord,
   RunResult,
   Turn,
 } from "@/features/tutorial-conversation";
+import { createLogger } from "@/shared/lib/logger";
+import { sectionsOf } from "@/shared/lib/markdown-sections";
+
+const log = createLogger("tutorial-conversation:context");
 
 /**
  * The names of the tutorial mode's own tools, declared once: the tools
@@ -28,6 +32,11 @@ export const BEGIN_INVITATION =
 
 export interface TutorialFacts {
   definition: TutorialDefinition;
+  /**
+   * The tutorial's `docs/` Markdown by file name, for the pages' sections;
+   * a page missing here is listed by title and address alone
+   */
+  docPages: Readonly<Record<string, string>> | undefined;
   progress: ConversationProgress;
   /** The card that acts, or null */
   live: Turn | null;
@@ -65,11 +74,23 @@ export const describeTutorial = (facts: TutorialFacts): string => {
     );
   }
   if (definition.docs?.length) {
+    if (facts.docPages === undefined) {
+      // Once per description, not per page: the assistant then links every
+      // page at its top, which reads like pages with no sections
+      log.warn("the facts carry no doc pages for a tutorial that lists some", {
+        context: {
+          tutorial: definition.name,
+          files: definition.docs.map((d) => d.file),
+        },
+      });
+    }
     lines.push(
       "This tutorial's doc pages, which open beside the code: " +
-        definition.docs.map((d) => `${d.title} (${d.url})`).join("; ") +
+        definition.docs.map(describeDoc(facts.docPages)).join("; ") +
         ". When one of them covers what you explain, link it as a Markdown " +
-        "link with its address exactly as listed. Link another site only " +
+        "link with its address exactly as listed: the section that covers " +
+        "it when one does, the page otherwise. When you also name the page " +
+        "a section is in, link the page too. Link another site only " +
         "for what none of them covers, and one page at most per answer."
     );
   }
@@ -112,6 +133,32 @@ const whereOf = (
     `Objective: ${step.objective}. The step's file: ${step.file}.${passed}`
   );
 };
+
+/**
+ * A doc page for the context: its title and address, then its sections
+ * with their `page#id` addresses (spec "The assistant's context lists each
+ * doc page's sections"); the title and address alone for a page with no
+ * section or no Markdown
+ */
+const describeDoc =
+  (docPages: TutorialFacts["docPages"]) =>
+  (doc: Doc): string => {
+    const markdown = docPages?.[doc.file];
+    if (docPages !== undefined && markdown === undefined) {
+      // The check rejects a listed page with no Markdown when it is given
+      // the pages, as the app's loader is, so pages that lack one did not
+      // come through it; `describeTutorial` warns for pages absent as a whole
+      log.warn("a listed doc page has no Markdown in the facts", {
+        context: { file: doc.file },
+      });
+    }
+    const sections = markdown === undefined ? [] : sectionsOf(markdown);
+    if (sections.length === 0) return `${doc.title} (${doc.url})`;
+    const listed = sections
+      .map((s) => `${s.title} (${doc.url}#${s.id})`)
+      .join(", ");
+    return `${doc.title} (${doc.url}), sections: ${listed}`;
+  };
 
 /** The latest run to start, of any act, that has ended */
 const lastRun = (progress: ConversationProgress): RunRecord | null => {
@@ -190,6 +237,7 @@ if (import.meta.vitest) {
       };
       const text = describeTutorial({
         definition: hello,
+        docPages: undefined,
         progress,
         live: null,
         openFiles: ["programs/hello/src/lib.rs"],
@@ -245,6 +293,7 @@ if (import.meta.vitest) {
       };
       const text = describeTutorial({
         definition: withDocs,
+        docPages: { "log.md": "# The program log\n\nJust the title." },
         progress: freshProgress(),
         live,
         openFiles: [],
@@ -253,7 +302,55 @@ if (import.meta.vitest) {
       expect(text).toContain("Do not give its answer away");
       expect(text).toContain(`${TOOLS.hint} posts the lesson's own hint`);
       expect(text).toContain(
-        "This tutorial's doc pages, which open beside the code: The program log (https://solana.com/docs/programs/debugging). When one of them covers what you explain, link it as a Markdown link with its address exactly as listed. Link another site only for what none of them covers, and one page at most per answer."
+        "This tutorial's doc pages, which open beside the code: The program log (https://solana.com/docs/programs/debugging). When one of them covers what you explain, link it as a Markdown link with its address exactly as listed: the section that covers it when one does, the page otherwise. When you also name the page a section is in, link the page too. Link another site only for what none of them covers, and one page at most per answer."
+      );
+    });
+
+    it("lists each doc page's sections with their addresses, pages with none as before", () => {
+      const url = "https://www.anchor-lang.com/docs/basics/program-structure";
+      const withDocs: TutorialDefinition = {
+        version: hello.version,
+        name: hello.name,
+        description: hello.description,
+        authors: hello.authors,
+        level: hello.level,
+        framework: hello.framework,
+        languages: hello.languages,
+        thumbnail: hello.thumbnail,
+        minutes: hello.minutes,
+        intro: hello.intro,
+        steps: hello.steps,
+        finish: hello.finish,
+        docs: [
+          { title: "Program Structure", url, file: "program-structure.md" },
+          {
+            title: "Programs",
+            url: "https://solana.com/docs/core/programs",
+            file: "programs.md",
+          },
+          {
+            title: "Transactions",
+            url: "https://solana.com/docs/core/transactions",
+            file: "transactions.md",
+          },
+        ],
+      };
+      const text = describeTutorial({
+        definition: withDocs,
+        docPages: {
+          "program-structure.md":
+            "# Program Structure\n\n## #[account] attribute\n\n### Account Discriminator\n",
+          "programs.md": "# Programs\n\nNo sections.",
+        },
+        progress: freshProgress(),
+        live: null,
+        openFiles: [],
+        currentFile: null,
+      });
+      expect(text).toContain(
+        `Program Structure (${url}), sections: #[account] attribute (${url}#account-attribute), Account Discriminator (${url}#account-discriminator); ` +
+          "Programs (https://solana.com/docs/core/programs); " +
+          "Transactions (https://solana.com/docs/core/transactions). When one"
       );
     });
 
@@ -292,6 +389,7 @@ if (import.meta.vitest) {
       expect(
         describeTutorial({
           definition: hello,
+          docPages: undefined,
           progress,
           live: null,
           openFiles: [],
@@ -306,6 +404,7 @@ if (import.meta.vitest) {
       const facts = (progress: ConversationProgress) =>
         describeTutorial({
           definition: hello,
+          docPages: undefined,
           progress,
           live: null,
           openFiles: [],

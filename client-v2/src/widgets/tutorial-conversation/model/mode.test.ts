@@ -31,6 +31,19 @@ vi.mock("@/utils/explorer", () => ({
 vi.mock("@/views/sidebar/assistant/store", () => ({
   PgAssistant: { addToolCall: vi.fn() },
 }));
+vi.mock("@/utils/tutorial", () => ({
+  PgTutorial: {
+    all: [
+      {
+        name: "Hello Anchor",
+        docPages: {
+          "program-structure.md":
+            "# Program Structure\n\n## #[account] attribute\n",
+        },
+      },
+    ],
+  },
+}));
 
 const conversation = vi.mocked(PgConversation);
 
