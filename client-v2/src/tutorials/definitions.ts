@@ -69,7 +69,7 @@ if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("tutorials/definitions", () => {
-    /** The Markdown tutorial Hello Anchor's finish suggests next */
+    /** An upstream Markdown tutorial, listed after the conversation ones */
     const counterPda = { name: "Counter PDA Tutorial" } as TutorialData;
 
     it("lists Hello Anchor from its tutorial.json", () => {
@@ -119,11 +119,17 @@ if (import.meta.vitest) {
     });
 
     it("leaves out a definition whose next names no listed tutorial, keeps one with none", () => {
-      // Without Counter PDA Tutorial among the others, Hello Anchor's next
-      // names nothing; Zero Copy's next is null, so it stays
+      // Without Battle Coins among the others, Lumberjack's next names
+      // nothing; Zero Copy's next is null, so it stays
       const names = definitionTutorials([]).map((t) => t.name);
-      expect(names).not.toContain("Hello Anchor");
+      expect(names).not.toContain("Lumberjack");
       expect(names).toContain("Zero Copy");
+    });
+
+    it("accepts another definition as a next", () => {
+      // Hello Anchor's next is Lumberjack, a definition itself
+      const names = definitionTutorials([]).map((t) => t.name);
+      expect(names).toContain("Hello Anchor");
     });
 
     it("lists Zero Copy under Advanced, in four steps", () => {
