@@ -38,7 +38,7 @@ source outside its declaration, where a `track` call names it.
 | Fund the wallet | `fund_sent` | `fund_failed` | `FundDialog` in `features/fund-wallet/ui/FundDialog.tsx` | features/fund-wallet |
 | Deploy | `deploy_started`, `deploy_succeeded` | `deploy_failed` | `deploy` (its `preChecks` and `handle`) in `commands/deploy/deploy.ts`; `PgStageDeploy.start` in `features/deploy/model/stage-deploy.ts` | features/deploy |
 | Use: run tests or a client script | `run_finished` | `run_errored` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | pending (funnel-events) |
-| Use: send an instruction | `interact_sent`, `interact_succeeded` | `interact_failed` | `runCall` in `views/flow/stages/run-call.ts` | features/program-interact |
+| Use: send an instruction | `interact_sent`, `interact_succeeded` | `interact_failed`, `interact_cancelled` (the user said no in the wallet) | `runCall` in `views/flow/stages/run-call.ts` | features/program-interact |
 | Export the project | `project_exported` | `project_export_failed` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `Project` in `widgets/settings-page/ui/SettingsPage.tsx` | pending (funnel-events) |
 | Follow a tutorial | `tutorial_started`, `tutorial_finished` | `tutorial_definition_rejected`, `tutorial_action_run` (its outcome other than ok) | `open`, `reducer` and `store` in `features/tutorial-conversation/model/`; `load` in `entities/tutorial/model/definition/load.ts` | entities/tutorial |
 | Ask the assistant | `assistant_turn_sent`, `assistant_turn_answered` | `assistant_turn_failed` | `useTurn` in `widgets/assistant/model/use-turn.ts` | widgets/assistant |

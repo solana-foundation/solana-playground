@@ -343,8 +343,16 @@ describe("runCall events", () => {
     ]);
   });
 
-  it("counts a call that never went out as failed at send", async () => {
+  it("counts a wallet the user said no to as cancelled, not failed", async () => {
     h.test.mockRejectedValue(new Error("User rejected the request."));
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([["interact_cancelled", { cluster: "devnet" }]]);
+  });
+
+  it("counts a call that never went out as failed at send", async () => {
+    h.test.mockRejectedValue(new Error("Failed to fetch"));
 
     await runCall(IX);
 

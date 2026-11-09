@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import type { InteractCluster } from "@/features/program-interact";
 import { interactTelemetry } from "@/features/program-interact";
 import { createLogger } from "@/shared/lib/logger";
+import { isWalletRejection } from "@/shared/lib/wallet-rejection";
 
 import {
   PgCommand,
@@ -131,11 +132,16 @@ const send = async (
     };
   } catch (e: any) {
     // A signature with a thrown error: sent, but its confirmation is unknown
-    if (!reported)
-      interactTelemetry.track("interact_failed", {
-        cluster,
-        phase: signature ? "confirm" : "send",
-      });
+    if (!reported) {
+      if (!signature && isWalletRejection(e)) {
+        interactTelemetry.track("interact_cancelled", { cluster });
+      } else {
+        interactTelemetry.track("interact_failed", {
+          cluster,
+          phase: signature ? "confirm" : "send",
+        });
+      }
+    }
     const raw: string = e?.message ?? String(e);
     // An RPC refusal is named rather than shown in web3's words, which tell
     // a learner to catch the exception

@@ -12,7 +12,9 @@ type InteractEvents = {
   interact_sent: { cluster: InteractCluster };
   /** That transaction confirmed without an error. */
   interact_succeeded: { cluster: InteractCluster };
-  /** An instruction call did not succeed, stopping at `phase`. */
+  /** The user declined to sign an instruction call in their wallet, so nothing went out. Not a failure: `interact_failed` never counts it. */
+  interact_cancelled: { cluster: InteractCluster };
+  /** An instruction call did not succeed, stopping at `phase`. A wallet the user said no to is `interact_cancelled` instead. */
   interact_failed: { cluster: InteractCluster; phase: InteractFailedPhase };
 };
 

@@ -1,3 +1,8 @@
+import {
+  errorFieldsOf,
+  isWalletRejection,
+} from "@/shared/lib/wallet-rejection";
+
 /** A Playground account that can receive SOL, as the dialog names it */
 export interface Receiver {
   name: string;
@@ -98,35 +103,16 @@ export const maxAmount = (balance: number): string | undefined => {
   return fraction ? `${whole}.${fraction}` : String(whole);
 };
 
-/** How wallets word a user's "no": Phantom, Solflare, Backpack, WalletConnect */
-const REJECTION = /reject|denied|declin|cancel/i;
-
-/** EIP-1193's "user rejected", which several Solana wallets reuse */
-const USER_REJECTED_CODE = 4001;
-
 const NETWORK = /failed to (fetch|send)|network|timed? ?out|blockhash/i;
 
 /** Errors from the cluster, never from the user: read before any wording */
 const NETWORK_NAMES = new Set(["SendTransactionError", "TransferFailedError"]);
 
-/** Name, code and message of whatever was thrown: wallets also throw plain objects */
-const fieldsOf = (error: unknown) => {
-  if (typeof error !== "object" || error === null) {
-    return { name: "", code: undefined, message: "" };
-  }
-  const { name, code, message } = error as Record<string, unknown>;
-  return {
-    name: typeof name === "string" ? name : "",
-    code,
-    message: typeof message === "string" ? message : "",
-  };
-};
-
 export const classify = (error: unknown): FailureReason => {
-  const { name, code, message } = fieldsOf(error);
+  const { name, message } = errorFieldsOf(error);
   if (name === "TransferNotConfirmedError") return "unconfirmed";
   if (NETWORK_NAMES.has(name)) return "network";
-  if (code === USER_REJECTED_CODE || REJECTION.test(message)) return "rejected";
+  if (isWalletRejection(error)) return "rejected";
   if (NETWORK.test(message)) return "network";
   return "unknown";
 };
