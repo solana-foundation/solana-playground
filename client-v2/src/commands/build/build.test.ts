@@ -184,8 +184,8 @@ describe("commands/build/build", () => {
       utils.PgExplorer.files = { "/p/src/lib.rs": { content: NATIVE } };
       utils.PgServer.build.mockResolvedValue({
         stderr: "Finished release",
-        uuid: null,
-        idl: null,
+        uuid: undefined,
+        idl: undefined,
       });
 
       await run();
@@ -199,8 +199,8 @@ describe("commands/build/build", () => {
     it("counts a compile error as a failed build", async () => {
       utils.PgServer.build.mockResolvedValue({
         stderr: "error[E0425]: x\nerror: could not compile `solpg`",
-        uuid: null,
-        idl: null,
+        uuid: undefined,
+        idl: undefined,
       });
 
       await run();
