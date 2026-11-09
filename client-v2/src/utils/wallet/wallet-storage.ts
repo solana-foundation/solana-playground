@@ -408,6 +408,10 @@ export const walletStorageWith =
       if (target === "store-stale") return;
       target = isIndexedDbMissing(error) ? "store-gone" : "store-stale";
     };
+    /** Fall back for good after the store answered a read: it may hold a copy */
+    const degradeAfterRead = () => {
+      target = "store-stale";
+    };
     let writes = Promise.resolve();
     /** The newest save that has not landed in either store */
     let unsaved: SerializedWalletState | undefined;
@@ -532,6 +536,23 @@ export const walletStorageWith =
       }
     };
 
+    /**
+     * Replace the `localStorage` copy read as `text` with `state`, unless
+     * someone rewrote it meanwhile (`keepUnsaved` writes outside the lock, and
+     * may hold another tab's only copy of a key)
+     *
+     * @returns whether `localStorage` now holds `state`
+     */
+    const rewriteLocal = (text: string) => (state: StoredWallet) => {
+      try {
+        if (local.getItem(WALLET_LOCAL_KEY) !== text) return false;
+      } catch (error) {
+        reportFailure("Wallet in localStorage not read", error);
+        return false;
+      }
+      return writeLocal(state);
+    };
+
     const fallBack = (state: SerializedWalletState): WriteOutcome => {
       if (!writeLocal(state)) return "lost";
       return target === "store-stale" ? "local-store-stale" : "local";
@@ -621,6 +642,9 @@ export const walletStorageWith =
         // A store that may hold a wallet, and no copy to fall back to: not
         // degraded, so the next read (Try again) asks the store again
         if (!fromLocal && !isIndexedDbMissing(error)) return UNAVAILABLE;
+        // TODO(HOO-2680 follow-up): with IndexedDB absent this holds for
+        // good, so keys in `localStorage` never move; moving them needs a
+        // path that skips the store's set-aside record
         if (isMoveBlocked(move, fromLocal)) return UNAVAILABLE;
         // A save while falling back rewrites `localStorage` without its
         // damaged accounts, which may still hold key bytes: their text goes
@@ -697,7 +721,7 @@ export const walletStorageWith =
           if (movedKeys.length > 0) return UNAVAILABLE;
           // Nothing moves and nothing is rewritten, so the damaged accounts
           // stay where they were
-          degrade(error);
+          degradeAfterRead();
           return foundOrNone(merged);
         }
         reportDamaged("Damaged wallet accounts set aside", new Error("shape"));
@@ -705,6 +729,10 @@ export const walletStorageWith =
       const found = foundOrNoneWith(damaged.length);
 
       if (!fromLocal) {
+        // TODO(HOO-2680 follow-up): a misshapen store record and no wallet
+        // anywhere leaves `merged` undefined, so nothing rewrites the record
+        // and its key bytes stay in the store after the move; it needs a
+        // decision on what a keyless "no wallet" record is
         const isMoved = movedKeys.length > 0;
         if (merged && (isMoved || (stored && stored.damaged.length > 0))) {
           try {
@@ -733,8 +761,11 @@ export const walletStorageWith =
       // and nothing here can clear them
       const isStoreHoldingKeys =
         move !== undefined &&
-        stored !== undefined &&
-        hasKeys([...stored.wallet.accounts, ...stored.damaged]);
+        hasKeys([
+          ...(stored?.wallet.accounts ?? []),
+          ...(stored?.damaged ?? []),
+          ...misshapen,
+        ]);
       try {
         await copyToStore(moved);
       } catch (error) {
@@ -744,8 +775,11 @@ export const walletStorageWith =
         // origin. If even that fails, the move is not done: the wallet does
         // not load, nothing degrades, and the next read asks the store again.
         if (isStoreHoldingKeys) return UNAVAILABLE;
-        if (isLocalHoldingKeys && !writeLocal(moved)) return UNAVAILABLE;
-        degrade(error);
+        if (isLocalHoldingKeys && !rewriteLocal(fromLocal.text)(moved)) {
+          return UNAVAILABLE;
+        }
+        degradeAfterRead();
+        await clearMovedAside(movedKeys);
         return found(moved);
       }
 

@@ -602,7 +602,7 @@ if (import.meta.vitest) {
         expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
       });
 
-      it("a store that does not take the keyless record keeps the wallet unavailable until a read finishes the move", async () => {
+      it("keeps the wallet unavailable when the store refuses the keyless record, until a read finishes the move", async () => {
         const record = walletOf(accountsOf(2));
         const store = memoryStore(record);
         store.write.mockRejectedValueOnce(new Error("quota"));
@@ -625,7 +625,7 @@ if (import.meta.vitest) {
         expect(store.held()).toEqual(keyless(record));
       });
 
-      it("a store that does not take a localStorage wallet: localStorage is rewritten without keys and the wallet loads from it", async () => {
+      it("rewrites a localStorage wallet the store refuses without its keys, and loads from it", async () => {
         const record = walletOf(accountsOf(1));
         const store = memoryStore(undefined);
         store.write.mockRejectedValueOnce(new Error("quota"));
@@ -647,7 +647,53 @@ if (import.meta.vitest) {
         );
       });
 
-      it("a localStorage wallet neither the store nor localStorage takes back without keys stays unavailable with its keys", async () => {
+      it("clears moved keys from the set-aside record when the store refuses a localStorage wallet", async () => {
+        const [account] = accountsOf(1);
+        const other = realKey();
+        const damaged = { name: "Bad", kp: other.kp, publicKey: "nope" };
+        const store = memoryStore(undefined);
+        store.write.mockRejectedValueOnce(new Error("quota"));
+        const local = memoryLocal(
+          JSON.stringify({
+            state: "pg",
+            accounts: [account, damaged],
+            currentIndex: 0,
+            standardName: NO_STANDARD,
+          })
+        );
+        const { frame, kept } = fakeKeyPage();
+
+        const read = await walletStorageWith(store)(local).readMovingKeys(
+          moveKeysWith(frame)
+        );
+
+        expect(read.kind).toBe("wallet");
+        expect(kept.has(other.publicKey)).toBe(true);
+        expect(JSON.stringify(store.heldAside())).not.toContain(
+          other.kp.join(",")
+        );
+      });
+
+      it("leaves a localStorage copy another tab rewrote during the move, and stays unavailable", async () => {
+        const record = walletOf(accountsOf(1));
+        const store = memoryStore(undefined);
+        store.write.mockRejectedValueOnce(new Error("quota"));
+        const local = memoryLocal(JSON.stringify(record));
+        const rewritten = JSON.stringify(walletOf(accountsOf(2)));
+        const { frame } = fakeKeyPageAnswering((keys) => {
+          local.items.set(WALLET_LOCAL_KEY, rewritten);
+          return keys;
+        });
+
+        const read = await walletStorageWith(store)(local).readMovingKeys(
+          moveKeysWith(frame)
+        );
+
+        expect(read).toEqual({ kind: "unavailable" });
+        expect(local.items.get(WALLET_LOCAL_KEY)).toBe(rewritten);
+      });
+
+      it("keeps a localStorage wallet's keys and the wallet unavailable when neither store takes it without keys", async () => {
         const record = walletOf(accountsOf(1));
         const store = memoryStore(undefined);
         store.write.mockRejectedValueOnce(new Error("quota"));
@@ -666,7 +712,7 @@ if (import.meta.vitest) {
         expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
       });
 
-      it("a store holding keys that refuses its record without them keeps the wallet unavailable, even with a localStorage copy", async () => {
+      it("keeps the wallet unavailable when a store holding keys refuses its record without them, even with a localStorage copy", async () => {
         const record = walletOf(accountsOf(1));
         const store = memoryStore(record);
         store.write.mockRejectedValueOnce(new Error("quota"));
@@ -681,7 +727,7 @@ if (import.meta.vitest) {
         expect(store.held()).toEqual(record);
       });
 
-      it("a localStorage wallet whose copy cannot be removed keeps the wallet unavailable until a read removes it", async () => {
+      it("keeps the wallet unavailable until a read removes a localStorage copy that could not be removed", async () => {
         const record = walletOf(accountsOf(1));
         const store = memoryStore(undefined);
         const text = JSON.stringify(record);
@@ -710,7 +756,7 @@ if (import.meta.vitest) {
         expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
       });
 
-      it("damaged accounts the store will not set aside keep the wallet unavailable once keys moved", async () => {
+      it("keeps the wallet unavailable once keys moved when the store will not set damaged accounts aside", async () => {
         const [account] = accountsOf(1);
         const junk = { name: 7, kp: Array.from({ length: 64 }, () => 1) };
         const stored = {
