@@ -11,16 +11,12 @@ This page gives the order, the check after each step, and what to do when a chec
 ("deploy-client-vercel.md") and [Firewall](firewall.md); each step links the section it runs.
 
 Alexander Anikeev (`alexander.anikeev@hoodies.team`, or `<SUPPORT_CHANNEL>`) is the contact on the Hoodies side and
-helps with setting this up. The steps marked "Ping Alexander" name what to send him.
+helps with setting this up.
 
-## Values file
+## Values to have ready
 
-Every placeholder below goes into one shell file outside the repository, for example `~/solpg-production.env`,
-which every shell running these steps sources first. Start it from cloud-sql.md's
-["Values used below"](cloud-sql.md#values-used-below) block, which already defines `PROJECT_ID`, `REGION`,
-`TEAM_SLUG`, `VERCEL_PROJECT`, `OPERATOR` and the service accounts derived from them, and add the rest as variables
-of the same names (`VERCEL_PROJECT_ID=...`, `CUSTOM_DOMAIN=...`). Fill in what is known before step 1; the table
-says which values only a step produces, and that step adds them. None of these values is a secret.
+The placeholders the steps use. They are inputs to the commands, not production variables: none goes into Doppler
+or Vercel, and none is a secret. Have each ready before step 1; the table says which ones a step produces.
 
 | Placeholder | What it is | Where to find it |
 | --- | --- | --- |
@@ -76,8 +72,9 @@ Accounts and access:
   another slug, stop and tell Alexander before step 5.
 - DNS of `<CUSTOM_DOMAIN>` (step 9).
 
-**Each new shell** starts with `. ~/solpg-production.env` (the [values file](#values-file)): the commands below
-read `$PROJECT_ID`, `$REGION`, `$OPERATOR`, `$PRODUCTION_DB_USER`, `$PRODUCTION_SA` and `$PROJECT_NUMBER` from it.
+**Each new shell** starts by setting cloud-sql.md's ["Values used below"](cloud-sql.md#values-used-below): the
+commands below read `$PROJECT_ID`, `$REGION`, `$OPERATOR`, `$PRODUCTION_DB_USER`, `$PRODUCTION_SA` and
+`$PROJECT_NUMBER` from it.
 
 To open `psql` on `solpg` as the operator, which several checks do, from any directory:
 
@@ -248,8 +245,6 @@ Live session `<SESSION_SETUP>`.
 `npx vercel@62.7.0 env ls production` runs and lists only what `<DOPPLER_CONFIG>` already holds (nothing, if it is
 new).
 
-**Ping Alexander:** with `<VERCEL_APP_DOMAIN>`, and with the output of `vercel-link` if it fails.
-
 ## Step 2: Google Cloud and Cloud SQL
 
 Live session `<SESSION_SETUP>`. Ticket HOO-1735.
@@ -272,9 +267,6 @@ helpers that step 5 uses). Step 3 was done in step 1. Step 5 creates `solpg` if 
 **If a check fails:** nothing reads `solpg` yet, so fix and run the step again. A `GRANT` that answers
 `permission denied` has its own fix in step 5 of cloud-sql.md. A proxy that does not start prints its log: usually
 `gcloud` is logged in as someone without the Cloud SQL roles step 5 grants.
-
-**Ping Alexander:** with the outputs of checks 1 and 2, and when a step marked _unverified_ in cloud-sql.md behaves
-differently from what it says.
 
 ## Step 3: the database variables and the schema
 
@@ -367,8 +359,6 @@ first deployment in step 7. Give write access to `<DOPPLER_CONFIG>` only to the 
 **Check:** in Vercel → Settings → Environment Variables, Production, `AUTH_SECRET`, `GITHUB_CLIENT_SECRET`,
 `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET` carry the Secret badge, and
 `SENTRY_AUTH_TOKEN` does not.
-
-**Ping Alexander:** if Sentry's organization or project slug differs from `solana-fndn` / `solana-playground`.
 
 ## Step 6: the production environment
 
@@ -466,9 +456,6 @@ and deploys to the production domain. A build on Vercel itself would not finish 
 
 Fix the cause and deploy again; no one uses the domain yet.
 
-**Ping Alexander:** he is in the session; send him the outputs of checks 2, 3 and 7, and the `usd` and `turns` of
-check 6 beside the `newcomer` key's spend.
-
 ## Step 8: deploys from `master`, and the smoke check
 
 Live session `<SESSION_SETUP>`.
@@ -523,8 +510,6 @@ origin, `AUTH_BASE_URL`. The accounts and projects created while testing stay in
 
 **If a check fails:** as in step 7. **Rollback:** point the OAuth app and `AUTH_BASE_URL` back at
 `<VERCEL_APP_DOMAIN>`, remove the domain, and redeploy.
-
-**Ping Alexander:** he is in the session; send him the outputs of checks 1 and 2.
 
 ## Operating production
 
