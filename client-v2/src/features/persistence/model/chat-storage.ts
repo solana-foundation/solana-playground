@@ -1,3 +1,8 @@
+import {
+  removeConfigDir,
+  removeConfigFile,
+  writeConfigFile,
+} from "../../../utils/explorer/config-file";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { decodeThread, encodeThread } from "./chat-codec";
@@ -158,13 +163,9 @@ export class PgChatStorage {
     const capped = capThread(threadId, items);
 
     try {
-      // `createParents` on the write, not a separate `createDir`: that helper
-      // treats the last path segment as a file name and stops short of it, so
-      // asking it for the directory itself only ever creates `/.config`
-      await PgFs.writeFile(
+      await writeConfigFile(
         pathOf(threadId),
-        JSON.stringify(encodeThread(capped)),
-        { createParents: true }
+        JSON.stringify(encodeThread(capped))
       );
     } catch (e) {
       report(`write ${threadId}`, e);
@@ -177,7 +178,7 @@ export class PgChatStorage {
    */
   static async remove(threadId: string): Promise<boolean> {
     try {
-      await PgFs.removeFile(pathOf(threadId));
+      await removeConfigFile(pathOf(threadId));
       return true;
     } catch (e) {
       if (isMissing(e)) return true;
@@ -218,7 +219,7 @@ export class PgChatStorage {
   /** Drop every thread. Used on sign-out, after a successful final sync. */
   static async clear() {
     try {
-      await PgFs.removeDir(DIR, { recursive: true });
+      await removeConfigDir(DIR);
     } catch (e) {
       if (!isMissing(e)) report("clear", e);
     }
@@ -257,6 +258,35 @@ if (import.meta.vitest) {
     });
 
     describe("PgChatStorage", () => {
+      it("keeps a thread it just created through a reload before the folder tree is saved", async () => {
+        await PgChatStorage.write("t1", [item(1)]);
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+
+        expect(await PgChatStorage.read("t1")).toEqual([item(1)]);
+      });
+
+      it("forgets a thread it removed through a reload before the folder tree is saved", async () => {
+        await PgChatStorage.write("t1", [item(1)]);
+        await PgChatStorage.remove("t1");
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+
+        expect(await PgChatStorage.threadIds()).toEqual([]);
+      });
+
+      it("forgets threads it cleared through a reload before the folder tree is saved", async () => {
+        await PgChatStorage.write("t1", [item(1)]);
+        await PgChatStorage.clear();
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+
+        expect(await PgChatStorage.threadIds()).toEqual([]);
+      });
+
       it("round-trips a thread", async () => {
         await PgChatStorage.write("t1", [item(1), item(2)]);
 

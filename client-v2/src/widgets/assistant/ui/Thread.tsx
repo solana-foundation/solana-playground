@@ -13,6 +13,7 @@ import {
 } from "../../../views/sidebar/assistant/store";
 import { DEFAULT_CONNECTION } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
+import { isChangeProposal } from "../model/is-change-proposal";
 import { useSignInOffer } from "../model/sign-in-offer";
 import { assistantTelemetry } from "../model/telemetry";
 import type { Turn } from "../model/use-turn";
@@ -28,9 +29,10 @@ const SUGGESTIONS = [
 ] as const;
 
 /**
- * Sent by "Make this change": models often describe an edit in prose instead of
- * calling `write_file`. This asks for the same edit as a patch, which lands in
- * the usual approval card.
+ * Sent by "Make this change": models often show an edit as a code block in
+ * the reply instead of calling `write_file`. This asks for the same edit as a
+ * patch, which lands in the usual approval card. It is offered only under
+ * such a block (`isChangeProposal`).
  *
  * It leaves the assistant a line to say afterwards, so the turn does not end
  * on a silence the panel has to explain.
@@ -67,12 +69,14 @@ export const Thread = ({
 
   // Offer "Make this change" on the reply the assistant just finished, and
   // only there: an older message describes code that has since moved on, and a
-  // turn ending in an approval card has already produced its patch.
+  // turn ending in an approval card has already produced its patch. Only a
+  // reply that proposes code gets it: an explanation has nothing to apply.
   const lastItem = items[items.length - 1];
   const changeableId =
     !busy &&
     lastItem?.kind === "assistant" &&
     lastItem.text &&
+    isChangeProposal(lastItem.text) &&
     !turnProducedApproval(items)
       ? lastItem.id
       : null;

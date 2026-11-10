@@ -9,7 +9,7 @@ import {
 import { Spinner } from "@/shared/ui/spinner";
 
 import type { AccountView } from "../model/account";
-import { accountLabel, accountUser } from "../model/account";
+import { accountImage, accountLabel } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
 import RailUser from "./RailUser";
 
@@ -66,7 +66,7 @@ const BaseRailFooter = ({
                   // footer's row does beside the avatar
                   <Spinner aria-label="Sending feedback" />
                 ) : (
-                  <RailAccount image={accountUser(account)?.image} />
+                  <RailAccount image={accountImage(account)} />
                 )}
               </SidebarMenuButton>
             </DropdownMenuTrigger>

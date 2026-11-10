@@ -33,6 +33,8 @@ test a failure on purpose (C-2, C-3, C-5, M-4, G-2 to G-5) say so in their title
 
 The browser's `ResizeObserver loop completed with undelivered notifications.` is not in the table: client-v2's global
 error handler drops it (HOO-2125). A `logger:global` error with that text means the filter regressed, and C-4 fails.
+client-v2's own code raises none on a load of Home or a project (`client-v2/e2e/resize-observer-loop.e2e.spec.ts`,
+HOO-2187), so a notice seen in C-4 comes from a dependency or a browser extension.
 
 ## 0. Prerequisites
 

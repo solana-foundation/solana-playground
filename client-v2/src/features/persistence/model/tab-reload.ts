@@ -225,7 +225,7 @@ const leaveDeleted = async (): Promise<ReloadResult> => {
     return "skipped";
   } else {
     // What the deleting tab ends up showing: the tree, tabs and editor
-    // reset, and the gallery opening over the empty state. Not what its
+    // reset, and Home showing over the empty state. Not what its
     // `deleteWorkspace` does to get there -- that clears the current id,
     // saves the list and announces a switch, and the list on disk is
     // already the deleter's. Not `ON_DID_DELETE_WORKSPACE` either, which
@@ -265,8 +265,8 @@ const leaveDeleted = async (): Promise<ReloadResult> => {
  *
  * `importWorkspace` writes no files for an empty set and dispatches
  * `ON_DID_CREATE_WORKSPACE`. That re-renders the navigation's project list, and
- * `Flow.tsx` answers it by closing the gallery it opened over an empty
- * browser -- harmless here, where the list was not empty to begin with.
+ * the start view answers it by leaving Home for the work -- harmless here,
+ * where the list was not empty to begin with.
  *
  * @returns whether it is back. When it is not, the caller leaves it as a
  * deleted one, which is at least a state the sidebar can render; its files
@@ -437,6 +437,7 @@ const reloadOnce = async (reopen: boolean): Promise<ReloadResult> => {
   }
   if (!changed.length) return "unchanged";
 
+  PgCommon.createAndDispatchCustomEvent(PgExplorer.events.ON_DID_RELOAD_FILES);
   await PgEditorModels.drop(changed);
   const open = PgExplorer.getCurrentFile();
   if (open && changed.includes(open.path)) {

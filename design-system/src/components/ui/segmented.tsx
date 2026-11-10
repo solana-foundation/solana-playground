@@ -115,7 +115,7 @@ const segmentedItemVariants = cva(
         gradient:
           "h-8 rounded-lg border border-border px-3 text-muted-foreground hover:border-border-strong hover:text-foreground data-[state=on]:gradient-stroke data-[state=on]:text-foreground data-[state=on]:[--stroke-fill:var(--surface-panel)]",
         chips:
-          "h-7 rounded-md border border-border px-2.5 text-muted-foreground hover:text-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/10 data-[state=on]:text-foreground",
+          "h-7 rounded-md border border-border px-2.5 text-muted-foreground hover:border-border-strong hover:text-foreground data-[state=on]:border-primary data-[state=on]:bg-primary/10 data-[state=on]:text-foreground",
       },
     },
     defaultVariants: {

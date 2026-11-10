@@ -5,7 +5,7 @@ import BaseNewProject from "./BaseNewProject";
 
 /**
  * New project, connected: Start from scratch and the catalog's two lists
- * from `useNewProject`, which the dialog holds above its `ModalFrame`.
+ * from `useNewProject`, which the page holds (`NewProjectPage`).
  */
 const NewProject = ({ project }: { project: NewProjectState }) => (
   <BaseNewProject
@@ -14,7 +14,8 @@ const NewProject = ({ project }: { project: NewProjectState }) => (
       <StartFromScratch
         held={project.busy}
         onRunning={project.onStarting}
-        onStarted={project.closeDialog}
+        onStarted={project.closePage}
+        onFailed={project.onStartFailed}
       />
     }
   />

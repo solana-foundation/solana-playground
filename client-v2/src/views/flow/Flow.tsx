@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { openConnectDialog } from "@/app/ConnectDialog";
@@ -5,7 +6,7 @@ import { openShareGistDialogFor, ShareButton } from "@/app/ShareGistDialog";
 import Wallet from "@/components/Wallet";
 import { FeedbackHost } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
-import { useKeybind } from "@/hooks";
+import { useKeybind, useRenderOnChange } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
@@ -15,12 +16,21 @@ import {
   type SettingsFocus,
   type SettingsRequest,
 } from "@/shared/lib/settings-request";
-import { LogoLockup } from "@/shared/ui/logo";
+import { LogoLockup, LogoLockupMark } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
 import { Tag } from "@/shared/ui/tag";
 import { PgCommon, PgExplorer, PgTutorial, PgView } from "@/utils";
+import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
-import { Assistant, useTurn } from "@/widgets/assistant";
+import {
+  Assistant,
+  displayModelName,
+  modelShown,
+  probeDefaultBackend,
+  retryDefaultBackend,
+  useDefaultBackend,
+  useTurn,
+} from "@/widgets/assistant";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { homeSlot, useStartView } from "@/widgets/home";
 import { CONSOLE_KEY, keyLabel, LayoutShell } from "@/widgets/layout-shell";
@@ -30,6 +40,7 @@ import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
 import { SetupList } from "@/widgets/setup-list";
 import {
   StageNotice,
+  StatusAnnouncer,
   StatusChip,
   StatusRail,
   StatusRow,
@@ -61,6 +72,10 @@ import type { FlowState } from "./state/stage";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
 import { useStagesOffered } from "./use-stages-offered";
 import { useViewPath } from "./use-view-path";
+
+/** The status's Try again on the hosted model: whether the deployment answered */
+const retryHostedModel = async () =>
+  (await probeDefaultBackend()).state !== "unreachable";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
@@ -206,6 +221,46 @@ const shareFromCodeHead = (name: string) =>
     name
   );
 
+/**
+ * The settings page with whether the hosted model answers, and the asking
+ * again its row offers. Its own component, so the probe is read only while
+ * the page is open and the frame does not re-render on its answer.
+ */
+const LiveSettings = (
+  props: Omit<
+    ComponentProps<typeof SettingsPage>,
+    "hosted" | "hostedName" | "ownKey" | "onRetryHosted"
+  >
+) => {
+  const backend = useDefaultBackend();
+  useRenderOnChange(PgAssistant.onDidChange);
+  // Named as the composer's model button names them, so Settings and the
+  // chat never disagree about which model answers (HOO-2695)
+  const current = modelShown(PgAssistant.connection, backend);
+  return (
+    <SettingsPage
+      {...props}
+      hosted={backend.state}
+      hostedName={
+        PgAssistant.hostedModel && displayModelName(PgAssistant.hostedModel)
+      }
+      ownKey={current.kind === "keyed" ? current.label : undefined}
+      onRetryHosted={retryHosted}
+    />
+  );
+};
+
+/**
+ * The row's Try again. The probe answers its own failures and tells every
+ * reader; a rejection is a bug past them, reported as the composer's retry
+ * reports it, then rethrown for the button's own handler
+ */
+const retryHosted = () =>
+  retryDefaultBackend().catch((error: unknown) => {
+    log.error(error, { report: true, context: { from: "settings" } });
+    throw error;
+  });
+
 const FlowFrame = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
   const [settings, setSettings] = useState<SettingsState>({ open: false });
@@ -296,7 +351,7 @@ const FlowFrame = () => {
   );
 
   const page = useStartView();
-  // The Tutorials or Programs page shown, if any (`widgets/catalog`)
+  // The New project, Tutorials or Programs page shown, if any (`widgets/catalog`)
   const catalog = useCatalogPage();
   // Home, the page shown and the work, each on its own URL
   useViewPath({
@@ -419,6 +474,16 @@ const FlowFrame = () => {
         fade={1}
         className="-z-10 will-change-transform"
       />
+      {/* Outside the part that goes inert, so it still speaks over the
+          settings. No stage while they cover the work: the stage's notice is
+          invisible and inert then, so the announcer says the outage itself */}
+      <StatusAnnouncer
+        stage={
+          page.view === "work" && !catalog && !settings.open
+            ? state.stage
+            : undefined
+        }
+      />
       {/* The app stays mounted under the settings page, invisible and inert
           (design.md, "Settings as a full page (5.20)"): `Write` must never
           unmount, and with `display: contents` and `visibility` the shell
@@ -443,6 +508,7 @@ const FlowFrame = () => {
                 })
               }
               onConnectAi={() => openConnectDialog("status")}
+              onRetryAi={retryHostedModel}
             />
           }
           home={homeSlot(
@@ -479,8 +545,6 @@ const FlowFrame = () => {
                   // A phone's menu page would cover the page it just opened
                   closeSheet();
                 }}
-                onClosePage={catalogPage.close}
-                closeSheet={closeSheet}
                 phone={menuPage}
                 collapsed={collapsed}
                 onToggle={toggle}
@@ -498,6 +562,7 @@ const FlowFrame = () => {
                     </Tag>
                   </span>
                 }
+                railLogo={<LogoLockupMark aria-hidden="true" />}
                 projects={(open) => (
                   <ProjectList
                     onPicked={catalogPage.close}
@@ -526,6 +591,7 @@ const FlowFrame = () => {
                           })
                         }
                         onConnectAi={() => openConnectDialog("status")}
+                        onRetryAi={retryHostedModel}
                       />
                     }
                     onToggleSettings={toggleSettings(closeSheet)}
@@ -543,6 +609,7 @@ const FlowFrame = () => {
                           })
                         }
                         onConnectAi={() => openConnectDialog("status")}
+                        onRetryAi={retryHostedModel}
                       />
                     }
                     onToggleSettings={toggleSettings(closeSheet)}
@@ -648,7 +715,7 @@ const FlowFrame = () => {
       </div>
 
       {settings.open && (
-        <SettingsPage focus={settings.focus} onClose={closeSettings} />
+        <LiveSettings focus={settings.focus} onClose={closeSettings} />
       )}
 
       <ModalHost />

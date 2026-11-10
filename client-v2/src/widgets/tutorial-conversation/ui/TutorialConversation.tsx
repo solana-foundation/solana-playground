@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { StepJumpVia } from "@/entities/tutorial";
 import {
   docForLink,
+  isOnStartLadder,
   requestCode,
   requestDoc,
   slugOf,
@@ -574,12 +575,12 @@ const handlers: Omit<
 
 /**
  * The tutorial a definition's `finish.next` names, by its slug among the
- * listed ones, or null. The loader drops a definition whose `next` names no
- * known tutorial, so a set `next` almost always finds one; it finds none
- * when it names a definition that was itself left out.
+ * listed ones, or null. Only a start ladder tutorial is recommended: any
+ * other next finds none, as `yarn tutorial:check` already refuses one. It
+ * also finds none when it names a definition that was itself left out.
  */
 const nextTutorialOf = (next: string | null): string | null =>
-  next === null
+  next === null || !isOnStartLadder(next)
     ? null
     : PgTutorial.all.find((t) => slugOf(t.name) === next)?.name ?? null;
 

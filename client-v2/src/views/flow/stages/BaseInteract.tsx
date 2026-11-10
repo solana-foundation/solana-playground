@@ -151,7 +151,7 @@ const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
         </BrandButton>
         {/* An outline in the pill's height and shape, so the pill keeps the
             focus, as Deploy's Upload IDL */}
-        <div className="flex justify-center [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:rounded-full [&_[data-slot=button]]:px-5 max-md:[&_[data-slot=button]]:w-full max-md:[&>div]:w-full">
+        <div className="flex justify-center [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:rounded-full [&_[data-slot=button]]:px-5 max-md:[&_[data-slot=button]]:h-12 max-md:[&_[data-slot=button]]:w-full max-md:[&>div]:w-full">
           {p.idlLoad}
         </div>
       </>
@@ -288,7 +288,7 @@ const BaseInteract = (p: BaseInteractProps) => (
     <div className="flex flex-col items-start gap-4 border-b border-border px-6 py-3 max-md:min-h-15 max-md:justify-center max-md:py-2 max-md:pr-2 max-md:pl-5">
       <div className="flex flex-col gap-1 max-md:hidden">
         <div className="flex flex-wrap items-baseline gap-2.5">
-          <h2 className="m-0 text-[1.75rem] leading-tight font-medium tracking-tight">
+          <h2 className="m-0 text-[1.75rem] leading-tight font-headline tracking-tight">
             Interact
           </h2>
           <span className="font-mono text-sm text-muted-foreground">
@@ -303,7 +303,7 @@ const BaseInteract = (p: BaseInteractProps) => (
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           Deployment
           <NativeSelect
-            className="[&_select]:font-mono [&_select]:text-xs [&_select]:tabular-nums"
+            className="[&_select]:font-mono [&_select]:text-xs [&_select]:tabular-nums max-md:[&_select]:h-11!"
             value={p.selected ?? ""}
             onChange={(ev) => p.onPick(ev.target.value)}
             disabled={p.deployments.length === 0}

@@ -55,8 +55,8 @@ function DiffStat({
       className={cn("ml-auto flex gap-2 text-xs tabular-nums", className)}
       {...props}
     >
-      <span className="text-success">+{added}</span>
-      <span className="text-error">−{removed}</span>
+      <span className="text-success-ink">+{added}</span>
+      <span className="text-error-ink">−{removed}</span>
     </span>
   );
 }
@@ -80,8 +80,8 @@ const diffLineVariants = cva(
     variants: {
       variant: {
         context: "text-muted-foreground before:content-['_']",
-        added: "bg-success/10 text-success before:content-['+']",
-        removed: "bg-error/10 text-error before:content-['−']",
+        added: "bg-success/10 text-success-ink before:content-['+']",
+        removed: "bg-error/10 text-error-ink before:content-['−']",
       },
     },
     defaultVariants: {
