@@ -21,12 +21,12 @@ SHALL contain the production build server's host.
 A build with `VERCEL_ENV` set SHALL fail before bundling when `REACT_APP_SERVER_URL` is empty or unset, with a
 message that names `REACT_APP_SERVER_URL`. A build without `VERCEL_ENV` SHALL NOT fail for this reason.
 
-#### Scenario: A preview build without the variable
+#### Scenario: A preview build without the variable (manual)
 
 - **WHEN** the build runs with `VERCEL_ENV=preview` and no `REACT_APP_SERVER_URL`
 - **THEN** it exits non-zero, and its output names `REACT_APP_SERVER_URL`
 
-#### Scenario: A CI build
+#### Scenario: A CI build (manual)
 
 - **WHEN** the build runs with neither `VERCEL_ENV` nor `REACT_APP_SERVER_URL`
 - **THEN** the check passes
@@ -36,7 +36,7 @@ message that names `REACT_APP_SERVER_URL`. A build without `VERCEL_ENV` SHALL NO
 When `REACT_APP_SERVER_URL` is empty, the default build server SHALL be `http://localhost:8080`, and the client SHALL
 log a warning that names `REACT_APP_SERVER_URL` once at start-up.
 
-#### Scenario: A fresh checkout
+#### Scenario: A fresh checkout (manual)
 
 - **WHEN** `yarn dev` runs without `REACT_APP_SERVER_URL` and a fresh profile opens the app
 - **THEN** the "Build server" setting is `http://localhost:8080`, and the console shows the warning
@@ -47,12 +47,12 @@ The "Build server" setting SHALL list "Solana Foundation" with the URL from `REA
 is set, and SHALL NOT list it when the variable is empty. A profile that stored that option SHALL use the variable's
 current URL, or the default when the variable is empty.
 
-#### Scenario: The variable is set
+#### Scenario: The variable is set (manual)
 
 - **WHEN** `REACT_APP_SERVER_URL` is `https://server.example`
 - **THEN** the setting lists "Solana Foundation" with `https://server.example`, before "Local"
 
-#### Scenario: A stored choice without the variable
+#### Scenario: A stored choice without the variable (manual)
 
 - **WHEN** a profile stored the "Solana Foundation" option and the app starts with `REACT_APP_SERVER_URL` empty
 - **THEN** the setting is `http://localhost:8080`

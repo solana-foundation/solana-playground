@@ -12,12 +12,12 @@ user's machine, the exported project it relies on, and keeping an uploaded IDL a
 When a build response carries `idl: null`, `client-v2` SHALL keep the IDL it already holds for the program. A
 response with an IDL SHALL replace it.
 
-#### Scenario: Rebuild after an upload
+#### Scenario: Rebuild after an upload (manual)
 
 - **WHEN** a user uploads an IDL, then builds, and the build response carries `idl: null`
 - **THEN** Interact still offers the uploaded IDL's instructions
 
-#### Scenario: A build that returns an IDL
+#### Scenario: A build that returns an IDL (manual)
 
 - **WHEN** the held IDL names program `a`, and a build response carries an IDL that names program `b`
 - **THEN** the held IDL names program `b`
@@ -33,7 +33,7 @@ The Anchor project export SHALL write an `idl-build` feature into the program's 
 - **WHEN** a user exports the default Anchor starter and runs `anchor idl build` in it with Anchor 1.1.2
 - **THEN** the command writes the IDL JSON and exits 0
 
-#### Scenario: A program that uses anchor-spl
+#### Scenario: A program that uses anchor-spl (manual)
 
 - **WHEN** the exported files include a program whose source contains `anchor_spl::`
 - **THEN** the program's `Cargo.toml` has `idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]`
@@ -60,13 +60,13 @@ After a successful build, the Build stage SHALL say that the build produces no I
 "Build the IDL locally"; it SHALL NOT say that an IDL reflects the build. While the browser holds no IDL, the Build
 stage SHALL NOT show "Download IDL", and "Build the IDL locally" SHALL take its place in the downloads row.
 
-#### Scenario: A successful build
+#### Scenario: A successful build (manual)
 
 - **WHEN** a build succeeds and its response carries `idl: null`
 - **THEN** the Build stage's message does not contain "The IDL below reflects this build", and "Build the IDL
   locally" is shown
 
-#### Scenario: Download without an IDL
+#### Scenario: Download without an IDL (manual)
 
 - **WHEN** a build succeeds and the browser holds no IDL
 - **THEN** the Build stage shows no "Download IDL", and "Build the IDL locally" is first in its downloads row
@@ -78,22 +78,22 @@ The dialog SHALL hold a two-option control with the `aria-label` "IDL build meth
 the project to uploading the IDL. Every shell command SHALL sit in a code block with a copy button whose
 `aria-label` is "Copy command".
 
-#### Scenario: Switching method
+#### Scenario: Switching method (manual)
 
 - **WHEN** the user selects "Local toolchain"
 - **THEN** the steps for installing Rust, the Solana CLI, and Anchor through `avm` replace the Docker steps
 
-#### Scenario: The last step
+#### Scenario: The last step (manual)
 
 - **WHEN** either method is shown
 - **THEN** its last step names the IDL file's path and holds an "Upload IDL" link
 
-#### Scenario: Following Upload IDL
+#### Scenario: Following Upload IDL (manual)
 
 - **WHEN** the user presses the last step's "Upload IDL" from Build, Deploy, or Interact
 - **THEN** the dialog closes, the Flow shows Deploy, and Deploy's "Upload IDL" takes focus and opens the file picker
 
-#### Scenario: Docker's install page
+#### Scenario: Docker's install page (manual)
 
 - **WHEN** the Docker method is shown
 - **THEN** "Docker" in its build step links to `https://docs.docker.com/get-started/get-docker/`
@@ -119,12 +119,12 @@ method SHALL install the Solana CLI version and the Anchor version the stable bu
 The first step of both methods SHALL hold a "Download project" button that exports the open workspace in Anchor's
 layout as a zip. A failed export SHALL show its reason in the dialog and log it.
 
-#### Scenario: Download
+#### Scenario: Download (manual)
 
 - **WHEN** the user presses "Download project" in an Anchor workspace
 - **THEN** the browser saves `<workspace>.zip`
 
-#### Scenario: A workspace whose framework cannot be told
+#### Scenario: A workspace whose framework cannot be told (manual)
 
 - **WHEN** the export throws because the framework cannot be told
 - **THEN** the dialog shows the reason under the button, and the dialog stays open
@@ -137,7 +137,7 @@ The slice `idl-build-guide` SHALL send `idl_guide_opened` when the dialog opens,
 `docker-build`, `install-rust`, `install-solana`, `install-anchor`, `anchor-build`; and
 `idl_guide_upload_followed`, with no parameters, when the user presses the last step's "Upload IDL".
 
-#### Scenario: Open, switch, copy
+#### Scenario: Open, switch, copy (manual)
 
 - **WHEN** the user opens the guide from Interact, selects "Local toolchain", and copies the Rust install command
 - **THEN** the memory provider records `idl_guide_opened` with `surface: "interact"`, `idl_guide_method_picked`
@@ -150,12 +150,12 @@ The slice `idl-build-guide` SHALL send `idl_guide_project_downloaded`, with no p
 and `idl_guide_export_failed` when the export throws, with `reason` one of `unknown-framework`, `no-workspace`,
 `other`.
 
-#### Scenario: A saved zip
+#### Scenario: A saved zip (manual)
 
 - **WHEN** the user presses "Download project" and the export succeeds
 - **THEN** the memory provider records `idl_guide_project_downloaded`
 
-#### Scenario: A failed export
+#### Scenario: A failed export (manual)
 
 - **WHEN** the export throws because the framework cannot be told
 - **THEN** the memory provider records `idl_guide_export_failed` with `reason: "unknown-framework"`, and no
