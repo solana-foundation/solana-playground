@@ -37,6 +37,8 @@ export interface BaseIdlBuildGuideProps {
   onDownload: () => Promise<void>;
   /** A step's command reached the clipboard */
   onCopied: (step: CommandStepId) => void;
+  /** The last step's Upload IDL link; the dialog has closed */
+  onUpload: () => void;
 }
 
 const TRIGGER = "Build the IDL locally";
@@ -72,6 +74,29 @@ const DownloadStep = ({
   </div>
 );
 
+const StepTitle = ({
+  step,
+}: {
+  step: Extract<GuideStep, { kind: "command" }>;
+}) => {
+  const at = step.link ? step.title.indexOf(step.link.text) : -1;
+  if (!step.link || at === -1) return <p>{step.title}</p>;
+  return (
+    <p>
+      {step.title.slice(0, at)}
+      <a
+        href={step.link.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-4"
+      >
+        {step.link.text}
+      </a>
+      {step.title.slice(at + step.link.text.length)}
+    </p>
+  );
+};
+
 const CommandStep = ({
   p,
   step,
@@ -80,7 +105,7 @@ const CommandStep = ({
   step: Extract<GuideStep, { kind: "command" }>;
 }) => (
   <div className="flex min-w-0 flex-col gap-2">
-    <p>{step.title}</p>
+    <StepTitle step={step} />
     {step.note && <p className="text-xs text-muted-foreground">{step.note}</p>}
     <CodeBlock>
       <CodeBlockHeader>
@@ -103,11 +128,36 @@ const CommandStep = ({
   </div>
 );
 
+const UploadStep = ({
+  p,
+  step,
+}: {
+  p: BaseIdlBuildGuideProps;
+  step: Extract<GuideStep, { kind: "upload" }>;
+}) => (
+  <div className="flex flex-col items-start gap-2">
+    <p>
+      {step.title}{" "}
+      <Button
+        variant="link"
+        className="h-auto p-0"
+        onClick={() => {
+          p.onOpenChange(false);
+          p.onUpload();
+        }}
+      >
+        Upload IDL
+      </Button>
+    </p>
+    <p className="text-xs text-muted-foreground">{step.note}</p>
+  </div>
+);
+
 const Step = ({ p, step }: { p: BaseIdlBuildGuideProps; step: GuideStep }) => {
   if (step.kind === "download")
     return <DownloadStep p={p} title={step.title} />;
   if (step.kind === "command") return <CommandStep p={p} step={step} />;
-  return <p>{step.title}</p>;
+  return <UploadStep p={p} step={step} />;
 };
 
 /**

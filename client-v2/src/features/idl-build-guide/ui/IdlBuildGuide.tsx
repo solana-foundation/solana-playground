@@ -34,10 +34,12 @@ const failureReason = (error: unknown): ExportFailureReason => {
 export interface IdlBuildGuideProps {
   /** The Flow stage the guide is opened from */
   surface: GuideSurface;
+  /** Opens the IDL upload; the stage decides where it lives */
+  onUpload: () => void;
 }
 
 /** The guide, connected: the workspace export, telemetry, and the logger. */
-const IdlBuildGuide = ({ surface }: IdlBuildGuideProps) => {
+const IdlBuildGuide = ({ surface, onUpload }: IdlBuildGuideProps) => {
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<IdlBuildMethod>("docker");
   const [download, setDownload] = useState<Download>({ state: "idle" });
@@ -70,6 +72,11 @@ const IdlBuildGuide = ({ surface }: IdlBuildGuideProps) => {
     idlBuildGuideTelemetry.track("idl_guide_project_downloaded", {});
   };
 
+  const handleUpload = () => {
+    idlBuildGuideTelemetry.track("idl_guide_upload_followed", {});
+    onUpload();
+  };
+
   return (
     <BaseIdlBuildGuide
       open={open}
@@ -85,6 +92,7 @@ const IdlBuildGuide = ({ surface }: IdlBuildGuideProps) => {
           step,
         })
       }
+      onUpload={handleUpload}
     />
   );
 };

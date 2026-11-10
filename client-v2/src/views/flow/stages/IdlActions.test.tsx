@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
   error: vi.fn(),
   idl: null as unknown,
   subscribedTo: vi.fn(),
+  setStage: vi.fn(),
 }));
+
+vi.mock("../state/stage", () => ({ PgFlow: { setStage: mocks.setStage } }));
 
 vi.mock("../../../utils", () => ({
   PgCommon: { getDataUrl: () => "data:application/json," },
@@ -49,7 +52,7 @@ vi.mock("@/shared/lib/logger", () => ({
   }),
 }));
 
-import IdlActions, { useIdlName } from "./IdlActions";
+import IdlActions, { uploadIdlOnDeploy, useIdlName } from "./IdlActions";
 
 const COUNTER_IDL = JSON.stringify({ name: "counter", instructions: [] });
 
@@ -315,6 +318,32 @@ describe("IdlActions on a stage that lists the IDL", () => {
     expect(
       await screen.findByText("That file is not an Anchor IDL.")
     ).toBeTruthy();
+  });
+
+  // The guide's Upload IDL link, followed from Deploy and from another stage
+  it.each([
+    ["while Deploy shows", true],
+    ["once Deploy mounts", false],
+  ])("uploadIdlOnDeploy opens the picker %s", (_, isMountedFirst) => {
+    const click = vi.spyOn(HTMLInputElement.prototype, "click");
+    if (isMountedFirst) render(<IdlActions mode="upload-button" />);
+    uploadIdlOnDeploy();
+    if (!isMountedFirst) render(<IdlActions mode="upload-button" />);
+
+    expect(mocks.setStage).toHaveBeenCalledWith("deploy");
+    expect(click).toHaveBeenCalledOnce();
+    expect(document.activeElement?.textContent).toBe("Upload IDL");
+  });
+
+  it("uploadIdlOnDeploy leaves Interact's picker closed", () => {
+    const click = vi.spyOn(HTMLInputElement.prototype, "click");
+    const interact = render(<IdlActions mode="upload" />);
+    uploadIdlOnDeploy();
+    expect(click).not.toHaveBeenCalled();
+
+    interact.unmount();
+    render(<IdlActions mode="upload-button" />);
+    expect(click).toHaveBeenCalledOnce();
   });
 
   const IdlName = () => (

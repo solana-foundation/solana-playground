@@ -111,6 +111,7 @@ vi.mock("@/widgets/status", () => ({ useNetworkHold: () => mocks.hold }));
 vi.mock("./IdlActions", () => ({
   default: () => null,
   useIdlName: () => undefined,
+  uploadIdlOnDeploy: () => undefined,
 }));
 vi.mock("@/shared/lib/report-button-failure", () => ({
   reportButtonFailure: (action: string) =>

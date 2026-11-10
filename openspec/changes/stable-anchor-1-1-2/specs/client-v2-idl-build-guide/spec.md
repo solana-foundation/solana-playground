@@ -86,7 +86,17 @@ the project to uploading the IDL. Every shell command SHALL sit in a code block 
 #### Scenario: The last step
 
 - **WHEN** either method is shown
-- **THEN** its last step names the IDL file's path and the "Upload IDL" action
+- **THEN** its last step names the IDL file's path and holds an "Upload IDL" link
+
+#### Scenario: Following Upload IDL
+
+- **WHEN** the user presses the last step's "Upload IDL" from Build, Deploy, or Interact
+- **THEN** the dialog closes, the Flow shows Deploy, and Deploy's "Upload IDL" takes focus and opens the file picker
+
+#### Scenario: Docker's install page
+
+- **WHEN** the Docker method is shown
+- **THEN** "Docker" in its build step links to `https://docs.docker.com/get-started/get-docker/`
 
 ### Requirement: The guide's commands pin the server's versions
 
@@ -124,7 +134,8 @@ layout as a zip. A failed export SHALL show its reason in the dialog and log it.
 The slice `idl-build-guide` SHALL send `idl_guide_opened` when the dialog opens, with `surface` one of `build`,
 `deploy`, `interact`; `idl_guide_method_picked` when the user changes the method, not on open, with `method`
 `docker` or `local`; and `idl_guide_command_copied` when a copy succeeds, with `method` and `step` one of
-`docker-build`, `install-rust`, `install-solana`, `install-anchor`, `anchor-build`.
+`docker-build`, `install-rust`, `install-solana`, `install-anchor`, `anchor-build`; and
+`idl_guide_upload_followed`, with no parameters, when the user presses the last step's "Upload IDL".
 
 #### Scenario: Open, switch, copy
 

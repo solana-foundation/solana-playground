@@ -16,16 +16,22 @@ export type CommandStepId =
 /** Where both methods write the IDL: the project root, since `-o` creates no folder and a fresh export has no `target/idl` */
 export const IDL_PATH = "idl.json";
 
+/** Prints where the IDL landed, so the root location is not a guess; silent when the build wrote nothing */
+const SHOW_IDL_PATH = `[ -f ${IDL_PATH} ] && echo "IDL written to $PWD/${IDL_PATH}"`;
+
 export type GuideStep =
   | { kind: "download"; title: string }
   | {
       kind: "command";
       id: CommandStepId;
       title: string;
+      /** Turns the first `text` in `title` into a link */
+      link?: { text: string; href: string };
       note?: string;
       lines: string[];
     }
-  | { kind: "upload"; title: string };
+  /** `title` leads into the Upload IDL link; `note` follows it */
+  | { kind: "upload"; title: string; note: string };
 
 const DOWNLOAD: GuideStep = {
   kind: "download",
@@ -34,7 +40,8 @@ const DOWNLOAD: GuideStep = {
 
 const UPLOAD: GuideStep = {
   kind: "upload",
-  title: `Upload ${IDL_PATH} from the project folder with "Upload IDL". Build the IDL again after you change the program's instructions or accounts.`,
+  title: `Upload ${IDL_PATH} from the project folder on Deploy:`,
+  note: "Build the IDL again after you change the program's instructions or accounts.",
 };
 
 // TODO: export the features the server enables on each crate, so a program that needs one builds its IDL locally
@@ -46,8 +53,13 @@ export const STEPS: Record<IdlBuildMethod, GuideStep[]> = {
       kind: "command",
       id: "docker-build",
       title: `Build the IDL in Anchor ${ANCHOR_VERSION}'s Docker image.`,
+      link: {
+        text: "Docker",
+        href: "https://docs.docker.com/get-started/get-docker/",
+      },
       lines: [
         `docker run --rm --platform linux/amd64 -v "$PWD":/workdir -w /workdir quay.io/ottersec/anchor:v${ANCHOR_VERSION} anchor idl build -o ${IDL_PATH}`,
+        SHOW_IDL_PATH,
       ],
     },
     UPLOAD,
@@ -87,7 +99,7 @@ export const STEPS: Record<IdlBuildMethod, GuideStep[]> = {
       kind: "command",
       id: "anchor-build",
       title: "Build the IDL.",
-      lines: [`anchor idl build -o ${IDL_PATH}`],
+      lines: [`anchor idl build -o ${IDL_PATH}`, SHOW_IDL_PATH],
     },
     UPLOAD,
   ],

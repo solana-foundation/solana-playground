@@ -18,7 +18,10 @@ vi.mock("./interact-surface", () => ({
   interactFacts: () => ({}),
   interactSurface: () => mocks.surface,
 }));
-vi.mock("./IdlActions", () => ({ default: () => undefined }));
+vi.mock("./IdlActions", () => ({
+  default: () => undefined,
+  uploadIdlOnDeploy: () => undefined,
+}));
 // Echoes the network it is told the wallet lacks SOL on
 vi.mock("./InteractBody", () => ({
   default: ({ solNeededOn }: { solNeededOn?: string }) => (

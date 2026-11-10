@@ -56,10 +56,13 @@ afterEach(() => {
   resetLogger();
 });
 
+const onUpload = vi.fn();
+
 const openFrom = (surface: "build" | "deploy" | "interact") => {
+  onUpload.mockReset();
   render(
     <TooltipProvider>
-      <IdlBuildGuide surface={surface} />
+      <IdlBuildGuide surface={surface} onUpload={onUpload} />
     </TooltipProvider>
   );
   fireEvent.click(
@@ -101,9 +104,33 @@ describe("features/idl-build-guide", () => {
       expect(lastStep(dialog)).toContain(
         "Upload idl.json from the project folder"
       );
-      expect(lastStep(dialog)).toContain('"Upload IDL"');
+      expect(
+        within(steps(dialog).at(-1) as HTMLElement).getByRole("button", {
+          name: "Upload IDL",
+        })
+      ).toBeTruthy();
     }
   );
+
+  it("closes on Upload IDL, hands over to the stage, and reports it", () => {
+    const dialog = openFrom("build");
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Upload IDL" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(onUpload).toHaveBeenCalledOnce();
+    expect(sent.events.map((e) => e.name)).toEqual([
+      "idl_guide_opened",
+      "idl_guide_upload_followed",
+    ]);
+  });
+
+  it("links Docker to its install page", () => {
+    const dialog = openFrom("build");
+    expect(
+      within(dialog).getByRole("link", { name: "Docker" }).getAttribute("href")
+    ).toBe("https://docs.docker.com/get-started/get-docker/");
+  });
 
   it("starts both methods with Download project", () => {
     const dialog = openFrom("build");

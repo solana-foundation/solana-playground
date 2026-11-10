@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { programName } from "@/entities/idl";
 import { createLogger } from "@/shared/lib/logger";
@@ -8,6 +8,7 @@ import { Button } from "@/shared/ui/button";
 import ImportButton from "../../../components/ImportButton";
 import { useRenderOnChange } from "../../../hooks";
 import { PgCommon, PgProgramInfo } from "../../../utils";
+import { PgFlow } from "../state/stage";
 
 const log = createLogger("flow:idl-actions");
 
@@ -58,6 +59,21 @@ const DownloadIdl = ({ look }: { look: IdlLook }) => {
   );
 };
 
+/** Deploy's Upload IDL picker while it is mounted */
+let openDeployPicker: (() => void) | undefined;
+/** Set while Deploy is still mounting, so its picker opens once it does */
+let isDeployPickerRequested = false;
+
+/**
+ * Takes the user to Deploy and opens its Upload IDL picker. The browser may
+ * refuse a picker opened outside the click, so the button also takes focus.
+ */
+export const uploadIdlOnDeploy = () => {
+  if (openDeployPicker) openDeployPicker();
+  else isDeployPickerRequested = true;
+  PgFlow.setStage("deploy");
+};
+
 /** Names the IDL in use by its program, so the user can tell which is loaded */
 const idlLabel = (idl: object) => {
   const name = programName(idl);
@@ -82,6 +98,26 @@ const UploadIdl = ({
   // other step or from a build, answers it.
   const [refusal, setRefusal] = useState<{ over: typeof idl }>();
   const refused = refusal !== undefined && refusal.over === idl;
+
+  // Deploy's instance, the one without the name, answers `uploadIdlOnDeploy`
+  const group = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (withName) return;
+    const open = () => {
+      group.current?.querySelector("button")?.focus();
+      group.current
+        ?.querySelector<HTMLInputElement>("input[type=file]")
+        ?.click();
+    };
+    openDeployPicker = open;
+    if (isDeployPickerRequested) {
+      isDeployPickerRequested = false;
+      open();
+    }
+    return () => {
+      if (openDeployPicker === open) openDeployPicker = undefined;
+    };
+  }, [withName]);
 
   /** Refuses a file that is not an IDL; a throw after that is ours */
   const load = async (file: File | undefined) => {
@@ -108,7 +144,7 @@ const UploadIdl = ({
   // holds, so a file fixed on disk and picked again would be ignored.
   return (
     // One group, so the lines stay beside their button wherever a stage puts it
-    <span className="inline-flex flex-wrap items-center gap-2">
+    <span ref={group} className="inline-flex flex-wrap items-center gap-2">
       <ImportButton
         accept=".json"
         variant={look}

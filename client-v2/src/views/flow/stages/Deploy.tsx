@@ -34,7 +34,7 @@ import { PgFlow } from "../state/stage";
 import type { DeployDetails, DeployPayer } from "./BaseDeploy";
 import BaseDeploy from "./BaseDeploy";
 import { deployViewFor } from "./deploy-view";
-import IdlActions, { useIdlName } from "./IdlActions";
+import IdlActions, { uploadIdlOnDeploy, useIdlName } from "./IdlActions";
 import { markIfToldByStage } from "./stage-failure";
 
 const log = createLogger("flow:deploy");
@@ -210,7 +210,9 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         }
         onShowNetwork={showNetwork}
         idlUpload={<IdlActions mode="upload-button" />}
-        idlGuide={<IdlBuildGuide surface="deploy" />}
+        idlGuide={
+          <IdlBuildGuide surface="deploy" onUpload={uploadIdlOnDeploy} />
+        }
         idlName={idlName}
         // Keyed on the project: an open dialog or a note never carries over
         // to another project's keypair

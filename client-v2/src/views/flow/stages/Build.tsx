@@ -22,7 +22,7 @@ import { PgFlow } from "../state/stage";
 import BaseBuild from "./BaseBuild";
 import { buildSurface, ownOutput } from "./build-surface";
 import { failedView } from "./build-view";
-import IdlActions from "./IdlActions";
+import IdlActions, { uploadIdlOnDeploy } from "./IdlActions";
 import { toldByStage } from "./stage-failure";
 import { useSlowBuild } from "./use-slow-build";
 
@@ -105,7 +105,7 @@ const Build = () => {
           <DownloadProgram from="build-stage" look="link" />
         </>
       }
-      idlGuide={<IdlBuildGuide surface="build" />}
+      idlGuide={<IdlBuildGuide surface="build" onUpload={uploadIdlOnDeploy} />}
     />
   );
 };
