@@ -10,14 +10,17 @@ This page gives the order, the check after each step, and what to do when a chec
 [Cloud SQL for client-v2](cloud-sql.md) ("cloud-sql.md" below), [Deploy the client to Vercel](deploy-client-vercel.md)
 ("deploy-client-vercel.md") and [Firewall](firewall.md); each step links the section it runs.
 
-**Stop at a failed check.** Do not start the next step. Send Alexander Anikeev (`alexander.anikeev@hoodies.team`, or
-`<SUPPORT_CHANNEL>`) the command and its whole output, never a secret value. Alexander has no access to the Google
-Cloud project or the Vercel team, so you run every step here; he reads output, answers questions and checks the
-public URLs from outside.
+Alexander Anikeev (`alexander.anikeev@hoodies.team`, or `<SUPPORT_CHANNEL>`) is the contact on the Hoodies side and
+helps with setting this up. The steps marked "Ping Alexander" name what to send him.
 
-## Values the client fills in
+## Values file
 
-Fill each in once, before step 1. Some are known only after a step; the table says which.
+Every placeholder below goes into one shell file outside the repository, for example `~/solpg-production.env`,
+which every shell running these steps sources first. Start it from cloud-sql.md's
+["Values used below"](cloud-sql.md#values-used-below) block, which already defines `PROJECT_ID`, `REGION`,
+`TEAM_SLUG`, `VERCEL_PROJECT`, `OPERATOR` and the service accounts derived from them, and add the rest as variables
+of the same names (`VERCEL_PROJECT_ID=...`, `CUSTOM_DOMAIN=...`). Fill in what is known before step 1; the table
+says which values only a step produces, and that step adds them. None of these values is a secret.
 
 | Placeholder | What it is | Where to find it |
 | --- | --- | --- |
@@ -73,9 +76,8 @@ Accounts and access:
   another slug, stop and tell Alexander before step 5.
 - DNS of `<CUSTOM_DOMAIN>` (step 9).
 
-**Each new shell** (every live session) starts by setting cloud-sql.md's
-["Values used below"](cloud-sql.md#values-used-below): the steps use `$PROJECT_ID`, `$REGION`, `$OPERATOR`,
-`$PRODUCTION_DB_USER`, `$PRODUCTION_SA` and `$PROJECT_NUMBER`.
+**Each new shell** starts with `. ~/solpg-production.env` (the [values file](#values-file)): the commands below
+read `$PROJECT_ID`, `$REGION`, `$OPERATOR`, `$PRODUCTION_DB_USER`, `$PRODUCTION_SA` and `$PROJECT_NUMBER` from it.
 
 To open `psql` on `solpg` as the operator, which several checks do, from any directory:
 
