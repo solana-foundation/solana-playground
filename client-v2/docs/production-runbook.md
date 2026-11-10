@@ -250,7 +250,8 @@ Optional. Without them the app uses the public Solana endpoints.
    WebAssembly, about an hour), which does not fit in Vercel's build time limit; with the credentials it stores the
    compiled packages there and later builds reuse them, so a push to `master` can deploy (step 8). If either line
    says `unset`, builds on Vercel never finish: tell Alexander, and deploy with the local build of step 7 until it
-   is fixed.
+   is fixed. The two lines prove only that the credentials are there, not that the cache holds the packages: step
+   8's check 3 proves that.
 
 ## Step 2: Google Cloud and Cloud SQL
 
@@ -399,7 +400,7 @@ and deploys to the production domain.
 
 **Why a local build:** the first build has to compile the wasm packages, and on Vercel that takes longer than its
 build time limit allows, so it would fail. A local build has no limit. Once Remote Cache holds the compiled
-packages (step 1, check 2), builds on Vercel reuse them and finish, and from step 8 a push to `master` deploys
+packages (step 8, check 3), builds on Vercel reuse them and finish, and from step 8 a push to `master` deploys
 production without this command ([Deploying production](#deploying-production)).
 
 **Check:**
@@ -486,6 +487,12 @@ result.
 2. The `smoke` job of that push's `client-v2` run passes and its summary shows `{"enabled":true,"db":"ok"}`. A Git
    build that times out fails the job, and production keeps the deployment it had ([Deploying
    production](#deploying-production)).
+3. **Remote Cache holds the packages.** That push's build log (Deployments → the build → Building) prints
+   `>>> wasm packages: HIT in Remote Cache` or `HIT in Build Cache`, and the same for `>>> default crates:`. A
+   `MISS in Build Cache and Remote Cache` line means the cache was empty: that build compiles the packages and
+   uploads them before it can time out, so the next push's build should print `HIT`. A line
+   `Remote Cache upload failed` means it did not store them: tell Alexander. Until a build prints both `HIT` lines,
+   deploy each merge to `master` with step 7's command.
 
 ## Step 9: release on the custom domain
 
