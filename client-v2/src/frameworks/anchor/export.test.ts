@@ -161,6 +161,28 @@ await pg.program.methods.hello(name).rpc();
     expect(files.get("client/client.ts")).not.toContain("(async");
   });
 
+  it("leaves a client that starts with export{} unwrapped", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'export{};\nawait pg.program.methods.hello("Anchor").rpc();\n',
+    ]);
+
+    expect(files.get("client/client.ts")).not.toContain("(async");
+  });
+
+  it("keeps a comment on the last import's line beside the import", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'import { BN } from "bn.js"; // big numbers\nconsole.log(BN);\n',
+    ]);
+
+    const client = files.get("client/client.ts") ?? "";
+    expect(client).toContain('import { BN } from "bn.js"; // big numbers\n');
+    expect(client).toContain(
+      "anchor.Program<HelloAnchor>;\n\nconsole.log(BN);"
+    );
+  });
+
   it("keeps the code that follows the last import on the same line", async () => {
     const files = await exported(LIB, [
       "client/client.ts",

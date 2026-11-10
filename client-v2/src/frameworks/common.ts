@@ -46,14 +46,16 @@ export const addAfter = (
  * `await` is not available in a CommonJS module.
  *
  * An `await` inside a comment or a string also triggers the wrap, which is
- * harmless. A client with a top-level `export` is left as it is: inside the
- * function the `export` would not compile.
+ * harmless. A client with a top-level `export` (`export const`, `export {}`,
+ * `export *`) is left as it is: inside the function the `export` would not
+ * compile. A line inside a template literal or a block comment that starts
+ * with `export` also leaves the client unwrapped.
  *
  * @param content JS/TS code
  * @returns the content with the wrapped code
  */
 export const wrapTopLevelAwait = (content: string) => {
-  if (!/\bawait\b/.test(content) || /^export\s/m.test(content)) {
+  if (!/\bawait\b/.test(content) || /^export\b/m.test(content)) {
     return content;
   }
 
@@ -103,9 +105,12 @@ export const addAfterImports = (content: string, newContent: string) => {
   const end = getLeadingImportsEnd(content);
   if (!end) return newContent + "\n" + content;
 
+  // A comment on the last import's line stays beside that import
+  const comment = /^[ \t]*\/\/[^\r\n]*/.exec(content.slice(end))?.[0] ?? "";
+  const head = end + comment.length;
   // Skip the line break that ends the last import, when there is one
-  const rest = content.slice(end).replace(/^\r?\n/, "");
-  return content.slice(0, end) + "\n" + newContent + "\n" + rest;
+  const rest = content.slice(head).replace(/^\r?\n/, "");
+  return content.slice(0, head) + "\n" + newContent + "\n" + rest;
 };
 
 /**
