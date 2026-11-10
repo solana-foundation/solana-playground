@@ -191,7 +191,7 @@ Optional. Without them the app uses the public Solana endpoints.
 | Where | Name | Value | Set in |
 | --- | --- | --- | --- |
 | `client-v2/.env` in your checkout (gitignored) | `VERCEL_DEPLOY_TEAM`, `VERCEL_DEPLOY_PROJECT_ID` | `<TEAM_SLUG>` and `<VERCEL_PROJECT_ID>`. Every Makefile target refuses a checkout linked to another project | Step 1 |
-| GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. The `smoke` job of `client-v2.yml` sends it to check production after each push to `master` | Step 8 |
+| GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. **Why:** after each push to `master`, the `smoke` job of `.github/workflows/client-v2.yml` waits for that commit's production deployment and calls `GET /api/sync` on the deployment's own URL, which Deployment Protection hides; the job sends this secret to get past it. The run fails unless production answers `{"enabled":true,"db":"ok"}`, so a production that cannot reach its database shows as a red run. Without the secret the job passes with a warning and checks nothing | Step 8 |
 | The build server's environment | `PG_CLIENT_URLS` | Must include `https://<VERCEL_APP_DOMAIN>` and, from step 9, `https://<CUSTOM_DOMAIN>`, or the browser's build requests are refused by CORS | Before step 7; step 9 |
 
 ## Step 1: the Vercel project
@@ -214,8 +214,9 @@ Optional. Without them the app uses the public Solana endpoints.
 5. Team Settings → Security: **Enforce Sensitive Environment Variables** off, or at least not covering this
    project's Production. With it on, `SENTRY_AUTH_TOKEN` and the database variables become Secrets, a local build
    pulls them as empty, and the production build and `migrate-production-db` fail.
-6. Settings → Deployment Protection → Protection Bypass for Automation: create the secret. It goes on GitHub in
-   step 8; it stays readable on this settings page.
+6. Settings → Deployment Protection → Protection Bypass for Automation: create the secret. The CI smoke check uses
+   it ([Outside Vercel](#outside-vercel) says how); it goes on GitHub in step 8 and stays readable on this settings
+   page.
 7. Note `<VERCEL_PROJECT_ID>` (Settings → General) and `<VERCEL_APP_DOMAIN>` (Settings → Domains).
 8. **Doppler.** Create `<DOPPLER_PROJECT>` and `<DOPPLER_CONFIG>` if they do not exist. In the project,
    Integrations → Vercel: authorize Doppler's Vercel app, then Setup Integration with Team `<TEAM_SLUG>`, project
