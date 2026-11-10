@@ -1,3 +1,5 @@
+import type { RunKind } from "../../features/run";
+import { runTelemetry } from "../../features/run";
 import {
   PgCommon,
   PgExplorer,
@@ -6,6 +8,7 @@ import {
   PgTerminal,
 } from "../../utils";
 import type { RunResult } from "../../utils/js-runtime";
+import { isRunBusy } from "../../utils/js-runtime";
 import { createArgs, createCmd } from "../create";
 
 /**
@@ -65,17 +68,49 @@ export const test = createCmd({
   handle: (input) => processCommon({ paths: input.args.paths, isTest: true }),
 });
 
-/**
- * Process `run` or `test` command.
- *
- * @param params -
- * - `paths`: File paths to run or test
- * - `isTest`: Whether to execute as test
- */
-const processCommon = async (params: {
+/** What `run` and `test` take, from the terminal or the explorer */
+interface ProcessParams {
+  /** File paths to run or test */
   paths: string[] | undefined;
+  /** Whether to execute as test */
   isTest: boolean;
-}): Promise<RunResult> => {
+}
+
+/**
+ * Process `run` or `test` command, and count the run: `run_finished` with its
+ * outcome when `runFiles` returns (`test` runs every file, `run` stops at the
+ * first failing script), or `run_errored` when it throws before or instead of
+ * finishing (the funnel's "Use" step, `client-v2-run`).
+ *
+ * @param params the paths and whether to execute as test
+ * @throws what `runFiles` throws, after the run is counted
+ */
+const processCommon = async (params: ProcessParams): Promise<RunResult> => {
+  const kind: RunKind = params.isTest ? "test" : "client";
+  let result: RunResult;
+  try {
+    result = await runFiles(params);
+  } catch (error) {
+    runTelemetry.track("run_errored", {
+      kind,
+      reason: isRunBusy(error) ? "busy" : "other",
+    });
+    throw error;
+  }
+  runTelemetry.track("run_finished", {
+    kind,
+    outcome: result.ok ? "passed" : "failed",
+  });
+  return result;
+};
+
+/**
+ * Run or test the given files, or the whole `client` or `tests` folder.
+ *
+ * @param params the paths and whether to execute as test
+ * @returns how the run ended: the first failure, if any
+ */
+const runFiles = async (params: ProcessParams): Promise<RunResult> => {
   const { paths, isTest } = params;
   PgTerminal.println(
     PgTerminal.info(`Running ${isTest ? "tests" : "client"}...`)

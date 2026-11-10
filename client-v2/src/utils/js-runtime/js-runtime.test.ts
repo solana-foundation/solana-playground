@@ -1,6 +1,7 @@
 import * as mocha from "mocha/browser-entry";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { isRunBusy, RunBusyError } from "./busy";
 import { PgJsRuntime } from "./js-runtime";
 
 // The BDD functions mocha 10's `mocha.setup({ ui: "bdd" })` puts on the global
@@ -52,6 +53,9 @@ vi.mock("../program-info", () => ({
 }));
 vi.mock("../program-interaction", () => ({ PgProgramInteraction: {} }));
 
+/** What `execute` hands `_getGlobals` to record a failure with */
+const fail = vi.fn((reason: unknown) => String(reason));
+
 /** `_getGlobals` for a test run, as `execute` calls it */
 const testGlobals = (): Promise<{
   globals: [string, unknown][];
@@ -59,12 +63,22 @@ const testGlobals = (): Promise<{
 }> =>
   (
     PgJsRuntime as unknown as {
-      _getGlobals(params: { isTest: boolean }): Promise<{
+      _getGlobals(params: {
+        isTest: boolean;
+        fail: (reason: unknown) => string;
+      }): Promise<{
         globals: [string, unknown][];
         endCode: string;
       }>;
     }
-  )._getGlobals({ isTest: true });
+  )._getGlobals({ isTest: true, fail });
+
+/** The callback `_run` hands `mocha.run` */
+const runCallback = () => {
+  const [callback] = vi.mocked(mocha.run).mock.calls.at(-1) ?? [];
+  if (!callback) throw new Error("_run did not call mocha.run");
+  return callback;
+};
 
 // vitest's own `describe`, `it` and hooks share these names on the global
 // object (`globals: true`); each case starts without them, as a first run in
@@ -88,6 +102,8 @@ describe("PgJsRuntime test globals", () => {
     vi.stubGlobal("PACKAGES", { global: {}, importable: {} });
     fake.defines = BDD;
     fake.atSetup = [];
+    fail.mockClear();
+    vi.mocked(mocha.run).mockClear();
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -108,7 +124,8 @@ describe("PgJsRuntime test globals", () => {
         (globalThis as Record<string, unknown>)[name]
       );
     }
-    expect(byName.get("_run")).toBe(mocha.run);
+    (byName.get("_run") as () => unknown)();
+    expect(mocha.run).toHaveBeenCalledWith(expect.any(Function));
     expect(endCode).toBe("_run()");
     // `execute` polls `_state` back to "init", which mocha only does when it
     // does not dispose itself after `run`
@@ -130,6 +147,24 @@ describe("PgJsRuntime test globals", () => {
     ]);
   });
 
+  it("records a test file as failed when mocha reports failures", async () => {
+    const { globals } = await testGlobals();
+    (new Map(globals).get("_run") as () => unknown)();
+
+    runCallback()(2);
+
+    expect(fail).toHaveBeenCalledWith("2 failing");
+  });
+
+  it("leaves a test file passed when mocha reports no failure", async () => {
+    const { globals } = await testGlobals();
+    (new Map(globals).get("_run") as () => unknown)();
+
+    runCallback()(0);
+
+    expect(fail).not.toHaveBeenCalled();
+  });
+
   it("names a function mocha.setup left undefined", async () => {
     fake.defines = BDD.filter((name) => name !== "xspecify");
 
@@ -137,4 +172,44 @@ describe("PgJsRuntime test globals", () => {
       "mocha.setup did not define `xspecify`"
     );
   });
+});
+
+describe("PgJsRuntime busy refusal", () => {
+  const runtime = PgJsRuntime as unknown as { _isClientRunning: boolean };
+  const state = mocha as unknown as { _state: string };
+  const run = (isTest: boolean) =>
+    PgJsRuntime.execute({ fileName: "a.ts", code: "", isTest });
+
+  afterEach(() => {
+    runtime._isClientRunning = false;
+    state._state = "init";
+  });
+
+  it.each([
+    ["a client script", false, "Client is already running!"],
+    ["tests", true, "Please wait for client to finish."],
+  ])(
+    "refuses %s with a RunBusyError while a client script runs",
+    async (_, isTest, message) => {
+      runtime._isClientRunning = true;
+      const refused = run(isTest);
+      await expect(refused).rejects.toBeInstanceOf(RunBusyError);
+      await expect(refused).rejects.toThrow(message);
+      await expect(refused).rejects.toSatisfy(isRunBusy);
+    }
+  );
+
+  it.each([
+    ["a client script", false, "Please wait for tests to finish."],
+    ["tests", true, "Tests are already running!"],
+  ])(
+    "refuses %s with a RunBusyError while tests run",
+    async (_, isTest, message) => {
+      state._state = "running";
+      const refused = run(isTest);
+      await expect(refused).rejects.toBeInstanceOf(RunBusyError);
+      await expect(refused).rejects.toThrow(message);
+      await expect(refused).rejects.toSatisfy(isRunBusy);
+    }
+  );
 });

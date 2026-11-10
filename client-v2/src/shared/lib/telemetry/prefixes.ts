@@ -23,6 +23,7 @@ export const EVENT_PREFIXES = {
   "program-keypair": "keypair",
   "project-export": "export",
   "project-files": "project",
+  run: "run",
   "session-footer": "session",
   "settings-page": "settings",
   "setup-list": "setup",

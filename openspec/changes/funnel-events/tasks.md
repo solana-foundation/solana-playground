@@ -53,7 +53,7 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
 
 ## 3. Run
 
-- [ ] 3.1 Add `features/run` with prefix `run`; make `PgJsRuntime.execute`
+- [x] 3.1 Add `features/run` with prefix `run`; make `PgJsRuntime.execute`
       (`utils/js-runtime/js-runtime.ts`) report whether a file failed and
       throw a named error when another run is in progress; send the events
       from `processCommon` (`commands/run-and-test/run-and-test.ts`).

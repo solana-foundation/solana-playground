@@ -13,6 +13,7 @@ import { PgTerminal } from "../terminal";
 import type { MergeUnion, OrString } from "../types";
 import { PgWallet, Wallet } from "../wallet";
 import type { PgWeb3 } from "../web3";
+import { RunBusyError } from "./busy";
 import {
   pgSignerFromFileWith,
   reasonMessage,
@@ -51,8 +52,14 @@ const BDD_GLOBALS = [
   "xspecify",
 ] as const;
 
-/** How a script run ended: the first uncaught error, if any */
+/**
+ * How a run ended: the first uncaught error of a script, or how many of a
+ * test file's tests failed, if any
+ */
 export type RunResult = { ok: true } | { ok: false; error: string };
+
+/** Records a run's first failure and returns its message */
+type Fail = (reason: unknown) => string;
 
 export class PgJsRuntime {
   /**
@@ -83,12 +90,12 @@ export class PgJsRuntime {
         }
 
         // Get globals
-        const { globals, endCode } = await this._getGlobals({ isTest });
-        const fail: NonNullable<IframeGlobals["__fail"]> = (reason) => {
+        const fail: Fail = (reason) => {
           const error = reasonMessage(reason);
           if (result.ok) result = { ok: false, error };
           return error;
         };
+        const { globals, endCode } = await this._getGlobals({ isTest, fail });
         globals.push(["__fail", fail]);
 
         // Handle imports
@@ -168,6 +175,7 @@ export class PgJsRuntime {
    *
    * @param cb callback function to run
    * @param isTest whether to execute as a test
+   * @throws {RunBusyError} when a client or tests are already running
    */
   private static async _executeBlocking(
     cb: () => Promise<void>,
@@ -175,12 +183,12 @@ export class PgJsRuntime {
   ) {
     // Block creating multiple client/test instances at the same time
     if (this._isClientRunning) {
-      if (isTest) throw new Error("Please wait for client to finish.");
-      throw new Error("Client is already running!");
+      if (isTest) throw new RunBusyError("Please wait for client to finish.");
+      throw new RunBusyError("Client is already running!");
     }
     if (mocha._state === "running") {
-      if (!isTest) throw new Error("Please wait for tests to finish.");
-      throw new Error("Tests are already running!");
+      if (!isTest) throw new RunBusyError("Please wait for tests to finish.");
+      throw new RunBusyError("Tests are already running!");
     }
 
     try {
@@ -241,9 +249,14 @@ export class PgJsRuntime {
    * Get global variables.
    *
    * @param isTest whether to execute as a test
+   * @param fail records the run's failure: a test file's `_run` reports
+   * mocha's failure count through it
    * @returns the globals and the end code to indicate when the execution is over
    */
-  private static async _getGlobals({ isTest }: Pick<ExecuteParams, "isTest">) {
+  private static async _getGlobals({
+    isTest,
+    fail,
+  }: Pick<ExecuteParams, "isTest"> & { fail: Fail }) {
     // Redefine console inside the iframe to log in the terminal
     const log = (cb?: (text: string) => string) => {
       return (...args: any[]) => {
@@ -316,7 +329,10 @@ export class PgJsRuntime {
         timeout: "30000",
         // Mocha disposes itself after the `run` function without this option
         cleanReferencesAfterRun: false,
-        // Logs the test output to the browser console
+        // Logs the test output to the browser console. A reporter with an
+        // async `done` would let `execute`'s `_state` poll resolve before
+        // `_run`'s callback records the failures: mocha's `done` sets `_state`
+        // and calls the callback in one tick only when the reporter has none
         reporter: "spec",
       });
 
@@ -331,7 +347,15 @@ export class PgJsRuntime {
           }
           return [name, fn];
         }),
-        ["_run", mocha.run]
+        // Mocha prints each failure itself; the run only records that there
+        // were some, so the command can tell a failed test file from a passed one
+        [
+          "_run",
+          () =>
+            mocha.run((failures) => {
+              if (failures > 0) fail(`${failures} failing`);
+            }),
+        ]
       );
     } else {
       // Run only
@@ -621,7 +645,7 @@ export class PgJsRuntime {
 }
 
 /** What a running script's iframe holds besides the window's own */
-type IframeGlobals = Window & { __fail?: (reason: unknown) => string };
+type IframeGlobals = Window & { __fail?: Fail };
 
 /** Keywords that are not allowed to be in the user code */
 const BLACKLISTED_GLOBALS = [

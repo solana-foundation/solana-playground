@@ -32,7 +32,7 @@ SHALL be declared by a tracker under `features/`, `widgets/` or `entities/`.
 | Build | `build_started`, `build_succeeded` | `build` in `commands/build/build.ts` | pending (wbdi-flow) |
 | Fund the wallet | `fund_sent`, `fund_airdropped` | `FundDialog` in `features/fund-wallet/ui/FundDialog.tsx`; `airdrop` in `commands/airdrop/airdrop.ts` | features/fund-wallet |
 | Deploy | `deploy_started`, `deploy_succeeded` | `deploy` (its `preChecks` and `handle`) in `commands/deploy/deploy.ts`; `PgStageDeploy.start` in `features/deploy/model/stage-deploy.ts` | features/deploy |
-| Use: run tests or a client script | `run_finished` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | pending (funnel-events) |
+| Use: run tests or a client script | `run_finished` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | features/run |
 | Use: send an instruction | `interact_sent` | `runCall` in `views/flow/stages/run-call.ts` | pending (wbdi-flow) |
 | Export the project | `project_exported` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `Project` in `widgets/settings-page/ui/SettingsPage.tsx` | pending (funnel-events) |
 | Follow a tutorial | `tutorial_started`, `tutorial_finished` | `PgTutorial` in `utils/tutorial/tutorial.ts`; markdown tutorials opened by `PgTutorial.open` are not counted (HOO-2751, 10 Nov 2026) | pending (tutorial-flow-v2) |
