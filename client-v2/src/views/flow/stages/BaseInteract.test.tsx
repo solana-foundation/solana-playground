@@ -12,9 +12,10 @@ import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import { requireFor } from "../../../test-utils/require-for";
-import { PROGRAM_ID, SHORT_PROGRAM_ID } from "./addresses.fixture";
+import { PROGRAM_ID } from "./addresses.fixture";
 import type { BaseInteractProps, DeploymentOption } from "./BaseInteract";
 import BaseInteract from "./BaseInteract";
+import { shortenId } from "./interact-callouts";
 import type { InteractSurface } from "./interact-surface";
 
 const render = (ui: ReactElement) =>
@@ -249,7 +250,7 @@ describe("BaseInteract", () => {
   it("names the program it calls, with copy, and the network", () => {
     render(<BaseInteract {...props("ready", { programId: PROGRAM_ID })} />);
     const program = screen.getByTitle(PROGRAM_ID);
-    expect(program.textContent).toBe(SHORT_PROGRAM_ID);
+    expect(program.textContent).toBe(shortenId(PROGRAM_ID));
     expect(
       screen.getByRole("button", { name: "Copy program id" })
     ).toBeTruthy();

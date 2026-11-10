@@ -10,16 +10,12 @@ import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DeployRunState } from "@/commands/deploy/run";
+import { shortKey } from "@/features/deploy";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
 
 import type { DeployRecord } from "../state/deploy-history";
-import {
-  PROGRAM_ID,
-  SHORT_PROGRAM_ID,
-  SHORT_WALLET,
-  WALLET,
-} from "./addresses.fixture";
+import { PROGRAM_ID, WALLET } from "./addresses.fixture";
 import type { BaseDeployProps, DeployDetails } from "./BaseDeploy";
 import BaseDeploy from "./BaseDeploy";
 import type { DeployView } from "./deploy-view";
@@ -392,7 +388,9 @@ describe("BaseDeploy", () => {
 
     const result = screen.getByRole("status", { name: "Deploy result" });
     expect(result.textContent).toContain("Deployed to devnet");
-    expect(result.querySelector("code")?.textContent).toBe(SHORT_PROGRAM_ID);
+    expect(result.querySelector("code")?.textContent).toBe(
+      shortKey(PROGRAM_ID)
+    );
     expect(
       within(result).getByRole("button", { name: "Copy the program id" })
     ).toBeTruthy();
@@ -631,7 +629,7 @@ describe("BaseDeploy", () => {
       <BaseDeploy {...props({ built: true, history: [] })} />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From your Playground wallet · ${SHORT_WALLET} · 4.20 SOL`
+      `From your Playground wallet · ${shortKey(WALLET)} · 4.20 SOL`
     );
     expect(screen.getByText(/^Deploying sends/).textContent).toBe(
       "Deploying sends the compiled program to devnet."
@@ -647,7 +645,7 @@ describe("BaseDeploy", () => {
       />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      `From your wallet · ${SHORT_WALLET} · 4.20 SOL`
+      `From your wallet · ${shortKey(WALLET)} · 4.20 SOL`
     );
 
     rerender(

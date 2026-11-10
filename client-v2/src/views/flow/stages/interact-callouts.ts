@@ -24,10 +24,9 @@ if (import.meta.vitest) {
 
   describe("views/flow/stages/interact-callouts", () => {
     let PROGRAM_ID: typeof import("./addresses.fixture").PROGRAM_ID;
-    let SHORT_PROGRAM_ID: typeof import("./addresses.fixture").SHORT_PROGRAM_ID;
 
     beforeAll(async () => {
-      ({ PROGRAM_ID, SHORT_PROGRAM_ID } = await import("./addresses.fixture"));
+      ({ PROGRAM_ID } = await import("./addresses.fixture"));
     });
 
     it("builtAfterDeploy compares a known build with a known deploy", () => {
@@ -45,7 +44,7 @@ if (import.meta.vitest) {
     });
 
     it("shortenId keeps four characters each side", () => {
-      expect(shortenId(PROGRAM_ID)).toBe(SHORT_PROGRAM_ID);
+      expect(shortenId(PROGRAM_ID)).toBe("Prog…nter");
       expect(shortenId("short")).toBe("short");
     });
   });
