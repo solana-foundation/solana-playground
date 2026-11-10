@@ -209,7 +209,8 @@ describe("commands/deploy, while the network is down", () => {
 
   beforeEach(async () => {
     const { deploy } = await import("./deploy");
-    [, checkNetwork] = deploy.preChecks as [() => void, () => void];
+    // Second: the mainnet refusal comes first
+    [, checkNetwork] = deploy.preChecks as [unknown, () => void];
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
   });
 
@@ -377,7 +378,9 @@ describe("commands/deploy", () => {
         };
         // The stub has no keypair, so the check goes on to refuse after the
         // notice these tests are about
-        await preChecks[3]().catch(() => undefined);
+        await preChecks
+          .at(-1)?.()
+          .catch(() => undefined);
       } finally {
         Object.assign(PgProgramInfo, {
           importedProgram,

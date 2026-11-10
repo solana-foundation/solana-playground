@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UnknownClusterError } from "@/entities/cluster";
 
-import { PgConnection, TerminalLineError } from "../../utils";
+import { PgConnection, PgGlobal, TerminalLineError } from "../../utils";
 import { checkNotMainnet } from "./check-not-mainnet";
 import {
   DEPLOY_NETWORK_UNREAD,
@@ -14,6 +14,7 @@ vi.mock("../../utils", async () => {
   const terminal = await import("../../utils/terminal");
   return {
     TerminalLineError: terminal.TerminalLineError,
+    PgGlobal: { deployState: "ready" },
     PgConnection: {
       cluster: "devnet",
       current: { rpcEndpoint: "https://rpc.example.com" },
@@ -23,7 +24,24 @@ vi.mock("../../utils", async () => {
 });
 
 describe("checkNotMainnet", () => {
-  beforeEach(() => vi.mocked(PgConnection.getCluster).mockReset());
+  beforeEach(() => {
+    vi.mocked(PgConnection.getCluster).mockReset();
+    PgGlobal.deployState = "ready";
+  });
+
+  // The same command pauses and resumes a run under way: a stalled custom RPC
+  // must not hold a pause for the read's 15 s, and that run already passed
+  // the check at its start and checks again before each send
+  it.each(["loading", "paused"] as const)(
+    "reads no network while a deploy is %s",
+    async (state) => {
+      PgGlobal.deployState = state;
+      vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
+
+      await expect(checkNotMainnet()).resolves.toBeUndefined();
+      expect(PgConnection.getCluster).not.toHaveBeenCalled();
+    }
+  );
 
   // The cached cluster says devnet: the guard reads the endpoint itself, as
   // a network switch or a custom RPC with mainnet's genesis would need

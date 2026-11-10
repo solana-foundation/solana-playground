@@ -17,7 +17,10 @@ const assistant = vi.hoisted(() => ({
   },
   needsSignIn: false,
   defaultProbe: "unasked" as string,
-  limitReachedUntil: undefined as number | undefined,
+  limitReached: undefined as
+    | { reason: "daily-cap"; until: number }
+    | { reason: "pool-exhausted" }
+    | undefined,
   hostedModel: undefined as string | undefined,
 }));
 
@@ -56,8 +59,8 @@ vi.mock("@/views/sidebar/assistant/store", () => ({
     get hostedModel() {
       return assistant.hostedModel;
     },
-    get limitReachedUntil() {
-      return assistant.limitReachedUntil;
+    get limitReached() {
+      return assistant.limitReached;
     },
     onDidChange: () => ({ dispose: () => {} }),
   },
@@ -71,7 +74,7 @@ afterEach(() => {
   assistant.connection = null;
   assistant.needsSignIn = false;
   assistant.defaultProbe = "unasked";
-  assistant.limitReachedUntil = undefined;
+  assistant.limitReached = undefined;
   assistant.hostedModel = undefined;
   PgAnalyzerStatus.set({ kind: "idle" });
 });
@@ -118,7 +121,13 @@ it("leaves a connected backend to its turns, whatever the probe says", () => {
 
 it("reads Limit reached on the connected default until the limit comes back", () => {
   assistant.connection = { id: "default" };
-  assistant.limitReachedUntil = Date.now() + 60_000;
+  assistant.limitReached = { reason: "daily-cap", until: Date.now() + 60_000 };
+  expect(wordsOf().current[1].words).toBe("AI · Limit reached");
+});
+
+it("reads Limit reached on the connected default after a spent pool", () => {
+  assistant.connection = { id: "default" };
+  assistant.limitReached = { reason: "pool-exhausted" };
   expect(wordsOf().current[1].words).toBe("AI · Limit reached");
 });
 

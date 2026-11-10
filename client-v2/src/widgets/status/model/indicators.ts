@@ -88,6 +88,9 @@ export type AiInput =
   /** The hosted model refused a turn under its free daily limit; `until` is
    * when it comes back, as a time */
   | { kind: "limit"; until: number }
+  /** The hosted model refused a turn because its tier's pool is spent; only
+   * the upstream knows when it refills, so no time is named */
+  | { kind: "out-of-capacity" }
   /** `needsSignIn`: the default backend while nobody is signed in */
   | { kind: "off"; needsSignIn: boolean };
 
@@ -210,6 +213,21 @@ export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
       detail: `The free daily limit is used. It comes back at ${clockTime(
         ai.until
       )}, or add a key of your own to keep going.`,
+      action: ADD_KEY,
+      panel: { retry: false },
+    };
+  }
+  if (ai.kind === "out-of-capacity") {
+    // Waiting too, with the chat's own sentence: no time to promise
+    return {
+      ...base,
+      state: "not-ready",
+      words: "AI · Limit reached",
+      label: "AI, limit reached",
+      railLabel: "AI, limit reached",
+      tip: "AI · Limit reached",
+      detail:
+        "The free assistant is out of capacity for now. Try again later, or add a key of your own to keep going.",
       action: ADD_KEY,
       panel: { retry: false },
     };
@@ -547,6 +565,20 @@ if (import.meta.vitest) {
         ]);
         expect(a.detail).toBe(
           "The free daily limit is used. It comes back at 05:00, or add a key of your own to keep going."
+        );
+      });
+
+      it("reads Limit reached after a spent pool, with a panel naming no time", () => {
+        const a = aiIndicator({ kind: "out-of-capacity" }, true);
+        expect([a.state, a.words, a.label, a.panel, a.action]).toEqual([
+          "not-ready",
+          "AI · Limit reached",
+          "AI, limit reached",
+          { retry: false },
+          { kind: "ai", text: "Add an API key" },
+        ]);
+        expect(a.detail).toBe(
+          "The free assistant is out of capacity for now. Try again later, or add a key of your own to keep going."
         );
       });
 

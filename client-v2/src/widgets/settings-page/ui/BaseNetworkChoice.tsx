@@ -10,14 +10,14 @@ const NO_DEPLOYS = "Not available for deploys";
 
 /**
  * A chip. An offered network says how a deploy works there (free SOL only on
- * devnet, following Spec 03); Mainnet is offered without deploys in the beta
- * (HOO-2728), so its line says so beside an amber dot. A saved custom RPC
- * says nothing, since its cluster is unknown.
+ * devnet, following Spec 03; none at all on mainnet in the beta), with an
+ * amber dot where SOL is real; a saved custom RPC says neither, since its
+ * cluster is unknown.
  */
 interface Chip {
   label: string;
   endpoint: string;
-  foot?: { line: string; isAmber: boolean };
+  foot?: { line: string; isRealSol: boolean };
 }
 
 const NETWORKS: ReadonlyArray<Chip> = OFFERED.map(
@@ -26,8 +26,8 @@ const NETWORKS: ReadonlyArray<Chip> = OFFERED.map(
     endpoint: value,
     foot:
       cluster === "mainnet-beta"
-        ? { line: NO_DEPLOYS, isAmber: true }
-        : { line: "Deploys with free devnet SOL", isAmber: false },
+        ? { line: NO_DEPLOYS, isRealSol: true }
+        : { line: "Deploys with free devnet SOL", isRealSol: false },
   })
 );
 
@@ -124,12 +124,12 @@ const BaseNetworkChoice = ({
       </div>
       {children}
       {picked?.foot && (
-        // The card's foot: how a deploy works here, amber on Mainnet
+        // The card's foot: how a deploy works here, amber where SOL is real
         <p
           id={footId}
           className="flex items-center gap-2 bg-surface-raised/50 px-4 py-2.5 text-xs text-muted-foreground max-md:text-caption max-md:font-read"
         >
-          <StatusDot variant={picked.foot.isAmber ? "warning" : "success"} />
+          <StatusDot variant={picked.foot.isRealSol ? "warning" : "success"} />
           {picked.foot.line}
         </p>
       )}

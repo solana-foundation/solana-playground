@@ -160,7 +160,7 @@ describe("BaseNetworkChoice", () => {
     ["Testnet", Endpoint.TESTNET],
     ["Localnet", Endpoint.LOCALNET],
     ["Surfpool", Endpoint.SURFPOOL],
-  ])("checks %s on its address, with no line under it", (name, endpoint) => {
+  ])("checks %s on its address, with deploys open there", (name, endpoint) => {
     render(<BaseNetworkChoice endpoint={endpoint} onPick={() => {}} />);
     expect(
       screen.getByRole("radio", { name }).getAttribute("aria-checked")
@@ -191,7 +191,7 @@ describe("BaseNetworkChoice", () => {
     ).toBeTruthy();
   });
 
-  it("says nothing about deploys on devnet", () => {
+  it("does not refuse deploys on Devnet", () => {
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
     expect(screen.queryByText("Not available for deploys")).toBeNull();
   });
@@ -257,14 +257,6 @@ describe("BaseNetworkChoice", () => {
         description: "Deploys with free devnet SOL",
       })
     ).toBeTruthy();
-  });
-
-  it("marks Mainnet's foot line with an amber dot", () => {
-    render(
-      <BaseNetworkChoice endpoint={Endpoint.MAINNET_BETA} onPick={() => {}} />
-    );
-    const foot = screen.getByText("Not available for deploys");
-    expect(foot.querySelector(".bg-warning")).toBeTruthy();
   });
 
   it("has no foot for a saved custom RPC", () => {

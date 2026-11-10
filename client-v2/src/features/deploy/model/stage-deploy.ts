@@ -156,6 +156,9 @@ export class PgStageDeploy {
       // The stage's state says "unknown" with `undefined`; the connection's `null` stays here
       const cluster = PgConnection.cluster ?? undefined;
       const workspace = PgExplorer.currentWorkspaceName;
+      // The network the press was for. The endpoint, not `cluster`: a custom
+      // RPC's cluster name can arrive late without the network changing
+      const endpoint = PgSettings.connection.endpoint;
       const redeploy = PgProgramInfo.onChain?.deployed === true;
       // A step recorded by an earlier run says nothing about this one, which
       // may fail before it reaches the deploy command
@@ -179,6 +182,19 @@ export class PgStageDeploy {
           deployTelemetry.track("deploy_started", { cluster, redeploy });
         }
         await ensurePlaygroundWallet(PgWallet);
+        // Both waits above can be long (a slow endpoint, a new wallet). The
+        // press was for the project and network open when it was made; one
+        // opened meanwhile is never deployed without its own press.
+        if (
+          PgExplorer.currentWorkspaceName !== workspace ||
+          PgSettings.connection.endpoint !== endpoint
+        ) {
+          log.info("project or network changed before the deploy; stopped", {
+            context: { workspace, cluster },
+          });
+          PgStageDeploy._set({ phase: "stopped", stop: { kind: "cancelled" } });
+          return;
+        }
         reachedRun = true;
         result = await PgDeployRun.runWith({
           confirmStaleBuild: PgStageDeploy._askStaleBuild,

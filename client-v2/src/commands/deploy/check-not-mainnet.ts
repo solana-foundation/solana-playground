@@ -2,7 +2,7 @@ import { UnknownClusterError } from "@/entities/cluster";
 import { createLogger } from "@/shared/lib/logger";
 
 import type { Cluster } from "../../utils";
-import { PgConnection, TerminalLineError } from "../../utils";
+import { PgConnection, PgGlobal, TerminalLineError } from "../../utils";
 import type { MainnetRefusal } from "./mainnet-block";
 import { DEPLOY_REFUSAL, isDeployBlocked } from "./mainnet-block";
 
@@ -68,8 +68,11 @@ export const refuseMainnet = refuseMainnetWith(DEPLOY_REFUSAL);
 /**
  * The `deploy` command's first pre-check: the early refusal, before the
  * wallet question. `processDeploy` checks its own connection again before
- * any send, since the network can change while the question waits.
+ * any send, since the network can change while the question waits. Only a
+ * fresh start reads the network: the same command pauses and resumes a run
+ * under way, which a stalled RPC must not hold for the read's 15 s.
  */
 export const checkNotMainnet = async () => {
+  if (PgGlobal.deployState !== "ready") return;
   await refuseMainnet(PgConnection.current.rpcEndpoint);
 };
