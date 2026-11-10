@@ -23,9 +23,9 @@ user's first build.
 
 ## Decisions
 
-**`FOUNDATION_ENDPOINT` becomes the variable.** `default-endpoint.ts` reads `BUILD_SERVER_URL`
-(`REACT_APP_SERVER_URL`) from `shared/config/client-env`; the "Solana Foundation" option exists only when it is non-empty;
-`defaultServerEndpoint` returns it or `LOCAL_ENDPOINT`. The `foundation` key in `stored-endpoint.ts` maps to the same
+**`BUILD_SERVER_URL` replaces `FOUNDATION_ENDPOINT`.** `default-endpoint.ts` reads `BUILD_SERVER_URL`, the value of
+`REACT_APP_SERVER_URL`, from `shared/config/client-env`; the "Solana Foundation" option exists only when it is
+non-empty; `defaultServerEndpoint` returns it or `LOCAL_ENDPOINT`. The `foundation` key in `stored-endpoint.ts` maps to the same
 value, so a stored `foundation` choice follows the variable, and falls back to the default through the existing
 "option is gone" path when the variable is empty.
 

@@ -14,11 +14,11 @@ Lands in the `stable-anchor-1-1-2` PR. Every task: ticket to file. 1.1 and 1.2 m
 
 ## 2. Images and docs
 
-- [ ] 2.1 Replace the `ONBUILD ENV` in `client-v2/Dockerfile` with a build argument, pass it from `compose.yaml`'s
+- [x] 2.1 Replace the `ONBUILD ENV` in `client-v2/Dockerfile` with a build argument, pass it from `compose.yaml`'s
   standalone profile, and update `client-v2/.env.example` and `docs/testing.md`. Verify: `git grep -n appspot --
   ':!client/'` prints nothing, and the standalone compose profile builds with the variable passed.
 
 ## 3. Integration
 
-- [ ] 3.1 Run `yarn run check`. Verify: it passes, and the PR description lists the Vercel variables a human must set
+- [x] 3.1 Run `yarn run check`. Verify: it passes, and the PR description lists the Vercel variables a human must set
   before merge. Depends on 1.1, 1.2, and 2.1.
