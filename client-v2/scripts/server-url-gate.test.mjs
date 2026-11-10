@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 
 const GATE = fileURLToPath(new URL("./server-url-gate.mjs", import.meta.url));
 
-/** Runs the gate as `build:bundle` does, with only the given variables */
-const runGate = (env) =>
+/** Runs the gate as `build:bundle` does, with only the given variables; Node drops an `undefined` one */
+const runGate = ({ VERCEL_ENV, REACT_APP_SERVER_URL }) =>
   spawnSync(process.execPath, [GATE], {
     encoding: "utf8",
-    env: { PATH: process.env.PATH, ...env },
+    env: { PATH: process.env.PATH, VERCEL_ENV, REACT_APP_SERVER_URL },
   });
 
 test("client-v2-build-server-endpoint: A preview build without the variable", () => {
