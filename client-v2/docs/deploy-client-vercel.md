@@ -6,6 +6,9 @@ Every Makefile target acts on the Vercel project `VERCEL_DEPLOY_PROJECT_ID` name
 
 ## Release checklist: `client-v2` to production
 
+The Foundation's production on Cloud SQL is set up by the [production runbook](production-runbook.md) instead; this
+checklist describes a project whose production database is on Neon.
+
 Nothing below has been run end to end yet — see [Known gaps](#known-gaps). The
 order is the point: each step assumes the ones above it, and steps 1–7 come
 **before** the first production build of `client-v2`. `master` already

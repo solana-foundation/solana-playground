@@ -1,108 +1,78 @@
-# Production runbook: client-v2 on Cloud SQL
+# Production runbook: client-v2 on Vercel and Cloud SQL
 
-The steps that move `client-v2`'s production (the Vercel project and its `api/*.mjs` functions) onto Postgres on
-Cloud SQL instance `solpg`, and release it on the custom domain, for the team that runs the Google Cloud project and
-the Vercel production project. Production has no users yet, so nothing is copied: the cutover starts on an empty
-database, and the release empties it once more.
+How to set up `client-v2`'s production from nothing: the Vercel project, Postgres on Cloud SQL instance `solpg`,
+and every service production uses (GitHub sign-in, the Nous Research model keys, Sentry, the Firewall, Secret
+Manager), and then release it on the custom domain. This is for the team that runs the Google Cloud project and the
+Vercel team. Nothing is deployed yet and no user data exists anywhere, so nothing is copied or migrated from an
+older system: the database starts empty and the migrations create its schema.
 
-This page gives the order, the gates between steps, the check after each step, and the rollback. The commands live in
+This page gives the order, the check after each step, and what to do when a check fails. Some commands live in
 [Cloud SQL for client-v2](cloud-sql.md) ("cloud-sql.md" below), [Deploy the client to Vercel](deploy-client-vercel.md)
 ("deploy-client-vercel.md") and [Firewall](firewall.md); each step links the section it runs.
 
 **Stop at a failed check.** Do not start the next step. Send Alexander Anikeev (`alexander.anikeev@hoodies.team`, or
 `<SUPPORT_CHANNEL>`) the command and its whole output, never a secret value. Alexander has no access to the Google
-Cloud project or the Vercel project, so every step here is run by you; he reads output, answers questions and checks
-the public URLs from outside.
+Cloud project or the Vercel team, so you run every step here; he reads output, answers questions and checks the
+public URLs from outside.
 
 ## Values the client fills in
 
-Nothing below is known to the authors of this page. Fill each in once, before step 1.
+Fill each in once, before step 1. Some are known only after a step; the table says which.
 
-| Placeholder | What it is | Where to find it | Name in cloud-sql.md |
-| --- | --- | --- | --- |
-| `<PROJECT_ID>` | The Google Cloud project that holds instance `solpg` | Cloud console, project picker | `PROJECT_ID` |
-| `<REGION>` | The region of `solpg` | `gcloud sql instances describe solpg --project=<PROJECT_ID> --format='value(region)'`. The [design](../../openspec/changes/cloud-sql/design.md) recorded `us-central1` on 2026-10-22; use what the command prints | `REGION` |
-| `<TEAM_SLUG>` | The Vercel team that owns the production project | The path in the team's Vercel URL | `TEAM_SLUG` |
-| `<VERCEL_PROJECT>` | The production Vercel project's name | Vercel → the project → Settings → General | `VERCEL_PROJECT` |
-| `<VERCEL_PROJECT_ID>` | The same project's id, `prj_...` | Same page | |
-| `<OPERATOR>` | The Google account of each person who runs migrations, lower case | Your team | `OPERATOR` |
-| `<VERCEL_APP_DOMAIN>` | The project's stable `<name>.vercel.app` production domain, used until the release | Vercel → Settings → Domains. [deploy-client-vercel.md, "Sign-in on previews"](deploy-client-vercel.md#sign-in-on-previews) names `solana-playground-teal.vercel.app` as the production host; confirm it is this project's | |
-| `<CUSTOM_DOMAIN>` | The launch domain, without `https://` | Your team | |
-| `<GITHUB_OAUTH_APP>` | The GitHub OAuth app production signs in with, and the organization that owns it | GitHub → the organization → Settings → Developer settings → OAuth Apps | |
-| `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` on the build server (App Engine) | Your team | |
-| `<NOUS_ACCOUNT>` | The Nous Research account that holds the prepaid credits the assistant spends | Your team | |
-| `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team | |
-| `<SPEND_SIGN_OFF>` | Who signed off the assistant's monthly spend of $1,500 (the two keys' monthly limits), and when | Your team | |
-| `<SUPPORT_CHANNEL>` | Where to reach Alexander during and between the live sessions | Agreed with Alexander | |
-| `<SESSION_SETUP>`, `<SESSION_CUTOVER>`, `<SESSION_RELEASE>` | Date, time and time zone of the live sessions for steps 1 to 4, step 6, and step 7 | Agreed with Alexander; the launch is Wed 11 Nov 2026 | |
+| Placeholder | What it is | Where to find it |
+| --- | --- | --- |
+| `<PROJECT_ID>` | The Google Cloud project that holds instance `solpg` | Cloud console, project picker |
+| `<REGION>` | The region of `solpg`, for example `us-central1` | Your choice in step 2, or `gcloud sql instances describe solpg --project=<PROJECT_ID> --format='value(region)'` if the instance exists |
+| `<TEAM_SLUG>` | The Vercel team that owns the production project | The path in the team's Vercel URL |
+| `<VERCEL_PROJECT>` | The production Vercel project's name | Chosen in step 1 |
+| `<VERCEL_PROJECT_ID>` | The same project's id, `prj_...` | Step 1: Vercel → the project → Settings → General |
+| `<VERCEL_APP_DOMAIN>` | The project's `<name>.vercel.app` production domain, used until the release | Step 1: Vercel → the project → Settings → Domains |
+| `<CUSTOM_DOMAIN>` | The launch domain, without `https://` | Your team |
+| `<OPERATOR>` | The Google account of each person who runs migrations, lower case | Your team |
+| `<GITHUB_OWNER>` | The GitHub organization that will own the production OAuth app | Your team |
+| `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` on the build server (App Engine) | Your team |
+| `<NOUS_ACCOUNT>` | The Nous Research account whose credits the assistant spends | Your team |
+| `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team |
+| `<SUPPORT_CHANNEL>` | Where to reach Alexander during and between the live sessions | Agreed with Alexander |
+| `<SESSION_SETUP>`, `<SESSION_RELEASE>` | Date, time and time zone of the live sessions for steps 1 to 7 and for step 9 | Agreed with Alexander; the launch is Wed 11 Nov 2026 |
 
 cloud-sql.md writes some of these in lower case inside SQL and commands: `<project id>` is `<PROJECT_ID>`,
-`<operator e-mail>` is `<OPERATOR>`, `<custom domain>` is `<CUSTOM_DOMAIN>`. Its "Values used below" also asks for
-`REPO`, which only the preview steps read; production needs none. Two values appear during the run, not before it:
-`<deployment url>`, printed by the deploy in step 2, and `<bypass secret>`, created in step 2.
+`<operator e-mail>` is `<OPERATOR>`. Its "Values used below" also asks for `REPO`, which only the preview steps
+read; production needs none.
 
 Secret values (keys, tokens, client secrets) never go on this page, in a ticket, or in a message. The
 [environment table](#production-environment) says where each one comes from.
 
 ## Before you start
 
-On the machine that runs the steps:
+On the machine that runs the steps (macOS or Linux):
 
-- `gcloud`, logged in as `<OPERATOR>` (`gcloud auth login`), with rights to administer IAM and Cloud SQL in
-  `<PROJECT_ID>`.
+- `gcloud`, logged in as `<OPERATOR>` (`gcloud auth login`), with rights to administer IAM, Cloud SQL and Secret
+  Manager in `<PROJECT_ID>`.
 - [`cloud-sql-proxy`](https://cloud.google.com/sql/docs/postgres/sql-proxy#install), `psql`, and `dbmate`
   ([client-v2/db/README.md](../db/README.md)).
-- Node at the version in `client-v2/.nvmrc`, yarn 1, `jq`, `make`, `curl`, `git` and `openssl`. A production build
-  installs Rust itself (`scripts/vercel-install.sh`) and takes about an hour on a cold machine.
-- A full clone (not `--depth`) of `solana-foundation/solana-playground`, on `master`. Every command runs from that
-  checkout. If `client-v2/Makefile.vercel` is missing there, stop and ask Alexander: steps 2, 4, 6 and 7 use its
-  targets.
-- The checkout linked to the production project, once, from the repository root, with a Vercel token that can read
-  the project ([deploy-client-vercel.md, "One-time setup"](deploy-client-vercel.md#one-time-setup) step 5, and
-  [Tokens](deploy-client-vercel.md#tokens)):
+- Node at the version in `client-v2/.nvmrc`, yarn 1, `jq`, `make`, `curl`, `git` and `openssl`. The production
+  build installs Rust itself (`scripts/vercel-install.sh`) and takes about an hour the first time.
+- A full clone (not `--depth`) of `solana-foundation/solana-playground`, on `master`, with
+  `git submodule update --init`. Every command runs from the repository root of that checkout.
 
-  ```sh
-  VERCEL_TOKEN=<token> VERCEL_PROJECT_ID=<VERCEL_PROJECT_ID> make -f client-v2/Makefile.vercel vercel-bootstrap
-  npx vercel@62.7.0 login
-  make -f client-v2/Makefile.vercel vercel-auth
-  ```
+Accounts and access:
 
-  `vercel-auth` prints `Vercel CLI user: <you>`. The CLI version is the one pinned as `VERCEL_CLI` in
-  `client-v2/Makefile.vercel`; use that version wherever this page says `npx vercel@62.7.0`.
-
-Access the steps need, besides the machine:
-
-- Google Cloud: IAM and Cloud SQL administration in `<PROJECT_ID>`, and Secret Manager (step 5).
-- Vercel: the production project's environment variables, Deployment Protection, Domains and Firewall; the team
-  setting for the OIDC issuer mode (step 1).
-- Nous Research: `<NOUS_ACCOUNT>`'s dashboard, to create the assistant's keys and their spend limits and to read
-  their spend (step 4).
-- The production Neon database, through the Neon console or the Vercel project's Storage tab: step 4 migrates it,
-  step 6 counts its accounts, and step 6's rollback restores its connection strings.
-- GitHub: admin on `solana-foundation/solana-playground` for an Actions secret (step 2), and on the organization
-  that owns `<GITHUB_OAUTH_APP>` (steps 4 and 7).
-- Sentry: a token that may upload source maps (step 4).
-- DNS of `<CUSTOM_DOMAIN>` (step 7).
-
-Two Vercel settings to check once:
-
-- The team setting **Enforce Sensitive Environment Variables** (team Settings → Security) is off, or at least does not
-  cover this project's Production. With it on, `SENTRY_AUTH_TOKEN` and the database variables become Sensitive, a
-  local build pulls them as empty, and the production build and `migrate-production-db` fail.
-- The project's Settings → Environment Variables has **Automatically expose System Environment Variables** on. The
-  application decides by `VERCEL_ENV` which database it may open, and the build by `VERCEL_ENV` whether to upload
-  source maps.
-
-Then record what Production holds today and what it answers, and keep both outputs:
-
-```sh
-npx vercel@62.7.0 env ls production
-curl -s https://<VERCEL_APP_DOMAIN>/api/sync
-```
+- Google Cloud: IAM, Cloud SQL and Secret Manager administration in `<PROJECT_ID>`.
+- Vercel: a member of `<TEAM_SLUG>` who can create a project and edit its settings, environment variables,
+  Deployment Protection, Domains and Firewall, and the team's Security settings. The team's plan: Enterprise, so
+  the build can use the Enhanced build machine.
+- GitHub: admin on `solana-foundation/solana-playground` (an Actions secret, the Vercel GitHub app) and on
+  `<GITHUB_OWNER>` (an OAuth app).
+- Nous Research: `<NOUS_ACCOUNT>`'s dashboard, to create keys and their spend limits.
+- Sentry: organization `solana-fndn` with a project `solana-playground`, and a token that may upload source maps
+  to it. **Both slugs are fixed in code** (`scripts/upload-sourcemaps.mjs`): if your organization or project has
+  another slug, stop and tell Alexander before step 5.
+- DNS of `<CUSTOM_DOMAIN>` (step 9).
 
 **Each new shell** (every live session) starts by setting cloud-sql.md's
-["Values used below"](cloud-sql.md#values-used-below) again: steps 6 and 7 use `$PROJECT_ID`, `$REGION`,
-`$OPERATOR`, `$PRODUCTION_DB_USER`, `$PRODUCTION_SA` and `$PROJECT_NUMBER`.
+["Values used below"](cloud-sql.md#values-used-below): the steps use `$PROJECT_ID`, `$REGION`, `$OPERATOR`,
+`$PRODUCTION_DB_USER`, `$PRODUCTION_SA` and `$PROJECT_NUMBER`.
 
 To open `psql` on `solpg` as the operator, which several checks do, from any directory:
 
@@ -114,147 +84,172 @@ psql "postgres://$(printf %s "$OPERATOR" | sed 's/@/%40/')@127.0.0.1:5434/solpg?
 
 ## Order and gates
 
-Run the steps in this order. Each gate names what must be true before the step after it starts.
+Run the steps in order. Three gates hold throughout:
 
-1. **Google Cloud setup (step 1) before the staged deployment (step 2).** Step 2 is the first time a Vercel
-   deployment exchanges its token for the production service account; without step 1 it has nothing to reach.
-2. **The Firewall (step 3) before the hosted AI key goes into Production (step 4).** The key spends money on every
-   turn, and the rate limit is what stops one client from spending a key's daily limit in a minute.
-3. **Before the hosted key is set in step 4, all of these hold:**
-   - Production sets only `PG_AI_*` names, and no `AGENT_*` name at all (`vercel env ls production` lists none).
-   - `AUTH_BASE_URL` is the domain users open: `https://<VERCEL_APP_DOMAIN>` until the release,
-     `https://<CUSTOM_DOMAIN>` after it.
-   - The Firewall has live rules on `/api/agent` and on `/api/ai/status`.
-   - The database production reads has every migration: `migrate-production-db` reports nothing to apply
-     ([Migrate first, then merge](#migrate-first-then-merge)).
-   - Alexander has confirmed that the assistant's code on `master` is the launch code.
-4. **Migrate first, then merge to `master`.** A push to `master` can deploy production, so a pull request that adds a
-   migration merges only after you have applied that migration to production. One is pending now: foundation PR #114
-   adds `20261105120000_agent_turn_at_reserve.sql`, and must not merge before you run
-   [Migrate first, then merge](#migrate-first-then-merge) for it.
-5. **The cutover (step 6) happens on `<VERCEL_APP_DOMAIN>`.** The custom domain is not attached before step 7.
-6. **The release (step 7) empties `solpg`**, then sets `AUTH_BASE_URL` and the GitHub OAuth callback to the custom
-   domain and attaches the domain.
-
-Step 5 (Secret Manager) runs alongside step 4: a secret goes into Secret Manager when its value is in hand, since a
-Sensitive value cannot be read back from Vercel afterwards.
-
-## Deploying production
-
-Two ways put a new deployment on the production domain:
-
-- **A full build, from the checkout:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. It
-  pulls Production's variables, prints the commit, asks for a typed `yes`, builds locally and deploys. Use it after
-  any change to a `REACT_APP_*` variable, since those are inlined into the browser bundle at build time.
-- **Server variables only:** after a change that touches no `REACT_APP_*` variable, deploy the last full build again
-  from the repository root, `npx vercel@62.7.0 deploy --prebuilt --prod --archive=tgz`. A function reads the
-  variables the project held when its deployment was created
-  ([deploy-client-vercel.md, "Deploy"](deploy-client-vercel.md#deploy)). This works only while `.vercel/output` is
-  the build of the commit production runs.
-
-A push to `master` also starts a production build on Vercel through the Git integration. Every such build on
-`master` from 2026-10-19 to 2026-11-03 failed, so a full local build is the dependable path; after any push, check
-Vercel → Deployments for which deployment is Current.
-
-Rolling back a deployment (Deployments → the previous one → Instant Rollback, or `vercel promote <url> --prod`)
-restores that deployment's code and the variables it was created with. It does not undo a migration or a Firewall
-change. After an Instant Rollback, Vercel stops giving the production domain to new production deployments: the next
-deploy goes live only once you promote it (`vercel promote <url> --prod`) or undo the rollback in the dashboard.
+1. **The Firewall (step 4) before the first deployment (step 7).** The first deployment already carries the model
+   key, and the rate limits are what stop one client from spending a key's daily limit in a minute.
+2. **The schema before the code.** `solpg` holds every migration before a deployment reads it (step 3), and from
+   then on a pull request that adds a migration merges only after you have applied it
+   ([Migrations](#migrations)).
+3. **Alexander confirms that `master` is the launch code** before step 7. It includes foundation PR #141, which
+   makes the assistant charge what Nous reports and read the Nous keys' spend limits. Without it the assistant still
+   runs on Nous, but its per-user caps are counted at lower prices.
 
 ## Production environment
 
-Every variable the production build and the functions read, from `src/shared/config/server-env.mjs`,
-`src/shared/config/client-env.ts`, `scripts/check-agent-env.mjs` and the build scripts. "Sensitive" means a Vercel
-Sensitive variable (`vercel env add --sensitive`): its value cannot be read back, and a local build pulls it as empty.
+Every variable production reads, from `src/shared/config/server-env.mjs`, `src/shared/config/client-env.ts`,
+`scripts/check-agent-env.mjs` and the build scripts. "Sensitive" means a Vercel Sensitive variable
+(`vercel env add --sensitive`): its value cannot be read back, and a local build pulls it as empty. Set every
+variable for **Production** only.
 
 **`REACT_APP_*` values are inlined into the browser bundle and readable by every visitor. Nothing secret goes in
 one.**
 
+A production build fails without `PG_AI_API_KEY`, `AUTH_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
+`AUTH_BASE_URL`, the database variables of `DB_PROVIDER`, and `SENTRY_AUTH_TOKEN`
+(`scripts/check-agent-env.mjs`, `scripts/upload-sourcemaps.mjs`), and says which one is missing.
+
 ### Database (Cloud SQL)
 
-| Variable | Required | Value | Sensitive | Set in |
-| --- | --- | --- | --- | --- |
-| `DB_PROVIDER` | Yes, from step 6 | `cloud-sql`. Unset means `url` (Neon) | No | Step 2 (`-e` only), step 6 |
-| `CLOUD_SQL_INSTANCE` | With `cloud-sql` | `<PROJECT_ID>:<REGION>:solpg` | No | Step 2 (`-e`), step 6 |
-| `CLOUD_SQL_DATABASE` | With `cloud-sql` | `solpg`. In production the application refuses any other name | No | Step 2 (`-e`), step 6 |
-| `CLOUD_SQL_USER` | With `cloud-sql` | `vercel-production@<PROJECT_ID>.iam` | No | Step 2 (`-e`), step 6 |
-| `GCP_PROJECT_NUMBER` | With `cloud-sql` | `gcloud projects describe <PROJECT_ID> --format='value(projectNumber)'` | No | Step 2 (`-e`), step 6 |
-| `GCP_WORKLOAD_IDENTITY_POOL_ID` | With `cloud-sql` | `vercel` | No | Step 2 (`-e`), step 6 |
-| `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID` | With `cloud-sql` | `vercel` | No | Step 2 (`-e`), step 6 |
-| `GCP_SERVICE_ACCOUNT_EMAIL` | With `cloud-sql` | `vercel-production@<PROJECT_ID>.iam.gserviceaccount.com` | No | Step 2 (`-e`), step 6 |
-| `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Until step 6 | The production Neon database, pooled and direct | As today | Removed in step 6; restored by its rollback |
+None is a secret, and `migrate-production-db` reads them from a pull, so none is Sensitive.
+
+| Variable | Value | Set in |
+| --- | --- | --- |
+| `DB_PROVIDER` | `cloud-sql` | Step 3 |
+| `CLOUD_SQL_INSTANCE` | `<PROJECT_ID>:<REGION>:solpg` | Step 3 |
+| `CLOUD_SQL_DATABASE` | `solpg`. In production the application refuses any other name | Step 3 |
+| `CLOUD_SQL_USER` | `vercel-production@<PROJECT_ID>.iam` | Step 3 |
+| `GCP_PROJECT_NUMBER` | `gcloud projects describe <PROJECT_ID> --format='value(projectNumber)'` | Step 3 |
+| `GCP_WORKLOAD_IDENTITY_POOL_ID` | `vercel` | Step 3 |
+| `GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID` | `vercel` | Step 3 |
+| `GCP_SERVICE_ACCOUNT_EMAIL` | `vercel-production@<PROJECT_ID>.iam.gserviceaccount.com` | Step 3 |
+| `DATABASE_URL`, `DATABASE_URL_UNPOOLED` | Never: they belong to the Neon provider, which production does not use | |
 
 ### Sync and sign-in
 
-| Variable | Required | Value | Sensitive | Set in |
-| --- | --- | --- | --- | --- |
-| `SYNC_ENABLED` | Yes | Exactly `true`. Anything else turns sync off | No | Step 6 makes sure (`false` on the step 2 deployment only) |
-| `AUTH_SECRET` | Yes | Generated for production, `openssl rand -base64 32`, used nowhere else. Rotating it signs everyone out | Yes | Step 4 (check it exists) |
-| `AUTH_BASE_URL` | Yes; a production build fails without it | `https://<VERCEL_APP_DOMAIN>`, then `https://<CUSTOM_DOMAIN>`. No trailing slash | No | Step 2 if missing, step 4 checks, step 7 |
-| `GITHUB_CLIENT_ID` | Yes | `<GITHUB_OAUTH_APP>`'s Client ID. Its callback URL is `<AUTH_BASE_URL>/api/auth/callback/github` | No | Step 4 (check), step 7 (callback) |
-| `GITHUB_CLIENT_SECRET` | Yes | `<GITHUB_OAUTH_APP>`'s client secret | Yes | Step 4 (check) |
-| `AUTH_OAUTH_PROXY_SECRET` | Only if previews sign in through production | The same value as on Preview, never equal to any `AUTH_SECRET` ([Sign-in on previews](deploy-client-vercel.md#sign-in-on-previews)) | Yes | Leave as it is |
-| `AUTH_OAUTH_PROXY_URL` | Never on Production | Preview only | | |
+| Variable | Value | Sensitive | Set in |
+| --- | --- | --- | --- |
+| `SYNC_ENABLED` | Exactly `true`. Anything else turns sync off | No | Step 6 |
+| `AUTH_SECRET` | `openssl rand -base64 32`, generated for production and used nowhere else. Rotating it signs everyone out | Yes | Step 6 |
+| `AUTH_BASE_URL` | `https://<VERCEL_APP_DOMAIN>`, then `https://<CUSTOM_DOMAIN>` from step 9. No trailing slash. Production accepts sign-in and writes from this origin only | No | Step 6, step 9 |
+| `GITHUB_CLIENT_ID` | The production OAuth app's Client ID (step 5) | No | Step 6 |
+| `GITHUB_CLIENT_SECRET` | The production OAuth app's client secret (step 5) | Yes | Step 6 |
+| `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL` | Never on Production: they let previews sign in through production, and this project has no previews | | |
 
-### Assistant default backend
+### Assistant default backend (Nous Research)
 
-The assistant runs on Nous Research, from `<NOUS_ACCOUNT>`'s prepaid credits. Its two keys are created first, in
-step 4 ([deploy-client-vercel.md, "Default backend spend"](deploy-client-vercel.md#default-backend-spend), "Nous
-setup"). Vercel AI Gateway is a documented fallback for when the credits are used up; do not set it up for the launch.
+The assistant runs on Nous Research, from `<NOUS_ACCOUNT>`'s credits, through the two keys created in step 5.
+`PG_AI_BASE_URL` and `PG_AI_MODEL` stay unset: they default to Nous
+(`https://inference-api.nousresearch.com/v1`, `z-ai/glm-5.3-flash:US`, a US-hosted model). Vercel AI Gateway is a
+documented fallback for when the credits run out ([Default backend
+spend](deploy-client-vercel.md#default-backend-spend)); do not set it up for the launch.
 
-| Variable | Required | Value | Sensitive | Set in |
-| --- | --- | --- | --- | --- |
-| `PG_AI_API_KEY` | Yes; every Vercel build fails without it | The Nous `established` key | Yes | Step 4 |
-| `PG_AI_NEWCOMER_API_KEY` | No, recommended | The Nous `newcomer` key. Unset, newcomers spend through `PG_AI_API_KEY`, and new accounts share the established users' limit | Yes | Step 4 |
-| `PG_AI_BASE_URL`, `PG_AI_MODEL` | No | Leave unset: they default to Nous (`https://inference-api.nousresearch.com/v1`, `z-ai/glm-5.3-flash:US`). Set only to move to the Gateway | No | |
-| `PG_AI_REASONING_EFFORT`, `PG_AI_PROVIDERS`, `PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`, `PG_AI_MAX_BODY_BYTES`, `PG_AI_MAX_OUTPUT_TOKENS`, `PG_AI_NEWCOMER_AGE_DAYS`, `PG_AI_NEWCOMER_DAILY_CAP`, `PG_AI_ESTABLISHED_DAILY_CAP` | No | Leave unset: each defaults as `agentEnv` in `src/shared/config/server-env.mjs` sets it, listed in [Default backend spend](deploy-client-vercel.md#default-backend-spend) | No | |
-| Any `AGENT_*` | Never | The deprecated names. Delete every one | | Step 4 |
-| `SOURCES`, `MCP_EXPLORER_URL`, `MCP_EXPLORER_TOKEN`, `MCP_EXPLORER_BYPASS` | No | Leave unset unless told otherwise ([Sources catalogue](deploy-client-vercel.md#sources-catalogue)) | Token and bypass: yes | |
+| Variable | Value | Sensitive | Set in |
+| --- | --- | --- | --- |
+| `PG_AI_API_KEY` | The Nous `established` key | Yes | Step 6 |
+| `PG_AI_NEWCOMER_API_KEY` | The Nous `newcomer` key. Unset, new GitHub accounts spend through `PG_AI_API_KEY` and share the established users' limit | Yes | Step 6 |
+| `PG_AI_BASE_URL`, `PG_AI_MODEL` | Leave unset (Nous) | No | |
+| `PG_AI_REASONING_EFFORT`, `PG_AI_PROVIDERS`, `PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`, `PG_AI_MAX_BODY_BYTES`, `PG_AI_MAX_OUTPUT_TOKENS`, `PG_AI_NEWCOMER_AGE_DAYS`, `PG_AI_NEWCOMER_DAILY_CAP`, `PG_AI_ESTABLISHED_DAILY_CAP` | Leave unset. Each defaults as `agentEnv` in `src/shared/config/server-env.mjs` sets it: a user may spend $0.10 a day while their GitHub account is younger than 30 days, $0.50 after | No | |
+| Any `AGENT_*` | Never: the deprecated spelling of `PG_AI_*` | | |
+| `SOURCES`, `MCP_EXPLORER_URL`, `MCP_EXPLORER_TOKEN`, `MCP_EXPLORER_BYPASS` | Leave unset unless told otherwise ([Sources catalogue](deploy-client-vercel.md#sources-catalogue)) | Token and bypass: yes | |
 
 ### Observability
 
-| Variable | Required | Value | Sensitive | Set in |
-| --- | --- | --- | --- | --- |
-| `REACT_APP_SENTRY_DSN` | Yes, for error reports | The DSN of Sentry project `solana-playground` in organization `solana-fndn` (both fixed in `scripts/upload-sourcemaps.mjs`). Public: the browser and the functions share it | No | Step 4 |
-| `SENTRY_AUTH_TOKEN` | Yes; a production build fails without it | A Sentry auth token that may upload source maps to that project. Read by the build only | **No**: a local build pulls a Sensitive value as empty and then fails | Step 2 if missing or Sensitive |
-| `SENTRY_TRACES_SAMPLE_RATE` | No | `0` to `1`. Unset traces every API request | No | |
-| `SENTRY_PREVIEW_ENABLED`, `SOURCEMAPS_PREVIEW_ENABLED` | Never on Production | Preview only | | |
-| `REACT_APP_GA_MEASUREMENT_ID` | No | `G-...`, if the Foundation uses Google Analytics | No | Step 4 |
-| `REACT_APP_LOG_LEVEL` | No | Unset logs `warn` in production | No | |
+| Variable | Value | Sensitive | Set in |
+| --- | --- | --- | --- |
+| `REACT_APP_SENTRY_DSN` | The DSN of Sentry project `solana-playground` in organization `solana-fndn`. Public: the browser and the functions share it | No | Step 6 |
+| `SENTRY_AUTH_TOKEN` | A Sentry auth token that may upload source maps to that project. Read by the build only | **No**: a local build pulls a Sensitive value as empty and then fails | Step 6 |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0` to `1`. Unset traces every API request | No | |
+| `SENTRY_PREVIEW_ENABLED`, `SOURCEMAPS_PREVIEW_ENABLED` | Never on Production: Preview only | | |
+| `REACT_APP_GA_MEASUREMENT_ID` | `G-...`, the Google Analytics 4 measurement id, if the Foundation uses Google Analytics. Unset, the page carries no tag | No | Step 6 |
+| `REACT_APP_LOG_LEVEL` | Unset logs `warn` in production | No | |
 
-### Browser and build
+### Solana RPC and deploys
 
-| Variable | Required | Value | Sensitive | Set in |
-| --- | --- | --- | --- | --- |
-| `REACT_APP_DEVNET_RPC_URL`, `REACT_APP_TESTNET_RPC_URL`, `REACT_APP_MAINNET_RPC_URL` | No | Triton's URLs, **only if Triton has restricted the keys in them to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`**: every visitor can read them. Without that restriction leave them unset; the public endpoints stay | No (public by design) | Step 4 |
-| `REACT_APP_SERVER_URL` | No | Unset uses the Foundation's build server | No | |
-| `REACT_APP_SERVER_UNSTABLE` | Never `true` | A Vercel build with `true` fails | No | |
-| `REACT_APP_VERCEL_ENV`, `REACT_APP_VERCEL_GIT_COMMIT_SHA` | Never | `scripts/vercel-build.sh` sets both | | |
-| `USE_WASM_STUBS` | Never | A deployment with `true` fails its install (`scripts/vercel-install.sh`) | | |
-| `VERCEL_ENV` and Vercel's other system variables | Never as a project variable | Vercel sets them; see the system variables setting in [Before you start](#before-you-start) | | |
-| `VERCEL_ARTIFACTS_TOKEN`, `VERCEL_ARTIFACTS_OWNER` | No | Remote Cache for Git-integration builds ([Build cache](deploy-client-vercel.md#build-cache)) | Token: yes | |
+Optional. Without them the app uses the public Solana endpoints.
+
+| Variable | Value | Sensitive | Set in |
+| --- | --- | --- | --- |
+| `REACT_APP_DEVNET_RPC_URL`, `REACT_APP_TESTNET_RPC_URL`, `REACT_APP_MAINNET_RPC_URL` | The RPC provider's URLs (Triton), **only if the provider restricts the keys in them to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`**: every visitor can read them. Without that restriction leave them unset | No (public by design) | Step 6 |
+| `REACT_APP_DEVNET_READ_BUFFER_RPC_URL`, `REACT_APP_TESTNET_READ_BUFFER_RPC_URL`, `REACT_APP_MAINNET_READ_BUFFER_RPC_URL` | The RPC a program deploy reads its buffer account through, because a provider's RPC can answer `null` for a buffer just written. **Set them whenever the RPC URLs above are set**: `https://api.devnet.solana.com`, `https://api.testnet.solana.com`, `https://api.mainnet-beta.solana.com`. Unset, deploys read through the selected endpoint | No | Step 6 |
+| `REACT_APP_DEVNET_SEND_TX_PER_SECOND`, `REACT_APP_TESTNET_SEND_TX_PER_SECOND`, `REACT_APP_MAINNET_SEND_TX_PER_SECOND` | The most buffer writes per second a deploy sends, just below the RPC plan's `sendTransaction` limit. Unset, 4 a second | No | Step 6, if the provider's limit is known |
+
+### Build and platform
+
+| Variable | Value |
+| --- | --- |
+| `REACT_APP_SERVER_URL` | Leave unset: the Foundation's build server |
+| `REACT_APP_SERVER_UNSTABLE` | Never `true`: a Vercel build with it fails |
+| `REACT_APP_VERCEL_ENV`, `REACT_APP_VERCEL_GIT_COMMIT_SHA` | Never: `scripts/vercel-build.sh` sets both |
+| `USE_WASM_STUBS` | Never: a deployment with it fails its install (`scripts/vercel-install.sh`) |
+| `VERCEL_ENV` and Vercel's other system variables | Never as a project variable: Vercel sets them, see step 1 |
 
 ### Outside Vercel
 
 | Where | Name | Value | Set in |
 | --- | --- | --- | --- |
-| GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. Read by a CI job that checks production after each push to `master`, once foundation PR #102 merges; set it in advance | Step 2 |
-| The build server's environment | `PG_CLIENT_URLS` | Must include `https://<VERCEL_APP_DOMAIN>` and, from step 7, `https://<CUSTOM_DOMAIN>`, or the browser's build requests are refused by CORS | Before step 4; step 7 |
+| `client-v2/.env` in your checkout (gitignored) | `VERCEL_DEPLOY_TEAM`, `VERCEL_DEPLOY_PROJECT_ID` | `<TEAM_SLUG>` and `<VERCEL_PROJECT_ID>`. Every Makefile target refuses a checkout linked to another project | Step 1 |
+| GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. The `smoke` job of `client-v2.yml` sends it to check production after each push to `master` | Step 8 |
+| The build server's environment | `PG_CLIENT_URLS` | Must include `https://<VERCEL_APP_DOMAIN>` and, from step 9, `https://<CUSTOM_DOMAIN>`, or the browser's build requests are refused by CORS | Before step 7; step 9 |
+| Google Cloud Secret Manager | One secret per Sensitive value | A copy under your control: a Sensitive Vercel variable cannot be read back | Step 5 |
 
-## Step 1: Google Cloud and Cloud SQL
+## Step 1: the Vercel project
 
-Ticket HOO-1735. Live session `<SESSION_SETUP>`.
+Live session `<SESSION_SETUP>`.
 
-**What for:** the identity production connects as, and the instance settings that let only that identity in.
-Vercel's OIDC token is exchanged through Workload Identity Federation for the service account `vercel-production`,
-which logs in to Postgres with IAM; there is no password or key anywhere.
+**What for:** the project production deploys to, and a checkout linked to it.
 
-**Preconditions:** the tools in [Before you start](#before-you-start); every placeholder filled in; a time when a
-restart of `solpg` does no harm (changing its flags may restart it).
+**Run:**
 
-**Run:** [cloud-sql.md](cloud-sql.md), "Values used below", then steps 1 to 5, in one shell (step 4 defines helpers
-that step 5 uses). Step 3 is the Vercel dashboard: OIDC Federation on with issuer mode **Team**, and the Function
-Region nearest `<REGION>`.
+1. Create the project in `<TEAM_SLUG>` from `solana-foundation/solana-playground`
+   ([deploy-client-vercel.md, "One-time setup"](deploy-client-vercel.md#one-time-setup) steps 1 to 3): Framework
+   Preset **Other**, Root Directory **`client-v2`**, Production Branch **`master`**, Build Machine **Enhanced**.
+   Leave the build and install commands empty: `client-v2/vercel.json` sets them. If the import starts a first
+   build, let it fail or cancel it: the project has no variables yet.
+2. Settings → Functions: Function Region nearest `<REGION>` (each database query crosses that distance), and Fluid
+   compute on.
+3. Settings → Security → Secure backend access with OIDC Federation: enabled, issuer mode **Team**
+   ([cloud-sql.md, step 3](cloud-sql.md#3-vercel-oidc)).
+4. Settings → Environment Variables: **Automatically expose System Environment Variables** on. The application
+   decides by `VERCEL_ENV` which database it may open, and the build by `VERCEL_ENV` whether to report to Sentry.
+5. Team Settings → Security: **Enforce Sensitive Environment Variables** off, or at least not covering this
+   project's Production. With it on, `SENTRY_AUTH_TOKEN` and the database variables become Sensitive, a local build
+   pulls them as empty, and the production build and `migrate-production-db` fail.
+6. Settings → Deployment Protection → Protection Bypass for Automation: create the secret. Store it in Secret
+   Manager in step 5 and on GitHub in step 8.
+7. Note `<VERCEL_PROJECT_ID>` (Settings → General) and `<VERCEL_APP_DOMAIN>` (Settings → Domains).
+8. In your checkout, put `VERCEL_DEPLOY_TEAM=<TEAM_SLUG>` and `VERCEL_DEPLOY_PROJECT_ID=<VERCEL_PROJECT_ID>` in
+   `client-v2/.env` (create the file if missing; it is gitignored). Then, from the repository root:
+
+   ```sh
+   make vercel-login
+   make vercel-link
+   make vercel-auth
+   ```
+
+   `vercel-link` prints `Linked Vercel project: <VERCEL_PROJECT_ID> in team ...`; `vercel-auth` prints
+   `Vercel CLI user: <you>`. The CLI version is the one pinned as `VERCEL_CLI` in `client-v2/Makefile.vercel`; use
+   that version wherever this page says `npx vercel@62.7.0`.
+
+**Check:** `npx vercel@62.7.0 env ls production` runs and lists no variables.
+
+**Ping Alexander:** with `<VERCEL_APP_DOMAIN>`, and with the output of `vercel-link` if it fails.
+
+## Step 2: Google Cloud and Cloud SQL
+
+Live session `<SESSION_SETUP>`. Ticket HOO-1735.
+
+**What for:** the instance, and the identity production connects as. Vercel's OIDC token is exchanged through
+Workload Identity Federation for the service account `vercel-production`, which logs in to Postgres with IAM;
+there is no database password or key anywhere.
+
+**Run:** [cloud-sql.md](cloud-sql.md), "Values used below", then steps 1, 2, 4 and 5, in one shell (step 4 defines
+helpers that step 5 uses). Step 3 was done in step 1. Step 5 creates `solpg` if it does not exist. Also enable
+Secret Manager for step 5 of this page:
+
+```sh
+gcloud services enable secretmanager.googleapis.com --project="$PROJECT_ID"
+```
 
 **Check**, with the commands in [cloud-sql.md, "Checks"](cloud-sql.md#checks):
 
@@ -263,160 +258,168 @@ Region nearest `<REGION>`.
 2. `\l solpg` through the proxy shows `CONNECT` for `vercel-production@<PROJECT_ID>.iam` and none for `PUBLIC`;
    `\drg` (psql 16 and later; `\du` before) shows no member of that role other than the operators.
 3. `psql` straight to the instance's public IP on port 5432 never reaches a password prompt.
-4. `dbmate status` against `solpg`, as the operator, lists every file in `client-v2/db/migrations` as pending. From
-   the repository root:
-
-   ```sh
-   (cd client-v2 && CLOUD_SQL_INSTANCE="$PROJECT_ID:$REGION:solpg" CLOUD_SQL_USER="$PRODUCTION_DB_USER" \
-     CLOUD_SQL_DATABASE=solpg scripts/db/cloud-sql/migration-url production -- dbmate status)
-   ```
-
-   Expected: one `[ ]` line per migration file, `Applied: 0`.
 
 **If a check fails:** nothing reads `solpg` yet, so fix and run the step again. A `GRANT` that answers
 `permission denied` has its own fix in step 5 of cloud-sql.md. A proxy that does not start prints its log: usually
-`gcloud` is logged in as someone without the Cloud SQL roles step 5 grants. Neon is not touched by this step.
+`gcloud` is logged in as someone without the Cloud SQL roles step 5 grants.
 
-**Ping Alexander:** when a step marked _unverified_ in cloud-sql.md behaves differently from what it says, and with
-the outputs of checks 1 and 2 once they pass.
+**Ping Alexander:** with the outputs of checks 1 and 2, and when a step marked _unverified_ in cloud-sql.md behaves
+differently from what it says.
 
-## Step 2: staged production deployment, sync off
+## Step 3: the database variables and the schema
 
-Ticket HOO-2415.
+Live session `<SESSION_SETUP>`.
 
-**What for:** the first real token exchange. A production deployment that takes no domain proves that the production
-environment's own identity reaches `solpg`, while the production domain keeps serving the current deployment on
-Neon.
-
-**Preconditions:**
-
-- Step 1's checks pass.
-- Production holds what a production build requires, or `vercel build --prod` fails before anything is deployed:
-  `PG_AI_API_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `AUTH_SECRET`, `AUTH_BASE_URL`, `DATABASE_URL`, and
-  `SENTRY_AUTH_TOKEN` not Sensitive. Compare with the `vercel env ls production` output you kept.
-  - Missing `AUTH_BASE_URL` or `SENTRY_AUTH_TOKEN`, or a Sensitive `SENTRY_AUTH_TOKEN`: set them now, with the values
-    and the method of step 4. Gate 2 holds back only the AI key.
-  - The key under a deprecated `AGENT_*` name: the build accepts it for this step; step 4 replaces it.
-  - No key under either name: stop and ask Alexander. Setting one is step 4, which waits for the Firewall.
-- A Protection Bypass for Automation exists: Vercel → Settings → Deployment Protection → Protection Bypass for
-  Automation. Store its value as the GitHub repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`
-  ([Outside Vercel](#outside-vercel)).
-
-**Run:** [cloud-sql.md, step 6](cloud-sql.md#6-vercel-the-production-environment-staged). Keep the deployment URL
-`deploy` prints.
-
-**Check:**
-
-1. `curl -s -H "x-vercel-protection-bypass: <bypass secret>" https://<deployment url>/api/sync` answers
-   `{"enabled":false,"db":"ok"}`.
-2. The instance's log shows `vercel-production@<PROJECT_ID>.iam` logging in: Cloud console → Logging → Logs Explorer,
-   resource Cloud SQL Database, database `<PROJECT_ID>:solpg`, search `vercel-production`. If the instance logs no
-   connections, run `select usename, datname from pg_stat_activity where datname = 'solpg';` through the proxy within
-   10 seconds of check 1, while the function's pool still holds its connection. That the log names the user is
-   unverified.
-3. `curl -s https://<VERCEL_APP_DOMAIN>/api/sync` answers as it did before the step: the production domain is
-   unchanged.
-
-Record and send to Alexander:
-
-- The latency, cold and warm: run
-  `curl -s -o /dev/null -w '%{time_total}\n' -H "x-vercel-protection-bypass: <bypass secret>" https://<deployment url>/api/sync`
-  once 15 minutes after the last request, then twice more straight away.
-- `show max_connections;` on `solpg` through the proxy. Each function instance opens at most `POOL_LIMITS.max`
-  connections (`src/features/persistence/model/providers/url.mjs`); the peak count of concurrent function instances,
-  if the Vercel dashboard shows one.
-- Whether Vercel refuses a project variable named `VERCEL_ENV`: try to add one on **Preview** only, with the value
-  `shadow-test` (never `production`), in Settings → Environment Variables, and delete it at once if accepted. The application's production check reads `VERCEL_ENV`
-  ([cloud-sql.md, "Four gates"](cloud-sql.md#four-gates-between-a-preview-and-solpg)).
-
-**If a check fails:** check 1's body says which side:
-
-- `"db":"unconfigured"`: an `-e` value is missing or misspelt.
-- `"db":"unreachable"`: the token exchange or the login failed. The deployment's function log (Deployments → the
-  deployment → Logs, filter `/api/sync`) names the cause. A line starting `db: refusing` names the instance or
-  database the application refused. Otherwise compare, in order: OIDC issuer mode Team; the subject in step 4's
-  binding (`owner:<TEAM_SLUG>:project:<VERCEL_PROJECT>:environment:production`); the two roles on `solpg`; the IAM
-  database user.
-- `401` or a Vercel login page: the bypass header is missing or wrong.
-
-**Rollback:** none needed. The deployment has no domain and no project variable changed; delete it from Deployments
-if you like.
-
-**Ping Alexander:** with the body of check 1 and the recorded values, pass or fail.
-
-## Step 3: Firewall
-
-Ticket HOO-2412.
-
-**What for:** a rate limit per client on the routes that spend money or open a database connection, and an emergency
-switch that turns the hosted assistant off without a redeploy.
-
-**Preconditions:** none beyond access to the project's Firewall tab. The rules cover every domain of the project, so
-they hold after the release without change.
-
-**Run:** [firewall.md](firewall.md): "Before configuring", then every rule under "Rules to configure", including
-`Rate limit /api/ai/status (IP)` and the two `[EMERGENCY]` rules, which are created **disabled**. Publish.
-
-**Check**, from one machine, with [firewall.md, "Verifying"](firewall.md#verifying):
-
-1. The 40-request loop against `https://<VERCEL_APP_DOMAIN>/api/agent` answers `200` for the first 30 and `429` with
-   an `x-vercel-mitigated` header after that.
-2. The same loop with `seq 1 70` against `https://<VERCEL_APP_DOMAIN>/api/ai/status` answers `429` after 60.
-3. The same loop with `seq 1 30` against `https://<VERCEL_APP_DOMAIN>/api/auth/sign-in/social` answers `429` after
-   20. This is the check "Before configuring" asks for: it shows whether the firewall matches the path before
-   `vercel.json` rewrites it. Report the result either way.
-4. The Firewall overview lists each under its rule name, and the rule list shows `[EMERGENCY] Deny /api/agent`
-   and `[EMERGENCY] Rate limit /api/agent (JA4)` as Disabled.
-
-Your own IP is limited for up to 60 seconds afterwards.
-
-**If a check fails:** no `429` means the rule is not published, its path expression does not match, or a `Bypass`
-rule sits above it ("Order" in firewall.md). If the app stops loading or signing in, a managed bot rule is
-challenging the page's own requests: switch that rule off.
-
-**Rollback:** disable the rule and publish. The Firewall's Audit Log lists every change.
-
-**Ping Alexander:** with the outputs of checks 1 to 3.
-
-## Step 4: Production environment
-
-Tickets HOO-1745 (the hosted key), HOO-1796 (the RPC URLs), HOO-1801 (Sentry on the functions).
-
-**What for:** every variable in [Production environment](#production-environment) with its launch value, on the
-deployment that still reads Neon.
-
-**Preconditions:** every item of gate 3 in [Order and gates](#order-and-gates). For the migration item, run
-`make -f client-v2/Makefile.vercel migrate-production-db` from the repository root: while Production's `DB_PROVIDER`
-is unset it migrates the production Neon database, prints its host, and either reports `nothing to apply` or lists
-what is pending and asks for `yes`. Also: `<SPEND_SIGN_OFF>` and `<TOP_UP_OWNER>` are filled in,
-`PG_CLIENT_URLS` on the build server includes `https://<VERCEL_APP_DOMAIN>` (ask `<BUILD_SERVER_CONTACT>`), and
-Triton has answered whether its keys are restricted to your domains.
+**What for:** production's database settings on Vercel, and the schema in `solpg`, applied the way every later
+migration will be.
 
 **Run:**
 
-1. In `<NOUS_ACCOUNT>`'s dashboard, create two keys, each with a daily and a monthly spend limit:
+1. Set each variable of [Database (Cloud SQL)](#database-cloud-sql) on Production, not Sensitive:
+
+   ```sh
+   add() { printf %s "$2" | npx vercel@62.7.0 env add "$1" production --no-sensitive --force; }
+   add DB_PROVIDER cloud-sql
+   add CLOUD_SQL_INSTANCE "$PROJECT_ID:$REGION:solpg"
+   add CLOUD_SQL_DATABASE solpg
+   add CLOUD_SQL_USER "$PRODUCTION_DB_USER"
+   add GCP_PROJECT_NUMBER "$PROJECT_NUMBER"
+   add GCP_WORKLOAD_IDENTITY_POOL_ID vercel
+   add GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID vercel
+   add GCP_SERVICE_ACCOUNT_EMAIL "$PRODUCTION_SA"
+   ```
+
+2. Apply every migration:
+
+   ```sh
+   make migrate-production-db
+   ```
+
+   It pulls Production's variables, prints `production database: solpg on Cloud SQL instance <PROJECT_ID>:<REGION>:solpg`,
+   starts the proxy as `gcloud`'s active account, lists every file in `client-v2/db/migrations` as pending, and
+   applies them after a typed `yes`, as the production user's role.
+
+**Check:**
+
+1. `make migrate-production-db` again prints `nothing to apply`.
+2. `\dt` on `solpg` through the proxy lists the tables, every one owned by `vercel-production@<PROJECT_ID>.iam`.
+
+**If a check fails:** `Production's DB_PROVIDER is cloud-sql, but ... is not set there` names a variable that
+item 1 missed. `no DATABASE_URL_UNPOOLED in the Production environment` means the pull did not see `DB_PROVIDER`:
+check it with `npx vercel@62.7.0 env ls production`. A migration that fails midway can be run again: dbmate records
+each one it finished in `schema_migrations`. If the schema is wrong, drop and recreate the empty database as in
+cloud-sql.md step 5 and run item 2 again; nothing depends on it yet.
+
+## Step 4: Firewall
+
+Live session `<SESSION_SETUP>`. Ticket HOO-2412.
+
+**What for:** a rate limit per client on the routes that spend money or open a database connection, and an emergency
+switch that turns the assistant off without a redeploy.
+
+**Run:** [firewall.md](firewall.md): "Before configuring", then every rule under "Rules to configure", including
+`Rate limit /api/ai/status (IP)` and the two `[EMERGENCY]` rules, which are created **disabled**. Publish. The rules
+cover every domain of the project, so they hold after the release without change.
+
+**Check:** the Firewall tab lists each rule under its name, and `[EMERGENCY] Deny /api/agent` and
+`[EMERGENCY] Rate limit /api/agent (JA4)` as Disabled. The rules are tested against the deployment in step 7.
+
+**Rollback:** disable a rule and publish. The Firewall's Audit Log lists every change.
+
+## Step 5: accounts, keys and secrets
+
+Live session `<SESSION_SETUP>`. Tickets HOO-1745, HOO-1795, HOO-1796, HOO-1801.
+
+**What for:** every credential production uses, each with a copy in Secret Manager.
+
+**Secret Manager, for every secret below at the moment you have its value** (a Nous key is shown once, at creation;
+a Sensitive Vercel variable cannot be read back):
+
+```sh
+printf %s '<value>' | gcloud secrets create <secret name> --project="$PROJECT_ID" \
+  --replication-policy=automatic --data-file=-
+```
+
+A later value of the same secret is `gcloud secrets versions add <secret name> --data-file=-`. Grant
+`roles/secretmanager.secretAccessor` only to the people who rotate them. Nothing syncs Secret Manager and Vercel:
+every rotation updates both.
+
+**Run:**
+
+1. **GitHub OAuth app.** In `<GITHUB_OWNER>` → Settings → Developer settings → OAuth Apps → New OAuth App: Homepage
+   URL `https://<VERCEL_APP_DOMAIN>`, Authorization callback URL
+   `https://<VERCEL_APP_DOMAIN>/api/auth/callback/github`. Generate a client secret. Keep the Client ID for step 6;
+   store the client secret.
+2. **`AUTH_SECRET`.** `openssl rand -base64 32`. Store it.
+3. **Nous keys.** In `<NOUS_ACCOUNT>`'s dashboard, create two keys, each with a daily and a monthly spend limit:
 
    | Key | Daily limit | Monthly limit | Goes into |
    | --- | --- | --- | --- |
    | `established` | $50 | $1,250 | `PG_AI_API_KEY` |
    | `newcomer` | $10 | $250 | `PG_AI_NEWCOMER_API_KEY` |
 
-   A key is shown once, at creation: put it in Secret Manager at once ([step 5](#step-5-secrets-into-secret-manager)).
-   The limits are the ceiling on what the assistant can spend, whatever the application does. The daily limit is a
-   rolling window that starts with the key's first request. Note the prepaid balance, and tell `<TOP_UP_OWNER>` how
-   to read it: Nous has no auto top-up, and an empty balance refuses every turn until credits are added.
-2. Delete every `AGENT_*` variable: `npx vercel@62.7.0 env rm <NAME> production --yes`.
-3. Set each variable of the tables marked "Step 4", in Vercel → Settings → Environment Variables, Production only,
-   or from the shell:
+   Store each. The limits are the ceiling on what the assistant can spend, whatever the application does; past one,
+   Nous refuses the key and the assistant answers that it is unavailable. The daily limit is a rolling window that
+   starts with the key's first request. Note the balance, and show `<TOP_UP_OWNER>` where to read it: Nous has no
+   auto top-up and no API for the balance.
+4. **Sentry.** In organization `solana-fndn`, project `solana-playground` (platform React; create it if missing):
+   copy the DSN (Project Settings → Client Keys), and create an auth token that may upload source maps (Organization
+   Settings → Auth Tokens). Store the token.
+5. **Protection Bypass for Automation** (step 1). Store it.
+6. **Optional:** a Google Analytics 4 property and its measurement id (`G-...`); the RPC provider's URLs, restricted
+   to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`, and its `sendTransaction` limit. Store any RPC URL that carries a
+   key.
 
-   ```sh
-   printf %s '<value>' | npx vercel@62.7.0 env add <NAME> production --sensitive --force
-   ```
+**Check:** `gcloud secrets list --project="$PROJECT_ID"` lists one secret for each of `AUTH_SECRET`,
+`GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`, `SENTRY_AUTH_TOKEN` and the bypass secret, and
+`gcloud secrets versions access latest --secret=<secret name> --project="$PROJECT_ID" | wc -c` prints a non-zero
+length for each.
 
-   with `--no-sensitive` instead of `--sensitive` for the variables the tables mark "No". Store each secret in
-   Secret Manager as you set it ([step 5](#step-5-secrets-into-secret-manager)).
-4. Check that `<GITHUB_OAUTH_APP>`'s callback URL is `https://<VERCEL_APP_DOMAIN>/api/auth/callback/github`.
-5. Deploy with a full build ([Deploying production](#deploying-production)): the `REACT_APP_*` values changed.
+**Ping Alexander:** if Sentry's organization or project slug differs from `solana-fndn` / `solana-playground`.
+
+## Step 6: the production environment
+
+Live session `<SESSION_SETUP>`.
+
+**What for:** every remaining variable in [Production environment](#production-environment).
+
+**Preconditions:** steps 1 to 5 pass.
+
+**Run:** set each variable the tables mark "Step 6", in Vercel → Settings → Environment Variables, Production only,
+or from the shell:
+
+```sh
+printf %s '<value>' | npx vercel@62.7.0 env add <NAME> production --sensitive --force
+```
+
+with `--no-sensitive` instead of `--sensitive` for the variables the tables mark "No". `AUTH_BASE_URL` is
+`https://<VERCEL_APP_DOMAIN>` for now.
+
+Then ask `<BUILD_SERVER_CONTACT>` to add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
+
+**Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
+`AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
+`REACT_APP_SENTRY_DSN` and `SENTRY_AUTH_TOKEN`, plus any optional ones you set, with no `AGENT_*`, `DATABASE_URL`
+or `AUTH_OAUTH_PROXY_*` name, and `SENTRY_AUTH_TOKEN` not Sensitive.
+
+## Step 7: the first production deployment
+
+Live session `<SESSION_SETUP>`, with Alexander.
+
+**What for:** production running on `https://<VERCEL_APP_DOMAIN>`, checked end to end before anyone is told about it.
+
+**Preconditions:** gates 1 to 3 in [Order and gates](#order-and-gates) hold; `PG_CLIENT_URLS` includes
+`https://<VERCEL_APP_DOMAIN>`.
+
+**Run:** a full local build and deploy, from the repository root on `master`:
+
+```sh
+make deploy-client-to-vercel-production
+```
+
+It pulls Production's variables, prints the commit, asks for a typed `yes`, builds (about an hour the first time)
+and deploys to the production domain. A build on Vercel itself would not finish in its time limit the first time
+([Deploying production](#deploying-production)).
 
 **Check:**
 
@@ -424,15 +427,18 @@ Triton has answered whether its keys are restricted to your domains.
    `warning: SENTRY_AUTH_TOKEN is not set`, `warning: source maps: upload failed`. A line
    `check-agent-env: ... empty here` is expected on a local build: it names the Sensitive variables the pull held as
    empty.
-2. `curl -s https://<VERCEL_APP_DOMAIN>/api/ai/status`, signed out, answers
+2. `curl -s https://<VERCEL_APP_DOMAIN>/api/sync` answers `{"enabled":true,"db":"ok"}`. The instance's log
+   (Logs Explorer, resource Cloud SQL Database, search `vercel-production`) shows the production user logging in.
+3. `curl -s https://<VERCEL_APP_DOMAIN>/api/ai/status`, signed out, answers
    `{"available":false,"key":"hosted","reason":"signed-out","model":"z-ai/glm-5.3-flash:US"}`.
-3. Signed in on `https://<VERCEL_APP_DOMAIN>` in a browser, the assistant answers a question on the default backend,
-   and the Nous dashboard shows spend on the `newcomer` or `established` key.
-4. **The newcomer cap.** Sign in with a GitHub account created less than 30 days ago (create one if your team has
-   none), and send turns on the default backend until the chat says "You have used today's free assistant
-   allowance. It resets at 00:00 UTC, or bring your own key to keep going." That takes about 13 turns, $0.10 in
-   all. Then compare what the application charged that account with what Nous counted on the `newcomer` key. In
-   the Neon SQL editor of the database production reads:
+4. Sign in on `https://<VERCEL_APP_DOMAIN>` with GitHub, create a project and edit a file; in a second browser
+   signed in to the same account, the edit appears. Through the proxy on `solpg`, `select count(*) from "user";`
+   and `select count(*) from project_files;` both answer more than `0`.
+5. The assistant answers a question on the default backend, and the Nous dashboard shows spend on the `newcomer`
+   or `established` key.
+6. **The newcomer cap.** Signed in with a GitHub account created less than 30 days ago, send turns on the default
+   backend until the chat says "You have used today's free assistant allowance. It resets at 00:00 UTC, or bring
+   your own key to keep going." That takes about 13 turns, $0.10 in all. Through the proxy on `solpg`:
 
    ```sql
    select sum(charged) / 1e6 as usd, count(*) as turns
@@ -442,186 +448,142 @@ Triton has answered whether its keys are restricted to your domains.
      and day = (now() at time zone 'utc')::date;
    ```
 
-   The numeric id is in `https://api.github.com/users/<login>`. `usd` should match the `newcomer` key's spend in
-   the Nous dashboard for the same turns, to within a cent: the application charges the cost Nous reports for each
-   turn. Spend on the `newcomer` key from anyone else in the same window adds to the dashboard's figure, so run
-   this check before the domain is shared.
-5. With RPC URLs set: the endpoint picker lists the "(Platform)" entries, and one of them answers.
-6. `curl -s https://<VERCEL_APP_DOMAIN>/api/sync` answers `{"enabled":true,"db":"ok"}`, or
-   `{"enabled":false,"db":"ok"}` while `SYNC_ENABLED` is not `true`. The database is still Neon.
+   The numeric id is in `https://api.github.com/users/<login>`. `usd` should match the `newcomer` key's spend in the
+   Nous dashboard for the same turns, to within a cent.
+7. The Firewall, from one machine, with the loop in [firewall.md, "Verifying"](firewall.md#verifying) against
+   `https://<VERCEL_APP_DOMAIN>`: `/api/agent` answers `429` with an `x-vercel-mitigated` header after 30 requests;
+   `/api/ai/status` (`seq 1 70`) after 60; `/api/auth/sign-in/social` (`seq 1 30`) after 20. Report the last one
+   either way: it shows whether the firewall matches the path before `vercel.json` rewrites it. Your IP stays
+   limited for up to 60 seconds afterwards.
+8. Sentry receives an event from the browser and one from a function (Alexander says how to trigger them in the
+   session).
+9. With RPC URLs set: Settings › Network offers Mainnet, Devnet and Testnet on your provider's URLs, and a program
+   deploy to Devnet completes.
+10. `make migrate-production-db` prints `nothing to apply`.
 
-**If a check fails:** a failed build prints `check-agent-env: <what is missing>`, naming the variable. A turn answered
-`502` is logged as `agent: upstream refused the default backend` with a cause: the key and `PG_AI_BASE_URL` do not
-belong to the same upstream ([Assistant default backend](deploy-client-vercel.md#assistant-default-backend)).
+**If a check fails:**
 
-**Rollback:** to stop spend at once, switch on `[EMERGENCY] Deny /api/agent` and publish. To undo the whole step,
-roll back to the previous deployment ([Deploying production](#deploying-production)); it keeps the variables it was
-created with. Before the next deploy, set the previous values again from Secret Manager, or from the source each row
-of the table names, and promote that deploy.
+- A failed build prints `check-agent-env: <what is missing>` or the Sentry upload error, naming the variable.
+- `"db":"unconfigured"`: a step 3 variable is missing or misspelt.
+- `"db":"unreachable"`: the token exchange or the login failed. The deployment's function log (Deployments → the
+  deployment → Logs, filter `/api/sync`) names the cause. A line starting `db: refusing` names the instance or
+  database the application refused. Otherwise compare, in order: OIDC issuer mode Team; the subject in cloud-sql.md
+  step 4's binding (`owner:<TEAM_SLUG>:project:<VERCEL_PROJECT>:environment:production`); the two roles on `solpg`;
+  the IAM database user.
+- Sign-in failing at GitHub with "The redirect_uri is not associated with this application": the OAuth app's
+  callback URL and `AUTH_BASE_URL` disagree. Writes answering `403`: the page is open on another hostname than
+  `AUTH_BASE_URL`.
+- A turn answered `502` is logged as `agent: upstream refused the default backend`: the key is wrong, or
+  `PG_AI_BASE_URL` is set to something other than Nous.
+- Builds failing in the browser with a CORS error: `PG_CLIENT_URLS`.
 
-**Ping Alexander:** when every check passes, with the list of names `vercel env ls production` prints (names only),
-the `usd` and `turns` of check 4 beside the `newcomer` key's spend in the Nous dashboard, and `<SPEND_SIGN_OFF>`
-and `<TOP_UP_OWNER>`.
+Fix the cause and deploy again; no one uses the domain yet.
 
-## Step 5: secrets into Secret Manager
+**Ping Alexander:** he is in the session; send him the outputs of checks 2, 3 and 7, and the `usd` and `turns` of
+check 6 beside the `newcomer` key's spend.
 
-Ticket HOO-1795.
+## Step 8: deploys from `master`, and the smoke check
 
-**What for:** a copy of each production secret under the Foundation's control. Sensitive Vercel variables cannot be
-read back, so without a copy a lost value means a rotation. The application reads its secrets only from Vercel's
-variables; nothing syncs the two, so every rotation updates both.
+Live session `<SESSION_SETUP>`.
 
-**When:** at the moment each value is in hand: when it is generated or shown (a Nous key is shown once, at
-creation), in steps 2 and 4. A value already stored Sensitive in Vercel that nobody holds a copy of cannot be read
-back; rotate it (a new value in both places) instead.
+**What for:** a push to `master` deploys production through Vercel's Git integration, and a CI job checks the
+result.
 
-**Run**, once: `gcloud services enable secretmanager.googleapis.com --project=<PROJECT_ID>`. Then for each of
-`AUTH_SECRET`, `GITHUB_CLIENT_SECRET`, `AUTH_OAUTH_PROXY_SECRET` (if set), `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
-`SENTRY_AUTH_TOKEN`, the Protection Bypass for Automation secret, and any RPC URL that carries a key, under a name
-your team chooses:
+**Run:**
 
-```sh
-printf %s '<value>' | gcloud secrets create <secret name> --project=<PROJECT_ID> \
-  --replication-policy=automatic --data-file=-
-```
+1. The project's Git connection (Settings → Git) names `solana-foundation/solana-playground`, Production Branch
+   `master`. Other branches are skipped by `vercel.json`'s `ignoreCommand`, except `master-production`, `scope/*`,
+   `integration/*` and `new-face-polish-<n>`, which build Preview deployments; Preview has no variables, so those
+   builds fail and serve nothing. Turn the Git connection's preview builds off if you prefer.
+2. On GitHub, add the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET` with the bypass secret from step 1
+   ([Outside Vercel](#outside-vercel)).
 
-A later value of the same secret is `gcloud secrets versions add <secret name> --data-file=-`. Grant
-`roles/secretmanager.secretAccessor` only to the people who rotate them. Rotating `AUTH_SECRET` signs everyone out.
+**Check**, after the next merge to `master`:
 
-**Check:** `gcloud secrets list --project=<PROJECT_ID>` lists each one, and
-`gcloud secrets versions access latest --secret=<secret name> --project=<PROJECT_ID> | wc -c` prints a non-zero
-length.
+1. The repository's Settings → Environments lists `Production`. If it lists `Production – <VERCEL_PROJECT>` instead
+   (Vercel names it so when more than one project builds this repository), tell Alexander: the smoke job looks for
+   `Production`.
+2. The `smoke` job of that push's `client-v2` run passes and its summary shows `{"enabled":true,"db":"ok"}`. A Git
+   build that times out fails the job, and production keeps the deployment it had ([Deploying
+   production](#deploying-production)).
 
-**Ping Alexander:** with the instance connection name production uses, `<PROJECT_ID>:<REGION>:solpg`, so HOO-1735
-can be closed.
+## Step 9: release on the custom domain
 
-## Migrate first, then merge
+Live session `<SESSION_RELEASE>`, with Alexander. Ticket HOO-2537.
 
-Whenever a pull request adds a file under `client-v2/db/migrations`, and before it merges to `master`. Alexander
-tells you which pull request; foundation PR #114 is the one pending now.
+**Preconditions:** steps 7 and 8 pass, and Alexander has accepted his checks on `<VERCEL_APP_DOMAIN>`.
 
-1. From the repository root, check out the pull request's head: dbmate applies the migrations of the checkout it runs
-   in.
+**Run:**
 
-   ```sh
-   git fetch https://github.com/solana-foundation/solana-playground.git pull/114/head
-   git checkout --detach FETCH_HEAD
-   make -f client-v2/Makefile.vercel migrate-production-db
-   ```
-
-   It prints the database it will migrate (the Neon host before step 6, `solpg` on Cloud SQL after), the pending
-   list, and asks for `yes`. On Cloud SQL it needs `cloud-sql-proxy`, `psql`, and `gcloud` logged in as an
-   operator.
-2. **Check:** run the target again; it prints `nothing to apply`.
-3. `git checkout master`, and tell Alexander. The pull request merges after that.
-
-The migration of #114 keeps the code already deployed working: its new `settled_at` column has a default until a later
-migration drops it. If the target fails midway, send Alexander the output; dbmate records each migration it finished
-in `schema_migrations`.
-
-The Neon path reads `DATABASE_URL_UNPOOLED` from the Production pull. If that variable is Sensitive, the pull holds
-it empty and the target stops with `no DATABASE_URL_UNPOOLED in the Production environment`. Then run what the
-target runs, with the direct (unpooled) connection string of the production Neon database from the Neon console:
-
-```sh
-cd client-v2
-DATABASE_URL='<direct connection string>' dbmate status
-DATABASE_URL='<direct connection string>' dbmate --no-dump-schema up
-cd ..
-```
-
-Check first that the host in that string is the production Neon database, not a preview one.
-
-## Step 6: cutover on the `vercel.app` domain
-
-Ticket for `cloud-sql` task 3.2. Live session `<SESSION_CUTOVER>`, with Alexander.
-
-**What for:** production reads and writes `solpg` from here on. Neon stays as it is and is the rollback.
-
-**Preconditions:**
-
-- Steps 1 to 4 pass.
-- Alexander confirms that `master` holds the launch code, and that every account in the production Neon database is
-  a test account. To count them:
-
-  ```sh
-  make -f client-v2/Makefile.vercel vercel-link-production
-  psql "$(sed -n 's/^DATABASE_URL_UNPOOLED=//p' .vercel/.env.production.local | tr -d '"')" -c 'select count(*) from "user";'
-  ```
-
-  If the pulled value is empty (a Sensitive variable), run the `select` in the Neon console's SQL editor instead.
-
-- No custom domain is attached to the project.
-
-**Run:** in a new shell, set "Values used below" ([Before you start](#before-you-start)). Then
-[cloud-sql.md, step 7](cloud-sql.md#7-cutover), items 1 to 6, from a checkout of `master`. For item 5 deploy as in
-[Deploying production](#deploying-production); only server variables changed.
+1. Ask `<BUILD_SERVER_CONTACT>` to add `https://<CUSTOM_DOMAIN>` to `PG_CLIENT_URLS`.
+2. Set the OAuth app's Homepage URL to `https://<CUSTOM_DOMAIN>` and its callback URL to
+   `https://<CUSTOM_DOMAIN>/api/auth/callback/github`.
+3. Set `AUTH_BASE_URL` to `https://<CUSTOM_DOMAIN>` on Production.
+4. Attach `<CUSTOM_DOMAIN>` (Settings → Domains) and create the DNS records Vercel shows.
+5. Redeploy as in [Deploying production](#deploying-production). `AUTH_BASE_URL` is a server variable, so the
+   server-variables-only way is enough while `.vercel/output` is still the build production runs.
 
 **Check:**
 
-1. `\dt` on `solpg` (item 3) shows every table owned by `vercel-production@<PROJECT_ID>.iam`.
-2. `curl -s https://<VERCEL_APP_DOMAIN>/api/sync` answers `{"enabled":true,"db":"ok"}`.
-3. Sign in on `https://<VERCEL_APP_DOMAIN>`, create or edit a project, then through the proxy on `solpg`:
-   `select count(*) from "user";` and `select count(*) from project_files;` both answer more than `0`.
-4. `make -f client-v2/Makefile.vercel migrate-production-db` names `solpg` and prints `nothing to apply`.
-
-Alexander then runs the pre-release checks on `<VERCEL_APP_DOMAIN>`: sign-in, sync across two browsers, the
-assistant on the default key, the daily cap's `429`, a Sentry test event from the browser and from a function, and
-the Firewall rule.
-
-**If a check fails:** a body of `"db":"unconfigured"` or `"db":"unreachable"` has the same causes as in step 2; the
-deployment's function log names them.
-
-**Rollback:** [cloud-sql.md, step 7, "Rollback"](cloud-sql.md#7-cutover): restore `DATABASE_URL`,
-`DATABASE_URL_UNPOOLED` and `DB_PROVIDER=url` on Production and redeploy. The Neon database was not written to after
-the switch.
-
-**Ping Alexander:** he is in the session; send him the outputs of checks 2 and 4.
-
-## Step 7: release on the custom domain
-
-Ticket HOO-2537. Live session `<SESSION_RELEASE>`, with Alexander.
-
-**What for:** the launch domain starts on an empty database. The test accounts, sessions and projects from step 6 go
-with the old one.
-
-**Preconditions:**
-
-- Step 6 passes, and Alexander has accepted the results of his pre-release checks.
-- `<CUSTOM_DOMAIN>`'s DNS records are ready to point at Vercel (Vercel shows the records when the domain is added
-  under Settings → Domains).
-- `PG_CLIENT_URLS` on the build server includes `https://<CUSTOM_DOMAIN>` (ask `<BUILD_SERVER_CONTACT>`).
-- A checkout of `master` that holds every migration production has. If a pull request's migration was applied ahead
-  of its merge and the pull request is still open, run item 3 of the cloud-sql.md section below a second time, from
-  that pull request's head, as in [Migrate first, then merge](#migrate-first-then-merge).
-
-**Run:** in a new shell, set "Values used below" ([Before you start](#before-you-start)). Then
-[cloud-sql.md, "Release: an empty `solpg` on the custom domain"](cloud-sql.md#release-an-empty-solpg-on-the-custom-domain),
-items 1 to 6. For the redeploy in item 5, use either way in [Deploying production](#deploying-production). If the
-Preview environment sets `AUTH_OAUTH_PROXY_URL`, set it to `https://<CUSTOM_DOMAIN>` as well, since previews sign
-in through the production domain's callback.
-
-**Check:**
-
-1. `select count(*) from "user";` on `solpg` answers `0` after the migration and again after the redeploy, before
-   anyone signs in.
-2. `curl -s https://<CUSTOM_DOMAIN>/api/sync` answers `{"enabled":true,"db":"ok"}`.
-3. `curl -s https://<CUSTOM_DOMAIN>/api/ai/status` answers as in step 4's check 2.
-4. Sign in on `https://<CUSTOM_DOMAIN>` and edit a project; the `"user"` and `project_files` counts rise above `0`.
+1. `curl -s https://<CUSTOM_DOMAIN>/api/sync` answers `{"enabled":true,"db":"ok"}`.
+2. `curl -s https://<CUSTOM_DOMAIN>/api/ai/status` answers as in step 7's check 3.
+3. Sign in on `https://<CUSTOM_DOMAIN>`, edit a project, and ask the assistant a question.
 
 A sign-in on `<VERCEL_APP_DOMAIN>` is now refused at GitHub, and its writes answer `403`: production accepts one
-origin, `AUTH_BASE_URL`.
+origin, `AUTH_BASE_URL`. The accounts and projects created while testing stay in `solpg`.
 
-Alexander then runs the launch checks on `<CUSTOM_DOMAIN>`: sign-in, a project syncs, the assistant answers, the cap
-answers `429`, Sentry receives a test event, and production answers `{"enabled":true,"db":"ok"}` on
-`GET /api/sync` after a push to `master` (a CI job, foundation PR #102, checks this once it merges; until then
-Alexander checks it by hand).
-
-**If a check fails:** sign-in failing at GitHub with "The redirect_uri is not associated with this application"
-means the callback URL and `AUTH_BASE_URL` disagree. Writes answering `403` mean `AUTH_BASE_URL` is not exactly
-`https://<CUSTOM_DOMAIN>`, or the redeploy did not happen after it was set.
-
-**Rollback:** the release's rollback in cloud-sql.md returns to the `vercel.app` domain on an empty `solpg`. If
-`solpg` itself is the problem, step 6's rollback to Neon still applies.
+**If a check fails:** as in step 7. **Rollback:** point the OAuth app and `AUTH_BASE_URL` back at
+`<VERCEL_APP_DOMAIN>`, remove the domain, and redeploy.
 
 **Ping Alexander:** he is in the session; send him the outputs of checks 1 and 2.
+
+## Operating production
+
+### Deploying production
+
+- **A push to `master`** builds and deploys on Vercel. A build that must compile the wasm packages (the first one,
+  and any after a change under `wasm/`) does not finish inside Vercel's build time limit; it stores them in Vercel's
+  Remote Cache on the way, so the next build of the same `wasm/` finishes
+  ([deploy-client-vercel.md, "Build cache"](deploy-client-vercel.md#build-cache)). Its log says
+  `>>> Remote Cache: VERCEL_ARTIFACTS_TOKEN set`; if it says `unset`, tell Alexander. After any push, check Vercel →
+  Deployments for which deployment is Current.
+- **A full build from the checkout:** `make deploy-client-to-vercel-production`, as in step 7. Use it when a Git
+  build times out, or after a change to a `REACT_APP_*` variable when no push is coming: those are inlined into the
+  bundle at build time.
+- **Server variables only:** after a change that touches no `REACT_APP_*` variable, deploy the last full local build
+  again from the repository root, `npx vercel@62.7.0 deploy --prebuilt --prod --archive=tgz`. A function reads the
+  variables the project held when its deployment was created. This works only while `.vercel/output` is the build
+  of the commit production runs; after a push to `master` has deployed a newer commit, use a full build instead.
+
+Rolling back (Deployments → the previous one → Instant Rollback, or `vercel promote <url> --prod`) restores that
+deployment's code and variables. It does not undo a migration or a Firewall change. After an Instant Rollback,
+Vercel stops giving the production domain to new production deployments until you promote one or undo the rollback.
+
+### Migrations
+
+A push to `master` deploys production, so a pull request that adds a file under `client-v2/db/migrations` merges
+only after its migration is applied. Alexander tells you which pull request. From the repository root:
+
+```sh
+git fetch https://github.com/solana-foundation/solana-playground.git pull/<number>/head
+git checkout --detach FETCH_HEAD
+make migrate-production-db
+make migrate-production-db   # again: prints `nothing to apply`
+git checkout master
+```
+
+dbmate applies the migrations of the checkout it runs in, hence the checkout. Then tell Alexander; the pull request
+merges after that. Migrations are written so the code already deployed keeps working on the new schema.
+
+### The assistant's spend
+
+- **Stop spend at once:** switch on `[EMERGENCY] Deny /api/agent` in the Firewall and publish
+  ([firewall.md, "Emergency switches"](firewall.md#emergency-switches)).
+- **Credits:** `<TOP_UP_OWNER>` reads the balance in the Nous dashboard. An empty balance refuses every turn until
+  credits are added, and Sentry receives the `api:agent` error `upstream credit balance is empty`.
+- **A leaked key:** create a new one in Nous with the same limits, set it in Vercel and Secret Manager, redeploy
+  (server variables only), then revoke the old one.
+
+### Adding an operator
+
+[cloud-sql.md, "Adding an operator"](cloud-sql.md#adding-an-operator), the production part.
