@@ -48,10 +48,35 @@ describe("BaseNotEnoughSol", () => {
     expect(card.textContent).toContain("7xKX…gAsU");
     expect(card.textContent).toContain("429 Too Many Requests");
     expect(
-      screen.getByRole("link", { name: "Open faucet" }).getAttribute("href")
+      screen
+        .getByRole("link", { name: "Open the web faucet" })
+        .getAttribute("href")
     ).toBe(
-      `https://faucet.solana.com/?walletAddress=${ADDRESS}&cluster=devnet`
+      `https://faucet.solana.com/?walletAddress=${ADDRESS}&amount=5&cluster=devnet`
     );
+  });
+
+  it("spells out the web faucet once the faucet refused", () => {
+    renderCard({});
+
+    const steps = screen.getByRole("list", {
+      name: "Get SOL from the web faucet",
+    });
+    expect(
+      Array.from(steps.querySelectorAll("li"), (li) => li.textContent)
+    ).toStrictEqual([
+      "1Open the web faucet and sign in with GitHub. It asks for a public repo: if you have none, fork solana-playground there",
+      "2Confirm the airdrop. Your address and 5 SOL are filled in",
+      "3Come back here and press Try again",
+    ]);
+  });
+
+  it("lists no steps while the faucet was not asked", () => {
+    renderCard({ reason: "airdrop_off" });
+
+    expect(
+      screen.queryByRole("list", { name: "Get SOL from the web faucet" })
+    ).toBeNull();
   });
 
   it("offers Request airdrop in place of Try again while automatic airdrop is off", () => {
@@ -91,7 +116,9 @@ describe("BaseNotEnoughSol", () => {
     renderCard({ cluster: "mainnet-beta", reason: "no_faucet" });
 
     expect(screen.getByText("Not enough mainnet SOL")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Open faucet" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Open the web faucet" })
+    ).toBeNull();
   });
 
   it("names no network while the cluster is unknown", () => {

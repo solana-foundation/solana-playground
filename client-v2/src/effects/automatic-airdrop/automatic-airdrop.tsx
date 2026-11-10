@@ -1,6 +1,6 @@
 import { isAirdropSignInGated } from "../../commands/airdrop/sign-in-gate";
 import { PgSession } from "../../features/auth";
-import { faucetUrlFor, isFaucetCluster } from "../../shared/lib/faucet";
+import { faucetLink, isFaucetCluster } from "../../shared/lib/faucet";
 import { createLogger } from "../../shared/lib/logger";
 import {
   Cluster,
@@ -63,9 +63,12 @@ export const automaticAirdrop = () => {
             "Note: This was an automatic airdrop request.",
             ...(isFaucetCluster(cluster)
               ? [
-                  `Visit ${faucetUrlFor(cluster)(
-                    PgWallet.current?.publicKey.toBase58()
-                  )} to obtain SOL.`,
+                  // The web faucet filled in, the amount too, so the user only confirms
+                  `Visit ${faucetLink({
+                    walletAddress: PgWallet.current?.publicKey.toBase58(),
+                    amount: airdropAmount,
+                    cluster,
+                  })} to obtain SOL.`,
                 ]
               : []),
             `To disable, run \`${PgCommand.setting.name} set wallet.automaticAirdrop false\`.`,

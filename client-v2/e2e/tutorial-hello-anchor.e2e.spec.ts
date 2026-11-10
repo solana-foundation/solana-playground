@@ -326,7 +326,7 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
       LONG
     );
     await expect(
-      feed(page).getByRole("link", { name: /Open faucet/ })
+      feed(page).getByRole("link", { name: /Open the web faucet/ })
     ).toBeVisible();
     await expect(feed(page).getByText("Asks the faucet again")).toBeVisible();
     expect(devnet.programs()).toEqual([]);
