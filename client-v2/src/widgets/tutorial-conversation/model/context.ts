@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94 */
-import type { TutorialDefinition } from "@/entities/tutorial";
+import type { ActBeat, TutorialDefinition } from "@/entities/tutorial";
 import type {
   ConversationProgress,
   RunRecord,
@@ -56,6 +56,7 @@ export const describeTutorial = (facts: TutorialFacts): string => {
         `${TOOLS.skip} skips it, as its buttons do.`
     );
   }
+  if (live?.kind === "act") lines.push(whereActIs(live));
   const last = lastRun(progress);
   if (last) lines.push(`The last result: ${describeRun(last)}.`);
   if (facts.openFiles.length) {
@@ -110,6 +111,45 @@ const whereOf = (
   return (
     `Step ${i + 1} of ${definition.steps.length}: ${step.title}. ` +
     `Objective: ${step.objective}. The step's file: ${step.file}.${passed}`
+  );
+};
+
+/**
+ * What else, if anything, runs the live act outside its card. Asked "how do
+ * I build?", the assistant sent learners to a Build action on the stage bar,
+ * which has none, and a tutorial's frame draws no Write/Build/Deploy/Interact
+ * tabs either (HOO-2755). A build or a deploy the lesson reads runs from the
+ * card alone: the terminal's `build` compiles but passes no step. A call has
+ * the Call panel and a run has the client file too (`PassedVia`).
+ */
+const BESIDES_THE_CARD: Record<ActBeat["act"], string> = {
+  build:
+    "It is the only build the lesson reads: the work area has no Build action or tab in a tutorial, and a build typed in the terminal passes no step.",
+  deploy:
+    "It is the only deploy the lesson reads: the work area has no Deploy action or tab in a tutorial, and a deploy typed in the terminal passes no step.",
+  buildDeploy:
+    "It is the only build and deploy the lesson reads: the work area has no Build or Deploy action or tab in a tutorial, and the terminal's commands pass no step.",
+  airdrop: "It is the only way to request the airdrop in the lesson.",
+  run: "Running the client file from the editor passes the step too.",
+  call: "The Call panel in the work area's head sends the same instruction and passes the step too.",
+};
+
+/**
+ * Where the control that runs the step's act sits: its card in the tutorial
+ * feed, this chat, with what else runs it (`BESIDES_THE_CARD`) and how the
+ * card stands: live, running, or interrupted by a reload, after which the
+ * learner presses it again; nothing resumes on its own.
+ */
+const whereActIs = (live: Extract<Turn, { kind: "act" }>): string => {
+  let state = "";
+  if (live.state === "running") state = " It is running now.";
+  if (live.state === "interrupted") {
+    state = " A reload interrupted its last run; pressing it runs it again.";
+  }
+  return (
+    `The step waits for the "${live.act.button}" button on the ` +
+    `"${live.act.title}" card in the tutorial feed, in this chat. ` +
+    `${BESIDES_THE_CARD[live.act.act]} Point the learner to that card.${state}`
   );
 };
 
@@ -200,6 +240,73 @@ if (import.meta.vitest) {
       expect(text).toContain("in front: programs/hello/src/lib.rs");
       expect(text).toContain("you cannot change files, build, deploy");
       expect(text).not.toContain(BEGIN_INVITATION);
+    });
+
+    it("points to the live act's card, says what else runs it, and that an interrupted card is pressed again", () => {
+      const build = hello.steps[0].beats.find(
+        (b): b is ActBeat => b.kind === "act"
+      );
+      if (!build) throw new Error("Hello Anchor has no act in step 1");
+      const call: ActBeat = {
+        kind: "act",
+        id: "s9.call",
+        act: "call",
+        title: "Call hello",
+        context: "Sends hello",
+        button: "Call",
+        call: { instruction: "hello" },
+      };
+      const progress = freshProgress();
+      progress.startedAt = 1000;
+      progress.cursor = {
+        kind: "step",
+        stepId: hello.steps[0].id,
+        beat: 4,
+        fail: false,
+      };
+      const card = (
+        act: ActBeat,
+        state: import("@/features/tutorial-conversation").ActState
+      ): Turn => ({
+        id: act.id,
+        kind: "act",
+        step: hello.steps[0].id,
+        at: 2000,
+        whole: true,
+        beatId: act.id,
+        act,
+        state,
+        presses: [],
+        note: null,
+        stage: null,
+        took: null,
+      });
+      const facts = (live: Turn) => ({
+        definition: hello,
+        progress,
+        live,
+        openFiles: [],
+        currentFile: null,
+      });
+      const text = describeTutorial(facts(card(build, "live")));
+      expect(text).toContain(
+        `The step waits for the "${build.button}" button on the ` +
+          `"${build.title}" card in the tutorial feed, in this chat.`
+      );
+      expect(text).toContain(
+        "the work area has no Build action or tab in a tutorial"
+      );
+      expect(text).not.toContain("It is running now.");
+      expect(text).not.toContain("A reload interrupted");
+      expect(describeTutorial(facts(card(build, "running")))).toContain(
+        "It is running now."
+      );
+      expect(describeTutorial(facts(card(build, "interrupted")))).toContain(
+        "A reload interrupted its last run; pressing it runs it again."
+      );
+      const called = describeTutorial(facts(card(call, "live")));
+      expect(called).toContain("The Call panel in the work area's head");
+      expect(called).not.toContain("only way");
     });
 
     it("guards an open question's answer and lists the tutorial's docs", () => {
