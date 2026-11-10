@@ -47,8 +47,3 @@ profile. The profiles with a server keep `http://localhost:${PG_PORT}`.
   previous deployment stays live. The PR description lists both Vercel projects and both environments.
 - [A developer relying on the old default gets a local server] → the start-up warning names the variable;
   `client-v2/.env.example` documents it.
-
-## Migration Plan
-
-1. Set `REACT_APP_SERVER_URL` for production and preview in both Vercel projects (a human does this).
-2. Merge. Rollback: revert the PR.
