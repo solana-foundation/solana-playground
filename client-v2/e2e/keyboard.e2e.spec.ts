@@ -131,10 +131,19 @@ test("keyboard: Enter opens a file from the tree, Space folds a folder", async (
   await lib.focus();
   await page.keyboard.press("Enter");
   await expect(page.locator(TAB)).toHaveCount(1, LONG);
+  // The open focuses the editor, taking focus from any tree item
+  // (`leavesFocusElsewhere`), and on a loaded runner it lands late: wait for
+  // it, or the Space below types into lib.rs instead of folding `src`
+  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused(
+    LONG
+  );
 
   await src.focus();
+  await expect(src).toBeFocused();
   await page.keyboard.press(" ");
   await expect(lib).toBeHidden();
+  // Folding keeps the folder focused, so the second Space unfolds it
+  await expect(src).toBeFocused();
   await page.keyboard.press(" ");
   await expect(lib).toBeVisible();
 });
