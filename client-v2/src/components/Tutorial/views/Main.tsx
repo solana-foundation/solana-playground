@@ -1,12 +1,12 @@
 import { FC, useEffect, useRef } from "react";
 
 import { Button } from "@/shared/ui/button";
+import { Icon } from "@/shared/ui/icon";
 
 import { Emoji } from "../../../constants";
 import { useAsyncEffect } from "../../../hooks";
 import { PgCommon, PgRouter, PgTutorial, PgView } from "../../../utils";
 import EditorWithTabs from "../../EditorWithTabs";
-import { PointedArrow } from "../../Icons";
 import { SpinnerWithBg } from "../../Loading";
 import Markdown from "../../Markdown";
 import Resizable from "../../Resizable";
@@ -117,7 +117,7 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
                     variant="ghost"
                     className={NAVIGATION_BUTTON}
                   >
-                    <PointedArrow data-icon="inline-start" rotate="180deg" />
+                    <Icon name="back" data-icon="inline-start" />
                     {pages[pageNumber - 2].title ??
                       `${pageNumber - 1}/${pages.length}`}
                   </Button>
@@ -143,7 +143,7 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
                   >
                     {pages[pageNumber].title ??
                       `${pageNumber + 1}/${pages.length}`}
-                    <PointedArrow data-icon="inline-end" />
+                    <Icon name="forward" data-icon="inline-end" />
                   </Button>
                 )}
               </div>

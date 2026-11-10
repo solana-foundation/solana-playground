@@ -8,20 +8,9 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/shared/ui/context-menu";
+import { Icon } from "@/shared/ui/icon";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 
-import {
-  Edit,
-  NewFile,
-  NewFolder,
-  Rocket,
-  RunAll,
-  TestPaper,
-  TestTube,
-  Trash,
-  Triangle,
-  Wrench,
-} from "../../../../components/Icons";
 import { PgExplorer, PgView } from "../../../../utils";
 import type { useExplorerContextMenu } from "./useExplorerContextMenu";
 
@@ -107,42 +96,42 @@ export const ExplorerContextMenu: FC<
         {itemData.isFolder && (
           <>
             <ContextMenuItem onSelect={newItem}>
-              <NewFile />
+              <Icon name="new-file" />
               <MenuItemText>New File</MenuItemText>
               <ContextMenuShortcut>ALT+N</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuItem onSelect={newItem}>
-              <NewFolder />
+              <Icon name="new-folder" />
               <MenuItemText>New Folder</MenuItemText>
               <ContextMenuShortcut>ALT+N</ContextMenuShortcut>
             </ContextMenuItem>
           </>
         )}
         <ContextMenuItem onSelect={renameItem}>
-          <Edit />
+          <Icon name="edit" />
           <MenuItemText>Rename</MenuItemText>
           <ContextMenuShortcut>F2</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" onSelect={deleteItem}>
-          <Trash />
+          <Icon name="delete" />
           <MenuItemText>Delete</MenuItemText>
           <ContextMenuShortcut>Del</ContextMenuShortcut>
         </ContextMenuItem>
         {itemData.isProgramFolder && (
           <>
             <ContextMenuItem onSelect={telling(runBuild, "build")}>
-              <Wrench />
+              <Icon name="build" />
               <MenuItemText>Build</MenuItemText>
             </ContextMenuItem>
             <ContextMenuItem onSelect={telling(runDeploy, "deploy")}>
-              <Rocket />
+              <Icon name="deploy" />
               <MenuItemText>Deploy</MenuItemText>
             </ContextMenuItem>
           </>
         )}
         {itemData.isClient && (
           <ContextMenuItem onSelect={telling(runClient, "run the client")}>
-            <Triangle rotate="90deg" />
+            <Icon name="run" />
             <MenuItemText>Run</MenuItemText>
           </ContextMenuItem>
         )}
@@ -150,19 +139,19 @@ export const ExplorerContextMenu: FC<
           <ContextMenuItem
             onSelect={telling(runClientFolder, "run the client")}
           >
-            <RunAll />
+            <Icon name="run" />
             <MenuItemText>Run All</MenuItemText>
           </ContextMenuItem>
         )}
         {itemData.isTest && (
           <ContextMenuItem onSelect={telling(runTest, "run the test")}>
-            <TestTube />
+            <Icon name="test" />
             <MenuItemText>Test</MenuItemText>
           </ContextMenuItem>
         )}
         {itemData.isTestFolder && (
           <ContextMenuItem onSelect={telling(runTestFolder, "run the tests")}>
-            <TestPaper />
+            <Icon name="test" />
             <MenuItemText>Test All</MenuItemText>
           </ContextMenuItem>
         )}

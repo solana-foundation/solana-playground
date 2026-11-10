@@ -12,10 +12,10 @@ const tagVariants = cva(
     variants: {
       variant: {
         neutral: "bg-surface-raised text-muted-foreground",
-        success: "bg-success/12 text-success",
-        warning: "bg-warning/12 text-warning",
-        info: "bg-info/12 text-info",
-        error: "bg-error/12 text-error",
+        success: "bg-success/12 text-success-ink",
+        warning: "bg-warning/12 text-warning-ink",
+        info: "bg-info/12 text-info-ink",
+        error: "bg-error/12 text-error-ink",
         brand:
           "bg-brand-purple/14 text-[color-mix(in_oklab,var(--brand-purple)_55%,var(--foreground))]",
       },

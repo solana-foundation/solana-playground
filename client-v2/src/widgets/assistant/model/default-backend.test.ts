@@ -12,6 +12,7 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import {
   probeDefaultBackend,
   resetDefaultBackendProbe,
@@ -350,5 +351,90 @@ describe("useDefaultBackend", () => {
       ["assistant:connect", "error", true],
       ["assistant:connect", "error", true],
     ]);
+  });
+});
+
+describe("the probe's state for the status", () => {
+  it("goes from checking to answered, whatever the answer", async () => {
+    answer({ key: "own" });
+    const asked = probeDefaultBackend();
+    expect(PgAssistant.defaultProbe).toBe("checking");
+    await asked;
+    expect(PgAssistant.defaultProbe).toBe("answered");
+  });
+
+  it("keeps the model the deployment named, for the status and Settings", async () => {
+    answer({ key: "hosted", model: "claude-opus-5-5" });
+    await probeDefaultBackend();
+    expect(PgAssistant.hostedModel).toBe("claude-opus-5-5");
+    resetDefaultBackendProbe();
+    answer({ key: "own" });
+    await probeDefaultBackend();
+    expect(PgAssistant.hostedModel).toBeUndefined();
+  });
+
+  it("keeps the model's name through a failed ask, which says nothing of it", async () => {
+    answer({ key: "hosted", model: "claude-opus-5-5" });
+    await probeDefaultBackend();
+    answer({}, 500);
+    await retryDefaultBackend();
+    expect(PgAssistant.hostedModel).toBe("claude-opus-5-5");
+  });
+
+  it("records no failure while the browser is offline, so coming back online reads no red", async () => {
+    // Offline says nothing about the deployment, and nothing asks again on the
+    // way back: a recorded failure would turn into a false "Not responding"
+    const onLine = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
+    expect(PgAssistant.defaultProbe).toBe("unasked");
+    onLine.mockRestore();
+  });
+
+  it("reads unreachable on an error status and on a request that fails", async () => {
+    answer({}, 500);
+    await probeDefaultBackend();
+    expect(PgAssistant.defaultProbe).toBe("unreachable");
+
+    resetDefaultBackendProbe();
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+    await probeDefaultBackend();
+    expect(PgAssistant.defaultProbe).toBe("unreachable");
+  });
+
+  it("stays unreachable while asking again, so its Try again stays on screen", async () => {
+    answer({}, 500);
+    await probeDefaultBackend();
+
+    answer({ key: "own" });
+    const again = probeDefaultBackend();
+    expect(PgAssistant.defaultProbe).toBe("unreachable");
+    await again;
+    expect(PgAssistant.defaultProbe).toBe("answered");
+  });
+
+  it("asks with a time limit, so a request that hangs ends", async () => {
+    const fetched = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({ ok: false, status: 500 } as Response);
+    await probeDefaultBackend();
+    expect(fetched.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("leaves a newer probe's state alone when an old one answers", async () => {
+    let settle: (r: Response) => void = () => {};
+    vi.spyOn(globalThis, "fetch").mockReturnValue(
+      new Promise<Response>((resolve) => (settle = resolve))
+    );
+    const old = probeDefaultBackend();
+    resetDefaultBackendProbe();
+    expect(PgAssistant.defaultProbe).toBe("unasked");
+    settle({
+      ok: true,
+      status: 200,
+      json: async () => ({ key: "own" }),
+    } as Response);
+    await old;
+    expect(PgAssistant.defaultProbe).toBe("unasked");
   });
 });

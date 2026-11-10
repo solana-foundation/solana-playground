@@ -52,10 +52,12 @@ const props = (
   onBuild: vi.fn(() => Promise.resolve()),
   onContinue: vi.fn(),
   hasIdl: false,
+  sourceChanged: false,
   onAsk: vi.fn(),
   onOpenFile: vi.fn(),
   onShowLog: vi.fn(),
   onSignIn: vi.fn(),
+  onStop: vi.fn(),
   idlActions: null,
 });
 
@@ -134,6 +136,115 @@ describe("BaseBuild", () => {
     ).not.toBeNull();
   });
 
+  // HOO-2648: a hung server must not leave an endless bar with no way out
+  it("offers Stop and the full log while a first build runs", () => {
+    const p = props({ kind: "empty" }, true);
+    const { container } = render(<BaseBuild {...p} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(p.onStop).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Show full log" }));
+    expect(p.onShowLog).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /^Build/ })).toBeNull();
+    expect(brandButtons(container)).toHaveLength(0);
+    expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  // The region is in place before the run, so the change is announced
+  it("announces a first build through a polite region already on screen", () => {
+    const p = props({ kind: "empty" });
+    const { rerender } = render(<BaseBuild {...p} />);
+    const region = screen.getByRole("status");
+    expect(region.textContent).toMatch(/^Build compiles your program/);
+
+    rerender(<BaseBuild {...p} building />);
+
+    expect(screen.getByRole("status")).toBe(region);
+    expect(region.textContent).toMatch(/^Compiling on the build server\./);
+  });
+
+  describe("keeps focus in the stage", () => {
+    it("moves it from Build to Stop when the run starts, to the title when it ends", () => {
+      const p = props({ kind: "empty" });
+      const { rerender } = render(<BaseBuild {...p} />);
+      screen.getByRole("button", { name: /^Build/ }).focus();
+
+      rerender(<BaseBuild {...p} building />);
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Stop" })
+      );
+
+      rerender(<BaseBuild {...p} surface={{ kind: "succeeded" }} />);
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Build succeeded" })
+      );
+    });
+
+    it("puts it back on the title after a stop", () => {
+      const p = props({ kind: "empty" }, true);
+      const { rerender } = render(<BaseBuild {...p} />);
+      screen.getByRole("button", { name: "Stop" }).focus();
+
+      rerender(<BaseBuild {...p} building={false} />);
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Nothing built yet" })
+      );
+    });
+
+    // A press on the page, on nothing focusable, lets go of the stage too
+    it("leaves focus alone after a press outside the stage", () => {
+      const p = props({ kind: "empty" }, true);
+      const { rerender } = render(<BaseBuild {...p} />);
+      const stop = screen.getByRole("button", { name: "Stop" });
+      stop.focus();
+      fireEvent.pointerDown(document.body);
+      stop.blur();
+
+      rerender(
+        <BaseBuild {...p} building={false} surface={{ kind: "succeeded" }} />
+      );
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it("lands on the title when a rebuild from a failed build succeeds", () => {
+      const p = props(failed([typeError("a", "expected u32")]));
+      const { rerender } = render(<BaseBuild {...p} />);
+      screen.getByRole("button", { name: "Try again" }).focus();
+
+      rerender(<BaseBuild {...p} surface={{ kind: "succeeded" }} />);
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("heading", { name: "Build succeeded" })
+      );
+    });
+
+    // A finished build never pulls anyone out of their typing
+    it("leaves focus that is outside the stage alone", () => {
+      const p = props({ kind: "empty" }, true);
+      const { rerender } = render(
+        <>
+          <input aria-label="editor" />
+          <BaseBuild {...p} />
+        </>
+      );
+      screen.getByRole("button", { name: "Stop" }).focus();
+      screen.getByRole("textbox", { name: "editor" }).focus();
+
+      rerender(
+        <>
+          <input aria-label="editor" />
+          <BaseBuild {...p} building={false} surface={{ kind: "succeeded" }} />
+        </>
+      );
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("textbox", { name: "editor" })
+      );
+    });
+  });
+
   it.each([
     [59_999, false],
     [60_000, true],
@@ -194,7 +305,7 @@ describe("BaseBuild", () => {
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
-  // An edit after a build needs a new build, without the assistant or a command
+  // A new build without the assistant or a command, while the code is unchanged
   it("offers Build again as the outlined pill beside Deploy", () => {
     const p = props({ kind: "succeeded" });
     render(<BaseBuild {...p} />);
@@ -205,13 +316,70 @@ describe("BaseBuild", () => {
     expect(p.onBuild).toHaveBeenCalled();
   });
 
-  // Nothing is below to point at, and the app cannot tell an edit
+  // The screen has one brand action, and it steers away from an old build
+  describe("once the code changed after the build", () => {
+    const changed = () => {
+      const p = props({ kind: "succeeded" });
+      p.sourceChanged = true;
+      return p;
+    };
+
+    it("leads with Build again as the brand pill", () => {
+      const p = changed();
+      const { container } = render(<BaseBuild {...p} />);
+
+      const again = screen.getByRole("button", { name: "Build again" });
+      expect(again.getAttribute("data-slot")).toBe("brand-button");
+      expect(
+        container.querySelectorAll('[data-slot="brand-button"]').length
+      ).toBe(1);
+      fireEvent.click(again);
+      return vi.waitFor(() => expect(p.onBuild).toHaveBeenCalled());
+    });
+
+    it("steps Continue to Deploy down, still working", () => {
+      const p = changed();
+      render(<BaseBuild {...p} />);
+
+      const go = screen.getByRole("button", { name: "Continue to Deploy" });
+      expect(go.getAttribute("data-variant")).toBe("outline");
+      fireEvent.click(go);
+      expect(p.onContinue).toHaveBeenCalled();
+    });
+
+    it("says why", () => {
+      render(<BaseBuild {...changed()} />);
+
+      expect(
+        screen.getByText(
+          "Your code changed after the last build. Build again before you deploy."
+        )
+      ).toBeTruthy();
+    });
+
+    it("shows the rebuild running on the brand pill", () => {
+      const p = changed();
+      p.building = true;
+      render(<BaseBuild {...p} />);
+
+      const busy = screen.getByRole("button", { name: "Building…" });
+      expect(busy.getAttribute("data-slot")).toBe("brand-button");
+      expect((busy as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("waits offline, as every Build action does", () => {
+      const p = changed();
+      p.offline = true;
+      render(<BaseBuild {...p} />);
+
+      const again = screen.getByRole("button", { name: "Build again" });
+      expect((again as HTMLButtonElement).disabled).toBe(true);
+    });
+  });
+
   it.each([
-    [
-      true,
-      "The program and its IDL are ready to deploy. Edited since? Build again first.",
-    ],
-    [false, "The program is ready to deploy. Edited since? Build again first."],
+    [true, "The program and its IDL are ready to deploy."],
+    [false, "The program is ready to deploy."],
   ])(
     "names the IDL in the success line only when there is one (%s)",
     (hasIdl, line) => {
@@ -454,16 +622,25 @@ describe("BaseBuild", () => {
     expect(fault?.textContent).toContain("Wrong type");
   });
 
-  it("gives every error the same outlined fix", () => {
+  it("gives every error the same outline Explain and Fix", () => {
     const { container } = render(
       <BaseBuild
         {...props(failed([typeError("first", "a"), typeError("second", "b")]))}
       />
     );
 
-    expect(brandButtons(container)).toHaveLength(0);
-    expect(screen.getAllByRole("button", { name: "Explain" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Fix" })).toHaveLength(2);
+    // Slava, 3 Nov: no card's Explain stands out; each reads the same
+    const cards = container.querySelectorAll('[data-slot="diagnostic"]');
+    expect(cards).toHaveLength(2);
+    cards.forEach((card) => {
+      expect(brandButtons(card as HTMLElement)).toHaveLength(0);
+    });
+    const explains = screen.getAllByRole("button", { name: "Explain" });
+    const fixes = screen.getAllByRole("button", { name: "Fix" });
+    expect(explains).toHaveLength(2);
+    expect(fixes).toHaveLength(2);
+    expect(explains[0].className).toBe(explains[1].className);
+    expect(explains[0].className).toBe(fixes[0].className);
   });
 
   it("shows rustc's excerpt when the source cannot be read", () => {

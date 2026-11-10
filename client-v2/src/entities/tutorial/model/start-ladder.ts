@@ -1,8 +1,10 @@
+import { slugOf } from "./definition/check";
+
 /**
  * The tutorials the start offers, in the order a new developer takes them:
- * one per level, all Anchor. Home and the Tutorials page list
- * only these; every other tutorial stays registered, so its link and New
- * project's list keep it. What the Start here banner says of a lesson, as the
+ * one per level, all Anchor. Home, the Tutorials page and New project list
+ * only these; every other tutorial stays registered, so its link keeps
+ * working. What the Start here banner says of a lesson, as the
  * tutorial-v2 prototype's lessons write it (`lessons/<slug>.ts`): `line`
  * before a start, `done` once finished (its `headline`, no full stop); a
  * definition has neither, and two of the three are not definitions yet.
@@ -24,6 +26,14 @@ export const START_LADDER = [
     done: "You read 40 KB without copying it",
   },
 ] as const;
+
+/**
+ * Whether a tutorial, by slug, is on the ladder: the only tutorials a finish
+ * may recommend next (`finish.next`), as `yarn tutorial:check` enforces and
+ * the finish card's "Next" obeys
+ */
+export const isOnStartLadder = (slug: string) =>
+  START_LADDER.some((l) => slugOf(l.name) === slug);
 
 /** What the banner says of a ladder tutorial before a start and once done */
 export const ladderLine = (
@@ -51,6 +61,14 @@ if (import.meta.vitest) {
           named("Zero Copy", "Hello Seahorse", "Lumberjack", "Hello Anchor")
         ).map((t) => t.name)
       ).toEqual(["Hello Anchor", "Lumberjack", "Zero Copy"]);
+    });
+
+    it("names its three tutorials by slug, and no other", () => {
+      expect(
+        ["hello-anchor", "lumberjack", "zero-copy"].every(isOnStartLadder)
+      ).toBe(true);
+      expect(isOnStartLadder("battle-coins")).toBe(false);
+      expect(isOnStartLadder("Lumberjack")).toBe(false);
     });
 
     it("leaves out a ladder tutorial that is not registered", () => {

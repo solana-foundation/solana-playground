@@ -89,12 +89,23 @@ test("mainnet-deploy-warning: Mainnet picked in Settings", async ({
   );
   await build(page);
   const settings = page.getByRole("region", { name: "Settings" });
-  const pick = async (name: string) => {
-    await page.getByRole("button", { name: /^Change cluster/ }).click();
-    await settings
+  const chipsOf = async (name: string) =>
+    settings
       .getByRole("radiogroup", { name: "Network" })
       .getByRole("radio", { name })
       .click();
+  const pick = async (name: string) => {
+    await page.getByRole("button", { name: /^Change cluster/ }).click();
+    await chipsOf(name);
+  };
+  /** A cluster that is not answering opens the status panel first (Spec 06) */
+  const pickFromStatusPanel = async (name: string) => {
+    await page.getByRole("button", { name: /^Change cluster/ }).click();
+    await page
+      .getByRole("dialog", { name: "Network" })
+      .getByRole("button", { name: "Change network" })
+      .click();
+    await chipsOf(name);
   };
 
   await pick("Mainnet");
@@ -110,7 +121,7 @@ test("mainnet-deploy-warning: Mainnet picked in Settings", async ({
     panel.getByRole("alert", { name: "Mainnet deploy warning" })
   ).toBeVisible(LONG);
 
-  await pick("Devnet");
+  await pickFromStatusPanel("Devnet");
   await settings.getByRole("button", { name: "Back to app" }).click();
   await expect(
     panel.getByRole("button", { name: "Deploy to devnet" })

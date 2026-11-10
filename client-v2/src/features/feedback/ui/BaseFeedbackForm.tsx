@@ -120,7 +120,7 @@ export const BaseFeedbackForm = ({
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="feedback-contact">
                 X handle{" "}
-                <span className="font-normal text-muted-foreground">
+                <span className="font-read text-muted-foreground">
                   (optional)
                 </span>
               </Label>
@@ -185,7 +185,7 @@ const GithubAnchor = ({
     target="_blank"
     rel="noopener noreferrer"
     onClick={() => onGithub(link)}
-    className="text-primary hover:underline"
+    className="text-primary-ink hover:underline"
   >
     {children}
     <ExternalLink aria-hidden="true" className="ml-0.5 inline size-3" />

@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
+import { startTutorials } from "@/entities/tutorial";
 import { PgTutorial } from "@/utils";
 
 import type { BaseNewProjectProps } from "../ui/BaseNewProject";
-import { toastOpenFailed } from "../ui/open-failed-toast";
+import { toastOpenFailed, toastStartFailed } from "../ui/open-failed-toast";
+import { catalogPage } from "./catalog-page";
 import { importProgram, isImportCancel } from "./program-open";
 import type { CatalogPage } from "./telemetry";
 import { catalogTelemetry } from "./telemetry";
@@ -11,7 +13,7 @@ import { useCardOpen } from "./use-card-open";
 import { useProgramList } from "./use-program-list";
 import { useTutorialList } from "./use-tutorial-list";
 
-/** New project's state, held by its dialog and drawn by `NewProject` */
+/** New project's state, held by its page and drawn by `NewProject` */
 export interface NewProjectState {
   /** Everything `BaseNewProject` takes but Start from scratch */
   view: Omit<BaseNewProjectProps, "scratch">;
@@ -19,19 +21,17 @@ export interface NewProjectState {
   busy: boolean;
   /** Start from scratch reports its own run here, so the cards wait on it */
   onStarting: (starting: boolean) => void;
-  /** Closes this dialog, if it is still open */
-  closeDialog: () => void;
+  /** Start from scratch's failure: a toast once the page was left */
+  onStartFailed: (message: string) => void;
+  /** Closes the page */
+  closePage: () => void;
 }
 
 /**
- * New project's state. Call it in the dialog's component, above its
- * `ModalFrame`: a dialog stacked on this one (an import's program picker)
- * remounts everything under the frame, and the Open that dialog belongs to
- * must still be known when it finishes. Whatever opens or starts from here
- * closes the dialog (`close`, which closes this dialog by its id and so
- * never another); a failure stays where it happened, or, once the dialog was
- * dismissed, comes up as a toast. One Open or Start at a time across both
- * lists.
+ * New project's state, held by its page. Whatever opens or starts from here
+ * closes the page (`close`), if this visit still shows it. A failure stays where it happened, or comes up
+ * as a toast where nothing shows it: the page was left, or the failing card's
+ * list is not the one shown. One Open or Start at a time across both lists.
  */
 export const useNewProject = (
   close: () => void,
@@ -42,7 +42,7 @@ export const useNewProject = (
   const [query, setQuery] = useState("");
   const [starting, setStarting] = useState(false);
 
-  // Whether this dialog is still open: once it is dismissed, no card is left
+  // Whether the page still shows: once it is left, no card is left
   // to show a failure
   const open = useRef(true);
   useEffect(() => {
@@ -51,21 +51,39 @@ export const useNewProject = (
       open.current = false;
     };
   }, []);
-  const onFailed = (message: string) => {
-    if (!open.current) toastOpenFailed(message);
+  // The tab shown when an Open fails, not when it started: a ref, since the
+  // Open's callbacks are the render's that started it
+  const shown = useRef(tab);
+  shown.current = tab;
+  // Only this visit closes the page: an Open from an earlier one that ends
+  // after the page was left and opened again must not close the new visit.
+  // Kept by the store, not by this mount: the page remounts within one visit
+  // (Start from scratch switches the project under it)
+  const visit = useRef(catalogPage.visit());
+  const closeIfOpen = () => {
+    if (catalogPage.visit() === visit.current) close();
+  };
+  const failedOn = (list: CatalogPage) => (message: string) => {
+    if (!open.current || shown.current !== list) toastOpenFailed(message);
   };
 
   const tutorialOpen = useCardOpen("tutorials", {
-    onOpened: close,
-    onFailed,
+    onOpened: closeIfOpen,
+    onFailed: failedOn("tutorials"),
   });
   const programOpen = useCardOpen("programs", {
     isCancel: isImportCancel,
-    onOpened: close,
-    onFailed,
+    onOpened: closeIfOpen,
+    onFailed: failedOn("programs"),
   });
   const busy = tutorialOpen.busy || programOpen.busy;
-  const tutorials = useTutorialList(query, tutorialOpen.cardOpen);
+  // The start ladder only, as Home and the Tutorials page: the tutorials
+  // walked through end to end, so a new user is pointed at a path that works
+  const tutorials = useTutorialList(
+    query,
+    tutorialOpen.cardOpen,
+    startTutorials(PgTutorial.all)
+  );
   const programs = useProgramList(query, programOpen.cardOpen);
   const held = busy || starting;
   // Each list refuses its own second Open; this refuses the other's while
@@ -105,6 +123,10 @@ export const useNewProject = (
     },
     busy,
     onStarting: setStarting,
-    closeDialog: close,
+    // Start sits above both lists, so only a left page hides its failure
+    onStartFailed: (message) => {
+      if (!open.current) toastStartFailed(message);
+    },
+    closePage: closeIfOpen,
   };
 };

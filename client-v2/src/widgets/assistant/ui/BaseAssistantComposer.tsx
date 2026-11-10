@@ -2,6 +2,7 @@ import { XIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useId, useRef } from "react";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
   Composer,
@@ -51,7 +52,7 @@ export interface ComposerAddableFile {
 const CHIP_TARGET =
   "relative before:absolute before:inset-x-0 before:-inset-y-[11px] before:content-[''] md:before:hidden";
 const REMOVE_TARGET =
-  "relative grid size-auto place-items-center rounded-full border-0 text-muted-foreground hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-transparent before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-[''] md:before:-inset-1";
+  "relative grid size-auto place-items-center rounded-full border-0 text-muted-foreground hover:bg-transparent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring dark:hover:bg-transparent before:absolute before:-inset-x-1 before:-inset-y-3.5 before:content-[''] md:before:-inset-1.5";
 
 /**
  * Where the user writes to the assistant: what it will read, the words, the
@@ -141,7 +142,7 @@ export function BaseAssistantComposer({
                   {/* The quietest text in the box: what it reads, not what to do */}
                   <ComposerChip
                     tabIndex={0}
-                    className={`${CHIP_TARGET} text-subtle`}
+                    className={cn(CHIP_TARGET, "text-subtle")}
                   >
                     {/* The short label is for the eye; a screen reader
                         reads what is sent, in full */}

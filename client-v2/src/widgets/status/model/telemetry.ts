@@ -19,6 +19,13 @@ type StatusEvents = {
     state: MeasuredState;
     from: PickedFrom;
   };
+  /** A user's Try again on an indicator's panel or sheet row finished
+   * asking: `answered` is whether the cluster, or the hosted model, answered. */
+  status_retried: {
+    indicator: Exclude<IndicatorId, "rust">;
+    from: PickedFrom;
+    answered: boolean;
+  };
   /** A user opened the phone's status sheet; `worst` is the chip's state. */
   status_sheet_opened: { worst: MeasuredState };
   /** A notice over the stage first showed since its condition began: not

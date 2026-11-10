@@ -16,7 +16,6 @@ const app = vi.hoisted(() => {
       return { dispose: () => listeners.delete(cb) };
     },
     showFiles: vi.fn(),
-    setModal: vi.fn(),
     createItem: vi.fn(async () => {}),
   };
 });
@@ -27,12 +26,9 @@ vi.mock("@/utils/explorer", () => ({
   },
 }));
 vi.mock("@/utils/view", () => ({
-  PgView: { showFiles: app.showFiles, setModal: app.setModal },
+  PgView: { showFiles: app.showFiles },
 }));
 vi.mock("@/utils/common", () => ({ PgCommon: { sleep: async () => {} } }));
-vi.mock("@/views/flow/gallery/NewWorkspaceModal", () => ({
-  default: () => <></>,
-}));
 vi.mock("@/views/sidebar/explorer/Component/useCreateItem", () => ({
   useCreateItem: () => ({ createItem: app.createItem }),
 }));
@@ -45,13 +41,13 @@ beforeEach(() => {
 });
 
 it("asks for the Files column while the project has files", async () => {
-  render(<NoFileOpen />);
+  render(<NoFileOpen onStartProject={() => {}} />);
   await userEvent.click(screen.getByRole("button", { name: "Show files" }));
   expect(app.showFiles).toHaveBeenCalledTimes(1);
 });
 
 it("switches to the no-files state once the last file goes", () => {
-  render(<NoFileOpen />);
+  render(<NoFileOpen onStartProject={() => {}} />);
   expect(screen.getByRole("heading", { name: "No file open" })).toBeTruthy();
   app.files = [];
   act(() => app.emit());
@@ -62,17 +58,18 @@ it("switches to the no-files state once the last file goes", () => {
 
 it("adds a file through the Files column's own New file flow", async () => {
   app.files = [];
-  render(<NoFileOpen />);
+  render(<NoFileOpen onStartProject={() => {}} />);
   await userEvent.click(screen.getByRole("button", { name: "Add a file" }));
   expect(app.showFiles).toHaveBeenCalledTimes(1);
   expect(app.createItem).toHaveBeenCalledTimes(1);
 });
 
-it("starts a project in the new workspace modal", async () => {
+it("hands Start a project to the caller", async () => {
   app.files = [];
-  render(<NoFileOpen />);
+  const onStartProject = vi.fn();
+  render(<NoFileOpen onStartProject={onStartProject} />);
   await userEvent.click(
     screen.getByRole("button", { name: "Start a project" })
   );
-  expect(app.setModal).toHaveBeenCalledTimes(1);
+  expect(onStartProject).toHaveBeenCalledTimes(1);
 });

@@ -53,6 +53,7 @@ describe("statusOf, for the write stage", () => {
       stopped: null,
       airdrops: 0,
       hasProgram: true,
+      sourceChanged: false,
     };
     expect(statusOf(restored, "write")).toBe("done");
   });

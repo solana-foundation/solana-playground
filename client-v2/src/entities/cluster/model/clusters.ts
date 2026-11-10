@@ -62,12 +62,16 @@ export interface ClusterInfo {
 
 export type Clusters = Readonly<Record<ClusterKey, ClusterInfo>>;
 
+/** An env cluster's send cap when the env sets no positive one, below Helius Developer's `sendTransaction` limit (https://www.helius.dev/docs/billing/rate-limits) */
+const DEFAULT_SEND_TX_PER_SECOND = 4;
+
 /** A positive number, else `undefined`: the env leaves a cap unset, empty or unparsable */
 const perSecondOf = (value: string | undefined) => {
   const perSecond = Number(value);
   return Number.isFinite(perSecond) && perSecond > 0 ? perSecond : undefined;
 };
 
+/** One of our endpoints with no send cap: Localnet, Surfpool and Playnet run on the person's machine or in the browser */
 const infoOf = (
   [key, cluster, name, publicUrl, isOffered]: readonly [
     ClusterKey,
@@ -86,7 +90,17 @@ const infoOf = (
   url: env.rpcUrl || publicUrl,
   isOffered,
   readBufferUrl: env.readBufferRpcUrl || undefined,
-  sendTxPerSecond: perSecondOf(env.sendTxPerSecond),
+  sendTxPerSecond: undefined,
+});
+
+/** An env cluster's endpoint, capped at the env's send cap or {@link DEFAULT_SEND_TX_PER_SECOND} */
+const envInfoOf = (
+  meta: Parameters<typeof infoOf>[0],
+  env: ClusterEnv
+): ClusterInfo => ({
+  ...infoOf(meta, env),
+  sendTxPerSecond:
+    perSecondOf(env.sendTxPerSecond) ?? DEFAULT_SEND_TX_PER_SECOND,
 });
 
 /**
@@ -98,15 +112,15 @@ const infoOf = (
 export const clustersFor = (
   env: Partial<Record<EnvCluster, ClusterEnv>>
 ): Clusters => ({
-  "mainnet-beta": infoOf(
+  "mainnet-beta": envInfoOf(
     ["mainnet-beta", "mainnet-beta", "Mainnet", Endpoint.MAINNET_BETA, true],
     env["mainnet-beta"] ?? {}
   ),
-  devnet: infoOf(
+  devnet: envInfoOf(
     ["devnet", "devnet", "Devnet", Endpoint.DEVNET, true],
     env.devnet ?? {}
   ),
-  testnet: infoOf(
+  testnet: envInfoOf(
     ["testnet", "testnet", "Testnet", Endpoint.TESTNET, true],
     env.testnet ?? {}
   ),

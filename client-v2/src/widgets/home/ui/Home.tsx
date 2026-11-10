@@ -2,7 +2,6 @@ import { useState } from "react";
 
 import { startTutorials, useTutorialProgress } from "@/entities/tutorial";
 import { PgSession } from "@/features/auth";
-import { StartFromScratch } from "@/features/new-project";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgTutorial } from "@/utils";
 
@@ -11,7 +10,7 @@ import { runExample } from "../model/example";
 import type { RecentEntry } from "../model/recent";
 import { recentProjectsWith } from "../model/recent";
 import { useSessionRetry } from "../model/session-retry";
-import type { PageTile } from "../model/telemetry";
+import type { HomeTile } from "../model/telemetry";
 import { homeTelemetry } from "../model/telemetry";
 import { useProgramCount } from "../model/use-program-count";
 import { useVisit } from "../model/use-visit";
@@ -23,8 +22,8 @@ export interface HomeProps {
   onAsk: () => void;
   /** Go back to the project open under Home */
   onContinue: () => void;
-  /** Open the Tutorials or Programs page, in Home's place */
-  onOpenPage: (page: PageTile) => void;
+  /** Open the New project, Tutorials or Programs page, in Home's place */
+  onOpenPage: (page: HomeTile) => void;
 }
 
 const log = createLogger("home:actions");
@@ -105,7 +104,7 @@ const Home = ({ onAsk, onContinue, onOpenPage }: HomeProps) => {
     TutorialFailure | undefined
   >(undefined);
 
-  const openTile = (tile: PageTile) => {
+  const openTile = (tile: HomeTile) => {
     homeTelemetry.track("home_tile_opened", { tile });
     onOpenPage(tile);
   };
@@ -116,11 +115,7 @@ const Home = ({ onAsk, onContinue, onOpenPage }: HomeProps) => {
       // The start offers only its ladder, one tutorial per level
       tutorials={startTutorials(PgTutorial.all)}
       programCount={programCount}
-      scratch={<StartFromScratch />}
       onTile={openTile}
-      onNewProject={() =>
-        homeTelemetry.track("home_tile_opened", { tile: "new-project" })
-      }
       tutorialError={tutorialError}
       onTutorial={async (name) => {
         setTutorialError(undefined);

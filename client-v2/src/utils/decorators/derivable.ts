@@ -1,6 +1,9 @@
+import { createLogger } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
 import type { Disposable } from "../types";
 import { addInit, addOnDidChange, getChangePropName, PROPS } from "./common";
+
+const log = createLogger("utils:derivable");
 
 /** Derivable state properties */
 export type DerivableState<T> = {
@@ -62,7 +65,13 @@ export function derivable<T extends Derivable>(
 
           try {
             return await entry.derive(value);
-          } catch {
+          } catch (e) {
+            // A failure becomes `null` for the caller to present (Interact's
+            // "can't reach the network", for `PgProgramInfo.onChain`), so it
+            // is logged at debug only
+            log.debug("Derivation failed", {
+              context: { prop, reason: String(e) },
+            });
             return null;
           }
         };

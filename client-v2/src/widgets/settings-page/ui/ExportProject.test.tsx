@@ -11,22 +11,26 @@ vi.mock("@/hooks", () => ({
   useExplorer: () => ({ currentWorkspaceName: "my-anchor-app" }),
 }));
 
-import ExportProject, { OpenProjectLine } from "./ExportProject";
+import ExportProject, { useExportRowCopy } from "./ExportProject";
 
 describe("Settings › Project export", () => {
   it("names the open project and exports that one", async () => {
+    const Row = () => {
+      const copy = useExportRowCopy();
+      return <p data-testid="export-row-line">{copy.description}</p>;
+    };
     render(
       <>
-        <OpenProjectLine phone={false} />
+        <Row />
         <ExportProject />
       </>
     );
 
-    expect(screen.getByTestId("settings-open-project").textContent).toBe(
-      "Exports my-anchor-app, the project open now."
+    expect(screen.getByTestId("export-row-line").textContent).toBe(
+      'All files of "my-anchor-app" as a zip.'
     );
     await userEvent.click(
-      screen.getByRole("button", { name: "Export project (zip)" })
+      screen.getByRole("button", { name: "Export project" })
     );
     expect(exportWorkspace).toHaveBeenCalledWith({ name: "my-anchor-app" });
   });

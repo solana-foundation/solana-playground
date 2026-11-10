@@ -38,6 +38,7 @@ const DEFAULT_STATE: FlowState = {
   stopped: null,
   airdrops: 0,
   hasProgram: true,
+  sourceChanged: false,
 };
 
 const state = (overrides: Partial<FlowState>): FlowState => ({
