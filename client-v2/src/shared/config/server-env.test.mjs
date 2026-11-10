@@ -44,8 +44,8 @@ describe("agentEnv", () => {
         API_KEY: undefined,
         NEWCOMER_API_KEY: undefined,
         PROVIDERS: [],
-        PRICE_INPUT: 0.15,
-        PRICE_OUTPUT: 0.5,
+        PRICE_INPUT: 0.2475,
+        PRICE_OUTPUT: 0.825,
         MAX_BODY_BYTES: 524288,
         MAX_OUTPUT_TOKENS: 8192,
         NEWCOMER_AGE_DAYS: 30,
@@ -88,7 +88,7 @@ describe("agentEnv", () => {
 
     assert.equal(env.API_KEY, undefined);
     assert.equal(env.NEWCOMER_API_KEY, undefined);
-    assert.equal(env.PRICE_INPUT, 0.15);
+    assert.equal(env.PRICE_INPUT, 0.2475);
     assert.equal(env.MAX_BODY_BYTES, 524288);
     assert.equal(env.MAX_OUTPUT_TOKENS, 8192);
     assert.equal(env.NEWCOMER_AGE_DAYS, 30);
@@ -120,7 +120,7 @@ describe("agentEnv", () => {
 
     const env = agentEnv();
 
-    assert.equal(env.PRICE_INPUT, 0.15);
+    assert.equal(env.PRICE_INPUT, 0.2475);
     assert.equal(env.NEWCOMER_DAILY_CAP, 0.1);
     assert.equal(env.MAX_OUTPUT_TOKENS, 8192);
     assert.equal(warned.mock.callCount(), 3);
@@ -178,7 +178,7 @@ describe("agentEnv", () => {
     const env = (await freshAgentEnv())();
 
     assert.deepEqual(env.PROVIDERS, ["baseten"]);
-    assert.equal(env.PRICE_INPUT, 0.15);
+    assert.equal(env.PRICE_INPUT, 0.2475);
     assert.equal(env.NEWCOMER_DAILY_CAP, 0.02);
     const messages = warned.mock.calls.map((call) => call.arguments[1]);
     assert.ok(messages.some((m) => m.includes('AGENT_PRICE_INPUT="cheap"')));
