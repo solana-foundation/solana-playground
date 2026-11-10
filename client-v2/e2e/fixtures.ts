@@ -665,11 +665,15 @@ export const playnetReady = (page: Page) =>
 export const seedNativeWorkspace = async (page: Page) => {
   await page.goto("/");
   await expect(home(page)).toBeVisible();
-  const region = homeRegion(page);
-  await region.getByRole("button", { name: /^New project/ }).click();
-  await region.getByRole("radio", { name: /Native/ }).click();
-  await region.getByLabel("Project name").fill("e2e-native");
-  await region.getByRole("button", { name: /^Start/ }).click();
+  await homeRegion(page)
+    .getByRole("button", { name: /^New project/ })
+    .click();
+  // Start from scratch is on the New project page, not in Home's region
+  const created = newProjectPage(page);
+  await created.getByRole("radio", { name: /Native/ }).click();
+  await created.getByLabel("Project name").fill("e2e-native");
+  await created.getByRole("button", { name: /^Start/ }).click();
+  await expect(created).toBeHidden();
   await expect(home(page)).toBeHidden();
   await expect(page.locator("#root-dir")).toBeVisible();
 };
