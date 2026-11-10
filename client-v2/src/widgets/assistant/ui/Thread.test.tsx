@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionUser } from "@/features/auth";
 import { PgSession } from "@/features/auth";
 import { PgSyncClient } from "@/features/persistence";
+import { createDraft } from "@/shared/lib/draft";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -572,15 +573,19 @@ describe("Thread, a refused key", () => {
   const REFUSED = "OpenAI did not accept this key.";
   const withOpener = (openConnect: Turn["openConnect"]) =>
     ({ busy: false, send: vi.fn(), openConnect } as unknown as Turn);
-  /** A turn whose composer reads `input`, for Use hosted model to fill */
-  const withInput = (input: string, setInput: Turn["setInput"]) =>
-    ({
+  /** A turn whose composer holds `input`, for Use hosted model to fill */
+  const withInput = (input: string) => {
+    const draft = createDraft();
+    draft.set(input);
+    const setInput = vi.spyOn(draft, "set");
+    const turn = {
       busy: false,
       send: vi.fn(),
       openConnect: vi.fn(),
-      input,
-      setInput,
-    } as unknown as Turn);
+      draft,
+    } as unknown as Turn;
+    return { turn, setInput };
+  };
   const refuse = () =>
     act(() => {
       PgAssistant.addUserMessage("hi");
@@ -622,8 +627,7 @@ describe("Thread, a refused key", () => {
     hosted();
     await signIn();
     refuse();
-    const setInput = vi.fn();
-    const turn = withInput("", setInput);
+    const { turn, setInput } = withInput("");
     render(<Thread turn={turn} project="Counter" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
@@ -641,8 +645,8 @@ describe("Thread, a refused key", () => {
     hosted();
     await signIn();
     refuse();
-    const setInput = vi.fn();
-    render(<Thread turn={withInput("draft", setInput)} project="Counter" />);
+    const { turn, setInput } = withInput("draft");
+    render(<Thread turn={turn} project="Counter" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
 
@@ -667,7 +671,7 @@ describe("Thread, a refused key", () => {
     hosted();
     await signIn();
     refuse();
-    render(<Thread turn={withInput("", vi.fn())} project="Counter" />);
+    render(<Thread turn={withInput("").turn} project="Counter" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
 

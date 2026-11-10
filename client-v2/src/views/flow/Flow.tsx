@@ -133,8 +133,7 @@ const TutorialChat = ({
             send,
             stop: turn.stop,
             busy: turn.busy,
-            input: turn.input,
-            setInput: turn.setInput,
+            draft: turn.draft,
           }}
         />
       </div>
