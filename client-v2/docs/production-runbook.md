@@ -1,8 +1,8 @@
 # Production runbook: client-v2 on Vercel and Cloud SQL
 
 How to set up `client-v2`'s production from nothing: the Vercel project, Postgres on Cloud SQL instance `solpg`,
-and every service production uses (GitHub sign-in, the Nous Research model keys, Sentry, the Firewall, Secret
-Manager), and then release it on the custom domain. This is for the team that runs the Google Cloud project and the
+and every service production uses (GitHub sign-in, the Nous Research model keys, Sentry, the Firewall, Doppler for
+the environment variables), and then release it on the custom domain. This is for the team that runs the Google Cloud project and the
 Vercel team. Nothing is deployed yet and no user data exists anywhere, so nothing is copied or migrated from an
 older system: the database starts empty and the migrations create its schema.
 
@@ -28,6 +28,7 @@ Fill each in once, before step 1. Some are known only after a step; the table sa
 | `<VERCEL_PROJECT_ID>` | The same project's id, `prj_...` | Step 1: Vercel → the project → Settings → General |
 | `<VERCEL_APP_DOMAIN>` | The project's `<name>.vercel.app` production domain, used until the release | Step 1: Vercel → the project → Settings → Domains |
 | `<CUSTOM_DOMAIN>` | The launch domain, without `https://` | Your team |
+| `<DOPPLER_PROJECT>`, `<DOPPLER_CONFIG>` | The Doppler project and config that hold production's variables, for example `solana-playground` and `prd` | Your team; created in step 1 if new |
 | `<OPERATOR>` | The Google account of each person who runs migrations, lower case | Your team |
 | `<GITHUB_OWNER>` | The GitHub organization that will own the production OAuth app | Your team |
 | `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` on the build server (App Engine) | Your team |
@@ -40,15 +41,16 @@ cloud-sql.md writes some of these in lower case inside SQL and commands: `<proje
 `<operator e-mail>` is `<OPERATOR>`. Its "Values used below" also asks for `REPO`, which only the preview steps
 read; production needs none.
 
-Secret values (keys, tokens, client secrets) never go on this page, in a ticket, or in a message. The
-[environment table](#production-environment) says where each one comes from.
+Secret values (keys, tokens, client secrets) never go on this page, in a ticket, or in a message. Every
+production variable lives in `<DOPPLER_CONFIG>`, which syncs to Vercel's Production environment; the
+[environment table](#production-environment) says where each value comes from.
 
 ## Before you start
 
 On the machine that runs the steps (macOS or Linux):
 
-- `gcloud`, logged in as `<OPERATOR>` (`gcloud auth login`), with rights to administer IAM, Cloud SQL and Secret
-  Manager in `<PROJECT_ID>`.
+- `gcloud`, logged in as `<OPERATOR>` (`gcloud auth login`), with rights to administer IAM and Cloud SQL in
+  `<PROJECT_ID>`.
 - [`cloud-sql-proxy`](https://cloud.google.com/sql/docs/postgres/sql-proxy#install), `psql`, and `dbmate`
   ([client-v2/db/README.md](../db/README.md)).
 - Node at the version in `client-v2/.nvmrc`, yarn 1, `jq`, `make`, `curl`, `git` and `openssl`. The production
@@ -58,7 +60,8 @@ On the machine that runs the steps (macOS or Linux):
 
 Accounts and access:
 
-- Google Cloud: IAM, Cloud SQL and Secret Manager administration in `<PROJECT_ID>`.
+- Google Cloud: IAM and Cloud SQL administration in `<PROJECT_ID>`.
+- Doppler: write access to `<DOPPLER_PROJECT>`, and the right to add its Vercel integration.
 - Vercel: a member of `<TEAM_SLUG>` who can create a project and edit its settings, environment variables,
   Deployment Protection, Domains and Firewall, and the team's Security settings. The team's plan: Enterprise, so
   the build can use the Enhanced build machine.
@@ -98,9 +101,11 @@ Run the steps in order. Three gates hold throughout:
 ## Production environment
 
 Every variable production reads, from `src/shared/config/server-env.mjs`, `src/shared/config/client-env.ts`,
-`scripts/check-agent-env.mjs` and the build scripts. "Sensitive" means a Vercel Sensitive variable
-(`vercel env add --sensitive`): its value cannot be read back, and a local build pulls it as empty. Set every
-variable for **Production** only.
+`scripts/check-agent-env.mjs` and the build scripts. Set each in `<DOPPLER_CONFIG>`, never in Vercel by hand:
+Doppler is the source, and its sync writes Vercel's **Production** environment. "In Doppler" is the secret's
+visibility there. The sync's type is **Dynamic**, so an **Unmasked** secret reaches Vercel as a Config variable and a
+**Masked** one as a Secret, whose value cannot be read back and which a local build pulls as empty. That is why the
+values a local build or `migrate-production-db` reads are Unmasked even when they are tokens.
 
 **`REACT_APP_*` values are inlined into the browser bundle and readable by every visitor. Nothing secret goes in
 one.**
@@ -111,7 +116,7 @@ A production build fails without `PG_AI_API_KEY`, `AUTH_SECRET`, `GITHUB_CLIENT_
 
 ### Database (Cloud SQL)
 
-None is a secret, and `migrate-production-db` reads them from a pull, so none is Sensitive.
+All Unmasked in Doppler: none is a secret, and `migrate-production-db` reads them from a pull.
 
 | Variable | Value | Set in |
 | --- | --- | --- |
@@ -127,13 +132,13 @@ None is a secret, and `migrate-production-db` reads them from a pull, so none is
 
 ### Sync and sign-in
 
-| Variable | Value | Sensitive | Set in |
+| Variable | Value | In Doppler | Set in |
 | --- | --- | --- | --- |
-| `SYNC_ENABLED` | Exactly `true`. Anything else turns sync off | No | Step 6 |
-| `AUTH_SECRET` | `openssl rand -base64 32`, generated for production and used nowhere else. Rotating it signs everyone out | Yes | Step 6 |
-| `AUTH_BASE_URL` | `https://<VERCEL_APP_DOMAIN>`, then `https://<CUSTOM_DOMAIN>` from step 9. No trailing slash. Production accepts sign-in and writes from this origin only | No | Step 6, step 9 |
-| `GITHUB_CLIENT_ID` | The production OAuth app's Client ID (step 5) | No | Step 6 |
-| `GITHUB_CLIENT_SECRET` | The production OAuth app's client secret (step 5) | Yes | Step 6 |
+| `SYNC_ENABLED` | Exactly `true`. Anything else turns sync off | Unmasked | Step 6 |
+| `AUTH_SECRET` | `openssl rand -base64 32`, generated for production and used nowhere else. Rotating it signs everyone out | Masked | Step 6 |
+| `AUTH_BASE_URL` | `https://<VERCEL_APP_DOMAIN>`, then `https://<CUSTOM_DOMAIN>` from step 9. No trailing slash. Production accepts sign-in and writes from this origin only | Unmasked | Step 6, step 9 |
+| `GITHUB_CLIENT_ID` | The production OAuth app's Client ID (step 5) | Unmasked | Step 6 |
+| `GITHUB_CLIENT_SECRET` | The production OAuth app's client secret (step 5) | Masked | Step 6 |
 | `AUTH_OAUTH_PROXY_SECRET`, `AUTH_OAUTH_PROXY_URL` | Never on Production: they let previews sign in through production, and this project has no previews | | |
 
 ### Assistant default backend (Nous Research)
@@ -144,35 +149,35 @@ The assistant runs on Nous Research, from `<NOUS_ACCOUNT>`'s credits, through th
 documented fallback for when the credits run out ([Default backend
 spend](deploy-client-vercel.md#default-backend-spend)); do not set it up for the launch.
 
-| Variable | Value | Sensitive | Set in |
+| Variable | Value | In Doppler | Set in |
 | --- | --- | --- | --- |
-| `PG_AI_API_KEY` | The Nous `established` key | Yes | Step 6 |
-| `PG_AI_NEWCOMER_API_KEY` | The Nous `newcomer` key. Unset, new GitHub accounts spend through `PG_AI_API_KEY` and share the established users' limit | Yes | Step 6 |
-| `PG_AI_BASE_URL`, `PG_AI_MODEL` | Leave unset (Nous) | No | |
-| `PG_AI_REASONING_EFFORT`, `PG_AI_PROVIDERS`, `PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`, `PG_AI_MAX_BODY_BYTES`, `PG_AI_MAX_OUTPUT_TOKENS`, `PG_AI_NEWCOMER_AGE_DAYS`, `PG_AI_NEWCOMER_DAILY_CAP`, `PG_AI_ESTABLISHED_DAILY_CAP` | Leave unset. Each defaults as `agentEnv` in `src/shared/config/server-env.mjs` sets it: a user may spend $0.10 a day while their GitHub account is younger than 30 days, $0.50 after | No | |
+| `PG_AI_API_KEY` | The Nous `established` key | Masked | Step 6 |
+| `PG_AI_NEWCOMER_API_KEY` | The Nous `newcomer` key. Unset, new GitHub accounts spend through `PG_AI_API_KEY` and share the established users' limit | Masked | Step 6 |
+| `PG_AI_BASE_URL`, `PG_AI_MODEL` | Leave unset (Nous) | Unmasked | |
+| `PG_AI_REASONING_EFFORT`, `PG_AI_PROVIDERS`, `PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`, `PG_AI_MAX_BODY_BYTES`, `PG_AI_MAX_OUTPUT_TOKENS`, `PG_AI_NEWCOMER_AGE_DAYS`, `PG_AI_NEWCOMER_DAILY_CAP`, `PG_AI_ESTABLISHED_DAILY_CAP` | Leave unset. Each defaults as `agentEnv` in `src/shared/config/server-env.mjs` sets it: a user may spend $0.10 a day while their GitHub account is younger than 30 days, $0.50 after | Unmasked | |
 | Any `AGENT_*` | Never: the deprecated spelling of `PG_AI_*` | | |
-| `SOURCES`, `MCP_EXPLORER_URL`, `MCP_EXPLORER_TOKEN`, `MCP_EXPLORER_BYPASS` | Leave unset unless told otherwise ([Sources catalogue](deploy-client-vercel.md#sources-catalogue)) | Token and bypass: yes | |
+| `SOURCES`, `MCP_EXPLORER_URL`, `MCP_EXPLORER_TOKEN`, `MCP_EXPLORER_BYPASS` | Leave unset unless told otherwise ([Sources catalogue](deploy-client-vercel.md#sources-catalogue)) | Token and bypass: Masked | |
 
 ### Observability
 
-| Variable | Value | Sensitive | Set in |
+| Variable | Value | In Doppler | Set in |
 | --- | --- | --- | --- |
-| `REACT_APP_SENTRY_DSN` | The DSN of Sentry project `solana-playground` in organization `solana-fndn`. Public: the browser and the functions share it | No | Step 6 |
-| `SENTRY_AUTH_TOKEN` | A Sentry auth token that may upload source maps to that project. Read by the build only | **No**: a local build pulls a Sensitive value as empty and then fails | Step 6 |
-| `SENTRY_TRACES_SAMPLE_RATE` | `0` to `1`. Unset traces every API request | No | |
+| `REACT_APP_SENTRY_DSN` | The DSN of Sentry project `solana-playground` in organization `solana-fndn`. Public: the browser and the functions share it | Unmasked | Step 6 |
+| `SENTRY_AUTH_TOKEN` | A Sentry auth token that may upload source maps to that project. Read by the build only | **Unmasked**: a local build pulls a Vercel Secret as empty, and then fails | Step 6 |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0` to `1`. Unset traces every API request | Unmasked | |
 | `SENTRY_PREVIEW_ENABLED`, `SOURCEMAPS_PREVIEW_ENABLED` | Never on Production: Preview only | | |
-| `REACT_APP_GA_MEASUREMENT_ID` | `G-...`, the Google Analytics 4 measurement id, if the Foundation uses Google Analytics. Unset, the page carries no tag | No | Step 6 |
-| `REACT_APP_LOG_LEVEL` | Unset logs `warn` in production | No | |
+| `REACT_APP_GA_MEASUREMENT_ID` | `G-...`, the Google Analytics 4 measurement id, if the Foundation uses Google Analytics. Unset, the page carries no tag | Unmasked | Step 6 |
+| `REACT_APP_LOG_LEVEL` | Unset logs `warn` in production | Unmasked | |
 
 ### Solana RPC and deploys
 
 Optional. Without them the app uses the public Solana endpoints.
 
-| Variable | Value | Sensitive | Set in |
+| Variable | Value | In Doppler | Set in |
 | --- | --- | --- | --- |
-| `REACT_APP_DEVNET_RPC_URL`, `REACT_APP_TESTNET_RPC_URL`, `REACT_APP_MAINNET_RPC_URL` | The RPC provider's URLs (Triton), **only if the provider restricts the keys in them to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`**: every visitor can read them. Without that restriction leave them unset | No (public by design) | Step 6 |
-| `REACT_APP_DEVNET_READ_BUFFER_RPC_URL`, `REACT_APP_TESTNET_READ_BUFFER_RPC_URL`, `REACT_APP_MAINNET_READ_BUFFER_RPC_URL` | The RPC a program deploy reads its buffer account through, because a provider's RPC can answer `null` for a buffer just written. **Set them whenever the RPC URLs above are set**: `https://api.devnet.solana.com`, `https://api.testnet.solana.com`, `https://api.mainnet-beta.solana.com`. Unset, deploys read through the selected endpoint | No | Step 6 |
-| `REACT_APP_DEVNET_SEND_TX_PER_SECOND`, `REACT_APP_TESTNET_SEND_TX_PER_SECOND`, `REACT_APP_MAINNET_SEND_TX_PER_SECOND` | The most buffer writes per second a deploy sends, just below the RPC plan's `sendTransaction` limit. Unset, 4 a second | No | Step 6, if the provider's limit is known |
+| `REACT_APP_DEVNET_RPC_URL`, `REACT_APP_TESTNET_RPC_URL`, `REACT_APP_MAINNET_RPC_URL` | The RPC provider's URLs (Triton), **only if the provider restricts the keys in them to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`**: every visitor can read them. Without that restriction leave them unset | Unmasked (public by design) | Step 6 |
+| `REACT_APP_DEVNET_READ_BUFFER_RPC_URL`, `REACT_APP_TESTNET_READ_BUFFER_RPC_URL`, `REACT_APP_MAINNET_READ_BUFFER_RPC_URL` | The RPC a program deploy reads its buffer account through, because a provider's RPC can answer `null` for a buffer just written. **Set them whenever the RPC URLs above are set**: `https://api.devnet.solana.com`, `https://api.testnet.solana.com`, `https://api.mainnet-beta.solana.com`. Unset, deploys read through the selected endpoint | Unmasked | Step 6 |
+| `REACT_APP_DEVNET_SEND_TX_PER_SECOND`, `REACT_APP_TESTNET_SEND_TX_PER_SECOND`, `REACT_APP_MAINNET_SEND_TX_PER_SECOND` | The most buffer writes per second a deploy sends, just below the RPC plan's `sendTransaction` limit. Unset, 4 a second | Unmasked | Step 6, if the provider's limit is known |
 
 ### Build and platform
 
@@ -191,7 +196,6 @@ Optional. Without them the app uses the public Solana endpoints.
 | `client-v2/.env` in your checkout (gitignored) | `VERCEL_DEPLOY_TEAM`, `VERCEL_DEPLOY_PROJECT_ID` | `<TEAM_SLUG>` and `<VERCEL_PROJECT_ID>`. Every Makefile target refuses a checkout linked to another project | Step 1 |
 | GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. The `smoke` job of `client-v2.yml` sends it to check production after each push to `master` | Step 8 |
 | The build server's environment | `PG_CLIENT_URLS` | Must include `https://<VERCEL_APP_DOMAIN>` and, from step 9, `https://<CUSTOM_DOMAIN>`, or the browser's build requests are refused by CORS | Before step 7; step 9 |
-| Google Cloud Secret Manager | One secret per Sensitive value | A copy under your control: a Sensitive Vercel variable cannot be read back | Step 5 |
 
 ## Step 1: the Vercel project
 
@@ -213,12 +217,19 @@ Live session `<SESSION_SETUP>`.
 4. Settings → Environment Variables: **Automatically expose System Environment Variables** on. The application
    decides by `VERCEL_ENV` which database it may open, and the build by `VERCEL_ENV` whether to report to Sentry.
 5. Team Settings → Security: **Enforce Sensitive Environment Variables** off, or at least not covering this
-   project's Production. With it on, `SENTRY_AUTH_TOKEN` and the database variables become Sensitive, a local build
+   project's Production. With it on, `SENTRY_AUTH_TOKEN` and the database variables become Secrets, a local build
    pulls them as empty, and the production build and `migrate-production-db` fail.
-6. Settings → Deployment Protection → Protection Bypass for Automation: create the secret. Store it in Secret
-   Manager in step 5 and on GitHub in step 8.
+6. Settings → Deployment Protection → Protection Bypass for Automation: create the secret. Store it in Doppler in
+   step 5 and on GitHub in step 8.
 7. Note `<VERCEL_PROJECT_ID>` (Settings → General) and `<VERCEL_APP_DOMAIN>` (Settings → Domains).
-8. In your checkout, put `VERCEL_DEPLOY_TEAM=<TEAM_SLUG>` and `VERCEL_DEPLOY_PROJECT_ID=<VERCEL_PROJECT_ID>` in
+8. **Doppler.** Create `<DOPPLER_PROJECT>` and `<DOPPLER_CONFIG>` if they do not exist. In the project,
+   Integrations → Vercel: authorize Doppler's Vercel app, then Setup Integration with Team `<TEAM_SLUG>`, project
+   `<VERCEL_PROJECT>`, Vercel environment **Production**, variable type **Dynamic**, config `<DOPPLER_CONFIG>`. Leave
+   its redeploy on sync off until step 8: every value saved in steps 3 to 6 would otherwise start a build before
+   the checked one in step 7. One integration only: this project has no Preview or Development variables. Never
+   sync a variable named in Doppler's reserved list (`AWS_*`, `TZ` and the others on
+   [its Vercel page](https://docs.doppler.com/docs/vercel)); none of ours is.
+9. In your checkout, put `VERCEL_DEPLOY_TEAM=<TEAM_SLUG>` and `VERCEL_DEPLOY_PROJECT_ID=<VERCEL_PROJECT_ID>` in
    `client-v2/.env` (create the file if missing; it is gitignored). Then, from the repository root:
 
    ```sh
@@ -231,7 +242,9 @@ Live session `<SESSION_SETUP>`.
    `Vercel CLI user: <you>`. The CLI version is the one pinned as `VERCEL_CLI` in `client-v2/Makefile.vercel`; use
    that version wherever this page says `npx vercel@62.7.0`.
 
-**Check:** `npx vercel@62.7.0 env ls production` runs and lists no variables.
+**Check:** Doppler's Integrations page lists the Vercel sync for Production, and
+`npx vercel@62.7.0 env ls production` runs and lists only what `<DOPPLER_CONFIG>` already holds (nothing, if it is
+new).
 
 **Ping Alexander:** with `<VERCEL_APP_DOMAIN>`, and with the output of `vercel-link` if it fails.
 
@@ -244,12 +257,7 @@ Workload Identity Federation for the service account `vercel-production`, which 
 there is no database password or key anywhere.
 
 **Run:** [cloud-sql.md](cloud-sql.md), "Values used below", then steps 1, 2, 4 and 5, in one shell (step 4 defines
-helpers that step 5 uses). Step 3 was done in step 1. Step 5 creates `solpg` if it does not exist. Also enable
-Secret Manager for step 5 of this page:
-
-```sh
-gcloud services enable secretmanager.googleapis.com --project="$PROJECT_ID"
-```
+helpers that step 5 uses). Step 3 was done in step 1. Step 5 creates `solpg` if it does not exist.
 
 **Check**, with the commands in [cloud-sql.md, "Checks"](cloud-sql.md#checks):
 
@@ -275,19 +283,10 @@ migration will be.
 
 **Run:**
 
-1. Set each variable of [Database (Cloud SQL)](#database-cloud-sql) on Production, not Sensitive:
-
-   ```sh
-   add() { printf %s "$2" | npx vercel@62.7.0 env add "$1" production --no-sensitive --force; }
-   add DB_PROVIDER cloud-sql
-   add CLOUD_SQL_INSTANCE "$PROJECT_ID:$REGION:solpg"
-   add CLOUD_SQL_DATABASE solpg
-   add CLOUD_SQL_USER "$PRODUCTION_DB_USER"
-   add GCP_PROJECT_NUMBER "$PROJECT_NUMBER"
-   add GCP_WORKLOAD_IDENTITY_POOL_ID vercel
-   add GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID vercel
-   add GCP_SERVICE_ACCOUNT_EMAIL "$PRODUCTION_SA"
-   ```
+1. Set each variable of [Database (Cloud SQL)](#database-cloud-sql) in `<DOPPLER_CONFIG>`, Unmasked, with the
+   values the table gives (`echo "$PROJECT_ID:$REGION:solpg" "$PRODUCTION_DB_USER" "$PROJECT_NUMBER" "$PRODUCTION_SA"`
+   prints the four that vary). Check that the sync wrote them: `npx vercel@62.7.0 env ls production` lists all eight,
+   and the dashboard shows none with the Secret badge.
 
 2. Apply every migration:
 
@@ -306,7 +305,8 @@ migration will be.
 
 **If a check fails:** `Production's DB_PROVIDER is cloud-sql, but ... is not set there` names a variable that
 item 1 missed. `no DATABASE_URL_UNPOOLED in the Production environment` means the pull did not see `DB_PROVIDER`:
-check it with `npx vercel@62.7.0 env ls production`. A migration that fails midway can be run again: dbmate records
+check the Doppler sync and `npx vercel@62.7.0 env ls production`. A variable that is there but pulled empty was
+synced as a Secret: make it Unmasked in Doppler. A migration that fails midway can be run again: dbmate records
 each one it finished in `schema_migrations`. If the schema is wrong, drop and recreate the empty database as in
 cloud-sql.md step 5 and run item 2 again; nothing depends on it yet.
 
@@ -330,27 +330,18 @@ cover every domain of the project, so they hold after the release without change
 
 Live session `<SESSION_SETUP>`. Tickets HOO-1745, HOO-1795, HOO-1796, HOO-1801.
 
-**What for:** every credential production uses, each with a copy in Secret Manager.
-
-**Secret Manager, for every secret below at the moment you have its value** (a Nous key is shown once, at creation;
-a Sensitive Vercel variable cannot be read back):
-
-```sh
-printf %s '<value>' | gcloud secrets create <secret name> --project="$PROJECT_ID" \
-  --replication-policy=automatic --data-file=-
-```
-
-A later value of the same secret is `gcloud secrets versions add <secret name> --data-file=-`. Grant
-`roles/secretmanager.secretAccessor` only to the people who rotate them. Nothing syncs Secret Manager and Vercel:
-every rotation updates both.
+**What for:** every credential production uses, each stored in `<DOPPLER_CONFIG>` under its variable name the
+moment you have it (a Nous key is shown once, at creation), with the visibility the
+[environment table](#production-environment) gives. Each syncs to Vercel as you save it; nothing reads it until the
+first deployment in step 7. Give write access to `<DOPPLER_CONFIG>` only to the people who rotate them.
 
 **Run:**
 
 1. **GitHub OAuth app.** In `<GITHUB_OWNER>` → Settings → Developer settings → OAuth Apps → New OAuth App: Homepage
    URL `https://<VERCEL_APP_DOMAIN>`, Authorization callback URL
-   `https://<VERCEL_APP_DOMAIN>/api/auth/callback/github`. Generate a client secret. Keep the Client ID for step 6;
-   store the client secret.
-2. **`AUTH_SECRET`.** `openssl rand -base64 32`. Store it.
+   `https://<VERCEL_APP_DOMAIN>/api/auth/callback/github`. Generate a client secret. Store it as
+   `GITHUB_CLIENT_SECRET`; the Client ID goes in as `GITHUB_CLIENT_ID` in step 6.
+2. **`AUTH_SECRET`.** `openssl rand -base64 32`. Store it as `AUTH_SECRET`.
 3. **Nous keys.** In `<NOUS_ACCOUNT>`'s dashboard, create two keys, each with a daily and a monthly spend limit:
 
    | Key | Daily limit | Monthly limit | Goes into |
@@ -358,22 +349,22 @@ every rotation updates both.
    | `established` | $50 | $1,250 | `PG_AI_API_KEY` |
    | `newcomer` | $10 | $250 | `PG_AI_NEWCOMER_API_KEY` |
 
-   Store each. The limits are the ceiling on what the assistant can spend, whatever the application does; past one,
+   Store them as `PG_AI_API_KEY` and `PG_AI_NEWCOMER_API_KEY`. The limits are the ceiling on what the assistant can spend, whatever the application does; past one,
    Nous refuses the key and the assistant answers that it is unavailable. The daily limit is a rolling window that
    starts with the key's first request. Note the balance, and show `<TOP_UP_OWNER>` where to read it: Nous has no
    auto top-up and no API for the balance.
 4. **Sentry.** In organization `solana-fndn`, project `solana-playground` (platform React; create it if missing):
    copy the DSN (Project Settings → Client Keys), and create an auth token that may upload source maps (Organization
-   Settings → Auth Tokens). Store the token.
-5. **Protection Bypass for Automation** (step 1). Store it.
+   Settings → Auth Tokens). Store the token as `SENTRY_AUTH_TOKEN`, **Unmasked** (a local build reads it); the DSN
+   goes in as `REACT_APP_SENTRY_DSN` in step 6.
+5. **Protection Bypass for Automation** (step 1). Store it as `VERCEL_AUTOMATION_BYPASS_SECRET`, Masked. The
+   application does not read it; it is kept here so it has a home, and goes on GitHub in step 8.
 6. **Optional:** a Google Analytics 4 property and its measurement id (`G-...`); the RPC provider's URLs, restricted
-   to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`, and its `sendTransaction` limit. Store any RPC URL that carries a
-   key.
+   to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`, and its `sendTransaction` limit. They go in in step 6.
 
-**Check:** `gcloud secrets list --project="$PROJECT_ID"` lists one secret for each of `AUTH_SECRET`,
-`GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`, `SENTRY_AUTH_TOKEN` and the bypass secret, and
-`gcloud secrets versions access latest --secret=<secret name> --project="$PROJECT_ID" | wc -c` prints a non-zero
-length for each.
+**Check:** in Vercel → Settings → Environment Variables, Production, `AUTH_SECRET`, `GITHUB_CLIENT_SECRET`,
+`PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET` carry the Secret badge, and
+`SENTRY_AUTH_TOKEN` does not.
 
 **Ping Alexander:** if Sentry's organization or project slug differs from `solana-fndn` / `solana-playground`.
 
@@ -385,22 +376,16 @@ Live session `<SESSION_SETUP>`.
 
 **Preconditions:** steps 1 to 5 pass.
 
-**Run:** set each variable the tables mark "Step 6", in Vercel → Settings → Environment Variables, Production only,
-or from the shell:
-
-```sh
-printf %s '<value>' | npx vercel@62.7.0 env add <NAME> production --sensitive --force
-```
-
-with `--no-sensitive` instead of `--sensitive` for the variables the tables mark "No". `AUTH_BASE_URL` is
-`https://<VERCEL_APP_DOMAIN>` for now.
+**Run:** set each variable the tables mark "Step 6" in `<DOPPLER_CONFIG>`, with the visibility in its "In Doppler"
+column. `AUTH_BASE_URL` is `https://<VERCEL_APP_DOMAIN>` for now.
 
 Then ask `<BUILD_SERVER_CONTACT>` to add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
 
 **Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
 `AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
-`REACT_APP_SENTRY_DSN` and `SENTRY_AUTH_TOKEN`, plus any optional ones you set, with no `AGENT_*`, `DATABASE_URL`
-or `AUTH_OAUTH_PROXY_*` name, and `SENTRY_AUTH_TOKEN` not Sensitive.
+`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` and `VERCEL_AUTOMATION_BYPASS_SECRET`, plus any optional ones you set,
+with no `AGENT_*`, `DATABASE_URL` or `AUTH_OAUTH_PROXY_*` name. Only the Masked ones carry the Secret badge in the
+dashboard.
 
 ## Step 7: the first production deployment
 
@@ -425,7 +410,7 @@ and deploys to the production domain. A build on Vercel itself would not finish 
 
 1. The build log has none of these lines: `check-agent-env: deprecated AGENT_* names still set`,
    `warning: SENTRY_AUTH_TOKEN is not set`, `warning: source maps: upload failed`. A line
-   `check-agent-env: ... empty here` is expected on a local build: it names the Sensitive variables the pull held as
+   `check-agent-env: ... empty here` is expected on a local build: it names the Masked variables the pull held as
    empty.
 2. `curl -s https://<VERCEL_APP_DOMAIN>/api/sync` answers `{"enabled":true,"db":"ok"}`. The instance's log
    (Logs Explorer, resource Cloud SQL Database, search `vercel-production`) shows the production user logging in.
@@ -497,6 +482,8 @@ result.
    builds fail and serve nothing. Turn the Git connection's preview builds off if you prefer.
 2. On GitHub, add the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET` with the bypass secret from step 1
    ([Outside Vercel](#outside-vercel)).
+3. In Doppler, turn on the Vercel sync's redeploy on sync. From now on a change in `<DOPPLER_CONFIG>` redeploys
+   production.
 
 **Check**, after the next merge to `master`:
 
@@ -518,10 +505,10 @@ Live session `<SESSION_RELEASE>`, with Alexander. Ticket HOO-2537.
 1. Ask `<BUILD_SERVER_CONTACT>` to add `https://<CUSTOM_DOMAIN>` to `PG_CLIENT_URLS`.
 2. Set the OAuth app's Homepage URL to `https://<CUSTOM_DOMAIN>` and its callback URL to
    `https://<CUSTOM_DOMAIN>/api/auth/callback/github`.
-3. Set `AUTH_BASE_URL` to `https://<CUSTOM_DOMAIN>` on Production.
+3. Set `AUTH_BASE_URL` to `https://<CUSTOM_DOMAIN>` in `<DOPPLER_CONFIG>`.
 4. Attach `<CUSTOM_DOMAIN>` (Settings → Domains) and create the DNS records Vercel shows.
-5. Redeploy as in [Deploying production](#deploying-production). `AUTH_BASE_URL` is a server variable, so the
-   server-variables-only way is enough while `.vercel/output` is still the build production runs.
+5. Doppler's sync redeploys. Check that a new production deployment appears in Deployments and goes Ready; if none
+   does, redeploy as in [Deploying production](#deploying-production).
 
 **Check:**
 
@@ -550,6 +537,9 @@ origin, `AUTH_BASE_URL`. The accounts and projects created while testing stay in
 - **A full build from the checkout:** `make deploy-client-to-vercel-production`, as in step 7. Use it when a Git
   build times out, or after a change to a `REACT_APP_*` variable when no push is coming: those are inlined into the
   bundle at build time.
+- **After a change in Doppler:** its sync redeploys production on Vercel, which rebuilds, so `REACT_APP_*` changes
+  are picked up too. Check Deployments for the new deployment. If none appears, or it fails, use one of the ways
+  here.
 - **Server variables only:** after a change that touches no `REACT_APP_*` variable, deploy the last full local build
   again from the repository root, `npx vercel@62.7.0 deploy --prebuilt --prod --archive=tgz`. A function reads the
   variables the project held when its deployment was created. This works only while `.vercel/output` is the build
@@ -581,8 +571,8 @@ merges after that. Migrations are written so the code already deployed keeps wor
   ([firewall.md, "Emergency switches"](firewall.md#emergency-switches)).
 - **Credits:** `<TOP_UP_OWNER>` reads the balance in the Nous dashboard. An empty balance refuses every turn until
   credits are added, and Sentry receives the `api:agent` error `upstream credit balance is empty`.
-- **A leaked key:** create a new one in Nous with the same limits, set it in Vercel and Secret Manager, redeploy
-  (server variables only), then revoke the old one.
+- **A leaked key:** create a new one in Nous with the same limits, replace it in `<DOPPLER_CONFIG>` (the sync
+  redeploys), check the new deployment is Current, then revoke the old one.
 
 ### Adding an operator
 

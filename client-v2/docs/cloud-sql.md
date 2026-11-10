@@ -222,7 +222,9 @@ add GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID vercel
 add GCP_SERVICE_ACCOUNT_EMAIL "$PRODUCTION_SA"
 ```
 
-Production sets no `DATABASE_URL`: that is the Neon provider's variable.
+Where Doppler syncs Production's variables, as in the [production runbook](production-runbook.md), set them in
+Doppler instead, Unmasked, so the sync writes them as Config variables a pull can read. Production sets no
+`DATABASE_URL`: that is the Neon provider's variable.
 
 ## 7. Migrate, then deploy
 
