@@ -73,10 +73,7 @@ export interface BaseBuildProps {
   offline: boolean;
   onBuild: () => unknown;
   onContinue: () => void;
-  /**
-   * The app holds an IDL, the build's or an uploaded one: the success line
-   * names it
-   */
+  /** `PgProgramInfo` holds an IDL; never the build's, which produces none */
   hasIdl: boolean;
   /** The code changed after the build on screen: Build again leads */
   sourceChanged: boolean;
@@ -423,7 +420,7 @@ const successLine = ({ sourceChanged, hasIdl }: BaseBuildProps) => {
     return "Your code changed after the last build. Build again before you deploy.";
   }
   return hasIdl
-    ? "The program and its IDL are ready to deploy."
+    ? "The program is ready to deploy. The Playground's build produces no IDL, so Interact keeps the IDL it already holds."
     : "The program is ready to deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.";
 };
 

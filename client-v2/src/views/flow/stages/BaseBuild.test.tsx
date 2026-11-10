@@ -381,15 +381,18 @@ describe("BaseBuild", () => {
     });
   });
 
+  // Scenario "A successful build" (client-v2-idl-build-guide), with and without an IDL held
   it.each([
-    [true, "The program and its IDL are ready to deploy."],
-    // Scenario "A successful build" (client-v2-idl-build-guide)
+    [
+      true,
+      "The program is ready to deploy. The Playground's build produces no IDL, so Interact keeps the IDL it already holds.",
+    ],
     [
       false,
       "The program is ready to deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.",
     ],
   ])(
-    "names the IDL in the success line only when there is one (%s)",
+    "says the build produces no IDL, whether or not one is held (%s)",
     (hasIdl, line) => {
       const p = props({ kind: "succeeded" });
       p.hasIdl = hasIdl;
