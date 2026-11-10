@@ -19,9 +19,9 @@
  * an output limit, so a turn's worst-case cost is known before the call. The
  * ledger in `features/agent` reserves that cost against the user's daily cap
  * for their tier before the upstream is dialled, and settles it to the
- * reported usage once the response has ended. Each tier spends through its
- * own Gateway key, whose daily budget, with the team's monthly one, is the
- * ceiling that holds even when the ledger is wrong. The Vercel Firewall rate
+ * reported cost once the response has ended. Each tier spends through its
+ * own upstream key, whose daily and monthly spend limits, inside a prepaid
+ * balance, are the ceiling that holds even when the ledger is wrong. The Vercel Firewall rate
  * limit in `docs/firewall.md` caps one client's request rate.
  *
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
@@ -80,14 +80,20 @@ const FORWARDED = ["messages", "tools", "tool_choice"];
 const MAX_ERROR_TEXT = 300;
 
 /**
- * The `error.type` of a Gateway `402`: a budget in scope is spent, or the
- * team's credit balance is empty. Either way the tier's pool is out until a
- * reset or a person acts, which the caller reads as `pool-exhausted`.
+ * Why an upstream `402` refused a turn, by the code it names. Every `402` is
+ * `pool-exhausted` to the caller; the cause decides only what the maintainers
+ * hear. Nous names it in `code`, the Gateway in `error.type`.
+ *
+ * @type {Record<string, PoolRefusal>}
  */
-const POOL_EXHAUSTED_TYPES = [
-  "quota_for_entity_exceeded",
-  "insufficient_funds",
-];
+const POOL_REFUSALS = {
+  // A tier's key reached its spend limit: expected, and it reopens by itself
+  key_spend_limit_reached: "key-limit",
+  quota_for_entity_exceeded: "key-limit",
+  // The prepaid balance is empty: every tier is out until a person adds credits
+  insufficient_credits_for_paid_model: "no-credits",
+  insufficient_funds: "no-credits",
+};
 
 /**
  * The configured upstream, or `null` when this deployment has no key.
@@ -375,7 +381,7 @@ async function handler(req, res) {
         tier: gate.tier,
       });
     }
-    end = await relay(res, configured, body, gate.tier, now);
+    end = await relay(res, configured, body, gate.tier);
   } finally {
     // On every path that returns, the response has ended here, so none of
     // this delays an answer. None of these steps throws: there is nobody left
@@ -438,11 +444,10 @@ async function handler(req, res) {
  * @param {NonNullable<ReturnType<typeof upstream>>} configured
  * @param {Record<string, unknown>} body the caller's request
  * @param {"newcomer" | "established"} tier picks the key
- * @param {Date} now for a refusal's `Retry-After`
  * @returns {Promise<import("../src/features/agent/server/ledger.mjs").TurnEnd>}
  *   how the turn ended, which decides its charge
  */
-const relay = async (res, configured, body, tier, now) => {
+const relay = async (res, configured, body, tier) => {
   // A browser that closes the tab should not keep paying for tokens
   // nobody will read: closing the response aborts the upstream request,
   // which is also what ends `pipeStream`'s read loop. Fires on a normal
@@ -540,13 +545,14 @@ const relay = async (res, configured, body, tier, now) => {
       });
       return { kind: "refused" };
     }
-    if (response.status === 402 && isPoolExhausted(text)) {
-      // Reported: the tier's pool stays out until a person buys credits
-      log.warn("tier pool exhausted", {
-        report: true,
-        context: { tier, body: shown },
-      });
-      res.setHeader("retry-after", String(secondsToReset(now)));
+    if (response.status === 402) {
+      logPoolRefusal(poolRefusalOf(text), tier, shown);
+      // A key's daily limit reopens on a rolling window the route cannot
+      // see, so only the upstream knows when to try again
+      const retryAfter = response.headers.get("retry-after")?.trim();
+      if (retryAfter && isRetryAfter(retryAfter)) {
+        res.setHeader("retry-after", retryAfter);
+      }
       sendJson(res, REFUSAL_STATUS[POOL_EXHAUSTED_REASON], {
         error: REFUSAL_MESSAGES[POOL_EXHAUSTED_REASON],
         reason: POOL_EXHAUSTED_REASON,
@@ -635,19 +641,60 @@ const refusalCause = (status, text) => {
 };
 
 /**
- * Whether a `402` body is the Gateway's spent budget or empty balance
+ * Why an upstream `402` refused a turn
  *
+ * @typedef {"key-limit" | "no-credits" | "unknown"} PoolRefusal
  * @param {string} text the upstream's body
+ * @returns {PoolRefusal}
  */
-const isPoolExhausted = (text) => {
+const poolRefusalOf = (text) => {
+  let parsed;
   try {
-    return POOL_EXHAUSTED_TYPES.includes(JSON.parse(text)?.error?.type);
+    parsed = JSON.parse(text);
   } catch (e) {
-    // Not JSON, so not the Gateway's refusal: relayed as the upstream's 402
+    // Still `pool-exhausted`: only the cause is unknown
     warnNotJson("pool-exhausted", 402, e);
-    return false;
+    return "unknown";
   }
+  const code = parsed?.code ?? parsed?.error?.code ?? parsed?.error?.type;
+  return (typeof code === "string" && POOL_REFUSALS[code]) || "unknown";
 };
+
+/**
+ * Tell the maintainers about a `402` as its cause deserves: a spent key limit
+ * is the gate working, an empty balance needs a person now, and an unknown
+ * code needs a branch of its own.
+ *
+ * @param {PoolRefusal} cause
+ * @param {"newcomer" | "established"} tier
+ * @param {string} shown the upstream's body, redacted
+ */
+const logPoolRefusal = (cause, tier, shown) => {
+  if (cause === "key-limit") {
+    log.warn("tier key limit reached", { context: { tier } });
+    return;
+  }
+  if (cause === "no-credits") {
+    log.error(new Error("upstream credit balance is empty"), {
+      report: true,
+      context: { tier, body: shown },
+    });
+    return;
+  }
+  log.warn("upstream 402 with an unknown cause", {
+    report: true,
+    context: { tier, body: shown },
+  });
+};
+
+/**
+ * Whether an upstream `Retry-After` is one the route may pass on: seconds, or
+ * an HTTP date
+ *
+ * @param {string} value
+ */
+const isRetryAfter = (value) =>
+  /^\d+$/.test(value) || !Number.isNaN(Date.parse(value));
 
 /**
  * Log which check could not read an upstream error body. Only the error's

@@ -1038,7 +1038,7 @@ describe("the assistant's provider", () => {
       });
 
       await expect(defaultBackend().send("hi")).rejects.toThrow(
-        /^The free assistant is out of capacity for today\. It resets at 00:00 UTC, or bring your own key to keep going\.$/
+        /^The free assistant is out of capacity for now\. Try again later, or bring your own key to keep going\.$/
       );
       expect(refused()).toEqual([
         {

@@ -818,13 +818,13 @@ describe("POST /api/agent spend gate", () => {
   const TURN = '{"messages":[{"role":"user","content":"hi"}]}';
   const USAGE = { prompt_tokens: 1000, completion_tokens: 100 };
   /** What `USAGE` costs at the default prices, in micro-USD */
-  const USAGE_COST = Math.ceil(1000 * 0.15 + 100 * 0.5);
+  const USAGE_COST = Math.ceil(1000 * 0.2475 + 100 * 0.825);
   const CAP = { newcomer: toMicro(0.1), established: toMicro(0.5) };
   /** The reservation `TURN` takes at the default limits */
   const RESERVED = worstCaseCost({
     bytes: Buffer.byteLength(TURN),
     maxOutputTokens: 8192,
-    prices: { input: 0.15, output: 0.5 },
+    prices: { input: 0.2475, output: 0.825 },
   });
 
   beforeEach(() => {
@@ -862,11 +862,14 @@ describe("POST /api/agent spend gate", () => {
   };
 
   /** `Response.json`, which the TypeScript DOM lib here does not declare */
-  const json = (body: unknown, init: ResponseInit = {}) =>
-    new Response(JSON.stringify(body), {
+  const json = (body: unknown, init: ResponseInit = {}) => {
+    const headers = new Headers(init.headers);
+    headers.set("content-type", "application/json");
+    return new Response(JSON.stringify(body), {
       status: init.status ?? 200,
-      headers: { "content-type": "application/json" },
+      headers,
     });
+  };
 
   type Answer = (init: RequestInit) => Response | Promise<Response>;
 
@@ -1022,7 +1025,17 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("A turn is charged what it cost", () => {
-    it("charges a completed turn its reported usage", async () => {
+    it("charges a completed turn its reported cost", async () => {
+      network(() =>
+        streamed({ prompt_tokens: 1000, completion_tokens: 100, cost: 0.0005 })
+      );
+
+      await postJson(handler, TURN);
+
+      expect(spend()).toEqual({ reserved: 0, spent: 500 });
+    });
+
+    it("charges a completed turn with no reported cost its tokens", async () => {
       network();
 
       await postJson(handler, TURN);
@@ -1362,46 +1375,120 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("An exhausted pool is reported as such", () => {
+    /** The 503 every upstream 402 becomes, with the turn left uncharged */
+    const expectPoolExhausted = (res: Awaited<ReturnType<typeof postJson>>) => {
+      expect(res.statusCode).toBe(503);
+      expect(jsonBody(res)).toMatchObject({
+        reason: "pool-exhausted",
+        tier: "established",
+      });
+      expect(spend()).toEqual({ reserved: 0, spent: 0 });
+    };
+
+    it("answers a spent key limit with the upstream's Retry-After", async () => {
+      const logged = serverLog();
+      network(() =>
+        json(
+          { code: "key_spend_limit_reached", message: "limit reached" },
+          { status: 402, headers: { "retry-after": "3600" } }
+        )
+      );
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(res.headers["retry-after"]).toBe("3600");
+      // The gate working: a warning, not a report
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "warn",
+          message: "tier key limit reached",
+          report: false,
+        })
+      );
+    });
+
+    it("reports an empty credit balance to the maintainers", async () => {
+      const logged = serverLog();
+      network(() =>
+        json(
+          { code: "insufficient_credits_for_paid_model", message: "top up" },
+          { status: 402 }
+        )
+      );
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(logged).toContainEqual(
+        expect.objectContaining({ level: "error", report: true })
+      );
+    });
+
     it.each([
-      ["the tier's pool is empty", "quota_for_entity_exceeded"],
-      ["the credit balance is empty", "insufficient_funds"],
-    ])("reports an exhausted pool when %s", async (_, type) => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
+      {
+        refusal: "the Gateway's spent budget",
+        type: "quota_for_entity_exceeded",
+        level: "warn",
+        report: false,
+      },
+      {
+        refusal: "the Gateway's empty balance",
+        type: "insufficient_funds",
+        level: "error",
+        report: true,
+      },
+    ])("answers $refusal the same way", async ({ type, level, report }) => {
+      const logged = serverLog();
       network(() =>
         json({ error: { message: "spent", type } }, { status: 402 })
       );
 
       const res = await postJson(handler, TURN);
 
-      expect(res.statusCode).toBe(503);
-      expect(jsonBody(res)).toMatchObject({
-        reason: "pool-exhausted",
-        tier: "established",
-      });
-      expect(res.headers["retry-after"]).toBe("43200");
-      expect(spend()).toEqual({ reserved: 0, spent: 0 });
+      expectPoolExhausted(res);
+      expect(logged).toContainEqual(expect.objectContaining({ level, report }));
     });
 
-    it("relays a 402 that is not the Gateway's budget as the upstream's", async () => {
+    it("answers an unrecognised 402 as an exhausted pool and reports it", async () => {
       const logged = serverLog();
       network(() => new Response("Payment required", { status: 402 }));
 
       const res = await postJson(handler, TURN);
 
-      expect(res.statusCode).toBe(402);
-      expect(jsonBody<{ reason?: string }>(res).reason).toBeUndefined();
-      // Why it was relayed, without the body
+      expectPoolExhausted(res);
       expect(logged).toContainEqual(
         expect.objectContaining({
           level: "warn",
-          message: "upstream error body is not JSON",
-          context: {
-            check: "pool-exhausted",
-            status: 402,
-            error: "SyntaxError",
-          },
+          message: "upstream 402 with an unknown cause",
+          report: true,
         })
       );
+    });
+
+    it("sends no Retry-After when the upstream sent none", async () => {
+      serverLog();
+      network(() => json({ code: "key_spend_limit_reached" }, { status: 402 }));
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(res.headers["retry-after"]).toBeUndefined();
+    });
+
+    it("drops an upstream Retry-After that is neither seconds nor a date", async () => {
+      serverLog();
+      network(() =>
+        json(
+          { code: "key_spend_limit_reached" },
+          { status: 402, headers: { "retry-after": "soon" } }
+        )
+      );
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(res.headers["retry-after"]).toBeUndefined();
     });
   });
 

@@ -5,7 +5,7 @@
  *
  * A turn reserves its worst-case cost before the upstream is called and
  * settles to what it cost once the response has ended. Exact accounting is not
- * the goal: the Gateway's budgets are the ceiling, and the ledger only has to
+ * the goal: the upstream keys' spend limits are the ceiling, and the ledger only has to
  * be fair between users. It may overcharge a user, never undercharge them.
  *
  * Every statement runs on a `query` the route passes in -- the persistence
@@ -26,8 +26,8 @@ const MICRO_PER_USD = 1_000_000;
 export const toMicro = (usd) => Math.ceil(usd * MICRO_PER_USD);
 
 /**
- * The UTC date `now` falls on, as `YYYY-MM-DD`: the ledger's day and the
- * Gateway's daily budget reset on the same boundary.
+ * The UTC date `now` falls on, as `YYYY-MM-DD`: the ledger's day, on which a
+ * user's daily cap resets.
  *
  * @param {Date} now
  */
@@ -53,7 +53,8 @@ export const secondsToReset = (now) => {
  *
  * Prices are USD per million tokens, so tokens times price is micro-USD
  * already. Every input token is charged at the full price, cached or not,
- * which overcharges as the ledger may.
+ * which overcharges as the ledger may. Sizes a reservation, and charges a
+ * turn whose upstream reported no cost.
  *
  * @param {{ prompt_tokens?: number; completion_tokens?: number }} usage
  * @param {{ input: number; output: number }} prices USD per million tokens
@@ -77,7 +78,7 @@ export const costOf = (usage, prices) =>
  *
  * @typedef {{ kind: "refused" }
  *   | { kind: "abandoned" }
- *   | { kind: "completed"; usage: { prompt_tokens?: number; completion_tokens?: number } }
+ *   | { kind: "completed"; usage: { prompt_tokens?: number; completion_tokens?: number; cost?: unknown } }
  *   | { kind: "unfinished" }} TurnEnd
  */
 
@@ -99,8 +100,11 @@ const tokenCount = (count) =>
       null;
 
 /**
- * What a turn is charged, in micro-USD. A completed turn whose usage cannot
- * be priced is charged its reservation, as one that reported none.
+ * What a turn is charged, in micro-USD. A completed turn is charged the cost
+ * the upstream reported (Nous's `usage.cost`, in USD), which counts cached
+ * input at its own price; without one, its tokens at `prices`. A completed
+ * turn whose usage can be priced neither way is charged its reservation, as
+ * one that reported none.
  *
  * @param {TurnEnd} end
  * @param {number} reserved the turn's reservation, in micro-USD
@@ -108,10 +112,27 @@ const tokenCount = (count) =>
  */
 export const chargeFor = (end, reserved, prices) => {
   if (end.kind === "refused" || end.kind === "abandoned") return 0;
-  if (end.kind === "completed" && isPriceable(end.usage)) {
-    return costOf(end.usage, prices);
-  }
+  if (end.kind !== "completed") return reserved;
+  const reported = reportedCost(end.usage.cost);
+  if (reported !== undefined) return reported;
+  if (isPriceable(end.usage)) return costOf(end.usage, prices);
   return reserved;
+};
+
+/**
+ * The upstream's reported cost in micro-USD, or undefined when it reported
+ * none, or one the ledger cannot store: not a number, negative, or past what
+ * a `bigint` column holds exactly.
+ *
+ * @param {unknown} cost USD
+ * @returns {number | undefined}
+ */
+const reportedCost = (cost) => {
+  if (typeof cost !== "number" || !Number.isFinite(cost) || cost < 0) {
+    return undefined;
+  }
+  const micro = toMicro(cost);
+  return Number.isSafeInteger(micro) ? micro : undefined;
 };
 
 /**

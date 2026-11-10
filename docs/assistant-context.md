@@ -283,8 +283,8 @@ Honesty rule for the demo — never present a mocked step as working.
   their GitHub account is under a month old, that resets at 00:00 UTC. At the
   limit the panel says "You have used today's free assistant allowance. It
   resets at 00:00 UTC, or bring your own key to keep going."; when the free
-  backend as a whole is out for the day it says "The free assistant is out of
-  capacity for today." with the same advice. The conversation stays, and a
+  backend as a whole is out it says "The free assistant is out of capacity for
+  now. Try again later," with the same advice. The conversation stays, and a
   backend on the user's own key has no such limit.
 - **Real, with a gap:** deploy history. It is a genuine client-side store,
   not seeded or scripted, and records every real deploy — but not the

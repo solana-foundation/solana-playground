@@ -81,6 +81,23 @@ Run 2.1, 2.2 and 2.3 at the same time; 2.4 follows all three.
       "The account age is learned after a turn", and a count of the queries
       one turn issues before and after the upstream call (HOO-1751; after
       2.1, 2.2, 2.3)
+- [x] 2.5 Nous refusals in `api/agent.mjs`: every upstream `402` is 503
+      `pool-exhausted` with `tier`, carrying the upstream's `Retry-After`
+      when it sent one and none otherwise; `key_spend_limit_reached` and
+      `quota_for_entity_exceeded` log a warning,
+      `insufficient_credits_for_paid_model` and `insufficient_funds` report
+      an error to Sentry, any other `402` reports its redacted body (design
+      decision 6). Verify with the scenarios of "An exhausted pool is
+      reported as such" as cases in
+      `src/features/agent/agent.integration.spec.ts`, the Sentry report read
+      from the logger (HOO-1751; may run with 2.6)
+- [x] 2.6 Charge the reported cost: `settle` charges `usage.cost` (USD, a
+      finite number not below zero) when present, else the token counts at
+      the prices; the price defaults in `agentEnv` become 0.2475 and 0.825.
+      Verify with the scenarios of "A turn is charged what it cost" in
+      `agent.integration.spec.ts`, a `yarn test-api` case for the charge
+      with and without `cost`, and the `agentEnv` default tests (HOO-1751;
+      may run with 2.5)
 
 ## 3. The panel and its event
 
@@ -103,6 +120,11 @@ Run 2.1, 2.2 and 2.3 at the same time; 2.4 follows all three.
       shows the sentence, the earlier messages stay, and `Message the
       assistant` still works after switching to a key-based backend. Verify
       with `yarn test-e2e` for that file (HOO-1751; after 3.2)
+- [x] 3.4 The `pool-exhausted` sentence names no time: "The free assistant
+      is out of capacity for now. Try again later, or bring your own key to
+      keep going." Update `docs/assistant-context.md` to match (then
+      `yarn sync-assistant-context`). Verify with the mapping's unit tests
+      and the browser test of 3.3 (HOO-1751)
 
 ## 4. Operations and documentation
 
@@ -118,25 +140,24 @@ Run 2.1, 2.2 and 2.3 at the same time; 2.4 follows all three.
       `api/agent.mjs` and the Firewall page's `Rate limit /api/agent (IP)`
       description, which both say per-user caps are future work. Verify with
       `yarn run check` in `client-v2/` (HOO-1751; after 2.4)
-- [ ] 4.3 A person sets up the Gateway for the first time (no agent handles
-      the keys): buys credits, so the team is on the paid tier; turns on auto
-      top-up; registers no provider credential (Gateway BYOK), so budgets
-      count every request; creates the two Gateway keys and their daily
-      budgets and the team's monthly budget; sets the variables in Vercel;
-      and gets sign-off on the $1,500 monthly team budget. Verify in the
-      Gateway dashboard that both keys show their budgets and the team shows
-      no BYOK credential (HOO-1751; after 2.4)
-- [ ] 4.5 A day after production traffic moves to the Gateway, a person
-      revokes the Nous Research key. Verify that the Gateway logs show the
-      day's turns and that the Nous Research dashboard shows the key revoked
-      (HOO-1751; after 4.4)
-- [ ] 4.4 On a preview with the Gateway keys: send turns until a
-      `newcomer` account reaches its cap, check the 429 and the panel
-      sentence, and check one Gateway log entry per turn under the right key.
-      For one turn, compare the stream's final `usage.cost` with
-      `total_cost` from `GET /v1/generation?id=...` (design, Open
-      Questions). Verify by recording the result in the PR (HOO-1751; after
-      3.3, 4.3)
+- [x] 4.6 `client-v2/docs/deploy-client-vercel.md`: the Nous setup becomes
+      the primary one (two keys, each with a daily and a monthly spend
+      limit, the prepaid balance with no auto top-up and who tops it up, the
+      Sentry error that says it is empty, the price defaults), and the
+      Gateway setup moves under a fallback heading. Verify that each variable
+      the page names is read by `agentEnv` (HOO-1751; after 2.5, 2.6)
+- [ ] 4.3 A person sets up the Nous keys (no agent handles the keys):
+      creates the `established` and `newcomer` keys with the daily and
+      monthly limits of the design's "Starting values", sets
+      `PG_AI_API_KEY` and `PG_AI_NEWCOMER_API_KEY` in Vercel, names who tops
+      up the balance, and gets sign-off on the $1,500 monthly total. Verify
+      in the Nous dashboard that both keys show their limits (HOO-1751;
+      after 2.5)
+- [ ] 4.4 On a preview with the Nous keys: send turns until a `newcomer`
+      account reaches its cap, check the 429 and the panel sentence, and
+      check that the `newcomer` key's spend in the Nous dashboard matches the
+      sum of the turns' reported `usage.cost`. Verify by recording the result
+      in the PR (HOO-1751; after 3.4, 4.3)
 
 ## Workflow follow-up
 

@@ -54,17 +54,25 @@ by one user SHALL together never reserve more than the cap.
 ### Requirement: A turn is charged what it cost
 
 When a turn ends, `POST /api/agent` SHALL replace the turn's reservation with
-its charge: the cost of the token usage the upstream reported for a turn that
-streamed to the end with the caller still connected, the full reservation for
-any other turn the upstream may have received (the caller went away, before
-the upstream answered or while the turn streamed; the stream broke; no usage
-was reported), and nothing for a turn the upstream refused before streaming.
+its charge. A turn that streamed to the end with the caller still connected is
+charged the cost the upstream reported for it, or, when the upstream reported
+token usage and no cost, that usage at the configured prices. Any other turn
+the upstream may have received (the caller went away, before the upstream
+answered or while the turn streamed; the stream broke; no usage was reported)
+is charged the full reservation, and a turn the upstream refused before
+streaming is charged nothing.
 
-#### Scenario: A completed turn is charged its reported usage
+#### Scenario: A completed turn is charged its reported cost
 
-- **WHEN** a turn streams to the end and the upstream reports its token usage
-- **THEN** the user's spend today grows by the cost of that usage, not by the
-  reservation
+- **WHEN** a turn streams to the end and the upstream's usage reports a cost
+- **THEN** the user's spend today grows by that cost, not by the reservation
+
+#### Scenario: A completed turn with no reported cost is charged its tokens
+
+- **WHEN** a turn streams to the end and the upstream's usage reports token
+  counts and no cost
+- **THEN** the user's spend today grows by those tokens at the configured
+  prices, not by the reservation
 
 #### Scenario: A turn the caller abandons is charged the reservation
 
@@ -109,7 +117,9 @@ turn is known before the call.
 When providers are configured, every upstream request from `POST /api/agent`
 SHALL restrict the Gateway to them, so a turn is served only by a provider in
 the US region that retains no data and does not train on it. A caller SHALL NOT
-be able to change the restriction.
+be able to change the restriction. Providers are configured by default only
+when the upstream is Vercel AI Gateway; the default upstream, Nous Research,
+gets no restriction unless providers are configured explicitly.
 
 #### Scenario: The upstream request names the providers
 
@@ -194,26 +204,40 @@ nothing and be tried again after the user's next turn.
 
 ### Requirement: An exhausted pool is reported as such
 
-When the upstream refuses a turn with `402` because a budget is spent (type
-`quota_for_entity_exceeded`) or the credit balance is empty (type
-`insufficient_funds`), `POST /api/agent` SHALL answer 503 with
-`{ "reason": "pool-exhausted", "tier": <tier> }` and a `Retry-After` header
-counting the seconds to the next 00:00 UTC, and SHALL NOT charge the user for
-the turn.
+When the upstream refuses a turn with `402`, `POST /api/agent` SHALL answer
+503 with `{ "reason": "pool-exhausted", "tier": <tier> }` and SHALL NOT charge
+the user for the turn. The response SHALL carry the upstream's `Retry-After`
+header when the upstream sent one, and none otherwise. A `402` that says the
+account's credit balance is empty (code `insufficient_credits_for_paid_model`,
+or the Gateway's type `insufficient_funds`) SHALL also be reported to the
+maintainers' error tracker, since no tier can spend until a person adds
+credits.
 
-#### Scenario: The tier's pool is empty
+#### Scenario: The tier's key limit is spent
 
-- **WHEN** the upstream answers a turn with 402 and type
-  `quota_for_entity_exceeded`
-- **THEN** the response is 503 with `reason` `pool-exhausted` and a
-  `Retry-After` header, and the user's spend today is unchanged
+- **WHEN** the upstream answers a turn with 402, code
+  `key_spend_limit_reached` and `Retry-After: 3600`
+- **THEN** the response is 503 with `reason` `pool-exhausted`, the tier, and
+  `Retry-After: 3600`, and the user's spend today is unchanged
 
 #### Scenario: The credit balance is empty
 
-- **WHEN** the upstream answers a turn with 402 and type
-  `insufficient_funds`
-- **THEN** the response is 503 with `reason` `pool-exhausted` and a
-  `Retry-After` header, and the user's spend today is unchanged
+- **WHEN** the upstream answers a turn with 402 and code
+  `insufficient_credits_for_paid_model`
+- **THEN** the response is 503 with `reason` `pool-exhausted`, the refusal is
+  reported to the error tracker, and the user's spend today is unchanged
+
+#### Scenario: An unrecognised 402 is still an exhausted pool
+
+- **WHEN** the upstream answers a turn with 402 and a body that names neither
+  code
+- **THEN** the response is 503 with `reason` `pool-exhausted`, and the user's
+  spend today is unchanged
+
+#### Scenario: No Retry-After from the upstream
+
+- **WHEN** the upstream answers a turn with 402 and no `Retry-After` header
+- **THEN** the 503 carries no `Retry-After` header
 
 ### Requirement: The gate fails closed
 
@@ -245,9 +269,9 @@ to a key-based backend.
 
 - **WHEN** a user connected to the default backend sends a message and
   `/api/agent` answers 503 with `reason` `pool-exhausted`
-- **THEN** the chat shows "The free assistant is out of capacity for today. It
-  resets at 00:00 UTC, or bring your own key to keep going.", and the earlier
-  messages of the conversation are still shown
+- **THEN** the chat shows "The free assistant is out of capacity for now. Try
+  again later, or bring your own key to keep going.", and the earlier messages
+  of the conversation are still shown
 
 ### Requirement: Refusals by a limit are tracked
 
