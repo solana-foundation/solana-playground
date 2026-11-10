@@ -137,30 +137,24 @@ const openWalletPanel = async (page: Page, address: string) => {
     .click();
 };
 
-/** Get set up's warning for a wallet the key page did not answer for */
-const walletRetry = (page: Page) =>
-  page.getByRole("button", { name: "Wallet unavailable, try again" });
-
 /**
- * `seedWorkspace`, then wait for the seeded keys to leave the page.
- *
- * The key page has `HANDSHAKE_TIMEOUT_MS` (10 s) to answer. On the CI runner
- * the app's first load can take longer than that (Home showed after 16 s in
- * run 42770163476), and the key page's request waits behind it, so the wallet
- * reads as unavailable. Get set up's Try again, the path a user takes, reads
- * it again; a key page that never answers still fails the spec.
+ * `seedWorkspace`, then wait for the seeded keys to leave the page: the key
+ * page has `KEY_PAGE_LOAD_TIMEOUT_MS` to load even while the app's own first
+ * load is slow (16 s on the CI runner), so no retry is taken here.
  */
 const seedWorkspaceWithKeysMoved = async (page: Page) => {
   await seedWorkspace(page);
-  const isMoved = async () =>
-    (await storedWallet(page))?.accounts.every(
-      ({ kp, publicKey }) => kp === undefined && publicKey !== undefined
-    ) === true;
   await expect
-    .poll(async () => (await isMoved()) || walletRetry(page).isVisible(), LONG)
+    .poll(
+      async () =>
+        (
+          await storedWallet(page)
+        )?.accounts.every(
+          ({ kp, publicKey }) => kp === undefined && publicKey !== undefined
+        ),
+      LONG
+    )
     .toBe(true);
-  if (!(await isMoved())) await walletRetry(page).click();
-  await expect.poll(isMoved, LONG).toBe(true);
 };
 
 test("wallet-storage: Three accounts move", async ({ page }) => {
