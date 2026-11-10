@@ -27,7 +27,7 @@ SHALL be declared by a tracker under `features/`, `widgets/` or `entities/`.
 | Get a project: new | `new_project_started` | `StartFromScratch` in `features/new-project/ui/StartFromScratch.tsx` | features/new-project |
 | Get a project: from the catalog | `catalog_item_opened` | `useCardOpen` in `widgets/catalog/model/use-card-open.ts` | widgets/catalog |
 | Get a project: import | `project_imported` | `ImportGithub` and its `Example` in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx`; `ImportFs` in `Modals/ImportFs.tsx`; `ImportTemporary` in `Modals/ImportTemporary.tsx` | features/project-files |
-| Get a project: view a GitHub link | `project_viewed` | `github` (`/github/<owner>/<repo>…`) in `routes/github/github.tsx` | pending (funnel-events) |
+| Get a project: view a GitHub link | `project_viewed` | `trackView` in `features/project-files/model/view.ts`, around `PgGithub.getFiles` in `github` (`/github/<owner>/<repo>…`, `routes/github/github.tsx`) | features/project-files |
 | Sign in | `auth_signed_in` | `PgSession._signIn` in `features/auth/model/session.ts` | features/auth |
 | Build | `build_started`, `build_succeeded` | `build` in `commands/build/build.ts` | pending (wbdi-flow) |
 | Fund the wallet | `fund_sent`, `fund_airdropped` | `FundDialog` in `features/fund-wallet/ui/FundDialog.tsx`; `airdrop` in `commands/airdrop/airdrop.ts` | features/fund-wallet |
