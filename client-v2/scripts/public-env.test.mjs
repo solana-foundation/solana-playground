@@ -213,6 +213,11 @@ for (const [label, env, expected] of [
     /REACT_APP_MAINNET_RPC_URL carries a credential in its query/,
   ],
   [
+    "fails a key-like query name written percent-encoded",
+    { REACT_APP_MAINNET_RPC_URL: "https://rpc.example.com/?k%65y=abc123" },
+    /REACT_APP_MAINNET_RPC_URL carries a credential in its query/,
+  ],
+  [
     "fails a bare token in the query",
     {
       REACT_APP_MAINNET_RPC_URL: "https://rpc.example.com/?abc123def456ghi789",

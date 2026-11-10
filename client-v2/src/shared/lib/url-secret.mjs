@@ -42,14 +42,33 @@ export const queryTermsOf = (search) =>
     });
 
 /**
- * Whether a query term carries a secret: a non-empty value under a key-like
- * name, a value that reads as a token, or a bare term that does.
+ * `text` with each `%XX` escape decoded and `+` read as a space, as a server
+ * reads a query name. Never throws on a malformed escape: one that is not two
+ * hex digits stays as written.
  *
- * @param {string} name the term's name, or the bare term
- * @param {string | undefined} value the value after `=`, `undefined` for a bare term
+ * @param {string} text
+ * @returns {string}
+ */
+const percentDecoded = (text) =>
+  text
+    .replaceAll("+", " ")
+    .replace(/%([0-9a-f]{2})/gi, (_, hex) =>
+      String.fromCharCode(parseInt(hex, 16))
+    );
+
+/**
+ * Whether a query term carries a secret: a non-empty value under a key-like
+ * name, as written or decoded (`k%65y` is `key` to the server), a value that
+ * reads as a token, or a bare term that does.
+ *
+ * @param {string} name the term's name, or the bare term, as written
+ * @param {string | undefined} value the value after `=`, as written; `undefined` for a bare term
  * @returns {boolean}
  */
 export const isSecretQueryTerm = (name, value) =>
   value === undefined
     ? isTokenLike(name)
-    : value !== "" && (KEY_NAME.test(name) || isTokenLike(value));
+    : value !== "" &&
+      (KEY_NAME.test(name) ||
+        KEY_NAME.test(percentDecoded(name)) ||
+        isTokenLike(value));

@@ -28,6 +28,7 @@ import {
   queryTermsOf,
 } from "../src/shared/lib/url-secret.mjs";
 import { GA4_ID } from "./google-tag.mjs";
+import { encodedForms } from "./lib/encoded-forms.mjs";
 
 const CLIENT_DIR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -144,7 +145,7 @@ const keyProblems = (name, url) => [
  */
 
 /** @type {(pattern: RegExp, shape: string) => ShapeCheck} */
-const matching = (pattern, shape) => (name, value) =>
+const checkWith = (pattern, shape) => (name, value) =>
   pattern.test(value) ? [] : [`${name} is not ${shape}`];
 
 /** @type {ShapeCheck} */
@@ -182,28 +183,28 @@ const VALUE_SHAPES = [
   [(name) => name.endsWith("_URL"), publicUrl],
   [
     (name) => name.endsWith("_SEND_TX_PER_SECOND"),
-    matching(/^\d+(\.\d+)?$/, "a number"),
+    checkWith(/^\d+(\.\d+)?$/, "a number"),
   ],
   [
     (name) => name === "REACT_APP_GA_MEASUREMENT_ID",
-    matching(GA4_ID, "a GA4 measurement id"),
+    checkWith(GA4_ID, "a GA4 measurement id"),
   ],
   // The levels `isLevel` in src/shared/lib/logger/severity accepts
   [
     (name) => name === "REACT_APP_LOG_LEVEL",
-    matching(/^(panic|error|warn|info|debug)$/, "a log level"),
+    checkWith(/^(panic|error|warn|info|debug)$/, "a log level"),
   ],
   [
     (name) => name === "REACT_APP_SERVER_UNSTABLE",
-    matching(/^(true|false|0|1)$/, "a boolean"),
+    checkWith(/^(true|false|0|1)$/, "a boolean"),
   ],
   [
     (name) => name === "REACT_APP_VERCEL_ENV",
-    matching(/^(production|preview|development)$/, "a Vercel environment"),
+    checkWith(/^(production|preview|development)$/, "a Vercel environment"),
   ],
   [
     (name) => name === "REACT_APP_VERCEL_GIT_COMMIT_SHA",
-    matching(/^[0-9a-f]{7,40}$/, "a commit sha"),
+    checkWith(/^[0-9a-f]{7,40}$/, "a commit sha"),
   ],
 ];
 
@@ -334,21 +335,6 @@ export const secretsOf = (dir, env) => {
       .map(([name, value]) => [`${name}\0${value}`, [name, value]])
   );
   return [...unique.values()];
-};
-
-/**
- * The forms `value` takes in a build: as written; inside a double-quoted JS
- * or JSON string (quotes, backslashes and newlines escaped, as a multiline
- * private key would be), with `/` escaped too, as some serialisers write it;
- * and inside a single-quoted string, which esbuild writes for a string that
- * holds `"`.
- */
-const encodedForms = (value) => {
-  const escaped = JSON.stringify(value).slice(1, -1);
-  const singleQuoted = escaped.replaceAll('\\"', '"').replaceAll("'", "\\'");
-  return [
-    ...new Set([value, escaped, escaped.replaceAll("/", "\\/"), singleQuoted]),
-  ];
 };
 
 /**
