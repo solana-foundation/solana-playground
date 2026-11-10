@@ -214,8 +214,8 @@ Optional. Without them the app uses the public Solana endpoints.
 5. Team Settings → Security: **Enforce Sensitive Environment Variables** off, or at least not covering this
    project's Production. With it on, `SENTRY_AUTH_TOKEN` and the database variables become Secrets, a local build
    pulls them as empty, and the production build and `migrate-production-db` fail.
-6. Settings → Deployment Protection → Protection Bypass for Automation: create the secret. Store it in Doppler in
-   step 5 and on GitHub in step 8.
+6. Settings → Deployment Protection → Protection Bypass for Automation: create the secret. It goes on GitHub in
+   step 8; it stays readable on this settings page.
 7. Note `<VERCEL_PROJECT_ID>` (Settings → General) and `<VERCEL_APP_DOMAIN>` (Settings → Domains).
 8. **Doppler.** Create `<DOPPLER_PROJECT>` and `<DOPPLER_CONFIG>` if they do not exist. In the project,
    Integrations → Vercel: authorize Doppler's Vercel app, then Setup Integration with Team `<TEAM_SLUG>`, project
@@ -345,13 +345,11 @@ first deployment in step 7. Give write access to `<DOPPLER_CONFIG>` only to the 
    copy the DSN (Project Settings → Client Keys), and create an auth token that may upload source maps (Organization
    Settings → Auth Tokens). Store the token as `SENTRY_AUTH_TOKEN`, **Unmasked** (a local build reads it); the DSN
    goes in as `REACT_APP_SENTRY_DSN` in step 6.
-5. **Protection Bypass for Automation** (step 1). Store it as `VERCEL_AUTOMATION_BYPASS_SECRET`, Masked. The
-   application does not read it; it is kept here so it has a home, and goes on GitHub in step 8.
-6. **Optional:** a Google Analytics 4 property and its measurement id (`G-...`); the RPC provider's URLs, restricted
+5. **Optional:** a Google Analytics 4 property and its measurement id (`G-...`); the RPC provider's URLs, restricted
    to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`, and its `sendTransaction` limit. They go in in step 6.
 
 **Check:** in Vercel → Settings → Environment Variables, Production, `AUTH_SECRET`, `GITHUB_CLIENT_SECRET`,
-`PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY` and `VERCEL_AUTOMATION_BYPASS_SECRET` carry the Secret badge, and
+`PG_AI_API_KEY` and `PG_AI_NEWCOMER_API_KEY` carry the Secret badge, and
 `SENTRY_AUTH_TOKEN` does not.
 
 ## Step 6: the production environment
@@ -367,7 +365,7 @@ Then ask `<BUILD_SERVER_CONTACT>` to add `https://<VERCEL_APP_DOMAIN>` to `PG_CL
 
 **Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
 `AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
-`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` and `VERCEL_AUTOMATION_BYPASS_SECRET`, plus any optional ones you set,
+`REACT_APP_SENTRY_DSN` and `SENTRY_AUTH_TOKEN`, plus any optional ones you set,
 with no `AGENT_*`, `DATABASE_URL` or `AUTH_OAUTH_PROXY_*` name. Only the Masked ones carry the Secret badge in the
 dashboard.
 
@@ -422,7 +420,12 @@ and deploys to the production domain. A build on Vercel itself would not finish 
    `/api/ai/status` (`seq 1 70`) after 60; `/api/auth/sign-in/social` (`seq 1 30`) after 20. Report the last one
    either way: it shows whether the firewall matches the path before `vercel.json` rewrites it. Your IP stays
    limited for up to 60 seconds afterwards.
-8. Sentry receives an event from the browser and one from a function (ask Alexander how to trigger them).
+8. Sentry, project `solana-playground`, environment `production`:
+   - **The browser.** On `https://<VERCEL_APP_DOMAIN>`, open the browser's developer console and run
+     `setTimeout(() => { throw new Error("sentry check: browser") })`. The app reports any uncaught error, so within a
+     minute Issues lists `Error: sentry check: browser`. Resolve it afterwards.
+   - **The functions.** Traces lists `GET /api/sync` spans from the requests of check 2: every API function sends a
+     span per request while `SENTRY_TRACES_SAMPLE_RATE` is unset.
 9. With RPC URLs set: Settings › Network offers Mainnet, Devnet and Testnet on your provider's URLs, and a program
    deploy to Devnet completes.
 10. `make migrate-production-db` prints `nothing to apply`.
@@ -453,9 +456,7 @@ result.
 **Run:**
 
 1. The project's Git connection (Settings → Git) names `solana-foundation/solana-playground`, Production Branch
-   `master`. Other branches are skipped by `vercel.json`'s `ignoreCommand`, except `master-production`, `scope/*`,
-   `integration/*` and `new-face-polish-<n>`, which build Preview deployments; Preview has no variables, so those
-   builds fail and serve nothing. Turn the Git connection's preview builds off if you prefer.
+   `master`.
 2. On GitHub, add the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET` with the bypass secret from step 1
    ([Outside Vercel](#outside-vercel)).
 3. In Doppler, turn on the Vercel sync's redeploy on sync. From now on a change in `<DOPPLER_CONFIG>` redeploys
