@@ -3,6 +3,9 @@ import { afterEach, expect, it, vi } from "vitest";
 // One instruction card: its head counts the inputs, its body groups them and
 // ends in Test, which says what it waits for.
 
+const network = vi.hoisted(() => ({ hold: undefined as string | undefined }));
+vi.mock("@/widgets/status", () => ({ useNetworkHold: () => network.hold }));
+
 // The utils barrel reads build-time globals jsdom lacks, and the inputs need
 // a connected program; the form under test needs none of it.
 vi.mock("../../../../../utils", () => ({
@@ -230,6 +233,7 @@ const testButton = () =>
 afterEach(() => {
   stored.amount = { value: "5", error: false };
   session.wallet = {};
+  network.hold = undefined;
 });
 
 // Every card mounts its form, and a remount (a rebuilt IDL) restores the
@@ -260,4 +264,14 @@ it("holds Test while the caller blocks it, without a reason of its own", () => {
 
   expect(testButton().disabled).toBe(true);
   expect(screen.queryByText("Connect a wallet to test")).toBeNull();
+});
+
+it("holds Test while the network is down, and says why first", () => {
+  network.hold = "Devnet is not responding";
+  stored.amount = { value: "", error: false };
+  render(<Instruction idlInstruction={FORM_IX} onCall={vi.fn()} open />);
+
+  expect(testButton().disabled).toBe(true);
+  expect(screen.getByText("Devnet is not responding")).toBeTruthy();
+  expect(screen.queryByText("Fill every field to test")).toBeNull();
 });

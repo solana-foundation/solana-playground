@@ -30,8 +30,8 @@ export type FrameworkParam<N extends string> = {
     description?: string;
   };
 
-  /** Example GitHub project */
-  githubExample: {
+  /** Example GitHub project, when the dialog that imports from GitHub lists one */
+  githubExample?: {
     /** Project name */
     name: string;
     /** Project GitHub URL */

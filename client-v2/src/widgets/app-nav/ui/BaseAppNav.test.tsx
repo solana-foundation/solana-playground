@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { requireFor } from "@/test-utils/require-for";
 
 import type { NavItem } from "../model/nav-item";
 import BaseAppNav from "./BaseAppNav";
@@ -33,6 +34,7 @@ const draw = (collapsed: boolean, onOpen = vi.fn(), onToggle = vi.fn()) => {
           onToggle={onToggle}
           onOpen={onOpen}
           logo={<span>logo</span>}
+          railLogo={<span>rail logo</span>}
           projects={<span>projects</span>}
           footer={<span>footer</span>}
           railFooter={<span>rail footer</span>}
@@ -68,9 +70,11 @@ it("shows the logo, project list and footer when open, not the rail's", () => {
   expect(screen.queryByText("rail footer")).toBeNull();
 });
 
-it("swaps the logo, project list and footer for the rail's footer when collapsed, keeping the items", () => {
+it("swaps the logo, project list and footer for the rail's when collapsed, keeping the items", () => {
   draw(true);
   expect(screen.queryByText("logo")).toBeNull();
+  expect(screen.getByText("rail logo")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Go to Home" })).toBeNull();
   expect(screen.queryByText("projects")).toBeNull();
   expect(screen.queryByText("footer")).toBeNull();
   expect(screen.queryByText("setup")).toBeNull();
@@ -87,11 +91,71 @@ it("names the toggle for what it will do", () => {
   expect(onToggle).toHaveBeenCalledTimes(1);
 });
 
-it("offers to expand a collapsed navigation", () => {
+it("expands a collapsed navigation from the trimmed logo, with no collapse icon beside it", () => {
   const onToggle = vi.fn();
   draw(true, vi.fn(), onToggle);
-  fireEvent.click(screen.getByRole("button", { name: "Expand navigation" }));
+  const expand = screen.getByRole("button", { name: "Expand navigation" });
+  expect(expand.textContent).toBe("rail logo");
+  expect(screen.getAllByRole("button", { name: /navigation/ })).toHaveLength(1);
+  fireEvent.click(expand);
   expect(onToggle).toHaveBeenCalledTimes(1);
+});
+
+it("hands focus to the toggle that replaces the one pressed", () => {
+  const nav = (collapsed: boolean) => (
+    <TooltipProvider>
+      <SidebarProvider>
+        <BaseAppNav
+          collapsed={collapsed}
+          onToggle={vi.fn()}
+          onOpen={vi.fn()}
+          logo={<span>logo</span>}
+          railLogo={<span>rail logo</span>}
+          projects={undefined}
+          footer={undefined}
+          railFooter={undefined}
+          setup={undefined}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  const { rerender } = render(nav(true));
+  const expand = screen.getByRole("button", { name: "Expand navigation" });
+  expand.focus();
+  fireEvent.click(expand);
+  rerender(nav(false));
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Collapse navigation" })
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+  rerender(nav(true));
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: "Expand navigation" })
+  );
+});
+
+it("takes no focus for a toggle pressed without it", () => {
+  const nav = (collapsed: boolean) => (
+    <TooltipProvider>
+      <SidebarProvider>
+        <BaseAppNav
+          collapsed={collapsed}
+          onToggle={vi.fn()}
+          onOpen={vi.fn()}
+          logo={<span>logo</span>}
+          railLogo={<span>rail logo</span>}
+          projects={undefined}
+          footer={undefined}
+          railFooter={undefined}
+          setup={undefined}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  const { rerender } = render(nav(true));
+  fireEvent.click(screen.getByRole("button", { name: "Expand navigation" }));
+  rerender(nav(false));
+  expect(document.activeElement).toBe(document.body);
 });
 
 it("on a phone, heads the menu with the logo and a close, not a collapse", () => {
@@ -105,6 +169,7 @@ it("on a phone, heads the menu with the logo and a close, not a collapse", () =>
           onToggle={onToggle}
           onOpen={vi.fn()}
           logo={<span>logo</span>}
+          railLogo={<span>rail logo</span>}
           projects={<span>projects</span>}
           footer={<span>footer</span>}
           railFooter={<span>rail footer</span>}
@@ -121,6 +186,39 @@ it("on a phone, heads the menu with the logo and a close, not a collapse", () =>
   expect(onToggle).toHaveBeenCalledOnce();
 });
 
+it("takes the logo to Home, in the column and at the head of the phone's menu", () => {
+  const onOpen = vi.fn();
+  draw(false, onOpen);
+  fireEvent.click(screen.getByRole("button", { name: "Go to Home" }));
+  expect(onOpen).toHaveBeenLastCalledWith("home");
+
+  render(
+    <TooltipProvider>
+      <SidebarProvider>
+        <BaseAppNav
+          phone
+          collapsed={false}
+          onToggle={vi.fn()}
+          onOpen={onOpen}
+          logo={<span>phone logo</span>}
+          railLogo={undefined}
+          projects={undefined}
+          footer={undefined}
+          railFooter={undefined}
+          setup={undefined}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  const phoneLogo = requireFor("the phone logo's button")(
+    screen.getByText("phone logo").closest("button")
+  );
+  expect(phoneLogo.getAttribute("aria-label")).toBe("Go to Home");
+  fireEvent.click(phoneLogo);
+  expect(onOpen).toHaveBeenCalledTimes(2);
+  expect(onOpen).toHaveBeenLastCalledWith("home");
+});
+
 it("draws the way to a computer only on a phone, in its own group above Get set up", () => {
   const nav = (phone: boolean) => (
     <TooltipProvider>
@@ -131,6 +229,7 @@ it("draws the way to a computer only on a phone, in its own group above Get set 
           onToggle={vi.fn()}
           onOpen={vi.fn()}
           logo={<span>logo</span>}
+          railLogo={<span>rail logo</span>}
           projects={<span>projects</span>}
           handoff={<span>handoff</span>}
           footer={<span>footer</span>}
@@ -168,6 +267,7 @@ it("puts the pin in the open head only", () => {
             onToggle={vi.fn()}
             onOpen={vi.fn()}
             logo={<span>logo</span>}
+            railLogo={<span>mark</span>}
             projects={<span>projects</span>}
             footer={<span>footer</span>}
             railFooter={<span>rail footer</span>}

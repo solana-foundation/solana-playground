@@ -1,6 +1,11 @@
 import { solanaExplorer } from "../block-explorers/solana-explorer";
-import { solanaFM } from "../block-explorers/solana-fm";
 import { solscan } from "../block-explorers/solscan";
+import {
+  findBlockExplorer,
+  PgBlockExplorer,
+  resolveBlockExplorer,
+} from "./block-explorer";
+import { PgSettings } from "./settings";
 
 // `settings.ts`, reached through this module, reads a global
 // that only exists once the app has booted
@@ -15,6 +20,14 @@ vi.mock("./index", async () => ({
   PgConnection: { cluster: "testnet" },
 }));
 
+// What `resolveBlockExplorer` stores, without the app's settings behind it
+vi.mock("./settings", () => ({
+  PgSettings: {
+    blockExplorer: { name: "" },
+    onDidChangeBlockExplorerName: vi.fn(),
+  },
+}));
+
 const ID = "11111111111111111111111111111111";
 
 describe("block explorers", () => {
@@ -22,8 +35,8 @@ describe("block explorers", () => {
     expect(solanaExplorer.getAddressUrl(ID, "devnet")).toBe(
       `https://explorer.solana.com/address/${ID}?cluster=devnet`
     );
-    expect(solanaFM.getTxUrl("sig", "devnet")).toBe(
-      "https://solana.fm/tx/sig?cluster=devnet-solana"
+    expect(solscan.getTxUrl("sig", "devnet")).toBe(
+      "https://solscan.io/tx/sig?cluster=devnet"
     );
     expect(solscan.getAddressUrl(ID, "mainnet-beta")).toBe(
       `https://solscan.io/address/${ID}`
@@ -35,6 +48,34 @@ describe("block explorers", () => {
     expect(solanaExplorer.opens("mainnet-beta")).toBe(true);
     expect(solscan.opens("localnet")).toBe(false);
     expect(solanaExplorer.opens("playnet")).toBe(false);
+  });
+
+  it("fall back to Solana Explorer when the stored one is no longer offered", () => {
+    const all = [solscan, solanaExplorer];
+    expect(findBlockExplorer(all, "Solscan")).toBe(solscan);
+    // Solana FM was dropped (HOO-2700); a user who had it picked keeps working
+    expect(findBlockExplorer(all, "Solana FM")).toBe(solanaExplorer);
+    expect(() => findBlockExplorer([solscan], "Solana FM")).toThrow(
+      "Solana Explorer"
+    );
+  });
+
+  it("store the fallback, so the settings page shows what links open", () => {
+    PgBlockExplorer.all = [solscan, solanaExplorer];
+    const writes: string[] = [];
+    Object.defineProperty(PgSettings.blockExplorer, "name", {
+      configurable: true,
+      get: () => "",
+      set: (name: string) => writes.push(name),
+    });
+
+    expect(resolveBlockExplorer("Solana FM")).toBe(solanaExplorer);
+    expect(writes).toEqual(["Solana Explorer"]);
+
+    // An offered name is stored already; writing it would only fire again
+    expect(resolveBlockExplorer("Solscan")).toBe(solscan);
+    expect(resolveBlockExplorer("Solana Explorer")).toBe(solanaExplorer);
+    expect(writes).toEqual(["Solana Explorer"]);
   });
 
   it("open the selected network when given none", () => {

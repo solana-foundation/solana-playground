@@ -1,13 +1,14 @@
-// The send button's play shape: the ring around it must not be drawn at
-// all, since any crop of the ring's box still leaves slivers of the ring in
-// its corners. A file of its own: the installed component is never edited by
-// hand.
+// The parts of the logo drawn alone: the send button's play shape, whose
+// ring must not be drawn at all, since any crop of the ring's box still
+// leaves slivers of the ring in its corners; and the folded navigation's mark,
+// the lockup without its words. A file of its own: the installed component is
+// never edited by hand.
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { requireFor } from "@/test-utils/require-for";
 
-import { LogoMark, LogoPlay } from "./logo";
+import { LogoLockup, LogoLockupMark, LogoMark, LogoPlay } from "./logo";
 
 /** The subpaths of every path an svg draws, each from its `M` */
 const subpaths = (svg: Element) =>
@@ -32,5 +33,18 @@ describe("LogoPlay", () => {
 
     expect(play).toEqual(mark.slice(2));
     ring.forEach((edge) => expect(play).not.toContain(edge));
+  });
+});
+
+describe("LogoLockupMark", () => {
+  it("draws the lockup's mark and none of its words", () => {
+    const paths = (svg: Element | null) =>
+      Array.from(requireFor("an svg")(svg).querySelectorAll("path"), (p) =>
+        p.getAttribute("d")
+      );
+    const lockup = paths(render(<LogoLockup />).container.firstElementChild);
+    const mark = paths(render(<LogoLockupMark />).container.firstElementChild);
+
+    expect(mark).toEqual(lockup.slice(0, 1));
   });
 });

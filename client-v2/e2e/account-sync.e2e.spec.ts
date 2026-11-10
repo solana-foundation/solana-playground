@@ -430,7 +430,7 @@ test("client-v2-layout: A rename reaches the account", async ({ page }) => {
   const alphaId = await makeLocalProject(page, "Alpha");
   // A second project, so Alpha is not the open one
   await openGallery(page);
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await gallery.getByLabel("Project name").fill("Beta");
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden(LONG);

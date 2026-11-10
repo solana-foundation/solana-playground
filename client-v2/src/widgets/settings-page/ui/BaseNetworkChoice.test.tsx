@@ -185,7 +185,7 @@ describe("BaseNetworkChoice", () => {
     ).toBeTruthy();
   });
 
-  it("says nothing about real SOL on devnet", () => {
+  it("says nothing about real SOL on Devnet", () => {
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
     expect(screen.queryByText("Deploys with real SOL")).toBeNull();
   });
@@ -239,5 +239,70 @@ describe("BaseNetworkChoice", () => {
       "https://h.test/",
       chipKey("Helius", "https://h.test/")
     );
+  });
+
+  it("says how a deploy works on Devnet in the card's foot, with a green dot", () => {
+    render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
+    const foot = screen.getByText("Deploys with free devnet SOL");
+    expect(foot.querySelector(".bg-success")).toBeTruthy();
+    expect(
+      screen.getByRole("radiogroup", {
+        name: "Network",
+        description: "Deploys with free devnet SOL",
+      })
+    ).toBeTruthy();
+  });
+
+  it("marks Mainnet's foot line with an amber dot", () => {
+    render(
+      <BaseNetworkChoice endpoint={Endpoint.MAINNET_BETA} onPick={() => {}} />
+    );
+    const foot = screen.getByText("Deploys with real SOL");
+    expect(foot.querySelector(".bg-warning")).toBeTruthy();
+  });
+
+  it("has no foot for a saved custom RPC", () => {
+    render(
+      <BaseNetworkChoice
+        endpoint="https://h.test/"
+        custom={[{ name: "Helius", url: "https://h.test/" }]}
+        onPick={() => {}}
+      />
+    );
+    expect(screen.queryByText(/^Deploys with/)).toBeNull();
+    expect(
+      screen
+        .getByRole("radiogroup", { name: "Network" })
+        .getAttribute("aria-describedby")
+    ).toBeNull();
+  });
+
+  it("has no foot for an endpoint no chip lists", () => {
+    render(
+      <BaseNetworkChoice endpoint="https://unknown.test/" onPick={() => {}} />
+    );
+    expect(screen.queryByText(/^Deploys with/)).toBeNull();
+    expect(
+      screen
+        .getByRole("radiogroup", { name: "Network" })
+        .getAttribute("aria-describedby")
+    ).toBeNull();
+  });
+
+  it("puts what it is given between the chips and the foot", () => {
+    render(
+      <BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}}>
+        <p>middle</p>
+      </BaseNetworkChoice>
+    );
+    const group = screen.getByRole("radiogroup", { name: "Network" });
+    const middle = screen.getByText("middle");
+    const foot = screen.getByText("Deploys with free devnet SOL");
+    expect(
+      group.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      middle.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 });

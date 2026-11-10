@@ -25,6 +25,7 @@ const failedBuild: FlowState = {
   stopped: null,
   airdrops: 0,
   hasProgram: true,
+  sourceChanged: false,
 };
 
 /** Every element a `ResizeObserver` watches (the fold's stepper root, the
@@ -113,6 +114,7 @@ describe("Stepper", () => {
       airdrops: 0,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     render(<Stepper state={noProgram} onSelect={vi.fn()} />);
     expect(screen.getAllByRole("tab").map((tab) => tab.id)).toEqual([
@@ -220,6 +222,7 @@ describe("phone", () => {
       airdrops: 0,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     render(<Stepper state={noProgram} onSelect={vi.fn()} phone />);
     expect(
@@ -249,6 +252,7 @@ describe("phone", () => {
       airdrops: 0,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     rerender(<Stepper state={noProgram} onSelect={vi.fn()} phone />);
     // The window widens past the phone breakpoint with the stepper mounted

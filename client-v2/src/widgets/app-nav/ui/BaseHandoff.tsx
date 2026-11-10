@@ -132,7 +132,7 @@ const BaseHandoff = ({
               <span className="mb-2 flex size-12 items-center justify-center rounded-panel bg-surface-raised text-muted-foreground">
                 <Monitor strokeWidth={1.75} className="size-6" aria-hidden />
               </span>
-              <DrawerTitle className="font-heading text-title! font-normal!">
+              <DrawerTitle className="font-heading text-title! font-headline!">
                 {HANDOFF_TITLE}
               </DrawerTitle>
             </DrawerHeader>

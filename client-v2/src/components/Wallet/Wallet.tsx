@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { Icon } from "@/shared/ui/icon";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
@@ -29,7 +30,6 @@ import {
 } from "../../utils";
 import ErrorBoundary from "../ErrorBoundary";
 import FadeIn from "../FadeIn";
-import { Close, ShortArrow } from "../Icons";
 import Img from "../Img";
 import Input from "../Input";
 import Balance from "./Balance";
@@ -64,7 +64,9 @@ const Wallet = () => {
         enableResizing={false}
         bounds={"#" + WALLET_BOUND_ID}
         enableUserSelectHack={false}
-        style={{ zIndex: 1 }}
+        // Above the page (the program cards' buttons are `z-10`), under the
+        // full pages (`z-40`) and the dialogs and menus (`z-50`)
+        style={{ zIndex: 30 }}
       >
         <WalletWrapper>
           <ErrorBoundary>
@@ -157,7 +159,7 @@ export const WalletName = () => {
                 <WalletTitleText>
                   {getAccountDisplayName(wallet)}
                 </WalletTitleText>
-                <ShortArrow rotate="90deg" />
+                <Icon name="chevron-down" size={16} />
               </WalletTitleWrapper>
             </DropdownMenuTrigger>
           </TooltipTrigger>
@@ -186,7 +188,12 @@ export const WalletName = () => {
                 });
               }}
             >
-              <Img src={standardWallet.icon} alt={standardWallet.name} />
+              {/* An image, which the item does not size as it does its icons */}
+              <Img
+                src={standardWallet.icon}
+                alt={standardWallet.name}
+                className="size-4 shrink-0 rounded-sm"
+              />
               <MenuItemText>
                 {getAccountDisplayName(standardWallet)}
               </MenuItemText>
@@ -281,7 +288,7 @@ const WalletClose = () => (
     title="Close"
     className="absolute right-4"
   >
-    <Close />
+    <Icon name="close" />
   </Button>
 );
 

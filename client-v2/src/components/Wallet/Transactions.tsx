@@ -5,10 +5,10 @@ import styled, { css } from "styled-components";
 import { createLogger } from "@/shared/lib/logger";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Icon } from "@/shared/ui/icon";
 
 import { useBlockExplorer, useConnection } from "../../hooks";
 import { PgCommon, PgConnection, PgTheme, PgWallet, PgWeb3 } from "../../utils";
-import { Clock, Error as ErrorIcon, Refresh } from "../Icons";
 import Link from "../Link";
 import { SpinnerWithBg } from "../Loading";
 import { describeTxsError } from "./txs-error";
@@ -92,7 +92,7 @@ const Transactions = () => {
           onClick={refresh}
           className="mr-2"
         >
-          <Refresh />
+          <Icon name="refresh" />
         </Button>
       </TxsTitleWrapper>
 
@@ -102,7 +102,7 @@ const Transactions = () => {
           <Slot>Slot</Slot>
           <Time>
             Time
-            <Clock />
+            <Icon name="time" size={16} />
           </Time>
         </TxsTableHeader>
 
@@ -231,7 +231,7 @@ const Tx: FC<React.PropsWithChildren<PgWeb3.ConfirmedSignatureInfo>> = ({
       ) : (
         <>
           <Signature>
-            {err && <ErrorIcon color="error" />}
+            {err && <Icon name="error" size={16} className="text-error" />}
             {signature.substring(0, 5)}...
           </Signature>
           <Slot>{slot}</Slot>

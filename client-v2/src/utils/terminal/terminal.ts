@@ -60,7 +60,7 @@ export class PgTerminal {
   }
 
   static warning(text: string) {
-    return `\x1b[1;33m${text}\x1b[0m`;
+    return toneWith("warning")(text);
   }
 
   static info(text: string) {
@@ -93,9 +93,9 @@ export class PgTerminal {
 
   /** Get whether the terminal is focused or in blur. */
   static isFocused() {
-    return document
-      .getElementsByClassName("terminal xterm xterm-dom-renderer-owner-1")[0]
-      ?.classList.contains("focus");
+    // By where focus is, not by the renderer's class: that names the first
+    // terminal only, and a remount renames it
+    return Boolean(document.activeElement?.closest(".xterm"));
   }
 
   /** Dispatch enable terminal custom event; dropped while none is mounted. */
@@ -529,6 +529,23 @@ export class PgTerm {
     this._xterm.scrollToBottom();
   }
 
+  /** The whole buffer as plain text, wrapped lines joined: the log's Copy */
+  getText() {
+    const buffer = this._xterm.buffer.active;
+    let text = "";
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i);
+      if (!line) continue;
+      // A row the next one continues keeps its trailing space: the wrap may
+      // have broken the line there
+      const isContinued = buffer.getLine(i + 1)?.isWrapped ?? false;
+      text +=
+        (line.isWrapped || i === 0 ? "" : "\n") +
+        line.translateToString(!isContinued);
+    }
+    return text.trimEnd();
+  }
+
   /** Destroy the current xterm instance. */
   destroy() {
     this._xterm.dispose();
@@ -737,8 +754,9 @@ export class PgTerm {
       // Compared plain: xterm's text carries no colour codes
       const previousLine = this._tty.getLine(1)?.translateToString().trim();
       if (previousLine !== msg) {
-        const tone = lineTone(e);
-        this.println(tone ? toneWith(tone)(msg) : msg);
+        // The highlighter reads a colour code's digits as words, and its own
+        // colours end this one early
+        this.println(toneWith(lineTone(e))(msg), { noColor: true });
       }
 
       // An unknown command, a bad option or a declined question is an outcome,
@@ -813,4 +831,64 @@ export class PgTerm {
 
     return true;
   };
+}
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("utils/terminal/terminal", () => {
+    /** A terminal whose buffer holds these rows, each `[text, isWrapped]` */
+    const termOf = (rows: Array<[string, boolean]>) =>
+      ({
+        _xterm: {
+          buffer: {
+            active: {
+              length: rows.length,
+              getLine: (i: number) =>
+                rows[i] && {
+                  isWrapped: rows[i][1],
+                  // xterm pads a row to the terminal's width
+                  translateToString: (trimRight: boolean) =>
+                    trimRight ? rows[i][0].trimEnd() : rows[i][0],
+                },
+            },
+          },
+        },
+      } as unknown as PgTerm);
+
+    it("getText joins a wrapped row to the line it continues", () => {
+      const term = termOf([
+        ["$ build", false],
+        ["Compiling a very long ", false],
+        ["line", true],
+        ["Done", false],
+      ]);
+      expect(PgTerm.prototype.getText.call(term)).toBe(
+        "$ build\nCompiling a very long line\nDone"
+      );
+    });
+
+    it("getText keeps the space a wrapped row breaks at", () => {
+      const term = termOf([
+        ["Compiling a very ", false],
+        ["long line", true],
+      ]);
+      expect(PgTerm.prototype.getText.call(term)).toBe(
+        "Compiling a very long line"
+      );
+    });
+
+    it("getText drops the empty rows under the last output", () => {
+      const term = termOf([
+        ["Done", false],
+        ["", false],
+        ["", false],
+      ]);
+      expect(PgTerm.prototype.getText.call(term)).toBe("Done");
+    });
+
+    it("getText reads an empty buffer as no text", () => {
+      expect(PgTerm.prototype.getText.call(termOf([]))).toBe("");
+    });
+  });
 }

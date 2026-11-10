@@ -21,7 +21,7 @@ export interface BarToggle {
 }
 
 export interface BaseStageBarProps {
-  /** The project's name, shown while the assistant is hidden; null hides it */
+  /** The project's name, or Home's, cut to the bar's width; null shows none */
   title: string | null;
   /**
    * The assistant's toggle: the panel's on a wide window, the Sheet's below;
@@ -106,7 +106,7 @@ const AssistantToggle = ({
 
 /**
  * The 44 px bar over the files column and the stage (design.md, "Frame chrome
- * (5.25)"): the project's name while the assistant is hidden, then one row
+ * (5.25)"): the project's name, cut short when narrow, then one row
  * of icons, as Claude's corner: the page's actions (Share), the assistant's
  * toggle and More, which holds the documentation. The files toggle lives in
  * the editor head (`BaseEditorHead`), beside the terminal's. The assistant's
@@ -125,7 +125,7 @@ const BaseStageBar = ({
       className="flex h-11 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3"
     >
       <span
-        className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground"
+        className="min-w-0 flex-1 truncate text-sm font-headline text-muted-foreground"
         title={title ?? undefined}
       >
         {title}

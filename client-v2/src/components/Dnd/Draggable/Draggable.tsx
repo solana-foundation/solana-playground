@@ -3,7 +3,7 @@ import {
   useDraggable,
   UseDraggableArguments,
 } from "@dnd-kit/core";
-import { ForwardRefExoticComponent } from "react";
+import { ForwardRefExoticComponent, KeyboardEvent } from "react";
 
 interface DraggableProps<P> {
   Item: ForwardRefExoticComponent<P>;
@@ -23,6 +23,16 @@ const Draggable = <P,>({ Item, itemProps, id }: DraggableProps<P>) => {
       style={{ cursor: isDragging ? "grabbing" : "pointer" }}
       {...listeners}
       {...attributes}
+      // The item is a `role="button"` in the Tab order (dnd-kit's
+      // attributes), so Enter and Space press it as they would a button. Only
+      // the mouse drags (`Dnd.Context` registers no keyboard sensor), so no
+      // drag key is taken from it.
+      onKeyDown={(ev: KeyboardEvent<HTMLElement>) => {
+        if (ev.target !== ev.currentTarget) return;
+        if (ev.key !== "Enter" && ev.key !== " ") return;
+        ev.preventDefault();
+        ev.currentTarget.click();
+      }}
       {...itemProps}
     />
   );

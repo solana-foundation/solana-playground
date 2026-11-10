@@ -88,7 +88,7 @@ function StepperItem({
         </span>
       )}
       {status === "failed" && errors ? (
-        <span data-slot="stepper-errors" className="text-error group-data-[compact=true]/stepper-list:hidden">
+        <span data-slot="stepper-errors" className="text-error-ink group-data-[compact=true]/stepper-list:hidden">
           {errors} {errors === 1 ? "error" : "errors"}
         </span>
       ) : null}

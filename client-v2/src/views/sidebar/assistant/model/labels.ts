@@ -20,6 +20,17 @@ const NAMES: Record<string, string> = {
 
 export const displayModelName = (id: string) => NAMES[id] ?? id;
 
+/** What the hosted model is called where the deployment does not name it */
+export const HOSTED_FALLBACK_NAME = "Default model";
+
+/**
+ * The hosted model's name: its display name, or {@link HOSTED_FALLBACK_NAME}
+ * when the deployment did not say which model it serves. Never the backend's
+ * id, "default", which reads as a setting rather than a model.
+ */
+export const hostedModelName = (model: string | undefined) =>
+  model ? displayModelName(model) : HOSTED_FALLBACK_NAME;
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -37,6 +48,13 @@ if (import.meta.vitest) {
           "deepseek/deepseek-chat-v3.1:free"
         );
       });
+    });
+  });
+
+  describe("hostedModelName", () => {
+    it("names the hosted model, or calls it Default model when unnamed", () => {
+      expect(hostedModelName("claude-opus-5-5")).toBe("Opus 5.5");
+      expect(hostedModelName(undefined)).toBe("Default model");
     });
   });
 }

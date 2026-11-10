@@ -28,9 +28,7 @@ const tutorial = (name: string): HomeTutorial => ({
 const props = (start: BaseHomeProps["start"]): BaseHomeProps => ({
   tutorials: ["Hello Anchor", "B", "C", "D", "E", "F"].map(tutorial),
   programCount: 34,
-  scratch: <div data-testid="scratch" />,
   onTile: vi.fn(),
-  onNewProject: vi.fn(),
   onTutorial: vi.fn().mockResolvedValue(undefined),
   tutorialError: undefined,
   onAllTutorials: vi.fn(),
@@ -126,19 +124,13 @@ it("draws the tiles' icons bare, with no tile behind them", () => {
   }
 });
 
-it("unfolds and folds the scratch options under New project", () => {
+it("opens the New project page from its tile", () => {
   const p = props(undefined);
   const home = draw(p);
   const tile = home.getByRole("button", { name: "New project" });
-  expect(tile.getAttribute("aria-expanded")).toBe("false");
-  expect(home.queryByTestId("scratch")).toBeNull();
+  expect(tile.hasAttribute("aria-expanded")).toBe(false);
   fireEvent.click(tile);
-  expect(home.getByTestId("scratch")).toBeTruthy();
-  expect(tile.getAttribute("aria-expanded")).toBe("true");
-  expect(p.onNewProject).toHaveBeenCalledTimes(1);
-  fireEvent.click(tile);
-  expect(home.queryByTestId("scratch")).toBeNull();
-  expect(p.onNewProject).toHaveBeenCalledTimes(1);
+  expect(p.onTile).toHaveBeenCalledWith("new-project");
 });
 
 it("reports the other tiles", () => {

@@ -118,6 +118,10 @@ const startRustAnalyzer = async (): Promise<Disposable> => {
       ]);
     },
     async () => {
+      // No project open (the last one was just deleted, and the analyzer
+      // started after it): the explorer has no path to resolve `lib.rs` against
+      if (!PgExplorer.isTemporary && !PgExplorer.currentWorkspaceName) return;
+
       // Return early if `lib.rs` file doesn't exist
       const file = PgExplorer.getFile("src/lib.rs");
       if (!file) return;
