@@ -149,7 +149,7 @@ describe("BaseDeployResultCard", () => {
     expect(
       Array.from(steps.querySelectorAll("li"), (li) => li.textContent)
     ).toStrictEqual([
-      "1Open the web faucet and sign in with GitHub (an account with a public repo)",
+      "1Open the web faucet and sign in with GitHub. It asks for a public repo: if you have none, fork solana-playground there",
       "2Confirm the airdrop. Your address and 5 SOL are filled in",
       "3Come back here and press Try again",
     ]);

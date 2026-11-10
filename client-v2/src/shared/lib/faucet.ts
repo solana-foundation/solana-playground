@@ -69,7 +69,9 @@ export const faucetUrlWith = (sol: number) => linkWith({ amount: sol });
  * again says to press it, a live balance says it updates by itself.
  */
 export const webFaucetSteps = (sol: number, back: string): string[] => [
-  "Open the web faucet and sign in with GitHub (an account with a public repo)",
+  // A GitHub account with no public repo gets nothing from the web faucet; a
+  // fork of Playground is one, and it passed (Natalia, 10 Nov)
+  "Open the web faucet and sign in with GitHub. It asks for a public repo: if you have none, fork solana-playground there",
   `Confirm the airdrop. Your address and ${sol} SOL are filled in`,
   back,
 ];

@@ -40,8 +40,7 @@ and for any other failure "The airdrop didn't go through." It SHALL NOT say
 to try again in a minute. The cost is an estimate, rounded to two decimals
 ("about 2.81 SOL"); the balance keeps its exact figure. Under the line SHALL
 sit the web faucet in three numbered steps (`aria-label="Get devnet SOL from
-the web faucet"`): "Open the web faucet and sign in with GitHub (an account
-with a public repo)", "Confirm the airdrop. Your address and 5 SOL are filled
+the web faucet"`): "Open the web faucet and sign in with GitHub. It asks for a public repo: if you have none, fork solana-playground there", "Confirm the airdrop. Your address and 5 SOL are filled
 in" and "Come back here and press Try again". Under them sit "Your wallet"
 with the whole address and Copy, and the outlined link "Open the web faucet"
 (`https://faucet.solana.com/?walletAddress=<address>&amount=5&cluster=devnet`,
