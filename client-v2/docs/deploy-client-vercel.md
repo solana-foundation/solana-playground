@@ -6,6 +6,9 @@ Every Makefile target acts on the Vercel project `VERCEL_DEPLOY_PROJECT_ID` name
 
 ## Release checklist: `client-v2` to production
 
+The Foundation's production on Cloud SQL is set up by the [production runbook](production-runbook.md) instead; this
+checklist describes a project whose production database is on Neon.
+
 Nothing below has been run end to end yet — see [Known gaps](#known-gaps). The
 order is the point: each step assumes the ones above it, and steps 1–7 come
 **before** the first production build of `client-v2`. `master` already
@@ -35,6 +38,11 @@ as soon as the Root Directory points at `client-v2`.
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `SENTRY_AUTH_TOKEN`: a production build fails without it
+     (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
+     Sensitive variable as an empty value, which fails the same way, so a
+     production built locally needs it stored as a variable that is not
+     Sensitive.
    - `PG_AI_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
      `GITHUB_CLIENT_SECRET`, `DATABASE_URL`) and the [firewall](firewall.md)
      rules. `/api/agent` answers only signed-in users, and a production build

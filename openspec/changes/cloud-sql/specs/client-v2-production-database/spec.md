@@ -4,9 +4,10 @@
 
 Production's Postgres on Cloud SQL: the identity the functions connect with,
 the instance settings that keep Postgres's own port closed, who migrates it
-and which database a migration reaches, the cutover that switches production
-to an empty, migrated `solpg` with a rollback at every step, and the guide that lets the upstream repository's
-maintainers set all of it up themselves.
+and which database a migration reaches, production set up from nothing on an
+empty, migrated `solpg` and checked on its Vercel-generated domain before the
+release, and the guide that lets the upstream repository's maintainers set all
+of it up themselves.
 
 ## ADDED Requirements
 
@@ -34,13 +35,13 @@ string SHALL be stored for production anywhere.
   `owner:<team>:project:<project>:environment:production` and no other
   subject may impersonate it
 
-#### Scenario: The production identity connects before the cutover (manual)
+#### Scenario: The production identity connects before the release (manual)
 
-- **WHEN** a staged production deployment (`vercel deploy --prod
-  --skip-domain`, assigned no domain) is made with `DB_PROVIDER=cloud-sql`,
-  the `CLOUD_SQL_*` variables naming the empty `solpg`, the federation
-  variables, and `SYNC_ENABLED=false`, each passed to that deployment alone
-- **THEN** its `GET /api/sync` answers `{ "enabled": false, "db": "ok" }`, and
+- **WHEN** the first production deployment is made, on the project's
+  Vercel-generated domain with no custom domain attached, and Production's
+  variables name the migrated `solpg` through the `cloud-sql` provider with
+  the federation variables
+- **THEN** its `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, and
   the instance's logs show the connection authenticated as the production IAM
   database user, with no operator credential involved
 
@@ -116,59 +117,57 @@ identity.
 - **WHEN** the IAM policy bindings of `github-ci` are listed
 - **THEN** none grants a Cloud SQL role on instance `solpg`
 
-### Requirement: The cutover switches production to an empty, migrated database
+### Requirement: Production starts on an empty, migrated database
 
-Production SHALL move to Cloud SQL without copying data: the production
-Neon project holds no user data to keep, so `solpg` starts empty. Every
-migration SHALL be applied to `solpg`, under the production IAM user's role,
-before Production's variables name it. Sync SHALL stay on throughout; nothing
-is frozen, because nothing moves.
+Production SHALL be set up on Cloud SQL from nothing: no earlier production
+database exists, so no data is copied and nothing is frozen. Production's
+variables SHALL name `solpg` before the first migration, because
+`migrate-production-db` reads them from Production, and every migration SHALL
+be applied to `solpg`, under the production IAM user's role, before the first
+production deployment. Production SHALL set no `DATABASE_*` variable.
 
-#### Scenario: solpg is ready before the switch (manual)
+#### Scenario: solpg is ready before the first deployment (manual)
 
-- **WHEN** the migrations have been applied to `solpg` and Production still
-  reads Neon
-- **THEN** `dbmate status` through `migration-url production` lists every
-  migration as applied, and `\dt` shows every table owned by the production
-  IAM user
+- **WHEN** Production's variables name `solpg` and the migrations have been
+  applied, before any production deployment is made
+- **THEN** `migrate-production-db` names `solpg` and reports nothing to
+  apply, and `\dt` shows every table owned by the production IAM user
 
-#### Scenario: Production runs on solpg after the switch (manual)
+#### Scenario: Production runs on solpg (manual)
 
-- **WHEN** Production's variables name `solpg` through the `cloud-sql`
-  provider, `DATABASE_URL` is removed, and Production is redeployed
-- **THEN** `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`,
-  `migrate-production-db` names `solpg` and reports nothing to apply, and a
-  sign-in followed by a project edit on the production domain writes a row to
-  `solpg`
+- **WHEN** the first production deployment is made on the Vercel-generated
+  domain
+- **THEN** `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, and a
+  sign-in followed by a project edit on that domain writes a row to `solpg`
 
-### Requirement: The production Neon project is the rollback
+### Requirement: A bad deployment rolls back the deployment, not the database
 
-Until the production Neon project is deleted, restoring `DATABASE_URL` and
-`DB_PROVIDER=url` on Production and redeploying SHALL be a complete rollback.
-Anything written to `solpg` in between is test data and may be lost.
+Vercel's Instant Rollback to an earlier production deployment SHALL be the
+rollback of a production deployment. It does not undo a migration, and no
+second production database exists to fall back to: a migration that has to be
+undone is undone by another migration, applied with `migrate-production-db`.
 
-#### Scenario: Rollback after the switch (manual)
+#### Scenario: Rollback of a bad deployment (manual)
 
-- **WHEN** the production deployment's `GET /api/sync` answers
-  `db: "unreachable"` after the switch to `cloud-sql`
-- **THEN** restoring `DATABASE_URL` and `DB_PROVIDER=url` on Production and
-  redeploying makes it answer `db: "ok"` again from the untouched production
-  Neon project
+- **WHEN** a production deployment fails its checks and the deployment before
+  it passed them, with no migration applied in between
+- **THEN** Instant Rollback to the earlier deployment makes production answer
+  as that deployment did, and `solpg` is left as it is
 
-### Requirement: Production is released on an empty database
+### Requirement: Production is released on the database it was tested on
 
-Before the custom domain is attached to the Production environment, database
-`solpg` SHALL be dropped and created again, empty, owned by the production IAM
-user and with `CONNECT` revoked from `PUBLIC`, and every migration SHALL be
-applied to it. `AUTH_BASE_URL` and the GitHub OAuth app's callback URL SHALL
-name the custom domain before the first sign-in there.
+`solpg` SHALL NOT be created again at release: the accounts and rows written
+while testing on the Vercel-generated domain stay in it. `AUTH_BASE_URL` and
+the GitHub OAuth app's callback URL SHALL name the custom domain before the
+first sign-in there.
 
-#### Scenario: No test account survives the release (manual)
+#### Scenario: The release keeps solpg (manual)
 
-- **WHEN** `solpg` has been created again and migrated and the custom domain
-  is attached, before anyone signs in on it
-- **THEN** `select count(*) from "user"` answers 0, and `GET /api/sync` on the
-  custom domain answers `{ "enabled": true, "db": "ok" }`
+- **WHEN** the custom domain is attached to the Production environment and
+  production is redeployed
+- **THEN** `GET /api/sync` on the custom domain answers
+  `{ "enabled": true, "db": "ok" }`, and `migrate-production-db` names `solpg`
+  and reports nothing to apply
 
 #### Scenario: Sign-in works on the custom domain (manual)
 
@@ -229,11 +228,10 @@ repository, with each value specific to this deployment as a placeholder.
   database `solpg_preview` and `preview-shared-db.yml`, which migrates it, and
   adding an operator
 
-#### Scenario: The guide is the runbook for the cutover and its rollback (manual)
+#### Scenario: The guide sets production up from nothing (manual)
 
-- **WHEN** a maintainer moves another deployment from a connection string to
-  Cloud SQL
-- **THEN** the guide's cutover and rollback steps match task 3.2, with the
-  checks that must pass before the switch, and say that a deployment with
-  users to keep needs a data copy behind a write freeze, which this guide
-  does not give
+- **WHEN** a maintainer sets production up on Cloud SQL
+- **THEN** the guide's production steps match tasks 3.2 and 3.5, in order,
+  with the checks that must pass before the first deployment, and say that
+  moving a deployment with users to keep onto Cloud SQL needs a data copy
+  behind a write freeze, which this guide does not give
