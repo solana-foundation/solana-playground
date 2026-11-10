@@ -46,14 +46,16 @@ export const addAfter = (
  * `await` is not available in a CommonJS module.
  *
  * An `await` inside a comment or a string also triggers the wrap, which is
- * harmless. A client with a top-level `export` is not supported: the `export`
- * would end up inside the function.
+ * harmless. A client with a top-level `export` is left as it is: inside the
+ * function the `export` would not compile.
  *
  * @param content JS/TS code
  * @returns the content with the wrapped code
  */
 export const wrapTopLevelAwait = (content: string) => {
-  if (!/\bawait\b/.test(content)) return content;
+  if (!/\bawait\b/.test(content) || /^export\s/m.test(content)) {
+    return content;
+  }
 
   const bodyStartIndex = getLeadingImportsEnd(content);
 
@@ -101,9 +103,9 @@ export const addAfterImports = (content: string, newContent: string) => {
   const end = getLeadingImportsEnd(content);
   if (!end) return newContent + "\n" + content;
 
-  return (
-    content.slice(0, end) + "\n" + newContent + "\n" + content.slice(end + 1)
-  );
+  // Skip the line break that ends the last import, when there is one
+  const rest = content.slice(end).replace(/^\r?\n/, "");
+  return content.slice(0, end) + "\n" + newContent + "\n" + rest;
 };
 
 /**

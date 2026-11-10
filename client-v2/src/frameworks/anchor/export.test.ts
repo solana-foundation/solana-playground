@@ -152,6 +152,37 @@ await pg.program.methods.hello(name).rpc();
     expect(files.get("client/client.ts")).not.toContain("(async");
   });
 
+  it("leaves a client with a top-level export unwrapped", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'export const name = "Anchor";\nawait pg.program.methods.hello(name).rpc();\n',
+    ]);
+
+    expect(files.get("client/client.ts")).not.toContain("(async");
+  });
+
+  it("keeps the code that follows the last import on the same line", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'import { BN } from "bn.js";console.log(BN);\n',
+    ]);
+
+    expect(files.get("client/client.ts")).toContain(
+      "anchor.Program<HelloAnchor>;\n\nconsole.log(BN);"
+    );
+  });
+
+  it("adds no blank line after imports that end in CRLF", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'import { BN } from "bn.js";\r\nconsole.log(BN);\r\n',
+    ]);
+
+    expect(files.get("client/client.ts")).toContain(
+      "anchor.Program<HelloAnchor>;\n\nconsole.log(BN);"
+    );
+  });
+
   it("leaves the await of a test alone", async () => {
     const files = await exported(LIB, TEST);
 
@@ -164,5 +195,12 @@ await pg.program.methods.hello(name).rpc();
     const manifest = JSON.parse(files.get("package.json") ?? "{}");
     expect(manifest.devDependencies["ts-node"]).toBeDefined();
     expect(manifest.devDependencies["ts-mocha"]).toBeDefined();
+  });
+
+  it("gives the client the Node types for process and console", async () => {
+    const files = await exported(LIB, CLIENT);
+
+    const tsconfig = JSON.parse(files.get("tsconfig.json") ?? "{}");
+    expect(tsconfig.compilerOptions.types).toContain("node");
   });
 });

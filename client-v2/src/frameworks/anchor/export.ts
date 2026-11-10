@@ -226,7 +226,7 @@ ${await getJSDependencies(frameworkFiles)}
       "tsconfig.json",
       `{
   "compilerOptions": {
-    "types": ["mocha", "chai"],
+    "types": ["mocha", "chai", "node"],
     "typeRoots": ["./node_modules/@types"],
     "lib": ["es2015"],
     "module": "commonjs",
