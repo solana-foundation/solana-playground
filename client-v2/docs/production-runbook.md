@@ -203,8 +203,9 @@ Optional. Without them the app uses the public Solana endpoints.
 1. Create the project in `<TEAM_SLUG>` from `solana-foundation/solana-playground`
    ([deploy-client-vercel.md, "One-time setup"](deploy-client-vercel.md#one-time-setup) steps 1 to 3): Framework
    Preset **Other**, Root Directory **`client-v2`**, Production Branch **`master`**, Build Machine **Enhanced**.
-   Leave the build and install commands empty: `client-v2/vercel.json` sets them. If the import starts a first
-   build, let it fail or cancel it: the project has no variables yet.
+   Leave the build and install commands empty: `client-v2/vercel.json` sets them. The import starts a first build;
+   let it run, since its log answers the Remote Cache check below. It then fails or times out, which is expected:
+   the project has no variables yet.
 2. Settings → Functions: Function Region nearest `<REGION>` (each database query crosses that distance), and Fluid
    compute on.
 3. Settings → Security → Secure backend access with OIDC Federation: enabled, issuer mode **Team**
@@ -238,9 +239,17 @@ Optional. Without them the app uses the public Solana endpoints.
    `Vercel CLI user: <you>`. The CLI version is the one pinned as `VERCEL_CLI` in `client-v2/Makefile.vercel`; use
    that version wherever this page says `npx vercel@62.7.0`.
 
-**Check:** Doppler's Integrations page lists the Vercel sync for Production, and
-`npx vercel@62.7.0 env ls production` runs and lists only what `<DOPPLER_CONFIG>` already holds (nothing, if it is
-new).
+**Check:**
+
+1. Doppler's Integrations page lists the Vercel sync for Production, and `npx vercel@62.7.0 env ls production`
+   runs and lists only what `<DOPPLER_CONFIG>` already holds (nothing, if it is new).
+2. **Remote Cache.** The import build's log (Deployments → the build → Building) prints, within its first minutes,
+   `>>> Remote Cache: VERCEL_ARTIFACTS_TOKEN set` and `>>> Remote Cache: VERCEL_ARTIFACTS_OWNER set`. These are the
+   credentials Vercel gives a build for its Remote Cache. A build on Vercel compiles the wasm packages (Rust to
+   WebAssembly, about an hour), which does not fit in Vercel's build time limit; with the credentials it stores the
+   compiled packages there and later builds reuse them, so a push to `master` can deploy (step 8). If either line
+   says `unset`, builds on Vercel never finish: tell Alexander, and deploy with the local build of step 7 until it
+   is fixed.
 
 ## Step 2: Google Cloud and Cloud SQL
 
@@ -384,8 +393,12 @@ make deploy-client-to-vercel-production
 ```
 
 It pulls Production's variables, prints the commit, asks for a typed `yes`, builds (about an hour the first time)
-and deploys to the production domain. A build on Vercel itself would not finish in its time limit the first time
-([Deploying production](#deploying-production)).
+and deploys to the production domain.
+
+**Why a local build:** the first build has to compile the wasm packages, and on Vercel that takes longer than its
+build time limit allows, so it would fail. A local build has no limit. Once Remote Cache holds the compiled
+packages (step 1, check 2), builds on Vercel reuse them and finish, and from step 8 a push to `master` deploys
+production without this command ([Deploying production](#deploying-production)).
 
 **Check:**
 
