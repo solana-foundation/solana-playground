@@ -137,11 +137,37 @@ const openWalletPanel = async (page: Page, address: string) => {
     .click();
 };
 
+/** Get set up's warning for a wallet the key page did not answer for */
+const walletRetry = (page: Page) =>
+  page.getByRole("button", { name: "Wallet unavailable, try again" });
+
+/**
+ * `seedWorkspace`, then wait for the seeded keys to leave the page.
+ *
+ * The key page has `HANDSHAKE_TIMEOUT_MS` (10 s) to answer. On the CI runner
+ * the app's first load can take longer than that (Home showed after 16 s in
+ * run 42770163476), and the key page's request waits behind it, so the wallet
+ * reads as unavailable. Get set up's Try again, the path a user takes, reads
+ * it again; a key page that never answers still fails the spec.
+ */
+const seedWorkspaceWithKeysMoved = async (page: Page) => {
+  await seedWorkspace(page);
+  const isMoved = async () =>
+    (await storedWallet(page))?.accounts.every(
+      ({ kp, publicKey }) => kp === undefined && publicKey !== undefined
+    ) === true;
+  await expect
+    .poll(async () => (await isMoved()) || walletRetry(page).isVisible(), LONG)
+    .toBe(true);
+  if (!(await isMoved())) await walletRetry(page).click();
+  await expect.poll(isMoved, LONG).toBe(true);
+};
+
 test("wallet-storage: Three accounts move", async ({ page }) => {
   const { addresses, names, wallet } = threeAccounts();
   await seedLocalWallet(page)(wallet);
 
-  await seedWorkspace(page);
+  await seedWorkspaceWithKeysMoved(page);
 
   // The page's record keeps the names and public keys, and no key bytes
   await expect
@@ -219,11 +245,8 @@ test("wallet-signing: Project code signs through the page and the key page", asy
     currentIndex: 0,
   });
 
-  await seedWorkspace(page);
   // Signed only once the key has left the page
-  await expect
-    .poll(async () => (await storedWallet(page))?.accounts[0]?.kp, LONG)
-    .toBeUndefined();
+  await seedWorkspaceWithKeysMoved(page);
   await expect
     .poll(async () => (await storedWallet(page))?.accounts[0]?.publicKey, LONG)
     .toBe(address);
@@ -286,7 +309,7 @@ const oneMovedAccount = async (page: Page) => {
     accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
     currentIndex: 0,
   });
-  await seedWorkspace(page);
+  await seedWorkspaceWithKeysMoved(page);
   await expect
     .poll(async () => (await storedWallet(page))?.accounts[0]?.publicKey, LONG)
     .toBe(address);
