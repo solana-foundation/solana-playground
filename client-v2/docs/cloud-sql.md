@@ -163,7 +163,8 @@ gcloud sql instances create solpg \
 ```
 
 When it exists, list its flags first: `--database-flags` replaces the whole set, so every flag already set goes into
-the command with the new one. Changing flags may restart the instance.
+the command with the new one. Changing flags may restart the instance. The `patch` also clears every authorised
+network, which would otherwise open Postgres's port to that network.
 
 The operator who runs this step gets the `cloudsqlsuperuser` role, so the setup needs no password for the built-in
 `postgres` user. An operator added later needs only membership of the production user's role ([Adding an
@@ -173,7 +174,7 @@ operator](#adding-an-operator)).
 gcloud sql instances describe solpg --format='value(settings.databaseFlags)'
 # Append every flag the line above printed: --database-flags=cloudsql.iam_authentication=on,<name>=<value>,...
 gcloud sql instances patch solpg --database-flags=cloudsql.iam_authentication=on \
-  --connector-enforcement=REQUIRED --ssl-mode=ENCRYPTED_ONLY
+  --connector-enforcement=REQUIRED --ssl-mode=ENCRYPTED_ONLY --clear-authorized-networks
 grant "serviceAccount:$PRODUCTION_SA" solpg
 grant "user:$OPERATOR" solpg
 gcloud sql users create "$PRODUCTION_DB_USER" --instance=solpg --type=cloud_iam_service_account
@@ -200,6 +201,19 @@ On PostgreSQL 16 and later, `GRANT` of a role needs the `ADMIN` option on the ta
 `permission denied`, run it as the built-in `postgres` user instead: set a password with
 `gcloud sql users set-password postgres --instance=solpg --prompt-for-password`, use it for that statement only,
 then set it again to a random value nobody records.
+
+**Starting `solpg` again.** Only before production serves anyone, when its schema came out wrong: connected to
+`postgres` as above, drop it and run the `CREATE DATABASE` and `REVOKE` above again. The role `GRANT` stays and is not
+repeated. `WITH (FORCE)` closes the sessions still open on `solpg`; the operator may close them as a member of the
+production user's role.
+
+```sql
+DROP DATABASE solpg WITH (FORCE);
+CREATE DATABASE solpg OWNER "vercel-production@<project id>.iam";
+REVOKE CONNECT ON DATABASE solpg FROM PUBLIC;
+```
+
+Then migrate it again (step 7) and run gate 2 of [Checks](#checks).
 
 Stop the proxy (`kill %1`). `github-ci` and `vercel-preview` get nothing here.
 
@@ -450,11 +464,11 @@ The instance settings of step 5:
 
 ```sh
 gcloud sql instances describe solpg \
-  --format='yaml(settings.databaseFlags,settings.connectorEnforcement,settings.ipConfiguration.sslMode)'
+  --format='yaml(settings.databaseFlags,settings.connectorEnforcement,settings.ipConfiguration.sslMode,settings.ipConfiguration.authorizedNetworks)'
 ```
 
 It shows `cloudsql.iam_authentication` with value `on`, `connectorEnforcement: REQUIRED`, and
-`sslMode: ENCRYPTED_ONLY`.
+`sslMode: ENCRYPTED_ONLY`, and no `authorizedNetworks` entry: an empty list prints nothing.
 
 The port is closed: `psql "host=<instance public ip> port=5432 user=postgres sslmode=require"` is refused, since
 connector enforcement admits only the connector front end. The address is

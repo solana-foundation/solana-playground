@@ -31,6 +31,7 @@ or Vercel, and none is a secret. Have each ready before step 1; the table says w
 | `<OPERATOR>` | The Google account of each person who runs migrations, lower case | Your team |
 | `<GITHUB_OWNER>` | The GitHub organization that will own the production OAuth app | Your team |
 | `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` on the build server (App Engine) | Your team |
+| `<BUILD_SERVER_URL>` | The build server's `https://` origin, the one whose `PG_CLIENT_URLS` lists production | `<BUILD_SERVER_CONTACT>` |
 | `<NOUS_ACCOUNT>` | The Nous Research account whose credits the assistant spends | Your team |
 | `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team |
 
@@ -174,17 +175,17 @@ Optional. Without them the app uses the public Solana endpoints.
 | --- | --- | --- | --- |
 | `REACT_APP_DEVNET_RPC_URL`, `REACT_APP_TESTNET_RPC_URL`, `REACT_APP_MAINNET_RPC_URL` | The RPC provider's URLs (Triton), **only if the provider restricts the keys in them to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`**: every visitor can read them. Without that restriction leave them unset | Unmasked (public by design) | Step 6 |
 | `REACT_APP_DEVNET_READ_BUFFER_RPC_URL`, `REACT_APP_TESTNET_READ_BUFFER_RPC_URL`, `REACT_APP_MAINNET_READ_BUFFER_RPC_URL` | The RPC a program deploy reads its buffer account through, because a provider's RPC can answer `null` for a buffer just written. **Set them whenever the RPC URLs above are set**: `https://api.devnet.solana.com`, `https://api.testnet.solana.com`, `https://api.mainnet-beta.solana.com`. Unset, deploys read through the selected endpoint | Unmasked | Step 6 |
-| `REACT_APP_DEVNET_SEND_TX_PER_SECOND`, `REACT_APP_TESTNET_SEND_TX_PER_SECOND`, `REACT_APP_MAINNET_SEND_TX_PER_SECOND` | The most buffer writes per second a deploy sends, just below the RPC plan's `sendTransaction` limit. Unset, 4 a second | Unmasked | Step 6, if the provider's limit is known |
+| `REACT_APP_DEVNET_SEND_TX_PER_SECOND`, `REACT_APP_TESTNET_SEND_TX_PER_SECOND`, `REACT_APP_MAINNET_SEND_TX_PER_SECOND` | Optional. The most buffer writes per second a deploy sends, just below the RPC plan's `sendTransaction` limit. Unset, 4 a second | Unmasked | |
 
 ### Build and platform
 
-| Variable | Value |
-| --- | --- |
-| `REACT_APP_SERVER_URL` | Leave unset: the Foundation's build server |
-| `REACT_APP_SERVER_UNSTABLE` | Never `true`: a Vercel build with it fails |
-| `REACT_APP_VERCEL_ENV`, `REACT_APP_VERCEL_GIT_COMMIT_SHA` | Never: `scripts/vercel-build.sh` sets both |
-| `USE_WASM_STUBS` | Never: a deployment with it fails its install (`scripts/vercel-install.sh`) |
-| `VERCEL_ENV` and Vercel's other system variables | Never as a project variable: Vercel sets them, see step 1 |
+| Variable | Value | In Doppler | Set in |
+| --- | --- | --- | --- |
+| `REACT_APP_SERVER_URL` | `<BUILD_SERVER_URL>`, no trailing slash. **Required**: the build server every profile starts on | Unmasked | Step 6 |
+| `REACT_APP_SERVER_UNSTABLE` | Never `true`: a Vercel build with it fails | | |
+| `REACT_APP_VERCEL_ENV`, `REACT_APP_VERCEL_GIT_COMMIT_SHA` | Never: `scripts/vercel-build.sh` sets both | | |
+| `USE_WASM_STUBS` | Never: a deployment with it fails its install (`scripts/vercel-install.sh`) | | |
+| `VERCEL_ENV` and Vercel's other system variables | Never as a project variable: Vercel sets them, see step 1 | | |
 
 ### Outside Vercel
 
@@ -265,7 +266,7 @@ helpers that step 5 uses). Step 3 was done in step 1. Step 5 creates `solpg` if 
 **Check**, with the commands in [cloud-sql.md, "Checks"](cloud-sql.md#checks):
 
 1. `gcloud sql instances describe solpg ...` shows `cloudsql.iam_authentication` `on`, `connectorEnforcement:
-   REQUIRED`, `sslMode: ENCRYPTED_ONLY`.
+   REQUIRED`, `sslMode: ENCRYPTED_ONLY`, and no `authorizedNetworks`.
 2. `\l solpg` through the proxy shows `CONNECT` for `vercel-production@<PROJECT_ID>.iam` and none for `PUBLIC`;
    `\drg` (psql 16 and later; `\du` before) shows no member of that role other than the operators.
 3. `psql` straight to the instance's public IP on port 5432 never reaches a password prompt.
@@ -305,8 +306,9 @@ migration will be.
 item 1 missed. `no DATABASE_URL_UNPOOLED in the Production environment` means the pull did not see `DB_PROVIDER`:
 check the Doppler sync and `npx vercel@62.7.0 env ls production`. A variable that is there but pulled empty was
 synced as a Secret: make it Unmasked in Doppler. A migration that fails midway can be run again: dbmate records
-each one it finished in `schema_migrations`. If the schema is wrong, drop and recreate the empty database as in
-cloud-sql.md step 5 and run item 2 again; nothing depends on it yet.
+each one it finished in `schema_migrations`. If the schema is wrong, start `solpg` again as
+[cloud-sql.md, step 5](cloud-sql.md#5-google-cloud-the-production-instance) says under "Starting `solpg` again" (drop,
+create, `REVOKE`), run item 2 again, then check 2 of step 2; nothing depends on it yet.
 
 ## Step 4: Firewall
 
@@ -375,7 +377,7 @@ Then ask `<BUILD_SERVER_CONTACT>` to add `https://<VERCEL_APP_DOMAIN>` to `PG_CL
 
 **Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
 `AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
-`REACT_APP_SENTRY_DSN` and `SENTRY_AUTH_TOKEN`, plus any optional ones you set,
+`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` and `REACT_APP_SERVER_URL`, plus any optional ones you set,
 with no `AGENT_*`, `DATABASE_URL` or `AUTH_OAUTH_PROXY_*` name. Only the Masked ones carry the Secret badge in the
 dashboard.
 
