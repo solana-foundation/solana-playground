@@ -234,8 +234,8 @@ export class PgStageDeploy {
       PgStageDeploy._set({ phase: "done", backupFor });
       try {
         // The network the run deployed to, which the user may have changed
-        // since it started. A run that could not name it sends no event:
-        // the network selected may not be the one it ran on.
+        // since it started. A run on a network of its own (`cluster` null)
+        // sends no event: the network selected may not be the one it ran on.
         if (result.cluster) {
           deployTelemetry.track("deploy_succeeded", {
             cluster: result.cluster,

@@ -56,6 +56,14 @@ export const IDL_NETWORK_UNREAD =
   "Could not read which network the endpoint serves, so nothing was sent. Check the RPC in Settings › Network and try again.";
 
 /**
+ * The `anchor idl` writes' refusal when the endpoint changed between the
+ * network read and the CLI's start: the network read is not the one it
+ * would send to
+ */
+export const IDL_NETWORK_CHANGED =
+  "The network changed while the command started, so nothing was sent. Run it again.";
+
+/**
  * How a mainnet send is refused. `blocked` makes an error rather than holding
  * a line: the deploy's is an identifiable subclass, which the Deploy stage
  * tells apart from a failed deploy.

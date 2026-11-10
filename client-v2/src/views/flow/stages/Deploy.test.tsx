@@ -9,6 +9,7 @@ import {
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NETWORKS } from "@/constants";
 import {
   initTelemetry,
   memoryProvider,
@@ -29,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   setStage: vi.fn(),
   requestConsole: vi.fn(),
+  pickNetwork: vi.fn(),
   noop: () => ({ dispose: () => undefined }),
   wallet: {
     // eslint-disable-next-line unicorn/no-null -- `PgWallet.current` is `null` while no wallet is current
@@ -135,6 +137,9 @@ vi.mock("../state/deploy-history", () => ({
   PgDeployHistory: { list: () => mocks.history, onDidChange: mocks.noop },
 }));
 vi.mock("@/widgets/status", () => ({ useNetworkHold: () => mocks.hold }));
+// The real pick refuses while a deploy or an `anchor idl` write holds the
+// network (pick-network.test.ts); the stage only hands it the URL
+vi.mock("@/widgets/settings-page", () => ({ pickNetwork: mocks.pickNetwork }));
 vi.mock("./IdlActions", () => ({
   default: () => null,
   useIdlName: () => undefined,
@@ -313,6 +318,28 @@ describe("Deploy stage", () => {
     expect(
       screen.getByRole("button", { name: "Redeploy to devnet" })
     ).toBeTruthy();
+  });
+
+  // A switch from the stage goes through Settings' pick, which refuses while
+  // a deploy or an `anchor idl` write holds the network
+  it("asks Settings' pick for the network a deployment was made on", () => {
+    mocks.history = [
+      {
+        id: "a",
+        workspace: "counter",
+        cluster: "testnet",
+        programId: "Prog111",
+        // eslint-disable-next-line unicorn/no-null -- `DeployRecord.signature` is `null` when no signature was kept
+        signature: null,
+        at: 1,
+      },
+    ];
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Show / }));
+    expect(mocks.pickNetwork).toHaveBeenCalledWith(
+      NETWORKS.find((n) => n.cluster === "testnet")?.value
+    );
   });
 
   /** The Program id block's custom id is where the deploy goes */

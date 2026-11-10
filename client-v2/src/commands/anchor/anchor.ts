@@ -7,7 +7,7 @@ import {
 import { checkPgWallet } from "../checks";
 import { createCmd } from "../create";
 import { refuseMainnetWith } from "../deploy/check-not-mainnet";
-import { IDL_REFUSAL } from "../deploy/mainnet-block";
+import { IDL_NETWORK_CHANGED, IDL_REFUSAL } from "../deploy/mainnet-block";
 
 const refuseIdlWriteOnMainnet = refuseMainnetWith(IDL_REFUSAL);
 
@@ -43,8 +43,10 @@ export const anchor = createCmd({
 
     // Mainnet IDL writes are refused in the beta (HOO-2737). The network is
     // read from the endpoint the WASM CLI sends to, not the cached cluster,
-    // and Settings holds it until the command ends: the CLI reads it again
-    // for every transaction (`idl init` writes after its create confirms).
+    // and it is held until the command ends: the CLI reads it again at each
+    // step (`idl init` makes a new client for its write once the create
+    // confirms, `idl upgrade` for its set-buffer). Every switch the user asks
+    // for goes through Settings' `pickNetwork`, which refuses meanwhile.
     // A boolean is enough: the terminal is disabled while a command runs
     // (`PgTerm.process`), so no second write starts meanwhile.
     PgGlobal.isIdlWriting = true;
@@ -55,10 +57,10 @@ export const anchor = createCmd({
       const { runAnchor } = await PgPackage.import("anchor-cli", {
         log: true,
       });
-      // Settings is held, but not every network switch goes through it: an
-      // endpoint changed while the CLI loaded was never checked
+      // The hold covers user switches only: an endpoint changed while the CLI
+      // loaded, by anything else, was never checked
       if (PgSettings.connection.endpoint !== endpoint) {
-        throw new TerminalLineError(IDL_REFUSAL.unread);
+        throw new TerminalLineError(IDL_NETWORK_CHANGED);
       }
 
       await runAnchor(input.raw);

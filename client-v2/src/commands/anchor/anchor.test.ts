@@ -10,6 +10,7 @@ import {
   TerminalLineError,
 } from "../../utils";
 import {
+  IDL_NETWORK_CHANGED,
   IDL_NETWORK_UNREAD,
   MAINNET_IDL_BLOCKED,
 } from "../deploy/mainnet-block";
@@ -135,7 +136,7 @@ describe("anchor", () => {
       return { runAnchor } as never;
     });
 
-    await expect(run("anchor idl init")).rejects.toThrow(IDL_NETWORK_UNREAD);
+    await expect(run("anchor idl init")).rejects.toThrow(IDL_NETWORK_CHANGED);
     expect(runAnchor).not.toHaveBeenCalled();
   });
 

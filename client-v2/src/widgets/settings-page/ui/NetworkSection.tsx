@@ -8,7 +8,7 @@ import { Button } from "@/shared/ui/button";
 import { PgGlobal, PgSettings, PgView } from "@/utils";
 import type { ToastChildProps } from "@/utils/view";
 
-import { canSwitchNetwork, networkHeldBy } from "../model/network-hold";
+import { canSwitchNetwork } from "../model/network-hold";
 import { answerFor, saveCheckedWith } from "../model/save-custom-rpc";
 import { settingsTelemetry } from "../model/telemetry";
 import BaseCustomRpcs from "./BaseCustomRpcs";
@@ -16,6 +16,7 @@ import BaseNetworkChoice, {
   checkedChipKey,
   chipKey,
 } from "./BaseNetworkChoice";
+import { pickNetwork as pick, toastNetworkHeld } from "./pick-network";
 
 /**
  * Whether the network is held on the RPC saved under `url`: it is the one in
@@ -26,35 +27,6 @@ const isHeld = (url: string) =>
 
 /** Save a custom RPC once its URL answers one health request (spec `client-v2-custom-rpcs`) */
 const saveChecked = saveCheckedWith(fetchRpcHealth)(isHeld);
-
-/** Say what holds the network where it is: a deploy or an IDL write */
-const toastNetworkHeld = () => {
-  if (networkHeldBy(PgGlobal) === "idl") {
-    PgView.setToast(
-      () => (
-        <span>
-          An anchor idl command is running. Change the network when it ends.
-        </span>
-      ),
-      { options: { name: "network-held-by-idl" } }
-    );
-    return;
-  }
-  PgView.setToast(
-    () => <span>A deploy is running. Change the network when it ends.</span>,
-    { options: { name: "network-held-by-deploy" } }
-  );
-};
-
-/** Move the network to `url`; false, with a toast, while a deploy or an IDL write holds it */
-const pick = (url: string): boolean => {
-  if (!canSwitchNetwork(PgGlobal)) {
-    toastNetworkHeld();
-    return false;
-  }
-  PgSettings.connection.endpoint = url;
-  return true;
-};
 
 /**
  * List the connection's endpoint when it is a custom one, and move the

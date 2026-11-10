@@ -127,7 +127,7 @@ if (import.meta.vitest) {
       );
     });
 
-    // The deploy's mainnet guard (HOO-2728) rests on these three answers
+    // The mainnet refusal of deploys and `anchor idl` writes (`refuseMainnetWith`) rests on these three answers
     describe("fetchClusterByGenesisHash", () => {
       const answering = (answer: () => Promise<string>) =>
         vi
