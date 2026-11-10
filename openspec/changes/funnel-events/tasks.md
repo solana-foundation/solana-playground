@@ -9,7 +9,7 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
 
 ## 1. The funnel check
 
-- [ ] 1.1 Extend `src/app/slice-structure.test.ts` with the funnel check of
+- [x] 1.1 Extend `src/app/slice-structure.test.ts` with the funnel check of
       [design.md](design.md): collect every name declared through
       `createTracker<...>()` under `features/`, `widgets/` and `entities/`,
       read the Events column of the table in
