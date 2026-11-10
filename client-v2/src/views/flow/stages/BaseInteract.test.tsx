@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import { requireFor } from "../../../test-utils/require-for";
-import { PROGRAM_ID } from "./addresses.fixture";
+import { PROGRAM_ID } from "../__fixtures__/addresses";
 import type { BaseInteractProps, DeploymentOption } from "./BaseInteract";
 import BaseInteract from "./BaseInteract";
 import { shortenId } from "./interact-callouts";

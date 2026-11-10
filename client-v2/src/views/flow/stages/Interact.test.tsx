@@ -33,7 +33,7 @@ vi.mock("../../../components/Wallet/hooks/useAirdrop", () => ({
   useAirdrop: () => ({ airdrop: vi.fn(), faucet: "available" }),
 }));
 vi.mock("../../../utils", async () => {
-  const { PROGRAM_ID } = await import("./addresses.fixture");
+  const { PROGRAM_ID } = await import("../__fixtures__/addresses");
   return {
     PgConnection: {
       get cluster() {

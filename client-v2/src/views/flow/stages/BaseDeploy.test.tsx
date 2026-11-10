@@ -14,8 +14,8 @@ import { shortKey } from "@/features/deploy";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
 
+import { PROGRAM_ID, WALLET } from "../__fixtures__/addresses";
 import type { DeployRecord } from "../state/deploy-history";
-import { PROGRAM_ID, WALLET } from "./addresses.fixture";
 import type { BaseDeployProps, DeployDetails } from "./BaseDeploy";
 import BaseDeploy from "./BaseDeploy";
 import type { DeployView } from "./deploy-view";

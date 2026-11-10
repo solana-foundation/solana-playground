@@ -23,10 +23,10 @@ if (import.meta.vitest) {
   const { beforeAll, describe, it, expect } = import.meta.vitest;
 
   describe("views/flow/stages/interact-callouts", () => {
-    let PROGRAM_ID: typeof import("./addresses.fixture").PROGRAM_ID;
+    let PROGRAM_ID: typeof import("../__fixtures__/addresses").PROGRAM_ID;
 
     beforeAll(async () => {
-      ({ PROGRAM_ID } = await import("./addresses.fixture"));
+      ({ PROGRAM_ID } = await import("../__fixtures__/addresses"));
     });
 
     it("builtAfterDeploy compares a known build with a known deploy", () => {

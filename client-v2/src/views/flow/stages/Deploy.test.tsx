@@ -126,7 +126,7 @@ import {
   DeployFundingError,
   PgDeployRun,
 } from "../../../commands/deploy/run";
-import { WALLET } from "./addresses.fixture";
+import { WALLET } from "../__fixtures__/addresses";
 import Deploy from "./Deploy";
 
 const pgWallet = () => ({ isPg: true, publicKey: { toBase58: () => WALLET } });
