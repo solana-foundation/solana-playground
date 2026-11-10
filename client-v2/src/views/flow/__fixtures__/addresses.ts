@@ -34,6 +34,9 @@ export const PROGRAM_ID = vanityAddress("Program", "Counter");
 /** The wallet that pays for the deploy */
 export const WALLET = vanityAddress("Wa11et", "Payer");
 
+/** A second wallet, for a test that needs one no earlier test has answered the backup question for */
+export const FRESH_WALLET = vanityAddress("Fresh", "Wa11et");
+
 /** The {@link PROGRAM_ID} PDA for `seed`, as `PublicKey.findProgramAddressSync` derives it */
 export const seededAddress = async (seed: string): Promise<Address> => {
   const [address] = await getProgramDerivedAddress({

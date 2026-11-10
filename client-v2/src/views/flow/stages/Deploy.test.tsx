@@ -126,7 +126,7 @@ import {
   DeployFundingError,
   PgDeployRun,
 } from "../../../commands/deploy/run";
-import { WALLET } from "../__fixtures__/addresses";
+import { FRESH_WALLET, WALLET } from "../__fixtures__/addresses";
 import Deploy from "./Deploy";
 
 const pgWallet = () => ({ isPg: true, publicKey: { toBase58: () => WALLET } });
@@ -515,7 +515,7 @@ describe("Deploy stage", () => {
     mocks.wallet.current = {
       isPg: true,
       publicKey: {
-        toBase58: () => "SaveWa11et111111111111111111111111111111111",
+        toBase58: () => FRESH_WALLET,
       },
     };
     mocks.execute.mockResolvedValue({
