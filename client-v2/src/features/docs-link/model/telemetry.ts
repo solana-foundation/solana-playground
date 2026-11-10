@@ -37,4 +37,15 @@ type DocsLinkEvents = {
   docs_link_run_funding_shown: { wallet: WalletOrigin };
 };
 
-export const docsLinkTelemetry = createTracker<DocsLinkEvents>();
+/**
+ * Free text, opted in: no type lists the values, so the owner decides
+ * whether to keep it (HOO-2752)
+ */
+type DocsLinkFreeText = {
+  host: "the host of the page a docs link came from, which can be any site";
+};
+
+export const docsLinkTelemetry = createTracker<
+  DocsLinkEvents,
+  DocsLinkFreeText
+>();

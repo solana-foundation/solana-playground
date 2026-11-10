@@ -19,6 +19,7 @@ import {
 } from "../../utils";
 import { StoppedError, throwIfStopped } from "../../utils/stopped";
 import { isAirdropSignInGated } from "../airdrop/sign-in-gate";
+import { withAirdropVia } from "../airdrop/via";
 import { checkWallet } from "../checks";
 import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
@@ -368,7 +369,10 @@ const processDeploy = async (
     throwIfNetworkChanged(connection);
     PgDeployRun.update({ funds: true, step: "funding" });
     try {
-      await PgCommand.airdrop.execute(amount.toString());
+      await withAirdropVia(
+        () => PgCommand.airdrop.execute(amount.toString()),
+        "deploy"
+      );
     } catch (e) {
       if (!answers) throw e;
       // The stage shows the faucet's answer on its card; the error and its

@@ -249,7 +249,7 @@ describe("ConflictResolver telemetry", () => {
 
     expect(sent.events.at(-1)).toEqual({
       name: "sync_whole_file_answered",
-      params: { answer, from: "view" },
+      params: { decision: answer, from: "view" },
     });
     expect(PgProjectSync.resolve).toHaveBeenCalledWith("p1", answer);
   });

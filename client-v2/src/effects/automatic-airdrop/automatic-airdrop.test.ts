@@ -26,6 +26,7 @@ vi.mock("../../features/auth", () => ({
   PgSession: { get: vi.fn(() => ({ user: {} })) },
 }));
 
+import { getAirdropVia } from "../../commands/airdrop/via";
 import { PgSession } from "../../features/auth";
 import { PgCommand, PgConnection, PgTerminal } from "../../utils";
 import { automaticAirdrop } from "./automatic-airdrop";
@@ -46,10 +47,16 @@ describe("automaticAirdrop", () => {
     airdrop.mockRejectedValueOnce(unmounted);
     await pass();
 
-    airdrop.mockResolvedValueOnce(undefined);
+    let via = "";
+    airdrop.mockImplementationOnce(async () => {
+      via = getAirdropVia();
+    });
     await pass();
 
     expect(airdrop).toHaveBeenCalledTimes(2);
+    // `fund_airdropped` counts the run as the effect's, and only while it runs
+    expect(via).toBe("automatic");
+    expect(getAirdropVia()).toBe("terminal");
   });
 
   it("stops on a cluster whose airdrop failed", async () => {

@@ -329,7 +329,7 @@ describe("Thread, approvals", () => {
     const card = PgAssistant.items.find((i) => i.kind === "approval");
     expect(card?.kind === "approval" && card.status).toBe("allowed");
     expect(tracked()).toEqual([
-      ["assistant_approval_answered", { kind: "patch", answer: "allow" }],
+      ["assistant_approval_answered", { kind: "patch", decision: "allow" }],
     ]);
   });
 
@@ -348,7 +348,7 @@ describe("Thread, approvals", () => {
     const card = PgAssistant.items.find((i) => i.kind === "approval");
     expect(card?.kind === "approval" && card.status).toBe("denied");
     expect(tracked()).toEqual([
-      ["assistant_approval_answered", { kind: "command", answer: "deny" }],
+      ["assistant_approval_answered", { kind: "command", decision: "deny" }],
     ]);
   });
 });

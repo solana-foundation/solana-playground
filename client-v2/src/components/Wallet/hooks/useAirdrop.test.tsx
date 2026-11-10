@@ -15,6 +15,7 @@ vi.mock("../../../features/auth", () => ({
   PgSession: { get: vi.fn(), signIn: vi.fn() },
 }));
 
+import { getAirdropVia } from "../../../commands/airdrop/via";
 import { PgSession } from "../../../features/auth";
 import { PgCommand, PgConnection } from "../../../utils";
 import { useAirdrop } from "./useAirdrop";
@@ -24,7 +25,7 @@ const faucetOn = (
   cluster: string | null,
   amount: ReturnType<typeof PgConnection.getAirdropAmount>
 ) => {
-  const { result } = renderHook(() => useAirdrop());
+  const { result } = renderHook(() => useAirdrop("wallet"));
   const subscription = vi.mocked(PgConnection.onDidChangeCluster).mock.lastCall;
   if (!subscription) throw new Error("useAirdrop did not watch the cluster");
   const [onChange] = subscription;
@@ -43,7 +44,7 @@ describe("useAirdrop", () => {
   it("rejects with a failed sign-in, and does not airdrop", async () => {
     const failure = new Error("popup blocked");
     vi.mocked(PgSession.signIn).mockRejectedValueOnce(failure);
-    const { result } = renderHook(() => useAirdrop());
+    const { result } = renderHook(() => useAirdrop("wallet"));
 
     await expect(result.current.airdrop()).rejects.toBe(failure);
 
@@ -71,7 +72,7 @@ describe("useAirdrop", () => {
   it("airdrops on localnet without opening the sign-in", async () => {
     Object.assign(PgConnection, { cluster: "localnet" });
     try {
-      const { result } = renderHook(() => useAirdrop());
+      const { result } = renderHook(() => useAirdrop("wallet"));
 
       await result.current.airdrop();
 
@@ -83,10 +84,23 @@ describe("useAirdrop", () => {
   });
 
   it("opens the sign-in before a devnet airdrop when signed out", async () => {
-    const { result } = renderHook(() => useAirdrop());
+    const { result } = renderHook(() => useAirdrop("wallet"));
 
     await result.current.airdrop();
 
     expect(PgSession.signIn).toHaveBeenCalledOnce();
+  });
+
+  it("names its control as the airdrop's caller while the command runs", async () => {
+    let via: string | undefined;
+    vi.mocked(PgCommand.airdrop.execute).mockImplementationOnce(async () => {
+      via = getAirdropVia();
+    });
+    const { result } = renderHook(() => useAirdrop("stage"));
+
+    await result.current.airdrop();
+
+    expect(via).toBe("stage");
+    expect(getAirdropVia()).toBe("terminal");
   });
 });

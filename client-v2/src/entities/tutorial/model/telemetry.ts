@@ -13,6 +13,19 @@ export type QuestionResult =
   | "skipped"
   | "call_panel";
 
+/**
+ * The live actions a composer message can name on its own; `word` in
+ * `tutorial_word_sent`, and the engine's `Word`
+ */
+export type ActionWord =
+  | "start"
+  | "build"
+  | "deploy"
+  | "run"
+  | "call"
+  | "next"
+  | "explain";
+
 /** How the feed moved to a step's divider: a bar segment, its narrow menu, or ⌥↑ / ⌥↓ */
 export type StepJumpVia = "bar" | "menu" | "key";
 
@@ -128,7 +141,7 @@ export type TutorialEvents = {
   tutorial_word_sent: {
     tutorial: string;
     step: number;
-    word: string;
+    word: ActionWord;
     refused: boolean;
   };
   /**
@@ -178,4 +191,19 @@ export type TutorialEvents = {
  * (`widgets/tutorial-conversation`): the spec names their events
  * `tutorial_*`, and the prefix is this slice's.
  */
-export const tutorialTelemetry = createTracker<TutorialEvents>();
+/**
+ * Free text, opted in: no type lists the values, so the owner decides
+ * whether to keep each (HOO-2752). Slugs and beat ids come from each
+ * `tutorial.json`, which the loader reads as data, as `string`.
+ */
+type TutorialFreeText = {
+  tutorial: "a tutorial slug, the folder of a tutorial.json, read at run time";
+  next: "the slug of the tutorial a definition names next, a definition's or an upstream Markdown one's";
+  question: "a question's beat id from its tutorial.json";
+  file: "a workspace path the assistant's apply card wrote";
+};
+
+export const tutorialTelemetry = createTracker<
+  TutorialEvents,
+  TutorialFreeText
+>();

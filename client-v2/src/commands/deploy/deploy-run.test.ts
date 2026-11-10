@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgSession } from "../../features/auth";
 import { PgCommand, PgProgramInfo, PgTerminal } from "../../utils";
+import { getAirdropVia } from "../airdrop/via";
 import { deploy } from "./deploy";
 import type { DeployRunState } from "./run";
 import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
@@ -350,11 +351,18 @@ describe("deploy run", () => {
   it("funds first, without a question, when the stage started it", async () => {
     const steps = recordSteps();
     balance.mockResolvedValueOnce(0);
+    let via = "";
+    vi.mocked(PgCommand.airdrop.execute).mockImplementationOnce(async () => {
+      via = getAirdropVia();
+    });
 
     await PgDeployRun.runWith(answers(true))(handleDeploy);
 
     expect(steps[0]).toBe("funding");
     expect(PgCommand.airdrop.execute).toHaveBeenCalledWith("1");
+    // `fund_airdropped` counts the top-up as the deploy's
+    expect(via).toBe("deploy");
+    expect(getAirdropVia()).toBe("terminal");
     expect(waitForInput).not.toHaveBeenCalled();
   });
 

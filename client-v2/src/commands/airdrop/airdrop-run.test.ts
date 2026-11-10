@@ -1,7 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PgConnection } from "../../utils";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
+
+import { PgConnection, PgTx } from "../../utils";
 import { airdrop } from "./airdrop";
+import { withAirdropVia } from "./via";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const WALLET = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
@@ -47,14 +54,20 @@ const run = () => {
   return airdrop.handle({ args: {} } as never);
 };
 
+let sent: ReturnType<typeof memoryProvider>;
+
 describe("airdrop, once the faucet answers", () => {
   beforeEach(() => {
+    sent = memoryProvider();
+    initTelemetry({ providers: [sent] });
     printed.length = 0;
     connection.getBalance.mockReset();
     connection.requestAirdrop.mockReset();
     connection.requestAirdrop.mockImplementation(async () => `tx${++txCount}`);
     expect(PgConnection.cluster).toBe("devnet");
   });
+
+  afterEach(() => resetTelemetry());
 
   it("says what arrived, not what was asked for", async () => {
     connection.getBalance
@@ -123,6 +136,7 @@ describe("airdrop, once the faucet answers", () => {
 
     // The start line alone: no faucet note follows it
     expect(printed).toEqual(["Airdropping 5 SOL..."]);
+    expect(sent.events).toEqual([]);
   });
 
   it("adds no faucet note to any other failure", async () => {
@@ -133,5 +147,57 @@ describe("airdrop, once the faucet answers", () => {
 
     // The start line alone: no faucet note follows it
     expect(printed).toEqual(["Airdropping 5 SOL..."]);
+  });
+
+  describe("fund_airdropped", () => {
+    it("counts an airdrop that arrived as the terminal's, on the cluster it funded", async () => {
+      connection.getBalance
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(5 * LAMPORTS_PER_SOL);
+
+      await run();
+
+      expect(sent.events).toEqual([
+        {
+          name: "fund_airdropped",
+          params: { via: "terminal", cluster: "devnet" },
+          scope: undefined,
+        },
+      ]);
+    });
+
+    it("names the caller that wrapped the run", async () => {
+      connection.getBalance
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(5 * LAMPORTS_PER_SOL);
+
+      await withAirdropVia(run, "deploy");
+
+      expect(sent.events.map((event) => event.params)).toEqual([
+        { via: "deploy", cluster: "devnet" },
+      ]);
+    });
+
+    it("counts nothing when the airdrop fails", async () => {
+      connection.getBalance.mockResolvedValue(0);
+      connection.requestAirdrop.mockRejectedValueOnce(
+        new Error("429 Too Many Requests: rate limited")
+      );
+
+      await expect(run()).rejects.toThrow("429");
+
+      expect(sent.events).toEqual([]);
+    });
+
+    it("counts nothing when the airdrop transaction fails", async () => {
+      connection.getBalance.mockResolvedValue(0);
+      vi.mocked(PgTx.confirm).mockResolvedValueOnce({
+        err: "InstructionError",
+      } as never);
+
+      await expect(run()).rejects.toThrow("Airdrop transaction failed");
+
+      expect(sent.events).toEqual([]);
+    });
   });
 });

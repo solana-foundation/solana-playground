@@ -233,7 +233,11 @@ const LiveSettingsPage = ({
       current={current}
       onPick={(id) => {
         setCurrent(id);
-        settingsTelemetry.track("settings_section_picked", { section: id });
+        // The list offers only these sections; the lookup narrows its `string`
+        const section = SECTION_ORDER.find((known) => known === id);
+        if (section) {
+          settingsTelemetry.track("settings_section_picked", { section });
+        }
       }}
       onCurrentChange={setCurrent}
       onBack={() => onClose("back")}

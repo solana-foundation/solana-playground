@@ -133,7 +133,7 @@ const Interact = () => {
   // The fee payer cannot pay one fee (Spec 12): only with a wallet to pay
   const wallet = useWallet();
   const balance = useBalance();
-  const { airdrop, faucet } = useAirdrop();
+  const { airdrop, faucet } = useAirdrop("stage");
   const short =
     wallet && typeof balance === "number" && solNeeded(balance) && cluster
       ? {

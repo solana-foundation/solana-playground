@@ -1,4 +1,5 @@
 import { checkSignedIn } from "../../features/auth";
+import { fundTelemetry } from "../../features/fund-wallet";
 import {
   PgCommon,
   PgConnection,
@@ -13,6 +14,7 @@ import { createArgs, createCmd } from "../create";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
 import { isRateLimited, rateLimitNote, receivedLine } from "./report";
 import { isAirdropSignInGated } from "./sign-in-gate";
+import { getAirdropVia } from "./via";
 
 /**
  * Command pre-check: a public faucet asks for a sign-in, a local one does not.
@@ -43,6 +45,9 @@ export const airdrop = createCmd({
   ]),
   preChecks: [checkWallet, checkSignedInWhereGated],
   handle: async (input) => {
+    // Read before the first await: another caller's `withAirdropVia` can
+    // name a newer caller while this run waits on the faucet
+    const via = getAirdropVia();
     let cluster = PgConnection.cluster;
     let isStale = PgConnection.clusterIsStale;
     // A read that failed will not finish by waiting; it is tried once more,
@@ -126,6 +131,10 @@ export const airdrop = createCmd({
       PgTerminal.println(
         PgTerminal.success(receivedLine(amount, afterBalance - beforeBalance))
       );
+      // `cluster` is one of the five names even on a custom endpoint, which
+      // `readCluster` resolves from its genesis hash, so it is `FundCluster`
+      // as it is
+      fundTelemetry.track("fund_airdropped", { via, cluster });
     } catch (error) {
       if (isRateLimited(error)) {
         PgTerminal.println(

@@ -80,6 +80,14 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
       counted": declare, describe and emit, with memory-provider tests
       that a stage deploy sends each event once (depends on 4.1)
 
+## 5. Fund
+
+- [x] 5.1 Send `fund_airdropped {via, cluster}` from the `airdrop` command
+      (`commands/airdrop/airdrop.ts`) once the balance rises, with `via` set
+      by each caller through `withAirdropVia` (`commands/airdrop/via.ts`).
+      Satisfies `client-v2-wallet-funding`, "A faucet airdrop is counted"
+      (HOO-2751; depends on 1.1)
+
 ## Workflow follow-up
 
 - Align `wbdi-flow`'s "Deploy telemetry" requirement with the names and

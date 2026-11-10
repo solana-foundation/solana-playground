@@ -679,7 +679,7 @@ test.describe("The thread", () => {
     );
     expect(answered).toHaveLength(1);
     expect(answered[0]).toContain("kind: patch");
-    expect(answered[0]).toContain("answer: allow");
+    expect(answered[0]).toContain("decision: allow");
   });
 });
 

@@ -1,4 +1,5 @@
 import { isAirdropSignInGated } from "../../commands/airdrop/sign-in-gate";
+import { withAirdropVia } from "../../commands/airdrop/via";
 import { PgSession } from "../../features/auth";
 import { faucetUrlFor, isFaucetCluster } from "../../shared/lib/faucet";
 import { createLogger } from "../../shared/lib/logger";
@@ -45,7 +46,7 @@ export const automaticAirdrop = () => {
 
       // Execute the `airdrop` command (handles the default amount)
       try {
-        await PgCommand.airdrop.execute();
+        await withAirdropVia(() => PgCommand.airdrop.execute(), "automatic");
       } catch (e) {
         // Under Home no terminal is mounted to run the command in. That says
         // nothing about the cluster: the next balance change tries again

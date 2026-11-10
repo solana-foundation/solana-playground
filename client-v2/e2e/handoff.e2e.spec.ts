@@ -103,7 +103,7 @@ test.describe("on a phone", () => {
     await menu.getByRole("button", { name: TITLE }).click();
     await expect
       .poll(() => lineOf(lines, "nav_handoff_opened"))
-      .toContain("signedIn: false");
+      .toContain("signed_in: false");
   });
 });
 

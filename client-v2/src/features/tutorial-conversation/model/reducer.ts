@@ -281,7 +281,7 @@ export type Effect =
       params: {
         tutorial: string;
         step: number;
-        word: string;
+        word: Word;
         refused: boolean;
       };
     }

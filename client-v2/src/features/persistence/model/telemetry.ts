@@ -32,10 +32,10 @@ type PersistenceEvents = {
   sync_resolve_cancelled: NoParams;
   /**
    * "Keep this version" or "Take the other version" was pressed, in the
-   * resolve view or on the banner.
+   * resolve view or on the banner; `decision` is which.
    */
   sync_whole_file_answered: {
-    answer: "keep-local" | "take-server";
+    decision: "keep-local" | "take-server";
     from: "view" | "banner";
   };
   /**

@@ -54,6 +54,7 @@ site, and the project's rules send agents to them.
 
 ### Modified Capabilities
 
+- `client-v2-wallet-funding`: "A faucet airdrop is counted" adds `fund_airdropped {via, cluster}` from the `airdrop` command, so the funnel's "Fund the wallet" step counts airdrops as well as transfers (HOO-2751).
 - `client-v2-deploy`: "Deploy events" counts every deploy, whatever started
   it, and its parameters follow the merged design.
 

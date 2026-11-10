@@ -147,7 +147,7 @@ export const Thread = ({
     if (card?.kind !== "approval" || card.status !== "pending") return;
     assistantTelemetry.track("assistant_approval_answered", {
       kind: card.request.type,
-      answer,
+      decision: answer,
     });
     PgAssistant.resolveApproval(id, answer === "allow");
   };

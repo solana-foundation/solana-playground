@@ -1,18 +1,11 @@
 /* eslint-disable max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
-import type { Act, ActBeat } from "@/entities/tutorial";
+import type { Act, ActBeat, ActionWord } from "@/entities/tutorial";
 
 import type { WordAction } from "./reducer";
 import type { Turn } from "./view";
 
 /** The live actions a composer message can name on its own */
-export type Word =
-  | "start"
-  | "build"
-  | "deploy"
-  | "run"
-  | "call"
-  | "next"
-  | "explain";
+export type Word = ActionWord;
 
 /** Each word as typed, to the action it names; "begin" and "go" start too */
 const WORDS: Record<string, Word> = {
