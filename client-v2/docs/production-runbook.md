@@ -10,7 +10,7 @@ This page gives the order, the check after each step, and what to do when a chec
 [Cloud SQL for client-v2](cloud-sql.md) ("cloud-sql.md" below), [Deploy the client to Vercel](deploy-client-vercel.md)
 ("deploy-client-vercel.md") and [Firewall](firewall.md); each step links the section it runs.
 
-Alexander Anikeev (`alexander.anikeev@hoodies.team`, or `<SUPPORT_CHANNEL>`) is the contact on the Hoodies side and
+Alexander Anikeev (`alexander.anikeev@hoodies.team`) is the contact on the Hoodies side and
 helps with setting this up.
 
 ## Values to have ready
@@ -33,8 +33,6 @@ or Vercel, and none is a secret. Have each ready before step 1; the table says w
 | `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` on the build server (App Engine) | Your team |
 | `<NOUS_ACCOUNT>` | The Nous Research account whose credits the assistant spends | Your team |
 | `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team |
-| `<SUPPORT_CHANNEL>` | Where to reach Alexander during and between the live sessions | Agreed with Alexander |
-| `<SESSION_SETUP>`, `<SESSION_RELEASE>` | Date, time and time zone of the live sessions for steps 1 to 7 and for step 9 | Agreed with Alexander; the launch is Wed 11 Nov 2026 |
 
 cloud-sql.md writes some of these in lower case inside SQL and commands: `<project id>` is `<PROJECT_ID>`,
 `<operator e-mail>` is `<OPERATOR>`. Its "Values used below" also asks for `REPO`, which only the preview steps
@@ -198,8 +196,6 @@ Optional. Without them the app uses the public Solana endpoints.
 
 ## Step 1: the Vercel project
 
-Live session `<SESSION_SETUP>`.
-
 **What for:** the project production deploys to, and a checkout linked to it.
 
 **Run:**
@@ -247,7 +243,7 @@ new).
 
 ## Step 2: Google Cloud and Cloud SQL
 
-Live session `<SESSION_SETUP>`. Ticket HOO-1735.
+Ticket HOO-1735.
 
 **What for:** the instance, and the identity production connects as. Vercel's OIDC token is exchanged through
 Workload Identity Federation for the service account `vercel-production`, which logs in to Postgres with IAM;
@@ -269,8 +265,6 @@ helpers that step 5 uses). Step 3 was done in step 1. Step 5 creates `solpg` if 
 `gcloud` is logged in as someone without the Cloud SQL roles step 5 grants.
 
 ## Step 3: the database variables and the schema
-
-Live session `<SESSION_SETUP>`.
 
 **What for:** production's database settings on Vercel, and the schema in `solpg`, applied the way every later
 migration will be.
@@ -306,7 +300,7 @@ cloud-sql.md step 5 and run item 2 again; nothing depends on it yet.
 
 ## Step 4: Firewall
 
-Live session `<SESSION_SETUP>`. Ticket HOO-2412.
+Ticket HOO-2412.
 
 **What for:** a rate limit per client on the routes that spend money or open a database connection, and an emergency
 switch that turns the assistant off without a redeploy.
@@ -322,7 +316,7 @@ cover every domain of the project, so they hold after the release without change
 
 ## Step 5: accounts, keys and secrets
 
-Live session `<SESSION_SETUP>`. Tickets HOO-1745, HOO-1795, HOO-1796, HOO-1801.
+Tickets HOO-1745, HOO-1795, HOO-1796, HOO-1801.
 
 **What for:** every credential production uses, each stored in `<DOPPLER_CONFIG>` under its variable name the
 moment you have it (a Nous key is shown once, at creation), with the visibility the
@@ -362,8 +356,6 @@ first deployment in step 7. Give write access to `<DOPPLER_CONFIG>` only to the 
 
 ## Step 6: the production environment
 
-Live session `<SESSION_SETUP>`.
-
 **What for:** every remaining variable in [Production environment](#production-environment).
 
 **Preconditions:** steps 1 to 5 pass.
@@ -380,8 +372,6 @@ with no `AGENT_*`, `DATABASE_URL` or `AUTH_OAUTH_PROXY_*` name. Only the Masked 
 dashboard.
 
 ## Step 7: the first production deployment
-
-Live session `<SESSION_SETUP>`, with Alexander.
 
 **What for:** production running on `https://<VERCEL_APP_DOMAIN>`, checked end to end before anyone is told about it.
 
@@ -432,8 +422,7 @@ and deploys to the production domain. A build on Vercel itself would not finish 
    `/api/ai/status` (`seq 1 70`) after 60; `/api/auth/sign-in/social` (`seq 1 30`) after 20. Report the last one
    either way: it shows whether the firewall matches the path before `vercel.json` rewrites it. Your IP stays
    limited for up to 60 seconds afterwards.
-8. Sentry receives an event from the browser and one from a function (Alexander says how to trigger them in the
-   session).
+8. Sentry receives an event from the browser and one from a function (ask Alexander how to trigger them).
 9. With RPC URLs set: Settings › Network offers Mainnet, Devnet and Testnet on your provider's URLs, and a program
    deploy to Devnet completes.
 10. `make migrate-production-db` prints `nothing to apply`.
@@ -457,8 +446,6 @@ and deploys to the production domain. A build on Vercel itself would not finish 
 Fix the cause and deploy again; no one uses the domain yet.
 
 ## Step 8: deploys from `master`, and the smoke check
-
-Live session `<SESSION_SETUP>`.
 
 **What for:** a push to `master` deploys production through Vercel's Git integration, and a CI job checks the
 result.
@@ -485,7 +472,7 @@ result.
 
 ## Step 9: release on the custom domain
 
-Live session `<SESSION_RELEASE>`, with Alexander. Ticket HOO-2537.
+Ticket HOO-2537.
 
 **Preconditions:** steps 7 and 8 pass, and Alexander has accepted his checks on `<VERCEL_APP_DOMAIN>`.
 
