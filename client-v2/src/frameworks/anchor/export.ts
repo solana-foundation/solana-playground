@@ -1,10 +1,11 @@
 import { PgCommon, PgExplorer, PgProgramInfo, TupleFiles } from "../../utils";
 import {
   addAfter,
+  addAfterImports,
   addImports,
   getJSDependencies,
   getRustDependencies,
-  IMPORT_STATEMENT_REGEX,
+  wrapTopLevelAwait,
 } from "../common";
 
 /**
@@ -44,6 +45,40 @@ export const convertFromPlayground = async (files: TupleFiles) => {
     else continue;
 
     frameworkFiles.push([path, content]);
+  }
+
+  // `anchor test` runs mocha on `tests/**/*.ts`, and mocha exits with an error
+  // when no file matches, which is the case for a project that has no tests
+  // (a `tests/README.md` alone leaves it with no file too)
+  if (
+    !frameworkFiles.some(
+      ([path]) =>
+        path.startsWith(PgExplorer.PATHS.TESTS_DIRNAME) && path.endsWith(".ts")
+    )
+  ) {
+    frameworkFiles.push([
+      PgCommon.joinPaths(PgExplorer.PATHS.TESTS_DIRNAME, `${packageName}.ts`),
+      convertJS(
+        `import * as anchor from "@coral-xyz/anchor";
+import { expect } from "chai";
+
+describe("${programName}", () => {
+  it("is deployed", async () => {
+    const info = await program.provider.connection.getAccountInfo(
+      program.programId
+    );
+    expect(
+      info,
+      \`program \${program.programId} is not deployed on \${program.provider.connection.rpcEndpoint}; run anchor deploy\`
+    ).to.not.equal(null);
+    expect(info?.executable).to.equal(true);
+  });
+});
+`,
+        programName,
+        { isTest: true }
+      ),
+    ]);
   }
 
   // Add the files that don't exist in Playground
@@ -235,11 +270,14 @@ const convertJS = (
     content = `import * as anchor from "@coral-xyz/anchor";\n` + content;
   }
 
+  // Top-level `await` doesn't compile with the exported `tsconfig.json`
+  // (CommonJS) and Playground runs client code inside an async function anyway
+  if (!opts?.isTest) content = wrapTopLevelAwait(content);
+
   // Add program
   const pascalCaseProgramName = PgCommon.toPascalFromSnake(programName);
-  content = addAfter(
+  content = addAfterImports(
     content,
-    IMPORT_STATEMENT_REGEX,
     `import type { ${pascalCaseProgramName} } from "../target/types/${programName}";`
   );
 
@@ -253,9 +291,8 @@ const convertJS = (
   `,
         { firstOccurance: true }
       )
-    : addAfter(
+    : addAfterImports(
         content,
-        IMPORT_STATEMENT_REGEX,
         `\n// Configure the client to use the local cluster
 anchor.setProvider(anchor.AnchorProvider.env());\n
 const program = anchor.workspace.${pascalCaseProgramName} as anchor.Program<${pascalCaseProgramName}>;

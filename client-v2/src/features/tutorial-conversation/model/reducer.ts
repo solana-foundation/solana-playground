@@ -3837,7 +3837,8 @@ if (import.meta.vitest) {
         expect(flowed.state.progress.cursor).toEqual({
           kind: "step",
           stepId: "greet-by-name",
-          beat: 5,
+          // Past s4.call, the step's sixth beat (s4.client writes the client first)
+          beat: 6,
           fail: false,
         });
         expect(
