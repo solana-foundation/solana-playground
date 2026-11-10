@@ -109,8 +109,11 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
 
   useKeybind(
     "Ctrl+L",
-    () => {
-      if (PgTerminal.isFocused()) term.clear();
+    (ev) => {
+      // Outside the terminal ⌘L is the browser's: the address bar. Decided
+      // from the event, not by the renderer's class, which a remount renames.
+      if (!(ev.target as Element | null)?.closest?.(".xterm")) return false;
+      term.clear();
     },
     [term]
   );

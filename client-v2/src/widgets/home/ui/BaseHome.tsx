@@ -29,7 +29,7 @@ import { Button } from "@/shared/ui/button";
 import type { TutorialData } from "@/utils";
 
 import type { RecentEntry } from "../model/recent";
-import type { PageTile } from "../model/telemetry";
+import type { HomeTile } from "../model/telemetry";
 import HomeComposer from "./HomeComposer";
 
 /** What a tutorial's card shows: the tutorial model's own fields */
@@ -74,11 +74,7 @@ export interface BaseHomeProps {
   tutorials: readonly HomeTutorial[];
   /** `null` while loading */
   programCount: number | null;
-  /** What New project unfolds under the tiles */
-  scratch: ReactNode;
-  onTile: (tile: PageTile) => void;
-  /** Reported; the unfold is this component's own state */
-  onNewProject: () => void;
+  onTile: (tile: HomeTile) => void;
   onTutorial: (name: string) => Promise<void>;
   /** The last tutorial that failed to open, or `undefined` */
   tutorialError: TutorialFailure | undefined;
@@ -242,15 +238,12 @@ const BaseHome = ({
   start,
   tutorials,
   programCount,
-  scratch,
   onTile,
-  onNewProject,
   onTutorial,
   tutorialError,
   onAllTutorials,
   onAsk,
 }: BaseHomeProps) => {
-  const [unfolded, setUnfolded] = useState(false);
   const tutorialCount = tutorials.length;
 
   return (
@@ -285,15 +278,7 @@ const BaseHome = ({
           <ActionCardContent>
             <ActionCardTitle>
               <ActionCardLink asChild>
-                <button
-                  type="button"
-                  aria-expanded={unfolded}
-                  onClick={() => {
-                    setUnfolded(!unfolded);
-                    // Only unfolding is reported, folding again is not
-                    if (!unfolded) onNewProject();
-                  }}
-                >
+                <button type="button" onClick={() => onTile("new-project")}>
                   New project
                 </button>
               </ActionCardLink>
@@ -338,8 +323,6 @@ const BaseHome = ({
           </ActionCardContent>
         </ActionCard>
       </div>
-
-      {unfolded ? scratch : null}
 
       <div className="flex items-center justify-between">
         <p className="text-caption text-muted-foreground">

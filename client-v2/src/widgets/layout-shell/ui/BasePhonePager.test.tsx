@@ -68,6 +68,7 @@ const Harness = (choice: Choice) => {
     stageNode,
     consoleNode,
     consoleOpen: choice.consoleOpen ?? false,
+    onConsoleClose: choice.onConsoleClose ?? vi.fn(),
     home: choice.home,
     cover: choice.cover,
   };
@@ -346,6 +347,36 @@ it("keeps the console on the preview page", () => {
       "console-probe"
     )
   ).toBeTruthy();
+});
+
+it("raises the console's sheet only while the preview is the page", () => {
+  const onConsoleClose = vi.fn();
+  const { rerender } = renderPager({
+    page: "preview",
+    consoleOpen: true,
+    onConsoleClose,
+  });
+  const sheet = () =>
+    requireFor("the console's sheet")(
+      document.querySelector("[data-slot='console-sheet']")
+    );
+  const scrim = () =>
+    document.querySelector("[data-slot='console-sheet-scrim']");
+  expect(sheet().getAttribute("data-state")).toBe("open");
+  expect(scrim()).not.toBeNull();
+
+  // A run or a funding prompt moves to Work with the console still open: the
+  // sheet is fixed, so it would cover Work, and the preview under it is inert
+  rerender(pagerElement({ page: "work", consoleOpen: true, onConsoleClose }));
+  expect(sheet().getAttribute("data-state")).toBe("closed");
+  expect(scrim()).toBeNull();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(onConsoleClose).not.toHaveBeenCalled();
+
+  rerender(
+    pagerElement({ page: "preview", consoleOpen: true, onConsoleClose })
+  );
+  expect(sheet().getAttribute("data-state")).toBe("open");
 });
 
 it("leaves the menu page's head to the navigation, which draws its own close", () => {

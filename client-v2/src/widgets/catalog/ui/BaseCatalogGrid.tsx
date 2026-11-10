@@ -101,11 +101,10 @@ const BaseCatalogGrid = ({
     <div className="grid grid-cols-1 gap-3 min-[720px]:grid-cols-2">
       {list.cards.map((c) => (
         <ActionCard key={c.id}>
-          {/* An icon keeps the image tile; a tutorial's cover is square */}
-          <ActionCardMedia
-            variant="image"
-            className={typeof c.media === "string" ? undefined : "h-14"}
-          >
+          {/* Square: a tutorial's cover and a program's image (a GitHub
+              avatar) are both square, and the kit's shorter image tile
+              cropped the avatar's top and bottom */}
+          <ActionCardMedia variant="image" className="h-14">
             {typeof c.media === "string" ? (
               <img src={c.media} alt="" />
             ) : (

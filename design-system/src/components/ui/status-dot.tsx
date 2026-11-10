@@ -4,8 +4,10 @@ import { cn } from "@/lib/utils"
 
 /* The product's one vocabulary for state: a dot. It renders no words, so
    callers add them where it matters. Running pulses; everything else sits
-   still. */
-const statusDotVariants = cva("inline-block shrink-0 rounded-full", {
+   still. Centred on its line box it sits high, since Stack Sans has a tall
+   ascent over a short descent; 0.035em drops it between the capitals' and
+   the lowercase middles, at any text size. */
+const statusDotVariants = cva("inline-block shrink-0 translate-y-[0.035em] rounded-full", {
   variants: {
     variant: {
       idle: "bg-subtle",

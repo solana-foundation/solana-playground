@@ -88,9 +88,8 @@ function ActionCardTitle({ className, children, ...props }: React.ComponentProps
   )
 }
 
-/* A card's line under its title, at the label weight (380) on every screen,
-   as the phone's quick starts set it: the read weight steps up to 400 from
-   md and made it as heavy as the title next to it */
+/* A card's line under its title, at the label weight (380), as the phone's
+   quick starts set it */
 function ActionCardDescription({ className, ...props }: React.ComponentProps<"p">) {
   return <p data-slot="action-card-description" className={cn("line-clamp-2 text-caption font-label text-muted-foreground", className)} {...props} />
 }

@@ -5,6 +5,7 @@ export {
 } from "../../views/sidebar/assistant/model/labels";
 export {
   probeDefaultBackend,
+  retryDefaultBackend,
   useDefaultBackend,
 } from "./model/default-backend";
 export type { DefaultBackend } from "./model/default-backend";

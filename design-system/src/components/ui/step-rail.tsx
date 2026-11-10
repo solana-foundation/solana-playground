@@ -76,7 +76,7 @@ function StepRailMeta({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="step-rail-meta"
-      className={cn("col-start-2 text-xs leading-4 text-muted-foreground max-md:mt-0.5 max-md:text-caption max-md:font-label", className)}
+      className={cn("col-start-2 text-xs leading-4 font-label text-muted-foreground max-md:mt-0.5 max-md:text-caption", className)}
       {...props}
     />
   )

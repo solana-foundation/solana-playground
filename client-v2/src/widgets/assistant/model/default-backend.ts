@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { AssistantEvents } from "./telemetry";
 import { assistantTelemetry } from "./telemetry";
 
@@ -35,6 +36,9 @@ type Asked = { backend: DefaultBackend; failed: boolean };
 
 let probe: Promise<DefaultBackend> | undefined;
 
+/** How long the deployment gets to say whether it serves a hosted model */
+const PROBE_TIMEOUT_MS = 10_000;
+
 /** The retry under way, which a second Try again joins */
 let retrying: Promise<DefaultBackend> | undefined;
 
@@ -66,6 +70,7 @@ const broadcast = (backend: DefaultBackend) => {
 export const resetDefaultBackendProbe = () => {
   probe = undefined;
   retrying = undefined;
+  PgAssistant.setDefaultProbe("unasked");
 };
 
 const failed = (reason: ProbeFailure, error: unknown): Asked => {
@@ -85,7 +90,10 @@ type StatusBody = { key?: unknown; reason?: unknown; model?: unknown };
 const ask = async (): Promise<Asked> => {
   let res: Response;
   try {
-    res = await fetch(AI_STATUS_URL);
+    // A hung request would keep a Try again busy for as long as the page lives
+    res = await fetch(AI_STATUS_URL, {
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
   } catch (error) {
     return failed("network", error);
   }
@@ -136,24 +144,50 @@ const ask = async (): Promise<Asked> => {
 };
 
 /**
+ * A failure the status may report. Offline says nothing about the deployment,
+ * and nothing asks again on the way back online, so recording one then would
+ * read as a false "Not responding" once the browser is back.
+ */
+const recordProbeFailure = () =>
+  PgAssistant.setDefaultProbe(navigator.onLine ? "unreachable" : "unasked");
+
+/**
  * Ask `GET /api/ai/status` whether this deployment offers its hosted model,
  * and which: once per page, unless the asking fails, when the next caller
  * asks again. Whether this user may spend it is the page's session's to say.
  */
 export const probeDefaultBackend = (): Promise<DefaultBackend> => {
   if (probe) return probe;
+  // The status's AI indicator reads Off while it asks (no "Checking", DES-126),
+  // then Not responding on a failure. Asking again after a failure stays Not
+  // responding until it hears back: the indicator's panel holds the Try again
+  // that asked, and Off has no panel
+  if (PgAssistant.defaultProbe !== "unreachable") {
+    PgAssistant.setDefaultProbe("checking");
+  }
   // Only the latest request speaks to the readers: one a retry replaced
   // answers its own callers, never over the retry's answer
   const current: Promise<DefaultBackend> = ask().then(
     ({ backend, failed: askFailed }) => {
       if (probe !== current) return backend;
-      if (askFailed) probe = undefined;
+      if (askFailed) {
+        probe = undefined;
+        recordProbeFailure();
+      } else {
+        PgAssistant.setDefaultProbe("answered");
+        // Only an answer changes the name: a failed ask says nothing about
+        // which model the deployment serves
+        PgAssistant.setHostedModel(
+          (backend.state === "present" && backend.model) || undefined
+        );
+      }
       broadcast(backend);
       return backend;
     },
     (error: unknown) => {
       if (probe !== current) throw error;
       probe = undefined;
+      recordProbeFailure();
       // A bug past the probe's own failures: without an answer the default
       // is not offered, and every reader says so
       broadcast({ state: "unreachable" });

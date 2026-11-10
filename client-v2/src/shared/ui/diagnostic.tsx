@@ -55,7 +55,7 @@ function DiagnosticCode({ className, ...props }: React.ComponentProps<"code">) {
     <code
       data-slot="diagnostic-code"
       className={cn(
-        "shrink-0 rounded-full bg-error/10 px-2 py-0.5 font-mono text-[0.6875rem] text-error lowercase",
+        "shrink-0 rounded-full bg-error/10 px-2 py-0.5 font-mono text-[0.6875rem] text-error-ink lowercase",
         className
       )}
       {...props}
@@ -121,7 +121,7 @@ function DiagnosticLine({
       </span>
       <code className="min-w-0 whitespace-pre">{children}</code>
       {fault && (
-        <span className="col-start-2 font-sans text-xs text-error">
+        <span className="col-start-2 font-sans text-xs text-error-ink">
           {fault}
         </span>
       )}

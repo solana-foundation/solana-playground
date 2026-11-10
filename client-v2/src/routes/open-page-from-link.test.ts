@@ -25,3 +25,11 @@ it("opens the page and mounts the work under it, keeping the link's path", () =>
   expect(common.handleRoute).toHaveBeenCalledWith();
   expect(route).toBe(common.route);
 });
+
+it("opens New project from `/new` the same way", () => {
+  const route = openPageFromLink("new-project");
+
+  expect(catalog.catalogPage.open).toHaveBeenCalledWith("new-project", "link");
+  expect(common.handleRoute).toHaveBeenCalledWith();
+  expect(route).toBe(common.route);
+});

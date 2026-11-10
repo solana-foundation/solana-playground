@@ -5,6 +5,5 @@ import ExplorerSkeleton from "./Component/ExplorerSkeleton";
 export const explorer = createSidebarPage({
   name: "Explorer",
   icon: explorerIcon,
-  keybind: "Ctrl+Shift+E",
   LoadingComponent: ExplorerSkeleton,
 });

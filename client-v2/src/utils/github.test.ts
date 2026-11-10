@@ -340,7 +340,7 @@ describe("PgGithub.isValidUrl", () => {
     // react-router turns `/https://github.com/…` into `/https:/github.com/…`
     expect(
       PgGithub.isValidUrl(
-        "https:/github.com/solana-developers/program-examples/tree/main/basics"
+        "https:/github.com/solana-foundation/program-examples/tree/main/basics"
       )
     ).toBe(true);
   });
@@ -355,15 +355,49 @@ describe("PgGithub.isValidUrl", () => {
   });
 });
 
+describe("PgGithub.routePath", () => {
+  it("puts GitHub's path after /github/, with or without the URL's scheme", () => {
+    const path =
+      "/github/solana-foundation/program-examples/tree/main/basics/create-account/anchor";
+    expect(
+      PgGithub.routePath(
+        "https://github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor"
+      )
+    ).toBe(path);
+    expect(
+      PgGithub.routePath(
+        "github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor/"
+      )
+    ).toBe(path);
+    // The folded form react-router makes of `https://` in a path
+    expect(PgGithub.routePath("https:/www.github.com/a/b")).toBe("/github/a/b");
+  });
+
+  it("is a URL the GitHub route accepts again", () => {
+    const path = PgGithub.routePath("https://github.com/a/b/tree/main/c");
+    expect(
+      PgGithub.isValidUrl(`github.com/${path.slice("/github/".length)}`)
+    ).toBe(true);
+    expect(
+      PgGithub.parseUrl(`github.com/${path.slice("/github/".length)}`)
+    ).toEqual({
+      owner: "a",
+      repo: "b",
+      ref: "main",
+      path: "c",
+    });
+  });
+});
+
 describe("PgGithub.parseUrl", () => {
   it("reads the URL the router folded as it reads the full one", () => {
     const url =
-      "github.com/solana-developers/program-examples/tree/main/basics";
+      "github.com/solana-foundation/program-examples/tree/main/basics";
     expect(PgGithub.parseUrl(`https:/${url}`)).toEqual(
       PgGithub.parseUrl(`https://${url}`)
     );
     expect(PgGithub.parseUrl(`https:/${url}`)).toEqual({
-      owner: "solana-developers",
+      owner: "solana-foundation",
       repo: "program-examples",
       ref: "main",
       path: "basics",

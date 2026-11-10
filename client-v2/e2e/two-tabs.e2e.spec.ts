@@ -418,7 +418,7 @@ const createdProjectSurvives = async ({
   // A new project in A. B loaded with a list that does not have it, and
   // every re-open in B saves B's list back over the store's.
   await openGallery(a);
-  const gallery = a.locator("[data-gallery-modal]");
+  const gallery = a.locator("[data-new-project]");
   await gallery.getByLabel("Project name").fill("Second");
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden(LONG);

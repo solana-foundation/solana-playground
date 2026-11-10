@@ -358,7 +358,10 @@ reason.
   function with the setting already applied. Each setting is a curried
   argument of its own, not a field of an options object, and a positional
   boolean becomes a function with its own name (`renderCollapsed(node)`, not
-  `render(node, true)`). A function that returns a function is named
+  `render(node, true)`). A function of two parameters, the setting first and
+  the data last, stays uncurried until a caller fixes the setting and reuses
+  the result; then it becomes `<verb>For` or `<verb>With`, as
+  `truncateWith(80)` does. A function that returns a function is named
   `<verb>For` or `<verb>With`, so the full call reads as one phrase:
   `formatFor(locale)(amount)`. No `make` or `create` prefix.
 

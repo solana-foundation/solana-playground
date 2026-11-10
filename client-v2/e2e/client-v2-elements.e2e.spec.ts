@@ -20,7 +20,7 @@ test("client-v2-elements: A skill is switched by its name", async ({
   // The first skill that can be switched off; a bundled skill is locked on
   const first = page
     .locator(
-      '[role="checkbox"][id^="skill-"][aria-checked="true"]:not([disabled])'
+      '[role="checkbox"][id*="skill-"][aria-checked="true"]:not([disabled])'
     )
     .first();
   await expect(first).toBeVisible();

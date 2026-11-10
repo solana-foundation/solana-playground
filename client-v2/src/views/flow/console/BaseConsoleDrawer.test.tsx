@@ -3,6 +3,8 @@ import path from "node:path";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import { requireFor } from "../../../test-utils/require-for";
 import { BOTTOM_BAR_PX } from "../tokens";
 import BaseConsoleDrawer, { CONSOLE_BODY_ID } from "./BaseConsoleDrawer";
@@ -16,6 +18,7 @@ const draw = (
     onClear?: () => void;
     stop?: { run: "build" | "deploy"; onStop: () => void } | null;
     progress?: number;
+    log?: string;
   }
 ) =>
   render(
@@ -27,9 +30,12 @@ const draw = (
       onClear={handlers.onClear ?? vi.fn()}
       stop={handlers.stop ?? null}
       shortcut="⌘J"
+      log={handlers.log ?? ""}
     >
       <div className="xterm" />
-    </BaseConsoleDrawer>
+    </BaseConsoleDrawer>,
+    // Copy, shown once there is a log, has a tooltip that needs the provider
+    { wrapper: TooltipProvider }
   );
 
 it("names its button Terminal and controls the body by its fixed id", () => {
@@ -101,6 +107,18 @@ it.each([
 });
 
 // Spec 13 (TRM-28): Clear is off beside Stop; a phone hides it for Stop
+it("offers Copy log only while open with a log to copy", () => {
+  const { unmount } = draw(true, { log: "Done" });
+  expect(screen.getByRole("button", { name: "Copy log" })).toBeTruthy();
+  unmount();
+
+  draw(true, { log: "" }).unmount();
+  expect(screen.queryByRole("button", { name: "Copy log" })).toBeNull();
+
+  draw(false, { log: "Done" });
+  expect(screen.queryByRole("button", { name: "Copy log" })).toBeNull();
+});
+
 it("turns Clear off while a run can be stopped", () => {
   draw(true, { stop: { run: "build", onStop: vi.fn() } });
 
@@ -124,6 +142,7 @@ it("shows the status text with a dot of its tone", () => {
       onClear={vi.fn()}
       stop={null}
       shortcut="⌘J"
+      log=""
     />
   );
   expect(screen.getByText("build failed")).toBeTruthy();

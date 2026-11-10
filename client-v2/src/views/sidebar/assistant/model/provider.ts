@@ -152,6 +152,8 @@ export const createProvider = (
           });
         }
         if (refusal) {
+          // The status's AI indicator says so until the limit comes back
+          PgAssistant.markLimitReached();
           // The conversation and the session stay: switching to a key-based
           // backend is how the user keeps going today
           agentTelemetry.track("agent_refused", {
@@ -201,6 +203,8 @@ export const createProvider = (
       }
 
       history = result.messages;
+      // A turn the hosted default answered means its limit has lifted
+      PgAssistant.limitLifted();
       if (result.reachedStepLimit) {
         throw new Error(
           `The model was still calling tools after ${MAX_STEPS} rounds. Stopped it.`

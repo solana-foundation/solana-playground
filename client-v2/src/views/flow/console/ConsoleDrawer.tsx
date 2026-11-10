@@ -116,10 +116,35 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
     return () => PgTerminal.setConsoleOpen(false);
   }, [open]);
 
+  // Copy takes the log as it is when the console opens and again whenever a
+  // run's stage moves: a deploy opens the console before it has printed, and
+  // the run's whole text lands only as it ends
+  // TODO(intake: interface-2 carry review, PR 379): output a client Run or a typed
+  // command prints after the status settles is not re-read; reading at the
+  // click needs a value getter on the design system's CopyButton
+  const [logText, setLogText] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    PgTerminal.get()
+      .then((term) => {
+        if (live) setLogText(term.getText());
+      })
+      .catch((error: unknown) =>
+        log.error(error, { context: { action: "read the log for Copy" } })
+      );
+    return () => {
+      live = false;
+    };
+  }, [open, flow.build, flow.deploy]);
+
   const clear = () => {
-    PgTerminal.clear().catch((error: unknown) =>
-      log.error(error, { report: true, context: { action: "clear" } })
-    );
+    PgTerminal.clear()
+      // A cleared log has nothing left to copy
+      .then(() => setLogText(""))
+      .catch((error: unknown) =>
+        log.error(error, { report: true, context: { action: "clear" } })
+      );
   };
 
   return (
@@ -140,6 +165,7 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
           : keyLabel(CONSOLE_KEY, PgCommon.getOS())
       }
       onClear={clear}
+      log={logText}
       stop={stop && { run: stop, onStop: () => PgCommandManager.stop() }}
     >
       <Terminal />

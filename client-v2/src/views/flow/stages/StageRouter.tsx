@@ -1,15 +1,16 @@
 import type { FC } from "react";
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 
 import { cn } from "@/shared/lib/utils";
 
 import { SpinnerWithBg } from "../../../components/Loading";
 import type { Stage } from "../state/stage";
+import { lazyStage } from "./lazy-stage";
 import Write from "./Write";
 
-const Build = lazy(() => import("./Build"));
-const Deploy = lazy(() => import("./Deploy"));
-const Interact = lazy(() => import("./Interact"));
+const Build = lazyStage(() => import("./Build"), "build");
+const Deploy = lazyStage(() => import("./Deploy"), "deploy");
+const Interact = lazyStage(() => import("./Interact"), "interact");
 
 interface StageRouterProps {
   stage: Stage;

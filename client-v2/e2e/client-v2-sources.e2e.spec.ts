@@ -111,7 +111,7 @@ test("client-v2-sources: A protected server added in the browser", async ({
   await expect(box).toBeChecked();
   const row = page.locator('[data-slot="field"]', { has: box });
   await row.getByRole("button", { name: "Call a tool" }).click();
-  await row.locator("#mcp-tool-protected").selectOption("ping", LONG);
+  await row.getByRole("combobox", { name: "TOOL" }).selectOption("ping", LONG);
   await row.getByRole("button", { name: "Call", exact: true }).click();
   await expect(row.locator("pre", { hasText: "pong" })).toBeVisible(LONG);
 
