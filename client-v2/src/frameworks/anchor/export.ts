@@ -160,6 +160,7 @@ client = "yarn run ts-node client/*.ts"
 members = [
     "programs/*"
 ]
+resolver = "2"
 
 [profile.release]
 overflow-checks = true
