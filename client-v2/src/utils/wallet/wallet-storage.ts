@@ -113,7 +113,9 @@ const isPublicKeyText = (value: unknown): value is string => {
     return new PgWeb3.PublicKey(value).toBase58() === value;
   } catch {
     // web3 throws on text that is not base58 or not 32 bytes: not a public
-    // key, so the account reads as damaged and is set aside
+    // key, so the account reads as damaged and is set aside. The text and the
+    // parser's message stay out of the log: either may be wallet state
+    log.debug("stored public key is not a public key; account set aside");
     return false;
   }
 };
