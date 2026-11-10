@@ -37,8 +37,8 @@ time. Every task: ticket to file.
   not `null`. Verify: `build.test.ts` covers both scenarios of "A build without an IDL keeps the IDL the browser
   holds", and the `null` case fails against the code before the change.
 - [x] 2.4 Create `client-v2/src/features/idl-build-guide`: `model/versions.ts`, `model/steps.ts`,
-  `model/telemetry.ts` declaring the five events with doc comments, the `idl-build-guide: "idl_guide"` entry in
-  `shared/lib/telemetry/prefixes.ts`, `ui/BaseIdlBuildGuide.tsx`, `ui/IdlBuildGuide.tsx`, and `index.ts`. Verify:
+  `model/telemetry.ts` declaring the six events with doc comments (`idl_guide_upload_followed` among them), the
+  `idl-build-guide: "idl_guide"` entry in `shared/lib/telemetry/prefixes.ts`, `ui/BaseIdlBuildGuide.tsx`, `ui/IdlBuildGuide.tsx`, and `index.ts`. Verify:
   a test fails when `model/versions.ts` differs from `server/programs/Cargo.lock` or `server/Dockerfile`; render
   tests cover method switching, the last step, download success, and the `unknown-framework` failure; telemetry
   tests assert the scenarios of "The guide reports how it is used" and "The guide reports the project

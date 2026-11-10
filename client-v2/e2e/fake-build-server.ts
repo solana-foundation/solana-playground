@@ -5,9 +5,9 @@ import { PLANNED_1_1_2 } from "../src/features/tutorial-conversation/model/build
 /**
  * The build server for the tutorial specs, answered in the test. A build of
  * Hello Anchor's `lib.rs` fails with the Anchor 1.1.2 server's real log while the
- * file has no `struct Hello`, as the step plans, and passes otherwise with an
- * Anchor IDL read off `lib.rs`: `hello`, with a `name: string` argument once
- * its signature takes one. A deploy downloads a few KB of program bytes whose
+ * file has no `struct Hello`, as the step plans, and passes otherwise with a
+ * uuid per program and no IDL, so a tutorial calls through the IDL it ships.
+ * A deploy downloads a few KB of program bytes whose
  * first byte says which `hello` was built, so the fake devnet answers a call
  * with the log of the code it actually holds.
  */

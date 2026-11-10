@@ -64,8 +64,9 @@ users a guided way to build the IDL on their own machine and upload it.
 - Lesson steps checked against the program's IDL are left unchanged: offering the guide there waits for the build
   backend that returns an IDL again (tasks 2.7 and 2.8).
 - The design system's `CopyButton` gains an `onCopied` callback, so a copy is counted only when it succeeds.
-- Telemetry, slice `idl-build-guide`, prefix `idl_guide`: adds `idl_guide_opened`, `idl_guide_method_picked`,
-  `idl_guide_command_copied`, `idl_guide_project_downloaded`, `idl_guide_export_failed`. Renames and removes none.
+- Telemetry, slice `idl-build-guide`, prefix `idl_guide`: adds six events, `idl_guide_opened`,
+  `idl_guide_method_picked`, `idl_guide_command_copied`, `idl_guide_project_downloaded`, `idl_guide_export_failed`,
+  and `idl_guide_upload_followed`, sent when the last step's "Upload IDL" is pressed. Renames and removes none.
 
 ## Capabilities
 
