@@ -57,7 +57,7 @@ export const renamedDependencies = (metadata) => {
  * @param {string[]} features
  * @returns {(manifest: string) => string}
  */
-export const withFeatures = (features) => (manifest) =>
+export const appendFeaturesWith = (features) => (manifest) =>
   `${manifest.trimEnd()}\n\n[package.metadata.solana-playground]\nfeatures = ${JSON.stringify(
     features
   )}\n`;

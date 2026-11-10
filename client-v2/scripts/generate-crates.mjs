@@ -11,9 +11,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import {
+  appendFeaturesWith,
   featuresByCrate,
   renamedDependencies,
-  withFeatures,
 } from "./crate-features.mjs";
 import {
   CLIENT_PATH,
@@ -278,7 +278,7 @@ async function generateCrate(servedAs, name, version, onlyProcMacros) {
   );
   await fs.writeFile(
     path.join(CRATES_PATH, `${snakeCaseName}.toml`),
-    withFeatures(features.get(`${name}@${version}`) ?? [])(
+    appendFeaturesWith(features.get(`${name}@${version}`) ?? [])(
       // The wasm's `cargo_toml` 0.14 rejects edition 2024 and panics; its Rust Analyzer reads it as 2021 anyway
       manifest.replace(/^edition\s*=\s*"2024"/m, 'edition = "2021"')
     )
