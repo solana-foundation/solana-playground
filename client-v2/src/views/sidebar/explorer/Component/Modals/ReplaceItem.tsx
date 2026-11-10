@@ -1,8 +1,8 @@
 import { FC } from "react";
 
+import { Icon } from "@/shared/ui/icon";
 import { ModalFrame } from "@/widgets/overlays";
 
-import { Warning } from "../../../../../components/Icons";
 import { PgExplorer } from "../../../../../utils";
 
 interface ReplaceItemProps {
@@ -33,8 +33,8 @@ export const ReplaceItem: FC<React.PropsWithChildren<ReplaceItemProps>> = ({
       }}
     >
       <div className="flex items-center justify-center">
-        <div className="size-8 [&>svg]:size-full">
-          <Warning color="warning" />
+        <div className="size-6 [&>svg]:size-full">
+          <Icon name="warning" className="text-warning" />
         </div>
         <div className="ml-4 flex flex-col">
           <span className="font-bold">

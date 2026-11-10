@@ -2,6 +2,8 @@ import { XIcon } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import * as React from "react";
 
+import { shiftTabFromFrame } from "@/shared/lib/frame-focus";
+import { useReleaseFocus } from "@/shared/lib/hooks/use-release-focus";
 import { cn } from "@/shared/lib/utils";
 
 /* The product's dialog. On a desk, a card on the dimmed stage: bg2, a
@@ -29,10 +31,13 @@ function ModalContent({
   className,
   size = "default",
   children,
+  ref,
+  onKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   size?: "default" | "narrow" | "wide";
 }) {
+  const [releaseFocus] = useReleaseFocus(ref);
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay
@@ -40,14 +45,19 @@ function ModalContent({
         className="fixed inset-0 z-50 bg-backdrop data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0"
       />
       <DialogPrimitive.Content
+        ref={releaseFocus}
         data-slot="modal-content"
         data-size={size}
         className={cn(
-          "fixed z-50 flex flex-col bg-surface-panel text-foreground outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+          "fixed z-50 flex flex-col bg-surface-panel text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
           "md:top-1/2 md:left-1/2 md:max-h-[calc(100dvh-4rem)] md:w-[min(36rem,calc(100vw-2rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-border-strong md:shadow-modal md:data-open:zoom-in-95 md:data-[size=narrow]:w-[min(27rem,calc(100vw-2rem))] md:data-[size=wide]:w-[min(64rem,90vw)]",
           "max-md:inset-0 max-md:h-dvh",
           className
         )}
+        onKeyDown={(event) => {
+          onKeyDown?.(event);
+          if (!event.defaultPrevented) shiftTabFromFrame(event);
+        }}
         {...props}
       >
         {children}

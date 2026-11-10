@@ -1,6 +1,6 @@
 // The store and the bridge reach the `utils` barrel; only the text matters here
 const store = vi.hoisted(() => ({
-  PgAssistant: { enabledSkills: [] as unknown[] },
+  PgAssistant: { enabledSkills: [] as unknown[], mcpServers: [] as unknown[] },
 }));
 vi.mock("../store", () => store);
 vi.mock("../bridge/playground-bridge", () => ({ realBridge: {} }));
@@ -30,6 +30,45 @@ describe("systemPrompt", () => {
       "- playground-env (Playground build environment): What compiles here."
     );
     expect(systemPrompt()).not.toContain("- solana-dev (");
+  });
+
+  it("names the MCP servers switched off, so the model says so instead of guessing", () => {
+    store.PgAssistant.mcpServers = [
+      {
+        id: "solana",
+        name: "Solana Developer",
+        url: "/api/mcp",
+        enabled: true,
+      },
+      {
+        id: "explorer",
+        name: "Solana Explorer",
+        url: "/api/mcp",
+        enabled: false,
+      },
+    ];
+
+    const prompt = systemPrompt();
+    expect(prompt).toContain(
+      "MCP servers the user has switched off, so none of their tools is available to you: Solana Explorer."
+    );
+    expect(prompt).toContain("Settings › Assistant › Skills and MCP servers");
+    expect(prompt).not.toMatch(/switched off[^.]*Solana Developer/);
+  });
+
+  it("says nothing about servers while every one is on", () => {
+    store.PgAssistant.mcpServers = [
+      {
+        id: "explorer",
+        name: "Solana Explorer",
+        url: "/api/mcp",
+        enabled: true,
+      },
+    ];
+
+    expect(systemPrompt()).not.toContain(
+      "MCP servers the user has switched off"
+    );
   });
 });
 

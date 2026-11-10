@@ -1,8 +1,8 @@
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Icon } from "@/shared/ui/icon";
 
-import { Plus } from "../../../../components/Icons";
 import { PgView } from "../../../../utils";
 import { CreateWorkspace } from "./Modals";
 
@@ -22,7 +22,7 @@ const NoWorkspace = () => {
         onError={reportButtonFailure("create a project")}
         className="w-full"
       >
-        <Plus data-icon="inline-start" />
+        <Icon name="add" data-icon="inline-start" />
         Create a new project
       </AsyncButton>
     </div>

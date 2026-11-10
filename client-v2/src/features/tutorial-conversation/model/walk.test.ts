@@ -346,8 +346,8 @@ describe.each([
 ])("%s through the engine", (_name, { json, docs }) => {
   it("passes the check", () => {
     const d = json as unknown as TutorialDefinition;
-    // Hello Anchor's next is upstream's Counter PDA Tutorial, which only the
-    // catalog knows
+    // Each definition is checked alone, so its next (another definition or
+    // an upstream tutorial) counts as known
     const known = new Set(d.finish.next === null ? [] : [d.finish.next]);
     expect(checkDefinition(d, known, { docs })).toEqual([]);
   });

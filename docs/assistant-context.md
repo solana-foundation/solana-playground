@@ -123,9 +123,9 @@ the browser, behind the same approval gates.
   it, and it is the page the app opens on.
 - You stay in control of a turn: the backend is named above the chat and can be
   changed without losing the conversation, **Stop** ends a turn in flight (and
-  denies anything waiting on your approval), and when a reply describes an edit
-  in prose instead of writing it, **Make this change** asks for the same edit as
-  a patch — which still arrives as a diff you accept or reject.
+  denies anything waiting on your approval), and when a reply shows an edit as a
+  code block instead of writing it, **Make this change** asks for the same edit
+  as a patch — which still arrives as a diff you accept or reject.
 
 **One gap we had to close.** The client did not keep the compiler's output
 anywhere — the raw `stderr` was printed to the terminal and discarded, leaving
@@ -196,15 +196,18 @@ Done:
   columns with no header. From the left: the navigation (Home, New project,
   Tutorials, Programs, the project list under them, and its session
   footer: a status row of three indicators, each a dot and words (the
-  network, which opens the settings on the cluster; the AI, which opens
-  Connect a model; the Rust analyzer, which opens a short panel), and an
+  network, which opens the settings on the cluster, or a short panel with
+  Try again and Change network while the cluster does not answer; the AI,
+  which opens Connect a model, and opens a short panel at "AI · Limit
+  reached" (the free daily limit is used) or "AI · Not responding"; the Rust
+  analyzer, which opens a short panel), and an
   account row whose menu holds sign-in, Settings (Cmd+,), Docs, the feedback
   entries and the wallet; Cmd+B folds it to a rail of icons, whose footer
   keeps the three status dots and an Account button that opens the same
   menu; on a phone the three fold into one status chip in the top bar that
   opens a sheet), the
   assistant, then the work area. Across the top of the work area runs the
-  stage bar (the project's name while the assistant is hidden, the
+  stage bar (the project's name, whether or not the assistant shows, the
   assistant's toggle, Docs); under it the stepper (Write → Build → Deploy →
   Interact, state derived from real build/deploy events); under that the
   editor head, with the open files' tabs on the left and two toggles on the
@@ -234,10 +237,10 @@ Done:
   tutorials by level under a Start here banner, which features the first
   not completed ("Start here", "Continue · Step n of m", or "Completed" once
   all three are done); the other tutorials stay reachable from New project.
-  The New Workspace gallery (New project) starts a project from scratch, from
-  one of 11 programs that build on the default server, or from one of 16
-  tutorials. The cluster row, the account menu's Settings or Cmd+, open
-  Settings as a page of its
+  New project, a page of its own beside them (also at `/new`), starts a
+  project from scratch, from one of 10 programs that build on the default
+  server, or from one of 16 tutorials. The cluster row, the account menu's
+  Settings or Cmd+, open Settings as a page of its
   own over the whole window: a list of sections (Network, Project, Block
   Explorer, Build, Connection, Editor, Notification, Server, Test UI, UI,
   Wallet, Experimental) built from the existing settings registry, and "Back
@@ -318,7 +321,7 @@ Honesty rule for the demo — never present a mocked step as working.
   saves the IDL a successful build already produced; "Upload IDL" on
   Deploy and Interact replaces the IDL this browser uses -- neither
   generates anything or writes anything on-chain.
-- **Not view-only:** the Programs page's and the gallery's ecosystem program cards
+- **Not view-only:** the Programs page's and New project's ecosystem program cards
   import from GitHub through upstream's own mechanism (`PgGithub.import`)
   into a normal, editable project -- they open as a normal project; those
   targeting Anchor newer than the pinned 0.29 will not compile on this build

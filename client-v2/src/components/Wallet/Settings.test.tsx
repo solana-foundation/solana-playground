@@ -8,14 +8,17 @@ import {
   resetLogger,
 } from "@/shared/lib/logger";
 
-import { PgCommand, PgView, PgWallet } from "../../utils";
+import { toggleWallet } from "../../commands/connect/connect-wallet";
+import { PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import type { Faucet } from "./hooks";
 import Settings from "./Settings";
 
+vi.mock("../../commands/connect/connect-wallet", () => ({
+  toggleWallet: vi.fn(),
+}));
 // The utils barrel needs build-time globals the unit runner does not define.
 vi.mock("../../utils", () => ({
-  PgCommand: { connect: { execute: vi.fn() } },
   PgView: {
     ids: { WALLET_RENAME_INPUT: "wallet-rename-input" },
     setModal: vi.fn(),
@@ -66,7 +69,11 @@ vi.mock("../Icons", () => {
     Trash: Icon,
   };
 });
-vi.mock("../Img", () => ({ default: () => null }));
+vi.mock("../Img", () => ({
+  default: ({ className }: { className?: string }) => (
+    <i data-testid="wallet-icon" className={className} />
+  ),
+}));
 vi.mock("./Modals/Add", () => ({ Add: () => null }));
 
 const knownSignIn = vi.hoisted(() => new Error("popup blocked"));
@@ -217,7 +224,7 @@ describe("wallet Settings menu", () => {
         icon: "",
         connected,
       } as never);
-      vi.mocked(PgCommand.connect.execute).mockRejectedValueOnce(failure);
+      vi.mocked(toggleWallet).mockRejectedValueOnce(failure);
       render(<Host />);
       await openMenu();
 
@@ -283,6 +290,25 @@ describe("wallet Settings menu", () => {
 
     expect(PgWallet.import).not.toHaveBeenCalled();
     expect(PgWallet.export).not.toHaveBeenCalled();
+  });
+
+  it("draws every wallet extension's icon at one size", async () => {
+    for (const name of ["Phantom", "Solflare", "SquadsX"]) {
+      PgWallet.standardWallets.push({
+        name,
+        icon: "",
+        connected: false,
+      } as never);
+    }
+    render(<Host />);
+    await openMenu();
+
+    const icons = screen.getAllByTestId("wallet-icon");
+    expect(icons).toHaveLength(3);
+    for (const icon of icons) {
+      expect(icon.classList).toContain("size-4");
+      expect(icon.classList).toContain("shrink-0");
+    }
   });
 
   it("says so when the imported file is not a keypair", async () => {

@@ -16,19 +16,27 @@ pace by 1 write per second.
 - **THEN** the terminal prints "Warning: Reached rate-limits" with the provider and its message, the deploy waits
   10 seconds, and the next round sends at half the pace
 
-### Requirement: The send cap comes from the env per cluster
+### Requirement: The send cap is 4 per cluster unless the env sets one
 
-The pace SHALL never rise above the cluster's send cap: `REACT_APP_DEVNET_SEND_TX_PER_SECOND`,
-`REACT_APP_TESTNET_SEND_TX_PER_SECOND` or `REACT_APP_MAINNET_SEND_TX_PER_SECOND`, in writes per second. The cap SHALL
-apply to every RPC of that cluster: the platform RPC, the public one, and a custom RPC whose genesis hash names the
-cluster. A cap that is unset, not a number, or not above 0 SHALL cap nothing, and the pace then rises to at most 20
-writes per second.
+The pace SHALL never rise above the cluster's send cap, in writes per second. Devnet, testnet and mainnet-beta SHALL
+each have a send cap of 4, which a positive `REACT_APP_DEVNET_SEND_TX_PER_SECOND`,
+`REACT_APP_TESTNET_SEND_TX_PER_SECOND` or `REACT_APP_MAINNET_SEND_TX_PER_SECOND` SHALL replace. A value that is unset,
+not a number, or not above 0 SHALL leave the cap at 4; no value turns the cap off. The cap SHALL apply to every RPC
+of that cluster: the platform RPC, the public one, and a custom RPC whose genesis hash names the cluster. Localnet,
+Surfpool, Playnet, and an RPC whose cluster is not known SHALL have no send cap, and the pace there rises to at most
+20 writes per second.
+
+#### Scenario: A cluster with no cap in the env sends at most 4 writes per second (manual)
+
+- **WHEN** `REACT_APP_DEVNET_SEND_TX_PER_SECOND` is unset and a program of a few hundred chunks deploys to devnet
+  with no rate limit
+- **THEN** no second of the write sends more than 4 buffer writes
 
 #### Scenario: A capped cluster never sends faster than its cap (manual)
 
-- **WHEN** `REACT_APP_DEVNET_SEND_TX_PER_SECOND` is `4` and a program of a few hundred chunks deploys to devnet
+- **WHEN** `REACT_APP_DEVNET_SEND_TX_PER_SECOND` is `2` and a program of a few hundred chunks deploys to devnet
   with no rate limit
-- **THEN** no second of the write sends more than 4 buffer writes
+- **THEN** no second of the write sends more than 2 buffer writes
 
 ### Requirement: A load that lands no chunk fails
 

@@ -10,8 +10,9 @@ deploy does about either, so nothing checks the fix and the next edit can undo i
 ## What Changes
 
 - Buffer writes are paced: they start at a fixed rate, halve on a rate limit and rise after a run of accepted
-  writes, never above the cluster's send cap from `REACT_APP_DEVNET_SEND_TX_PER_SECOND`,
-  `REACT_APP_TESTNET_SEND_TX_PER_SECOND` or `REACT_APP_MAINNET_SEND_TX_PER_SECOND`.
+  writes, never above the cluster's send cap: 4 writes per second on devnet, testnet and mainnet-beta, unless a
+  positive `REACT_APP_DEVNET_SEND_TX_PER_SECOND`, `REACT_APP_TESTNET_SEND_TX_PER_SECOND` or
+  `REACT_APP_MAINNET_SEND_TX_PER_SECOND` replaces it. Localnet, Surfpool and Playnet have no cap.
 - A load that lands no chunk in `MAX_STALLED_ROUNDS` rounds in a row fails, and the buffer's SOL is returned.
 - A deploy the Deploy stage started closes its buffer after a failed write without asking in the terminal; a deploy
   typed in the terminal keeps its question.
@@ -54,7 +55,7 @@ deploy does about either, so nothing checks the fix and the next edit can undo i
   `client-v2/src/shared/lib/rpc-rate-limit/`, `client-v2/src/shared/lib/faucet.ts`,
   `client-v2/src/views/flow/console/`, and the tutorial deploy runner and cards.
 - Configuration: six optional `REACT_APP_*` variables, listed in `client-v2/.env.example`. Unset, a deploy reads
-  buffers through the selected RPC and paces writes up to its own ceiling.
+  buffers through the selected RPC and paces writes up to 4 per second on devnet, testnet and mainnet-beta.
 - Out of scope: which RPC each cluster resolves to and what `localStorage` stores for it, which `cluster-entity`
   owns; a Stop that ends a tutorial deploy and closes leftover buffers from earlier runs; a send cap that
   applies only to the platform URL rather than to the whole cluster; reading the RPC's `Retry-After` and

@@ -54,7 +54,8 @@ const decideWith =
 /**
  * The marker for one project, read from the sync mark and the open conflicts,
  * never from state of its own. `undefined` while signed out or where sync is off:
- * the account row says that once, so the rows stay clean.
+ * the account row says that once, so the rows stay clean. A session that ended is
+ * not signed out: its projects keep their markers.
  *
  * Rejects when it cannot tell whether a mark exists (`existsOrThrow`): "This
  * browser" or `undefined` would both be guesses, so the caller keeps whatever the
@@ -69,7 +70,9 @@ export const syncMarkerOf = async (
   localName: string
 ): Promise<SyncMarker | undefined> => {
   const { PgProjectSync, isCleanAgainst } = await sync();
-  const available = await PgProjectSync.isAvailable();
+  const available =
+    (await PgProjectSync.isAvailable()) ||
+    (await PgProjectSync.hasExpiredMarks());
   const hasMark = available && (await PgSyncMark.existsOrThrow(projectId));
   const isClean = async (mark: SyncMark | undefined) => {
     const { snapshotOf } = await snapshot();
@@ -252,6 +255,13 @@ if (import.meta.vitest) {
         await expect(syncMarkerOf("p1", "counter")).rejects.toThrow(
           "store locked"
         );
+      });
+
+      it("keeps a project's marker after a session ended", async () => {
+        vi.spyOn(PgProjectSync, "isAvailable").mockResolvedValue(false);
+        vi.spyOn(PgProjectSync, "hasExpiredMarks").mockResolvedValue(true);
+        vi.spyOn(PgSyncMark, "existsOrThrow").mockResolvedValue(false);
+        expect(await syncMarkerOf("p1", "counter")).toBe("this-browser");
       });
 
       it("reads no marker where sync is unavailable or nobody is signed in", async () => {

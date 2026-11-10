@@ -8,8 +8,6 @@ type MainSecondaryPageParam<N extends string> = {
   name: N;
   /** Title of the page, defaults to `name` */
   title?: string;
-  /** Keybind for the page */
-  keybind?: string;
   /** Actions available for the page */
   actions?: Array<{
     /** Action name */
@@ -46,7 +44,7 @@ type MainSecondaryPage<N extends string> = RequiredKey<
 export const createMainSecondaryPage = <N extends string>(
   page: MainSecondaryPageParam<N>
 ) => {
-  page.title ??= page.keybind ? `${page.name} (${page.keybind})` : page.name;
+  page.title ??= page.name;
   page.importComponent ??= () => {
     return import(`./${PgCommon.toKebabFromTitle(page.name)}/Component`);
   };

@@ -13,23 +13,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+import { Icon } from "@/shared/ui/icon";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 
 import { NO_FAUCET } from "../../commands/airdrop/no-faucet";
+import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { isSignInFailure } from "../../features/auth";
 import { useCopy } from "../../hooks";
-import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
+import { Fn, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
-import {
-  Airdrop,
-  Copy,
-  Edit,
-  ExportFile,
-  ImportFile,
-  Plus,
-  ThreeDots,
-  Trash,
-} from "../Icons";
 import Img from "../Img";
 import { useAirdrop, useDarken } from "./hooks";
 import { importedText } from "./imported-text";
@@ -119,7 +111,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
       >
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-sm" title="More">
-            <ThreeDots />
+            <Icon name="more" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -136,7 +128,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           }}
         >
           <DropdownMenuItem onSelect={copyAddress}>
-            <Copy />
+            <Icon name="copy" />
             <MenuItemText>Copy address</MenuItemText>
           </DropdownMenuItem>
           {faucet === "available" && (
@@ -150,13 +142,13 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                 });
               }}
             >
-              <Airdrop />
+              <Icon name="airdrop" />
               <MenuItemText>Airdrop</MenuItemText>
             </DropdownMenuItem>
           )}
           {faucet === "none" && (
             <DropdownMenuItem disabled>
-              <Airdrop />
+              <Icon name="airdrop" />
               <MenuItemText>{NO_FAUCET}</MenuItemText>
             </DropdownMenuItem>
           )}
@@ -168,12 +160,12 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
               })
             }
           >
-            <Plus />
+            <Icon name="add" />
             <MenuItemText>Add</MenuItemText>
           </DropdownMenuItem>
           {isPg && (
             <DropdownMenuItem onSelect={rename}>
-              <Edit />
+              <Icon name="edit" />
               <MenuItemText>Rename</MenuItemText>
             </DropdownMenuItem>
           )}
@@ -187,7 +179,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                 })
               }
             >
-              <Trash />
+              <Icon name="delete" />
               <MenuItemText>Remove</MenuItemText>
             </DropdownMenuItem>
           )}
@@ -202,7 +194,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                     })
             }
           >
-            <ImportFile />
+            <Icon name="import" />
             <MenuItemText>Import</MenuItemText>
           </DropdownMenuItem>
           {isPg && (
@@ -217,7 +209,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                       })
               }
             >
-              <ExportFile />
+              <Icon name="export" />
               <MenuItemText>Export</MenuItemText>
             </DropdownMenuItem>
           )}
@@ -226,15 +218,13 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
               key={standardWallet.name}
               variant={standardWallet.connected ? "destructive" : "default"}
               onSelect={() => {
-                PgCommand.connect
-                  .execute(standardWallet.name.toLowerCase())
-                  .catch(
-                    reportButtonFailure(
-                      standardWallet.connected
-                        ? `disconnect from ${standardWallet.name}`
-                        : `connect ${standardWallet.name}`
-                    )
-                  );
+                toggleWallet(standardWallet.name.toLowerCase()).catch(
+                  reportButtonFailure(
+                    standardWallet.connected
+                      ? `disconnect from ${standardWallet.name}`
+                      : `connect ${standardWallet.name}`
+                  )
+                );
               }}
             >
               {/* An image, which the item does not size as it does its icons */}

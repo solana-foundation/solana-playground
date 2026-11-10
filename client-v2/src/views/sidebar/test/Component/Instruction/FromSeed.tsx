@@ -2,9 +2,9 @@ import { FC, useMemo, useRef, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { Button } from "@/shared/ui/button";
+import { Icon } from "@/shared/ui/icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
-import { Edit, Plus, Trash } from "../../../../../components/Icons";
 import SearchBar, {
   SearchBarDropdownProps,
   SearchBarProps,
@@ -124,7 +124,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                         size="icon-sm"
                         aria-label="Edit seed"
                       >
-                        <Edit />
+                        <Icon name="edit" />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>Edit seed</TooltipContent>
@@ -143,7 +143,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                       className="hover:text-destructive"
                       aria-label="Delete seed"
                     >
-                      <Trash />
+                      <Icon name="delete" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Delete seed</TooltipContent>
@@ -197,7 +197,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
             setSeeds((prevSeeds) => [...prevSeeds, { state: "selecting" }]);
           }}
         >
-          <Plus data-icon="inline-start" />
+          <Icon name="add" data-icon="inline-start" />
           Add Seed
         </Button>
 

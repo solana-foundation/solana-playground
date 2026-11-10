@@ -116,7 +116,7 @@ const isField = (target: EventTarget | null) =>
  * two read as one set. TODO(design-system): the kit's footer sizes
  */
 const FOOTER_BUTTON =
-  "h-10 rounded-full px-4 font-heading text-[0.9375rem] font-normal";
+  "h-10 rounded-full px-4 font-heading text-[0.9375rem] font-act";
 
 /** The foot's submit on a phone: full width, whichever button it is */
 const PHONE_SUBMIT = "h-12 rounded-xl text-control";

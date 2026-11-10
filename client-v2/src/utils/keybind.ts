@@ -7,8 +7,12 @@ const MODIFIERS = ["CTRL", "ALT", "SHIFT"];
 /** Keys of the keybind */
 type Keybind = string;
 
-/** Handler callback for the keybind */
-type HandleKeybindCb = (ev: KeyboardEvent) => unknown;
+/**
+ * Handler callback for the keybind. Returning `false` declines the key: the
+ * handler did nothing with it, so its default (a reload, the address bar, a
+ * typed character) is left alone.
+ */
+type HandleKeybindCb = (ev: KeyboardEvent) => false | void | Promise<void>;
 
 /** Handler for the keybind */
 type HandleKeybind =
@@ -65,13 +69,12 @@ export class PgKeybind {
       });
       if (!keybind) return;
 
-      if (typeof keybind.handle === "function") {
-        keybind.handle(ev);
-        ev.preventDefault();
-      } else {
-        keybind.handle.handle(ev);
-        if (!keybind.handle.opts?.noPreventDefault) ev.preventDefault();
-      }
+      const { handle: run, opts } =
+        typeof keybind.handle === "function"
+          ? { handle: keybind.handle, opts: undefined }
+          : keybind.handle;
+      if (run(ev) === false) return;
+      if (!opts?.noPreventDefault) ev.preventDefault();
     };
 
     document.addEventListener("keydown", handle);
@@ -158,6 +161,18 @@ if (import.meta.vitest) {
         bind("Enter");
         press("Enter");
         expect(handle).toHaveBeenCalledTimes(1);
+      });
+
+      it("leaves the default to a handler that returns false", () => {
+        dispose = PgKeybind.add("Ctrl+R", () => false).dispose;
+        const ev = press("r", { metaKey: true });
+        expect(ev.defaultPrevented).toBe(false);
+      });
+
+      it("prevents the default when a handler returns anything else", () => {
+        dispose = PgKeybind.add("Ctrl+R", () => undefined).dispose;
+        const ev = press("r", { metaKey: true });
+        expect(ev.defaultPrevented).toBe(true);
       });
 
       it("honours noPreventDefault", () => {

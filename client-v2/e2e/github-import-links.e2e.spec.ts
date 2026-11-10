@@ -19,10 +19,13 @@ const openGithubImport = async (page: Page) => {
   return page.getByRole("dialog");
 };
 
+/** Where the app opens a GitHub repository, as the dialog's explainer shows */
+const GITHUB_ROUTE = "/github/";
+
 /**
  * Every link the GitHub import dialog offers, as GitHub URLs: an example's
  * "Open in GitHub", and the explainer's repository and its playground URL,
- * which is the app's origin with the GitHub URL after it.
+ * which is the app's origin, `/github/`, and GitHub's own path after it.
  */
 const importDialogLinks = async (page: Page) => {
   const dialog = await openGithubImport(page);
@@ -31,8 +34,11 @@ const importDialogLinks = async (page: Page) => {
     .evaluateAll((links) => links.map((a) => a.getAttribute("href") ?? ""));
   await page.keyboard.press("Escape");
   const origin = new URL(page.url()).origin;
+  const route = origin + GITHUB_ROUTE;
   return hrefs.map((href) =>
-    href.startsWith(origin) ? href.slice(origin.length + 1) : href
+    href.startsWith(route)
+      ? `https://github.com/${href.slice(route.length)}`
+      : href
   );
 };
 
@@ -50,14 +56,13 @@ const buildServerLink = async (page: Page) => {
 };
 
 /**
- * Every GitHub link the two dialogs offer, recorded: the three examples, the
+ * Every GitHub link the two dialogs offer, recorded: the two examples, the
  * explainer's repository (also inside its playground URL) and the build
  * server's tip. A change to any of them is a change to this list.
  */
 const LINKS = [
   "https://github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor",
   "https://github.com/solana-foundation/program-examples/tree/main/basics/hello-solana/native/program",
-  "https://github.com/solana-foundation/program-examples/tree/main/basics/transfer-sol/anchor",
   "https://github.com/solana-foundation/solana-playground/tree/master/server",
 ];
 
@@ -68,7 +73,7 @@ const dialogLinks = async (page: Page) => {
   return Array.from(new Set(links.concat(server))).sort();
 };
 
-test("github-import: The import and build server dialogs offer the recorded links", async ({
+test("client-v2-routes: The import and build server dialogs offer the recorded links", async ({
   page,
 }) => {
   await page.goto("/");
@@ -82,16 +87,9 @@ test("github-import: Every recorded link resolves on GitHub @live-links", async 
   page,
 }) => {
   for (const url of LINKS) {
-    // Its own timeout: GitHub's tree pages answer slower than the config's
-    // `actionTimeout`, and a thrown timeout would end the loop before the
-    // links after it were checked. Soft, so one run names every dead link.
-    const status = await page.request
-      .get(url, { maxRedirects: 5, timeout: LONG.timeout })
-      .then(
-        (response) => response.status(),
-        (error: Error) => error.message
-      );
-    expect.soft(status, url).toBe(200);
+    const response = await page.request.get(url, { maxRedirects: 5 });
+    // Soft, so one run names every dead link
+    expect.soft(response.status(), url).toBe(200);
   }
 });
 
@@ -124,9 +122,25 @@ const stubExamples = async (page: Page) => {
   );
 };
 
-// The router folds `/https://github.com/…` to `/https:/github.com/…` on an
-// in-app navigation, which the route used to refuse as "URL path not found"
-test("github-import: An example's Open shows its program", async ({ page }) => {
+/** The examples program's own `/github/` address */
+const PROGRAM_ROUTE = `/github/solana-foundation/program-examples/tree/main/${PROGRAM_PATH}`;
+
+test("client-v2-routes: A folder of the examples repository opens", async ({
+  page,
+}) => {
+  await stubExamples(page);
+  await page.goto(PROGRAM_ROUTE);
+
+  await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+    "entrypoint!(process_instruction)",
+    LONG
+  );
+  await expect(page).toHaveURL(PROGRAM_ROUTE);
+});
+
+test("client-v2-routes: An example's Open shows its program", async ({
+  page,
+}) => {
   await stubExamples(page);
   await page.goto("/");
 
@@ -141,15 +155,16 @@ test("github-import: An example's Open shows its program", async ({ page }) => {
     "entrypoint!(process_instruction)",
     LONG
   );
+  await expect(page).toHaveURL(PROGRAM_ROUTE);
 });
 
 // A failed route's error stayed in the main view over the next route's
-test("github-import: A failed open leaves no error for the next one", async ({
+test("client-v2-routes: A folder with no program says so, then gets out of the way", async ({
   page,
 }) => {
   await stubExamples(page);
   await page.goto(
-    "/https://github.com/solana-foundation/program-examples/tree/main/basics/gone"
+    "/github/solana-foundation/program-examples/tree/main/basics/gone"
   );
   await expect(page.getByText(/No program code found/)).toBeVisible(LONG);
 

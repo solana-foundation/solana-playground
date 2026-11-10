@@ -48,8 +48,15 @@ const utils = vi.hoisted(() => {
     PgGithub: {
       import: vi.fn(),
       isValidUrl: (url: string) => url.startsWith("https://github.com/"),
+      routePath: (url: string) =>
+        url.replace("https://github.com/", "/github/"),
     },
-    PgRouter: { getPathUrl: (u: string) => u, navigate: vi.fn() },
+    // An absolute URL, as the real one: a path would make the explainer's
+    // link a router link, which needs a router around it
+    PgRouter: {
+      getPathUrl: (path: string) => `https://pg.test${path}`,
+      navigate: vi.fn(),
+    },
     PgView: { closeModal: vi.fn(), classNames: { ERROR: "error" } },
     PgTheme: { convertToCSS: () => "", getColor: () => "inherit" },
   };
@@ -161,9 +168,7 @@ it("closes the dialog as imported when an example is opened", () => {
 
   fireEvent.click(within(row).getByRole("button", { name: /^open$/i }));
 
-  expect(utils.PgRouter.navigate).toHaveBeenCalledWith(
-    "/https://github.com/a/b"
-  );
+  expect(utils.PgRouter.navigate).toHaveBeenCalledWith("/github/a/b");
   expect(utils.PgView.closeModal).toHaveBeenCalledWith(
     IMPORTED,
     "import-github"

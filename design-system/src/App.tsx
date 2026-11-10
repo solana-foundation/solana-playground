@@ -7,7 +7,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 
-import { Colour, Motion, Shape, Type } from "./ds/foundations"
+import { Colour, Icons, Motion, Shape, Type } from "./ds/foundations"
 import { Migration } from "./ds/migration"
 import { Group, ThemeVersion } from "./ds/parts"
 import { PlaygroundBlocks, PlaygroundComponents } from "./ds/pg-blocks"
@@ -207,6 +207,7 @@ function App() {
               <Colour />
               <Type />
               <Shape />
+              <Icons />
               <Motion />
             </Group>
 
