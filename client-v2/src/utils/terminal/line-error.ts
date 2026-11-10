@@ -80,6 +80,18 @@ export const processErrorLine = (error: unknown) => {
   return `Process error: ${message || error}`;
 };
 
+/**
+ * The line the terminal prints for a command that threw, coloured by its
+ * variant. A refusal the person can act on, such as signing in to build, prints
+ * uncoloured, as the Build stage shows it neutral: it asks, nothing failed.
+ *
+ * @param error what the command threw
+ * @param line its plain line, from `processErrorLine`
+ * @returns the line ready to print
+ */
+export const toneErrorLine = (error: unknown, line: string) =>
+  isPlainRefusal(error) ? line : toneWith(lineTone(error))(line);
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -98,6 +110,19 @@ if (import.meta.vitest) {
       );
       expect(processErrorLine(refusal)).toBe("Sign in with GitHub to build.");
       expect(processErrorLine(new Error("boom"))).toBe("Process error: boom");
+    });
+
+    it("prints a refusal uncoloured and any other failure in its tone", () => {
+      const refusal = Object.assign(
+        new Error("Sign in with GitHub to build."),
+        { isPlain: true }
+      );
+      expect(toneErrorLine(refusal, refusal.message)).toBe(
+        "Sign in with GitHub to build."
+      );
+      expect(toneErrorLine(new Error("boom"), "Process error: boom")).toBe(
+        "\x1b[1;31mProcess error: boom\x1b[0m"
+      );
     });
 
     it("reads a stop as a warning", () => {

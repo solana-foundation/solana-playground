@@ -15,7 +15,7 @@ import { PgAutocomplete } from "./autocomplete";
 import { fitBuffersTableWith } from "./buffers-table";
 import { confirmReply, confirmSuffix } from "./confirm";
 import { PgHistory } from "./history";
-import { lineTone, processErrorLine, toneWith } from "./line-error";
+import { processErrorLine, toneErrorLine, toneWith } from "./line-error";
 import { PgShell } from "./shell";
 import { noteOutput } from "./slow-run";
 import { PgTty } from "./tty";
@@ -756,7 +756,7 @@ export class PgTerm {
       if (previousLine !== msg) {
         // The highlighter reads a colour code's digits as words, and its own
         // colours end this one early
-        this.println(toneWith(lineTone(e))(msg), { noColor: true });
+        this.println(toneErrorLine(e, msg), { noColor: true });
       }
 
       // An unknown command, a bad option or a declined question is an outcome,
