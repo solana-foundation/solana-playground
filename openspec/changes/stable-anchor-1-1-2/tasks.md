@@ -5,8 +5,9 @@ time. Every task: ticket to file.
 
 ## 1. Stable build server
 
-- [x] 1.1 Replace `server/programs/Cargo.toml`'s dependencies with the pinned set from the `stable-build-server`
-  spec, port `server/programs/default/src/lib.rs` to Anchor 1.1.2, and regenerate `server/programs/Cargo.lock` with
+- [x] 1.1 Replace `server/programs/Cargo.toml`'s dependencies with the crates the `stable-build-server` requirement
+  "A program may depend only on the pinned crate set" lists, each at the version its tables name or its newest
+  release, and the removed crates named in a comment, port `server/programs/default/src/lib.rs` to Anchor 1.1.2, and regenerate `server/programs/Cargo.lock` with
   Solana 3.1.10's `cargo-build-sbf`. Verify: `cargo-build-sbf --manifest-path server/programs/Cargo.toml --offline`
   succeeds, and `anchor-lang`, `anchor-spl`, and `solana-program` in the lock match
   `server/templates/anchor-1.1.2/Cargo.lock`.

@@ -12,14 +12,38 @@ overflow-checks = true
 incremental = true
 
 [dependencies]
-anchor-lang = { version = "=1.1.2", features = ["allow-missing-optionals", "event-cpi", "init-if-needed", "lazy-account"] }
+anchor-lang = { version = "=1.1.2", features = ["allow-missing-optionals", "anchor-debug", "event-cpi", "init-if-needed", "lazy-account"] }
 anchor-spl = { version = "=1.1.2", features = ["governance", "memo", "metadata"] }
+arrayref = "=0.3.9"
 borsh = { version = "=1.8.1", features = ["derive"] }
+borsh-derive = "=1.8.1"
 bytemuck = { version = "=1.25.2", features = ["derive", "min_const_generics"] }
+bytemuck_derive = "=1.12.1"
+mpl-bubblegum = "=4.0.0"
+mpl-token-metadata = "=5.1.2-alpha.2"
+num-derive = "=0.5.1"
+num-traits = "=0.2.19"
+pyth-sdk = "=0.8.0"
+serde = { version = "=1.0.229", features = ["derive"] }
 solana-program = "=3.0.0"
+spl-associated-token-account = { version = "=8.0.0", features = ["no-entrypoint"] }
 spl-associated-token-account-interface = "=2.0.0"
+spl-pod = { version = "=0.7.4", features = ["borsh"] }
+spl-tlv-account-resolution = "=0.11.4"
+spl-token = { version = "=9.0.0", features = ["no-entrypoint"] }
+spl-token-2022 = { version = "=10.0.0", features = ["no-entrypoint"] } # 11+ moves to spl-token-2022-interface 3+, whose types differ from anchor-spl's
 spl-token-2022-interface = "=2.1.0"
+spl-token-group-interface = "=0.7.1" # spl-token-2022 10.0.0 fails to compile against 0.7.2
 spl-token-interface = "=2.0.0"
+spl-token-metadata-interface = "=0.8.0" # spl-token-2022 10.0.0 implements `Extension` only for this major's `TokenMetadata`
+spl-transfer-hook-interface = "=2.1.0"
+spl-type-length-value = "=0.9.1"
+thiserror = "=1.0.69" # the anchor-lang prelude re-exports this version; another makes `thiserror::` ambiguous
+# Dropped, no release supports Solana 3:
+# switchboard-solana 0.30.4 needs anchor-lang 0.30, switchboard-v2 0.4.0 needs solana-program 1.16
+# pyth-sdk-solana 0.10.6 fails to build: its borsh 0.10 derives need `Pubkey: BorshSerialize`
+# spl-account-compression 1.0.0 needs solana-program 2
+# mpl-token-auth-rules 1.5.1 needs solana-program < 1.19
 
 [lints.rust]
 unexpected_cfgs = "allow"

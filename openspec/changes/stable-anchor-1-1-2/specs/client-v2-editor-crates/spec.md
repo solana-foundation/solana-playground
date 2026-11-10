@@ -11,7 +11,9 @@ that a supported crate re-exports from another crate resolves. Under a
 proc-macro crate only proc-macro dependencies are served, and a reached crate
 the expansion tool cannot read is skipped with a warning. Each crate name is in
 snake case. Rust Analyzer SHALL see each crate with the features the lockfile's
-resolution enables for it.
+resolution enables for it. The exceptions are `mpl-bubblegum` and
+`mpl-token-metadata`: their generated modules are raw identifiers
+(`mod r#name`), and the expansion tool looks for a file named `r#name.rs`.
 
 #### Scenario: A feature-gated item (manual)
 

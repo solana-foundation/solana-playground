@@ -129,11 +129,11 @@ const servedBy = new Map();
 /**
  * Crates not to generate, plus the reached crates `syn-file-expand-cli` failed to read.
  *
- * `mpl-token-metadata` (every release since 3.x) declares its generated modules as raw identifiers (`mod r#name`),
- * and `syn-file-expand-cli` looks for `r#name.rs`, which does not exist.
+ * `mpl-bubblegum` (4.x) and `mpl-token-metadata` (every release since 3.x) declare their generated modules as raw
+ * identifiers (`mod r#name`), and `syn-file-expand-cli` looks for `r#name.rs`, which does not exist.
  */
-// TODO(HOO-2753): resolve `r#name` to `name.rs` during expansion, then serve `mpl-token-metadata`
-const skippedCrates = ["mpl-token-metadata"];
+// TODO(HOO-2753): resolve `r#name` to `name.rs` during expansion, then serve both crates
+const skippedCrates = ["mpl-bubblegum", "mpl-token-metadata"];
 
 await clearSupportedCrates();
 

@@ -31,11 +31,20 @@ See [proposal.md](proposal.md), section "Why". State this design depends on, rea
 
 ## Decisions
 
-**Seed the lockfile from the template's resolution.** `server/programs/Cargo.toml` lists the pinned set from the
-`stable-build-server` spec, and its `Cargo.lock` is generated with the Solana 3.1.10 toolchain, then checked so that
+**Seed the lockfile from the template's resolution.** `server/programs/Cargo.toml` lists the crates of the
+`stable-build-server` requirement "A program may depend only on the pinned crate set", and its `Cargo.lock` is generated with the Solana 3.1.10 toolchain, then checked so that
 `anchor-lang`, `anchor-spl`, and `solana-program` match `server/templates/anchor-1.1.2/Cargo.lock`. Alternative:
 copy the template's lockfile. Rejected: the stable set adds `borsh`, `solana-program`, and the interface crates as
 direct dependencies, so the lock differs. `solana-program` is direct because native programs import it.
+
+**Each restored crate takes its newest release that keeps `anchor-spl` interop.** A crate of the Anchor 0.29 list
+stays when a release builds on Solana 3 with the lock holding one `solana-program` 3.0.0 and `anchor-lang` and
+`anchor-spl` at 1.1.2, and every probe program builds, including one that passes an
+`anchor_spl::token_interface::Mint` where a `spl_token_2022::state::Mint` is expected. `spl-token-2022`,
+`spl-token-group-interface`, `spl-token-metadata-interface`, and `thiserror` stay below their newest release; the
+spec's table names the error each newer release hits. Alternative: take the newest release of each. Rejected: a
+program then holds two copies of the token state types, and `anchor-spl`'s accounts no longer convert to
+`spl-token-2022`'s.
 
 **The editor gets every reachable crate.** `solana-program` 3.0 re-exports separate crates (`solana-pubkey`,
 `solana-msg`, `solana-account-info`, and others), and `generate-crates.mjs` generated only the supported crates and
@@ -68,7 +77,8 @@ case, but a larger change to the crate graph than this change needs.
 **Keep `idl` in the response, always `null`.** `client/` (upstream's, not edited) and `client-v2` read the key.
 Removing it would turn every response into a parse of an absent field in `client/`. The request's `flags`
 (`seedsFeature`, `noDocs`, `safetyChecks`) are accepted and ignored for the same reason. The response type becomes
-`Option<serde_json::Value>`, so `anchor-syn` leaves `server/Cargo.toml`.
+`Option<serde_json::Value>`, so `anchor-syn` leaves `server/Cargo.toml`. IDL generation stays off until the build
+backend that returns an IDL replaces this route; tasks 2.7 and 2.8 of [tasks.md](tasks.md) wait for that backend.
 
 **`client-v2` replaces the IDL only when the build returns one.** `build` passes `idl` to `PgProgramInfo.update`
 only when it is not `null`. The unstable route still returns IDLs, and those still replace the held one.
