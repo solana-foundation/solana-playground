@@ -30,24 +30,24 @@ mono, then `mut` and `signer` as neutral tags with no colour of their own.
   accounts
 - **THEN** its card's head shows no count and neither heading is drawn
 
-### Requirement: An Interact card's Test says what it waits for
+### Requirement: An Interact card's Send says what it waits for
 
-An instruction card SHALL end in one row with Test, the card's only primary
+An instruction card SHALL end in one row with Send, the card's only primary
 action, and, for an instruction that has inputs, "Fill with Random" and
-"Reset" beside it as quiet buttons. While Test is held, the row SHALL say why:
-"Connect a wallet to test" with no wallet, else "Fill every field to test"
+"Reset" beside it as quiet buttons. While Send is held, the row SHALL say why:
+"Connect a wallet to send" with no wallet, else "Fill every field to send"
 until the fields have been checked and every one holds a valid value; nothing
-once Test can run.
+once Send can run.
 
-#### Scenario: Test held for a wallet
+#### Scenario: Send held for a wallet
 
 - **WHEN** no wallet is connected and the user opens an instruction card
-- **THEN** Test is disabled and the row reads "Connect a wallet to test"
+- **THEN** Send is disabled and the row reads "Connect a wallet to send"
 
-#### Scenario: Test held for a field
+#### Scenario: Send held for a field
 
 - **WHEN** a wallet is connected and an argument of the instruction is empty
-- **THEN** Test is disabled and the row reads "Fill every field to test"
+- **THEN** Send is disabled and the row reads "Fill every field to send"
 
 ### Requirement: Copy sits inside an Interact field
 

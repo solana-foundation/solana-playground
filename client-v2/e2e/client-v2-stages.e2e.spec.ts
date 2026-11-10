@@ -194,11 +194,11 @@ test.describe("client-v2-stages: Interact", () => {
     await expect(
       panel.getByRole("button", { name: "Copy program id" })
     ).toBeVisible(LONG);
-    // Every instruction is a card, folded on arrival; opened, it ends in Test
+    // Every instruction is a card, folded on arrival; opened, it ends in Send
     const card = panel.getByRole("button", { name: /^initialize/ });
     await expect(card).toHaveAttribute("aria-expanded", "false");
     await card.click();
-    await expect(panel.getByRole("button", { name: "Test" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Send" })).toBeVisible();
     await expect(panel.locator('[data-slot="stage-empty"]')).toHaveCount(0);
   });
 

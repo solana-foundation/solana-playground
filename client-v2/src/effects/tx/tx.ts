@@ -10,7 +10,8 @@ import {
 } from "../../utils";
 import { ExplorerLink } from "./ExplorerLink";
 
-// Show a notification toast with explorer links after a transaction is sent.
+// After a transaction is sent, toast "Transaction sent" with its signature
+// linked to the block explorer picked in Settings.
 export const tx = () => {
   return PgTx.onDidSend((sentTx) => {
     // Check setting

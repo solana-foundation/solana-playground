@@ -336,7 +336,7 @@ Flow SHALL mount one visually hidden `role="status"` region. It SHALL say an ind
 
 ### Requirement: Deploy and Interact wait for the network
 
-While the browser is offline or the cluster does not answer, as the network indicator reads it, Deploy's pill and Interact's Test SHALL be disabled, with the reason where each gives its reason today: the pill's tooltip, and the line beside Test: "You're offline" or "Devnet is not responding". The notice over the stage is the visible reason where there is no tooltip. A cluster still connecting SHALL hold nothing. The `deploy` command SHALL refuse to start with "<reason>. Deploy waits for the network.", printed as its own line; pausing or resuming a deploy under way SHALL still work.
+While the browser is offline or the cluster does not answer, as the network indicator reads it, Deploy's pill and Interact's Send SHALL be disabled, with the reason where each gives its reason today: the pill's tooltip, and the line beside Send: "You're offline" or "Devnet is not responding". The notice over the stage is the visible reason where there is no tooltip. A cluster still connecting SHALL hold nothing. The `deploy` command SHALL refuse to start with "<reason>. Deploy waits for the network.", printed as its own line; pausing or resuming a deploy under way SHALL still work.
 
 #### Scenario: The cluster does not answer
 
@@ -346,7 +346,7 @@ While the browser is offline or the cluster does not answer, as the network indi
 #### Scenario: Offline on Interact (manual)
 
 - **WHEN** the form is filled and a wallet is connected, and the browser goes offline
-- **THEN** Test is disabled and the line reads "You're offline"
+- **THEN** Send is disabled and the line reads "You're offline"
 
 #### Scenario: A deploy from elsewhere
 
