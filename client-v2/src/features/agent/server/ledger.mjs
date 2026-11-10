@@ -53,8 +53,8 @@ export const secondsToReset = (now) => {
  *
  * Prices are USD per million tokens, so tokens times price is micro-USD
  * already. Every input token is charged at the full price, cached or not,
- * which overcharges as the ledger may. Sizes a reservation, and charges a
- * turn whose upstream reported no cost.
+ * which overcharges as the ledger may. Charges a completed turn: alone when
+ * the upstream reported no cost, and as the floor under the cost it reported.
  *
  * @param {{ prompt_tokens?: number; completion_tokens?: number }} usage
  * @param {{ input: number; output: number }} prices USD per million tokens
@@ -78,7 +78,7 @@ export const costOf = (usage, prices) =>
  *
  * @typedef {{ kind: "refused" }
  *   | { kind: "abandoned" }
- *   | { kind: "completed"; usage: { prompt_tokens?: number; completion_tokens?: number; cost?: unknown } }
+ *   | { kind: "completed"; usage: import("./stream-usage.mjs").Usage }
  *   | { kind: "unfinished" }} TurnEnd
  */
 
@@ -100,11 +100,13 @@ const tokenCount = (count) =>
       null;
 
 /**
- * What a turn is charged, in micro-USD. A completed turn is charged the cost
- * the upstream reported (Nous's `usage.cost`, in USD), which counts cached
- * input at its own price; without one, its tokens at `prices`. A completed
- * turn whose usage can be priced neither way is charged its reservation, as
- * one that reported none.
+ * What a turn is charged, in micro-USD. A completed turn is charged the larger
+ * of the cost the upstream reported (`usage.cost`, in USD) and its tokens at
+ * `prices`, so an upstream that reports too little, as the Gateway reported
+ * `cost: 0` for a free-tier turn on 2026-10-29, cannot undercharge; the
+ * reported cost wins when the upstream's price is above `prices`. With only
+ * one of the two, that one; with neither, its reservation, as a turn that
+ * reported no usage.
  *
  * @param {TurnEnd} end
  * @param {number} reserved the turn's reservation, in micro-USD
@@ -114,15 +116,15 @@ export const chargeFor = (end, reserved, prices) => {
   if (end.kind === "refused" || end.kind === "abandoned") return 0;
   if (end.kind !== "completed") return reserved;
   const reported = reportedCost(end.usage.cost);
-  if (reported !== undefined) return reported;
-  if (isPriceable(end.usage)) return costOf(end.usage, prices);
-  return reserved;
+  const priced = isPriceable(end.usage) ? costOf(end.usage, prices) : undefined;
+  if (reported === undefined) return priced ?? reserved;
+  return priced === undefined ? reported : Math.max(reported, priced);
 };
 
 /**
  * The upstream's reported cost in micro-USD, or undefined when it reported
- * none, or one the ledger cannot store: not a number, negative, or past what
- * a `bigint` column holds exactly.
+ * none, or one the ledger cannot use: not a number, negative, or too large
+ * for a JS number to hold exactly in micro-USD.
  *
  * @param {unknown} cost USD
  * @returns {number | undefined}

@@ -1035,6 +1035,17 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: 500 });
     });
 
+    it("charges a completed turn its tokens when the reported cost is below them", async () => {
+      // The Gateway reported `cost: 0` for a free-tier turn on 2026-10-29
+      network(() =>
+        streamed({ prompt_tokens: 1000, completion_tokens: 100, cost: 0 })
+      );
+
+      await postJson(handler, TURN);
+
+      expect(spend()).toEqual({ reserved: 0, spent: USAGE_COST });
+    });
+
     it("charges a completed turn with no reported cost its tokens", async () => {
       network();
 
@@ -1449,6 +1460,62 @@ describe("POST /api/agent spend gate", () => {
       expectPoolExhausted(res);
       expect(logged).toContainEqual(expect.objectContaining({ level, report }));
     });
+
+    it.each([
+      {
+        where: "a nested error.code",
+        body: { error: { code: "insufficient_credits_for_paid_model" } },
+      },
+      {
+        where: "error.type behind a numeric error.code",
+        body: { error: { code: 402, type: "insufficient_funds" } },
+      },
+      {
+        where: "error.type behind a generic top-level code",
+        body: {
+          code: "payment_required",
+          error: { type: "insufficient_funds" },
+        },
+      },
+    ])("reports an empty balance named in $where", async ({ body }) => {
+      const logged = serverLog();
+      network(() => json(body, { status: 402 }));
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "error",
+          error: expect.objectContaining({
+            message: "upstream credit balance is empty",
+          }),
+          report: true,
+        })
+      );
+    });
+
+    it.each([
+      { what: "an unmapped code", code: "payment_required" },
+      { what: "an inherited key", code: "constructor" },
+    ])(
+      "reports a JSON 402 naming $what as an unknown cause",
+      async ({ code }) => {
+        const logged = serverLog();
+        network(() => json({ code }, { status: 402 }));
+
+        const res = await postJson(handler, TURN);
+
+        expectPoolExhausted(res);
+        expect(logged).toContainEqual(
+          expect.objectContaining({
+            level: "warn",
+            message: "upstream 402 with an unknown cause",
+            report: true,
+          })
+        );
+      }
+    );
 
     it("answers an unrecognised 402 as an exhausted pool and reports it", async () => {
       const logged = serverLog();

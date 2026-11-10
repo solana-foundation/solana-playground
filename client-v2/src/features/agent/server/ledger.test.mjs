@@ -53,9 +53,15 @@ describe("ledger arithmetic", () => {
     assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 10);
   });
 
-  it("charges a reported cost of zero as nothing", () => {
+  it("charges the tokens when the reported cost is below them", () => {
+    // The Gateway reported `cost: 0` for a free-tier turn on 2026-10-29
     const usage = { prompt_tokens: 1000, completion_tokens: 100, cost: 0 };
-    assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 0);
+    assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 200);
+    const cheap = { prompt_tokens: 1000, completion_tokens: 100, cost: 1e-4 };
+    assert.equal(
+      chargeFor({ kind: "completed", usage: cheap }, 9999, PRICES),
+      200
+    );
   });
 
   // A cost the ledger cannot store falls back to the tokens at the prices

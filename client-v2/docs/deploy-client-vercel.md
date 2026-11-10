@@ -355,7 +355,7 @@ Gateway](#fallback-vercel-ai-gateway)). Three limits stack:
   GitHub account is younger than `PG_AI_NEWCOMER_AGE_DAYS`, or its creation
   date is not stored yet, and `established` after. `/api/agent` keeps a ledger
   in Postgres (`agent_spend`): a turn reserves its worst-case cost before the
-  upstream call and settles to the reported cost once the response has ended.
+  upstream call and settles to what it cost once the response has ended.
   The date is stored at sign-in, or looked up from GitHub after the user's
   first turn when sign-in did not store it. The cap resets at 00:00 UTC.
 - **Bounds on one request.** A body over `PG_AI_MAX_BODY_BYTES` is refused, and
@@ -390,7 +390,7 @@ The limits are optional and default to the starting values in the change's
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `PG_AI_PROVIDERS` | `baseten,fireworks` when `PG_AI_BASE_URL` is the Gateway, none otherwise | Gateway provider slugs a turn may be served by: the US-region endpoints for the model with zero data retention and no training. Any other upstream refuses the field (Nous: `400 unknown_parameter`), so it gets none by default. Set but empty, it sends no restriction even to the Gateway. Check `/v1/models/<model>/endpoints` before changing it |
-| `PG_AI_PRICE_INPUT` / `PG_AI_PRICE_OUTPUT` | `0.2475` / `0.825` | USD per million tokens, Nous's price for the default model. A turn is charged the `usage.cost` the upstream reports; these prices size the reservation and charge a turn whose usage carries no cost. Above the Gateway's list price ($0.15 / $0.50), so on the fallback they overcharge, never under |
+| `PG_AI_PRICE_INPUT` / `PG_AI_PRICE_OUTPUT` | `0.2475` / `0.825` | USD per million tokens, Nous's price for the default model. These prices size the reservation and set the floor of the charge: a turn is charged the larger of the `usage.cost` the upstream reports and its tokens at these prices. Above the Gateway's list price ($0.15 / $0.50), so on the fallback they overcharge, never under, even where the Gateway reports `cost: 0` |
 | `PG_AI_MAX_BODY_BYTES` | `524288` | A larger body is refused with `413` |
 | `PG_AI_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_completion_tokens` |
 | `PG_AI_NEWCOMER_AGE_DAYS` | `30` | Younger GitHub accounts are `newcomer` |
@@ -474,16 +474,18 @@ What `POST /api/agent` answers past sign-in:
 | --- | --- |
 | `413` | The body is larger than `PG_AI_MAX_BODY_BYTES`. No charge |
 | `429`, `reason: "daily-cap"` | The turn's worst case would pass the user's cap today. Carries `tier` and `Retry-After` (seconds to 00:00 UTC). The upstream is not called |
-| `503`, `reason: "pool-exhausted"` | The upstream answered `402`, whatever its code. Carries `tier`, and the upstream's `Retry-After` when it sent one (a key's daily window is the upstream's to know). No charge. Logged by cause: `key_spend_limit_reached` (Gateway: `quota_for_entity_exceeded`) as the warning `api:agent: tier key limit reached`; `insufficient_credits_for_paid_model` (Gateway: `insufficient_funds`) reported to Sentry as `upstream credit balance is empty`, which needs a person to add credits; any other `402` reported as `upstream 402 with an unknown cause`, with its body |
-| `503`, no `reason` | The ledger could not be read; logged as `agent: spend ledger unavailable`. The upstream is not called |
+| `503`, `reason: "pool-exhausted"` | The upstream answered `402`, whatever its code. Carries `tier`, and the upstream's `Retry-After` when it sent one (a key's daily window is the upstream's to know). No charge. Logged by cause: `key_spend_limit_reached` (Gateway: `quota_for_entity_exceeded`) as the `api:agent` warning `tier key limit reached`; `insufficient_credits_for_paid_model` (Gateway: `insufficient_funds`) reported to Sentry as `upstream credit balance is empty`, which needs a person to add credits; any other `402` reported as `upstream 402 with an unknown cause`, with its body |
+| `503`, no `reason` | The ledger could not be read; reported to Sentry as an `api:agent` error with the database's message and `code`. The upstream is not called |
 
-A turn is charged the `usage.cost` the upstream reported, or, with no cost in
-its usage, its tokens at the prices; a turn the caller abandoned, or one that
+A turn is charged the larger of the `usage.cost` the upstream reported and
+its tokens at the prices, or the one of the two its usage allows; a turn the caller abandoned, or one that
 ended without usage, its whole reservation; a turn the upstream refused,
 nothing. A function that dies between reserve and settle leaves the
 reservation spent for the day and its `agent_turn` row `started`: the ledger
-may overcharge, never undercharge. Failures after the answer are logged as
-`agent: counting a capped turn failed` and `agent: account age lookup failed`;
+may overcharge, never undercharge. Failures after the answer are reported as
+`api:agent` errors with the database's message (counting a capped turn, with
+its `tier` and `day`) and, for the account age, as the `agent:account-age`
+warning `account age not learned` or an error with the database's message;
 a settle that fails is reported as an `api:agent` error with the database's
 message, carrying the turn's `turnId`, `end`, `reserved` and `charge`. A
 settle that finds no
@@ -500,7 +502,8 @@ mid-turn, a lost charge record otherwise.
   means the per-user cap binds first.
 - The Nous dashboard's spend per key and the balance: how close each key comes
   to its limits, and how long the balance lasts. `agent_turn.charged` holds
-  each turn's reported cost, which replaces the design's estimate of a typical
+  each completed turn's charge, its reported cost unless the tokens at the
+  prices came to more, which replaces the design's estimate of a typical
   step.
 - `agent_spend` for the spread: `select day, count(*), sum(spent) / 1e6 as usd
   from agent_spend group by day order by day desc`.

@@ -91,9 +91,9 @@ Run 2.1, 2.2 and 2.3 at the same time; 2.4 follows all three.
       reported as such" as cases in
       `src/features/agent/agent.integration.spec.ts`, the Sentry report read
       from the logger (HOO-1751; may run with 2.6)
-- [x] 2.6 Charge the reported cost: `settle` charges `usage.cost` (USD, a
-      finite number not below zero) when present, else the token counts at
-      the prices; the price defaults in `agentEnv` become 0.2475 and 0.825.
+- [x] 2.6 Charge the reported cost: `settle` charges the larger of
+      `usage.cost` (USD, a finite number not below zero) and the token
+      counts at the prices, or the one of the two the usage allows; the price defaults in `agentEnv` become 0.2475 and 0.825.
       Verify with the scenarios of "A turn is charged what it cost" in
       `agent.integration.spec.ts`, a `yarn test-api` case for the charge
       with and without `cost`, and the `agentEnv` default tests (HOO-1751;
@@ -125,6 +125,12 @@ Run 2.1, 2.2 and 2.3 at the same time; 2.4 follows all three.
       keep going." Update `docs/assistant-context.md` to match (then
       `yarn sync-assistant-context`). Verify with the mapping's unit tests
       and the browser test of 3.3 (HOO-1751)
+- [x] 3.5 The status's AI indicator after a `pool-exhausted` refusal:
+      `PgAssistant.markLimitReached` takes the refusal's reason, a spent pool
+      holds Limit reached with no time until a turn goes through, and its
+      panel shows the chat's sentence with "add a key of your own". Verify
+      with the store's and `widgets/status` unit tests and the browser test
+      `client-v2-status: The free pool is spent` (HOO-1751; after 3.4)
 
 ## 4. Operations and documentation
 

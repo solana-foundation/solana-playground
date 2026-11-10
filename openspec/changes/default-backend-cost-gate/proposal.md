@@ -40,9 +40,11 @@ one request.
 - `/api/agent` refuses a request whose body is larger than a configured limit
   (413), and sets `max_completion_tokens` on every upstream request, so the worst-case
   cost of one turn is known before the call.
-- The panel shows a plain sentence for `daily-cap` and `pool-exhausted`, says
-  when the default backend is available again, and points at the key-based
-  backends.
+- The panel shows a plain sentence for `daily-cap` and `pool-exhausted` and
+  points at the key-based backends. Only the `daily-cap` sentence says when
+  the default backend is available again (00:00 UTC); a spent pool refills
+  when the upstream says, so its sentence names no time, and neither does the
+  status's AI indicator.
 - HOO-1788 needs no new token: the Better Auth session, which `readSession`
   already verifies, is the session token, and `user.id` is the limit key.
 - Telemetry: `features/agent` gains browser code, a tracker in
@@ -64,8 +66,13 @@ one request.
 
 ### Modified Capabilities
 
-None. `assistant-own-key` keeps its requirement that the default backend needs
-a signed-in user. This change adds limits for the signed-in user.
+- `client-v2-status`: the AI indicator's Limit reached names a time only
+  after a `daily-cap` refusal; after a `pool-exhausted` one its panel says the
+  free assistant is out of capacity for now, and it holds until a turn on the
+  hosted model goes through.
+
+`assistant-own-key` keeps its requirement that the default backend needs a
+signed-in user. This change adds limits for the signed-in user.
 
 ## Impact
 
@@ -73,7 +80,8 @@ a signed-in user. This change adds limits for the signed-in user.
   tier lookup, request bounds; `index.ts` and `model/telemetry.ts` for the
   event), `client-v2/src/shared/lib/telemetry/prefixes.ts` (prefix `agent`),
   `client-v2/src/shared/config/server-env.mjs` (`agentEnv`), the default
-  backend's error mapping in the assistant panel.
+  backend's error mapping in the assistant panel, and the status's AI
+  indicator (`widgets/status`, `PgAssistant.limitReached`).
 - Database: one migration adds the ledger table and a user field for the
   GitHub account's creation date; `db/schema.sql` is regenerated.
 - Operations: a person creates the two Nous keys with their daily and

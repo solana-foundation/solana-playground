@@ -227,8 +227,8 @@ key `(user_id, day)`. Amounts are integers in micro-USD.
   plus `max_completion_tokens` output tokens, at the configured prices.
 - **Settle**: one statement, `reserved = reserved - $r, spent = spent + $charge`,
   with `$charge` from the spec's requirement "A turn is charged what it cost":
-  the `usage.cost` the upstream reported, in USD, or, when the usage carries
-  no cost, its token counts at the configured prices.
+  the larger of the `usage.cost` the upstream reported, in USD, and its
+  token counts at the configured prices; with only one of the two, that one.
   It runs after the response has ended, so it adds no latency either. Only a
   stream read to its end with the caller still connected is charged its
   reported usage: usage seen on a turn that stopped early may be a running
@@ -250,10 +250,12 @@ turn's cost. Checked on 2026-11-10 with `z-ai/glm-5.3-flash:US`:
 ```
 
 18 × $0.2475/M + 6 × $0.825/M is exactly $0.000009405, the catalogue price.
-Charging `usage.cost` counts cached input at its lower price and follows a
-price change with no variable to update. Prices still come from configuration
-(`PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`, per million tokens): they size the
-reservation, and they charge a turn whose usage has no cost.
+Charging `usage.cost` follows a price rise with no variable to update. The
+tokens at the configured prices (`PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`,
+per million tokens) are the floor under it, so an upstream that reports too
+little cannot undercharge: the Gateway reported `cost: 0` on a free-tier turn
+(Open Questions). The floor gives up the discount on cached input, which the
+Non-Goals allow. The prices also size the reservation.
 
 Alternative: Upstash Redis. Lower latency per call, but a second store to
 provision and operate. Postgres already serves `readSession` on every turn.
@@ -367,8 +369,8 @@ Gateway section of `client-v2/docs/deploy-client-vercel.md`.
 
 Derived from the Nous price for `z-ai/glm-5.3-flash:US` on 2026-11-10: $0.2475
 per million input tokens, $0.825 per million output tokens. The charge is the
-reported `usage.cost`, so the prices only size the reservation and charge a
-turn whose usage has no cost. They sit above the Gateway's list price ($0.15 /
+larger of the reported `usage.cost` and the tokens at these prices, which
+also size the reservation. They sit above the Gateway's list price ($0.15 /
 $0.50), so on the fallback they overcharge, as the Non-Goals allow. The code
 takes each value from the environment, with these as the defaults. Read
 `agent_refused` after a week and adjust.
@@ -413,5 +415,6 @@ How the numbers follow from the price:
 - On the Gateway fallback, whether its streamed `usage.cost` matches
   `total_cost` from `GET /v1/generation?id=...`. A local run on 2026-10-29
   against a free-tier model saw `cost`, `market_cost` and `cost_details`, all
-  0; the field is undocumented. Check one paid turn before moving to the
-  Gateway; until then the price variables are the fallback charge there too.
+  0; the field is undocumented. The charge's floor, the tokens at the
+  configured prices, keeps such a report from undercharging, so the check is
+  for accuracy, not safety.

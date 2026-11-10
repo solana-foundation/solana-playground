@@ -1080,26 +1080,26 @@ describe("the assistant's provider", () => {
       it("holds after a daily-cap refusal", async () => {
         refuses(429, { error: "server text", reason: "daily-cap" });
         await expect(defaultBackend().send("hi")).rejects.toThrow();
-        expect(PgAssistant.limitReachedUntil).toBeDefined();
+        expect(PgAssistant.limitReached?.reason).toBe("daily-cap");
       });
 
       it("holds after a spent-pool refusal", async () => {
         refuses(503, { error: "server text", reason: "pool-exhausted" });
         await expect(defaultBackend().send("hi")).rejects.toThrow();
-        expect(PgAssistant.limitReachedUntil).toBeDefined();
+        expect(PgAssistant.limitReached).toEqual({ reason: "pool-exhausted" });
       });
 
       it("does not hold after a signed-out refusal", async () => {
         refuses(401, { error: "Sign in.", reason: "signed-out" });
         await expect(defaultBackend().send("hi")).rejects.toThrow();
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
       });
 
       it("lifts once a turn goes through", async () => {
-        PgAssistant.markLimitReached();
+        PgAssistant.markLimitReached("daily-cap");
         respond(openAiText("Hi."));
         await defaultBackend().send("hi");
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
       });
     });
 

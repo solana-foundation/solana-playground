@@ -641,7 +641,10 @@ const refusalCause = (status, text) => {
 };
 
 /**
- * Why an upstream `402` refused a turn
+ * Why an upstream `402` refused a turn. Nous names the cause in `code`, the
+ * Gateway in `error.type`, and either may also carry a code that is not one
+ * of {@link POOL_REFUSALS} (a numeric `error.code`, a generic top-level
+ * `code`), so the first known one among the three wins.
  *
  * @typedef {"key-limit" | "no-credits" | "unknown"} PoolRefusal
  * @param {string} text the upstream's body
@@ -656,8 +659,10 @@ const poolRefusalOf = (text) => {
     warnNotJson("pool-exhausted", 402, e);
     return "unknown";
   }
-  const code = parsed?.code ?? parsed?.error?.code ?? parsed?.error?.type;
-  return (typeof code === "string" && POOL_REFUSALS[code]) || "unknown";
+  const known = [parsed?.code, parsed?.error?.code, parsed?.error?.type].find(
+    (code) => typeof code === "string" && Object.hasOwn(POOL_REFUSALS, code)
+  );
+  return known === undefined ? "unknown" : POOL_REFUSALS[known];
 };
 
 /**
