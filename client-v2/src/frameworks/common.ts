@@ -50,7 +50,7 @@ export const addAfter = (
  * @returns the dependency list
  */
 export const getRustDependencies = async (files: TupleFiles) => {
-  // TODO(HOO-2638): write the server's anchor-lang/anchor-spl features so init_if_needed, event-cpi and lazy-account programs build their IDL locally
+  // TODO: export the features the server enables on each crate, so a program that needs one builds its IDL locally
   const versions = await getVersions("crates");
   // Exact: a bare "1.1.2" lets Cargo take a later 1.x than the server builds with
   const getVersion = (crateName: string) =>

@@ -37,7 +37,7 @@ const UPLOAD: GuideStep = {
   title: `Upload ${IDL_PATH} from the project folder with "Upload IDL". Build the IDL again after you change the program's instructions or accounts.`,
 };
 
-// TODO(HOO-2638): write the server's anchor-lang/anchor-spl features so init_if_needed, event-cpi and lazy-account programs build their IDL locally
+// TODO: export the features the server enables on each crate, so a program that needs one builds its IDL locally
 /** The steps of each method, from the download to the upload */
 export const STEPS: Record<IdlBuildMethod, GuideStep[]> = {
   docker: [

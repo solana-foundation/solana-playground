@@ -107,7 +107,7 @@ change adds the `idl-build` feature to the program `Cargo.toml` in `frameworks/a
 quay.io/ottersec/anchor:v<anchor> anchor idl build -o idl.json`. The output sits at the project root because a
 fresh export has no `target/idl`, and `anchor idl build -o` does not create folders; the local method writes the
 same path. The export does not carry the server's `anchor-lang`/`anchor-spl` features, so a program using
-`init_if_needed`, `event-cpi`, or `lazy-account` fails its local IDL build; shipped knowingly, tracked in HOO-2638,
+`init_if_needed`, `event-cpi`, or `lazy-account` fails its local IDL build; shipped knowingly,
 with TODOs at `getRustDependencies` and the guide's steps. `--platform` keeps Apple Silicon on the
 published architecture. Task 2.2 confirms the image's entrypoint, user, and tag before the command is fixed in
 `model/steps.ts`.
