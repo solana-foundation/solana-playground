@@ -9,7 +9,7 @@ use anyhow::anyhow;
 use regex::Regex;
 
 use crate::{
-    log::{info, warn},
+    log::{error, info, warn},
     utils::Files,
 };
 
@@ -26,7 +26,10 @@ pub const MAX_FILE_AMOUNT: usize = 64;
 pub const MAX_PATH_LEN: usize = 128;
 
 /// Max program build output stderr length
-pub const MAX_STDERR_LEN: usize = 1024 * 1024 * 1024; // 1 MiB
+pub const MAX_STDERR_LEN: usize = 1024 * 1024; // 1 MiB
+
+/// How many characters of a failed build's stderr the server log keeps
+const LOGGED_STDERR_LEN: usize = 4096;
 
 /// Build the program from the given program name and files.
 ///
@@ -154,10 +157,25 @@ const COMPILE_ERROR_MARKER: &str = "error: could not compile";
 fn check_build_output(success: bool, stderr: String) -> anyhow::Result<String> {
     // The client reads failure only from the compile error marker, so any other failure would pass as success
     if !success && !stderr.contains(COMPILE_ERROR_MARKER) {
-        return Err(anyhow!("Build failed: {stderr}"));
+        // The output names server paths and the toolchain, so only the server log sees it
+        error!(
+            "Build failed outside the compiler: {}",
+            tail(&stderr, LOGGED_STDERR_LEN)
+        );
+        return Err(anyhow!("Build failed on the server"));
     }
 
     Ok(stderr)
+}
+
+/// The last `max_chars` characters of `text`, where cargo prints the cause
+fn tail(text: &str, max_chars: usize) -> &str {
+    let start = text
+        .char_indices()
+        .rev()
+        .nth(max_chars.saturating_sub(1))
+        .map_or(0, |(index, _)| index);
+    &text[start..]
 }
 
 /// Read the program ELF and return its bytes.
@@ -195,7 +213,14 @@ mod tests {
     }
 
     #[test]
-    fn check_build_output_rejects_other_failures() {
-        assert!(check_build_output(false, "error: no matching package".into()).is_err());
+    fn check_build_output_rejects_other_failures_without_their_output() {
+        let error = check_build_output(false, "error: no matching package".into()).unwrap_err();
+        assert_eq!(error.to_string(), "Build failed on the server");
+    }
+
+    #[test]
+    fn tail_keeps_the_last_characters() {
+        assert_eq!(tail("ab€", 2), "b€");
+        assert_eq!(tail("ab", 5), "ab");
     }
 }
