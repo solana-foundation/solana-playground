@@ -762,6 +762,24 @@ describe("BaseBuild", () => {
     }
   );
 
+  // HOO-2782: the stage is centred, so an in-flow line mounted by the click
+  // took a gap and moved the action row down while the rebuild ran
+  it("keeps the slow line out of the flow until it has words", () => {
+    const surface: BuildSurfaceView = { kind: "succeeded" };
+    const { container, rerender } = render(
+      <BaseBuild {...props(surface, true)} />
+    );
+    const line = container.querySelector(
+      '[data-slot="stage-empty"] > p[role="status"]'
+    );
+    if (!line) throw new Error("the slow line is not mounted");
+    expect(line.matches(":empty")).toBe(true);
+    expect(line.classList).toContain("empty:sr-only");
+
+    rerender(<BaseBuild {...props(surface, true, true)} />);
+    expect(line.matches(":empty")).toBe(false);
+  });
+
   it("drops the slow line once the build is over", () => {
     render(<BaseBuild {...props({ kind: "succeeded" }, false, true)} />);
 

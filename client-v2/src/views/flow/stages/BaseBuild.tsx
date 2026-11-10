@@ -201,9 +201,11 @@ const LogLink = ({ onShowLog }: Pick<BaseBuildProps, "onShowLog">) => (
 /**
  * Spec 08 BUILD-05, mounted for the whole run so its polite region is in
  * place before the words arrive. Never a warning colour: slow is not broken.
+ * Empty, it is `sr-only`: out of the flow, so mounting it adds no gap to the
+ * centred stage and the action row stays where the click found it.
  */
 const SlowLine = ({ slow }: { slow: boolean }) => (
-  <p role="status" className="text-sm text-muted-foreground">
+  <p role="status" className="text-sm text-muted-foreground empty:sr-only">
     {slow
       ? "This build is taking longer than usual. The server may be busy. It keeps running."
       : ""}
