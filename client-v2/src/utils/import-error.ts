@@ -1,6 +1,14 @@
 // Dependency-free, like `server-error.ts`: a slice reads these without
 // booting the `utils` barrel.
 
+/** Thrown when the user closes the program selection without choosing */
+export class ImportCancelledError extends Error {
+  constructor() {
+    super("Import cancelled");
+    this.name = "ImportCancelledError";
+  }
+}
+
 /**
  * Why a GitHub import could not read the repository or one of its files, as
  * telemetry reports it; `network` is a request that got no answer

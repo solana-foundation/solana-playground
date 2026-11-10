@@ -1,6 +1,7 @@
 import { PgFramework } from "./framework";
 import type { ImportProgress } from "./github";
-import { filterRepoFiles, ImportCancelledError, PgGithub } from "./github";
+import { filterRepoFiles, PgGithub } from "./github";
+import { ImportCancelledError } from "./import-error";
 
 // `./explorer` boots lightning-fs on import, which needs a real IndexedDB.
 vi.mock("./explorer", () => ({ PgExplorer: {} }));

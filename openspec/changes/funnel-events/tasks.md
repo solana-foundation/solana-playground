@@ -31,7 +31,7 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
       "Import failures carry an enumerated reason": declare and describe the
       events, one mapping test per reason and a reason assertion at each
       throw site; sending, and the memory-provider tests, are 2.2 to 2.4
-- [ ] 2.2 Send the import events from `ImportGithub` and `Example`
+- [x] 2.2 Send the import events from `ImportGithub` and `Example`
       (`ImportGithub.tsx`), `ImportFs` (`ImportFs.tsx`) and `ImportTemporary`
       (`ImportTemporary.tsx`). Satisfies "A GitHub import is counted", "A
       file import is counted" and "A temporary project's import is

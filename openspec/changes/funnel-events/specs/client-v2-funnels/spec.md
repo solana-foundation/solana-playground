@@ -26,7 +26,7 @@ SHALL be declared by a tracker under `features/`, `widgets/` or `entities/`.
 | Arrive on the catalog | `catalog_shown` | `catalogPage` in `widgets/catalog/model/catalog-page.ts` | widgets/catalog |
 | Get a project: new | `new_project_started` | `StartFromScratch` in `features/new-project/ui/StartFromScratch.tsx` | features/new-project |
 | Get a project: from the catalog | `catalog_item_opened` | `useCardOpen` in `widgets/catalog/model/use-card-open.ts` | widgets/catalog |
-| Get a project: import | `project_imported` | `ImportGithub` and its `Example` in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx`; `ImportFs` in `Modals/ImportFs.tsx`; `ImportTemporary` in `Modals/ImportTemporary.tsx` | pending (funnel-events) |
+| Get a project: import | `project_imported` | `ImportGithub` and its `Example` in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx`; `ImportFs` in `Modals/ImportFs.tsx`; `ImportTemporary` in `Modals/ImportTemporary.tsx` | features/project-files |
 | Get a project: view a GitHub link | `project_viewed` | `github` (`/github/<owner>/<repo>…`) in `routes/github/github.tsx` | pending (funnel-events) |
 | Sign in | `auth_signed_in` | `PgSession._signIn` in `features/auth/model/session.ts` | features/auth |
 | Build | `build_started`, `build_succeeded` | `build` in `commands/build/build.ts` | pending (wbdi-flow) |

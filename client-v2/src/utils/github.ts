@@ -1,6 +1,6 @@
 import { PgExplorer, TupleFiles } from "./explorer";
 import { noProgramCode, PgFramework } from "./framework";
-import { GithubImportError } from "./import-error";
+import { GithubImportError, ImportCancelledError } from "./import-error";
 import { PgLanguage } from "./language";
 
 /** Single entry of a Git tree */
@@ -48,14 +48,6 @@ const IGNORED_FILE_REGEX = /(^|\/)package-lock\.json$/;
  * a slash, as in marginfi's `marginfi/fuzz`. Keep the two in step.
  */
 const PROGRAM_SRC_REGEX = /programs\/(.+?)\/src/;
-
-/** Thrown when the user closes the program selection without choosing */
-export class ImportCancelledError extends Error {
-  constructor() {
-    super("Import cancelled");
-    this.name = "ImportCancelledError";
-  }
-}
 
 /** Progress of a repository import */
 export type ImportProgress = {
