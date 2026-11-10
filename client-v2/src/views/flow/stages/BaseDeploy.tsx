@@ -108,6 +108,9 @@ export interface BaseDeployProps {
   onShowNetwork: (cluster: string) => void;
   /** The IDL in use, by its program's name; undefined while there is none */
   idlName: string | undefined;
+  /** Why the network holds a deploy, while it does; the notice over the stage
+   * says it too */
+  networkHold?: string;
   /** The secondary "Upload IDL" action (`IdlActions mode="upload-button"`) */
   idlUpload: ReactNode;
   /**
@@ -122,7 +125,7 @@ export interface BaseDeployProps {
 
 /** Why the Deploy button is off, for its tooltip; undefined when it is on */
 const deployBlockedReason = (p: BaseDeployProps) =>
-  p.view.kind === "running" ? "A deploy is already running" : undefined;
+  p.view.kind === "running" ? "A deploy is already running" : p.networkHold;
 
 /**
  * A failed deploy of a built program: the stage maps no failure to a named
@@ -529,7 +532,7 @@ const DeployPill = ({
   }
   return (
     <BrandButton
-      disabled={running}
+      disabled={deployBlockedReason(p) !== undefined}
       aria-busy={running || undefined}
       title={deployBlockedReason(p)}
       onClick={p.onDeploy}
@@ -664,7 +667,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             first: it is the stage's one way on */}
         <div
           data-slot="deploy-outlines"
-          className="flex flex-wrap items-center justify-center gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:[&_[data-variant=outline]]:w-full max-md:[&_[data-variant=outline]]:px-3 max-md:[&_button]:text-sm! max-md:[&>span]:w-full max-md:[&>span>div]:w-full [&_[data-variant=outline]]:h-10 [&_[data-variant=outline]]:rounded-full [&_[data-variant=outline]]:px-5"
+          className="flex flex-wrap items-center justify-center gap-2 max-md:grid max-md:w-full max-md:grid-cols-2 max-md:[&_[data-variant=outline]]:h-12 max-md:[&_[data-variant=outline]]:w-full max-md:[&_[data-variant=outline]]:px-3 max-md:[&_button]:text-sm! max-md:[&>span]:w-full max-md:[&>span>div]:w-full [&_[data-variant=outline]]:h-10 [&_[data-variant=outline]]:rounded-full [&_[data-variant=outline]]:px-5"
         >
           {offersRetry(p) && (
             <Button variant="outline" onClick={p.onShowLog}>

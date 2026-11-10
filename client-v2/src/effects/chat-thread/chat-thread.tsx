@@ -166,6 +166,9 @@ export const chatThread = (): Disposable => {
     const wasSignedIn = signedIn;
     signedIn = !!PgSession.get();
     if (!wasSignedIn || signedIn) return;
+    // No teardown ran and the account has not changed. Closing the thread would
+    // cut a running turn and deny its approvals, over a failed upload
+    if (PgSession.expiredUser) return;
 
     openedFor = null;
     void open().catch((e) => report("open thread after sign-out", e));

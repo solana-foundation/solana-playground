@@ -4,6 +4,7 @@ import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Icon } from "@/shared/ui/icon";
 import {
   Select,
   SelectContent,
@@ -14,15 +15,7 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 
-import {
-  Edit,
-  ExportFile,
-  Github,
-  ImportFile,
-  ImportWorkspace,
-  Plus,
-  Trash,
-} from "../../../../components/Icons";
+import { Github } from "../../../../components/Icons";
 import { useExplorer } from "../../../../hooks";
 import { PgCommon, PgExplorer, PgTutorial, PgView } from "../../../../utils";
 import {
@@ -66,7 +59,7 @@ const WorkspaceButtons = () => {
         title="Create"
         failureAction="create a project"
       >
-        <Plus />
+        <Icon name="add" />
       </WorkspaceButton>
 
       <WorkspaceButton
@@ -74,7 +67,7 @@ const WorkspaceButtons = () => {
         title="Rename"
         failureAction="rename the project"
       >
-        <Edit />
+        <Icon name="edit" />
       </WorkspaceButton>
 
       <WorkspaceButton
@@ -83,7 +76,7 @@ const WorkspaceButtons = () => {
         failureAction="delete the project"
         className="hover:text-destructive"
       >
-        <Trash />
+        <Icon name="delete" />
       </WorkspaceButton>
 
       <WorkspaceButton
@@ -99,7 +92,7 @@ const WorkspaceButtons = () => {
         title="Import from local file system"
         failureAction="open the file import"
       >
-        <ImportFile />
+        <Icon name="import" />
       </WorkspaceButton>
 
       <WorkspaceButton
@@ -107,7 +100,7 @@ const WorkspaceButtons = () => {
         title="Export"
         failureAction="export the project"
       >
-        <ExportFile />
+        <Icon name="export" />
       </WorkspaceButton>
     </div>
   );
@@ -220,7 +213,7 @@ const TemporaryWarning = () => {
         onError={reportButtonFailure("import the project")}
         className="w-full"
       >
-        <ImportWorkspace data-icon="inline-start" />
+        <Icon name="import" data-icon="inline-start" />
         Import
       </AsyncButton>
     </div>

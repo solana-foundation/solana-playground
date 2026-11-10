@@ -75,6 +75,10 @@ const finishedReply = (text: string) => {
   PgAssistant.setStatus("idle");
 };
 
+/** A reply that proposes code, the kind "Make this change" turns into a patch */
+const CHANGE_REPLY =
+  "Add a field to the account:\n\n```rust\npub count: u64,\n```";
+
 /** A turn that wrote a patch the user applied, then replied */
 const appliedPatchThenReply = () => {
   PgAssistant.addUserMessage("Fix it");
@@ -743,7 +747,7 @@ describe("Thread, sending", () => {
   });
 
   it("make this change asks for a patch and is reported", () => {
-    act(() => finishedReply("Add a field to the account."));
+    act(() => finishedReply(CHANGE_REPLY));
     const send = vi.fn().mockResolvedValue(undefined);
     render(<Thread turn={stubTurn(false, send)} project="Counter" />);
 
@@ -754,8 +758,28 @@ describe("Thread, sending", () => {
     expect(tracked()).toEqual([["assistant_make_change_requested", {}]]);
   });
 
+  it("no make-change under an explanation", () => {
+    act(() =>
+      finishedReply(
+        "This account holds 2.5 SOL and the System Program owns it."
+      )
+    );
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(
+      screen.queryByRole("button", { name: "Make this change" })
+    ).toBeNull();
+  });
+
+  it("no make-change under a command to run", () => {
+    act(() => finishedReply("Run this:\n\n```bash\nanchor build\n```"));
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(
+      screen.queryByRole("button", { name: "Make this change" })
+    ).toBeNull();
+  });
+
   it("no make-change while a turn runs", () => {
-    act(() => finishedReply("Add a field to the account."));
+    act(() => finishedReply(CHANGE_REPLY));
     render(<Thread turn={stubTurn(true)} project="Counter" />);
     expect(
       screen.queryByRole("button", { name: "Make this change" })
@@ -764,8 +788,8 @@ describe("Thread, sending", () => {
 
   it("make-change only on the newest reply", () => {
     act(() => {
-      finishedReply("First answer.");
-      finishedReply("Second answer.");
+      finishedReply(CHANGE_REPLY);
+      finishedReply(CHANGE_REPLY);
     });
     render(<Thread turn={stubTurn(false)} project="Counter" />);
     expect(

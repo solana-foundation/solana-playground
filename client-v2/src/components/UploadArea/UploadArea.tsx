@@ -2,9 +2,9 @@ import { FC } from "react";
 import { DropzoneOptions, DropzoneState, useDropzone } from "react-dropzone";
 
 import { cn } from "@/shared/lib/utils";
+import { Icon } from "@/shared/ui/icon";
 
 import { PgCommon } from "../../utils";
-import { Checkmark, Upload } from "../Icons";
 import Input from "../Input";
 
 interface UploadAreaProps extends DropzoneOptions {
@@ -32,13 +32,13 @@ const UploadArea: FC<React.PropsWithChildren<UploadAreaProps>> = ({
         "flex flex-col items-center justify-center rounded-[12px] p-8 [transition:all_50ms_linear]",
         "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_39%,transparent)] bg-[color-mix(in_srgb,var(--primary)_9%,transparent)]",
         "hover:cursor-pointer hover:border-[color-mix(in_srgb,var(--primary)_73%,transparent)] hover:[&>div]:text-[var(--text-primary)]",
-        "[&>svg]:h-16 [&>svg]:w-16 [&>svg]:text-primary",
+        "[&>svg]:size-6 [&>svg]:text-primary",
         isDragActive ? "opacity-[0.55]" : "opacity-100",
         className
       )}
     >
       <Input {...getInputProps()} />
-      <Upload />
+      <Icon name="upload" />
       <ImportResult isDragActive={isDragActive} {...props} />
     </div>
   );
@@ -70,7 +70,7 @@ const ImportResult: FC<React.PropsWithChildren<ImportResultProps>> = ({
     return (
       <div>
         <ImportResultText result="success">
-          <Checkmark />
+          <Icon name="success" size={16} />
           Imported {filesLength} {PgCommon.makePlural("file", filesLength)}.
         </ImportResultText>
       </div>

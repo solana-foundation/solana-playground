@@ -61,9 +61,9 @@ function CopyButton({
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        <span className={copied ? "text-success" : undefined}>
-          {copied ? "Copied" : label}
-        </span>
+        {/* The tooltip's own ink: it sits on the inverse of the page, so a
+            page ink such as success-ink loses its contrast there */}
+        {copied ? "Copied" : label}
       </TooltipContent>
     </Tooltip>
   );

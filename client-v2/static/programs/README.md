@@ -29,8 +29,8 @@ A program is listed only when all of these hold:
    still builds: the SPL programs here come from the archived
    `solana-program-library`, pinned at `token-v4.0.0`, because its `master`
    dropped some of them and their new homes in `solana-program/*` need crates
-   the server lacks. A repository without a usable tag is pinned to a commit:
-   the one non-SPL entry, Bonfida's `token-vesting`, is.
+   the server lacks. A repository without a usable tag is pinned to a
+   commit.
 
 ## Checking the list
 
@@ -39,7 +39,9 @@ whose crates change, can break a card that worked. Check every card before a
 release and after a build-server change, and drop what no longer builds.
 
 Last checked 3 Nov 2026 against the Foundation server, for HOO-2527: all
-eleven build. Of upstream's 34, only four did (HOO-2421: spl-memo,
+eleven build. On 7 Nov Bonfida's `token-vesting`, the one non-SPL entry,
+was dropped: in the app its card never finished building (HOO-2700), so ten
+remain. Of upstream's 34, only four did (HOO-2421: spl-memo,
 spl-name-service, spl-noop and spl-stake-pool): the rest hit missing
 crates (most Anchor protocols and SPL programs), more than 64 source files
 (mpl-token-metadata, openbook-v2), or a 502 from the server (drift-v2,

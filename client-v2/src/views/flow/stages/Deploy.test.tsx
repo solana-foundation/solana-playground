@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   // eslint-disable-next-line unicorn/no-null -- `useProgramInfo()` answers `null` for a failed chain read, no keypair and no build
   programInfo: { onChain: null, pk: null, uuid: null as string | null },
   deployState: "ready",
+  hold: undefined as string | undefined,
   history: [] as unknown[],
   update: vi.fn(),
   setStage: vi.fn(),
@@ -129,6 +130,7 @@ vi.mock("@/widgets/layout-shell", () => ({
 vi.mock("../state/deploy-history", () => ({
   PgDeployHistory: { list: () => mocks.history, onDidChange: mocks.noop },
 }));
+vi.mock("@/widgets/status", () => ({ useNetworkHold: () => mocks.hold }));
 vi.mock("./IdlActions", () => ({
   default: () => null,
   useIdlName: () => undefined,
@@ -173,6 +175,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 afterEach(() => {
+  mocks.hold = undefined;
   mocks.flow = { build: "done", deploy: "active" };
   // eslint-disable-next-line unicorn/no-null -- `useProgramInfo()` answers `null` for a failed chain read, no keypair and no build
   mocks.programInfo = { onChain: null, pk: null, uuid: null };
@@ -222,6 +225,15 @@ describe("Deploy stage", () => {
     expect(
       screen.queryByRole("button", { name: "Deploy to devnet" })
     ).toBeNull();
+  });
+
+  it("holds the pill on what the status reads", () => {
+    mocks.hold = "You're offline";
+    render(<Deploy onChangeNetwork={() => {}} />);
+    expect(screen.getByRole("button", { name: /Deploy to/ })).toHaveProperty(
+      "disabled",
+      true
+    );
   });
 
   it("reports a deploy that fails", async () => {

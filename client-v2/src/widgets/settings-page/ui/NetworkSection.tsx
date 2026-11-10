@@ -217,20 +217,23 @@ const NetworkSection = () => {
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <BaseNetworkChoice
-        endpoint={endpoint}
-        custom={rpcs}
-        chosen={chosen}
-        onPick={handlePick}
-      />
-      <BaseCustomRpcs
-        rpcs={rpcs}
-        onAdd={handleAdd}
-        onEdit={handleEdit}
-        onRemove={handleRemove}
-      />
-    </div>
+    // The saved RPCs sit between the chips and the card's foot, which stays
+    // the card's last row
+    <BaseNetworkChoice
+      endpoint={endpoint}
+      custom={rpcs}
+      chosen={chosen}
+      onPick={handlePick}
+    >
+      <div className="px-4 py-3">
+        <BaseCustomRpcs
+          rpcs={rpcs}
+          onAdd={handleAdd}
+          onEdit={handleEdit}
+          onRemove={handleRemove}
+        />
+      </div>
+    </BaseNetworkChoice>
   );
 };
 

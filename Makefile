@@ -6,6 +6,6 @@
 .PHONY: help
 help: ## Show this help
 	@printf 'Usage: make <target>\n\nTargets:\n'
-	@sed -nE 's/^([a-zA-Z_%-]+):.*## (.*)$$/  \1: \2/p' $(MAKEFILE_LIST)
+	@sed -nE 's/^([a-zA-Z_%-]+):.*## (.*)$$/  \1: \2/p' $(MAKEFILE_LIST) | LC_ALL=C sort -t: -k1,1
 
 include client-v2/Makefile.vercel

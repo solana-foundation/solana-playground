@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
 import { catalogPage } from "../model/catalog-page";
-import type { CatalogPage } from "../model/telemetry";
+import type { ShownPage } from "../model/telemetry";
+import NewProjectPage from "./NewProjectPage";
 import ProgramsPage from "./ProgramsPage";
 import TutorialsPage from "./TutorialsPage";
 
@@ -15,9 +16,14 @@ export interface CatalogSlot {
 }
 
 const PAGES: Record<
-  CatalogPage,
+  ShownPage,
   { title: string; hasOwnHeading: boolean; content: () => ReactNode }
 > = {
+  "new-project": {
+    title: "New project",
+    hasOwnHeading: false,
+    content: () => <NewProjectPage />,
+  },
   tutorials: {
     title: "Tutorials",
     hasOwnHeading: true,
@@ -31,9 +37,7 @@ const PAGES: Record<
 };
 
 /** The page shown, for the layout shell's `cover`; none while no page shows */
-export const catalogSlot = (
-  page: CatalogPage | null
-): CatalogSlot | undefined =>
+export const catalogSlot = (page: ShownPage | null): CatalogSlot | undefined =>
   page === null
     ? undefined
     : {

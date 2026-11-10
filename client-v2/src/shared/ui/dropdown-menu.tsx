@@ -2,6 +2,7 @@ import { CheckIcon, ChevronRightIcon } from "lucide-react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import * as React from "react";
 
+import { useReleaseFocus } from "@/shared/lib/hooks/use-release-focus";
 import { cn } from "@/shared/lib/utils";
 
 function DropdownMenu({
@@ -33,11 +34,14 @@ function DropdownMenuContent({
   className,
   align = "start",
   sideOffset = 4,
+  ref,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+  const [releaseFocus] = useReleaseFocus(ref);
   return (
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
+        ref={releaseFocus}
         data-slot="dropdown-menu-content"
         sideOffset={sideOffset}
         align={align}
@@ -169,7 +173,7 @@ function DropdownMenuLabel({
       data-slot="dropdown-menu-label"
       data-inset={inset}
       className={cn(
-        "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7",
+        "px-1.5 py-1 text-xs font-label text-muted-foreground data-inset:pl-7",
         className
       )}
       {...props}

@@ -29,6 +29,13 @@ stalled-round limit live there once. web3.js retries a 429 on its own, which hid
   `REACT_APP_<CLUSTER>_SEND_TX_PER_SECOND` for the connection's cluster. Keying by the platform URL alone would let a
   custom RPC of the same provider exceed the plan's limit. The cost: a person's own faster RPC on that cluster is
   capped too. The variable's value is meant to sit just below the plan's limit, as `client-v2/.env.example` says.
+- **Devnet, testnet and mainnet-beta default to a cap of 4.** `DEFAULT_SEND_TX_PER_SECOND` in
+  `client-v2/src/entities/cluster/model/clusters.ts` applies when the variable is unset or not a positive number, so
+  a deployment that sets no variable stays below the
+  [Helius Developer `sendTransaction` limit](https://www.helius.dev/docs/billing/rate-limits). Only a positive value
+  overrides it, and no value removes the cap, so a missing or mistyped variable cannot send a platform RPC writes
+  faster than its plan allows. Localnet, Surfpool and Playnet keep no cap, since they run on the person's own machine
+  or in the browser.
 - **The cluster of a custom RPC comes from its genesis hash.** `getClusterOf` in `client-v2/src/utils/connection.ts`
   takes a known endpoint's cluster without a request, and the selected custom endpoint's from `PgConnection.cluster`
   once it is resolved, so the cap and the read-buffer RPC follow a custom devnet RPC as they follow the platform one.

@@ -280,7 +280,7 @@ const EmptyThread = ({
           key={suggestion}
           variant="outline"
           size="sm"
-          className="h-auto rounded-full border-border bg-card px-3 py-1.5 text-[0.8125rem] font-normal text-muted-foreground dark:border-border dark:bg-card"
+          className="h-auto rounded-full border-border bg-card px-3 py-1.5 text-[0.8125rem] font-act text-muted-foreground dark:border-border dark:bg-card"
           onClick={() => onSuggestion(suggestion)}
         >
           {suggestion}

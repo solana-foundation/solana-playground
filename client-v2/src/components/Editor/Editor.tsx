@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
+import { catalogPage } from "@/widgets/catalog";
 import { NoFileOpen } from "@/widgets/layout-shell";
 
 import { createLogger } from "../../shared/lib/logger";
@@ -42,7 +43,13 @@ export const Editor = () => {
       {/* Monaco cannot draw a background image, so its own background is
           transparent and this wrapper paints the surface under it */}
       <div className="h-full w-full overflow-auto bg-surface-panel">
-        {noFile ? <NoFileOpen /> : <Monaco />}
+        {noFile ? (
+          <NoFileOpen
+            onStartProject={() => catalogPage.open("new-project", "editor")}
+          />
+        ) : (
+          <Monaco />
+        )}
       </div>
     </Suspense>
   );

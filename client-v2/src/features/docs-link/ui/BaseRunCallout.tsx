@@ -16,7 +16,7 @@ import type { RunState } from "../model/run";
 /** Where the open project came from, when a docs link opened it */
 export interface RunSourceInfo {
   title: string;
-  /** The page the link came from, already checked to be `https:` */
+  /** The page the link came from, already checked to be an `https:` Solana page */
   from?: string;
 }
 

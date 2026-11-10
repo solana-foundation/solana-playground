@@ -1,6 +1,7 @@
 import type { McpServerEntry } from "@/features/mcp";
 import { parseServers } from "@/features/mcp";
 import { report } from "@/features/persistence";
+import { writeConfigFile } from "@/utils/explorer/config-file";
 import { PgFs } from "@/utils/explorer/fs";
 
 /**
@@ -217,7 +218,7 @@ export const readToolConfig = async (): Promise<ToolConfigRead> => {
 /** Store the edits. A failure is reported: a lost write must not take the panel down. */
 export const writeToolConfig = async (text: string) => {
   try {
-    await PgFs.writeFile(TOOL_CONFIG_PATH, text, { createParents: true });
+    await writeConfigFile(TOOL_CONFIG_PATH, text);
   } catch (e) {
     report("write tool config", e);
   }

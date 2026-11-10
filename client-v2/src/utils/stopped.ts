@@ -1,7 +1,7 @@
 /**
  * A run the person stopped (Ctrl+C or the console strip's Stop). Not a
- * failure: the terminal prints its message as is, without "Process error",
- * no button toasts it, and the flow returns to where it was before the run.
+ * failure: the terminal prints its message as a warning, without "Process
+ * error", no button toasts it, and the flow returns to where it was before the run.
  * Its message says what was stopped and what was left behind.
  */
 export class StoppedError extends Error {
