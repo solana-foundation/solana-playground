@@ -37,11 +37,22 @@ const LOCK_FILE_PATH = path.join(
   "Cargo.lock"
 );
 
+/** The server's toolchain, which wrote the lock: an older cargo cannot read its lock version */
+const TOOLCHAIN_PATH = path.join(
+  REPO_ROOT_PATH,
+  "server",
+  "rust-toolchain.toml"
+);
+
 /** `syn-file-expand-cli` name */
 const CLI_NAME = "syn-file-expand-cli";
 
 /** `syn-file-expand-cli` version for the supported crates */
 const CLI_VERSION = "0.3.0";
+
+const toolchainFile = await fs.readFile(TOOLCHAIN_PATH, "utf8");
+const channel = toolchainFile.match(/^channel\s*=\s*"([^"]+)"/m)?.[1];
+if (!channel) throw new Error(`No \`channel\` in ${TOOLCHAIN_PATH}`);
 
 // The script's own source carries the tool version and the flags
 const key = crypto
@@ -51,6 +62,8 @@ const key = crypto
   .update(await fs.readFile(new URL("./crate-features.mjs", import.meta.url)))
   .update("\0")
   .update(await fs.readFile(LOCK_FILE_PATH))
+  .update("\0")
+  .update(toolchainFile)
   .digest("hex");
 
 if (process.argv.includes("--key")) {
@@ -67,13 +80,24 @@ if (
   process.exit(0);
 }
 
-skipWithoutTool("cargo", "the supported crates");
+skipWithoutTool("rustup", "the supported crates");
 
 /** Cargo home the registry and the tool live in */
 const cargoHome = process.env.CARGO_HOME ?? path.join(homedir(), ".cargo");
 
+// `+channel` on every cargo call: the default toolchain, where one exists, may be the wasm packages' older one
+run("rustup", [
+  "toolchain",
+  "install",
+  channel,
+  "--no-self-update",
+  "--profile",
+  "minimal",
+]);
+
 // The registry holds only what something downloaded; fetch every locked crate first
 run("cargo", [
+  `+${channel}`,
   "fetch",
   "--locked",
   "--manifest-path",
@@ -85,6 +109,7 @@ const cliRoot = path.join(cargoHome, "tools", `${CLI_NAME}-${CLI_VERSION}`);
 const cliPath = path.join(cliRoot, "bin", CLI_NAME);
 if (!(await exists(cliPath))) {
   run("cargo", [
+    `+${channel}`,
     "install",
     CLI_NAME,
     "--version",
@@ -104,6 +129,7 @@ const lockFile = await parseLockFile(LOCK_FILE_PATH);
 /** The lock's resolution, as `cargo metadata` reports it */
 const metadata = JSON.parse(
   capture("cargo", [
+    `+${channel}`,
     "metadata",
     "--format-version",
     "1",
