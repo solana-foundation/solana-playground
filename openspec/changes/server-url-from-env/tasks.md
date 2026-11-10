@@ -5,7 +5,7 @@ Lands in the `stable-anchor-1-1-2` PR. Every task: ticket to file. 1.1 and 1.2 m
 ## 1. Client
 
 - [x] 1.1 Remove the App Engine literal from `settings/server/default-endpoint.ts`: the "Solana Foundation" option
-  takes `SERVER_URL` and is absent when it is empty, the default falls back to `LOCAL_ENDPOINT`, and
+  takes `BUILD_SERVER_URL` and is absent when it is empty, the default falls back to `LOCAL_ENDPOINT`, and
   `settings/server/server.ts` logs the warning. Update `buildEndpointOptions` in `settings/stored-endpoint.ts` and
   the in-source tests that pin the old URL. Verify: unit tests for every scenario of "Development defaults to a
   local server" and "The Foundation option follows the variable".

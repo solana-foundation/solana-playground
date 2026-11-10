@@ -7,7 +7,7 @@ import type {
   ClusterSelection,
 } from "../entities/cluster/model/clusters";
 import { CLUSTERS, offeredOf } from "../entities/cluster/model/clusters";
-import { SERVER_URL } from "../shared/config/client-env";
+import { BUILD_SERVER_URL } from "../shared/config/client-env";
 import { LOCAL_ENDPOINT } from "./server/default-endpoint";
 
 /** The settings whose value is an address */
@@ -81,7 +81,7 @@ export const buildEndpointOptions = (
   };
 };
 
-const ENDPOINT_OPTIONS = buildEndpointOptions(CLUSTERS, SERVER_URL);
+const ENDPOINT_OPTIONS = buildEndpointOptions(CLUSTERS, BUILD_SERVER_URL);
 
 const isClusterKey = (key: string): key is ClusterKey =>
   Object.hasOwn(CLUSTERS, key);

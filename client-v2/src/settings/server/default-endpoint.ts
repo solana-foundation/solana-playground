@@ -1,4 +1,4 @@
-import { SERVER_URL } from "../../shared/config/client-env";
+import { BUILD_SERVER_URL } from "../../shared/config/client-env";
 
 /** A build server on this machine, and the default when `REACT_APP_SERVER_URL` is empty */
 export const LOCAL_ENDPOINT = "http://localhost:8080";
@@ -22,7 +22,8 @@ const serverEndpointOptionsFor = (
   { name: "Local", value: LOCAL_ENDPOINT },
 ];
 
-export const SERVER_ENDPOINT_OPTIONS = serverEndpointOptionsFor(SERVER_URL);
+export const SERVER_ENDPOINT_OPTIONS =
+  serverEndpointOptionsFor(BUILD_SERVER_URL);
 
 /**
  * Which build server a fresh profile talks to: the deployment's

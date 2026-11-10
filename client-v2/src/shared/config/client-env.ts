@@ -7,10 +7,10 @@
 // development-only branches from the production bundle.
 
 /** The deployment's build server, listed as "Solana Foundation"; unset means a local server */
-export const SERVER_URL = process.env.REACT_APP_SERVER_URL;
+export const BUILD_SERVER_URL = process.env.REACT_APP_SERVER_URL;
 
 /** Default of `experimental.unstable`; only `"true"` turns it on */
-export const SERVER_UNSTABLE = process.env.REACT_APP_SERVER_UNSTABLE;
+export const BUILD_SERVER_UNSTABLE = process.env.REACT_APP_SERVER_UNSTABLE;
 
 /** Platform RPC endpoints for Devnet, Mainnet and Testnet; unset falls back to the public one */
 export const PLATFORM_RPC_URLS = {
