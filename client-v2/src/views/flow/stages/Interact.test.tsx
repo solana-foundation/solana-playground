@@ -32,36 +32,39 @@ vi.mock("../../sidebar/assistant/bridge/build-output", () => ({
 vi.mock("../../../components/Wallet/hooks/useAirdrop", () => ({
   useAirdrop: () => ({ airdrop: vi.fn(), faucet: "available" }),
 }));
-vi.mock("../../../utils", () => ({
-  PgConnection: {
-    get cluster() {
-      return mocks.cluster;
+vi.mock("../../../utils", async () => {
+  const { PROGRAM_ID } = await import("./addresses.fixture");
+  return {
+    PgConnection: {
+      get cluster() {
+        return mocks.cluster;
+      },
+      onDidChangeCluster: mocks.noop,
     },
-    onDidChangeCluster: mocks.noop,
-  },
-  PgExplorer: {
-    currentWorkspaceName: "hello",
-    get currentWorkspaceId() {
-      return mocks.workspaceId;
+    PgExplorer: {
+      currentWorkspaceName: "hello",
+      get currentWorkspaceId() {
+        return mocks.workspaceId;
+      },
+      onDidSwitchWorkspace: mocks.noop,
     },
-    onDidSwitchWorkspace: mocks.noop,
-  },
-  PgProgramInfo: {
-    get customPk() {
-      return mocks.customPk;
+    PgProgramInfo: {
+      get customPk() {
+        return mocks.customPk;
+      },
+      callableIdl: () => mocks.callable,
+      getPkStr: () => PROGRAM_ID,
+      // eslint-disable-next-line unicorn/no-null -- `readIdl()` answers `null` with no IDL
+      readIdl: () => null,
+      update: mocks.update,
     },
-    callableIdl: () => mocks.callable,
-    getPkStr: () => "6PNd3SmUcvQEHfcTiQkpprF4mmXzR7Ez7JwJfnJDAVkj",
-    // eslint-disable-next-line unicorn/no-null -- `readIdl()` answers `null` with no IDL
-    readIdl: () => null,
-    update: mocks.update,
-  },
-  PgWeb3: {
-    PublicKey: class {
-      constructor(readonly id: string) {}
+    PgWeb3: {
+      PublicKey: class {
+        constructor(readonly id: string) {}
+      },
     },
-  },
-}));
+  };
+});
 vi.mock("../../../hooks", () => ({
   useBalance: () => 0,
   useExplorer: () => ({}),

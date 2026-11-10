@@ -72,7 +72,7 @@ export const deployViewFor =
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
-  const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+  const WALLET = "Wa11et11111111111111111111111111111111Payer";
 
   /** The stage open on devnet, project "counter", the Playground wallet current */
   const here = deployViewFor({

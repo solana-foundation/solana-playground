@@ -52,9 +52,6 @@ const mocks = vi.hoisted(() => ({
   automaticAirdrop: false,
 }));
 
-const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
-const pgWallet = () => ({ isPg: true, publicKey: { toBase58: () => WALLET } });
-
 // The real barrels pull in the whole playground; the stage reads only these
 vi.mock("../../../utils", () => ({
   PgCommand: { deploy: { execute: mocks.execute } },
@@ -129,7 +126,10 @@ import {
   DeployFundingError,
   PgDeployRun,
 } from "../../../commands/deploy/run";
+import { WALLET } from "./addresses.fixture";
 import Deploy from "./Deploy";
+
+const pgWallet = () => ({ isPg: true, publicKey: { toBase58: () => WALLET } });
 
 /** The app gives every screen a tooltip provider; the copy button needs one */
 const render = (ui: ReactElement) =>
@@ -515,7 +515,7 @@ describe("Deploy stage", () => {
     mocks.wallet.current = {
       isPg: true,
       publicKey: {
-        toBase58: () => "SaveWa11et1111111111111111111111111111111111",
+        toBase58: () => "SaveWa11et111111111111111111111111111111111",
       },
     };
     mocks.execute.mockResolvedValue({

@@ -12,6 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import { requireFor } from "../../../test-utils/require-for";
+import { PROGRAM_ID, SHORT_PROGRAM_ID } from "./addresses.fixture";
 import type { BaseInteractProps, DeploymentOption } from "./BaseInteract";
 import BaseInteract from "./BaseInteract";
 import type { InteractSurface } from "./interact-surface";
@@ -25,7 +26,6 @@ const found = <T,>(value: T | null, what: string): T => {
   return value;
 };
 
-const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
 const GUIDE = "Build the IDL locally";
 
 const SURFACES: InteractSurface[] = [
@@ -173,7 +173,10 @@ describe("BaseInteract", () => {
         {...props("ready", {
           onPick,
           deployments: [
-            { id: "a", label: "latest · devnet · 6PNd3S…" },
+            {
+              id: "a",
+              label: `latest · devnet · ${PROGRAM_ID.slice(0, 6)}…`,
+            },
             { id: "b", label: "devnet · 9xQeWv…" },
           ],
         })}
@@ -246,7 +249,7 @@ describe("BaseInteract", () => {
   it("names the program it calls, with copy, and the network", () => {
     render(<BaseInteract {...props("ready", { programId: PROGRAM_ID })} />);
     const program = screen.getByTitle(PROGRAM_ID);
-    expect(program.textContent).toBe("6PNd\u2026AVkj");
+    expect(program.textContent).toBe(SHORT_PROGRAM_ID);
     expect(
       screen.getByRole("button", { name: "Copy program id" })
     ).toBeTruthy();
