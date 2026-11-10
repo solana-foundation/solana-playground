@@ -30,6 +30,9 @@ Nothing below is known to the authors of this page. Fill each in once, before st
 | `<CUSTOM_DOMAIN>` | The launch domain, without `https://` | Your team | |
 | `<GITHUB_OAUTH_APP>` | The GitHub OAuth app production signs in with, and the organization that owns it | GitHub → the organization → Settings → Developer settings → OAuth Apps | |
 | `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` on the build server (App Engine) | Your team | |
+| `<NOUS_ACCOUNT>` | The Nous Research account that holds the prepaid credits the assistant spends | Your team | |
+| `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team | |
+| `<SPEND_SIGN_OFF>` | Who signed off the assistant's monthly spend of $1,500 (the two keys' monthly limits), and when | Your team | |
 | `<SUPPORT_CHANNEL>` | Where to reach Alexander during and between the live sessions | Agreed with Alexander | |
 | `<SESSION_SETUP>`, `<SESSION_CUTOVER>`, `<SESSION_RELEASE>` | Date, time and time zone of the live sessions for steps 1 to 4, step 6, and step 7 | Agreed with Alexander; the launch is Wed 11 Nov 2026 | |
 
@@ -71,7 +74,9 @@ Access the steps need, besides the machine:
 
 - Google Cloud: IAM and Cloud SQL administration in `<PROJECT_ID>`, and Secret Manager (step 5).
 - Vercel: the production project's environment variables, Deployment Protection, Domains and Firewall; the team
-  setting for the OIDC issuer mode (step 1); a team Owner for the AI Gateway's keys and budgets (step 4).
+  setting for the OIDC issuer mode (step 1).
+- Nous Research: `<NOUS_ACCOUNT>`'s dashboard, to create the assistant's keys and their spend limits and to read
+  their spend (step 4).
 - The production Neon database, through the Neon console or the Vercel project's Storage tab: step 4 migrates it,
   step 6 counts its accounts, and step 6's rollback restores its connection strings.
 - GitHub: admin on `solana-foundation/solana-playground` for an Actions secret (step 2), and on the organization
@@ -114,7 +119,7 @@ Run the steps in this order. Each gate names what must be true before the step a
 1. **Google Cloud setup (step 1) before the staged deployment (step 2).** Step 2 is the first time a Vercel
    deployment exchanges its token for the production service account; without step 1 it has nothing to reach.
 2. **The Firewall (step 3) before the hosted AI key goes into Production (step 4).** The key spends money on every
-   turn, and the rate limit is what stops one client from spending a day's budget in a minute.
+   turn, and the rate limit is what stops one client from spending a key's daily limit in a minute.
 3. **Before the hosted key is set in step 4, all of these hold:**
    - Production sets only `PG_AI_*` names, and no `AGENT_*` name at all (`vercel env ls production` lists none).
    - `AUTH_BASE_URL` is the domain users open: `https://<VERCEL_APP_DOMAIN>` until the release,
@@ -193,15 +198,15 @@ one.**
 
 ### Assistant default backend
 
-The Gateway's keys and budgets are created first, by a team Owner:
-[deploy-client-vercel.md, "Default backend spend"](deploy-client-vercel.md#default-backend-spend), "Gateway setup".
+The assistant runs on Nous Research, from `<NOUS_ACCOUNT>`'s prepaid credits. Its two keys are created first, in
+step 4 ([deploy-client-vercel.md, "Default backend spend"](deploy-client-vercel.md#default-backend-spend), "Nous
+setup"). Vercel AI Gateway is a documented fallback for when the credits are used up; do not set it up for the launch.
 
 | Variable | Required | Value | Sensitive | Set in |
 | --- | --- | --- | --- | --- |
-| `PG_AI_API_KEY` | Yes; every Vercel build fails without it | The Gateway's `established` key | Yes | Step 4 |
-| `PG_AI_NEWCOMER_API_KEY` | No, recommended | The Gateway's `newcomer` key. Unset, newcomers spend through `PG_AI_API_KEY` | Yes | Step 4 |
-| `PG_AI_BASE_URL` | Yes, for the Gateway | `https://ai-gateway.vercel.sh/v1`. Unset sends turns to Nous Research | No | Step 4 |
-| `PG_AI_MODEL` | Yes, for the Gateway | `zai/glm-5.3-flash` | No | Step 4 |
+| `PG_AI_API_KEY` | Yes; every Vercel build fails without it | The Nous `established` key | Yes | Step 4 |
+| `PG_AI_NEWCOMER_API_KEY` | No, recommended | The Nous `newcomer` key. Unset, newcomers spend through `PG_AI_API_KEY`, and new accounts share the established users' limit | Yes | Step 4 |
+| `PG_AI_BASE_URL`, `PG_AI_MODEL` | No | Leave unset: they default to Nous (`https://inference-api.nousresearch.com/v1`, `z-ai/glm-5.3-flash:US`). Set only to move to the Gateway | No | |
 | `PG_AI_REASONING_EFFORT`, `PG_AI_PROVIDERS`, `PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`, `PG_AI_MAX_BODY_BYTES`, `PG_AI_MAX_OUTPUT_TOKENS`, `PG_AI_NEWCOMER_AGE_DAYS`, `PG_AI_NEWCOMER_DAILY_CAP`, `PG_AI_ESTABLISHED_DAILY_CAP` | No | Leave unset: each defaults as `agentEnv` in `src/shared/config/server-env.mjs` sets it, listed in [Default backend spend](deploy-client-vercel.md#default-backend-spend) | No | |
 | Any `AGENT_*` | Never | The deprecated names. Delete every one | | Step 4 |
 | `SOURCES`, `MCP_EXPLORER_URL`, `MCP_EXPLORER_TOKEN`, `MCP_EXPLORER_BYPASS` | No | Leave unset unless told otherwise ([Sources catalogue](deploy-client-vercel.md#sources-catalogue)) | Token and bypass: yes | |
@@ -383,14 +388,25 @@ deployment that still reads Neon.
 **Preconditions:** every item of gate 3 in [Order and gates](#order-and-gates). For the migration item, run
 `make -f client-v2/Makefile.vercel migrate-production-db` from the repository root: while Production's `DB_PROVIDER`
 is unset it migrates the production Neon database, prints its host, and either reports `nothing to apply` or lists
-what is pending and asks for `yes`. Also: the Gateway setup is done, `PG_CLIENT_URLS` on the build server includes
-`https://<VERCEL_APP_DOMAIN>` (ask `<BUILD_SERVER_CONTACT>`), and Triton has answered whether its keys are
-restricted to your domains.
+what is pending and asks for `yes`. Also: `<SPEND_SIGN_OFF>` and `<TOP_UP_OWNER>` are filled in,
+`PG_CLIENT_URLS` on the build server includes `https://<VERCEL_APP_DOMAIN>` (ask `<BUILD_SERVER_CONTACT>`), and
+Triton has answered whether its keys are restricted to your domains.
 
 **Run:**
 
-1. Delete every `AGENT_*` variable: `npx vercel@62.7.0 env rm <NAME> production --yes`.
-2. Set each variable of the tables marked "Step 4", in Vercel → Settings → Environment Variables, Production only,
+1. In `<NOUS_ACCOUNT>`'s dashboard, create two keys, each with a daily and a monthly spend limit:
+
+   | Key | Daily limit | Monthly limit | Goes into |
+   | --- | --- | --- | --- |
+   | `established` | $50 | $1,250 | `PG_AI_API_KEY` |
+   | `newcomer` | $10 | $250 | `PG_AI_NEWCOMER_API_KEY` |
+
+   A key is shown once, at creation: put it in Secret Manager at once ([step 5](#step-5-secrets-into-secret-manager)).
+   The limits are the ceiling on what the assistant can spend, whatever the application does. The daily limit is a
+   rolling window that starts with the key's first request. Note the prepaid balance, and tell `<TOP_UP_OWNER>` how
+   to read it: Nous has no auto top-up, and an empty balance refuses every turn until credits are added.
+2. Delete every `AGENT_*` variable: `npx vercel@62.7.0 env rm <NAME> production --yes`.
+3. Set each variable of the tables marked "Step 4", in Vercel → Settings → Environment Variables, Production only,
    or from the shell:
 
    ```sh
@@ -399,8 +415,8 @@ restricted to your domains.
 
    with `--no-sensitive` instead of `--sensitive` for the variables the tables mark "No". Store each secret in
    Secret Manager as you set it ([step 5](#step-5-secrets-into-secret-manager)).
-3. Check that `<GITHUB_OAUTH_APP>`'s callback URL is `https://<VERCEL_APP_DOMAIN>/api/auth/callback/github`.
-4. Deploy with a full build ([Deploying production](#deploying-production)): the `REACT_APP_*` values changed.
+4. Check that `<GITHUB_OAUTH_APP>`'s callback URL is `https://<VERCEL_APP_DOMAIN>/api/auth/callback/github`.
+5. Deploy with a full build ([Deploying production](#deploying-production)): the `REACT_APP_*` values changed.
 
 **Check:**
 
@@ -409,11 +425,29 @@ restricted to your domains.
    `check-agent-env: ... empty here` is expected on a local build: it names the Sensitive variables the pull held as
    empty.
 2. `curl -s https://<VERCEL_APP_DOMAIN>/api/ai/status`, signed out, answers
-   `{"available":false,"key":"hosted","reason":"signed-out","model":"zai/glm-5.3-flash"}`.
+   `{"available":false,"key":"hosted","reason":"signed-out","model":"z-ai/glm-5.3-flash:US"}`.
 3. Signed in on `https://<VERCEL_APP_DOMAIN>` in a browser, the assistant answers a question on the default backend,
-   and the Gateway's log shows the turn under the `newcomer` or `established` key.
-4. With RPC URLs set: the endpoint picker lists the "(Platform)" entries, and one of them answers.
-5. `curl -s https://<VERCEL_APP_DOMAIN>/api/sync` answers `{"enabled":true,"db":"ok"}`, or
+   and the Nous dashboard shows spend on the `newcomer` or `established` key.
+4. **The newcomer cap.** Sign in with a GitHub account created less than 30 days ago (create one if your team has
+   none), and send turns on the default backend until the chat says "You have used today's free assistant
+   allowance. It resets at 00:00 UTC, or bring your own key to keep going." That takes about 13 turns, $0.10 in
+   all. Then compare what the application charged that account with what Nous counted on the `newcomer` key. In
+   the Neon SQL editor of the database production reads:
+
+   ```sql
+   select sum(charged) / 1e6 as usd, count(*) as turns
+   from agent_turn
+   where user_id = (select "userId" from account
+                    where "providerId" = 'github' and "accountId" = '<numeric GitHub id of the account>')
+     and day = (now() at time zone 'utc')::date;
+   ```
+
+   The numeric id is in `https://api.github.com/users/<login>`. `usd` should match the `newcomer` key's spend in
+   the Nous dashboard for the same turns, to within a cent: the application charges the cost Nous reports for each
+   turn. Spend on the `newcomer` key from anyone else in the same window adds to the dashboard's figure, so run
+   this check before the domain is shared.
+5. With RPC URLs set: the endpoint picker lists the "(Platform)" entries, and one of them answers.
+6. `curl -s https://<VERCEL_APP_DOMAIN>/api/sync` answers `{"enabled":true,"db":"ok"}`, or
    `{"enabled":false,"db":"ok"}` while `SYNC_ENABLED` is not `true`. The database is still Neon.
 
 **If a check fails:** a failed build prints `check-agent-env: <what is missing>`, naming the variable. A turn answered
@@ -425,7 +459,9 @@ roll back to the previous deployment ([Deploying production](#deploying-producti
 created with. Before the next deploy, set the previous values again from Secret Manager, or from the source each row
 of the table names, and promote that deploy.
 
-**Ping Alexander:** when every check passes, with the list of names `vercel env ls production` prints (names only).
+**Ping Alexander:** when every check passes, with the list of names `vercel env ls production` prints (names only),
+the `usd` and `turns` of check 4 beside the `newcomer` key's spend in the Nous dashboard, and `<SPEND_SIGN_OFF>`
+and `<TOP_UP_OWNER>`.
 
 ## Step 5: secrets into Secret Manager
 
@@ -435,7 +471,7 @@ Ticket HOO-1795.
 read back, so without a copy a lost value means a rotation. The application reads its secrets only from Vercel's
 variables; nothing syncs the two, so every rotation updates both.
 
-**When:** at the moment each value is in hand: when it is generated or shown (a Gateway key is shown once, at
+**When:** at the moment each value is in hand: when it is generated or shown (a Nous key is shown once, at
 creation), in steps 2 and 4. A value already stored Sensitive in Vercel that nobody holds a copy of cannot be read
 back; rotate it (a new value in both places) instead.
 
