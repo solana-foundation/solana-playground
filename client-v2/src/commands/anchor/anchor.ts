@@ -47,7 +47,7 @@ export const anchor = createCmd({
     // for every transaction (`idl init` writes after its create confirms).
     // A boolean is enough: the terminal is disabled while a command runs
     // (`PgTerm.process`), so no second write starts meanwhile.
-    PgGlobal.idlWriting = true;
+    PgGlobal.isIdlWriting = true;
     try {
       const endpoint = PgSettings.connection.endpoint;
       await refuseIdlWriteOnMainnet(endpoint);
@@ -63,7 +63,7 @@ export const anchor = createCmd({
 
       await runAnchor(input.raw);
     } finally {
-      PgGlobal.idlWriting = false;
+      PgGlobal.isIdlWriting = false;
     }
   },
 });

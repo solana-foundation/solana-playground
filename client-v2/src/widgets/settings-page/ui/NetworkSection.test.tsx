@@ -10,7 +10,7 @@ import { PgCustomRpcs } from "@/entities/cluster";
 const { state } = vi.hoisted(() => ({
   state: {
     deployState: "ready" as string,
-    idlWriting: false,
+    isIdlWriting: false,
     endpoint: "",
     toasts: [] as (string | undefined)[],
   },
@@ -20,8 +20,8 @@ vi.mock("@/utils", () => ({
     get deployState() {
       return state.deployState;
     },
-    get idlWriting() {
-      return state.idlWriting;
+    get isIdlWriting() {
+      return state.isIdlWriting;
     },
   },
   PgSettings: {
@@ -298,7 +298,7 @@ describe("NetworkSection while a deploy runs", () => {
     localStorage.clear();
     PgCustomRpcs.save(HELIUS);
     state.deployState = "ready";
-    state.idlWriting = false;
+    state.isIdlWriting = false;
     state.endpoint = HELIUS.url;
     state.toasts = [];
   });
@@ -309,7 +309,7 @@ describe("NetworkSection while a deploy runs", () => {
   });
 
   it("names an anchor idl write when one holds the network", async () => {
-    state.idlWriting = true;
+    state.isIdlWriting = true;
     render(<NetworkSection />);
 
     await userEvent.click(
