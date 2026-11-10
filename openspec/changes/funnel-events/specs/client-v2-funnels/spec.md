@@ -34,7 +34,7 @@ SHALL be declared by a tracker under `features/`, `widgets/` or `entities/`.
 | Deploy | `deploy_started`, `deploy_succeeded` | `deploy` (its `preChecks` and `handle`) in `commands/deploy/deploy.ts`; `PgStageDeploy.start` in `features/deploy/model/stage-deploy.ts` | features/deploy |
 | Use: run tests or a client script | `run_finished` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | features/run |
 | Use: send an instruction | `interact_sent` | `runCall` in `views/flow/stages/run-call.ts` | pending (wbdi-flow) |
-| Export the project | `project_exported` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `Project` in `widgets/settings-page/ui/SettingsPage.tsx` | pending (funnel-events) |
+| Export the project | `project_exported` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `ExportProject` in `widgets/settings-page/ui/ExportProject.tsx` | features/project-files |
 | Follow a tutorial | `tutorial_started`, `tutorial_finished` | `PgTutorial` in `utils/tutorial/tutorial.ts`; markdown tutorials opened by `PgTutorial.open` are not counted (HOO-2751, 10 Nov 2026) | pending (tutorial-flow-v2) |
 | Ask the assistant | `assistant_turn_sent`, `assistant_turn_answered` | `useTurn` in `widgets/assistant/model/use-turn.ts` | pending (assistant-usage-events) |
 

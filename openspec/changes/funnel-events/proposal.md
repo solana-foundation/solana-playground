@@ -24,8 +24,9 @@ site, and the project's rules send agents to them.
 - New slice `features/project-files`, prefix `project`. Events added:
   `project_imported {via}`, `project_import_failed {via, reason}`,
   `project_viewed`, `project_view_failed {reason}`, `project_exported {via,
-  converted}`, `project_export_failed {via}` (`via`, not `source` or `from`:
-  one trigger name, decided with HOO-2752 on 10 Nov 2026).
+  converted, profile, files}`, `project_export_failed {via, profile}`
+  (`via`, not `source` or `from`: one trigger name, decided with HOO-2752 on
+  10 Nov 2026).
 - New slice `features/run`, prefix `run`. Events added:
   `run_finished {kind, outcome}` and `run_errored {kind, reason}`.
 - `features/deploy` counts every deploy from the `deploy` command that the
@@ -39,7 +40,13 @@ site, and the project's rules send agents to them.
   None of these events has reached `master` or production, so no recorded
   data changes meaning. `deploy_sol_needed_shown` and `deploy_backup_*` do
   not change.
-- No event is renamed or removed in any other slice.
+- `features/project-export` stops sending `export_downloaded` and
+  `export_failed`, which have reached `master`: `project_exported` and
+  `project_export_failed` replace them with the same `profile` and `files`,
+  plus `via`. GA4 reports on the old names stop getting data from the
+  release that carries this, and their recorded data keeps its meaning.
+  `export_convert_failed` does not change. No other event in another slice
+  is renamed or removed.
 - `openspec/config.yaml` and `client-v2/CLAUDE.md` extend the telemetry rule
   to the legacy roots and point agents at the funnel table.
 
@@ -58,6 +65,9 @@ site, and the project's rules send agents to them.
 - `client-v2-wallet-funding`: "A faucet airdrop is counted" adds `fund_airdropped {via, cluster}` from the `airdrop` command, so the funnel's "Fund the wallet" step counts airdrops as well as transfers (HOO-2751).
 - `client-v2-deploy`: "Deploy events" counts every deploy, whatever started
   it, and its parameters follow the merged design.
+- `project-export`: "The export reports what it did" keeps
+  `export_convert_failed` and leaves the zip's outcome to the caller, which
+  counts it through `features/project-files`.
 
 ## Impact
 

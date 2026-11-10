@@ -1,7 +1,7 @@
 import { InfoIcon } from "lucide-react";
 import { FC, useEffect, useState } from "react";
 
-import type { ProjectKind } from "@/features/project-export";
+import type { ConvertedExport, ProjectKind } from "@/features/project-export";
 import {
   DEFAULT_KEYPAIR_PATH,
   exportAsIs,
@@ -12,6 +12,11 @@ import {
   readProjectKind,
   RPC_URL_VARIABLE,
 } from "@/features/project-export";
+import {
+  trackExportAsIs,
+  trackExported,
+  trackExportFailed,
+} from "@/features/project-files";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
@@ -73,13 +78,18 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
     };
   }, [project]);
 
+  // The dialog counts its exports where they started (spec
+  // `client-v2-project-files`, "An export is counted with where it started"):
+  // a converted zip's outcome here, the plain one in `exportWithoutChanges`, so a
+  // conversion that falls back counts once
   const convertAndExport = async () => {
-    let readme: string;
+    let exported: ConvertedExport;
     try {
-      readme = await exportConverted(project);
+      exported = await exportConverted(project);
     } catch (e) {
       // The zip itself failed: an export as is would fail the same way
       if (isDownloadFailure(e)) {
+        trackExportFailed("dialog", e.profile);
         reportExportFailure(e);
         return;
       }
@@ -100,8 +110,9 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
       }
       return;
     }
+    trackExported("dialog", exported);
     // Outside the `try`: a failure to show the README must not export twice
-    setPage(modalPage(Readme, { readme }));
+    setPage(modalPage(Readme, { readme: exported.readme }));
   };
 
   /**
@@ -119,7 +130,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
   /** Whether the project downloaded */
   const exportWithoutChanges = async () => {
     try {
-      await exportAsIs(project);
+      await trackExportAsIs(() => exportAsIs(project), "dialog");
     } catch (e) {
       reportExportFailure(e);
       return false;

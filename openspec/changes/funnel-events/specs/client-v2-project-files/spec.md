@@ -126,10 +126,16 @@ it throws, with the reasons of `project_import_failed`.
 
 `convertAndExport` and `exportWithoutChanges` in `ExportWorkspace`
 (`views/sidebar/explorer/Component/Modals/ExportWorkspace.tsx`) SHALL send
-`project_exported {via: "dialog", converted}` once the zip is handed to the
-browser, and `project_export_failed {via: "dialog"}` when nothing was
-saved. `converted` is `true` only when the conversion succeeded; a fallback
-to the project as it is sends `false`.
+`project_exported {via: "dialog", converted, profile, files}` once the zip
+is handed to the browser, and `project_export_failed {via: "dialog",
+profile}` when nothing was saved. `converted` is `true` only when the
+conversion succeeded; a fallback to the project as it is sends `false`.
+`profile` is how the zip was made (`anchor`, `native`, `seahorse`,
+`typescript`, or `as-is` for the files as they are, a fallback included),
+and `files` counts the files in it. These two events replace
+`project-export`'s `export_downloaded` and `export_failed`, which carried
+`profile` and `files` without where the export started; `export_convert_failed`
+stays with `project-export`.
 
 #### Scenario: Convert and export (manual)
 
@@ -146,10 +152,12 @@ to the project as it is sends `false`.
 ### Requirement: The settings page's export is counted
 
 The Export button (named "Export project") of the `Project` section's
-Export project row in `widgets/settings-page/ui/SettingsPage.tsx` SHALL send
-`project_exported {via: "settings", converted: false}` once
-`PgFramework.exportWorkspace` resolves, and
-`project_export_failed {via: "settings"}` when it rejects.
+Export project row, `ExportProject` in
+`widgets/settings-page/ui/ExportProject.tsx`, SHALL send
+`project_exported {via: "settings", converted: false, profile: "as-is",
+files}` once `exportAsIs` (`features/project-export`) resolves with the
+zip's file count, and `project_export_failed {via: "settings", profile:
+"as-is"}` when it rejects.
 
 #### Scenario: Export from the settings page fails (manual)
 

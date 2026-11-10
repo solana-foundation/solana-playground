@@ -15,6 +15,21 @@ export type ImportVia = "github" | "files" | "temporary";
 export type ExportVia = "dialog" | "settings";
 
 /**
+ * How a zip was made: a framework's conversion, the TypeScript profile, or
+ * the project's files as they are. The same union as `ExportProfile` in
+ * `features/project-export`, which declares the conversions and which this
+ * slice may not import (a feature never imports another feature); the two
+ * change together, and a profile added there without one here fails to
+ * compile where the dialog hands the export's result to this slice
+ */
+export type ExportProfile =
+  | "anchor"
+  | "native"
+  | "seahorse"
+  | "typescript"
+  | "as-is";
+
+/**
  * Why an import or a GitHub link view failed (spec `client-v2-project-files`,
  * "Import failures carry an enumerated reason"), as the typed errors carry
  * it: `not-found`, `rate-limited`, `too-large`, `no-source`, `network` or
@@ -34,11 +49,20 @@ type ProjectFilesEvents = {
   project_view_failed: { reason: ImportReason };
   /**
    * A zip was handed to the browser; `converted` is `true` only when a
-   * conversion succeeded, `false` for the project as it is or a fallback to it
+   * conversion succeeded, `false` for the project as it is or a fallback to
+   * it; `profile` is how the zip was made and `files` counts the files in it
    */
-  project_exported: { via: ExportVia; converted: boolean };
-  /** No zip was saved; the dialog or the settings page said so */
-  project_export_failed: { via: ExportVia };
+  project_exported: {
+    via: ExportVia;
+    converted: boolean;
+    profile: ExportProfile;
+    files: number;
+  };
+  /**
+   * No zip was saved; the dialog or the settings page said so. `profile` is
+   * how the zip was being made
+   */
+  project_export_failed: { via: ExportVia; profile: ExportProfile };
 };
 
 export const projectFilesTelemetry = createTracker<ProjectFilesEvents>();
