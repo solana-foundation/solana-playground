@@ -124,7 +124,7 @@ export class PgChatSync {
     if (!(await PgChatSync._ready())) return null;
 
     try {
-      const response = await fetch(
+      const response = await PgSession.fetchAuthed(
         `/api/conversations?threadId=${encodeURIComponent(threadId)}`,
         { credentials: "include", cache: "no-store" }
       );
@@ -227,7 +227,7 @@ export class PgChatSync {
     body: string
   ): Promise<PushOutcome> {
     try {
-      const response = await fetch("/api/conversations", {
+      const response = await PgSession.fetchAuthed("/api/conversations", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -301,7 +301,7 @@ export class PgChatSync {
 
     let threads: unknown;
     try {
-      const response = await fetch(
+      const response = await PgSession.fetchAuthed(
         `/api/conversations?projectId=${encodeURIComponent(workspaceId)}`,
         { credentials: "include", cache: "no-store" }
       );

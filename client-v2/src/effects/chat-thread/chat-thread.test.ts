@@ -216,6 +216,34 @@ describe("the chat-thread effect", () => {
     expect(load).toHaveBeenCalled();
   });
 
+  it("leaves the thread open when a session ends without a sign-out", async () => {
+    // Closing it cuts a running turn and denies its approvals, and the thread
+    // has not changed account: it only cannot upload for now
+    await PgSession.refreshWith({
+      id: "u1",
+      name: undefined,
+      image: undefined,
+      login: undefined,
+    });
+    effect = chatThread();
+    await settle();
+    const close = vi.spyOn(PgAssistant, "closeThread");
+    const load = vi.mocked(PgAssistant.loadThread);
+    close.mockClear();
+    load.mockClear();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 401,
+    } as Response);
+
+    await PgSession.refresh();
+    await settle();
+
+    expect(PgSession.expiredUser).toBeDefined();
+    expect(close).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+  });
+
   it("stops listening once disposed", async () => {
     const disposable = chatThread();
     await settle();

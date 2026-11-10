@@ -178,6 +178,21 @@ it("a row puts its control beside the text, and under it on a phone", () => {
   expect(layoutOf("Word wrap")).toBe("stacked");
 });
 
+it("a row's help line carries its test id", () => {
+  render(
+    <BaseSettingRow
+      name="Export current project"
+      description="No project is open."
+      descriptionTestId="settings-open-project"
+      control={<button>Export</button>}
+      phone={false}
+    />
+  );
+  expect(screen.getByTestId("settings-open-project").textContent).toBe(
+    "No project is open."
+  );
+});
+
 const chip = (name: string, checked: boolean) => (
   <button key={name} role="radio" aria-checked={checked}>
     {name}

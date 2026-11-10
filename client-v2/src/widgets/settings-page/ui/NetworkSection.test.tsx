@@ -425,4 +425,21 @@ describe("NetworkSection while a deploy runs", () => {
     expect(state.endpoint).toBe(DEFAULT_ENDPOINT);
     expect(state.toasts).toEqual(["custom-rpc-removed"]);
   });
+
+  it("puts the saved RPCs between the chips and the card's foot", () => {
+    state.endpoint = DEFAULT_ENDPOINT;
+    render(<NetworkSection />);
+    const order = [
+      screen.getByRole("radiogroup", { name: "Network" }),
+      screen.getByRole("list", { name: "Custom RPCs" }),
+      screen.getByRole("button", { name: "Add custom RPC" }),
+      screen.getByText("Deploys with free devnet SOL"),
+    ];
+    for (let i = 1; i < order.length; i++) {
+      expect(
+        order[i - 1].compareDocumentPosition(order[i]) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    }
+  });
 });

@@ -2,6 +2,8 @@ import { expect, it, vi } from "vitest";
 
 vi.mock("./TutorialsPage", () => ({ default: () => null }));
 vi.mock("./ProgramsPage", () => ({ default: () => null }));
+// The slot only names the page here; nothing renders it
+vi.mock("./NewProjectPage", () => ({ default: () => undefined }));
 vi.mock("@/utils", () => ({}));
 
 import { requireFor } from "@/test-utils/require-for";
@@ -20,4 +22,7 @@ it("names the page shown and closes it", () => {
   expect(requireFor("the tutorials slot")(catalogSlot("tutorials")).title).toBe(
     "Tutorials"
   );
+  expect(
+    requireFor("the new project slot")(catalogSlot("new-project")).title
+  ).toBe("New project");
 });

@@ -32,7 +32,7 @@ source outside its declaration, where a `track` call names it.
 | Get a project: new | `new_project_started` | `new_project_start_failed` | `StartFromScratch` in `features/new-project/ui/StartFromScratch.tsx` | features/new-project |
 | Get a project: from the catalog | `catalog_item_opened` | `catalog_open_failed` | `useCardOpen` in `widgets/catalog/model/use-card-open.ts` | widgets/catalog |
 | Get a project: import | `project_imported` | `project_import_failed` | `ImportGithub` and its `Example` in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx`; `ImportFs` in `Modals/ImportFs.tsx`; `ImportTemporary` in `Modals/ImportTemporary.tsx` | pending (funnel-events) |
-| Get a project: view a GitHub link | `project_viewed` | `project_view_failed` | `githubDefault` in `routes/github/github.tsx` | pending (funnel-events) |
+| Get a project: view a GitHub link | `project_viewed` | `project_view_failed` | `github` (`/github/<owner>/<repo>…`) in `routes/github/github.tsx` | pending (funnel-events) |
 | Sign in | `auth_signed_in` | `auth_sign_in_failed` | `PgSession._signIn` in `features/auth/model/session.ts` | features/auth |
 | Build | `build_started`, `build_succeeded` | `build_failed` | `build` in `commands/build/build.ts` | features/program-build |
 | Fund the wallet | `fund_sent` | `fund_failed` | `FundDialog` in `features/fund-wallet/ui/FundDialog.tsx` | features/fund-wallet |

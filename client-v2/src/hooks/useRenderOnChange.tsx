@@ -2,7 +2,7 @@ import { useEffect, useReducer, useState } from "react";
 
 import type { Disposable } from "../utils";
 
-export const useRenderOnChange = <T, G extends () => T>(
+export const useRenderOnChange = <T, G extends () => T | undefined>(
   onChange: ((cb: (v?: T) => any) => Disposable) & { getValue?: G }
 ) => {
   const [value, setValue] = useState(() => onChange?.getValue?.());

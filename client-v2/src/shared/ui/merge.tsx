@@ -364,7 +364,9 @@ function MergePaneHeader({
           <span className="sr-only">Read-only:</span>
         </>
       )}
-      <span className={cn("truncate", deleted && "text-error")}>{label}</span>
+      <span className={cn("truncate", deleted && "text-error-ink")}>
+        {label}
+      </span>
       {children}
     </div>
   );

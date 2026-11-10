@@ -828,7 +828,11 @@ describe("BaseResultCard", () => {
       />
     );
     expect(screen.getByText(/Invalid path/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /-->/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: (name) => name.startsWith("--> "),
+      })
+    ).toBeNull();
     expect(
       screen.getByRole("button", { name: /Explain the error/ })
     ).toBeTruthy();
@@ -863,7 +867,11 @@ describe("BaseResultCard", () => {
       />
     );
     expect(screen.getByText(/exit status: 1/)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /-->/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: (name) => name.startsWith("--> "),
+      })
+    ).toBeNull();
   });
 
   it("folds to its head once it is a record, and the head opens it again", async () => {

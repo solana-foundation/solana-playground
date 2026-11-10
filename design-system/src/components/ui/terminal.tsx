@@ -22,10 +22,10 @@ const terminalLineVariants = cva("min-w-0 break-words whitespace-pre-wrap", {
     variant: {
       output: "text-muted-foreground",
       prompt: "text-foreground before:mr-2 before:text-brand-purple before:content-['$']",
-      info: "text-info",
-      success: "text-success",
-      warning: "text-warning",
-      error: "text-error",
+      info: "text-info-ink",
+      success: "text-success-ink",
+      warning: "text-warning-ink",
+      error: "text-error-ink",
     },
   },
   defaultVariants: {

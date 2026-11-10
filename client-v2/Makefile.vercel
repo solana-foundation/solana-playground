@@ -11,8 +11,22 @@
 
 CLIENT_DIR := client-v2
 
+# Every path below is relative to the repository root; from elsewhere .env and the link file would be read from the wrong place.
+ifeq ($(wildcard $(CLIENT_DIR)/Makefile.vercel),)
+$(error Run from the repository root: make -f $(CLIENT_DIR)/Makefile.vercel <target>, or make <target>)
+endif
+
 # Targets verified against this CLI version; bump only after re-running them.
 VERCEL_CLI := vercel@62.7.0
+
+# The root Makefile defines help and includes this file; run with -f alone, this file brings its own.
+ifneq ($(.DEFAULT_GOAL),help)
+.DEFAULT_GOAL := help
+.PHONY: help
+help:
+	@printf 'Usage: make -f $(CLIENT_DIR)/Makefile.vercel <target>\n\nTargets:\n'
+	@sed -nE 's/^([a-zA-Z_%-]+):.*## (.*)$$/  \1: \2/p' $(MAKEFILE_LIST) | LC_ALL=C sort -t: -k1,1
+endif
 
 # Where a laptop preview's database lives: `url` (a Neon branch of the preview
 # project, the default) or `cloud-sql` (a database on the preview Cloud SQL
@@ -50,14 +64,21 @@ define check_preview_instance
 endef
 
 # Secrets live in $(CLIENT_DIR)/.env, which dbmate reads by itself. Make does not,
-# so the Neon values are lifted out here and exported to every recipe. `?=` leaves
-# an already-exported value alone; named keys are read rather than the file
-# sourced, so a stray DATABASE_URL in there cannot redirect a migration.
-# See $(CLIENT_DIR)/docs/neon.md.
+# so the Neon values and the Vercel deploy target are lifted out here and exported
+# to every recipe. `?=` leaves an already-exported value alone; named keys are read
+# rather than the file sourced, so a stray DATABASE_URL in there cannot redirect a
+# migration. See $(CLIENT_DIR)/docs/neon.md.
 dotenv = $(shell sed -n 's/^$(1)=//p' $(CLIENT_DIR)/.env 2>/dev/null | head -1 | tr -d '"'"'"'"')
 NEON_API_KEY ?= $(call dotenv,NEON_API_KEY)
 NEON_PROJECT_ID ?= $(call dotenv,NEON_PROJECT_ID)
-export NEON_API_KEY NEON_PROJECT_ID
+# An empty value counts as unset; `override` because make ignores a plain assignment to a variable set empty on its command line.
+ifeq ($(strip $(VERCEL_DEPLOY_TEAM)),)
+override VERCEL_DEPLOY_TEAM := $(call dotenv,VERCEL_DEPLOY_TEAM)
+endif
+ifeq ($(strip $(VERCEL_DEPLOY_PROJECT_ID)),)
+override VERCEL_DEPLOY_PROJECT_ID := $(call dotenv,VERCEL_DEPLOY_PROJECT_ID)
+endif
+export NEON_API_KEY NEON_PROJECT_ID VERCEL_DEPLOY_TEAM VERCEL_DEPLOY_PROJECT_ID
 
 # `--token` is passed only when VERCEL_TOKEN is set; otherwise the CLI uses the
 # login from `vercel login`, which a developer already has. A token is for CI.
@@ -70,7 +91,7 @@ export NEON_API_KEY NEON_PROJECT_ID
 # the value.
 VERCEL_TOKEN_ARG = $${VERCEL_TOKEN:+--token=$$VERCEL_TOKEN}
 
-.PHONY: vercel-bootstrap vercel-auth vercel-link-preview vercel-link-production \
+.PHONY: vercel-login vercel-link vercel-auth vercel-link-preview vercel-link-production \
 	deploy-client-to-vercel-preview deploy-client-to-vercel-production deploy-client-to-vercel-prod-fast \
 	preview-db-branch migrate-preview-db migrate-production-db
 
@@ -79,18 +100,49 @@ VERCEL_TOKEN_ARG = $${VERCEL_TOKEN:+--token=$$VERCEL_TOKEN}
 VERCEL_IDS = export VERCEL_ORG_ID=$$(jq -r .orgId .vercel/project.json) && \
 	export VERCEL_PROJECT_ID=$$(jq -r .projectId .vercel/project.json)
 
+VERCEL_DEPLOY_PROJECT_ID_UNSET = VERCEL_DEPLOY_PROJECT_ID is unset: add the id of the Vercel project to deploy to $(CLIENT_DIR)/.env
+VERCEL_DEPLOY_TEAM_UNSET = VERCEL_DEPLOY_TEAM is unset: add the slug or id of the Vercel team that owns that project to $(CLIENT_DIR)/.env; vercel teams ls lists the slugs
+
+# Where VERCEL_DEPLOY_PROJECT_ID came from, so a mismatch names the value that won and how to change it.
+deploy_project_origin = $(origin VERCEL_DEPLOY_PROJECT_ID)
+DEPLOY_PROJECT_SOURCE = $(if $(findstring environment,$(deploy_project_origin)),the shell,$(if $(findstring command,$(deploy_project_origin)),the make command line,$(CLIENT_DIR)/.env))
+DEPLOY_PROJECT_FIX = $(if $(findstring environment,$(deploy_project_origin)),run 'unset VERCEL_DEPLOY_PROJECT_ID' to use the value in $(CLIENT_DIR)/.env,$(if $(findstring command,$(deploy_project_origin)),drop it from the make command,fix the value in $(CLIENT_DIR)/.env))
+
+define require_jq
+	@command -v jq >/dev/null 2>&1 || { echo "jq required — see https://jqlang.org/download/" >&2; exit 1; }
+endef
+
+# Two teams each have a project named solana-playground; only the one VERCEL_DEPLOY_PROJECT_ID names may be linked.
+define vercel_expected_project
+	$(require_jq)
+	@test -f .vercel/project.json || { echo "no .vercel/project.json: run 'make vercel-link'" >&2; exit 1; }
+	@: "$${VERCEL_DEPLOY_PROJECT_ID:?$(VERCEL_DEPLOY_PROJECT_ID_UNSET)}"; \
+		org=$$(jq -r .orgId .vercel/project.json) || { echo "could not read .vercel/project.json" >&2; exit 1; }; \
+		project=$$(jq -r .projectId .vercel/project.json) || { echo "could not read .vercel/project.json" >&2; exit 1; }; \
+		printf 'Linked Vercel project: %s in team %s; expected %s (from %s)\n' "$$project" "$$org" "$$VERCEL_DEPLOY_PROJECT_ID" "$(DEPLOY_PROJECT_SOURCE)"; \
+		[ "$$project" = "$$VERCEL_DEPLOY_PROJECT_ID" ] || { \
+			echo "The linked project is not the expected one: run 'make vercel-link' to link $$VERCEL_DEPLOY_PROJECT_ID, or, if that value is wrong, $(DEPLOY_PROJECT_FIX)" >&2; \
+			exit 1; }
+endef
+
 # Names the auth fix the CLI's "Could not retrieve Project Settings" hides; stdin is /dev/null so a missing login fails instead of prompting.
-define vercel_auth
-	@test -f .vercel/project.json || { echo "no .vercel/project.json: run 'make vercel-bootstrap'" >&2; exit 1; }
-	@out=$$($(VERCEL_IDS) && npx $(VERCEL_CLI) whoami $(VERCEL_TOKEN_ARG) </dev/null 2>&1) || { \
+# Needs no link file, so a fresh checkout learns about a missing login before it links.
+define vercel_login_check
+	@out=$$(npx $(VERCEL_CLI) whoami $(VERCEL_TOKEN_ARG) </dev/null 2>&1) || { \
 		printf '%s\n' "$$out" >&2; \
 		if [ -n "$${VERCEL_TOKEN:-}" ]; then \
 			echo "VERCEL_TOKEN was rejected. A project-scoped token cannot drive the CLI: run 'unset VERCEL_TOKEN' to use your 'vercel login' session, or use an All Projects token." >&2; \
 		else \
-			echo "No working Vercel CLI login: run 'npx $(VERCEL_CLI) login' with an account in team $$(jq -r .orgId .vercel/project.json)." >&2; \
+			echo "No working Vercel CLI login: run 'make vercel-login' with an account in team $${VERCEL_DEPLOY_TEAM:-VERCEL_DEPLOY_TEAM}." >&2; \
 		fi; \
 		exit 1; }; \
 		echo "Vercel CLI user: $$(printf '%s\n' "$$out" | tail -1)"
+endef
+
+# The pull targets, and so the preview and full production deploys, check the linked project, then the login.
+define vercel_auth
+	$(call vercel_expected_project)
+	$(call vercel_login_check)
 endef
 
 # $(1): Vercel environment to pull (preview | production).
@@ -104,27 +156,49 @@ define vercel_link
 	@echo "Root Directory pinned to $(CLIENT_DIR)"
 endef
 
-# Resolve orgId from Vercel API + write .vercel/project.json. Requires jq.
-# The one target that still requires VERCEL_TOKEN: this calls the REST API
-# directly and a raw request has no stored login to fall back on. A
-# project-scoped token is enough here -- /v9/projects/<id> is project-level.
-vercel-bootstrap: ## Link the local checkout to the dashboard project (run once; needs VERCEL_TOKEN, VERCEL_PROJECT_ID)
-	@: $${VERCEL_TOKEN:?VERCEL_TOKEN is unset}
-	@: $${VERCEL_PROJECT_ID:?VERCEL_PROJECT_ID is unset}
-	@command -v jq >/dev/null 2>&1 || { echo "jq required — see https://jqlang.org/download/" >&2; exit 1; }
-	@# `printf '%s'`, never `echo`: macOS /bin/sh is bash in sh mode with xpg_echo
-	@# on, so its echo expands the \n inside the response's JSON strings into real
-	@# newlines and hands jq invalid input. The project payload embeds commit
-	@# messages, so one multi-line commit is enough to break bootstrap.
-	@response=$$(curl -sH "Authorization: Bearer $${VERCEL_TOKEN}" "https://api.vercel.com/v9/projects/$${VERCEL_PROJECT_ID}"); \
-		org_id=$$(printf '%s' "$$response" | jq -r '.accountId // empty'); \
-		if [ -z "$$org_id" ]; then echo "Bootstrap failed. Vercel API response: $$response" >&2; exit 1; fi; \
-		mkdir -p .vercel; \
-		jq -n --arg org "$$org_id" --arg proj "$${VERCEL_PROJECT_ID}" '{orgId: $$org, projectId: $$proj}' > .vercel/project.json; \
-		echo "Wrote .vercel/project.json"
+# Interactive, so it takes the terminal; every target below reads the session it stores unless VERCEL_TOKEN is set.
+vercel-login: ## Log the Vercel CLI in with your account, at the pinned VERCEL_CLI version
+	npx $(VERCEL_CLI) login
 
-vercel-auth: ## Check that the Vercel CLI is logged in to the linked team
-	$(call vercel_auth)
+# `vercel link` also writes a .env.local holding an OIDC token and edits .gitignore in the
+# directory it links, so it links a throwaway directory under the gitignored .vercel/ and
+# only the two IDs are copied out. The exported IDs are dropped because they outrank --team/--project.
+vercel-link: ## Link the checkout to the existing project VERCEL_DEPLOY_PROJECT_ID in VERCEL_DEPLOY_TEAM with your 'vercel login' session
+	@: "$${VERCEL_DEPLOY_TEAM:?$(VERCEL_DEPLOY_TEAM_UNSET)}"
+	@: "$${VERCEL_DEPLOY_PROJECT_ID:?$(VERCEL_DEPLOY_PROJECT_ID_UNSET)}"
+	@# A project name instead of an ID could make `vercel link --yes` create a project in the team.
+	@case "$$VERCEL_DEPLOY_PROJECT_ID" in prj_*) ;; *) \
+		echo "VERCEL_DEPLOY_PROJECT_ID is \"$$VERCEL_DEPLOY_PROJECT_ID\": set it to the Project ID (prj_...) from the project's Settings → General, not the project name" >&2; exit 1;; esac
+	$(require_jq)
+	@mkdir -p .vercel; \
+		dir=$$(mktemp -d .vercel/link.XXXXXX) || exit 1; \
+		trap 'rm -rf "$$dir"' EXIT; \
+		trap 'exit 1' HUP INT TERM; \
+		out=$$(env -u VERCEL_ORG_ID -u VERCEL_PROJECT_ID npx $(VERCEL_CLI) link --yes --cwd "$$dir" \
+			--team "$$VERCEL_DEPLOY_TEAM" --project "$$VERCEL_DEPLOY_PROJECT_ID" $(VERCEL_TOKEN_ARG) </dev/null 2>&1) || { \
+			printf '%s\n' "$$out" >&2; \
+			if [ -n "$${VERCEL_TOKEN:-}" ]; then \
+				echo "Could not link with VERCEL_TOKEN set. Either the token was rejected (a project-scoped token cannot drive the CLI: run 'unset VERCEL_TOKEN' to use your 'vercel login' session, or use an All Projects token), or VERCEL_DEPLOY_TEAM ($$VERCEL_DEPLOY_TEAM) or VERCEL_DEPLOY_PROJECT_ID ($$VERCEL_DEPLOY_PROJECT_ID) is wrong." >&2; \
+			else \
+				echo "Could not link: run 'make vercel-login' with an account in team $$VERCEL_DEPLOY_TEAM, and check that VERCEL_DEPLOY_PROJECT_ID names an existing project there." >&2; \
+			fi; \
+			exit 1; }; \
+		jq '{orgId, projectId}' "$$dir/.vercel/project.json" > .vercel/project.json.next || { \
+			rm -f .vercel/project.json.next; \
+			printf '%s\n' "$$out" >&2; \
+			echo "vercel link wrote no readable .vercel/project.json" >&2; \
+			exit 1; }; \
+		linked=$$(jq -r .projectId .vercel/project.json.next); \
+		[ "$$linked" = "$$VERCEL_DEPLOY_PROJECT_ID" ] || { \
+			rm -f .vercel/project.json.next; \
+			echo "vercel link linked $$linked, not VERCEL_DEPLOY_PROJECT_ID ($$VERCEL_DEPLOY_PROJECT_ID); the previous link is kept" >&2; \
+			exit 1; }; \
+		mv .vercel/project.json.next .vercel/project.json; \
+		echo "Wrote .vercel/project.json"
+	$(call vercel_expected_project)
+
+vercel-auth: ## Check that the Vercel CLI is logged in (or VERCEL_TOKEN works); needs no link
+	$(call vercel_login_check)
 
 vercel-link-preview: ## Pull preview env vars from Vercel
 	$(call vercel_link,preview)
@@ -175,7 +249,7 @@ deploy-client-to-vercel-production: vercel-link-production ## Build locally + de
 FAST_BUILD_CONFIG := .vercel/vercel.noinstall.json
 
 deploy-client-to-vercel-prod-fast: ## Rebuild without the wasm/install step and deploy to PRODUCTION (needs a prior full build)
-	@test -f .vercel/project.json || { echo "no .vercel/project.json — run 'make vercel-bootstrap'" >&2; exit 1; }
+	$(call vercel_expected_project)
 	@test -d $(CLIENT_DIR)/node_modules || { echo "no $(CLIENT_DIR)/node_modules — run a full build first" >&2; exit 1; }
 	@# node_modules too: yarn keeps a stub installed there after wasm/*/pkg turns real.
 	@. $(CLIENT_DIR)/scripts/wasm-stubs.sh; \
@@ -213,7 +287,7 @@ deploy-client-to-vercel-prod-fast: ## Rebuild without the wasm/install step and 
 # $(CLIENT_DIR)/docs/cloud-sql.md.
 migrate-production-db: ## Apply pending migrations to the production database (SERVES PRODUCTION)
 	@command -v dbmate >/dev/null 2>&1 || { echo "dbmate required — see $(CLIENT_DIR)/db/README.md" >&2; exit 1; }
-	@test -f .vercel/project.json || { echo "no .vercel/project.json — run 'make vercel-bootstrap'" >&2; exit 1; }
+	$(call vercel_expected_project)
 	@# `env pull`, not `pull`: it writes only the named file and leaves the cached
 	@# project settings (and the pinned Root Directory) alone.
 	export VERCEL_ORG_ID=$$(jq -r .orgId .vercel/project.json) && \
@@ -271,8 +345,12 @@ migrate-production-db: ## Apply pending migrations to the production database (S
 		echo "Production's DB_PROVIDER must be url, cloud-sql or unset, not \"$$provider\"" >&2; exit 1;; \
 	esac
 
+# cloud-sql reads the linked project's Preview pull, so the link is checked; url reads NEON_PROJECT_ID and needs no link.
+preview_project_check = $(if $(filter cloud-sql,$(DB_PROVIDER)),$(call vercel_expected_project))
+
 preview-db-branch: ## Create (or reuse) this git branch's preview database (DB_PROVIDER=url|cloud-sql)
 	$(check_provider)
+	$(preview_project_check)
 	$(check_preview_instance)
 	@$(PREVIEW_CLOUD_SQL) $(DB_SCRIPTS)/create-preview-db --branch "$(GIT_BRANCH)" >/dev/null
 
@@ -281,6 +359,7 @@ preview-db-branch: ## Create (or reuse) this git branch's preview database (DB_P
 # and not an incident. Created first if missing, as the Neon branch always was.
 migrate-preview-db: ## Apply pending migrations to this git branch's own preview database (DB_PROVIDER=url|cloud-sql)
 	$(check_provider)
+	$(preview_project_check)
 	$(check_preview_instance)
 	@command -v dbmate >/dev/null 2>&1 || { echo "dbmate required — see $(CLIENT_DIR)/db/README.md" >&2; exit 1; }
 	@$(PREVIEW_CLOUD_SQL) $(DB_SCRIPTS)/create-preview-db --branch "$(GIT_BRANCH)" >/dev/null

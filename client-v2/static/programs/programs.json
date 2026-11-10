@@ -78,13 +78,5 @@
     "icon": "https://avatars.githubusercontent.com/u/35608259",
     "framework": "Native",
     "categories": ["SPL", "Token", "Trading"]
-  },
-  {
-    "name": "token-vesting",
-    "description": "Bonfida's token vesting: locks tokens under a schedule and releases each portion to the recipient once its unlock time passes.",
-    "repo": "https://github.com/Bonfida/token-vesting/tree/6234f98229196d1c785dfd2198bb58afc60bca10/program",
-    "icon": "https://avatars.githubusercontent.com/u/76649234",
-    "framework": "Native",
-    "categories": ["Token"]
   }
 ]

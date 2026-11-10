@@ -9,7 +9,7 @@ See [proposal.md](proposal.md), "Why". Facts this design rests on, read on
   `views/sidebar/explorer/Component/Modals/` (`ImportGithub.tsx`,
   `ImportFs.tsx`, `ImportTemporary.tsx`, `ExportWorkspace.tsx`). The settings
   page opens the import dialogs and exports with `PgFramework.exportWorkspace()`
-  directly. `/<GitHub URL>` (`githubDefault` in `routes/github/github.tsx`)
+  directly. `/github/<owner>/<repo>…` (`github` in `routes/github/github.tsx`)
   opens a repository as a temporary project through `PgGithub.getFiles`.
 - `PgGithub` throws plain `Error`s whose only difference is the message
   (404, rate limit, truncated tree, no source files), and

@@ -1,3 +1,4 @@
+import { NetworkRefusedError } from "@/commands/deploy/network-refused";
 import {
   initTelemetry,
   memoryProvider,
@@ -623,5 +624,33 @@ describe("READING_TOOLS", () => {
         .map((tool) => tool.name)
     );
     for (const name of READING_TOOLS) expect(real).toContain(name);
+  });
+});
+
+describe("deploy", () => {
+  it("says a deploy the network refused did not start, rather than failed", async () => {
+    const tool = requireFor("the deploy tool")(
+      createTools({
+        getProjectContext: () => ({ cluster: "devnet" }),
+        quoteDeploy: async () => ({
+          network: "devnet",
+          cost: 1_420_000_000,
+          playground: true,
+        }),
+        deploy: async () => {
+          throw new NetworkRefusedError(
+            "Devnet is not responding. Deploy waits for the network."
+          );
+        },
+      } as unknown as PlaygroundBridge).find((t) => t.name === "deploy")
+    );
+
+    const pending = tool.run({});
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), true);
+
+    expect(await pending).toBe(
+      "The deploy did not start, and nothing was sent: Devnet is not responding. Deploy waits for the network."
+    );
   });
 });

@@ -1,3 +1,4 @@
+import { PgSession } from "../../features/auth";
 import { PgAccountList } from "../../features/persistence/model/account-list";
 import { report } from "../../features/persistence/model/diagnostics";
 import { reconcile } from "../../features/persistence/model/project-restore";
@@ -144,6 +145,11 @@ export const projectSync = (): Disposable => {
   // device. `push` is a no-op for a snapshot the server already has, so
   // switching back and forth costs nothing.
   const subscriptions = [
+    // A sign-in's reconcile may have written the mark clean, and a flag raised
+    // before the first read found nobody to write it for
+    PgSession.onDidChange(() => {
+      flagged = false;
+    }),
     PgExplorer.onDidSaveFile(schedule),
     PgExplorer.onDidCreateItem(schedule),
     PgExplorer.onDidRenameItem(schedule),
@@ -241,6 +247,10 @@ export const projectSync = (): Disposable => {
    * lets Home offer the example to a signed-in account again.
    */
   const settleLocalDeletes = async () => {
+    // A delete cannot reach the account now. The project comes back on the next
+    // sign-in, as after any delete made signed out, and keeps its mark and chat
+    if (PgSession.expiredUser) return;
+
     // Whether every delete below reached the account; one that did not leaves
     // the project alive there
     let allReached = true;

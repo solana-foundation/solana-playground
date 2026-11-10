@@ -1,6 +1,10 @@
 // TODO(ui-migration 1.4): a feature importing a feature; bases are stored per signed-in account
 import { PgSession } from "@/features/auth";
 
+import {
+  removeConfigFile,
+  writeConfigFile,
+} from "../../../utils/explorer/config-file";
 import { PgFs } from "../../../utils/explorer/fs";
 import { report } from "./diagnostics";
 import type { BaseContents } from "./merge";
@@ -121,10 +125,9 @@ export class PgSyncBase {
     const userId = currentUserId();
     if (!userId) return;
     try {
-      await PgFs.writeFile(
+      await writeConfigFile(
         pathOf(userId, projectId),
-        JSON.stringify(contents),
-        { createParents: true }
+        JSON.stringify(contents)
       );
     } catch (e) {
       report(`write sync base ${projectId}`, e);
@@ -150,7 +153,7 @@ export class PgSyncBase {
     const userId = currentUserId();
     if (!userId) return;
     try {
-      await PgFs.removeFile(pathOf(userId, projectId));
+      await removeConfigFile(pathOf(userId, projectId));
     } catch (e) {
       if (!isMissing(e)) report(`clear sync base ${projectId}`, e);
     }
@@ -190,6 +193,36 @@ if (import.meta.vitest) {
         PgSyncBase.reset();
         storedFiles().clear();
         await signedIn();
+      });
+
+      it("forgets a base it cleared through a reload before the folder tree is saved", async () => {
+        PgSyncBase.track("p1", { "src/lib.rs": "before" });
+        await PgSyncBase.capture("p1", ["src/lib.rs"], {
+          "src/lib.rs": await sha256("before"),
+        });
+        await PgSyncBase.clear("p1");
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+
+        const userId = currentUserId();
+        if (!userId) throw new Error("expected a signed-in user");
+        expect(await PgFs.exists(pathOf(userId, "p1"))).toBe(false);
+      });
+
+      it("keeps a base it just created through a reload before the folder tree is saved", async () => {
+        PgSyncBase.track("p1", { "src/lib.rs": "before" });
+        await PgSyncBase.capture("p1", ["src/lib.rs"], {
+          "src/lib.rs": await sha256("before"),
+        });
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+        PgSyncBase.reset();
+
+        expect(await PgSyncBase.read("p1")).toEqual({
+          "src/lib.rs": { hash: await sha256("before"), content: "before" },
+        });
       });
 
       it("keeps a file's pre-edit content, taken from the shadow", async () => {

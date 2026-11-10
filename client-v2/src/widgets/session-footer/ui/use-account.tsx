@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 
+import { connectWallet } from "@/commands/connect/connect-wallet";
 import { isSetupRejected } from "@/commands/connect/setup-rejected";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import { FeedbackMenuItems, useFeedbackSend } from "@/features/feedback";
@@ -8,7 +9,7 @@ import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { createLogger } from "@/shared/lib/logger";
 import type { SettingsRequest } from "@/shared/lib/settings-request";
-import { PgCommand, PgCommon, PgExplorer, PgView, PgWallet } from "@/utils";
+import { PgCommon, PgExplorer, PgView, PgWallet } from "@/utils";
 
 import type {
   AccountItem,
@@ -17,7 +18,7 @@ import type {
   AccountView,
   SignOutState,
 } from "../model/account";
-import { shownSignOutState } from "../model/account";
+import { sessionWith, shownSignOutState } from "../model/account";
 import { sessionTelemetry } from "../model/telemetry";
 import { useClusterStatus } from "../model/use-cluster-status";
 import BaseAccountMenu from "./BaseAccountMenu";
@@ -78,14 +79,14 @@ export const useAccount = ({
   const menuOpen = useRef(false);
 
   const user = PgSession.get();
-  // A session wins over the sign-in state: a sign-in that failed before the
-  // session arrived (another tab, a reload) stays failed in `PgSession`
+  // A session wins over the sign-in state: a sign-in may still wait here on a
+  // popup when the session arrives from another tab
   const session: AccountSession = user
     ? {
         status: "signed-in",
         user: { name: user.name, login: user.login, image: user.image },
       }
-    : PgSession.signInState();
+    : sessionWith(PgSession.expiredUser)(PgSession.signInState());
   const account: AccountView = {
     session,
     wallet: wallet
@@ -103,9 +104,10 @@ export const useAccount = ({
 
   // `connect` toggles: no wallet to the Playground wallet, the Playground
   // wallet to none, an extension wallet back to the Playground one. It
-  // rejects when the user closes the setup, which is their choice, not a fault
+  // rejects when the user closes the setup, which is their choice, not a fault.
+  // Home mounts no terminal, so this must work without one
   const toggleWallet = (item: AccountItem) => {
-    PgCommand.connect.execute().catch((error: unknown) => {
+    connectWallet().catch((error: unknown) => {
       if (isSetupRejected(error)) {
         log.info("wallet setup dismissed", { context: { item } });
         return;

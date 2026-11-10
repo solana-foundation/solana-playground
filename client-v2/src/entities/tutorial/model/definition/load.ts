@@ -89,7 +89,8 @@ if (import.meta.vitest) {
       telemetry.resetTelemetry();
     });
 
-    const KNOWN = new Set(["hello-anchor", "counter-pda-tutorial"]);
+    // Hello Anchor's next is Lumberjack
+    const KNOWN = new Set(["hello-anchor", "lumberjack"]);
 
     /** Hello Anchor with two schema errors: no minutes, a level no one has */
     const broken = () => {

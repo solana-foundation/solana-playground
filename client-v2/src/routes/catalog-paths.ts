@@ -1,5 +1,6 @@
-/** The links that open a page: the bare `/tutorials` and `/programs` */
+/** The links that open a page: the bare `/new`, `/tutorials` and `/programs` */
 const LINKS = {
+  "/new": "new-project",
   "/tutorials": "tutorials",
   "/programs": "programs",
 } as const;
@@ -19,8 +20,15 @@ export const catalogPageOfPath = (path: string): LinkedPage | null => {
 export const isCatalogLinkPath = (path: string) =>
   catalogPageOfPath(path) !== null;
 
+/** Each page's own path, which stays in the address bar while it shows */
+const PATHS: Record<LinkedPage, keyof typeof LINKS> = {
+  "new-project": "/new",
+  tutorials: "/tutorials",
+  programs: "/programs",
+};
+
 /** The page's own path, which stays in the address bar while it shows */
-export const pathOfCatalogPage = (page: LinkedPage) => `/${page}` as const;
+export const pathOfCatalogPage = (page: LinkedPage) => PATHS[page];
 
 /**
  * Home's own path: it has to differ from the work's path, `/` included, so
@@ -48,6 +56,8 @@ if (import.meta.vitest) {
       ["/tutorials", "tutorials"],
       ["/tutorials/", "tutorials"],
       ["/programs", "programs"],
+      ["/new", "new-project"],
+      ["/new/", "new-project"],
       ["/tutorials/hello-anchor", null],
       ["/", null],
       ["/programs/x", null],
@@ -62,6 +72,7 @@ if (import.meta.vitest) {
       ["/home/", true],
       ["/tutorials", true],
       ["/programs", true],
+      ["/new", true],
       ["/tutorials/hello-anchor/1", false],
       ["/open", false],
       ["/homes", false],
@@ -72,11 +83,12 @@ if (import.meta.vitest) {
     it("gives each page its own path", () => {
       expect(pathOfCatalogPage("tutorials")).toBe("/tutorials");
       expect(pathOfCatalogPage("programs")).toBe("/programs");
+      expect(pathOfCatalogPage("new-project")).toBe("/new");
       expect(isHomePath(HOME_PATH)).toBe(true);
     });
 
     it("leads each page's path back to the same page", () => {
-      for (const page of ["tutorials", "programs"] as const) {
+      for (const page of ["new-project", "tutorials", "programs"] as const) {
         expect(catalogPageOfPath(pathOfCatalogPage(page))).toBe(page);
       }
     });

@@ -20,6 +20,7 @@ import type { Nullable } from "./types";
 import { PgWeb3 } from "./web3";
 
 const log = createLogger("program-info:storage");
+const fetchLog = createLogger("program-info:fetch");
 
 /** Program info state */
 type ProgramInfo = Nullable<{
@@ -143,7 +144,13 @@ const derive = () => ({
 
   /** On-chain data of the program */
   onChain: createDerivable({
-    derive: () => _PgProgramInfo.fetch(),
+    // No id, nothing to fetch: `undefined` is "not known yet". `null` is any
+    // failed fetch, which Interact (`interactSurface`) shows as "can't reach
+    // the network", so it must not stand for a missing id
+    // (Typed by hand: inferring it through `PgProgramInfo.pk` would make the
+    // class's type depend on itself)
+    derive: (): ReturnType<typeof _PgProgramInfo.fetch> | undefined =>
+      PgProgramInfo.pk ? _PgProgramInfo.fetch() : undefined,
     onChange: ["pk", PgConnection.onDidChange, PgCommand.deploy.onDidFinish],
   }),
 });
@@ -154,6 +161,35 @@ const migrate = () => {
   // is already stored in `indexedDB`
   localStorage.removeItem("programInfo");
 };
+
+/** The program data's header: tag (4), slot (8), authority option (1 + 32) */
+const PROGRAM_DATA_HEADER_LEN = 45;
+
+/**
+ * The program data's full length. The RPC reports it as `space` beside a
+ * sliced read; web3.js 1.98 keeps the field without typing it. Without it
+ * this reads the whole account, the slow path a large program pays, so the
+ * fallback is logged.
+ */
+const programDataLenWith =
+  (conn: typeof PgConnection.current) =>
+  async (
+    programDataPk: InstanceType<typeof PgWeb3.PublicKey>,
+    sliced: { data: Buffer }
+  ) => {
+    // A `space` below the slice is an RPC answering with the slice's length
+    if (
+      "space" in sliced &&
+      typeof sliced.space === "number" &&
+      sliced.space >= sliced.data.length
+    ) {
+      return sliced.space;
+    }
+    fetchLog.info("The RPC sent no `space`; reading the whole program data");
+    const whole = await conn.getAccountInfo(programDataPk);
+    // Closed between the two reads: no length, as for no account at all
+    return whole?.data.length;
+  };
 
 @initable({ onDidInit })
 @derivable(derive)
@@ -222,7 +258,11 @@ class _PgProgramInfo {
 
     const programDataPkBuffer = programAccountInfo.data.slice(4);
     const programDataPk = new PgWeb3.PublicKey(programDataPkBuffer);
-    const programDataAccountInfo = await conn.getAccountInfo(programDataPk);
+    // Only the header is needed, and a large program's data runs to
+    // megabytes (Drift on devnet: 7 MB, 9.3 MB as base64)
+    const programDataAccountInfo = await conn.getAccountInfo(programDataPk, {
+      dataSlice: { offset: 0, length: PROGRAM_DATA_HEADER_LEN },
+    });
     if (!programDataAccountInfo) return { deployed, upgradable: true };
 
     // Check if program authority exists
@@ -230,14 +270,15 @@ class _PgProgramInfo {
     const upgradable = !!authorityExists;
     if (!upgradable) return { deployed, upgradable };
 
+    const programDataLen = await programDataLenWith(conn)(
+      programDataPk,
+      programDataAccountInfo
+    );
+    if (programDataLen === undefined) return { deployed, upgradable: true };
+
     const authorityBuffer = programDataAccountInfo.data.slice(13, 45);
     const authority = new PgWeb3.PublicKey(authorityBuffer);
-    return {
-      deployed,
-      upgradable,
-      authority,
-      programDataLen: programDataAccountInfo.data.length,
-    };
+    return { deployed, upgradable, authority, programDataLen };
   }
 
   /**

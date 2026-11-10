@@ -40,8 +40,8 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
       counted": declare, describe and emit, with memory-provider tests,
       including nothing sent for a closed program choice; clear the import
       row's mark (depends on 2.1)
-- [ ] 2.3 Send `project_viewed` and `project_view_failed` from
-      `githubDefault` (`routes/github/github.tsx`). Satisfies "A project
+- [ ] 2.3 Send `project_viewed` and `project_view_failed` from the
+      `github` route (`routes/github/github.tsx`). Satisfies "A project
       opened from a GitHub link is counted": declare, describe and emit,
       with memory-provider tests; clear the GitHub link row's mark (depends
       on 2.1)
