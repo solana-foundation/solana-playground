@@ -1,6 +1,7 @@
 import { PgCommon } from "./common";
 import { PgExplorer, TupleFiles } from "./explorer";
 import { PgWorkspace } from "./explorer/workspace";
+import { ConversionError } from "./import-error";
 import type { RequiredKey, SyncOrAsync } from "./types";
 
 /** Framework creation parameter */
@@ -384,11 +385,12 @@ export class PgFramework {
    * @returns a function taking `source`, where the files came from (named in
    * the refusal, `undefined` when there is nothing to name), which returns a
    * function taking the framework files
-   * @throws `NOT_A_PROGRAM` when no framework recognises the files, they hold
-   * Rust or Python, and any of it is Python, sits outside `src/`, or a crate
-   * manifest (`Cargo.toml`, `Xargo.toml`) sits at the root;
-   * `noProgramCode` when there is no program and no script; "Could not
-   * convert files" when a framework's conversion returns nothing
+   * @throws a `ConversionError`: `unsupported` (`NOT_A_PROGRAM`) when no
+   * framework recognises the files, they hold Rust or Python, and any of it is
+   * Python, sits outside `src/`, or a crate manifest (`Cargo.toml`,
+   * `Xargo.toml`) sits at the root; `no-source` (`noProgramCode`) when there
+   * is no program and no script; `unsupported` ("Could not convert files")
+   * when a framework's conversion returns nothing
    */
   static convertToPlaygroundLayoutWith(root: string) {
     return (source: string | undefined) => async (files: TupleFiles) => {
@@ -411,18 +413,20 @@ export class PgFramework {
         }
 
         if (files.some(([path]) => PROGRAM_SOURCE_REGEX.test(path))) {
-          throw new Error(NOT_A_PROGRAM);
+          throw new ConversionError(NOT_A_PROGRAM, "unsupported");
         }
         const noProgramFiles = toNoProgramLayoutWith(root)(files);
         if (!noProgramFiles.some(([path]) => SCRIPT_FILE_REGEX.test(path))) {
-          throw new Error(noProgramCode(source));
+          throw new ConversionError(noProgramCode(source), "no-source");
         }
         return noProgramFiles;
       }
 
       const { convertToPlayground } = await framework.import();
       const convertedFiles = await convertToPlayground(files);
-      if (!convertedFiles.length) throw new Error("Could not convert files");
+      if (!convertedFiles.length) {
+        throw new ConversionError("Could not convert files", "unsupported");
+      }
 
       return convertedFiles;
     };
@@ -765,7 +769,28 @@ if (import.meta.vitest) {
             ["prog/main.py", "x"],
             ["client.ts", "a"],
           ])
-        ).rejects.toThrow(NOT_A_PROGRAM);
+        ).rejects.toMatchObject({
+          message: NOT_A_PROGRAM,
+          reason: "unsupported",
+        });
+      });
+
+      it("refuses files a framework claims but converts to nothing", async () => {
+        const getFromFiles = vi
+          .spyOn(PgFramework, "getFromFiles")
+          .mockResolvedValue({
+            import: async () => ({ convertToPlayground: async () => [] }),
+          } as unknown as Awaited<ReturnType<typeof PgFramework.getFromFiles>>);
+        try {
+          await expect(
+            pathsOf([["programs/a/src/lib.rs", "#[program]"]])
+          ).rejects.toMatchObject({
+            message: "Could not convert files",
+            reason: "unsupported",
+          });
+        } finally {
+          getFromFiles.mockRestore();
+        }
       });
 
       /** What Settings › Export writes is what Import reads back */
@@ -930,7 +955,10 @@ if (import.meta.vitest) {
           PgFramework.convertToPlaygroundLayoutWith("")("alice/docs")([
             ["README.md", "x"],
           ])
-        ).rejects.toThrow("No program code found in alice/docs.");
+        ).rejects.toMatchObject({
+          message: "No program code found in alice/docs.",
+          reason: "no-source",
+        });
       });
 
       it("leaves an Anchor repository to Anchor", async () => {

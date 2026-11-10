@@ -22,6 +22,7 @@ export const EVENT_PREFIXES = {
   persistence: "sync",
   "program-keypair": "keypair",
   "project-export": "export",
+  "project-files": "project",
   "session-footer": "session",
   "settings-page": "settings",
   "setup-list": "setup",

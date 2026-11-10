@@ -7,6 +7,7 @@ export * from "./editor";
 export * from "./explorer/";
 export * from "./framework";
 export * from "./github";
+export * from "./import-error";
 export * from "./global";
 export * from "./js-runtime";
 export * from "./keybind";

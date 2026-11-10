@@ -22,9 +22,10 @@ site, and the project's rules send agents to them.
   `src/app/slice-structure.test.ts` fails on a listed name no tracker
   declares that is not pending.
 - New slice `features/project-files`, prefix `project`. Events added:
-  `project_imported {source}`, `project_import_failed {source, reason}`,
-  `project_viewed`, `project_view_failed {reason}`, `project_exported {from,
-  converted}`, `project_export_failed {from}`.
+  `project_imported {via}`, `project_import_failed {via, reason}`,
+  `project_viewed`, `project_view_failed {reason}`, `project_exported {via,
+  converted}`, `project_export_failed {via}` (`via`, not `source` or `from`:
+  one trigger name, decided with HOO-2752 on 10 Nov 2026).
 - New slice `features/run`, prefix `run`. Events added:
   `run_finished {kind, outcome}` and `run_errored {kind, reason}`.
 - `features/deploy` counts every deploy from the `deploy` command that the
@@ -80,9 +81,12 @@ site, and the project's rules send agents to them.
     keep them firing.
   - `client-v2/CLAUDE.md`: a paragraph after the slice telemetry rule points
     at the funnel table and extends the rule to the legacy roots.
-- Users see no change. The events reach GA4 only where
-  `REACT_APP_GA_MEASUREMENT_ID` is set; the deploy, run and import paths
-  behave as before, pause and resume included.
+- Users see one change: a GitHub import whose request gets no answer says
+  "GitHub did not answer the request for …. Check the connection and try
+  again." instead of the browser's "Failed to fetch" (HOO-2751, task 2.1).
+  The events reach GA4 only where `REACT_APP_GA_MEASUREMENT_ID` is set; the
+  deploy, run and import paths otherwise behave as before, pause and resume
+  included.
 - Page views come from GA4's Enhanced Measurement ("page changes based on
   browser history events"), switched on in GA4 admin (HOO-2409), with no
   code.
