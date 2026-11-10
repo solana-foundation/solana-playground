@@ -1,1 +1,0 @@
-# Seahorse program
