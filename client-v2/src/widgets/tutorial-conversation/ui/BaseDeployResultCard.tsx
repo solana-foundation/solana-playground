@@ -25,6 +25,7 @@ import {
 } from "@/shared/ui/collapsible";
 import { CopyButton } from "@/shared/ui/copy-button";
 
+import FaucetSteps from "./FaucetSteps";
 import { formatSeconds, Prose, READ } from "./Prose";
 import WalletAddress from "./WalletAddress";
 
@@ -62,11 +63,13 @@ const sol = (lamports: number) =>
 const aboutSol = (lamports: number) =>
   String(Math.round((lamports / 1e9) * 100) / 100);
 
-/** Why the airdrop failed, in words true to the cause (Design alignment, 7 Nov) */
+/** Why the airdrop failed, in words true to the cause (Design alignment, 7 Nov).
+ * No "try again in a minute": the faucet's limit rarely lifts that soon, so the
+ * steps under it send the learner to the web faucet instead (10 Nov) */
 const airdropWhy = (message: string) =>
   isFaucetLimit(message)
-    ? "The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
-    : "The airdrop didn't go through: try again in a minute, or top the wallet up yourself.";
+    ? " The devnet faucet is at its limit."
+    : " The airdrop didn't go through.";
 
 /** The red head every failed deploy shares, 48 tall while it waits on the learner */
 const FailedHead = ({ title, open }: { title: string; open: boolean }) => (
@@ -132,14 +135,13 @@ const BaseDeployResultCard = ({
           <p className={READ}>
             {`Your wallet has ${sol(
               result.balance
-            )} SOL, and this deploy needs about ${aboutSol(result.cost)} SOL. ${
+            )} SOL, and this deploy needs about ${aboutSol(result.cost)} SOL.${
               // Only the airdrop asked the faucet; a deploy found the wallet
               // short on its own
-              result.act === "airdrop"
-                ? airdropWhy(result.message)
-                : "Get devnet SOL from the faucet, or top the wallet up yourself."
+              result.act === "airdrop" ? airdropWhy(result.message) : ""
             }`}
           </p>
+          <FaucetSteps />
           {/* The whole address, to check against a faucet's field: it
               breaks across lines only where the card is too narrow for it */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
@@ -155,7 +157,7 @@ const BaseDeployResultCard = ({
             </WalletAddress>
           </div>
           <div className="flex max-sm:flex-col max-sm:items-stretch">
-            <Button asChild variant="ghost">
+            <Button asChild variant="outline">
               <a
                 href={faucetUrlWith(DEVNET_FAUCET_SOL)("devnet")(
                   result.address
@@ -163,7 +165,7 @@ const BaseDeployResultCard = ({
                 target="_blank"
                 rel="noreferrer"
               >
-                Open faucet
+                Open the web faucet
                 <ExternalLink aria-hidden="true" className="size-4" />
               </a>
             </Button>

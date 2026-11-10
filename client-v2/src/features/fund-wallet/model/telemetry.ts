@@ -12,7 +12,21 @@ export type FundCluster =
 
 type FundEvents = {
   /** The Fund dialog opened; `from` is the control that opened it. */
-  fund_dialog_opened: { from: "account-menu" };
+  fund_dialog_opened: { from: "account-menu" | "wallet-chip" };
+  /** The wallet chip's popover asked the faucet for SOL. */
+  fund_airdrop_requested: { from: "wallet-chip" };
+  /**
+   * The faucet sent SOL; `via` is `faucet` for the chip's own ask and
+   * `web-faucet` when the balance rose after the web faucet was opened.
+   */
+  fund_airdrop_received: { via: "faucet" | "web-faucet" };
+  /**
+   * The chip's ask came back without SOL: `rate-limited` for the faucet's
+   * limit, `failed` for anything else but a sign-in the user did not finish.
+   */
+  fund_airdrop_refused: { reason: "rate-limited" | "failed" };
+  /** The web faucet opened from the chip, after the faucet refused. */
+  fund_web_faucet_opened: { from: "wallet-chip" };
   /**
    * A wallet connected inside the dialog to pay; `wallet` is its Wallet
    * Standard name (Phantom, Solflare), never an address.

@@ -1,6 +1,8 @@
 import type { FC } from "react";
 import { useEffect, useReducer, useState } from "react";
 
+import { isSignInFailure, useSignedIn } from "../../../features/auth";
+import { WalletChip } from "../../../features/fund-wallet";
 import { useSetStatic } from "../../../hooks/useSetStatic";
 import { useViewport } from "../../../shared/lib/hooks/use-viewport";
 import { createLogger } from "../../../shared/lib/logger";
@@ -71,6 +73,7 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
   tutorial,
 }) => {
   const viewport = useViewport();
+  const signedIn = useSignedIn();
   const [flow, setFlow] = useState(() => PgFlow.state);
   // `PgBuildOutput` fills in slightly after the `build-finish` event that
   // sets `flow.build`, and it carries the diagnostic code a failed status
@@ -166,6 +169,12 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
       }
       onClear={clear}
       log={logText}
+      wallet={
+        <WalletChip
+          signedOut={signedIn === false}
+          isSignInFailure={isSignInFailure}
+        />
+      }
       stop={stop && { run: stop, onStop: () => PgCommandManager.stop() }}
     >
       <Terminal />

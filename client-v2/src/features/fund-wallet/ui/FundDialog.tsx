@@ -24,6 +24,8 @@ const log = createLogger("fund-wallet:dialog");
 export interface FundDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The control that opened it, for `fund_dialog_opened` */
+  from?: "account-menu" | "wallet-chip";
 }
 
 /** The receiver `deploy` pays from, read from `PgWallet` */
@@ -92,7 +94,11 @@ const logFailure =
  * through its own `connect()` so `PgWallet.state` never changes, and the
  * transfer through `PgTx` on the Playground's cluster.
  */
-const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
+const FundDialog = ({
+  open,
+  onOpenChange,
+  from = "account-menu",
+}: FundDialogProps) => {
   useRenderOnChange(PgWallet.onDidChangeStandardWallets);
   useRenderOnChange(PgWallet.onDidChangeCurrent);
   // The balance, the check and the note follow a cluster change
@@ -130,11 +136,11 @@ const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
   useEffect(() => {
     attempt.current++;
     if (!open) return;
-    fundTelemetry.track("fund_dialog_opened", { from: "account-menu" });
+    fundTelemetry.track("fund_dialog_opened", { from });
     setFailure(unconfirmedFailure());
     setAmount(DEFAULT_AMOUNT);
     setPayerName(undefined);
-  }, [open]);
+  }, [open, from]);
 
   // The wallet switching its account emits `connect` (and `disconnect` when it
   // drops); `publicKey` is live, so the address and balance follow a re-render

@@ -565,7 +565,7 @@ describe("BaseResultCard", () => {
     expect(screen.getByText("Not enough devnet SOL")).toBeTruthy();
     expect(
       screen.getByText(
-        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
+        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet faucet is at its limit."
       )
     ).toBeTruthy();
     // The whole address, with Copy right after it rather than at the row's end
@@ -574,8 +574,12 @@ describe("BaseResultCard", () => {
         ?.parentElement?.textContent
     ).toBe("Wa11etCopy");
     expect(
-      screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
-    ).toBe("https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet");
+      screen
+        .getByRole("link", { name: /Open the web faucet/ })
+        .getAttribute("href")
+    ).toBe(
+      "https://faucet.solana.com/?walletAddress=Wa11et&amount=5&cluster=devnet"
+    );
     unmount();
     txCard({
       act: "call",

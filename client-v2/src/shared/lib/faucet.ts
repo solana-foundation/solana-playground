@@ -62,6 +62,18 @@ export const faucetUrlFor = linkWith({});
 /** {@link faucetUrlFor}, also asking for `sol` */
 export const faucetUrlWith = (sol: number) => linkWith({ amount: sol });
 
+/**
+ * The web faucet in three steps, for someone who has never used one: a
+ * prefilled link alone loses a newcomer on its sign-in page (Sergey, 10 Nov).
+ * `back` is the last step, what to do once the SOL is sent: a card with Try
+ * again says to press it, a live balance says it updates by itself.
+ */
+export const webFaucetSteps = (sol: number, back: string): string[] => [
+  "Open the web faucet and sign in with GitHub (an account with a public repo)",
+  `Confirm the airdrop. Your address and ${sol} SOL are filled in`,
+  back,
+];
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 

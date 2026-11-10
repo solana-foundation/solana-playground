@@ -1,6 +1,7 @@
 import { FC, useRef } from "react";
 import styled from "styled-components";
 
+import { faucetLink } from "@/shared/lib/faucet";
 import { createLogger } from "@/shared/lib/logger";
 import {
   markFailureShown,
@@ -17,10 +18,12 @@ import { Icon } from "@/shared/ui/icon";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 
 import { NO_FAUCET } from "../../commands/airdrop/no-faucet";
+import { isRateLimited } from "../../commands/airdrop/report";
 import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { isSignInFailure } from "../../features/auth";
+import { FaucetRefusedToast } from "../../features/fund-wallet";
 import { useCopy } from "../../hooks";
-import { Fn, PgView, PgWallet } from "../../utils";
+import { Fn, PgConnection, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import Img from "../Img";
 import { useAirdrop, useDarken } from "./hooks";
@@ -128,12 +131,35 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           {faucet === "available" && (
             <DropdownMenuItem
               onSelect={() => {
-                airdrop().catch((error: unknown) => {
-                  // A cancelled, blocked or refused sign-in is held in
-                  // `PgSession.signInState`, and the account row shows it
-                  if (isSignInFailure(error)) markFailureShown(error);
-                  reportButtonFailure("airdrop")(error);
-                });
+                airdrop().then(
+                  // Said here too: under Home no terminal shows what it printed
+                  () =>
+                    PgView.setToast(() => <span>Airdrop received.</span>, {
+                      options: { name: "airdrop-received" },
+                    }),
+                  (error: unknown) => {
+                    // The faucet's limit gets the way round, not "Could not airdrop"
+                    if (isRateLimited(error)) {
+                      markFailureShown(error);
+                      PgView.setToast(FaucetRefusedToast, {
+                        componentProps: {
+                          href: faucetLink({
+                            walletAddress: wallet.publicKey.toBase58(),
+                            amount:
+                              PgConnection.getAirdropAmount() ?? undefined,
+                            cluster: PgConnection.cluster ?? undefined,
+                          }),
+                        },
+                        options: { name: "airdrop-refused", duration: 15000 },
+                      });
+                      return;
+                    }
+                    // A cancelled, blocked or refused sign-in is held in
+                    // `PgSession.signInState`, and the account row shows it
+                    if (isSignInFailure(error)) markFailureShown(error);
+                    reportButtonFailure("airdrop")(error);
+                  }
+                );
               }}
             >
               <Icon name="airdrop" />

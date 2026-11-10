@@ -16,7 +16,7 @@ import type {
   RunResult,
 } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
-import { faucetUrlFor } from "@/shared/lib/faucet";
+import { DEVNET_FAUCET_SOL, faucetUrlWith } from "@/shared/lib/faucet";
 import { PROGRAM_LOG, programLogText } from "@/shared/lib/program-log";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
@@ -29,6 +29,7 @@ import {
 } from "@/shared/ui/collapsible";
 
 import BaseAccountView from "./BaseAccountView";
+import FaucetSteps from "./FaucetSteps";
 import { formatSeconds, Prose, READ } from "./Prose";
 import WalletAddress from "./WalletAddress";
 
@@ -343,8 +344,9 @@ const FundsCard = ({
               result.act
             } needs about ${solOf(
               cost
-            )} SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself.`}
+            )} SOL. The devnet faucet is at its limit.`}
           </p>
+          <FaucetSteps />
           {/* As the deploy's card: the whole address, Copy right after it */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
             <span className="shrink-0 text-muted-foreground">Your wallet</span>
@@ -360,13 +362,13 @@ const FundsCard = ({
             </WalletAddress>
           </div>
           <div className="flex">
-            <Button variant="secondary" asChild>
+            <Button variant="outline" asChild>
               <a
-                href={faucetUrlFor("devnet")(address)}
+                href={faucetUrlWith(DEVNET_FAUCET_SOL)("devnet")(address)}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Open faucet
+                Open the web faucet
                 <ExternalLink aria-hidden="true" className="size-4" />
               </a>
             </Button>

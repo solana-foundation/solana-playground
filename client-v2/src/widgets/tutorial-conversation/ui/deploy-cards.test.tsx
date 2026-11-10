@@ -135,21 +135,31 @@ describe("BaseDeployResultCard", () => {
     );
   });
 
-  it("says how short the wallet is, with its whole address, Copy beside it and Open faucet; the retry is the act card under it", () => {
+  it("says how short the wallet is, the web faucet in three steps, its whole address with Copy beside it, and Open the web faucet; the retry is the act card under it", () => {
     card(noFunds);
     expect(screen.getByText("Not enough devnet SOL")).toBeTruthy();
     expect(
       screen.getByText(
-        "Your wallet has 0.12 SOL, and this deploy needs about 1.82 SOL. Get devnet SOL from the faucet, or top the wallet up yourself."
+        "Your wallet has 0.12 SOL, and this deploy needs about 1.82 SOL."
       )
     ).toBeTruthy();
+    const steps = screen.getByRole("list", {
+      name: "Get devnet SOL from the web faucet",
+    });
+    expect(
+      Array.from(steps.querySelectorAll("li"), (li) => li.textContent)
+    ).toStrictEqual([
+      "1Open the web faucet and sign in with GitHub (an account with a public repo)",
+      "2Confirm the airdrop. Your address and 5 SOL are filled in",
+      "3Come back here and press Try again",
+    ]);
     expect(screen.getByText("Your wallet")).toBeTruthy();
     // The whole address, with Copy right after it rather than at the row's end
     const copy = screen.getByRole("button", {
       name: "Copy the wallet address",
     });
     expect(copy.parentElement?.parentElement?.textContent).toBe(WALLET);
-    const faucet = screen.getByRole("link", { name: /Open faucet/ });
+    const faucet = screen.getByRole("link", { name: /Open the web faucet/ });
     expect(faucet.getAttribute("href")).toBe(
       `https://faucet.solana.com/?walletAddress=${WALLET}&amount=5&cluster=devnet`
     );
@@ -170,10 +180,12 @@ describe("BaseDeployResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0.12 SOL, and this deploy needs about 1.82 SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
+        "Your wallet has 0.12 SOL, and this deploy needs about 1.82 SOL. The devnet faucet is at its limit."
       )
     ).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Open faucet/ })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Open the web faucet/ })
+    ).toBeTruthy();
   });
 
   it("tells an airdrop that failed otherwise that it didn't go through", () => {
@@ -189,7 +201,7 @@ describe("BaseDeployResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The airdrop didn't go through: try again in a minute, or top the wallet up yourself."
+        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The airdrop didn't go through."
       )
     ).toBeTruthy();
   });
@@ -208,7 +220,7 @@ describe("BaseDeployResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0.1235 SOL, and this deploy needs about 2.81 SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
+        "Your wallet has 0.1235 SOL, and this deploy needs about 2.81 SOL. The devnet faucet is at its limit."
       )
     ).toBeTruthy();
   });
