@@ -95,8 +95,12 @@ rest come from the 7 Nov call.
   makes the hidden frame (`width/height 0`, `aria-hidden`, off the tab
   order), waits for `{type: "ready"}` from `frame.contentWindow` at the key
   origin, and hands it one port of a `MessageChannel`. Every later message
-  goes over the port. The handshake is bounded (10 s); past it the wallet is
-  `unavailable`.
+  goes over the port. The handshake is bounded in two parts: the frame has
+  30 s to load, then the page 10 s to announce itself; past either the wallet
+  is `unavailable`. The load gets its own limit because it runs while the
+  app's own first load holds the network and the main thread (16 s on the CI
+  runner); a key origin that refuses the request loads an error page, so a
+  block still ends after 10 s.
 - **The API.** Requests carry an `id`; replies carry the same `id` and a
   result or an error message:
   - `accounts` → the base58 public keys the key page holds.
@@ -169,8 +173,9 @@ rest come from the 7 Nov call.
 - [Cross-site previews partition the frame's storage] → accepted: a preview
   is a test bed.
 - [Every wallet read waits for the key page] → a user whose saved state is
-  an extension wallet also waits, up to 10 s, when the key page is blocked or
-  slow, then reads `unavailable` for that load. This is what the spec says.
+  an extension wallet also waits when the key page is blocked (about 10 s)
+  or slow (up to 30 s to load, then 10 s), then reads `unavailable` for that
+  load. This is what the spec says.
   A follow-up could read the record first and need the key page only for the
   built-in wallet or a record that still holds keys.
 - [Previews serve the whole app on the key origin] → the host rule matches

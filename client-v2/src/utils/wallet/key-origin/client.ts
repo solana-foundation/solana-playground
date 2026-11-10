@@ -13,8 +13,21 @@ import {
 /** Where the key page is served, under the key origin */
 const KEY_PAGE_PATH = "/wallet-keys.html";
 
-/** How long the key page has to load and announce itself */
+/**
+ * How long the key page has to announce itself once its frame has loaded.
+ * Ready is sent from the page's own script, so past `load` it is due at once;
+ * the limit catches a page that loaded but will not speak.
+ */
 export const HANDSHAKE_TIMEOUT_MS = 10_000;
+
+/**
+ * How long the key page's frame has to load. Kept apart from
+ * `HANDSHAKE_TIMEOUT_MS`: the frame loads while the app's own first load holds
+ * the network and the main thread, which on a slow machine takes longer than
+ * the handshake's limit (16 s on the CI runner). A key origin that refuses the
+ * request still ends early: the frame loads its error page.
+ */
+export const KEY_PAGE_LOAD_TIMEOUT_MS = 30_000;
 
 /** How long a request may wait for its reply before the key page counts as gone */
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -143,9 +156,14 @@ const frameOverWith =
  * window, at `origin`, counts. Listens from the call on, so call it before the
  * frame starts loading.
  *
+ * The clock runs in two parts: `loadTimeoutMs` until the frame's `load`, then
+ * `timeoutMs` for the page to announce itself.
+ *
  * @param wait.origin the key origin
  * @param wait.host the window the frame is in
- * @param wait.timeoutMs how long the key page has to announce itself
+ * @param wait.loadTimeoutMs how long the frame has to load
+ * @param wait.timeoutMs how long the key page has to announce itself once
+ * its frame has loaded
  * @param wait.signal stops the wait: a frame pointed elsewhere must not take a
  * later load's ready for its own
  * @returns for the frame, the page's end of the channel
@@ -156,11 +174,13 @@ const handshakeWith =
   ({
     origin,
     host,
+    loadTimeoutMs,
     timeoutMs,
     signal,
   }: {
     origin: string;
     host: Window;
+    loadTimeoutMs: number;
     timeoutMs: number;
     signal: AbortSignal;
   }) =>
@@ -168,6 +188,7 @@ const handshakeWith =
     new Promise<MessagePort>((resolve, reject) => {
       const stop = () => {
         clearTimeout(timer);
+        frame.removeEventListener("load", handleLoad);
         host.removeEventListener("message", handleMessage);
         signal.removeEventListener("abort", abort);
       };
@@ -202,7 +223,12 @@ const handshakeWith =
         target.postMessage(handshake, origin, [channel.port2]);
         resolve(channel.port1);
       };
-      const timer = setTimeout(() => fail("timeout"), timeoutMs);
+      let timer = setTimeout(() => fail("timeout"), loadTimeoutMs);
+      const handleLoad = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fail("timeout"), timeoutMs);
+      };
+      frame.addEventListener("load", handleLoad, { once: true });
       host.addEventListener("message", handleMessage);
       signal.addEventListener("abort", abort);
     });
@@ -211,14 +237,21 @@ const handshakeWith =
  * Opens the hidden key page on `origin` and a private channel to it
  * (`handshakeWith`); everything after the handshake goes over that port.
  *
- * @param opts the handshake's time limit, the document to put the frame in,
+ * @param opts the handshake's time limits, the document to put the frame in,
  * and what the connection does past the handshake
  * @returns a function of the key origin that answers the connection
  */
 const connectKeyFrameWith =
-  (opts: { timeoutMs?: number; doc?: Document } & FrameOptions) =>
+  (
+    opts: {
+      loadTimeoutMs?: number;
+      timeoutMs?: number;
+      doc?: Document;
+    } & FrameOptions
+  ) =>
   (origin: string): Promise<KeyFrame> => {
     const {
+      loadTimeoutMs = KEY_PAGE_LOAD_TIMEOUT_MS,
       timeoutMs = HANDSHAKE_TIMEOUT_MS,
       doc = document,
       ...frameOptions
@@ -229,6 +262,7 @@ const connectKeyFrameWith =
     const connected = handshakeWith({
       origin,
       host,
+      loadTimeoutMs,
       timeoutMs,
       signal: new AbortController().signal,
     })(frame);
@@ -292,7 +326,13 @@ export const connectKeyPanel =
   (frame: HTMLIFrameElement, signal: AbortSignal) =>
   (src: string): Promise<MessagePort> => {
     const host = frame.ownerDocument.defaultView ?? window;
-    const connected = handshakeWith({ origin, host, timeoutMs, signal })(frame);
+    const connected = handshakeWith({
+      origin,
+      host,
+      loadTimeoutMs: KEY_PAGE_LOAD_TIMEOUT_MS,
+      timeoutMs,
+      signal,
+    })(frame);
     frame.src = src;
     return connected;
   };
@@ -443,6 +483,7 @@ if (import.meta.vitest) {
         .contentWindow;
       ready(target, "https://evil.example");
       expect(handed).toHaveLength(0);
+      document.querySelector("iframe")?.dispatchEvent(new Event("load"));
       vi.advanceTimersByTime(1000);
       await outcome;
       expect(document.querySelector("iframe")).toBeNull();
@@ -649,9 +690,38 @@ if (import.meta.vitest) {
           ORIGIN + "/wallet-keys.html"
         )
       ).rejects.toBeInstanceOf(KeyFrameUnavailable);
+      silent.dispatchEvent(new Event("load"));
       vi.advanceTimersByTime(1000);
       await timedOut;
       expect(silent.isConnected).toBe(true);
+    });
+
+    it("gives a frame that is still loading past the handshake's limit until the load limit", async () => {
+      vi.useFakeTimers();
+      const { connected, target, handed } = startWith(1000)();
+      let settled = false;
+      void connected.then(
+        () => (settled = true),
+        () => (settled = true)
+      );
+      vi.advanceTimersByTime(KEY_PAGE_LOAD_TIMEOUT_MS - 1);
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      ready(target, ORIGIN);
+      const frame = await connected;
+      expect(handed).toHaveLength(1);
+      frame.close();
+    });
+
+    it("times out a frame that never loads at the load limit", async () => {
+      vi.useFakeTimers();
+      const { connected } = startWith(1000)();
+      const outcome = expect(connected).rejects.toMatchObject({
+        reason: "timeout",
+      });
+      vi.advanceTimersByTime(KEY_PAGE_LOAD_TIMEOUT_MS);
+      await outcome;
+      expect(document.querySelector("iframe")).toBeNull();
     });
 
     it("stops a panel's handshake when told, so a later load is not taken for it", async () => {
