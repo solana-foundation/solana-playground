@@ -27,13 +27,18 @@ pub fn create_source_root(name: &str, file_id: FileId) -> SourceRoot {
 }
 
 /// The features the lockfile enables for a crate, which `generate-crates.mjs` writes to
-/// `[package.metadata.solpg] features`; none when the manifest has no such list.
+/// `[package.metadata.solana-playground] features`; none when the manifest has no such list.
 pub fn get_enabled_features(manifest: &Manifest) -> Vec<String> {
     manifest
         .package
         .as_ref()
         .and_then(|package| package.metadata.as_ref())
-        .and_then(|metadata| metadata.get("solpg")?.get("features")?.as_array())
+        .and_then(|metadata| {
+            metadata
+                .get("solana-playground")?
+                .get("features")?
+                .as_array()
+        })
         .map(|features| {
             features
                 .iter()

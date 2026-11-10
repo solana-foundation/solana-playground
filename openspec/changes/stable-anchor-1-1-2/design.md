@@ -60,8 +60,9 @@ expansion tool cannot read is skipped with a warning.
 lock's resolution enables per crate (from `cargo metadata`), and `add_crate` sets `feature="<name>"` for each.
 This edits `wasm/`, a deliberate exception like `server/`. Alternative: delete `#[cfg(feature = ...)]` from the
 generated sources. Rejected: an item with a `cfg(not(feature))` twin would be defined twice. The features ride in
-the served `<name>.toml` under `[package.metadata.playground]`, so the wasm reads them from the manifest it already
-parses.
+the served `<name>.toml` under `[package.metadata.solana-playground]`, so the wasm reads them from the manifest it
+already parses. Not `[package.metadata.playground]`: serde, syn, tokio, and other crates declare that table for the
+Rust Playground, so a second one is a duplicate TOML table. Not `solpg`: the project names new things after Solana Playground, not `solpg`.
 
 **Renamed dependencies are served under their alias.** `solana-pubkey` 3.0 re-exports `solana_address::Address`, and
 `solana-address` 1.1.0 is only `pub use solana_address_v2::*`, its 2.x release under a renamed dependency. The

@@ -51,12 +51,13 @@ export const renamedDependencies = (metadata) => {
 /**
  * The manifest Rust Analyzer reads for a crate, with its enabled features
  * appended where `world_state.rs` (`add_crate`) looks for them. Not
- * `[package.metadata.playground]`: serde and others already use that table.
+ * `[package.metadata.playground]`: serde, syn, tokio and others declare that
+ * table for the Rust Playground, and a second one is a duplicate TOML table.
  *
  * @param {string[]} features
  * @returns {(manifest: string) => string}
  */
 export const withFeatures = (features) => (manifest) =>
-  `${manifest.trimEnd()}\n\n[package.metadata.solpg]\nfeatures = ${JSON.stringify(
+  `${manifest.trimEnd()}\n\n[package.metadata.solana-playground]\nfeatures = ${JSON.stringify(
     features
   )}\n`;
