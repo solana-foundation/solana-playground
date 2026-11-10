@@ -432,7 +432,7 @@ The tutorial slice SHALL emit:
   - `attempts`: 1 to 3.
 - `tutorial_step_passed` when a step's goal passes, with:
   - `tutorial`;
-  - `step`: 1 to 6;
+  - `step_index`: 1 to 6;
   - `via`: `chat` (an act card), `client` (a client run) or `call_panel`;
   - `seconds`: the step's time.
 - `tutorial_finished` when the finish card shows, with:
@@ -448,14 +448,14 @@ The tutorial slice SHALL emit:
   assistant (not when it opens Connect a model, or waits while an answer
   runs) or a finish chip is pressed, with:
   - `tutorial`;
-  - `step`;
-  - `source`: `typed`, or `chip` when a finish chip is pressed (the event
+  - `step_index`;
+  - `via`: `typed`, or `chip` when a finish chip is pressed (the event
     fires for chips too, though their answer needs no model).
 - `tutorial_word_sent` when a composer message is only an action word whose
   action is live, or one an open question refuses, with (a word with
   nothing live to run goes to the assistant as a question):
   - `tutorial`;
-  - `step`;
+  - `step_index`;
   - `word`: the action word matched (`start`, `build`, `deploy`, `run`,
     `call`, `next` or `explain`), never the message itself;
   - `refused`: whether an open question refused it.
@@ -468,17 +468,17 @@ The tutorial slice SHALL emit:
 - `tutorial_step_reset` when a confirmed Reset on an appended wrote card
   puts the live step back as it was entered, with:
   - `tutorial`;
-  - `step`: 1 to 6.
+  - `step_index`: 1 to 6.
 - `tutorial_step_jumped` when a step bar segment, an item of its narrow
   menu, or ⌥↑ / ⌥↓ moves the feed to a step's divider, with:
   - `tutorial`;
-  - `step`: the divider's step, 1 to 6;
-  - `from`: the live step;
+  - `step_index`: the divider's step, 1 to 6;
+  - `from_step`: the live step;
   - `via`: `bar`, `menu` or `key`.
 - `tutorial_step_back` when the back pill takes the learner back to the
   live card, with:
   - `tutorial`;
-  - `step`: the live step, or 0 before Start.
+  - `step_index`: the live step, or 0 before Start.
 
 The text of the question is never sent.
 
@@ -493,5 +493,5 @@ The text of the question is never sent.
 - **WHEN** on step 3 the learner clicks the step bar's first segment, then
   the "Back to step 3" pill
 - **THEN** `tutorial_step_jumped` reaches the memory provider with
-  `step: 1`, `from: 3` and `via: "bar"`, then `tutorial_step_back` with
-  `step: 3`
+  `step_index: 1`, `from_step: 3` and `via: "bar"`, then `tutorial_step_back`
+  with `step_index: 3`

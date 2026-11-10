@@ -238,7 +238,7 @@ those listed and never a path or file content:
   the close button or Escape. No parameters.
 - `sync_whole_file_answered`: "Keep this version" or "Take the other
   version" was pressed. `decision`, one of `keep-local`, `take-server`;
-  `from`, one of `view`, `banner`.
+  `via`, one of `view`, `banner`.
 - `sync_resolve_stale`: Apply was refused because a file changed since the
   view showed it. `files`, how many changed.
 - `sync_resolve_apply_failed`: Apply settled nothing for another reason.

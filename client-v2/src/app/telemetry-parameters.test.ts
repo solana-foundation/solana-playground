@@ -141,23 +141,26 @@ const kindsOfName = (usages: Usage[]) =>
   Array.from(new Set(usages.flatMap(({ type }) => type.split("|")))).sort();
 
 /**
- * Names that carry two types today, each with why it stays. GA4 registers a
- * name once, so each is a defect awaiting its fix, and an entry leaves this
- * list in the change that fixes it: the test fails on an entry that no longer
- * conflicts. Every event of each conflict, both halves, is on `master`
- * already, so renaming one cuts its GA4 history. HOO-2752 asks for the
- * renames; this change defers them for that reason, and the ticket's rename
- * item stays open.
+ * Names that carry two types, each with why it stays. GA4 registers a name
+ * once, so each is a defect awaiting its fix, and an entry leaves this list in
+ * the change that fixes it: the test fails on an entry that no longer
+ * conflicts. Empty since HOO-2752 renamed `step` and `from` and made
+ * `feedback_sent.rating` a number only, absent when no star is given.
  */
-const KNOWN_CONFLICTS: Record<string, string> = {
-  from: "`tutorial_step_jumped` sends the step number; 14 events send the trigger",
-  rating: "`feedback_sent` sends a star count, or the text `none`",
-  step: "the `tutorial_*` events send the step number; `deploy_failed` and `cli_command_copied` send a step name",
-};
+const KNOWN_CONFLICTS: Record<string, string> = {};
 
-// The trigger synonyms `via`, `from` and `source` are not checked against each
-// other: which one stays is HOO-2752's open product decision. (`from` is also a
-// known conflict above, for its own two types.)
+/**
+ * The one name for what the user pressed, or where an action started. `from`
+ * and `source` said the same thing until HOO-2752; a new parameter that says it
+ * is `via`. A name only the cross-slice scan can hold to, since each slice
+ * would accept a synonym of its own. The open changes `funnel-events` and
+ * `wbdi-flow` still spell `from` or `source` for events nobody sends yet, and
+ * bring them to `via` in their own PRs; this test refuses them the moment a
+ * tracker declares them.
+ */
+const TRIGGER = "via";
+const TRIGGER_SYNONYMS = ["from", "source"];
+
 describe("telemetry parameters", () => {
   let parameters = new Map<string, Usage[]>();
 
@@ -167,7 +170,7 @@ describe("telemetry parameters", () => {
   }, 120_000);
 
   // These floors guard a scan that finds nothing without failing when the scan
-  // breaks or a tracker's type stops resolving: today 34 files and 80 names.
+  // breaks or a tracker's type stops resolving: today 82 names.
   it("finds the parameters of every tracker", () => {
     expect(FILES.length).toBeGreaterThan(25);
     expect(parameters.size).toBeGreaterThan(50);
@@ -191,5 +194,10 @@ describe("telemetry parameters", () => {
         (name) => !conflicts.some((line) => line.startsWith(`${name}:`))
       )
     ).toEqual([]);
+  });
+
+  it("names a trigger `via`, never a synonym", () => {
+    expect(parameters.has(TRIGGER)).toBe(true);
+    expect(TRIGGER_SYNONYMS.filter((name) => parameters.has(name))).toEqual([]);
   });
 });

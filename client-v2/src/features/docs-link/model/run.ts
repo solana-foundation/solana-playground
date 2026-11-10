@@ -123,7 +123,7 @@ const listen = () => {
     if (isHelp(input)) return;
     started++;
     const source = currentSource();
-    docsLinkTelemetry.track("docs_link_run_started", { source });
+    docsLinkTelemetry.track("docs_link_run_started", { via: source });
     set({
       kind: "running",
       startedAt: Date.now(),
@@ -141,7 +141,7 @@ const listen = () => {
     const next = settleWith(ms)(result);
     const outcome: RunOutcome = next.kind;
     docsLinkTelemetry.track("docs_link_run_finished", {
-      source: run.source,
+      via: run.source,
       outcome,
       seconds: Math.floor(ms / 1000),
     });
@@ -193,7 +193,9 @@ const fundsFor =
     if (switches !== since) return "project-left";
     if (balance >= needed) return "enough";
 
-    docsLinkTelemetry.track("docs_link_run_funding_shown", { wallet });
+    docsLinkTelemetry.track("docs_link_run_funding_shown", {
+      funding_state: wallet,
+    });
     set({
       kind: "funding",
       address: current.publicKey.toBase58(),

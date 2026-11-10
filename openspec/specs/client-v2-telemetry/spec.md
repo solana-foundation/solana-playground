@@ -125,7 +125,11 @@ declared, by the type guard `createTracker` applies, so `yarn test-types`
 fails a bad map. One cross-slice check, `src/app/telemetry-parameters.test.ts`,
 reads every tracker and fails a name that two events type differently, since
 no slice alone sees the other's events; a name that still carries two types
-is recorded there as a known conflict until it is renamed.
+is recorded there as a known conflict until it is renamed. The parameter
+that says what the user pressed, or where an action started, SHALL be named
+`via`; no tracker SHALL declare a parameter named `from` or `source`, which
+the cross-slice check also enforces, since each slice alone would accept a
+synonym of its own.
 
 The scenarios on the cross-slice check are marked `(manual)`: the unit test
 holds them, not a Playwright test (the repository marks such scenarios
@@ -155,6 +159,11 @@ inconsistently).
 
 - **WHEN** a name listed as a known conflict no longer has two types
 - **THEN** the cross-slice parameter test fails until its entry is removed
+
+#### Scenario: A trigger gets a synonym (manual)
+
+- **WHEN** an event declares a parameter named `from` or `source`
+- **THEN** the cross-slice parameter test fails and names the synonym
 
 ### Requirement: A widget attributes events without props
 

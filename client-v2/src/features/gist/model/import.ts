@@ -275,12 +275,12 @@ const layOut = async (files: Record<string, { content: string }>) => {
  * @throws {GistImportError} with the reason the import stopped
  */
 export const fetchGistFiles = async (ref: GistRef, from: GistImportSource) => {
-  gistTelemetry.track("gist_import_started", { from });
+  gistTelemetry.track("gist_import_started", { via: from });
   try {
     const { owner, files } = await fetchGist(ref);
     const laidOut = await layOut(files);
     gistTelemetry.track("gist_import_succeeded", {
-      from,
+      via: from,
       layout: laidOut.layout,
     });
     return { owner, files: laidOut.files };
@@ -297,7 +297,10 @@ export const fetchGistFiles = async (ref: GistRef, from: GistImportSource) => {
     if (failure !== error) {
       log.error(error as Error, { report: true, context: { id: ref.id } });
     }
-    gistTelemetry.track("gist_import_failed", { from, reason: failure.reason });
+    gistTelemetry.track("gist_import_failed", {
+      via: from,
+      reason: failure.reason,
+    });
     throw failure;
   }
 };

@@ -1210,7 +1210,7 @@ widgets/assistant
   suggestions become the prototype's three, and "What's our current status
   and roadmap?" goes.
 - **Telemetry.** Prefix `assistant`: `assistant_approval_answered {kind:
-  patch | command, decision: allow | deny}`, `assistant_suggestion_picked`,
+  patch | command, answer: allow | deny}`, `assistant_suggestion_picked`,
   `assistant_make_change_requested`. The thread logs nothing of its own: a
   send that fails before its turn starts is `useTurn`'s, through
   `reportButtonFailure`, and a failed "Skip this step" goes there too.

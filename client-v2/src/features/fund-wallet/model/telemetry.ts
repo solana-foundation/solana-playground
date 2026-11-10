@@ -23,8 +23,8 @@ export type AirdropVia =
   | "automatic";
 
 type FundEvents = {
-  /** The Fund dialog opened; `from` is the control that opened it. */
-  fund_dialog_opened: { from: "account-menu" };
+  /** The Fund dialog opened; `via` is the control that opened it. */
+  fund_dialog_opened: { via: "account-menu" };
   /**
    * A wallet connected inside the dialog to pay; `wallet` is its Wallet
    * Standard name (Phantom, Solflare), never an address.

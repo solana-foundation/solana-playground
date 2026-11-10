@@ -120,16 +120,16 @@ undeclared name fails the run.
 The `docs-link` slice SHALL send:
 
 - `docs_link_run_started` when a `run` starts, from the stage row's Run or
-  typed in the terminal. Its `source` is `link` when a docs link opened the
+  typed in the terminal. Its `via` is `link` when a docs link opened the
   project, else `project`, taken when the run starts.
 - `docs_link_run_finished` when such a run ends. Its `outcome` is `done`,
-  `failed` or `missing-package`, its `source` as above, and `seconds` is the
+  `failed` or `missing-package`, its `via` as above, and `seconds` is the
   run's whole seconds.
-- `docs_link_run_funding_shown` when the funding card shows. Its `wallet` is
+- `docs_link_run_funding_shown` when the funding card shows. Its `funding_state` is
   `new` when Run had to create the wallet, else `existing`.
 
 #### Scenario: A funded run (manual)
 - **WHEN** a user with enough SOL presses Run on the Quickstart and it
   succeeds
-- **THEN** `docs_link_run_started` with `source: "link"` is sent, then
+- **THEN** `docs_link_run_started` with `via: "link"` is sent, then
   `docs_link_run_finished` with `outcome: "done"`

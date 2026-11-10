@@ -122,7 +122,7 @@ updates on its own.
 ### Requirement: Funding is measured
 
 The `features/fund-wallet` slice SHALL emit, with prefix `fund`:
-`fund_dialog_opened` `{ from: "account-menu" }` when the dialog opens;
+`fund_dialog_opened` `{ via: "account-menu" }` when the dialog opens;
 `fund_wallet_connected` `{ wallet: string }` (the wallet's name) when a wallet
 connects in the dialog; `fund_sent` `{ cluster: "mainnet-beta" | "devnet" | "testnet" | "localnet" | "playnet" }` (the Playground's cluster) when a
 transfer is confirmed; and

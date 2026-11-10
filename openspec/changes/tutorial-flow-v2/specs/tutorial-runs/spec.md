@@ -275,7 +275,7 @@ ends, and once for each run a reload interrupted (`outcome: "interrupted"`,
 parameters:
 
 - `tutorial`: the slug;
-- `step`: 1 to 6;
+- `step_index`: 1 to 6;
 - `action`: `airdrop`, `build`, `deploy`, `build_deploy`, `run`, `call` (the
   call act) or `call_panel` (a Call panel call);
 - `outcome`: `ok`, `failed`, `interrupted`, `no_wallet`, `no_funds` or

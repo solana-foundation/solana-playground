@@ -221,7 +221,7 @@ const SyncBanner = () => {
     if (resolution === "keep-local" || resolution === "take-server") {
       persistenceTelemetry.track("sync_whole_file_answered", {
         decision: resolution,
-        from: "banner",
+        via: "banner",
       });
     }
     setBusy(true);

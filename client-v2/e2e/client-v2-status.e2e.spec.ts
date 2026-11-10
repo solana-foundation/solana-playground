@@ -88,7 +88,7 @@ test.describe("on a 1440 px window", () => {
     await expect
       .poll(() => lineOf(lines, "status_indicator_picked"))
       // No model is grey (`idle`), which is measured as ready
-      .toContain("{indicator: ai, state: ready, from: row}");
+      .toContain("{indicator: ai, state: ready, via: row}");
   });
 
   test("client-v2-status: A cluster that stops answering", async ({
@@ -119,7 +119,7 @@ test.describe("on a 1440 px window", () => {
     await panel.getByRole("button", { name: "Change network" }).click();
     await expect
       .poll(() => lineOf(lines, "settings_opened"))
-      .toContain("{from: cluster}");
+      .toContain("{via: cluster}");
     const networks = page
       .getByRole("region", { name: "Settings" })
       .getByRole("radiogroup", { name: "Network" });
@@ -159,13 +159,13 @@ test.describe("on a 1440 px window", () => {
     ).toBeVisible();
     await expect
       .poll(() => lineOf(lines, "status_retried"))
-      .toContain("{indicator: ai, from: row, answered: false}");
+      .toContain("{indicator: ai, via: row, answered: false}");
     failing = false;
     await panel.getByRole("button", { name: "Try again" }).click();
     await expect(ai(page)).toHaveText("AI · Off");
     await expect
       .poll(() => lines.join("\n"))
-      .toContain("{indicator: ai, from: row, answered: true}");
+      .toContain("{indicator: ai, via: row, answered: true}");
   });
 
   test("client-v2-status: Going offline and back", async ({
@@ -409,7 +409,7 @@ test("client-v2-status: The rail's dots", async ({ page }) => {
   await rail.getByRole("button", { name: /^Cluster: devnet/ }).click();
   await expect
     .poll(() => lineOf(lines, "settings_opened"))
-    .toContain("{from: rail}");
+    .toContain("{via: rail}");
 });
 
 test("client-v2-status: The free daily limit is used", async ({ page }) => {

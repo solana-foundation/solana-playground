@@ -36,7 +36,7 @@ type PersistenceEvents = {
    */
   sync_whole_file_answered: {
     decision: "keep-local" | "take-server";
-    from: "view" | "banner";
+    via: "view" | "banner";
   };
   /**
    * An Apply was refused because a file changed since the view showed it;

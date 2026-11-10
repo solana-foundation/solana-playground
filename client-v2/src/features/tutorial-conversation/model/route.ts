@@ -4,11 +4,8 @@ import type { Act, ActBeat, ActionWord } from "@/entities/tutorial";
 import type { WordAction } from "./reducer";
 import type { Turn } from "./view";
 
-/** The live actions a composer message can name on its own */
-export type Word = ActionWord;
-
 /** Each word as typed, to the action it names; "begin" and "go" start too */
-const WORDS: Record<string, Word> = {
+const WORDS: Record<string, ActionWord> = {
   start: "start",
   begin: "start",
   go: "start",
@@ -33,7 +30,7 @@ const ACTS: Record<"build" | "deploy" | "run" | "call", readonly Act[]> = {
  * alone or with "please" before or after it, in any case, with trailing
  * punctuation. "build it" is not a word; it goes to the assistant.
  */
-export const wordOf = (text: string): Word | null => {
+export const wordOf = (text: string): ActionWord | null => {
   const parts = text
     .trim()
     .toLowerCase()
@@ -47,8 +44,8 @@ export const wordOf = (text: string): Word | null => {
 
 /** Where a composer message goes (`route`), with the word it matched */
 export type Route =
-  | { kind: "word"; word: Word; action: WordAction }
-  | { kind: "refused"; word: Word }
+  | { kind: "word"; word: ActionWord; action: WordAction }
+  | { kind: "refused"; word: ActionWord }
   | { kind: "assistant" };
 
 /**
@@ -80,7 +77,11 @@ const callFields = (act: ActBeat): string[] =>
     ? (act.call.args ?? []).filter((a): a is string => typeof a === "string")
     : [];
 
-const actionFor = (word: Word, live: Turn, at: number): WordAction | null => {
+const actionFor = (
+  word: ActionWord,
+  live: Turn,
+  at: number
+): WordAction | null => {
   switch (word) {
     case "start":
       return live.kind === "intro" ? { type: "start", at } : null;

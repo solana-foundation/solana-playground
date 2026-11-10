@@ -1018,7 +1018,7 @@ describe("PgConversation", () => {
     expect(actionRuns().map((e) => e.params)).toEqual([
       {
         tutorial: "hello-anchor",
-        step: 2,
+        step_index: 2,
         action: "deploy",
         outcome: "interrupted",
         seconds: 0,
@@ -1484,7 +1484,7 @@ describe("PgConversation's airdrop card", () => {
     ).toEqual([
       expect.objectContaining({
         tutorial: "hello-anchor",
-        step: 2,
+        step_index: 2,
         action: "airdrop",
         outcome: "no_funds",
       }),
@@ -2094,7 +2094,7 @@ describe("PgCallPanel", () => {
     expect(
       events.events.filter((e) => e.name === "tutorial_step_passed").at(-1)
         ?.params
-    ).toMatchObject({ via: "call_panel", step: 3 });
+    ).toMatchObject({ via: "call_panel", step_index: 3 });
   });
 
   it("shows no new field for a build that was not deployed", async () => {
@@ -2127,7 +2127,7 @@ describe("PgConversation's composer", () => {
     PgConversation.asked({ kind: "intro" });
     await settle();
     expect(named("tutorial_question_asked")).toMatchObject([
-      { name: "tutorial_question_asked", params: { step: 0 } },
+      { name: "tutorial_question_asked", params: { step_index: 0 } },
     ]);
   });
 
@@ -2301,7 +2301,7 @@ describe("PgConversation's composer", () => {
     expect(named("tutorial_word_sent")[0].params).toMatchObject({
       word: "start",
       refused: false,
-      step: 0,
+      step_index: 0,
     });
     // The pill sits before what its action posted, outside step 1
     const turns = PgConversation.view(LATER)?.turns ?? [];

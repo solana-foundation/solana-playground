@@ -674,8 +674,8 @@ export const TutorialConversation = ({
       if (!definition || !slug) return;
       tutorialTelemetry.track("tutorial_step_jumped", {
         tutorial: slug,
-        step: index + 1,
-        from: from + 1,
+        step_index: index + 1,
+        from_step: from + 1,
         via,
       });
       // On the phone a picked step takes the chat back to its divider
@@ -689,7 +689,7 @@ export const TutorialConversation = ({
     if (!slug) return;
     tutorialTelemetry.track("tutorial_step_back", {
       tutorial: slug,
-      step: step === null ? 0 : step + 1,
+      step_index: step === null ? 0 : step + 1,
     });
   }, []);
 

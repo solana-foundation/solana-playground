@@ -21,20 +21,20 @@ type DocsLinkEvents = {
   docs_link_failed: { reason: DocsLinkFailure };
   /**
    * A `run` started, from the stage row's Run or typed in the terminal;
-   * `source` says whether a docs link opened the project
+   * `via` says whether a docs link opened the project
    */
-  docs_link_run_started: { source: RunSource };
+  docs_link_run_started: { via: RunSource };
   /** That `run` ended; `seconds` is its whole seconds */
   docs_link_run_finished: {
-    source: RunSource;
+    via: RunSource;
     outcome: RunOutcome;
     seconds: number;
   };
   /**
-   * Run stopped at "Not enough SOL on devnet"; `wallet` is `new` when Run
-   * had to set the wallet up first
+   * Run stopped at "Not enough SOL on devnet"; `funding_state` is `new` when
+   * Run had to set the wallet up first
    */
-  docs_link_run_funding_shown: { wallet: WalletOrigin };
+  docs_link_run_funding_shown: { funding_state: WalletOrigin };
 };
 
 /**

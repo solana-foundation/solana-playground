@@ -133,7 +133,7 @@ describe("PgClientRun", () => {
       "docs_link_run_finished",
     ]);
     expect(sent.events[1].params).toEqual({
-      source: "project",
+      via: "project",
       outcome: "done",
       seconds: 12,
     });
@@ -218,7 +218,7 @@ describe("PgClientRun", () => {
     });
     expect(sent.events.at(-1)).toMatchObject({
       name: "docs_link_run_funding_shown",
-      params: { wallet: "existing" },
+      params: { funding_state: "existing" },
     });
   });
 
@@ -251,7 +251,7 @@ describe("PgClientRun", () => {
     await PgClientRun.start();
 
     expect(utils.PgCommand.connect.execute).toHaveBeenCalledTimes(1);
-    expect(sent.events.at(-1)?.params).toEqual({ wallet: "new" });
+    expect(sent.events.at(-1)?.params).toEqual({ funding_state: "new" });
   });
 
   it("runs a project from no link without asking for SOL", async () => {
@@ -264,7 +264,7 @@ describe("PgClientRun", () => {
     const { PgDocsLink } = await load();
     PgDocsLink.open(QUICKSTART);
     startRun();
-    expect(sent.events.at(-1)?.params).toEqual({ source: "link" });
+    expect(sent.events.at(-1)?.params).toEqual({ via: "link" });
   });
 
   it("runs when the wallet holds exactly what the link needs", async () => {
@@ -392,7 +392,7 @@ describe("PgClientRun", () => {
     await PgClientRun.start();
 
     expect(utils.PgCommand.connect.execute).toHaveBeenCalledTimes(1);
-    expect(sent.events.at(-1)?.params).toEqual({ wallet: "existing" });
+    expect(sent.events.at(-1)?.params).toEqual({ funding_state: "existing" });
   });
 
   it("checks no SOL on a browser wallet", async () => {
@@ -493,7 +493,7 @@ describe("PgClientRun", () => {
     startRun();
     PgDocsLink.clear();
     finishRun({ ok: { ok: true } });
-    expect(sent.events.at(-1)?.params).toMatchObject({ source: "link" });
+    expect(sent.events.at(-1)?.params).toMatchObject({ via: "link" });
   });
 
   it("reads a thrown non-Error as its text", async () => {

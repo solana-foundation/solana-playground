@@ -449,7 +449,7 @@ test("gist-sharing: A successful share is counted", async ({ page }) => {
   expect(Number(files)).toBeGreaterThan(0);
   expect(succeeded).toContain(`files: ${files}`);
   expect(started).toContain("visibility: secret");
-  expect(started).toContain("source: project_menu");
+  expect(started).toContain("via: project_menu");
 });
 
 test("gist-sharing: A failure is counted by reason", async ({ page }) => {

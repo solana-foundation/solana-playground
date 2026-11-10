@@ -498,8 +498,8 @@ describe("TutorialConversation", () => {
     expect(PgExplorer.openFile).toHaveBeenCalledWith(`/hello/${step1.file}`);
     expect(track).toHaveBeenCalledWith("tutorial_step_jumped", {
       tutorial: "hello-anchor",
-      step: 1,
-      from: 2,
+      step_index: 1,
+      from_step: 2,
       via: "bar",
     });
   });
@@ -1279,7 +1279,7 @@ describe("TutorialConversation keys and the pill", () => {
     );
     expect(track).toHaveBeenLastCalledWith("tutorial_step_back", {
       tutorial: "hello-anchor",
-      step: 2,
+      step_index: 2,
     });
   });
 });
@@ -1432,7 +1432,7 @@ describe("TutorialConversation on the phone", () => {
     act(() => requestStepJump(0));
     expect(track).toHaveBeenCalledWith(
       "tutorial_step_jumped",
-      expect.objectContaining({ step: 1, via: "menu" })
+      expect.objectContaining({ step_index: 1, via: "menu" })
     );
     expect(PgExplorer.openFile).not.toHaveBeenCalled();
   });

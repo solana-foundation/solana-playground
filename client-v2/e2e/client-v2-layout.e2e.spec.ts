@@ -2066,7 +2066,7 @@ test.describe("the settings page", () => {
 
     await expect
       .poll(() => lineOf(lines, "settings_opened"))
-      .toContain("from: key");
+      .toContain("via: key");
     await expect
       .poll(() => lineOf(lines, "settings_closed"))
       .toContain("via: escape");
@@ -2095,7 +2095,7 @@ test.describe("the settings page", () => {
     await expect(settingsPage(page)).toBeVisible();
     await expect
       .poll(() => lines.filter((l) => l.includes("settings_opened")).at(-1))
-      .toContain("from: stage");
+      .toContain("via: stage");
   });
 
   test("client-v2-layout: A menu open at ⌘, closes as the settings open", async ({

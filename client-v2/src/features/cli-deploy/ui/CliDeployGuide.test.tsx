@@ -108,7 +108,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
     expect(sent.events).toEqual([
       expect.objectContaining({
         name: "cli_guide_opened",
-        params: { from: "deploy-stage" },
+        params: { via: "deploy-stage" },
       }),
     ]);
   });

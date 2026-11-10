@@ -7,12 +7,12 @@ import type { Rating } from "./provider";
 type FeedbackEvents = {
   /** The feedback form opened. */
   feedback_opened: NoParams;
-  /** The reporter accepted a feedback; `rating` is the stars chosen, or `none`. */
-  feedback_sent: { rating: Rating | "none" };
+  /** The reporter accepted a feedback; `rating` is the stars chosen, absent when none was. */
+  feedback_sent: { rating?: Rating };
   /** The reporter rejected a feedback; what was typed is kept for another try. */
   feedback_failed: NoParams;
-  /** The user opened a GitHub link; `link` says which they picked, `from` where. */
-  feedback_github_clicked: { link: GithubLink; from: "menu" | "form" };
+  /** The user opened a GitHub link; `link` says which they picked, `via` where. */
+  feedback_github_clicked: { link: GithubLink; via: "menu" | "form" };
 };
 
 export const feedbackTelemetry = createTracker<FeedbackEvents>();
