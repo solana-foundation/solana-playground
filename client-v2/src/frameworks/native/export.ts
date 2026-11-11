@@ -2,6 +2,7 @@ import { PgCommon, PgExplorer, PgProgramInfo, TupleFiles } from "../../utils";
 import {
   addAfterImports,
   addImports,
+  fetchServerCargoLock,
   getJSDependencies,
   getRustDependencies,
   wrapTopLevelAwait,
@@ -70,6 +71,12 @@ no-entrypoint = []
 
 ${await getRustDependencies(files)}
 `,
+    ],
+
+    // The program is its own workspace root, so cargo reads the lock beside its manifest
+    [
+      PgCommon.joinPaths(PROGRAM_PATH, "Cargo.lock"),
+      await fetchServerCargoLock(),
     ],
 
     // .gitignore

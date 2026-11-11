@@ -35,8 +35,9 @@ place on a line SHALL show the log, with no line link.
 #### Scenario: The planned failure is a real compiler error (manual)
 
 - **WHEN** Hello Anchor's step 1 builds before the fixing question
-- **THEN** the build server answers with `error[E0412]: cannot find type `Hello` in this scope` at `src/lib.rs:9:32`, after an `E0432` macro symptom at line 5
-- **AND** the card reads "E0412 · line 9" and line 9 is marked
+- **THEN** the build server answers with `error[E0432]` at `src/lib.rs:5:1`, whose log holds
+  ``could not find `__client_accounts_hello` ``
+- **AND** the card reads "E0432 · line 5" and line 5 is marked
 
 ### Requirement: Deploy goes from the learner's wallet on devnet
 

@@ -254,10 +254,10 @@ For a failure the definition does not plan:
   first line that changes, and works once. A reload while the assistant answers
   offers it at once.
 
-#### Scenario: The planned E0412
+#### Scenario: The planned failure
 
 - **WHEN** the learner builds Hello Anchor after the first question
-- **THEN** the card reads "Build failed" with "E0412 · line 9", `lib.rs` line 9
+- **THEN** the card reads "Build failed" with "E0432 · line 5", `lib.rs` line 5
   is marked red, and the terminal opens
 - **AND** Explain posts the explanation with line 9 quoted, then the "Fix it ·
   2 of 4" question

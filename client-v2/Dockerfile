@@ -11,13 +11,13 @@ FROM ${IMAGE} AS server-true
 ################################### No server ##################################
 FROM ${IMAGE} AS server-false
 
-# Set build server URL to the fork's production API
-ONBUILD ENV REACT_APP_SERVER_URL="https://playground-server-dot-analytics-324114.de.r.appspot.com"
-
 ###################### Build and start development client ######################
 FROM server-${HAS_SERVER}
 
 ARG USER
+# The build server's URL comes from the build, never from this file; empty means a local server
+ARG REACT_APP_SERVER_URL=""
+ENV REACT_APP_SERVER_URL=${REACT_APP_SERVER_URL}
 
 WORKDIR /home/${USER}
 COPY . .

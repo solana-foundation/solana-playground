@@ -76,6 +76,10 @@ describe("convertFromPlayground", () => {
     // Set at boot by `globals/`, which this test does not load
     PgLanguage.all = [];
     vi.spyOn(PgCommon, "fetchJSON").mockResolvedValue({});
+    // The crates' features and the build server's lock, which the exports fetch
+    vi.spyOn(PgCommon, "fetchText").mockImplementation(async (path) =>
+      path.endsWith("features.json") ? "{}" : "# server lock\n"
+    );
   });
   afterEach(() => vi.restoreAllMocks());
 

@@ -424,7 +424,7 @@ describe("PgConversation", () => {
         act: "build",
         input: {
           beatId: "s1.build",
-          failsWith: "cannot find type `Hello` in this scope",
+          failsWith: "could not find `__client_accounts_hello`",
         },
       },
     ]);

@@ -3,10 +3,12 @@ import {
   addAfter,
   addAfterImports,
   addImports,
+  fetchServerCargoLock,
   getJSDependencies,
   getRustDependencies,
   wrapTopLevelAwait,
 } from "../common";
+import { getIdlBuildFeature } from "./idl-build-feature";
 
 /**
  * {@link Framework.importFromPlayground}
@@ -123,6 +125,7 @@ no-idl = []
 no-log-ix-name = []
 cpi = ["no-entrypoint"]
 default = []
+${getIdlBuildFeature(frameworkFiles)}
 
 ${await getRustDependencies(frameworkFiles)}
 `,
@@ -176,9 +179,6 @@ ${programName} = "${PgProgramInfo.pk.toBase58()}"`
     : ""
 }
 
-[registry]
-url = "https://api.apr.dev"
-
 [provider]
 cluster = "Localnet"
 wallet = "~/.config/solana/id.json"
@@ -196,6 +196,7 @@ client = "yarn run ts-node client/*.ts"
 members = [
     "programs/*"
 ]
+resolver = "2"
 
 [profile.release]
 overflow-checks = true
@@ -207,6 +208,8 @@ incremental = false
 codegen-units = 1
 `,
     ],
+
+    ["Cargo.lock", await fetchServerCargoLock()],
 
     // package.json
     [

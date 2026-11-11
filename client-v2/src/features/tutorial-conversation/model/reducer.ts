@@ -1858,13 +1858,13 @@ if (import.meta.vitest) {
       seconds: 1.2,
       reason: "compiler",
       error: {
-        code: "E0412",
+        code: "E0432",
         file: "src/lib.rs",
-        line: 9,
-        column: 32,
-        message: "cannot find type `Hello` in this scope",
+        line: 5,
+        column: 1,
+        message: "unresolved import `crate`",
       },
-      log: "error[E0412]: cannot find type `Hello` in this scope",
+      log: "error[E0432]: unresolved import `crate`\n  | ^^^^^^^^^^ could not find `__client_accounts_hello` in the crate root",
     };
     const FAILED_DEPLOY: RunResult = {
       act: "deploy",
@@ -3087,7 +3087,7 @@ if (import.meta.vitest) {
           act: "build",
           input: {
             beatId: "s1.build",
-            failsWith: "cannot find type `Hello` in this scope",
+            failsWith: "could not find `__client_accounts_hello`",
           },
           startedAt: 7000,
         });
@@ -3954,7 +3954,7 @@ if (import.meta.vitest) {
           wrong: [],
         });
         expect(r.effects).toEqual([
-          { kind: "focus", file: "src/lib.rs", line: 9 },
+          { kind: "focus", file: "src/lib.rs", line: 5 },
         ]);
       });
 
@@ -4041,7 +4041,7 @@ if (import.meta.vitest) {
         expect(first).toMatchObject({
           input: {
             beatId: "s1.build",
-            failsWith: "cannot find type `Hello` in this scope",
+            failsWith: "could not find `__client_accounts_hello`",
           },
         });
         const inFail = reduce(ctx(), failed(), {

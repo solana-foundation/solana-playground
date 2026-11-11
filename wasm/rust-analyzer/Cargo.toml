@@ -34,3 +34,7 @@ wasm-bindgen-rayon = "1.0.3"
 # its `nightly` feature which has a default implementation of `panic!` on `wasm32`.
 parking_lot_core_8 = { package = "parking_lot_core", version = "0.8.5", features = ["nightly"] }
 parking_lot_core_9 = { package = "parking_lot_core", version = "0.9.8", features = ["nightly"] }
+
+[patch.crates-io]
+# GHSA-hc92-9h3m-c39j: anymap has no patched release; ra_ap_hir_def 0.0.179 drops it but needs Rust 1.70.
+anymap = { path = "vendor/anymap" }

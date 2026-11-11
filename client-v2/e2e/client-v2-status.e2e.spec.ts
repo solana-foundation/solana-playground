@@ -103,6 +103,20 @@ const buildIsSaved = (page: Page) =>
     );
   });
 
+/**
+ * On top of `stallDevnet`: every other devnet call is left unanswered, so the
+ * program's on-chain check never comes back. A cluster this slow is what made
+ * the restored build verdict wait on it (HOO-2744).
+ */
+const holdDevnetCalls = (page: Page) =>
+  page.route("https://api.devnet.solana.com/**", async (route) => {
+    const body = route.request().postDataJSON() as {
+      method?: string;
+    } | null;
+    if (body?.method === "getSlot") return route.fallback();
+    // Never answered: the page sees a request that is still in flight
+  });
+
 test.describe("on a 1440 px window", () => {
   test.use({ viewport: WIDE_DESK });
 
@@ -362,6 +376,7 @@ test.describe("on a 1440 px window", () => {
     await expect.poll(() => buildIsSaved(page), { timeout: 10_000 }).toBe(true);
 
     await stallDevnet(page);
+    await holdDevnetCalls(page);
     await page.reload();
     await expect(region(page)).toHaveText("Devnet, not responding", {
       timeout: 15_000,
