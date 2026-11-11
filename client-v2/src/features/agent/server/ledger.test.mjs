@@ -43,6 +43,43 @@ describe("ledger arithmetic", () => {
     assert.equal(chargeFor({ kind: "abandoned" }, 9999, PRICES), 0);
   });
 
+  it("charges the cost the upstream reported over the tokens", () => {
+    // Nous on 2026-11-10: 18 + 6 tokens of z-ai/glm-5.3-flash:US
+    const usage = {
+      prompt_tokens: 18,
+      completion_tokens: 6,
+      cost: 0.000009405,
+    };
+    assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 10);
+  });
+
+  it("charges the tokens when the reported cost is below them", () => {
+    // The Gateway reported `cost: 0` for a free-tier turn on 2026-10-29
+    const usage = { prompt_tokens: 1000, completion_tokens: 100, cost: 0 };
+    assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 200);
+    const cheap = { prompt_tokens: 1000, completion_tokens: 100, cost: 1e-4 };
+    assert.equal(
+      chargeFor({ kind: "completed", usage: cheap }, 9999, PRICES),
+      200
+    );
+  });
+
+  // A cost the ledger cannot store falls back to the tokens at the prices
+  // eslint-disable-next-line unicorn/no-null -- a JSON usage frame can carry `null`
+  for (const bad of ["0.01", -0.01, Number.NaN, Infinity, 1e20, null]) {
+    it(`charges the tokens for a completed turn reporting a cost of ${String(
+      bad
+    )}`, () => {
+      const usage = { prompt_tokens: 1000, completion_tokens: 100, cost: bad };
+      assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 200);
+    });
+  }
+
+  it("charges a reported cost even when the token counts cannot be priced", () => {
+    const usage = { prompt_tokens: -1, completion_tokens: 100, cost: 0.001 };
+    assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 1000);
+  });
+
   // The upstream's usage is not ours: a count that cannot be priced charges
   // the reservation, never NaN, a negative or an overflow
   // eslint-disable-next-line unicorn/no-null -- a JSON usage frame can carry `null`

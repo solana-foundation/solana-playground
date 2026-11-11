@@ -215,10 +215,13 @@ export const agentEnv = () => ({
   PROVIDERS: readProviders(
     read(agentName("BASE_URL")) || DEFAULT_AGENT_BASE_URL
   ),
+  // The prices size a turn's reservation and are the floor of its charge
+  // (`chargeFor`). The defaults are Nous's for the default model; the
+  // Gateway's list price is lower, so on it they overcharge, never under
   /** USD per million input tokens */
-  PRICE_INPUT: readNumber(agentName("PRICE_INPUT"), 0.15),
+  PRICE_INPUT: readNumber(agentName("PRICE_INPUT"), 0.2475),
   /** USD per million output tokens */
-  PRICE_OUTPUT: readNumber(agentName("PRICE_OUTPUT"), 0.5),
+  PRICE_OUTPUT: readNumber(agentName("PRICE_OUTPUT"), 0.825),
   /** About 128k input tokens at 4 bytes per token */
   MAX_BODY_BYTES: readCount(agentName("MAX_BODY_BYTES"), 524288),
   /** Sent as `max_completion_tokens` on every upstream request */

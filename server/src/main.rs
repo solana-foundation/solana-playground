@@ -12,10 +12,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use solpg_server::{
-    db,
-    log::{self, info, warn},
-};
+use solpg_server::log::{self, info, warn};
 use tokio::net::TcpListener;
 
 use self::{config::Config, middlewares::*, routes::*};
@@ -24,7 +21,7 @@ use self::{config::Config, middlewares::*, routes::*};
 /// test can check which routes the API key guards.
 fn app(config: Config) -> Router {
     // Off unless `PG_API_KEY` is set. Guards what costs the server work or
-    // serves a build's output; sharing stays open
+    // serves a build's output
     let api_key = middleware::from_fn_with_state(config.api_key, require_api_key);
 
     let build_routes = Router::new()
@@ -34,9 +31,6 @@ fn app(config: Config) -> Router {
         )
         .route("/deploy/{uuid}", get(deploy))
         .layer(api_key.clone());
-    let share_routes = Router::new()
-        .route("/share/{id}", get(share_get))
-        .route("/new", post(share_new));
 
     let unstable_routes = if cfg!(feature = "unstable") {
         let build_concurrency = config.unstable_build.limits.route.concurrency;
@@ -62,7 +56,6 @@ fn app(config: Config) -> Router {
 
     Router::new()
         .merge(build_routes)
-        .merge(share_routes)
         .nest("/unstable", unstable_routes)
         .layer(compression())
         .layer(payload_limit(config.payload_limit))
@@ -78,9 +71,6 @@ async fn main() -> Result<()> {
 
     #[cfg(feature = "unstable")]
     setup::setup().await?;
-
-    db::init(&config.db_uri, config.db_name.clone()).await?;
-    info!("DB initialized");
 
     match &config.api_key {
         Some(_) => info!("API key required on build, deploy and unstable routes"),
@@ -145,11 +135,6 @@ mod tests {
             status("POST", "/build", Some("s3cret")).await,
             StatusCode::UNAUTHORIZED
         );
-    }
-
-    #[tokio::test]
-    async fn sharing_stays_open() {
-        assert_ne!(status("POST", "/new", None).await, StatusCode::UNAUTHORIZED);
     }
 
     #[cfg(feature = "unstable")]

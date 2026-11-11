@@ -84,7 +84,7 @@ mod tests {
             .layer(middleware::from_fn_with_state(key, require_api_key));
         Router::new()
             .merge(guarded)
-            .route("/share", get(|| async { "shared" }))
+            .route("/open", get(|| async { "open" }))
     }
 
     async fn status(app: Router, path: &str, header: Option<&str>) -> StatusCode {
@@ -154,9 +154,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn share_route_is_open() {
+    async fn unguarded_route_is_open() {
         assert_eq!(
-            status(app(Some("s3cret")), "/share", None).await,
+            status(app(Some("s3cret")), "/open", None).await,
             StatusCode::OK
         );
     }

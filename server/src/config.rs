@@ -17,10 +17,6 @@ pub struct Config {
     pub payload_limit: usize,
     /// Whether logs should be verbose
     pub verbose: bool,
-    /// Database URI
-    pub db_uri: String,
-    /// Database name
-    pub db_name: String,
     /// Maximum amount of concurrent builds
     pub build_concurrency: usize,
     /// Key the build, deploy and unstable routes require in `x-api-key`, if any
@@ -50,8 +46,6 @@ impl Config {
             port: get_env("PORT", 8080u16),
             payload_limit: get_env("PAYLOAD_LIMIT", 1024usize * 1024),
             verbose: get_env("VERBOSE", false),
-            db_uri: get_env("DB_URI", "mongodb://localhost:27017"),
-            db_name: get_env("DB_NAME", "solpg"),
             build_concurrency: get_env("BUILD_CONCURRENCY", 16usize),
             api_key: get_env_raw("API_KEY").and_then(ApiKey::new),
             unstable_build: BuildConfig {

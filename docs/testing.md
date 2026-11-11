@@ -8,7 +8,7 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | [Prerequisites](#0-prerequisites) | macOS and Docker set-up, toolchains, branches |
 | [Builds](#1-builds) | wasm, client, client-v2 and its browser suite, server, compose images, real wasm packages |
 | [Client dev servers](#2-client-dev-servers-without-a-server) | client and client-v2 start with no build server running |
-| [Full suite with compose](#3-full-suite-with-docker-compose) | client, server, and database together; client-server requests |
+| [Full suite with compose](#3-full-suite-with-docker-compose) | client and server together; client-server requests |
 | [Static assets](#4-static-assets-default-rs-files-and-templates) | rust-analyzer `.rs` files in local, Vercel, and Docker builds; templates, tutorials |
 | [Release gate](#5-release-gate-unstable-and-stubs-stay-out-of-production) | unstable and the wasm stubs stay out of production |
 | [Optional: unstable server](#6-optional-unstable-server) | the server's unstable functionality, tested on purpose |
@@ -87,7 +87,7 @@ scenario adds a service or a profile to that file; it never adds a second compos
 
 | Case | Profile |
 | --- | --- |
-| B-6, D-1, D-4, D-5, D-9 | `dev` |
+| B-6, D-1, D-5, D-9 | `dev` |
 | D-2, D-3 | `prod` |
 | D-6 | `v2` |
 | D-7 | `v2-prod` |
@@ -99,12 +99,12 @@ client-v2 adds profiles; it does not rename or remove these:
 
 | Profile | Runs |
 | --- | --- |
-| `dev` | client, server, database |
-| `prod` | production build of the client, server, database |
+| `dev` | client, server |
+| `prod` | production build of the client, server |
 | `client-standalone` | client without a server |
-| `server-standalone` | server without a database |
+| `server-standalone` | server that starts without the root `.env` |
 
-The `v2` and `v2-prod` profiles run the `server-standalone` service too, and neither runs `server` or `db` (MongoDB).
+The `v2` and `v2-prod` profiles run the `server-standalone` service too, and neither runs `server`.
 
 - [ ] `docker compose config --profiles` lists all four.
 - [ ] `docker compose --profile client-standalone config --services` includes `client-standalone` and no client-v2
@@ -267,8 +267,8 @@ was packaged without a rebuild, which `seed_target_dirs` in `client-v2/scripts/s
 
 Goal: the client starts and stays usable when no build server is reachable. Only the actions that call the server fail.
 
-Requests that need the server: `POST /build`, `GET /deploy/{uuid}`, `GET /share/{id}`, and `POST /new`. Nothing calls
-the server on page load at `/`.
+Requests that need the server: `POST /build` and `GET /deploy/{uuid}`. Upstream's `client/` also sends `GET /share/{id}`
+and `POST /new` from Share, which the server answers with 404. Nothing calls the server on page load at `/`.
 
 ### C-1. client starts
 
@@ -368,8 +368,8 @@ docker compose --profile dev up --build
 
 Expect:
 
-- [ ] `wasm` exits 0; `db`, `server`, and `client` stay running.
-- [ ] the server log shows it listening on 8080 with no MongoDB connection error.
+- [ ] `wasm` exits 0; `server` and `client` stay running.
+- [ ] the server log shows it listening on 8080.
 - [ ] the client answers on `http://localhost:3000` (`PG_CLIENT_PORT` overrides the port), and the C-1 checks for
       the IDE, the terminal `help`, and the network tab pass.
 - [ ] D-9 passes: the server builds a program.
@@ -394,15 +394,6 @@ Steps: click Deploy.
 
 Expect: `GET http://localhost:8080/deploy/{uuid}` returns 200; the terminal prints the program ID; `solana program show
 <program ID>` in the playground terminal shows the program on the selected cluster.
-
-### D-4. share round trip
-
-Precondition: D-1 session (`dev` profile). A production build always sends share requests to `https://api.solpg.io`,
-so only a development build exercises the local server here.
-
-Steps: click Share, copy the link, open it in a new tab.
-
-Expect: `POST /new` to `http://localhost:8080` returns an ID; `GET /share/{id}` returns the same files that were shared.
 
 ### D-5. CORS
 
@@ -429,12 +420,11 @@ remote Foundation server).
 
 Expect:
 
-- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running; no `db` or `server`
-      service exists.
+- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running; no `server` service
+      exists.
 - [ ] the `grep -c` prints `0`: the `yarn start` guard found the real packages.
 - [ ] `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/sync` prints a status other than `404`.
-- [ ] the D-2 and D-3 steps pass against the client-v2 UI, and no request path contains `/unstable/`. D-4 does not
-      apply: sharing needs MongoDB, which this profile does not run.
+- [ ] the D-2 and D-3 steps pass against the client-v2 UI, and no request path contains `/unstable/`.
 
 ### D-7. client-v2 production stack
 
@@ -496,7 +486,7 @@ Expect:
 - [ ] the build returns `200` with JSON: `uuid` is a string, `idl` is `null` (a native program), and `stderr` holds no
       `error`.
 - [ ] `/deploy/<uuid>` returns the program binary: its first bytes print as `177   E   L   F`.
-- [ ] with `PG_API_KEY` set, the same `curl` without the header returns `401`, and `/share/<id>` still answers.
+- [ ] with `PG_API_KEY` set, the same `curl` without the header returns `401`.
 
 ## 4. Static assets: default `.rs` files and templates
 
@@ -806,8 +796,7 @@ Expect: exit code 0; binaries `solpg-server`, `build-program`, and `bundle` in `
 
 ### U-2. unstable routes
 
-Precondition: U-1 done; the P-1 Darwin export in the same shell; MongoDB reachable at `PG_DB_URI` (the compose `db`
-service publishes no port).
+Precondition: U-1 done; the P-1 Darwin export in the same shell.
 
 ```sh
 PG_PORT=8081 server/target/release/solpg-server
@@ -1057,7 +1046,7 @@ different port is a different origin.
 
 | Group | Cases | Profile | Slot |
 | --- | --- | --- | --- |
-| upstream dev | D-1, D-4, D-5, D-9, C-3 | `dev` | 1 |
+| upstream dev | D-1, D-5, D-9, C-3 | `dev` | 1 |
 | upstream prod | D-2, then D-3 | `prod` | 2 |
 | v2 stack | D-6, then D-7 | `v2`, then `v2-prod` | 3 |
 | v2 standalone | D-8, S-7, S-1 to S-3, S-10 | `client-v2-standalone` | 4 |

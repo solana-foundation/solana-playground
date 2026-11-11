@@ -76,17 +76,6 @@ describe("PgServer routes", () => {
     );
   });
 
-  it("sends shares to the share server while builds go through the route", async () => {
-    settings.server.endpoint = "/api/build-server";
-    try {
-      respond("share-id");
-      await PgServer.shareNew({ explorer: { files: {} } });
-      expect(requestedUrl()).toBe("https://api.solpg.io/new");
-    } finally {
-      settings.server.endpoint = "http://server.test";
-    }
-  });
-
   it("reaches a route on this origin given as a path", async () => {
     settings.server.endpoint = "/api/build-server";
     try {
@@ -122,12 +111,6 @@ describe("the unstable switch", () => {
     respond(null);
     await PgServer.deploy("abc");
     expect(requestedUrl()).toBe("http://server.test/unstable/deploy/abc");
-  });
-
-  it("leaves the share routes alone: they have no sandbox to pick", async () => {
-    respond("share-id");
-    await PgServer.shareNew({ explorer: { files: {} } });
-    expect(requestedUrl()).toBe("http://server.test/new");
   });
 });
 

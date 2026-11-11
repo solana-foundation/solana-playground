@@ -37,24 +37,6 @@ interface BuildRequest {
   project?: { id: string; name: string };
 }
 
-/** `/new` request */
-interface ShareNewRequest {
-  explorer: {
-    files: {
-      [key: string]: { content?: string };
-    };
-  };
-}
-
-/**
- * Whether sharing goes to upstream's server, which holds the share database.
- * Always in production; in development too while the build server is this
- * deployment's route, which forwards builds only and answers a share with 404.
- */
-const isSharedOnDbServer = () =>
-  process.env.NODE_ENV === "production" ||
-  PgSettings.server.endpoint === FOUNDATION_ENDPOINT;
-
 export class PgServer {
   /**
    * Build the program files.
@@ -103,40 +85,6 @@ export class PgServer {
   }
 
   /**
-   * Get the shared project information.
-   *
-   * @param id share id
-   * @returns the shared project response
-   */
-  static async shareGet(id: string) {
-    /** `/share` response */
-    type ShareResponse = ShareNewRequest["explorer"];
-
-    const response = await this._send(`/share/${id}`, {
-      cache: true,
-      useDbServer: isSharedOnDbServer(),
-    });
-    return (await response.json()) as ShareResponse;
-  }
-
-  /**
-   * Share a new project.
-   *
-   * @param req share request
-   * @returns the unique share id
-   */
-  static async shareNew(req: ShareNewRequest) {
-    /** `/new` response is the share id */
-    type ShareNewResponse = string;
-
-    const response = await this._send("/new", {
-      post: { body: JSON.stringify(req) },
-      useDbServer: isSharedOnDbServer(),
-    });
-    return (await response.text()) as ShareNewResponse;
-  }
-
-  /**
    * Send an HTTP request to the Playground server.
    *
    * @param opts server send request options; an aborted `signal` fails the
@@ -147,15 +95,15 @@ export class PgServer {
   private static async _send(
     path: string,
     opts?: {
-      cache?: boolean;
       post?: { body: string };
-      useDbServer?: boolean;
       unstable?: boolean;
       signal?: AbortSignal;
     }
   ) {
-    const requestInit: RequestInit = { signal: opts?.signal };
-    if (!opts?.cache) requestInit.cache = "no-store";
+    const requestInit: RequestInit = {
+      signal: opts?.signal,
+      cache: "no-store",
+    };
 
     if (opts?.post) {
       requestInit.method = "POST";
@@ -163,11 +111,8 @@ export class PgServer {
       requestInit.body = opts.post.body;
     }
 
-    const serverUrl = opts?.useDbServer
-      ? "https://api.solpg.io"
-      : PgSettings.server.endpoint;
     if (opts?.unstable) path = PgCommon.joinPaths("unstable", path);
-    const requestUrl = PgCommon.joinPaths(serverUrl, path);
+    const requestUrl = PgCommon.joinPaths(PgSettings.server.endpoint, path);
     let response: Response;
     try {
       response = await fetch(requestUrl, requestInit);

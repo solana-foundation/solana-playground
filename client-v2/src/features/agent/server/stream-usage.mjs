@@ -12,7 +12,11 @@ import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
 const log = createServerLogger("agent:stream-usage");
 
 /**
- * @typedef {{ prompt_tokens?: number; completion_tokens?: number }} Usage
+ * The upstream's `usage` object, kept whole as it arrived: the ledger reads
+ * `cost` (USD, Nous and the Gateway) beside the token counts, and checks
+ * every field before it charges, since none is ours.
+ *
+ * @typedef {{ prompt_tokens?: number; completion_tokens?: number; cost?: unknown }} Usage
  */
 
 /**

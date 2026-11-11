@@ -3,7 +3,7 @@
  *
  * The route is a base URL to the client: `PgServer` joins its usual paths
  * onto it. Only the paths the client calls are forwarded, so the route cannot
- * be used to reach anything else the build server serves (sharing, bundling).
+ * be used to reach anything else the build server serves, such as bundling.
  */
 
 /** The client's calls, each with its one method */
