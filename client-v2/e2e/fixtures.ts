@@ -47,6 +47,15 @@ export const startProject = async (page: Page, name: string, timeout = {}) => {
 export const filesToggle = (page: Page) => page.locator("#editor-head-files");
 
 /**
+ * The editor holding the focus it takes when it mounts and opens the current
+ * file. Monaco is a lazy chunk, and on a loaded runner it arrives well past
+ * an assertion's 20 s (30 s in run 42634376598): the wait is the page load's,
+ * as for the About page's Start.
+ */
+export const editorTookFocus = (page: Page) =>
+  expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused(LONG);
+
+/**
  * The About page's Start, which begins a tutorial. The page draws it only once
  * the tutorial's lazy chunk loads, which a cold dev server compiles in more
  * than an action's 10 s: the wait names the button if it never comes. `exact`
@@ -205,9 +214,7 @@ export const test = base.extend<{ seededPage: Page }>({
     // machine that lands after a test has already put the focus somewhere
     // else -- a right-clicked file -- and takes it away. Hand the page over
     // once the editor holds the focus, so it has nothing left to take.
-    await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused(
-      LONG
-    );
+    await editorTookFocus(page);
     await use(page);
   },
 });
