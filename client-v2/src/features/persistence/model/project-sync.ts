@@ -16,7 +16,7 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { Disposable } from "../../../utils/types";
 import { DELETED_REASON } from "./deleted.mjs";
-import { report } from "./diagnostics";
+import { isMissing, report } from "./diagnostics";
 import type { FileConflict, MergePlan, ResolvedFiles } from "./merge";
 import {
   baseAfterMerge,
@@ -1124,6 +1124,17 @@ export class PgProjectSync {
             }
             buffers.discard(full);
             caughtUp.add(path);
+            // Dropping the model flushes its pending autosave, and memory
+            // still lists the file until the re-open, so that save -- or one
+            // that fired while the caller awaited -- wrote the file back.
+            // Left there, the next push uploads it over the other device's
+            // delete. Removed without reading first: a read that fails
+            // cannot tell a written-back file from an absent one.
+            try {
+              await PgFs.removeFile(full);
+            } catch (e) {
+              if (!isMissing(e)) report(`remove ${full}`, e);
+            }
             continue;
           }
 
@@ -1145,13 +1156,19 @@ export class PgProjectSync {
           if (buffer !== content) buffers.write(full, content);
           caughtUp.add(path);
           if (content !== after[path]) folded.push(path);
-          // Nothing more to do when nothing was folded in and the buffer held
-          // either copy: it holds `after` now, which the store has. A model
-          // the re-open built is already `after`, and writing it again would
-          // announce a change to the other tabs that is none.
+          // Nothing more to do when nothing was folded in, the buffer held
+          // either copy, and the store still holds `after`: writing it again
+          // would announce a change to the other tabs that is none.
+          //
+          // Read, not assumed. Between writing `after` and getting here the
+          // caller awaited its upload (merge) or its mark (adopt), and a
+          // pending autosave fired in that window writes the old buffer over
+          // `after`. From here the buffer is `after`, and an autosave already
+          // under way with the old text is ahead of this read in the fs queue.
           if (
             content === after[path] &&
-            (buffer === read || buffer === content)
+            (buffer === read || buffer === content) &&
+            (await PgProjectSync._readStored(full)) === content
           ) {
             continue;
           }
@@ -1160,8 +1177,8 @@ export class PgProjectSync {
           continue;
         }
 
-        // The store too, after any autosave that fired during the rewrite
-        // with the old text. Before the re-open, so its re-read finds what
+        // The store too, after any autosave that fired during the rewrite, or
+        // during the caller's await, with the old text. Before the re-open, so its re-read finds what
         // the editor shows. After it, memory has been read already, so it is
         // set here too: a fold that left the buffer as it was fires no
         // autosave to bring memory along, and a build reads memory.
@@ -1546,6 +1563,20 @@ export class PgProjectSync {
       await PgSyncMark.write(projectId, settled);
       return true;
     });
+  }
+
+  /**
+   * What the store holds for a file, or `undefined` when it cannot say --
+   * missing or unreadable. `undefined` makes `_catchUp` write, which at worst
+   * repeats a write.
+   */
+  private static async _readStored(path: string): Promise<string | undefined> {
+    try {
+      return await PgFs.readToString(path);
+    } catch (e) {
+      if (!isMissing(e)) report(`read ${path}`, e);
+      return undefined;
+    }
   }
 
   /**
