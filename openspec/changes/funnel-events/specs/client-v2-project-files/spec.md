@@ -110,7 +110,9 @@ error, never from an error message.
 The `github` route (`/github/<owner>/<repo>…`) in `routes/github/github.tsx`
 SHALL send `project_viewed`, with no parameters, once `PgGithub.getFiles`
 has returned the repository's files, and `project_view_failed {reason}` when
-it throws, with the reasons of `project_import_failed`.
+it throws, with the reasons of `project_import_failed`. A closed program
+choice (`ImportCancelledError`) is the user changing their mind and sends
+neither event, as for an import.
 
 #### Scenario: A GitHub link opens (manual)
 

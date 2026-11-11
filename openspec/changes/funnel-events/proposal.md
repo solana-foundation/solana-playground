@@ -45,8 +45,10 @@ site, and the project's rules send agents to them.
   `project_export_failed` replace them with the same `profile` and `files`,
   plus `via`. GA4 reports on the old names stop getting data from the
   release that carries this, and their recorded data keeps its meaning.
-  `export_convert_failed` does not change. No other event in another slice
-  is renamed or removed.
+  `export_convert_failed` does not change. `settings_key_deleted` is removed:
+  Settings sends `assistant_key_deleted {via: "settings"}` instead, one event
+  for the key's deletion from either place (HOO-2752). No other event in
+  another slice is renamed or removed.
 - `openspec/config.yaml` and `client-v2/CLAUDE.md` extend the telemetry rule
   to the legacy roots and point agents at the funnel table.
 
