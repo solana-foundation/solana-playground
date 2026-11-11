@@ -291,6 +291,28 @@ describe("PgConversation", () => {
     });
   });
 
+  it("records and saves the written lines' text as the block landed", async () => {
+    const workspace = memoryWorkspace({ "src/lib.rs": "" });
+    open(NAME, { workspace });
+    await settle();
+    PgConversation.start();
+    await settle();
+    const landed = [
+      "use anchor_lang::prelude::*;",
+      "",
+      'declare_id!("11111111111111111111111111111111");',
+    ];
+    expect(PgConversation.state.engine.progress.beats["s1.boil"]).toMatchObject(
+      { wrote: { lines: [1, 2, 3], text: landed } }
+    );
+    // The learner's edit afterwards changes the file, not the record
+    await workspace.write("src/lib.rs", "// mine", NAME);
+    PgConversation.edit("src/lib.rs", "// mine");
+    await settle();
+    const saved = file[STORAGE_KEY] as { beats: Record<string, unknown> };
+    expect(saved.beats["s1.boil"]).toMatchObject({ wrote: { text: landed } });
+  });
+
   it("lands a write where its own ref has it", async () => {
     const OLD = "fn already_there() {}";
     const PLANNED = "fn planned() {}";

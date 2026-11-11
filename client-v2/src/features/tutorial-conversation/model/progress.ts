@@ -238,6 +238,13 @@ interface Resolved {
 export interface Wrote {
   file: string;
   lines: number[];
+  /**
+   * Each written line's text as the block landed, in the order of `lines`:
+   * the card draws these, so the learner's later edits to the file leave it
+   * as the lesson wrote it. Absent in a save from before it was kept, where
+   * the card reads those lines from the file.
+   */
+  text?: string[];
   created?: true;
   /** The learner's own lines kept the block from its place: it went to the
    * end of the file, and its card offers to restart the step */
@@ -613,13 +620,29 @@ const parseCursor = (v: unknown): Cursor | null => {
   return null;
 };
 
+/**
+ * A block's landing as saved: `Wrote`. A flag that is not `true` and text
+ * that is not a list of strings read as absent rather than failing the
+ * landing; text drawn from the file is the fallback for the latter.
+ */
+const wroteSchema = z.object({
+  file: z.string(),
+  lines: z.array(z.number().int()),
+  text: z.array(z.string()).optional().catch(undefined),
+  created: z.literal(true).optional().catch(undefined),
+  appended: z.literal(true).optional().catch(undefined),
+});
+
 const parseWrote = (v: unknown): Wrote | null => {
-  if (!isRecord(v) || typeof v.file !== "string" || !isIndexes(v.lines)) {
-    return null;
-  }
-  const wrote: Wrote = { file: v.file, lines: v.lines };
-  if (v.created === true) wrote.created = true;
-  if (v.appended === true) wrote.appended = true;
+  const parsed = wroteSchema.safeParse(v);
+  if (!parsed.success) return null;
+  const { file, lines, text, created, appended } = parsed.data;
+  const wrote: Wrote = { file, lines };
+  // Text that does not pair with the lines is dropped: the card then reads
+  // the file, as for a save from before text was kept
+  if (text && text.length === lines.length) wrote.text = text;
+  if (created) wrote.created = true;
+  if (appended) wrote.appended = true;
   return wrote;
 };
 
@@ -1299,6 +1322,64 @@ if (import.meta.vitest) {
 
     it("parses a midway save to itself", () => {
       expect(reload(midway())).toEqual(midway());
+    });
+
+    it("keeps a block's written text across a reload, and reads a save without it as before", () => {
+      const text = ["use anchor_lang::prelude::*;", "", 'declare_id!("1");'];
+      const withText = midway({
+        beats: {
+          "s1.boil": {
+            kind: "written",
+            at: 1100,
+            wrote: { file: "src/lib.rs", lines: [1, 2, 3], text },
+          },
+        },
+      });
+      expect(reload(withText)?.beats["s1.boil"]).toEqual(
+        withText.beats["s1.boil"]
+      );
+      // A resolved question's block keeps its text too
+      const q1 = {
+        kind: "picked",
+        at: 1300,
+        openedAt: 1250,
+        option: 1,
+        attempts: 1,
+        wrong: [],
+        wrote: { file: "src/lib.rs", lines: [5], text: ["fn hi() {}"] },
+      };
+      expect(
+        reload(midway({ beats: { "s1.q1": q1 } }))?.beats["s1.q1"]
+      ).toEqual(q1);
+      // A save from before the text was kept: no text, the card reads the file
+      expect(reload(midway())?.beats["s1.boil"]).toEqual({
+        kind: "written",
+        at: 1100,
+        wrote: { file: "src/lib.rs", lines: [1, 2, 3] },
+      });
+    });
+
+    it("drops text it cannot pair with the lines, and keeps the block", () => {
+      const landed = (text: unknown) =>
+        reload(
+          midway({
+            beats: {
+              "s1.boil": {
+                kind: "written",
+                at: 1100,
+                wrote: { file: "src/lib.rs", lines: [1, 2], text },
+              },
+            },
+          })
+        )?.beats["s1.boil"];
+      const block = {
+        kind: "written",
+        at: 1100,
+        wrote: { file: "src/lib.rs", lines: [1, 2] },
+      };
+      expect(landed(["only one"])).toEqual(block);
+      expect(landed([1, 2])).toEqual(block);
+      expect(landed("a\nb")).toEqual(block);
     });
 
     it("keeps a landed airdrop across a reload, so its card is not live again", () => {

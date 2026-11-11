@@ -6,7 +6,7 @@ import type {
   Quote,
   TutorialDefinition,
 } from "@/entities/tutorial";
-import type { Turn } from "@/features/tutorial-conversation";
+import type { Turn, Wrote } from "@/features/tutorial-conversation";
 import { shortKey } from "@/shared/lib/short-key";
 import { Button } from "@/shared/ui/button";
 
@@ -150,6 +150,23 @@ const withProgram = (act: ActBeat, programId: string | null): ActBeat =>
 const linesOf = (content: string | null) => content?.split("\n") ?? [];
 
 /**
+ * A block's lines, first to last, as the lesson wrote them: its saved text,
+ * else (a save from before the text was kept) those lines as the file holds
+ * them now
+ */
+const previewOf = (
+  read: (file: string) => string | null,
+  wrote: Wrote
+): string[] => {
+  const { text } = wrote;
+  const content = text ? [] : linesOf(read(wrote.file));
+  return wrote.lines
+    .map((line, i) => ({ line, code: text ? text[i] : content[line - 1] }))
+    .sort((a, b) => a.line - b.line)
+    .map(({ code }) => code ?? "");
+};
+
+/**
  * What a question's record calls it, so the records down the thread say
  * which question each answers: "Fix" for an ask whose kicker is `Fix it`,
  * else "Q<n>" counting the tutorial's asks whose kicker is `Question`, in
@@ -249,17 +266,11 @@ const TurnView = ({
       return <BaseYouPill text={turn.text} code={turn.code} />;
     case "wrote": {
       const wrote = turn.wrote;
-      const content = wrote ? linesOf(read(wrote.file)) : [];
-      const preview = wrote
-        ? [...wrote.lines]
-            .sort((a, b) => a - b)
-            .map((line) => content[line - 1] ?? "")
-        : [];
       return (
         <BaseWroteCard
           wrote={wrote}
           failed={turn.failed}
-          preview={preview}
+          preview={wrote ? previewOf(read, wrote) : []}
           onShow={on.showLine}
           onReset={
             turn.step !== null && !passed.includes(turn.step)

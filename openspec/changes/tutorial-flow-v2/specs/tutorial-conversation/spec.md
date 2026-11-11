@@ -177,6 +177,15 @@ learner sees what they saw on entering it.
 - **THEN** a wrote card reads "Created client/client.ts"
 - **AND** the workspace opens the `client.ts` tab
 
+#### Scenario: The learner edits the written lines
+
+- **WHEN** a write has posted its wrote card and the learner then changes
+  those lines in the editor
+- **THEN** the card still shows the lines as the write put them, after a
+  reload too
+- **AND** a card saved before the written text was kept shows those lines
+  as the file holds them
+
 ### Requirement: Act cards run one thing and show its stages
 
 An `act` beat SHALL render as an act card with an icon tile, a title, a

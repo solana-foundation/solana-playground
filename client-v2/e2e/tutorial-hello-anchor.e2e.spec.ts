@@ -287,6 +287,43 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await expect(feed(page).getByText(/· 2nd try/)).toBeVisible(LONG);
   });
 
+  test("tutorial-conversation: The learner edits the written lines", async ({
+    page,
+  }) => {
+    test.skip(isLive, "needs no build or devnet");
+    test.setTimeout(120_000);
+    const EDIT = 'import "not-a-real-package";';
+    const LESSON = "use anchor_lang::prelude::*;";
+    const card = () =>
+      feed(page).getByRole("button", {
+        name: /^Show lines 1 to 3 in .*lib\.rs$/,
+      });
+    await start(page);
+    await expect(card()).toContainText(LESSON, LONG);
+    // The learner replaces the file the block landed in
+    await card().click();
+    await page.locator(".monaco-editor .view-lines").first().click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type(EDIT);
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      EDIT
+    );
+    // The editor saves half a second after the last key; past that, the
+    // file holds the edit
+    await page.waitForTimeout(1500);
+    await expect(card()).toContainText(LESSON);
+    await expect(card()).not.toContainText(EDIT);
+    // After a reload, once the editor holds the edit again, the card still
+    // shows the lesson's lines: it reads its save, not the file
+    await page.reload();
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      EDIT,
+      LONG
+    );
+    await expect(card()).toContainText(LESSON);
+    await expect(card()).not.toContainText(EDIT);
+  });
+
   test("tutorial-conversation: The planned E0412", async ({ page }) => {
     test.skip(isLive, "steers the fakes");
     test.setTimeout(120_000);

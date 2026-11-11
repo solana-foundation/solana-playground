@@ -15,6 +15,7 @@ import type {
   Proposal,
   RunResult,
   Turn,
+  Wrote,
 } from "@/features/tutorial-conversation";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
@@ -1012,6 +1013,64 @@ describe("TurnView", () => {
         />
       </TooltipProvider>
     );
+
+  describe("a wrote card", () => {
+    const wroteTurn = (wrote: Wrote): Turn => ({
+      id: "wrote:s3.client",
+      kind: "wrote",
+      step: null,
+      at: 1,
+      whole: true,
+      beatId: "s3.client",
+      wrote,
+      failed: false,
+    });
+    const drawWith = (turn: Turn, file: string) =>
+      render(
+        <TurnView
+          turn={turn}
+          definition={definition}
+          live={false}
+          running={false}
+          passed={[]}
+          read={() => file}
+          nextTutorial={null}
+          on={on()}
+        />
+      );
+    const edited = 'import "not-a-real-package";\n// const a = 1;\n// a();';
+
+    it("shows the lines the lesson wrote, whatever the file holds now", () => {
+      drawWith(
+        wroteTurn({
+          file: "client/client.ts",
+          lines: [1, 2],
+          text: ['console.log("My address:", pg.wallet.publicKey);', ""],
+        }),
+        edited
+      );
+      expect(
+        screen.getByText('console.log("My address:", pg.wallet.publicKey);')
+      ).toBeTruthy();
+      expect(screen.queryByText('import "not-a-real-package";')).toBeNull();
+    });
+
+    it("shows the written text in line order when the lines are not", () => {
+      drawWith(
+        wroteTurn({ file: "a.ts", lines: [2, 1], text: ["second", "first"] }),
+        edited
+      );
+      const rows = screen
+        .getAllByText(/^(first|second)$/)
+        .map((el) => el.textContent);
+      expect(rows).toEqual(["first", "second"]);
+    });
+
+    it("reads a save without text from the file, as before", () => {
+      drawWith(wroteTurn({ file: "client/client.ts", lines: [1, 2] }), edited);
+      expect(screen.getByText('import "not-a-real-package";')).toBeTruthy();
+    });
+  });
 
   it("names the program step 4 upgrades in its act card, or says your program before there is one", () => {
     const ship = actOf("s4.ship");

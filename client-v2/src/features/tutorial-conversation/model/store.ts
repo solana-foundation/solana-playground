@@ -21,6 +21,7 @@ import type {
   PassedVia,
   RunResult,
   UnreadTx,
+  Wrote,
 } from "./progress";
 import { freshProgress, parseProgress } from "./progress";
 import { WorkspaceMovedError } from "./real-workspace";
@@ -1202,12 +1203,19 @@ export class PgConversation {
             PgConversation._landedLate(name, effect.file);
             break;
           }
+          // The lines as they landed, for the card to draw whatever the
+          // learner does to the file afterwards
+          const rows = placed.code.split("\n");
+          const wrote: Wrote = {
+            file: effect.file,
+            lines: placed.lines,
+            text: placed.lines.map((line) => rows[line - 1] ?? ""),
+          };
+          if (placed.appended) wrote.appended = true;
           PgConversation._dispatch({
             type: "written",
             beatId: effect.beatId,
-            wrote: placed.appended
-              ? { file: effect.file, lines: placed.lines, appended: true }
-              : { file: effect.file, lines: placed.lines },
+            wrote,
             at: effect.at,
           });
         } catch (e) {
