@@ -114,8 +114,9 @@ its `Cargo.lock`, which `generate-crates.mjs` serves as `/crates/Cargo.lock`, an
 Without the lock, cargo resolves newer transitive crates that fail to compile; without the features, a program using
 `init_if_needed`, `event-cpi`, or `lazy-account` does not compile, and one using `spl_token_2022` links a second
 `entrypoint`. The Anchor and native exports both ship them. `--platform` keeps Apple Silicon on the
-published architecture. Task 2.2 confirms the image's entrypoint, user, and tag before the command is fixed in
-`model/steps.ts`.
+published architecture. Verified on macOS (Apple Silicon) on 2026-11-11: the command builds the exported Anchor
+starter and writes `idl.json`. Linux is unverified: task 2.2 stays open for whether the image writes `idl.json` and
+`target/` as `root` there, which would add `--user "$(id -u):$(id -g)"` to the command.
 
 ## Risks / Trade-offs
 
