@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { UNKNOWN_NETWORK } from "@/constants";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -294,7 +296,33 @@ const Program = ({
  * their own. On a phone the tab above already says Interact, so the head is
  * that one row, the picker at the start and the upload at the end.
  */
-const BaseInteract = (p: BaseInteractProps) => (
+const BaseInteract = (props: BaseInteractProps) => {
+  // One portal whose node moves between slots: a guide that moved in the tree
+  // when its own upload turned the surface ready would remount and close
+  const [guideNode] = useState(() => {
+    const el = document.createElement("div");
+    el.className = "contents";
+    return el;
+  });
+  const slot = useCallback(
+    (el: HTMLDivElement | null) => {
+      el?.append(guideNode);
+    },
+    [guideNode]
+  );
+  const p: BaseInteractProps = {
+    ...props,
+    idlGuide: <div ref={slot} className="contents" />,
+  };
+  return (
+    <>
+      {createPortal(props.idlGuide, guideNode)}
+      <StageView p={p} />
+    </>
+  );
+};
+
+const StageView = ({ p }: { p: BaseInteractProps }) => (
   <div className="flex h-full flex-col">
     <div className="flex flex-col items-start gap-4 border-b border-border px-6 py-3 max-md:min-h-15 max-md:justify-center max-md:py-2 max-md:pr-2 max-md:pl-5">
       <div className="flex flex-col gap-1 max-md:hidden">

@@ -6,7 +6,8 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
+import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
@@ -53,6 +54,7 @@ const props = (
     builtAfterDeploy?: boolean;
     solNeeded?: BaseInteractProps["solNeeded"];
     idlRefusal?: string;
+    idlGuide?: ReactNode;
   } = {}
 ): BaseInteractProps => ({
   meta: "",
@@ -64,7 +66,7 @@ const props = (
   network: "cluster" in over ? over.cluster : "devnet",
   onGoTo: over.onGoTo ?? vi.fn(),
   idlLoad: <button>Upload IDL</button>,
-  idlGuide: <button aria-label={GUIDE}>{GUIDE}</button>,
+  idlGuide: over.idlGuide ?? <button aria-label={GUIDE}>{GUIDE}</button>,
   form: <div>FORM</div>,
   programId: over.programId,
   builtAfterDeploy: over.builtAfterDeploy ?? false,
@@ -133,6 +135,31 @@ describe("BaseInteract", () => {
       }
       unmount();
     }
+  });
+
+  // A remount would close the guide's dialog on the IDL it just loaded
+  it("keeps the IDL guide mounted when the stage turns from no-idl to ready", () => {
+    let mounts = 0;
+    const Guide = () => {
+      useEffect(() => {
+        mounts += 1;
+      }, []);
+      return <button aria-label={GUIDE}>{GUIDE}</button>;
+    };
+    const { container, rerender } = render(
+      <BaseInteract {...props("no-idl", { idlGuide: <Guide /> })} />
+    );
+    expect(
+      within(actions(container)).getByRole("button", { name: GUIDE })
+    ).toBeTruthy();
+    rerender(
+      <TooltipProvider>
+        <BaseInteract {...props("ready", { idlGuide: <Guide /> })} />
+      </TooltipProvider>
+    );
+    expect(screen.getAllByRole("button", { name: GUIDE })).toHaveLength(1);
+    expect(container.querySelector('[data-slot="stage-empty"]')).toBeNull();
+    expect(mounts).toBe(1);
   });
 
   it("a bad IDL shows the error notice", () => {
