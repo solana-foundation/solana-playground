@@ -2,7 +2,7 @@
 
 > Executed inline with superpowers:executing-plans.
 
-**Goal:** the four task groups of [`tasks.md`](https://github.com/solana-foundation/solana-playground/blob/2ae7a1132881dead7e745014d0e74bda081cbdd7/openspec/changes/server-release-rollback-oidc/tasks.md).
+**Goal:** the four task groups of [`tasks.md`](https://github.com/solana-foundation/solana-playground/blob/866c64640a54ae6638ecfd4664fc3cef959e8508/openspec/changes/server-release-rollback-oidc/tasks.md).
 
 **Spec:** `../specs/server-release/spec.md`, `../design.md`.
 
@@ -42,4 +42,4 @@ Composite with inputs `workload_identity_provider`, `service_account`, `credenti
 
 ## Task 4: `docs/server-release.md`, README pointer
 
-Per [`tasks.md`](https://github.com/solana-foundation/solana-playground/blob/2ae7a1132881dead7e745014d0e74bda081cbdd7/openspec/changes/server-release-rollback-oidc/tasks.md) 4.1. Commit.
+Per [`tasks.md`](https://github.com/solana-foundation/solana-playground/blob/866c64640a54ae6638ecfd4664fc3cef959e8508/openspec/changes/server-release-rollback-oidc/tasks.md) 4.1. Commit.

@@ -595,11 +595,13 @@ OIDC.
      --member="serviceAccount:$SERVER_SA" --role=roles/iam.serviceAccountUser
    ```
 
-   Remove `roles/editor`, `roles/owner` and any `roles/cloudsql.*` from the account only after check 3 below has
-   deployed a release with these roles (`gcloud projects remove-iam-policy-binding "$SERVER_PROJECT_ID"
-   --member="serviceAccount:$SERVER_SA" --role=<role>`), then run check 4. If that deploy fails on a permission,
-   its log names the one missing; grant it and deploy again, but never a Cloud SQL role. A different project holds
-   no Cloud SQL instance of ours, so this paragraph does not apply there.
+   Then remove `roles/editor`, `roles/owner` and any `roles/cloudsql.*` from the account, each with
+   `gcloud projects remove-iam-policy-binding "$SERVER_PROJECT_ID" --member="serviceAccount:$SERVER_SA" --role=<role>`.
+   Remove them now, before the checks: while a broad role stays, a deploy succeeds whatever the narrow roles lack,
+   so check 3 would prove nothing. Checks 1 and 2 then prove the traffic role, and check 3 the deploy roles. If
+   check 3's deploy fails on a permission, its log names the one missing: grant it (never a Cloud SQL role) and
+   re-run the failed CICD job. If a release cannot wait for that, grant `roles/editor` back, release, and remove it
+   again. A different project holds no Cloud SQL instance of ours, so this paragraph does not apply there.
 
 3. **Create the pool and provider.** The pool is `github-server`, not `github`: cloud-sql.md's step 9 creates a
    `github` pool for previews, and the two may share a project. The condition admits tokens from `master` of this
@@ -678,7 +680,7 @@ OIDC.
 **Rollback:** clear the variable `GCP_WORKLOAD_IDENTITY_PROVIDER`; both workflows sign in with `GCP_KEY` again.
 This works only until the key is deleted below.
 
-**Then retire the key**, once checks 1 and 3 passed:
+**Then retire the key**, once checks 1, 3 and 4 passed:
 
 1. Delete the repository secret `GCP_KEY` on GitHub.
 2. Delete the key in GCP. List the account's user-managed keys:
