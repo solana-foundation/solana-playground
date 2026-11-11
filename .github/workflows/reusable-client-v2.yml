@@ -449,13 +449,15 @@ jobs:
       # A red shard leaves the others running, so one run reports every
       # failure and `e2e-report` sees every report.
       fail-fast: false
-      # The shard list is 1..N without gaps and the one place that holds N:
-      # `Browser tests` divides `strategy.job-total` by the browser count to
-      # get it, and a shard index the matrix skips is a slice nobody runs
-      # while this job stays green. `e2e-report` fails on the gap, per browser.
+      # `shard` lists 1..N without gaps and `shards` holds N, the `--shard`
+      # divisor; a shard index the list skips is a slice nobody runs while
+      # this job stays green, so `e2e-report` fails on the gap, per browser.
+      # N is a matrix value, not `strategy.job-total`: a run filtered to some
+      # jobs (`act --matrix`) would divide by the wrong count.
       matrix:
         browser: ${{ fromJSON(inputs.firefox && '["chromium","firefox"]' || '["chromium"]') }}
         shard: [1, 2, 3, 4, 5, 6, 7]
+        shards: [7]
 
     defaults:
       run:
@@ -543,10 +545,7 @@ jobs:
       # fails `e2e-report`. The `@live-links` specs reach github.com, so a
       # GitHub outage cannot turn a PR red: `client-v2-live-links.yml` runs them.
       - name: Browser tests
-        env:
-          JOB_TOTAL: ${{ strategy.job-total }}
-          BROWSERS: ${{ inputs.firefox && 2 || 1 }}
-        run: yarn test-e2e --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/$((JOB_TOTAL / BROWSERS)) --grep-invert "${{ inputs.use-wasm-stubs && '@real-wasm|@live-links' || '@live-links' }}"
+        run: yarn test-e2e --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/${{ matrix.shards }} --grep-invert "${{ inputs.use-wasm-stubs && '@real-wasm|@live-links' || '@live-links' }}"
 
       # Traces, screenshots and the per-test error context of what failed.
       # Open a trace with `yarn playwright show-trace <file>`. `always()`,
