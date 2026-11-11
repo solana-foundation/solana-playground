@@ -178,6 +178,34 @@ describe("creating a workspace while another is open", () => {
   });
 });
 
+describe("PgExplorer.saveEditorPosition", () => {
+  beforeEach(reset);
+
+  // The editor saves its position every second; a workspace being re-read
+  // (Start in a tutorial) has emptied the file map, and the save threw
+  // "reading 'meta'" (HOO-2585)
+  it("skips a file the open workspace does not hold", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const position = { cursor: { from: 0, to: 0 }, topLineNumber: 1 };
+
+    expect(() =>
+      PgExplorer.saveEditorPosition("src/gone.rs", position)
+    ).not.toThrow();
+  });
+
+  it("keeps the position of a file it holds", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const path = requireFor("a file of alpha")(
+      Object.keys(PgExplorer.files).find((p) => p.endsWith(".rs"))
+    );
+    const position = { cursor: { from: 1, to: 2 }, topLineNumber: 3 };
+
+    PgExplorer.saveEditorPosition(path, position);
+
+    expect(PgExplorer.files[path].meta?.position).toEqual(position);
+  });
+});
+
 describe("deleting a workspace that is not open", () => {
   beforeEach(reset);
 

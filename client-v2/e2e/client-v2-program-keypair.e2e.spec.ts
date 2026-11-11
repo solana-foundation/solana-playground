@@ -2,7 +2,14 @@ import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { Keypair } from "@solana/web3.js";
 
-import { DEVNET_RPC, expect, isStored, LONG, test } from "./fixtures";
+import {
+  DEVNET_RPC,
+  expect,
+  isStored,
+  LONG,
+  reloadAndBoot,
+  test,
+} from "./fixtures";
 
 /**
  * The browser scenarios of `client-v2-program-keypair`: the Deploy stage's
@@ -195,7 +202,7 @@ test("client-v2-program-keypair: Invalid text", async ({
   await expect(button(page, "Remove custom id")).toBeHidden();
 
   // The id itself is unchanged: a fresh load shows it again
-  await page.reload();
+  await reloadAndBoot(page);
   await openDeploy(page);
   await openFold(page);
   await expect(field(page)).toHaveValue(before, LONG);
@@ -217,7 +224,7 @@ test("client-v2-program-keypair: Open on a mismatch", async ({
   // The id is in the store before the reload, which would otherwise race the
   // write on a slow runner
   await expect.poll(() => isStored(page, OTHER_ID), LONG).toBe(true);
-  await page.reload();
+  await reloadAndBoot(page);
   await openDeploy(page);
   await expect(field(page)).toHaveValue(OTHER_ID, LONG);
   await expect(
