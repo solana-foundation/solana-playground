@@ -149,6 +149,23 @@ await pg.program.methods.hello(name).rpc();
     );
   });
 
+  it.each([
+    ['import{BN} from "bn.js";'],
+    ['import*as bn from "bn.js";'],
+    ['import"dotenv/config";'],
+  ])("keeps the compact import %s outside the wrapper", async (statement) => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      `${statement}\nawait pg.program.methods.hello("Anchor").rpc();\n`,
+    ]);
+
+    const client = files.get("client/client.ts") ?? "";
+    expect(client.indexOf(statement)).toBeGreaterThanOrEqual(0);
+    expect(client.indexOf(statement)).toBeLessThan(
+      client.indexOf("(async () => {")
+    );
+  });
+
   it("leaves a client without await as it is", async () => {
     const files = await exported(LIB, [
       "client/client.ts",

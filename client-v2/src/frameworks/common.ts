@@ -82,7 +82,9 @@ export const wrapTopLevelAwait = (content: string) => {
  */
 const getLeadingImportsEnd = (content: string) => {
   const skipped = /(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*/y;
-  const importStatement = /import\s[\s\S]*?["'][^"'\n]*["'];?/y;
+  // `import{BN}`, `import*as x` and `import"x"` need no space after the keyword;
+  // a lookahead keeps `important` and `import(` out
+  const importStatement = /import(?=[\s{*"'])[\s\S]*?["'][^"'\n]*["'];?/y;
   let end = 0;
   let index = 0;
   while (true) {
