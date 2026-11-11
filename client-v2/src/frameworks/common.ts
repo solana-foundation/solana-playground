@@ -1,13 +1,75 @@
+import { z } from "zod";
+
 import {
   JsRuntimePackageName,
   MergeUnion,
   PgCommon,
+  PgExplorer,
   PgLanguage,
+  PgProgramInfo,
   PgView,
+  PgWeb3,
   TupleFiles,
   ValueOf,
 } from "../utils";
 import { SelectProgram } from "./SelectProgram";
+
+/** The project an export converts: its name, its program keypair and id */
+export interface ExportedProject {
+  name: string | undefined;
+  /** The program keypair, absent when the project has none */
+  kp: PgWeb3.Keypair | undefined;
+  /** The program id, absent when the project has none */
+  pk: PgWeb3.PublicKey | undefined;
+}
+
+/** What an export reads of a saved project's `.workspace/program-info.json` */
+const SavedProgramInfo = z.object({
+  kp: z.array(z.number().int()).length(64).nullish(),
+  customPk: z.string().nullish(),
+});
+
+/**
+ * Read the project an export converts. The open one's program is the one in
+ * memory, whose file may not be written yet; another project's is its saved
+ * program info. The Projects menu exports any project, and the open one's
+ * keypair in another's zip would give it the open one's program id.
+ *
+ * @param name the project; the open one when not given
+ * @returns its name, program keypair and program id, each absent when it has none
+ */
+export const readExportedProject = async (
+  name: string | undefined
+): Promise<ExportedProject> => {
+  if (!name || name === PgExplorer.currentWorkspaceName) {
+    return {
+      name: name ?? PgExplorer.currentWorkspaceName,
+      kp: PgProgramInfo.kp ?? undefined,
+      pk: PgProgramInfo.pk ?? undefined,
+    };
+  }
+
+  const path = PgCommon.joinPaths(
+    PgExplorer.PATHS.ROOT_DIR_PATH,
+    name,
+    PgExplorer.PATHS.WORKSPACE_DIRNAME,
+    "program-info.json"
+  );
+  try {
+    const saved = SavedProgramInfo.parse(await PgExplorer.fs.readToJSON(path));
+    const kp = saved.kp
+      ? PgWeb3.Keypair.fromSecretKey(Uint8Array.from(saved.kp))
+      : undefined;
+    const pk = saved.customPk
+      ? new PgWeb3.PublicKey(saved.customPk)
+      : kp?.publicKey;
+    return { name, kp, pk };
+  } catch {
+    // No program info (never built), or none that reads as one: the export
+    // goes without a program id rather than with a wrong one
+    return { name, kp: undefined, pk: undefined };
+  }
+};
 
 /** Map of dependency name -> version */
 type Dependencies = { [dependencyName: string]: string };

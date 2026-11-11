@@ -133,7 +133,7 @@ export const exportConverted = async (
     if (kindOf(files) === "program") {
       const framework = await PgFramework.getFromFiles(files);
       if (framework) attempted = FRAMEWORK_PROFILES[framework.name];
-      const result = await PgFramework.convertToFramework(files);
+      const result = await PgFramework.convertToFramework(files, name);
       converted = {
         profile: FRAMEWORK_PROFILES[result.framework],
         files: result.files,

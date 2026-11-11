@@ -67,7 +67,10 @@ const wallet = {
 `;
 
 const exported = async (...files: (readonly [string, string])[]) => {
-  const result = await convertFromPlayground(files.map(([p, c]) => [p, c]));
+  const result = await convertFromPlayground(
+    files.map(([p, c]) => [p, c]),
+    undefined
+  );
   return new Map(result as TupleFiles);
 };
 
@@ -192,6 +195,70 @@ describe("convertFromPlayground", () => {
     expect(
       PgWeb3.Keypair.fromSecretKey(Uint8Array.from(secretKey)).publicKey
     ).toEqual(kp.publicKey);
+  });
+
+  describe("a project other than the open one", () => {
+    /** The open project, Hello World, with a program keypair of its own */
+    const openWithKeypair = () => {
+      const open = PgWeb3.Keypair.generate();
+      Object.defineProperty(PgProgramInfo, "kp", {
+        get: () => open,
+        configurable: true,
+      });
+      onTestFinished(() => {
+        Reflect.deleteProperty(PgProgramInfo, "kp");
+      });
+      vi.spyOn(PgExplorer, "currentWorkspaceName", "get").mockReturnValue(
+        "Hello World"
+      );
+      return open;
+    };
+
+    const exportedAs = async (name: string) =>
+      new Map(
+        (await convertFromPlayground(
+          [LIB, CLIENT].map(([p, c]) => [p, c]),
+          name
+        )) as TupleFiles
+      );
+
+    it("ships that project's saved keypair and name, not the open one's", async () => {
+      const open = openWithKeypair();
+      const saved = PgWeb3.Keypair.generate();
+      const read = vi
+        .spyOn(PgExplorer.fs, "readToJSON")
+        .mockResolvedValue({ kp: Array.from(saved.secretKey) });
+
+      const files = await exportedAs("Other Project");
+
+      expect(read).toHaveBeenCalledWith(
+        "/Other Project/.workspace/program-info.json"
+      );
+      expect(files.get("program/Cargo.toml")).toContain(
+        'name = "other-project"'
+      );
+      const secretKey = JSON.parse(
+        files.get("program/target/deploy/other_project-keypair.json") ?? "[]"
+      );
+      const shipped = PgWeb3.Keypair.fromSecretKey(Uint8Array.from(secretKey));
+      expect(shipped.publicKey).toEqual(saved.publicKey);
+      expect(shipped.publicKey).not.toEqual(open.publicKey);
+    });
+
+    it("ships no keypair for a project with no program info", async () => {
+      openWithKeypair();
+      vi.spyOn(PgExplorer.fs, "readToJSON").mockRejectedValue(
+        new Error("not found")
+      );
+
+      const files = await exportedAs("Other Project");
+
+      expect(
+        Array.from(files.keys()).filter((path) =>
+          path.endsWith("-keypair.json")
+        )
+      ).toEqual([]);
+    });
   });
 
   it("ships no program keypair when Playground has none", async () => {

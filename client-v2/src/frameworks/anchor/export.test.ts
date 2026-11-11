@@ -66,7 +66,10 @@ describe("hello_anchor", () => {
 `;
 
 const exported = async (...files: (readonly [string, string])[]) => {
-  const result = await convertFromPlayground(files.map(([p, c]) => [p, c]));
+  const result = await convertFromPlayground(
+    files.map(([p, c]) => [p, c]),
+    undefined
+  );
   return new Map(result as TupleFiles);
 };
 
@@ -98,9 +101,10 @@ describe("convertFromPlayground", () => {
     vi.spyOn(PgCommon, "fetchText").mockImplementation(async (path) =>
       path.endsWith("features.json") ? "{}" : ""
     );
-    const result = await convertSeahorse([
-      ["src/foo.py", "from seahorse.prelude import *\n"],
-    ]);
+    const result = await convertSeahorse(
+      [["src/foo.py", "from seahorse.prelude import *\n"]],
+      undefined
+    );
 
     const test = new Map(result as TupleFiles).get("tests/foo.ts");
     expect(test).toContain('describe("foo", () => {');

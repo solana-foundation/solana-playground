@@ -74,9 +74,14 @@ export type FrameworkParam<N extends string> = {
      * layout files.
      *
      * @param files playground layout files
+     * @param name the project the files are from, whose program id the
+     * export carries; the open one when not given
      * @returns the frameworks' original layout files
      */
-    convertFromPlayground: (files: TupleFiles) => SyncOrAsync<TupleFiles>;
+    convertFromPlayground: (
+      files: TupleFiles,
+      name: string | undefined
+    ) => SyncOrAsync<TupleFiles>;
     /** Markdown text to show after conversion */
     readme: string;
   }>;
@@ -534,16 +539,17 @@ export class PgFramework {
    * Convert playground layout files to their framework's layout.
    *
    * @param files playground layout files
+   * @param name the project the files are from
    * @returns the framework's files, the README to show after, and the framework
    * @throws when no framework recognises the files (`isUnknownFramework`)
    */
-  static async convertToFramework(files: TupleFiles) {
+  static async convertToFramework(files: TupleFiles, name: string) {
     const framework = await this.getFromFiles(files);
     if (!framework) throw new Error(UNKNOWN_FRAMEWORK);
 
     const { convertFromPlayground, readme } = await framework.export();
     return {
-      files: await convertFromPlayground(files),
+      files: await convertFromPlayground(files, name),
       readme,
       framework: framework.name,
     };
@@ -590,7 +596,7 @@ export class PgFramework {
     // Convert from playground layout to framework layout
     let readme: string | undefined;
     if (opts?.convert)
-      ({ files, readme } = await this.convertToFramework(files));
+      ({ files, readme } = await this.convertToFramework(files, name));
 
     await this.downloadZip(name, files);
 

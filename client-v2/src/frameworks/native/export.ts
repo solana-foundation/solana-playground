@@ -1,4 +1,4 @@
-import { PgCommon, PgExplorer, PgProgramInfo, TupleFiles } from "../../utils";
+import { PgCommon, PgExplorer, TupleFiles } from "../../utils";
 import {
   addAfterImports,
   addImports,
@@ -6,17 +6,20 @@ import {
   getImportedNames,
   getJSDependencies,
   getRustDependencies,
+  readExportedProject,
   wrapTopLevelAwait,
 } from "../common";
 
 /**
  * {@link Framework.importFromPlayground}
  */
-export const convertFromPlayground = async (files: TupleFiles) => {
+export const convertFromPlayground = async (
+  files: TupleFiles,
+  name: string | undefined
+) => {
+  const project = await readExportedProject(name);
   const PROGRAM_PATH = "program";
-  const packageName = PgCommon.toKebabFromTitle(
-    PgExplorer.currentWorkspaceName ?? "solpg"
-  );
+  const packageName = PgCommon.toKebabFromTitle(project.name ?? "solpg");
   // `cargo build-sbf` names the program's files after the lib name, the
   // package name in snake case, and keeps a keypair that is already there
   const keypairPath = PgCommon.joinPaths(
@@ -134,10 +137,10 @@ ${await getJSDependencies(frameworkFiles)}
   // Playground's program keypair, if it has one, so that the local program
   // gets its id. A custom program id is not carried over: a first deploy to
   // the local validator needs that id's keypair.
-  if (PgProgramInfo.kp) {
+  if (project.kp) {
     frameworkFiles.push([
       keypairPath,
-      JSON.stringify(Array.from(PgProgramInfo.kp.secretKey)),
+      JSON.stringify(Array.from(project.kp.secretKey)),
     ]);
   }
 

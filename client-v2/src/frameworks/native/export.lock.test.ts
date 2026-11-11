@@ -27,6 +27,11 @@ vi.mock("../common", () => ({
   getRustDependencies: async () => "[dependencies]",
   getJSDependencies: async () => '"dependencies": {}',
   fetchServerCargoLock: async () => SERVER_LOCK,
+  readExportedProject: async (name: string | undefined) => ({
+    name,
+    kp: undefined,
+    pk: undefined,
+  }),
 }));
 
 const SERVER_LOCK = 'version = 4\n\n[[package]]\nname = "solpg"\n';
@@ -36,7 +41,10 @@ const { convertFromPlayground } = await import("./export");
 describe("frameworks/native/export", () => {
   it("ships the build server's lock beside the program manifest", async () => {
     const exported = new Map(
-      await convertFromPlayground([["src/lib.rs", "entrypoint!(process);"]])
+      await convertFromPlayground(
+        [["src/lib.rs", "entrypoint!(process);"]],
+        undefined
+      )
     );
 
     expect(exported.get("program/Cargo.lock")).toBe(SERVER_LOCK);

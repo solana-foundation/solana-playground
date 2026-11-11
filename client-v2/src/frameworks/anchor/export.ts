@@ -1,4 +1,4 @@
-import { PgCommon, PgExplorer, PgProgramInfo, TupleFiles } from "../../utils";
+import { PgCommon, PgExplorer, TupleFiles } from "../../utils";
 import {
   addAfter,
   addAfterImports,
@@ -6,6 +6,7 @@ import {
   fetchServerCargoLock,
   getJSDependencies,
   getRustDependencies,
+  readExportedProject,
   wrapTopLevelAwait,
 } from "../common";
 import { getIdlBuildFeature } from "./idl-build-feature";
@@ -13,7 +14,11 @@ import { getIdlBuildFeature } from "./idl-build-feature";
 /**
  * {@link Framework.importFromPlayground}
  */
-export const convertFromPlayground = async (files: TupleFiles) => {
+export const convertFromPlayground = async (
+  files: TupleFiles,
+  name: string | undefined
+) => {
+  const project = await readExportedProject(name);
   // Program manifest's lib name must match the `#[program]` module name and
   // Anchor.toml programs definition
   const libContent = files.find(([path]) => path.endsWith("lib.rs"))?.[1];
@@ -21,7 +26,7 @@ export const convertFromPlayground = async (files: TupleFiles) => {
 
   const programName =
     /(pub\s+)?mod\s+(\w+)/m.exec(libContent)?.[2] ??
-    PgCommon.toSnakeCase(PgExplorer.currentWorkspaceName ?? "program");
+    PgCommon.toSnakeCase(project.name ?? "program");
   const packageName = PgCommon.toKebabFromSnake(programName);
   const programPath = PgCommon.joinPaths("programs", packageName);
 
@@ -173,9 +178,9 @@ seeds = false
 skip-lint = false
 
 ${
-  PgProgramInfo.pk
+  project.pk
     ? `[programs.localnet]
-${programName} = "${PgProgramInfo.pk.toBase58()}"`
+${programName} = "${project.pk.toBase58()}"`
     : ""
 }
 
@@ -242,10 +247,10 @@ ${await getJSDependencies(frameworkFiles)}
   );
 
   // Create program keypair if it exists
-  if (PgProgramInfo.kp) {
+  if (project.kp) {
     frameworkFiles.push([
       PgCommon.joinPaths("target", "deploy", `${programName}-keypair.json`),
-      JSON.stringify(Array.from(PgProgramInfo.kp.secretKey)),
+      JSON.stringify(Array.from(project.kp.secretKey)),
     ]);
   }
 

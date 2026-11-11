@@ -145,7 +145,11 @@ describe("features/project-export/model/export", () => {
 
       const exported = await exportConverted("beta");
 
-      expect(utils.PgFramework.convertToFramework).toHaveBeenCalledWith(ANCHOR);
+      // The named project, so its own program id goes in the zip
+      expect(utils.PgFramework.convertToFramework).toHaveBeenCalledWith(
+        ANCHOR,
+        "beta"
+      );
       expect(utils.PgFramework.downloadZip).toHaveBeenCalledWith(
         "beta",
         anchorFiles
