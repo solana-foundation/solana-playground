@@ -41,6 +41,12 @@ describe("platformRules", () => {
       headersFor("/runtime.html")["Content-Security-Policy"],
       RUNTIME_CSP
     );
+    // Firefox checks the frame's own load against the app's COEP as a
+    // cross-origin request, since the `sandbox` attribute makes it opaque
+    assert.equal(
+      headersFor("/runtime.html")["Cross-Origin-Resource-Policy"],
+      "cross-origin"
+    );
     assert.equal(headersFor("/")["Content-Security-Policy"], undefined);
     assert.equal(
       headersFor("/runtime.html.map")["Content-Security-Policy"],

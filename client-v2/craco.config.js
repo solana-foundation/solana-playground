@@ -141,8 +141,12 @@ const vercelHeadersOf = (page) => {
   );
 };
 
-/** The CSP `runtime.html` is served with */
-const RUNTIME_CSP = vercelHeadersOf(SANDBOX_PAGE)["Content-Security-Policy"];
+/**
+ * The CSP and CORP `runtime.html` is served with. The CORP is for Firefox,
+ * which checks the frame's load against the app's COEP as a cross-origin
+ * request, since the `sandbox` attribute makes the frame opaque
+ */
+const RUNTIME_HEADERS = vercelHeadersOf(SANDBOX_PAGE);
 
 /** The CSP and CORP `wallet-keys.html` is served with */
 const KEY_PAGE_HEADERS = vercelHeadersOf(KEY_PAGE);
@@ -696,7 +700,7 @@ module.exports = {
       // The sandbox's page is an opaque origin however it is framed, and
       // only the app may frame it
       if (urlPath === `/${SANDBOX_PAGE}`) {
-        return { ...headers, "Content-Security-Policy": RUNTIME_CSP };
+        return { ...headers, ...RUNTIME_HEADERS };
       }
       // The key page: its own CSP, and CORP so the app's COEP lets it frame
       // the page from the other loopback host. Only the headers: the dev
