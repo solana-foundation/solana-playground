@@ -1,15 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { PgFramework } from "@/utils";
+import { PgExplorer, PgFramework } from "@/utils";
 import { PgWorkspace } from "@/utils/explorer/workspace";
 
 import type { IdlBuildMethod } from "../model/steps";
 import { STEPS } from "../model/steps";
 import type { ExportFailureReason, GuideSurface } from "../model/telemetry";
 import { idlBuildGuideTelemetry } from "../model/telemetry";
-import type { Download, Landing } from "./BaseIdlBuildGuide";
+import type { Availability, Download, Landing } from "./BaseIdlBuildGuide";
 import BaseIdlBuildGuide from "./BaseIdlBuildGuide";
 
 const log = createLogger("idl-build-guide:ui");
@@ -32,6 +32,42 @@ const failureReason = (error: unknown): ExportFailureReason => {
   return "other";
 };
 
+/** An undetected framework keeps the guide available, so a detection miss never hides it */
+const readAvailability = async (): Promise<Availability> => {
+  const framework = await PgFramework.getFromFiles();
+  return framework?.name === "Native" ? "coming-soon" : "available";
+};
+
+/** Re-read on a workspace switch or a save, since either can change the framework */
+const useAvailability = () => {
+  const [availability, setAvailability] = useState<Availability>("available");
+
+  useEffect(() => {
+    let latest = 0;
+    const refresh = async () => {
+      const call = ++latest;
+      try {
+        const next = await readAvailability();
+        if (call === latest) setAvailability(next);
+      } catch (error) {
+        log.warn("Could not tell the project's framework", {
+          context: { error },
+        });
+      }
+    };
+    refresh();
+    const switched = PgExplorer.onDidSwitchWorkspace(refresh);
+    const saved = PgExplorer.onDidSaveFile(refresh);
+    return () => {
+      latest = -1;
+      switched.dispose();
+      saved.dispose();
+    };
+  }, []);
+
+  return availability;
+};
+
 export interface IdlBuildGuideProps {
   /** The Flow stage the guide is opened from */
   surface: GuideSurface;
@@ -47,6 +83,7 @@ const IdlBuildGuide = ({
   onLoadIdl,
   onInteract,
 }: IdlBuildGuideProps) => {
+  const availability = useAvailability();
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<IdlBuildMethod>("docker");
   const [download, setDownload] = useState<Download>({ state: "idle" });
@@ -98,6 +135,7 @@ const IdlBuildGuide = ({
 
   return (
     <BaseIdlBuildGuide
+      availability={availability}
       open={open}
       onOpenChange={handleOpenChange}
       method={method}

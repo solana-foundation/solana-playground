@@ -1,6 +1,7 @@
 // The guide connected: its steps per method, the project download, and the
 // events it sends. A file of its own, since it mocks the utils barrel.
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -18,8 +19,13 @@ import { TooltipProvider } from "@/shared/ui/tooltip";
 const UNKNOWN_FRAMEWORK = "Could not identify framework";
 
 const utils = vi.hoisted(() => ({
+  PgExplorer: {
+    onDidSwitchWorkspace: () => ({ dispose: () => {} }),
+    onDidSaveFile: () => ({ dispose: () => {} }),
+  },
   PgFramework: {
     exportWorkspace: vi.fn(),
+    getFromFiles: vi.fn(),
     isUnknownFramework: (e: unknown) =>
       e instanceof Error && e.message === "Could not identify framework",
   },
@@ -45,6 +51,7 @@ beforeEach(() => {
     clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
   });
   utils.PgFramework.exportWorkspace.mockReset().mockResolvedValue({});
+  utils.PgFramework.getFromFiles.mockReset().mockResolvedValue(undefined);
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
   logged = memoryLogs();
@@ -96,7 +103,42 @@ const drop = async (dialog: HTMLElement) => {
   );
 };
 
+const renderFor = async (framework: "Anchor" | "Native") => {
+  utils.PgFramework.getFromFiles.mockResolvedValue({ name: framework });
+  await act(async () => {
+    render(
+      <TooltipProvider>
+        <IdlBuildGuide
+          surface="build"
+          onLoadIdl={onLoadIdl}
+          onInteract={onInteract}
+        />
+      </TooltipProvider>
+    );
+  });
+  return screen.getByRole("button", { name: "Build the IDL locally" });
+};
+
 describe("features/idl-build-guide", () => {
+  it("disables the guide for a Native project and says it is coming soon", async () => {
+    const user = userEvent.setup();
+    const trigger = await renderFor("Native");
+    expect(trigger).toHaveProperty("disabled", true);
+
+    // The button takes no pointer events while disabled; its wrapper does
+    await user.hover(trigger.parentElement as HTMLElement);
+
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "Coming soon"
+    );
+  });
+
+  it("keeps the guide open to an Anchor project", async () => {
+    const trigger = await renderFor("Anchor");
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
   it("opens on Docker, and Local toolchain replaces its steps", () => {
     const dialog = openFrom("build");
     expect(within(dialog).getByLabelText("IDL build method")).toBeTruthy();

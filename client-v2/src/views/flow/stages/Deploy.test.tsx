@@ -58,8 +58,10 @@ vi.mock("../../../utils", () => ({
   PgConnection: { cluster: "devnet", onDidChangeCluster: "cluster" },
   PgExplorer: {
     currentWorkspaceName: "counter",
+    onDidSaveFile: mocks.noop,
     onDidSwitchWorkspace: mocks.noop,
   },
+  PgFramework: { getFromFiles: async () => undefined },
   PgGlobal: {
     onDidChangeDeployState: "deployState",
     get deployState() {

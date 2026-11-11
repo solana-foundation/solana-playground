@@ -21,6 +21,7 @@ import {
 } from "@/shared/ui/dialog";
 import { DropZone, DropZoneIcon, DropZoneTitle } from "@/shared/ui/drop-zone";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import type {
   Command,
@@ -36,7 +37,11 @@ export type Download = { state: "idle" } | { state: "failed"; message: string };
 /** What became of the file dropped on the last step */
 export type Landing = "waiting" | "loaded" | "refused";
 
+/** Whether the project can follow the guide; a Native project has no `idl-build` to run */
+export type Availability = "available" | "coming-soon";
+
 export interface BaseIdlBuildGuideProps {
+  availability: Availability;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   method: IdlBuildMethod;
@@ -228,12 +233,26 @@ const Foot = ({ p, n }: { p: BaseIdlBuildGuideProps; n: number }) => (
   </div>
 );
 
+/** A disabled button takes no pointer events, so its wrapper holds the tooltip */
+const ComingSoonTrigger = () => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <div>
+        <Button variant="outline" aria-label={TRIGGER} disabled>
+          {TRIGGER}
+        </Button>
+      </div>
+    </TooltipTrigger>
+    <TooltipContent>Coming soon</TooltipContent>
+  </Tooltip>
+);
+
 /**
  * The button that opens the guide, and the guide: a method picker, then the
  * download, the method's steps, and the IDL's upload at the foot. Only the
  * steps scroll, so the picker and the upload stay in view.
  */
-const BaseIdlBuildGuide = (p: BaseIdlBuildGuideProps) => (
+const Guide = ({ p }: { p: BaseIdlBuildGuideProps }) => (
   <Dialog open={p.open} onOpenChange={p.onOpenChange}>
     <DialogTrigger asChild>
       <Button variant="outline" aria-label={TRIGGER}>
@@ -301,5 +320,10 @@ const BaseIdlBuildGuide = (p: BaseIdlBuildGuideProps) => (
     </DialogContent>
   </Dialog>
 );
+
+const BaseIdlBuildGuide = (p: BaseIdlBuildGuideProps) => {
+  if (p.availability === "coming-soon") return <ComingSoonTrigger />;
+  return <Guide p={p} />;
+};
 
 export default BaseIdlBuildGuide;

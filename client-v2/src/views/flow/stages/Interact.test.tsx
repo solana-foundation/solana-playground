@@ -50,8 +50,10 @@ vi.mock("../../../utils", async () => {
       get currentWorkspaceId() {
         return mocks.workspaceId;
       },
+      onDidSaveFile: mocks.noop,
       onDidSwitchWorkspace: mocks.noop,
     },
+    PgFramework: { getFromFiles: async () => undefined },
     PgProgramInfo: {
       get customPk() {
         return mocks.customPk;
