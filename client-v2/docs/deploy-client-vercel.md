@@ -6,6 +6,9 @@ Every Makefile target acts on the Vercel project `VERCEL_DEPLOY_PROJECT_ID` name
 
 ## Release checklist: `client-v2` to production
 
+The Foundation's production on Cloud SQL is set up by the [production runbook](production-runbook.md) instead; this
+checklist describes a project whose production database is on Neon.
+
 Nothing below has been run end to end yet — see [Known gaps](#known-gaps). The
 order is the point: each step assumes the ones above it, and steps 1–7 come
 **before** the first production build of `client-v2`. `master` already
@@ -35,6 +38,11 @@ as soon as the Root Directory points at `client-v2`.
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `SENTRY_AUTH_TOKEN`: a production build fails without it
+     (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
+     Sensitive variable as an empty value, which fails the same way, so a
+     production built locally needs it stored as a variable that is not
+     Sensitive.
    - `PG_AI_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
      `GITHUB_CLIENT_SECRET`, `DATABASE_URL`) and the [firewall](firewall.md)
      rules. `/api/agent` answers only signed-in users, and a production build
@@ -338,27 +346,83 @@ and the request rate per client is capped by the [firewall](firewall.md) rules.
 
 ### Default backend spend
 
-The upstream is Vercel AI Gateway (HOO-1751, OpenSpec change
-`default-backend-cost-gate`). Three limits stack:
+The upstream is Nous Research, the `PG_AI_BASE_URL` default, paid from the
+client's prepaid Nous credits (HOO-1751, OpenSpec change
+`default-backend-cost-gate`). Vercel AI Gateway is the documented fallback,
+for when those credits are used up ([Fallback: Vercel AI
+Gateway](#fallback-vercel-ai-gateway)). Three limits stack:
 
-- **The Gateway's budgets, the ceiling.** Each tier spends through its own
-  Gateway API key with a daily budget, and the team has a monthly budget above
-  both. They are set in the Gateway dashboard, outside our code, so they hold
-  even when the ledger below is wrong. A budget is soft: the request that
-  crosses it completes, at most one worst-case turn (about $0.023).
+- **The keys' spend limits, the ceiling.** Each tier spends through its own
+  Nous key, each with a daily and a monthly spend limit set in the Nous
+  dashboard, outside our code, so they hold even when the ledger below is
+  wrong. Past its limit a key is refused with `402`
+  `key_spend_limit_reached`. The daily limit is a rolling window that starts
+  with the key's first request, not a fixed hour. The prepaid balance, with
+  no auto top-up, bounds everything beyond the keys.
 - **A per-user daily cap, by tier.** A signed-in user is `newcomer` while their
   GitHub account is younger than `PG_AI_NEWCOMER_AGE_DAYS`, or its creation
   date is not stored yet, and `established` after. `/api/agent` keeps a ledger
   in Postgres (`agent_spend`): a turn reserves its worst-case cost before the
-  upstream call and settles to the reported usage once the response has ended.
+  upstream call and settles to what it cost once the response has ended.
   The date is stored at sign-in, or looked up from GitHub after the user's
-  first turn when sign-in did not store it.
+  first turn when sign-in did not store it. The cap resets at 00:00 UTC.
 - **Bounds on one request.** A body over `PG_AI_MAX_BODY_BYTES` is refused, and
   every upstream request carries `max_completion_tokens`, so a turn's worst case is known
-  before the call. Every request also restricts the Gateway to
-  `PG_AI_PROVIDERS`.
+  before the call.
 
-Every day boundary is 00:00 UTC, where the Gateway's daily budgets reset too.
+The model id `z-ai/glm-5.3-flash:US` is Nous's Fireworks-hosted US SKU, so
+turns stay in the US with no routing field.
+
+**Nous setup, once, by a person** (no agent handles the keys):
+
+1. Create two keys in the Nous dashboard, `established` and `newcomer`, each
+   with a daily and a monthly spend limit: `newcomer` $10 a day and $250 a
+   month, `established` $50 a day and $1,250 a month. The $1,500 monthly
+   total needs sign-off before it is set.
+2. Name the person who tops up the prepaid balance. There is no auto top-up:
+   an empty balance refuses every turn with `pool-exhausted` until credits are
+   added, and `/api/agent` reports it to Sentry as the `api:agent` error
+   `upstream credit balance is empty`. Nous has no API for the balance or a
+   key's limit; read both in the dashboard.
+3. Set the variables below in Vercel, for Production and Preview.
+   `PG_AI_BASE_URL` and `PG_AI_MODEL` stay unset, on the Nous defaults.
+
+| Variable | Value on Nous |
+| --- | --- |
+| `PG_AI_API_KEY` | The `established` key. Secret |
+| `PG_AI_NEWCOMER_API_KEY` | The `newcomer` key. Secret. Optional: without it newcomers spend through `PG_AI_API_KEY`, still held to the newcomer cap, and the pools are shared |
+
+The limits are optional and default to the starting values in the change's
+`design.md`; each is read by `agentEnv` (`src/shared/config/server-env.mjs`):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `PG_AI_PROVIDERS` | `baseten,fireworks` when `PG_AI_BASE_URL` is the Gateway, none otherwise | Gateway provider slugs a turn may be served by: the US-region endpoints for the model with zero data retention and no training. Any other upstream refuses the field (Nous: `400 unknown_parameter`), so it gets none by default. Set but empty, it sends no restriction even to the Gateway. Check `/v1/models/<model>/endpoints` before changing it |
+| `PG_AI_PRICE_INPUT` / `PG_AI_PRICE_OUTPUT` | `0.2475` / `0.825` | USD per million tokens, Nous's price for the default model. These prices size the reservation and set the floor of the charge: a turn is charged the larger of the `usage.cost` the upstream reports and its tokens at these prices. Above the Gateway's list price ($0.15 / $0.50), so on the fallback they overcharge, never under, even where the Gateway reports `cost: 0` |
+| `PG_AI_MAX_BODY_BYTES` | `524288` | A larger body is refused with `413` |
+| `PG_AI_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_completion_tokens` |
+| `PG_AI_NEWCOMER_AGE_DAYS` | `30` | Younger GitHub accounts are `newcomer` |
+| `PG_AI_NEWCOMER_DAILY_CAP` | `0.10` | USD per user per UTC day |
+| `PG_AI_ESTABLISHED_DAILY_CAP` | `0.50` | USD per user per UTC day |
+
+A malformed number falls back to its default and logs `server-env: ...`.
+
+**Order.** The change adds a migration (`agent_spend` and
+`"user"."githubCreatedAt"`): run `migrate-production-db` first, then merge to
+`master` ([Conversation and project sync](#conversation-and-project-sync)).
+The keys and the merge can come in either order: without
+`PG_AI_NEWCOMER_API_KEY`, newcomers spend through `PG_AI_API_KEY`, and the
+ledger and caps apply already.
+
+#### Fallback: Vercel AI Gateway
+
+The Gateway is a change of variables, with no code. Its budgets play the part
+of the Nous key limits: a daily budget per key under a team monthly budget,
+refusing with `402` `quota_for_entity_exceeded`, and an empty balance with
+`402` `insufficient_funds`; `/api/agent` treats both as it treats the Nous
+codes. A budget is soft: the request that crosses it completes, at most one
+worst-case turn. Every request to the Gateway is restricted to
+`PG_AI_PROVIDERS`.
 
 **Gateway setup, once, by a person** (no agent handles the keys):
 
@@ -386,31 +450,8 @@ Every day boundary is 00:00 UTC, where the Gateway's daily budgets reset too.
 | `PG_AI_API_KEY` | The `established` key. Secret |
 | `PG_AI_NEWCOMER_API_KEY` | The `newcomer` key. Secret. Optional: without it newcomers spend through `PG_AI_API_KEY`, still held to the newcomer cap, and the pools are shared |
 
-The limits are optional and default to the starting values in the change's
-`design.md`; each is read by `agentEnv` (`src/shared/config/server-env.mjs`):
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `PG_AI_PROVIDERS` | `baseten,fireworks` when `PG_AI_BASE_URL` is the Gateway, none otherwise | Gateway provider slugs a turn may be served by: the US-region endpoints for the model with zero data retention and no training. Any other upstream refuses the field (Nous: `400 unknown_parameter`), so it gets none by default. Set but empty, it sends no restriction even to the Gateway. Check `/v1/models/<model>/endpoints` before changing it |
-| `PG_AI_PRICE_INPUT` / `PG_AI_PRICE_OUTPUT` | `0.15` / `0.50` | USD per million tokens, the Gateway's list price. The ledger charges reported usage at these prices: the cost in the Gateway's streamed usage is undocumented, so it is not used |
-| `PG_AI_MAX_BODY_BYTES` | `524288` | A larger body is refused with `413` |
-| `PG_AI_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_completion_tokens` |
-| `PG_AI_NEWCOMER_AGE_DAYS` | `30` | Younger GitHub accounts are `newcomer` |
-| `PG_AI_NEWCOMER_DAILY_CAP` | `0.10` | USD per user per UTC day |
-| `PG_AI_ESTABLISHED_DAILY_CAP` | `0.50` | USD per user per UTC day |
-
-A malformed number falls back to its default and logs `server-env: ...`.
-
-**Order.** The change adds a migration (`agent_spend` and
-`"user"."githubCreatedAt"`): run `migrate-production-db` first, then merge to
-`master` ([Conversation and project sync](#conversation-and-project-sync)). The
-merge alone moves nothing: with `PG_AI_BASE_URL` unset, turns still go to the
-Nous Research default, with no provider restriction, and the ledger and caps
-apply to them already.
-
-**The switch** to the Gateway is a change of variables, not of code, and can
-come before or after the merge. In Vercel, for Production (and Preview, to try
-it there first):
+**The switch** to the Gateway is a change of variables, not of code. In
+Vercel, for Production (and Preview, to try it there first):
 
 1. **Set** `PG_AI_BASE_URL` to `https://ai-gateway.vercel.sh/v1` and
    `PG_AI_MODEL` to `zai/glm-5.3-flash`. Setting the base URL is the switch:
@@ -422,19 +463,18 @@ it there first):
    refused the default backend`), so change the base URL and the key together.
 3. Redeploy: a function reads its variables when the deployment is built.
 
-A day after production traffic moves to the Gateway, revoke the Nous Research
-key, so nothing can spend outside the budgets.
+A day after production traffic moves to the Gateway, revoke the Nous keys, so
+nothing can spend outside the budgets.
 
-**Rollback**, before the Nous key is revoked (on a project that still sets any
-`AGENT_*` twin, change or delete it alongside: an unset `PG_AI_*` falls back to
-it): restore the previous
-`PG_AI_API_KEY`, unset `PG_AI_NEWCOMER_API_KEY` (left set, newcomers' turns
-send its Gateway key to Nous and get `502`), and unset `PG_AI_BASE_URL` and
-`PG_AI_MODEL` (or set them back to the Nous values), then redeploy. Unset,
-`PG_AI_PROVIDERS` follows the base URL and sends no restriction to Nous; if it
-was set by hand, unset it too, since Nous refuses the restriction. The ledger works against any
-upstream that reports usage on the stream. After the Nous key is revoked, a
-rollback needs a new one.
+**Back to Nous**, before the Nous keys are revoked (on a project that still
+sets any `AGENT_*` twin, change or delete it alongside: an unset `PG_AI_*`
+falls back to it): restore the Nous `PG_AI_API_KEY` and
+`PG_AI_NEWCOMER_API_KEY` (a Gateway key sent to Nous gets `502`), and unset
+`PG_AI_BASE_URL` and `PG_AI_MODEL`, then redeploy. Unset, `PG_AI_PROVIDERS`
+follows the base URL and sends no restriction to Nous; if it was set by hand,
+unset it too, since Nous refuses the restriction. The ledger works against any
+upstream that reports usage on the stream. After the Nous keys are revoked,
+going back needs new ones.
 
 What `POST /api/agent` answers past sign-in:
 
@@ -442,15 +482,18 @@ What `POST /api/agent` answers past sign-in:
 | --- | --- |
 | `413` | The body is larger than `PG_AI_MAX_BODY_BYTES`. No charge |
 | `429`, `reason: "daily-cap"` | The turn's worst case would pass the user's cap today. Carries `tier` and `Retry-After` (seconds to 00:00 UTC). The upstream is not called |
-| `503`, `reason: "pool-exhausted"` | The Gateway answered `402` `quota_for_entity_exceeded` (the tier's key or the team is out of budget) or `insufficient_funds`. Carries `tier` and `Retry-After`; logged as `agent: tier pool exhausted`. No charge |
-| `503`, no `reason` | The ledger could not be read; logged as `agent: spend ledger unavailable`. The upstream is not called |
+| `503`, `reason: "pool-exhausted"` | The upstream answered `402`, whatever its code. Carries `tier`, and the upstream's `Retry-After` when it sent one (a key's daily window is the upstream's to know). No charge. Logged by cause: `key_spend_limit_reached` (Gateway: `quota_for_entity_exceeded`) as the `api:agent` warning `tier key limit reached`; `insufficient_credits_for_paid_model` (Gateway: `insufficient_funds`) reported to Sentry as `upstream credit balance is empty`, which needs a person to add credits; any other `402` reported as `upstream 402 with an unknown cause`, with its body |
+| `503`, no `reason` | The ledger could not be read; reported to Sentry as an `api:agent` error with the database's message and `code`. The upstream is not called |
 
-A turn is charged its reported usage; a turn the caller abandoned, or one that
+A turn is charged the larger of the `usage.cost` the upstream reported and
+its tokens at the prices, or the one of the two its usage allows; a turn the caller abandoned, or one that
 ended without usage, its whole reservation; a turn the upstream refused,
 nothing. A function that dies between reserve and settle leaves the
 reservation spent for the day and its `agent_turn` row `started`: the ledger
-may overcharge, never undercharge. Failures after the answer are logged as
-`agent: counting a capped turn failed` and `agent: account age lookup failed`;
+may overcharge, never undercharge. Failures after the answer are reported as
+`api:agent` errors with the database's message (counting a capped turn, with
+its `tier` and `day`) and, for the account age, as the `agent:account-age`
+warning `account age not learned` or an error with the database's message;
 a settle that fails is reported as an `api:agent` error with the database's
 message, carrying the turn's `turnId`, `end`, `reserved` and `charge`. A
 settle that finds no
@@ -462,12 +505,14 @@ mid-turn, a lost charge record otherwise.
 
 - `agent_refused` in analytics, by `reason` and `tier`: how often each tier
   reaches its cap (`daily-cap`) or its pool (`pool-exhausted`). Frequent
-  `pool-exhausted` for `established` means the key's daily budget is too low
+  `pool-exhausted` for `established` means the key's daily limit is too low
   for the users it serves; frequent `daily-cap` with little `pool-exhausted`
   means the per-user cap binds first.
-- The Gateway's logs and spend, per key: the actual cost per turn, which
-  replaces the design's estimate of a typical step, and how close each key
-  comes to its daily budget.
+- The Nous dashboard's spend per key and the balance: how close each key comes
+  to its limits, and how long the balance lasts. `agent_turn.charged` holds
+  each completed turn's charge, its reported cost unless the tokens at the
+  prices came to more, which replaces the design's estimate of a typical
+  step.
 - `agent_spend` for the spread: `select day, count(*), sum(spent) / 1e6 as usd
   from agent_spend group by day order by day desc`.
 
@@ -490,8 +535,8 @@ mid-turn, a lost charge record otherwise.
   before the `model` migration keeps settling after it, as rows with no
   `model`.
 
-Adjust the caps and budgets together: the sum of per-user caps a pool serves
-can exceed its budget, but the budget is what binds.
+Adjust the caps and key limits together: the sum of per-user caps a pool
+serves can exceed its key's limit, but the limit is what binds.
 
 **Rotating the keys.** `PG_AI_API_KEY` and `PG_AI_NEWCOMER_API_KEY` live only
 in Vercel's encrypted variables and are read only by server code, through
@@ -501,12 +546,13 @@ every run of eight or more of their characters from the error text it relays
 or logs (the upstream's own successful stream is forwarded as it comes). To rotate one, or
 after a suspected leak:
 
-1. Create a new key in the Gateway with the same daily budget as the old one.
+1. Create a new key at the upstream (the Nous dashboard, or the Gateway on the
+   fallback) with the same spend limits as the old one.
 2. Set it in Vercel for Production and Preview, replacing the old value.
-3. Redeploy, and send one turn as a signed-in user: the Gateway logs it under
-   the new key.
-4. Revoke the old key in the Gateway. After a leak, do this first and accept
-   the minutes of `502` until the redeploy is live.
+3. Redeploy, and send one turn as a signed-in user: the upstream's dashboard
+   shows its spend under the new key.
+4. Revoke the old key. After a leak, do this first and accept the minutes of
+   `502` until the redeploy is live.
 
 ## Sources catalogue
 
