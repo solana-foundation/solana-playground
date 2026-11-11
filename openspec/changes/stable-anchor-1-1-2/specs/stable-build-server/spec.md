@@ -95,3 +95,15 @@ the response.
 
 - **WHEN** a reviewer reads `server/Cargo.toml`
 - **THEN** it has no `anchor-syn` dependency
+
+### Requirement: A build that fails outside the compiler is a server failure
+
+When `cargo-build-sbf` exits non-zero and its output carries no compile error, the stable `/build` route SHALL
+answer with the error "Build failed on the server" and SHALL NOT return the build output, which names server paths
+and the toolchain. The server SHALL log the output's last 4096 characters. A compile error SHALL still return its
+full output.
+
+#### Scenario: A dependency that does not resolve (manual)
+
+- **WHEN** a program's build fails before compiling, for example on a dependency the lock cannot resolve
+- **THEN** `/build` answers with "Build failed on the server", and the server log holds the cargo error

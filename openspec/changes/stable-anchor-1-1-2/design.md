@@ -68,7 +68,7 @@ Rust Playground, so a second one is a duplicate TOML table. Not `solpg`: the pro
 `solana-address` 1.1.0 is only `pub use solana_address_v2::*`, its 2.x release under a renamed dependency. The
 generator, the client loader, and the wasm identify a crate by name, so 2.x had no file. The generator writes a
 renamed dependency's resolved source as `<alias>.rs`, and `load_dependency` maps the alias. Alternative: identify
-crates by name and version in all three places. Deferred (ticket to file, TODOs at each site): correct for every
+crates by name and version in all three places. Deferred (HOO-2754, TODOs at each site): correct for every
 case, but a larger change to the crate graph than this change needs.
 
 **`CopyButton` reports success.** The installed `CopyButton` had no success callback, and
@@ -94,7 +94,7 @@ render without commands until the fetch resolves.
 **A feature slice with a Base pair, opened from the legacy Flow.** `features/idl-build-guide` holds
 `ui/BaseIdlBuildGuide.tsx` (steps, method, copy, and download handlers through props), `ui/IdlBuildGuide.tsx`
 (export, telemetry, logger `idl-build-guide:ui`), `model/steps.ts` (the step table per method, ids matching the
-`step` event values), `model/telemetry.ts`, and `index.ts`. It uses the installed `dialog`, `segmented`,
+`step` event values), `model/telemetry.ts`, and `index.ts`. It uses the installed `dialog`, `radio-group`, `drop-zone`,
 `code-block`, and `copy-button` from `shared/ui`; copy failures go through `reportButtonFailure("copy the command")`.
 `views/flow/stages` (a legacy root) renders `IdlBuildGuide` beside `IdlActions`, passing `surface`.
 
@@ -131,8 +131,8 @@ published architecture. Task 2.2 confirms the image's entrypoint, user, and tag 
   cannot call, with the reason.
 - [The image writes `target/` as root on Linux hosts] → the guide's last step names the file; task 2.2 records
   whether `--user "$(id -u):$(id -g)"` is needed and adds it to the command if so.
-- [An uploaded IDL goes stale after the user edits instructions] → accepted; the guide's last step says to rebuild
-  the IDL after changing the program's interface.
+- [An uploaded IDL goes stale after the user edits instructions] → accepted: nothing prompts a rebuild; after changing
+  instructions the user builds and uploads the IDL again.
 
 ## Migration Plan
 

@@ -73,7 +73,7 @@ time. Every task: ticket to file.
   that crate, and its existing lints go to a separate PR). Depends on 1.5.
 - [x] 3.5 Serve a renamed dependency (`alias = { package = "x" }`) under its alias: `generate-crates.mjs` writes the
   resolved version's source as `<alias>.rs` and `<alias>.toml`, and `load_dependency` in `wasm/rust-analyzer` maps
-  the alias to that file. Leave a TODO (ticket to file) at the generator, the client loader (`rust-analyzer.ts`
+  the alias to that file. Leave a TODO (HOO-2754) at the generator, the client loader (`rust-analyzer.ts`
   `cachedNames`), and `get_file_id`, describing keying crates by name and version. Verify: hovering `Pubkey` in the
   Native starter shows its definition from `solana_address`, and `Pubkey::find_` completes in an Anchor project.
   Depends on 3.4.
