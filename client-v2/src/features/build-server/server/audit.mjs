@@ -15,6 +15,16 @@ const log = createServerLogger("build-server:audit");
  */
 
 /**
+ * The user's GitHub account id, which names them on the row when `login` is
+ * empty: sign-in stores a login only when it creates the user, so one created
+ * before the column or through the OAuth proxy on a preview has none.
+ */
+const GITHUB_ID = `select "accountId" from account
+                    where "userId" = $1 and "providerId" = 'github'
+                    order by "updatedAt" desc
+                    limit 1`;
+
+/**
  * Open the row for a build. Throws when it cannot be written, and the route
  * refuses the build then: an unrecorded build is the thing this prevents.
  *
@@ -31,8 +41,10 @@ export const startAuditWith =
   async ({ userId, project, unstable, bytes }) => {
     const { rows } = await query(
       `insert into build_audit
-       (user_id, login, project_id, project_name, unstable, request_bytes)
-     values ($1, (select login from "user" where id = $1), $2, $3, $4, $5)
+       (user_id, login, github_id, project_id, project_name, unstable,
+        request_bytes)
+     values ($1, (select login from "user" where id = $1), (${GITHUB_ID}),
+             $2, $3, $4, $5)
      returning id`,
       [userId, project.id, project.name, unstable, bytes]
     );

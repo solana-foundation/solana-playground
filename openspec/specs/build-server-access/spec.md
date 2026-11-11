@@ -72,7 +72,8 @@ request SHALL NOT reach the build server.
 ### Requirement: Every build is recorded
 
 The route SHALL write one `build_audit` row per forwarded build before the
-build server is called, holding the user id, the GitHub login, the time, the
+build server is called, holding the user id, the GitHub account id, the
+GitHub login when the user has one stored, the time, the
 project id and name the client sent, whether the route was unstable and the
 request size; and SHALL complete it with the program UUID (the server's, else
 the request's, and only a UUID), the status and the duration once the build
@@ -84,8 +85,8 @@ the route SHALL answer `503` and not call the build server.
 #### Scenario: A build on record (manual)
 
 - **WHEN** a signed-in user builds project "hello-anchor"
-- **THEN** one row names that user, the project, the program UUID, status
-  `200` and the duration
+- **THEN** one row names that user and their GitHub account id, the project,
+  the program UUID, status `200` and the duration
 
 #### Scenario: The database is down (manual)
 

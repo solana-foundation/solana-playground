@@ -23,6 +23,10 @@ describe("startAuditWith", () => {
     const [text, params] = query.mock.calls[0].arguments;
     assert.match(text, /insert into build_audit/);
     assert.match(text, /select login from "user" where id = \$1/);
+    assert.match(
+      text,
+      /select "accountId" from account\s+where "userId" = \$1 and "providerId" = 'github'/
+    );
     assert.deepEqual(params, ["u1", "p1", "hello", false, 120]);
   });
 

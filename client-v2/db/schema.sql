@@ -118,6 +118,7 @@ CREATE TABLE public.build_audit (
     request_bytes integer NOT NULL,
     status integer,
     duration_ms integer,
+    github_id text,
     CONSTRAINT build_audit_duration_check CHECK (((duration_ms IS NULL) OR (duration_ms >= 0))),
     CONSTRAINT build_audit_request_bytes_check CHECK ((request_bytes >= 0))
 );
@@ -553,6 +554,7 @@ COPY public.schema_migrations (version) FROM stdin;
 20261102190000
 20261105120000
 20261106120000
+20261112000000
 \.
 
 
