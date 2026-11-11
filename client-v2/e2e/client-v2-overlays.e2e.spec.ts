@@ -2,7 +2,8 @@ import type { Locator, Page } from "@playwright/test";
 
 import { requireFor } from "../src/test-utils/require-for";
 import { expect, test } from "./fixtures";
-import { lineOf, linesOn } from "./telemetry";
+import { lineOf, linesOn, linesRead } from "./telemetry";
+import { waitForPhonePage } from "./viewports";
 
 const file = (page: Page, name: string): Locator =>
   page.locator("#root-dir").getByText(name, { exact: true });
@@ -95,6 +96,7 @@ test("client-v2-overlays: A dialog closes the Files sheet on a phone", async ({
   seededPage: page,
 }) => {
   await page.setViewportSize({ width: 390, height: 800 });
+  await waitForPhonePage(page, "Work");
   await page.getByRole("button", { name: /^Files/ }).click();
   const sheet = page.locator('[data-slot="sheet-content"]');
   await expect(sheet).toBeVisible();
@@ -162,6 +164,7 @@ test("client-v2-overlays: Events of a failing dialog", async ({
     "name: rename-item"
   );
   // The dialog is reported once, and no event carries what the user typed
+  await linesRead(lines);
   const overlayLines = lines.filter((line) =>
     line.startsWith("[telemetry:event] overlay_")
   );

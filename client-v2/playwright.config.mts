@@ -11,6 +11,7 @@ import {
   describeHolders,
   queuePort,
 } from "./scripts/e2e-queue.mjs";
+import { CHROMIUM, FIREFOX } from "./scripts/e2e-projects.mjs";
 import { fullSuiteRefusal } from "./scripts/e2e-scope.mjs";
 
 // `craco start` binds `PORT`, so the same variable picks the server the run
@@ -109,6 +110,18 @@ const takeQueueSlot = () => {
 const port = queued ? takeQueueSlot() : ownPort ?? 3000;
 const origin = `http://localhost:${port}`;
 
+// A plain local run stays on Chromium and its memory budget. Playwright 1.62 has no
+// `TestProject.default`, so `firefox` exists only when a `--project` can pick it.
+const ALL_PROJECTS_ENV = "E2E_ALL_PROJECTS";
+// Workers get no `--project` in their argv; the runner's answer reaches them through the environment.
+if (process.argv.some((arg) => arg.split("=", 1)[0] === "--project")) {
+  process.env[ALL_PROJECTS_ENV] = "1";
+}
+const shouldIncludeAllProjects = process.env[ALL_PROJECTS_ENV] === "1";
+
+/** Specs about a Firefox-only failure, which the `chromium` project leaves out */
+const FIREFOX_ONLY_SPECS = /-firefox\.e2e\.spec\.ts$/;
+
 /** A saved layout with every column but the console open */
 const TREE_OPEN_LAYOUT = JSON.stringify({
   v: 2,
@@ -152,6 +165,8 @@ const decision = devServerDecision();
 // for the one spec compiled cold inside a shard's `globalTimeout` (HOO-2680).
 const KEY_ORIGIN_SPEC = "**/wallet-key-origin.e2e.spec.ts";
 const keyOriginRun = !!process.env.REACT_APP_WALLET_KEY_ORIGIN;
+// A project's own `testIgnore` replaces this one, so `chromium` repeats it.
+const KEY_ORIGIN_IGNORE = keyOriginRun ? [] : [KEY_ORIGIN_SPEC];
 
 /**
  * Browser-level tests. Kept out of `src` so vitest never collects them -
@@ -164,7 +179,7 @@ export default defineConfig({
   testMatch: keyOriginRun
     ? KEY_ORIGIN_SPEC
     : "**/*.@(spec|test).?(c|m)[jt]s?(x)",
-  testIgnore: keyOriginRun ? [] : KEY_ORIGIN_SPEC,
+  testIgnore: KEY_ORIGIN_IGNORE,
   // The dev server is slow to boot: wasm chunks plus the generate step
   //
   // Per test. 30s was under what the slowest specs actually need: the
@@ -247,6 +262,16 @@ export default defineConfig({
     // Watch the flow at human speed: SLOWMO=600 yarn test-e2e --headed
     launchOptions: { slowMo: Number(process.env.SLOWMO ?? 0) },
   },
+  projects: [
+    {
+      name: CHROMIUM,
+      use: { browserName: CHROMIUM },
+      testIgnore: [...KEY_ORIGIN_IGNORE, FIREFOX_ONLY_SPECS],
+    },
+    ...(shouldIncludeAllProjects
+      ? [{ name: FIREFOX, use: { browserName: FIREFOX } }]
+      : []),
+  ],
   webServer: {
     // `dev` runs `generate-fast`, then `generate-dev-crates`, which skips on
     // the stubs and on CI finds the restored crates current by key. A machine's

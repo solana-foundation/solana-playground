@@ -6,6 +6,7 @@ name: client-v2 checks
 #
 # Every action is pinned to a commit, the version tag beside it: a tag can
 # be moved, a commit cannot.
+# Runners are pinned to `ubuntu-26.04`, so the Chromium and Firefox results come from one known image; `ubuntu-latest` moves on GitHub's schedule.
 on:
   workflow_call:
     inputs:
@@ -16,6 +17,10 @@ on:
       use-wasm-stubs:
         type: boolean
         required: true
+      # `true` adds a `firefox` entry to every shard of the `e2e` matrix.
+      firefox:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -34,7 +39,7 @@ jobs:
   wasm:
     name: wasm packages
     if: ${{ !inputs.use-wasm-stubs }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # A cold build takes about an hour on a laptop.
     timeout-minutes: 150
     # The e2e shards restore the crates the steps below cache, by this key.
@@ -154,7 +159,7 @@ jobs:
     needs: wasm
     # `wasm` is skipped on stubs; a skipped need would skip this job too.
     if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       CI: "true"
@@ -306,7 +311,7 @@ jobs:
     name: build
     needs: wasm
     if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       CI: "true"
@@ -417,10 +422,10 @@ jobs:
   # shard's json report and checks the skips there against
   # `e2e/known-skips.txt`. `playwright.config.mts` says what `CI` changes.
   e2e:
-    name: e2e (${{ matrix.shard }})
+    name: e2e (${{ matrix.browser }}, ${{ matrix.shard }})
     needs: wasm
     if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Measured on run 40369790881 (2026-10-26, 278 tests): about 4 minutes
     # from checkout to the first test (install, browser, dev-server compile),
     # and the slowest of four shards holds about 7 minutes of tests. By run
@@ -447,12 +452,15 @@ jobs:
       # A red shard leaves the others running, so one run reports every
       # failure and `e2e-report` sees every report.
       fail-fast: false
-      # The list is 1..N without gaps: `strategy.job-total` is its length and
-      # the divisor in the `--shard` argument of `Browser tests`, and a shard
-      # index the matrix skips is a slice nobody runs while this job stays
-      # green. `e2e-report` fails on the gap.
+      # `shard` lists 1..N without gaps and `shards` holds N, the `--shard`
+      # divisor; a shard index the list skips is a slice nobody runs while
+      # this job stays green, so `e2e-report` fails on the gap, per browser.
+      # N is a matrix value, not `strategy.job-total`: a run filtered to some
+      # jobs (`act --matrix`) would divide by the wrong count.
       matrix:
+        browser: ${{ fromJSON(inputs.firefox && '["chromium","firefox"]' || '["chromium"]') }}
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shards: [8]
 
     defaults:
       run:
@@ -501,20 +509,28 @@ jobs:
       #
       # restore + save rather than `actions/cache`, whose post step saves
       # only when the job succeeds: while the suite is red, every run would
-      # download Chromium again, and a red suite is when runs are frequent.
+      # download the browser again, and a red suite is when runs are frequent.
+      # The key names the shard's browser: a cache saved by the other browser
+      # holds no binary for this one, and a hit would skip its install. It
+      # names the runner image too (`ImageOS`, e.g. `ubuntu26`): `runner.os` is
+      # `Linux` on every release, so a browser built on another image would load.
+      # And `runner.arch`: an arm64 act run on the same image saved an aarch64
+      # Firefox that an amd64 run restored and failed to spawn (ENOENT).
       - name: Playwright version
         id: playwright
-        run: echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS:?a GitHub-hosted runner sets ImageOS}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: yarn playwright install --with-deps chromium
+        run: yarn playwright install --with-deps ${{ matrix.browser }}
 
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.playwright-cache.outputs.cache-hit != 'true'
@@ -524,7 +540,7 @@ jobs:
 
       - name: Install Playwright system dependencies
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: yarn playwright install-deps chromium
+        run: yarn playwright install-deps ${{ matrix.browser }}
 
       # `yarn dev` runs `generate-fast` and `generate-dev-crates` (current by key
       # from the restored cache, skipped on stubs) itself before `craco start`, and the
@@ -534,7 +550,7 @@ jobs:
       # fails `e2e-report`. The `@live-links` specs reach github.com, so a
       # GitHub outage cannot turn a PR red: `client-v2-live-links.yml` runs them.
       - name: Browser tests
-        run: yarn test-e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }} --grep-invert "${{ inputs.use-wasm-stubs && '@real-wasm|@live-links' || '@live-links' }}"
+        run: yarn test-e2e --project=${{ matrix.browser }} --shard=${{ matrix.shard }}/${{ matrix.shards }} --grep-invert "${{ inputs.use-wasm-stubs && '@real-wasm|@live-links' || '@live-links' }}"
 
       # Traces, screenshots and the per-test error context of what failed.
       # Open a trace with `yarn playwright show-trace <file>`. `always()`,
@@ -544,7 +560,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: playwright-test-results-${{ matrix.shard }}
+          name: playwright-test-results-${{ matrix.browser }}-${{ matrix.shard }}
           path: client-v2/test-results/
           retention-days: 7
           if-no-files-found: warn
@@ -652,7 +668,7 @@ jobs:
   # second pass of the same script, after the shards'.
   e2e-report:
     name: e2e-report
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: [e2e, e2e-key-origin]
     if: always()
@@ -669,6 +685,7 @@ jobs:
           sparse-checkout: |
             client-v2/e2e/known-skips.txt
             client-v2/scripts/e2e-report.mjs
+            client-v2/scripts/e2e-projects.mjs
             client-v2/.nvmrc
           sparse-checkout-cone-mode: false
 
@@ -685,7 +702,7 @@ jobs:
           path: client-v2/shard-reports
 
       # Playwright writes `config.shard` as `{ total, current }` into the
-      # json report. The reports must agree on `total` and cover 1..total: a
+      # json report. Each browser's reports must agree on `total` and cover 1..total: a
       # cancelled shard, a shard that never reached a report, or a lost
       # upload is a slice nobody checked, not a pass. A skipped test is green
       # to Playwright, and so is one that passed on its retry; the reporters
@@ -693,7 +710,10 @@ jobs:
       # `e2e/known-skips.txt` fails the job, a listed test that no longer
       # skips is a warning to prune the list, and a flaky test is a warning
       # with its title -- work to do, not a pass.
+      # The expression of the `e2e` matrix's `browser`, so a run that lost every report of one browser fails here.
       - name: Check the shards and their skips
+        env:
+          E2E_PROJECTS: ${{ join(fromJSON(inputs.firefox && '["chromium","firefox"]' || '["chromium"]'), ',') }}
         run: node scripts/e2e-report.mjs shard-reports e2e/known-skips.txt
 
       # The `e2e-key-origin` job's report, a run of its own (`--shard=1/1`),
@@ -711,6 +731,8 @@ jobs:
 
       - name: Check the key-origin run and its skips
         if: always()
+        env:
+          E2E_PROJECTS: chromium
         run: node scripts/e2e-report.mjs key-origin-reports /dev/null
 
   # A called workflow whose jobs were skipped still concludes `success`, and
@@ -719,7 +741,7 @@ jobs:
   # A job added above joins `needs` and the list below.
   gate:
     name: gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: [wasm, checks, build, e2e, e2e-key-origin, e2e-report]
     if: always()

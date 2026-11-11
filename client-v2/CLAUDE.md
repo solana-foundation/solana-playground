@@ -615,13 +615,18 @@ reason.
   and leaves them out. It needs no server and no Postgres: every spec stubs
   the account endpoints with `page.route`, and the dev server serves
   `api/*.mjs` itself. The assistant's specs stub `/api/agent` the same way,
-  so none depends on the machine's default backend. Two sync tests ("switching
-  tabs mid-debounce raises no conflict", "reloading a project the account
-  already has writes nothing") are `test.fixme` on the runner, where the
-  load's timing differs and the sync races they guard show. The two are
-  listed by title in `e2e/known-skips.txt`; the `e2e-report` job checks the
-  list once, over every shard's report, and fails on any skip that is not in
-  the list and warns on an entry that no longer skips. CI retries a
+  so none depends on the machine's default backend. The suite runs on
+  Chromium every time, and on Firefox too for a PR that changes `wasm/`,
+  either client-v2 workflow, or a file under `client-v2/` outside the
+  Markdown no bundle loads (the `changes` job of `client-v2.yml`), and for a
+  manual run with the `firefox` input. Every test the suite expects to skip
+  is listed by title in `e2e/known-skips.txt`, with its reason in the test's
+  `test.skip` or `test.fixme`; a `[<project>] ` prefix, such as
+  `[firefox] `, limits a line to that Playwright project, and a line without
+  one matches every project, so a skip on one browser only takes the prefix.
+  The `e2e-report` job checks the list once, over every shard's report, and
+  fails on any skip that is not in the list and warns on an entry that no
+  longer skips. CI retries a
   failed spec once, because the runner is three times slower than a laptop and
   fails specs on timing alone; a pass on the retry is reported as **flaky**, named in the
   run's annotations, and is work to do, not a pass. Locally `retries` is 0,
@@ -630,6 +635,9 @@ reason.
   Locally, run only the specs your change touches:
   `yarn test-e2e e2e/<spec>.e2e.spec.ts`, with no `PORT`. The full suite is
   CI's; a local run without a spec stops with a message unless `E2E_FULL=1`.
+  A run without `--project` declares only the `chromium` project; add
+  `--project=firefox` for Firefox, and `make e2e-full` runs the full suite
+  on both browsers.
   A local run queues machine-wide before it starts its dev server, and the
   queue picks its port: slot N runs on `13900 + N`. At most `E2E_MAX_RUNS`
   runs (default 1) go at once across every worktree, each with 2 workers
