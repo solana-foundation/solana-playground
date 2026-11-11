@@ -28,6 +28,8 @@ vi.mock("../../../../utils", () => {
   return {
     PgConnection: {
       cluster: "devnet",
+      clusterIsStale: false,
+      hasClusterReadFailed: false,
       current: rpc.selected,
       getReadBufferConnection: () => rpc.readBuffer,
     },
@@ -85,6 +87,48 @@ const startedPort = () => {
   expect(port.program().id).toBe("Wa11et");
   return port;
 };
+
+describe("realDeployPort().refusal", () => {
+  // HOO-2728: right after a switch to a custom RPC the cached name is still
+  // the old network's, which may hide mainnet behind "devnet"
+  it("refuses while the network's name is still the previous endpoint's", () => {
+    Object.defineProperty(PgConnection, "clusterIsStale", {
+      value: true,
+      configurable: true,
+    });
+    try {
+      expect(realDeployPort().refusal()).toBe(
+        "The network is still loading. Try again in a moment."
+      );
+    } finally {
+      Object.defineProperty(PgConnection, "clusterIsStale", {
+        value: false,
+        configurable: true,
+      });
+    }
+  });
+});
+
+describe("realDeployPort().refusal on a failed read", () => {
+  // A custom RPC that is down never stops being stale; the learner gets the
+  // devnet line, not a wait that never ends
+  it("says devnet when the network's read failed", () => {
+    const set = (key: string, value: unknown) =>
+      Object.defineProperty(PgConnection, key, { value, configurable: true });
+    set("clusterIsStale", true);
+    set("hasClusterReadFailed", true);
+    set("cluster", undefined);
+    try {
+      expect(realDeployPort().refusal()).toBe(
+        "Tutorials deploy to devnet. Switch the network to devnet in Settings and try again."
+      );
+    } finally {
+      set("clusterIsStale", false);
+      set("hasClusterReadFailed", false);
+      set("cluster", "devnet");
+    }
+  });
+});
 
 describe("realDeployPort().writeBuffer", () => {
   beforeEach(() => {

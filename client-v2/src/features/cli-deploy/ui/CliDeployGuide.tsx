@@ -21,7 +21,7 @@ export interface CliDeployGuideProps {
 }
 
 /**
- * The cluster the guide opens on: Mainnet from the mainnet warning, else the
+ * The cluster the guide opens on: Mainnet from the Deploy stage on mainnet, else the
  * one Playground is on when it is Mainnet, Devnet or Testnet (a custom RPC
  * included, read by its genesis hash), else Devnet: Localnet and Surfpool
  * open on Devnet, since the guide is for the remote clusters.
@@ -30,7 +30,7 @@ const openingCluster = (
   from: GuideFrom,
   cluster: string | undefined
 ): CliCluster =>
-  from === "mainnet-warning" ? "mainnet" : cliClusterOf(cluster) ?? "devnet";
+  from === "mainnet-blocked" ? "mainnet" : cliClusterOf(cluster) ?? "devnet";
 
 /** The CLI deploy guide, connected: the program's name, the download, events */
 const CliDeployGuide = (p: CliDeployGuideProps) => {

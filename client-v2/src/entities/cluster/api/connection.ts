@@ -73,7 +73,22 @@ const CLUSTER_BY_GENESIS_HASH = new Map<string, Cluster>([
   ["5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d", "mainnet-beta"],
 ]);
 
-/** The public cluster `endpoint` serves, read from its genesis hash; throws for any other */
+/**
+ * An endpoint answered with a genesis hash that names no known cluster: a
+ * network of its own, not one that failed to answer
+ */
+export class UnknownClusterError extends Error {
+  constructor(genesisHash: string) {
+    super(`Genesis hash ${genesisHash} did not match any cluster`);
+    this.name = "UnknownClusterError";
+  }
+}
+
+/**
+ * The public cluster `endpoint` serves, read from its genesis hash. Throws
+ * `UnknownClusterError` for any other genesis, and the connection's own error
+ * when the endpoint does not answer.
+ */
 export const fetchClusterByGenesisHash = async (
   endpoint: string
 ): Promise<Cluster> => {
@@ -82,13 +97,13 @@ export const fetchClusterByGenesisHash = async (
   ).getGenesisHash();
   const cluster = CLUSTER_BY_GENESIS_HASH.get(genesisHash);
   if (!cluster) {
-    throw new Error(`Genesis hash ${genesisHash} did not match any cluster`);
+    throw new UnknownClusterError(genesisHash);
   }
   return cluster;
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("entities/cluster/api/connection", () => {
     it("shares one connection per endpoint and commitment", () => {
@@ -110,6 +125,37 @@ if (import.meta.vitest) {
       expect(getConnectionFor("processed")("https://first.test")).not.toBe(
         first
       );
+    });
+
+    // The mainnet refusal of deploys and `anchor idl` writes (`refuseMainnetWith`) rests on these three answers
+    describe("fetchClusterByGenesisHash", () => {
+      const answering = (answer: () => Promise<string>) =>
+        vi
+          .spyOn(Connection.prototype, "getGenesisHash")
+          .mockImplementationOnce(answer);
+
+      it("reads mainnet's genesis hash as mainnet-beta", async () => {
+        answering(async () => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
+        await expect(
+          fetchClusterByGenesisHash("https://genesis-mainnet.test")
+        ).resolves.toBe("mainnet-beta");
+      });
+
+      it("throws UnknownClusterError for a genesis no cluster names", async () => {
+        answering(async () => "Own1111");
+        await expect(
+          fetchClusterByGenesisHash("https://genesis-own.test")
+        ).rejects.toBeInstanceOf(UnknownClusterError);
+      });
+
+      it("passes a failed read on as itself, not as an unknown cluster", async () => {
+        answering(async () => {
+          throw new Error("fetch failed");
+        });
+        const read = fetchClusterByGenesisHash("https://genesis-down.test");
+        await expect(read).rejects.toThrow("fetch failed");
+        await expect(read).rejects.not.toBeInstanceOf(UnknownClusterError);
+      });
     });
 
     it("builds a new connection on every call with a fetch of its own", () => {

@@ -11,7 +11,7 @@ export type DownloadFrom = "build-stage" | "guide";
 export type CommandStep = "deploy" | "idl";
 
 /** Which control opened the guide */
-export type GuideFrom = "mainnet-warning" | "deploy-stage";
+export type GuideFrom = "mainnet-blocked" | "deploy-stage";
 
 type CliDeployEvents = {
   /** A program binary was fetched and handed to the browser to save. */

@@ -4,6 +4,7 @@ export {
   getConnectionFor,
   getNativeConnectionFor,
   getUnretriedConnectionFor,
+  UnknownClusterError,
 } from "./api/connection";
 export type {
   Cluster,

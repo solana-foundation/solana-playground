@@ -11,6 +11,7 @@ import {
 } from "../airdrop/closed-faucet";
 import { getAirdropVia } from "../airdrop/via";
 import { deploy } from "./deploy";
+import { DEPLOY_NETWORK_UNREAD } from "./mainnet-block";
 import type { DeployRunState } from "./run";
 import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
 
@@ -63,6 +64,7 @@ vi.mock("../../utils", () => {
   return {
     PgCommand: { airdrop: { execute: vi.fn(async () => {}) } },
     PgCommon: { formatSeconds: () => "1s", makePlural: (s: string) => s },
+    TerminalLineError: class TerminalLineError extends Error {},
     PgConnection: {
       cluster: "devnet",
       getCluster: vi.fn(async () => "devnet"),
@@ -344,10 +346,24 @@ describe("deploy run", () => {
     expect(PgCommand.airdrop.execute).not.toHaveBeenCalled();
   });
 
-  it("reports no network when the connection's cannot be read, not the one selected", async () => {
+  // HOO-2728: an endpoint that does not say which network it is could be
+  // mainnet, so nothing is sent on a guess
+  it("sends nothing when the connection's network cannot be read", async () => {
     const { PgConnection } = await import("../../utils");
     vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
       new Error("genesis hash unreadable")
+    );
+
+    await expect(handleDeploy()).rejects.toThrow(DEPLOY_NETWORK_UNREAD);
+    expect(balance).not.toHaveBeenCalled();
+    expect(PgCommand.airdrop.execute).not.toHaveBeenCalled();
+  });
+
+  it("records no network for one of its own, and deploys", async () => {
+    const { PgConnection } = await import("../../utils");
+    const { UnknownClusterError } = await import("@/entities/cluster");
+    vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
+      new UnknownClusterError("Own1111")
     );
     balance
       .mockResolvedValueOnce(10_000_000_000)

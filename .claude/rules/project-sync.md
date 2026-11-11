@@ -116,6 +116,15 @@ when a session reads a file matching the `paths` in the frontmatter.
   it can mount mid-sync, build its model from memory not yet re-read, and have
   the re-open reuse it -- the pane kept the replaced file (HOO-2119). The
   second pass also sets memory, which the re-open has already read.
+  `_catchUp` reads the store before skipping a file it thinks is level, never
+  assumes it: a merge awaits its upload, and an adopt its mark, between
+  writing the store and catching the buffer up, and a pending autosave fires
+  in that window with the old text. Assumed, the store kept that text
+  under a mark saying "merged", and the next reconcile uploaded it, reverting
+  the other device's lines on the account (HOO-2821). A file sync removed
+  is removed again, without a read first: discarding its model flushes the
+  pending autosave, and memory still lists the file, so the save writes it
+  back, and a failed read cannot tell that copy from no file.
 - **`dirty` is a hint, never a decision.** The `dirty` hint only lets
   reconcile skip re-hashing a project; `mark.files` + `name` decide whether
   anything is owed. Code decided on `dirty` twice, and was wrong both times: a
