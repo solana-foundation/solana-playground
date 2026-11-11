@@ -53,7 +53,8 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
   const from = useRef<number | undefined>(undefined);
   const [connect, setConnect] = useState<ConnectState>({ kind: "idle" });
   const attempts = useRef(0);
-  // A deploy from the extension still needs it to sign: no disconnect then
+  // A deploy from the extension still needs it to sign: no disconnect then,
+  // and no connect, which would change who signs the rest of the run
   const [deploying, setDeploying] = useState(
     () => PgDeployRun.state.step !== null
   );
@@ -231,8 +232,11 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
           icon: w.icon,
         }))}
         connect={connect}
-        onConnectOpen={() => setConnect({ kind: "listing" })}
-        onConnect={(name) => void handleConnect(name)}
+        // A wallet that connects mid-deploy must not change who signs
+        onConnectOpen={
+          deploying ? undefined : () => setConnect({ kind: "listing" })
+        }
+        onConnect={deploying ? undefined : (name) => void handleConnect(name)}
         disconnectHeld={deploying}
         onDisconnect={() => {
           if (!owner) return;

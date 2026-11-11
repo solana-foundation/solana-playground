@@ -859,6 +859,42 @@ describe("commands/deploy", () => {
       expect(openBuffers.forget).not.toHaveBeenCalled();
     });
   });
+  describe("the signer a run starts with", () => {
+    it("keeps signing the final deploy with the Playground wallet when a wallet connects mid-run", async () => {
+      env.balance = 10_000_000_000;
+      loadBuffer.mockResolvedValue(undefined);
+      // A connect during the write makes the extension the current wallet
+      createBuffer.mockImplementation(async () => {
+        env.standard = true;
+        return "sig";
+      });
+
+      const result = await runDeploy();
+
+      expect(result).not.toBeInstanceOf(Error);
+      const [, , , options] = deployProgram.mock.calls[0] as unknown as [
+        unknown,
+        unknown,
+        unknown,
+        { wallet: unknown }
+      ];
+      expect(options.wallet).toBe(pgWallet);
+    });
+
+    it("keeps signing the funding transfer with the standard wallet it started with", async () => {
+      env.standard = true;
+      env.balance = 10_000_000_000;
+      loadBuffer.mockResolvedValue(undefined);
+
+      await runDeploy();
+
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ transfer: expect.anything() }),
+        expect.objectContaining({ wallet: standardWallet })
+      );
+    });
+  });
+
   describe("a deploy from a standard wallet", () => {
     const FEE = 5000;
     /** The returns to the standard wallet, in lamports */
@@ -1012,7 +1048,8 @@ describe("commands/deploy", () => {
       fromStandard();
       send.mockImplementation(async (...args: unknown[]) => {
         const opts = args[1] as { wallet?: unknown } | undefined;
-        if (!opts?.wallet) throw new Error("User rejected the request.");
+        if (opts?.wallet === standardWallet)
+          throw new Error("User rejected the request.");
         return landTransfer(...args);
       });
 

@@ -248,6 +248,8 @@ const processDeploy = async (
     (await PgServer.deploy(PgProgramInfo.uuid!));
   const programLen = programBytes.length;
 
+  // The signer the run starts with, kept to its end: a wallet that connects
+  // meanwhile must not take over the remaining steps
   const wallet = PgWallet.current!;
   const [pgWallet, standardWallet] = wallet.isPg
     ? [wallet, null]
@@ -427,7 +429,7 @@ const processDeploy = async (
       PgDeployRun.update({ approval: { wallet: standardWallet.name, n: 1 } });
       try {
         await sendAndConfirmTxWithRetries(
-          () => PgTx.send(transferIx, { connection }),
+          () => PgTx.send(transferIx, { wallet: standardWallet, connection }),
           async () =>
             (await connection.getBalance(standardWallet.publicKey)) <
             userBalance - requiredBalance
@@ -869,7 +871,7 @@ const processDeploy = async (
           PgProgramInfo.kp!,
           bufferKp.publicKey,
           programLen,
-          { connection }
+          { wallet, connection }
         );
       },
       async () => {
@@ -889,7 +891,7 @@ const processDeploy = async (
         return await BpfLoaderUpgradeable.upgradeProgram(
           programPk,
           bufferKp.publicKey,
-          { connection }
+          { wallet, connection }
         );
       },
       async () => {

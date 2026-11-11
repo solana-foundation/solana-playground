@@ -236,6 +236,21 @@ describe("features/fund-wallet/ui/WalletChip", () => {
     }
   });
 
+  it("offers no Connect while a deploy runs from the Playground wallet", () => {
+    renderChip(() => false);
+    act(() => PgDeployRun.update({ step: "write" }));
+    try {
+      fireEvent.click(
+        screen.getByRole("button", { name: /^Wallet 7xKX…gAsU/ })
+      );
+      expect(
+        screen.queryByRole("button", { name: "Connect a wallet" })
+      ).toBeNull();
+    } finally {
+      act(() => PgDeployRun.reset());
+    }
+  });
+
   describe("the airdrop state belongs to one wallet on one cluster", () => {
     const OTHER = "9wFFyRfZBsuAha4YcuxcXLKwMxJR43S7fPfQLusDBzvT";
     const received = () =>
