@@ -1,8 +1,17 @@
 # Spec Delta
 
-## MODIFIED Requirements
+## REMOVED Requirements
 
 ### Requirement: The WASM CLIs say why they cannot use a key held on its own origin
+
+**Reason**: The CLIs now sign through the key page instead of failing.
+
+**Migration**: See "The WASM CLIs sign through the key page" below; only
+offline signing (`--sign-only`) still ends with the key-origin line.
+
+## ADDED Requirements
+
+### Requirement: The WASM CLIs sign through the key page
 
 Under the key origin, the `solana`, `spl-token` and `anchor` commands SHALL
 have the key page sign the built-in wallet's part of every transaction they
