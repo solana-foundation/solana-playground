@@ -533,7 +533,12 @@ test.describe("The thread", () => {
 
   test("client-v2-assistant: Reading back during an answer", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "On Firefox one mouse.wheel scrolls about 270 px whatever its delta, so the wheel never reaches the thread's top"
+    );
     await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, answer);
     await openProject(page, "thread-read-back");
 
@@ -586,7 +591,12 @@ test.describe("The thread", () => {
   // off-screen, since a new message did not turn following back on
   test("a message sent while scrolled up brings the reply into view", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "On Firefox one mouse.wheel scrolls about 270 px whatever its delta, so the wheel never reaches the thread's top"
+    );
     await stubSession(page);
     await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) =>
       route.fulfill({

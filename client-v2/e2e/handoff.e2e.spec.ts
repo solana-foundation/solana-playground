@@ -1,6 +1,13 @@
 import type { Page } from "@playwright/test";
 
-import { expect, home, LONG, stubSession, test } from "./fixtures";
+import {
+  expect,
+  grantClipboard,
+  home,
+  LONG,
+  stubSession,
+  test,
+} from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
 import { DESK, PHONE } from "./viewports";
 
@@ -35,7 +42,7 @@ test.describe("on a phone", () => {
     page,
     context,
   }) => {
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await grantClipboard(context);
     // The link and its buttons show signed in only
     await stubSession(page, ADA);
     const lines = linesOn(page);

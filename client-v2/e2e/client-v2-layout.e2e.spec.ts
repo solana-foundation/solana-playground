@@ -744,7 +744,12 @@ test.describe("on a phone", () => {
   // settled when the editor mounts.
   test("a swipe made while the editor loads stays on the preview", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "Firefox defines no TouchEvent in a context without hasTouch, which this describe leaves off"
+    );
     let release!: () => void;
     const held = new Promise<void>((resolve) => (release = resolve));
     // The editor's chunk (webpack's name for it), held so it mounts under the
@@ -983,7 +988,12 @@ test.describe("on an iPhone", () => {
 
   test("client-v2-layout: The editor's keyboard button on an iPhone", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "An iPhone user agent on Gecko takes theme.ts's non-Firefox path, whose for-of over document.fonts.keys() throws on Gecko; a real iPhone runs WebKit"
+    );
     // A project is started from the desktop's Home, as "on a phone" does
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
