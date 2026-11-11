@@ -50,7 +50,7 @@ const renderDialog = (props: Partial<BaseFundDialogProps>) =>
       onSend={props.onSend ?? vi.fn().mockResolvedValue(undefined)}
       failure={props.failure}
       addressUrl={props.addressUrl}
-      phone={props.phone}
+      isPhone={props.isPhone}
     />
   );
 
@@ -279,14 +279,14 @@ describe("features/fund-wallet/ui/BaseFundDialog", () => {
   });
 
   it("draws the phone's foot: no Cancel, Send across it", () => {
-    renderDialog({ payer: PAYER, phone: true });
+    renderDialog({ payer: PAYER, isPhone: true });
 
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     expect(sendButton().getAttribute("data-variant")).toBe("accent");
   });
 
   it("draws no foot on a phone before a payer connects", () => {
-    renderDialog({ phone: true });
+    renderDialog({ isPhone: true });
 
     expect(document.querySelector('[data-slot="dialog-footer"]')).toBeNull();
   });

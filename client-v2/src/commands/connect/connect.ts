@@ -132,15 +132,15 @@ const standardNamed = (name: string) => {
  * when it is not. One already connected (a payer the Fund dialog connected)
  * is made current as it is, never toggled off.
  *
- * @param stillWanted asked once the wallet answers: a request that was
+ * @param isStillWanted asked once the wallet answers: a request that was
  * superseded meanwhile leaves the wallet connected but not current
  * @throws the wallet's own error when it declines; nothing changes then
  */
 export const setStandardCurrentWith =
-  (stillWanted: () => boolean) => async (name: string) => {
+  (isStillWanted: () => boolean) => async (name: string) => {
     const wallet = standardNamed(name);
     if (!wallet.connected) await wallet.connect();
-    if (!stillWanted()) return;
+    if (!isStillWanted()) return;
     PgWallet.update({ state: "sol", standardName: wallet.name });
   };
 

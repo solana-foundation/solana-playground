@@ -58,7 +58,7 @@ export interface BaseWalletChipProps {
   /** As `PgConnection.cluster` names it; absent before it is read */
   cluster?: string;
   /** The cluster has a faucet: Get SOL and the web faucet show only then */
-  faucet: boolean;
+  hasFaucet: boolean;
   /** What one airdrop asks for, in SOL */
   airdropSol: number;
   /** The web faucet, filled in with the address and amount */
@@ -71,7 +71,7 @@ export interface BaseWalletChipProps {
   /** What `received` adds, in SOL; omitted when the rise is unknown */
   received?: number;
   /** A public faucet asks for a GitHub sign-in first, and nobody is in */
-  signInFirst: boolean;
+  shouldSignInFirst: boolean;
   onOpenChange?: (open: boolean) => void;
   onAirdrop: () => void;
   onOpenFaucet: () => void;
@@ -86,7 +86,7 @@ export interface BaseWalletChipProps {
   onConnect?: (name: string) => void;
   onDisconnect?: () => void;
   /** A deploy from the connected wallet runs: it cannot be disconnected yet */
-  disconnectHeld?: boolean;
+  isDisconnectHeld?: boolean;
 }
 
 const fmt = (sol: number) => `${Number(sol.toFixed(4))} SOL`;
@@ -108,14 +108,14 @@ const BaseWalletChip = ({
   address,
   balance,
   cluster,
-  faucet,
+  hasFaucet,
   airdropSol,
   faucetHref,
   faucetSteps,
   state,
   refusal,
   received,
-  signInFirst,
+  shouldSignInFirst,
   onOpenChange,
   onAirdrop,
   onOpenFaucet,
@@ -126,12 +126,12 @@ const BaseWalletChip = ({
   onConnectOpen,
   onConnect,
   onDisconnect,
-  disconnectHeld = false,
+  isDisconnectHeld = false,
 }: BaseWalletChipProps) => {
   const short = shortAddress(address);
   const shown = balance === undefined ? "…" : fmt(balance);
-  const empty = balance === 0;
-  const twoBelow = state === "refused" || state === "away";
+  const isEmpty = balance === 0;
+  const hasTwoBelow = state === "refused" || state === "away";
   return (
     <Popover onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
@@ -146,7 +146,7 @@ const BaseWalletChip = ({
           <Wallet aria-hidden="true" className="size-3.5" />
           <span className="font-mono">{short}</span>
           <span aria-hidden="true">·</span>
-          <span className={cn("tabular-nums", empty && "text-warning")}>
+          <span className={cn("tabular-nums", isEmpty && "text-warning")}>
             {shown}
           </span>
         </button>
@@ -199,12 +199,12 @@ const BaseWalletChip = ({
                 variant="secondary"
                 size="sm"
                 className="mt-3 w-full"
-                disabled={disconnectHeld}
+                disabled={isDisconnectHeld}
                 onClick={onDisconnect}
               >
                 Disconnect {owner.name}
               </Button>
-              {disconnectHeld && (
+              {isDisconnectHeld && (
                 <p className="mt-1.5 text-center text-[0.75rem] text-muted-foreground">
                   Disconnect after the deploy finishes
                 </p>
@@ -269,7 +269,7 @@ const BaseWalletChip = ({
             </p>
           )}
 
-          {faucet &&
+          {hasFaucet &&
             (state === "idle" ||
               state === "asking" ||
               state === "unreachable") && (
@@ -288,7 +288,7 @@ const BaseWalletChip = ({
                     `Get ${airdropSol} ${cluster ? `${cluster} ` : ""}SOL`
                   )}
                 </Button>
-                {signInFirst && state === "idle" && (
+                {shouldSignInFirst && state === "idle" && (
                   <p className="text-center text-[0.75rem] text-muted-foreground">
                     Asks you to sign in with GitHub first
                   </p>
@@ -311,9 +311,12 @@ const BaseWalletChip = ({
 
           {/* The other ways, as real buttons under the main one: half width
               side by side, or full width alone */}
-          {state !== "received" && (!owner || twoBelow) && (
+          {state !== "received" && (!owner || hasTwoBelow) && (
             <div
-              className={cn("grid gap-2", twoBelow && !owner && "grid-cols-2")}
+              className={cn(
+                "grid gap-2",
+                hasTwoBelow && !owner && "grid-cols-2"
+              )}
             >
               {state === "refused" && (
                 <Button variant="secondary" size="sm" onClick={onAirdrop}>
@@ -330,7 +333,7 @@ const BaseWalletChip = ({
               {/* The current wallet is the user's own: nothing to send from */}
               {!owner && (
                 <Button variant="secondary" size="sm" onClick={onFund}>
-                  {twoBelow ? "Use your wallet" : "Send from your wallet"}
+                  {hasTwoBelow ? "Use your wallet" : "Send from your wallet"}
                 </Button>
               )}
             </div>

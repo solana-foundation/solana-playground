@@ -35,14 +35,14 @@ vi.mock("@/components/Wallet/hooks", () => ({
   useAirdrop: () => ({ airdrop, faucet: "available" }),
 }));
 const connectStandard = vi.hoisted(() => ({
-  make: vi.fn<(name: string, stillWanted: () => boolean) => Promise<void>>(
+  make: vi.fn<(name: string, isStillWanted: () => boolean) => Promise<void>>(
     async () => {}
   ),
   drop: vi.fn<(name: string) => Promise<void>>(async () => {}),
 }));
 vi.mock("@/commands/connect/connect", () => ({
-  setStandardCurrentWith: (stillWanted: () => boolean) => (name: string) =>
-    connectStandard.make(name, stillWanted),
+  setStandardCurrentWith: (isStillWanted: () => boolean) => (name: string) =>
+    connectStandard.make(name, isStillWanted),
   disconnectStandard: connectStandard.drop,
 }));
 const current = vi.hoisted(() => ({
@@ -108,7 +108,7 @@ afterEach(() => {
 const renderChip = (isSignInFailure: (e: unknown) => boolean) =>
   render(
     <TooltipProvider>
-      <WalletChip signedOut={false} isSignInFailure={isSignInFailure} />
+      <WalletChip isSignedOut={false} isSignInFailure={isSignInFailure} />
     </TooltipProvider>
   );
 
@@ -137,7 +137,7 @@ describe("features/fund-wallet/ui/WalletChip", () => {
     stop = onDidRequestFundDialog((from) => asked.push(from));
     render(
       <TooltipProvider>
-        <WalletChip signedOut={false} isSignInFailure={() => false} />
+        <WalletChip isSignedOut={false} isSignInFailure={() => false} />
       </TooltipProvider>
     );
 
@@ -318,7 +318,7 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       balanceNow.sol = 2;
       view.rerender(
         <TooltipProvider>
-          <WalletChip signedOut={false} isSignInFailure={() => false} />
+          <WalletChip isSignedOut={false} isSignInFailure={() => false} />
         </TooltipProvider>
       );
 
@@ -337,7 +337,7 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       clusterNow.name = "testnet";
       view.rerender(
         <TooltipProvider>
-          <WalletChip signedOut={false} isSignInFailure={() => false} />
+          <WalletChip isSignedOut={false} isSignInFailure={() => false} />
         </TooltipProvider>
       );
 
@@ -392,12 +392,12 @@ describe("features/fund-wallet/ui/WalletChip", () => {
     });
 
     it("tells a superseded approval not to take over, and still logs its failure", async () => {
-      const asked: { name: string; stillWanted?: () => boolean }[] = [];
+      const asked: { name: string; isStillWanted?: () => boolean }[] = [];
       const answers: { approve: () => void; fail: (e: Error) => void }[] = [];
       connectStandard.make.mockImplementation(
-        (name, stillWanted) =>
+        (name, isStillWanted) =>
           new Promise<void>((resolve, reject) => {
-            asked.push({ name, stillWanted });
+            asked.push({ name, isStillWanted });
             answers.push({ approve: resolve, fail: reject });
           })
       );
@@ -410,7 +410,7 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       const rerender = () =>
         view.rerender(
           <TooltipProvider>
-            <WalletChip signedOut={false} isSignInFailure={() => false} />
+            <WalletChip isSignedOut={false} isSignInFailure={() => false} />
           </TooltipProvider>
         );
       const playground = current.wallet;
@@ -427,8 +427,8 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       expect(asked.map((a) => a.name)).toEqual(["Phantom", "Phantom"]);
 
       const [first, second] = asked;
-      expect(first.stillWanted?.()).toBe(false);
-      expect(second.stillWanted?.()).toBe(true);
+      expect(first.isStillWanted?.()).toBe(false);
+      expect(second.isStillWanted?.()).toBe(true);
 
       await act(async () => answers[0].fail(new Error("socket hung up")));
       expect(
@@ -439,9 +439,9 @@ describe("features/fund-wallet/ui/WalletChip", () => {
     it("supersedes a connect still pending when a deploy begins", async () => {
       const asked: (() => boolean)[] = [];
       connectStandard.make.mockImplementation(
-        (_name, stillWanted) =>
+        (_name, isStillWanted) =>
           new Promise<void>(() => {
-            asked.push(stillWanted);
+            asked.push(isStillWanted);
           })
       );
       renderChip(() => false);

@@ -113,8 +113,9 @@ export const stepAmount =
     const parsed = parseAmount(cut);
     // Cut digits put the amount between two lamports, so `1.0000000001`
     // steps down to `1`, not `0.9`
-    const between = cut !== trimmed && /[1-9]/.test(trimmed.slice(cut.length));
-    const lamports = (parsed.ok ? parsed.lamports : 0) + (between ? 0.5 : 0);
+    const isBetween =
+      cut !== trimmed && /[1-9]/.test(trimmed.slice(cut.length));
+    const lamports = (parsed.ok ? parsed.lamports : 0) + (isBetween ? 0.5 : 0);
     const steps =
       direction === 1
         ? Math.floor(lamports / STEP_LAMPORTS) + 1

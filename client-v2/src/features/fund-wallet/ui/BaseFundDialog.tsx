@@ -101,7 +101,7 @@ export interface BaseFundDialogProps {
    */
   addressUrl?: (address: string) => string | undefined;
   /** A phone draws the modal frame's foot: no Cancel, Send across it */
-  phone?: boolean;
+  isPhone?: boolean;
 }
 
 const shortAddress = (address: string) =>
@@ -227,9 +227,9 @@ const BaseFundDialog = ({
   onSend,
   failure,
   addressUrl,
-  phone = false,
+  isPhone = false,
 }: BaseFundDialogProps) => {
-  const [sending, setSending] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const note = payer
     ? amountNoteFor(receiver.name)(payer, cluster)(amount)
     : undefined;
@@ -243,9 +243,9 @@ const BaseFundDialog = ({
   const canLower = lower !== amount;
 
   const handleAmountKey = (event: KeyboardEvent<HTMLInputElement>) => {
-    const modified =
+    const isModified =
       event.shiftKey || event.altKey || event.metaKey || event.ctrlKey;
-    if (modified) return;
+    if (isModified) return;
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
     onAmountChange(stepAmount(event.key === "ArrowUp" ? 1 : -1)(amount));
@@ -254,11 +254,11 @@ const BaseFundDialog = ({
   // BrandButton has no wait of its own, so Send keeps one: a second press
   // while the wallet asks would start a second transfer
   const handleSend = () => {
-    setSending(true);
+    setIsSending(true);
     Promise.resolve()
       .then(onSend)
       .catch(reportButtonFailure("send the SOL"))
-      .finally(() => setSending(false));
+      .finally(() => setIsSending(false));
   };
 
   return (
@@ -383,9 +383,9 @@ const BaseFundDialog = ({
         )}
 
         {/* A phone with no payer yet has nothing for the foot to hold */}
-        {(!phone || payer) && (
+        {(!isPhone || payer) && (
           <DialogFooter>
-            {!phone && (
+            {!isPhone && (
               <DialogClose asChild>
                 <Button variant="ghost" className={DESK_CANCEL}>
                   Cancel
@@ -394,17 +394,17 @@ const BaseFundDialog = ({
             )}
             {payer && (
               <BrandButton
-                variant={phone ? "accent" : "ring"}
+                variant={isPhone ? "accent" : "ring"}
                 // Busy is not unavailable: it keeps its colour, as AsyncButton does
                 className={cn(
-                  phone ? PHONE_SEND : DESK_SEND,
-                  sending && "disabled:opacity-100"
+                  isPhone ? PHONE_SEND : DESK_SEND,
+                  isSending && "disabled:opacity-100"
                 )}
-                disabled={!note?.ok || unconfirmed || sending}
-                aria-busy={sending || undefined}
+                disabled={!note?.ok || unconfirmed || isSending}
+                aria-busy={isSending || undefined}
                 onClick={handleSend}
               >
-                {sending && <Spinner aria-hidden="true" />}
+                {isSending && <Spinner aria-hidden="true" />}
                 {sendLabel(amount)}
               </BrandButton>
             )}

@@ -90,7 +90,7 @@ const FundDialog = ({
   const [payerName, setPayerName] = useState<string | undefined>();
   const [balance, setBalance] = useState<FundPayer["balance"]>("loading");
   const [amount, setAmount] = useState(DEFAULT_AMOUNT);
-  const phone = useViewport() === "phone";
+  const isPhone = useViewport() === "phone";
   const [failure, setFailure] = useState<FundFailure | undefined>();
   // Each opening is one attempt; a send that settles after the dialog closed
   // or reopened must not close or mark the dialog the user sees now
@@ -278,7 +278,7 @@ const FundDialog = ({
       onSend={send}
       failure={failure}
       addressUrl={addressUrl}
-      phone={phone}
+      isPhone={isPhone}
     />
   );
 };

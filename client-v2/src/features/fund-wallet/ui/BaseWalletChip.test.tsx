@@ -18,14 +18,14 @@ const renderChip = (props: Partial<BaseWalletChipProps>) =>
         address={WALLET}
         balance={"balance" in props ? props.balance : 0}
         cluster={"cluster" in props ? props.cluster : "devnet"}
-        faucet={props.faucet ?? true}
+        hasFaucet={props.hasFaucet ?? true}
         airdropSol={5}
         faucetHref="https://faucet.solana.com/?cluster=devnet"
         faucetSteps={STEPS}
         state={props.state ?? "idle"}
         refusal={props.refusal ?? "limit"}
         received={props.received}
-        signInFirst={props.signInFirst ?? false}
+        shouldSignInFirst={props.shouldSignInFirst ?? false}
         onAirdrop={props.onAirdrop ?? vi.fn()}
         onOpenFaucet={props.onOpenFaucet ?? vi.fn()}
         onFund={props.onFund ?? vi.fn()}
@@ -56,7 +56,7 @@ describe("features/fund-wallet/ui/BaseWalletChip", () => {
   it("offers the faucet and the user's own wallet, and says a sign-in comes first", () => {
     const onAirdrop = vi.fn();
     const onFund = vi.fn();
-    renderChip({ signInFirst: true, onAirdrop, onFund });
+    renderChip({ shouldSignInFirst: true, onAirdrop, onFund });
     open();
     expect(screen.getByText("Playground wallet")).toBeTruthy();
     expect(screen.getByText("Devnet")).toBeTruthy();
@@ -135,7 +135,7 @@ describe("features/fund-wallet/ui/BaseWalletChip", () => {
   });
 
   it("offers no faucet on a network without one, and tags mainnet", () => {
-    renderChip({ cluster: "mainnet-beta", faucet: false, balance: 2 });
+    renderChip({ cluster: "mainnet-beta", hasFaucet: false, balance: 2 });
     open();
     expect(screen.getByText("Mainnet")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Get / })).toBeNull();

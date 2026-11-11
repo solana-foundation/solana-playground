@@ -1092,8 +1092,8 @@ const leftoverReturnFor =
     // A send whose outcome is not known yet: the balance before it, and what it
     // moved. Settled at the next attempt, or when the run of attempts ends
     let pending: { balanceBefore: number; amount: number } | undefined;
-    const settle = (landed: boolean, fee: number) => {
-      if (landed && pending) {
+    const settle = (isLanded: boolean, fee: number) => {
+      if (isLanded && pending) {
         returned += pending.amount;
         feesPaid += fee;
       }

@@ -36,7 +36,7 @@ const log = createLogger("fund-wallet:wallet-chip");
 
 export interface WalletChipProps {
   /** Nobody is signed in: a public faucet then asks for GitHub first */
-  signedOut: boolean;
+  isSignedOut: boolean;
   /** A sign-in that failed on the way to the airdrop; the account row shows
    * it, so the chip says nothing more */
   isSignInFailure: (error: unknown) => boolean;
@@ -49,7 +49,7 @@ export interface WalletChipProps {
  * dialog. Nothing shows without a wallet. Back from the web faucet, the
  * balance rising over what it was ends the wait.
  */
-const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
+const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
   useWallet();
   useRenderOnChange(PgConnection.onDidChangeCluster);
   const balance = useBalance() ?? undefined;
@@ -63,7 +63,7 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
   const attempts = useRef(0);
   // A deploy from the extension still needs it to sign: no disconnect then,
   // and no connect, which would change who signs the rest of the run
-  const [deploying, setDeploying] = useState(() => PgDeployRun.isActive);
+  const [isDeploying, setIsDeploying] = useState(() => PgDeployRun.isActive);
   useEffect(() => {
     const sub = PgDeployRun.onDidChange(() => {
       const isActive = PgDeployRun.isActive;
@@ -73,7 +73,7 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
         attempts.current++;
         setConnect({ kind: "idle" });
       }
-      setDeploying(isActive);
+      setIsDeploying(isActive);
     });
     return () => sub.dispose();
   }, []);
@@ -220,7 +220,7 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
         address={address}
         balance={balance}
         cluster={cluster}
-        faucet={faucet === "available"}
+        hasFaucet={faucet === "available"}
         airdropSol={airdropSol}
         faucetHref={faucetLink({
           walletAddress: address,
@@ -234,7 +234,7 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
         state={state}
         refusal={refusal}
         received={received}
-        signInFirst={signedOut && isAirdropSignInGated(cluster)}
+        shouldSignInFirst={isSignedOut && isAirdropSignInGated(cluster)}
         onOpenChange={(open) => {
           // A result is read once; the next opening starts fresh
           if (!open && state === "received") setState("idle");
@@ -258,10 +258,10 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
         connect={connect}
         // A wallet that connects mid-deploy must not change who signs
         onConnectOpen={
-          deploying ? undefined : () => setConnect({ kind: "listing" })
+          isDeploying ? undefined : () => setConnect({ kind: "listing" })
         }
-        onConnect={deploying ? undefined : (name) => void handleConnect(name)}
-        disconnectHeld={deploying}
+        onConnect={isDeploying ? undefined : (name) => void handleConnect(name)}
+        isDisconnectHeld={isDeploying}
         onDisconnect={() => {
           if (!owner) return;
           disconnectStandard(owner.name)

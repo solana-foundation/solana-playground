@@ -171,7 +171,7 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
       log={logText}
       wallet={
         <WalletChip
-          signedOut={signedIn === false}
+          isSignedOut={signedIn === false}
           isSignInFailure={isSignInFailure}
         />
       }
