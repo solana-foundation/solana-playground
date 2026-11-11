@@ -1,11 +1,21 @@
 import type { Page } from "@playwright/test";
 
-import { expect, json, LONG, test } from "./fixtures";
+import {
+  consoleTrigger,
+  expect,
+  json,
+  LONG,
+  runInTerminal,
+  test,
+} from "./fixtures";
 
 /**
- * The scenarios of `mainnet-deploy-warning`: the Deploy stage warns about
- * the browser-held Playground wallet on mainnet, and only there.
+ * The scenarios of `mainnet-deploy-warning`: in the beta a program is not
+ * deployed to mainnet from Playground (HOO-2728); the Deploy stage says so and
+ * points to deploying from the user's own machine.
  */
+
+const BLOCKED = "Deploys to mainnet are not available in the beta.";
 
 /**
  * Reloads on the endpoint picked in Settings, by its option name. Mainnet's
@@ -49,36 +59,56 @@ const openDeploy = async (page: Page) => {
   return panel;
 };
 
-test("mainnet-deploy-warning: Deploy stage on mainnet shows the warning", async ({
+test("mainnet-deploy-warning: Deploy stage on mainnet", async ({
   seededPage: page,
 }) => {
   await reloadOn(page, "mainnet-beta");
   await build(page);
   const panel = await openDeploy(page);
 
-  const warning = panel.getByRole("alert", { name: "Mainnet deploy warning" });
-  await expect(warning).toBeVisible(LONG);
-  await expect(warning).toContainText("Playground wallet");
-  await expect(warning).toContainText("your own machine");
+  await expect(panel.getByText(BLOCKED)).toBeVisible(LONG);
   await expect(
     panel.getByRole("button", { name: "Deploy to mainnet" })
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await panel.getByRole("button", { name: "Deploy from your machine" }).click();
+  const guide = page.getByRole("dialog", { name: "Deploy from your machine" });
+  await expect(guide).toBeVisible();
+  await expect(
+    guide
+      .getByRole("radiogroup", { name: "Cluster" })
+      .getByRole("radio", { name: "Mainnet" })
+  ).toBeChecked();
 });
 
-test("mainnet-deploy-warning: Deploy stage on devnet shows no warning", async ({
+test("mainnet-deploy-warning: Terminal deploy on mainnet", async ({
+  seededPage: page,
+}) => {
+  await reloadOn(page, "mainnet-beta");
+  const drawer = consoleTrigger(page);
+  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+    await drawer.click();
+  }
+  await runInTerminal(page, "deploy");
+
+  // Refused before the wallet question and before "Deploying..."
+  const terminal = page.locator(".xterm-rows").first();
+  await expect(terminal).toContainText(BLOCKED, LONG);
+  await expect(terminal).not.toContainText("Deploying...");
+  await expect(terminal).not.toContainText("Connect the Playground wallet?");
+});
+
+test("mainnet-deploy-warning: Deploy stage on devnet", async ({
   seededPage: page,
 }) => {
   await build(page);
   const panel = await openDeploy(page);
 
   // The stage names its cluster once the endpoint is read; only then is
-  // the warning's absence an answer
+  // the line's absence an answer
   await expect(
     panel.getByRole("button", { name: "Deploy to devnet" })
   ).toBeVisible(LONG);
-  await expect(
-    panel.getByRole("alert", { name: "Mainnet deploy warning" })
-  ).toHaveCount(0);
+  await expect(panel.getByText(BLOCKED)).toHaveCount(0);
 });
 
 test("mainnet-deploy-warning: Mainnet picked in Settings", async ({
@@ -112,23 +142,19 @@ test("mainnet-deploy-warning: Mainnet picked in Settings", async ({
   await expect(
     settings.getByRole("radiogroup", {
       name: "Network",
-      description: "Deploys with real SOL",
+      description: "Not available for deploys",
     })
   ).toBeVisible();
   await settings.getByRole("button", { name: "Back to app" }).click();
   const panel = await openDeploy(page);
-  await expect(
-    panel.getByRole("alert", { name: "Mainnet deploy warning" })
-  ).toBeVisible(LONG);
+  await expect(panel.getByText(BLOCKED)).toBeVisible(LONG);
 
   await pickFromStatusPanel("Devnet");
   await settings.getByRole("button", { name: "Back to app" }).click();
   await expect(
     panel.getByRole("button", { name: "Deploy to devnet" })
   ).toBeVisible(LONG);
-  await expect(
-    panel.getByRole("alert", { name: "Mainnet deploy warning" })
-  ).toHaveCount(0);
+  await expect(panel.getByText(BLOCKED)).toHaveCount(0);
 });
 
 test("mainnet-deploy-warning: Five networks are offered, Mainnet first", async ({
@@ -145,23 +171,4 @@ test("mainnet-deploy-warning: Five networks are offered, Mainnet first", async (
     "Localnet",
     "Surfpool",
   ]);
-});
-
-test("mainnet-deploy-warning: Guide from the mainnet warning", async ({
-  seededPage: page,
-}) => {
-  await reloadOn(page, "mainnet-beta");
-  const panel = await openDeploy(page);
-
-  await panel
-    .getByRole("alert", { name: "Mainnet deploy warning" })
-    .getByRole("button", { name: "deploy from your own machine" })
-    .click(LONG);
-  const guide = page.getByRole("dialog", { name: "Deploy from your machine" });
-  await expect(guide).toBeVisible();
-  await expect(
-    guide
-      .getByRole("radiogroup", { name: "Cluster" })
-      .getByRole("radio", { name: "Mainnet" })
-  ).toBeChecked();
 });
