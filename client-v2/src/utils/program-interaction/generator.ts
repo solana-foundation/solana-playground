@@ -1,7 +1,7 @@
 import { PgProgramInfo } from "../program-info";
 import { PgWallet } from "../wallet";
 import { PgWeb3 } from "../web3";
-import { getPrograms, getPythAccounts } from "./generators";
+import { getPrograms } from "./generators";
 import { getIdlType, IdlType } from "./idl-types";
 
 /**
@@ -99,8 +99,7 @@ type PublicKeyGenerator =
     }
   | { type: "All programs"; name: string }
   | { type: "Token accounts"; name: string }
-  | { type: "Mint accounts"; name: string }
-  | { type: "Pyth"; name: string };
+  | { type: "Mint accounts"; name: string };
 
 /** Program public key generator */
 type ProgramGenerator = { type: "Current program" };
@@ -146,7 +145,6 @@ export const createGenerator = (
     case "All programs":
     case "Token accounts":
     case "Mint accounts":
-    case "Pyth":
     case "Accounts":
     case "Arguments":
       if (selectedItems.length !== 2) return null;
@@ -204,9 +202,6 @@ export const generateValue = (
     case "Token accounts":
     case "Mint accounts":
       return generator.name;
-
-    case "Pyth":
-      return getPythAccounts()[generator.name];
 
     case "Accounts": {
       const accRef = values.accounts.find(

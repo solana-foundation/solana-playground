@@ -178,7 +178,7 @@ export type ToastRequest = {
 export type SidebarPageParam<N extends string> = {
   /** Name of the page */
   name: N;
-  /** `src` of the image */
+  /** `src` of the image, an asset the page imports */
   icon: string;
   /** Title of the page, defaults to `name` */
   title?: string;

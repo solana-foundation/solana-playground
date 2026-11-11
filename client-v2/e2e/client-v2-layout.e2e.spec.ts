@@ -1034,12 +1034,7 @@ test.describe("on an iPhone", () => {
 
   test("client-v2-layout: The editor's keyboard button on an iPhone", async ({
     page,
-    browserName,
   }) => {
-    test.fixme(
-      browserName === "firefox",
-      "An iPhone user agent on Gecko takes theme.ts's non-Firefox path, whose for-of over document.fonts.keys() throws on Gecko; a real iPhone runs WebKit"
-    );
     // A project is started from the desktop's Home, as "on a phone" does
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
@@ -1156,13 +1151,10 @@ test("the wallet window's close button is clickable at the top of the work area"
   await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expectWalletInMenu(page, /SOL/);
-  // The window is opened by the editor tab bar's "Wallet" button. Its icon's
-  // alt text joins its accessible name ("Wallet Wallet"), so it is found by
-  // its text, which is the label alone.
+  // The window is opened by the editor tab bar's "Wallet" button
   await page
     .locator("#tabs")
-    .getByRole("button")
-    .filter({ hasText: /^Wallet$/ })
+    .getByRole("button", { name: "Wallet", exact: true })
     .click();
 
   const wallet = page.locator(".react-draggable");
@@ -2018,15 +2010,15 @@ test("the wallet asks about the validator when localnet does not answer", async 
   ).toBeVisible({ timeout: 15_000 });
 });
 
-// The tab row's Wallet button carries a 400 px picture; the design system's
-// Button sizes only an `svg`, so the picture is sized where it is used
+// The tab row's Wallet button carries an icon; the row stays the editor
+// head's height with it
 test("the tab row keeps its height with a wallet connected", async ({
   seededPage: page,
 }) => {
   await connectWallet(page);
 
   const row = page.locator("#tabs");
-  const icon = row.getByRole("button", { name: "Wallet" }).locator("img");
+  const icon = row.getByRole("button", { name: "Wallet" }).locator("svg");
   await expect(icon).toBeVisible();
   expect((await icon.boundingBox())?.height).toBeLessThanOrEqual(16);
   // The row fills the 44 px editor head, whose bottom line it sits above

@@ -164,48 +164,15 @@ export class PgTheme {
 
     applyThemeMode(this._theme.isDark ? "dark" : "light");
 
-    // Load font if necessary.
-    //
-    // Iterating over the fonts here because both the `check` and `has` methods
-    // of `document.fonts` are not reliable i.e. `check` returns `true` for
-    // non-existent fonts and `has` expects a `FontFace` argument, which means
-    // we'd have to store the object somewhere because it compares by object
-    // reference rather than font family.
-    let isLoaded = false;
-    if (PgCommon.getBrowser() === "Firefox") {
-      // Using `document.fonts.keys()` in a loop results in
-      // `TypeError: document.fonts.keys() is not iterable` on Firefox.
-      //
-      // https://bugzilla.mozilla.org/show_bug.cgi?id=1729089
-      const fonts = document.fonts.keys();
-      while (1) {
-        const { done, value: face } = fonts.next();
-        if (done) break;
-        if (face.family === this._font.family) {
-          isLoaded = face.status === "loaded";
-        }
-      }
-    } else {
-      for (const face of document.fonts.keys()) {
-        if (face.family === this._font.family) {
-          isLoaded = face.status === "loaded";
-        }
-      }
-    }
-    if (!isLoaded) {
-      try {
-        const fontFace = new FontFace(
-          this._font.family,
-          `url(/fonts/${PgCommon.toPascalFromTitle(this._font.family)}.woff2)`
-        );
-        await fontFace.load();
-        document.fonts.add(fontFace);
-      } catch (e) {
-        log.warn(`Failed to load font: ${this._font.family}`, {
-          ns: "theme:font",
-          context: { error: e },
-        });
-      }
+    // A face from the stylesheets `index.tsx` imports is fetched on first use; wait so the editor lays out in it
+    try {
+      const faces = await document.fonts.load(`1em "${this._font.family}"`);
+      if (!faces.length) throw new Error("No @font-face declares the family");
+    } catch (e) {
+      log.warn(`Failed to load font: ${this._font.family}`, {
+        ns: "theme:font",
+        context: { error: e },
+      });
     }
 
     // Set defaults (order matters)

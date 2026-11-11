@@ -138,7 +138,16 @@ command of the `sync-upstream` skill) copies upstream's changes to the listed
 paths and updates `assets-commit.txt`; a path the list does not cover is
 reported and never copied.
 
-Every SVG, PNG, and JPEG in `public/` and `src/tutorials/` is optimised by
+The code fonts, the interface icons, and the framework logos are outside
+`public/`, so an upstream sync never touches them. JetBrains Mono and Hack
+come from the `@fontsource/jetbrains-mono` and `hack-font` packages, which
+`src/index.tsx` imports so webpack bundles their files;
+`src/themes/hack.css` declares Hack's regular face. Icons are `lucide-react`
+components. Each framework's logo sits in its folder,
+`src/frameworks/<name>/`, and the framework imports it.
+
+Every SVG, PNG, and JPEG in `public/`, `src/tutorials/`, and
+`src/frameworks/` is optimised by
 [`scripts/optimise-image.mjs`](scripts/optimise-image.mjs): SVG through svgo,
 PNG losslessly and JPEG through mozjpeg at `JPEG_QUALITY`, both with sharp.
 Run `node scripts/optimise-image.mjs <file>...` on an image before adding it;
@@ -160,8 +169,7 @@ build fails on a listed name whose folder or `data.json` is missing
 The page icon, the home-screen icon and the install icons, rendered by design
 (Almaz, 4 Nov 2026, HOO-2568) from the triangle-and-circle mark on the brand
 gradient, with the fork's `manifest.json`. They replace upstream's
-`favicon.ico` and `manifest.json`; upstream's `logo192.png` and `logo512.png`
-stay in `public/`, unreferenced. The served page's head points at these files,
+`favicon.ico` and `manifest.json`. The served page's head points at these files,
 sets `theme-color`, and carries the share card (Open Graph and Twitter tags,
 with `og.png`), so a browser, a crawler, a link preview or a home screen reads
 them from the markup without running the bundle.
