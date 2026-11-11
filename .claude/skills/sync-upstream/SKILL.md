@@ -64,29 +64,47 @@ Run every command from a checkout of this repository, with Node 22 or later. The
 ## Assets step
 
 Upstream's assets live in `https://github.com/solana-playground/assets.git`, which upstream pins as the
-`client/public` gitlink. The fork keeps a copy in `client-v2/public/` and records the assets commit it came
-from in `client-v2/scripts/assets-commit.txt`. Do this by hand on the polish branch:
+`client/public` gitlink. The fork keeps the part of them it uses in `client-v2/public/` and records the assets
+commit it came from in `client-v2/scripts/assets-commit.txt`. The part is the import list,
+`client-v2/scripts/assets-import.txt`: one asset path a line, a trailing `/` for a folder, `#` for a comment. A
+tutorial folder that `client-v2/src/tutorials/markdown-tutorials.json` lists is imported whole without a line
+there, so enabling a Markdown tutorial is one edit.
 
-1. Read `<old>` from `assets-commit.txt` and `<new>` from `git ls-tree <to> client/public`. Stop when they
-   are equal.
-2. Clone the assets repository with full history into a scratch folder outside the repository, and list the
-   changes: `git -C <assets> diff --no-renames --name-status <old> <new>`.
-3. A file the fork never changed is one whose copy in `client-v2/public/` equals `git -C <assets> show
-   <old>:<path>`. For those, apply the change as is: copy added and modified files from `<new>`, delete deleted
-   ones. New tutorial folders are copied whole, like any other added file.
-4. A file the fork changed is never overwritten: the brand files (`favicon*`, `apple-touch-icon.png`,
-   `icon-*.png`, `manifest.json`, `og.png`) and `programs/programs.json`. Show the user the fork's version and
-   upstream's `<new>` version, and ask which changes to take. `index.html` is not one of them: it stays
-   upstream's, and the build adds the brand head (`client-v2/scripts/brand-head.mjs`), so it is copied as is.
-   A build that fails in `brandHeadFor` after the copy means upstream restructured the head; update
-   `isBrandTag` there.
-5. A copied tutorial folder does not show in the app until
-   `client-v2/src/tutorials/markdown-tutorials.json` lists it. For each new `tutorials/<name>/` with a
-   `data.json` (names starting with `_` excluded), report the name and upstream's date, the last line of
-   `git -C <assets>/tutorials/<name> log --follow --format=%ad --date=unix --diff-filter=A .`, and ask the user
-   whether to enable it. On a yes, add `"<name>": { "added": <that date> }` to `markdown-tutorials.json`, in
-   alphabetical order: the build keeps the file's order.
-6. Write `<new>` (full sha) to `assets-commit.txt`.
+On the polish branch, run `S assets <worktree>`, after `yarn install` in its `client-v2/` (the command loads svgo
+and sharp from there). It reads `<old>` from `assets-commit.txt` and `<new>` from the
+`client/public` gitlink of the upstream tip that the last upstream sync subject on the worktree's `HEAD` names
+(a third argument, an upstream commit, replaces that tip for a dry run), and stops when they are equal. It
+clones the assets repository into `<worktree git dir>/sync-upstream/assets`, or fetches it there, and goes
+through `git diff --no-renames --name-status <old> <new>`. Every blob it compares or writes first goes through
+`optimiseImage` (`client-v2/scripts/optimise-image.mjs`), which changes SVG, PNG, and JPEG files and returns
+any other file as it is, because the fork keeps its images optimised:
+
+- a path the import list does not cover is reported as not imported, and nothing is written;
+- a fork-owned path (`FORK_OWNED`: the brand files `favicon*`, `apple-touch-icon.png`, `icon-*.png`,
+  `manifest.json`, `og.png`, and `programs/programs.json`) is reported, never written;
+- a path whose copy in `client-v2/public/` differs from `<old>`'s optimised blob is reported as changed by the
+  fork, never written;
+- a path whose copy already equals `<new>`'s optimised blob is counted as current;
+- any other path takes upstream's add, change, or delete, with the optimised bytes.
+
+The optimiser's output is the same only for the svgo and sharp versions `client-v2/package.json` pins. A change
+that bumps either one runs `node scripts/optimise-image.mjs` over every image in `client-v2/public/` and
+`client-v2/src/tutorials/` in the same change; otherwise this command reports every image as changed by the
+fork.
+
+It reports each tutorial folder upstream added with a `data.json` (names starting with `_` excluded) and
+upstream's date, without importing it, writes `<new>` to `assets-commit.txt`, prints a summary, and commits
+nothing. Then decide with the user:
+
+1. For each fork-owned path and each path the fork changed, show the fork's version and upstream's
+   (`git -C <clone> show <new8>:<path>`) and ask which changes to take. `index.html` is not fork-owned: it stays
+   upstream's, and the build adds the brand head (`client-v2/scripts/brand-head.mjs`). A build that fails in
+   `brandHeadFor` after the copy means upstream restructured the head; update `isBrandTag` there.
+2. For each new tutorial, ask whether to enable it. On a yes, add `"<name>": { "added": <the reported date> }`
+   to `markdown-tutorials.json` in alphabetical order (the build keeps the file's order), copy the folder with
+   the command the summary prints, and run `node scripts/optimise-image.mjs` from `client-v2/` on its images.
+3. For a path reported as not imported that the fork now needs, add it to `assets-import.txt` and copy it the
+   same way.
 
 ## Contract
 
@@ -98,7 +116,7 @@ from in `client-v2/scripts/assets-commit.txt`. Do this by hand on the polish bra
 | Body line | `- <hash8> <subject>`, oldest first; commit body lines become `  * ` sub-bullets. The PR body is the same list |
 | Signature | `git commit -S`. `publish` refuses an unsigned commit |
 | Branches | `sync/merge-<suffix>` (the merge, pushed to hoodieshq), `sync/polish-<suffix>` (the fork's fixes) |
-| State | `<worktree git dir>/sync-upstream/`: target, upstream tip, push lease, message, commit |
+| State | `<worktree git dir>/sync-upstream/`: target, upstream tip, push lease, message, commit, the assets clone |
 
 Env overrides: `UPSTREAM_REMOTE`, `UPSTREAM_BRANCH`, `TARGET_REMOTE`, `TARGET_BRANCH`, `PUSH_REMOTE`,
 `SYNC_BRANCH_PREFIX`, `WORKTREE_ROOT`. A dry run sets `SYNC_BRANCH_PREFIX=dryrun/` so it creates only
@@ -106,7 +124,8 @@ Env overrides: `UPSTREAM_REMOTE`, `UPSTREAM_BRANCH`, `TARGET_REMOTE`, `TARGET_BR
 dry run's worktree and branch afterwards.
 
 `node --test .claude/skills/sync-upstream/scripts/sync-upstream.test.mjs` checks the message format against the
-merged commit a7a8a1f9, the subject parser against both subject forms, and the `GUARDS` matching.
+merged commit a7a8a1f9, the subject parser against both subject forms, the `GUARDS` matching, the import list
+matcher, and that the import list or `FORK_OWNED` covers every file in `client-v2/public/`.
 
 ## Common mistakes
 

@@ -35,7 +35,7 @@ const folders = (dir: string) =>
 const holds = (dir: string, test: Parameters<string[]["some"]>[0]) =>
   fs.readdirSync(dir).some(test);
 
-/** Upstream's Markdown tutorials, tracked in `public/` */
+/** The Markdown tutorials `src/tutorials/markdown-tutorials.json` enables, tracked in `public/` */
 const PUBLIC = path.join(CLIENT, "public", "tutorials");
 
 /**

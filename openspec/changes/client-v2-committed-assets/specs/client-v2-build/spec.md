@@ -11,10 +11,10 @@ names it.
 
 #### Scenario: A listed tutorial shows with its date (manual)
 
-- **WHEN** `markdown-tutorials.json` lists `bank-simulator` with `added` `1698672911` and the production build has
-  run
-- **THEN** the Tutorials page shows "Bank Simulator", and the built tutorial data carries `unixTimestamp`
-  `1698672911` for it
+- **WHEN** `public/tutorials/` holds a Markdown tutorial's folder, `markdown-tutorials.json` lists it with `added`
+  `1698672911`, and the production build has run
+- **THEN** the built tutorial data carries that tutorial with `unixTimestamp` `1698672911`, and its link
+  `/tutorials/<folder>` opens it
 
 #### Scenario: An unlisted folder is not shown (manual)
 
@@ -26,6 +26,32 @@ names it.
 
 - **WHEN** `markdown-tutorials.json` lists a name that has no folder under `public/tutorials/`
 - **THEN** the production build fails, and its error names that entry and the missing `data.json` path
+
+### Requirement: An upstream sync imports only the listed assets
+
+An upstream sync SHALL copy into `client-v2/public/` only the upstream asset paths that
+`client-v2/scripts/assets-import.txt` lists, as a file or under a folder, or that lie in a tutorial folder
+`client-v2/src/tutorials/markdown-tutorials.json` lists. It SHALL report every other changed path without writing
+it, and SHALL NOT write a fork-owned path or a path whose copy the fork changed.
+
+#### Scenario: An unlisted asset path is not imported (manual)
+
+- **WHEN** `assets-commit.txt` names an earlier assets commit, upstream's changes since then include a path under
+  `tutorials/` that neither list covers, and `sync-upstream.mjs assets` runs
+- **THEN** the summary lists that path as not imported, `client-v2/public/` has no file at that path, and only
+  listed paths appear among the written ones
+
+### Requirement: The images are optimised
+
+Every SVG, PNG, and JPEG tracked under `client-v2/public/` and `client-v2/src/tutorials/` SHALL be a fixed point
+of `client-v2/scripts/optimise-image.mjs`: optimising it again SHALL return the same bytes. `yarn test-api` SHALL
+fail on an image that is not.
+
+#### Scenario: An unoptimised image fails the check (manual)
+
+- **WHEN** a PNG saved without compression is added under `client-v2/public/` and `yarn test-api` runs
+- **THEN** `scripts/optimise-image.test.mjs` fails and names that file, and passes once
+  `node scripts/optimise-image.mjs <file>` has rewritten it
 
 ## MODIFIED Requirements
 

@@ -92,7 +92,10 @@ if (import.meta.vitest) {
       ]);
       expect(hello?.pageCount).toBe(4);
       expect(hello?.level).toBe("Beginner");
-      expect(hello?.thumbnail).toBe("/tutorials/hello-anchor/thumbnail.jpg");
+      // The file next to tutorial.json, bundled, not the bare "thumbnail.jpg"
+      expect(hello?.thumbnail).toMatch(
+        /\/src\/tutorials\/hello-anchor\/thumbnail\.jpg$/
+      );
     });
 
     it("carries Hello Anchor's four doc pages with their Markdown", () => {

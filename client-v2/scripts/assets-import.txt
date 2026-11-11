@@ -1,0 +1,17 @@
+# Paths of upstream's assets repository that `sync-upstream.mjs assets` imports into client-v2/public/.
+# One path a line, a trailing / marks a folder. A tutorial folder that
+# src/tutorials/markdown-tutorials.json lists is imported whole without a line here.
+.gitignore
+favicon.ico
+fonts/
+frameworks/
+icons/
+index.html
+languages/
+logo192.png
+logo512.png
+manifest.json
+programs/
+pyth/
+robots.txt
+themes/
