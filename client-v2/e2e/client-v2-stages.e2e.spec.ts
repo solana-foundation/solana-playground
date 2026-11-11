@@ -466,6 +466,50 @@ test.describe("client-v2-stages: Interact", () => {
       cardBox.x + cardBox.width + 0.5
     );
   });
+
+  // At 1024 px in the suite's layout (TREE_OPEN_LAYOUT in playwright.config:
+  // the navigation, the files and the assistant open), the stage is about
+  // 240 px wide, less the scrollbar gutter on both edges: Upload IDL, the
+  // IDL's name and "Build the IDL locally" on one centred row lost both ends
+  test("Interact keeps its IDL actions inside a narrow stage", async ({
+    seededPage: page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    // eslint-disable-next-line unicorn/no-null -- the cluster's answer for an account that does not exist
+    await stubProgramAccount(page, null);
+    const panel = await buildThenInteract(page);
+    await expect(
+      panel.getByRole("heading", { name: "Nothing to call yet" })
+    ).toBeVisible(LONG);
+
+    // The frame's content box, inside its gutters, where it clips. Under
+    // 300 px it cannot hold the two buttons side by side (about 270 px) with
+    // the IDL's name, so the row must wrap; wider, the test no longer reaches
+    // the case it guards
+    const frame = await panel
+      .locator("div.overflow-y-auto")
+      .first()
+      .evaluate((el) => {
+        // `clientWidth` leaves out both gutters, half of the difference each
+        const gutter = (el.offsetWidth - el.clientWidth) / 2;
+        const left = el.getBoundingClientRect().left + gutter;
+        return { left, right: left + el.clientWidth };
+      });
+    expect(frame.right - frame.left).toBeLessThan(300);
+    const actions = panel.locator('[data-slot="stage-empty-actions"]');
+    await expect(
+      actions.getByRole("button", { name: "Build the IDL locally" })
+    ).toBeVisible();
+    // The buttons, and the IDL's name beside Upload IDL
+    const parts = actions.getByRole("button").or(actions.getByRole("status"));
+    for (const part of await parts.all()) {
+      const box = requireFor("an action's bounding box")(
+        await part.boundingBox()
+      );
+      expect(box.x).toBeGreaterThanOrEqual(frame.left - 0.5);
+      expect(box.x + box.width).toBeLessThanOrEqual(frame.right + 0.5);
+    }
+  });
 });
 
 test.describe("client-v2-stages on a phone", () => {
