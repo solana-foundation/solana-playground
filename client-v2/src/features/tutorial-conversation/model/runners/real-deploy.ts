@@ -273,7 +273,9 @@ export const realDeployPort = (): DeployPort => {
     build: async () => {
       const built = await runBuild("build", { beatId: "deploy" }, () => {});
       if (built.ok || built.act !== "build") return { ok: true };
-      return { ok: false, message: buildFailureOf(built) };
+      return built.reason === "stopped"
+        ? { ok: false, message: built.log, isStopped: true }
+        : { ok: false, message: buildFailureOf(built) };
     },
     bytes: async () =>
       PgServer.deploy(needed(PgProgramInfo.uuid, "the build's uuid")),
@@ -443,9 +445,8 @@ export const realDeployPort = (): DeployPort => {
 /** A failed build's line on the deploy's failed card */
 const buildFailureOf = (r: Extract<RunResult, { act: "build"; ok: false }>) => {
   if (r.reason === "unreachable") return "The build server didn't answer.";
-  // TODO(HOO-2661): untested; this module needs the app's globals to load,
-  // so an in-source block cannot reach it. The line is the one the
-  // tutorial-runs spec names for a build-and-deploy refused for sign-in
+  // The line the tutorial-runs spec names for a build-and-deploy refused
+  // for sign-in (HOO-2661); `real-deploy.test.ts` covers it
   if (r.reason === "signed_out") return "Sign in with GitHub to build.";
   const e = r.error;
   if (!e) return "The build failed. See the terminal.";
@@ -476,7 +477,10 @@ export const runDeployOnDevnet: ActRun = async (act, _input, onStage) => {
   );
   // The reason and the chain's message only: never a key or the wallet.
   // `runDeploy` answers only deploy results, so every failure has a reason
-  if (!result.ok && result.act !== "build" && "reason" in result) {
+  if (!result.ok && result.act !== "build" && result.reason === "stopped") {
+    // The learner's Stop: no failure (HOO-2822)
+    log.info(`The learner stopped a tutorial ${act}`);
+  } else if (!result.ok && result.act !== "build" && "reason" in result) {
     log.warn(`A tutorial ${act} stopped: ${result.reason}`, {
       context: { message: result.message },
     });

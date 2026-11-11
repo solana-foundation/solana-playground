@@ -301,6 +301,17 @@ keypair and runs the act again, building for it: "Not upgradable" when the
 program can no longer be upgraded, and "Not your program" when another
 wallet holds its upgrade authority, which also keeps "Try again" with
 "Switch to the wallet that deployed it, then try again".
+An act the learner stopped (Stop or Ctrl+C while it ran) SHALL NOT read as a
+failure (HOO-2822). Today a build can be stopped, and a deploy or
+build-and-deploy while it builds; a run, a call and a deploy's chain stages
+cannot. Its result card SHALL read "<act> stopped" ("Build stopped"), with
+no error line, no Explain the error and no "I'll fix it myself", and SHALL
+be followed at once by an act card that runs it again with the act's own
+verb ("Build again", "Deploy again", "Build and deploy again"; "Run again"
+and "Call again" should a run or call become stoppable) and the line
+"Stopped. Press <button> when you're ready.". The act's word in the
+composer presses that card. A stop SHALL NOT be reported to error
+tracking, and `tutorial_action_run` counts it as `failed`.
 
 #### Scenario: Fixing an unplanned build error yourself (manual)
 
@@ -310,6 +321,15 @@ wallet holds its upgrade authority, which also keeps "Try again" with
   again." with "Build again" follows
 - **AND** after the fix, Build again builds and a passing build passes the
   step
+
+#### Scenario: A build the learner stopped (manual)
+
+- **WHEN** the learner presses Build on Hello Anchor's step 1, then Stop
+  while it builds
+- **THEN** the result card reads "Build stopped", with no Explain the error
+  and no "I'll fix it myself"
+- **AND** an act card "Stopped. Press Build again when you're ready." with
+  "Build again" follows at once, and typing `build` presses it
 
 #### Scenario: A program that can no longer be upgraded (manual)
 

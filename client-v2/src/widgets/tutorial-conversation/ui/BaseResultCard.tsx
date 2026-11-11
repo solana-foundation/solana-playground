@@ -13,6 +13,7 @@ import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Kbd } from "@/shared/ui/kbd";
 
+import BaseStoppedCard, { STOPPED_TITLE } from "./BaseStoppedCard";
 import BaseTxResultCard from "./BaseTxResultCard";
 import { ACTION, ACTION_FILL, ACTION_SOFT, PHONE_CTA } from "./card-action";
 import { phoneCtaWidth, usePhone } from "./phone";
@@ -116,6 +117,7 @@ const headOf = (
     immutable: "Not upgradable",
     not_authority: "Not your program",
     failed: r.act === "airdrop" ? "Airdrop failed" : "Deploy failed",
+    stopped: STOPPED_TITLE[r.act],
   } as const;
   return { title: titles[r.reason], meta: r.message };
 };
@@ -142,7 +144,8 @@ const iconTone = (ok: boolean, signedOut: boolean) => {
  * The run tickets (4.1 to 4.3) fill the bodies each result carries.
  *
  * A run's or call's result is `BaseTxResultCard`'s; a deploy's is
- * `BaseDeployResultCard`'s, which `TurnView` picks for it.
+ * `BaseDeployResultCard`'s, which `TurnView` picks for it. An act the
+ * learner stopped is `BaseStoppedCard`'s, whatever the act (HOO-2822).
  */
 const BaseResultCard = ({
   result,
@@ -163,6 +166,10 @@ const BaseResultCard = ({
   const [reopened, setReopened] = useState(false);
   const layout = usePhone();
   const { phone } = layout;
+  // A Base component takes types only from the feature, so not `isStoppedRun`
+  if (!result.ok && "reason" in result && result.reason === "stopped") {
+    return <BaseStoppedCard act={result.act} />;
+  }
   if (isTxResult(result)) {
     return (
       <BaseTxResultCard
@@ -182,12 +189,12 @@ const BaseResultCard = ({
   // Not a failure: nothing is wrong with the code (Design alignment, 6 Nov)
   const signedOut = failedBuild?.reason === "signed_out";
   // The build never ran: one way on, nothing of the compiler's to read
-  const stopped = unreachable || signedOut;
+  const hasNotRun = unreachable || signedOut;
   const Icon = iconOf(result.ok, signedOut);
   // Folded, it opens again only when there is something to read
   const foldable =
     !!failedBuild &&
-    !stopped &&
+    !hasNotRun &&
     !open &&
     (failedBuild.error !== null || failedBuild.log !== "");
   const expanded = open || (foldable && reopened);
@@ -278,7 +285,7 @@ const BaseResultCard = ({
           )}
         </div>
       )}
-      {expanded && failedBuild && !stopped && (
+      {expanded && failedBuild && !hasNotRun && (
         <div className="flex flex-col gap-3 border-t border-error/20 px-3 py-3">
           {/* The compiler's words on a red rule, a quote of its output with
               no well (the prototype's ResultCard, f7d42bf2e) */}

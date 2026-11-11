@@ -1,6 +1,8 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
 import type { Idl } from "@coral-xyz/anchor";
 
+import { isStopped } from "@/utils/stopped";
+
 import type { RunInput, RunStage } from "../ports";
 import type { Exists, RunResult, UnreadTx } from "../progress";
 import type { AccountData } from "./account-read";
@@ -100,6 +102,24 @@ export interface RunPort {
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
+ * A run or call that ended with a `StoppedError` (HOO-2822): no failure,
+ * never reported. A guard: the `run` command is not stoppable and a call
+ * runs through no command, so neither can be stopped today
+ */
+const stoppedOf = (
+  act: "run" | "call",
+  seconds: () => number,
+  e: unknown
+): TxResult => ({
+  act,
+  ok: false,
+  seconds: seconds(),
+  reason: "stopped",
+  message: messageOf(e),
+  log: "",
+});
+
+/**
  * A failed call's line when the learner's program no longer matches what the
  * step expects. The conversation adds the offer to show the lines (`view.ts`);
  * the Call panel has no such action, so this line promises none.
@@ -160,6 +180,7 @@ export const runOrCall = async (
   try {
     return await attempt(port, act, input, onStage, seconds, fail);
   } catch (e) {
+    if (isStopped(e)) return stoppedOf(act, seconds, e);
     port.report(e, `The tutorial ${act}`);
     return fail(messageOf(e));
   }
@@ -276,6 +297,9 @@ const fromSends = async ({
   // A try `PgTx.send` answered by sending again is not a refusal; after its last resend the answer arrives as `error`
   const captured = sends.captured.filter((c) => !isRetriedSend(c));
   const { error } = sends;
+  // A guard (see `stoppedOf`): a stop after some sends is still a stop,
+  // since the run did not finish
+  if (isStopped(error)) return stoppedOf(act, seconds, error);
 
   if (!captured.length) {
     if (error instanceof NoSuchInstructionError) {
@@ -466,9 +490,13 @@ const landedResult = async (
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi } = import.meta.vitest;
+  const { beforeAll, describe, it, expect, vi } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/run-call", () => {
+    let StoppedError: typeof import("@/utils/stopped").StoppedError;
+    beforeAll(async () => {
+      ({ StoppedError } = await import("@/utils/stopped"));
+    });
     const SOL = 1_000_000_000;
     const PROGRAM = "He11o1111111111111111111111111111111111111";
     const WALLET = "Wa11et1111111111111111111111111111111111111";
@@ -755,6 +783,48 @@ if (import.meta.vitest) {
       });
       expect(result).not.toHaveProperty("reason");
     });
+
+    it.each(["run", "call"] as const)(
+      "a %s the learner stopped is stopped, not failed, and nothing is reported",
+      async (act) => {
+        const before = portWith({
+          send: async () => ({
+            captured: [],
+            error: new StoppedError("Stopped."),
+          }),
+        });
+        expect((await stagesOf(before, act)).result).toMatchObject({
+          act,
+          ok: false,
+          reason: "stopped",
+          message: "Stopped.",
+        });
+        expect(before.report).not.toHaveBeenCalled();
+        const thrown = portWith({
+          send: async () => {
+            throw new StoppedError("Stopped.");
+          },
+        });
+        expect((await stagesOf(thrown, act)).result).toMatchObject({
+          act,
+          ok: false,
+          reason: "stopped",
+        });
+        expect(thrown.report).not.toHaveBeenCalled();
+        const after = portWith({
+          send: async () => ({
+            captured: [{ kind: "sent", signature: "5ig", encoded: "tx" }],
+            error: new StoppedError("Stopped."),
+          }),
+        });
+        expect((await stagesOf(after, act)).result).toMatchObject({
+          act,
+          ok: false,
+          reason: "stopped",
+        });
+        expect(after.report).not.toHaveBeenCalled();
+      }
+    );
 
     describe("runOrCall", () => {
       const CREATES = { instruction: "init_player", account: "player" };

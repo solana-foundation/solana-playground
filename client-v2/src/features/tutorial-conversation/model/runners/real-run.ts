@@ -322,8 +322,11 @@ export const runOnDevnet =
       input,
       onStage
     );
-    // The reason and the message only: no key material
-    if (!result.ok) {
+    // The reason and the message only: no key material. A stop is the
+    // learner's, no failure (HOO-2822)
+    if (!result.ok && result.reason === "stopped") {
+      log.info(`The learner stopped a tutorial ${act}`);
+    } else if (!result.ok) {
       log.warn(`A tutorial ${act} failed`, {
         context: {
           message: result.message,

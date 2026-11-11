@@ -3,6 +3,7 @@ import type { Act } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
 import { PgCommand, PgExplorer } from "@/utils";
 import { isSignInRefusalError } from "@/utils/sign-in-refusal";
+import { isStopped } from "@/utils/stopped";
 import {
   PgBuildOutput,
   stripKnownNoise,
@@ -30,7 +31,8 @@ const log = createLogger("tutorial-conversation:build");
  * last-build state move exactly as they do for the editor (design D4), then
  * the raw log the command keeps for the assistant, read back and parsed.
  * The result is a fact, never a throw: a server that never answered is
- * `unreachable`; one that asked for a sign-in is `signed_out`; one that
+ * `unreachable`; one that asked for a sign-in is `signed_out`; a build the
+ * learner stopped (the command's `StoppedError`) is `stopped`; one that
  * refused the request otherwise shows its text as the log, with no line.
  *
  * @param act the act being run; only `build` reaches this runner
@@ -51,6 +53,19 @@ export const runBuild = async (
     await PgCommand.build.execute();
   } catch (e) {
     const message = messageOf(e);
+    // The learner's Stop: nothing failed, and the team has nothing to hear
+    // (HOO-2822)
+    if (isStopped(e)) {
+      log.info("the learner stopped the build");
+      return {
+        act: "build",
+        ok: false,
+        seconds: seconds(),
+        reason: "stopped",
+        error: null,
+        log: message,
+      };
+    }
     if (NO_ANSWER.test(message)) {
       log.warn("the build server did not answer", { context: { message } });
       return failedResult(act, message, seconds());

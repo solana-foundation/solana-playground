@@ -25,6 +25,7 @@ import {
 } from "@/shared/ui/collapsible";
 import { CopyButton } from "@/shared/ui/copy-button";
 
+import BaseStoppedCard from "./BaseStoppedCard";
 import { formatSeconds, Prose, READ } from "./Prose";
 import WalletAddress from "./WalletAddress";
 
@@ -238,6 +239,9 @@ const BaseDeployResultCard = ({
           </p>
         </FailedCard>
       );
+    // The learner's Stop: nothing failed (HOO-2822)
+    case "stopped":
+      return <BaseStoppedCard act={result.act} />;
     default: {
       // A reason `RunResult` adds must get its own card here
       const unknown: never = result;
