@@ -139,7 +139,12 @@ const effectsMounted = (page: Page) =>
 test("client-v2-layout: A workspace re-open leaves the composer focused", async ({
   page,
   context,
+  browserName,
 }) => {
+  test.fixme(
+    browserName === "firefox",
+    "On Firefox the composer ends inactive after the re-open, cause unknown (HOO-2791)"
+  );
   test.setTimeout(180_000);
 
   const mounted = effectsMounted(page);

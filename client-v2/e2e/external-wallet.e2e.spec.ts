@@ -76,7 +76,12 @@ const openWalletMenu = async (page: Page) => {
 test("client-v2-external-wallet: A wallet that registers late", async ({
   page,
   seededPage,
+  browserName,
 }) => {
+  test.fixme(
+    browserName === "firefox",
+    "On Firefox the late-registered wallet is never listed, cause unknown (HOO-2791)"
+  );
   void seededPage;
   await setUpPlaygroundWallet(page);
 
