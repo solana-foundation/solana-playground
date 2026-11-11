@@ -511,6 +511,8 @@ jobs:
       # holds no binary for this one, and a hit would skip its install. It
       # names the runner image too (`ImageOS`, e.g. `ubuntu26`): `runner.os` is
       # `Linux` on every release, so a browser built on another image would load.
+      # And `runner.arch`: an arm64 act run on the same image saved an aarch64
+      # Firefox that an amd64 run restored and failed to spawn (ENOENT).
       - name: Playwright version
         id: playwright
         run: |
@@ -521,7 +523,7 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
