@@ -190,6 +190,7 @@ describe("PgJsRuntime busy refusal", () => {
     ["tests", true, "Please wait for client to finish."],
   ])(
     "refuses %s with a RunBusyError while a client script runs",
+    // eslint-disable-next-line max-params -- it.each passes one parameter per cell of the row
     async (_, isTest, message) => {
       runtime._isClientRunning = true;
       const refused = run(isTest);
@@ -204,6 +205,7 @@ describe("PgJsRuntime busy refusal", () => {
     ["tests", true, "Tests are already running!"],
   ])(
     "refuses %s with a RunBusyError while tests run",
+    // eslint-disable-next-line max-params -- it.each passes one parameter per cell of the row
     async (_, isTest, message) => {
       state._state = "running";
       const refused = run(isTest);
