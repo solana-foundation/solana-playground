@@ -310,8 +310,17 @@ export const addImports = (content: string) => {
  */
 export const getImportedNames = (content: string) => {
   const names = new Set<string>();
-  const statement = /\bimport(?![\w$(])([^"'`;]*?)\bfrom\s*["'][^"'\n]*["']/g;
-  for (const [, clause] of content.matchAll(statement)) {
+  // An import in a comment binds nothing: drop comments, but keep strings
+  // whole, so "http://" in one is not read as a comment
+  const code = content.replace(
+    /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+    (_match, string?: string) => string ?? " "
+  );
+  // A statement starts a line or follows a `;`, so an import written inside a
+  // string is not one
+  const statement =
+    /(?:^|;)[ \t]*import(?![\w$(])([^"'`;]*?)\bfrom\s*["'][^"'\n]*["']/gm;
+  for (const [, clause] of code.matchAll(statement)) {
     for (const part of clause.replace(/[{}]/g, ",").split(",")) {
       const name = part
         .trim()
