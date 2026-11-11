@@ -26,7 +26,8 @@ test("client-v2-layout: A late editor mount leaves the new-file field focused", 
     await route.continue();
   });
 
-  await page.reload();
+  // The held chunk can be requested before `load`, which then waits on it
+  await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.locator("#root-dir")).toBeVisible(LONG);
   await expect.poll(() => requested, LONG).toBe(true);
   await expect(page.locator(".monaco-editor")).toHaveCount(0);
@@ -159,6 +160,10 @@ test("client-v2-layout: A workspace re-open leaves the composer focused", async 
   }, KEY_CONNECTION);
   const composer = page.getByRole("textbox", { name: "Message the assistant" });
   await expect(composer).toBeVisible(LONG);
+  // Before the second tab opens: Firefox moves no focus on a click into the tab it sends to the background
+  await composer.click();
+  await page.keyboard.type("half a thought");
+  await expect(composer).toBeFocused();
 
   // A second tab of the same browser on the same project. A file created
   // there changes which files exist, so this tab's `effects/tab-sync`
@@ -169,9 +174,6 @@ test("client-v2-layout: A workspace re-open leaves the composer focused", async 
   await other.goto("/");
   await expect(other.locator("#root-dir")).toBeVisible(LONG);
   await otherMounted;
-
-  await composer.click();
-  await page.keyboard.type("half a thought");
 
   await other.getByRole("button", { name: "New file" }).click();
   const name = other.locator("#root-dir input");
