@@ -174,8 +174,7 @@ impl DefaultSigner {
                     }
                 })
                 .map_err(|_| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    std::io::Error::other(
                         format!(
                         "No default signer found, run \"solana-keygen new -o {}\" to create a new one",
                         self.path
@@ -566,7 +565,7 @@ pub struct SignerFromPathConfig {
 /// the following schemes are supported:
 ///
 /// - `file:` &mdash; Read the keypair from a JSON keypair file. The path portion
-///    of the URI is the file path.
+///   of the URI is the file path.
 ///
 /// - `stdin:` &mdash; Read the keypair from stdin, in the JSON format used by
 ///   the keypair file.
@@ -773,8 +772,7 @@ pub fn signer_from_path_with_config(
             )?))
         }
         SignerSourceKind::Filepath(path) => match read_keypair_file(&path) {
-            Err(e) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Err(e) => Err(std::io::Error::other(
                 format!("could not read keypair file \"{}\". Run \"solana-keygen new\" to create a keypair file: {}", path, e),
             )
             .into()),
@@ -809,8 +807,7 @@ pub fn signer_from_path_with_config(
             } else if config.allow_null_signer || matches.is_present(SIGN_ONLY_ARG.name) {
                 Ok(Box::new(NullSigner::new(&pubkey)))
             } else {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                Err(std::io::Error::other(
                     format!("missing signature for supplied pubkey: {}", pubkey),
                 )
                 .into())
@@ -895,14 +892,11 @@ pub fn resolve_signer_from_path(
             .map(|_| None)
         }
         SignerSourceKind::Filepath(path) => match read_keypair_file(&path) {
-            Err(e) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "could not read keypair file \"{}\". \
+            Err(e) => Err(std::io::Error::other(format!(
+                "could not read keypair file \"{}\". \
                     Run \"solana-keygen new\" to create a keypair file: {}",
-                    path, e
-                ),
-            )
+                path, e
+            ))
             .into()),
             Ok(_) => Ok(Some(path.to_string())),
         },
@@ -1018,14 +1012,11 @@ pub fn keypair_from_path(
             )?)
         }
         SignerSourceKind::Filepath(path) => match read_keypair_file(&path) {
-            Err(e) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "could not read keypair file \"{}\". \
+            Err(e) => Err(std::io::Error::other(format!(
+                "could not read keypair file \"{}\". \
                     Run \"solana-keygen new\" to create a keypair file: {}",
-                    path, e
-                ),
-            )
+                path, e
+            ))
             .into()),
             Ok(file) => Ok(file),
         },
@@ -1033,13 +1024,10 @@ pub fn keypair_from_path(
             let mut stdin = std::io::stdin();
             Ok(read_keypair(&mut stdin)?)
         }
-        _ => Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "signer of type `{:?}` does not support Keypair output",
-                kind
-            ),
-        )
+        _ => Err(std::io::Error::other(format!(
+            "signer of type `{:?}` does not support Keypair output",
+            kind
+        ))
         .into()),
     }
 }

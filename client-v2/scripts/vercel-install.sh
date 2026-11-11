@@ -166,17 +166,30 @@ download_wasm_bindgen() {
     || { echo ">>> wasm-bindgen $1: prebuilt $url unusable, compiling instead" >&2; return 1; }
 }
 
-# $1: version, $2: destination. --locked keeps the crate's own Cargo.lock; unlocked, the pinned Cargo resolves dependencies it cannot build.
+# $1: package. Prints the toolchain that builds it: its own rust-toolchain.toml when it has one, else the workspace's.
+package_toolchain() {
+  local file="../wasm/$1/rust-toolchain.toml"
+  if [ -f "$file" ]; then
+    # Matches wasm/build.sh's parsing of the same file.
+    awk '/channel/{gsub(/"/, ""); print $3 }' "$file"
+  else
+    printf '%s' "$RUST_VERSION"
+  fi
+}
+
+# $1: version, $2: destination, $3: toolchain. --locked keeps the crate's own Cargo.lock; unlocked, Cargo resolves the newest dependencies, which the toolchain may not build.
 cargo_install_wasm_bindgen() {
   local root="$2.cargo"
-  cargo install wasm-bindgen-cli --version "$1" --locked --root "$root"
+  # The toolchain of the package that pins this version: a later Rust refuses to compile wasm-bindgen below 0.2.88.
+  rustup toolchain install "$3" --profile minimal
+  cargo "+$3" install wasm-bindgen-cli --version "$1" --locked --root "$root"
   mv "$root/bin/wasm-bindgen" "$root/bin/wasm-bindgen-test-runner" "$2"
   rm -rf "$root"
 }
 
-# $1: version. Leaves wasm-bindgen and wasm-bindgen-test-runner in $WASM_BINDGEN_ROOT/<version>.
+# $1: version, $2: package that resolves it. Leaves wasm-bindgen and wasm-bindgen-test-runner in $WASM_BINDGEN_ROOT/<version>.
 install_wasm_bindgen() {
-  local dir="$WASM_BINDGEN_ROOT/$1"
+  local dir="$WASM_BINDGEN_ROOT/$1" toolchain
   if wasm_bindgen_reports "$dir" "$1"; then
     echo ">>> wasm-bindgen $1: cached"
     return
@@ -186,7 +199,9 @@ install_wasm_bindgen() {
     echo ">>> wasm-bindgen $1: prebuilt"
     return
   fi
-  cargo_install_wasm_bindgen "$1" "$dir"
+  # Its own line: set -e ignores a failure inside a command substitution used as an argument.
+  toolchain=$(package_toolchain "$2")
+  cargo_install_wasm_bindgen "$1" "$dir" "$toolchain"
   if ! wasm_bindgen_reports "$dir" "$1"; then
     echo ">>> wasm-bindgen $1: $dir/wasm-bindgen does not report that version" >&2
     return 1
@@ -206,13 +221,13 @@ build_wasm_packages() {
   rustup default "$RUST_VERSION"
 
   # One package at a time, its wasm-bindgen first on PATH: wasm-pack takes a matching binary from PATH; otherwise
-  # it downloads a prebuilt tarball and, when that fails, runs an unlocked `cargo install` that the pinned toolchain cannot build.
+  # it downloads a prebuilt tarball and, when that fails, runs an unlocked `cargo install`, whose newest dependencies the toolchain may not build.
   local package version
   # WASM_PACKAGES is declared in wasm-stubs.sh.
   for package in $WASM_PACKAGES; do
     # Its own line: set -e ignores a failure inside a command substitution used as an argument.
     version=$(wasm_bindgen_version "$package")
-    install_wasm_bindgen "$version"
+    install_wasm_bindgen "$version" "$package"
     PATH="$WASM_BINDGEN_ROOT/$version:$PATH" bash ../wasm/build.sh "$package"
   done
 }
