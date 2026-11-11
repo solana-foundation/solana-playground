@@ -11,19 +11,18 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MAINNET_DEPLOY_BLOCKED_LINE } from "@/commands/deploy/mainnet-block";
 import type { DeployRunState } from "@/commands/deploy/run";
+import { shortKey } from "@/features/deploy";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
 
+import { PROGRAM_ID, WALLET } from "../__fixtures__/addresses";
 import type { DeployRecord } from "../state/deploy-history";
 import type { BaseDeployProps, DeployDetails } from "./BaseDeploy";
 import BaseDeploy from "./BaseDeploy";
 import type { DeployView } from "./deploy-view";
 import { IDLE_VIEW } from "./deploy-view";
 
-const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
-
-const SHORT_ID = "6PNd…AVkj";
-const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+const GUIDE = "Build the IDL locally";
 
 // eslint-disable-next-line unicorn/no-null -- a stored record writes an absent signature as null
 const NONE = null;
@@ -97,6 +96,7 @@ const props = (state: {
   onShowNetwork: vi.fn(),
   idlName: undefined,
   idlUpload: <button>Upload IDL</button>,
+  idlGuide: <button aria-label={GUIDE}>{GUIDE}</button>,
   programKeypair: <section aria-label="Program id" />,
   onOpenCliGuide: state.onOpenCliGuide ?? vi.fn(),
 });
@@ -383,7 +383,9 @@ describe("BaseDeploy", () => {
 
     const result = screen.getByRole("status", { name: "Deploy result" });
     expect(result.textContent).toContain("Deployed to devnet");
-    expect(result.querySelector("code")?.textContent).toBe(SHORT_ID);
+    expect(result.querySelector("code")?.textContent).toBe(
+      shortKey(PROGRAM_ID)
+    );
     expect(
       within(result).getByRole("button", { name: "Copy the program id" })
     ).toBeTruthy();
@@ -622,7 +624,7 @@ describe("BaseDeploy", () => {
       <BaseDeploy {...props({ built: true, history: [] })} />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      "From your Playground wallet · 7xKX…gAsU · 4.20 SOL"
+      `From your Playground wallet · ${shortKey(WALLET)} · 4.20 SOL`
     );
     expect(screen.getByText(/^Deploying sends/).textContent).toBe(
       "Deploying sends the compiled program to devnet."
@@ -638,7 +640,7 @@ describe("BaseDeploy", () => {
       />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      "From your wallet · 7xKX…gAsU · 4.20 SOL"
+      `From your wallet · ${shortKey(WALLET)} · 4.20 SOL`
     );
 
     rerender(
@@ -735,8 +737,8 @@ describe("BaseDeploy", () => {
     expect(p.onSaveKeypair).toHaveBeenCalledOnce();
   });
 
-  /** The prototype's first deploy: the pill, Upload IDL and the CLI guide under it */
-  it("before the first deploy it has no history, only Upload IDL and the CLI guide", () => {
+  /** The prototype's first deploy: the pill, the IDL actions and the CLI guide under it */
+  it("before the first deploy it has no history, only the IDL actions and the CLI guide", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: true, history: [] })} />
     );
@@ -750,13 +752,14 @@ describe("BaseDeploy", () => {
       [...actions.querySelectorAll("button")].map((b) => b.textContent)
     ).toEqual(["Deploy to devnet"]);
     expect(screen.getByRole("button", { name: "Upload IDL" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: GUIDE })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Deploy with the CLI" })
     ).toBeTruthy();
   });
 
-  /** After a deploy the stage reports: the history, and Upload IDL beside the pill */
-  it("after a deploy it shows the history and keeps Upload IDL", () => {
+  /** After a deploy the stage reports: the history, and the IDL actions beside the pill */
+  it("after a deploy it shows the history and keeps the IDL actions", () => {
     const { container } = render(
       <BaseDeploy
         {...props({
@@ -771,6 +774,7 @@ describe("BaseDeploy", () => {
       container.querySelector('[data-slot="stage-empty-actions"]')
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Upload IDL" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: GUIDE })).toBeTruthy();
   });
 
   const FUNDING: DeployView = {

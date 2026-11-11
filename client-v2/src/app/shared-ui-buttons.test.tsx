@@ -163,23 +163,34 @@ describe("AsyncButton", () => {
 });
 
 describe("CopyButton", () => {
-  const renderCopy = (onError = vi.fn()) => {
+  const renderCopy = () => {
+    const onError = vi.fn();
+    const onCopied = vi.fn();
     render(
       <TooltipProvider>
-        <CopyButton value="https://beta.solpg.io/abc" onError={onError} />
+        <CopyButton
+          value="https://beta.solpg.io/abc"
+          onError={onError}
+          onCopied={onCopied}
+        />
       </TooltipProvider>
     );
-    return { onError, button: screen.getByRole("button", { name: "Copy" }) };
+    return {
+      onError,
+      onCopied,
+      button: screen.getByRole("button", { name: "Copy" }),
+    };
   };
 
-  it("writes its value and says Copied", async () => {
+  it("writes its value, says Copied, and tells onCopied", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
-    const { button } = renderCopy();
+    const { button, onCopied } = renderCopy();
 
     await act(async () => fireEvent.click(button));
     expect(writeText).toHaveBeenCalledWith("https://beta.solpg.io/abc");
     expect(button.getAttribute("aria-label")).toBe("Copied");
+    expect(onCopied).toHaveBeenCalledTimes(1);
   });
 
   it("does not say Copied when the clipboard refuses, and reports it", async () => {
@@ -187,11 +198,12 @@ describe("CopyButton", () => {
     vi.stubGlobal("navigator", {
       clipboard: { writeText: vi.fn().mockRejectedValue(refusal) },
     });
-    const { button, onError } = renderCopy();
+    const { button, onError, onCopied } = renderCopy();
 
     await act(async () => fireEvent.click(button));
     expect(onError).toHaveBeenCalledWith(refusal);
     expect(button.getAttribute("aria-label")).toBe("Copy");
+    expect(onCopied).not.toHaveBeenCalled();
   });
 
   it("reports a browser with no clipboard", async () => {

@@ -193,13 +193,13 @@ describe("Hello Anchor through the engine", () => {
       reason: "compiler",
       seconds: 1.2,
       error: {
-        code: "E0412",
+        code: "E0432",
         file: "src/lib.rs",
-        line: 9,
-        column: 32,
-        message: "cannot find type `Hello` in this scope",
+        line: 5,
+        column: 1,
+        message: "unresolved import `crate`",
       },
-      log: "error[E0412]: cannot find type `Hello` in this scope",
+      log: "error[E0432]: unresolved import `crate`\n  | ^^^^^^^^^^ could not find `__client_accounts_hello` in the crate root",
     };
     const runner = stubRunner([
       { stages: ["Building"], result: failed },

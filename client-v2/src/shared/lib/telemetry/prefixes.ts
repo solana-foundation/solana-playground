@@ -14,6 +14,7 @@ export const EVENT_PREFIXES = {
   "fund-wallet": "fund",
   gist: "gist",
   home: "home",
+  "idl-build-guide": "idl_guide",
   "layout-shell": "layout",
   mcp: "mcp",
   "new-project": "new_project",

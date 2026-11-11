@@ -13,6 +13,7 @@ function CopyButton({
   value,
   label = "Copy",
   onError,
+  onCopied,
   className,
   ...props
 }: Omit<
@@ -24,6 +25,8 @@ function CopyButton({
   label?: string
   /** where a refused copy goes */
   onError?: (error: unknown) => void
+  /** runs once the clipboard holds the value, never after a refused copy */
+  onCopied?: () => void
 }) {
   const [open, setOpen] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
@@ -39,6 +42,7 @@ function CopyButton({
       return
     }
     setCopied(true)
+    onCopied?.()
     window.clearTimeout(timer.current)
     timer.current = window.setTimeout(() => setCopied(false), 1400)
   }
