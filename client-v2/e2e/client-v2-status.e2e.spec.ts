@@ -40,7 +40,10 @@ const OFFLINE_LINE =
 
 /**
  * Devnet answers `getSlot` with one slot that never moves: down by
- * `PgConnection.getIsClusterDown`, which reads the slot twice a second apart
+ * `PgConnection.getIsClusterDown`, which reads the slot twice a second apart.
+ * `getAccountInfo` answers "no account" at once: the Deploy stage restores a
+ * reload's build only after `PgProgramInfo.onChain` reads the program
+ * account, and the real devnet can take longer than the test waits
  */
 const stallDevnet = (page: Page) =>
   page.route("https://api.devnet.solana.com/**", async (route) => {
@@ -48,8 +51,55 @@ const stallDevnet = (page: Page) =>
       id?: unknown;
       method?: string;
     } | null;
-    if (body?.method !== "getSlot") return route.continue();
-    return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
+    if (body?.method === "getSlot") {
+      return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
+    }
+    if (body?.method === "getAccountInfo") {
+      return json(route, {
+        jsonrpc: "2.0",
+        // eslint-disable-next-line unicorn/no-null -- the RPC's own "no account"
+        result: { context: { slot: 123 }, value: null },
+        id: body.id,
+      });
+    }
+    return route.continue();
+  });
+
+/**
+ * Whether the build's verdict is on disk: a file in lightning-fs's IndexedDB
+ * store holds `"lastBuildFailed":false`. `PgProgramInfo` writes
+ * `program-info.json` a moment after Build reports success, and a reload
+ * before that write reads the project as never built.
+ */
+const buildIsSaved = (page: Page) =>
+  page.evaluate(async () => {
+    const dbs = await indexedDB.databases();
+    const name = dbs.map((d) => d.name).find((n) => n?.includes("solana"));
+    if (!name) return false;
+    const db: IDBDatabase = await new Promise((resolve, reject) => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error);
+    });
+    const store = Array.from(db.objectStoreNames).find((s) =>
+      s.includes("files")
+    );
+    if (!store) {
+      db.close();
+      return false;
+    }
+    const values: unknown[] = await new Promise((resolve, reject) => {
+      const all = db.transaction(store, "readonly").objectStore(store).getAll();
+      all.onsuccess = () => resolve(all.result);
+      all.onerror = () => reject(all.error);
+    });
+    db.close();
+    const decoder = new TextDecoder();
+    return values.some(
+      (value) =>
+        value instanceof Uint8Array &&
+        decoder.decode(value).includes('"lastBuildFailed":false')
+    );
   });
 
 test.describe("on a 1440 px window", () => {
@@ -308,6 +358,7 @@ test.describe("on a 1440 px window", () => {
     await expect(
       build.getByRole("heading", { name: "Build succeeded" })
     ).toBeVisible({ timeout: 60_000 });
+    await expect.poll(() => buildIsSaved(page), { timeout: 10_000 }).toBe(true);
 
     await stallDevnet(page);
     await page.reload();
