@@ -23,8 +23,10 @@ type IdlBuildGuideEvents = {
   idl_guide_project_downloaded: NoParams;
   /** "Download project" threw; the reason shows under the button and was logged. */
   idl_guide_export_failed: { reason: ExportFailureReason };
-  /** The last step's Upload IDL link closed the dialog and handed over to the stage's upload. */
-  idl_guide_upload_followed: NoParams;
+  /** A file dropped or picked on the last step was an IDL and is now the one in use. */
+  idl_guide_idl_loaded: NoParams;
+  /** A file dropped or picked on the last step was not an Anchor IDL; the step says so. */
+  idl_guide_idl_refused: NoParams;
 };
 
 export const idlBuildGuideTelemetry = createTracker<IdlBuildGuideEvents>();

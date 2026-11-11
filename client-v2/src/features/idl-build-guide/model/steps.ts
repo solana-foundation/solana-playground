@@ -19,88 +19,89 @@ export const IDL_PATH = "idl.json";
 /** Prints where the IDL landed, so the root location is not a guess; silent when the build wrote nothing */
 const SHOW_IDL_PATH = `[ -f ${IDL_PATH} ] && echo "IDL written to $PWD/${IDL_PATH}"`;
 
+/** Shell lines run together, copied as one */
+export interface Command {
+  id: CommandStepId;
+  lines: string[];
+}
+
+/** One tool of the toolchain, named over its own command so a failure names the tool */
+export interface Tool {
+  name: string;
+  command: Command;
+}
+
+/**
+ * A step of a method. The download and the IDL's upload open and close every
+ * method, so the dialog draws them itself; these are the steps between.
+ */
 export type GuideStep =
-  | { kind: "download"; title: string }
-  | {
-      kind: "command";
-      id: CommandStepId;
-      title: string;
-      /** Turns the first `text` in `title` into a link */
-      link?: { text: string; href: string };
-      note?: string;
-      lines: string[];
-    }
-  /** `title` leads into the Upload IDL link; `note` follows it */
-  | { kind: "upload"; title: string; note: string };
+  | { kind: "command"; command: Command }
+  /** Folded: whoever has the tools skips it. `note` follows the tools */
+  | { kind: "install"; title: string; tools: Tool[]; note: string };
 
-const DOWNLOAD: GuideStep = {
-  kind: "download",
-  title: "Download the project, unzip it, and open a terminal in its folder.",
-};
-
-const UPLOAD: GuideStep = {
-  kind: "upload",
-  title: `Upload ${IDL_PATH} from the project folder on Deploy:`,
-  note: "Build the IDL again after you change the program's instructions or accounts.",
+const BUILD: GuideStep = {
+  kind: "command",
+  command: {
+    id: "anchor-build",
+    lines: [`anchor idl build -o ${IDL_PATH}`, SHOW_IDL_PATH],
+  },
 };
 
 // TODO: export the features the server enables on each crate, so a program that needs one builds its IDL locally
-/** The steps of each method, from the download to the upload */
+/** The steps of each method between the download and the upload */
 export const STEPS: Record<IdlBuildMethod, GuideStep[]> = {
   docker: [
-    DOWNLOAD,
     {
       kind: "command",
-      id: "docker-build",
-      title: `Build the IDL in Anchor ${ANCHOR_VERSION}'s Docker image.`,
-      link: {
-        text: "Docker",
-        href: "https://docs.docker.com/get-started/get-docker/",
+      command: {
+        id: "docker-build",
+        lines: [
+          `docker run --rm --platform linux/amd64 -v "$PWD":/workdir -w /workdir quay.io/ottersec/anchor:v${ANCHOR_VERSION} anchor idl build -o ${IDL_PATH}`,
+          SHOW_IDL_PATH,
+        ],
       },
-      lines: [
-        `docker run --rm --platform linux/amd64 -v "$PWD":/workdir -w /workdir quay.io/ottersec/anchor:v${ANCHOR_VERSION} anchor idl build -o ${IDL_PATH}`,
-        SHOW_IDL_PATH,
-      ],
     },
-    UPLOAD,
   ],
   local: [
-    DOWNLOAD,
     {
-      kind: "command",
-      id: "install-rust",
-      title: "Install Rust.",
-      note: "On Linux, install build-essential, pkg-config, libssl-dev, and libudev-dev first.",
-      lines: [
-        "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
-        '. "$HOME/.cargo/env"',
+      kind: "install",
+      title: "Install Rust, Solana CLI, Anchor",
+      note: "Linux needs build-essential, pkg-config, libssl-dev, libudev-dev.",
+      tools: [
+        {
+          name: "Rust",
+          command: {
+            id: "install-rust",
+            lines: [
+              "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
+              '. "$HOME/.cargo/env"',
+            ],
+          },
+        },
+        {
+          name: `Solana CLI ${SOLANA_VERSION}`,
+          command: {
+            id: "install-solana",
+            lines: [
+              `sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"`,
+              'export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"',
+            ],
+          },
+        },
+        {
+          name: `Anchor ${ANCHOR_VERSION}`,
+          command: {
+            id: "install-anchor",
+            lines: [
+              `cargo install --git https://github.com/otter-sec/anchor --tag v${ANCHOR_VERSION} avm --locked --force`,
+              `avm install ${ANCHOR_VERSION}`,
+              `avm use ${ANCHOR_VERSION}`,
+            ],
+          },
+        },
       ],
     },
-    {
-      kind: "command",
-      id: "install-solana",
-      title: `Install the Solana CLI ${SOLANA_VERSION}.`,
-      lines: [
-        `sh -c "$(curl -sSfL https://release.anza.xyz/v${SOLANA_VERSION}/install)"`,
-        'export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"',
-      ],
-    },
-    {
-      kind: "command",
-      id: "install-anchor",
-      title: `Install Anchor ${ANCHOR_VERSION} through avm.`,
-      lines: [
-        `cargo install --git https://github.com/otter-sec/anchor --tag v${ANCHOR_VERSION} avm --locked --force`,
-        `avm install ${ANCHOR_VERSION}`,
-        `avm use ${ANCHOR_VERSION}`,
-      ],
-    },
-    {
-      kind: "command",
-      id: "anchor-build",
-      title: "Build the IDL.",
-      lines: [`anchor idl build -o ${IDL_PATH}`, SHOW_IDL_PATH],
-    },
-    UPLOAD,
+    BUILD,
   ],
 };

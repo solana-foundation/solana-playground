@@ -34,7 +34,11 @@ import { PgFlow } from "../state/stage";
 import type { DeployDetails, DeployPayer } from "./BaseDeploy";
 import BaseDeploy from "./BaseDeploy";
 import { deployViewFor } from "./deploy-view";
-import IdlActions, { uploadIdlOnDeploy, useIdlName } from "./IdlActions";
+import IdlActions, {
+  loadIdlFile,
+  openInteract,
+  useIdlName,
+} from "./IdlActions";
 import { markIfToldByStage } from "./stage-failure";
 
 const log = createLogger("flow:deploy");
@@ -211,7 +215,11 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         onShowNetwork={showNetwork}
         idlUpload={<IdlActions mode="upload-button" />}
         idlGuide={
-          <IdlBuildGuide surface="deploy" onUpload={uploadIdlOnDeploy} />
+          <IdlBuildGuide
+            surface="deploy"
+            onLoadIdl={loadIdlFile}
+            onInteract={openInteract}
+          />
         }
         idlName={idlName}
         // Keyed on the project: an open dialog or a note never carries over

@@ -57,16 +57,18 @@ users a guided way to build the IDL on their own machine and upload it.
   and `bytemuck`.
 - New feature slice `features/idl-build-guide`: a dialog with two methods to build the IDL locally, Docker with
   `quay.io/ottersec/anchor:v1.1.2`, or a local Rust, Solana and `avm` install, each a list of copyable commands that
-  starts with downloading the project and ends at the existing "Upload IDL" action. The Flow's Build, Deploy, and
-  Interact stages open it where they offer the IDL.
+  starts with downloading the project and ends at a drop zone that loads the IDL, then offers Interact. The local
+  method folds its install into one step. The Flow's Build, Deploy, and Interact stages open it where they offer the
+  IDL.
 - The Build stage stops saying the IDL reflects the build: after a successful build it says the build has no IDL and
   offers the guide. While the browser holds no IDL, "Download IDL" is not shown and the guide is offered in its place.
 - Lesson steps checked against the program's IDL are left unchanged: offering the guide there waits for the build
   backend that returns an IDL again (tasks 2.7 and 2.8).
 - The design system's `CopyButton` gains an `onCopied` callback, so a copy is counted only when it succeeds.
-- Telemetry, slice `idl-build-guide`, prefix `idl_guide`: adds six events, `idl_guide_opened`,
+- Telemetry, slice `idl-build-guide`, prefix `idl_guide`: adds seven events, `idl_guide_opened`,
   `idl_guide_method_picked`, `idl_guide_command_copied`, `idl_guide_project_downloaded`, `idl_guide_export_failed`,
-  and `idl_guide_upload_followed`, sent when the last step's "Upload IDL" is pressed. Renames and removes none.
+  and `idl_guide_idl_loaded` and `idl_guide_idl_refused`, sent when a file dropped on the last step is loaded or
+  refused. Renames and removes none.
 
 ## Capabilities
 

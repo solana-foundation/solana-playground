@@ -20,7 +20,8 @@ vi.mock("./interact-surface", () => ({
 }));
 vi.mock("./IdlActions", () => ({
   default: () => undefined,
-  uploadIdlOnDeploy: () => undefined,
+  loadIdlFile: async () => true,
+  openInteract: () => undefined,
 }));
 // Echoes the network it is told the wallet lacks SOL on
 vi.mock("./InteractBody", () => ({

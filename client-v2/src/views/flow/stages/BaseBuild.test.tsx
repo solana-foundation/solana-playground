@@ -403,9 +403,11 @@ describe("BaseBuild", () => {
   );
 
   // Scenario "Download without an IDL" (client-v2-idl-build-guide)
+  // The guide keeps one place in the tree, so its dialog survives an IDL
+  // loading from inside it; CSS order moves it
   it.each([
-    [false, [GUIDE, "Download .so"]],
-    [true, ["Download .so", GUIDE]],
+    [false, "order-first"],
+    [true, "order-last"],
   ])(
     "puts the IDL guide first in the downloads row only without an IDL (%s)",
     (hasIdl, order) => {
@@ -416,9 +418,10 @@ describe("BaseBuild", () => {
       const row = requireFor("the downloads row")(
         screen.getByRole("button", { name: "Download .so" }).parentElement
       );
-      expect(
-        Array.from(row.children, (child) => child.textContent)
-      ).toStrictEqual(order);
+      const guide = requireFor("the guide's slot")(
+        Array.from(row.children).find((child) => child.textContent === GUIDE)
+      );
+      expect(guide.className).toBe(order);
     }
   );
 

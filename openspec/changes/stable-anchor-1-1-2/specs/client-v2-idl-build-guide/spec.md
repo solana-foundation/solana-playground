@@ -73,30 +73,40 @@ stage SHALL NOT show "Download IDL", and "Build the IDL locally" SHALL take its 
 
 ### Requirement: The guide offers a Docker method and a local method
 
-The dialog SHALL hold a two-option control with the `aria-label` "IDL build method", with the options "Docker" and
-"Local toolchain", "Docker" selected when the dialog opens. Each method SHALL list numbered steps, from downloading
-the project to uploading the IDL. Every shell command SHALL sit in a code block with a copy button whose
-`aria-label` is "Copy command".
+The dialog SHALL hold a radio group with the `aria-label` "IDL build method", with two cards that both stay in view:
+"Docker" ("Only Docker needed") and "Local toolchain" ("Rust, Solana CLI, Anchor"), "Docker" selected when the
+dialog opens. Each method SHALL list numbered steps, from downloading
+the project to uploading the IDL, and a step SHALL be its number and its control, with no step title. Every shell
+command SHALL sit in a code block without line numbers whose long lines wrap, with a copy button whose `aria-label`
+is "Copy command" and which stays visible. The local method SHALL show its install of Rust, the Solana CLI and Anchor
+as one open step that lists each tool under its own name with its own copy button.
+Only the steps SHALL scroll: the title, the method control and the last step SHALL stay in view.
 
 #### Scenario: Switching method (manual)
 
 - **WHEN** the user selects "Local toolchain"
-- **THEN** the steps for installing Rust, the Solana CLI, and Anchor through `avm` replace the Docker steps
+- **THEN** the step "Install Rust, Solana CLI, Anchor if missing" and the build command replace the Docker command
+
+#### Scenario: The install is open (manual)
+
+- **WHEN** the local method is shown
+- **THEN** its install step lists Rust, the Solana CLI and Anchor through `avm`, each with its own "Copy command"
 
 #### Scenario: The last step (manual)
 
-- **WHEN** either method is shown
-- **THEN** its last step names the IDL file's path and holds an "Upload IDL" link
+- **WHEN** either method is shown, on a screen too short for every step
+- **THEN** its last step is a drop zone "Drop idl.json or browse" at the dialog's foot, in view while the steps scroll
 
-#### Scenario: Following Upload IDL (manual)
+#### Scenario: Dropping the IDL (manual)
 
-- **WHEN** the user presses the last step's "Upload IDL" from Build, Deploy, or Interact
-- **THEN** the dialog closes, the Flow shows Deploy, and Deploy's "Upload IDL" takes focus and opens the file picker
+- **WHEN** the user drops or picks an Anchor IDL file on the last step
+- **THEN** the browser holds that IDL, the foot says "IDL loaded", and its "Go to Interact" closes the dialog and the
+  Flow shows Interact
 
-#### Scenario: Docker's install page (manual)
+#### Scenario: Dropping a file that is not an IDL (manual)
 
-- **WHEN** the Docker method is shown
-- **THEN** "Docker" in its build step links to `https://docs.docker.com/get-started/get-docker/`
+- **WHEN** the user drops a file that is not an Anchor IDL on the last step
+- **THEN** the step says "That file is not an Anchor IDL." and the browser keeps the IDL it held
 
 ### Requirement: The guide's commands pin the server's versions
 
@@ -134,8 +144,9 @@ layout as a zip. A failed export SHALL show its reason in the dialog and log it.
 The slice `idl-build-guide` SHALL send `idl_guide_opened` when the dialog opens, with `surface` one of `build`,
 `deploy`, `interact`; `idl_guide_method_picked` when the user changes the method, not on open, with `method`
 `docker` or `local`; and `idl_guide_command_copied` when a copy succeeds, with `method` and `step` one of
-`docker-build`, `install-rust`, `install-solana`, `install-anchor`, `anchor-build`; and
-`idl_guide_upload_followed`, with no parameters, when the user presses the last step's "Upload IDL".
+`docker-build`, `install-rust`, `install-solana`, `install-anchor`, `anchor-build`; and, with no parameters,
+`idl_guide_idl_loaded` when a file dropped or picked on the last step is loaded as the IDL, and
+`idl_guide_idl_refused` when that file is not an Anchor IDL.
 
 #### Scenario: Open, switch, copy (manual)
 

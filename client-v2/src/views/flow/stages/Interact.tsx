@@ -29,7 +29,7 @@ import type { DeployRecord } from "../state/deploy-history";
 import { PgDeployHistory } from "../state/deploy-history";
 import { PgFlow } from "../state/stage";
 import BaseInteract from "./BaseInteract";
-import IdlActions, { uploadIdlOnDeploy } from "./IdlActions";
+import IdlActions, { loadIdlFile, openInteract } from "./IdlActions";
 import { builtAfterDeploy, solNeeded } from "./interact-callouts";
 import { interactFacts, interactSurface } from "./interact-surface";
 import InteractBody from "./InteractBody";
@@ -172,7 +172,11 @@ const Interact = () => {
       onGoTo={(stage) => PgFlow.setStage(stage)}
       idlLoad={<IdlActions mode="upload" />}
       idlGuide={
-        <IdlBuildGuide surface="interact" onUpload={uploadIdlOnDeploy} />
+        <IdlBuildGuide
+          surface="interact"
+          onLoadIdl={loadIdlFile}
+          onInteract={openInteract}
+        />
       }
       idlRefusal={idlRefusal(PgProgramInfo.readIdl())}
       programId={programId ?? undefined}

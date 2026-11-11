@@ -450,9 +450,12 @@ const Succeeded = (p: BaseBuildProps) => (
             Unreached's Show full log. Download IDL draws itself only while
             the app holds an IDL; without one, the guide takes its place */}
         <div className="flex w-full flex-wrap justify-center gap-2">
-          {!p.hasIdl && p.idlGuide}
           {p.idlActions}
-          {p.hasIdl && p.idlGuide}
+          {/* One place in the tree, moved by order: a guide that moved in the
+              tree when its own drop loaded an IDL would remount and close */}
+          <div className={p.hasIdl ? "order-last" : "order-first"}>
+            {p.idlGuide}
+          </div>
         </div>
       </>
     }

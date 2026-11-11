@@ -52,7 +52,11 @@ vi.mock("@/shared/lib/logger", () => ({
   }),
 }));
 
-import IdlActions, { uploadIdlOnDeploy, useIdlName } from "./IdlActions";
+import IdlActions, {
+  loadIdlFile,
+  openInteract,
+  useIdlName,
+} from "./IdlActions";
 
 const COUNTER_IDL = JSON.stringify({ name: "counter", instructions: [] });
 
@@ -320,30 +324,22 @@ describe("IdlActions on a stage that lists the IDL", () => {
     ).toBeTruthy();
   });
 
-  // The guide's Upload IDL link, followed from Deploy and from another stage
-  it.each([
-    ["while Deploy shows", true],
-    ["once Deploy mounts", false],
-  ])("uploadIdlOnDeploy opens the picker %s", (_, isMountedFirst) => {
-    const click = vi.spyOn(HTMLInputElement.prototype, "click");
-    if (isMountedFirst) render(<IdlActions mode="upload-button" />);
-    uploadIdlOnDeploy();
-    if (!isMountedFirst) render(<IdlActions mode="upload-button" />);
+  // The guide's drop zone loads through the same door as Upload IDL
+  it("loadIdlFile loads an IDL and refuses a file that is not one", async () => {
+    mocks.warn.mockClear();
+    expect(
+      await loadIdlFile(jsonFile(JSON.stringify({ instructions: [] })))
+    ).toBe(true);
+    expect(mocks.update).toHaveBeenCalledWith({ idl: { instructions: [] } });
 
-    expect(mocks.setStage).toHaveBeenCalledWith("deploy");
-    expect(click).toHaveBeenCalledOnce();
-    expect(document.activeElement?.textContent).toBe("Upload IDL");
+    expect(await loadIdlFile(jsonFile("not json"))).toBe(false);
+    expect(mocks.update).toHaveBeenCalledOnce();
+    expect(mocks.warn).toHaveBeenCalledOnce();
   });
 
-  it("uploadIdlOnDeploy leaves Interact's picker closed", () => {
-    const click = vi.spyOn(HTMLInputElement.prototype, "click");
-    const interact = render(<IdlActions mode="upload" />);
-    uploadIdlOnDeploy();
-    expect(click).not.toHaveBeenCalled();
-
-    interact.unmount();
-    render(<IdlActions mode="upload-button" />);
-    expect(click).toHaveBeenCalledOnce();
+  it("openInteract shows Interact", () => {
+    openInteract();
+    expect(mocks.setStage).toHaveBeenCalledWith("interact");
   });
 
   const IdlName = () => (

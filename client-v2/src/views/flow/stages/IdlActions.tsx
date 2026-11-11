@@ -1,5 +1,5 @@
 import type { FC } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { programName } from "@/entities/idl";
 import { createLogger } from "@/shared/lib/logger";
@@ -59,20 +59,29 @@ const DownloadIdl = ({ look }: { look: IdlLook }) => {
   );
 };
 
-/** Deploy's Upload IDL picker while it is mounted */
-let openDeployPicker: (() => void) | undefined;
-/** Set while Deploy is still mounting, so its picker opens once it does */
-let isDeployPickerRequested = false;
-
 /**
- * Takes the user to Deploy and opens its Upload IDL picker. The browser may
- * refuse a picker opened outside the click, so the button also takes focus.
+ * Loads an IDL file into this browser; false when the file is not an Anchor
+ * IDL. The file is read outside the refusal: a file that cannot be read is
+ * not the user's malformed IDL, so that throw goes to the caller
  */
-export const uploadIdlOnDeploy = () => {
-  if (openDeployPicker) openDeployPicker();
-  else isDeployPickerRequested = true;
-  PgFlow.setStage("deploy");
+export const loadIdlFile = async (file: File) => {
+  const text = await file.text();
+  let parsed;
+  try {
+    parsed = parseIdl(text);
+  } catch (e) {
+    // The user's own file, not a fault of ours: say so and log it quietly
+    log.warn("Refused an IDL file", {
+      context: { name: file.name, reason: String(e) },
+    });
+    return false;
+  }
+  PgProgramInfo.update({ idl: parsed });
+  return true;
 };
+
+/** Takes the user to Interact, where the IDL in use is called */
+export const openInteract = () => PgFlow.setStage("interact");
 
 /** Names the IDL in use by its program, so the user can tell which is loaded */
 const idlLabel = (idl: object) => {
@@ -99,44 +108,10 @@ const UploadIdl = ({
   const [refusal, setRefusal] = useState<{ over: typeof idl }>();
   const refused = refusal !== undefined && refusal.over === idl;
 
-  // Deploy's instance, the one without the name, answers `uploadIdlOnDeploy`
-  const group = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (withName) return;
-    const open = () => {
-      group.current?.querySelector("button")?.focus();
-      group.current
-        ?.querySelector<HTMLInputElement>("input[type=file]")
-        ?.click();
-    };
-    openDeployPicker = open;
-    if (isDeployPickerRequested) {
-      isDeployPickerRequested = false;
-      open();
-    }
-    return () => {
-      if (openDeployPicker === open) openDeployPicker = undefined;
-    };
-  }, [withName]);
-
   /** Refuses a file that is not an IDL; a throw after that is ours */
   const load = async (file: File | undefined) => {
     if (!file) return;
-    // Read outside the try: a file that cannot be read is not the user's
-    // malformed IDL, and `ImportButton` reports it
-    const text = await file.text();
-    let parsed;
-    try {
-      parsed = parseIdl(text);
-    } catch (e) {
-      // The user's own file, not a fault of ours: say so and log it quietly
-      log.warn("Refused an IDL file", {
-        context: { name: file.name, reason: String(e) },
-      });
-      setRefusal({ over: idl });
-      return;
-    }
-    PgProgramInfo.update({ idl: parsed });
+    if (!(await loadIdlFile(file))) setRefusal({ over: idl });
   };
 
   // `ImportButton` reports a throw from `load` itself. The input lets go of
@@ -144,7 +119,7 @@ const UploadIdl = ({
   // holds, so a file fixed on disk and picked again would be ignored.
   return (
     // One group, so the lines stay beside their button wherever a stage puts it
-    <span ref={group} className="inline-flex flex-wrap items-center gap-2">
+    <span className="inline-flex flex-wrap items-center gap-2">
       <ImportButton
         accept=".json"
         variant={look}

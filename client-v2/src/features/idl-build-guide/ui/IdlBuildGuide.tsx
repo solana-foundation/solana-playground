@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { PgFramework } from "@/utils";
 import { PgWorkspace } from "@/utils/explorer/workspace";
 
@@ -8,7 +9,7 @@ import type { IdlBuildMethod } from "../model/steps";
 import { STEPS } from "../model/steps";
 import type { ExportFailureReason, GuideSurface } from "../model/telemetry";
 import { idlBuildGuideTelemetry } from "../model/telemetry";
-import type { Download } from "./BaseIdlBuildGuide";
+import type { Download, Landing } from "./BaseIdlBuildGuide";
 import BaseIdlBuildGuide from "./BaseIdlBuildGuide";
 
 const log = createLogger("idl-build-guide:ui");
@@ -34,21 +35,29 @@ const failureReason = (error: unknown): ExportFailureReason => {
 export interface IdlBuildGuideProps {
   /** The Flow stage the guide is opened from */
   surface: GuideSurface;
-  /** Opens the IDL upload; the stage decides where it lives */
-  onUpload: () => void;
+  /** Loads an IDL file into the browser; false when the file is not an IDL */
+  onLoadIdl: (file: File) => Promise<boolean>;
+  /** Takes the user to Interact once the IDL is loaded */
+  onInteract: () => void;
 }
 
 /** The guide, connected: the workspace export, telemetry, and the logger. */
-const IdlBuildGuide = ({ surface, onUpload }: IdlBuildGuideProps) => {
+const IdlBuildGuide = ({
+  surface,
+  onLoadIdl,
+  onInteract,
+}: IdlBuildGuideProps) => {
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<IdlBuildMethod>("docker");
   const [download, setDownload] = useState<Download>({ state: "idle" });
+  const [landing, setLanding] = useState<Landing>("waiting");
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) return;
     setMethod("docker");
     setDownload({ state: "idle" });
+    setLanding("waiting");
     idlBuildGuideTelemetry.track("idl_guide_opened", { surface });
   };
 
@@ -72,9 +81,19 @@ const IdlBuildGuide = ({ surface, onUpload }: IdlBuildGuideProps) => {
     idlBuildGuideTelemetry.track("idl_guide_project_downloaded", {});
   };
 
-  const handleUpload = () => {
-    idlBuildGuideTelemetry.track("idl_guide_upload_followed", {});
-    onUpload();
+  const handleIdlFile = async (file: File) => {
+    let isLoaded;
+    try {
+      isLoaded = await onLoadIdl(file);
+    } catch (error) {
+      reportButtonFailure("load the IDL")(error);
+      return;
+    }
+    setLanding(isLoaded ? "loaded" : "refused");
+    idlBuildGuideTelemetry.track(
+      isLoaded ? "idl_guide_idl_loaded" : "idl_guide_idl_refused",
+      {}
+    );
   };
 
   return (
@@ -92,7 +111,9 @@ const IdlBuildGuide = ({ surface, onUpload }: IdlBuildGuideProps) => {
           step,
         })
       }
-      onUpload={handleUpload}
+      landing={landing}
+      onIdlFile={handleIdlFile}
+      onInteract={onInteract}
     />
   );
 };

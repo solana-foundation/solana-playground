@@ -56,13 +56,19 @@ afterEach(() => {
   resetLogger();
 });
 
-const onUpload = vi.fn();
+const onLoadIdl = vi.fn<(file: File) => Promise<boolean>>();
+const onInteract = vi.fn();
 
 const openFrom = (surface: "build" | "deploy" | "interact") => {
-  onUpload.mockReset();
+  onLoadIdl.mockReset().mockResolvedValue(true);
+  onInteract.mockReset();
   render(
     <TooltipProvider>
-      <IdlBuildGuide surface={surface} onUpload={onUpload} />
+      <IdlBuildGuide
+        surface={surface}
+        onLoadIdl={onLoadIdl}
+        onInteract={onInteract}
+      />
     </TooltipProvider>
   );
   fireEvent.click(
@@ -71,65 +77,98 @@ const openFrom = (surface: "build" | "deploy" | "interact") => {
   return screen.getByRole("dialog", { name: "Build the IDL on your machine" });
 };
 
-const steps = (dialog: HTMLElement) => within(dialog).getAllByRole("listitem");
-
-const lastStep = (dialog: HTMLElement) => {
-  const all = steps(dialog);
-  return all[all.length - 1].textContent;
-};
+/** The scrolling steps, from the download to the build */
+const steps = (dialog: HTMLElement) =>
+  within(within(dialog).getByRole("list", { name: "Steps" })).getAllByRole(
+    "listitem"
+  );
 
 const pick = (dialog: HTMLElement, method: "Docker" | "Local toolchain") =>
   fireEvent.click(within(dialog).getByRole("radio", { name: method }));
+
+const drop = async (dialog: HTMLElement) => {
+  const input = dialog.querySelector<HTMLInputElement>("input[type=file]");
+  if (!input) throw new Error("no file input in the dialog");
+  await act(async () =>
+    fireEvent.change(input, {
+      target: { files: [new File(["{}"], "idl.json")] },
+    })
+  );
+};
 
 describe("features/idl-build-guide", () => {
   it("opens on Docker, and Local toolchain replaces its steps", () => {
     const dialog = openFrom("build");
     expect(within(dialog).getByLabelText("IDL build method")).toBeTruthy();
     expect(dialog.textContent).toContain("quay.io/ottersec/anchor:v");
-    expect(dialog.textContent).not.toContain("avm install");
+    expect(dialog.textContent).not.toContain("Install Rust");
+
+    pick(dialog, "Local toolchain");
+
+    expect(dialog.textContent).toContain("Install Rust, Solana CLI, Anchor");
+    expect(dialog.textContent).toContain("anchor idl build -o idl.json");
+    expect(dialog.textContent).not.toContain("docker run");
+  });
+
+  it("shows both methods and the toolchain install open", () => {
+    const dialog = openFrom("build");
+    expect(dialog.textContent).toContain("Only Docker needed");
+    expect(dialog.textContent).toContain("Rust, Solana CLI, Anchor");
 
     pick(dialog, "Local toolchain");
 
     expect(dialog.textContent).toContain("rustup.rs");
+    expect(dialog.textContent).toContain("rustup.rs");
     expect(dialog.textContent).toContain("release.anza.xyz");
     expect(dialog.textContent).toContain("avm install");
-    expect(dialog.textContent).not.toContain("docker run");
   });
 
   it.each(["Docker", "Local toolchain"] as const)(
-    "ends %s at the IDL's path and Upload IDL",
+    "ends %s at the IDL's drop zone",
     (method) => {
       const dialog = openFrom("build");
       pick(dialog, method);
-      expect(lastStep(dialog)).toContain(
-        "Upload idl.json from the project folder"
-      );
-      expect(
-        within(steps(dialog).at(-1) as HTMLElement).getByRole("button", {
-          name: "Upload IDL",
-        })
-      ).toBeTruthy();
+      const upload = within(dialog).getByRole("list", {
+        name: "Upload the IDL",
+      });
+      expect(upload.textContent).toContain("Drop idl.json or browse");
     }
   );
 
-  it("closes on Upload IDL, hands over to the stage, and reports it", () => {
+  it("loads a dropped IDL, then goes to Interact, and reports it", async () => {
     const dialog = openFrom("build");
 
-    fireEvent.click(within(dialog).getByRole("button", { name: "Upload IDL" }));
+    await drop(dialog);
 
+    expect(onLoadIdl).toHaveBeenCalledOnce();
+    expect(within(dialog).getByRole("status").textContent).toContain(
+      "IDL loaded"
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Go to Interact" })
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(onUpload).toHaveBeenCalledOnce();
+    expect(onInteract).toHaveBeenCalledOnce();
     expect(sent.events.map((e) => e.name)).toEqual([
       "idl_guide_opened",
-      "idl_guide_upload_followed",
+      "idl_guide_idl_loaded",
     ]);
   });
 
-  it("links Docker to its install page", () => {
-    const dialog = openFrom("build");
-    expect(
-      within(dialog).getByRole("link", { name: "Docker" }).getAttribute("href")
-    ).toBe("https://docs.docker.com/get-started/get-docker/");
+  it("says so when the dropped file is not an IDL, and reports it", async () => {
+    const dialog = openFrom("deploy");
+    onLoadIdl.mockResolvedValue(false);
+
+    await drop(dialog);
+
+    expect(within(dialog).getByRole("alert").textContent).toBe(
+      "That file is not an Anchor IDL."
+    );
+    expect(within(dialog).queryByRole("status")).toBeNull();
+    expect(sent.events.map((e) => e.name)).toEqual([
+      "idl_guide_opened",
+      "idl_guide_idl_refused",
+    ]);
   });
 
   it("starts both methods with Download project", () => {
@@ -149,7 +188,9 @@ describe("features/idl-build-guide", () => {
     const dialog = openFrom("interact");
     pick(dialog, "Local toolchain");
 
-    const installRust = steps(dialog)[1];
+    const installRust = within(dialog)
+      .getByText("Rust")
+      .closest("div") as HTMLElement;
     expect(installRust.textContent).toContain("rustup.rs");
     await act(async () =>
       fireEvent.click(
