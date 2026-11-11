@@ -148,6 +148,22 @@ ${await getJSDependencies(frameworkFiles)}
 const keepBody = (content: string) => content;
 
 /**
+ * A name for an added import that the code does not use: the name itself, or
+ * with `_` in front until it is free.
+ *
+ * @param content JS/TS code
+ * @param name the name wanted
+ * @returns a name no identifier of the code has
+ */
+const unusedName = (content: string, name: string) => {
+  const isUsed = (candidate: string) =>
+    new RegExp(`(?<![\\w$.])${candidate}(?![\\w$])`).test(content);
+  let candidate = name;
+  while (isUsed(candidate)) candidate = "_" + candidate;
+  return candidate;
+};
+
+/**
  * Try to make the JS/TS file work in a local `node` environment by making the
  * necessary conversions.
  *
@@ -167,8 +183,13 @@ const convertJSWith =
     if (!getImportedNames(content).has("web3")) {
       content = `import * as web3 from "@solana/web3.js";\n` + content;
     }
+    // The globals below need `fs`, `os` and `path`; a name the client already
+    // uses gets an `_` in front, or the added import would not compile
+    const [fs, os, path] = ["fs", "os", "path"].map((name) =>
+      unusedName(content, name)
+    );
     content =
-      `import * as fs from "fs";\nimport * as os from "os";\nimport * as path from "path";\n` +
+      `import * as ${fs} from "fs";\nimport * as ${os} from "os";\nimport * as ${path} from "path";\n` +
       content;
 
     content = transformBody(content);
@@ -181,12 +202,12 @@ const convertJSWith =
       `// Manually initialize variables that are automatically defined in Playground
 const readKeypair = (keypairPath: string) =>
   web3.Keypair.fromSecretKey(
-    Uint8Array.from(JSON.parse(fs.readFileSync(keypairPath, "utf8")))
+    Uint8Array.from(JSON.parse(${fs}.readFileSync(keypairPath, "utf8")))
   );
 const PROGRAM_ID = readKeypair("${keypairPath}").publicKey;
 const connection = new web3.Connection("http://127.0.0.1:8899", "confirmed");
 const wallet = {
-  keypair: readKeypair(path.join(os.homedir(), ".config", "solana", "id.json")),
+  keypair: readKeypair(${path}.join(${os}.homedir(), ".config", "solana", "id.json")),
 };
 `
     );

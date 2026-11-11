@@ -143,6 +143,20 @@ describe("convertFromPlayground", () => {
     }
   );
 
+  it("names the added fs, os and path imports apart from the client's own", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'const path = "example";\nconst _os = 1;\nconsole.log(path, _os);\n',
+    ]);
+
+    const client = files.get("client/client.ts") ?? "";
+    expect(client).toContain('import * as _path from "path";');
+    expect(client).toContain('import * as os from "os";');
+    expect(client).toContain('import * as fs from "fs";');
+    expect(client).toContain('readKeypair(_path.join(os.homedir(), ".config"');
+    expect(client).not.toContain('import * as path from "path";');
+  });
+
   it("defines the globals after the imports when the code below says import", async () => {
     const files = await exported(LIB, [
       "client/client.ts",
