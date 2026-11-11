@@ -166,8 +166,10 @@ export const wrapTopLevelAwait = (content: string) => {
 const getLeadingImportsEnd = (content: string) => {
   const skipped = /(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*/y;
   // `import{BN}`, `import*as x` and `import"x"` need no space after the keyword;
-  // a lookahead keeps `important` and `import(` out
-  const importStatement = /import(?=[\s{*"'])[\s\S]*?["'][^"'\n]*["'];?/y;
+  // lookaheads keep `important` and a dynamic `import(`, `import (` or
+  // `import /* c */ (` out
+  const importStatement =
+    /import(?=[\s{*"'])(?!(?:\s|\/\*[\s\S]*?\*\/)*\()[\s\S]*?["'][^"'\n]*["'];?/y;
   let end = 0;
   let index = 0;
   while (true) {
@@ -405,11 +407,11 @@ const maskCommentsAndStrings = (content: string) =>
 
 /**
  * An import statement where a statement starts: at a line's start or after a
- * `;`. Group 1 is the statement, its `;` included. Read on
+ * `;`, and not a dynamic `import (`. Group 1 is the statement, its `;` included. Read on
  * `maskCommentsAndStrings`'s result, where a string's text is blank
  */
 const IMPORT_STATEMENT =
-  /(?:^|;)[ \t\uFEFF]*(import(?![\w$(])[^"'`;]*?["'][^"'\n]*["'][ \t]*;?)/gm;
+  /(?:^|;)[ \t\uFEFF]*(import(?![\w$(])(?!\s*\()[^"'`;]*?["'][^"'\n]*["'][ \t]*;?)/gm;
 
 /**
  * Take the import statements out of the given code, comments and strings
@@ -450,7 +452,7 @@ export const getImportedNames = (content: string) => {
   // A statement starts a line or follows a `;`, after any whitespace (`\s`
   // includes a byte order mark)
   const statement =
-    /(?:^|;)\s*import(?![\w$(])([^"'`;]*?)\bfrom\s*["'][^"'\n]*["']/gm;
+    /(?:^|;)\s*import(?![\w$(])(?!\s*\()([^"'`;]*?)\bfrom\s*["'][^"'\n]*["']/gm;
   for (const [, clause] of code.matchAll(statement)) {
     for (const part of clause.replace(/[{}]/g, ",").split(",")) {
       const name = part

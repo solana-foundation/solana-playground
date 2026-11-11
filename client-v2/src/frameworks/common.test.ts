@@ -125,6 +125,16 @@ describe("wrapTopLevelAwait", () => {
     );
   });
 
+  it.each([
+    ['console.log("start");\nimport ("bn.js");\nawait Promise.resolve();\n'],
+    ['import ("bn.js");\nawait Promise.resolve();\n'],
+    [
+      'console.log(1);\nimport /* lazy */ ("bn.js");\nawait Promise.resolve();\n',
+    ],
+  ])("leaves a dynamic import with a space inside: %s", (client) => {
+    expect(wrapTopLevelAwait(client)).toBe("\n\n" + wrapped(client.trim()));
+  });
+
   it("leaves an import in a comment, a string or a template literal inside", () => {
     const client =
       '// import x from "x";\nconst a = "import y from \'y\'";\nconst b = `\nimport z from "z";\n`;\nawait a;\n';
