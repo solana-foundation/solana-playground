@@ -34,13 +34,17 @@ export const build = createCmd({
     PgGlobal.update({ buildLoading: true });
     PgTerminal.println(PgTerminal.info("Building..."));
 
+    // `PgProgramInfo` follows the open project, so a reply for one built before a switch is not written into another
+    const workspace = PgExplorer.currentWorkspaceName;
+    const isStillOpen = () => PgExplorer.currentWorkspaceName === workspace;
+
     try {
       const result = await buildProgram(signal).catch((e: unknown) => {
         // The aborted request fails; say it was stopped, not that it failed.
         // Only "Stopped.": the server may still finish, its reply is not kept
         throwIfStopped(signal, STOPPED);
         // Deploy's stale-build guard reads it, so the previous binary is not shipped
-        PgProgramInfo.update({ lastBuildFailed: true });
+        if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
         throw e;
       });
       // A reply that lands after a stop is dropped: nothing of it is kept
@@ -49,12 +53,14 @@ export const build = createCmd({
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.
       const failed = result.stderr.includes("error: could not compile");
-      PgProgramInfo.update({
-        uuid: result.uuid ?? undefined,
-        lastBuildFailed: failed,
-        // The stable server builds no IDL; a `null` keeps the one the user uploaded
-        ...(result.idl && { idl: result.idl }),
-      });
+      if (isStillOpen()) {
+        PgProgramInfo.update({
+          uuid: result.uuid ?? undefined,
+          lastBuildFailed: failed,
+          // The stable server builds no IDL; a `null` keeps the one the user uploaded
+          ...(result.idl && { idl: result.idl }),
+        });
+      }
       // `improveOutput` is lossy by design; the assistant needs the raw text.
       // The workspace travels with it: one output is kept for the session, so
       // without it the next project inherits this report.

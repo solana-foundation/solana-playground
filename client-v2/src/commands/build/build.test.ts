@@ -7,6 +7,7 @@ const utils = vi.hoisted(() => ({
   PgExplorer: {
     getFileContent: vi.fn<(path: string) => string | undefined>(),
     files: {} as Record<string, { content: string }>,
+    currentWorkspaceName: "a" as string | undefined,
     getCurrentSrcPath: () => "/p/src/",
     getRelativePath: (path: string) => path.slice("/p/".length),
     PATHS: { ROOT_DIR_PATH: "/" },
@@ -42,6 +43,7 @@ describe("commands/build/build", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     utils.PgExplorer.files = {};
+    utils.PgExplorer.currentWorkspaceName = "a";
   });
 
   it.each([
@@ -183,6 +185,33 @@ describe("commands/build/build", () => {
       expect(utils.PgProgramInfo.update).toHaveBeenCalledWith({
         lastBuildFailed: true,
       });
+    });
+  });
+
+  describe("another project opened during the build", () => {
+    beforeEach(() => {
+      utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
+      utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    it.each([
+      // eslint-disable-next-line unicorn/no-null -- the build response carries `null` for no IDL
+      ["a reply", async () => ({ stderr: "Finished release", idl: null })],
+      [
+        "a failure",
+        async () => {
+          throw new Error("Server request failed");
+        },
+      ],
+    ])("leaves that project's info alone on %s", async (_, answer) => {
+      utils.PgServer.build.mockImplementation(async () => {
+        utils.PgExplorer.currentWorkspaceName = "b";
+        return answer();
+      });
+
+      await run().catch(() => undefined);
+
+      expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
     });
   });
 });
