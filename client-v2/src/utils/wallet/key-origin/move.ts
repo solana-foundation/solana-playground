@@ -798,6 +798,33 @@ if (import.meta.vitest) {
         ]);
       });
 
+      it("keeps the wallet unavailable while the set-aside record keeps moved key bytes, until a read clears them", async () => {
+        const [account] = accountsOf(1);
+        const { kp: damagedKp, publicKey: damagedKey } = realKey();
+        const damaged = { name: 7, kp: damagedKp, publicKey: damagedKey };
+        const store = memoryStoreWith([damaged])(walletOf([account]));
+        store.updateAside.mockRejectedValueOnce(new Error("aborted"));
+        const { frame, kept } = fakeKeyPage();
+        const storage = walletStorageWith(store)(memoryLocal(undefined));
+
+        const first = await storage.readMovingKeys(moveKeysWith(frame));
+
+        expect(first).toEqual({ kind: "unavailable" });
+        expect(kept.has(damaged.publicKey)).toBe(true);
+        expect(store.heldAside()).toEqual([damaged]);
+
+        const second = await storage.readMovingKeys(moveKeysWith(frame));
+
+        expect(second).toEqual({
+          kind: "wallet",
+          wallet: keyless(walletOf([account])),
+          setAside: 0,
+        });
+        expect(store.heldAside()).toEqual([
+          { name: 7, publicKey: damaged.publicKey },
+        ]);
+      });
+
       it("moves the keys of damaged accounts it sets aside, then clears their bytes", async () => {
         const [account] = accountsOf(1);
         const other = realKey();

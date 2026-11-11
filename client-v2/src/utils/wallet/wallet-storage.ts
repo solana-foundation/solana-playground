@@ -616,16 +616,23 @@ export const walletStorageWith =
       fromLocal !== undefined &&
       hasKeys([...fromLocal.wallet.accounts, ...fromLocal.damaged]);
 
-    /** Take the moved keys' bytes out of the set-aside record */
+    /**
+     * Take the moved keys' bytes out of the set-aside record.
+     *
+     * @returns whether none is left there: while one is, key bytes stay on
+     * the app's origin, so the move is not done and the wallet does not load
+     */
     const clearMovedAside = async (keys: number[][]) => {
-      if (keys.length === 0) return;
+      if (keys.length === 0) return true;
       const moved = new Set(keys.map((kp) => kp.join(",")));
       try {
         await store.updateAside((items) => items.map(withoutMovedWith(moved)));
+        return true;
       } catch (error) {
-        // The key page holds them; the next load moves them again, which
+        // The key page holds them; the next read moves them again, which
         // adds no copy, and clears them then
         reportFailure("Moved keys left in the set-aside record", error);
+        return false;
       }
     };
 
@@ -751,7 +758,7 @@ export const walletStorageWith =
             if (isMoved) return UNAVAILABLE;
           }
         }
-        await clearMovedAside(movedKeys);
+        if (!(await clearMovedAside(movedKeys))) return UNAVAILABLE;
         return found(merged);
       }
 
@@ -781,14 +788,14 @@ export const walletStorageWith =
           return UNAVAILABLE;
         }
         degradeAfterRead();
-        await clearMovedAside(movedKeys);
+        if (!(await clearMovedAside(movedKeys))) return UNAVAILABLE;
         return found(moved);
       }
 
       if (!removeLocal(fromLocal.text) && isLocalHoldingKeys) {
         return UNAVAILABLE;
       }
-      await clearMovedAside(movedKeys);
+      if (!(await clearMovedAside(movedKeys))) return UNAVAILABLE;
       return found(moved);
     };
 
