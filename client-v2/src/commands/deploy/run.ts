@@ -41,8 +41,9 @@ export interface DeployResult {
   /**
    * The network the run deployed to, read from the endpoint of the
    * connection it used: the user may select another one while it runs.
-   * `null` when that endpoint cannot say (a custom endpoint whose genesis
-   * hash does not answer); the selected network is never used in its place.
+   * `null` for a network of its own (a custom endpoint whose genesis hash
+   * names no known cluster); an endpoint that does not answer is refused
+   * before the run sends. The selected network is never used in its place.
    */
   cluster: Cluster | null;
 }

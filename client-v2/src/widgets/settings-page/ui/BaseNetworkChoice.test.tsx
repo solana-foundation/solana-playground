@@ -160,15 +160,15 @@ describe("BaseNetworkChoice", () => {
     ["Testnet", Endpoint.TESTNET],
     ["Localnet", Endpoint.LOCALNET],
     ["Surfpool", Endpoint.SURFPOOL],
-  ])("checks %s on its address, with no line under it", (name, endpoint) => {
+  ])("checks %s on its address, with deploys open there", (name, endpoint) => {
     render(<BaseNetworkChoice endpoint={endpoint} onPick={() => {}} />);
     expect(
       screen.getByRole("radio", { name }).getAttribute("aria-checked")
     ).toBe("true");
-    expect(screen.queryByText("Deploys with real SOL")).toBeNull();
+    expect(screen.queryByText("Not available for deploys")).toBeNull();
   });
 
-  it("offers Mainnet, described as deploying with real SOL", () => {
+  it("offers Mainnet, described as not available for deploys", () => {
     render(
       <BaseNetworkChoice endpoint={Endpoint.MAINNET_BETA} onPick={() => {}} />
     );
@@ -180,14 +180,20 @@ describe("BaseNetworkChoice", () => {
     expect(
       screen.getByRole("radiogroup", {
         name: "Network",
-        description: "Deploys with real SOL",
+        description: "Not available for deploys",
       })
+    ).toBeTruthy();
+    // The amber dot marks a network offered without deploys
+    expect(
+      screen
+        .getByText("Not available for deploys")
+        .querySelector('[data-slot="status-dot"][data-variant="warning"]')
     ).toBeTruthy();
   });
 
-  it("says nothing about real SOL on Devnet", () => {
+  it("does not refuse deploys on Devnet", () => {
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
-    expect(screen.queryByText("Deploys with real SOL")).toBeNull();
+    expect(screen.queryByText("Not available for deploys")).toBeNull();
   });
 
   it("picks once on a click", async () => {
@@ -251,14 +257,6 @@ describe("BaseNetworkChoice", () => {
         description: "Deploys with free devnet SOL",
       })
     ).toBeTruthy();
-  });
-
-  it("marks Mainnet's foot line with an amber dot", () => {
-    render(
-      <BaseNetworkChoice endpoint={Endpoint.MAINNET_BETA} onPick={() => {}} />
-    );
-    const foot = screen.getByText("Deploys with real SOL");
-    expect(foot.querySelector(".bg-warning")).toBeTruthy();
   });
 
   it("has no foot for a saved custom RPC", () => {

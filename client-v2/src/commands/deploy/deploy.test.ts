@@ -6,6 +6,7 @@ import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
 
 import { PgTerminal } from "../../utils";
 import { isStopped } from "../../utils/stopped";
+import { MainnetDeployRefusedError } from "./mainnet-block";
 import { NetworkRefusedError } from "./network-refused";
 import { PgDeployRun } from "./run";
 
@@ -17,6 +18,12 @@ const env = vi.hoisted(() => ({
   bufferBalance: (async () => 0) as () => Promise<number>,
   /** The user has switched network since the deploy began */
   switchedNetwork: false,
+  /** What `PgConnection.getCluster` reads from the deploy's endpoint */
+  cluster: "devnet",
+  /** Runs while `getCluster` reads: the user switching network meanwhile */
+  duringClusterRead: () => undefined as void,
+  /** What `PgProgramInfo.onChain` holds for the selected network */
+  onChain: { deployed: false } as { deployed: boolean },
   waitForInput: (async () => true) as (msg: string) => Promise<unknown>,
   executeFromStr: (async () => undefined) as (cmd: string) => Promise<unknown>,
   /** What `getAccountInfo` returns for the buffer */
@@ -87,7 +94,6 @@ vi.mock("../../utils", () => ({
     sleep: vi.fn(),
     timeout: <R>(promisable: Promise<R>) => promisable,
   },
-  TerminalLineError: class extends Error {},
   PgConnection: {
     cluster: "devnet",
     get isConnected() {
@@ -118,7 +124,10 @@ vi.mock("../../utils", () => ({
       };
     },
     getAirdropAmount: () => 5,
-    getCluster: async () => "devnet",
+    getCluster: async () => {
+      env.duringClusterRead();
+      return env.cluster;
+    },
     getReadBufferConnection: <T>(connection: T) => env.readBuffer ?? connection,
   },
   PgGlobal: {
@@ -133,7 +142,9 @@ vi.mock("../../utils", () => ({
   },
   PgProgramInfo: {
     importedProgram: { bytes: new Uint8Array(10) },
-    onChain: { deployed: false },
+    get onChain() {
+      return env.onChain;
+    },
     pk: {},
   },
   PgServer: { deploy: vi.fn() },
@@ -154,6 +165,7 @@ vi.mock("../../utils", () => ({
     }),
   },
   PgTx: { send, confirm },
+  TerminalLineError: class TerminalLineError extends Error {},
   PgView: { setMainSecondaryProgress: vi.fn() },
   PgWallet: {
     get current() {
@@ -216,7 +228,8 @@ describe("commands/deploy, while the network is down", () => {
 
   beforeEach(async () => {
     const { deploy } = await import("./deploy");
-    [checkNetwork] = deploy.preChecks as [() => void];
+    // Second: the mainnet refusal comes first
+    [, checkNetwork] = deploy.preChecks as [unknown, () => void];
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
   });
 
@@ -265,6 +278,9 @@ describe("commands/deploy", () => {
     env.balance = 0;
     env.bufferBalance = async () => 0;
     env.switchedNetwork = false;
+    env.cluster = "devnet";
+    env.duringClusterRead = () => undefined;
+    env.onChain = { deployed: false };
     env.waitForInput = async () => true;
     env.executeFromStr = async () => undefined;
     // A live buffer whose authority is the Playground wallet
@@ -293,6 +309,34 @@ describe("commands/deploy", () => {
     openBuffers.forget.mockReset();
     openBuffers.forget.mockImplementation(async () => undefined);
     vi.mocked(PgTerminal.println).mockClear();
+  });
+
+  // HOO-2728: the network can move to mainnet while the pre-checks' wallet
+  // question waits, so the run reads its own connection again before a send
+  it("refuses before any send when its connection is on mainnet", async () => {
+    env.cluster = "mainnet-beta";
+    env.balance = 100e9;
+
+    const failure = await runDeploy();
+
+    // By type: the stage counts no failure for exactly this error
+    expect(failure).toBeInstanceOf(MainnetDeployRefusedError);
+    expect(airdrop).not.toHaveBeenCalled();
+    expect(createBuffer).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  // The network read waits on the RPC; a switch meanwhile refreshes the
+  // program info for the other network, which must not pick deploy or upgrade
+  it("deploys as the program info read with its connection, not after a switch", async () => {
+    env.balance = 100e9;
+    env.duringClusterRead = () => {
+      env.onChain = { deployed: true };
+    };
+
+    await runDeploy();
+
+    expect(deployProgram).toHaveBeenCalled();
   });
 
   it("prints the low balance notice as a warning", async () => {
@@ -355,7 +399,9 @@ describe("commands/deploy", () => {
         };
         // The stub has no keypair, so the check goes on to refuse after the
         // notice these tests are about
-        await preChecks[2]().catch(() => undefined);
+        await preChecks
+          .at(-1)?.()
+          .catch(() => undefined);
       } finally {
         Object.assign(PgProgramInfo, {
           importedProgram,

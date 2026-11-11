@@ -10,6 +10,7 @@ import { PgCustomRpcs } from "@/entities/cluster";
 const { state } = vi.hoisted(() => ({
   state: {
     deployState: "ready" as string,
+    isIdlWriting: false,
     endpoint: "",
     toasts: [] as (string | undefined)[],
   },
@@ -18,6 +19,9 @@ vi.mock("@/utils", () => ({
   PgGlobal: {
     get deployState() {
       return state.deployState;
+    },
+    get isIdlWriting() {
+      return state.isIdlWriting;
     },
   },
   PgSettings: {
@@ -294,6 +298,7 @@ describe("NetworkSection while a deploy runs", () => {
     localStorage.clear();
     PgCustomRpcs.save(HELIUS);
     state.deployState = "ready";
+    state.isIdlWriting = false;
     state.endpoint = HELIUS.url;
     state.toasts = [];
   });
@@ -301,6 +306,19 @@ describe("NetworkSection while a deploy runs", () => {
     localStorage.clear();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("names an anchor idl write when one holds the network", async () => {
+    state.isIdlWriting = true;
+    render(<NetworkSection />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Remove Helius" })
+    );
+
+    expect(PgCustomRpcs.list()).toEqual([HELIUS]);
+    expect(state.endpoint).toBe(HELIUS.url);
+    expect(state.toasts).toEqual(["network-held-by-idl"]);
   });
 
   it("keeps the RPC in use, rather than removing it", async () => {
