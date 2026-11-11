@@ -1,0 +1,55 @@
+name: GCP auth
+description: Signs gcloud in through Workload Identity Federation when a provider is given, else with a service-account key.
+
+# Inputs, not secrets: a composite action cannot read the secrets context. The job needs `id-token: write` for the provider path.
+inputs:
+  workload_identity_provider:
+    description: Full provider resource name; empty keeps the key path
+    required: false
+    default: ""
+  service_account:
+    description: Service-account email
+    required: true
+  credentials_json:
+    description: Service-account JSON key, ignored once a provider is given
+    required: false
+    default: ""
+  project_id:
+    description: GCP project that owns the App Engine app
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The action fails on both paths at once, so each expression leaves the unused path empty.
+    - name: Set up Cloud SDK authentication
+      uses: google-github-actions/auth@7b53cdc2a387814ed14eec026287aac689ae8c9b # v2.1.9
+      with:
+        token_format: access_token
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.workload_identity_provider != '' && inputs.service_account || '' }}
+        credentials_json: ${{ inputs.workload_identity_provider == '' && inputs.credentials_json || '' }}
+
+    # The run does not otherwise say which path it took, and a cleared variable falls back to the key without an error
+    - name: Say how this run signed in
+      shell: bash
+      env:
+        PROVIDER: ${{ inputs.workload_identity_provider }}
+      run: |
+        if [ -n "$PROVIDER" ]; then
+          echo "::notice::GCP sign-in: Workload Identity Federation"
+        else
+          echo "::notice::GCP sign-in: service-account key"
+        fi
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
+    - name: Configure GCloud
+      shell: bash
+      env:
+        SERVICE_ACCOUNT: ${{ inputs.service_account }}
+        PROJECT_ID: ${{ inputs.project_id }}
+      run: |
+        gcloud config set account "$SERVICE_ACCOUNT"
+        gcloud config set project "$PROJECT_ID"
