@@ -235,6 +235,33 @@ So `scripts/vercel-install.sh` installs each version itself, into `.cache/rust/w
 
 The version comes from the lockfile, the file wasm-pack reads, after `cargo metadata --locked` has accepted it, so a bump without `cargo update` stops the build before wasm-pack asks for a version the script did not install. To bump: change the two manifests, then `cargo update -p wasm-bindgen` in `wasm/` and in `wasm/rust-analyzer/`.
 
+## Public variables
+
+Every `REACT_APP_*` variable a build sees is public: every visitor can read it in the bundle. CRA defines `process.env` as one object holding all of them, and third-party code that reads `process.env.<anything>` makes webpack inline that object, values and all, whether or not our code reads the variable. Set no other `REACT_APP_*` in any environment. The client reads only these, all in `src/shared/config/client-env.ts`:
+
+| Variable | Holds |
+| --- | --- |
+| `REACT_APP_SERVER_URL`, `REACT_APP_SERVER_UNSTABLE` | the build server, and whether to use its `/unstable` routes |
+| `REACT_APP_{DEVNET,TESTNET,MAINNET}_RPC_URL` | the platform RPC endpoints |
+| `REACT_APP_{DEVNET,TESTNET,MAINNET}_READ_BUFFER_RPC_URL` | the RPC a deploy reads its program buffer through |
+| `REACT_APP_{DEVNET,TESTNET,MAINNET}_SEND_TX_PER_SECOND` | a deploy's buffer writes per second |
+| `REACT_APP_SENTRY_DSN` | Sentry's DSN, which is public by design; never an auth token |
+| `REACT_APP_GA_MEASUREMENT_ID` | the GA4 id |
+| `REACT_APP_LOG_LEVEL` | the console log level |
+| `REACT_APP_VERCEL_GIT_COMMIT_SHA`, `REACT_APP_VERCEL_ENV` | set by `scripts/vercel-build.sh`; never set them in the project |
+
+Every other variable stays on the server, read by `api/*.mjs` through `src/shared/config/server-env.mjs` and the build scripts; mark each credential among them **Sensitive** in Vercel.
+
+Two checks in `scripts/public-env.mjs` cover both sides:
+
+- **Before webpack runs**, in every production `craco build` (`build-fast` included), `craco.config.js` fails the build on a `REACT_APP_*` the client does not read, whatever its letter case (CRA matches the prefix that way), and on a public value that:
+  - is outside its variable's shape in `VALUE_SHAPES`: a log level, a GA4 id, a number, a sha, a Sentry DSN that is an `https` URL with a public key and no legacy secret key. A name the client reads without an entry there fails too, so a new public variable states what it may hold.
+  - is a URL with a user or password before the host, or with a query term, path segment or fragment that `src/shared/lib/url-secret.mjs` reads as a key, the same code the custom RPC list masks by. The query is judged as written, not decoded. Host labels are left out: a keyless provider hostname can hold a long label with a digit.
+  - starts like a token (`sk-`, `sntrys_`, `ghp_`, `postgres://`, …), or equals a secret variable's value.
+- **After `craco build`**, in `build:bundle`, which every deployment runs, before the source maps go to Sentry: `node scripts/public-env.mjs check-build build` fails when any file in `build/` holds the value of a secret variable, as written or escaped inside a double- or single-quoted string literal. A secret variable is one whose name `isSecretName` matches, in any letter case (it contains `SECRET`, `TOKEN`, `PASSWORD`, `PASSWD`, `CREDENTIAL`, `PRIVATE` or `BYPASS`, is `KEY` or ends in `_KEY`, or starts with `DATABASE_URL`), or one whose value is a URL with a password, such as `POSTGRES_URL`. It reads the process environment and the `.env` files CRA reads, parsed both by `util.parseEnv` and by CRA's dotenv with dotenv-expand. A local `vercel build` sees a Sensitive variable as empty and cannot look for its value; only the build on Vercel can.
+
+Both name variables, never their values. An RPC key the provider restricts to the production origin may be published: list its variable in `PUBLIC_ENV_RESTRICTED_KEYS` (comma-separated; a build-time variable, not `REACT_APP_*`) to skip the key checks of that URL. Credentials before the host still fail, and `check-build` still fails when a secret variable holds the same key. Do that only once the restriction is confirmed in the provider's dashboard; a key that was ever deployed unrestricted is published, so rotate it.
+
 ## Tokens
 
 `Makefile.vercel` passes `--token` only when `VERCEL_TOKEN` is set. Unset, the
