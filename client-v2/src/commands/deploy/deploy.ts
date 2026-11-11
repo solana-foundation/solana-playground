@@ -395,6 +395,10 @@ const processDeploy = async (
   const balanceBefore = await spendable();
   PgDeployRun.update({ step: "buffer" });
 
+  // What a standard wallet sends the Playground wallet; extra 0.1 SOL for fees
+  // (doesn't have to get used)
+  const funding = requiredBalanceWithoutFees + PgWeb3.solToLamports(0.1);
+
   // What the Playground wallet holds before a standard wallet sends it SOL:
   // anything over it at the end goes back (`returnLeftover`)
   const returnLeftover = standardWallet
@@ -402,6 +406,7 @@ const processDeploy = async (
         from: pgWallet,
         to: standardWallet,
         before: await connection.getBalance(pgWallet.publicKey),
+        funded: funding,
         connection,
         sendAndConfirmTxWithRetries,
       })
@@ -413,9 +418,7 @@ const processDeploy = async (
     // asking for approval.
     if (standardWallet) {
       throwIfStopped(signal, deployStoppedLine({ state: "none" }));
-      // Transfer extra 0.1 SOL for fees (doesn't have to get used)
-      const requiredBalance =
-        requiredBalanceWithoutFees + PgWeb3.solToLamports(0.1);
+      const requiredBalance = funding;
       const transferIx = PgWeb3.SystemProgram.transfer({
         fromPubkey: standardWallet.publicKey,
         toPubkey: pgWallet.publicKey,
@@ -1049,7 +1052,8 @@ const TRANSFER_FEE = 5000;
 
 /**
  * Send back to the standard wallet `to` what the Playground wallet `from`
- * holds over `before`, its balance before `to` sent it SOL for the deploy.
+ * holds over `before`, its balance before `to` sent it SOL for the deploy, up
+ * to `funded`, what `to` sent.
  * What is owed is read again at each attempt, so a retry after an attempt
  * that landed sends nothing. It never throws: a failed return is logged and
  * says how much stayed, and the deploy keeps its own result.
@@ -1059,12 +1063,15 @@ const leftoverReturnFor =
     from,
     to,
     before,
+    funded,
     connection,
     sendAndConfirmTxWithRetries,
   }: {
     from: Wallet;
     to: Wallet;
     before: number;
+    /** What `to` sends `from` for the run: the most that goes back */
+    funded: number;
     connection: PgWeb3.Connection;
     sendAndConfirmTxWithRetries: ReturnType<
       typeof sendAndConfirmTxWithRetriesFor
@@ -1076,10 +1083,13 @@ const leftoverReturnFor =
     try {
       await sendAndConfirmTxWithRetries(
         async () => {
+          // SOL that lands meanwhile (an airdrop, a web faucet top-up) is not
+          // `to`'s: never return more than `to` sent
           owed =
-            (await connection.getBalance(from.publicKey)) -
-            before -
-            TRANSFER_FEE;
+            Math.min(
+              (await connection.getBalance(from.publicKey)) - before,
+              funded
+            ) - TRANSFER_FEE;
           if (owed <= 0) return "";
           const ixs = [
             PgWeb3.ComputeBudgetProgram.setComputeUnitPrice({

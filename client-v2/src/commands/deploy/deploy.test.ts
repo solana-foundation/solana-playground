@@ -923,6 +923,23 @@ describe("commands/deploy", () => {
       );
     });
 
+    it("never returns more than the extension sent, whatever else lands in the Playground wallet", async () => {
+      fromStandard();
+      // The deploy spends 0.01 SOL while a top-up of 5 SOL lands meanwhile
+      createBuffer.mockImplementation(async () => {
+        movePg(-10_000_000 + 5_000_000_000);
+        return "sig";
+      });
+
+      await runDeploy();
+
+      expect(returns()).toEqual([2_100_000_000 - FEE]);
+      // The top-up stays in the Playground wallet
+      expect(env.pgLamports).toBeGreaterThanOrEqual(
+        1_000_000_000 + 5_000_000_000 - 10_000_000
+      );
+    });
+
     it("returns after a failed deploy, once its buffer is closed", async () => {
       fromStandard();
       deployProgram.mockRejectedValue(new Error("custom program error: 0x1"));
