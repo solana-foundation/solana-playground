@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 import { requireFor } from "../src/test-utils/require-for";
 import {
   expect,
+  isStored,
   LONG,
   streamed,
   stubAiStatus,
@@ -64,6 +65,10 @@ test("a reload opens on the step it left, with no intro", async ({ page }) => {
     .getByRole("button", { name: /Start step 1/ })
     .click(LONG);
   await expect(stepOne(page)).toBeVisible(LONG);
+  // The step shows at once; its save reaches IndexedDB a moment later, and a
+  // reload before that opened on the intro on a loaded runner. A started
+  // save has a time in `startedAt`, which is null before Start
+  await expect.poll(() => isStored(page, '"startedAt":1'), LONG).toBe(true);
 
   await page.reload();
   await expect(stepOne(page)).toBeVisible(LONG);
