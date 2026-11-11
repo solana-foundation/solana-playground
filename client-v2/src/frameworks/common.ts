@@ -137,13 +137,19 @@ export const wrapTopLevelAwait = (content: string) => {
   }
 
   const bodyStartIndex = getLeadingImportsEnd(content);
+  // An import after another statement is still the module's: inside the
+  // function it would not compile, so it joins the leading ones
+  const { imports, rest } = takeImports(content.slice(bodyStartIndex));
+  const head = [content.slice(0, bodyStartIndex), ...imports]
+    .filter(Boolean)
+    .join("\n");
 
   // The body is not re-indented: indenting lines inside a multi-line template
   // literal would change its text
-  const body = content.slice(bodyStartIndex).trim();
+  const body = rest.trim();
 
   return (
-    content.slice(0, bodyStartIndex) +
+    head +
     `\n\n(async () => {\n${body}\n})().catch((err) => {\n  console.error(err);\n  process.exitCode = 1;\n});\n`
   );
 };
@@ -377,6 +383,58 @@ export const addImports = (content: string) => {
 };
 
 /**
+ * The given code with the text of its comments and strings blanked: each
+ * character but a line break becomes a space, and a string keeps its quotes.
+ * The length and the line breaks stay, so a match found in the result sits at
+ * the same place in the code. Comments and strings are read together, so
+ * "http://" in a string is not taken for a comment.
+ *
+ * @param content JS/TS code
+ * @returns the code with only its own tokens readable
+ */
+const maskCommentsAndStrings = (content: string) =>
+  content.replace(
+    /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+    (match, string?: string) =>
+      string
+        ? string[0] +
+          string.slice(1, -1).replace(/[^\n]/g, " ") +
+          string[string.length - 1]
+        : match.replace(/[^\n]/g, " ")
+  );
+
+/**
+ * An import statement where a statement starts: at a line's start or after a
+ * `;`. Group 1 is the statement, its `;` included. Read on
+ * `maskCommentsAndStrings`'s result, where a string's text is blank
+ */
+const IMPORT_STATEMENT =
+  /(?:^|;)[ \t\uFEFF]*(import(?![\w$(])[^"'`;]*?["'][^"'\n]*["'][ \t]*;?)/gm;
+
+/**
+ * Take the import statements out of the given code, comments and strings
+ * aside. A static import is only valid at a module's top, so each one found
+ * is the module's own, wherever it stands.
+ *
+ * @param content JS/TS code
+ * @returns the imports in their order, and the code without them
+ */
+const takeImports = (content: string) => {
+  const masked = maskCommentsAndStrings(content);
+  const ranges = Array.from(masked.matchAll(IMPORT_STATEMENT), (m) => {
+    // `matchAll` sets `index` on every match; the type does not say so
+    const start = (m.index ?? 0) + m[0].length - m[1].length;
+    return [start, start + m[1].length] as const;
+  });
+  const imports = ranges.map(([start, end]) => content.slice(start, end));
+  let rest = content;
+  for (const [start, end] of ranges.slice().reverse()) {
+    rest = rest.slice(0, start) + rest.slice(end);
+  }
+  return { imports, rest };
+};
+
+/**
  * Names the import statements of the given code bind: `web3` for
  * `import * as web3 from "x"`, `import web3 from "x"` and `import{web3}from"x"`,
  * `b` for `import { a as b } from "x"`. A name the code already binds must not
@@ -387,13 +445,8 @@ export const addImports = (content: string) => {
  */
 export const getImportedNames = (content: string) => {
   const names = new Set<string>();
-  // An import in a comment or a string binds nothing: drop comments and empty
-  // strings, read together so "http://" in a string is not taken for a
-  // comment; an import's own `from "x"` stays a string, `from ""`
-  const code = content.replace(
-    /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-    (_match, string?: string) => (string ? string[0] + string[0] : " ")
-  );
+  // An import in a comment or a string binds nothing (`maskCommentsAndStrings`)
+  const code = maskCommentsAndStrings(content);
   // A statement starts a line or follows a `;`, after any whitespace (`\s`
   // includes a byte order mark)
   const statement =

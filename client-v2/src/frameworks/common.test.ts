@@ -19,7 +19,8 @@ vi.stubGlobal("CRATES", {
   importable: ["anchor_lang", "arrayref", "unknown_crate"],
 });
 
-const { getImportedNames, getRustDependencies } = await import("./common");
+const { getImportedNames, getRustDependencies, wrapTopLevelAwait } =
+  await import("./common");
 
 describe("frameworks/common", () => {
   it("pins the crate versions and features the server builds with", async () => {
@@ -88,5 +89,46 @@ describe("getImportedNames", () => {
         'const important = await import("x");\n// import from "y"\n'
       ).size
     ).toBe(0);
+  });
+});
+
+describe("wrapTopLevelAwait", () => {
+  /** The function the export wraps a client's body in */
+  const wrapped = (body: string) =>
+    `(async () => {\n${body}\n})().catch((err) => {\n  console.error(err);\n  process.exitCode = 1;\n});\n`;
+
+  it("keeps an import after another statement outside the wrapper", () => {
+    const client =
+      'console.log("start");\nimport { PublicKey } from "@solana/web3.js";\nconst main = async () => {\n  await Promise.resolve(PublicKey.default);\n};\n';
+
+    expect(wrapTopLevelAwait(client)).toBe(
+      'import { PublicKey } from "@solana/web3.js";\n\n' +
+        wrapped(
+          'console.log("start");\n\nconst main = async () => {\n  await Promise.resolve(PublicKey.default);\n};'
+        )
+    );
+  });
+
+  it("keeps the leading imports first and a later one after them", () => {
+    const client =
+      'import * as web3 from "@solana/web3.js";\nconsole.log(1);\nimport{BN}from"bn.js";\nawait web3.Connection;\n';
+
+    const result = wrapTopLevelAwait(client);
+    expect(result.indexOf('import{BN}from"bn.js";')).toBeLessThan(
+      result.indexOf("(async")
+    );
+    expect(
+      result.indexOf('import * as web3 from "@solana/web3.js";')
+    ).toBeLessThan(result.indexOf('import{BN}from"bn.js";'));
+    expect(result).toContain(
+      wrapped("console.log(1);\n\nawait web3.Connection;")
+    );
+  });
+
+  it("leaves an import in a comment, a string or a template literal inside", () => {
+    const client =
+      '// import x from "x";\nconst a = "import y from \'y\'";\nconst b = `\nimport z from "z";\n`;\nawait a;\n';
+
+    expect(wrapTopLevelAwait(client)).toBe("\n\n" + wrapped(client.trim()));
   });
 });
