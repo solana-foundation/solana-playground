@@ -960,6 +960,37 @@ describe("commands/deploy", () => {
       );
     });
 
+    it("returns to the account that funded the run, not the one the extension switched to meanwhile", async () => {
+      fromStandard();
+      const funder = standardWallet.publicKey;
+      const other = keyOf("Other1111");
+      createBuffer.mockImplementation(async () => {
+        movePg(-2_010_000_000);
+        // The user switches the extension to another account mid-run
+        standardWallet.publicKey = other;
+        return "sig";
+      });
+
+      try {
+        const result = await runDeploy();
+
+        expect(result).not.toBeInstanceOf(Error);
+        const toFunder = transfer.mock.calls.filter(
+          ([args]) =>
+            args.fromPubkey === pgWallet.publicKey && args.toPubkey === funder
+        );
+        const toOther = transfer.mock.calls.filter(
+          ([args]) => args.toPubkey === other
+        );
+        expect(toFunder.map(([args]) => args.lamports)).toEqual([
+          90_000_000 - FEE,
+        ]);
+        expect(toOther).toEqual([]);
+      } finally {
+        standardWallet.publicKey = funder;
+      }
+    });
+
     it("never returns more than the extension sent, whatever else lands in the Playground wallet", async () => {
       fromStandard();
       // The deploy spends 0.01 SOL while a top-up of 5 SOL lands meanwhile

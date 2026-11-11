@@ -1061,26 +1061,30 @@ const TRANSFER_FEE = 5000;
  * that landed sends nothing. It never throws: a failed return is logged and
  * says how much stayed, and the deploy keeps its own result.
  */
-const leftoverReturnFor =
-  ({
-    from,
-    to,
-    before,
-    funded,
-    connection,
-    sendAndConfirmTxWithRetries,
-  }: {
-    from: Wallet;
-    to: Wallet;
-    before: number;
-    /** What `to` sends `from` for the run: the most that goes back */
-    funded: number;
-    connection: PgWeb3.Connection;
-    sendAndConfirmTxWithRetries: ReturnType<
-      typeof sendAndConfirmTxWithRetriesFor
-    >;
-  }) =>
-  async () => {
+const leftoverReturnFor = ({
+  from,
+  to,
+  before,
+  funded,
+  connection,
+  sendAndConfirmTxWithRetries,
+}: {
+  from: Wallet;
+  to: Wallet;
+  before: number;
+  /** What `to` sends `from` for the run: the most that goes back */
+  funded: number;
+  connection: PgWeb3.Connection;
+  sendAndConfirmTxWithRetries: ReturnType<
+    typeof sendAndConfirmTxWithRetriesFor
+  >;
+}) => {
+  // The account that funded the run, fixed now, before it sends anything: `to`
+  // is the live extension wallet, and one switched to another account while the
+  // buffer is written would otherwise take the return
+  const recipient = to.publicKey;
+  const recipientName = to.name;
+  return async () => {
     let owed = 0;
     // What returns are known to have moved, and what they cost in fees. Only
     // a return the chain confirmed counts: a send that returned a signature
@@ -1131,7 +1135,7 @@ const leftoverReturnFor =
             }),
             PgWeb3.SystemProgram.transfer({
               fromPubkey: from.publicKey,
-              toPubkey: to.publicKey,
+              toPubkey: recipient,
               lamports: owed,
             }),
           ];
@@ -1146,7 +1150,7 @@ const leftoverReturnFor =
       await settleFromBalance();
       if (returned > 0) {
         PgTerminal.println(
-          `Returned ${formatLamports(returned)} SOL to ${to.name}.`
+          `Returned ${formatLamports(returned)} SOL to ${recipientName}.`
         );
       }
     } catch (e) {
@@ -1163,6 +1167,7 @@ const leftoverReturnFor =
       );
     }
   };
+};
 
 /** Lamports as SOL, to five decimals, trailing zeros dropped */
 const formatLamports = (lamports: number) =>
