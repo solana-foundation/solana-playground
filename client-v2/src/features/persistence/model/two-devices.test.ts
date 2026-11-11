@@ -987,15 +987,17 @@ describe("both devices changed it", () => {
     captureWrites();
     const path = `/${HELLO.name}/src/lib.rs`;
     const buffers = editorHolds({ [path]: "a\nb\nc\nd\nE\n" });
-    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-      if (init?.method === "PUT") {
-        storedFiles().set(path, requireFor("the buffer")(buffers.get(path)));
-      }
-      return await fakeFetch(url, init);
-    }) as unknown as typeof fetch;
+    const put = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(async (url, init) => {
+        if (init?.method === "PUT") {
+          storedFiles().set(path, requireFor("the buffer")(buffers.get(path)));
+        }
+        return (await fakeFetch(url as string, init)) as unknown as Response;
+      });
 
     expect(await PgProjectSync.pushCurrent()).toBe("ok");
-    global.fetch = vi.fn(fakeFetch) as unknown as typeof fetch;
+    put.mockRestore();
 
     expect(storedFiles().get(path)).toBe("A\nb\nc\nd\nE\n");
     await reconcile();
@@ -1013,27 +1015,29 @@ describe("both devices changed it", () => {
     captureWrites();
     const path = `/${HELLO.name}/src/lib.rs`;
     editorHolds({ [path]: "a\nb\nc\nd\nE\n" });
-    let unreadable = false;
+    let isUnreadable = false;
     let puts = 0;
-    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-      // The second is the merge's own upload; the first is refused
-      if (init?.method === "PUT" && ++puts === 2) {
-        storedFiles().set(path, "a\nb\nc\nd\nE\n");
-        unreadable = true;
-      }
-      return await fakeFetch(url, init);
-    }) as unknown as typeof fetch;
+    const put = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(async (url, init) => {
+        // The second is the merge's own upload; the first is refused
+        if (init?.method === "PUT" && ++puts === 2) {
+          storedFiles().set(path, "a\nb\nc\nd\nE\n");
+          isUnreadable = true;
+        }
+        return (await fakeFetch(url as string, init)) as unknown as Response;
+      });
     const read = PgFs.readToString.bind(PgFs);
     vi.spyOn(PgFs, "readToString").mockImplementation(async (at: string) => {
-      if (unreadable && at === path) {
-        unreadable = false;
+      if (isUnreadable && at === path) {
+        isUnreadable = false;
         throw new Error("EIO: the store failed");
       }
       return await read(at);
     });
 
     expect(await PgProjectSync.pushCurrent()).toBe("ok");
-    global.fetch = vi.fn(fakeFetch) as unknown as typeof fetch;
+    put.mockRestore();
 
     expect(storedFiles().get(path)).toBe("A\nb\nc\nd\nE\n");
     expect(getFailures().map((f) => f.what)).toEqual([`read ${path}`]);
@@ -1066,6 +1070,40 @@ describe("both devices changed it", () => {
     expect(serverRow(HELLO.id).snapshot).toEqual({
       files: { "src/lib.rs": "A\nb\nc\nd\nE\n" },
     });
+  });
+
+  it("removes a written-back file even when the store cannot read it", async () => {
+    await startFrom(
+      { "src/lib.rs": base, "tests/t.rs": "test" },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, {
+      "src/lib.rs": "a\nb\nc\nd\nE\n",
+      "tests/t.rs": "test",
+    });
+    captureWrites();
+    const removed = `/${HELLO.name}/tests/t.rs`;
+    let isUnreadable = false;
+    editor = PgExplorer.registerEditorBuffers({
+      read: (at) => (at === removed ? "test" : undefined),
+      write: () => undefined,
+      discard: (at) => {
+        storedFiles().set(at, "test");
+        isUnreadable = true;
+      },
+    });
+    const read = PgFs.readToString.bind(PgFs);
+    vi.spyOn(PgFs, "readToString").mockImplementation(async (at: string) => {
+      if (isUnreadable && at === removed) {
+        isUnreadable = false;
+        throw new Error("EIO: the store failed");
+      }
+      return await read(at);
+    });
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+
+    expect(storedFiles().has(removed)).toBe(false);
   });
 
   it("folds in what was typed while the merge ran", async () => {

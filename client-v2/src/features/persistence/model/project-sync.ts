@@ -1128,9 +1128,12 @@ export class PgProjectSync {
             // still lists the file until the re-open, so that save -- or one
             // that fired while the caller awaited -- wrote the file back.
             // Left there, the next push uploads it over the other device's
-            // delete.
-            if ((await PgProjectSync._readStored(full)) !== undefined) {
+            // delete. Removed without reading first: a read that fails
+            // cannot tell a written-back file from an absent one.
+            try {
               await PgFs.removeFile(full);
+            } catch (e) {
+              if (!isMissing(e)) report(`remove ${full}`, e);
             }
             continue;
           }

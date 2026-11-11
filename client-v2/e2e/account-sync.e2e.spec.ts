@@ -919,7 +919,7 @@ test("typing folded into the other device's copy still merges with its next chan
   // `src/lib.rs` as the account held it after each write it accepted
   const accepted: string[] = [];
   // The next write the account accepts is the merge's own upload
-  let merging = false;
+  let isMerging = false;
 
   await page.route("**/api/auth/get-session", (r) =>
     json(r, { user: { id: "u1", name: "T", image: null, login: "t" } })
@@ -939,7 +939,7 @@ test("typing folded into the other device's copy still merges with its next chan
       beforeNextWrite?.();
       beforeNextWrite = null;
       if (row.snapshot && body.baseUpdatedAt !== row.updatedAt) {
-        merging = true;
+        isMerging = true;
         return r.fulfill({
           status: 409,
           contentType: "application/json",
@@ -950,8 +950,8 @@ test("typing folded into the other device's copy still merges with its next chan
       // uploads, and only then brings the editor up to the merged copy: an
       // autosave timer left by the fold before it fires in that window and
       // writes the pre-merge buffer back (HOO-2821).
-      if (merging) {
-        merging = false;
+      if (isMerging) {
+        isMerging = false;
         await new Promise((resolve) => setTimeout(resolve, 800));
       }
       row = { snapshot: applyWrite(row.snapshot, body), updatedAt: stamp() };
