@@ -523,6 +523,8 @@ const Monaco = () => {
 
       // Save position data
       positionDataIntervalId = setInterval(() => {
+        // Disposed by a workspace re-read before the next open clears this
+        if (model.isDisposed()) return;
         const selection = editor.getSelection();
         if (!selection) return;
 
