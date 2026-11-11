@@ -909,6 +909,75 @@ describe("the stored workspaces beside a temporary view", () => {
     expect(await PgExplorer.readAllWorkspaceNames()).toEqual(["alpha", "beta"]);
     expectLinkStillOpen();
   });
+
+  // Another tab's rename or delete reached the view's tab, but the list it
+  // showed kept the old names, and opening one of them failed
+  describe("when another tab changes the list", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    /** What another tab's rename of alpha and delete of beta leave behind */
+    const anotherTabRenamesAndDeletes = () =>
+      writeConfig({
+        workspaces: [
+          {
+            id: requireFor("alpha's stored id")(storedIdOf("alpha")),
+            name: "gamma",
+          },
+        ],
+        currentId: readConfig().currentId,
+      });
+
+    it("shows the store's names after a refresh, with the link left open", async () => {
+      await openLink();
+      const id = storedIdOf("alpha");
+      anotherTabRenamesAndDeletes();
+      const announced = vi.fn();
+      const listening = PgExplorer.onDidChangeWorkspaceList(announced);
+      try {
+        expect(await PgExplorer.refreshWorkspaces()).toBe(true);
+      } finally {
+        listening.dispose();
+      }
+
+      expect(PgExplorer.storedWorkspaceNames).toEqual(["gamma"]);
+      expect(PgExplorer.storedWorkspaceIdOf("gamma")).toBe(id);
+      expect(announced).toHaveBeenCalledTimes(1);
+      expectLinkStillOpen();
+    });
+
+    it("keeps the names shown when the store fails to read", async () => {
+      await openLink();
+      clearFailures();
+      stored().set(PgWorkspace.WORKSPACES_CONFIG_PATH, "{ not json");
+
+      expect(await PgExplorer.refreshWorkspaces()).toBe(false);
+
+      expect(PgExplorer.storedWorkspaceNames).toEqual(["alpha", "beta"]);
+      expect(getFailures()).toEqual([
+        expect.objectContaining({ what: "refresh workspaces" }),
+      ]);
+      expectLinkStillOpen();
+    });
+
+    it("leaves a list set during the read alone", async () => {
+      // A rename beside the link saves its list while the refresh reads an
+      // older store; taken after it, that read would bring the old name back
+      await openLink();
+      const read = PgExplorer.fs.readToJSON.bind(PgExplorer.fs);
+      vi.spyOn(PgExplorer.fs, "readToJSON").mockImplementationOnce(
+        async (path: string) => {
+          const before = await read(path);
+          await PgExplorer.renameWorkspace("gamma", { from: "alpha" });
+          return before;
+        }
+      );
+
+      expect(await PgExplorer.refreshWorkspaces()).toBe(true);
+
+      expect(PgExplorer.storedWorkspaceNames).toEqual(["gamma", "beta"]);
+      expectLinkStillOpen();
+    });
+  });
 });
 
 // The tree finds an item by its path on every render while a file waits to

@@ -231,6 +231,10 @@ export class PgExplorer {
    * never taken from it. A config that cannot be read tells nothing, so the
    * list in memory stays as it is rather than becoming empty.
    *
+   * A temporary view has no current workspace to keep, and re-reads the
+   * stored list it shows beside the link's project, whose files it leaves
+   * alone.
+   *
    * @returns `false` when the store's list was left alone and may hold what
    * this tab has yet to see: a change of this tab's own to the list is not
    * saved yet, or the config failed to read. `true` otherwise, a store with
@@ -238,7 +242,9 @@ export class PgExplorer {
    */
   static async refreshWorkspaces() {
     const workspace = this._workspace;
-    if (!workspace) return true;
+    if (!workspace) {
+      return this.isTemporary ? await this._refreshStoredList() : true;
+    }
     const saved = this._savedWorkspaces;
     let stored;
     try {
@@ -268,6 +274,31 @@ export class PgExplorer {
         this.events.ON_DID_CHANGE_WORKSPACE_LIST
       );
     }
+    return true;
+  }
+
+  /**
+   * `refreshWorkspaces` for a temporary view: the stored list read again, so
+   * the project list follows another tab's create, rename or delete.
+   *
+   * Taken only if nothing replaced the list during the read. A change made
+   * beside the link reads the list and sets the one it saves, and a link or
+   * project opened meanwhile sets its own; each is at least as new as this
+   * read, which taken after them would put back a name already gone.
+   */
+  private static async _refreshStoredList() {
+    const shown = this._storedList;
+    let stored;
+    try {
+      stored = await this._fetchStoredList();
+    } catch (e) {
+      report("refresh workspaces", e);
+      return false;
+    }
+    if (this._workspace || !this.isTemporary || this._storedList !== shown) {
+      return true;
+    }
+    this._takeStoredList(stored);
     return true;
   }
 
@@ -2138,6 +2169,11 @@ export class PgExplorer {
    * @returns the stored workspaces
    */
   private static async _readStoredList() {
+    return this._takeStoredList(await this._fetchStoredList());
+  }
+
+  /** The stored workspaces, read without setting them as the shown list */
+  private static async _fetchStoredList() {
     // Strict, unlike `_getWorkspaces`: a config that cannot be read must not
     // read as no projects, nor be written back as an empty list
     let read: Parameters<typeof PgWorkspace.migrate>[0];
@@ -2147,7 +2183,11 @@ export class PgExplorer {
       if (!isMissing(e)) throw e;
       read = PgWorkspace.DEFAULT;
     }
-    const stored = new PgWorkspace(PgWorkspace.migrate(read));
+    return new PgWorkspace(PgWorkspace.migrate(read));
+  }
+
+  /** Set the stored list a temporary view shows; announce it if it changed */
+  private static _takeStoredList(stored: PgWorkspace) {
     const isChanged =
       JSON.stringify(stored.allNames) !==
       JSON.stringify(this._storedList?.allNames);
