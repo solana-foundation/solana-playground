@@ -126,8 +126,8 @@ test("client-v2-layout: The checklist on a phone's menu page", async ({
 
   // Unfolded by the user, it stays so
   await page.reload();
-  // The phone's bar comes with the app's lazy chunk, which a loaded runner
-  // serves past an action's 10 s (run 42837442804)
+  // The phone pager's Menu comes with the app's lazy chunk, which a loaded
+  // runner serves past an action's 10 s
   const menu = page.getByRole("button", { name: "Menu", exact: true });
   await expect(menu).toBeVisible(LONG);
   await menu.click();

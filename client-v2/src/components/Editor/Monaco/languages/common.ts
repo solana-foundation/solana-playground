@@ -27,9 +27,8 @@ export const importTypes = async (
   await PgCommon.executeInitial(
     monaco.editor.onDidCreateEditor,
     async (editor: monaco.editor.ICodeEditor | undefined) => {
-      // No editor yet: the last project was deleted while the language
-      // started, and Home shows instead. The next editor comes through
-      // `onDidCreateEditor`
+      // No editor exists yet when the language starts (Home shows: the last
+      // project was deleted); the first arrives through `onDidCreateEditor`
       if (!editor) return;
 
       changeModels.push(

@@ -64,10 +64,10 @@ const fakeAccount = async (
     conflicts: 0,
     rejectPuts: false,
     /**
-     * Another device's files, written over the row just before this
-     * browser's next upload of lib.rs reaches it. Set on the row directly, a read that
-     * was already on its way (the load's reconcile, on a slow runner) took
-     * them before the test typed, and there was no overlap left to answer
+     * Another device's files, written over the row once, just before this
+     * browser's first edit of lib.rs reaches it. Writing the row at the start
+     * of a test let a read already in flight (the load's reconcile, on a slow
+     * runner) take them before the test typed, leaving no overlap to answer.
      */
     movesOnAtPut: undefined as Record<string, string> | undefined,
     deleted: false,
@@ -125,9 +125,9 @@ const fakeAccount = async (
       if (opts.putDelayMs) {
         await new Promise((done) => setTimeout(done, opts.putDelayMs));
       }
-      // The upload of this browser's edit to lib.rs, not another write
-      const sendsLib = (body.changed?.[LIB] ?? body.files?.[LIB]) !== undefined;
-      if (state.movesOnAtPut && sendsLib) {
+      // A patch carrying this browser's edit to lib.rs, not a whole-set
+      // upload of what it already had
+      if (state.movesOnAtPut && body.changed?.[LIB] !== undefined) {
         row.snapshot = { files: state.movesOnAtPut };
         row.updatedAt = stamp();
         state.movesOnAtPut = undefined;
@@ -333,6 +333,8 @@ test("taking the other version replaces a file that is already open", async ({
     .getByRole("alert")
     .filter({ hasText: "Changed on another device" });
   await expect(banner).toBeVisible(LONG);
+  // The banner answers the other device's move, not a refused upload alone
+  expect(state.movesOnAtPut).toBeUndefined();
   state.rejectPuts = false;
 
   await page.getByRole("button", { name: "Take the other version" }).click();
