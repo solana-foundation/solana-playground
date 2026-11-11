@@ -692,7 +692,7 @@ test.describe("assistant-own-key", () => {
   }) => {
     test.fixme(
       browserName === "firefox",
-      "On Firefox a tab opened right after connecting does not read the chosen backend; with a 3 s wait before opening it the test passes"
+      "On Firefox a tab opened right after connecting does not read the chosen backend; with a 3 s wait before opening it the test passes (HOO-2791)"
     );
     const defaultTurns = await countedDefault(page);
     await seedWorkspace(page, "own-key-new-thread");

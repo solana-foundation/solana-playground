@@ -161,7 +161,7 @@ test.describe("on a phone", () => {
   }) => {
     test.fixme(
       browserName === "firefox",
-      "On Firefox the Seahorse framework button's label is 3 px wider than the button (scrollWidth 106 > clientWidth 103)"
+      "On Firefox the Seahorse framework button's label is 3 px wider than the button (scrollWidth 106 > clientWidth 103) (HOO-2791)"
     );
     await page.goto("/");
     await expect(home(page)).toBeVisible(LONG);

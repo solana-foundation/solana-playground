@@ -16,7 +16,7 @@ import {
   test,
   TEST_USER,
 } from "./fixtures";
-import { linesOn } from "./telemetry";
+import { linesOn, linesRead } from "./telemetry";
 
 /**
  * The limits a project is held to, seen from the browser: the sync banner a
@@ -755,6 +755,7 @@ test("project-sync-limits: A banner already up sends nothing more", async ({
   await editFile(page, "f1.rs", "// more");
   await editFile(page, "f2.rs", "// more");
   await page.waitForTimeout(5000);
+  await linesRead(lines);
 
   expect(limitEvents(lines)).toHaveLength(1);
 });

@@ -54,6 +54,28 @@ test(
         timeout: 150_000,
       })
       .toBe(true);
+    // "ready" can come before `loadDependency("anchor_lang")`; a hover the worker answers from that crate proves it loaded
+    await page.getByRole("tab", { name: /^Write/ }).click();
+    const context = page
+      .locator(".monaco-editor .view-line span", { hasText: /^Context$/ })
+      .first();
+    const anchorHover = page
+      .locator(".monaco-hover")
+      .filter({ hasText: "anchor_lang" });
+    const isAnchorHoverShown = async () => {
+      await page.mouse.move(0, 0);
+      await context.hover();
+      return anchorHover.waitFor({ timeout: 10_000 }).then(
+        () => true,
+        // A hover asked before the crate loaded shows nothing from it; the poll hovers again
+        () => false
+      );
+    };
+    await expect
+      .poll(async () => failures.length > 0 || (await isAnchorHoverShown()), {
+        timeout: 150_000,
+      })
+      .toBe(true);
     expect(failures, `wasm or Rust errors:\n${failures.join("\n")}`).toEqual(
       []
     );

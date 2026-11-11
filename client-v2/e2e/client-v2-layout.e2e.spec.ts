@@ -17,7 +17,7 @@ import {
   stubSignedIn,
   test,
 } from "./fixtures";
-import { lineOf, linesOn } from "./telemetry";
+import { lineOf, linesOn, linesRead } from "./telemetry";
 import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
 
 /**
@@ -28,6 +28,7 @@ import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
 const onlyLineOf = async (page: Page, lines: string[], name: string) => {
   await expect.poll(() => lineOf(lines, name)).toBeTruthy();
   await page.waitForTimeout(300);
+  await linesRead(lines);
   const all = lines.filter((line) =>
     line.startsWith(`[telemetry:event] ${name} `)
   );
@@ -224,6 +225,7 @@ test("a restored width the library would fold opens the assistant, and changes n
   ).toBeVisible();
   await expect.poll(() => widthOf(page)).toBeGreaterThan(270);
   await page.waitForTimeout(300);
+  await linesRead(lines);
   expect(lineOf(lines, "layout_panel_toggled")).toBeUndefined();
   expect(await savedLayout(page)).toBe(saved);
 });

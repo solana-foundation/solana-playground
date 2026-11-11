@@ -25,11 +25,13 @@ const textOf = async (message: ConsoleMessage) => {
   return values.map(previewOf).join(" ");
 };
 
+/** The read of every line received so far, per array {@link linesOn} returned */
+const pendingReads = new WeakMap<string[], () => Promise<void>>();
+
 /**
- * The telemetry event lines the page logs from now on.
- *
- * The dev server logs each event at `debug` from the `telemetry:event`
- * namespace, as `[telemetry:event] <name> {<params>}`.
+ * The telemetry event lines the page logs from now on, as
+ * `[telemetry:event] <name> {<params>}`. A line lands in the array
+ * asynchronously, so await {@link linesRead} before asserting one is absent.
  */
 export const linesOn = (page: Page) => {
   const lines: string[] = [];
@@ -45,7 +47,17 @@ export const linesOn = (page: Page) => {
         lines.push(text);
       });
   });
+  pendingReads.set(lines, () => queue);
   return lines;
+};
+
+/** Resolves once every line the test has received is in `lines` */
+export const linesRead = (lines: string[]) => {
+  const read = pendingReads.get(lines);
+  if (read === undefined) {
+    throw new Error("linesRead takes an array that linesOn returned");
+  }
+  return read();
 };
 
 /** The first event line with this name, params included */

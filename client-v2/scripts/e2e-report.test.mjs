@@ -64,8 +64,24 @@ const fourShards = (dir, specsOf = () => []) => {
   }
 };
 
-const check = (dir, knownSkipsFile) =>
-  checkReports({ reportsDir: path.join(dir, "shards"), knownSkipsFile });
+const checkFor = (expectedProjects) => (dir, knownSkipsFile) =>
+  checkReports({
+    reportsDir: path.join(dir, "shards"),
+    knownSkipsFile,
+    expectedProjects,
+  });
+const check = checkFor(["chromium"]);
+const checkBoth = checkFor(["chromium", "firefox"]);
+
+const writeProjectShards = (shards, project, { current, total }) => {
+  for (const n of current) {
+    writeShard(
+      shards,
+      `${project}-${n}`,
+      reportOn(project)({ current: n, total, specs: [] })
+    );
+  }
+};
 
 const setUp = (t) => {
   const dir = tempDir(t);
@@ -213,21 +229,63 @@ describe("scripts/e2e-report", () => {
 
   it("checks the shards of each project on its own", (t) => {
     const { dir, shards } = setUp(t);
-    for (const project of ["chromium", "firefox"]) {
-      for (const n of [1, 2]) {
-        writeShard(
-          shards,
-          `${project}-${n}`,
-          reportOn(project)({ current: n, total: 2, specs: [] })
-        );
-      }
-    }
+    writeProjectShards(shards, "chromium", { current: [1, 2], total: 2 });
+    writeProjectShards(shards, "firefox", { current: [1, 2], total: 2 });
     const known = writeKnownSkips(dir, []);
-    assert.deepEqual(check(dir, known), {
+    assert.deepEqual(checkBoth(dir, known), {
       ok: true,
       lines: [
         "chromium shards reported: 1 2 of 2",
         "firefox shards reported: 1 2 of 2",
+      ],
+    });
+  });
+
+  it("a shard missing from one project is not filled by another's", (t) => {
+    const { dir, shards } = setUp(t);
+    writeProjectShards(shards, "chromium", { current: [1, 2], total: 2 });
+    writeProjectShards(shards, "firefox", { current: [1], total: 2 });
+    const known = writeKnownSkips(dir, []);
+    assert.deepEqual(checkBoth(dir, known), {
+      ok: false,
+      lines: [
+        "::error::firefox shards 1 of 2 reported -- every one of 1..2 must",
+      ],
+    });
+  });
+
+  it("an expected project without a report is an error", (t) => {
+    const { dir, shards } = setUp(t);
+    writeProjectShards(shards, "chromium", { current: [1, 2], total: 2 });
+    const known = writeKnownSkips(dir, []);
+    assert.deepEqual(checkBoth(dir, known), {
+      ok: false,
+      lines: [
+        "::error::no firefox report -- the run expected chromium, firefox",
+      ],
+    });
+  });
+
+  it("a report of a project the run did not expect is an error", (t) => {
+    const { dir, shards } = setUp(t);
+    writeProjectShards(shards, "chromium", { current: [1, 2], total: 2 });
+    writeProjectShards(shards, "firefox", { current: [1, 2], total: 2 });
+    const known = writeKnownSkips(dir, []);
+    assert.deepEqual(check(dir, known), {
+      ok: false,
+      lines: ["::error::a firefox report -- the run expected only chromium"],
+    });
+  });
+
+  it("a known-skips prefix that names no project is an error", (t) => {
+    const { dir, shards } = setUp(t);
+    fourShards(shards);
+    const known = writeKnownSkips(dir, ["[firfox] skips"]);
+    assert.deepEqual(check(dir, known), {
+      ok: false,
+      lines: [
+        "chromium shards reported: 1 2 3 4 of 4",
+        `::error title=unknown project in known skips::[firfox] skips -- ${known} names [firfox], none of chromium, firefox`,
       ],
     });
   });
@@ -253,7 +311,7 @@ describe("scripts/e2e-report", () => {
   });
 
   // The test `skips` ends with `status` on `skippedOn`, the one project the
-  // run holds, against the one known-skips line `entry`.
+  // run expects and holds, against the one known-skips line `entry`.
   const prefixCases = [
     {
       name: "a [firefox] line covers the skip on firefox",
@@ -305,7 +363,7 @@ describe("scripts/e2e-report", () => {
         })
       );
       const known = writeKnownSkips(dir, [entry]);
-      assert.deepEqual(check(dir, known), {
+      assert.deepEqual(checkFor([skippedOn])(dir, known), {
         ok,
         lines: [`${skippedOn} shards reported: 1 of 1`].concat(
           lines.map((line) => line.replace("KNOWN", known))

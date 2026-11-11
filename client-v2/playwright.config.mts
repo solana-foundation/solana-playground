@@ -11,6 +11,7 @@ import {
   describeHolders,
   queuePort,
 } from "./scripts/e2e-queue.mjs";
+import { CHROMIUM, FIREFOX } from "./scripts/e2e-projects.mjs";
 import { fullSuiteRefusal } from "./scripts/e2e-scope.mjs";
 
 // `craco start` binds `PORT`, so the same variable picks the server the run
@@ -245,13 +246,11 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
-      use: { browserName: "chromium" },
+      name: CHROMIUM,
+      use: { browserName: CHROMIUM },
       testIgnore: FIREFOX_ONLY_SPECS,
     },
-    ...(allProjects
-      ? [{ name: "firefox", use: { browserName: "firefox" as const } }]
-      : []),
+    ...(allProjects ? [{ name: FIREFOX, use: { browserName: FIREFOX } }] : []),
   ],
   webServer: {
     // `dev` runs `generate-fast`, then `generate-dev-crates`, which skips on

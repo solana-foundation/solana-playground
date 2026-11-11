@@ -9,7 +9,7 @@ import {
   stubPrograms,
   test,
 } from "./fixtures";
-import { lineOf, linesOn } from "./telemetry";
+import { lineOf, linesOn, linesRead } from "./telemetry";
 import { PHONE } from "./viewports";
 
 /**
@@ -164,6 +164,7 @@ test("client-v2-layout: Searching tutorials", async ({ seededPage: page }) => {
   expect(lineOf(lines, "catalog_searched")).toContain("page: tutorials");
   // Past another rest: still the one search
   await page.waitForTimeout(800);
+  await linesRead(lines);
   expect(
     lines.filter((l) => l.startsWith("[telemetry:event] catalog_searched "))
   ).toHaveLength(1);

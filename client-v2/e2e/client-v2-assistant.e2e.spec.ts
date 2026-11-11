@@ -11,7 +11,7 @@ import {
   stubSession,
   test,
 } from "./fixtures";
-import { lineOf, linesOn } from "./telemetry";
+import { lineOf, linesOn, linesRead } from "./telemetry";
 import { DESK, PHONE } from "./viewports";
 
 /**
@@ -279,6 +279,7 @@ test("client-v2-assistant: Stopping a turn is reported once", async ({
   await expect.poll(() => lineOf(lines, "assistant_turn_stopped")).toBeTruthy();
   // A moment more, so a second copy fails the test instead of passing unread
   await page.waitForTimeout(300);
+  await linesRead(lines);
   expect(
     lines.filter((l) =>
       l.startsWith("[telemetry:event] assistant_turn_stopped ")
@@ -684,6 +685,7 @@ test.describe("The thread", () => {
       .poll(() => lineOf(lines, "assistant_approval_answered"))
       .toBeTruthy();
     await page.waitForTimeout(300);
+    await linesRead(lines);
     const answered = lines.filter((l) =>
       l.startsWith("[telemetry:event] assistant_approval_answered ")
     );

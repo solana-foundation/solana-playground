@@ -581,6 +581,7 @@ jobs:
           sparse-checkout: |
             client-v2/e2e/known-skips.txt
             client-v2/scripts/e2e-report.mjs
+            client-v2/scripts/e2e-projects.mjs
             client-v2/.nvmrc
           sparse-checkout-cone-mode: false
 
@@ -605,7 +606,10 @@ jobs:
       # `e2e/known-skips.txt` fails the job, a listed test that no longer
       # skips is a warning to prune the list, and a flaky test is a warning
       # with its title -- work to do, not a pass.
+      # The expression of the `e2e` matrix's `browser`, so a run that lost every report of one browser fails here.
       - name: Check the shards and their skips
+        env:
+          E2E_PROJECTS: ${{ join(fromJSON(inputs.firefox && '["chromium","firefox"]' || '["chromium"]'), ',') }}
         run: node scripts/e2e-report.mjs shard-reports e2e/known-skips.txt
 
   # A called workflow whose jobs were skipped still concludes `success`, and

@@ -16,5 +16,3 @@ tutorial-runs: Passing step 3 from the Call panel
 [firefox] client-v2-layout: New project on a phone is a page
 [firefox] project-sync-limits: Five files of 100 KiB stop the project
 [firefox] assistant-own-key: A new thread takes the last chosen backend
-[firefox] client-v2-external-wallet: A wallet that registers late
-[firefox] client-v2-layout: A workspace re-open leaves the composer focused
