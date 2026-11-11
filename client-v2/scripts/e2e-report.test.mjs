@@ -252,22 +252,34 @@ describe("scripts/e2e-report", () => {
     });
   });
 
-  // A skip on `skippedOn`, against the one known-skips line `entry`.
+  // The test `skips` ends with `status` on `skippedOn`, the one project the
+  // run holds, against the one known-skips line `entry`.
   const prefixCases = [
     {
       name: "a [firefox] line covers the skip on firefox",
       entry: "[firefox] skips",
       skippedOn: "firefox",
+      status: "skipped",
       ok: true,
       lines: [],
     },
     {
-      name: "a [firefox] line does not cover the same title on chromium",
+      name: "a [firefox] line neither covers the title on chromium nor goes stale without firefox",
       entry: "[firefox] skips",
       skippedOn: "chromium",
+      status: "skipped",
       ok: false,
       lines: [
         "::error title=unexpected e2e skip::[chromium] skips -- not in KNOWN",
+      ],
+    },
+    {
+      name: "a [firefox] line goes stale when firefox ran the test",
+      entry: "[firefox] skips",
+      skippedOn: "firefox",
+      status: "expected",
+      ok: true,
+      lines: [
         "::warning title=stale known skip::[firefox] skips -- listed in KNOWN but ran",
       ],
     },
@@ -275,11 +287,12 @@ describe("scripts/e2e-report", () => {
       name: "a line without a prefix covers the skip on any project",
       entry: "skips",
       skippedOn: "firefox",
+      status: "skipped",
       ok: true,
       lines: [],
     },
   ];
-  for (const { name, entry, skippedOn, ok, lines } of prefixCases) {
+  for (const { name, entry, skippedOn, status, ok, lines } of prefixCases) {
     it(name, (t) => {
       const { dir, shards } = setUp(t);
       writeShard(
@@ -288,7 +301,7 @@ describe("scripts/e2e-report", () => {
         reportOn(skippedOn)({
           current: 1,
           total: 1,
-          specs: [specOn(skippedOn)("skips", "skipped")],
+          specs: [specOn(skippedOn)("skips", status)],
         })
       );
       const known = writeKnownSkips(dir, [entry]);

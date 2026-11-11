@@ -207,7 +207,11 @@ export const checkReports = ({ reportsDir, knownSkipsFile }) => {
     .filter((skip) => !known.some((entry) => isKnownSkip(entry, skip)))
     .map(labelOf)
     .sort();
+  // A line for a project this run left out has nothing to be stale against.
   const stale = known
+    .filter(
+      (entry) => entry.project === undefined || projects.includes(entry.project)
+    )
     .filter((entry) => !skipped.some((skip) => isKnownSkip(entry, skip)))
     .map(({ line }) => line)
     .sort();
