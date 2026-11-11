@@ -10,10 +10,10 @@ import {
 } from "../src/features/agent/server.mjs";
 import {
   consoleTrigger,
-  editorTookFocus,
   expect,
   json,
   LONG,
+  reloadAndBoot,
   runInTerminal,
   seedWorkspace,
   startProject,
@@ -53,16 +53,6 @@ const stallDevnet = (page: Page) =>
     if (body?.method !== "getSlot") return route.continue();
     return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
   });
-
-/**
- * A reload, then the app up again: every lazy chunk is fetched anew, and on a
- * loaded runner the app came up 15 s and more after the reload, so a status
- * the test waits for after it never had its own time to arrive
- */
-const reloadAndBoot = async (page: Page) => {
-  await page.reload();
-  await editorTookFocus(page);
-};
 
 /**
  * On top of `stallDevnet`: every other devnet call is left unanswered, so the

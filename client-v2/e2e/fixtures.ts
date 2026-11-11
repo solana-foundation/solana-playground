@@ -56,6 +56,16 @@ export const editorTookFocus = (page: Page) =>
   expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused(LONG);
 
 /**
+ * A reload, then the app up again: every lazy chunk is fetched anew, so the
+ * app's boot, not the step a test waits for after the reload, spends that
+ * step's timeout
+ */
+export const reloadAndBoot = async (page: Page) => {
+  await page.reload();
+  await editorTookFocus(page);
+};
+
+/**
  * The About page's Start, which begins a tutorial. The page draws it only once
  * the tutorial's lazy chunk loads, which a cold dev server compiles in more
  * than an action's 10 s: the wait names the button if it never comes. `exact`

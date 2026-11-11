@@ -990,6 +990,7 @@ test.describe("on an iPhone", () => {
     // A project is started from the desktop's Home, as "on a phone" does
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
+    await editorTookFocus(page);
     await page.setViewportSize(PHONE);
     const lines = page.locator(".monaco-editor .view-lines");
     await expect(lines).toContainText("use anchor_lang");
