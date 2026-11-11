@@ -642,7 +642,9 @@ describe("BaseDeploy", () => {
       />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      "From Phantom · 7xKX…gAsU · 4.20 SOLPhantom asks twice: to send SOL for the deploy, then to deploy."
+      `From Phantom · ${shortKey(
+        WALLET
+      )} · 4.20 SOLPhantom asks twice: to send SOL for the deploy, then to deploy.`
     );
     // The note is a line of its own, so the payer stays one line
     expect(
