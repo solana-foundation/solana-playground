@@ -39,6 +39,32 @@ import {
 
 const log = createLogger("commands:deploy");
 
+/**
+ * The airdrop confirms on the cluster's own RPC, which can run ahead of the
+ * selected one. Waits until the selected RPC reads more than `before` for the
+ * wallet, so the balance the run's cost is measured from includes the airdrop.
+ * Gives up after a few seconds and goes on: the buffer's own retries cover a
+ * longer lag, and a cost read before the funds show would only be understated.
+ */
+const FUNDS_WAIT_TRIES = 6;
+const FUNDS_WAIT_MS = 1000;
+
+const waitForFundsOn =
+  (connection: PgWeb3.Connection) =>
+  async (address: PgWeb3.PublicKey, before: number) => {
+    for (let tries = 0; tries < FUNDS_WAIT_TRIES; tries++) {
+      try {
+        if ((await connection.getBalance(address)) > before) return;
+      } catch (e) {
+        log.warn("could not read the balance after the airdrop", {
+          context: { error: e instanceof Error ? e.message : String(e) },
+        });
+        return;
+      }
+      await PgCommon.sleep(FUNDS_WAIT_MS);
+    }
+  };
+
 const reclaimRejectedLineFor = (readBufferUrl: string | undefined) =>
   `${PgTerminal.error("Reclaim rejected.")} Run \`${closeBuffersCommandFor(
     readBufferUrl
@@ -382,6 +408,7 @@ const processDeploy = async (
         "airdrop_failed"
       );
     }
+    await waitForFundsOn(connection)(wallet.publicKey, userBalance);
   }
 
   // What the run costs is measured from here on, so an airdrop above is not
