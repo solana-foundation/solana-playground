@@ -618,17 +618,19 @@ const SKIP_VIAS: readonly SkipVia[] = ["button", "call_panel", "elsewhere"];
  * Hello Anchor's "greet-by-name" step gained a beat, `s4.client`, at index 2.
  * A cursor is the index of the next beat, so a save made before it, past the
  * second beat and without `s4.client` resolved, points one beat early: the
- * airdrop card would show as the live one instead of the deploy. Moving it one
- * on keeps it on the beat it meant; the learner skips only the client rewrite,
- * and the call card sends its own arguments.
+ * airdrop card would show as the live one instead of the deploy. The loader
+ * moves such a cursor one on and records `s4.client` as said, which also
+ * makes the move run once: the next load finds the beat resolved. The learner
+ * skips only the client rewrite, and the call card sends its own arguments.
  */
-const realignedCursor = (cursor: Cursor, beats: unknown): Cursor => {
-  if (cursor.kind !== "step" || cursor.stepId !== "greet-by-name")
-    return cursor;
-  if (cursor.fail || cursor.beat < 2) return cursor;
-  if (isRecord(beats) && "s4.client" in beats) return cursor;
-  return { ...cursor, beat: cursor.beat + 1 };
-};
+const REALIGNED_BEAT = "s4.client";
+
+const isBeforeRealignedBeat = (cursor: Cursor, beats: unknown) =>
+  cursor.kind === "step" &&
+  cursor.stepId === "greet-by-name" &&
+  !cursor.fail &&
+  cursor.beat >= 2 &&
+  !(isRecord(beats) && REALIGNED_BEAT in beats);
 
 const parseCursor = (v: unknown): Cursor | null => {
   if (!isRecord(v)) return null;
@@ -1135,7 +1137,11 @@ export const parseProgress = (
   if (!isStrings(saved.passed) || !isMsOrNull(saved.finishedAt)) return null;
   const parsed = parseCursor(saved.cursor);
   if (!parsed) return null;
-  const cursor = realignedCursor(parsed, saved.beats);
+  const realigned = isBeforeRealignedBeat(parsed, saved.beats);
+  const cursor: Cursor =
+    realigned && parsed.kind === "step"
+      ? { ...parsed, beat: parsed.beat + 1 }
+      : parsed;
   if (!isMsOrNull(saved.startedAt)) return null;
   // One rule for the save's timestamps: a malformed one fails the save
   if (!isMsOrNull(saved.restartedAt)) return null;
@@ -1150,7 +1156,17 @@ export const parseProgress = (
     startedAt: saved.startedAt,
     restartedAt,
     cursor,
-    beats: parseEach(saved.beats, parseResolution, onDrop, "beats"),
+    beats: Object.assign(
+      parseEach(saved.beats, parseResolution, onDrop, "beats"),
+      realigned
+        ? {
+            [REALIGNED_BEAT]: {
+              kind: "said" as const,
+              at: typeof saved.startedAt === "number" ? saved.startedAt : 0,
+            },
+          }
+        : {}
+    ),
     runs: parseEach(
       saved.runs,
       (entry, key) => parseRuns(entry, onDrop, key),
@@ -1196,6 +1212,11 @@ if (import.meta.vitest) {
         beat: 4,
         fail: false,
       });
+      // Loading the migrated save again moves nothing
+      const once = parseProgress(save(3, {}));
+      expect(parseProgress(JSON.parse(JSON.stringify(once)))?.cursor).toEqual(
+        once?.cursor
+      );
       expect(at(save(1, {}))).toMatchObject({ beat: 1 });
       expect(
         at(save(3, { "s4.client": { state: "said", at: 1 } }))
