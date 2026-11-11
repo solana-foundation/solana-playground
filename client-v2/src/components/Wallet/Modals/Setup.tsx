@@ -102,11 +102,16 @@ const LocalSetup = () => {
 const KeyOriginSetup = () => {
   const [text, setText] = useState("");
   const draft = useDraftKey();
-  const { isBusy, onBusy } = useBusyPanels();
+  const { isBusy, onBusy, whenIdle } = useBusyPanels();
 
   const handleSetup = async () => {
     if (!PgWallet.accounts.length) {
-      PgWallet.add({ publicKey: await draft.made() });
+      const made = await draft.made();
+      // An import may have started while the key was made: closing now would
+      // drop its panel's port, so wait for it, and keep its account if it
+      // landed instead of adding the made key beside it
+      await whenIdle();
+      if (!PgWallet.accounts.length) PgWallet.add({ publicKey: made });
     }
     return true; // Indicate the setup has been completed successfully
   };

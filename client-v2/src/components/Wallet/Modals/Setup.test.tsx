@@ -42,9 +42,14 @@ vi.mock("../KeyPanel", () => ({
   }) => (
     <>
       {props.action === "import" && (
-        <button type="button" onClick={() => props.onBusy?.(true)}>
-          panel busy
-        </button>
+        <>
+          <button type="button" onClick={() => props.onBusy?.(true)}>
+            panel busy
+          </button>
+          <button type="button" onClick={() => props.onBusy?.(false)}>
+            panel idle
+          </button>
+        </>
       )}
       <button
         type="button"
@@ -67,6 +72,9 @@ vi.mock("../KeyPanel", () => ({
 
 const IMPORTED = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 
+/** What each Continue's submit returned, newest last */
+const submits = vi.hoisted(() => [] as Promise<unknown>[]);
+
 // The frame is the overlay system's; what is under test is the body, and
 // what Continue does.
 vi.mock("@/widgets/overlays", () => ({
@@ -88,7 +96,9 @@ vi.mock("@/widgets/overlays", () => ({
       <button
         type="button"
         disabled={buttonProps.disabled || buttonProps.isHeld}
-        onClick={() => void buttonProps.onSubmit()}
+        onClick={() => {
+          submits.push(Promise.resolve(buttonProps.onSubmit()));
+        }}
       >
         {buttonProps.text}
       </button>
@@ -301,6 +311,37 @@ describe("wallet Setup under the key-origin provider", () => {
     fireEvent.click(screen.getByRole("button", { name: "panel busy" }));
 
     expect(isHeld()).toBe(true);
+  });
+
+  it("waits for an import started while Continue made the key, and keeps the import", async () => {
+    let finishMaking: (publicKey: string) => void = () => {};
+    vi.mocked(PgWallet.makeKey).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishMaking = resolve;
+      })
+    );
+    renderSetup();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const submit = submits[submits.length - 1];
+    const stateOf = (promise: Promise<unknown>) =>
+      Promise.race([
+        promise.then(() => "settled"),
+        new Promise((resolve) => setTimeout(() => resolve("pending"), 50)),
+      ]);
+
+    // The import starts while Continue still waits for the key
+    fireEvent.click(screen.getByRole("button", { name: "panel busy" }));
+    finishMaking(MADE);
+
+    expect(await stateOf(submit)).toBe("pending");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import keypair (panel)" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "panel idle" }));
+    expect(await submit).toBe(true);
+    expect(vi.mocked(PgWallet.add).mock.calls).toEqual([
+      [{ publicKey: IMPORTED }],
+    ]);
   });
 
   it("holds Cancel while a panel is busy, so an import's result still lands", async () => {
