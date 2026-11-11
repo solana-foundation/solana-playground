@@ -323,8 +323,16 @@ in this order:
    first, or press Skip. Then the button's yours."
 2. A finish chip SHALL get the definition's answer, with no model call.
 3. Anything else SHALL go to the product's assistant, with the tutorial, the
-   step, its objective, the open files, the last result and the tutorial's
-   doc list as its context. Its answer SHALL post in the feed as the
+   step, its objective, the steps still to come (or that it is the last),
+   the open files, the last result and the tutorial's doc list as its
+   context. The context SHALL also say where the lesson's actions are: on
+   the cards in this chat, by the action words of item 1, and in the work
+   area only by the Call panel and a client run, with no Build, Deploy or
+   Interact action or tab there; what the terminal runs (Playground's own
+   commands, no yarn, npm or npx); and the card the step waits on, by its
+   buttons: the live act's, an open question's (answer, Hint, "Type it
+   myself" on a wide screen, or Skip, before the step's next card), a
+   step-done card's "Next: <step>", or the card of a failed result. Its answer SHALL post in the feed as the
    assistant's turn. With no model connected, the message SHALL route to
    connecting a model. While the assistant answers, a question SHALL wait in
    the composer, unsent, until the answer ends, under the note "The assistant
