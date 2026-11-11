@@ -26,6 +26,8 @@ const env = vi.hoisted(() => ({
   accountReadFails: false,
   /** The deploy is from a standard wallet, which hands SOL to the Playground one */
   standard: false,
+  /** The Playground wallet's own lamports when set; else it reads `balance` */
+  pgLamports: undefined as number | undefined,
   /** The deploy-state listener `loadBufferWithControl` registers */
   onDeployState: (() => undefined) as (state: string) => void,
   /** What the terminal handle printed: the cancel's lines */
@@ -53,9 +55,17 @@ const pgWallet = vi.hoisted(() => ({
 }));
 const standardWallet = vi.hoisted(() => ({
   isPg: false,
+  name: "Phantom",
   publicKey: keyOf("Std1111"),
 }));
 const airdrop = vi.hoisted(() => vi.fn());
+const transfer = vi.hoisted(() =>
+  vi.fn(
+    (args: { fromPubkey: unknown; toPubkey: unknown; lamports: number }) => ({
+      transfer: args,
+    })
+  )
+);
 const termPrintln = vi.hoisted(() => vi.fn());
 const send = vi.hoisted(() => vi.fn(async () => "sig"));
 const loadBuffer = vi.hoisted(() => vi.fn());
@@ -92,6 +102,9 @@ vi.mock("../../utils", () => ({
       return {
         // The buffer's key is `Keypair.generate`'s; any other is the wallet's
         getBalance: async (key: { toBase58: () => string }) => {
+          if (key.toBase58() === "Pg1111" && env.pgLamports !== undefined) {
+            return env.pgLamports;
+          }
           if (key.toBase58() !== "Buf1111") return env.balance;
           return switched ? 0 : env.bufferBalance();
         },
@@ -156,7 +169,12 @@ vi.mock("../../utils", () => ({
     Keypair: {
       generate: () => ({ publicKey: { toBase58: () => "Buf1111" } }),
     },
-    SystemProgram: { transfer: vi.fn() },
+    SystemProgram: { transfer },
+    ComputeBudgetProgram: {
+      setComputeUnitPrice: (args: { microLamports: number }) => ({
+        computeUnitPrice: args.microLamports,
+      }),
+    },
   },
 }));
 
@@ -254,6 +272,8 @@ describe("commands/deploy", () => {
     };
     env.accountReadFails = false;
     env.standard = false;
+    env.pgLamports = undefined;
+    transfer.mockClear();
     env.termLines = [];
     env.readBuffer = undefined;
     airdrop.mockClear();
@@ -837,6 +857,235 @@ describe("commands/deploy", () => {
       expect((failure as Error).message).toBe("Deployment cancelled");
       expect(closeBuffer).not.toHaveBeenCalled();
       expect(openBuffers.forget).not.toHaveBeenCalled();
+    });
+  });
+  describe("a deploy from a standard wallet", () => {
+    const FEE = 5000;
+    /** The returns to the standard wallet, in lamports */
+    const returns = () =>
+      transfer.mock.calls
+        .map(([args]) => args)
+        .filter(
+          (args) =>
+            args.fromPubkey === pgWallet.publicKey &&
+            args.toPubkey === standardWallet.publicKey
+        )
+        .map((args) => args.lamports);
+    /** Move the Playground wallet's lamports by `delta` */
+    const movePg = (delta: number) => {
+      env.pgLamports = (env.pgLamports ?? 0) + delta;
+    };
+    /** A transfer moves the Playground wallet's lamports once it is sent */
+    const landTransfer = async (...args: unknown[]) => {
+      type Ix = {
+        transfer?: { fromPubkey: unknown; toPubkey: unknown; lamports: number };
+      };
+      const ixs = (Array.isArray(args[0]) ? args[0] : [args[0]]) as Ix[];
+      const t = ixs.find((ix) => ix?.transfer)?.transfer;
+      if (t && env.pgLamports !== undefined) {
+        if (t.toPubkey === pgWallet.publicKey) env.pgLamports += t.lamports;
+        if (t.fromPubkey === pgWallet.publicKey) env.pgLamports -= t.lamports;
+      }
+      return "sig";
+    };
+    afterEach(() => send.mockImplementation(async () => "sig"));
+    /** The Playground wallet starts with 1 SOL; the funding transfer adds 2.1 */
+    const fromStandard = () => {
+      env.standard = true;
+      env.balance = 10_000_000_000;
+      env.pgLamports = 1_000_000_000;
+      loadBuffer.mockResolvedValue(undefined);
+      send.mockImplementation(landTransfer);
+      // The buffer and the fees spend all but 0.09 SOL of what came in
+      createBuffer.mockImplementation(async () => {
+        movePg(-2_010_000_000);
+        return "sig";
+      });
+    };
+
+    it("returns what the Playground wallet holds over its balance before the run", async () => {
+      fromStandard();
+
+      const result = await runDeploy();
+
+      expect(result).not.toBeInstanceOf(Error);
+      expect(returns()).toEqual([90_000_000 - FEE]);
+      // A compute unit price of 0 keeps the priority fee off, so the fee is exact
+      expect(send).toHaveBeenCalledWith(
+        [
+          { computeUnitPrice: 0 },
+          { transfer: expect.objectContaining({ lamports: 90_000_000 - FEE }) },
+        ],
+        expect.objectContaining({ wallet: pgWallet })
+      );
+      expect(vi.mocked(PgTerminal.println).mock.calls.join("\n")).toContain(
+        "Returned 0.09 SOL to Phantom."
+      );
+    });
+
+    it("returns after a failed deploy, once its buffer is closed", async () => {
+      fromStandard();
+      deployProgram.mockRejectedValue(new Error("custom program error: 0x1"));
+      // The close gives the buffer's rent back to the Playground wallet
+      closeBuffer.mockImplementation(async () => {
+        movePg(2_000_000_000);
+        // eslint-disable-next-line unicorn/no-null -- a closed account reads `null`
+        env.bufferAccount = null;
+        return "sig";
+      });
+
+      const failure = await runDeploy();
+
+      expect((failure as Error).message).toContain("custom program error");
+      expect(closeBuffer).toHaveBeenCalled();
+      expect(returns()).toEqual([2_090_000_000 - FEE]);
+      expect(closeBuffer.mock.invocationCallOrder[0]).toBeLessThan(
+        send.mock.invocationCallOrder.at(-1) ?? 0
+      );
+    });
+
+    it("returns what came in when the deploy fails before any buffer", async () => {
+      fromStandard();
+      createBuffer.mockRejectedValue(new Error("blockhash not found"));
+      // eslint-disable-next-line unicorn/no-null -- no buffer was made
+      env.bufferAccount = null;
+
+      await runDeploy();
+
+      expect(returns()).toEqual([2_100_000_000 - FEE]);
+    });
+
+    it("returns after a stop during the write, once its buffer is closed", async () => {
+      fromStandard();
+      loadBuffer.mockImplementation(async () => env.controller.abort());
+      closeBuffer.mockImplementation(async () => {
+        movePg(2_000_000_000);
+        // eslint-disable-next-line unicorn/no-null -- a closed account reads `null`
+        env.bufferAccount = null;
+        return "sig";
+      });
+
+      const failure = await runDeploy();
+
+      expect(isStopped(failure)).toBe(true);
+      expect(returns()).toEqual([2_090_000_000 - FEE]);
+    });
+
+    it("sends once when a return lands but its send reports a failure", async () => {
+      fromStandard();
+      let failedOnce = false;
+      send.mockImplementation(async (...args: unknown[]) => {
+        const sig = await landTransfer(...args);
+        const opts = args[1] as { wallet?: unknown } | undefined;
+        if (opts?.wallet === pgWallet && !failedOnce) {
+          failedOnce = true;
+          throw new Error("confirmation timed out");
+        }
+        return sig;
+      });
+
+      const result = await runDeploy();
+
+      expect(result).not.toBeInstanceOf(Error);
+      expect(returns()).toEqual([90_000_000 - FEE]);
+      expect(env.pgLamports).toBe(1_000_000_000 + FEE);
+    });
+
+    it("sends nothing back and asks nothing more when the first approval is declined", async () => {
+      fromStandard();
+      send.mockImplementation(async (...args: unknown[]) => {
+        const opts = args[1] as { wallet?: unknown } | undefined;
+        if (!opts?.wallet) throw new Error("User rejected the request.");
+        return landTransfer(...args);
+      });
+
+      const failure = await runDeploy();
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(returns()).toEqual([]);
+      expect(createBuffer).not.toHaveBeenCalled();
+      expect(PgDeployRun.state.approval).toBeNull();
+    });
+
+    it("sends nothing when nothing is left over", async () => {
+      fromStandard();
+      createBuffer.mockImplementation(async () => {
+        movePg(-2_100_000_000);
+        return "sig";
+      });
+
+      await runDeploy();
+
+      expect(returns()).toEqual([]);
+    });
+
+    it("says how much stayed when the return fails, and the deploy still succeeds", async () => {
+      fromStandard();
+      send.mockImplementation(async (...args: unknown[]) => {
+        const opts = args[1] as { wallet?: unknown } | undefined;
+        if (opts?.wallet === pgWallet) throw new Error("blockhash not found");
+        return landTransfer(...args);
+      });
+
+      const result = await runDeploy();
+
+      expect(result).not.toBeInstanceOf(Error);
+      expect(vi.mocked(PgTerminal.println).mock.calls.join("\n")).toContain(
+        "0.09 SOL stayed in your Playground wallet."
+      );
+    });
+
+    it("names the two approvals while it waits on the standard wallet", async () => {
+      fromStandard();
+      const approvals: unknown[] = [];
+      const sub = PgDeployRun.onDidChange((state) =>
+        approvals.push(state.approval)
+      );
+      try {
+        await runDeploy();
+      } finally {
+        sub.dispose();
+      }
+
+      expect(approvals).toContainEqual({ wallet: "Phantom", n: 1 });
+      expect(approvals).toContainEqual({ wallet: "Phantom", n: 2 });
+      expect(PgDeployRun.state.approval).toBeNull();
+    });
+
+    it("names the approval when the standard wallet closes the buffer it holds", async () => {
+      fromStandard();
+      deployProgram.mockRejectedValue(new Error("custom program error: 0x1"));
+      env.bufferAccount = {
+        data: Buffer.concat([
+          Buffer.alloc(5),
+          standardWallet.publicKey.toBuffer(),
+        ]),
+      };
+      const approvals: unknown[] = [];
+      const sub = PgDeployRun.onDidChange((state) =>
+        approvals.push(state.approval)
+      );
+      try {
+        await runDeploy();
+      } finally {
+        sub.dispose();
+      }
+
+      expect(closeBuffer).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ wallet: standardWallet })
+      );
+      expect(approvals).toContainEqual({ wallet: "Phantom", n: "close" });
+      expect(PgDeployRun.state.approval).toBeNull();
+    });
+
+    it("never returns anything for a Playground deploy", async () => {
+      env.balance = 10_000_000_000;
+      loadBuffer.mockResolvedValue(undefined);
+
+      await runDeploy();
+
+      expect(returns()).toEqual([]);
     });
   });
 });

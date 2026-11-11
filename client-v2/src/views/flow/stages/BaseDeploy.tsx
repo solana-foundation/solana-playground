@@ -62,6 +62,8 @@ export interface DeployPayer {
   balance: number | undefined;
   /** The Playground wallet, not a connected one such as Phantom */
   playground: boolean;
+  /** A connected wallet's own name, as "Phantom"; absent for the Playground wallet */
+  name?: string;
 }
 
 export interface BaseDeployProps {
@@ -172,9 +174,24 @@ const payerLine = (p: BaseDeployProps) => {
   }
   const balance =
     payer.balance === undefined ? "" : ` · ${payer.balance.toFixed(2)} SOL`;
+  if (!payer.playground && payer.name) {
+    return `From ${payer.name} · ${shortKey(payer.address)}${balance}`;
+  }
   const which = payer.playground ? "your Playground wallet" : "your wallet";
   return `From ${which} · ${shortKey(payer.address)}${balance}`;
 };
+
+/**
+ * What a deploy from a connected wallet asks of it (`commands/deploy`), on its
+ * own line under the payer, so the payer stays one line to scan
+ */
+const PayerNote = ({ payer }: { payer: DeployPayer | undefined }) =>
+  payer && !payer.playground && payer.name ? (
+    <span className="block text-muted-foreground">
+      {payer.name} asks twice: to send SOL for the deploy, then to deploy.
+    </span>
+  ) : // eslint-disable-next-line unicorn/no-null -- a component that draws nothing returns `null`
+  null;
 
 /**
  * The stage's prose. `latest` is the latest deployment on the network picked
@@ -498,6 +515,7 @@ const BeforeDeploySummary = ({
         className="m-0 border-t border-border px-4 py-2.5 text-caption font-read text-muted-foreground"
       >
         {payerLine(p)}
+        <PayerNote payer={p.payer} />
       </p>
     )}
     {/* The last row: the program id, which unfolds into its keypair */}
@@ -584,6 +602,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             className="text-caption text-muted-foreground"
           >
             {payerLine(p)}
+            <PayerNote payer={p.payer} />
           </p>
         )}
 

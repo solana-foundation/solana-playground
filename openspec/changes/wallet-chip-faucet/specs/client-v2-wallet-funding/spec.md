@@ -71,8 +71,12 @@ not finish stays with the account row, as before.
 
 The `features/fund-wallet` slice SHALL emit, with prefix `fund`:
 `fund_dialog_opened` `{ from: "account-menu" | "wallet-chip" }` (the control that opened it) when the dialog opens;
-`fund_wallet_connected` `{ wallet: string }` (the wallet's name) when a wallet
-connects in the dialog; `fund_sent` `{ cluster: "mainnet-beta" | "devnet" | "testnet" | "localnet" | "playnet" }` (the Playground's cluster) when a
+`fund_wallet_connected` `{ wallet: string, as: "payer" | "current" }` (the wallet's name; `payer` when it
+connects in the dialog, `current` when the wallet chip makes it the current wallet);
+`fund_wallet_connect_started` `{ wallet: string }` when the wallet chip asks a wallet to connect;
+`fund_wallet_connect_failed` `{ wallet: string, reason: "rejected" | "network" | "unconfirmed" | "unknown" }`
+when that connect does not happen (`rejected` is the user's no); `fund_wallet_disconnected` `{ wallet: string }`
+when the chip disconnects the current wallet; `fund_sent` `{ cluster: "mainnet-beta" | "devnet" | "testnet" | "localnet" | "playnet" }` (the Playground's cluster) when a
 transfer is confirmed; and
 `fund_failed` `{ stage: "connect" | "send", reason: "rejected" | "network" | "unconfirmed" | "unknown" }` when connecting or sending fails. The wallet chip SHALL emit
 `fund_airdrop_requested` `{ from: "wallet-chip" }` when its popover asks the

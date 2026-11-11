@@ -39,10 +39,24 @@ type FundEvents = {
   /** The web faucet opened from the chip, after the faucet refused. */
   fund_web_faucet_opened: { from: "wallet-chip" };
   /**
-   * A wallet connected inside the dialog to pay; `wallet` is its Wallet
-   * Standard name (Phantom, Solflare), never an address.
+   * A wallet connected; `wallet` is its Wallet Standard name (Phantom,
+   * Solflare), never an address. `as` is `payer` inside the Fund dialog and
+   * `current` from the wallet chip, where it becomes the current wallet.
    */
-  fund_wallet_connected: { wallet: string };
+  fund_wallet_connected: { wallet: string; as: "payer" | "current" };
+  /**
+   * The wallet chip asked a wallet to connect (designers'
+   * `wallet_connect_started`). Every request answers with `fund_wallet_connected`
+   * or `fund_wallet_connect_failed`, also one a later pick superseded on screen.
+   */
+  fund_wallet_connect_started: { wallet: string };
+  /**
+   * The chip's connect did not happen; `reason` is `rejected` when the user
+   * said no in the wallet.
+   */
+  fund_wallet_connect_failed: { wallet: string; reason: FailureReason };
+  /** The chip disconnected the current wallet; the Playground wallet is back. */
+  fund_wallet_disconnected: { wallet: string };
   /** A transfer to the Playground wallet was confirmed on `cluster`. */
   fund_sent: { cluster: FundCluster };
   /**

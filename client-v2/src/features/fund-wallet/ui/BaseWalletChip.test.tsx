@@ -29,6 +29,12 @@ const renderChip = (props: Partial<BaseWalletChipProps>) =>
         onAirdrop={props.onAirdrop ?? vi.fn()}
         onOpenFaucet={props.onOpenFaucet ?? vi.fn()}
         onFund={props.onFund ?? vi.fn()}
+        owner={props.owner}
+        wallets={props.wallets}
+        connect={props.connect}
+        onConnectOpen={props.onConnectOpen ?? vi.fn()}
+        onConnect={props.onConnect}
+        onDisconnect={props.onDisconnect}
       />
     </TooltipProvider>
   );
@@ -136,5 +142,113 @@ describe("features/fund-wallet/ui/BaseWalletChip", () => {
     expect(
       screen.getByRole("button", { name: "Send from your wallet" })
     ).toBeTruthy();
+  });
+
+  describe("connecting a wallet", () => {
+    const ICON = "data:image/svg+xml,<svg/>";
+    const PHANTOM = { name: "Phantom", icon: ICON };
+
+    it("offers Connect a wallet beside the Playground wallet", () => {
+      const onConnectOpen = vi.fn();
+      renderChip({ onConnectOpen, onConnect: vi.fn() });
+      open();
+      fireEvent.click(screen.getByRole("button", { name: "Connect a wallet" }));
+      expect(onConnectOpen).toHaveBeenCalledOnce();
+    });
+
+    it("lists the installed wallets under its heading, and connects the one picked", () => {
+      const onConnect = vi.fn();
+      renderChip({
+        wallets: [PHANTOM, { name: "Solflare", icon: ICON }],
+        connect: { kind: "listing" },
+        onConnect,
+      });
+      open();
+      expect(screen.getByText("Connect a wallet")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Phantom" }));
+      expect(onConnect).toHaveBeenCalledWith("Phantom");
+      expect(screen.getByRole("button", { name: "Solflare" })).toBeTruthy();
+    });
+
+    it("says no extension was found, with the Playground wallet as the way on", () => {
+      renderChip({
+        wallets: [],
+        connect: { kind: "listing" },
+        onConnect: vi.fn(),
+      });
+      open();
+      expect(
+        screen.getByText("No wallet extension found in this browser.")
+      ).toBeTruthy();
+      expect(
+        screen.getByText(
+          "Install Phantom, Backpack or Solflare, then reload. Or keep using the Playground wallet."
+        )
+      ).toBeTruthy();
+    });
+
+    it("waits for the extension, with no list to press meanwhile", () => {
+      renderChip({
+        wallets: [PHANTOM],
+        connect: { kind: "waiting", wallet: "Phantom" },
+        onConnect: vi.fn(),
+      });
+      open();
+      expect(screen.getByText("Waiting for Phantom…")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Phantom" })).toBeNull();
+    });
+
+    it("says a declined connect kept the Playground wallet, and tries again", () => {
+      const onConnect = vi.fn();
+      renderChip({
+        wallets: [PHANTOM],
+        connect: { kind: "declined", wallet: "Phantom" },
+        onConnect,
+      });
+      open();
+      expect(
+        screen.getByText(
+          "Phantom didn't connect. The Playground wallet is in use."
+        )
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(onConnect).toHaveBeenCalledWith("Phantom");
+    });
+
+    it("names why a connect failed when it was not the user's no", () => {
+      renderChip({
+        wallets: [PHANTOM],
+        connect: {
+          kind: "failed",
+          wallet: "Phantom",
+          reason: "Phantom is not installed in this browser.",
+        },
+        onConnect: vi.fn(),
+      });
+      open();
+      expect(
+        screen.getByText(
+          "Phantom didn't connect: Phantom is not installed in this browser. The Playground wallet is in use."
+        )
+      ).toBeTruthy();
+    });
+
+    it("names a connected wallet, offers to disconnect it, and drops Send from your wallet", () => {
+      const onDisconnect = vi.fn();
+      renderChip({ owner: PHANTOM, onConnect: vi.fn(), onDisconnect });
+      open();
+      expect(screen.getByText("Phantom")).toBeTruthy();
+      expect(screen.queryByText("Playground wallet")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Send from your wallet" })
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Connect a wallet" })
+      ).toBeNull();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Disconnect Phantom" })
+      );
+      expect(onDisconnect).toHaveBeenCalledOnce();
+    });
   });
 });

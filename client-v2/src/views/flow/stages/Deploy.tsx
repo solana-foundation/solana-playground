@@ -133,6 +133,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         address: wallet.publicKey.toBase58(),
         balance: typeof balance === "number" ? balance : undefined,
         playground: wallet.isPg === true,
+        name: wallet.isPg ? undefined : wallet.name,
       }
     : undefined;
 

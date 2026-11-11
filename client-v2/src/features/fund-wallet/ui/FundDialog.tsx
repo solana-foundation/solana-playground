@@ -187,7 +187,7 @@ const FundDialog = ({
       setFailure(failureOf("connect", reason)(name, error));
       return;
     }
-    fundTelemetry.track("fund_wallet_connected", { wallet: name });
+    fundTelemetry.track("fund_wallet_connected", { wallet: name, as: "payer" });
     setPayerName(name);
   };
 

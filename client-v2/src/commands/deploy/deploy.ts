@@ -395,55 +395,79 @@ const processDeploy = async (
   const balanceBefore = await spendable();
   PgDeployRun.update({ step: "buffer" });
 
-  // If deploying from a standard wallet, transfer the required lamports for
-  // deployment to the first playground wallet, which allows to deploy without
-  // asking for approval.
-  if (standardWallet) {
-    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
-    // Transfer extra 0.1 SOL for fees (doesn't have to get used)
-    const requiredBalance =
-      requiredBalanceWithoutFees + PgWeb3.solToLamports(0.1);
-    const transferIx = PgWeb3.SystemProgram.transfer({
-      fromPubkey: standardWallet.publicKey,
-      toPubkey: pgWallet.publicKey,
-      lamports: requiredBalance,
-    });
-    await sendAndConfirmTxWithRetries(
-      () => PgTx.send(transferIx, { connection }),
-      async () =>
-        (await connection.getBalance(standardWallet.publicKey)) <
-        userBalance - requiredBalance
-    );
-  }
+  // What the Playground wallet holds before a standard wallet sends it SOL:
+  // anything over it at the end goes back (`returnLeftover`)
+  const returnLeftover = standardWallet
+    ? leftoverReturnFor({
+        from: pgWallet,
+        to: standardWallet,
+        before: await connection.getBalance(pgWallet.publicKey),
+        connection,
+        sendAndConfirmTxWithRetries,
+      })
+    : async () => {};
 
-  // Extend the program data account if needed.
-  //
-  // NOTE: This ideally would happen just before the upgrade, but doing so
-  // results in `Program was deployed in this block already` error.
-  if (additionalLen > 0) {
-    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
-    const programPk = PgProgramInfo.pk;
-    if (!programPk) throw new Error("The program ID was not found");
-    await sendAndConfirmTxWithRetries(
-      async () => {
-        return await BpfLoaderUpgradeable.extendProgram(
-          programPk,
-          additionalLen,
-          { wallet: pgWallet, connection }
+  try {
+    // If deploying from a standard wallet, transfer the required lamports for
+    // deployment to the first playground wallet, which allows to deploy without
+    // asking for approval.
+    if (standardWallet) {
+      throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+      // Transfer extra 0.1 SOL for fees (doesn't have to get used)
+      const requiredBalance =
+        requiredBalanceWithoutFees + PgWeb3.solToLamports(0.1);
+      const transferIx = PgWeb3.SystemProgram.transfer({
+        fromPubkey: standardWallet.publicKey,
+        toPubkey: pgWallet.publicKey,
+        lamports: requiredBalance,
+      });
+      PgDeployRun.update({ approval: { wallet: standardWallet.name, n: 1 } });
+      try {
+        await sendAndConfirmTxWithRetries(
+          () => PgTx.send(transferIx, { connection }),
+          async () =>
+            (await connection.getBalance(standardWallet.publicKey)) <
+            userBalance - requiredBalance
         );
-      },
-      // Read on the run's network: the program info follows the one picked
-      async () =>
-        additionalProgramLen({
-          programLen,
-          deployed: true,
-          onChainLen: await fetchProgramDataLenOn(connection)(programPk),
-        }) <= 0
-    );
-  }
+      } finally {
+        // eslint-disable-next-line unicorn/no-null -- no approval is asked any more
+        PgDeployRun.update({ approval: null });
+      }
+    }
 
-  // Funding is done; a stop here leaves no buffer
-  throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+    // Extend the program data account if needed.
+    //
+    // NOTE: This ideally would happen just before the upgrade, but doing so
+    // results in `Program was deployed in this block already` error.
+    if (additionalLen > 0) {
+      throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+      const programPk = PgProgramInfo.pk;
+      if (!programPk) throw new Error("The program ID was not found");
+      await sendAndConfirmTxWithRetries(
+        async () => {
+          return await BpfLoaderUpgradeable.extendProgram(
+            programPk,
+            additionalLen,
+            { wallet: pgWallet, connection }
+          );
+        },
+        // Read on the run's network: the program info follows the one picked
+        async () =>
+          additionalProgramLen({
+            programLen,
+            deployed: true,
+            onChainLen: await fetchProgramDataLenOn(connection)(programPk),
+          }) <= 0
+      );
+    }
+
+    // Funding is done; a stop here leaves no buffer
+    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+  } catch (e) {
+    // No buffer exists yet: what the standard wallet sent goes back now
+    await returnLeftover();
+    throw e;
+  }
 
   const bufferKp = PgWeb3.Keypair.generate();
   const bufferAddress = bufferKp.publicKey.toBase58();
@@ -501,14 +525,27 @@ const processDeploy = async (
     let left: StoppedBuffer;
     try {
       const signer = await closeSigner();
-      await sendAndConfirmTxWithRetries(
-        () =>
-          BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
-            wallet: signer,
-            connection,
-          }),
-        async () => !(await bufferConnection.getAccountInfo(bufferKp.publicKey))
-      );
+      // The standard wallet holds the buffer once it was handed over, so the
+      // close asks it once more, named like its two deploy approvals
+      if (signer === standardWallet) {
+        PgDeployRun.update({
+          approval: { wallet: standardWallet.name, n: "close" },
+        });
+      }
+      try {
+        await sendAndConfirmTxWithRetries(
+          () =>
+            BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
+              wallet: signer,
+              connection,
+            }),
+          async () =>
+            !(await bufferConnection.getAccountInfo(bufferKp.publicKey))
+        );
+      } finally {
+        // eslint-disable-next-line unicorn/no-null -- no approval is asked any more
+        PgDeployRun.update({ approval: null });
+      }
       left = { state: "closed" };
     } catch (e) {
       // The line names the buffer, the SOL it holds and how to reclaim it
@@ -773,8 +810,19 @@ const processDeploy = async (
     }
 
     // Deploy
-    PgDeployRun.update({ step: "deploy" });
-    signature = await (programExists ? upgrade() : deployNew());
+    PgDeployRun.update({
+      step: "deploy",
+      approval: standardWallet
+        ? { wallet: standardWallet.name, n: 2 }
+        : // eslint-disable-next-line unicorn/no-null -- a Playground deploy asks no approval
+          null,
+    });
+    try {
+      signature = await (programExists ? upgrade() : deployNew());
+    } finally {
+      // eslint-disable-next-line unicorn/no-null -- no approval is asked any more
+      PgDeployRun.update({ approval: null });
+    }
   } catch (e) {
     try {
       await closeAfterFailure();
@@ -785,10 +833,15 @@ const processDeploy = async (
         context: { action: "settle the buffer after a failed deploy" },
       });
     }
+    // The buffer is settled. Closed before its authority went to the standard
+    // wallet, its rent is in the Playground wallet and goes back now; closed
+    // after, the standard wallet signed the close and took the rent itself
+    await returnLeftover();
     throw e;
   }
   // The deploy consumed the buffer
   await forgetOpenBuffer(bufferAddress);
+  await returnLeftover();
   // The program is on chain by now: a failed balance read costs the run its
   // cost figure, never its success, or a retry would pay for an upgrade
   let cost: number | undefined;
@@ -985,6 +1038,89 @@ const loadBufferWithControl = (
     }
   });
 };
+
+/**
+ * A one-signature transfer's fee, which the Playground wallet pays to return.
+ * Exact because the return names a compute unit price of 0: `PgTx` adds the
+ * priority fee setting only to a transaction that names none, and with one the
+ * return would leave too little for its own fee and fail every attempt.
+ */
+const TRANSFER_FEE = 5000;
+
+/**
+ * Send back to the standard wallet `to` what the Playground wallet `from`
+ * holds over `before`, its balance before `to` sent it SOL for the deploy.
+ * What is owed is read again at each attempt, so a retry after an attempt
+ * that landed sends nothing. It never throws: a failed return is logged and
+ * says how much stayed, and the deploy keeps its own result.
+ */
+const leftoverReturnFor =
+  ({
+    from,
+    to,
+    before,
+    connection,
+    sendAndConfirmTxWithRetries,
+  }: {
+    from: Wallet;
+    to: Wallet;
+    before: number;
+    connection: PgWeb3.Connection;
+    sendAndConfirmTxWithRetries: ReturnType<
+      typeof sendAndConfirmTxWithRetriesFor
+    >;
+  }) =>
+  async () => {
+    let owed = 0;
+    let returned = 0;
+    try {
+      await sendAndConfirmTxWithRetries(
+        async () => {
+          owed =
+            (await connection.getBalance(from.publicKey)) -
+            before -
+            TRANSFER_FEE;
+          if (owed <= 0) return "";
+          const ixs = [
+            PgWeb3.ComputeBudgetProgram.setComputeUnitPrice({
+              microLamports: 0,
+            }),
+            PgWeb3.SystemProgram.transfer({
+              fromPubkey: from.publicKey,
+              toPubkey: to.publicKey,
+              lamports: owed,
+            }),
+          ];
+          const sig = await PgTx.send(ixs, { wallet: from, connection });
+          returned = owed;
+          return sig;
+        },
+        async () =>
+          (await connection.getBalance(from.publicKey)) <= before + TRANSFER_FEE
+      );
+      if (returned > 0) {
+        PgTerminal.println(
+          `Returned ${formatLamports(returned)} SOL to ${to.name}.`
+        );
+      }
+    } catch (e) {
+      log.error(e, {
+        report: true,
+        context: { action: "return the leftover SOL", owed },
+      });
+      PgTerminal.println(
+        PgTerminal.warning(
+          owed > 0
+            ? `${formatLamports(owed)} SOL stayed in your Playground wallet.`
+            : "The leftover SOL stayed in your Playground wallet."
+        )
+      );
+    }
+  };
+
+/** Lamports as SOL, to five decimals, trailing zeros dropped */
+const formatLamports = (lamports: number) =>
+  String(Number(PgWeb3.lamportsToSol(lamports).toFixed(5)));
 
 /** How long a stop waits for the kept buffer's balance before it ends */
 const KEPT_BALANCE_MS = 5000;

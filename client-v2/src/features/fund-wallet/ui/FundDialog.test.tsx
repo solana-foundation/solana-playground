@@ -209,7 +209,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     expect(utils.PgWallet.state).toBe("pg");
     expect(screen.getByText("7Hq5…Xk2P")).toBeTruthy();
     expect(events("fund_wallet_connected")).toEqual([
-      expect.objectContaining({ params: { wallet: "Phantom" } }),
+      expect.objectContaining({ params: { wallet: "Phantom", as: "payer" } }),
     ]);
   });
 

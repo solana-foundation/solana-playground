@@ -41,6 +41,7 @@ import {
   parseAmount,
   stepAmount,
 } from "../model/fund";
+import { NO_EXTENSION } from "../model/no-extension";
 
 /** The amount field's id, which the spec and the tests find it by */
 export const AMOUNT_ID = "fund-amount";
@@ -277,13 +278,8 @@ const BaseFundDialog = ({
 
         {wallets.length === 0 && (
           <div>
-            <p className="font-medium">
-              No wallet extension found in this browser.
-            </p>
-            <p className="text-muted-foreground text-sm">
-              Install Phantom, Backpack or Solflare, then reload. Or keep using
-              the Playground wallet.
-            </p>
+            <p className="font-medium">{NO_EXTENSION.title}</p>
+            <p className="text-muted-foreground text-sm">{NO_EXTENSION.hint}</p>
           </div>
         )}
 

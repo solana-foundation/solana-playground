@@ -42,6 +42,8 @@ const record = recordFor("devnet");
 const IDLE_RUN: DeployRunState = {
   // eslint-disable-next-line unicorn/no-null -- `DeployRunState.step` is `null` while no deploy runs
   step: null,
+  // eslint-disable-next-line unicorn/no-null -- `DeployRunState.approval` is `null` while none is asked
+  approval: null,
   percent: 0,
   funds: false,
   upgrade: false,
@@ -622,6 +624,32 @@ describe("BaseDeploy", () => {
     expect(result.textContent).toContain("1.42 SOL");
   });
 
+  it("names a connected wallet that pays, and its two approvals", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          history: [],
+          payer: {
+            address: WALLET,
+            balance: 4.2,
+            playground: false,
+            name: "Phantom",
+          },
+        })}
+      />
+    );
+    expect(screen.getByLabelText("Who pays").textContent).toBe(
+      "From Phantom · 7xKX…gAsU · 4.20 SOLPhantom asks twice: to send SOL for the deploy, then to deploy."
+    );
+    // The note is a line of its own, so the payer stays one line
+    expect(
+      screen.getByText(
+        "Phantom asks twice: to send SOL for the deploy, then to deploy."
+      ).tagName
+    ).toBe("SPAN");
+  });
+
   it("names the wallet that pays, or the Playground wallet before the first deploy", () => {
     const { rerender } = render(
       <BaseDeploy {...props({ built: true, history: [] })} />
@@ -690,7 +718,13 @@ describe("BaseDeploy", () => {
           built: true,
           view: RUNNING,
           history: [],
-          run: { step: "write", percent: 40, funds: true, upgrade: false },
+          run: {
+            step: "write",
+            percent: 40,
+            funds: true,
+            upgrade: false,
+            approval: IDLE_RUN.approval,
+          },
         })}
       />
     );

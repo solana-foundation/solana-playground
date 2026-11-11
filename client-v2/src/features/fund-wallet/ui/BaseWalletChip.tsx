@@ -13,11 +13,32 @@ import { Separator } from "@/shared/ui/separator";
 import { Spinner } from "@/shared/ui/spinner";
 import { Tag } from "@/shared/ui/tag";
 
+import { NO_EXTENSION } from "../model/no-extension";
+
 /**
  * Where asking the faucet stands: `away` while the web faucet is open in
  * another tab, until the balance rises
  */
 export type AirdropState = "idle" | "asking" | "refused" | "away" | "received";
+
+/** An installed wallet extension, as the connect list draws it */
+export interface ChipWallet {
+  name: string;
+  /** A data URL or an image URL */
+  icon: string;
+}
+
+/**
+ * Where connecting an extension stands: `listing` shows the installed ones,
+ * `waiting` holds until the extension answers, `declined` says it did not
+ */
+export type ConnectState =
+  | { kind: "idle" }
+  | { kind: "listing" }
+  | { kind: "waiting"; wallet: string }
+  | { kind: "declined"; wallet: string }
+  /** The connect failed for a reason other than the user's "no" */
+  | { kind: "failed"; wallet: string; reason: string };
 
 export interface BaseWalletChipProps {
   /** The deploying wallet's address */
@@ -45,6 +66,17 @@ export interface BaseWalletChipProps {
   onAirdrop: () => void;
   onOpenFaucet: () => void;
   onFund: () => void;
+  /** The connected extension that is the current wallet; absent for the Playground wallet */
+  owner?: ChipWallet;
+  /** The installed extensions the connect list offers */
+  wallets?: ChipWallet[];
+  connect?: ConnectState;
+  /** "Connect a wallet" was pressed; without `onConnect` nothing is offered */
+  onConnectOpen?: () => void;
+  onConnect?: (name: string) => void;
+  onDisconnect?: () => void;
+  /** A deploy from the connected wallet runs: it cannot be disconnected yet */
+  disconnectHeld?: boolean;
 }
 
 const fmt = (sol: number) => `${Number(sol.toFixed(4))} SOL`;
@@ -78,6 +110,13 @@ const BaseWalletChip = ({
   onAirdrop,
   onOpenFaucet,
   onFund,
+  owner,
+  wallets = [],
+  connect = { kind: "idle" },
+  onConnectOpen,
+  onConnect,
+  onDisconnect,
+  disconnectHeld = false,
 }: BaseWalletChipProps) => {
   const short = shortAddress(address);
   const shown = balance === undefined ? "…" : fmt(balance);
@@ -113,8 +152,16 @@ const BaseWalletChip = ({
             network is a tag, since it's a state; mainnet's is yellow */}
         <div className="p-4">
           <div className="flex items-center justify-between">
-            <span className="text-[0.8125rem] font-act text-foreground">
-              Playground wallet
+            <span className="flex items-center gap-1.5 text-[0.8125rem] font-act text-foreground">
+              {owner && (
+                <img
+                  src={owner.icon}
+                  alt=""
+                  aria-hidden="true"
+                  className="size-4 rounded-sm"
+                />
+              )}
+              {owner ? owner.name : "Playground wallet"}
             </span>
             {cluster && (
               <Tag variant={cluster === "mainnet-beta" ? "warning" : "neutral"}>
@@ -136,6 +183,32 @@ const BaseWalletChip = ({
               onError={reportButtonFailure("copy the address")}
             />
           </div>
+          {owner && onDisconnect && (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mt-3 w-full"
+                disabled={disconnectHeld}
+                onClick={onDisconnect}
+              >
+                Disconnect {owner.name}
+              </Button>
+              {disconnectHeld && (
+                <p className="mt-1.5 text-center text-[0.75rem] text-muted-foreground">
+                  Disconnect after the deploy finishes
+                </p>
+              )}
+            </>
+          )}
+          {!owner && onConnect && onConnectOpen && (
+            <ConnectBlock
+              wallets={wallets}
+              connect={connect}
+              onConnectOpen={onConnectOpen}
+              onConnect={onConnect}
+            />
+          )}
         </div>
         <Separator />
 
@@ -217,8 +290,10 @@ const BaseWalletChip = ({
 
           {/* The other ways, as real buttons under the main one: half width
               side by side, or full width alone */}
-          {state !== "received" && (
-            <div className={cn("grid gap-2", twoBelow && "grid-cols-2")}>
+          {state !== "received" && (!owner || twoBelow) && (
+            <div
+              className={cn("grid gap-2", twoBelow && !owner && "grid-cols-2")}
+            >
               {state === "refused" && (
                 <Button variant="secondary" size="sm" onClick={onAirdrop}>
                   Try again
@@ -231,14 +306,107 @@ const BaseWalletChip = ({
                   </a>
                 </Button>
               )}
-              <Button variant="secondary" size="sm" onClick={onFund}>
-                {twoBelow ? "Use your wallet" : "Send from your wallet"}
-              </Button>
+              {/* The current wallet is the user's own: nothing to send from */}
+              {!owner && (
+                <Button variant="secondary" size="sm" onClick={onFund}>
+                  {twoBelow ? "Use your wallet" : "Send from your wallet"}
+                </Button>
+              )}
             </div>
           )}
         </div>
       </PopoverContent>
     </Popover>
+  );
+};
+
+/**
+ * Connecting an extension, under the Playground wallet: one button, then the
+ * installed wallets, a wait for the one picked, or its decline. There is no
+ * Cancel while waiting: an extension's request cannot be withdrawn, and a late
+ * answer still lands, so closing the popover is the way out.
+ */
+const ConnectBlock = ({
+  wallets,
+  connect,
+  onConnectOpen,
+  onConnect,
+}: {
+  wallets: ChipWallet[];
+  connect: ConnectState;
+  onConnectOpen: () => void;
+  onConnect: (name: string) => void;
+}) => {
+  if (connect.kind === "idle") {
+    return (
+      <Button
+        variant="secondary"
+        size="sm"
+        className="mt-3 w-full"
+        onClick={onConnectOpen}
+      >
+        Connect a wallet
+      </Button>
+    );
+  }
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <p className="text-[0.75rem] font-act text-foreground">
+        Connect a wallet
+      </p>
+      {connect.kind === "waiting" && (
+        <p
+          role="status"
+          className="flex items-center gap-2 text-[0.8125rem] text-muted-foreground"
+        >
+          <Spinner className="size-3.5" />
+          Waiting for {connect.wallet}…
+        </p>
+      )}
+      {(connect.kind === "declined" || connect.kind === "failed") && (
+        <>
+          <p role="status" className="text-[0.8125rem] text-foreground">
+            {connect.kind === "failed"
+              ? `${connect.wallet} didn't connect: ${connect.reason.replace(
+                  /\.$/,
+                  ""
+                )}. The Playground wallet is in use.`
+              : `${connect.wallet} didn't connect. The Playground wallet is in use.`}
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => onConnect(connect.wallet)}
+          >
+            Try again
+          </Button>
+        </>
+      )}
+      {connect.kind === "listing" && wallets.length === 0 && (
+        <div className="text-[0.75rem] leading-4">
+          <p className="text-foreground">{NO_EXTENSION.title}</p>
+          <p className="text-muted-foreground">{NO_EXTENSION.hint}</p>
+        </div>
+      )}
+      {connect.kind === "listing" &&
+        wallets.map((wallet) => (
+          <Button
+            key={wallet.name}
+            variant="outline"
+            size="sm"
+            className="justify-start"
+            onClick={() => onConnect(wallet.name)}
+          >
+            <img
+              src={wallet.icon}
+              alt=""
+              aria-hidden="true"
+              className="size-4 rounded-sm"
+            />
+            {wallet.name}
+          </Button>
+        ))}
+    </div>
   );
 };
 

@@ -358,6 +358,13 @@ never say you did.
   account menu's Fund, the "Not enough SOL" cards) opens the Fund dialog,
   which sends SOL from a browser wallet such as Phantom or Solflare to the
   Playground wallet in one approved transfer.
+- **Deploy from a browser wallet.** "Connect a wallet" on the wallet chip (or
+  `connect <wallet>` in the terminal) makes an extension such as Phantom the
+  current wallet. A deploy from it asks it twice: once to send the SOL for the
+  deploy to the Playground wallet, which writes the program, and once to sign
+  the deploy itself, so the extension owns the program. Afterwards, whether
+  the deploy succeeded or not, the Playground wallet sends back the SOL it did
+  not spend; if that transfer fails, the terminal says how much stayed there. Tutorials always deploy from the Playground wallet.
 
 Mainnet has no faucet: there the wallet needs real SOL.
 

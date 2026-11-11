@@ -105,16 +105,46 @@ const toggleStandardIfNeeded = async (walletName: string | undefined) => {
   }
 
   if (!wallet.connected) {
-    await wallet.connect();
-    PgWallet.update({ state: "sol", standardName: wallet.name });
+    await makeStandardCurrent(wallet.name);
     PgTerminal.println(PgTerminal.success(`Connected to ${wallet.name}.`));
   } else {
-    await wallet.disconnect();
-    PgWallet.update({ state: "pg", standardName: null });
+    await disconnectStandard(wallet.name);
     PgTerminal.println(PgTerminal.bold(`Disconnected from ${wallet.name}.`));
   }
 
   return { changed: true };
+};
+
+/** The installed standard wallet named `name`, as its `name` reads */
+const standardNamed = (name: string) => {
+  const wallet = PgWallet.standardWallets.find((w) => w.name === name);
+  if (!wallet) throw new Error(`${name} is not installed in this browser.`);
+  return wallet;
+};
+
+/**
+ * Make the standard wallet `name` the current wallet, connecting it first
+ * when it is not. One already connected (a payer the Fund dialog connected)
+ * is made current as it is, never toggled off.
+ *
+ * @throws the wallet's own error when it declines; nothing changes then
+ */
+export const makeStandardCurrent = async (name: string) => {
+  const wallet = standardNamed(name);
+  if (!wallet.connected) await wallet.connect();
+  PgWallet.update({ state: "sol", standardName: wallet.name });
+};
+
+/** Disconnect the standard wallet `name`; the Playground wallet is current again */
+export const disconnectStandard = async (name: string) => {
+  try {
+    await standardNamed(name).disconnect();
+  } finally {
+    // An extension that throws after dropping the site still leaves it: the
+    // Playground wallet is current either way, never a wallet that is gone
+    // eslint-disable-next-line unicorn/no-null -- `standardName` is `null` with no standard wallet current
+    PgWallet.update({ state: "pg", standardName: null });
+  }
 };
 
 /**
