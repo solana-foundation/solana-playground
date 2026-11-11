@@ -22,7 +22,9 @@ const utils = vi.hoisted(() => ({
     createWorkspace: vi.fn(),
   },
   PgFramework: {
+    // Seahorse first, as a framework that is not offered for a new project
     all: [
+      { name: "Seahorse", icon: "/seahorse.png", circleImage: false },
       { name: "Anchor", icon: "/anchor.png", circleImage: false },
       { name: "Native", icon: "/native.png", circleImage: true },
     ],
@@ -82,6 +84,20 @@ it("makes the project from the framework's starter and says so", async () => {
   expect(named("new_project_started").map((e) => e.params)).toEqual([
     { framework: "Anchor" },
   ]);
+});
+
+it("offers every framework but Seahorse and starts on the first of them", () => {
+  render(<StartFromScratch />);
+
+  const group = screen.getByRole("radiogroup", { name: "Framework" });
+  expect(
+    Array.from(group.querySelectorAll('[role="radio"]')).map(
+      (radio) => radio.textContent
+    )
+  ).toEqual(["Anchor", "Native"]);
+  expect(
+    screen.getByRole("radio", { name: /Anchor/ }).getAttribute("aria-checked")
+  ).toBe("true");
 });
 
 it("names an unnamed project after its framework", async () => {

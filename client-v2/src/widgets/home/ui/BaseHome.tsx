@@ -283,9 +283,7 @@ const BaseHome = ({
                 </button>
               </ActionCardLink>
             </ActionCardTitle>
-            <ActionCardDescription>
-              Anchor, Native or Seahorse
-            </ActionCardDescription>
+            <ActionCardDescription>Anchor or Native</ActionCardDescription>
           </ActionCardContent>
         </ActionCard>
         <ActionCard orientation="vertical">

@@ -245,6 +245,29 @@ const OutlineContinueButton = ({ p }: { p: BaseBuildProps }) => (
 );
 
 /**
+ * The pill's label and "Building…" in one grid cell, the one not shown
+ * `invisible` and `aria-hidden`, as `AsyncButton` keeps its two: the pill is
+ * as wide busy as idle, so neither the pill nor anything centred with it
+ * moves while the build runs (HOO-2795)
+ */
+const BusyLabel = ({ busy, label }: { busy: boolean; label: string }) => (
+  <span className="inline-grid justify-items-center">
+    <span
+      aria-hidden={busy || undefined}
+      className={cn("col-start-1 row-start-1", busy && "invisible")}
+    >
+      {label}
+    </span>
+    <span
+      aria-hidden={!busy || undefined}
+      className={cn("col-start-1 row-start-1", !busy && "invisible")}
+    >
+      Building…
+    </span>
+  </span>
+);
+
+/**
  * Build as the surface's brand pill: the first build, with the play mark,
  * Try again after a build that never reached the compiler, which is that
  * surface's main action as Continue to Deploy is the success's, and Build again
@@ -269,7 +292,7 @@ const BrandBuildButton = ({
       Promise.resolve().then(p.onBuild).catch(reportButtonFailure("build"));
     }}
   >
-    {p.building ? "Building…" : label}
+    <BusyLabel busy={p.building} label={label} />
     {icon && !p.building && <BrandButtonIcon />}
   </BrandButton>
 );
