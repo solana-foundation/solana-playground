@@ -26,10 +26,16 @@ const utils = vi.hoisted(() => ({
     current: { getBalance: vi.fn() },
   },
   PgView: { setToast: vi.fn() },
+  PgBlockExplorer: {
+    current: { opens: () => false, getAddressUrl: () => "" },
+  },
   PgWeb3: {},
 }));
 vi.mock("@/utils", () => utils);
 vi.mock("@/hooks", () => ({ useRenderOnChange: () => undefined }));
+vi.mock("@/shared/lib/hooks/use-viewport", () => ({
+  useViewport: () => "wide",
+}));
 
 import { openFundDialog } from "../model/open";
 import FundDialogHost from "./FundDialogHost";

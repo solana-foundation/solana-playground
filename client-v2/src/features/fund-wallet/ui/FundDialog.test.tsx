@@ -55,6 +55,13 @@ const utils = vi.hoisted(() => ({
     current: { getBalance: vi.fn() },
   },
   PgView: { setToast: vi.fn() },
+  PgBlockExplorer: {
+    current: {
+      opens: (cluster: string | null) => cluster !== "localnet",
+      getAddressUrl: (address: string, cluster: string) =>
+        `https://explorer.test/address/${address}?cluster=${cluster}`,
+    },
+  },
   PgWeb3: {
     PublicKey: class {
       constructor(readonly value: string) {}
@@ -64,6 +71,10 @@ const utils = vi.hoisted(() => ({
 }));
 vi.mock("@/utils", () => utils);
 vi.mock("@/hooks", () => ({ useRenderOnChange: () => undefined }));
+const viewport = vi.hoisted(() => ({ current: "wide" }));
+vi.mock("@/shared/lib/hooks/use-viewport", () => ({
+  useViewport: () => viewport.current,
+}));
 
 const transfer = vi.hoisted(() => ({ sendFunds: vi.fn() }));
 vi.mock("../model/transfer", async () => {
@@ -90,6 +101,7 @@ beforeEach(() => {
   };
   utils.PgWallet.state = "pg";
   utils.PgConnection.cluster = "devnet";
+  viewport.current = "wide";
   utils.PgConnection.current.getBalance.mockReset().mockResolvedValue(2e9);
   utils.PgView.setToast.mockReset();
   transfer.sendFunds.mockReset().mockResolvedValue("sig");
@@ -118,7 +130,56 @@ const connectPhantom = async () => {
 
 const sendButton = () => screen.getByRole("button", { name: /^Send/ });
 
+/** The field starts at 0, so a send first needs an amount */
+const enterAmount = (value: string) =>
+  fireEvent.change(screen.getByLabelText("Amount (SOL)"), {
+    target: { value },
+  });
+
 describe("features/fund-wallet/ui/FundDialog", () => {
+  it("starts the amount at 0", async () => {
+    await renderOpen();
+    await connectPhantom();
+
+    expect(
+      (screen.getByLabelText("Amount (SOL)") as HTMLInputElement).value
+    ).toBe("0");
+    expect(sendButton().hasAttribute("disabled")).toBe(true);
+  });
+
+  it("links the receiver to the explorer on the Playground's cluster", async () => {
+    await renderOpen();
+
+    expect(
+      screen.getByRole("link", { name: "9xQe…VFin" }).getAttribute("href")
+    ).toBe(`https://explorer.test/address/${RECEIVER_ADDRESS}?cluster=devnet`);
+  });
+
+  it("draws the desk's foot: Cancel, then the ring Send", async () => {
+    await renderOpen();
+    await connectPhantom();
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(sendButton().getAttribute("data-variant")).toBe("ring");
+  });
+
+  it("draws the phone's foot: no Cancel, the accent Send", async () => {
+    viewport.current = "phone";
+    await renderOpen();
+
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    await connectPhantom();
+    expect(sendButton().getAttribute("data-variant")).toBe("accent");
+  });
+
+  it("links nothing on a cluster the explorer cannot open", async () => {
+    utils.PgConnection.cluster = "localnet";
+    await renderOpen();
+
+    expect(screen.queryByRole("link", { name: "9xQe…VFin" })).toBeNull();
+    expect(screen.getByText("9xQe…VFin")).toBeTruthy();
+  });
+
   it("counts the dialog opening from the account menu", async () => {
     await renderOpen();
 
@@ -177,6 +238,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     const onOpenChange = await renderOpen();
     await connectPhantom();
 
+    enterAmount("1");
     await act(async () => {
       fireEvent.click(sendButton());
     });
@@ -228,6 +290,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     await renderOpen();
     await connectPhantom();
 
+    enterAmount("1");
     await act(async () => {
       fireEvent.click(sendButton());
     });
@@ -252,6 +315,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     await renderOpen();
     await connectPhantom();
 
+    enterAmount("1");
     await act(async () => {
       fireEvent.click(sendButton());
     });
@@ -283,6 +347,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
   it("does not send from an account the user never saw", async () => {
     await renderOpen();
     await connectPhantom();
+    enterAmount("1");
     phantom.publicKey = { toBase58: () => OTHER_ADDRESS };
 
     await act(async () => {
@@ -305,6 +370,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     const view = render(<FundDialog open={true} onOpenChange={vi.fn()} />);
     await act(async () => undefined);
     await connectPhantom();
+    enterAmount("1");
     await act(async () => {
       fireEvent.click(sendButton());
     });
@@ -331,6 +397,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     const view = render(<FundDialog open={true} onOpenChange={vi.fn()} />);
     await act(async () => undefined);
     await connectPhantom();
+    enterAmount("1");
     await act(async () => {
       fireEvent.click(sendButton());
     });
@@ -357,6 +424,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     const view = render(<FundDialog open={true} onOpenChange={vi.fn()} />);
     await act(async () => undefined);
     await connectPhantom();
+    enterAmount("1");
     await act(async () => {
       fireEvent.click(sendButton());
     });

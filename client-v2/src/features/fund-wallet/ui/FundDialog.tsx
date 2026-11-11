@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useRenderOnChange } from "@/hooks";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
-import { PgConnection, PgView, PgWallet, PgWeb3 } from "@/utils";
+import {
+  PgBlockExplorer,
+  PgConnection,
+  PgView,
+  PgWallet,
+  PgWeb3,
+} from "@/utils";
 import type { StandardWallet } from "@/utils/wallet/types";
 
 import type { FailureReason } from "../model/fund";
@@ -83,6 +90,7 @@ const FundDialog = ({
   const [payerName, setPayerName] = useState<string | undefined>();
   const [balance, setBalance] = useState<FundPayer["balance"]>("loading");
   const [amount, setAmount] = useState(DEFAULT_AMOUNT);
+  const phone = useViewport() === "phone";
   const [failure, setFailure] = useState<FundFailure | undefined>();
   // Each opening is one attempt; a send that settles after the dialog closed
   // or reopened must not close or mark the dialog the user sees now
@@ -239,8 +247,22 @@ const FundDialog = ({
   };
 
   const payerView: FundPayer | undefined = payer?.publicKey
-    ? { name: payer.name, address: payer.publicKey.toBase58(), balance }
+    ? {
+        name: payer.name,
+        icon: payer.icon,
+        address: payer.publicKey.toBase58(),
+        balance,
+      }
     : undefined;
+
+  // An explorer with no page for this cluster (Solscan on a local validator,
+  // say) would open mainnet's, so the address then stays text
+  const explorer = PgBlockExplorer.current;
+  const linkCluster = PgConnection.cluster;
+  const addressUrl = (address: string) =>
+    explorer.opens(linkCluster)
+      ? explorer.getAddressUrl(address, linkCluster)
+      : undefined;
 
   return (
     <BaseFundDialog
@@ -255,6 +277,8 @@ const FundDialog = ({
       onConnect={connect}
       onSend={send}
       failure={failure}
+      addressUrl={addressUrl}
+      phone={phone}
     />
   );
 };
