@@ -1,7 +1,35 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { featuresByCrate, renamedDependencies } from "./crate-features.mjs";
+import {
+  declaredFeatures,
+  featuresByCrate,
+  renamedDependencies,
+} from "./crate-features.mjs";
+
+test("lists the root's declared features on its normal dependencies only", () => {
+  const features = declaredFeatures({
+    packages: [
+      {
+        id: "anchor-lang",
+        dependencies: [
+          { name: "anchor-lang-idl", kind: null, features: ["convert"] },
+        ],
+      },
+      {
+        id: "solpg",
+        dependencies: [
+          { name: "anchor-lang", kind: null, features: ["init-if-needed"] },
+          { name: "arrayref", kind: null, features: [] },
+          { name: "proptest", kind: "dev", features: ["std"] },
+        ],
+      },
+    ],
+    resolve: { root: "solpg" },
+  });
+
+  assert.deepEqual(features, { "anchor-lang": ["init-if-needed"] });
+});
 
 test("keeps each version of a crate's own features", () => {
   const features = featuresByCrate({

@@ -2,6 +2,7 @@ import { PgCommon, PgExplorer, PgProgramInfo, TupleFiles } from "../../utils";
 import {
   addAfter,
   addImports,
+  fetchServerCargoLock,
   getJSDependencies,
   getRustDependencies,
   IMPORT_STATEMENT_REGEX,
@@ -172,6 +173,8 @@ incremental = false
 codegen-units = 1
 `,
     ],
+
+    ["Cargo.lock", await fetchServerCargoLock()],
 
     // package.json
     [

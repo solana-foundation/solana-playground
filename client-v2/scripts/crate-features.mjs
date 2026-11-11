@@ -23,6 +23,23 @@ export const featuresByCrate = (metadata) => {
 };
 
 /**
+ * The features the root manifest declares on each of its normal dependencies, from `cargo metadata --format-version 1`.
+ * The manifest's own lists, not the resolution's, which unifies every dependent's features into each crate.
+ *
+ * @param {{ packages: { id: string, dependencies: { name: string, kind: string | null, features: string[] }[] }[], resolve: { root: string } }} metadata
+ * @returns {{ [name: string]: string[] }} only the dependencies that declare features
+ */
+export const declaredFeatures = (metadata) => {
+  const root = metadata.packages.find((p) => p.id === metadata.resolve.root);
+  if (!root) throw new Error("`cargo metadata` names no root package");
+  return Object.fromEntries(
+    root.dependencies
+      .filter((dep) => dep.kind === null && dep.features.length)
+      .map((dep) => [dep.name, dep.features])
+  );
+};
+
+/**
  * The normal dependencies each crate imports under a name other than the
  * package's own (`alias = { package = "x" }`, or a `[lib] name`), from
  * `cargo metadata --format-version 1`, keyed by `name@version`.

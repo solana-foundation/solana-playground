@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 
 import {
   appendFeaturesWith,
+  declaredFeatures,
   featuresByCrate,
   renamedDependencies,
 } from "./crate-features.mjs";
@@ -36,6 +37,9 @@ const LOCK_FILE_PATH = path.join(
   "programs",
   "Cargo.lock"
 );
+
+/** The server's manifest, whose declared features the export writes */
+const MANIFEST_PATH = path.join(path.dirname(LOCK_FILE_PATH), "Cargo.toml");
 
 /** The server's toolchain, which wrote the lock: an older cargo cannot read its lock version */
 const TOOLCHAIN_PATH = path.join(
@@ -62,6 +66,8 @@ const key = crypto
   .update(await fs.readFile(new URL("./crate-features.mjs", import.meta.url)))
   .update("\0")
   .update(await fs.readFile(LOCK_FILE_PATH))
+  .update("\0")
+  .update(await fs.readFile(MANIFEST_PATH))
   .update("\0")
   .update(toolchainFile)
   .digest("hex");
@@ -101,7 +107,7 @@ run("cargo", [
   "fetch",
   "--locked",
   "--manifest-path",
-  path.join(path.dirname(LOCK_FILE_PATH), "Cargo.toml"),
+  MANIFEST_PATH,
 ]);
 
 // A root of its own, so a different release on `PATH` never decides the output
@@ -136,7 +142,7 @@ const metadata = JSON.parse(
     "--locked",
     "--offline",
     "--manifest-path",
-    path.join(path.dirname(LOCK_FILE_PATH), "Cargo.toml"),
+    MANIFEST_PATH,
   ])
 );
 
@@ -169,6 +175,13 @@ await generateDependencies(crates, false);
 await fs.writeFile(
   path.join(CRATES_PATH, "versions.json"),
   JSON.stringify(crates)
+);
+
+// The exports ship both, so a local build resolves the crate versions and features the server builds with
+await fs.copyFile(LOCK_FILE_PATH, path.join(CRATES_PATH, "Cargo.lock"));
+await fs.writeFile(
+  path.join(CRATES_PATH, "features.json"),
+  JSON.stringify(declaredFeatures(metadata))
 );
 
 // Read at runtime, so a dev server started before this run still loads the proc macros

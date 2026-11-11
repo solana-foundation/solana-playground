@@ -27,7 +27,10 @@ vi.mock("../common", () => ({
   IMPORT_STATEMENT_REGEX: /import/,
   getRustDependencies: async () => "[dependencies]",
   getJSDependencies: async () => '"dependencies": {}',
+  fetchServerCargoLock: async () => SERVER_LOCK,
 }));
+
+const SERVER_LOCK = 'version = 4\n\n[[package]]\nname = "solpg"\n';
 
 const { convertFromPlayground } = await import("./export");
 
@@ -46,5 +49,16 @@ describe("frameworks/anchor/export", () => {
     expect(feature).toContain('"anchor-spl/idl-build"');
     expect(exported.get("programs/spl-program/Cargo.toml")).toContain(feature);
     expect(exported.get("Cargo.toml")).toMatch(/^resolver = "2"$/m);
+  });
+
+  // Without it, `anchor idl build` resolves newer transitive crates than the server, which fail to compile
+  it("ships the build server's lock beside the workspace manifest", async () => {
+    const exported = new Map(
+      await convertFromPlayground([
+        ["src/lib.rs", "#[program]\npub mod spl_program {}"],
+      ])
+    );
+
+    expect(exported.get("Cargo.lock")).toBe(SERVER_LOCK);
   });
 });
