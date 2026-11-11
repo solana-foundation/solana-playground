@@ -9,7 +9,11 @@ import {
 import { PgDeployRun } from "@/commands/deploy/run";
 import { useAirdrop } from "@/components/Wallet/hooks";
 import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
-import { faucetLink, webFaucetSteps } from "@/shared/lib/faucet";
+import {
+  DEVNET_FAUCET_SOL,
+  faucetLink,
+  webFaucetSteps,
+} from "@/shared/lib/faucet";
 import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
 import { createLogger } from "@/shared/lib/logger";
 import {
@@ -105,7 +109,7 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
   const address = wallet.publicKey.toBase58();
   const cluster = PgConnection.cluster ?? undefined;
   const amount = PgConnection.getAirdropAmount();
-  const airdropSol = typeof amount === "number" ? amount : 0;
+  const airdropSol = typeof amount === "number" ? amount : DEVNET_FAUCET_SOL;
 
   // A bridged extension leaves `isPg` unset, so only `true` means Playground
   const owner = wallet.isPg

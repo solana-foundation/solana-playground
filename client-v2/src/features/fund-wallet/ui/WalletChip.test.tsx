@@ -20,6 +20,7 @@ const ADDRESS = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 
 const balanceNow = vi.hoisted(() => ({ sol: 0 }));
 const clusterNow = vi.hoisted(() => ({ name: "devnet" }));
+const airdropAmount = vi.hoisted(() => ({ sol: 5 as number | null }));
 vi.mock("@/hooks", () => ({
   useBalance: () => balanceNow.sol,
   useRenderOnChange: () => undefined,
@@ -68,7 +69,7 @@ vi.mock("@/utils", () => ({
       return clusterNow.name;
     },
     onDidChangeCluster: () => ({ dispose: () => undefined }),
-    getAirdropAmount: () => 5,
+    getAirdropAmount: () => airdropAmount.sol,
   },
 }));
 
@@ -97,6 +98,7 @@ afterEach(() => {
   current.wallet = { isPg: true, publicKey: { toBase58: () => ADDRESS } };
   balanceNow.sol = 0;
   clusterNow.name = "devnet";
+  airdropAmount.sol = 5;
 });
 
 const renderChip = (isSignInFailure: (e: unknown) => boolean) =>
@@ -249,6 +251,21 @@ describe("features/fund-wallet/ui/WalletChip", () => {
     } finally {
       act(() => PgDeployRun.reset());
     }
+  });
+
+  it("names the 5 SOL default in the faucet steps and link when the airdrop amount is unknown", async () => {
+    airdropAmount.sol = null;
+    airdrop.mockRejectedValueOnce(
+      new AirdropRefusedError(new Error("429 Too Many Requests"))
+    );
+    renderChip(() => false);
+    await getSol();
+
+    expect(
+      screen.getByText(/Your address and 5 SOL are filled in/)
+    ).toBeTruthy();
+    const link = screen.getByRole("link", { name: /Open the web faucet/ });
+    expect(link.getAttribute("href")).toContain("amount=5");
   });
 
   describe("the airdrop state belongs to one wallet on one cluster", () => {
