@@ -40,13 +40,13 @@ RUN cargo --version
 COPY Cargo.* ./
 RUN mkdir src
 RUN echo "fn main() {}" > src/main.rs
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # Actual build
 COPY src src
 # It doesn't rebuild without removing the crate fingerprint for some reason
 RUN rm -rf target/release/.fingerprint/solpg-server-*
-RUN cargo build --release
+RUN cargo build --release --locked
 
 ################################# START SERVER #################################
 FROM rust
@@ -65,7 +65,7 @@ WORKDIR /home/${USER}
 COPY --chown=${USER}:${USER} programs programs
 # Cloud Build's legacy builder strips the owner write bit from context files; the server rewrites programs/<id>/Cargo.toml at runtime
 RUN chmod -R u+w programs
-RUN cargo-build-sbf --manifest-path programs/Cargo.toml
+RUN cargo-build-sbf --manifest-path programs/Cargo.toml -- --locked
 
 # Start server
 COPY --from=build /build/target/release/solpg-server .
