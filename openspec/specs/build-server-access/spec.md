@@ -41,7 +41,7 @@ the user's.
   deployed with `REACT_APP_SERVER_URL=/api/build-server`
 - **THEN** builds go to `/api/build-server` on the client's origin
 
-#### Scenario: No build server configured
+#### Scenario: No build server configured (manual)
 
 - **WHEN** a build reaches the route on a deployment without
   `PG_BUILD_SERVER_URL`

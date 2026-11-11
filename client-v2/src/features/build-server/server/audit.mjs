@@ -39,11 +39,17 @@ export const startAuditWith =
     return Number(rows[0].id);
   };
 
+/** How long a closing update may hold a finished build's answer back */
+export const FINISH_DEADLINE_MS = 5_000;
+
 /**
- * Close the row with how the build ended. Never throws: the response is
- * already on its way, and the row exists either way.
+ * Close the row with how the build ended. Never throws, and gives up after
+ * `deadlineMs`: the answer waits on it, and a stalled database must not hold
+ * a finished build until the function times out and the answer is lost. The
+ * row exists either way; one left open reads as a build that never ended.
  *
  * @param {Query} query
+ * @param {{ deadlineMs?: number }} [opts]
  * @returns {(outcome: {
  *   id: number;
  *   programUuid?: string;
@@ -53,19 +59,33 @@ export const startAuditWith =
  *   the row has
  */
 export const finishAuditWith =
-  (query) =>
+  (query, { deadlineMs = FINISH_DEADLINE_MS } = {}) =>
   async ({ id, programUuid, status, durationMs }) => {
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(new Error(`build_audit update took over ${deadlineMs} ms`)),
+        deadlineMs
+      );
+    });
     try {
-      await query(
-        `update build_audit
+      await Promise.race([
+        query(
+          `update build_audit
           set program_uuid = coalesce($2, program_uuid),
               status = $3,
               duration_ms = $4
         where id = $1`,
-        // `pg` sends an undefined parameter as null
-        [id, programUuid, status, Math.max(0, Math.round(durationMs))]
-      );
+          // `pg` sends an undefined parameter as null
+          [id, programUuid, status, Math.max(0, Math.round(durationMs))]
+        ),
+        deadline,
+      ]);
     } catch (e) {
       log.error(e, { report: true, context: { op: "finishAudit", id } });
+    } finally {
+      clearTimeout(timer);
     }
   };

@@ -60,4 +60,15 @@ describe("finishAuditWith", () => {
     };
     await finishAuditWith(query)({ id: 7, status: 502, durationMs: 3 });
   });
+
+  it("gives up on a stalled database, so the answer is not held", async () => {
+    const query = () => new Promise(() => {});
+    const started = Date.now();
+    await finishAuditWith(query, { deadlineMs: 20 })({
+      id: 7,
+      status: 200,
+      durationMs: 3,
+    });
+    assert.ok(Date.now() - started < 1_000);
+  });
 });
