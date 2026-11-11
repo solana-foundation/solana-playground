@@ -1,3 +1,4 @@
+import type { AgentRefusalReason } from "@/features/agent";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import {
   closeConnection,
@@ -420,6 +421,14 @@ type ToolResultRecord = Pick<
   "toolName" | "input" | "output" | "failed"
 >;
 
+/**
+ * The hosted default's limit a refusal recorded: a daily cap comes back at
+ * `until`, the next 00:00 UTC; a spent pool names no time.
+ */
+export type LimitReached =
+  | { reason: "daily-cap"; until: number }
+  | { reason: "pool-exhausted" };
+
 export class PgAssistant {
   static get items(): readonly ChatItem[] {
     return PgAssistant._items;
@@ -555,17 +564,19 @@ export class PgAssistant {
   }
 
   /**
-   * When the hosted default's free daily limit comes back, as of the last
-   * turn it refused under that limit in this tab: the next 00:00 UTC, or undefined
-   * once that has passed, nothing was refused, another backend was connected,
-   * the backend was forgotten, or someone else has signed in, since the
+   * Why the hosted default refused the last turn under a limit in this tab,
+   * or undefined once that has lifted: a daily cap holds until the next
+   * 00:00 UTC, a spent pool until a turn goes through, since only the
+   * upstream knows when it refills. Either clears when another backend is
+   * connected, the backend is forgotten, or someone else signs in, since the
    * allowance is per user. No endpoint reports the allowance, so a reload
    * forgets it until the next refusal.
    */
-  static get limitReachedUntil(): number | undefined {
+  static get limitReached(): LimitReached | undefined {
     const limit = PgAssistant._limitReached;
     if (!limit || limit.userId !== PgSession.get()?.id) return undefined;
-    return Date.now() < limit.until ? limit.until : undefined;
+    if (limit.reached.reason === "pool-exhausted") return limit.reached;
+    return Date.now() < limit.reached.until ? limit.reached : undefined;
   }
 
   /**
@@ -574,17 +585,22 @@ export class PgAssistant {
    * the refusal arrives: the limit is the hosted default's, and a key of the
    * user's own is not under it.
    */
-  static markLimitReached() {
+  static markLimitReached(reason: AgentRefusalReason) {
     if (!isDefaultBackend(PgAssistant._connection?.id)) return;
-    const at = new Date(Date.now());
-    const until = Date.UTC(
-      at.getUTCFullYear(),
-      at.getUTCMonth(),
-      at.getUTCDate() + 1
-    );
     PgAssistant._clearLimit();
-    PgAssistant._limitReached = { until, userId: PgSession.get()?.id };
-    PgAssistant._armLimitTimer(until);
+    const userId = PgSession.get()?.id;
+    if (reason === "pool-exhausted") {
+      PgAssistant._limitReached = { reached: { reason }, userId };
+    } else {
+      const at = new Date(Date.now());
+      const until = Date.UTC(
+        at.getUTCFullYear(),
+        at.getUTCMonth(),
+        at.getUTCDate() + 1
+      );
+      PgAssistant._limitReached = { reached: { reason, until }, userId };
+      PgAssistant._armLimitTimer(until);
+    }
     PgAssistant._emitOnly();
   }
 
@@ -2054,7 +2070,7 @@ export class PgAssistant {
   private static _turnBusy = false;
   private static _limitReached:
     | {
-        until: number;
+        reached: LimitReached;
         userId: string | undefined;
       }
     | undefined;
@@ -2455,7 +2471,7 @@ if (import.meta.vitest) {
       });
     });
 
-    describe("PgAssistant limitReachedUntil", () => {
+    describe("PgAssistant limitReached", () => {
       // The limit is the hosted default's, so a refusal is only ever marked on it
       beforeEach(() => {
         PgAssistant.connect({ id: "default", apiKey: "" });
@@ -2469,31 +2485,46 @@ if (import.meta.vitest) {
       it("holds until the next 00:00 UTC, then reads undefined", () => {
         vi.useFakeTimers();
         vi.setSystemTime(Date.UTC(2026, 10, 4, 22, 30));
-        PgAssistant.markLimitReached();
-        expect(PgAssistant.limitReachedUntil).toBe(Date.UTC(2026, 10, 5));
+        PgAssistant.markLimitReached("daily-cap");
+        expect(PgAssistant.limitReached).toEqual({
+          reason: "daily-cap",
+          until: Date.UTC(2026, 10, 5),
+        });
         vi.setSystemTime(Date.UTC(2026, 10, 5, 0, 0));
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
       });
 
       it("tells the status when the limit comes back, in a tab left open", () => {
         vi.useFakeTimers();
         vi.setSystemTime(Date.UTC(2026, 10, 4, 23, 0));
-        PgAssistant.markLimitReached();
+        PgAssistant.markLimitReached("daily-cap");
         const listener = vi.fn();
         const sub = PgAssistant.onDidChange(listener);
         vi.advanceTimersByTime(60 * 60 * 1000);
         expect(listener).toHaveBeenCalledOnce();
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
         sub.dispose();
+      });
+
+      it("holds a spent pool with no time until a turn goes through", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 22, 30));
+        PgAssistant.markLimitReached("pool-exhausted");
+        expect(PgAssistant.limitReached).toEqual({ reason: "pool-exhausted" });
+        // 00:00 UTC is the daily cap's reset, not the pool's
+        vi.setSystemTime(Date.UTC(2026, 10, 5, 1, 0));
+        expect(PgAssistant.limitReached).toEqual({ reason: "pool-exhausted" });
+        PgAssistant.limitLifted();
+        expect(PgAssistant.limitReached).toBeUndefined();
       });
 
       it("clears on connecting another backend, not on the same one", () => {
         PgAssistant.connect({ id: "default", apiKey: "" });
-        PgAssistant.markLimitReached();
+        PgAssistant.markLimitReached("daily-cap");
         PgAssistant.connect({ id: "default", apiKey: "" });
-        expect(PgAssistant.limitReachedUntil).toBeDefined();
+        expect(PgAssistant.limitReached).toBeDefined();
         PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
       });
 
       it("does not hold for someone else signing in", async () => {
@@ -2503,37 +2534,37 @@ if (import.meta.vitest) {
           image: undefined,
           login: undefined,
         });
-        PgAssistant.markLimitReached();
-        expect(PgAssistant.limitReachedUntil).toBeDefined();
+        PgAssistant.markLimitReached("daily-cap");
+        expect(PgAssistant.limitReached).toBeDefined();
         await PgSession.refreshWith({
           id: "u2",
           name: "Two",
           image: undefined,
           login: undefined,
         });
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
         PgSession.reset();
       });
 
       it("clears on Forget key", () => {
-        PgAssistant.markLimitReached();
+        PgAssistant.markLimitReached("daily-cap");
         PgAssistant.disconnect();
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
       });
 
       it("is not marked on a backend other than the hosted default", () => {
         // A default turn refused after the user had already switched to a key
         PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
-        PgAssistant.markLimitReached();
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        PgAssistant.markLimitReached("daily-cap");
+        expect(PgAssistant.limitReached).toBeUndefined();
       });
 
       it("lifts once a turn on the hosted default goes through", () => {
-        PgAssistant.markLimitReached();
+        PgAssistant.markLimitReached("daily-cap");
         const listener = vi.fn();
         const sub = PgAssistant.onDidChange(listener);
         PgAssistant.limitLifted();
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
         expect(listener).toHaveBeenCalledOnce();
         PgAssistant.limitLifted();
         expect(listener).toHaveBeenCalledOnce();
@@ -2543,16 +2574,16 @@ if (import.meta.vitest) {
       it("waits again when its timer fires before the clock reaches 00:00 UTC", () => {
         vi.useFakeTimers();
         vi.setSystemTime(Date.UTC(2026, 10, 4, 23, 0));
-        PgAssistant.markLimitReached();
+        PgAssistant.markLimitReached("daily-cap");
         const listener = vi.fn();
         const sub = PgAssistant.onDidChange(listener);
         // The wall clock is set back a minute while the timer runs
         vi.setSystemTime(Date.UTC(2026, 10, 4, 22, 59));
         vi.advanceTimersByTime(60 * 60 * 1000);
-        expect(PgAssistant.limitReachedUntil).toBeDefined();
+        expect(PgAssistant.limitReached).toBeDefined();
         expect(listener).not.toHaveBeenCalled();
         vi.advanceTimersByTime(60 * 1000);
-        expect(PgAssistant.limitReachedUntil).toBeUndefined();
+        expect(PgAssistant.limitReached).toBeUndefined();
         expect(listener).toHaveBeenCalledOnce();
         sub.dispose();
       });

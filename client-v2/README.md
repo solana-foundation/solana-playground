@@ -150,7 +150,7 @@ Both profiles start the same services:
 | `wasm`              | Builds the real `wasm/*/pkg` packages (`wasm/build.sh`); the client image copies them in. Never stubs. |
 | `postgres`          | Conversation and project sync, on host port `PG_POSTGRES_PORT` (5432).       |
 | `migrate`           | Runs dbmate over `db/migrations` once Postgres is healthy, then exits.       |
-| `server-standalone` | The Rust build server on `http://localhost:8080` (`PG_PORT`), without MongoDB, which only its share routes use. |
+| `server-standalone` | The Rust build server on `http://localhost:8080` (`PG_PORT`). |
 | `client-v2` / `client-v2-prod` | The client on `http://127.0.0.1:3000` (`PG_CLIENT_V2_PORT`), started once `wasm` and `migrate` have exited 0. |
 
 `client-v2-prod` runs `yarn build:bundle`, refuses to serve a bundle that

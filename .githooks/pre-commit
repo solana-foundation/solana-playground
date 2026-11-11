@@ -1,6 +1,8 @@
 #!/usr/bin/env sh
 # Opt-in pre-commit hook: `git config core.hooksPath .githooks` once per clone.
-# Prints the staged content's lint warnings and never blocks: pre-push's `check` is the gate.
+# Blocks a commit whose staged lines hold a value from a local .env file;
+# prints the staged content's lint warnings and never blocks on them: pre-push's `check` is the gate.
 root=$(git rev-parse --show-toplevel)
+node "$root/client-v2/scripts/check-env-leaks.mjs" --staged || exit 1
 node "$root/client-v2/scripts/lint-changed.mjs" --staged
 exit 0

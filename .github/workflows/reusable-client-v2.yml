@@ -167,8 +167,7 @@ jobs:
       # real database gets.
       DATABASE_URL: postgres://solpg:solpg@localhost:5432/solpg?sslmode=disable
 
-    # Ours, not the Rust server's MongoDB -- that one is untouched and is not
-    # needed here.
+    # The database `api/*.mjs` reads; the Rust build server holds none.
     services:
       postgres:
         image: postgres:16
