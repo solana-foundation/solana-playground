@@ -16,8 +16,9 @@ export type CommandStepId =
 /** Where both methods write the IDL: the project root, since `-o` creates no folder and a fresh export has no `target/idl` */
 export const IDL_PATH = "idl.json";
 
-/** Prints where the IDL landed, so the root location is not a guess; silent when the build wrote nothing */
-const SHOW_IDL_PATH = `[ -f ${IDL_PATH} ] && echo "IDL written to $PWD/${IDL_PATH}"`;
+/** Builds the IDL, then prints where it landed; `&&` keeps a failed build from announcing an older `idl.json` */
+const buildIdlWith = (anchor: string) =>
+  `${anchor} idl build -o ${IDL_PATH} && echo "IDL written to $PWD/${IDL_PATH}"`;
 
 /** Shell lines run together, copied as one */
 export interface Command {
@@ -44,7 +45,7 @@ const BUILD: GuideStep = {
   kind: "command",
   command: {
     id: "anchor-build",
-    lines: [`anchor idl build -o ${IDL_PATH}`, SHOW_IDL_PATH],
+    lines: [buildIdlWith("anchor")],
   },
 };
 
@@ -57,8 +58,9 @@ export const STEPS: Record<IdlBuildMethod, GuideStep[]> = {
       command: {
         id: "docker-build",
         lines: [
-          `docker run --rm --platform linux/amd64 -v "$PWD":/workdir -w /workdir quay.io/ottersec/anchor:v${ANCHOR_VERSION} anchor idl build -o ${IDL_PATH}`,
-          SHOW_IDL_PATH,
+          buildIdlWith(
+            `docker run --rm --platform linux/amd64 -v "$PWD":/workdir -w /workdir quay.io/ottersec/anchor:v${ANCHOR_VERSION} anchor`
+          ),
         ],
       },
     },
@@ -105,3 +107,26 @@ export const STEPS: Record<IdlBuildMethod, GuideStep[]> = {
     BUILD,
   ],
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("features/idl-build-guide/model/steps", () => {
+    it.each<[IdlBuildMethod, CommandStepId]>([
+      ["docker", "docker-build"],
+      ["local", "anchor-build"],
+    ])(
+      "%s announces idl.json on the build's own line, after `&&`",
+      (method, id) => {
+        const step = STEPS[method].find(
+          (s) => s.kind === "command" && s.command.id === id
+        );
+        expect(step?.kind === "command" && step.command.lines).toEqual([
+          expect.stringMatching(
+            /anchor idl build -o idl\.json && echo "IDL written to \$PWD\/idl\.json"$/
+          ),
+        ]);
+      }
+    );
+  });
+}
