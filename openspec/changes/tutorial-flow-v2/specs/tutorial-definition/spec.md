@@ -53,7 +53,7 @@ A beat SHALL be one of:
 A step MAY carry the beats that follow a planned build failure (the
 explanation, a fixing question and the second build), the assistant's line
 inside the failed card, and `failsWith`: a line of the build log that marks
-the planned failure, such as ``cannot find type `Hello` in this scope``. A
+the planned failure, such as ``could not find `__client_accounts_hello` ``. A
 planned failure needs all three; `onFail` needs `planned`. A failed build is the planned one only
 when its log contains `failsWith`, so a planned error with no code, like
 Lumberjack's, is recognised too. Text fields SHALL accept the inline Markdown the
@@ -65,7 +65,7 @@ shorter phone variant.
 - **WHEN** `client-v2/src/tutorials/hello-anchor/tutorial.json` is loaded
 - **THEN** it validates against the schema
 - **AND** it describes four steps (Program, Deploy, Client, Name) with four
-  questions and the planned E0412 failure in step 1, with the copy of
+  questions and the planned E0432 failure at line 5 in step 1, with the copy of
   Almaz's `SPEC.md` section 7 except where `tutorial-runs` replaces the Kora
   copy
 - **AND** its docs list Anchor's Program Structure and IDL pages and

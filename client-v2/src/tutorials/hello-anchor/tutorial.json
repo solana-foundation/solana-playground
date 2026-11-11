@@ -87,13 +87,13 @@
           "button": "Build"
         }
       ],
-      "failsWith": "cannot find type `Hello` in this scope",
+      "failsWith": "could not find `__client_accounts_hello`",
       "planned": "This one's on purpose. Every Anchor developer meets this error once, so let's meet it now.",
       "onFail": [
         {
           "kind": "say",
           "id": "f1.explain",
-          "text": "Line 9 asks for `Context<Hello>`: the accounts `hello` works with, described by a type called `Hello`. That type doesn't exist yet, so the compiler stops. `hello` reads no accounts, so the type can be empty. The fix goes at the bottom of lib.rs.",
+          "text": "The compiler points at line 5, `#[program]`, but the cause is line 9: `Context<Hello>` asks for the accounts `hello` works with, described by a type called `Hello`. That type doesn't exist yet, so `#[program]` can't find the code Anchor generates from it. `hello` reads no accounts, so the type can be empty. The fix goes at the bottom of lib.rs.",
           "quote": {
             "file": "src/lib.rs",
             "line": 9,

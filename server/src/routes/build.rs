@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use anchor_syn::idl::types::Idl;
 use anyhow::anyhow;
 use axum::{
     extract::{Json, State},
@@ -22,19 +21,7 @@ pub struct BuildRequest {
     /// return a `uuid`. Client is responsible for saving the `uuid` and using it with every
     /// subseqent requests in order to save resources not re-creating the project.
     uuid: Option<String>,
-    /// Build flags
-    flags: Option<BuildFlags>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct BuildFlags {
-    /// Enable Anchor `seeds` feature, defaults to `false`
-    seeds_feature: Option<bool>,
-    /// Remove doc comments from the IDL, defaults to `true`
-    no_docs: Option<bool>,
-    /// Enable safety checks, defaults to `false`
-    safety_checks: Option<bool>,
+    // Clients still send IDL `flags`; serde ignores unknown fields, so the request stays valid.
 }
 
 /// Build response
@@ -44,8 +31,8 @@ struct BuildResponse {
     stderr: String,
     /// UUID of the program, `None` if the [`BuildRequest`] includes `uuid`
     uuid: Option<String>,
-    /// Anchor IDL of the program, `None` for native programs
-    idl: Option<Idl>,
+    /// Always `None`; the key stays so clients that read it keep parsing the response
+    idl: Option<serde_json::Value>,
 }
 
 /// Build state
@@ -84,28 +71,16 @@ pub async fn build(
     let concurrency_id = permit.id();
 
     // Spawn a blocking `tokio::task` to avoid blocking the thread
-    let (build_result, uuid) = task::spawn_blocking(move || {
-        let flags = payload.flags.as_ref();
-        (
-            program::build(
-                concurrency_id,
-                &uuid,
-                &payload.files,
-                flags.and_then(|f| f.seeds_feature).unwrap_or_default(),
-                flags.and_then(|f| f.no_docs).unwrap_or(true),
-                flags.and_then(|f| f.safety_checks).unwrap_or_default(),
-            ),
-            uuid,
-        )
-    })
-    .await
-    .map_err(|e| anyhow!("Failed to run `spawn_blocking`: {e}"))?;
-    let (stderr, idl) = build_result?;
+    let (build_result, uuid) =
+        task::spawn_blocking(move || (program::build(concurrency_id, &uuid, &payload.files), uuid))
+            .await
+            .map_err(|e| anyhow!("Failed to run `spawn_blocking`: {e}"))?;
+    let stderr = build_result?;
 
     Ok(Json(BuildResponse {
         stderr,
         uuid: if respond_with_uuid { Some(uuid) } else { None },
-        idl,
+        idl: None,
     }))
 }
 

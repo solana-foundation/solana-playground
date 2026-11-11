@@ -866,7 +866,7 @@
           "$ref": "#/definitions/text"
         },
         "failsWith": {
-          "description": "A line of the build log that marks the planned failure, e.g. \"cannot find type `Hello` in this scope\". A failed build is the planned one only when its log holds it.",
+          "description": "A line of the build log that marks the planned failure, e.g. \"could not find `__client_accounts_hello`\". A failed build is the planned one only when its log holds it.",
           "type": "string",
           "minLength": 1
         },

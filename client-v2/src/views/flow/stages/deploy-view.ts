@@ -70,44 +70,50 @@ export const deployViewFor =
   };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
-
-  const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
-
-  /** The stage open on devnet, project "counter", the Playground wallet current */
-  const here = deployViewFor({
-    cluster: "devnet",
-    workspace: "counter",
-    wallet: WALLET,
-  });
-
-  const DETAIL = {
-    reason: "airdrop_failed",
-    balance: 0,
-    needed: 1_000_000_000,
-    address: WALLET,
-    cause: "429",
-  } as const;
-
-  const fundingStopOn = (
-    cluster: string,
-    workspace: string
-  ): StageDeployState => ({
-    phase: "stopped",
-    stop: { kind: "funding", detail: DETAIL, cluster, workspace },
-  });
-  const FUNDING_HERE = fundingStopOn("devnet", "counter");
-
-  const DONE_WITH_BACKUP: StageDeployState = {
-    phase: "done",
-    backupFor: WALLET,
-  };
+  const { beforeAll, describe, it, expect } = import.meta.vitest;
 
   describe("views/flow/stages/deploy-view", () => {
+    let WALLET: typeof import("../__fixtures__/addresses").WALLET;
+
+    beforeAll(async () => {
+      ({ WALLET } = await import("../__fixtures__/addresses"));
+    });
+
+    /** The stage open on devnet, project "counter", the Playground wallet current */
+    const here = (run: Parameters<ReturnType<typeof deployViewFor>>[0]) =>
+      deployViewFor({
+        cluster: "devnet",
+        workspace: "counter",
+        wallet: WALLET,
+      })(run);
+
+    const detail = () =>
+      ({
+        reason: "airdrop_failed",
+        balance: 0,
+        needed: 1_000_000_000,
+        address: WALLET,
+        cause: "429",
+      } as const);
+
+    const fundingStopOn = (
+      cluster: string,
+      workspace: string
+    ): StageDeployState => ({
+      phase: "stopped",
+      stop: { kind: "funding", detail: detail(), cluster, workspace },
+    });
+    const fundingHere = () => fundingStopOn("devnet", "counter");
+
+    const doneWithBackup = (): StageDeployState => ({
+      phase: "done",
+      backupFor: WALLET,
+    });
+
     it("shows only the running deploy when the terminal deploys over a funding stop", () => {
       expect(
         here({
-          stage: FUNDING_HERE,
+          stage: fundingHere(),
           deployState: "loading",
           flowDeploy: "failed",
         })
@@ -117,7 +123,7 @@ if (import.meta.vitest) {
     it("shows only the running deploy when the terminal deploys after a backup line", () => {
       expect(
         here({
-          stage: DONE_WITH_BACKUP,
+          stage: doneWithBackup(),
           deployState: "loading",
           flowDeploy: "done",
         })
@@ -137,11 +143,11 @@ if (import.meta.vitest) {
     it("shows the funding card for a stop on the project and network open now", () => {
       expect(
         here({
-          stage: FUNDING_HERE,
+          stage: fundingHere(),
           deployState: "ready",
           flowDeploy: "failed",
         })
-      ).toEqual({ kind: "funding", stop: DETAIL });
+      ).toEqual({ kind: "funding", stop: detail() });
     });
 
     it("shows a failure, not the card, for a funding stop on another network", () => {
@@ -177,7 +183,7 @@ if (import.meta.vitest) {
     it("drops the backup line once the last deploy failed", () => {
       expect(
         here({
-          stage: DONE_WITH_BACKUP,
+          stage: doneWithBackup(),
           deployState: "ready",
           flowDeploy: "failed",
         })
@@ -205,7 +211,7 @@ if (import.meta.vitest) {
             phase: "stopped",
             stop: {
               kind: "funding",
-              detail: DETAIL,
+              detail: detail(),
               cluster: "devnet",
               workspace: undefined,
             },
@@ -213,7 +219,7 @@ if (import.meta.vitest) {
           deployState: "ready",
           flowDeploy: "failed",
         })
-      ).toEqual({ kind: "funding", stop: DETAIL });
+      ).toEqual({ kind: "funding", stop: detail() });
     });
 
     it("treats a cancelled run as no failure", () => {
@@ -242,7 +248,7 @@ if (import.meta.vitest) {
 
     it("offers the backup line for the wallet it was shown for, after a deploy", () => {
       const run = {
-        stage: DONE_WITH_BACKUP,
+        stage: doneWithBackup(),
         deployState: "ready",
         flowDeploy: "done",
       } as const;

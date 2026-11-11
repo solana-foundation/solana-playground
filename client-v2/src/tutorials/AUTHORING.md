@@ -166,7 +166,7 @@ The rules:
 For the planned failure, the beats before the first build write a file that
 really fails with the error you want, and the fix question's block is what
 makes it build. `failsWith` is a line of the build log that marks it, such as
-``cannot find type `Hello` in this scope``: a failed build whose log does not
+`` could not find `__client_accounts_hello` ``: a failed build whose log does not
 hold it is treated as unplanned. The error may have a code or not; the card
 shows the one holding `failsWith`, with its file and line when the log gives
 them. Ask the person to build that file in Playground and copy the line from
@@ -227,7 +227,7 @@ error; `line` counts from 1 in the file as it stands at that moment.
 {
   "kind": "say",
   "id": "f1.explain",
-  "text": "Line 9 asks for `Context<Hello>`: the accounts `hello` works with, described by a type called `Hello`. That type doesn't exist yet, so the compiler stops. `hello` reads no accounts, so the type can be empty. The fix goes at the bottom of lib.rs.",
+  "text": "The compiler points at line 5, `#[program]`, but the cause is line 9: `Context<Hello>` asks for the accounts `hello` works with, described by a type called `Hello`. That type doesn't exist yet, so `#[program]` can't find the code Anchor generates from it. `hello` reads no accounts, so the type can be empty. The fix goes at the bottom of lib.rs.",
   "quote": {
     "file": "src/lib.rs",
     "line": 9,

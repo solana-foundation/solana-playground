@@ -1,19 +1,22 @@
 // The Interact stage drawn from props: what each surface says, which action
-// it offers, and that the IDL action is on screen exactly once.
+// it offers, and that Upload IDL and the IDL guide are each on screen exactly once.
 import {
   fireEvent,
   render as rtlRender,
   screen,
   within,
 } from "@testing-library/react";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
+import { useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import { requireFor } from "../../../test-utils/require-for";
+import { PROGRAM_ID } from "../__fixtures__/addresses";
 import type { BaseInteractProps, DeploymentOption } from "./BaseInteract";
 import BaseInteract from "./BaseInteract";
+import { shortenId } from "./interact-callouts";
 import type { InteractSurface } from "./interact-surface";
 
 const render = (ui: ReactElement) =>
@@ -25,7 +28,7 @@ const found = <T,>(value: T | null, what: string): T => {
   return value;
 };
 
-const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
+const GUIDE = "Build the IDL locally";
 
 const SURFACES: InteractSurface[] = [
   "no-project",
@@ -51,6 +54,7 @@ const props = (
     builtAfterDeploy?: boolean;
     solNeeded?: BaseInteractProps["solNeeded"];
     idlRefusal?: string;
+    idlGuide?: ReactNode;
   } = {}
 ): BaseInteractProps => ({
   meta: "",
@@ -62,6 +66,7 @@ const props = (
   network: "cluster" in over ? over.cluster : "devnet",
   onGoTo: over.onGoTo ?? vi.fn(),
   idlLoad: <button>Upload IDL</button>,
+  idlGuide: over.idlGuide ?? <button aria-label={GUIDE}>{GUIDE}</button>,
   form: <div>FORM</div>,
   programId: over.programId,
   builtAfterDeploy: over.builtAfterDeploy ?? false,
@@ -111,27 +116,50 @@ describe("BaseInteract", () => {
     expect(onGoTo).toHaveBeenCalledWith("deploy");
   });
 
-  it("one Upload IDL in every surface", () => {
+  it("one Upload IDL and one IDL guide in every surface", () => {
     for (const surface of SURFACES) {
       const { container, unmount } = render(
         <BaseInteract {...props(surface)} />
       );
-      expect(
-        screen.getAllByRole("button", { name: "Upload IDL" })
-      ).toHaveLength(1);
-      if (
-        surface === "no-idl" ||
-        surface === "not-built" ||
-        surface === "not-deployed"
-      ) {
-        expect(
-          within(actions(container)).getByRole("button", {
-            name: "Upload IDL",
-          })
-        ).toBeTruthy();
+      for (const name of ["Upload IDL", GUIDE]) {
+        expect(screen.getAllByRole("button", { name })).toHaveLength(1);
+        if (
+          surface === "no-idl" ||
+          surface === "not-built" ||
+          surface === "not-deployed"
+        ) {
+          expect(
+            within(actions(container)).getByRole("button", { name })
+          ).toBeTruthy();
+        }
       }
       unmount();
     }
+  });
+
+  // A remount would close the guide's dialog on the IDL it just loaded
+  it("keeps the IDL guide mounted when the stage turns from no-idl to ready", () => {
+    let mounts = 0;
+    const Guide = () => {
+      useEffect(() => {
+        mounts += 1;
+      }, []);
+      return <button aria-label={GUIDE}>{GUIDE}</button>;
+    };
+    const { container, rerender } = render(
+      <BaseInteract {...props("no-idl", { idlGuide: <Guide /> })} />
+    );
+    expect(
+      within(actions(container)).getByRole("button", { name: GUIDE })
+    ).toBeTruthy();
+    rerender(
+      <TooltipProvider>
+        <BaseInteract {...props("ready", { idlGuide: <Guide /> })} />
+      </TooltipProvider>
+    );
+    expect(screen.getAllByRole("button", { name: GUIDE })).toHaveLength(1);
+    expect(container.querySelector('[data-slot="stage-empty"]')).toBeNull();
+    expect(mounts).toBe(1);
   });
 
   it("a bad IDL shows the error notice", () => {
@@ -173,7 +201,10 @@ describe("BaseInteract", () => {
         {...props("ready", {
           onPick,
           deployments: [
-            { id: "a", label: "latest · devnet · 6PNd3S…" },
+            {
+              id: "a",
+              label: `latest · devnet · ${PROGRAM_ID.slice(0, 6)}…`,
+            },
             { id: "b", label: "devnet · 9xQeWv…" },
           ],
         })}
@@ -229,11 +260,9 @@ describe("BaseInteract", () => {
     ).toBe(hasAction);
   });
 
-  it("a program with no IDL asks for its IDL", () => {
+  it("a program with no IDL says the build does not produce one", () => {
     render(<BaseInteract {...props("no-idl")} />);
-    expect(
-      screen.getByText("Upload its IDL to call it from a form.")
-    ).toBeTruthy();
+    expect(screen.getByText(/build does not produce an IDL/)).toBeTruthy();
   });
 
   it("an unreachable network shows the error notice", () => {
@@ -248,7 +277,7 @@ describe("BaseInteract", () => {
   it("names the program it calls, with copy, and the network", () => {
     render(<BaseInteract {...props("ready", { programId: PROGRAM_ID })} />);
     const program = screen.getByTitle(PROGRAM_ID);
-    expect(program.textContent).toBe("6PNd\u2026AVkj");
+    expect(program.textContent).toBe(shortenId(PROGRAM_ID));
     expect(
       screen.getByRole("button", { name: "Copy program id" })
     ).toBeTruthy();

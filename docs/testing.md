@@ -8,7 +8,7 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | [Prerequisites](#0-prerequisites) | macOS and Docker set-up, toolchains, branches |
 | [Builds](#1-builds) | wasm, client, client-v2 and its browser suite, server, compose images, real wasm packages |
 | [Client dev servers](#2-client-dev-servers-without-a-server) | client and client-v2 start with no build server running |
-| [Full suite with compose](#3-full-suite-with-docker-compose) | client, server, and database together; client-server requests |
+| [Full suite with compose](#3-full-suite-with-docker-compose) | client and server together; client-server requests |
 | [Static assets](#4-static-assets-default-rs-files-and-templates) | rust-analyzer `.rs` files in local, Vercel, and Docker builds; templates, tutorials |
 | [Release gate](#5-release-gate-unstable-and-stubs-stay-out-of-production) | unstable and the wasm stubs stay out of production |
 | [Optional: unstable server](#6-optional-unstable-server) | the server's unstable functionality, tested on purpose |
@@ -16,6 +16,7 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | [client-v2 production build](#7-client-v2-production-build) | memory, the esbuild minifier, browser floor, type checks outside the build |
 | [Default backend access](#9-default-backend-access) | `/api/agent` refuses every request without a session, from the browser and from `curl` |
 | [Tutorial flow on devnet](#10-tutorial-flow-on-devnet) | Hello Anchor end to end on the real build server and devnet |
+| [IDL build guide](#11-idl-build-guide) | the guide's placement, its Docker and local commands on a real machine, and an uploaded IDL in Interact |
 
 Case IDs are stable: refer to a case by ID, not by position.
 
@@ -87,7 +88,7 @@ scenario adds a service or a profile to that file; it never adds a second compos
 
 | Case | Profile |
 | --- | --- |
-| B-6, D-1, D-4, D-5, D-9 | `dev` |
+| B-6, D-1, D-5, D-9 | `dev` |
 | D-2, D-3 | `prod` |
 | D-6 | `v2` |
 | D-7 | `v2-prod` |
@@ -99,12 +100,12 @@ client-v2 adds profiles; it does not rename or remove these:
 
 | Profile | Runs |
 | --- | --- |
-| `dev` | client, server, database |
-| `prod` | production build of the client, server, database |
+| `dev` | client, server |
+| `prod` | production build of the client, server |
 | `client-standalone` | client without a server |
-| `server-standalone` | server without a database |
+| `server-standalone` | server that starts without the root `.env` |
 
-The `v2` and `v2-prod` profiles run the `server-standalone` service too, and neither runs `server` or `db` (MongoDB).
+The `v2` and `v2-prod` profiles run the `server-standalone` service too, and neither runs `server`.
 
 - [ ] `docker compose config --profiles` lists all four.
 - [ ] `docker compose --profile client-standalone config --services` includes `client-standalone` and no client-v2
@@ -267,8 +268,8 @@ was packaged without a rebuild, which `seed_target_dirs` in `client-v2/scripts/s
 
 Goal: the client starts and stays usable when no build server is reachable. Only the actions that call the server fail.
 
-Requests that need the server: `POST /build`, `GET /deploy/{uuid}`, `GET /share/{id}`, and `POST /new`. Nothing calls
-the server on page load at `/`.
+Requests that need the server: `POST /build` and `GET /deploy/{uuid}`. Upstream's `client/` also sends `GET /share/{id}`
+and `POST /new` from Share, which the server answers with 404. Nothing calls the server on page load at `/`.
 
 ### C-1. client starts
 
@@ -312,15 +313,18 @@ Expect: an error page or message, not a blank screen.
 
 Precondition: `master`; B-7; nothing listens on port 8080.
 
-client-v2 defaults its server endpoint to the remote Foundation server, not to `localhost`. To test the "no server"
-case, point it at the local port:
+Without `REACT_APP_SERVER_URL`, client-v2 defaults its server endpoint to `http://localhost:8080` and logs a warning
+naming the variable. Leave the variable empty in `client-v2/.env` for this case:
 
 ```sh
-REACT_APP_SERVER_URL=http://localhost:8080 yarn --cwd client-v2 dev
+REACT_APP_SERVER_URL= yarn --cwd client-v2 dev
 curl -s http://localhost:3000/api/health
 ```
 
 Expect:
+
+- [ ] the browser console shows the `settings:server` warning naming `REACT_APP_SERVER_URL`, and Settings lists no
+      "Solana Foundation" build server.
 
 - [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the console, the IDE, the terminal `help`, and
       the network tab pass.
@@ -368,8 +372,8 @@ docker compose --profile dev up --build
 
 Expect:
 
-- [ ] `wasm` exits 0; `db`, `server`, and `client` stay running.
-- [ ] the server log shows it listening on 8080 with no MongoDB connection error.
+- [ ] `wasm` exits 0; `server` and `client` stay running.
+- [ ] the server log shows it listening on 8080.
 - [ ] the client answers on `http://localhost:3000` (`PG_CLIENT_PORT` overrides the port), and the C-1 checks for
       the IDE, the terminal `help`, and the network tab pass.
 - [ ] D-9 passes: the server builds a program.
@@ -395,15 +399,6 @@ Steps: click Deploy.
 Expect: `GET http://localhost:8080/deploy/{uuid}` returns 200; the terminal prints the program ID; `solana program show
 <program ID>` in the playground terminal shows the program on the selected cluster.
 
-### D-4. share round trip
-
-Precondition: D-1 session (`dev` profile). A production build always sends share requests to `https://api.solpg.io`,
-so only a development build exercises the local server here.
-
-Steps: click Share, copy the link, open it in a new tab.
-
-Expect: `POST /new` to `http://localhost:8080` returns an ID; `GET /share/{id}` returns the same files that were shared.
-
 ### D-5. CORS
 
 ```sh
@@ -425,16 +420,15 @@ docker compose --profile v2 logs | grep -c 'local dev stub'
 ```
 
 Steps: in Settings, check that `experimental.unstable` is off and set the server to Local (client-v2 defaults to the
-remote Foundation server).
+server `REACT_APP_SERVER_URL` names, when it is set).
 
 Expect:
 
-- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running; no `db` or `server`
-      service exists.
+- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running; no `server` service
+      exists.
 - [ ] the `grep -c` prints `0`: the `yarn start` guard found the real packages.
 - [ ] `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/sync` prints a status other than `404`.
-- [ ] the D-2 and D-3 steps pass against the client-v2 UI, and no request path contains `/unstable/`. D-4 does not
-      apply: sharing needs MongoDB, which this profile does not run.
+- [ ] the D-2 and D-3 steps pass against the client-v2 UI, and no request path contains `/unstable/`.
 
 ### D-7. client-v2 production stack
 
@@ -490,7 +484,7 @@ Use a minimal native program for `lib.rs`: `solana_program::entrypoint!` with a 
 
 Expect:
 
-- [ ] the build returns `200` with JSON: `uuid` is a string, `idl` is `null` (a native program), and `stderr` holds no
+- [ ] the build returns `200` with JSON: `uuid` is a string, `idl` is `null` (for every program), and `stderr` holds no
       `error`.
 - [ ] `/deploy/<uuid>` returns the program binary: its first bytes print as `177   E   L   F`.
 
@@ -746,7 +740,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST <production server URL>/unstabl
 curl -s -o /dev/null -w '%{http_code}\n' -X POST <production server URL>/build
 ```
 
-The production server URL is `FOUNDATION_ENDPOINT` in `client-v2/src/settings/server/default-endpoint.ts`.
+The production server URL is the Vercel projects' `REACT_APP_SERVER_URL`; ask a maintainer for it.
 
 Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which proves the URL is right.
 
@@ -802,8 +796,7 @@ Expect: exit code 0; binaries `solpg-server`, `build-program`, and `bundle` in `
 
 ### U-2. unstable routes
 
-Precondition: U-1 done; the P-1 Darwin export in the same shell; MongoDB reachable at `PG_DB_URI` (the compose `db`
-service publishes no port).
+Precondition: U-1 done; the P-1 Darwin export in the same shell.
 
 ```sh
 PG_PORT=8081 server/target/release/solpg-server
@@ -1053,7 +1046,7 @@ different port is a different origin.
 
 | Group | Cases | Profile | Slot |
 | --- | --- | --- | --- |
-| upstream dev | D-1, D-4, D-5, D-9, C-3 | `dev` | 1 |
+| upstream dev | D-1, D-5, D-9, C-3 | `dev` | 1 |
 | upstream prod | D-2, then D-3 | `prod` | 2 |
 | v2 stack | D-6, then D-7 | `v2`, then `v2-prod` | 3 |
 | v2 standalone | D-8, S-7, S-1 to S-3, S-10 | `client-v2-standalone` | 4 |
@@ -1243,3 +1236,74 @@ Expect:
       case while it is a `fixme`.
 - [ ] the run took under five minutes. A deploy that waits on the faucet longer is the faucet, not the flow: run again
       later.
+
+## 11. IDL build guide
+
+The stable build server returns `"idl": null` for every program, so a user builds the IDL on their own machine and
+uploads it. The Flow offers this as "Build the IDL locally" ([idl-build-guide](../client-v2/src/features/idl-build-guide)):
+a dialog with a Docker method (the default, `quay.io/ottersec/anchor`) and a local toolchain method (Rust, the Solana
+CLI, and Anchor through avm), whose commands `model/steps.ts` holds. CI checks where the guide is offered and that it
+opens ([client-v2-idl-build-guide.e2e.spec.ts](../client-v2/e2e/client-v2-idl-build-guide.e2e.spec.ts)); no CI job runs
+its commands, so I-2 and I-3 run them on a real machine. Run I-2 and I-3 on macOS (Apple Silicon) and on Linux, and
+record the results in task 2.2 of [stable-anchor-1-1-2](../openspec/changes/stable-anchor-1-1-2/tasks.md).
+
+### I-1. the Flow offers the guide while no IDL is held
+
+Precondition: client-v2 against a stable build server (D-6, or `yarn dev` with a server on `http://localhost:8080`),
+and a new project from the default Anchor starter. No IDL has been uploaded to it.
+
+Steps: build the project, then open Deploy and Interact.
+
+Expect:
+
+- [ ] the Build stage says the build produces no IDL, shows no "Download IDL", and has "Build the IDL locally" first
+      in its downloads row.
+- [ ] Deploy shows "Build the IDL locally"; Interact's empty surface says the build does not produce an IDL and shows
+      "Build the IDL locally" and "Upload IDL".
+- [ ] the button opens "Build the IDL on your machine" with "Docker" selected; "Local toolchain" switches the steps,
+      and every step that runs a command has "Copy command".
+
+### I-2. the Docker method builds the IDL
+
+Precondition: I-1's project, and Docker running. On Apple Silicon, Docker runs amd64 images (P-1).
+
+Steps:
+
+1. In the guide, "Download project", unzip it, and open a terminal in its folder.
+2. Copy the Docker step's command and run it.
+
+Expect:
+
+- [ ] the command exits 0 and writes `idl.json` in the project folder.
+- [ ] `idl.json` names the program's instructions (`initialize` for the default starter).
+- [ ] the files the command wrote are owned by the user who ran it. If they are owned by `root`, record that in task 2.2:
+      the command needs `--user`.
+
+### I-3. the local method builds the IDL
+
+Precondition: I-1's project, on a machine without Rust, Solana, or Anchor installed (a fresh VM or user account). On
+Linux, the packages the install step's note names are installed.
+
+Steps: in the guide, select "Local toolchain", then run each step's command in order in a terminal opened in the
+unzipped project.
+
+Expect:
+
+- [ ] every command exits 0, and `solana --version` and `anchor --version` print the versions the guide's titles name.
+- [ ] the last command writes `idl.json` in the project folder, with the same instructions as I-2's.
+
+### I-4. the uploaded IDL drives Interact and survives a rebuild
+
+Precondition: an `idl.json` from I-2 or I-3, the program deployed (localnet, or devnet with a faucet that answers).
+
+Steps:
+
+1. In Interact, "Upload IDL" and choose `idl.json`.
+2. Call `initialize`.
+3. Build again without changing the program.
+
+Expect:
+
+- [ ] after the upload, Interact lists the IDL's instructions.
+- [ ] the `initialize` transaction succeeds.
+- [ ] after the rebuild, Interact still lists the same instructions: a build that returns no IDL keeps the uploaded one.

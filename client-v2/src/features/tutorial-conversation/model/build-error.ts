@@ -41,23 +41,30 @@ if (import.meta.vitest) {
 
   describe("features/tutorial-conversation/model/build-error", () => {
     let PLANNED: string;
+    let PLANNED_1_1_2: string;
     let NO_CODE: string;
     let PASSED: string;
     beforeAll(async () => {
-      ({ PLANNED, NO_CODE, PASSED } = await import("./build-logs.fixture"));
+      ({ PLANNED, PLANNED_1_1_2, NO_CODE, PASSED } = await import(
+        "./build-logs.fixture"
+      ));
     });
-    const FAILS_WITH = "cannot find type `Hello` in this scope";
+    const FAILS_WITH = "could not find `__client_accounts_hello`";
+    const E0432 = {
+      code: "E0432",
+      file: "src/lib.rs",
+      line: 5,
+      column: 1,
+      message: "unresolved import `crate`",
+    };
 
-    it("shows the planned E0412 at line 9, past the macro symptom at line 5", () => {
-      const e0412 = {
-        code: "E0412",
-        file: "src/lib.rs",
-        line: 9,
-        column: 32,
-        message: FAILS_WITH,
-      };
-      expect(pickBuildError(PLANNED, FAILS_WITH)).toEqual(e0412);
-      expect(pickBuildError(PLANNED)).toEqual(e0412);
+    it("shows the error holding the step's line, on Anchor 0.29 and 1.1.2", () => {
+      expect(pickBuildError(PLANNED, FAILS_WITH)).toEqual(E0432);
+      expect(pickBuildError(PLANNED_1_1_2, FAILS_WITH)).toEqual(E0432);
+    });
+
+    it("shows the E0412 at line 9 past the macro symptom when no line is marked", () => {
+      expect(pickBuildError(PLANNED)).toMatchObject({ code: "E0412", line: 9 });
     });
 
     it("reads an error with no code like one with a code", () => {
@@ -76,15 +83,12 @@ if (import.meta.vitest) {
     });
 
     it("falls back to a symptom when it is the only error", () => {
-      const onlySymptom = PLANNED.split("error[E0412]")[0];
-      expect(pickBuildError(onlySymptom)).toMatchObject({
-        code: "E0432",
-        line: 5,
-      });
+      expect(pickBuildError(PLANNED_1_1_2)).toEqual(E0432);
     });
 
-    it("tells the planned log by its line", () => {
+    it("tells the planned log by its line, on Anchor 0.29 and 1.1.2", () => {
       expect(isPlannedLog(PLANNED, FAILS_WITH)).toBe(true);
+      expect(isPlannedLog(PLANNED_1_1_2, FAILS_WITH)).toBe(true);
       expect(isPlannedLog(NO_CODE, FAILS_WITH)).toBe(false);
     });
   });

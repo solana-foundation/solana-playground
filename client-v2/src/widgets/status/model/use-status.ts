@@ -54,8 +54,10 @@ const aiInput = (): AiInput => {
   if (!connection || PgAssistant.needsSignIn) {
     return { kind: "off", needsSignIn: PgAssistant.needsSignIn };
   }
-  const until = PgAssistant.limitReachedUntil;
-  if (until !== undefined) return { kind: "limit", until };
+  const limit = PgAssistant.limitReached;
+  if (limit?.reason === "daily-cap")
+    return { kind: "limit", until: limit.until };
+  if (limit?.reason === "pool-exhausted") return { kind: "out-of-capacity" };
   // The hosted default is named by the model the deployment serves; its id,
   // "default", is no model's name
   if (connection.id === "default") {
