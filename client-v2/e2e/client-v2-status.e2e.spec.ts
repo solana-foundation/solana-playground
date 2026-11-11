@@ -10,6 +10,7 @@ import {
 } from "../src/features/agent/server.mjs";
 import {
   consoleTrigger,
+  editorTookFocus,
   expect,
   json,
   LONG,
@@ -52,6 +53,16 @@ const stallDevnet = (page: Page) =>
     if (body?.method !== "getSlot") return route.continue();
     return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
   });
+
+/**
+ * A reload, then the app up again: every lazy chunk is fetched anew, and on a
+ * loaded runner the app came up 15 s and more after the reload, so a status
+ * the test waits for after it never had its own time to arrive
+ */
+const reloadAndBoot = async (page: Page) => {
+  await page.reload();
+  await editorTookFocus(page);
+};
 
 test.describe("on a 1440 px window", () => {
   test.use({ viewport: WIDE_DESK });
@@ -96,7 +107,7 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
 
     const down = row(page).getByRole("button", {
       name: "Change cluster, currently devnet, not responding",
@@ -276,7 +287,7 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await expect(
       row(page).getByRole("button", {
         name: "Change cluster, currently devnet, not responding",
@@ -337,7 +348,7 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await expect(network(page)).toContainText("Not responding", {
       timeout: 15_000,
     });
@@ -363,7 +374,7 @@ test.describe("on a 1440 px window", () => {
       .filter({ hasText: "Choose a network" });
     await expect(setupRow).toHaveAttribute("data-status", "done");
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await expect(setupRow).toHaveAttribute("data-status", "warn", {
       timeout: 15_000,
     });
@@ -374,7 +385,7 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await page.locator("#flow-stage-tab-deploy").click();
     const lines = linesOn(page);
     await notice(page)
