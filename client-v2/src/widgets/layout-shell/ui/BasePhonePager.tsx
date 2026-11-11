@@ -327,9 +327,9 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
     const up = (e: TouchEvent) => {
       touching.current = false;
       const x = e.changedTouches[0]?.clientX;
-      const tapped =
+      const isTap =
         x !== undefined && Math.abs(x - touchStart.current.x) < TAP_SLOP_PX;
-      if (tapped) moving.current = touchStart.current.moving;
+      if (isTap) moving.current = touchStart.current.moving;
       armSettleRef.current();
     };
     el.addEventListener("touchstart", down, { passive: true });
