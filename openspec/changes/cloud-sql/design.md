@@ -11,8 +11,9 @@ preview tooling is `.github/scripts/neon.sh` (`ensure`, `uri`, `delete`,
 `list`), `scripts/neon-preview-branch.sh`, and the `Makefile.vercel` targets: a
 labelled PR gets the Neon branch `preview/pr-<number>`, a laptop deploy gets
 `preview/<git-branch>`, both cut from `main` of the preview Neon project, which
-is separate from production's Neon project. The only workflow that reaches
-Google Cloud is `cicd.yml`, through a stored JSON key.
+is separate from production's Neon project. The workflows that reach
+Google Cloud are `cicd.yml` and `server-release.yml`, which deploy and release the
+server through a stored JSON key or, once set up, the `github-server` OIDC pool.
 
 The project moves to `solana-foundation`'s Vercel project, which builds a
 preview of every integration branch through the Git integration with the

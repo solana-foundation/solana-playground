@@ -26,7 +26,7 @@ See the [root README](../README.md#run-with-docker) for more options.
 
 The server is deployed to **Google App Engine** as the `playground-server` service via [`.github/workflows/cicd.yml`](../.github/workflows/cicd.yml). The workflow triggers on pushes to `master` and on manual dispatch, but checks and deploy run only for a tagged commit — untagged pushes exit early.
 
-The App Engine version label is the tag with periods replaced by dashes (e.g. `1.2.3` → `1-2-3`) and is uploaded with `--no-promote`, so traffic must be cut over manually in the GCP console.
+The App Engine version label is the tag with periods replaced by dashes (e.g. `1.2.3` → `1-2-3`) and is uploaded with `--no-promote`, so going live is a separate step: see [Server release](../docs/server-release.md).
 
 ## Versioning
 
@@ -45,5 +45,7 @@ Or run it manually (Actions → CICD → Run workflow) to deploy the latest tag.
 | `GCP_KEY`         | Service-account JSON for `google-github-actions/auth`. |
 | `SERVICE_ACCOUNT` | Service-account email used by `gcloud config`.   |
 | `PROJECT_ID`      | GCP project that owns the App Engine app.       |
+
+Repository variable `GCP_WORKLOAD_IDENTITY_PROVIDER`: set, deploys and releases sign in through OIDC and ignore `GCP_KEY`; see [Server release](../docs/server-release.md).
 
 Every runtime setting has a default in [`src/config.rs`](src/config.rs); [`app.yaml`](app.yaml) sets the ones production overrides.
