@@ -131,6 +131,8 @@ describe("wrapTopLevelAwait", () => {
     [
       'console.log(1);\nimport /* lazy */ ("bn.js");\nawait Promise.resolve();\n',
     ],
+    ['import // lazy\n("bn.js");\nawait Promise.resolve();\n'],
+    ['console.log(1);\nimport // lazy\n("bn.js");\nawait Promise.resolve();\n'],
   ])("leaves a dynamic import with a space inside: %s", (client) => {
     expect(wrapTopLevelAwait(client)).toBe("\n\n" + wrapped(client.trim()));
   });
