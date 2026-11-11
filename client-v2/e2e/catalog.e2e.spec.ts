@@ -9,8 +9,8 @@ import {
   stubPrograms,
   test,
 } from "./fixtures";
-import { lineOf, linesOn } from "./telemetry";
-import { PHONE } from "./viewports";
+import { lineOf, linesOn, linesRead } from "./telemetry";
+import { openPhoneMenu, PHONE } from "./viewports";
 
 /**
  * The navigation's item of this name, not Home's tile of the same words, nor
@@ -164,6 +164,7 @@ test("client-v2-layout: Searching tutorials", async ({ seededPage: page }) => {
   expect(lineOf(lines, "catalog_searched")).toContain("page: tutorials");
   // Past another rest: still the one search
   await page.waitForTimeout(800);
+  await linesRead(lines);
   expect(
     lines.filter((l) => l.startsWith("[telemetry:event] catalog_searched "))
   ).toHaveLength(1);
@@ -177,7 +178,7 @@ test.describe("on a phone", () => {
     await expect(home(page)).toBeVisible(LONG);
     const work = page.getByRole("region", { name: "Work" });
 
-    await work.getByRole("button", { name: "Menu" }).click();
+    await openPhoneMenu(page);
     await page
       .getByRole("region", { name: "Navigation" })
       // Exact: with no project the list offers Open tutorials too
@@ -196,11 +197,14 @@ test.describe("on a phone", () => {
     await expect(cards.first()).toBeVisible();
     // Both boxes in one frame: the pager may still be scrolling to the work
     // page, and two separate reads would see the cards at different places
-    const [first, second] = await cards.evaluateAll((els) =>
-      els.slice(0, 2).map((el) => {
-        const { x, y, height } = el.getBoundingClientRect();
-        return { x, y, height };
-      })
+    // Not `evaluateAll`: over these cards it crashes Playwright 1.65's Firefox 159 content process
+    const [first, second] = await work.evaluate((root) =>
+      Array.from(root.querySelectorAll('[data-slot="action-card"]'))
+        .slice(0, 2)
+        .map((el) => {
+          const { x, y, height } = el.getBoundingClientRect();
+          return { x, y, height };
+        })
     );
     // One column: the second card sits under the first, not beside it
     expect(second.y).toBeGreaterThan(first.y + first.height - 1);

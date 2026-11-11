@@ -4,6 +4,7 @@ import {
   applyWrite,
   currentProject,
   expect,
+  grantClipboard,
   json,
   LONG,
   projectMenu,
@@ -15,7 +16,7 @@ import {
   test,
   TEST_USER,
 } from "./fixtures";
-import { linesOn } from "./telemetry";
+import { linesOn, linesRead } from "./telemetry";
 
 /**
  * The limits a project is held to, seen from the browser: the sync banner a
@@ -279,7 +280,12 @@ test("project-sync-limits: A file one byte over the limit stops the project", as
 
 test("project-sync-limits: Five files of 100 KiB stop the project", async ({
   page,
+  browserName,
 }) => {
+  test.fixme(
+    browserName === "firefox",
+    "On Firefox keyboard.insertText lands twice in Monaco: the 130 inserted lines become 260, so the project reads 526 KB"
+  );
   // `src/lib.rs` is the fifth file of 102,400 bytes
   const files = bigFiles(4, 102_400);
   files["src/lib.rs"] = sourceOf(102_400);
@@ -519,7 +525,7 @@ test("project-sync-limits: The user undid the edit", async ({
   page,
   context,
 }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await grantClipboard(context);
   const account = await stubAccount(page, { "src/lib.rs": "// lib\n" });
   await openRestored(page);
 
@@ -626,6 +632,7 @@ test("project-sync-limits: A tutorial project", async ({ page }) => {
     .poll(() => account.sent("src/lib.rs", "// edited"), LONG)
     .toBe(true);
   await expect(banner(page)).toHaveCount(0);
+  await linesRead(lines);
   expect(limitEvents(lines)).toEqual([]);
 });
 
@@ -749,6 +756,7 @@ test("project-sync-limits: A banner already up sends nothing more", async ({
   await editFile(page, "f1.rs", "// more");
   await editFile(page, "f2.rs", "// more");
   await page.waitForTimeout(5000);
+  await linesRead(lines);
 
   expect(limitEvents(lines)).toHaveLength(1);
 });
@@ -962,7 +970,7 @@ test("project-sync-limits: Pasting past the file size limit", async ({
   page,
   context,
 }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await grantClipboard(context);
   const account = await stubAccount(page, { "src/lib.rs": "// lib\n" });
   await openRestored(page);
 

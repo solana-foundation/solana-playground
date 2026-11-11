@@ -11,6 +11,11 @@
 
 # catthehacker's full Ubuntu 24.04 image: rustup, cargo, node and yarn preinstalled.
 -P ubuntu-latest=catthehacker/ubuntu:full-24.04
+# The client-v2 workflows pin ubuntu-26.04; act skips a runs-on label it has no image for.
+-P ubuntu-26.04=catthehacker/ubuntu:full-24.04
+
+# GitHub's hosted runners set ImageOS, which keys the Playwright browser cache; act does not.
+--env ImageOS=ubuntu26
 
 # Actions cloned once under ~/.cache/act are reused instead of re-cloned per run.
 --action-offline-mode

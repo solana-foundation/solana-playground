@@ -10,7 +10,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
-import { DESK, PHONE } from "./viewports";
+import { DESK, openPhoneMenu, PHONE } from "./viewports";
 
 /**
  * The navigation's Get set up checklist. Every test stubs `/api/ai/status` with
@@ -117,7 +117,7 @@ test("client-v2-layout: The checklist on a phone's menu page", async ({
   await page.setViewportSize(DESK);
   await seedWorkspace(page);
   await page.setViewportSize(PHONE);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await expect(title(page)).toHaveText("Get set up· 1 of 4");
   // Folded to its one line on a phone, as the prototype keeps it
   await expect(title(page)).toHaveAttribute("aria-expanded", "false");
@@ -126,7 +126,7 @@ test("client-v2-layout: The checklist on a phone's menu page", async ({
 
   // Unfolded by the user, it stays so
   await page.reload();
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await expect(title(page)).toHaveAttribute("aria-expanded", "true", LONG);
 });
 
