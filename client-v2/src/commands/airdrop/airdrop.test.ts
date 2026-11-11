@@ -4,6 +4,7 @@ import { checkSignedIn } from "../../features/auth";
 import { PgConnection } from "../../utils";
 import { airdrop } from "./airdrop";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
+import { isAirdropRefused } from "./report";
 
 // Only what `airdrop.handle` reads before it asks the RPC for SOL
 vi.mock("../../utils", () => ({
@@ -53,7 +54,10 @@ const runOn = (
 describe("airdrop", () => {
   it("says the network has no faucet on mainnet", async () => {
     // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` and `getAirdropAmountOn()` are `null` before the cluster is read or where there is no faucet
-    await expect(runOn("mainnet-beta", null)).rejects.toThrow(NO_FAUCET);
+    const failure = await runOn("mainnet-beta", null).catch((e: unknown) => e);
+    expect((failure as Error).message).toBe(NO_FAUCET);
+    // Failed before the airdrop started: not a refusal, so no faucet steps
+    expect(isAirdropRefused(failure)).toBe(false);
   });
 
   it("waits while the cluster is the previous endpoint's", async () => {

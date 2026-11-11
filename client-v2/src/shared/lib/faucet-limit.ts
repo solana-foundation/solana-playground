@@ -7,6 +7,30 @@ const FAUCET_LIMIT = /\b429\b|too many requests|rate limit|airdrop limit/i;
  */
 export const isFaucetLimit = (message: string) => FAUCET_LIMIT.test(message);
 
+/** What a refused airdrop names as its cause: the faucet's limit, or anything else */
+export type AirdropRefusal = "limit" | "other";
+
+/**
+ * The cause as the wallet chip and the wallet menu head it, without a full
+ * stop; the tutorial cards add one. One string, so no two surfaces disagree
+ * about the same refusal
+ */
+export const refusalHeadline = (refusal: AirdropRefusal) =>
+  refusal === "limit"
+    ? "The faucet is at its limit"
+    : "The faucet did not send SOL";
+
+/**
+ * Why a tutorial's airdrop brought no SOL, in the words the Deploy stage's
+ * card and the wallet chip use for the same refusal, so no two surfaces
+ * disagree about one. No "try again in a minute": the faucet's limit rarely
+ * lifts that soon, so the steps under it send the learner to the web faucet
+ */
+export const airdropCause = (message: string) =>
+  isFaucetLimit(message)
+    ? "The devnet faucet is at its limit."
+    : `${refusalHeadline("other")}.`;
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -18,6 +42,13 @@ if (import.meta.vitest) {
       "You've hit the rate limit",
     ])("reads %j as the faucet's limit", (message) => {
       expect(isFaucetLimit(message)).toBe(true);
+    });
+
+    it.each([
+      ["429 Too Many Requests", "The devnet faucet is at its limit."],
+      ["fetch failed", "The faucet did not send SOL."],
+    ])("names the cause of %j", (message, cause) => {
+      expect(airdropCause(message)).toBe(cause);
     });
 
     it("reads any other failure as something else", () => {

@@ -1,4 +1,5 @@
 import { checkSignedIn } from "../../features/auth";
+import { isFaucetCluster } from "../../shared/lib/faucet";
 import {
   PgCommon,
   PgConnection,
@@ -11,7 +12,7 @@ import { askAgain } from "../../utils/ask-again";
 import { checkWallet } from "../checks";
 import { createArgs, createCmd } from "../create";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
-import { isRateLimited, rateLimitNote, receivedLine } from "./report";
+import { AirdropRefusedError, receivedLine, refusedNote } from "./report";
 import { isAirdropSignInGated } from "./sign-in-gate";
 
 /**
@@ -77,8 +78,11 @@ export const airdrop = createCmd({
     const connection = PgConnection.current;
     const walletPk = PgWallet.current!.publicKey;
 
-    // A rate limit on any of the RPC's answers is not the end of the road:
-    // the web faucet keeps a limit of its own. Point to it, then fail as before
+    // No answer here is the end of the road: the web faucet keeps a limit of
+    // its own and asks nothing of this RPC. Point to it on any refusal, then
+    // fail as before, with the same message, marked as a refusal so the wallet
+    // chip and the wallet menu show the same steps
+    let received: number;
     try {
       // Airdrop tx is sometimes successful even when the balance hasn't changed.
       // Check the balance before and after instead of only confirming the tx
@@ -122,24 +126,25 @@ export const airdrop = createCmd({
         await PgCommon.sleep(confirmations * PgWeb3.DEFAULT_MS_PER_SLOT);
       }
 
-      // What arrived, not what was asked: the RPC may grant less
-      PgTerminal.println(
-        PgTerminal.success(receivedLine(amount, afterBalance - beforeBalance))
-      );
+      received = afterBalance - beforeBalance;
     } catch (error) {
-      if (isRateLimited(error)) {
-        PgTerminal.println(
-          PgTerminal.info(
-            rateLimitNote({
-              walletAddress: walletPk.toBase58(),
-              amount,
-              cluster,
-            })
-          )
-        );
-      }
-      throw error;
+      // A local validator has no web faucet to point to; its own error says
+      // what went wrong
+      if (!isFaucetCluster(cluster)) throw error;
+      PgTerminal.println(
+        PgTerminal.info(
+          refusedNote(error, {
+            walletAddress: walletPk.toBase58(),
+            amount,
+            cluster,
+          })
+        )
+      );
+      throw new AirdropRefusedError(error);
     }
+
+    // What arrived, not what was asked: the RPC may grant less
+    PgTerminal.println(PgTerminal.success(receivedLine(amount, received)));
   },
 });
 

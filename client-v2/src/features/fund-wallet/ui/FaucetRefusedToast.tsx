@@ -1,5 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 
+import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
+import { refusalHeadline } from "@/shared/lib/faucet-limit";
 import { Button } from "@/shared/ui/button";
 
 import { fundFor } from "../model/receiver";
@@ -9,22 +11,29 @@ export interface FaucetRefusedToastProps {
   href: string;
   /** The wallet the faucet refused */
   address: string;
+  /** What the faucet refused for: its limit, or anything else */
+  refusal: AirdropRefusal;
 }
 
 /**
- * What the wallet menu's Airdrop says when the faucet is at its limit. The
- * terminal prints it too, but under Home no terminal shows, and the click
- * seemed to do nothing (Natalia, 10 Nov). The link is the web faucet with
- * the wallet and amount filled in; under it, Send from your wallet opens the
- * Fund dialog, which outlives the toast. It is left out when the dialog
- * would fund another wallet, as of when the toast showed: a wallet switch
- * while it shows is not read again, and the dialog then names the new one.
+ * What the wallet menu's Airdrop says when the faucet refuses, for its limit
+ * or anything else. The terminal prints it too, but under Home no terminal
+ * shows, and the click seemed to do nothing (Natalia, 10 Nov). The link is
+ * the web faucet with the wallet and amount filled in; under it, Send from
+ * your wallet opens the Fund dialog, which outlives the toast. It is left out
+ * when the dialog would fund another wallet, as of when the toast showed: a
+ * wallet switch while it shows is not read again, and the dialog then names
+ * the new one.
  */
-const FaucetRefusedToast = ({ href, address }: FaucetRefusedToastProps) => {
+const FaucetRefusedToast = ({
+  href,
+  address,
+  refusal,
+}: FaucetRefusedToastProps) => {
   const fund = fundFor("faucet-toast")(address);
   return (
     <span className="flex flex-col gap-1">
-      <strong>The faucet is at its limit.</strong>
+      <strong>{refusalHeadline(refusal)}.</strong>
       <span>
         Sign in to the web faucet with GitHub and confirm the airdrop. Your
         address is filled in.

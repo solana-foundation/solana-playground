@@ -23,6 +23,7 @@ const renderChip = (props: Partial<BaseWalletChipProps>) =>
         faucetHref="https://faucet.solana.com/?cluster=devnet"
         faucetSteps={STEPS}
         state={props.state ?? "idle"}
+        refusal={props.refusal ?? "limit"}
         received={props.received}
         signInFirst={props.signInFirst ?? false}
         onAirdrop={props.onAirdrop ?? vi.fn()}
@@ -95,6 +96,16 @@ describe("features/fund-wallet/ui/BaseWalletChip", () => {
     expect(onAirdrop).toHaveBeenCalledOnce();
     expect(
       screen.getByRole("button", { name: "Use your wallet" })
+    ).toBeTruthy();
+  });
+
+  it("names a refusal that is not the limit, with the same steps", () => {
+    renderChip({ state: "refused", refusal: "other" });
+    open();
+    expect(screen.getByText("The faucet did not send SOL")).toBeTruthy();
+    expect(screen.queryByText("The faucet is at its limit")).toBeNull();
+    expect(
+      screen.getByRole("list", { name: "Get SOL from the web faucet" })
     ).toBeTruthy();
   });
 

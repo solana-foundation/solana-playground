@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import type { RunResult } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
 import { DEVNET_FAUCET_SOL, faucetUrlWith } from "@/shared/lib/faucet";
-import { isFaucetLimit } from "@/shared/lib/faucet-limit";
+import { airdropCause } from "@/shared/lib/faucet-limit";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
 import { cn } from "@/shared/lib/utils";
@@ -64,14 +64,6 @@ const sol = (lamports: number) =>
 /** An estimate reads as one: "about 2.81 SOL", never four decimals */
 const aboutSol = (lamports: number) =>
   String(Math.round((lamports / 1e9) * 100) / 100);
-
-/** Why the airdrop failed, in words true to the cause (Design alignment, 7 Nov).
- * No "try again in a minute": the faucet's limit rarely lifts that soon, so the
- * steps under it send the learner to the web faucet instead (10 Nov) */
-const airdropWhy = (message: string) =>
-  isFaucetLimit(message)
-    ? " The devnet faucet is at its limit."
-    : " The airdrop didn't go through.";
 
 /** The red head every failed deploy shares, 48 tall while it waits on the learner */
 const FailedHead = ({ title, open }: { title: string; open: boolean }) => (
@@ -141,7 +133,7 @@ const BaseDeployResultCard = ({
             )} SOL, and this deploy needs about ${aboutSol(result.cost)} SOL.${
               // Only the airdrop asked the faucet; a deploy found the wallet
               // short on its own
-              result.act === "airdrop" ? airdropWhy(result.message) : ""
+              result.act === "airdrop" ? ` ${airdropCause(result.message)}` : ""
             }`}
           </p>
           <FaucetSteps />

@@ -38,7 +38,7 @@ describe("features/fund-wallet/ui/FaucetRefusedToast", () => {
     const asked: string[] = [];
     stop = onDidRequestFundDialog((from) => asked.push(from));
     const { container } = render(
-      <FaucetRefusedToast href={HREF} address={WALLET} />
+      <FaucetRefusedToast href={HREF} address={WALLET} refusal="limit" />
     );
 
     const labels = Array.from(container.querySelectorAll("a, button")).map(
@@ -51,8 +51,18 @@ describe("features/fund-wallet/ui/FaucetRefusedToast", () => {
 
   it("leaves it out when the dialog would fund another wallet", () => {
     stop = onDidRequestFundDialog(() => undefined);
-    render(<FaucetRefusedToast href={HREF} address={OTHER} />);
+    render(<FaucetRefusedToast href={HREF} address={OTHER} refusal="limit" />);
 
     expect(fundButton()).toBeNull();
+  });
+
+  it("says the faucet is at its limit, or that it did not send SOL", () => {
+    const { unmount } = render(
+      <FaucetRefusedToast href={HREF} address={WALLET} refusal="limit" />
+    );
+    expect(screen.getByText("The faucet is at its limit.")).toBeTruthy();
+    unmount();
+    render(<FaucetRefusedToast href={HREF} address={WALLET} refusal="other" />);
+    expect(screen.getByText("The faucet did not send SOL.")).toBeTruthy();
   });
 });

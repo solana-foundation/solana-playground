@@ -17,6 +17,7 @@ import type {
 } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
 import { DEVNET_FAUCET_SOL, faucetUrlWith } from "@/shared/lib/faucet";
+import { airdropCause } from "@/shared/lib/faucet-limit";
 import { PROGRAM_LOG, programLogText } from "@/shared/lib/program-log";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
@@ -345,9 +346,7 @@ const FundsCard = ({
           <p className={READ}>
             {`Your wallet has ${solOf(balance)} SOL, and this ${
               result.act
-            } needs about ${solOf(
-              cost
-            )} SOL. The devnet faucet is at its limit.`}
+            } needs about ${solOf(cost)} SOL. ${airdropCause(result.message)}`}
           </p>
           <FaucetSteps />
           {/* As the deploy's card: the whole address, Copy right after it */}

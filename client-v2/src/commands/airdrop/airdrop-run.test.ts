@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgConnection } from "../../utils";
 import { airdrop } from "./airdrop";
+import { AirdropRefusedError, isAirdropRefused } from "./report";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const WALLET = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
@@ -116,22 +117,49 @@ describe("airdrop, once the faucet answers", () => {
     expect(printed.at(-1)).toBe("Airdrop successful: received 5 SOL.");
   });
 
-  it("fails without a faucet note when the balance never moves", async () => {
+  it("links the web faucet when the balance never moves, and still fails", async () => {
     connection.getBalance.mockResolvedValue(2 * LAMPORTS_PER_SOL);
 
-    await expect(run()).rejects.toThrow("Balance did not change");
+    const failure = await run().catch((e: unknown) => e);
 
-    // The start line alone: no faucet note follows it
-    expect(printed).toEqual(["Airdropping 5 SOL..."]);
+    expect(failure).toBeInstanceOf(AirdropRefusedError);
+    expect((failure as Error).message).toBe("Balance did not change");
+    expect(printed.at(-1)).toMatch(
+      /^Airdrop refused: the devnet faucet did not send SOL\./
+    );
   });
 
-  it("adds no faucet note to any other failure", async () => {
+  it("links the web faucet for any other refusal, and keeps its message", async () => {
     connection.getBalance.mockResolvedValue(0);
     connection.requestAirdrop.mockRejectedValueOnce(new Error("fetch failed"));
 
-    await expect(run()).rejects.toThrow("fetch failed");
+    const failure = await run().catch((e: unknown) => e);
 
-    // The start line alone: no faucet note follows it
-    expect(printed).toEqual(["Airdropping 5 SOL..."]);
+    expect(isAirdropRefused(failure)).toBe(true);
+    expect((failure as Error).message).toBe("fetch failed");
+    expect(printed.at(-1)).toContain(
+      `https://faucet.solana.com/?walletAddress=${WALLET}&amount=5&cluster=devnet`
+    );
+    expect(printed.at(-1)).toContain("1. Open the web faucet");
+  });
+
+  it("adds no web faucet to a local validator's failure, and leaves it unwrapped", async () => {
+    const utils = await import("../../utils");
+    const conn = utils.PgConnection as { cluster: string };
+    conn.cluster = "localnet";
+    try {
+      connection.getBalance.mockResolvedValue(0);
+      connection.requestAirdrop.mockRejectedValueOnce(
+        new Error("fetch failed")
+      );
+
+      const failure = await run().catch((e: unknown) => e);
+
+      expect(isAirdropRefused(failure)).toBe(false);
+      expect((failure as Error).message).toBe("fetch failed");
+      expect(printed).toEqual(["Airdropping 5 SOL..."]);
+    } finally {
+      conn.cluster = "devnet";
+    }
   });
 });

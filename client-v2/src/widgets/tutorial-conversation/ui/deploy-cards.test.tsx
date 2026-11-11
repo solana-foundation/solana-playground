@@ -212,7 +212,7 @@ describe("BaseDeployResultCard", () => {
     ).toBeTruthy();
   });
 
-  it("tells an airdrop that failed otherwise that it didn't go through", () => {
+  it("tells an airdrop that failed otherwise that the faucet did not send SOL", () => {
     card({
       act: "airdrop",
       ok: false,
@@ -225,7 +225,7 @@ describe("BaseDeployResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The airdrop didn't go through."
+        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The faucet did not send SOL."
       )
     ).toBeTruthy();
   });

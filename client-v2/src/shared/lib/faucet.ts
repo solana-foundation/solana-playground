@@ -18,6 +18,13 @@ const FAUCET_CLUSTERS: readonly string[] = ["devnet", "testnet"];
 export const isFaucetCluster = (cluster: string): boolean =>
   FAUCET_CLUSTERS.includes(cluster);
 
+/**
+ * `sol` when the faucet's form offers it, else the most it gives on devnet: a
+ * link with another amount opens with none set, and the steps name it
+ */
+export const offeredAmount = (sol: number | undefined): number =>
+  sol !== undefined && FAUCET_AMOUNTS.includes(sol) ? sol : DEVNET_FAUCET_SOL;
+
 export interface FaucetLinkFill {
   walletAddress?: string;
   /** In SOL */
@@ -113,6 +120,12 @@ if (import.meta.vitest) {
       const url = new URL(faucetLink({ cluster: "testnet", amount: 1 }));
       expect(url.searchParams.get("cluster")).toBe("testnet");
       expect(url.searchParams.get("amount")).toBe("1");
+    });
+
+    it("asks for an amount the form offers, else the devnet most", () => {
+      expect(offeredAmount(2.5)).toBe(2.5);
+      expect(offeredAmount(3)).toBe(DEVNET_FAUCET_SOL);
+      expect(offeredAmount(undefined)).toBe(DEVNET_FAUCET_SOL);
     });
 
     it("is the bare faucet for a wallet link with no address", () => {

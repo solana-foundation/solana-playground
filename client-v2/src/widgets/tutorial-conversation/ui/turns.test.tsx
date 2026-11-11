@@ -585,6 +585,26 @@ describe("BaseResultCard", () => {
     expect(screen.getByText(/Program log: Instruction: Hello/)).toBeTruthy();
   });
 
+  it("says the faucet is at its limit only when the airdrop said so", () => {
+    txCard({
+      act: "call",
+      ok: false,
+      seconds: 1,
+      reason: "no_funds",
+      message: "429 Too Many Requests",
+      log: "",
+      funding: { balance: 0, cost: 500_000_000, address: "Wa11et" },
+    });
+    expect(
+      screen.getByText(
+        "Your wallet has 0 SOL, and this call needs about 0.5 SOL. The devnet faucet is at its limit."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("list", { name: "Get devnet SOL from the web faucet" })
+    ).toBeTruthy();
+  });
+
   it("heads a run the faucet left short, and one with no wallet, by their reason", () => {
     const { unmount } = txCard({
       act: "run",
@@ -596,9 +616,10 @@ describe("BaseResultCard", () => {
       funding: { balance: 0, cost: 500_000_000, address: "Wa11et" },
     });
     expect(screen.getByText("Not enough devnet SOL")).toBeTruthy();
+    // The cause is the airdrop's own: this one was not the faucet's limit
     expect(
       screen.getByText(
-        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet faucet is at its limit."
+        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The faucet did not send SOL."
       )
     ).toBeTruthy();
     // The whole address, with Copy right after it rather than at the row's end
