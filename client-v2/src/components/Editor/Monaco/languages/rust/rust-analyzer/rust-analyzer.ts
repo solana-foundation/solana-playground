@@ -26,6 +26,7 @@ const LANGUAGE_ID = "rust";
  * Full crate will be loaded when `crate_name::*` is used in the model content.
  * - `missing`: Crate files did not load; loaded with no content and not asked for again.
  */
+// TODO(HOO-2754): key crates by name and version so renamed and multi-version dependencies resolve generally
 const cachedNames: Map<string, "full" | "empty" | "missing"> = new Map();
 
 /** Rust Analyzer world state */

@@ -55,17 +55,16 @@ const mocks = vi.hoisted(() => ({
   ExportKey: () => undefined,
 }));
 
-const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
-const pgWallet = () => ({ isPg: true, publicKey: { toBase58: () => WALLET } });
-
 // The real barrels pull in the whole playground; the stage reads only these
 vi.mock("../../../utils", () => ({
   PgCommand: { deploy: { execute: mocks.execute } },
   PgConnection: { cluster: "devnet", onDidChangeCluster: "cluster" },
   PgExplorer: {
     currentWorkspaceName: "counter",
+    onDidSaveFile: mocks.noop,
     onDidSwitchWorkspace: mocks.noop,
   },
+  PgFramework: { getFromFiles: async () => undefined },
   PgGlobal: {
     onDidChangeDeployState: "deployState",
     get deployState() {
@@ -121,6 +120,8 @@ vi.mock("@/widgets/status", () => ({ useNetworkHold: () => mocks.hold }));
 vi.mock("./IdlActions", () => ({
   default: () => null,
   useIdlName: () => undefined,
+  loadIdlFile: async () => true,
+  openInteract: () => undefined,
 }));
 vi.mock("@/shared/lib/report-button-failure", () => ({
   reportButtonFailure: (action: string) =>
@@ -136,7 +137,10 @@ import {
   DeployFundingError,
   PgDeployRun,
 } from "../../../commands/deploy/run";
+import { FRESH_WALLET, WALLET } from "../__fixtures__/addresses";
 import Deploy from "./Deploy";
+
+const pgWallet = () => ({ isPg: true, publicKey: { toBase58: () => WALLET } });
 
 /** The app gives every screen a tooltip provider; the copy button needs one */
 const render = (ui: ReactElement) =>
@@ -523,7 +527,7 @@ describe("Deploy stage", () => {
     mocks.wallet.current = {
       isPg: true,
       publicKey: {
-        toBase58: () => "SaveWa11et1111111111111111111111111111111111",
+        toBase58: () => FRESH_WALLET,
       },
     };
     mocks.execute.mockResolvedValue({

@@ -10,7 +10,7 @@ import type {
   Turn,
 } from "@/features/tutorial-conversation";
 import { pickBuildError } from "@/features/tutorial-conversation/model/build-error";
-import { PLANNED } from "@/features/tutorial-conversation/model/build-logs.fixture";
+import { PLANNED_1_1_2 } from "@/features/tutorial-conversation/model/build-logs.fixture";
 // Past the slice's entry, which would load the store and the app's globals:
 // the engine's pure parts are all this test drives
 import {
@@ -26,9 +26,9 @@ import type { TurnHandlers } from "./TurnView";
 import TurnView from "./TurnView";
 
 /**
- * Hello Anchor's planned failure from the build server's real log
- * (2 Nov 2026), through the engine and the feed's cards: the specs' "The
- * planned E0412" (tutorial-conversation) and "The planned failure is a real
+ * Hello Anchor's planned failure from the Anchor 1.1.2 build server's real log
+ * (9 Nov 2026), through the engine and the feed's cards: the specs' "The
+ * planned failure" (tutorial-conversation) and "The planned failure is a real
  * compiler error" (tutorial-runs).
  */
 
@@ -47,8 +47,8 @@ const failed: RunResult = {
   ok: false,
   seconds: 6,
   reason: "compiler",
-  error: pickBuildError(PLANNED, step1.failsWith),
-  log: stripKnownNoise(PLANNED),
+  error: pickBuildError(PLANNED_1_1_2, step1.failsWith),
+  log: stripKnownNoise(PLANNED_1_1_2),
 };
 
 const play = (actions: Action[]) =>
@@ -106,10 +106,10 @@ const draw = (turn: Turn) => {
   return on;
 };
 
-describe("Hello Anchor's planned E0412", () => {
-  it("reads E0412 at line 9 off the real log and marks the failure planned", () => {
+describe("Hello Anchor's planned failure", () => {
+  it("reads E0432 at line 5 off the real log and marks the failure planned", () => {
     expect(failed).toMatchObject({
-      error: { code: "E0412", file: "src/lib.rs", line: 9, column: 32 },
+      error: { code: "E0432", file: "src/lib.rs", line: 5, column: 1 },
     });
     const v = view(definition, play(toFailure), LATE);
     const result = v.turns.find((t) => t.kind === "result");
@@ -117,18 +117,16 @@ describe("Hello Anchor's planned E0412", () => {
     expect(v.live?.id).toBe(result?.id);
   });
 
-  it("draws Build failed with E0412 · line 9, the planned line and the link to it", () => {
+  it("draws Build failed with E0432 · line 5, the planned line and the link to it", () => {
     const v = view(definition, play(toFailure), LATE);
     const on = draw(
       requireFor("a result turn")(v.turns.find((t) => t.kind === "result"))
     );
     expect(screen.getByText("Build failed")).toBeTruthy();
-    expect(screen.getByText("E0412 · line 9")).toBeTruthy();
-    expect(
-      screen.getByText("cannot find type `Hello` in this scope")
-    ).toBeTruthy();
-    screen.getByRole("button", { name: "--> src/lib.rs:9:32" }).click();
-    expect(on.revealError).toHaveBeenCalledWith("src/lib.rs", 9);
+    expect(screen.getByText("E0432 · line 5")).toBeTruthy();
+    expect(screen.getByText("unresolved import `crate`")).toBeTruthy();
+    screen.getByRole("button", { name: "--> src/lib.rs:5:1" }).click();
+    expect(on.revealError).toHaveBeenCalledWith("src/lib.rs", 5);
   });
 
   it("Explain posts the explanation with line 9 quoted, then the Fix it question", () => {
