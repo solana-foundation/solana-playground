@@ -36,7 +36,7 @@
 ## Migration Plan
 
 1. Merge: nothing changes, the key path is used.
-2. Someone with IAM rights runs the commands in `docs/server-release.md` and sets `GCP_WORKLOAD_IDENTITY_PROVIDER`.
+2. Someone with IAM rights runs step 10 of `client-v2/docs/production-runbook.md`, which sets `GCP_WORKLOAD_IDENTITY_PROVIDER`.
 3. The no-op promote proves OIDC and the list format. A rollback and a promote back prove the rest.
 4. The next tagged release deploys through OIDC; then `GCP_KEY` is deleted and the service account's key revoked.
 

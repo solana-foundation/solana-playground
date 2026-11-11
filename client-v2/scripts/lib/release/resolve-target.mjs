@@ -7,7 +7,7 @@ const ALL_TRAFFIC = 1 - 1e-4;
 const VERSION_FORMAT = /^[a-z0-9][a-z0-9.-]*$/;
 
 /** Refuses a list it cannot fully read: a wrong guess here moves production traffic */
-function readList(versions) {
+function getVersions(versions) {
   if (!Array.isArray(versions)) {
     throw new Error("Unreadable version list: not an array");
   }
@@ -37,16 +37,16 @@ function readList(versions) {
  * Picks the version to send all traffic to: the requested one, or with none requested, the newest serving version created before
  * the live one. `current` is undefined when no single version holds all traffic. The list does not say which versions were ever live, so a
  * parked version that never was counts as the one before.
- * @param {unknown[]} versions `gcloud app versions list --format=json`
  * @param {string} requested a version label or git tag, or empty to roll back
+ * @param {unknown[]} versions `gcloud app versions list --format=json`
  * @returns {{ current: string | undefined, target: string, isChanged: boolean }}
  * @throws {Error} on a malformed request, an unreadable list, or no usable target; the message says why
  */
-export function selectTarget(versions, requested) {
+export function selectTarget(requested, versions) {
   if (requested && !VERSION_FORMAT.test(requested)) {
     throw new Error(`Malformed version ${JSON.stringify(requested)}`);
   }
-  const list = readList(versions);
+  const list = getVersions(versions);
   const live = list.find(({ split }) => split >= ALL_TRAFFIC);
   const current = live?.id;
 
@@ -82,12 +82,12 @@ export function selectTarget(versions, requested) {
 }
 
 /**
- * @param {unknown[]} versions `gcloud app versions list --format=json`
  * @param {string} target the version label that should now be live
+ * @param {unknown[]} versions `gcloud app versions list --format=json`
  * @throws {Error} unless `target` holds all traffic
  */
-export function assertLive(versions, target) {
-  const live = readList(versions).find(({ id }) => id === target);
+export function assertLive(target, versions) {
+  const live = getVersions(versions).find(({ id }) => id === target);
   if (!live || live.split < ALL_TRAFFIC) {
     throw new Error(`Version "${target}" does not hold all traffic`);
   }
@@ -99,7 +99,7 @@ export function assertLive(versions, target) {
  * @throws {Error} on an unreadable list
  */
 export function describeTraffic(versions) {
-  return readList(versions)
+  return getVersions(versions)
     .filter(({ split }) => split > 0)
     .map(({ id, split }) => `- \`${id}\`: ${split}`)
     .join("\n");
@@ -110,10 +110,12 @@ function main(mode) {
   try {
     versions = JSON.parse(readFileSync(0, "utf8"));
   } catch (error) {
-    throw new Error(`Unreadable version list: ${error.message}`);
+    throw new Error(`Unreadable version list: ${error.message}`, {
+      cause: error,
+    });
   }
   if (mode === "verify") {
-    assertLive(versions, process.env.TARGET_VERSION ?? "");
+    assertLive(process.env.TARGET_VERSION ?? "", versions);
     return;
   }
   if (mode === "traffic") {
@@ -122,8 +124,8 @@ function main(mode) {
   }
   if (mode !== "select") throw new Error(`Unknown mode ${mode}`);
   const { current, target, isChanged } = selectTarget(
-    versions,
-    process.env.REQUESTED_VERSION ?? ""
+    process.env.REQUESTED_VERSION ?? "",
+    versions
   );
   console.log(
     `current=${current ?? "split"}\ntarget=${target}\nchanged=${isChanged}`

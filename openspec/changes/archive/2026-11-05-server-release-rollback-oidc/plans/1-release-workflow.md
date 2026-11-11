@@ -2,7 +2,7 @@
 
 > Executed inline with superpowers:executing-plans.
 
-**Goal:** the four task groups of `tasks.md`.
+**Goal:** the four task groups of [`tasks.md`](https://github.com/solana-foundation/solana-playground/blob/2ae7a1132881dead7e745014d0e74bda081cbdd7/openspec/changes/server-release-rollback-oidc/tasks.md).
 
 **Spec:** `../specs/server-release/spec.md`, `../design.md`.
 
@@ -26,9 +26,9 @@ Test: `resolve-target.test.mjs` beside it, run with `yarn test-api`.
 
 Produces:
 
-- `selectTarget(versions, requested) -> { current: string | null, target: string, changed: boolean }`, throws `Error` on every refusal in the spec.
+- `selectTarget(requested, versions) -> { current: string | undefined, target: string, isChanged: boolean }`, throws `Error` on every refusal in the spec.
 - `assertLive(versions, target) -> void`, throws unless `target` holds all traffic.
-- CLI: `node resolve-target.mjs select` (env `REQUESTED_VERSION`) prints `current=`, `target=`, `changed=` lines for `$GITHUB_OUTPUT`, with `current=split` for `null`. `node resolve-target.mjs verify` (env `TARGET_VERSION`). Both read the list on stdin, print the refusal as `::error::` and exit 1.
+- CLI: `node resolve-target.mjs select` (env `REQUESTED_VERSION`) prints `current=`, `target=`, `changed=` lines for `$GITHUB_OUTPUT`, with `current=split` for `undefined`. `node resolve-target.mjs verify` (env `TARGET_VERSION`). Both read the list on stdin, print the refusal as `::error::` and exit 1.
 
 Steps: failing tests from each spec scenario, run, implement, run, commit.
 
@@ -42,4 +42,4 @@ Composite with inputs `workload_identity_provider`, `service_account`, `credenti
 
 ## Task 4: `docs/server-release.md`, README pointer
 
-Per `tasks.md` 4.1. Commit.
+Per [`tasks.md`](https://github.com/solana-foundation/solana-playground/blob/2ae7a1132881dead7e745014d0e74bda081cbdd7/openspec/changes/server-release-rollback-oidc/tasks.md) 4.1. Commit.

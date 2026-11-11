@@ -46,4 +46,6 @@ Or run it manually (Actions → CICD → Run workflow) to deploy the latest tag.
 | `SERVICE_ACCOUNT` | Service-account email used by `gcloud config`.   |
 | `PROJECT_ID`      | GCP project that owns the App Engine app.       |
 
+Repository variable `GCP_WORKLOAD_IDENTITY_PROVIDER`: set, deploys and releases sign in through OIDC and ignore `GCP_KEY`; see [Server release](../docs/server-release.md).
+
 Every runtime setting has a default in [`src/config.rs`](src/config.rs); [`app.yaml`](app.yaml) sets the ones production overrides.

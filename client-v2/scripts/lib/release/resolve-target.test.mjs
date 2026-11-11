@@ -30,7 +30,7 @@ const stopped = versionFor("STOPPED")(0);
 const LIVE_B = [parked("a", 1), live("b", 2), parked("c", 3)];
 
 test("selects a named serving version as the target", () => {
-  assert.deepEqual(selectTarget(LIVE_B, "a"), {
+  assert.deepEqual(selectTarget("a", LIVE_B), {
     current: "b",
     target: "a",
     isChanged: true,
@@ -39,11 +39,11 @@ test("selects a named serving version as the target", () => {
 
 test("reads a version written as its tag as its label", () => {
   const list = [parked("1-2-3", 1), live("1-2-4", 2)];
-  assert.equal(selectTarget(list, "1.2.3").target, "1-2-3");
+  assert.equal(selectTarget("1.2.3", list).target, "1-2-3");
 });
 
 test("changes nothing when the live version is named again", () => {
-  assert.deepEqual(selectTarget(LIVE_B, "b"), {
+  assert.deepEqual(selectTarget("b", LIVE_B), {
     current: "b",
     target: "b",
     isChanged: false,
@@ -52,7 +52,7 @@ test("changes nothing when the live version is named again", () => {
 
 test("promotes a named target out of split traffic, with no current", () => {
   const split = [half("a", 1), half("b", 2)];
-  assert.deepEqual(selectTarget(split, "a"), {
+  assert.deepEqual(selectTarget("a", split), {
     current: undefined,
     target: "a",
     isChanged: true,
@@ -60,17 +60,17 @@ test("promotes a named target out of split traffic, with no current", () => {
 });
 
 test("refuses an unknown version, naming it and the existing ones", () => {
-  assert.throws(() => selectTarget(LIVE_B, "z"), /"z".*a, b, c/);
+  assert.throws(() => selectTarget("z", LIVE_B), /"z".*a, b, c/);
 });
 
 test("refuses a stopped version", () => {
   const list = [stopped("a", 1), live("b", 2)];
-  assert.throws(() => selectTarget(list, "a"), /"a" is STOPPED/);
+  assert.throws(() => selectTarget("a", list), /"a" is STOPPED/);
 });
 
 for (const bad of ["A-1", "a b", "a;rm", "$(x)", "-a"]) {
   test(`refuses the malformed version ${JSON.stringify(bad)}`, () => {
-    assert.throws(() => selectTarget(LIVE_B, bad), /Malformed version/);
+    assert.throws(() => selectTarget(bad, LIVE_B), /Malformed version/);
   });
 }
 
@@ -105,28 +105,28 @@ for (const [name, broken] of [
 ]) {
   test(`refuses a record without ${name}`, () => {
     const list = [broken, live("b", 2)];
-    assert.throws(() => selectTarget(list, "b"), /Unreadable version list/);
+    assert.throws(() => selectTarget("b", list), /Unreadable version list/);
   });
 }
 
 test("refuses a list that is not an array", () => {
   assert.throws(
-    () => selectTarget({ error: "x" }, ""),
+    () => selectTarget("", { error: "x" }),
     /Unreadable version list/
   );
 });
 
 test("refuses a null record", () => {
-  assert.throws(() => selectTarget([null], ""), /Unreadable version list/);
+  assert.throws(() => selectTarget("", [null]), /Unreadable version list/);
 });
 
 test("refuses a split written as a string", () => {
   const list = [{ id: "a", traffic_split: "1.0", version: SERVING_SINCE }];
-  assert.throws(() => selectTarget(list, "a"), /Unreadable version list/);
+  assert.throws(() => selectTarget("a", list), /Unreadable version list/);
 });
 
 test("refuses a malformed version before the list is read", () => {
-  assert.throws(() => selectTarget([null], "$(x)"), /Malformed version/);
+  assert.throws(() => selectTarget("$(x)", [null]), /Malformed version/);
 });
 
 test("orders by fractional seconds in the creation time", () => {
@@ -142,16 +142,16 @@ test("orders by fractional seconds in the creation time", () => {
     },
     live("c", 2),
   ];
-  assert.equal(selectTarget(list, "").target, "b");
+  assert.equal(selectTarget("", list).target, "b");
 });
 
 test("refuses an empty list", () => {
-  assert.throws(() => selectTarget([], ""), /No versions/);
+  assert.throws(() => selectTarget("", []), /No versions/);
 });
 
 test("rolls back to the newest serving version before the live one when none is named", () => {
   const list = [parked("a", 1), parked("b", 2), live("c", 3), parked("d", 4)];
-  assert.deepEqual(selectTarget(list, ""), {
+  assert.deepEqual(selectTarget("", list), {
     current: "c",
     target: "b",
     isChanged: true,
@@ -160,30 +160,30 @@ test("rolls back to the newest serving version before the live one when none is 
 
 test("skips a stopped version on rollback", () => {
   const list = [parked("a", 1), stopped("b", 2), live("c", 3)];
-  assert.equal(selectTarget(list, "").target, "a");
+  assert.equal(selectTarget("", list).target, "a");
 });
 
 test("skips a version created at the same instant on rollback", () => {
   const list = [live("a", 1), parked("b", 1)];
-  assert.throws(() => selectTarget(list, ""), /Nothing to roll back to/);
+  assert.throws(() => selectTarget("", list), /Nothing to roll back to/);
 });
 
 test("refuses a rollback with nothing older", () => {
   assert.throws(
-    () => selectTarget([live("a", 1), parked("b", 2)], ""),
+    () => selectTarget("", [live("a", 1), parked("b", 2)]),
     /Nothing to roll back to/
   );
 });
 
 test("asks for a named version on a rollback from split traffic", () => {
   const split = [half("a", 1), half("b", 2)];
-  assert.throws(() => selectTarget(split, ""), /name a version/);
+  assert.throws(() => selectTarget("", split), /name a version/);
 });
 
 test("counts float rounding as all traffic", () => {
   const list = [parked("a", 1), versionFor("SERVING")(0.99995)("b", 2)];
-  assert.equal(selectTarget(list, "").current, "b");
-  assert.doesNotThrow(() => assertLive(list, "b"));
+  assert.equal(selectTarget("", list).current, "b");
+  assert.doesNotThrow(() => assertLive("b", list));
 });
 
 test("does not count the smallest real split as all traffic", () => {
@@ -191,18 +191,18 @@ test("does not count the smallest real split as all traffic", () => {
     versionFor("SERVING")(0.001)("a", 1),
     versionFor("SERVING")(0.999)("b", 2),
   ];
-  assert.equal(selectTarget(list, "a").current, undefined);
-  assert.throws(() => selectTarget(list, ""), /name a version/);
-  assert.throws(() => assertLive(list, "b"), /does not hold all traffic/);
+  assert.equal(selectTarget("a", list).current, undefined);
+  assert.throws(() => selectTarget("", list), /name a version/);
+  assert.throws(() => assertLive("b", list), /does not hold all traffic/);
 });
 
 test("refuses a live check on a target without all traffic", () => {
-  assert.throws(() => assertLive(LIVE_B, "a"), /"a" does not hold all traffic/);
-  assert.doesNotThrow(() => assertLive(LIVE_B, "b"));
+  assert.throws(() => assertLive("a", LIVE_B), /"a" does not hold all traffic/);
+  assert.doesNotThrow(() => assertLive("b", LIVE_B));
 });
 
 test("refuses a live check on a target missing from the list", () => {
-  assert.throws(() => assertLive(LIVE_B, "z"), /"z" does not hold all traffic/);
+  assert.throws(() => assertLive("z", LIVE_B), /"z" does not hold all traffic/);
 });
 
 const runWith = (list) => (mode, env) =>
@@ -279,12 +279,12 @@ test("refuses a list verify cannot read", () => {
 });
 
 test("refuses an unknown or missing mode", () => {
-  for (const args of [["verfy"], []]) {
-    const { status, stdout, stderr } = spawnSync(
-      process.execPath,
-      [SCRIPT, ...args],
-      { encoding: "utf8", input: JSON.stringify(LIVE_B), env: {} }
-    );
+  for (const argv of [[SCRIPT, "verfy"], [SCRIPT]]) {
+    const { status, stdout, stderr } = spawnSync(process.execPath, argv, {
+      encoding: "utf8",
+      input: JSON.stringify(LIVE_B),
+      env: {},
+    });
     assert.equal(status, 1);
     assert.equal(stdout, "");
     assert.match(stderr, /^::error::Unknown mode/);

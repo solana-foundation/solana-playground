@@ -579,6 +579,28 @@ OIDC.
      --member="serviceAccount:$SERVER_SA" --role=roles/appengine.serviceAdmin --condition=None
    ```
 
+   **When `<SERVER_PROJECT_ID>` is `<PROJECT_ID>`**, the account must hold no role that reaches Cloud SQL, because
+   item 3 lets every workflow run on `master` act as it: no `roles/editor`, `roles/owner` or `roles/cloudsql.*`
+   (cloud-sql's Gate 1: no CI identity on the production instance). If the list shows any of them, grant what
+   deploying and moving traffic need instead, before removing anything:
+
+   ```sh
+   for role in roles/appengine.deployer roles/appengine.serviceAdmin roles/cloudbuild.builds.editor \
+     roles/storage.objectAdmin roles/artifactregistry.writer; do
+     gcloud projects add-iam-policy-binding "$SERVER_PROJECT_ID" \
+       --member="serviceAccount:$SERVER_SA" --role="$role" --condition=None
+   done
+   RUNTIME_SA=$(gcloud app describe --project="$SERVER_PROJECT_ID" --format='value(serviceAccount)')
+   gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SA" --project="$SERVER_PROJECT_ID" \
+     --member="serviceAccount:$SERVER_SA" --role=roles/iam.serviceAccountUser
+   ```
+
+   Remove `roles/editor`, `roles/owner` and any `roles/cloudsql.*` from the account only after check 3 below has
+   deployed a release with these roles (`gcloud projects remove-iam-policy-binding "$SERVER_PROJECT_ID"
+   --member="serviceAccount:$SERVER_SA" --role=<role>`), then run check 4. If that deploy fails on a permission,
+   its log names the one missing; grant it and deploy again, but never a Cloud SQL role. A different project holds
+   no Cloud SQL instance of ours, so this paragraph does not apply there.
+
 3. **Create the pool and provider.** The pool is `github-server`, not `github`: cloud-sql.md's step 9 creates a
    `github` pool for previews, and the two may share a project. The condition admits tokens from `master` of this
    repository only, by its id, which a rename cannot take over.
@@ -634,6 +656,13 @@ OIDC.
 3. **The next release.** After the next tagged commit on `master`, the CICD run's annotations say
    `GCP sign-in: Workload Identity Federation` and the new version appears, parked, in the version list. Move
    traffic to it as [Releasing the build server](#releasing-the-build-server) says.
+4. **No route to `solpg`**, when `<SERVER_PROJECT_ID>` is `<PROJECT_ID>`: this lists nothing.
+
+   ```sh
+   gcloud projects get-iam-policy "$PROJECT_ID" --flatten='bindings[].members' \
+     --filter="bindings.members:serviceAccount:$SERVER_SA AND bindings.role~^roles/(cloudsql|editor|owner)" \
+     --format='table(bindings.role)'
+   ```
 
 **If a check fails:**
 
