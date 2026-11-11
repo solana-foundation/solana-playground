@@ -12,25 +12,38 @@ const tempDir = (t) => {
   return dir;
 };
 
-const spec = (title, status) => ({ title, tests: [{ status }] });
+const specFor = (projectName) => (title, status) => ({
+  title,
+  tests: [{ status, projectName }],
+});
+const spec = specFor("chromium");
 
 // The describe nesting of a real report: a file suite holding a describe
-// suite holding the specs.
-const report = ({ current, total, specs }) => ({
-  config: { shard: { current, total } },
-  suites: [
-    {
-      title: "a.e2e.spec.ts",
-      suites: [{ title: "a describe", specs }],
-    },
-  ],
-});
+// suite holding the specs. A shard always ran some test of its project.
+const reportFor =
+  (project) =>
+  ({ current, total, specs }) => ({
+    config: { shard: { current, total } },
+    suites: [
+      {
+        title: "a.e2e.spec.ts",
+        suites: [
+          { title: "a describe", specs },
+          {
+            title: "b describe",
+            specs: [specFor(project)("passes", "expected")],
+          },
+        ],
+      },
+    ],
+  });
+const report = reportFor("chromium");
 
-const shardFile = (dir, n) =>
-  path.join(dir, `playwright-test-results-${n}`, "report.json");
+const shardFile = (dir, name) =>
+  path.join(dir, `playwright-test-results-${name}`, "report.json");
 
-const writeShard = (dir, n, content) => {
-  const file = shardFile(dir, n);
+const writeShard = (dir, name, content) => {
+  const file = shardFile(dir, name);
   fs.mkdirSync(path.dirname(file));
   fs.writeFileSync(
     file,
@@ -51,8 +64,24 @@ const fourShards = (dir, specsOf = () => []) => {
   }
 };
 
-const check = (dir, knownSkipsFile) =>
-  checkReports({ reportsDir: path.join(dir, "shards"), knownSkipsFile });
+const checkFor = (expectedProjects) => (dir, knownSkipsFile) =>
+  checkReports({
+    reportsDir: path.join(dir, "shards"),
+    knownSkipsFile,
+    expectedProjects,
+  });
+const check = checkFor(["chromium"]);
+const checkBoth = checkFor(["chromium", "firefox"]);
+
+const writeProjectShards = (shards, project, { current, total }) => {
+  for (const n of current) {
+    writeShard(
+      shards,
+      `${project}-${n}`,
+      reportFor(project)({ current: n, total, specs: [] })
+    );
+  }
+};
 
 const setUp = (t) => {
   const dir = tempDir(t);
@@ -74,9 +103,9 @@ describe("scripts/e2e-report", () => {
     assert.deepEqual(check(dir, known), {
       ok: true,
       lines: [
-        "shards reported: 1 2 3 4 of 4",
+        "chromium shards reported: 1 2 3 4 of 4",
         `::warning title=stale known skip::ran after all -- listed in ${known} but ran`,
-        "::warning title=flaky e2e test::passed on retry -- failed once on this runner, passed on retry; its trace is in the shard's artifact",
+        "::warning title=flaky e2e test::[chromium] passed on retry -- failed once on this runner, passed on retry; its trace is in the shard's artifact",
       ],
     });
   });
@@ -104,7 +133,9 @@ describe("scripts/e2e-report", () => {
     const known = writeKnownSkips(dir, []);
     assert.deepEqual(check(dir, known), {
       ok: false,
-      lines: ["::error::shards 1 2 4 of 4 reported -- every one of 1..4 must"],
+      lines: [
+        "::error::chromium shards 1 2 4 of 4 reported -- every one of 1..4 must",
+      ],
     });
   });
 
@@ -148,7 +179,7 @@ describe("scripts/e2e-report", () => {
     const known = writeKnownSkips(dir, []);
     assert.deepEqual(check(dir, known), {
       ok: false,
-      lines: ["::error::the shards disagree on their total: 2 4"],
+      lines: ["::error::the chromium shards disagree on their total: 2 4"],
     });
   });
 
@@ -161,8 +192,8 @@ describe("scripts/e2e-report", () => {
     assert.deepEqual(check(dir, known), {
       ok: false,
       lines: [
-        "shards reported: 1 2 3 4 of 4",
-        `::error title=unexpected e2e skip::skips unannounced -- not in ${known}`,
+        "chromium shards reported: 1 2 3 4 of 4",
+        `::error title=unexpected e2e skip::[chromium] skips unannounced -- not in ${known}`,
       ],
     });
   });
@@ -174,7 +205,7 @@ describe("scripts/e2e-report", () => {
     assert.deepEqual(check(dir, known), {
       ok: false,
       lines: [
-        "shards reported: 1 2 3 4 of 4",
+        "chromium shards reported: 1 2 3 4 of 4",
         `::error::${known} not checked out -- the sparse-checkout path in this job is stale`,
       ],
     });
@@ -192,7 +223,152 @@ describe("scripts/e2e-report", () => {
     ]);
     assert.deepEqual(check(dir, known), {
       ok: true,
-      lines: ["shards reported: 1 2 3 4 of 4"],
+      lines: ["chromium shards reported: 1 2 3 4 of 4"],
     });
   });
+
+  it("checks the shards of each project on its own", (t) => {
+    const { dir, shards } = setUp(t);
+    writeProjectShards(shards, "chromium", { current: [1, 2], total: 2 });
+    writeProjectShards(shards, "firefox", { current: [1, 2], total: 2 });
+    const known = writeKnownSkips(dir, []);
+    assert.deepEqual(checkBoth(dir, known), {
+      ok: true,
+      lines: [
+        "chromium shards reported: 1 2 of 2",
+        "firefox shards reported: 1 2 of 2",
+      ],
+    });
+  });
+
+  it("a shard missing from one project is not filled by another's", (t) => {
+    const { dir, shards } = setUp(t);
+    writeProjectShards(shards, "chromium", { current: [1, 2], total: 2 });
+    writeProjectShards(shards, "firefox", { current: [1], total: 2 });
+    const known = writeKnownSkips(dir, []);
+    assert.deepEqual(checkBoth(dir, known), {
+      ok: false,
+      lines: [
+        "::error::firefox shards 1 of 2 reported -- every one of 1..2 must",
+      ],
+    });
+  });
+
+  it("an expected project without a report is an error", (t) => {
+    const { dir, shards } = setUp(t);
+    writeProjectShards(shards, "chromium", { current: [1, 2], total: 2 });
+    const known = writeKnownSkips(dir, []);
+    assert.deepEqual(checkBoth(dir, known), {
+      ok: false,
+      lines: [
+        "::error::no firefox report -- the run expected chromium, firefox",
+      ],
+    });
+  });
+
+  it("a report of a project the run did not expect is an error", (t) => {
+    const { dir, shards } = setUp(t);
+    writeProjectShards(shards, "chromium", { current: [1, 2], total: 2 });
+    writeProjectShards(shards, "firefox", { current: [1, 2], total: 2 });
+    const known = writeKnownSkips(dir, []);
+    assert.deepEqual(check(dir, known), {
+      ok: false,
+      lines: ["::error::a firefox report -- the run expected only chromium"],
+    });
+  });
+
+  it("a known-skips prefix that names no project is an error", (t) => {
+    const { dir, shards } = setUp(t);
+    fourShards(shards);
+    const known = writeKnownSkips(dir, ["[firfox] skips"]);
+    assert.deepEqual(check(dir, known), {
+      ok: false,
+      lines: [
+        "chromium shards reported: 1 2 3 4 of 4",
+        `::error title=unknown project in known skips::[firfox] skips -- ${known} names [firfox], none of chromium, firefox`,
+      ],
+    });
+  });
+
+  it("a report holding tests of two projects is an error naming the file", (t) => {
+    const { dir, shards } = setUp(t);
+    const mixed = writeShard(
+      shards,
+      1,
+      report({
+        current: 1,
+        total: 1,
+        specs: [specFor("firefox")("runs here too", "expected")],
+      })
+    );
+    const known = writeKnownSkips(dir, []);
+    assert.deepEqual(check(dir, known), {
+      ok: false,
+      lines: [
+        `::error::${mixed} ran projects [chromium, firefox] -- a shard runs exactly one`,
+      ],
+    });
+  });
+
+  // The test `skips` ends with `status` on `skippedOn`, the one project the
+  // run expects and holds, against the one known-skips line `entry`.
+  const prefixCases = [
+    {
+      name: "a [firefox] line covers the skip on firefox",
+      entry: "[firefox] skips",
+      skippedOn: "firefox",
+      status: "skipped",
+      ok: true,
+      lines: [],
+    },
+    {
+      name: "a [firefox] line neither covers the title on chromium nor goes stale without firefox",
+      entry: "[firefox] skips",
+      skippedOn: "chromium",
+      status: "skipped",
+      ok: false,
+      lines: [
+        "::error title=unexpected e2e skip::[chromium] skips -- not in KNOWN",
+      ],
+    },
+    {
+      name: "a [firefox] line goes stale when firefox ran the test",
+      entry: "[firefox] skips",
+      skippedOn: "firefox",
+      status: "expected",
+      ok: true,
+      lines: [
+        "::warning title=stale known skip::[firefox] skips -- listed in KNOWN but ran",
+      ],
+    },
+    {
+      name: "a line without a prefix covers the skip on any project",
+      entry: "skips",
+      skippedOn: "firefox",
+      status: "skipped",
+      ok: true,
+      lines: [],
+    },
+  ];
+  for (const { name, entry, skippedOn, status, ok, lines } of prefixCases) {
+    it(name, (t) => {
+      const { dir, shards } = setUp(t);
+      writeShard(
+        shards,
+        1,
+        reportFor(skippedOn)({
+          current: 1,
+          total: 1,
+          specs: [specFor(skippedOn)("skips", status)],
+        })
+      );
+      const known = writeKnownSkips(dir, [entry]);
+      assert.deepEqual(checkFor([skippedOn])(dir, known), {
+        ok,
+        lines: [`${skippedOn} shards reported: 1 of 1`].concat(
+          lines.map((line) => line.replace("KNOWN", known))
+        ),
+      });
+    });
+  }
 });

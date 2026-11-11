@@ -11,7 +11,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
-import { DESK, PHONE } from "./viewports";
+import { DESK, openPhoneMenu, PHONE } from "./viewports";
 
 /**
  * The navigation's project list (HOO-2069), one test per scenario of the
@@ -32,6 +32,10 @@ const projectNames = (page: Page) =>
     .locator('[data-sidebar="menu-button"]')
     .allInnerTexts();
 
+// Scoped by CSS: counting under `getByRole("group", { name })` crashes Playwright 1.65's Firefox 159 (Juggler) content process
+const pins = (page: Page) =>
+  page.locator('[data-sidebar="group"]').getByTitle("Pinned");
+
 test("client-v2-layout: Pinning a project", async ({ page }) => {
   test.setTimeout(120_000);
   await twoProjects(page);
@@ -42,9 +46,7 @@ test("client-v2-layout: Pinning a project", async ({ page }) => {
   await page.reload();
 
   await expect.poll(() => projectNames(page), LONG).toEqual(["beta", "alpha"]);
-  await expect(
-    page.getByRole("group", { name: "Projects" }).getByTitle("Pinned")
-  ).toHaveCount(1);
+  await expect(pins(page)).toHaveCount(1);
   await expect(
     (await projectMenu(page, "beta")).getByRole("menuitem", { name: "Unpin" })
   ).toBeVisible();
@@ -81,9 +83,7 @@ test("client-v2-layout: Renaming in place", async ({ page }) => {
   // The pin is kept by id, through the rename and a reload
   await page.reload();
   await expect.poll(() => projectNames(page), LONG).toEqual(["gamma", "beta"]);
-  await expect(
-    page.getByRole("group", { name: "Projects" }).getByTitle("Pinned")
-  ).toHaveCount(1);
+  await expect(pins(page)).toHaveCount(1);
 });
 
 /** Long enough to truncate in the desk sidebar and the phone menu page alike */
@@ -131,7 +131,7 @@ for (const [layout, viewport] of [
 
     await page.setViewportSize(viewport);
     if (layout === "phone") {
-      await page.getByRole("button", { name: "Menu", exact: true }).click();
+      await openPhoneMenu(page);
     }
     // The pin is hidden while its row is hovered or holds focus, and the
     // menu hands focus back to the row's "⋮": park both elsewhere
@@ -175,7 +175,7 @@ test("the list is on a phone's menu page", async ({ page }) => {
   await twoProjects(page);
   await page.setViewportSize(PHONE);
 
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await expect(projectRow(page, "alpha")).toBeVisible();
   await projectRow(page, "alpha").click();
 
@@ -325,7 +325,7 @@ for (const [layout, viewport] of [
 
     await page.setViewportSize(viewport);
     if (layout === "phone") {
-      await page.getByRole("button", { name: "Menu", exact: true }).click();
+      await openPhoneMenu(page);
     }
 
     const offMiddle = await projectRow(page, "alpha").evaluate((button) => {

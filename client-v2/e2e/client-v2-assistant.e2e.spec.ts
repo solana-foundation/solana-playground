@@ -11,8 +11,8 @@ import {
   stubSession,
   test,
 } from "./fixtures";
-import { lineOf, linesOn } from "./telemetry";
-import { DESK, PHONE } from "./viewports";
+import { lineOf, linesOn, linesRead } from "./telemetry";
+import { DESK, PHONE, waitForPhonePage } from "./viewports";
 
 /**
  * The assistant's composer: the model it names, sending without a key,
@@ -279,6 +279,7 @@ test("client-v2-assistant: Stopping a turn is reported once", async ({
   await expect.poll(() => lineOf(lines, "assistant_turn_stopped")).toBeTruthy();
   // A moment more, so a second copy fails the test instead of passing unread
   await page.waitForTimeout(300);
+  await linesRead(lines);
   expect(
     lines.filter((l) =>
       l.startsWith("[telemetry:event] assistant_turn_stopped ")
@@ -341,6 +342,7 @@ test.describe("Connect a model", () => {
       await page.setViewportSize(DESK);
       await openProject(page, "connect-phone");
       await page.setViewportSize(PHONE);
+      await waitForPhonePage(page, "Work");
       await page.getByRole("radio", { name: "Chat" }).click();
       const work = page.getByRole("region", { name: "Work" });
       await expect(work).toBeInViewport();
@@ -459,6 +461,7 @@ const openOnPhone = async (page: Page, name: string) => {
   await page.setViewportSize(DESK);
   await openProject(page, name);
   await page.setViewportSize(PHONE);
+  await waitForPhonePage(page, "Work");
   await page.getByRole("radio", { name: "Chat" }).click();
   await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
 };
@@ -533,7 +536,12 @@ test.describe("The thread", () => {
 
   test("client-v2-assistant: Reading back during an answer", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "On Firefox one mouse.wheel scrolls about 270 px whatever its delta, so the wheel never reaches the thread's top"
+    );
     await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, answer);
     await openProject(page, "thread-read-back");
 
@@ -586,7 +594,12 @@ test.describe("The thread", () => {
   // off-screen, since a new message did not turn following back on
   test("a message sent while scrolled up brings the reply into view", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "On Firefox one mouse.wheel scrolls about 270 px whatever its delta, so the wheel never reaches the thread's top"
+    );
     await stubSession(page);
     await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) =>
       route.fulfill({
@@ -674,6 +687,7 @@ test.describe("The thread", () => {
       .poll(() => lineOf(lines, "assistant_approval_answered"))
       .toBeTruthy();
     await page.waitForTimeout(300);
+    await linesRead(lines);
     const answered = lines.filter((l) =>
       l.startsWith("[telemetry:event] assistant_approval_answered ")
     );
@@ -858,6 +872,7 @@ test("assistant-composer-context: Remove an open tab from the context", async ({
     expect(body).not.toContain(LIB_RS);
   }
   await expect(chip(page, "lib.rs")).toHaveCount(0);
+  await linesRead(lines);
   expect(
     lines.filter((line) => line.includes("assistant_file_chip_removed"))
   ).toHaveLength(1);

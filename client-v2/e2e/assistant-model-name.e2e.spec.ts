@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { expect, LONG, startProject, stubAiStatus, test } from "./fixtures";
-import { PHONE } from "./viewports";
+import { PHONE, waitForPhonePage } from "./viewports";
 
 /**
  * A long model name in the composer, laid out by a real browser: unit tests
@@ -70,6 +70,7 @@ test("assistant-model-name: Long name in the composer, desktop and phone", async
   await expectCutWithin(32)(page);
 
   await page.setViewportSize(PHONE);
+  await waitForPhonePage(page, "Work");
   await page.getByRole("radio", { name: "Chat" }).click();
   await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
   await page.keyboard.press("Escape");

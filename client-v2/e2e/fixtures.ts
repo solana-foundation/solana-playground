@@ -196,6 +196,16 @@ const startOnPublicDevnet = (context: BrowserContext) =>
     );
   });
 
+/**
+ * Lets the page read and write the clipboard. Chromium needs the permissions;
+ * Firefox rejects their names ("Unknown permission: clipboard-read") and
+ * allows the async clipboard without them.
+ */
+export const grantClipboard = async (context: BrowserContext) => {
+  if (context.browser()?.browserType().name() !== "chromium") return;
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+};
+
 export const test = base.extend<{ seededPage: Page }>({
   context: async ({ context }, use) => {
     await startOnPublicDevnet(context);
@@ -203,11 +213,17 @@ export const test = base.extend<{ seededPage: Page }>({
   },
   // `E2E_CPU_THROTTLE=<n>` slows the test's page `n` times, to show a race
   // that only the runner hits (`docs/testing.md`, "Parallel runs")
-  page: async ({ page }, use) => {
+  page: async ({ page, browserName }, use) => {
     const rate = Number(process.env.E2E_CPU_THROTTLE ?? 1);
     if (!(Number.isFinite(rate) && rate >= 1)) {
       throw new Error(
         `E2E_CPU_THROTTLE must be a number of 1 or more, got "${process.env.E2E_CPU_THROTTLE}".`
+      );
+    }
+    // The throttle goes through CDP, which only Chromium speaks
+    if (rate > 1 && browserName !== "chromium") {
+      throw new Error(
+        `E2E_CPU_THROTTLE works on Chromium only; run it with --project=chromium, not ${browserName}.`
       );
     }
     if (rate > 1) {
