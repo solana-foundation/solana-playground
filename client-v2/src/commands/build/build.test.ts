@@ -180,6 +180,9 @@ describe("commands/build/build", () => {
 
       expect(isStopped(err)).toBe(false);
       expect((err as Error).message).toBe("Server request failed");
+      expect(utils.PgProgramInfo.update).toHaveBeenCalledWith({
+        lastBuildFailed: true,
+      });
     });
   });
 });

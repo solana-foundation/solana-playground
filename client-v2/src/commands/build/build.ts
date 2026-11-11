@@ -39,6 +39,8 @@ export const build = createCmd({
         // The aborted request fails; say it was stopped, not that it failed.
         // Only "Stopped.": the server may still finish, its reply is not kept
         throwIfStopped(signal, STOPPED);
+        // Deploy's stale-build guard reads it, so the previous binary is not shipped
+        PgProgramInfo.update({ lastBuildFailed: true });
         throw e;
       });
       // A reply that lands after a stop is dropped: nothing of it is kept
