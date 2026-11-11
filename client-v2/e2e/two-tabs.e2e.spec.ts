@@ -63,6 +63,13 @@ const fakeAccount = async (
   const state = {
     conflicts: 0,
     rejectPuts: false,
+    /**
+     * Another device's files, written over the row just before this
+     * browser's next upload of lib.rs reaches it. Set on the row directly, a read that
+     * was already on its way (the load's reconcile, on a slow runner) took
+     * them before the test typed, and there was no overlap left to answer
+     */
+    movesOnAtPut: null as Record<string, string> | null,
     deleted: false,
     putsAfterDelete: 0,
   };
@@ -117,6 +124,13 @@ const fakeAccount = async (
       }
       if (opts.putDelayMs) {
         await new Promise((done) => setTimeout(done, opts.putDelayMs));
+      }
+      // The upload of this browser's edit to lib.rs, not another write
+      const sendsLib = (body.changed?.[LIB] ?? body.files?.[LIB]) !== undefined;
+      if (state.movesOnAtPut && sendsLib) {
+        row.snapshot = { files: state.movesOnAtPut };
+        row.updatedAt = stamp();
+        state.movesOnAtPut = null;
       }
       // The server's compare-and-swap: a write names the version it was
       // made against, and anything else is refused
@@ -302,13 +316,13 @@ test("taking the other version replaces a file that is already open", async ({
   context,
 }) => {
   test.setTimeout(180_000);
-  const { row, state, stamp } = await fakeAccount(context);
+  const { state } = await fakeAccount(context);
   const page = await context.newPage();
   await openShared(page);
 
-  // Another device moves the row on, and this one's next upload is refused
-  row.snapshot = { files: { [LIB]: "// theirs\n" } };
-  row.updatedAt = stamp();
+  // Another device moves the row on just before this one's upload, which is
+  // refused
+  state.movesOnAtPut = { [LIB]: "// theirs\n" };
   state.rejectPuts = true;
 
   // On the line the other device changed: lines that merge cleanly stay
