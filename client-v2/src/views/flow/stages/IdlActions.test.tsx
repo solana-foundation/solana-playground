@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
   error: vi.fn(),
   idl: null as unknown,
   subscribedTo: vi.fn(),
+  setStage: vi.fn(),
 }));
+
+vi.mock("../state/stage", () => ({ PgFlow: { setStage: mocks.setStage } }));
 
 vi.mock("../../../utils", () => ({
   PgCommon: { getDataUrl: () => "data:application/json," },
@@ -49,7 +52,11 @@ vi.mock("@/shared/lib/logger", () => ({
   }),
 }));
 
-import IdlActions, { useIdlName } from "./IdlActions";
+import IdlActions, {
+  loadIdlFile,
+  openInteract,
+  useIdlName,
+} from "./IdlActions";
 
 const COUNTER_IDL = JSON.stringify({ name: "counter", instructions: [] });
 
@@ -315,6 +322,24 @@ describe("IdlActions on a stage that lists the IDL", () => {
     expect(
       await screen.findByText("That file is not an Anchor IDL.")
     ).toBeTruthy();
+  });
+
+  // The guide's drop zone loads through the same door as Upload IDL
+  it("loadIdlFile loads an IDL and refuses a file that is not one", async () => {
+    mocks.warn.mockClear();
+    expect(
+      await loadIdlFile(jsonFile(JSON.stringify({ instructions: [] })))
+    ).toBe(true);
+    expect(mocks.update).toHaveBeenCalledWith({ idl: { instructions: [] } });
+
+    expect(await loadIdlFile(jsonFile("not json"))).toBe(false);
+    expect(mocks.update).toHaveBeenCalledOnce();
+    expect(mocks.warn).toHaveBeenCalledOnce();
+  });
+
+  it("openInteract shows Interact", () => {
+    openInteract();
+    expect(mocks.setStage).toHaveBeenCalledWith("interact");
   });
 
   const IdlName = () => (

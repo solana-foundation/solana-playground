@@ -1042,6 +1042,72 @@ describe("PgFlow.reduce, restoring a workspace after a reload", () => {
     expect(s.buildSettled).toBe("done");
   });
 
+  it("marks Deploy done when the cluster answers after the verdict", () => {
+    const built = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "restore",
+      built: false,
+      deployed: false,
+    });
+    const s = PgFlow.reduce(built, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(s.deploy).toBe("done");
+    expect(s.interact).toBe("active");
+  });
+
+  it("keeps a failed deploy of this session over the cluster's answer", () => {
+    const failed = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "deploy-finish",
+      ok: false,
+      from: "command",
+    });
+    const s = PgFlow.reduce(failed, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(s.deploy).toBe("failed");
+    // The program is on the cluster all the same
+    expect(s.interact).toBe("active");
+  });
+
+  it("leaves a deploy in flight running", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "deploy-start",
+      from: "command",
+    });
+    const s = PgFlow.reduce(running, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(s.deploy).toBe("running");
+  });
+
+  it("keeps Deploy offered after a build when only the verdict comes", () => {
+    const built = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "build-finish",
+      failed: false,
+      errorCount: 0,
+      ms: 1,
+    });
+    const s = PgFlow.reduce(built, { type: "restore", built: false });
+    expect(s.deploy).toBe("active");
+  });
+
+  it("hands back the same state when nothing moves", () => {
+    const s = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(
+      PgFlow.reduce(s, { type: "restore", built: false, deployed: true })
+    ).toBe(s);
+  });
+
   it("does not overwrite a build that is running right now", () => {
     const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
       type: "build-start",
@@ -1066,6 +1132,7 @@ describe("PgFlow.init, seeding a reloaded page", () => {
     );
     const buildOutputModule = await mockedBuildOutput();
     let workspaceChange: (() => void) | undefined;
+    let programInfoChange: (() => void) | undefined;
     let onChainChange: (() => void) | undefined;
 
     vi.mocked(PgCommand.build.onDidStart).mockReturnValue({
@@ -1087,6 +1154,10 @@ describe("PgFlow.init, seeding a reloaded page", () => {
       workspaceChange = cb;
       return { dispose: vi.fn() };
     });
+    vi.mocked(PgProgramInfo.onDidChange).mockImplementation((cb) => {
+      programInfoChange = () => cb(PgProgramInfo);
+      return { dispose: vi.fn() };
+    });
     vi.mocked(PgProgramInfo.onDidChangeOnChain).mockImplementation((cb) => {
       onChainChange = () => cb(PgProgramInfo.onChain);
       return { dispose: vi.fn() };
@@ -1097,33 +1168,120 @@ describe("PgFlow.init, seeding a reloaded page", () => {
       sub,
       reset: () =>
         requireFor("the workspace change listener")(workspaceChange)(),
-      onChainArrived: () =>
-        requireFor("the on-chain change listener")(onChainChange)(),
+      /** Any field of the program info changed, the file read among them */
+      programInfoChanged: () =>
+        requireFor("the program info change listener")(programInfoChange)(),
+      /** The cluster answered for this program */
+      onChainArrived: () => {
+        requireFor("the on-chain change listener")(onChainChange)();
+        // `onChain` is a field of the program info: its change fires both
+        requireFor("the program info change listener")(programInfoChange)();
+      },
     };
   };
 
+  /** The mocked program info, where the real class has getters */
+  const programInfo = async () =>
+    (
+      (await import("../../../utils")) as unknown as {
+        PgProgramInfo: {
+          lastBuildFailed: boolean | null | undefined;
+          onChain: { deployed: boolean } | null | undefined;
+        };
+      }
+    ).PgProgramInfo;
+
+  afterEach(async () => {
+    const info = await programInfo();
+    info.lastBuildFailed = undefined;
+    info.onChain = undefined;
+  });
+
   it("reads Deploy and Interact back from the on-chain program", async () => {
-    // `onChain` is a getter on the real class, a plain field on the mock
-    const { PgProgramInfo } = (await import("../../../utils")) as unknown as {
-      PgProgramInfo: {
-        lastBuildFailed: boolean | null;
-        onChain: { deployed: boolean } | null;
-      };
-    };
+    const info = await programInfo();
     const wiring = await initWithCapturedCallbacks();
     wiring.reset();
 
     // The workspace built cleanly and its program is live on the cluster.
-    PgProgramInfo.lastBuildFailed = false;
-    PgProgramInfo.onChain = { deployed: true };
+    info.lastBuildFailed = false;
+    info.onChain = { deployed: true };
     wiring.onChainArrived();
 
     expect(PgFlow.state.build).toBe("done");
     expect(PgFlow.state.deploy).toBe("done");
     expect(PgFlow.state.interact).toBe("active");
+    wiring.sub.dispose();
+  });
 
-    PgProgramInfo.lastBuildFailed = null;
-    PgProgramInfo.onChain = null;
+  /**
+   * The verdict is in `program-info.json`; the on-chain check waits on the
+   * cluster, which may be slow or not answer at all. Deploy is offered from
+   * the stored verdict alone.
+   */
+  it("offers Deploy from the stored build verdict before the cluster answers", async () => {
+    const info = await programInfo();
+    const wiring = await initWithCapturedCallbacks();
+    wiring.reset();
+
+    info.lastBuildFailed = false;
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.build).toBe("done");
+    expect(PgFlow.state.deploy).toBe("active");
+
+    // The cluster answers later: the program is already there
+    info.onChain = { deployed: true };
+    wiring.onChainArrived();
+
+    expect(PgFlow.state.deploy).toBe("done");
+    expect(PgFlow.state.interact).toBe("active");
+    wiring.sub.dispose();
+  });
+
+  it("offers Deploy when the cluster answers before the verdict is read", async () => {
+    const info = await programInfo();
+    const wiring = await initWithCapturedCallbacks();
+    wiring.reset();
+
+    info.onChain = { deployed: false };
+    wiring.onChainArrived();
+    expect(PgFlow.state.build).toBe("upcoming");
+
+    info.lastBuildFailed = false;
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.build).toBe("done");
+    expect(PgFlow.state.deploy).toBe("active");
+    wiring.sub.dispose();
+  });
+
+  it("reads nothing into program info that has not loaded yet", async () => {
+    const wiring = await initWithCapturedCallbacks();
+    wiring.reset();
+
+    // The getters answer `undefined` before the first read of the file
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.build).toBe("upcoming");
+    expect(PgFlow.state.deploy).toBe("upcoming");
+    wiring.sub.dispose();
+  });
+
+  /**
+   * `onChain` keeps the previous program's answer until the new fetch
+   * resolves. The next project's verdict, read meanwhile, must not take it.
+   */
+  it("does not give a switched-to project the last one's deployment", async () => {
+    const info = await programInfo();
+    const wiring = await initWithCapturedCallbacks();
+    info.onChain = { deployed: true };
+    wiring.reset();
+
+    info.lastBuildFailed = false;
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.deploy).toBe("active");
+    expect(PgFlow.state.interact).toBe("upcoming");
     wiring.sub.dispose();
   });
 });
@@ -1225,7 +1383,7 @@ describe("PgFlow.init, reading whether the project has a program", () => {
     };
     explorer = utils.PgExplorer;
     hasProgram = utils.PgFramework.hasProgram;
-    vi.mocked(utils.PgProgramInfo.onDidChangeOnChain).mockReturnValue({
+    vi.mocked(utils.PgProgramInfo.onDidChange).mockReturnValue({
       dispose: vi.fn(),
     });
     EVENTS.forEach((name) => {

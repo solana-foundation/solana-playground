@@ -181,8 +181,8 @@ Optional. Without them the app uses the public Solana endpoints.
 
 | Variable | Value | In Doppler | Set in |
 | --- | --- | --- | --- |
-| `REACT_APP_SERVER_URL` | Leave unset: builds go through this deployment's `/api/build-server`, which needs a GitHub sign-in and records each build in `build_audit` | Unmasked | |
-| `PG_BUILD_SERVER_URL` | `<BUILD_SERVER_URL>`, no trailing slash: where `/api/build-server` forwards builds. Unset, the Solana Foundation's server | Unmasked | Step 6 |
+| `REACT_APP_SERVER_URL` | `/api/build-server`, exactly. **Required**: builds go through this deployment's own route, which needs a GitHub sign-in and records each build in `build_audit` | Unmasked | Step 6 |
+| `PG_BUILD_SERVER_URL` | `<BUILD_SERVER_URL>`, no trailing slash: where `/api/build-server` forwards builds. **Required**: unset, the route refuses every build | Unmasked | Step 6 |
 | `PG_BUILD_SERVER_API_KEY` | The build server's `PG_API_KEY`, sent as `x-api-key`. Unset, no key is sent and production reports an error once per instance | Masked | Step 6 |
 | `REACT_APP_SERVER_UNSTABLE` | Never `true`: a Vercel build with it fails | | |
 | `REACT_APP_VERCEL_ENV`, `REACT_APP_VERCEL_GIT_COMMIT_SHA` | Never: `scripts/vercel-build.sh` sets both | | |
@@ -381,7 +381,7 @@ add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
 
 **Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
 `AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
-`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `PG_BUILD_SERVER_URL` and `PG_BUILD_SERVER_API_KEY`, plus any optional ones you set,
+`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `REACT_APP_SERVER_URL`, `PG_BUILD_SERVER_URL` and `PG_BUILD_SERVER_API_KEY`, plus any optional ones you set,
 with no `AGENT_*`, `DATABASE_URL` or `AUTH_OAUTH_PROXY_*` name. Only the Masked ones carry the Secret badge in the
 dashboard.
 

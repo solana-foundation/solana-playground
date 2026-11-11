@@ -244,23 +244,15 @@ export const sourcesEnv = () => ({
 });
 
 /**
- * The Solana Foundation's build server, which `/api/build-server` forwards to.
- * The client's `FOUNDATION_DIRECT_ENDPOINT` names the same host; a test holds
- * the two together.
- */
-export const DEFAULT_BUILD_SERVER_URL =
-  "https://playground-server-dot-analytics-324114.de.r.appspot.com";
-
-/**
  * Where `/api/build-server` forwards builds, and the key it proves itself
- * with. The key is the build server's `PG_API_KEY`; unset, no header is sent,
- * which a server without the check accepts.
+ * with. The URL has no default: the build server's host lives in deployment
+ * configuration only, as `REACT_APP_SERVER_URL` does for the client, and the
+ * route refuses to build without it. The key is the build server's
+ * `PG_API_KEY`; unset, no header is sent, which a server without the check
+ * accepts.
  */
 export const buildServerEnv = () => ({
-  URL: (read("PG_BUILD_SERVER_URL") || DEFAULT_BUILD_SERVER_URL).replace(
-    /\/+$/,
-    ""
-  ),
+  URL: read("PG_BUILD_SERVER_URL")?.replace(/\/+$/, "") || undefined,
   // A trailing newline pasted into a secret would never match the server's
   API_KEY: read("PG_BUILD_SERVER_API_KEY")?.trim() || undefined,
 });

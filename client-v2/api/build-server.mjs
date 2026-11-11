@@ -1,8 +1,9 @@
 /**
  * The way to the Solana Foundation's build server (HOO-2422).
  *
- * The client's default build server is this route on its own origin; it
- * joins the build server's paths onto it (`/api/build-server/build`), and
+ * A deployment points its client here with `REACT_APP_SERVER_URL=/api/build-server`
+ * and names the build server in `PG_BUILD_SERVER_URL`, without which every
+ * build is refused. The client joins the build server's paths onto this route (`/api/build-server/build`), and
  * `vercel.json` rewrites the subtree here with the remainder in `?path=`, as
  * it does for `/api/auth`. Only the paths the client calls are forwarded
  * (`features/build-server`).
@@ -181,12 +182,13 @@ const programUuidOf = (request, answer) => {
  *   isAllowedOrigin: typeof isAllowedOrigin;
  *   query: (text: string, params?: unknown[]) => Promise<{ rows: any[] }>;
  *   fetch: typeof fetch;
- *   env: () => { URL: string; API_KEY?: string };
+ *   env: () => { URL?: string; API_KEY?: string };
  *   isProduction: () => boolean;
  * }} deps
  */
 export const handleWith = (deps) => {
   let warnedOpen = false;
+  let warnedUnset = false;
 
   /**
    * A production deployment with no key leaves the build server open to
@@ -222,6 +224,24 @@ export const handleWith = (deps) => {
 
     if (route.kind === "deploy" && !isUuid(route.programId)) {
       return sendJson(res, 404, { error: "Not a build server route." });
+    }
+
+    // No default host: a deployment that forgot the variable says so,
+    // reported once per instance, rather than guessing where to send code
+    const { URL: base, API_KEY } = deps.env();
+    if (!base) {
+      if (!warnedUnset) {
+        warnedUnset = true;
+        log.error(
+          new Error("PG_BUILD_SERVER_URL is not set: builds are refused"),
+          { report: true }
+        );
+      }
+      return sendJson(res, 503, {
+        error:
+          "This deployment has no build server configured, so it cannot " +
+          "build. Pick another build server in Settings.",
+      });
     }
 
     // A caller who leaves stops the build server's request too. Listening
@@ -309,7 +329,6 @@ export const handleWith = (deps) => {
             durationMs: Date.now() - started,
           });
 
-    const { URL: base, API_KEY } = deps.env();
     warnIfOpen(API_KEY);
     /** @type {Record<string, string>} */
     const headers = { accept: req.headers.accept ?? "*/*" };

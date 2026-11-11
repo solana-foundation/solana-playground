@@ -2,7 +2,7 @@ import type { Idl } from "@coral-xyz/anchor";
 
 import { createLogger } from "@/shared/lib/logger";
 
-import { FOUNDATION_ENDPOINT } from "../settings/server/default-endpoint";
+import { BUILD_SERVER_ROUTE } from "../settings/server/default-endpoint";
 import { PgCommon } from "./common";
 import type { TupleFiles } from "./explorer";
 import { PgServerError, UNREADABLE_BODY } from "./server-error";
@@ -55,7 +55,7 @@ export class PgServer {
       idl: Option<Idl>;
     }
 
-    const isRoute = PgSettings.server.endpoint === FOUNDATION_ENDPOINT;
+    const isRoute = PgSettings.server.endpoint === BUILD_SERVER_ROUTE;
     const body = isRoute
       ? req
       : { files: req.files, uuid: req.uuid, flags: req.flags };

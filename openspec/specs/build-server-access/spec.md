@@ -9,18 +9,19 @@ who reads its URL.
 
 ### Requirement: Builds go through the deployment's own route
 
-The client's default build server SHALL be `/api/build-server` on the origin
-that served the client. A stored or configured address naming the Solana
-Foundation's build server host itself SHALL be read as the route. The route
-SHALL forward only `POST /build`, `GET /deploy/<uuid>`, `POST /unstable/build`
-and `GET /unstable/deploy/<uuid>` to the configured build server, keeping the
+A deployment with sign-in SHALL point its client at `/api/build-server` on
+the origin that served the client, by setting `REACT_APP_SERVER_URL` to that
+path, and SHALL name the build server in `PG_BUILD_SERVER_URL`; no source file
+names the build server's host. Without `PG_BUILD_SERVER_URL` the route SHALL
+answer every request with `503` and call no server. The route SHALL forward
+only `POST /build`, `GET /deploy/<uuid>`, `POST /unstable/build` and
+`GET /unstable/deploy/<uuid>` to the configured build server, keeping the
 build server's status and content type and the bytes of its answer, and SHALL
 answer `404` to any other path or a deploy id that is not a UUID, `405` to
 another method, `413` to a body over 1 MiB and `400` to a build body that is
 not JSON. A build server that refuses the route itself (`401` or `403`) SHALL
 be answered with `502` and reported, since it is a misconfiguration and not
-the user's. Sharing SHALL NOT go through the route: in development, while the
-build server is the route, shares go to the share server.
+the user's.
 
 #### Scenario: A build is forwarded (manual)
 
@@ -36,16 +37,15 @@ build server is the route, shares go to the share server.
 
 #### Scenario: A profile on the Solana Foundation option (manual)
 
-- **WHEN** a profile that stored the "Solana Foundation" build server loads
-  the client
+- **WHEN** a profile on the "Solana Foundation" build server loads a client
+  deployed with `REACT_APP_SERVER_URL=/api/build-server`
 - **THEN** builds go to `/api/build-server` on the client's origin
 
-#### Scenario: A profile that stored the server's own host (manual)
+#### Scenario: No build server configured
 
-- **WHEN** a profile stored the Foundation server's direct address, as the
-  option or as a custom URL
-- **THEN** builds go to `/api/build-server`, and any other custom URL is
-  left as it was
+- **WHEN** a build reaches the route on a deployment without
+  `PG_BUILD_SERVER_URL`
+- **THEN** the route answers `503` and calls no server
 
 ### Requirement: Only a signed-in GitHub user builds
 

@@ -3,6 +3,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { requireFor } from "../../../test-utils/require-for";
 import type { BaseBuildProps, BuildSurfaceView } from "./BaseBuild";
 import BaseBuild from "./BaseBuild";
 import type { DiagnosticView } from "./build-view";
@@ -59,7 +60,10 @@ const props = (
   onSignIn: vi.fn(),
   onStop: vi.fn(),
   idlActions: null,
+  idlGuide: <button aria-label={GUIDE}>{GUIDE}</button>,
 });
+
+const GUIDE = "Build the IDL locally";
 
 const brandButtons = (container: HTMLElement) =>
   container.querySelectorAll('[data-slot="brand-button"]');
@@ -90,10 +94,11 @@ describe("BaseBuild", () => {
     expect(screen.queryByRole("button", { name: "Download .so" })).toBeNull();
   });
 
-  it("offers the downloads after a successful build", () => {
+  it("offers the downloads and the IDL guide after a successful build", () => {
     render(<BaseBuild {...withDownloads({ kind: "succeeded" })} />);
 
     expect(screen.getByRole("button", { name: "Download .so" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: GUIDE })).toBeTruthy();
   });
 
   /** The prototype's empty stage: no icon tile, the brand pill to press */
@@ -347,16 +352,6 @@ describe("BaseBuild", () => {
       expect(p.onContinue).toHaveBeenCalled();
     });
 
-    it("says why", () => {
-      render(<BaseBuild {...changed()} />);
-
-      expect(
-        screen.getByText(
-          "Your code changed after the last build. Build again before you deploy."
-        )
-      ).toBeTruthy();
-    });
-
     it("shows the rebuild running on the brand pill", () => {
       const p = changed();
       p.building = true;
@@ -377,35 +372,60 @@ describe("BaseBuild", () => {
     });
   });
 
+  // Scenario "A successful build" (client-v2-idl-build-guide), with and without an IDL held, and after an edit
   it.each([
-    [true, "The program and its IDL are ready to deploy."],
-    [false, "The program is ready to deploy."],
+    {
+      when: "an IDL held",
+      hasIdl: true,
+      sourceChanged: false,
+      line: "The program is ready to deploy. The Playground's stable build server produces no IDL, so Interact keeps the IDL it already holds.",
+    },
+    {
+      when: "no IDL held",
+      hasIdl: false,
+      sourceChanged: false,
+      line: "The program is ready to deploy. The Playground's stable build server produces no IDL: build it locally and upload it to call the program from Interact.",
+    },
+    {
+      when: "the code changed",
+      hasIdl: false,
+      sourceChanged: true,
+      line: "Your code changed after the last build. Build again before you deploy. The Playground's stable build server produces no IDL: build it locally and upload it to call the program from Interact.",
+    },
   ])(
-    "names the IDL in the success line only when there is one (%s)",
-    (hasIdl, line) => {
+    "says the build produces no IDL ($when)",
+    ({ hasIdl, sourceChanged, line }) => {
       const p = props({ kind: "succeeded" });
       p.hasIdl = hasIdl;
+      p.sourceChanged = sourceChanged;
       render(<BaseBuild {...p} />);
 
       expect(screen.getByText(line)).toBeTruthy();
     }
   );
 
-  // The row carries Download .so either way; Download IDL leaves itself out
-  // without an IDL (`IdlActions`), so the stage passes whatever it is given
+  // Scenario "Download without an IDL" (client-v2-idl-build-guide)
+  // The guide keeps one place in the tree, so its dialog survives an IDL
+  // loading from inside it; CSS order moves it
   it.each([
-    [true, 1],
-    [false, 1],
-  ])("draws the downloads row with or without an IDL (%s)", (hasIdl, rows) => {
-    const p = props({ kind: "succeeded" });
-    p.hasIdl = hasIdl;
-    p.idlActions = <a href="#idl">Download IDL</a>;
-    render(<BaseBuild {...p} />);
+    [false, "order-first"],
+    [true, "order-last"],
+  ])(
+    "puts the IDL guide first in the downloads row only without an IDL (%s)",
+    (hasIdl, order) => {
+      const p = withDownloads({ kind: "succeeded" });
+      p.hasIdl = hasIdl;
+      render(<BaseBuild {...p} />);
 
-    expect(
-      screen.queryAllByRole("link", { name: "Download IDL" })
-    ).toHaveLength(rows);
-  });
+      const row = requireFor("the downloads row")(
+        screen.getByRole("button", { name: "Download .so" }).parentElement
+      );
+      const guide = requireFor("the guide's slot")(
+        Array.from(row.children).find((child) => child.textContent === GUIDE)
+      );
+      expect(guide.className).toBe(order);
+    }
+  );
 
   it("says a build that never reached the compiler did not start (BUILD-04)", async () => {
     const p = props({

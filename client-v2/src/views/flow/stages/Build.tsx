@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { PgSession } from "@/features/auth";
 import { DownloadProgram } from "@/features/cli-deploy";
+import { IdlBuildGuide } from "@/features/idl-build-guide";
 import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -23,7 +24,7 @@ import { PgFlow } from "../state/stage";
 import BaseBuild from "./BaseBuild";
 import { buildSurface, ownOutput } from "./build-surface";
 import { failedView } from "./build-view";
-import IdlActions from "./IdlActions";
+import IdlActions, { loadIdlFile, openInteract } from "./IdlActions";
 import { toldByStage } from "./stage-failure";
 import { useSlowBuild } from "./use-slow-build";
 
@@ -125,6 +126,13 @@ const Build = () => {
           .catch(toldByStage("build"))
           .catch(reportButtonFailure("build"));
       }}
+      idlGuide={
+        <IdlBuildGuide
+          surface="build"
+          onLoadIdl={loadIdlFile}
+          onInteract={openInteract}
+        />
+      }
     />
   );
 };

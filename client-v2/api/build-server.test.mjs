@@ -203,6 +203,20 @@ describe("/api/build-server", () => {
     assert.equal("x-api-key" in init.headers, false);
   });
 
+  it("refuses every build without PG_BUILD_SERVER_URL", async () => {
+    const d = deps({ env: () => ({ URL: undefined, API_KEY: "k3y" }) });
+    const handle = handleWith(d);
+
+    for (let i = 0; i < 2; i++) {
+      const res = makeRes();
+      await handle(makeReq({ body: BUILD }), res);
+      assert.equal(res.statusCode, 503);
+      assert.match(JSON.parse(res.body).error, /no build server configured/);
+    }
+    assert.equal(d.fetch.mock.callCount(), 0);
+    assert.equal(d.query.mock.callCount(), 0);
+  });
+
   it("keeps the program UUID the request already had", async () => {
     const d = deps({
       fetch: mock.fn(
