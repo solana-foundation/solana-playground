@@ -2,6 +2,7 @@ import { expect, type Page } from "@playwright/test";
 
 import {
   consoleTrigger,
+  editorTookFocus,
   HELP_TAIL,
   home,
   LONG,
@@ -52,7 +53,7 @@ const reloadOnLight = async (page: Page) => {
   await expect.poll(() => isDark(page)).toBe(false);
   // The editor focuses itself once it reopens the file; wait, so it does not
   // take keys meant for the terminal or the select
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await editorTookFocus(page);
 };
 
 /**

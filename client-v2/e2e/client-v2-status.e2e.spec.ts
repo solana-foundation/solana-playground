@@ -13,6 +13,7 @@ import {
   expect,
   json,
   LONG,
+  reloadAndBoot,
   runInTerminal,
   seedWorkspace,
   startProject,
@@ -110,7 +111,7 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
 
     const down = row(page).getByRole("button", {
       name: "Change cluster, currently devnet, not responding",
@@ -290,7 +291,7 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await expect(
       row(page).getByRole("button", {
         name: "Change cluster, currently devnet, not responding",
@@ -326,7 +327,7 @@ test.describe("on a 1440 px window", () => {
 
     await stallDevnet(page);
     await holdDevnetCalls(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await expect(region(page)).toHaveText("Devnet, not responding", {
       timeout: 15_000,
     });
@@ -352,7 +353,7 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await expect(network(page)).toContainText("Not responding", {
       timeout: 15_000,
     });
@@ -378,7 +379,7 @@ test.describe("on a 1440 px window", () => {
       .filter({ hasText: "Choose a network" });
     await expect(setupRow).toHaveAttribute("data-status", "done");
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await expect(setupRow).toHaveAttribute("data-status", "warn", {
       timeout: 15_000,
     });
@@ -389,7 +390,7 @@ test.describe("on a 1440 px window", () => {
     seededPage: page,
   }) => {
     await stallDevnet(page);
-    await page.reload();
+    await reloadAndBoot(page);
     await page.locator("#flow-stage-tab-deploy").click();
     const lines = linesOn(page);
     await notice(page)

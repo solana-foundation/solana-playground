@@ -186,6 +186,56 @@ it("reports a swipe after the last one's report, with no input in between", () =
   expect(onSwipe).toHaveBeenLastCalledWith("work");
 });
 
+// Choosing Chat while the pager scrolled back to Work let the snap carry it
+// on to Preview, reported as a swipe: Work went inert under the composer
+// being typed in (HOO-2585)
+it("keeps its move its own through a click on a control in a page", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "menu", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  rerender(pagerElement({ page: "work", onSwipe }));
+  fireEvent.pointerDown(screen.getByRole("radio", { name: "Chat" }));
+  pager.scrollLeft = 780;
+  fireEvent.scroll(pager);
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).not.toHaveBeenCalled();
+  expect(pager.scrollLeft).toBe(390);
+});
+
+it("keeps its move its own through a tap, which moves no page", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "menu", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  rerender(pagerElement({ page: "work", onSwipe }));
+  fireEvent.touchStart(pager, { touches: [{ clientX: 200, clientY: 300 }] });
+  fireEvent.touchEnd(pager, {
+    changedTouches: [{ clientX: 202, clientY: 301 }],
+  });
+  pager.scrollLeft = 780;
+  fireEvent.scroll(pager);
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).not.toHaveBeenCalled();
+  expect(pager.scrollLeft).toBe(390);
+});
+
+it("hands its move to the user at a drag, and reports the swipe", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "menu", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  rerender(pagerElement({ page: "work", onSwipe }));
+  fireEvent.touchStart(pager, { touches: [{ clientX: 300, clientY: 300 }] });
+  pager.scrollLeft = 780;
+  fireEvent.scroll(pager);
+  fireEvent.touchEnd(pager, {
+    changedTouches: [{ clientX: 40, clientY: 300 }],
+  });
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).toHaveBeenCalledWith("preview");
+});
+
 it("hands its move to the user at a wheel, and reports the swipe", () => {
   vi.useFakeTimers();
   const onSwipe = vi.fn();

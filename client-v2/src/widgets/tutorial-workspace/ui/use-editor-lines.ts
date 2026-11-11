@@ -90,7 +90,9 @@ export const useEditorLines = ({ root, marks, busy }: EditorLines) => {
   const arriving = marks.arriving && !settled;
 
   useEffect(() => {
-    if (!editor || !model) return;
+    // A re-opened workspace disposes the model before the editor reports
+    // its next one: there are no lines to draw on until it does
+    if (!editor || !model || model.isDisposed()) return;
     const plan = decorationsFor(
       { written, arriving, landing, error },
       model.getLineCount(),
