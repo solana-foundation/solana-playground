@@ -10,7 +10,8 @@ backend stays a build service with no storage of its own.
 ### Requirement: The server serves no share routes
 
 The server SHALL answer `GET /share/{id}` and `POST /new` with 404, in a build with or without the `unstable`
-feature. It SHALL store no project files that a client sends it.
+feature. It SHALL offer no route that stores a project for others to open; the files a build writes are not
+covered by this requirement.
 
 #### Scenario: A share lookup is not found (manual)
 
