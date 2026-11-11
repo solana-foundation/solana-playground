@@ -197,11 +197,14 @@ test.describe("on a phone", () => {
     await expect(cards.first()).toBeVisible();
     // Both boxes in one frame: the pager may still be scrolling to the work
     // page, and two separate reads would see the cards at different places
-    const [first, second] = await cards.evaluateAll((els) =>
-      els.slice(0, 2).map((el) => {
-        const { x, y, height } = el.getBoundingClientRect();
-        return { x, y, height };
-      })
+    // Not `evaluateAll`: over these cards it crashes Playwright 1.65's Firefox 159 content process
+    const [first, second] = await work.evaluate((root) =>
+      Array.from(root.querySelectorAll('[data-slot="action-card"]'))
+        .slice(0, 2)
+        .map((el) => {
+          const { x, y, height } = el.getBoundingClientRect();
+          return { x, y, height };
+        })
     );
     // One column: the second card sits under the first, not beside it
     expect(second.y).toBeGreaterThan(first.y + first.height - 1);

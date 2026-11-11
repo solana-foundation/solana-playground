@@ -99,6 +99,14 @@ const seedThenResize = async (
   await page.setViewportSize(size);
 };
 
+// A click retried mid-scroll can snap the pager to the menu page, leaving Work and its Menu inert
+const openPhoneMenu = async (page: Page) => {
+  await expect(page.getByRole("region", { name: "Work" })).toBeInViewport({
+    ratio: 1,
+  });
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+};
+
 test("client-v2-layout: A resized assistant and an open console", async ({
   seededPage: page,
 }) => {
@@ -525,7 +533,7 @@ test.describe("on a phone", () => {
 
   test("the account is a page of its own on a phone", async ({ page }) => {
     await seedThenNarrow(page);
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     // A tap: the page opens over the row, and the release lands on its foot
     await page.getByRole("button", { name: "Account, signed out" }).click();
     const accountMenu = page.getByRole("menu", { name: "Account" });
@@ -578,7 +586,7 @@ test.describe("on a phone", () => {
     await page.getByRole("button", { name: "Back to the code" }).click();
     await expect(page.locator(".monaco-editor")).toBeInViewport();
 
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     const menu = page.getByRole("region", { name: "Navigation" });
     await expect(menu).toBeInViewport();
     await page.getByRole("button", { name: "Close the menu" }).click();
@@ -696,7 +704,7 @@ test.describe("on a phone", () => {
 
   test("client-v2-layout: Settings on a phone", async ({ page }) => {
     await seedThenNarrow(page);
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     await page
       .getByRole("region", { name: "Navigation" })
       .getByRole("button", { name: /^Change cluster/ })
@@ -725,7 +733,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await seedThenNarrow(page);
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     await page
       .getByRole("region", { name: "Navigation" })
       .getByRole("button", { name: /^Change cluster/ })
@@ -798,7 +806,7 @@ test.describe("on a phone", () => {
     await seedWorkspace(page);
     for (const width of [393, 740]) {
       await page.setViewportSize({ width, height: 852 });
-      await page.getByRole("button", { name: "Menu", exact: true }).click();
+      await openPhoneMenu(page);
       await page
         .getByRole("region", { name: "Navigation" })
         .getByRole("button", { name: "New project", exact: true })
@@ -922,7 +930,7 @@ test("client-v2-layout: The navigation on a narrow window", async ({
   const navigation = page.getByRole("region", { name: "Navigation" });
   for (const width of [720, 740, 767]) {
     await page.setViewportSize({ width, height: 812 });
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     for (const name of ["Home", "New project", "Tutorials", "Programs"]) {
       await expect(
         navigation.getByRole("button", { name, exact: true })
@@ -949,7 +957,7 @@ test("client-v2-layout: The navigation on a narrow window", async ({
 // the navigation handed over, and the settings show over Work
 test("⌘, opens the settings from the phone's menu page", async ({ page }) => {
   await seedThenResize(page, { width: 740, height: 812 });
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await expect(
     page.getByRole("region", { name: "Navigation" })
   ).toBeInViewport();
@@ -2028,10 +2036,13 @@ test.describe("the settings page", () => {
     await expect(list.getByRole("button")).toHaveText(SECTIONS);
 
     // Each setting's control carries its own name: two of one name ("Endpoint"
-    // twice, once) cannot be told apart by a screen reader or a test
-    const names = await settingsPage(page)
-      .locator('[role="combobox"], [role="switch"]')
-      .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+    // twice, once) cannot be told apart by a screen reader or a test.
+    // Not `evaluateAll`: over these controls it crashes Playwright 1.65's Firefox 159 content process
+    const names = await settingsPage(page).evaluate((root) =>
+      Array.from(
+        root.querySelectorAll('[role="combobox"], [role="switch"]')
+      ).map((el) => el.getAttribute("aria-label"))
+    );
     expect(names.length).toBeGreaterThan(5);
     expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);
 
@@ -2227,7 +2238,7 @@ test.describe("the settings page at 1440 by 900", () => {
 
 test("client-v2-layout: The settings page on a phone", async ({ page }) => {
   await seedThenResize(page, PHONE);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await page
     .getByRole("region", { name: "Navigation" })
     .getByRole("button", { name: /^Change cluster/ })
