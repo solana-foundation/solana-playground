@@ -26,6 +26,7 @@ const renderCard = (props: Partial<BaseNotEnoughSolProps>) => {
         onRetry={onRetry}
         onAirdrop={onAirdrop}
         onSignIn={onSignIn}
+        onFund={props.onFund}
       />
     </TooltipProvider>
   );
@@ -128,5 +129,51 @@ describe("BaseNotEnoughSol", () => {
     expect(
       screen.getByText("Sign in with GitHub to request SOL.")
     ).toBeTruthy();
+  });
+
+  describe("Send from your wallet", () => {
+    it.each([
+      "signed_out",
+      "no_faucet",
+      "airdrop_off",
+      "airdrop_failed",
+    ] as const)("is offered when the card shows for %s", (reason) => {
+      const onFund = vi.fn();
+      renderCard({ reason, onFund });
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send from your wallet" })
+      );
+
+      expect(onFund).toHaveBeenCalledOnce();
+    });
+
+    it("comes after the web faucet", () => {
+      const { card } = renderCard({ reason: "airdrop_off", onFund: vi.fn() });
+
+      const labels = Array.from(card.querySelectorAll("a, button")).map(
+        (el) => el.textContent
+      );
+      expect(labels.indexOf("Send from your wallet")).toBeGreaterThan(
+        labels.indexOf("Open the web faucet")
+      );
+    });
+
+    it("is offered on a network with no faucet", () => {
+      renderCard({ reason: "no_faucet", cluster: "localnet", onFund: vi.fn() });
+
+      expect(screen.queryByRole("link", { name: /web faucet/ })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Send from your wallet" })
+      ).toBeTruthy();
+    });
+
+    it("is not drawn without a way to fund", () => {
+      renderCard({ reason: "airdrop_off" });
+
+      expect(
+        screen.queryByRole("button", { name: "Send from your wallet" })
+      ).toBeNull();
+    });
   });
 });

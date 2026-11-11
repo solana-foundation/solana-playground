@@ -143,6 +143,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                       markFailureShown(error);
                       PgView.setToast(FaucetRefusedToast, {
                         componentProps: {
+                          address: wallet.publicKey.toBase58(),
                           href: faucetLink({
                             walletAddress: wallet.publicKey.toBase58(),
                             amount:

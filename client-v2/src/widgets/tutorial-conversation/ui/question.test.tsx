@@ -178,6 +178,7 @@ const Lesson = ({ world }: { world: World }) => {
             revealError: vi.fn(),
             showLog: vi.fn(),
             createWallet: vi.fn(),
+            fundFor: vi.fn(() => vi.fn()),
             signIn: vi.fn(),
           }}
         />

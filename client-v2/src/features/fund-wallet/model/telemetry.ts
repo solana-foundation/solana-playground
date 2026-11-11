@@ -10,9 +10,20 @@ export type FundCluster =
   | "localnet"
   | "playnet";
 
+/** The control that opened the Fund dialog */
+export type FundFrom =
+  | "account-menu"
+  | "wallet-chip"
+  /** The Deploy stage's "Not enough SOL" card */
+  | "deploy-card"
+  /** The tutorial's "Not enough devnet SOL" cards */
+  | "tutorial-card"
+  /** The wallet menu's "The faucet is at its limit." toast */
+  | "faucet-toast";
+
 type FundEvents = {
   /** The Fund dialog opened; `from` is the control that opened it. */
-  fund_dialog_opened: { from: "account-menu" | "wallet-chip" };
+  fund_dialog_opened: { from: FundFrom };
   /** The wallet chip's popover asked the faucet for SOL. */
   fund_airdrop_requested: { from: "wallet-chip" };
   /**

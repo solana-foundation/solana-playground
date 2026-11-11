@@ -84,6 +84,7 @@ const handlers = (): TurnHandlers => ({
   copyFailed: vi.fn(),
   showLog: vi.fn(),
   createWallet: vi.fn(),
+  fundFor: vi.fn(() => vi.fn()),
   signIn: vi.fn(),
   apply: vi.fn(),
   keep: vi.fn(),

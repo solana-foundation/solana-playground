@@ -94,6 +94,11 @@ export interface BaseDeployProps {
   /** Deploy again, requesting an airdrop for the short wallet */
   onAirdrop: () => void;
   onSignIn: () => void;
+  /**
+   * "Send from your wallet" for the short wallet at an address: a function
+   * when the Fund dialog funds that wallet, else `undefined` and no button
+   */
+  fundFor?: (address: string) => (() => void) | undefined;
   onSaveKeypair: () => void;
   onDismissBackup: () => void;
   onStaleBuildAnswer: (deploy: boolean) => void;
@@ -593,6 +598,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             onRetry={p.onDeploy}
             onAirdrop={p.onAirdrop}
             onSignIn={p.onSignIn}
+            onFund={p.fundFor?.(view.stop.address)}
           />
         )}
         {view.kind === "failed" && (

@@ -325,8 +325,11 @@ const errorLineOf = (log: string): string | null => {
  */
 const FundsCard = ({
   result,
+  onFund,
 }: {
   result: Extract<Failed, { reason: "no_funds" }>;
+  /** Open the Fund dialog; no button without it */
+  onFund?: () => void;
 }) => {
   const { balance, cost, address } = result.funding;
   return (
@@ -361,7 +364,7 @@ const FundsCard = ({
               </span>
             </WalletAddress>
           </div>
-          <div className="flex">
+          <div className="flex flex-wrap gap-2 max-sm:flex-col max-sm:items-stretch">
             <Button variant="outline" asChild>
               <a
                 href={faucetUrlWith(DEVNET_FAUCET_SOL)("devnet")(address)}
@@ -372,6 +375,11 @@ const FundsCard = ({
                 <ExternalLink aria-hidden="true" className="size-4" />
               </a>
             </Button>
+            {onFund && (
+              <Button variant="outline" onClick={onFund}>
+                Send from your wallet
+              </Button>
+            )}
           </div>
         </>
       }
@@ -440,10 +448,12 @@ const FailedCard = ({
   result,
   exists,
   onRecheck,
+  onFund,
 }: {
   result: Failed;
   exists?: string;
   onRecheck?: () => void;
+  onFund?: () => void;
 }) => {
   if (result.reason === "unconfirmed") {
     return <UnconfirmedCard result={result} onRecheck={onRecheck} />;
@@ -487,7 +497,9 @@ const FailedCard = ({
       />
     );
   }
-  if (result.reason === "no_funds") return <FundsCard result={result} />;
+  if (result.reason === "no_funds") {
+    return <FundsCard result={result} onFund={onFund} />;
+  }
   let title = result.act === "run" ? "Run failed" : "Call failed";
   if (result.reason === "no_wallet") title = "No wallet";
   const error = result.refused?.error;
@@ -545,6 +557,7 @@ const BaseTxResultCard = ({
   account,
   exists,
   onRecheck,
+  onFund,
 }: {
   result: TxResult;
   account?: AccountOnCard;
@@ -552,11 +565,18 @@ const BaseTxResultCard = ({
   exists?: string;
   /** Check again on an unconfirmed result; absent when it is not live */
   onRecheck?: () => void;
+  /** Open the Fund dialog from a short-wallet card */
+  onFund?: () => void;
 }) =>
   result.ok ? (
     <LandedCard result={result} account={account} />
   ) : (
-    <FailedCard result={result} exists={exists} onRecheck={onRecheck} />
+    <FailedCard
+      result={result}
+      exists={exists}
+      onRecheck={onRecheck}
+      onFund={onFund}
+    />
   );
 
 export default BaseTxResultCard;

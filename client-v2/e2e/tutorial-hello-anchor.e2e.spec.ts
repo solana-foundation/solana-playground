@@ -331,6 +331,18 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await expect(feed(page).getByText("Asks the faucet again")).toBeVisible();
     expect(devnet.programs()).toEqual([]);
 
+    // A wallet of one's own is the other way round: the card opens the Fund
+    // dialog, which says so when this browser has no wallet extension
+    await feed(page)
+      .getByRole("button", { name: "Send from your wallet" })
+      .click();
+    const fund = page.getByRole("dialog");
+    await expect(
+      fund.getByText("No wallet extension found in this browser.")
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(fund).toBeHidden();
+
     // Try again, under the red card, asks the faucet again; once it pays,
     // the deploy follows
     devnet.faucet = "ok";

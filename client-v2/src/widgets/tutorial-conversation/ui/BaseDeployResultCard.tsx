@@ -53,6 +53,8 @@ export interface BaseDeployResultCardProps {
   onShowLog: () => void;
   /** Make the Playground wallet, then run the deploy again */
   onCreateWallet: () => Promise<unknown> | void;
+  /** Open the Fund dialog from the short-wallet card; no button without it */
+  onFund?: () => void;
 }
 
 /** Lamports as SOL, to four places at most */
@@ -126,6 +128,7 @@ const BaseDeployResultCard = ({
   open,
   onShowLog,
   onCreateWallet,
+  onFund,
 }: BaseDeployResultCardProps) => {
   if (result.ok) return <LandedCard result={result} onShowLog={onShowLog} />;
   switch (result.reason) {
@@ -156,7 +159,7 @@ const BaseDeployResultCard = ({
               />
             </WalletAddress>
           </div>
-          <div className="flex max-sm:flex-col max-sm:items-stretch">
+          <div className="flex flex-wrap gap-2 max-sm:flex-col max-sm:items-stretch">
             <Button asChild variant="outline">
               <a
                 href={faucetUrlWith(DEVNET_FAUCET_SOL)("devnet")(
@@ -169,6 +172,11 @@ const BaseDeployResultCard = ({
                 <ExternalLink aria-hidden="true" className="size-4" />
               </a>
             </Button>
+            {onFund && (
+              <Button variant="outline" onClick={onFund}>
+                Send from your wallet
+              </Button>
+            )}
           </div>
         </FailedCard>
       );

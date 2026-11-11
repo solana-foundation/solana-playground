@@ -5,6 +5,7 @@ import { openConnectDialog } from "@/app/ConnectDialog";
 import { openShareGistDialogFor, ShareButton } from "@/app/ShareGistDialog";
 import Wallet from "@/components/Wallet";
 import { FeedbackHost } from "@/features/feedback";
+import { FundDialogHost } from "@/features/fund-wallet";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import { useKeybind, useRenderOnChange } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
@@ -720,6 +721,7 @@ const FlowFrame = () => {
 
       <ModalHost />
       <ToastHost />
+      <FundDialogHost />
     </div>
   );
 };

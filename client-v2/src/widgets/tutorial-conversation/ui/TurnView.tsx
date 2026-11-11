@@ -6,7 +6,7 @@ import type {
   Quote,
   TutorialDefinition,
 } from "@/entities/tutorial";
-import type { Turn } from "@/features/tutorial-conversation";
+import type { RunResult, Turn } from "@/features/tutorial-conversation";
 import { shortKey } from "@/shared/lib/short-key";
 import { Button } from "@/shared/ui/button";
 
@@ -68,6 +68,11 @@ export interface TurnHandlers {
   showLog: () => void;
   /** Make the Playground wallet a deploy found missing, then run it again */
   createWallet: (beatId: string) => Promise<unknown> | void;
+  /**
+   * "Send from your wallet" on a "Not enough devnet SOL" card, for the short
+   * wallet's address: `undefined` when the Fund dialog would fund another one
+   */
+  fundFor: (address: string) => (() => void) | undefined;
   /** Sign in with GitHub, for a build the server refused for sign-in */
   signIn: () => Promise<unknown>;
 }
@@ -146,6 +151,14 @@ const withProgram = (act: ActBeat, programId: string | null): ActBeat =>
         ),
       }
     : act;
+
+/** A run's or call's "Send from your wallet", for the wallet it found short */
+const fundOf =
+  (fundFor: TurnHandlers["fundFor"]) =>
+  (result: RunResult): (() => void) | undefined =>
+    !result.ok && result.reason === "no_funds" && "funding" in result
+      ? fundFor(result.funding.address)
+      : undefined;
 
 const linesOf = (content: string | null) => content?.split("\n") ?? [];
 
@@ -327,6 +340,11 @@ const TurnView = ({
             open={turn.open}
             onShowLog={on.showLog}
             onCreateWallet={() => on.createWallet(turn.beatId)}
+            onFund={
+              !turn.result.ok && turn.result.reason === "no_funds"
+                ? on.fundFor(turn.result.address)
+                : undefined
+            }
           />
         );
       }
@@ -344,6 +362,7 @@ const TurnView = ({
           onRecheck={() => on.recheck(turn.beatId)}
           signedIn={signedIn}
           onSignIn={on.signIn}
+          onFund={fundOf(on.fundFor)(turn.result)}
         />
       );
     case "win": {

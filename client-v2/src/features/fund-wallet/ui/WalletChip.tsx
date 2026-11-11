@@ -11,10 +11,10 @@ import {
 } from "@/shared/lib/report-button-failure";
 import { PgConnection, PgWallet } from "@/utils";
 
+import { openFundDialog } from "../model/open";
 import { fundTelemetry } from "../model/telemetry";
 import type { AirdropState } from "./BaseWalletChip";
 import BaseWalletChip from "./BaseWalletChip";
-import FundDialog from "./FundDialog";
 
 export interface WalletChipProps {
   /** Nobody is signed in: a public faucet then asks for GitHub first */
@@ -38,7 +38,6 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
   const { airdrop, faucet } = useAirdrop();
   const [state, setState] = useState<AirdropState>("idle");
   const [received, setReceived] = useState<number | undefined>();
-  const [funding, setFunding] = useState(false);
   // The balance an ask or the web faucet started from, to tell when SOL came
   const from = useRef<number | undefined>(undefined);
 
@@ -118,9 +117,8 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
           });
           setState("away");
         }}
-        onFund={() => setFunding(true)}
+        onFund={() => openFundDialog("wallet-chip")}
       />
-      <FundDialog open={funding} onOpenChange={setFunding} from="wallet-chip" />
     </>
   );
 };

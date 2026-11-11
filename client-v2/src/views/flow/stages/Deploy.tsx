@@ -5,6 +5,7 @@ import { isSignInFailure, PgSession } from "@/features/auth";
 import type { GuideFrom } from "@/features/cli-deploy";
 import { CliDeployGuide } from "@/features/cli-deploy";
 import { PgStageDeploy, useDeployRun, useStageDeploy } from "@/features/deploy";
+import { fundFor } from "@/features/fund-wallet";
 import { ProgramKeypair } from "@/features/program-keypair";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -197,6 +198,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         onSignIn={() =>
           void signInThenDeploy().catch(reportButtonFailure("deploy"))
         }
+        fundFor={fundFor("deploy-card")}
         onSaveKeypair={saveKeypair}
         onDismissBackup={() => PgStageDeploy.answerBackup(false)}
         onStaleBuildAnswer={(answer) => PgStageDeploy.answerStaleBuild(answer)}

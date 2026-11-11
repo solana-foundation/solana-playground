@@ -1,5 +1,5 @@
 /* eslint-disable layers/curry-order, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -45,6 +45,7 @@ const card = (
     open: boolean;
     onShowLog: () => void;
     onCreateWallet: () => void;
+    onFund: () => void;
   }> = {}
 ) =>
   render(
@@ -54,6 +55,7 @@ const card = (
         open={over.open ?? true}
         onShowLog={over.onShowLog ?? vi.fn()}
         onCreateWallet={over.onCreateWallet ?? vi.fn()}
+        onFund={over.onFund}
       />
     </TooltipProvider>
   );
@@ -165,6 +167,28 @@ describe("BaseDeployResultCard", () => {
     );
     expect(faucet.getAttribute("target")).toBe("_blank");
     expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+  });
+
+  it("offers Send from your wallet after Open the web faucet", () => {
+    const onFund = vi.fn();
+    const { container } = card(noFunds, { onFund });
+    const labels = Array.from(container.querySelectorAll("a, button")).map(
+      (el) => el.textContent
+    );
+    expect(labels.indexOf("Send from your wallet")).toBe(
+      labels.indexOf("Open the web faucet") + 1
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send from your wallet" })
+    );
+    expect(onFund).toHaveBeenCalledOnce();
+  });
+
+  it("draws no Send from your wallet without a way to fund", () => {
+    card(noFunds);
+    expect(
+      screen.queryByRole("button", { name: "Send from your wallet" })
+    ).toBeNull();
   });
 
   it("tells an airdrop the faucet refused that the faucet is at its limit", () => {
