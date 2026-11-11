@@ -1087,7 +1087,7 @@ describe("commands/deploy", () => {
         return landTransfer(...args);
       });
     };
-    const printed = () => vi.mocked(PgTerminal.println).mock.calls.join("\n");
+    const printedLines = () => vi.mocked(PgTerminal.println).mock.calls.join("\n");
 
     it("prints no Returned line when every return send is dropped, and says the SOL stayed", async () => {
       fromStandard();
@@ -1097,8 +1097,8 @@ describe("commands/deploy", () => {
       const result = await runDeploy();
 
       expect(result).not.toBeInstanceOf(Error);
-      expect(printed()).not.toContain("Returned");
-      expect(printed()).toContain("stayed in your Playground wallet");
+      expect(printedLines()).not.toContain("Returned");
+      expect(printedLines()).toContain("stayed in your Playground wallet");
       expect(env.pgLamports).toBe(1_000_000_000 + 90_000_000);
     });
 
@@ -1110,7 +1110,7 @@ describe("commands/deploy", () => {
       await runDeploy();
 
       expect(returns()).toEqual([90_000_000 - FEE, 90_000_000 - FEE]);
-      expect(printed()).toContain("Returned 0.09 SOL to Phantom.");
+      expect(printedLines()).toContain("Returned 0.09 SOL to Phantom.");
       expect(env.pgLamports).toBe(1_000_000_000 + FEE);
     });
 
