@@ -575,13 +575,20 @@ test.describe("on a phone", () => {
     await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
     await expect(consoleHandle(page)).toBeInViewport();
     await page.getByRole("button", { name: "Back to the code" }).click();
-    await expect(page.locator(".monaco-editor")).toBeInViewport();
+    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport({
+      ratio: 1,
+    });
 
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     const menu = page.getByRole("region", { name: "Navigation" });
     await expect(menu).toBeInViewport();
     await page.getByRole("button", { name: "Close the menu" }).click();
-    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
+    // Whole, once the pager's smooth scroll has settled on it: Chat clicked
+    // mid-scroll let the pager snap on to Preview, which made Work inert and
+    // the composer refuse the fill below
+    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport({
+      ratio: 1,
+    });
     await page.getByRole("radio", { name: "Chat" }).click();
     // The composer is there and takes typing with nothing connected
     const composer = page.getByRole("textbox", {
