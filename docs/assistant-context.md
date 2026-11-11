@@ -69,10 +69,11 @@ runs the deployment configures its bypass secret on the server.
   user supplies. Never an open unlimited endpoint.
 - **Traceability.** A record of what the assistant did and on what basis.
 - **Open by default.** The client and any service integrated into it stay public.
-- **No backend changes.** The build server, crate list, deploy mechanics and
-  sharing infrastructure are out of scope. Conversation and project sync is
-  the exception, and it is additive: new `api/*` routes and a Postgres of our
-  own. The build server and its database are still untouched.
+- **No backend changes.** The build server, crate list and deploy mechanics
+  are out of scope. Conversation and project sync is the exception, and it is
+  additive: new `api/*` routes and a Postgres of our own. The build server
+  holds no database and serves no share routes; projects are shared as GitHub
+  gists.
 
 ## How it works, technically
 
@@ -283,8 +284,8 @@ Honesty rule for the demo — never present a mocked step as working.
   their GitHub account is under a month old, that resets at 00:00 UTC. At the
   limit the panel says "You have used today's free assistant allowance. It
   resets at 00:00 UTC, or bring your own key to keep going."; when the free
-  backend as a whole is out for the day it says "The free assistant is out of
-  capacity for today." with the same advice. The conversation stays, and a
+  backend as a whole is out it says "The free assistant is out of capacity for
+  now. Try again later," with the same advice. The conversation stays, and a
   backend on the user's own key has no such limit.
 - **Real, with a gap:** deploy history. It is a genuine client-side store,
   not seeded or scripted, and records every real deploy — but not the

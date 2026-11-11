@@ -13,35 +13,38 @@ one request.
 
 ## What Changes
 
-- The default backend's upstream moves from Nous Research to Vercel AI
-  Gateway, the project's first use of the Gateway. The move needs no code:
-  `PG_AI_BASE_URL`, `PG_AI_MODEL` and `PG_AI_API_KEY` change value. Each
-  Gateway key carries a daily budget and the team carries a monthly budget,
-  set in the Gateway dashboard, so total spend has a ceiling that holds even
-  when our own accounting is wrong. The Gateway is paid from prepaid credits
-  at the provider's list price, never through our own provider credential,
-  which budgets do not count. The Nous Research key is revoked after the
-  switch.
-- Every upstream request restricts the Gateway to US-region providers that
-  retain no data and do not train on it, keeping the US-only serving the Nous
-  Research model id (`:US`) gave. This is the one code change the move needs.
+- The default backend's upstream stays Nous Research, where the client holds
+  prepaid credits. Each tier's Nous key carries a daily and a monthly spend
+  limit, set in the Nous dashboard, so total spend has a ceiling that holds
+  even when our own accounting is wrong, and the prepaid balance, with no
+  auto top-up, bounds everything beyond that.
+- Vercel AI Gateway stays supported as a fallback upstream, reached by
+  configuration alone, for when the Nous credits are used up. A Gateway
+  upstream is restricted to US-region providers that retain no data and do
+  not train on it, keeping the US-only serving the Nous model id (`:US`)
+  gives.
 - Signed-in users fall into two tiers, `newcomer` and `established`, by the age
-  of their GitHub account. Each tier spends through its own Gateway key, so
-  when new accounts exhaust their key's daily budget, established users still
+  of their GitHub account. Each tier spends through its own upstream key, so
+  when new accounts exhaust their key's daily limit, established users still
   have theirs.
 - `/api/agent` keeps a per-user, per-day spend ledger in Postgres. A turn
   reserves its worst-case cost before the upstream call and settles to the
   cost the upstream reports when the stream ends. A turn that would pass the
   user's daily cap is refused with 429 and `reason: "daily-cap"` before the
   upstream is called.
-- A Gateway budget refusal (`402`, `quota_for_entity_exceeded`) reaches the
-  panel as 503 with `reason: "pool-exhausted"`, not as `Upstream 402: ...`.
+- An upstream `402` (a key's spend limit reached, `key_spend_limit_reached`,
+  or the credit balance empty) reaches the panel as 503 with
+  `reason: "pool-exhausted"` and the upstream's `Retry-After`, not as
+  `Upstream 402: ...`. An empty balance is also reported to Sentry, since
+  only a person adding credits brings the backend back.
 - `/api/agent` refuses a request whose body is larger than a configured limit
   (413), and sets `max_completion_tokens` on every upstream request, so the worst-case
   cost of one turn is known before the call.
-- The panel shows a plain sentence for `daily-cap` and `pool-exhausted`, says
-  when the default backend is available again, and points at the key-based
-  backends.
+- The panel shows a plain sentence for `daily-cap` and `pool-exhausted` and
+  points at the key-based backends. Only the `daily-cap` sentence says when
+  the default backend is available again (00:00 UTC); a spent pool refills
+  when the upstream says, so its sentence names no time, and neither does the
+  status's AI indicator.
 - HOO-1788 needs no new token: the Better Auth session, which `readSession`
   already verifies, is the session token, and `user.id` is the limit key.
 - Telemetry: `features/agent` gains browser code, a tracker in
@@ -63,8 +66,13 @@ one request.
 
 ### Modified Capabilities
 
-None. `assistant-own-key` keeps its requirement that the default backend needs
-a signed-in user. This change adds limits for the signed-in user.
+- `client-v2-status`: the AI indicator's Limit reached names a time only
+  after a `daily-cap` refusal; after a `pool-exhausted` one its panel says the
+  free assistant is out of capacity for now, and it holds until a turn on the
+  hosted model goes through.
+
+`assistant-own-key` keeps its requirement that the default backend needs a
+signed-in user. This change adds limits for the signed-in user.
 
 ## Impact
 
@@ -72,17 +80,19 @@ a signed-in user. This change adds limits for the signed-in user.
   tier lookup, request bounds; `index.ts` and `model/telemetry.ts` for the
   event), `client-v2/src/shared/lib/telemetry/prefixes.ts` (prefix `agent`),
   `client-v2/src/shared/config/server-env.mjs` (`agentEnv`), the default
-  backend's error mapping in the assistant panel.
+  backend's error mapping in the assistant panel, and the status's AI
+  indicator (`widgets/status`, `PgAssistant.limitReached`).
 - Database: one migration adds the ledger table and a user field for the
   GitHub account's creation date; `db/schema.sql` is regenerated.
-- Operations: a person buys Gateway credits, creates the Gateway keys and
-  budgets, sets the new environment variables in Vercel, records the starting
-  values in `client-v2/docs/deploy-client-vercel.md`, and revokes the Nous
-  Research key once the Gateway serves production. No agent handles the keys.
-- User-visible: a signed-in user who reaches the daily cap, or whose tier's
-  pool is empty for the day, sees why and when the default backend is
-  available again, and can switch to a key-based backend. A key-based backend
-  is not affected.
+- Operations: a person creates the two Nous keys with their daily and
+  monthly spend limits, sets the new environment variables in Vercel, records
+  the starting values in `client-v2/docs/deploy-client-vercel.md`, and owns
+  topping up the prepaid balance. The Gateway setup stays documented there as
+  the fallback. No agent handles the keys.
+- User-visible: a signed-in user who reaches the daily cap sees why and that
+  it resets at 00:00 UTC; one whose tier's pool is empty sees why and is told
+  to try again later. Both can switch to a key-based backend. A key-based
+  backend is not affected.
 - Out of scope:
   - Kora paymaster deploys (HOO-1787) and their identity, which wait on the
     Kora team's answer on how the deployer identifies a user.

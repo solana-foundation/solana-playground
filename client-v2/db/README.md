@@ -68,6 +68,3 @@ out to a host `pg_dump`.
 Migrations are **never** run from a serverless function: the platform would run
 them concurrently on every cold start. Apply them as an explicit deploy step,
 before flipping `SYNC_ENABLED` on an environment.
-
-This database is separate from the MongoDB in `compose.yaml`, which belongs to
-the Rust build server in `server/` and is upstream's. Nothing here touches it.

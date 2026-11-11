@@ -15,8 +15,8 @@ See [proposal.md](proposal.md), "Why". Facts this design rests on, read on
   (404, rate limit, truncated tree, no source files), and
   `PgFramework.convertToPlaygroundLayout` throws for an unknown framework
   (`PgFramework.isUnknownFramework`) or a conversion that yields nothing.
-- No code imports a zip. The Share dialog is exported but never opened, and
-  the share route's `validate` returns `false`.
+- No code imports a zip. client-v2 has no server share route or Share
+  dialog: `drop-server-share` removed both.
 - `run` and `test` (`commands/run-and-test`) call `PgJsRuntime.execute`
   per file. A test file ends with `mocha.run`, whose failure count is
   dropped; a client script's uncaught error is caught inside the iframe and

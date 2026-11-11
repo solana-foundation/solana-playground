@@ -47,8 +47,8 @@ Facts established while designing, which contradict the original brief:
 ### Runtime and data access
 
 - New endpoints are **`client-v2/api/*.mjs` Vercel functions** — the only
-  runtime the fork owns end to end. **The Rust build server and its MongoDB are
-  untouched**, which keeps this inside the "No backend changes" principle in
+  runtime the fork owns end to end. **The Rust build server holds no database,
+  and this work does not touch it**, which keeps this inside the "No backend changes" principle in
   `docs/assistant-context.md` as it was meant (the *build* server).
 - **Plain `pg` against a pooled connection string.** No ORM, no query builder.
   Portable across Neon / Supabase / RDS Proxy / PgBouncer, which matters because

@@ -186,15 +186,10 @@ services:
   server:
     <<: *server
     image: solana-playground-server
-    depends_on:
-      - db
-    environment:
-      - PG_DB_URI=${PG_DB_URI:-mongodb://db:27017}
 
-  # Server without DB. Publishes the same host port as `server`, so it is an
-  # alternative to it rather than a companion -- no profile may start both.
-  # client-v2 uses this one: MongoDB backs only the share routes, and the
-  # server connects to it lazily.
+  # Publishes the same host port as `server`, so it is an alternative to it
+  # rather than a companion -- no profile may start both. client-v2 uses this
+  # one, which starts without a `.env`.
   server-standalone:
     <<: *server
     image: solana-playground-server-standalone
@@ -268,20 +263,7 @@ services:
       - v2-prod
       - v2-unstable
 
-  db:
-    image: mongo:7
-    volumes:
-      - mongodb:/data/db
-    # Override the default command because it logs a lot and setting `logging`
-    # `driver` to `none` doesn't work
-    command: mongod --quiet --logpath /dev/null
-    profiles:
-      - dev
-      - prod
-
-  # Conversation and project sync, read only by `client-v2/api/*.mjs`. Separate
-  # from `db` on purpose: that one belongs to the Rust build server and is
-  # upstream's, and this work does not touch it.
+  # Conversation and project sync, read only by `client-v2/api/*.mjs`
   postgres:
     image: postgres:16
     environment:
@@ -323,5 +305,4 @@ services:
       - v2-unstable
 
 volumes:
-  mongodb:
   postgres:
