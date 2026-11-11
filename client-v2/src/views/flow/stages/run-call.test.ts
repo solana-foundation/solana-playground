@@ -15,7 +15,9 @@ const h = vi.hoisted(() => ({
 vi.mock("../../../utils", () => ({
   PgCommand: { solana: { execute: vi.fn(() => Promise.resolve()) } },
   PgCommon: {
-    transition: (p: Promise<unknown>) => p,
+    // The real wrapper, without its wait: it rewrites a non-Error rejection
+    transition: async (p: Promise<unknown>) =>
+      (await import("../../../utils/common")).PgCommon.transition(p, 0),
     sleep: () => Promise.resolve(),
   },
   PgConnection: {
@@ -345,6 +347,15 @@ describe("runCall events", () => {
 
   it("counts a wallet the user said no to as cancelled, not failed", async () => {
     h.test.mockRejectedValue(new Error("User rejected the request."));
+
+    await runCall(IX);
+
+    expect(sent()).toEqual([["interact_cancelled", { cluster: "devnet" }]]);
+  });
+
+  it("counts a wallet's plain-object 4001 as cancelled, not failed", async () => {
+    // eslint-disable-next-line prefer-promise-reject-errors -- some wallets reject with a plain object
+    h.test.mockReturnValue(Promise.reject({ code: 4001, message: "Nope" }));
 
     await runCall(IX);
 

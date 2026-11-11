@@ -104,9 +104,18 @@ const sendWith =
     const connection = PgConnection.current;
     // The IDL of the program the call went to, read before a switch can move it
     const idlErrors = getIdlErrors();
+    // The send's own rejection: `transition` rethrows a plain object as an
+    // `Error` with only its message, which drops a wallet's 4001 `code`
+    let sendError: unknown;
     try {
       signature = await PgCommon.transition(
-        PgProgramInteraction.test(ix, PgProgramInteraction.getAnchorProgram())
+        PgProgramInteraction.test(
+          ix,
+          PgProgramInteraction.getAnchorProgram()
+        ).catch((error: unknown) => {
+          sendError = error;
+          throw error;
+        })
       );
       interactTelemetry.track("interact_sent", { cluster });
       const confirmed = await PgTx.confirm(signature, { connection });
@@ -135,7 +144,7 @@ const sendWith =
     } catch (e: any) {
       // A signature with a thrown error: sent, but its confirmation is unknown
       if (!isReported) {
-        if (!signature && isWalletRejection(e)) {
+        if (!signature && isWalletRejection(sendError ?? e)) {
           interactTelemetry.track("interact_cancelled", { cluster });
         } else {
           interactTelemetry.track("interact_failed", {
