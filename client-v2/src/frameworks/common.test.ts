@@ -19,7 +19,7 @@ vi.stubGlobal("CRATES", {
   importable: ["anchor_lang", "arrayref", "unknown_crate"],
 });
 
-const { getRustDependencies } = await import("./common");
+const { getImportedNames, getRustDependencies } = await import("./common");
 
 describe("frameworks/common", () => {
   it("pins the crate versions and features the server builds with", async () => {
@@ -50,5 +50,26 @@ describe("frameworks/common", () => {
     } finally {
       SERVED["/crates/features.json"] = served;
     }
+  });
+});
+
+describe("getImportedNames", () => {
+  it.each([
+    ['import*as web3 from "@solana/web3.js";', ["web3"]],
+    ["import web3 from '@solana/web3.js'", ["web3"]],
+    ['import{BN}from"bn.js";', ["BN"]],
+    ['import { a as b, type C } from "x";', ["b"]],
+    ['import type { D } from "x";', ["D"]],
+    ['import "dotenv/config";\nimport web3 from "@solana/web3.js";', ["web3"]],
+  ])("reads the names %s binds", (content, names) => {
+    expect([...getImportedNames(content)]).toEqual(names);
+  });
+
+  it("reads no name from code that only mentions import", () => {
+    expect([
+      ...getImportedNames(
+        'const important = await import("x");\n// import from "y"\n'
+      ),
+    ]).toEqual([]);
   });
 });

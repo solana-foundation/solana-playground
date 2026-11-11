@@ -300,6 +300,31 @@ export const addImports = (content: string) => {
 };
 
 /**
+ * Names the import statements of the given code bind: `web3` for
+ * `import * as web3 from "x"`, `import web3 from "x"` and `import{web3}from"x"`,
+ * `b` for `import { a as b } from "x"`. A name the code already binds must not
+ * be imported again, which would not compile.
+ *
+ * @param content JS/TS code
+ * @returns the bound names
+ */
+export const getImportedNames = (content: string) => {
+  const names = new Set<string>();
+  const statement = /\bimport(?![\w$(])([^"'`;]*?)\bfrom\s*["'][^"'\n]*["']/g;
+  for (const [, clause] of content.matchAll(statement)) {
+    for (const part of clause.replace(/[{}]/g, ",").split(",")) {
+      const name = part
+        .trim()
+        .split(/\s+as\s+|\*\s*as\s+/)
+        .pop()
+        ?.trim();
+      if (name && /^[\w$]+$/.test(name) && name !== "type") names.add(name);
+    }
+  }
+  return names;
+};
+
+/**
  * Get global packages that are used in the given content.
  *
  * @param content JS/TS code
@@ -307,12 +332,16 @@ export const addImports = (content: string) => {
  */
 const getGlobalPackages = (content: string) => {
   const packages: Record<string, ValueOf<typeof PACKAGES["global"]>> = {};
+  const imported = getImportedNames(content);
   for (const [_packageName, importStyle] of PgCommon.entries(PACKAGES.global)) {
     if (PACKAGES_MAP[_packageName] === null) continue;
     const packageName = PACKAGES_MAP[_packageName] ?? _packageName;
 
     const style = importStyle as Partial<MergeUnion<typeof importStyle>>;
     const name = style.as ?? style.named ?? style.default;
+    // `web3.` also matches inside "@solana/web3.js", so a client that binds
+    // the name itself would get it twice
+    if (name !== undefined && imported.has(name)) continue;
 
     const accessors = [name + ".", name + "("];
     for (const accessor of accessors) {

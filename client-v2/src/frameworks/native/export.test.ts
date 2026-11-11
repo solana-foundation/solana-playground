@@ -126,6 +126,23 @@ describe("convertFromPlayground", () => {
     expect(client).toContain('import * as web3 from "@solana/web3.js";');
   });
 
+  it.each([
+    'import*as web3 from "@solana/web3.js";',
+    "import * as web3 from '@solana/web3.js'",
+    'import web3 from "@solana/web3.js";',
+  ])(
+    "keeps one web3 binding for a client that imports it as %s",
+    async (line) => {
+      const files = await exported(LIB, [
+        "client/client.ts",
+        `${line}\n\nconst { PublicKey } = web3;\nconsole.log(PublicKey.default);\n`,
+      ]);
+
+      const client = files.get("client/client.ts") ?? "";
+      expect(client.match(/\bweb3\s+from\b/g)).toHaveLength(1);
+    }
+  );
+
   it("defines the globals after the imports when the code below says import", async () => {
     const files = await exported(LIB, [
       "client/client.ts",

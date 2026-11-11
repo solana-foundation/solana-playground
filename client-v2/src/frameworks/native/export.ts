@@ -3,6 +3,7 @@ import {
   addAfterImports,
   addImports,
   fetchServerCargoLock,
+  getImportedNames,
   getJSDependencies,
   getRustDependencies,
   wrapTopLevelAwait,
@@ -161,12 +162,9 @@ const convertJSWith =
     // Handle imports
     content = addImports(content);
     // The globals below use `web3`, so the client needs that binding: the
-    // package name alone is not it (`import { PublicKey } from "@solana/web3.js"`)
-    if (
-      !/\bimport\s+(?:\*\s+as\s+)?web3\s+from\s+["']@solana\/web3\.js["']/.test(
-        content
-      )
-    ) {
+    // package name alone is not it (`import { PublicKey } from "@solana/web3.js"`),
+    // and a compact `import*as web3` is (`getImportedNames`)
+    if (!getImportedNames(content).has("web3")) {
       content = `import * as web3 from "@solana/web3.js";\n` + content;
     }
     content =
