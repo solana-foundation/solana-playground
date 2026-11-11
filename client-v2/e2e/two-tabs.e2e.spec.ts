@@ -63,6 +63,13 @@ const fakeAccount = async (
   const state = {
     conflicts: 0,
     rejectPuts: false,
+    /**
+     * Another device's files, written over the row once, just before this
+     * browser's first edit of lib.rs reaches it. Writing the row at the start
+     * of a test let a read already in flight (the load's reconcile, on a slow
+     * runner) take them before the test typed, leaving no overlap to answer.
+     */
+    movesOnAtPut: undefined as Record<string, string> | undefined,
     deleted: false,
     putsAfterDelete: 0,
   };
@@ -117,6 +124,13 @@ const fakeAccount = async (
       }
       if (opts.putDelayMs) {
         await new Promise((done) => setTimeout(done, opts.putDelayMs));
+      }
+      // A patch carrying this browser's edit to lib.rs, not a whole-set
+      // upload of what it already had
+      if (state.movesOnAtPut && body.changed?.[LIB] !== undefined) {
+        row.snapshot = { files: state.movesOnAtPut };
+        row.updatedAt = stamp();
+        state.movesOnAtPut = undefined;
       }
       // The server's compare-and-swap: a write names the version it was
       // made against, and anything else is refused
@@ -302,13 +316,13 @@ test("taking the other version replaces a file that is already open", async ({
   context,
 }) => {
   test.setTimeout(180_000);
-  const { row, state, stamp } = await fakeAccount(context);
+  const { state } = await fakeAccount(context);
   const page = await context.newPage();
   await openShared(page);
 
-  // Another device moves the row on, and this one's next upload is refused
-  row.snapshot = { files: { [LIB]: "// theirs\n" } };
-  row.updatedAt = stamp();
+  // Another device moves the row on just before this one's upload, which is
+  // refused
+  state.movesOnAtPut = { [LIB]: "// theirs\n" };
   state.rejectPuts = true;
 
   // On the line the other device changed: lines that merge cleanly stay
@@ -319,6 +333,8 @@ test("taking the other version replaces a file that is already open", async ({
     .getByRole("alert")
     .filter({ hasText: "Changed on another device" });
   await expect(banner).toBeVisible(LONG);
+  // The banner answers the other device's move, not a refused upload alone
+  expect(state.movesOnAtPut).toBeUndefined();
   state.rejectPuts = false;
 
   await page.getByRole("button", { name: "Take the other version" }).click();

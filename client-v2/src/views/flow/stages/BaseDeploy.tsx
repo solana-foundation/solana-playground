@@ -1,4 +1,4 @@
-import { ExternalLink, Rocket, TriangleAlert } from "lucide-react";
+import { ExternalLink, Rocket } from "lucide-react";
 import type { ReactNode } from "react";
 
 import type { DeployRunState } from "@/commands/deploy/run";
@@ -19,7 +19,7 @@ import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { CopyButton } from "@/shared/ui/copy-button";
 import {
   StageEmpty,
@@ -32,11 +32,9 @@ import {
 import { StatusDot } from "@/shared/ui/status-dot";
 
 import {
-  MAINNET_DEPLOY_WARNING_BODY,
-  MAINNET_DEPLOY_WARNING_GUIDE,
-  MAINNET_DEPLOY_WARNING_TITLE,
-  warnsOnDeploy,
-} from "../../../commands/deploy/mainnet-warning";
+  isDeployBlocked,
+  MAINNET_DEPLOY_BLOCKED_LINE,
+} from "../../../commands/deploy/mainnet-block";
 import type { DeployRecord } from "../state/deploy-history";
 import type { DeployView } from "./deploy-view";
 import {
@@ -178,6 +176,7 @@ const payerLine = (p: BaseDeployProps) => {
  * now; a project deployed only on other networks gets `ElsewhereLine` instead.
  */
 const description = (p: BaseDeployProps, latest: DeployRecord | undefined) => {
+  if (isDeployBlocked(p.cluster)) return MAINNET_DEPLOY_BLOCKED_LINE;
   if (!p.built) return "Build the program first.";
   if (latest) {
     return "The program id stays constant across deploys; redeploying upgrades it in place.";
@@ -194,11 +193,11 @@ const deployedElsewhere = (
   p: BaseDeployProps,
   latest: DeployRecord | undefined
 ) =>
-  latest === undefined && p.cluster
+  latest === undefined && p.cluster && !isDeployBlocked(p.cluster)
     ? p.history.find((r) => r.cluster !== p.cluster)
     : undefined;
 
-/** The stage's title: "Nothing on mainnet" while only other networks have deployments */
+/** The stage's title: "Nothing on testnet" while only other networks have deployments */
 const title = (p: BaseDeployProps, latest: DeployRecord | undefined) => {
   if (latest) return "Deploy";
   if (p.built && deployedElsewhere(p, latest)) {
@@ -489,7 +488,7 @@ const BeforeDeploySummary = ({
       )}
       {p.idlName && <IdlRow name={p.idlName} />}
     </dl>
-    {p.built && !running && (
+    {p.built && !running && !isDeployBlocked(p.cluster) && (
       <p
         aria-label="Who pays"
         className="m-0 border-t border-border px-4 py-2.5 text-caption font-read text-muted-foreground"
@@ -503,25 +502,46 @@ const BeforeDeploySummary = ({
 );
 
 /**
- * The mainnet warning's body, its "deploy from your own machine" turned into
- * the button that opens the CLI deploy guide; the words stay the terminal's
+ * The stage's one way on: the CLI guide on mainnet, where deploys are refused
+ * in the beta (HOO-2728); Go to Build until there is a build; then the deploy.
+ * A faded Deploy beside a link read as three kinds of button for two steps.
  */
-const MainnetWarningBody = ({ p }: { p: BaseDeployProps }) => {
-  const [before, after] = MAINNET_DEPLOY_WARNING_BODY.split(
-    MAINNET_DEPLOY_WARNING_GUIDE
-  );
+const DeployPill = ({
+  p,
+  isBlocked,
+  redeploy,
+}: {
+  p: BaseDeployProps;
+  isBlocked: boolean;
+  redeploy: boolean;
+}) => {
+  const running = p.view.kind === "running";
+  if (isBlocked) {
+    return (
+      <BrandButton onClick={() => p.onOpenCliGuide("mainnet-blocked")}>
+        Deploy from your machine
+        <BrandButtonIcon />
+      </BrandButton>
+    );
+  }
+  if (!p.built) {
+    return (
+      <BrandButton onClick={p.onGoToBuild}>
+        Go to Build
+        <BrandButtonIcon />
+      </BrandButton>
+    );
+  }
   return (
-    <>
-      {before}
-      <Button
-        variant="link"
-        className="inline h-auto p-0 align-baseline text-[length:inherit] whitespace-normal"
-        onClick={() => p.onOpenCliGuide("mainnet-warning")}
-      >
-        {MAINNET_DEPLOY_WARNING_GUIDE}
-      </Button>
-      {after}
-    </>
+    <BrandButton
+      disabled={deployBlockedReason(p) !== undefined}
+      aria-busy={running || undefined}
+      title={deployBlockedReason(p)}
+      onClick={p.onDeploy}
+    >
+      {deployLabel(p, redeploy)}
+      {!running && <BrandButtonIcon />}
+    </BrandButton>
   );
 };
 
@@ -533,7 +553,8 @@ const MainnetWarningBody = ({ p }: { p: BaseDeployProps }) => {
  * build. "Upload IDL" and "Deploy with the CLI" follow the pill on a desk and
  * sit above the pinned foot on a phone. After a deploy it shows the result
  * and the history, read from the left. The CLI guide's button shows on every
- * cluster.
+ * cluster but mainnet, where deploys are refused in the beta (HOO-2728) and
+ * the pill itself opens the guide.
  */
 const BaseDeploy = (p: BaseDeployProps) => {
   // Each network keeps its own deployments: the stage reads only the
@@ -556,6 +577,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
   const elsewhere = p.built ? deployedElsewhere(p, latest) : undefined;
   const { view } = p;
   const running = view.kind === "running";
+  const isBlocked = isDeployBlocked(p.cluster);
 
   return (
     <div className={STAGE_FRAME}>
@@ -575,7 +597,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
           </StageEmptyDescription>
         )}
         {!latest && <BeforeDeploySummary p={p} running={running} />}
-        {latest && p.built && !running && (
+        {latest && p.built && !running && !isBlocked && (
           <p
             aria-label="Who pays"
             className="text-caption text-muted-foreground"
@@ -601,15 +623,6 @@ const BaseDeploy = (p: BaseDeployProps) => {
           <Callout variant="error" role="alert">
             <CalloutDescription>
               Could not deploy. The full log has the details.
-            </CalloutDescription>
-          </Callout>
-        )}
-        {warnsOnDeploy(p.cluster) && (
-          <Callout variant="warning" aria-label="Mainnet deploy warning">
-            <TriangleAlert />
-            <CalloutTitle>{MAINNET_DEPLOY_WARNING_TITLE}</CalloutTitle>
-            <CalloutDescription>
-              <MainnetWarningBody p={p} />
             </CalloutDescription>
           </Callout>
         )}
@@ -641,25 +654,11 @@ const BaseDeploy = (p: BaseDeployProps) => {
           )}
         >
           {running && p.run.step && <BaseDeployProgress state={p.run} />}
-          {/* One pill, the way on: Go to Build until there is a build, then
-              the deploy. A faded Deploy beside a link read as three kinds of
-              button for two steps */}
-          {p.built ? (
-            <BrandButton
-              disabled={deployBlockedReason(p) !== undefined}
-              aria-busy={running || undefined}
-              title={deployBlockedReason(p)}
-              onClick={p.onDeploy}
-            >
-              {deployLabel(p, latest !== undefined)}
-              {!running && <BrandButtonIcon />}
-            </BrandButton>
-          ) : (
-            <BrandButton onClick={p.onGoToBuild}>
-              Go to Build
-              <BrandButtonIcon />
-            </BrandButton>
-          )}
+          <DeployPill
+            p={p}
+            isBlocked={isBlocked}
+            redeploy={latest !== undefined}
+          />
         </StageEmptyActions>
         {/* The other ways on, one kind of button: outlines in the
             pill's height and shape. They follow the pill in the page, so
@@ -679,12 +678,14 @@ const BaseDeploy = (p: BaseDeployProps) => {
           )}
           {p.idlUpload}
           {p.idlGuide}
-          <Button
-            variant="outline"
-            onClick={() => p.onOpenCliGuide("deploy-stage")}
-          >
-            Deploy with the CLI
-          </Button>
+          {!isBlocked && (
+            <Button
+              variant="outline"
+              onClick={() => p.onOpenCliGuide("deploy-stage")}
+            >
+              Deploy with the CLI
+            </Button>
+          )}
         </div>
       </StageEmpty>
     </div>

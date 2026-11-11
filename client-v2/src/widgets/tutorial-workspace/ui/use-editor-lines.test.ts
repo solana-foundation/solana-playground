@@ -18,7 +18,12 @@ const { editor } = vi.hoisted(() => {
       updateOptions: (o: { readOnly?: boolean }) => {
         if (o.readOnly !== undefined) readOnly = o.readOnly;
       },
-      getModel: () => undefined,
+      model: undefined as unknown,
+      getModel(): unknown {
+        return this.model;
+      },
+      createDecorationsCollection: () => ({ clear: () => {} }),
+      changeViewZones: () => {},
       onDidChangeModel: noDispose,
       onDidDispose: noDispose,
     },
@@ -52,6 +57,26 @@ describe("useEditorLines", () => {
   const holds: Array<{ dispose: () => void }> = [];
   afterEach(() => {
     holds.splice(0).forEach((hold) => hold.dispose());
+    editor.model = undefined;
+  });
+
+  // Start in a tutorial re-opens the workspace under a live editor, and the
+  // model the hook had read was disposed: reading its lines threw "Model is
+  // disposed!" into the error screen (HOO-2585)
+  it("draws nothing on a model already disposed", () => {
+    const disposed = () => {
+      throw new Error("Model is disposed!");
+    };
+    editor.model = {
+      isDisposed: () => true,
+      getLineCount: disposed,
+      getLineContent: disposed,
+    };
+    expect(() =>
+      renderHook(() =>
+        useEditorLines({ root: frame(), marks: NO_MARKS, busy: false })
+      )
+    ).not.toThrow();
   });
 
   it("leaves the editor writable after an act that started under the phone's lock", () => {

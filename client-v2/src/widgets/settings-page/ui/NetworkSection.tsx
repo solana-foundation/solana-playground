@@ -16,34 +16,17 @@ import BaseNetworkChoice, {
   checkedChipKey,
   chipKey,
 } from "./BaseNetworkChoice";
+import { pickNetwork as pick, toastNetworkHeld } from "./pick-network";
 
 /**
- * Whether a running deploy holds the network on the RPC saved under `url`:
- * it is the one in use, and a deploy is running or paused
+ * Whether the network is held on the RPC saved under `url`: it is the one in
+ * use, and a deploy runs or waits paused, or an `anchor idl` write runs
  */
 const isHeld = (url: string) =>
-  PgSettings.connection.endpoint === url &&
-  !canSwitchNetwork(PgGlobal.deployState);
+  PgSettings.connection.endpoint === url && !canSwitchNetwork(PgGlobal);
 
 /** Save a custom RPC once its URL answers one health request (spec `client-v2-custom-rpcs`) */
 const saveChecked = saveCheckedWith(fetchRpcHealth)(isHeld);
-
-/** Say that a running deploy holds the network where it is */
-const toastNetworkHeld = () =>
-  PgView.setToast(
-    () => <span>A deploy is running. Change the network when it ends.</span>,
-    { options: { name: "network-held-by-deploy" } }
-  );
-
-/** Move the network to `url`; false, with a toast, while a deploy holds it */
-const pick = (url: string): boolean => {
-  if (!canSwitchNetwork(PgGlobal.deployState)) {
-    toastNetworkHeld();
-    return false;
-  }
-  PgSettings.connection.endpoint = url;
-  return true;
-};
 
 /**
  * List the connection's endpoint when it is a custom one, and move the
@@ -51,10 +34,10 @@ const pick = (url: string): boolean => {
  */
 const adoptEndpoint = (endpoint: string) => {
   const listed = PgCustomRpcs.adopt(endpoint);
-  // A re-spelling of the same RPC waits for a running deploy silently: the
+  // A re-spelling of the same RPC waits for a held network silently: the
   // user asked for nothing, so no toast
   if (!listed || listed === endpoint) return;
-  if (!canSwitchNetwork(PgGlobal.deployState)) return;
+  if (!canSwitchNetwork(PgGlobal)) return;
   PgSettings.connection.endpoint = listed;
 };
 
