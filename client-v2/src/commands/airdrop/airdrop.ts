@@ -79,8 +79,14 @@ export const airdrop = createCmd({
     const amount = input.args.amount ?? defaultAmount;
     PgTerminal.println(PgTerminal.info(`Airdropping ${amount} SOL...`));
 
-    const connection = PgConnection.current;
-    const walletPk = PgWallet.current!.publicKey;
+    // The cluster's native RPC: a platform RPC can refuse an airdrop. The
+    // balances are read there too, so the one RPC that confirmed the airdrop
+    // also says whether it arrived, however far the platform RPC lags
+    const connection = PgConnection.getAirdropConnection(PgConnection.current);
+    // `checkWallet` ran first, so a wallet is there unless it went since
+    const wallet = PgWallet.current;
+    if (!wallet) throw new Error("No wallet to airdrop to");
+    const walletPk = wallet.publicKey;
 
     // A rate limit on any of the RPC's answers is not the end of the road:
     // the web faucet keeps a limit of its own. Point to it, then fail as before
@@ -109,7 +115,7 @@ export const airdrop = createCmd({
       }
 
       // Allow enough time for balance to update by waiting for confirmation
-      const txResult = await PgTx.confirm(cachedTxHash);
+      const txResult = await PgTx.confirm(cachedTxHash, { connection });
       if (txResult?.err) {
         throw new Error(`Airdrop transaction failed: ${txResult.err}`);
       }

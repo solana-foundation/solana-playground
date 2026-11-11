@@ -13,10 +13,19 @@ import { withAirdropVia } from "./via";
 const LAMPORTS_PER_SOL = 1_000_000_000;
 const WALLET = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
 
+/** The cluster's native RPC, which airdrops go through */
 const connection = {
   commitment: "confirmed",
   getBalance: vi.fn(),
   requestAirdrop: vi.fn(),
+};
+/** The selected connection, a platform RPC that refuses airdrops as Helius does */
+const platform = {
+  commitment: "confirmed",
+  getBalance: vi.fn(async () => 0),
+  requestAirdrop: vi.fn(async () => {
+    throw new Error("500 : internal error: please contact Helius support");
+  }),
 };
 const printed: string[] = [];
 
@@ -29,8 +38,11 @@ vi.mock("../../utils", () => ({
     hasClusterReadFailed: false,
     getAirdropAmountOn: vi.fn(() => 5),
     get current() {
-      return connection;
+      return platform;
     },
+    getAirdropConnection: vi.fn((selected: unknown) =>
+      selected === platform ? connection : selected
+    ),
   },
   PgTerminal: {
     println: vi.fn((line: string) => printed.push(line)),
@@ -80,6 +92,23 @@ describe("airdrop, once the faucet answers", () => {
     expect(printed.at(-1)).toBe(
       "Airdrop successful: received 1 SOL of the 5 SOL requested."
     );
+  });
+
+  it("requests, confirms and reads the balances through the cluster's native RPC", async () => {
+    connection.getBalance
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(5 * LAMPORTS_PER_SOL);
+
+    await run();
+
+    expect(PgConnection.getAirdropConnection).toHaveBeenCalledWith(platform);
+    expect(connection.requestAirdrop).toHaveBeenCalledOnce();
+    expect(PgTx.confirm).toHaveBeenLastCalledWith(expect.any(String), {
+      connection,
+    });
+    expect(connection.getBalance).toHaveBeenCalledTimes(2);
+    expect(platform.requestAirdrop).not.toHaveBeenCalled();
+    expect(platform.getBalance).not.toHaveBeenCalled();
   });
 
   it("links the web faucet when the RPC rate-limits, and still fails", async () => {

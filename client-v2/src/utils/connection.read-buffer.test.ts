@@ -216,3 +216,49 @@ describe("utils/connection", () => {
     ).toBeUndefined();
   });
 });
+
+describe("utils/connection: getAirdropConnection", () => {
+  const PLATFORM = "https://devnet.platform.test/?api-key=k";
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("airdrops on the platform RPC's cluster through its native RPC, at the selected commitment", async () => {
+    const { PgConnection, connectionTo } = await pgConnectionWith({
+      REACT_APP_DEVNET_RPC_URL: PLATFORM,
+      REACT_APP_DEVNET_READ_BUFFER_RPC_URL: DEVNET,
+    });
+
+    const airdrop = PgConnection.getAirdropConnection(connectionTo(PLATFORM));
+
+    expect(airdrop.rpcEndpoint).toBe(DEVNET);
+    expect(airdrop.commitment).toBe("finalized");
+  });
+
+  it.each([
+    {
+      label: "the env sets no native RPC for the cluster",
+      env: { REACT_APP_DEVNET_RPC_URL: PLATFORM },
+      endpoint: PLATFORM,
+    },
+    {
+      label: "the endpoint is Localnet",
+      env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: DEVNET },
+      endpoint: "http://localhost:8899",
+    },
+    {
+      label: "a custom endpoint is not the selected one",
+      env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: DEVNET },
+      endpoint: "https://custom.test",
+    },
+  ])(
+    "airdrops through the selected connection when $label",
+    async ({ env, endpoint }) => {
+      const { PgConnection, connectionTo } = await pgConnectionWith(env);
+      const selected = connectionTo(endpoint);
+
+      expect(PgConnection.getAirdropConnection(selected)).toBe(selected);
+    }
+  );
+});

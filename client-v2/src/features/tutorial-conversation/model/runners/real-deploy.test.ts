@@ -10,6 +10,17 @@ const h = vi.hoisted(() => ({
   balance: 0,
   getBalance: vi.fn(),
   rentRead: vi.fn(),
+  requestAirdrop: vi.fn(),
+  confirm: vi.fn(),
+  /** The native RPC's balance read, which funding never asks */
+  nativeGetBalance: vi.fn(),
+}));
+
+/** The cluster's native RPC, which airdrops go through */
+const native = vi.hoisted(() => ({
+  rpcEndpoint: "https://native.test",
+  getBalance: (...args: unknown[]) => h.nativeGetBalance(...args),
+  requestAirdrop: (...args: unknown[]) => h.requestAirdrop(...args),
 }));
 
 // The editor's globals as the funded probe reads them: a wallet, no program
@@ -20,11 +31,16 @@ vi.mock("@/utils", () => ({
       return h.cluster;
     },
     current: {
-      rpcEndpoint: "https://api.devnet.solana.com",
+      rpcEndpoint: "https://platform.test",
       getBalance: h.getBalance,
+      requestAirdrop: () => {
+        throw new Error("500 : internal error: please contact Helius support");
+      },
       getMinimumBalanceForRentExemption: h.rentRead,
     },
+    getAirdropConnection: () => native,
   },
+  PgTx: { confirm: h.confirm },
   PgWallet: {
     accounts: [{}],
     currentIndex: 0,
@@ -61,14 +77,18 @@ vi.mock("@/views/sidebar/assistant/bridge/build-output", () => ({
 vi.mock("@/views/flow/stages/build-report", () => ({}));
 
 let tutorialRunner: typeof import("./real-deploy").tutorialRunner;
+let devnetFunding: typeof import("./real-deploy").devnetFunding;
 beforeAll(async () => {
-  tutorialRunner = (await import("./real-deploy")).tutorialRunner;
+  ({ tutorialRunner, devnetFunding } = await import("./real-deploy"));
 });
 
 beforeEach(() => {
   h.cluster = "devnet";
   h.getBalance.mockReset().mockImplementation(async () => h.balance);
   h.rentRead.mockReset().mockResolvedValue(RENT);
+  h.requestAirdrop.mockReset().mockResolvedValue("airdropSig");
+  h.confirm.mockReset().mockResolvedValue(undefined);
+  h.nativeGetBalance.mockReset();
 });
 
 describe("features/tutorial-conversation/model/runners/real-deploy: tutorialRunner.isFunded", () => {
@@ -103,5 +123,42 @@ describe("features/tutorial-conversation/model/runners/real-deploy: tutorialRunn
   it("on devnet, rejects when the chain cannot be read, for the store to handle", async () => {
     h.getBalance.mockRejectedValue(new Error("fetch failed"));
     await expect(tutorialRunner.isFunded?.()).rejects.toThrow("fetch failed");
+  });
+});
+
+describe("features/tutorial-conversation/model/runners/real-deploy: devnetFunding", () => {
+  it("reads the balance through the selected connection, which the deploy spends on", async () => {
+    h.balance = 2 * SOL;
+    await expect(devnetFunding.balance(WALLET)).resolves.toBe(2 * SOL);
+    expect(h.nativeGetBalance).not.toHaveBeenCalled();
+  });
+
+  it("requests the airdrop through the cluster's native RPC", async () => {
+    await expect(devnetFunding.airdrop(WALLET, SOL)).resolves.toBe(
+      "airdropSig"
+    );
+    expect(h.requestAirdrop).toHaveBeenCalledWith(
+      expect.objectContaining({ address: WALLET }),
+      SOL
+    );
+  });
+
+  it("confirms on the RPC that took the airdrop, and counts no error as confirmed", async () => {
+    await expect(devnetFunding.confirm("airdropSig")).resolves.toBe(true);
+    expect(h.confirm).toHaveBeenCalledWith("airdropSig", {
+      connection: native,
+    });
+  });
+
+  it("counts a confirmation that timed out as not confirmed", async () => {
+    h.confirm.mockRejectedValueOnce(
+      new Error("TransactionExpiredTimeoutError")
+    );
+    await expect(devnetFunding.confirm("airdropSig")).resolves.toBe(false);
+  });
+
+  it("counts a transaction error as not confirmed", async () => {
+    h.confirm.mockResolvedValueOnce({ err: "InstructionError" });
+    await expect(devnetFunding.confirm("airdropSig")).resolves.toBe(false);
   });
 });

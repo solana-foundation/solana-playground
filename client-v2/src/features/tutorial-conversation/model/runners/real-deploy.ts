@@ -66,14 +66,36 @@ type Connection = PgWeb3.Connection;
 const readBufferOf = (conn: Connection) =>
   PgConnection.getReadBufferConnection(conn);
 
-/** Devnet through the connection the settings hold, which `PgTx` sends on */
+/**
+ * The airdrop connection of the one the settings hold: the cluster's native
+ * RPC, whose faucet answers where a platform RPC refuses
+ */
+const airdropConnection = () =>
+  PgConnection.getAirdropConnection(PgConnection.current);
+
+/**
+ * Devnet: the balance through the connection the settings hold, which `PgTx`
+ * sends the deploy on; the airdrop and its confirmation through the airdrop
+ * connection, since a signature is confirmed on the RPC that issued it
+ */
 export const devnetFunding: FundingChain = {
   balance: (address) => PgConnection.current.getBalance(pk(address)),
   airdrop: (address, lamports) =>
-    PgConnection.current.requestAirdrop(pk(address), lamports),
+    airdropConnection().requestAirdrop(pk(address), lamports),
   confirm: async (signature) => {
-    const result = await PgTx.confirm(signature);
-    return !!result && !result.err;
+    // `PgTx.confirm` answers nothing for a transaction that landed, `{ err }`
+    // for one that failed, and throws when the wait times out
+    try {
+      const result = await PgTx.confirm(signature, {
+        connection: airdropConnection(),
+      });
+      return !result?.err;
+    } catch (e) {
+      // Unconfirmed is an answer: the airdrop may still have landed, and
+      // `fundForDeploy` lets the balance decide
+      log.warn("Could not confirm the airdrop", { context: { error: e } });
+      return false;
+    }
   },
 };
 

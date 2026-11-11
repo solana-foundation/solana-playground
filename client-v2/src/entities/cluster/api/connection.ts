@@ -57,12 +57,12 @@ export const buildConnectionWith =
     connectionWith({ fetch })(endpoint);
 
 /**
- * The connection program buffer accounts are read through: the read-buffer
- * RPC of `cluster` at `connection`'s commitment, else `connection` itself.
+ * The native RPC of `cluster` at `connection`'s commitment, else `connection`
+ * itself: airdrops and program buffer reads go through it.
  */
-export const getReadBufferConnectionFor =
+export const getNativeConnectionFor =
   (cluster: Cluster | undefined) => (connection: Connection) => {
-    const url = cluster && CLUSTERS[cluster].readBufferUrl;
+    const url = cluster && CLUSTERS[cluster].nativeRpcUrl;
     if (!url) return connection;
     return getConnectionFor(connection.commitment)(url);
   };

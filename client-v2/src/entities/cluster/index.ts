@@ -2,7 +2,7 @@ export {
   buildConnectionWith,
   fetchClusterByGenesisHash,
   getConnectionFor,
-  getReadBufferConnectionFor,
+  getNativeConnectionFor,
   getUnretriedConnectionFor,
 } from "./api/connection";
 export type {
