@@ -5,7 +5,12 @@
 -- migrate:up
 
 -- No foreign key to "user": the record of who built what outlives the account,
--- and `login` is copied in so a deleted user's rows still name them.
+-- so `github_id` and `login` are copied in to keep naming a deleted user.
+-- `github_id` is the GitHub account id from the user's `account` row: every
+-- GitHub user has one, it never changes, and `https://api.github.com/user/<id>`
+-- turns it back into the current handle. `login` alone was not enough, since
+-- sign-in stores it only when it creates the user, so one created before the
+-- column or through the OAuth proxy on a preview has none.
 -- `project_id` and `project_name` are what the client sent, cut to 200
 -- characters by `projectOf`; `program_uuid` is the build server's, or the
 -- request's when the server issued none, and only ever UUID-shaped. `status` is
@@ -16,6 +21,7 @@ create table build_audit (
   id            bigserial primary key,
   user_id       text not null,
   login         text,
+  github_id     text,
   at            timestamptz not null default now(),
   project_id    text,
   project_name  text,
