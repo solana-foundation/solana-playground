@@ -221,7 +221,7 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       publicKey: { toBase58: () => ADDRESS },
     };
     renderChip(() => false);
-    act(() => PgDeployRun.update({ step: "write" }));
+    act(() => PgDeployRun.begin());
     try {
       fireEvent.click(
         screen.getByRole("button", { name: /^Wallet 7xKX…gAsU/ })
@@ -238,9 +238,10 @@ describe("features/fund-wallet/ui/WalletChip", () => {
     }
   });
 
-  it("offers no Connect while a deploy runs from the Playground wallet", () => {
+  it("offers no Connect while a deploy runs from the Playground wallet, before its first step too", () => {
     renderChip(() => false);
-    act(() => PgDeployRun.update({ step: "write" }));
+    // The run waits on the airdrop prompt: it has begun, and has no step
+    act(() => PgDeployRun.begin());
     try {
       fireEvent.click(
         screen.getByRole("button", { name: /^Wallet 7xKX…gAsU/ })
@@ -413,6 +414,27 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       expect(
         logs.entries.filter((e) => e.level === "error" || e.level === "warn")
       ).toHaveLength(1);
+    });
+
+    it("supersedes a connect still pending when a deploy begins", async () => {
+      const asked: (() => boolean)[] = [];
+      connectStandard.make.mockImplementation(
+        (_name, stillWanted) =>
+          new Promise<void>(() => {
+            asked.push(stillWanted);
+          })
+      );
+      renderChip(() => false);
+      openList();
+      fireEvent.click(screen.getByRole("button", { name: "Phantom" }));
+      expect(asked[0]()).toBe(true);
+
+      act(() => PgDeployRun.begin());
+      try {
+        expect(asked[0]()).toBe(false);
+      } finally {
+        act(() => PgDeployRun.reset());
+      }
     });
 
     it("says a decline kept the Playground wallet", async () => {

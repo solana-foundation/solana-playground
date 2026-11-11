@@ -120,6 +120,14 @@ export class PgDeployRun {
     return PgDeployRun._state;
   }
 
+  /**
+   * Whether a run is on, from its start (the airdrop prompt included, when
+   * `step` is still `null`) to its end
+   */
+  static get isActive(): boolean {
+    return PgDeployRun._isActive;
+  }
+
   static get answers(): DeployAnswers | undefined {
     return PgDeployRun._answers;
   }
@@ -168,13 +176,21 @@ export class PgDeployRun {
     for (const cb of PgDeployRun._listeners) cb(next);
   }
 
+  /** A run starts; the deploy command alone calls it */
+  static begin() {
+    PgDeployRun._isActive = true;
+    for (const cb of PgDeployRun._listeners) cb(PgDeployRun._state);
+  }
+
   /** Back to no run; the deploy command calls it when it ends */
   static reset() {
     PgDeployRun._state = IDLE;
+    PgDeployRun._isActive = false;
     for (const cb of PgDeployRun._listeners) cb(IDLE);
   }
 
   private static _state: DeployRunState = IDLE;
+  private static _isActive = false;
   private static _answers: DeployAnswers | undefined;
   private static _lastStep: DeployStep | undefined;
   private static readonly _listeners = new Set<

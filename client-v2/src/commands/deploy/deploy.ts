@@ -74,6 +74,7 @@ export const deploy = createCmd({
       )} This could take a while depending on the program size and network conditions.`
     );
 
+    PgDeployRun.begin();
     try {
       const startTime = performance.now();
       const result = await processDeploy(lockStop, signal);

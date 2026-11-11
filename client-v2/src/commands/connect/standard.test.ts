@@ -18,6 +18,7 @@ vi.mock("../../utils", () => ({
   PgTerminal: { println: vi.fn(), success: String, bold: String },
   PgView: {},
   PgWallet: {
+    state: "disconnected",
     get standardWallets() {
       return wallets.list;
     },
@@ -25,7 +26,9 @@ vi.mock("../../utils", () => ({
   },
 }));
 
+import { PgDeployRun } from "../deploy/run";
 import {
+  connectTo,
   disconnectStandard,
   setStandardCurrent,
   setStandardCurrentWith,
@@ -106,5 +109,22 @@ describe("commands/connect, a standard wallet from a button", () => {
     await expect(setStandardCurrent("Phantom")).rejects.toThrow(
       "Phantom is not installed in this browser."
     );
+  });
+});
+
+describe("commands/connect, the terminal while a deploy runs", () => {
+  it("refuses to connect a wallet from its begin, with one clear line", async () => {
+    const wallet = phantom(false);
+    wallets.list = [wallet];
+    PgDeployRun.begin();
+    try {
+      await expect(connectTo("phantom")).rejects.toThrow(
+        "Cannot connect a wallet while a deploy is running."
+      );
+      expect(wallet.connect).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+    } finally {
+      PgDeployRun.reset();
+    }
   });
 });

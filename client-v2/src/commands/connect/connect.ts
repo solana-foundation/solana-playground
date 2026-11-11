@@ -1,4 +1,5 @@
 import { PgCommon, PgTerminal, PgView, PgWallet } from "../../utils";
+import { PgDeployRun } from "../deploy/run";
 import { createArgs, createCmd } from "../create";
 import { SETUP_REJECTED } from "./setup-rejected";
 
@@ -24,6 +25,10 @@ export const connect = createCmd({
  * setup or an extension wallet
  */
 export const connectTo = async (walletName: string | undefined) => {
+  // A wallet that connects mid-deploy would change who signs the rest of it
+  if (PgDeployRun.isActive) {
+    throw new Error("Cannot connect a wallet while a deploy is running.");
+  }
   switch (PgWallet.state) {
     case "pg": {
       const { changed } = await toggleStandardIfNeeded(walletName);

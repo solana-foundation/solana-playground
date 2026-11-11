@@ -59,13 +59,18 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
   const attempts = useRef(0);
   // A deploy from the extension still needs it to sign: no disconnect then,
   // and no connect, which would change who signs the rest of the run
-  const [deploying, setDeploying] = useState(
-    () => PgDeployRun.state.step !== null
-  );
+  const [deploying, setDeploying] = useState(() => PgDeployRun.isActive);
   useEffect(() => {
-    const sub = PgDeployRun.onDidChange((run) =>
-      setDeploying(run.step !== null)
-    );
+    const sub = PgDeployRun.onDidChange(() => {
+      const isActive = PgDeployRun.isActive;
+      // A connect still pending when a run starts must not make its wallet
+      // current: it is superseded, as by a newer request
+      if (isActive) {
+        attempts.current++;
+        setConnect({ kind: "idle" });
+      }
+      setDeploying(isActive);
+    });
     return () => sub.dispose();
   }, []);
 
