@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 
-import { finishAuditWith, startAuditWith } from "./audit.mjs";
+import {
+  finishAuditWith,
+  finishAuditWithin,
+  startAuditWith,
+} from "./audit.mjs";
 
 describe("startAuditWith", () => {
   it("inserts one row and returns its id", async () => {
@@ -64,7 +68,7 @@ describe("finishAuditWith", () => {
   it("gives up on a stalled database, so the answer is not held", async () => {
     const query = () => new Promise(() => {});
     const started = Date.now();
-    await finishAuditWith(query, { deadlineMs: 20 })({
+    await finishAuditWithin(20)(query)({
       id: 7,
       status: 200,
       durationMs: 3,

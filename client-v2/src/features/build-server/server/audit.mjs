@@ -47,10 +47,10 @@ export const FINISH_DEADLINE_MS = 5_000;
  * `deadlineMs`: the answer waits on it, and a stalled database must not hold
  * a finished build until the function times out and the answer is lost. The
  * row exists either way; one left open reads as a build that never ended.
+ * Production uses `finishAuditWith`, which has `FINISH_DEADLINE_MS` applied.
  *
- * @param {Query} query
- * @param {{ deadlineMs?: number }} [opts]
- * @returns {(outcome: {
+ * @param {number} deadlineMs
+ * @returns {(query: Query) => (outcome: {
  *   id: number;
  *   programUuid?: string;
  *   status: number;
@@ -58,8 +58,9 @@ export const FINISH_DEADLINE_MS = 5_000;
  * }) => Promise<void>} what closes a row; a `programUuid` absent keeps what
  *   the row has
  */
-export const finishAuditWith =
-  (query, { deadlineMs = FINISH_DEADLINE_MS } = {}) =>
+export const finishAuditWithin =
+  (deadlineMs) =>
+  (query) =>
   async ({ id, programUuid, status, durationMs }) => {
     /** @type {ReturnType<typeof setTimeout> | undefined} */
     let timer;
@@ -89,3 +90,6 @@ export const finishAuditWith =
       clearTimeout(timer);
     }
   };
+
+/** `finishAuditWithin` with the production deadline */
+export const finishAuditWith = finishAuditWithin(FINISH_DEADLINE_MS);
