@@ -98,7 +98,7 @@ function ActionCardEyebrow({
   return (
     <span
       data-slot="action-card-eyebrow"
-      className={cn("text-xs text-subtle", className)}
+      className={cn("text-xs font-label text-subtle", className)}
       {...props}
     />
   );
