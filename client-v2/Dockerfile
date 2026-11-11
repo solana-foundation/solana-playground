@@ -1,20 +1,10 @@
-# Conditionally copy based on whether the server image has been built before
-ARG HAS_SERVER
 # Default non-root user
 ARG USER
 # Base image: the newest Node 22 patch; .nvmrc pins the exact version for local and CI runs
 ARG IMAGE="node:22"
 
-################################## Has server ##################################
-FROM ${IMAGE} AS server-true
-
-################################### No server ##################################
-FROM ${IMAGE} AS server-false
-
 ###################### Build and start development client ######################
-# A stage of this file, not an image, so it carries no tag
-# hadolint ignore=DL3006
-FROM server-${HAS_SERVER}
+FROM ${IMAGE}
 
 ARG USER
 # The build server's URL comes from the build, never from this file; empty means a local server
