@@ -4,7 +4,7 @@ import { isAirdropRefused, refusalOf } from "@/commands/airdrop/report";
 import { isAirdropSignInGated } from "@/commands/airdrop/sign-in-gate";
 import {
   disconnectStandard,
-  makeStandardCurrent,
+  makeStandardCurrentWhile,
 } from "@/commands/connect/connect";
 import { PgDeployRun } from "@/commands/deploy/run";
 import { useAirdrop } from "@/components/Wallet/hooks";
@@ -120,31 +120,37 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
     setConnect({ kind: "waiting", wallet: name });
     fundTelemetry.track("fund_wallet_connect_started", { wallet: name });
     try {
-      await makeStandardCurrent(name);
+      // A request superseded while it waited does not take over on approval
+      await makeStandardCurrentWhile(() => attempt === attempts.current)(name);
+      if (attempt !== attempts.current) return;
       fundTelemetry.track("fund_wallet_connected", {
         wallet: name,
         as: "current",
       });
-      if (attempt === attempts.current) setConnect({ kind: "idle" });
+      setConnect({ kind: "idle" });
     } catch (error) {
       const reason = classify(error);
       fundTelemetry.track("fund_wallet_connect_failed", {
         wallet: name,
         reason,
       });
-      if (attempt !== attempts.current) return;
+      // Declining is the user's answer; it is logged, never reported
       if (reason === "rejected") {
-        // Declining is the user's answer; it is logged, never reported
         log.warn("the wallet declined to connect", {
           context: { wallet: name, error: String(error) },
         });
+      } else {
+        log.error(error, {
+          report: true,
+          context: { action: "connect a wallet from the chip", wallet: name },
+        });
+      }
+      // Only the latest request speaks on screen; a superseded one is logged
+      if (attempt !== attempts.current) return;
+      if (reason === "rejected") {
         setConnect({ kind: "declined", wallet: name });
         return;
       }
-      log.error(error, {
-        report: true,
-        context: { action: "connect a wallet from the chip", wallet: name },
-      });
       setConnect({
         kind: "failed",
         wallet: name,

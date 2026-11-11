@@ -30,11 +30,14 @@ vi.mock("@/components/Wallet/hooks", () => ({
   useAirdrop: () => ({ airdrop, faucet: "available" }),
 }));
 const connectStandard = vi.hoisted(() => ({
-  make: vi.fn<(name: string) => Promise<void>>(async () => {}),
+  make: vi.fn<(name: string, stillWanted: () => boolean) => Promise<void>>(
+    async () => {}
+  ),
   drop: vi.fn<(name: string) => Promise<void>>(async () => {}),
 }));
 vi.mock("@/commands/connect/connect", () => ({
-  makeStandardCurrent: connectStandard.make,
+  makeStandardCurrentWhile: (stillWanted: () => boolean) => (name: string) =>
+    connectStandard.make(name, stillWanted),
   disconnectStandard: connectStandard.drop,
 }));
 const current = vi.hoisted(() => ({
@@ -55,7 +58,10 @@ vi.mock("@/utils", () => ({
     get current() {
       return current.wallet;
     },
-    standardWallets: [{ name: "Phantom", icon: "data:," }],
+    standardWallets: [
+      { name: "Phantom", icon: "data:," },
+      { name: "Solflare", icon: "data:," },
+    ],
   },
   PgConnection: {
     get cluster() {
@@ -300,7 +306,10 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       await act(async () => {
         fireEvent.click(screen.getByRole("button", { name: "Phantom" }));
       });
-      expect(connectStandard.make).toHaveBeenCalledWith("Phantom");
+      expect(connectStandard.make).toHaveBeenCalledWith(
+        "Phantom",
+        expect.any(Function)
+      );
       expect(chipEvents()).toEqual([
         ["fund_wallet_connect_started", { wallet: "Phantom" }],
         ["fund_wallet_connected", { wallet: "Phantom", as: "current" }],
@@ -327,6 +336,51 @@ describe("features/fund-wallet/ui/WalletChip", () => {
 
       await act(async () => approve());
       expect(screen.queryByText("Waiting for Phantom…")).toBeNull();
+    });
+
+    it("tells a superseded approval not to take over, and still logs its failure", async () => {
+      const asked: { name: string; stillWanted?: () => boolean }[] = [];
+      const answers: { approve: () => void; fail: (e: Error) => void }[] = [];
+      connectStandard.make.mockImplementation(
+        (name, stillWanted) =>
+          new Promise<void>((resolve, reject) => {
+            asked.push({ name, stillWanted });
+            answers.push({ approve: resolve, fail: reject });
+          })
+      );
+      const view = renderChip(() => false);
+      openList();
+      fireEvent.click(screen.getByRole("button", { name: "Phantom" }));
+
+      // Another way made a wallet current and dropped it again, which ended
+      // the wait; the user then picks again
+      const rerender = () =>
+        view.rerender(
+          <TooltipProvider>
+            <WalletChip signedOut={false} isSignInFailure={() => false} />
+          </TooltipProvider>
+        );
+      const playground = current.wallet;
+      current.wallet = {
+        name: "Solflare",
+        icon: "data:,",
+        publicKey: { toBase58: () => ADDRESS },
+      };
+      rerender();
+      current.wallet = playground;
+      rerender();
+      fireEvent.click(screen.getByRole("button", { name: "Connect a wallet" }));
+      fireEvent.click(screen.getByRole("button", { name: "Phantom" }));
+      expect(asked.map((a) => a.name)).toEqual(["Phantom", "Phantom"]);
+
+      const [first, second] = asked;
+      expect(first.stillWanted?.()).toBe(false);
+      expect(second.stillWanted?.()).toBe(true);
+
+      await act(async () => answers[0].fail(new Error("socket hung up")));
+      expect(
+        logs.entries.filter((e) => e.level === "error" || e.level === "warn")
+      ).toHaveLength(1);
     });
 
     it("says a decline kept the Playground wallet", async () => {

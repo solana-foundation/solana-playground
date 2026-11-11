@@ -25,7 +25,11 @@ vi.mock("../../utils", () => ({
   },
 }));
 
-import { disconnectStandard, makeStandardCurrent } from "./connect";
+import {
+  disconnectStandard,
+  makeStandardCurrent,
+  makeStandardCurrentWhile,
+} from "./connect";
 
 const phantom = (connected: boolean) => ({
   name: "Phantom",
@@ -62,6 +66,16 @@ describe("commands/connect, a standard wallet from a button", () => {
       state: "sol",
       standardName: "Phantom",
     });
+  });
+
+  it("connects but does not make the wallet current when it is no longer wanted", async () => {
+    const wallet = phantom(false);
+    wallets.list = [wallet];
+
+    await makeStandardCurrentWhile(() => false)("Phantom");
+
+    expect(wallet.connect).toHaveBeenCalledOnce();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("changes nothing when the wallet declines", async () => {

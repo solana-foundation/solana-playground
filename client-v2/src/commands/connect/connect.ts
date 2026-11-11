@@ -127,13 +127,20 @@ const standardNamed = (name: string) => {
  * when it is not. One already connected (a payer the Fund dialog connected)
  * is made current as it is, never toggled off.
  *
+ * @param stillWanted asked once the wallet answers: a request that was
+ * superseded meanwhile leaves the wallet connected but not current
  * @throws the wallet's own error when it declines; nothing changes then
  */
-export const makeStandardCurrent = async (name: string) => {
-  const wallet = standardNamed(name);
-  if (!wallet.connected) await wallet.connect();
-  PgWallet.update({ state: "sol", standardName: wallet.name });
-};
+export const makeStandardCurrentWhile =
+  (stillWanted: () => boolean) => async (name: string) => {
+    const wallet = standardNamed(name);
+    if (!wallet.connected) await wallet.connect();
+    if (!stillWanted()) return;
+    PgWallet.update({ state: "sol", standardName: wallet.name });
+  };
+
+/** `makeStandardCurrentWhile` for a request nothing supersedes */
+export const makeStandardCurrent = makeStandardCurrentWhile(() => true);
 
 /** Disconnect the standard wallet `name`; the Playground wallet is current again */
 export const disconnectStandard = async (name: string) => {
