@@ -568,7 +568,9 @@ reason.
 - **The `check` script is green before the push.** It runs what CI runs,
   in CI's order, minus the production build. Opt in to running it on every
   push with `git config core.hooksPath .githooks` once per clone. The same
-  setting adds a pre-commit hook, and both hooks print the lint warnings of
+  setting adds a pre-commit hook, which fails a commit whose staged lines
+  hold a value from a local `.env*` file (`scripts/check-env-leaks.mjs`),
+  and both hooks print the lint warnings of
   the content they cover (the staged content, or the content of the commits
   being pushed, as git holds it) through `scripts/lint-changed.mjs` without
   blocking; the `--max-warnings` ceiling in `check` stays the gate. Each line
