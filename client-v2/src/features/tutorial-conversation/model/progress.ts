@@ -600,6 +600,22 @@ const ACT_KINDS: Record<Act, true> = {
 const ACTS = Object.keys(ACT_KINDS) as readonly Act[];
 const SKIP_VIAS: readonly SkipVia[] = ["button", "call_panel", "elsewhere"];
 
+/**
+ * Hello Anchor's "greet-by-name" step gained a beat, `s4.client`, at index 2.
+ * A cursor is the index of the next beat, so a save made before it, past the
+ * second beat and without `s4.client` resolved, points one beat early: the
+ * airdrop card would show as the live one instead of the deploy. Moving it one
+ * on keeps it on the beat it meant; the learner skips only the client rewrite,
+ * and the call card sends its own arguments.
+ */
+const realignedCursor = (cursor: Cursor, beats: unknown): Cursor => {
+  if (cursor.kind !== "step" || cursor.stepId !== "greet-by-name")
+    return cursor;
+  if (cursor.fail || cursor.beat < 2) return cursor;
+  if (isRecord(beats) && "s4.client" in beats) return cursor;
+  return { ...cursor, beat: cursor.beat + 1 };
+};
+
 const parseCursor = (v: unknown): Cursor | null => {
   if (!isRecord(v)) return null;
   if (v.kind === "intro" || v.kind === "finished") return { kind: v.kind };
@@ -1062,8 +1078,9 @@ export const parseProgress = (
 ): ConversationProgress | null => {
   if (!isRecord(saved) || saved.version !== 1) return null;
   if (!isStrings(saved.passed) || !isMsOrNull(saved.finishedAt)) return null;
-  const cursor = parseCursor(saved.cursor);
-  if (!cursor) return null;
+  const parsed = parseCursor(saved.cursor);
+  if (!parsed) return null;
+  const cursor = realignedCursor(parsed, saved.beats);
   if (!isMsOrNull(saved.startedAt)) return null;
   // One rule for the save's timestamps: a malformed one fails the save
   if (!isMsOrNull(saved.restartedAt)) return null;
@@ -1102,6 +1119,34 @@ if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/progress", () => {
+    it("moves a cursor saved before s4.client one beat on", () => {
+      const save = (beat: number, beats: Record<string, unknown>) =>
+        JSON.parse(
+          JSON.stringify(
+            Object.assign(freshProgress(), {
+              cursor: {
+                kind: "step",
+                stepId: "greet-by-name",
+                beat,
+                fail: false,
+              },
+              beats,
+            })
+          )
+        );
+      const at = (v: unknown) => parseProgress(v)?.cursor;
+      expect(at(save(3, {}))).toEqual({
+        kind: "step",
+        stepId: "greet-by-name",
+        beat: 4,
+        fail: false,
+      });
+      expect(at(save(1, {}))).toMatchObject({ beat: 1 });
+      expect(
+        at(save(3, { "s4.client": { state: "said", at: 1 } }))
+      ).toMatchObject({ beat: 3 });
+    });
+
     it("drops a landed airdrop whose balance or amount does not read as lamports", () => {
       const saved = (balance: unknown, airdropped: unknown) =>
         JSON.parse(
