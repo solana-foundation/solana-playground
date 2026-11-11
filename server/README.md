@@ -17,9 +17,8 @@ docker compose -f ../compose.yaml --profile dev up server --build
 
 This will:
 
-1. Create a [MongoDB](https://github.com/mongodb/mongo) database
-2. Build the server from source
-3. Start the server
+1. Build the server from source
+2. Start the server
 
 See the [root README](../README.md#run-with-docker) for more options.
 
@@ -47,4 +46,4 @@ Or run it manually (Actions → CICD → Run workflow) to deploy the latest tag.
 | `SERVICE_ACCOUNT` | Service-account email used by `gcloud config`.   |
 | `PROJECT_ID`      | GCP project that owns the App Engine app.       |
 
-Runtime configuration (e.g. the database URI) is **not** baked into [`app.yaml`](app.yaml); set it on the App Engine service separately. Note: the current deploy does not set `PG_DB_URI`, so the server's database connection is not configured by this workflow.
+Every runtime setting has a default in [`src/config.rs`](src/config.rs); [`app.yaml`](app.yaml) sets the ones production overrides.
