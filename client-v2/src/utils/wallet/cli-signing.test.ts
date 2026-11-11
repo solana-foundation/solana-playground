@@ -129,6 +129,41 @@ describe("utils/wallet/wallet signTransactionMessage and its lookups for the WAS
     expect(sign).not.toHaveBeenCalled();
   });
 
+  it("refuses when another wallet became current while the key page signed", async () => {
+    const other = walletSigningWith(async (tx) => tx);
+    connect(
+      walletSigningWith(async (tx) => {
+        tx.partialSign(keypair);
+        // The user switches accounts while the key page is answering
+        connect({
+          isPg: true,
+          name: "Wallet 2",
+          publicKey: PgWeb3.Keypair.generate().publicKey,
+          signTransaction: other.signTransaction,
+        } as unknown as Wallet);
+        return tx;
+      })
+    );
+
+    await expect(
+      PgWallet.signTransactionMessage(messageFrom(keypair.publicKey), walletKey)
+    ).rejects.toThrow(`The wallet this command started with (${walletKey})`);
+  });
+
+  it("refuses when the wallet disconnected while the key page signed", async () => {
+    connect(
+      walletSigningWith(async (tx) => {
+        tx.partialSign(keypair);
+        Reflect.deleteProperty(PgWallet, "current");
+        return tx;
+      })
+    );
+
+    await expect(
+      PgWallet.signTransactionMessage(messageFrom(keypair.publicKey), walletKey)
+    ).rejects.toThrow(`The wallet this command started with (${walletKey})`);
+  });
+
   it("refuses a transaction the wallet left unsigned", async () => {
     connect(walletSigningWith(async (tx) => tx));
 

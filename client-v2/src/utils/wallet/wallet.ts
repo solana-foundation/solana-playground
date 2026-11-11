@@ -985,11 +985,7 @@ class _PgWallet {
   static async signTransactionMessage(message: Uint8Array, publicKey: string) {
     const wallet = PgWallet.current;
     if (!wallet) throw new Error("Not connected");
-    if (!wallet.isPg || wallet.publicKey.toBase58() !== publicKey) {
-      throw new Error(
-        `The wallet this command started with (${publicKey}) is no longer the current wallet`
-      );
-    }
+    PgWallet._assertCurrentIs(publicKey);
 
     const tx = PgWeb3.Transaction.populate(
       PgWeb3.Message.from(Buffer.from(message))
@@ -1012,7 +1008,25 @@ class _PgWallet {
       );
     }
 
+    // The user may switch accounts or disconnect while the key page answers;
+    // the CLI must not send from a wallet that is no longer current
+    PgWallet._assertCurrentIs(publicKey);
+
     return Uint8Array.from(signature);
+  }
+
+  /**
+   * Throw unless the current wallet is the built-in one with `publicKey`.
+   *
+   * @param publicKey base58 public key of the wallet a CLI run started with
+   */
+  private static _assertCurrentIs(publicKey: string) {
+    const wallet = PgWallet.current;
+    if (!wallet?.isPg || wallet.publicKey.toBase58() !== publicKey) {
+      throw new Error(
+        `The wallet this command started with (${publicKey}) is no longer the current wallet`
+      );
+    }
   }
 
   /**
