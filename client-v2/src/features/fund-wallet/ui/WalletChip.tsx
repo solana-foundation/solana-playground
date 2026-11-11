@@ -64,6 +64,18 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
     return () => sub.dispose();
   }, []);
 
+  // An airdrop's state belongs to the wallet and cluster it started on: on
+  // another, a balance that differs is not SOL that came, and a refusal is
+  // not this faucet's. Declared before the balance effect, so that one sees
+  // the cleared start.
+  const shownAddress = PgWallet.current?.publicKey.toBase58();
+  const shownCluster = PgConnection.cluster ?? undefined;
+  useEffect(() => {
+    from.current = undefined;
+    setState("idle");
+    setReceived(undefined);
+  }, [shownAddress, shownCluster]);
+
   useEffect(() => {
     if (state !== "away" && state !== "received") return;
     if (balance === undefined || from.current === undefined) return;

@@ -18,8 +18,10 @@ import { TooltipProvider } from "@/shared/ui/tooltip";
 
 const ADDRESS = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 
+const balanceNow = vi.hoisted(() => ({ sol: 0 }));
+const clusterNow = vi.hoisted(() => ({ name: "devnet" }));
 vi.mock("@/hooks", () => ({
-  useBalance: () => 0,
+  useBalance: () => balanceNow.sol,
   useRenderOnChange: () => undefined,
   useWallet: () => undefined,
 }));
@@ -56,7 +58,9 @@ vi.mock("@/utils", () => ({
     standardWallets: [{ name: "Phantom", icon: "data:," }],
   },
   PgConnection: {
-    cluster: "devnet",
+    get cluster() {
+      return clusterNow.name;
+    },
     onDidChangeCluster: () => ({ dispose: () => undefined }),
     getAirdropAmount: () => 5,
   },
@@ -85,6 +89,8 @@ afterEach(() => {
   connectStandard.make.mockReset();
   connectStandard.drop.mockReset();
   current.wallet = { isPg: true, publicKey: { toBase58: () => ADDRESS } };
+  balanceNow.sol = 0;
+  clusterNow.name = "devnet";
 });
 
 const renderChip = (isSignInFailure: (e: unknown) => boolean) =>
@@ -222,6 +228,62 @@ describe("features/fund-wallet/ui/WalletChip", () => {
     } finally {
       act(() => PgDeployRun.reset());
     }
+  });
+
+  describe("the airdrop state belongs to one wallet on one cluster", () => {
+    const OTHER = "9wFFyRfZBsuAha4YcuxcXLKwMxJR43S7fPfQLusDBzvT";
+    const received = () =>
+      sent.events.filter((event) => event.name === "fund_airdrop_received");
+
+    /** Refused by the faucet, then off to the web faucet to wait there */
+    const waitAtTheWebFaucet = async () => {
+      airdrop.mockRejectedValueOnce(
+        new AirdropRefusedError(new Error("429 Too Many Requests"))
+      );
+      const view = renderChip(() => false);
+      await getSol();
+      fireEvent.click(
+        screen.getByRole("link", { name: /Open the web faucet/ })
+      );
+      return view;
+    };
+
+    it("does not count another wallet's balance as SOL received", async () => {
+      const view = await waitAtTheWebFaucet();
+
+      current.wallet = {
+        name: "Phantom",
+        icon: "data:,",
+        publicKey: { toBase58: () => OTHER },
+      };
+      balanceNow.sol = 2;
+      view.rerender(
+        <TooltipProvider>
+          <WalletChip signedOut={false} isSignInFailure={() => false} />
+        </TooltipProvider>
+      );
+
+      expect(received()).toEqual([]);
+      expect(screen.queryByText(/Got /)).toBeNull();
+    });
+
+    it("drops a refusal when the cluster changes", async () => {
+      airdrop.mockRejectedValueOnce(
+        new AirdropRefusedError(new Error("429 Too Many Requests"))
+      );
+      const view = renderChip(() => false);
+      await getSol();
+      expect(screen.getByText("The faucet is at its limit")).toBeTruthy();
+
+      clusterNow.name = "testnet";
+      view.rerender(
+        <TooltipProvider>
+          <WalletChip signedOut={false} isSignInFailure={() => false} />
+        </TooltipProvider>
+      );
+
+      expect(screen.queryByText("The faucet is at its limit")).toBeNull();
+    });
   });
 
   describe("connecting a wallet", () => {
