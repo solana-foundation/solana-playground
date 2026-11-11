@@ -64,7 +64,7 @@ vi.mock("../../utils", () => {
   return {
     PgCommand: { airdrop: { execute: vi.fn(async () => {}) } },
     PgCommon: { formatSeconds: () => "1s", makePlural: (s: string) => s },
-    TerminalLineError: class TerminalLineError extends Error {},
+    TerminalLineError: class MockTerminalLineError extends Error {},
     PgConnection: {
       cluster: "devnet",
       getCluster: vi.fn(async () => "devnet"),
