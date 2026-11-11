@@ -11,8 +11,9 @@ export type Captured =
 
 /**
  * Send errors `PgTx.send` answers by sending again with a fresh blockhash:
- * the refusal is the first try of a transaction that may land on the retry,
- * not the program's answer
+ * the refusal is a try of a transaction that may land on the retry, not the
+ * program's answer. After its last resend `PgTx.send` throws the answer, so
+ * the run gets it as its error, not as a captured refusal
  */
 const RETRIED = [
   "Blockhash not found",

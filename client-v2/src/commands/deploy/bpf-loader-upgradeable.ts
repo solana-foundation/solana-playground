@@ -111,10 +111,37 @@ const MAX_BUFFER_READS = 30;
 
 const BUFFER_READ_INTERVAL_MS = 1000;
 
+/** How Chrome, Safari and Firefox word a fetch they could not make */
+const FETCH_FAILURE = /Failed to fetch|Load failed|NetworkError/i;
+
 /** A fetch the browser failed, which is how it reports a 429 sent without CORS headers */
 const isFetchFailure = (e: unknown) =>
-  e instanceof TypeError &&
-  /Failed to fetch|Load failed|NetworkError/i.test(e.message);
+  e instanceof TypeError && FETCH_FAILURE.test(e.message);
+
+/** The longest message a refused-write line carries: an RPC's error page can put a whole body on one line */
+const MAX_REFUSAL_MESSAGE_LENGTH = 200;
+
+/**
+ * The cluster's own words for a refused send, on one line: web3.js keeps them in a `SendTransactionError`'s
+ * `transactionMessage`, and adds the simulation's logs to its `message`
+ */
+const clusterMessageOf = (e: unknown) => {
+  // Each browser words a fetch it could not make its own way, and web3.js keeps that wording only as text when the
+  // blockhash fetch fails ("failed to get recent blockhash: TypeError: Load failed"); the line names it the same in all
+  if (isFetchFailure(e) || FETCH_FAILURE.test(toError(e).message)) {
+    return "Failed to fetch";
+  }
+  const message = (e as { transactionMessage?: unknown } | null)
+    ?.transactionMessage;
+  const words =
+    typeof message === "string" && message.trim()
+      ? message
+      : toError(e).message;
+  const line = words.trim().split("\n")[0];
+  return line.length > MAX_REFUSAL_MESSAGE_LENGTH
+    ? `${line.slice(0, MAX_REFUSAL_MESSAGE_LENGTH)}…`
+    : line;
+};
 
 /** The host of an RPC URL, for logs and errors: its path or query may carry an API key */
 const hostOf = (url: string) => /^[a-z]+:\/\/([^/?#]+)/i.exec(url)?.[1] ?? url;
@@ -187,6 +214,12 @@ export class BpfLoaderUpgradeable {
       onMissing?: (missingCount: number) => void;
       /** `reason` names the provider and its message, as in `Helius: Too many requests` */
       onRateLimit?: (retryAfter: number, reason: string) => void;
+      /**
+       * A write the cluster refused for a reason other than a rate limit, with the cluster's message: called for the
+       * first such write of each round. Its refused chunks are sent again in the next round, unless the load is
+       * stopped or gives up after rounds that land nothing. A round that reports a refusal skips `onRateLimit`.
+       */
+      onRefusal?: (message: string) => void;
     } & SendOption
   ) {
     const programBytes = Buffer.from(bytes);
@@ -236,8 +269,9 @@ export class BpfLoaderUpgradeable {
       let successCount = 0;
       let lastTxHash: string | undefined;
       let rateLimitReason: string | undefined;
+      let hasReportedRefusal = false;
       await Promise.all(
-        new Array(loadConcurrency).fill(null).map(async () => {
+        Array.from({ length: loadConcurrency }, async () => {
           let backoff = 0;
           while (1) {
             if (opts?.abortController?.signal.aborted) return;
@@ -288,6 +322,14 @@ export class BpfLoaderUpgradeable {
                 break;
               }
               lastRefusal = { error, words: `last refusal: ${error.message}` };
+              // A send that fails after a stop is not sent again, so it is not reported
+              if (
+                !hasReportedRefusal &&
+                !opts?.abortController?.signal.aborted
+              ) {
+                hasReportedRefusal = true;
+                opts?.onRefusal?.(clusterMessageOf(e));
+              }
 
               // The browser hides a 429 without CORS headers behind a failed fetch, so slow down as for one
               if (isFetchFailure(e)) pace.recordRateLimit();
@@ -305,7 +347,15 @@ export class BpfLoaderUpgradeable {
       if (rateLimitReason) {
         // TODO: Make use of the `Retry-After` response header
         const retryAfter = 10; // this is what `Retry-After` returns currently
-        opts?.onRateLimit?.(retryAfter, rateLimitReason);
+        // One line a round, printed as it happens: a round whose refusal is already in the terminal waits without a
+        // second one, and the rate limit goes to the log
+        if (hasReportedRefusal) {
+          log.warn("Rate-limited after a refused write; waiting", {
+            context: { reason: rateLimitReason, retryAfter },
+          });
+        } else {
+          opts?.onRateLimit?.(retryAfter, rateLimitReason);
+        }
         await pause(retryAfter * 1000);
         if (opts?.abortController?.signal.aborted) return;
       }
@@ -322,7 +372,7 @@ export class BpfLoaderUpgradeable {
     };
 
     const txCount = Math.ceil(programBytes.length / WRITE_CHUNK_SIZE);
-    const indices = new Array(txCount).fill(null).map((_, i) => i);
+    const indices = Array.from({ length: txCount }, (_, i) => i);
 
     const readBufferHost = hostOf(bufferConnection.rpcEndpoint);
     /**

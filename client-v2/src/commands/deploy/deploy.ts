@@ -28,6 +28,7 @@ import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
 import { MAINNET_DEPLOY_WARNING, warnsOnDeploy } from "./mainnet-warning";
 import { NetworkRefusedError } from "./network-refused";
 import { forgetOpenBuffer, recordOpenBuffer } from "./open-buffers";
+import { refusedWriteLine } from "./refused-write";
 import type { DeployResult, FundingFailure } from "./run";
 import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
 import type { StoppedBuffer } from "./stopped";
@@ -741,6 +742,11 @@ const processDeploy = async (
             ),
             { noColor: true }
           );
+        },
+        onRefusal: (message) => {
+          PgTerminal.println(PgTerminal.warning(refusedWriteLine(message)), {
+            noColor: true,
+          });
         },
       }
     ).catch(async (e: unknown) => {

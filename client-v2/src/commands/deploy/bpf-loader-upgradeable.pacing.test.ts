@@ -107,6 +107,7 @@ const loadWith = async (
     loadConcurrency: number;
     writesPerSecond: number;
     onRateLimit?: (retryAfter: number, reason: string) => void;
+    onRefusal?: (message: string) => void;
   },
   chunks: number
 ) => {
@@ -427,6 +428,151 @@ describe("commands/deploy/bpf-loader-upgradeable", () => {
     );
     expect(error.cause).toBe(refusal);
     expect(logged.entries.map(({ level }) => level)).toEqual(["warn"]);
+  });
+
+  it("reports the first refused write of each round to onRefusal, with the cluster's message", async () => {
+    // Each round lands one chunk and refuses the rest: three chunks take three rounds, two with refusals
+    chain.landsPerRead = 1;
+    chain.failWith = () =>
+      Object.assign(
+        new Error(
+          "Simulation failed. \nMessage: Transaction simulation failed: Insufficient funds for fee. \nLogs: \n[]."
+        ),
+        {
+          transactionMessage:
+            "Transaction simulation failed: Insufficient funds for fee",
+        }
+      );
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 4, writesPerSecond: 1000, onRefusal }, 3);
+
+    expect(onRefusal.mock.calls).toEqual([
+      ["Transaction simulation failed: Insufficient funds for fee"],
+      ["Transaction simulation failed: Insufficient funds for fee"],
+    ]);
+  });
+
+  it("names a refusal without a cluster message by the first line of its error", async () => {
+    chain.failures = 1;
+    chain.failWith = () => new Error("connection reset\nat fetch");
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000, onRefusal }, 2);
+
+    expect(onRefusal.mock.calls).toEqual([["connection reset"]]);
+  });
+
+  it("names a refusal by its error when the cluster's message is blank", async () => {
+    chain.failures = 1;
+    chain.failWith = () =>
+      Object.assign(new Error("Simulation failed.\nLogs: []"), {
+        transactionMessage: "  ",
+      });
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000, onRefusal }, 2);
+
+    expect(onRefusal.mock.calls).toEqual([["Simulation failed."]]);
+  });
+
+  it("reports no refusal for a send that fails after a stop", async () => {
+    const abortController = new AbortController();
+    chain.failures = 1;
+    chain.failWith = () => {
+      abortController.abort();
+      return new TypeError("Failed to fetch");
+    };
+    const onRefusal = vi.fn();
+    const bytes = new Uint8Array(2 * CHUNK_SIZE).fill(1);
+    chain.data = Buffer.alloc(METADATA_SIZE + bytes.length);
+
+    const loading = BpfLoaderUpgradeable.loadBuffer({} as never, bytes, {
+      loadConcurrency: 1,
+      abortController,
+      onRefusal,
+    });
+    await vi.runAllTimersAsync();
+    await loading;
+
+    expect(chain.sentAt).toHaveLength(1);
+    expect(onRefusal).not.toHaveBeenCalled();
+  });
+
+  it("reports a write the browser could not send as refused, naming the failed fetch", async () => {
+    chain.failures = 1;
+    chain.failWith = fetchFailed;
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000, onRefusal }, 2);
+
+    expect(onRefusal.mock.calls).toEqual([["Failed to fetch"]]);
+  });
+
+  it("prints one line for a round with a refusal and then a rate limit: the refusal", async () => {
+    const answers = [
+      () => new Error("Insufficient funds for fee"),
+      rateLimited,
+    ];
+    chain.failures = 2;
+    chain.failWith = () => (answers.shift() ?? rateLimited)();
+    const onRefusal = vi.fn();
+    const onRateLimit = vi.fn();
+
+    const sentAt = await loadWith(
+      { loadConcurrency: 1, writesPerSecond: 1000, onRefusal, onRateLimit },
+      3
+    );
+
+    expect(onRefusal.mock.calls).toEqual([["Insufficient funds for fee"]]);
+    expect(onRateLimit).not.toHaveBeenCalled();
+    // The round still waits out the rate limit
+    expect(sentAt[2] - sentAt[1]).toBeGreaterThanOrEqual(10_000);
+  });
+
+  it("names a fetch the browser could not make Failed to fetch, whatever the browser calls it", async () => {
+    chain.failures = 1;
+    // Safari's words for a failed fetch
+    chain.failWith = () => new TypeError("Load failed");
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000, onRefusal }, 2);
+
+    expect(onRefusal.mock.calls).toEqual([["Failed to fetch"]]);
+  });
+
+  it("names a failed blockhash fetch Failed to fetch, as web3.js words it in text", async () => {
+    chain.failures = 1;
+    chain.failWith = () =>
+      new Error("failed to get recent blockhash: TypeError: Load failed");
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000, onRefusal }, 2);
+
+    expect(onRefusal.mock.calls).toEqual([["Failed to fetch"]]);
+  });
+
+  it("cuts a long refusal message, such as an RPC's error page", async () => {
+    chain.failures = 1;
+    chain.failWith = () =>
+      new Error(`502 Bad Gateway: ${"<html>".repeat(100)}`);
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000, onRefusal }, 2);
+
+    const [[message]] = onRefusal.mock.calls as [[string]];
+    expect(message.startsWith("502 Bad Gateway: <html>")).toBe(true);
+    expect(message).toHaveLength(201);
+  });
+
+  it("leaves a rate-limited write to onRateLimit, not onRefusal", async () => {
+    chain.failures = 1;
+    chain.failWith = rateLimited;
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000, onRefusal }, 2);
+
+    expect(onRefusal).not.toHaveBeenCalled();
   });
 
   it("says writes were accepted but never landed when no send was refused", async () => {

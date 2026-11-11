@@ -233,7 +233,7 @@ const attempt = async (
 
   stage(labels[index]);
   const sends = await port.send(act, input);
-  // A first try `PgTx.send` answered by sending again is not a refusal
+  // A try `PgTx.send` answered by sending again is not a refusal; after its last resend the answer arrives as `error`
   const captured = sends.captured.filter((c) => !isRetriedSend(c));
   const { error } = sends;
 
