@@ -105,7 +105,7 @@ const PAST_LAMPORTS = /^(\d+\.\d{9})\d+$/;
  * steps up to `1.1` and down to `1`; other text that is not an amount steps
  * from 0.
  */
-export const stepAmount =
+export const stepAmountWith =
   (direction: 1 | -1) =>
   (text: string): string => {
     const trimmed = text.trim();
@@ -269,9 +269,9 @@ if (import.meta.vitest) {
       { text: "1.0000000001", direction: 1, next: "1.1" },
       { text: "1.0000000001", direction: -1, next: "1" },
     ])(
-      "stepAmount($direction)($text) is $next",
+      "stepAmountWith($direction)($text) is $next",
       ({ text, direction, next }) => {
-        expect(stepAmount(direction)(text)).toBe(next);
+        expect(stepAmountWith(direction)(text)).toBe(next);
       }
     );
 

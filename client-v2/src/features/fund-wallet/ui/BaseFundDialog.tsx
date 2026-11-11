@@ -39,7 +39,7 @@ import {
   formatSol,
   maxAmount,
   parseAmount,
-  stepAmount,
+  stepAmountWith,
 } from "../model/fund";
 import { NO_EXTENSION } from "../model/no-extension";
 
@@ -238,7 +238,7 @@ const BaseFundDialog = ({
   const shown = failure ? failureText(failure) : undefined;
   const max =
     typeof payer?.balance === "number" ? maxAmount(payer.balance) : undefined;
-  const lower = stepAmount(-1)(amount);
+  const lower = stepAmountWith(-1)(amount);
   // Less changes nothing at 0
   const canLower = lower !== amount;
 
@@ -248,7 +248,7 @@ const BaseFundDialog = ({
     if (isModified) return;
     if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
     event.preventDefault();
-    onAmountChange(stepAmount(event.key === "ArrowUp" ? 1 : -1)(amount));
+    onAmountChange(stepAmountWith(event.key === "ArrowUp" ? 1 : -1)(amount));
   };
 
   // BrandButton has no wait of its own, so Send keeps one: a second press
@@ -342,7 +342,7 @@ const BaseFundDialog = ({
                   <InputGroupButton
                     size="icon-xs"
                     aria-label="More by 0.1 SOL"
-                    onClick={() => onAmountChange(stepAmount(1)(amount))}
+                    onClick={() => onAmountChange(stepAmountWith(1)(amount))}
                   >
                     <Plus />
                   </InputGroupButton>

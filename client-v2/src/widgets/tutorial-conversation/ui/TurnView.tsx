@@ -153,7 +153,7 @@ const withProgram = (act: ActBeat, programId: string | null): ActBeat =>
     : act;
 
 /** A run's or call's "Send from your wallet", for the wallet it found short */
-const fundOf =
+const fundWith =
   (fundFor: TurnHandlers["fundFor"]) =>
   (result: RunResult): (() => void) | undefined =>
     !result.ok && result.reason === "no_funds" && "funding" in result
@@ -362,7 +362,7 @@ const TurnView = ({
           onRecheck={() => on.recheck(turn.beatId)}
           signedIn={signedIn}
           onSignIn={on.signIn}
-          onFund={fundOf(on.fundFor)(turn.result)}
+          onFund={fundWith(on.fundFor)(turn.result)}
         />
       );
     case "win": {
