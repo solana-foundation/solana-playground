@@ -312,10 +312,14 @@ export const getImportedNames = (content: string) => {
   const names = new Set<string>();
   // An import in a comment binds nothing: drop comments, but keep strings
   // whole, so "http://" in one is not read as a comment
-  const code = content.replace(
-    /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
-    (_match, string?: string) => string ?? " "
-  );
+  // A file saved with a byte order mark starts with U+FEFF, which is not
+  // a space to `[ \t]` below
+  const code = content
+    .replace(/^\uFEFF/, "")
+    .replace(
+      /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+      (_match, string?: string) => string ?? " "
+    );
   // A statement starts a line or follows a `;`, so an import written inside a
   // string is not one
   const statement =

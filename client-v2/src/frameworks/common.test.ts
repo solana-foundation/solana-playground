@@ -78,6 +78,12 @@ describe("getImportedNames", () => {
     expect(getImportedNames(content).size).toBe(0);
   });
 
+  it("reads the names of a client that starts with a byte order mark", () => {
+    expect(
+      getImportedNames('\uFEFFimport * as web3 from "@solana/web3.js";\n')
+    ).toEqual(new Set(["web3"]));
+  });
+
   it("reads no name from code that only mentions import", () => {
     expect(
       getImportedNames(
