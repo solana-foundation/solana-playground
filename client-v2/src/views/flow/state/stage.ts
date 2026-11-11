@@ -239,6 +239,34 @@ export const programSourceIn =
     );
 
 /**
+ * The stored build verdict as a stage status. Anything but a boolean is
+ * "never built": the getter also answers `undefined` until the file is read.
+ */
+const recordedBuild = (
+  lastBuildFailed: boolean | null | undefined
+): StageStatus => {
+  if (lastBuildFailed === true) return "failed";
+  if (lastBuildFailed === false) return "done";
+  return "upcoming";
+};
+
+/**
+ * Deploy after a restore. A program on the cluster is deployed, also when the
+ * verdict came first and left Deploy `active`; a run in flight or a failed
+ * deploy of this session knows more, so they stay. A recorded success points
+ * at Deploy the way `build-finish` does, so a reload does not leave a finished
+ * Build with nothing saying where to go next.
+ */
+const restoredDeploy = (
+  deploy: StageStatus,
+  { recorded, deployed }: { recorded: StageStatus; deployed?: boolean }
+): StageStatus => {
+  if (deployed && (deploy === "upcoming" || deploy === "active")) return "done";
+  if (deploy === "upcoming" && recorded === "done") return "active";
+  return deploy;
+};
+
+/**
  * The dev loop as state. Pure reducer plus a tiny store; `init` wires the
  * reducer to the events the client already emits.
  */
@@ -380,32 +408,17 @@ export class PgFlow {
         // off `upcoming` knows more about this run than the workspace's
         // record does, so the record never overwrites it. That is also
         // what makes a repeated restore idempotent.
-        // Anything but a boolean is "never built": the getter also answers
-        // `undefined` until the file is first read
-        const recorded: StageStatus =
-          ev.built === true
-            ? "failed"
-            : ev.built === false
-            ? "done"
-            : "upcoming";
+        const recorded = recordedBuild(ev.built);
         // A build in flight leaves `build` at "running" and `buildSettled`
         // on the previous verdict, so the same guard covers both: neither
         // is touched unless the stage is untouched.
         const fresh = state.build === "upcoming";
         const build = fresh ? recorded : state.build;
         const buildSettled = fresh ? recorded : state.buildSettled;
-        // A program on the cluster is deployed, also when the verdict came
-        // first and left Deploy `active`. A run in flight or a failed deploy
-        // of this session knows more, so they stay. A recorded success points
-        // at Deploy the way `build-finish` does, so a reload does not leave a
-        // finished Build with nothing saying where to go next.
-        const deploy =
-          ev.deployed &&
-          (state.deploy === "upcoming" || state.deploy === "active")
-            ? "done"
-            : state.deploy === "upcoming" && recorded === "done"
-            ? "active"
-            : state.deploy;
+        const deploy = restoredDeploy(state.deploy, {
+          recorded,
+          deployed: ev.deployed,
+        });
         const interact =
           ev.deployed && state.interact === "upcoming"
             ? "active"
