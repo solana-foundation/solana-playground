@@ -35,6 +35,7 @@ import { answerOf, existsLine, existsOf, isMismatch } from "./progress";
 import type { EngineState, Stage } from "./reducer";
 import { hasRepeatEnded } from "./reducer";
 import { wordOf } from "./route";
+import { CAPTURE_BUSY, isCaptureBusy } from "./runners/capture";
 import { MISMATCH } from "./runners/run-call";
 
 /**
@@ -247,6 +248,10 @@ export const ASKS_THE_FAUCET = "Asks the faucet again";
 /** That card's line after a deploy found the wallet short (HOO-2677) */
 export const CHECKS_THE_BALANCE = "Checks your balance again, then deploys";
 
+/** That card's line after another wallet held the upgrade authority (HOO-2806) */
+const SWITCH_TO_AUTHORITY =
+  "Switch to the wallet that deployed it, then try again";
+
 /** An act whose failures share the deploy's cards: an airdrop or a deploy */
 const isFundedAct = (result: RunResult): boolean =>
   result.act === "airdrop" ||
@@ -267,32 +272,83 @@ const isLandedAirdrop = (
  * deploy no longer funds the wallet (HOO-2677); any other failure keeps the
  * act's own line (`again`). Null for no wallet, whose result's own Create
  * wallet runs it once the wallet is there, and for every other result.
- * TODO(HOO-2356): the runner's authority and immutable-program refusals are
- * `failed` too, and running again cannot fix them; they need a reason of
- * their own in `RunResult`, as the build's `unreachable` has, before they
- * can go without a Try again.
+ * A program another wallet holds the upgrade authority of runs again once
+ * the learner switched to that wallet (`authority`); an immutable one never
+ * does, so its card's "Deploy under a new program id" is the way on, which
+ * the not-authority card offers too (HOO-2806).
+ *
+ * A failed run or call (HOO-2806) is run again from the same slot, its
+ * button the act's own verb ("Run again"): after a failure the learner can
+ * fix (`fix`), whose line says to fix it first, and after `no_funds` with
+ * the act's own line. Not after no wallet, whose card's Create wallet runs
+ * it, nor after an unconfirmed result, whose own Check again reads it again.
+ * A failed build gets "Build again" (`fix`), set in `view` (`fixingAt`), not
+ * here: once its card closed on "I'll fix it myself", or on Explain once the
+ * answer ended or a reload came; a planned failure goes on to the step's
+ * `onFail` instead.
  */
-type Retry = "faucet" | "balance" | "again";
+type Retry = "faucet" | "balance" | "again" | "fix" | "authority";
 
 const retryOf = (result: RunResult): Retry | null => {
-  if (!isFundedAct(result) || result.ok) return null;
+  if (result.ok) return null;
+  if (result.act === "run" || result.act === "call") {
+    // Refused because another run held the send path: nothing to fix
+    if (isCaptureBusy(result.message)) return "again";
+    if (result.reason === undefined || result.reason === "no_transaction") {
+      return "fix";
+    }
+    return result.reason === "no_funds" ? "again" : null;
+  }
+  if (!isFundedAct(result)) return null;
   if (result.reason === "no_funds") {
     return result.act === "airdrop" ? "faucet" : "balance";
   }
+  if (result.reason === "not_authority") return "authority";
   return result.reason === "failed" ? "again" : null;
 };
 
-const RETRY_CONTEXT: Record<Exclude<Retry, "again">, string> = {
+const RETRY_CONTEXT: Record<Exclude<Retry, "again" | "fix">, string> = {
   faucet: ASKS_THE_FAUCET,
   balance: CHECKS_THE_BALANCE,
+  authority: SWITCH_TO_AUTHORITY,
 };
 
-/** A failed airdrop's or deploy's act as its Try again card shows it */
+/** A failed run's retry line: the file it runs is the one to fix */
+const FIX_AND_RUN = "Fix client.ts, then run it again.";
+
+/** A failed call's: it is sent from the chat, so there is no file to name */
+const FIX_AND_CALL = "Fix what the error says, then try again.";
+
+/** A failed build's, once its card closed: the compiler named the line */
+const FIX_AND_BUILD = "Fix the error, then build again.";
+
+/** The line a failed act's retry card shows */
+const retryContext = (act: ActBeat, retry: Retry | null): string => {
+  if (retry === "fix") {
+    if (act.act === "build") return FIX_AND_BUILD;
+    return act.act === "run" ? FIX_AND_RUN : FIX_AND_CALL;
+  }
+  return retry === null || retry === "again"
+    ? act.context
+    : RETRY_CONTEXT[retry];
+};
+
+/**
+ * The retry card's button: a run or call, and a build the learner is fixing,
+ * keep their own verb, the first word of the button ("Run again", "Call
+ * again", "Chop again", "Build again"); a deploy or an airdrop reads "Try
+ * again", as the designers drew it
+ */
+const retryButton = (act: ActBeat, retry: Retry | null): string =>
+  act.act === "run" || act.act === "call" || retry === "fix"
+    ? `${act.button.split(" ")[0]} again`
+    : TRY_AGAIN;
+
+/** A failed act as its retry card shows it */
 const tryAgain = (act: ActBeat, retry: Retry | null): ActBeat =>
   Object.assign({}, act, {
-    button: TRY_AGAIN,
-    context:
-      retry === null || retry === "again" ? act.context : RETRY_CONTEXT[retry],
+    button: retryButton(act, retry),
+    context: retryContext(act, retry),
     // The retry is one press; the card above keeps the others
     repeat: undefined,
   });
@@ -953,6 +1009,7 @@ export const view = (
                 isLast &&
                 !done &&
                 run.explainedAt === undefined &&
+                run.selfFixAt === undefined &&
                 !(planned && p.cursor.kind === "step" && p.cursor.fail);
               turn({
                 id: `result:${b.id}:${n}`,
@@ -1039,13 +1096,26 @@ export const view = (
                   text: whyRefused(step.goal, run.result),
                 });
               }
-              const failedRetry = open ? retryOf(run.result) : null;
+              // A failed build the learner is fixing: once its card closed
+              // on "I'll fix it myself", or on Explain once the answer ended
+              // (a planned failure's goes on to `onFail` instead)
+              const fixingAt =
+                run.status === "failed" &&
+                isLast &&
+                !done &&
+                !open &&
+                run.result.act === "build" &&
+                !(planned && p.cursor.kind === "step" && p.cursor.fail)
+                  ? run.selfFixAt ?? offerAt
+                  : null;
+              let failedRetry: Retry | null = open ? retryOf(run.result) : null;
+              if (fixingAt !== null) failedRetry = "fix";
               if (isTurnedDown || failedRetry !== null) {
                 turn({
                   id: `${b.id}:retry`,
                   kind: "act",
                   step: step.id,
-                  at: run.at + run.took,
+                  at: fixingAt ?? run.at + run.took,
                   beatId: b.id,
                   // Nothing failed under a goal's refusal, so the act keeps
                   // its own label: "Try again" would say something did
@@ -1303,9 +1373,22 @@ if (import.meta.vitest) {
             log: "",
           },
         };
-        const { v, card } = cardOf(stateOf({ beat: 1, runs: [failed] }));
-        expect(card.id).toBe("s1.grow");
-        expect(v.turns.map((t) => t.id)).toContain("result:s1.grow:0");
+        const v = view(repeating(), stateOf({ beat: 1, runs: [failed] }), {
+          now: 99999,
+          loadedAt: 0,
+          probing: [],
+        });
+        // The card stays where it was; one press runs again under the result
+        // (HOO-2806)
+        expect(v.turns.map((t) => t.id).slice(-3)).toEqual([
+          "s1.grow",
+          "result:s1.grow:0",
+          "s1.grow:retry",
+        ]);
+        expect(v.live).toMatchObject({
+          id: "s1.grow:retry",
+          act: { button: "Grow again", repeat: undefined },
+        });
       });
 
       it("hands the card its account's newest reading, from the save alone", () => {
@@ -2124,6 +2207,555 @@ if (import.meta.vitest) {
       expect(retryOf(OK_BUILD)).toBeNull();
     });
 
+    describe("a failed run or call (HOO-2806)", () => {
+      const toRun = (): Action[] =>
+        toDeploy().concat([
+          {
+            type: "ended",
+            beatId: "s2.deploy",
+            result: {
+              act: "deploy",
+              ok: true,
+              seconds: 2,
+              programId: "p",
+              signature: "s",
+              upgraded: false,
+              lamports: 1,
+              instructions: ["hello"],
+            },
+            at: 12000,
+          },
+          { type: "next", at: 13000 },
+          { type: "skip", beatId: "s3.q3", at: 13500 },
+          { type: "act", beatId: "s3.run", at: 14000 },
+        ]);
+      const RUN_FAILED: RunResult = {
+        act: "run",
+        ok: false,
+        seconds: 1,
+        message: "Package `not-a-real-package` is not available.",
+        log: "",
+      };
+      const runEnded = (result: RunResult, at: number): Action => ({
+        type: "ended",
+        beatId: "s3.run",
+        result,
+        at,
+      });
+
+      it("posts a live Run again card under the failed card, saying to fix client.ts first", () => {
+        const v = view(
+          hello,
+          play(toRun().concat([runEnded(RUN_FAILED, 15000)])),
+          LATE
+        );
+        expect(ids(v).slice(-2)).toEqual(["result:s3.run:0", "s3.run:retry"]);
+        expect(v.live).toMatchObject({
+          id: "s3.run:retry",
+          kind: "act",
+          beatId: "s3.run",
+          state: "live",
+          act: { button: "Run again", context: FIX_AND_RUN },
+        });
+      });
+
+      it("pressing Run again is a second run, and a landed one passes the step", () => {
+        const state = play(
+          toRun().concat([
+            runEnded(RUN_FAILED, 15000),
+            { type: "act", beatId: "s3.run", at: 20000 },
+          ])
+        );
+        const running = view(hello, state, LATE);
+        expect(ids(running)).not.toContain("s3.run:retry");
+        expect(running.live).toMatchObject({
+          id: "s3.run:1",
+          state: "running",
+        });
+
+        const landed = play(
+          toRun().concat([
+            runEnded(RUN_FAILED, 15000),
+            { type: "act", beatId: "s3.run", at: 20000 },
+            runEnded(
+              {
+                act: "run",
+                ok: true,
+                seconds: 1,
+                signatures: ["x"],
+                line: "Program log: Hello, World!",
+                called: [],
+              },
+              21000
+            ),
+          ])
+        );
+        expect(landed.progress.passed).toContain("call-client");
+        expect(ids(view(hello, landed, LATE))).not.toContain("s3.run:retry");
+      });
+
+      it("a call keeps its own verb, and a short wallet keeps the act's line", () => {
+        const call = hello.steps
+          .flatMap((s) => s.beats)
+          .find((b) => b.id === "s4.call");
+        if (call?.kind !== "act") throw new Error("no s4.call act");
+        const failedCall: RunResult = {
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "Simulation failed",
+          log: "",
+        };
+        expect(tryAgain(call, retryOf(failedCall))).toMatchObject({
+          button: "Call again",
+          context: FIX_AND_CALL,
+        });
+        const short: RunResult = {
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "Not enough devnet SOL",
+          log: "",
+          reason: "no_funds",
+          funding: { balance: 0, cost: 5000, address: "WaLLet" },
+        };
+        expect(tryAgain(call, retryOf(short))).toMatchObject({
+          button: "Call again",
+          context: call.context,
+        });
+      });
+
+      it("offers no retry after no wallet, or a result devnet has not confirmed", () => {
+        const failed = (reason: "no_wallet" | "no_transaction"): RunResult => ({
+          act: "run",
+          ok: false,
+          seconds: 1,
+          message: "It did not run",
+          log: "",
+          reason,
+        });
+        expect(retryOf(failed("no_wallet"))).toBeNull();
+        expect(
+          retryOf({
+            act: "run",
+            ok: false,
+            seconds: 1,
+            message: "Not confirmed",
+            log: "",
+            reason: "unconfirmed",
+            unconfirmed: [],
+          })
+        ).toBeNull();
+        expect(retryOf(failed("no_transaction"))).toBe("fix");
+      });
+
+      it("a run another run's send held up runs again with its own line, nothing to fix", () => {
+        const held: RunResult = {
+          act: "run",
+          ok: false,
+          seconds: 0,
+          message: CAPTURE_BUSY,
+          log: "",
+        };
+        expect(retryOf(held)).toBe("again");
+      });
+
+      // The learner's ask (HOO-2806): no failure of any act may leave the feed
+      // with nothing to press. Each row ends an act without passing, and says
+      // what the live control must be: an act card for the same beat, its
+      // button named, or the result card's own button
+      describe("never a dead end", () => {
+        /** A goal passes on a landed result of the act it names */
+        const strict = (goal: { kind: string }, r: RunResult) =>
+          r.ok &&
+          r.act !== "airdrop" &&
+          (goal.kind !== "call" ||
+            ((r.act === "run" || r.act === "call") && r.called.length > 0));
+        const playStrict = (actions: Action[]): EngineState => {
+          const ctx = {
+            definition: hello,
+            slug: "hello-anchor",
+            judge: strict,
+          };
+          let state = INITIAL;
+          for (const a of actions) state = reduce(ctx, state, a).state;
+          return state;
+        };
+        const DEPLOYED: RunResult = {
+          act: "deploy",
+          ok: true,
+          seconds: 2,
+          programId: "p",
+          signature: "s",
+          upgraded: false,
+          lamports: 1,
+          instructions: ["hello"],
+        };
+        const SHIPPED: RunResult = {
+          act: "buildDeploy",
+          ok: true,
+          seconds: 2,
+          programId: "p",
+          signature: "s",
+          upgraded: true,
+          lamports: 1,
+          instructions: ["hello"],
+        };
+        const LANDED_RUN: RunResult = {
+          act: "run",
+          ok: true,
+          seconds: 1,
+          signatures: ["x"],
+          line: "Program log: Hello, World!",
+          called: [{ instruction: "hello", args: {} }],
+        };
+        const RAN_NO_CALL: RunResult = {
+          act: "run",
+          ok: true,
+          seconds: 1,
+          signatures: ["x"],
+          line: null,
+          called: [],
+        };
+        const endedWith = (
+          beatId: string,
+          result: RunResult,
+          at: number
+        ): Action => ({
+          type: "ended",
+          beatId,
+          result,
+          at,
+        });
+        const toBuild = (): Action[] => toFailed().slice(0, 3);
+        const toFixBuild = (): Action[] =>
+          toFailed().concat([
+            { type: "fixMyself", beatId: "s1.build", at: 9000 },
+            { type: "pick", beatId: "f1.q2", option: 2, at: 9500 },
+            { type: "act", beatId: "f1.build", at: 10000 },
+          ]);
+        const toAirdropPress = (): Action[] => toDeploy().slice(0, 7);
+        const toDeployPress = (): Action[] => toDeploy();
+        const toRunPress = (): Action[] =>
+          toDeploy().concat([
+            endedWith("s2.deploy", DEPLOYED, 12000),
+            { type: "next", at: 13000 },
+            { type: "skip", beatId: "s3.q3", at: 13500 },
+            { type: "act", beatId: "s3.run", at: 14000 },
+          ]);
+        const toShipPress = (): Action[] =>
+          toRunPress().concat([
+            endedWith("s3.run", LANDED_RUN, 15000),
+            { type: "next", at: 16000 },
+            { type: "skip", beatId: "s4.q4", at: 16500 },
+            { type: "act", beatId: "s4.airdrop", at: 17000 },
+            endedWith("s4.airdrop", airdropped(2 * SOL, SOL), 17100),
+            { type: "act", beatId: "s4.ship", at: 17200 },
+          ]);
+        const toCallPress = (): Action[] =>
+          toShipPress().concat([
+            endedWith("s4.ship", SHIPPED, 18000),
+            { type: "act", beatId: "s4.call", at: 18500 },
+          ]);
+        const txFailed = (
+          act: "run" | "call",
+          over: {
+            reason?: "no_wallet" | "no_transaction";
+            mismatch?: true;
+          }
+        ): RunResult => {
+          const failed: Extract<
+            RunResult,
+            { reason?: "no_wallet" | "no_transaction" }
+          > = {
+            act,
+            ok: false,
+            seconds: 1,
+            message: "It failed",
+            log: "",
+          };
+          if (over.reason) failed.reason = over.reason;
+          if (over.mismatch) failed.mismatch = over.mismatch;
+          return failed;
+        };
+        const NO_FUNDS_TX = (act: "run" | "call"): RunResult => ({
+          act,
+          ok: false,
+          seconds: 1,
+          message: "Not enough devnet SOL",
+          log: "",
+          reason: "no_funds",
+          funding: { balance: 0, cost: 5000, address: "WaLLet" },
+        });
+        const UNCONFIRMED = (act: "run" | "call"): RunResult => ({
+          act,
+          ok: false,
+          seconds: 1,
+          message: "Devnet has not confirmed this transaction yet.",
+          log: "",
+          reason: "unconfirmed",
+          unconfirmed: [{ signature: "5ig", calls: [] }],
+        });
+        const fundedFailed = (
+          act: "airdrop" | "deploy" | "buildDeploy",
+          reason: "failed" | "no_wallet"
+        ): RunResult => ({ act, ok: false, seconds: 1, reason, message: "No" });
+        const fundedShort = (
+          act: "airdrop" | "deploy" | "buildDeploy"
+        ): RunResult => ({
+          act,
+          ok: false,
+          seconds: 1,
+          reason: "no_funds",
+          message: "Not enough devnet SOL",
+          balance: 0,
+          cost: SOL,
+          address: "WaLLet",
+        });
+        const buildFailed = (
+          reason: "unreachable" | "signed_out"
+        ): RunResult => ({
+          act: "build",
+          ok: false,
+          seconds: 0,
+          reason,
+          error: null,
+          log: "",
+        });
+
+        /** The control the live turn offers, named as the learner sees it */
+        const controlOf = (v: ConversationView, beatId: string) => {
+          const live = v.live;
+          if (live?.kind === "ask") return `ask:${live.id}`;
+          if (!live || !("beatId" in live) || live.beatId !== beatId) {
+            return live ? `${live.kind}:${live.id}` : null;
+          }
+          if (live.kind === "act") {
+            return live.state === "live" || live.state === "interrupted"
+              ? live.act.button
+              : null;
+          }
+          if (live.kind !== "result" || !live.open) return null;
+          const r = live.result;
+          if (r.act === "build" && !r.ok) {
+            if (r.reason === "unreachable") return "Try again";
+            if (r.reason === "signed_out") return "Sign in with GitHub";
+            return "Explain the error";
+          }
+          if (!r.ok && "reason" in r && r.reason === "no_wallet") {
+            return "Create wallet";
+          }
+          if (!r.ok && "reason" in r && r.reason === "unconfirmed") {
+            return "Check again";
+          }
+          return null;
+        };
+
+        const at = 30000;
+        it.each([
+          // build
+          [
+            "build, planned compiler error",
+            "s1.build",
+            toFailed(),
+            "Explain the error",
+          ],
+          [
+            "build, planned, I'll fix it myself",
+            "f1.q2",
+            toFailed().concat([
+              { type: "fixMyself", beatId: "s1.build", at: 9000 },
+            ]),
+            "ask:f1.q2",
+          ],
+          [
+            "build, unplanned compiler error",
+            "f1.build",
+            toFixBuild().concat([endedWith("f1.build", FAILED_BUILD, 11000)]),
+            "Explain the error",
+          ],
+          [
+            "build, unplanned, explained",
+            "f1.build",
+            toFixBuild().concat([
+              endedWith("f1.build", FAILED_BUILD, 11000),
+              { type: "explain", beatId: "f1.build", at: 12000 },
+              { type: "answered", beatId: "f1.build", at: 13000 },
+            ]),
+            "Build again",
+          ],
+          [
+            "build, unplanned, I'll fix it myself",
+            "f1.build",
+            toFixBuild().concat([
+              endedWith("f1.build", FAILED_BUILD, 11000),
+              { type: "fixMyself", beatId: "f1.build", at: 12000 },
+            ]),
+            "Build again",
+          ],
+          [
+            "build, server unreachable or crashed",
+            "s1.build",
+            toBuild().concat([
+              endedWith("s1.build", buildFailed("unreachable"), 8000),
+            ]),
+            "Try again",
+          ],
+          [
+            "build, refused for sign-in",
+            "s1.build",
+            toBuild().concat([
+              endedWith("s1.build", buildFailed("signed_out"), 8000),
+            ]),
+            "Sign in with GitHub",
+          ],
+          // airdrop, deploy, build and deploy
+          [
+            "airdrop, failed or crashed",
+            "s2.airdrop",
+            toAirdropPress().concat([
+              endedWith("s2.airdrop", fundedFailed("airdrop", "failed"), at),
+            ]),
+            "Try again",
+          ],
+          [
+            "airdrop, faucet refused",
+            "s2.airdrop",
+            toAirdropPress().concat([
+              endedWith("s2.airdrop", fundedShort("airdrop"), at),
+            ]),
+            "Try again",
+          ],
+          [
+            "deploy, failed or crashed (HOO-2356 refusals too)",
+            "s2.deploy",
+            toDeployPress().concat([
+              endedWith("s2.deploy", fundedFailed("deploy", "failed"), at),
+            ]),
+            "Try again",
+          ],
+          [
+            "deploy, wallet short",
+            "s2.deploy",
+            toDeployPress().concat([
+              endedWith("s2.deploy", fundedShort("deploy"), at),
+            ]),
+            "Try again",
+          ],
+          [
+            "deploy, no wallet",
+            "s2.deploy",
+            toDeployPress().concat([
+              endedWith("s2.deploy", fundedFailed("deploy", "no_wallet"), at),
+            ]),
+            "Create wallet",
+          ],
+          [
+            "build and deploy, failed",
+            "s4.ship",
+            toShipPress().concat([
+              endedWith("s4.ship", fundedFailed("buildDeploy", "failed"), at),
+            ]),
+            "Try again",
+          ],
+          // run
+          [
+            "run, failed or crashed",
+            "s3.run",
+            toRunPress().concat([endedWith("s3.run", txFailed("run", {}), at)]),
+            "Run again",
+          ],
+          [
+            "run, sent no transaction",
+            "s3.run",
+            toRunPress().concat([
+              endedWith(
+                "s3.run",
+                txFailed("run", { reason: "no_transaction" }),
+                at
+              ),
+            ]),
+            "Run again",
+          ],
+          [
+            "run, program could not match",
+            "s3.run",
+            toRunPress().concat([
+              endedWith("s3.run", txFailed("run", { mismatch: true }), at),
+            ]),
+            "Run again",
+          ],
+          [
+            "run, wallet short",
+            "s3.run",
+            toRunPress().concat([endedWith("s3.run", NO_FUNDS_TX("run"), at)]),
+            "Run again",
+          ],
+          [
+            "run, no wallet",
+            "s3.run",
+            toRunPress().concat([
+              endedWith("s3.run", txFailed("run", { reason: "no_wallet" }), at),
+            ]),
+            "Create wallet",
+          ],
+          [
+            "run, not confirmed",
+            "s3.run",
+            toRunPress().concat([endedWith("s3.run", UNCONFIRMED("run"), at)]),
+            "Check again",
+          ],
+          [
+            "run, landed but the goal refused it",
+            "s3.run",
+            toRunPress().concat([endedWith("s3.run", RAN_NO_CALL, at)]),
+            "Run",
+          ],
+          // call
+          [
+            "call, failed or crashed",
+            "s4.call",
+            toCallPress().concat([
+              endedWith("s4.call", txFailed("call", {}), at),
+            ]),
+            "Call again",
+          ],
+          [
+            "call, no wallet",
+            "s4.call",
+            toCallPress().concat([
+              endedWith(
+                "s4.call",
+                txFailed("call", { reason: "no_wallet" }),
+                at
+              ),
+            ]),
+            "Create wallet",
+          ],
+          [
+            "call, not confirmed",
+            "s4.call",
+            toCallPress().concat([
+              endedWith("s4.call", UNCONFIRMED("call"), at),
+            ]),
+            "Check again",
+          ],
+        ] as const)("%s", (_label, beatId, actions, control) => {
+          const v = view(hello, playStrict(Array.from(actions)), LATE);
+          expect(controlOf(v, beatId)).toBe(control);
+        });
+
+        it("a run cut short by a reload: the act card again", () => {
+          const state = playStrict(toRunPress());
+          state.progress.runs["s3.run"] = [
+            { status: "interrupted", at: 14000 },
+          ];
+          const v = view(hello, state, LATE);
+          expect(controlOf(v, "s3.run")).toBe("Run");
+        });
+      });
+    });
+
     it("a running act shows its stage and changes the placeholder", () => {
       const state = play(
         toFailed()
@@ -2273,14 +2905,22 @@ if (import.meta.vitest) {
         { type: "answered", beatId: "f1.build", at: 13000 },
       ]);
       const offered = view(hello, play(answered), LATE);
-      expect(ids(offered).slice(-2)).toEqual([
+      // With the offer, the build to press after the fix (HOO-2806)
+      expect(ids(offered).slice(-3)).toEqual([
         "you:explain:f1.build:0",
         "fix:f1.build:0",
+        "f1.build:retry",
       ]);
-      expect(offered.turns.at(-1)).toMatchObject({
+      expect(
+        offered.turns.find((t) => t.id === "fix:f1.build:0")
+      ).toMatchObject({
         kind: "say",
         text: FIX_OFFER,
         follow: { kind: "showFix", done: false },
+      });
+      expect(offered.live).toMatchObject({
+        id: "f1.build:retry",
+        act: { button: "Build again", context: FIX_AND_BUILD },
       });
 
       const used = view(
@@ -2315,11 +2955,13 @@ if (import.meta.vitest) {
         loadedAt: 20000,
         probing: [],
       });
-      expect(reloaded.turns.at(-1)).toMatchObject({
-        id: "fix:f1.build:0",
+      expect(
+        reloaded.turns.find((t) => t.id === "fix:f1.build:0")
+      ).toMatchObject({
         at: 20000,
         follow: { kind: "showFix", done: false },
       });
+      expect(reloaded.live).toMatchObject({ id: "f1.build:retry", at: 20000 });
       // Before any reload the offer waits for the answer
       const live = view(hello, asked, { now: 1e9, loadedAt: 0, probing: [] });
       expect(live.turns.find((t) => t.id === "fix:f1.build:0")).toBeUndefined();

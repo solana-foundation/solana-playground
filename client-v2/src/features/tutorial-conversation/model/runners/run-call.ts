@@ -233,6 +233,46 @@ const attempt = async (
 
   stage(labels[index]);
   const sends = await port.send(act, input);
+  return fromSends({
+    port,
+    act,
+    input,
+    sends,
+    programId,
+    seconds,
+    fail,
+    onConfirming: () => stage(RUN_STAGES.confirming),
+  });
+};
+
+/** What `fromSends` reads a run's or call's result from */
+interface Sent {
+  port: RunPort;
+  act: "run" | "call";
+  input: RunInput;
+  /** What the run handed to the chain, and what it threw, if anything */
+  sends: { captured: Captured[]; error: unknown };
+  programId: string;
+  seconds: () => number;
+  fail: (message: string) => TxResult;
+  /** The sends are in: reading them back starts */
+  onConfirming: () => void;
+}
+
+/**
+ * The result of what a run or call sent: nothing sent, the refusals, and
+ * each sent transaction read back from devnet
+ */
+const fromSends = async ({
+  port,
+  act,
+  input,
+  sends,
+  programId,
+  seconds,
+  fail,
+  onConfirming,
+}: Sent): Promise<TxResult> => {
   // A try `PgTx.send` answered by sending again is not a refusal; after its last resend the answer arrives as `error`
   const captured = sends.captured.filter((c) => !isRetriedSend(c));
   const { error } = sends;
@@ -258,7 +298,7 @@ const attempt = async (
     };
   }
 
-  stage(RUN_STAGES.confirming);
+  onConfirming();
   const sent: SentTx[] = [];
   for (const c of captured) {
     const { calls, undecoded } = port.decode(c.encoded, input.idl);
@@ -275,6 +315,54 @@ const attempt = async (
     );
   }
   return landedResult(port, act, input, sent, programId, seconds, fail, error);
+};
+
+/**
+ * A run of the client file started outside its act card (the terminal's
+ * `run`, the explorer's Run), read as the run act reads its own: what it
+ * sent, read back from devnet, against the live step's `input`. Nothing is
+ * funded, staged or printed: the run has already happened. Undefined when there
+ * is no program to read its calls against, off devnet, or when the reading
+ * failed (reported).
+ *
+ * @param port the run port the act uses
+ * @param input the live step's run input
+ * @param sends what the run handed to the chain, and what it threw
+ * @param startedAt when it started, for the result's seconds
+ * @returns the result the run act would have posted for the same sends
+ */
+export const readOutsideRun = async (
+  port: RunPort,
+  input: RunInput,
+  sends: { captured: Captured[]; error: unknown },
+  startedAt: number
+): Promise<TxResult | undefined> => {
+  // Another cluster's run is no step's: tutorials run on devnet
+  if (port.refusal()) return undefined;
+  const programId = port.programId();
+  if (!programId) return undefined;
+  const seconds = () => (port.now() - startedAt) / 1000;
+  try {
+    return await fromSends({
+      port,
+      act: "run",
+      input,
+      sends,
+      programId,
+      seconds,
+      fail: (message) => ({
+        act: "run",
+        ok: false,
+        seconds: seconds(),
+        message,
+        log: "",
+      }),
+      onConfirming: () => {},
+    });
+  } catch (e) {
+    port.report(e, "Reading a client run outside its card");
+    return undefined;
+  }
 };
 
 /**
@@ -448,6 +536,49 @@ if (import.meta.vitest) {
         now: () => (clock += 500),
       };
     };
+
+    // HOO-2806: a run started outside its card, read as the card reads its own
+    describe("readOutsideRun", () => {
+      const SENT = {
+        captured: [{ kind: "sent" as const, signature: "5ig", encoded: "tx" }],
+        error: undefined,
+      };
+      const INPUT = { beatId: "client-run", log: "Hello, World!" };
+
+      it("reads what it sent as the act would, and funds nothing", async () => {
+        const port = portWith({});
+        await expect(
+          readOutsideRun(port, INPUT, SENT, 0)
+        ).resolves.toMatchObject({ act: "run", ok: true });
+        expect(port.funding.balance).not.toHaveBeenCalled();
+        expect(port.funding.airdrop).not.toHaveBeenCalled();
+      });
+
+      it("judges nothing off devnet, or with no program deployed", async () => {
+        await expect(
+          readOutsideRun(
+            portWith({ refusal: "Switch to devnet." }),
+            INPUT,
+            SENT,
+            0
+          )
+        ).resolves.toBeUndefined();
+        await expect(
+          readOutsideRun(portWith({ programId: null }), INPUT, SENT, 0)
+        ).resolves.toBeUndefined();
+      });
+
+      it("is a run that threw when the script threw after sending", async () => {
+        await expect(
+          readOutsideRun(
+            portWith({}),
+            INPUT,
+            { captured: SENT.captured, error: new Error("x is undefined") },
+            0
+          )
+        ).resolves.toMatchObject({ ok: false, message: "x is undefined" });
+      });
+    });
 
     describe("the account an act draws", () => {
       const CHOP: Captured = { kind: "sent", signature: "sig", encoded: "tx" };

@@ -22,18 +22,17 @@ import { scalarsOf } from "./account-read";
 import type { ActRun } from "./act-runner";
 import type { Sender } from "./capture";
 import { captureSends } from "./capture";
+import type { ClientRunWatchPort } from "./client-run-watch";
+import { CLIENT_FILE } from "./client-run-watch";
 import type { FundingChain } from "./fund";
 import type { Landed, RunPort } from "./run-call";
-import { NoSuchInstructionError, runOrCall } from "./run-call";
+import { NoSuchInstructionError, readOutsideRun, runOrCall } from "./run-call";
 import type { Target } from "./target";
 import { targetGuardFor } from "./target";
 import type { DecodedCall } from "./transactions";
 import { accountsWritten, fillRememberedWith } from "./transactions";
 
 const log = createLogger("tutorial-conversation:run");
-
-/** The client file a tutorial's run act runs, in the workspace's `client/` */
-const CLIENT_FILE = "client.ts";
 
 /** Reads of a confirmed transaction before the RPC is taken to not have it */
 const TX_READS = 5;
@@ -212,6 +211,17 @@ const sendCall = async (
   );
 };
 
+/**
+ * client.ts calls through `pg.program`, built from the stored IDL, which an
+ * Anchor 1.1.2 build leaves empty: the deployed one (the tutorial's shipped
+ * IDL) stands in, as the build's would
+ */
+const withDeployedIdl = (input: RunInput) => {
+  if (input.idl && !PgProgramInfo.callableIdl()) {
+    PgProgramInfo.update({ idl: input.idl });
+  }
+};
+
 /** The open project and the network, for a run's `targetGuardFor` */
 export const currentTarget = (): Target => ({
   workspace: PgExplorer.currentWorkspaceName ?? undefined,
@@ -240,13 +250,11 @@ export const realRunPort = (funding: FundingChain, capSol: number): RunPort => {
         PgWeb3.Connection.prototype as unknown as Sender,
         async () => {
           if (act === "run") {
-            // client.ts calls through `pg.program`, built from the stored
-            // IDL, which an Anchor 1.1.2 build leaves empty: the deployed one
-            // (the tutorial's shipped IDL) stands in, as the build's would
-            if (input.idl && !PgProgramInfo.callableIdl()) {
-              PgProgramInfo.update({ idl: input.idl });
-            }
-            await PgCommand.run.execute(CLIENT_FILE);
+            withDeployedIdl(input);
+            const ran = await PgCommand.run.execute(CLIENT_FILE);
+            // A script that threw is a run that did not finish, even after
+            // its transactions landed (HOO-2806 review)
+            if (ran && !ran.ok) throw new Error(ran.error);
             return;
           }
           if (!input.call) throw new Error("The call act names no instruction");
@@ -325,3 +333,35 @@ export const runOnDevnet =
     }
     return result;
   };
+
+/**
+ * The `run` command and devnet, for `watchClientRuns`: a client run started
+ * outside the run act is captured on the same prototype the act captures on,
+ * and read back through the act's own port
+ */
+export const realClientRunWatch = (
+  funding: FundingChain,
+  capSol: number
+): ClientRunWatchPort => ({
+  onDidStart: (cb) => PgCommand.run.onDidStart(cb),
+  onDidFinish: (cb) =>
+    PgCommand.run.onDidFinish((result) => {
+      if ("err" in result) return cb({ err: result.err });
+      // A script that threw comes back as a result, not a throw: the run act
+      // reads it as one that did not finish, and so does this
+      const ran = result.ok;
+      cb(ran && !ran.ok ? { err: new Error(ran.error) } : {});
+    }),
+  onDidEnd: (cb) => PgCommand.run.onDidEnd(cb),
+  prepare: withDeployedIdl,
+  capture: async (until) => {
+    const { captured, error } = await captureSends(
+      PgWeb3.Connection.prototype as unknown as Sender,
+      () => until
+    );
+    return { captured, error };
+  },
+  read: (input, sends, startedAt) =>
+    readOutsideRun(realRunPort(funding, capSol), input, sends, startedAt),
+  now: () => Date.now(),
+});

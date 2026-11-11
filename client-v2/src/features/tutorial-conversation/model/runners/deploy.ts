@@ -135,7 +135,7 @@ const failed = (
   act: "deploy" | "buildDeploy",
   started: number,
   now: number,
-  reason: "failed" | "no_wallet",
+  reason: "failed" | "no_wallet" | "immutable" | "not_authority",
   message: string
 ): RunResult => ({
   act,
@@ -150,17 +150,29 @@ const blocker = (
   onChain: OnChain,
   program: ProgramState,
   address: string
-): string | null => {
+): {
+  reason: "failed" | "immutable" | "not_authority";
+  message: string;
+} | null => {
   if (!onChain.deployed) {
     return program.keypair
       ? null
-      : "This workspace has only the program's id, not its keypair, so it cannot deploy it.";
+      : {
+          reason: "failed",
+          message:
+            "This workspace has only the program's id, not its keypair, so it cannot deploy it.",
+        };
   }
-  if (onChain.authority === null) return "This program is not upgradable.";
+  if (onChain.authority === null) {
+    return { reason: "immutable", message: "This program is not upgradable." };
+  }
   if (onChain.authority !== address) {
-    return `This program's upgrade authority is ${shortKey(
-      onChain.authority
-    )}, not your wallet, so it cannot be upgraded from here.`;
+    return {
+      reason: "not_authority",
+      message: `This program's upgrade authority is ${shortKey(
+        onChain.authority
+      )}, not your wallet, so it cannot be upgraded from here.`,
+    };
   }
   return null;
 };
@@ -256,7 +268,9 @@ export const runDeploy = async (
     const bytes = await port.bytes();
     const onChain = await port.onChain(id);
     const blocked = blocker(onChain, built, address);
-    if (blocked) return failed(act, started, port.now(), "failed", blocked);
+    if (blocked) {
+      return failed(act, started, port.now(), blocked.reason, blocked.message);
+    }
     const need = (await port.rent(bytes.length, onChain)) + FEE_HEADROOM;
     // With no estimate checked, or a binary that outgrew it, the balance is
     // checked against the real need
@@ -763,7 +777,7 @@ if (import.meta.vitest) {
       });
       await expect(runDeploy(port, "deploy", () => {})).resolves.toMatchObject({
         ok: false,
-        reason: "failed",
+        reason: "not_authority",
         message: expect.stringMatching(/upgrade authority is Other1…111111/),
       });
       expect(port.writeBuffer).not.toHaveBeenCalled();
@@ -779,7 +793,10 @@ if (import.meta.vitest) {
       }).port;
       await expect(
         runDeploy(immutable, "deploy", () => {})
-      ).resolves.toMatchObject({ message: "This program is not upgradable." });
+      ).resolves.toMatchObject({
+        reason: "immutable",
+        message: "This program is not upgradable.",
+      });
       const idOnly = portOf({
         balances: [5 * SOL],
         deployed: false,
@@ -791,6 +808,7 @@ if (import.meta.vitest) {
         runDeploy(idOnly, "deploy", () => {})
       ).resolves.toMatchObject({
         ok: false,
+        reason: "failed",
         message: expect.stringMatching(/not its keypair/),
       });
       expect(idOnly.writeBuffer).not.toHaveBeenCalled();

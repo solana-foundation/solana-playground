@@ -27,6 +27,10 @@ export const isRetriedSend = (c: Captured): boolean =>
 /** Thrown into a run that starts while another one is capturing */
 export const CAPTURE_BUSY = "Another run is sending. Wait for it to finish.";
 
+/** Whether a failure is that refusal, by its message */
+export const isCaptureBusy = (message: string): boolean =>
+  message === CAPTURE_BUSY;
+
 /** Whether a capture is in flight: the hook is on the shared prototype */
 let capturing = false;
 

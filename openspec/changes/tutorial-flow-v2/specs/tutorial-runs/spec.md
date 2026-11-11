@@ -74,11 +74,13 @@ that line. A deploy that cannot be paid for:
   Nov). A refused airdrop posts the same card, whose line ends "The devnet
   faucet is at its limit for now: try again in a minute, or top the wallet up
   yourself.", followed by its own live card, "Asks the faucet again". A deploy that failed otherwise draws no record
-  either and gets the same Try again card with the act's own line. Typing
-  "deploy" in the composer retries too.
+  either and gets the same Try again card with the act's own line, except a
+  refusal by the program on chain, which "No failed act is a dead end"
+  covers. Typing "deploy" in the composer retries too.
 
 A deploy SHALL keep the program's keypair in the workspace, so the program
-keeps its address. Every later deploy of that tutorial's program SHALL upgrade
+keeps its address, until the learner presses "Deploy under a new program id"
+on a program this wallet cannot upgrade. Every later deploy of that tutorial's program SHALL upgrade
 it in place. The result card SHALL be one row, "Deployed to devnet" (or
 "Upgraded <short id>"), and a chevron that opens its details, as Almaz's
 prototype draws it (3 Nov; where the prototype's table and its code differ,
@@ -155,7 +157,14 @@ meta is the program's error ("NotEnoughEnergy · error 6000") or else the
 plain reason, with the error line and the reason in view and the log behind
 the chevron; the step SHALL not pass. A run that sent no transaction SHALL
 post "No transaction", "client.ts sent none · see the terminal", not red,
-and the step SHALL not pass. A transaction that was sent but that devnet
+and the step SHALL not pass. While a failed run's or call's card, or a "No
+transaction" one, is the act's latest result, a live act card under it SHALL
+run the act again, as a failed deploy's Try again does: its button the act's
+own verb with "again" ("Run again", "Call again", "Chop again"), and its line
+"Fix client.ts, then run it again." for a run, "Fix what the error says,
+then try again." for a call. After "Not enough devnet SOL" it SHALL keep the
+act's own line; after no wallet, or an unconfirmed result, there SHALL be
+none. A run again that lands SHALL be judged on the step's goal as any run. A transaction that was sent but that devnet
 did not read back in the read window SHALL post "Not confirmed yet ·
 <short signature> ↗", not red, the short signature linking to the
 transaction in Explorer, the reason in its body, and, while it is the live
@@ -170,6 +179,15 @@ the one they landed with and the goal SHALL be judged on it.
 - **THEN** the result reads "Not confirmed yet" and the step does not fail
 - **AND** "Check again", once devnet has the transaction, posts "Confirmed"
   and passes the step without sending a second transaction
+
+#### Scenario: A failed run runs again (manual)
+
+- **WHEN** on Hello Anchor's step 3 `client.ts` throws and the card reads
+  "Run failed"
+- **THEN** a live act card under it reads "Fix client.ts, then run it
+  again." with "Run again"
+- **AND** after the learner fixes `client.ts`, Run again runs it, and the
+  run that lands passes the step
 
 #### Scenario: Hello from devnet (manual)
 
@@ -226,9 +244,19 @@ Each step's goal in the definition SHALL be checked against a real result:
   target, so a call before the upgrade does not pass an argument goal.
 
 A call from the client run, the call act or the Call panel SHALL pass the same
-goal. A call outside a step's goal (on a win, after the finish) SHALL show its
+goal. A run of the client file started outside its act card (the terminal's
+`run`, the explorer's or the editor's Run) SHALL be judged as the run act's
+own, on what it sent, and SHALL pass the live step's goal it meets, as a
+client run; a run the card started SHALL be judged once, by the card. A call outside a step's goal (on a win, after the finish) SHALL show its
 result and pass nothing. A passed step SHALL stay passed. No step SHALL pass on
 the learner's word alone.
+
+#### Scenario: Passing step 3 from the terminal (manual)
+
+- **WHEN** on Hello Anchor's step 3 the learner types `run` in the terminal
+  and `client.ts` calls `hello`, which logs "Hello, World!"
+- **THEN** step 3's win follows in the feed, as after the card's Run
+- **AND** a `run` whose transaction logs no hello passes nothing
 
 #### Scenario: Passing step 3 from the Call panel (manual)
 
@@ -253,6 +281,49 @@ The current step's goal SHALL stay as it is.
 - **WHEN** after step 2 the learner changes the `msg!` text in `lib.rs`
 - **THEN** one nudge with "Build and deploy" posts at the live point
 - **AND** the next call's log shows the new text only after that deploy lands
+
+### Requirement: No failed act is a dead end
+
+A failed or refused act SHALL always leave a live control in the feed that
+runs it again or leads to what fixes it (HOO-2806): its result card's own
+button (Explain the error and "I'll fix it myself", Try again, Sign in with
+GitHub, Create wallet, Check again) or an act card under the result that runs
+the act again ("Try again", or the act's own verb with "again", with a line
+saying what to fix first when the learner must change something). A failed
+build whose card closed on "I'll fix it myself", or on Explain once the
+answer ended, SHALL be followed by "Build again" with "Fix the error, then
+build again."; a planned failure goes on to the step's fix question instead.
+A run or call that found no wallet SHALL offer Create wallet, which makes the
+Playground wallet and runs the act again. A deploy or build-and-deploy the
+program on chain refuses before any SOL is locked SHALL say why and offer
+"Deploy under a new program id", which gives the workspace a new program
+keypair and runs the act again, building for it: "Not upgradable" when the
+program can no longer be upgraded, and "Not your program" when another
+wallet holds its upgrade authority, which also keeps "Try again" with
+"Switch to the wallet that deployed it, then try again".
+
+#### Scenario: Fixing an unplanned build error yourself (manual)
+
+- **WHEN** a build fails with an error the step does not plan and the
+  learner presses "I'll fix it myself"
+- **THEN** the card closes and an act card "Fix the error, then build
+  again." with "Build again" follows
+- **AND** after the fix, Build again builds and a passing build passes the
+  step
+
+#### Scenario: A program that can no longer be upgraded (manual)
+
+- **WHEN** step 4's build and deploy finds the program on chain immutable
+- **THEN** the card reads "Not upgradable" and offers "Deploy under a new
+  program id", with no Try again
+- **AND** the press builds for a new program id and deploys it to a fresh
+  address
+
+#### Scenario: A run with no wallet (manual)
+
+- **WHEN** a run or call finds no wallet
+- **THEN** its "No wallet" card offers Create wallet
+- **AND** Create wallet makes the Playground wallet and runs the act again
 
 ### Requirement: A reload interrupts a run, never repeats it
 

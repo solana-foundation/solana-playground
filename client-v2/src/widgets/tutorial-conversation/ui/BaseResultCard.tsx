@@ -40,6 +40,8 @@ export interface BaseResultCardProps {
   signedIn: boolean;
   /** Sign in with GitHub, for a build refused for sign-in */
   onSignIn: () => Promise<unknown>;
+  /** Make the Playground wallet a run or call found missing, then run it again */
+  onCreateWallet: () => Promise<unknown> | void;
 }
 
 /** The unreachable build server's line (HOO-2355, designers' BUILD-04) */
@@ -111,6 +113,8 @@ const headOf = (
   const titles = {
     no_funds: "Not enough devnet SOL",
     no_wallet: "No wallet",
+    immutable: "Not upgradable",
+    not_authority: "Not your program",
     failed: r.act === "airdrop" ? "Airdrop failed" : "Deploy failed",
   } as const;
   return { title: titles[r.reason], meta: r.message };
@@ -153,6 +157,7 @@ const BaseResultCard = ({
   onRecheck,
   signedIn,
   onSignIn,
+  onCreateWallet,
 }: BaseResultCardProps) => {
   // A folded failed build opens again from its head, to read, never to act
   const [reopened, setReopened] = useState(false);
@@ -165,6 +170,7 @@ const BaseResultCard = ({
         account={account}
         exists={exists}
         onRecheck={open ? onRecheck : undefined}
+        onCreateWallet={open ? onCreateWallet : undefined}
       />
     );
   }

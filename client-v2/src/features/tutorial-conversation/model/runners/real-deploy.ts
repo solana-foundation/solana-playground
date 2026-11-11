@@ -34,7 +34,7 @@ import { runDeploy } from "./deploy";
 import type { DeployWatchPort } from "./deploy-watch";
 import type { FundingChain } from "./fund";
 import { currentTarget } from "./real-run";
-import { runOnDevnet } from "./real-run";
+import { realClientRunWatch, runOnDevnet } from "./real-run";
 import { deploySlotOf, landedDeploy, recogniseDeploy } from "./recognise";
 import { targetGuardFor } from "./target";
 
@@ -483,6 +483,10 @@ export const runDeployOnDevnet: ActRun = async (act, _input, onStage) => {
   }
   return withIdl(result);
 };
+
+/** The `run` command and devnet, for a client run outside its card (`watchClientRuns`) */
+export const realClientRuns = () =>
+  realClientRunWatch(devnetFunding, DEVNET_FAUCET_SOL);
 
 /**
  * The runner the tutorial frame passes to `PgConversation.init`. The build

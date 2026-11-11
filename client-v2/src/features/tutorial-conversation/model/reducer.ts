@@ -359,7 +359,7 @@ const outcomeOf = (result: RunResult): ActionRunParams["outcome"] => {
     (result.act === "airdrop" ||
       result.act === "deploy" ||
       result.act === "buildDeploy") &&
-    result.reason !== "failed"
+    (result.reason === "no_funds" || result.reason === "no_wallet")
   ) {
     return result.reason;
   }
@@ -554,6 +554,36 @@ export const panelInput = (
     ...(creates && sameIdlName(creates.instruction, call.instruction)
       ? { creates }
       : {}),
+  };
+};
+
+/**
+ * The input a run of the client file started outside its card is judged with
+ * (HOO-2806), as the run act's would be: the live step's call or refused
+ * goal, while it
+ * has not passed and no act runs, with the step it is for. Undefined on any
+ * other step, which no client run can pass.
+ */
+export const clientRunInput = (
+  definition: TutorialDefinition,
+  p: ConversationProgress
+): { stepId: string; input: RunInput } | undefined => {
+  if (running(p)) return undefined;
+  const step = stepAt(definition, p.cursor);
+  if (!step || passed(p, step)) return undefined;
+  const { goal } = step;
+  if (goal.kind !== "call" && goal.kind !== "refused") return undefined;
+  const creates = createsOf(goal);
+  return {
+    stepId: step.id,
+    input: {
+      beatId: "client-run",
+      ...(p.deployed ? { idl: p.deployed.idl } : {}),
+      ...(goal.kind === "call" && goal.log !== undefined
+        ? { log: goal.log }
+        : {}),
+      ...(creates ? { creates } : {}),
+    },
   };
 };
 
@@ -1567,7 +1597,23 @@ const reduceAction = (
             : "landing",
       };
       if (!run.planned || p.cursor.fail) {
-        return { state, effects: [focus] };
+        // A build's card closes, and for an unplanned failure its Build
+        // again card follows (HOO-2806): without it the learner fixed the
+        // code with no Build to press
+        if (
+          run.result.act !== "build" ||
+          run.selfFixAt !== undefined ||
+          run.explainedAt !== undefined
+        ) {
+          return { state, effects: [focus] };
+        }
+        return {
+          state: withLastRun(state, action.beatId, {
+            ...run,
+            selfFixAt: action.at,
+          }),
+          effects: [focus],
+        };
       }
       // The fix question still follows; the explanation before it is skipped
       const flowed = flow(

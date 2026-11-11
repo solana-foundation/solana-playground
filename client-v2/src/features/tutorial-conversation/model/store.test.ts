@@ -48,6 +48,8 @@ import type { Judge, Runner, Workspace } from "./ports";
 import { memoryWorkspace, stubRunner } from "./ports";
 import type { RunResult } from "./progress";
 import { freshProgress } from "./progress";
+import { CAPTURE_BUSY } from "./runners/capture";
+import type { ClientRunWatchPort } from "./runners/client-run-watch";
 import {
   INITIAL_CONVERSATION_STATE,
   PgConversation,
@@ -2117,6 +2119,168 @@ describe("PgCallPanel", () => {
       events.events.filter((e) => e.name === "tutorial_step_passed").at(-1)
         ?.params
     ).toMatchObject({ via: "call_panel", step_index: 3 });
+  });
+
+  // HOO-2806: a `run` typed in the terminal ran client.ts fine, and the step
+  // waited on: nothing outside the card was judged
+  describe("a client run outside the card", () => {
+    const HELLO: RunResult = {
+      act: "run",
+      ok: true,
+      seconds: 1,
+      signatures: ["sig"],
+      line: "Program log: Hello, World!",
+      called: [{ instruction: "hello", args: {} }],
+    };
+    const NO_HELLO: RunResult = {
+      act: "run",
+      ok: false,
+      seconds: 1,
+      reason: "no_transaction",
+      message: "client.ts sent no transaction. See the terminal.",
+      log: "",
+    };
+
+    /** A `run` command the test starts and finishes, read as `result` */
+    const runCommand = (result: RunResult, busy: boolean) => {
+      const start = new Set<(input: string | null) => void>();
+      const finish = new Set<(r: { err?: unknown }) => void>();
+      const read = vi.fn(async () => result);
+      const port: ClientRunWatchPort = {
+        onDidStart: (cb) => {
+          start.add(cb);
+          return { dispose: () => start.delete(cb) };
+        },
+        onDidFinish: (cb) => {
+          finish.add(cb);
+          return { dispose: () => finish.delete(cb) };
+        },
+        onDidEnd: () => ({ dispose: () => {} }),
+        prepare: () => {},
+        capture: async (until) => {
+          if (busy) return { captured: [], error: new Error(CAPTURE_BUSY) };
+          await until;
+          return { captured: [], error: undefined };
+        },
+        read,
+        now: () => 0,
+      };
+      const run = async () => {
+        start.forEach((cb) => cb("run"));
+        finish.forEach((cb) => cb({}));
+        await settle();
+      };
+      return { port, read, run };
+    };
+
+    it("passes step 3 as client when it calls hello", async () => {
+      const idl = helloIdl([]);
+      await toDeployed(idl);
+      PgConversation.next();
+      await settle();
+      const { port, read, run } = runCommand(HELLO, false);
+      const watch = PgConversation.watchClientRuns(port);
+
+      await run();
+
+      expect(read).toHaveBeenCalledWith(
+        expect.objectContaining({ idl, log: "Hello, World!" }),
+        expect.anything(),
+        0
+      );
+      const { progress } = PgConversation.state.engine;
+      expect(progress.passed).toContain("call-client");
+      expect(progress.times["call-client"].via).toBe("client");
+      watch.dispose();
+    });
+
+    it("passes nothing when it sends no hello", async () => {
+      await toDeployed();
+      PgConversation.next();
+      await settle();
+      const { port, run } = runCommand(NO_HELLO, false);
+      const watch = PgConversation.watchClientRuns(port);
+
+      await run();
+
+      expect(PgConversation.state.engine.progress.passed).not.toContain(
+        "call-client"
+      );
+      watch.dispose();
+    });
+
+    it("leaves the card's own run to the card", async () => {
+      await toDeployed();
+      PgConversation.next();
+      await settle();
+      const { port, read, run } = runCommand(HELLO, true);
+      const watch = PgConversation.watchClientRuns(port);
+
+      await run();
+
+      expect(read).not.toHaveBeenCalled();
+      expect(PgConversation.state.engine.progress.passed).not.toContain(
+        "call-client"
+      );
+      watch.dispose();
+    });
+
+    it("passes nothing when it lands after the tutorial started over", async () => {
+      await toDeployed();
+      PgConversation.next();
+      await settle();
+      let land: (r: RunResult) => void = () => {};
+      const { port, read, run } = runCommand(HELLO, false);
+      read.mockImplementationOnce(
+        () => new Promise<RunResult>((resolve) => (land = resolve))
+      );
+      const watch = PgConversation.watchClientRuns(port);
+
+      await run();
+      expect(read).toHaveBeenCalledTimes(1);
+      // Started over and back on step 3: only the restart tells this run's
+      // result from one of the new walk
+      PgConversation.startOver();
+      await settle();
+      PgConversation.start();
+      await settle();
+      PgConversation.pick("s1.q1", 1);
+      await settle();
+      PgConversation.act("s1.build");
+      await settle();
+      PgConversation.next();
+      await settle();
+      PgConversation.skip("s2.q2");
+      await settle();
+      PgConversation.act("s2.airdrop");
+      await settle();
+      PgConversation.act("s2.deploy");
+      await settle();
+      PgConversation.next();
+      await settle();
+      expect(PgConversation.state.engine.progress.cursor).toMatchObject({
+        stepId: "call-client",
+      });
+      land(HELLO);
+      await settle();
+
+      expect(PgConversation.state.engine.progress.passed).not.toContain(
+        "call-client"
+      );
+      watch.dispose();
+    });
+
+    it("is not judged on a step whose goal is no call", async () => {
+      await toDeployed();
+      const { port, read, run } = runCommand(HELLO, false);
+      const watch = PgConversation.watchClientRuns(port);
+
+      // Still on step 2's win: the deploy step has passed
+      await run();
+
+      expect(read).not.toHaveBeenCalled();
+      watch.dispose();
+    });
   });
 
   it("shows no new field for a build that was not deployed", async () => {

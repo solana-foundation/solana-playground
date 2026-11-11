@@ -7,6 +7,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  Wallet,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
@@ -21,6 +22,7 @@ import { PROGRAM_LOG, programLogText } from "@/shared/lib/program-log";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
 import { cn } from "@/shared/lib/utils";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import {
   Collapsible,
@@ -438,10 +440,12 @@ const FailedCard = ({
   result,
   exists,
   onRecheck,
+  onCreateWallet,
 }: {
   result: Failed;
   exists?: string;
   onRecheck?: () => void;
+  onCreateWallet?: () => Promise<unknown> | void;
 }) => {
   if (result.reason === "unconfirmed") {
     return <UnconfirmedCard result={result} onRecheck={onRecheck} />;
@@ -511,6 +515,20 @@ const FailedCard = ({
           )}
           {/* The head's meta truncates; the whole reason reads here */}
           <p className={READ}>{result.message}</p>
+          {/* As the deploy's card: the wallet, then the act runs again */}
+          {result.reason === "no_wallet" && onCreateWallet && (
+            <div className="flex max-sm:flex-col max-sm:items-stretch">
+              <AsyncButton
+                onClick={async () => {
+                  await onCreateWallet();
+                }}
+                onError={reportButtonFailure("create the wallet")}
+              >
+                <Wallet aria-hidden="true" className="size-4" />
+                Create wallet
+              </AsyncButton>
+            </div>
+          )}
         </>
       }
       details={
@@ -543,6 +561,7 @@ const BaseTxResultCard = ({
   account,
   exists,
   onRecheck,
+  onCreateWallet,
 }: {
   result: TxResult;
   account?: AccountOnCard;
@@ -550,11 +569,18 @@ const BaseTxResultCard = ({
   exists?: string;
   /** Check again on an unconfirmed result; absent when it is not live */
   onRecheck?: () => void;
+  /** Create wallet on a run or call that found none; absent when it is not live */
+  onCreateWallet?: () => Promise<unknown> | void;
 }) =>
   result.ok ? (
     <LandedCard result={result} account={account} />
   ) : (
-    <FailedCard result={result} exists={exists} onRecheck={onRecheck} />
+    <FailedCard
+      result={result}
+      exists={exists}
+      onRecheck={onRecheck}
+      onCreateWallet={onCreateWallet}
+    />
   );
 
 export default BaseTxResultCard;
