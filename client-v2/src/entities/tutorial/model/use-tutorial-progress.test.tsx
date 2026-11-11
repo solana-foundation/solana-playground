@@ -21,6 +21,8 @@ const state = vi.hoisted(() => ({
     },
   ],
   workspaces: undefined as string[] | undefined,
+  // A repository or gist link's view: no list in memory, the stored one read
+  temporary: false,
   metadata: new Map<string, { pageNumber: number; completed: boolean }>(),
   // Each started tutorial's `.workspace/tutorial-storage.json`
   storage: new Map<string, Record<string, unknown>>(),
@@ -88,6 +90,9 @@ vi.mock("../../../utils/tutorial/tutorial", () => ({
 vi.mock("../../../utils/explorer/explorer", () => ({
   PgExplorer: {
     get allWorkspaceNames() {
+      return state.temporary ? undefined : state.workspaces;
+    },
+    get storedWorkspaceNames() {
       return state.workspaces;
     },
     get currentWorkspaceName() {
@@ -108,6 +113,7 @@ const fire = (event: string) =>
 describe("useTutorialProgress", () => {
   beforeEach(() => {
     state.workspaces = undefined;
+    state.temporary = false;
     state.metadata.clear();
     state.storage.clear();
     state.storageFailure = undefined;
@@ -138,6 +144,22 @@ describe("useTutorialProgress", () => {
       })
     );
     expect(result.current("Hello Solana")).toEqual({ state: "new" });
+  });
+
+  it("reads a started lesson's progress while a repository link's project is open", async () => {
+    state.temporary = true;
+    state.workspaces = ["Hello Anchor"];
+    state.metadata.set("Hello Anchor", { pageNumber: 2, completed: false });
+
+    const { result } = renderHook(() => useTutorialProgress());
+
+    await waitFor(() =>
+      expect(result.current("Hello Anchor")).toEqual({
+        state: "started",
+        page: 2,
+        pages: 6,
+      })
+    );
   });
 
   it("takes the open lesson's page from memory and follows it page by page", async () => {

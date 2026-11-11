@@ -8,6 +8,7 @@ import {
   projectRow,
   seedWorkspace,
   startAnotherProject,
+  stubPrograms,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -84,6 +85,28 @@ test("client-v2-layout: Renaming in place", async ({ page }) => {
   await expect(
     page.getByRole("group", { name: "Projects" }).getByTitle("Pinned")
   ).toHaveCount(1);
+});
+
+// HOO-2794: a repository link opens its files as a temporary view, which
+// held no list of workspaces, so the list went blank until the user left it
+test("keeps the projects listed beside a repository link, and opens one picked", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await twoProjects(page);
+  await stubPrograms(page);
+
+  await page.goto("/github/e2e/counter");
+  await expect(
+    page.locator(".monaco-editor .view-lines").first()
+  ).toContainText("process_instruction", LONG);
+
+  await expect.poll(() => projectNames(page), LONG).toEqual(["alpha", "beta"]);
+  // The repository's project is the open one, and it is not in the list
+  await expect(currentProject(page)).toHaveCount(0);
+
+  await projectRow(page, "alpha").click();
+  await expect(currentProject(page)).toHaveText("alpha", LONG);
 });
 
 /** Long enough to truncate in the desk sidebar and the phone menu page alike */

@@ -42,6 +42,8 @@ export class PgWorkspace {
     INVALID_NAME: "Invalid name",
     NOT_FOUND: "Workspace not found",
     CURRENT_NOT_FOUND: "Current workspace not found",
+    /** A project opened while a change from a temporary view was saved */
+    LIST_CHANGED: "The workspaces changed while the list was saved.",
   };
 
   constructor(workspaces: Workspaces = PgWorkspace.DEFAULT) {

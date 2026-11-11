@@ -193,6 +193,24 @@ describe("the project-sync effect", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("flags a project renamed beside a link without starting a pass", async () => {
+    // A link's view lists nothing in memory, so a pass would take every
+    // account project for a new one; the mark carries the name instead
+    vi.spyOn(PgExplorer, "isTemporary", "get").mockReturnValue(true);
+    const pass = vi.spyOn(restore, "reconcile");
+    effect = projectSync();
+
+    PgCommon.createAndDispatchCustomEvent(
+      PgExplorer.events.ON_DID_RENAME_WORKSPACE,
+      { id: "p2" }
+    );
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+
+    expect(PgSyncMark.markDirty).toHaveBeenCalledWith("p2");
+    expect(pass).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("treats a rename of the open project as an edit", () => {
     effect = projectSync();
 

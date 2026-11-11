@@ -19,6 +19,8 @@ const channel = vi.hoisted(() => () => {
 
 const state = vi.hoisted(() => ({
   names: [] as string[],
+  // A repository or gist link's view: no list in memory, the stored one read
+  temporary: false,
   markerOf: (async () => undefined) as (
     id: string,
     name: string
@@ -55,9 +57,14 @@ vi.mock("@/utils", () => {
   return {
     PgExplorer: {
       get allWorkspaceNames() {
+        return state.temporary ? undefined : state.names;
+      },
+      get storedWorkspaceNames() {
         return state.names;
       },
-      workspaceIdOf: (name: string) => `id-${name}`,
+      workspaceIdOf: (name: string) =>
+        state.temporary ? undefined : `id-${name}`,
+      storedWorkspaceIdOf: (name: string) => `id-${name}`,
       onDidCreateWorkspace: event("create"),
       onDidRenameWorkspace: event("rename"),
       onDidDeleteWorkspace: event("delete"),
@@ -70,6 +77,7 @@ vi.mock("@/utils", () => {
 afterEach(() => {
   report.mockReset();
   state.names = [];
+  state.temporary = false;
   state.markerOf = async () => undefined;
 });
 
@@ -84,6 +92,17 @@ describe("useSyncMarkers", () => {
     state.names = ["counter", "voting"];
     state.markerOf = async (_, name) =>
       name === "voting" ? "this-browser" : undefined;
+    const { result } = renderHook(() => useSyncMarkers());
+    await waitFor(() =>
+      expect(shown(result.current)).toEqual({ voting: "this-browser" })
+    );
+  });
+
+  it("reads the stored workspaces' markers while a repository link's project is open", async () => {
+    state.temporary = true;
+    state.names = ["counter", "voting"];
+    state.markerOf = async (id) =>
+      id === "id-voting" ? "this-browser" : undefined;
     const { result } = renderHook(() => useSyncMarkers());
     await waitFor(() =>
       expect(shown(result.current)).toEqual({ voting: "this-browser" })
