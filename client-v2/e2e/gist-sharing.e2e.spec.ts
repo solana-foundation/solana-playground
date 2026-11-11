@@ -3,6 +3,7 @@ import type { Page, Request } from "@playwright/test";
 import {
   currentProject,
   expect,
+  grantClipboard,
   json,
   LONG,
   projectMenu,
@@ -565,7 +566,7 @@ test("gist-sharing: Sharing a public gist", async ({ page }) => {
 });
 
 test("gist-sharing: Copying the Playground link", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await grantClipboard(context);
   await stubAuth(page, { signedIn: true });
   await stubGists(page, [201, { url: GIST_URL, id: "abc123" }]);
   await seedWorkspace(page);
@@ -622,7 +623,7 @@ test("gist-sharing: Another project's row", async ({ page }) => {
 });
 
 test("gist-sharing: A copy is counted", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await grantClipboard(context);
   const lines = linesOn(page);
   await stubAuth(page, { signedIn: true });
   await stubGists(page, [201, { url: GIST_URL, id: "abc123" }]);

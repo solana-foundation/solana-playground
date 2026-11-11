@@ -22,7 +22,7 @@ import {
 } from "./fixtures";
 import { hasSavedText } from "./saved-files";
 import { lineOf, linesOn } from "./telemetry";
-import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
+import { DESK, PHONE, TABLET, waitForPhonePage, WIDE_DESK } from "./viewports";
 
 /** The stock Sidebar, which holds the navigation and its foot */
 const nav = (page: Page) => page.locator('[data-slot="sidebar"]');
@@ -536,6 +536,7 @@ test.describe("on a phone", () => {
     await expect(chip).toHaveAccessibleName("Status, 1 not ready", {
       timeout: 15_000,
     });
+    await waitForPhonePage(page, "Work");
     expect((await chip.boundingBox())?.height).toBeGreaterThanOrEqual(44);
     await chip.click();
 

@@ -10,7 +10,7 @@ import {
   startProject,
   test,
 } from "./fixtures";
-import { DESK, PHONE, WIDE_DESK } from "./viewports";
+import { DESK, PHONE, waitForPhonePage, WIDE_DESK } from "./viewports";
 
 /**
  * The editor head (the `client-v2-editor-head` capability): the tab
@@ -222,6 +222,7 @@ test.describe("on a phone", () => {
     await page.setViewportSize(DESK);
     await firstVisit(page);
     await page.setViewportSize(PHONE);
+    await waitForPhonePage(page, "Work");
     await expect(head(page)).toHaveCount(0);
     await page.getByRole("button", { name: /^Files, .* open$/ }).click();
     const files = page.getByRole("dialog", { name: "Files" });
