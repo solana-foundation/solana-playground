@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 // CommonJS, and the telemetry it re-exports holds `import.meta.vitest` blocks
 import {
   DAILY_CAP_REASON,
+  POOL_EXHAUSTED_REASON,
   REFUSAL_MESSAGES,
   REFUSAL_STATUS,
 } from "../src/features/agent/server.mjs";
@@ -412,24 +413,30 @@ test("client-v2-status: The rail's dots", async ({ page }) => {
     .toContain("{from: rail}");
 });
 
-test("client-v2-status: The free daily limit is used", async ({ page }) => {
-  test.setTimeout(240_000);
+/**
+ * Send a turn the hosted model refuses with `reason`, then open the AI
+ * indicator's panel; returns the panel and Connect a model
+ */
+const refuseAndOpenAi = async (
+  page: Page,
+  reason: typeof DAILY_CAP_REASON | typeof POOL_EXHAUSTED_REASON
+) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await stubAiStatus(page, "test-model");
   await page.route("**/api/agent", (route) =>
     route.fulfill({
-      status: REFUSAL_STATUS[DAILY_CAP_REASON],
+      status: REFUSAL_STATUS[reason],
       contentType: "application/json",
       body: JSON.stringify({
-        error: REFUSAL_MESSAGES[DAILY_CAP_REASON],
-        reason: DAILY_CAP_REASON,
+        error: REFUSAL_MESSAGES[reason],
+        reason,
         tier: "newcomer",
       }),
     })
   );
   await stubSession(page);
   await page.goto("/");
-  await startProject(page, "status-limit", LONG);
+  await startProject(page, `status-${reason}`, LONG);
   const composer = page.getByRole("textbox", { name: "Message the assistant" });
   await expect(composer).toBeVisible(LONG);
   await page.getByRole("button", { name: "More", exact: true }).click();
@@ -440,17 +447,32 @@ test("client-v2-status: The free daily limit is used", async ({ page }) => {
 
   await composer.fill("a question");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page.getByText(REFUSAL_MESSAGES[DAILY_CAP_REASON])).toBeVisible(
-    LONG
-  );
+  await expect(page.getByText(REFUSAL_MESSAGES[reason])).toBeVisible(LONG);
 
   const limited = row(page).getByRole("button", { name: "AI, limit reached" });
   await expect(limited).toHaveText("AI · Limit reached");
   await limited.click();
-  const panel = page.getByRole("dialog", { name: "AI" });
+  return { panel: page.getByRole("dialog", { name: "AI" }), connect };
+};
+
+test("client-v2-status: The free daily limit is used", async ({ page }) => {
+  test.setTimeout(240_000);
+  const { panel, connect } = await refuseAndOpenAi(page, DAILY_CAP_REASON);
   await expect(
     panel.getByText(
       /^The free daily limit is used\. It comes back at \d\d:\d\d,/
+    )
+  ).toBeVisible();
+  await panel.getByRole("button", { name: "Add an API key" }).click();
+  await expect(connect).toBeVisible();
+});
+
+test("client-v2-status: The free pool is spent", async ({ page }) => {
+  test.setTimeout(240_000);
+  const { panel, connect } = await refuseAndOpenAi(page, POOL_EXHAUSTED_REASON);
+  await expect(
+    panel.getByText(
+      "The free assistant is out of capacity for now. Try again later, or add a key of your own to keep going."
     )
   ).toBeVisible();
   await panel.getByRole("button", { name: "Add an API key" }).click();

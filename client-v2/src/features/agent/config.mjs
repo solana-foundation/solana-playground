@@ -6,20 +6,21 @@
 /** `reason` on the 429 for a user who has spent today's allowance */
 export const DAILY_CAP_REASON = "daily-cap";
 
-/** `reason` on the 503 for a tier whose Gateway budget, or the credit balance, is spent */
+/** `reason` on the 503 for an upstream `402`: a tier's key limit, or the credit balance, is spent */
 export const POOL_EXHAUSTED_REASON = "pool-exhausted";
 
 /**
  * What the panel shows for each limit, and what `/api/agent` sends as
  * `error`. The panel shows its own copy rather than the response's, so no
- * text from the network reaches the chat this way.
+ * text from the network reaches the chat this way. The pool's sentence names
+ * no time: a key's limit reopens on the upstream's rolling window.
  */
 export const REFUSAL_MESSAGES = {
   [DAILY_CAP_REASON]:
     "You have used today's free assistant allowance. It resets at 00:00 UTC, " +
     "or bring your own key to keep going.",
   [POOL_EXHAUSTED_REASON]:
-    "The free assistant is out of capacity for today. It resets at 00:00 UTC, " +
+    "The free assistant is out of capacity for now. Try again later, " +
     "or bring your own key to keep going.",
 };
 
