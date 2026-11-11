@@ -117,11 +117,13 @@ when a session reads a file matching the `paths` in the frontmatter.
   the re-open reuse it -- the pane kept the replaced file (HOO-2119). The
   second pass also sets memory, which the re-open has already read.
   `_catchUp` reads the store before skipping a file it thinks is level, never
-  assumes it: the merge writes the store, awaits its upload, and only then
-  catches the buffer up, and an autosave timer left by an earlier fold fires
-  in that window with the pre-merge text. Assumed, the store kept that text
+  assumes it: a merge awaits its upload, and an adopt its mark, between
+  writing the store and catching the buffer up, and a pending autosave fires
+  in that window with the old text. Assumed, the store kept that text
   under a mark saying "merged", and the next reconcile uploaded it, reverting
-  the other device's lines on the account (HOO-2821).
+  the other device's lines on the account (HOO-2821). A file sync removed
+  is checked too: discarding its model flushes the pending autosave, and
+  memory still lists the file, so the save writes it back.
 - **`dirty` is a hint, never a decision.** The `dirty` hint only lets
   reconcile skip re-hashing a project; `mark.files` + `name` decide whether
   anything is owed. Code decided on `dirty` twice, and was wrong both times: a

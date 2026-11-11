@@ -1004,6 +1004,70 @@ describe("both devices changed it", () => {
     });
   });
 
+  it("writes the merged copy over a stale one it cannot read back", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    captureWrites();
+    const path = `/${HELLO.name}/src/lib.rs`;
+    editorHolds({ [path]: "a\nb\nc\nd\nE\n" });
+    let unreadable = false;
+    let puts = 0;
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      // The second is the merge's own upload; the first is refused
+      if (init?.method === "PUT" && ++puts === 2) {
+        storedFiles().set(path, "a\nb\nc\nd\nE\n");
+        unreadable = true;
+      }
+      return await fakeFetch(url, init);
+    }) as unknown as typeof fetch;
+    const read = PgFs.readToString.bind(PgFs);
+    vi.spyOn(PgFs, "readToString").mockImplementation(async (at: string) => {
+      if (unreadable && at === path) {
+        unreadable = false;
+        throw new Error("EIO: the store failed");
+      }
+      return await read(at);
+    });
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+    global.fetch = vi.fn(fakeFetch) as unknown as typeof fetch;
+
+    expect(storedFiles().get(path)).toBe("A\nb\nc\nd\nE\n");
+    expect(getFailures().map((f) => f.what)).toEqual([`read ${path}`]);
+  });
+
+  it("does not let the editor's last save bring back a file the other device deleted", async () => {
+    // Dropping the model of a removed file flushes its pending autosave, and
+    // memory still lists the file until the re-open, so the save went
+    // through and wrote the file back for the next push to upload
+    await startFrom(
+      { "src/lib.rs": base, "tests/t.rs": "test" },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, {
+      "src/lib.rs": "a\nb\nc\nd\nE\n",
+      "tests/t.rs": "test",
+    });
+    captureWrites();
+    const removed = `/${HELLO.name}/tests/t.rs`;
+    editor = PgExplorer.registerEditorBuffers({
+      read: (at) => (at === removed ? "test" : undefined),
+      write: () => undefined,
+      discard: (at) => void storedFiles().set(at, "test"),
+    });
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+
+    expect(storedFiles().has(removed)).toBe(false);
+    await reconcile();
+    expect(serverRow(HELLO.id).snapshot).toEqual({
+      files: { "src/lib.rs": "A\nb\nc\nd\nE\n" },
+    });
+  });
+
   it("folds in what was typed while the merge ran", async () => {
     await startFrom(
       { "src/lib.rs": base },
@@ -1046,8 +1110,8 @@ describe("both devices changed it", () => {
   });
 
   it("keeps a copy taken from the other device on disk when autosave writes the old buffer before the editor is caught up", async () => {
-    // As for a merge: the adoption writes the store, records the mark, and
-    // only then brings the editor up -- and an autosave can land between
+    // As for a merge: the adoption writes the store, then the mark, and only
+    // then brings the editor up -- an autosave lands while the mark is written
     await startFrom(
       { "src/lib.rs": base },
       { "src/lib.rs": "A\nb\nc\nd\ne\n" }

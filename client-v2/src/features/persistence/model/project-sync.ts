@@ -1124,6 +1124,14 @@ export class PgProjectSync {
             }
             buffers.discard(full);
             caughtUp.add(path);
+            // Dropping the model flushes its pending autosave, and memory
+            // still lists the file until the re-open, so that save -- or one
+            // that fired while the caller awaited -- wrote the file back.
+            // Left there, the next push uploads it over the other device's
+            // delete.
+            if ((await PgProjectSync._readStored(full)) !== undefined) {
+              await PgFs.removeFile(full);
+            }
             continue;
           }
 
@@ -1146,22 +1154,18 @@ export class PgProjectSync {
           caughtUp.add(path);
           if (content !== after[path]) folded.push(path);
           // Nothing more to do when nothing was folded in, the buffer held
-          // either copy, and the store still holds `after`. A model the
-          // re-open built is already `after`, and writing it again would
-          // announce a change to the other tabs that is none.
+          // either copy, and the store still holds `after`: writing it again
+          // would announce a change to the other tabs that is none.
           //
-          // The store is read, not assumed. The caller wrote `after` and then
-          // awaited its upload before getting here, and an autosave timer
-          // left by an earlier keystroke or rewrite can fire in between: it
-          // writes the buffer, still the old copy, over `after`. Skipped, that
-          // left the old copy in the store under a mark that says `after`,
-          // and the next push uploaded it -- reverting the other device's
-          // lines on the account. The buffer holds `after` from the line
-          // above, so no autosave can write the old copy after this read.
+          // Read, not assumed. Between writing `after` and getting here the
+          // caller awaited its upload (merge) or its mark (adopt), and a
+          // pending autosave fired in that window writes the old buffer over
+          // `after`. From here the buffer is `after`, and an autosave already
+          // under way with the old text is ahead of this read in the fs queue.
           if (
             content === after[path] &&
             (buffer === read || buffer === content) &&
-            (await PgProjectSync._stored(full)) === content
+            (await PgProjectSync._readStored(full)) === content
           ) {
             continue;
           }
@@ -1170,8 +1174,8 @@ export class PgProjectSync {
           continue;
         }
 
-        // The store too, after any autosave that fired during the rewrite
-        // with the old text. Before the re-open, so its re-read finds what
+        // The store too, after any autosave that fired during the rewrite, or
+        // during the caller's await, with the old text. Before the re-open, so its re-read finds what
         // the editor shows. After it, memory has been read already, so it is
         // set here too: a fold that left the buffer as it was fires no
         // autosave to bring memory along, and a build reads memory.
@@ -1559,6 +1563,20 @@ export class PgProjectSync {
   }
 
   /**
+   * What the store holds for a file, or `undefined` when it cannot say --
+   * missing or unreadable. `undefined` makes `_catchUp` write, which at worst
+   * repeats a write.
+   */
+  private static async _readStored(path: string): Promise<string | undefined> {
+    try {
+      return await PgFs.readToString(path);
+    } catch (e) {
+      if (!isMissing(e)) report(`read ${path}`, e);
+      return undefined;
+    }
+  }
+
+  /**
    * Bring the open workspace in line with the store before an adopt or a
    * merge reads it.
    *
@@ -1570,20 +1588,6 @@ export class PgProjectSync {
    * own; this is for the paths that arrive without one: a push refused with a
    * 409, and an answer to the banner.
    */
-  /**
-   * What the store holds for a file, or `undefined` when it cannot say --
-   * missing or unreadable. A caller that compares against it then writes,
-   * which is the safe side of either.
-   */
-  private static async _stored(path: string): Promise<string | undefined> {
-    try {
-      return await PgFs.readToString(path);
-    } catch (e) {
-      if (!isMissing(e)) report(`read ${path}`, e);
-      return undefined;
-    }
-  }
-
   private static async _catchUpWithDisk(projectId: string) {
     if (projectId !== PgExplorer.currentWorkspaceId) return;
     try {

@@ -949,7 +949,7 @@ test("typing folded into the other device's copy still merges with its next chan
       // Held past autosave's half second. The merge writes the store, then
       // uploads, and only then brings the editor up to the merged copy: an
       // autosave timer left by the fold before it fires in that window and
-      // writes the pre-merge buffer back. On CI the window opened by chance.
+      // writes the pre-merge buffer back (HOO-2821).
       if (merging) {
         merging = false;
         await new Promise((resolve) => setTimeout(resolve, 800));
@@ -1012,9 +1012,7 @@ test("typing folded into the other device's copy still merges with its next chan
     )
     .toBe(true);
   await expect(banner).toHaveCount(0);
-  // No later write takes the other device's line back out, even for a
-  // moment: a write that does, and a later one that puts it back, is still
-  // the account losing it for any device that reads in between
+  // No later write takes the other device's line out, even for a moment
   await settled(page, writes);
   const mergedAt = accepted.findIndex((lib) => lib.includes("// A2"));
   expect(mergedAt).toBeGreaterThan(-1);
