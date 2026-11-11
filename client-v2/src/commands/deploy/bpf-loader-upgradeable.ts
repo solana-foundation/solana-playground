@@ -103,6 +103,65 @@ const nextBackoff = (previous: number) =>
     MAX_FAILED_WRITE_BACKOFF_MS
   );
 
+/**
+ * How long a buffer write may wait for an answer before it counts as refused. A send is at most 1 + `PgTx`'s
+ * `MAX_FRESH_BLOCKHASH_SENDS` `sendRawTransaction` calls with their blockhash fetches and a slot's sleep between the
+ * later ones, each under a second on an RPC that answers; 20 s passes a slow one, and the line comes at least 10 s
+ * after the `SLOW_RUN_MS` notice.
+ */
+const WRITE_ANSWER_TIMEOUT_MS = 20_000;
+
+/** A buffer write that got no answer within {@link WRITE_ANSWER_TIMEOUT_MS} */
+class UnansweredWriteError extends Error {}
+
+/**
+ * `send`, or a rejection with {@link UnansweredWriteError} once `ms` pass, or with the stop's reason once
+ * `abortController` aborts. The request is not aborted: `PgTx.send` goes on, fresh-blockhash resends included. A write
+ * that lands late is found by a later buffer read, and may already have been sent again (a second fee), so its late
+ * outcome goes to the debug log only.
+ */
+const awaitAnswerWith =
+  (ms: number) =>
+  (abortController: AbortController | undefined) =>
+  <T>(send: Promise<T>) =>
+    new Promise<T>((resolve, reject) => {
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        reject(new UnansweredWriteError(`No answer in ${ms / 1000} s`));
+      }, ms);
+      const signal = abortController?.signal;
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(signal?.reason);
+      };
+      if (signal?.aborted) onAbort();
+      signal?.addEventListener("abort", onAbort, { once: true });
+      send
+        .then(
+          (value) => {
+            if (timedOut) {
+              log.debug("A buffer write answered after its time limit", {
+                context: { ms },
+              });
+            }
+            resolve(value);
+          },
+          (e: unknown) => {
+            if (timedOut) {
+              log.debug("A buffer write failed after its time limit", {
+                context: { ms, error: toError(e).message },
+              });
+            }
+            reject(e);
+          }
+        )
+        .finally(() => {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+        });
+    });
+
 /** Rounds in a row in which no missing chunk lands before `loadBuffer` gives up, so a refusing RPC cannot hang a deploy */
 const MAX_STALLED_ROUNDS = 5;
 
@@ -269,13 +328,15 @@ export class BpfLoaderUpgradeable {
       let successCount = 0;
       let lastTxHash: string | undefined;
       let rateLimitReason: string | undefined;
+      // A write with no answer ends the round, so a cluster that stopped answering costs one wait a round, not one a chunk
+      let hasUnansweredWrite = false;
       let hasReportedRefusal = false;
       await Promise.all(
         Array.from({ length: loadConcurrency }, async () => {
           let backoff = 0;
           while (1) {
             if (opts?.abortController?.signal.aborted) return;
-            if (rateLimitReason) break;
+            if (rateLimitReason || hasUnansweredWrite) break;
 
             const offset = missingIndices[i] * WRITE_CHUNK_SIZE;
             i++;
@@ -292,13 +353,19 @@ export class BpfLoaderUpgradeable {
 
             await pause(pace.turnIn());
             if (opts?.abortController?.signal.aborted) return;
+            // Another worker's write may have gone unanswered during the wait for this turn
+            if (hasUnansweredWrite) break;
 
             try {
-              lastTxHash = await PgTx.send(ix, {
-                wallet,
-                computeUnitLimit,
-                connection: writeConnection,
-              });
+              lastTxHash = await awaitAnswerWith(WRITE_ANSWER_TIMEOUT_MS)(
+                opts?.abortController
+              )(
+                PgTx.send(ix, {
+                  wallet,
+                  computeUnitLimit,
+                  connection: writeConnection,
+                })
+              );
               backoff = 0;
               pace.recordWrite();
               successCount++;
@@ -306,6 +373,8 @@ export class BpfLoaderUpgradeable {
               const current = total - missingIndices.length + successCount;
               opts?.onWrite?.(current, total);
             } catch (e: unknown) {
+              // A send that fails after a stop is not sent again, so it is neither counted nor reported
+              if (opts?.abortController?.signal.aborted) return;
               refusedCount++;
               const error = toError(e);
               firstRefusal ??= error;
@@ -322,11 +391,7 @@ export class BpfLoaderUpgradeable {
                 break;
               }
               lastRefusal = { error, words: `last refusal: ${error.message}` };
-              // A send that fails after a stop is not sent again, so it is not reported
-              if (
-                !hasReportedRefusal &&
-                !opts?.abortController?.signal.aborted
-              ) {
+              if (!hasReportedRefusal) {
                 hasReportedRefusal = true;
                 opts?.onRefusal?.(clusterMessageOf(e));
               }
@@ -334,6 +399,11 @@ export class BpfLoaderUpgradeable {
               // The browser hides a 429 without CORS headers behind a failed fetch, so slow down as for one
               if (isFetchFailure(e)) pace.recordRateLimit();
               else pace.recordFailure();
+              // No backoff: the round ends here, `loadUntilWritten` reads the buffer and `MAX_STALLED_ROUNDS` counts the round
+              if (e instanceof UnansweredWriteError) {
+                hasUnansweredWrite = true;
+                break;
+              }
               // The chunk is written again in the next round; the pause keeps
               // a failing RPC from being sent to at once
               backoff = nextBackoff(backoff);
