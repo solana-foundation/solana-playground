@@ -188,39 +188,31 @@ time.
       session role set to the production user) for `cloud-sql`; print the host,
       the database, and the pending list, and ask once. Record the pool sizing
       (`max_connections`, the pool's `max`, the concurrent instance count from
-      Vercel, the date) and the cold and warm latency of the staged
+      Vercel, the date) and the cold and warm latency of the first production
       deployment's `GET /api/sync` in `client-v2/docs/cloud-sql.md`. Verify with
-      `gcloud sql instances describe solpg` showing the three settings,
-      `\l solpg` showing `CONNECT` for the production user only, a direct `psql`
-      to port 5432 refused, a staged production deployment
-      (`vercel deploy --prod --skip-domain` with `-e DB_PROVIDER=cloud-sql`,
-      the `CLOUD_SQL_*` and `GCP_*` variables, and `-e SYNC_ENABLED=false`)
-      answering `{ "enabled": false, "db": "ok" }` on `GET /api/sync` with the
-      instance log naming the production IAM user, which proves the
-      application's own identity reaches `solpg` (the operator checks do not), `migrate-production-db` still naming the production
-      Neon host and "nothing to apply" while Production is on `url`, and
-      `dbmate status` through `migration-url production` as an operator listing
-      every migration pending on `solpg`. Depends on 1.2, 1.3. Ticket: HOO-2535.
-- [ ] 3.2 Cutover, on the project's Vercel-generated production domain before
-      any custom domain is attached, with sync on throughout: confirm with the
-      team that production still has no users (last confirmed 2026-11-03),
-      and stop if it
-      has (a copy behind a freeze is then needed, outside this change); apply
-      every migration to `solpg` with
-      `scripts/db/cloud-sql/migration-url production -- dbmate --no-dump-schema up`
-      as an operator, the Cloud SQL values given inline since Production does
-      not name them yet; set `DB_PROVIDER=cloud-sql`, the `CLOUD_SQL_*` and
-      `GCP_*` variables on Production and remove `DATABASE_URL` and
-      `DATABASE_URL_UNPOOLED`; redeploy; `GET /api/sync` answers
-      `{ "enabled": true, "db": "ok" }`; `migrate-production-db` names `solpg`
-      and reports nothing to apply. Leave the production Neon project
-      untouched as the rollback. Update `deploy-client-vercel.md` ("Release
-      checklist", "Conversation and project sync") and the root `CLAUDE.md`
-      gotcha on the production database. Verify by `\dt` showing every table
-      owned by the production user before the switch, the `GET /api/sync`
-      body after it, and a sign-in and project edit on the production domain
-      writing a row to `solpg`, all recorded in the PR. Depends on 3.1.
-      Ticket to file.
+      `gcloud sql instances describe solpg` showing the three settings and no
+      authorised network, `\l solpg` showing `CONNECT` for the production user
+      only, a direct `psql` to port 5432 refused, and `dbmate status` through
+      `migration-url production` as an operator listing every migration
+      pending on the empty `solpg`. That the application's own identity
+      reaches `solpg` (the operator checks do not) is proven by 3.2's first
+      production deployment, with the instance log naming the production IAM
+      user. Depends on 1.2, 1.3. Ticket: HOO-2535.
+- [ ] 3.2 Production on Cloud SQL from nothing, on the project's
+      Vercel-generated production domain before any custom domain is
+      attached: set `DB_PROVIDER=cloud-sql`, the `CLOUD_SQL_*` and `GCP_*`
+      variables on Production, with no `DATABASE_*` variable; apply every
+      migration to `solpg` with `migrate-production-db` as an operator, which
+      reads those variables; make the first production deployment;
+      `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`;
+      `migrate-production-db` names `solpg` and reports nothing to apply.
+      `client-v2/docs/production-runbook.md` orders these steps. Update
+      `deploy-client-vercel.md` ("Release checklist", "Conversation and
+      project sync") and the root `CLAUDE.md` gotcha on the production
+      database. Verify by `\dt` showing every table owned by the production
+      user before the first deployment, the `GET /api/sync` body after it, and
+      a sign-in and project edit on the generated domain writing a row to
+      `solpg`, all recorded on the ticket. Depends on 3.1. Ticket to file.
 - [ ] 3.3 Add a `smoke` job to `client-v2.yml` on push to `master` that waits
       for the Vercel deployment of the pushed commit and fails unless its
       `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, naming the URL
@@ -232,7 +224,7 @@ time.
       the instances they reach, the four gates, which workflow creates,
       migrates, and drops which database, who migrates production), then the
       setup steps in order for Google Cloud, Vercel, and GitHub, adding an
-      operator, and the cutover and rollback runbook, with every value
+      operator, and production's setup from nothing, with every value
       specific to this deployment as a placeholder. Link it from
       `deploy-client-vercel.md` and `preview-databases.md`. Verify by the
       four `(manual)` scenarios of "A maintainer guide sets the pipeline up
@@ -240,13 +232,9 @@ time.
       someone who did not run tasks 2.1, 2.5, and 3.1. Depends on 2.6, 3.2. Ticket
       to file.
 - [ ] 3.5 Release on the custom domain, once the run on the Vercel-generated
-      domain is finished: drop database `solpg` and create it again, empty and
-      owned by the production IAM user, with `CONNECT` revoked from `PUBLIC`
-      as in 3.1; apply every migration through `migration-url production` as
-      an operator; set `AUTH_BASE_URL` and the GitHub OAuth app's callback URL
-      to the custom domain; attach the domain to the Production environment
-      and redeploy. The test accounts, sessions, and rows written on the
-      generated domain go with the old database. Verify by
-      `select count(*) from "user"` answering 0 before the first sign-in, and
-      by 3.2's checks passing on the custom domain, all recorded on the
-      ticket. Depends on 3.2. Ticket: HOO-2537.
+      domain is finished: set `AUTH_BASE_URL` and the GitHub OAuth app's
+      callback URL to the custom domain; attach the domain to the Production
+      environment and redeploy. `solpg` is not created again: the test
+      accounts, sessions, and rows written on the generated domain stay in it
+      (decided 2026-11-10). Verify by 3.2's checks passing on the custom
+      domain, recorded on the ticket. Depends on 3.2. Ticket: HOO-2537.

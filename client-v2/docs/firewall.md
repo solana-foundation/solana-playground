@@ -29,6 +29,7 @@ with what the rule does, so the dashboard list shows the emergency switches with
 | Rule | Covers | Without it |
 | --- | --- | --- |
 | `Rate limit /api/agent (IP)` | `/api/agent` | One signed-in account, or a script holding its cookie, spends its whole daily cap on the paid model key as fast as it can send |
+| `Rate limit /api/ai/status (IP)` | `/api/ai/status` | A script sends session lookups to Postgres as fast as it can send: the route reads the caller's session on every request ([`api/ai.mjs`](../api/ai.mjs)) |
 | `Rate limit /api/mcp (IP)` | `/api/mcp` | Anyone relays requests to `mcp.solana.com` through our functions, unmetered |
 | `Rate limit sign-in (IP)` | `/api/auth/sign-in/` | A script starts GitHub OAuth flows without limit |
 | `Rate limit sync (IP)` | `/api/projects`, `/api/conversations` | A signed-in script writes to Postgres as fast as it can send |
@@ -48,6 +49,7 @@ Every rate limit uses the Fixed Window algorithm and answers `429` once a client
 | Rule | Limit | Key |
 | --- | --- | --- |
 | `Rate limit /api/agent (IP)` | 30 req/60s | IP |
+| `Rate limit /api/ai/status (IP)` | 60 req/60s | IP |
 | `Rate limit /api/mcp (IP)` | 60 req/60s | IP |
 | `Rate limit sign-in (IP)` | 20 req/60s | IP |
 | `Rate limit sync (IP)` | 300 req/60s | IP |
@@ -69,6 +71,23 @@ Rule:
 
 A tool loop sends one request per step, so 30 a minute allows a few long turns a minute from one person and stops a
 script. Shared IPs (an office, a VPN) share the bucket; raise the limit before exempting anyone.
+
+```text
+Name: Rate limit /api/ai/status (IP)
+Description: 60/60s per IP, 429 over the limit. The client asks it whether the hosted model is available, and again on the composer's Try again; each request is a session lookup in Postgres. ^/api/ai(/status)?$
+Status: Enabled
+Rule:
+    If `Request Path` `Matches expression` `^/api/ai(/status)?$`
+    AND `Rate Limit`
+        Strategy: Fixed Window
+        Window: 60 seconds
+        Limit: 60 requests
+        Keys: IP Address
+    Then `Too Many Requests (429)`
+```
+
+The pattern covers `/api/ai` as well, the function `vercel.json` rewrites `/api/ai/status` to, for the same reason as
+the sign-in rule under [Before configuring](#before-configuring): which path the firewall matches is unverified.
 
 ```text
 Name: Rate limit /api/mcp (IP)

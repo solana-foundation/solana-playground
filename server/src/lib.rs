@@ -1,7 +1,6 @@
 mod error;
 mod sandbox;
 
-pub mod db;
 pub mod log;
 pub mod package;
 pub mod program;
