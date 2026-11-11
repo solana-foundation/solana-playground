@@ -57,7 +57,7 @@ beforeAll(async () => {
   PLANNED = (await import("../build-logs.fixture")).PLANNED;
 });
 
-const FAILS_WITH = "cannot find type `Hello` in this scope";
+const FAILS_WITH = "could not find `__client_accounts_hello`";
 
 /** The build command as the server answers it: the output lands, then it returns */
 const answers = (stderr: string, failed: boolean) =>
@@ -104,14 +104,14 @@ describe("features/tutorial-conversation/model/runners/build", () => {
     expect(await run().result).toMatchObject({ instructions: [] });
   });
 
-  it("shows the planned E0412 at line 9, not the macro symptom at line 5", async () => {
+  it("shows the error holding the step's line, not the first cause at line 9", async () => {
     answers(PLANNED, true);
     const r = await run(FAILS_WITH).result;
     expect(r).toMatchObject({
       act: "build",
       ok: false,
       reason: "compiler",
-      error: { code: "E0412", file: "src/lib.rs", line: 9, column: 32 },
+      error: { code: "E0432", file: "src/lib.rs", line: 5, column: 1 },
     });
     expect(r.ok === false && "log" in r && r.log).not.toMatch(/Stack offset/);
   });

@@ -1,6 +1,8 @@
+use cargo_toml::Manifest;
 use ide_db::base_db::{CrateGraph, CrateId, FileId, FileSet, SourceRoot, VfsPath};
 
 /// Search the given source roots to find the crate with a matching name.
+// TODO(HOO-2754): key crates by name and version so renamed and multi-version dependencies resolve generally
 pub fn get_file_id<'a, 'b>(name: &'a str, source_roots: &'b Vec<SourceRoot>) -> Option<&'b FileId> {
     source_roots
         .iter()
@@ -22,6 +24,28 @@ pub fn create_source_root(name: &str, file_id: FileId) -> SourceRoot {
     let mut file_set = FileSet::default();
     file_set.insert(file_id, get_crate_path(name));
     SourceRoot::new_library(file_set)
+}
+
+/// The features the lockfile enables for a crate, which `generate-crates.mjs` writes to
+/// `[package.metadata.solana-playground] features`; none when the manifest has no such list.
+pub fn get_enabled_features(manifest: &Manifest) -> Vec<String> {
+    manifest
+        .package
+        .as_ref()
+        .and_then(|package| package.metadata.as_ref())
+        .and_then(|metadata| {
+            metadata
+                .get("solana-playground")?
+                .get("features")?
+                .as_array()
+        })
+        .map(|features| {
+            features
+                .iter()
+                .filter_map(|feature| feature.as_str().map(ToOwned::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Get the file position.

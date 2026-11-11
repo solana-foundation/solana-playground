@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { UNKNOWN_NETWORK } from "@/constants";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -48,6 +50,8 @@ export interface BaseInteractProps {
   onGoTo: (stage: Extract<Stage, "build" | "deploy">) => void;
   /** The "Upload IDL" action (`IdlActions mode="upload"`) */
   idlLoad: ReactNode;
+  /** "Build the IDL locally", beside Upload IDL */
+  idlGuide: ReactNode;
   /**
    * Why an Anchor IDL of spec 0.1.0 (Anchor 0.30 on) cannot be called
    * (`readIdl`'s reason), shown on the `bad-idl` surface; absent for any
@@ -99,7 +103,8 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
   "not-built": NOTHING_TO_CALL,
   "no-idl": {
     title: "This program has no IDL",
-    description: () => "Upload its IDL to call it from a form.",
+    description: () =>
+      "The Playground's build does not produce an IDL. Build the IDL on your machine, then upload it to call the program's instructions.",
   },
   "no-program-id": {
     title: "No program id",
@@ -132,6 +137,10 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
 const isNothingToCall = (surface: InteractSurface) =>
   surface === "not-built" || surface === "not-deployed";
 
+/** Where Upload IDL and the guide sit: one answer per surface, so the guide's one portal slot is drawn exactly once */
+const idlPlacement = (surface: InteractSurface): "header" | "body" =>
+  surface === "no-idl" || isNothingToCall(surface) ? "body" : "header";
+
 /** The step that supplies what an empty surface lacks, if there is one */
 const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
   if (surface === "no-program-id") {
@@ -142,6 +151,7 @@ const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
       </BrandButton>
     );
   }
+  if (idlPlacement(surface) === "header") return undefined;
   if (isNothingToCall(surface)) {
     return (
       <>
@@ -153,12 +163,17 @@ const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
             focus, as Deploy's Upload IDL */}
         <div className="flex justify-center [&_[data-slot=button]]:h-10 [&_[data-slot=button]]:rounded-full [&_[data-slot=button]]:px-5 max-md:[&_[data-slot=button]]:h-12 max-md:[&_[data-slot=button]]:w-full max-md:[&>div]:w-full">
           {p.idlLoad}
+          {p.idlGuide}
         </div>
       </>
     );
   }
-  if (surface === "no-idl") return p.idlLoad;
-  return null;
+  return (
+    <>
+      {p.idlLoad}
+      {p.idlGuide}
+    </>
+  );
 };
 
 const Empty = ({
@@ -283,7 +298,32 @@ const Program = ({
  * their own. On a phone the tab above already says Interact, so the head is
  * that one row, the picker at the start and the upload at the end.
  */
-const BaseInteract = (p: BaseInteractProps) => (
+const BaseInteract = (props: BaseInteractProps) => {
+  // One portal node moves between slots, so the guide's own upload turning the surface ready does not remount it and close its dialog
+  const [guideNode] = useState(() => {
+    const el = document.createElement("div");
+    el.className = "contents";
+    return el;
+  });
+  const slot = useCallback(
+    (el: HTMLDivElement | null) => {
+      el?.append(guideNode);
+    },
+    [guideNode]
+  );
+  const p: BaseInteractProps = {
+    ...props,
+    idlGuide: <div ref={slot} className="contents" />,
+  };
+  return (
+    <>
+      {createPortal(props.idlGuide, guideNode)}
+      <StageView p={p} />
+    </>
+  );
+};
+
+const StageView = ({ p }: { p: BaseInteractProps }) => (
   <div className="flex h-full flex-col">
     <div className="flex flex-col items-start gap-4 border-b border-border px-6 py-3 max-md:min-h-15 max-md:justify-center max-md:py-2 max-md:pr-2 max-md:pl-5">
       <div className="flex flex-col gap-1 max-md:hidden">
@@ -318,8 +358,12 @@ const BaseInteract = (p: BaseInteractProps) => (
             ))}
           </NativeSelect>
         </label>
-        {/* In `no-idl` and before a deploy the stage's own foot offers it */}
-        {p.surface !== "no-idl" && !isNothingToCall(p.surface) && p.idlLoad}
+        {idlPlacement(p.surface) === "header" && (
+          <>
+            {p.idlLoad}
+            {p.idlGuide}
+          </>
+        )}
       </div>
     </div>
     <div className={STAGE_FRAME}>

@@ -73,10 +73,7 @@ export interface BaseBuildProps {
   offline: boolean;
   onBuild: () => unknown;
   onContinue: () => void;
-  /**
-   * The app holds an IDL, the build's or an uploaded one: the success line
-   * names it
-   */
+  /** `PgProgramInfo` holds an IDL; never a stable build server's, which produces none */
   hasIdl: boolean;
   /** The code changed after the build on screen: Build again leads */
   sourceChanged: boolean;
@@ -89,6 +86,8 @@ export interface BaseBuildProps {
   onStop: () => void;
   /** The build's downloads (IDL, program binary), links under Build succeeded's pills */
   idlActions: ReactNode;
+  /** "Build the IDL locally": in Download IDL's place without an IDL, after the downloads with one */
+  idlGuide: ReactNode;
 }
 
 /**
@@ -416,20 +415,23 @@ const Restored = (p: BaseBuildProps & { failed: boolean }) => (
   />
 );
 
+const noIdlLine = (hasIdl: boolean) =>
+  hasIdl
+    ? "The Playground's stable build server produces no IDL, so Interact keeps the IDL it already holds."
+    : "The Playground's stable build server produces no IDL: build it locally and upload it to call the program from Interact.";
+
 const successLine = ({ sourceChanged, hasIdl }: BaseBuildProps) => {
-  if (sourceChanged) {
-    return "Your code changed after the last build. Build again before you deploy.";
-  }
-  return hasIdl
-    ? "The program and its IDL are ready to deploy."
+  const lead = sourceChanged
+    ? "Your code changed after the last build. Build again before you deploy."
     : "The program is ready to deploy.";
+  return `${lead} ${noIdlLine(hasIdl)}`;
 };
 
 const Succeeded = (p: BaseBuildProps) => (
   <Surface
     icon={<CircleCheck className="text-success" />}
     title="Build succeeded"
-    meta={p.ms === null ? null : `Built in ${msLabel(p.ms)}`}
+    meta={p.ms === null ? undefined : `Built in ${msLabel(p.ms)}`}
     description={successLine(p)}
     actions={
       <>
@@ -449,9 +451,14 @@ const Succeeded = (p: BaseBuildProps) => (
         )}
         {/* The stage's downloads, as links under the pills like
             Unreached's Show full log. Download IDL draws itself only while
-            the app holds an IDL */}
+            the app holds an IDL; without one, the guide takes its place */}
         <div className="flex w-full flex-wrap justify-center gap-2">
           {p.idlActions}
+          {/* One place in the tree, moved by order: a guide that moved in the
+              tree when its own drop loaded an IDL would remount and close */}
+          <div className={p.hasIdl ? "order-last" : "order-first"}>
+            {p.idlGuide}
+          </div>
         </div>
       </>
     }

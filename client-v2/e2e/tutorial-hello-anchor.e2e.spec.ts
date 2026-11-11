@@ -102,12 +102,12 @@ const start = async (page: Page) => {
     .click(LONG);
 };
 
-/** Step 1 through the planned E0412, fixed by the learner's own pick */
+/** Step 1 through the planned failure, fixed by the learner's own pick */
 const passStepOne = async (page: Page) => {
   await answer(page, beat("s1.q1", "ask"));
   await act(page, "s1.build").click(LONG);
   await expect(feed(page).getByText("Build failed").last()).toBeVisible(LONG);
-  await expect(feed(page).getByText("E0412 · line 9").last()).toBeVisible();
+  await expect(feed(page).getByText("E0432 · line 5").last()).toBeVisible();
   await feed(page).getByRole("button", { name: "I'll fix it myself" }).click();
   await answer(page, beat("f1.q2", "ask"));
   await act(page, "f1.build").click(LONG);
@@ -282,13 +282,13 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await expect(feed(page).getByText(/· 2nd try/)).toBeVisible(LONG);
   });
 
-  test("tutorial-conversation: The planned E0412", async ({ page }) => {
+  test("tutorial-conversation: The planned failure", async ({ page }) => {
     test.skip(isLive, "steers the fakes");
     test.setTimeout(120_000);
     await start(page);
     await answer(page, beat("s1.q1", "ask"));
     await act(page, "s1.build").click(LONG);
-    await expect(feed(page).getByText("E0412 · line 9").last()).toBeVisible(
+    await expect(feed(page).getByText("E0432 · line 5").last()).toBeVisible(
       LONG
     );
     // The definition's line on the card, then Explain's explanation and question
