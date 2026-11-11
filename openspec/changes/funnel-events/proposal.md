@@ -91,9 +91,9 @@ site, and the project's rules send agents to them.
     to file); this change does not edit `wbdi-flow`.
   - Tutorial events (`tutorial-flow-v2` on `scope/tutorial-flow-2`) and
     assistant turn events (`assistant-usage-events`, #62).
-  - Sharing, which is also left out of the funnel table. The share route
-    never matches (`routes/share/share.tsx`) and nothing opens the Share
-    dialog, so no share event can fire.
+  - Sharing, which is also left out of the funnel table. client-v2 has no
+    server share route or Share dialog (`drop-server-share` removed both),
+    and gist sharing is measured by its own spec, `gist-sharing`.
   - The catalog's program import, which `catalog_item_opened` and
     `catalog_open_failed` already report.
   - The Build stage's export, which `wbdi-flow` names `build_project_exported`.
