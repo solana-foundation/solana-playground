@@ -95,13 +95,13 @@ test.describe("tutorial: Hello Anchor on a phone, on a stubbed build server and 
     await showing(page, "chat");
     await startButton.click();
 
-    // Step 1: the planned E0412, which the phone only explains: it cannot
+    // Step 1: the planned E0432, which the phone only explains: it cannot
     // type the fix, so the learner picks it
     const q1 = beat("s1.q1", "ask");
     await askedOnThePhone(page, q1);
     await answer(page, q1);
     await act(page, "s1.build").click(LONG);
-    await expect(feed(page).getByText("E0412 · line 9").last()).toBeVisible(
+    await expect(feed(page).getByText("E0432 · line 5").last()).toBeVisible(
       LONG
     );
     const planned = step("write-program").planned;
