@@ -46,7 +46,12 @@ const append = (page: Page, chunk: { message: string; delta: string }) =>
 
 test("assistant-code-stream: A code block keeps its height while a line streams past its width", async ({
   page,
+  browserName,
 }) => {
+  test.fixme(
+    browserName === "firefox",
+    "Firefox draws overlay scrollbars that take no height, so the block's bar measures 0 and the jump never shows"
+  );
   test.setTimeout(120_000);
   await stubSession(page);
   await stubAiStatus(page, "z-ai/glm-5.3-flash:US");

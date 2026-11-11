@@ -1,6 +1,12 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { consoleTrigger, expect, seedWorkspace, test } from "./fixtures";
+import {
+  consoleTrigger,
+  expect,
+  grantClipboard,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 
 type AssistantWindow = Window & {
   __pgAssistant?: {
@@ -72,7 +78,7 @@ test.describe("client-v2-buttons", () => {
     context,
   }) => {
     test.setTimeout(120_000);
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await grantClipboard(context);
 
     // An assistant reply is rendered by `components/Markdown`, which draws
     // fenced code through `components/CodeBlock`. Sending a message for real

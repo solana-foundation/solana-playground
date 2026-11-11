@@ -688,7 +688,12 @@ test.describe("assistant-own-key", () => {
 
   test("assistant-own-key: A new thread takes the last chosen backend", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "On Firefox a tab opened right after connecting does not read the chosen backend; with a 3 s wait before opening it the test passes (HOO-2791)"
+    );
     const defaultTurns = await countedDefault(page);
     await seedWorkspace(page, "own-key-new-thread");
     await connectOwn(page);

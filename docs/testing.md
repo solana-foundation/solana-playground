@@ -190,9 +190,10 @@ Expect: exit code 0 for each; `server/target/release/solpg-server` exists.
 
 ### B-5. client-v2: browser suite
 
-Mirrors the `e2e` matrix and the `e2e-report` job in
+Mirrors the `chromium` entries of the `e2e` matrix and the `e2e-report` job in
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml), which
-[client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages.
+[client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages. The Firefox variant at the end of this
+case mirrors the `firefox` entries.
 
 Precondition: B-7, or `yarn --cwd client-v2 setup:with-stubs` and `test-e2e:with-stubs` in place of `test-e2e`, which
 leaves out the `@real-wasm` specs as [client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) does; a
@@ -211,8 +212,11 @@ Devnet.
 ```sh
 k=5
 PORT=$((13000 + 10 * k)) PG_AI_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e
-grep -cv '^#\|^$' client-v2/e2e/known-skips.txt
+grep -c '^\[chromium\] \|^[^#[]' client-v2/e2e/known-skips.txt
 ```
+
+The `grep` counts the lines without a `[<project>] ` prefix and the `[chromium] ` lines: a `[firefox] ` line never
+skips in this run.
 
 Expect:
 
@@ -225,6 +229,18 @@ Expect:
       fails the run, which is where it gets fixed.
 - [ ] the two `client-v2-ai` tests in `e2e/assistant-pause.e2e.spec.ts` pass rather than skip: they stub
       `/api/agent` themselves, so they need no configured backend.
+
+Firefox variant: a run without `--project` declares only the `chromium` project, so Firefox needs its own run.
+
+```sh
+k=5
+yarn --cwd client-v2 playwright install firefox
+PORT=$((13000 + 10 * k)) PG_AI_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e --project=firefox
+grep -c '^\[firefox\] \|^[^#[]' client-v2/e2e/known-skips.txt
+```
+
+Expect: the same checks as the Chromium run, with the `grep` counting the lines without a prefix and the
+`[firefox] ` lines.
 
 ### B-6. compose images
 
