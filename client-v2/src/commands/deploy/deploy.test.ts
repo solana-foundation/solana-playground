@@ -106,6 +106,7 @@ vi.mock("../../utils", () => ({
     getAirdropAmount: () => 5,
     getCluster: async () => "devnet",
     getReadBufferConnection: <T>(connection: T) => env.readBuffer ?? connection,
+    getAirdropConnection: <T>(connection: T) => connection,
   },
   PgGlobal: {
     get deployState() {

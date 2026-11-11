@@ -31,6 +31,10 @@ const chain = vi.hoisted(() => ({
   readFails: false,
   /** Sends are accepted but never reach the buffer */
   dropsWrites: false,
+  /** How long each send waits before it answers; `Infinity` never answers, as a paused validator */
+  answersAfterMs: 0,
+  /** Sends, from the first, that never answer whatever `answersAfterMs` says */
+  hangingSends: 0,
   current: { rpcEndpoint: "https://rpc.test", commitment: "confirmed" },
   readBufferRpc: {
     rpcEndpoint: "https://read.test/?api-key=secret",
@@ -47,9 +51,13 @@ vi.mock("../../utils", () => ({
   PgCommon: {
     setDefault: <T extends object>(value: T, defaults: object) =>
       Object.assign({}, defaults, value),
-    // Rejects on a stop, as `PgCommon.sleep` does
+    // Rejects on a stop, and at once after one, as `PgCommon.sleep` does
     sleep: (ms: number, abortController: AbortController | undefined) =>
       new Promise((res, rej) => {
+        if (abortController?.signal.aborted) {
+          rej(new DOMException("Aborted", "AbortError"));
+          return;
+        }
         const id = setTimeout(res, ms);
         abortController?.signal.addEventListener("abort", () => {
           clearTimeout(id);
@@ -72,6 +80,14 @@ vi.mock("../../utils", () => ({
     ) => {
       chain.sentAt.push(Date.now());
       chain.sentThrough.push(connection);
+      const hangs = chain.hangingSends-- > 0;
+      if (hangs || chain.answersAfterMs > 0) {
+        await new Promise((res) => {
+          if (!hangs && Number.isFinite(chain.answersAfterMs)) {
+            setTimeout(res, chain.answersAfterMs);
+          }
+        });
+      }
       if (chain.failures-- > 0 || chain.landsLeft-- <= 0) {
         throw chain.failWith();
       }
@@ -133,6 +149,8 @@ describe("commands/deploy/bpf-loader-upgradeable", () => {
     chain.sendTxPerSecond = undefined;
     chain.readFails = false;
     chain.dropsWrites = false;
+    chain.answersAfterMs = 0;
+    chain.hangingSends = 0;
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -588,5 +606,108 @@ describe("commands/deploy/bpf-loader-upgradeable", () => {
     );
     await vi.runAllTimersAsync();
     await failure;
+  });
+
+  it("refuses a write that never answers within 20 s, ends its round, and fails the load at the stalled-round limit", async () => {
+    chain.answersAfterMs = Number.POSITIVE_INFINITY;
+    const refusedAt: number[] = [];
+    const onRefusal = vi.fn<(message: string) => void>(() => {
+      refusedAt.push(Date.now());
+    });
+    const bytes = new Uint8Array(8 * CHUNK_SIZE).fill(1);
+    chain.data = Buffer.alloc(METADATA_SIZE + bytes.length);
+    const start = Date.now();
+
+    const loading = BpfLoaderUpgradeable.loadBuffer({} as never, bytes, {
+      loadConcurrency: 2,
+      writesPerSecond: 1000,
+      onRefusal,
+    });
+    // Attached before the timers run, so the rejection is never unhandled
+    const failure = expect(loading).rejects.toThrow(
+      "The RPC kept refusing buffer writes: no chunk landed in 5 rounds in a row (last refusal: No answer in 20 s)"
+    );
+    await vi.runAllTimersAsync();
+    await failure;
+
+    // One line a round, the first 20 s after the load starts (its first write goes at once)
+    expect(onRefusal.mock.calls).toEqual(
+      new Array(5).fill(["No answer in 20 s"])
+    );
+    expect(refusedAt[0] - start).toBe(20_000);
+    // Each round sends its two workers' first writes and nothing more
+    expect(chain.sentAt).toHaveLength(10);
+  });
+
+  it("lands a write that answers just under 20 s", async () => {
+    chain.answersAfterMs = 19_999;
+    const onRefusal = vi.fn();
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000, onRefusal }, 2);
+
+    expect(onRefusal).not.toHaveBeenCalled();
+    expect(chain.sentAt).toHaveLength(2);
+    expect(chain.data.subarray(METADATA_SIZE).every((b) => b === 1)).toBe(true);
+  });
+
+  it("sends nothing more in a round once one write goes unanswered, and sends that chunk again next round", async () => {
+    // A turn every 8 s: worker A's write at 0 s never answers, worker B lands writes at 8 s and 16 s and waits for
+    // its 24 s turn when A's write times out at 20 s
+    chain.hangingSends = 1;
+    const onRefusal = vi.fn();
+
+    const sentAt = await loadWith(
+      { loadConcurrency: 2, writesPerSecond: 0.125, onRefusal },
+      4
+    );
+
+    expect(onRefusal.mock.calls).toEqual([["No answer in 20 s"]]);
+    const sentAfter = sentAt.map((t) => t - sentAt[0]);
+    expect(sentAfter.slice(0, 3)).toEqual([0, 8000, 16_000]);
+    // The next round's first turn is the one after B's skipped 24 s turn
+    expect(sentAfter[3]).toBe(32_000);
+    expect(chain.data.subarray(METADATA_SIZE).every((b) => b === 1)).toBe(true);
+  });
+
+  it("returns at once, with no refusal, when stopped while a write waits for an answer", async () => {
+    chain.hangingSends = 1;
+    const start = Date.now();
+    const abortController = new AbortController();
+    setTimeout(() => abortController.abort(), 100);
+    const onRefusal = vi.fn();
+    const bytes = new Uint8Array(2 * CHUNK_SIZE).fill(1);
+    chain.data = Buffer.alloc(METADATA_SIZE + bytes.length);
+    let returnedAt: number | undefined;
+
+    const loading = BpfLoaderUpgradeable.loadBuffer({} as never, bytes, {
+      loadConcurrency: 1,
+      abortController,
+      onRefusal,
+    }).then(() => {
+      returnedAt = Date.now();
+    });
+    await vi.runAllTimersAsync();
+    await loading;
+
+    expect(returnedAt === undefined ? undefined : returnedAt - start).toBe(100);
+    expect(onRefusal).not.toHaveBeenCalled();
+    expect(chain.sentAt).toHaveLength(1);
+  });
+
+  it("logs the outcome of a write that answers after its time limit", async () => {
+    const logged = memoryProvider();
+    initLogger({ providers: [logged] });
+    chain.answersAfterMs = 25_000;
+
+    await loadWith({ loadConcurrency: 1, writesPerSecond: 1000 }, 1);
+
+    // The read at 20 s misses the first write, which lands at 25 s, so the chunk is sent again and that send answers
+    // late too
+    expect(
+      logged.entries.filter(
+        ({ message }) =>
+          message === "A buffer write answered after its time limit"
+      )
+    ).toHaveLength(2);
   });
 });

@@ -111,3 +111,30 @@ and a failed run's `planned` and its moments (`explainedAt`, `answeredAt`,
 `fixedAt`, `selfFixAt`) are each dropped alone when they do not read, as the
 hand-written checks did. The result inside stays `parseResult`'s. Old saves
 load unchanged; the parse test round-trips them.
+
+## A learner's Stop (HOO-2822)
+
+The matrix listed no Stop: a stopped build read as "Build failed", offered
+Explain and "I'll fix it myself", and had no Build again until an answer
+ended; the stop was reported as a fault.
+
+- Detection is typed: `PgCommand.build` (the one stoppable command a tutorial
+  act runs) ends a stop with `StoppedError` (`utils/stopped.ts`). `runBuild`
+  answers it as `reason: "stopped"` and logs it at info; the deploy runner's
+  build port carries it on as a deploy `stopped`. A `StoppedError` a
+  deploy stage, a run or a call throws is `stopped` too, never reported;
+  none can throw one today (`run` is not stoppable, a call and the chain
+  stages run through no command), so those branches are guards.
+- `RunResult`: `stopped` joins the build's, the deploy's and the run's or
+  call's reasons; `isStoppedRun` reads it. `parseResult` keeps a saved
+  build's `stopped` (it no longer reads as `compiler`); old saves load
+  unchanged. `outcomeOf` reports it as `failed`, since the spec's outcomes
+  name no stop.
+- `view.ts`: a stopped result is never `open`; `retryOf` gives `stopped`,
+  whose card is the act's own "again" (a build-and-deploy keeps its whole
+  button) with "Stopped. Press <button> when you're ready.". The reducer's
+  `explain` ignores it.
+- `BaseStoppedCard`: one quiet row, "<act> stopped", drawn for every act by
+  `BaseResultCard` and `BaseDeployResultCard`.
+- Matrix rows: build (on the planned-failure step and while fixing), deploy,
+  build-and-deploy, run and call, each stopped, in `never a dead end`.

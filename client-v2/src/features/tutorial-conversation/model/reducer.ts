@@ -44,6 +44,7 @@ import {
   hintOf,
   isMismatch,
   isSignedOut,
+  isStoppedRun,
   isUnconfirmed,
   isUnreachable,
 } from "./progress";
@@ -352,7 +353,10 @@ const unconfirmedOf = (runs: RunRecord[] | undefined): UnreadTx[] | null => {
     : null;
 };
 
-/** A run's outcome as `tutorial_action_run` names it */
+/**
+ * A run's outcome as `tutorial_action_run` names it. An act the learner
+ * stopped (HOO-2822) is `failed`: the spec's outcomes name no stop
+ */
 const outcomeOf = (result: RunResult): ActionRunParams["outcome"] => {
   if (result.ok) return "ok";
   if (
@@ -1495,14 +1499,15 @@ const reduceAction = (
       if (passed(p, found.step)) return same(state);
       if (!run.planned || p.cursor.fail) {
         // Asked once: the card closes on the press. A server that never
-        // answered, one that asks for a sign-in, or a devnet that has not
-        // read the transaction back yet has nothing to explain; its card
-        // offers the way on instead
+        // answered, one that asks for a sign-in, a devnet that has not
+        // read the transaction back yet, or an act the learner stopped has
+        // nothing to explain; its card offers the way on instead
         if (
           run.explainedAt !== undefined ||
           isUnreachable(run.result) ||
           isSignedOut(run.result) ||
-          isUnconfirmed(run.result)
+          isUnconfirmed(run.result) ||
+          isStoppedRun(run.result)
         ) {
           return same(state);
         }
@@ -4134,6 +4139,43 @@ if (import.meta.vitest) {
           at: 8000,
         });
         expect(r.state).toBe(stopped);
+        expect(r.effects).toEqual([]);
+      });
+
+      it("a build the learner stopped is no planned failure, has nothing to explain, and is measured as failed", () => {
+        const stoppedBuild: RunResult = {
+          act: "build",
+          ok: false,
+          seconds: 0,
+          reason: "stopped",
+          error: null,
+          log: "Stopped.",
+        };
+        const { state: ended, effects } = play([
+          start,
+          rightPick,
+          build(7000),
+          { type: "ended", beatId: "s1.build", result: stoppedBuild, at: 7100 },
+        ]);
+        expect(ended.progress.runs["s1.build"]).toEqual([
+          { status: "failed", at: 7000, took: 100, result: stoppedBuild },
+        ]);
+        // The spec's outcomes name no stop: a stop counts as failed
+        expect(effects).toContainEqual(
+          expect.objectContaining({
+            name: "tutorial_action_run",
+            params: expect.objectContaining({
+              action: "build",
+              outcome: "failed",
+            }),
+          })
+        );
+        const r = reduce(ctx(), ended, {
+          type: "explain",
+          beatId: "s1.build",
+          at: 8000,
+        });
+        expect(r.state).toBe(ended);
         expect(r.effects).toEqual([]);
       });
 

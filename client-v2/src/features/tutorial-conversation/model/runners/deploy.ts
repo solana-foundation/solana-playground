@@ -1,5 +1,6 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
 import { shortKey } from "@/shared/lib/short-key";
+import { isStopped } from "@/utils/stopped";
 
 import type { RunStage } from "../ports";
 import type { RunResult } from "../progress";
@@ -66,8 +67,13 @@ export interface DeployPort {
   createWallet(): string;
   /** Read twice, before and after the build, so it answers live */
   program(): ProgramState;
-  /** Runs the build; a failure stops the deploy with its message */
-  build(): Promise<{ ok: true } | { ok: false; message: string }>;
+  /**
+   * Runs the build; a failure stops the deploy with its message, and a build
+   * the learner stopped (`isStopped`) stops it as stopped (HOO-2822)
+   */
+  build(): Promise<
+    { ok: true } | { ok: false; message: string; isStopped?: true }
+  >;
   /** The last build's binary */
   bytes(): Promise<Uint8Array>;
   /** Whether the program is on chain (an upgrade), its length and authority */
@@ -135,7 +141,7 @@ const failed = (
   act: "deploy" | "buildDeploy",
   started: number,
   now: number,
-  reason: "failed" | "no_wallet" | "immutable" | "not_authority",
+  reason: "failed" | "no_wallet" | "immutable" | "not_authority" | "stopped",
   message: string
 ): RunResult => ({
   act,
@@ -250,7 +256,13 @@ export const runDeploy = async (
       stage(DEPLOY_STAGES.building);
       const built = await port.build();
       if (!built.ok) {
-        return failed(act, started, port.now(), "failed", built.message);
+        return failed(
+          act,
+          started,
+          port.now(),
+          built.isStopped ? "stopped" : "failed",
+          built.message
+        );
       }
     }
 
@@ -317,21 +329,27 @@ export const runDeploy = async (
       instructions: port.instructions(),
     };
   } catch (e) {
-    port.report(e, current);
+    // A stop is no fault of the deploy's: not reported (HOO-2822). A guard:
+    // only the build stage can be stopped today, and it answers `stopped`
+    if (!isStopped(e)) port.report(e, current);
     return failed(
       act,
       started,
       port.now(),
-      "failed",
+      isStopped(e) ? "stopped" : "failed",
       e instanceof Error ? e.message : String(e)
     );
   }
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi } = import.meta.vitest;
+  const { beforeAll, describe, it, expect, vi } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/deploy", () => {
+    let StoppedError: typeof import("@/utils/stopped").StoppedError;
+    beforeAll(async () => {
+      ({ StoppedError } = await import("@/utils/stopped"));
+    });
     const SOL = 1_000_000_000;
     const WALLET = "Wa11et1111111111111111111111111111111111111";
     const PROGRAM = "Prog111111111111111111111111111111111111111";
@@ -600,6 +618,47 @@ if (import.meta.vitest) {
         message: "error[E0412]",
       });
       expect(port.writeBuffer).not.toHaveBeenCalled();
+    });
+
+    it("stops as stopped, not failed, when the learner stopped its build", async () => {
+      const { port } = portOf({
+        balances: [5 * SOL],
+        deployed: false,
+        stale: true,
+        id: null,
+        build: async () => ({
+          ok: false,
+          message: "Stopped.",
+          isStopped: true,
+        }),
+      });
+      await expect(
+        runDeploy(port, "buildDeploy", () => {})
+      ).resolves.toMatchObject({
+        act: "buildDeploy",
+        ok: false,
+        reason: "stopped",
+        message: "Stopped.",
+      });
+      expect(port.writeBuffer).not.toHaveBeenCalled();
+    });
+
+    it("turns a stop thrown in a stage into a stopped deploy, and reports nothing", async () => {
+      const { port } = portOf({
+        balances: [5 * SOL],
+        deployed: false,
+        stale: false,
+        id: PROGRAM,
+      });
+      port.writeBuffer = vi.fn(async () => {
+        throw new StoppedError("Stopped.");
+      });
+      await expect(runDeploy(port, "deploy", () => {})).resolves.toMatchObject({
+        ok: false,
+        reason: "stopped",
+        message: "Stopped.",
+      });
+      expect(port.report).not.toHaveBeenCalled();
     });
 
     it("turns a throw from the chain into a failed deploy", async () => {

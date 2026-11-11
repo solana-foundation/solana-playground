@@ -31,7 +31,13 @@ import type {
   RunResult,
   Wrote,
 } from "./progress";
-import { answerOf, existsLine, existsOf, isMismatch } from "./progress";
+import {
+  answerOf,
+  existsLine,
+  existsOf,
+  isMismatch,
+  isStoppedRun,
+} from "./progress";
 import type { EngineState, Stage } from "./reducer";
 import { hasRepeatEnded } from "./reducer";
 import { wordOf } from "./route";
@@ -286,11 +292,17 @@ const isLandedAirdrop = (
  * here: once its card closed on "I'll fix it myself", or on Explain once the
  * answer ended or a reload came; a planned failure goes on to the step's
  * `onFail` instead.
+ *
+ * An act the learner stopped (HOO-2822) runs again at once from its own
+ * button (`stopped`, `retryButton`: "Build again", "Deploy again", or
+ * "Build and deploy again" for a build-and-deploy): nothing failed, so there is nothing to
+ * explain or fix first.
  */
-type Retry = "faucet" | "balance" | "again" | "fix" | "authority";
+type Retry = "faucet" | "balance" | "again" | "fix" | "authority" | "stopped";
 
 const retryOf = (result: RunResult): Retry | null => {
   if (result.ok) return null;
+  if (isStoppedRun(result)) return "stopped";
   if (result.act === "run" || result.act === "call") {
     // Refused because another run held the send path: nothing to fix
     if (isCaptureBusy(result.message)) return "again";
@@ -307,7 +319,10 @@ const retryOf = (result: RunResult): Retry | null => {
   return result.reason === "failed" ? "again" : null;
 };
 
-const RETRY_CONTEXT: Record<Exclude<Retry, "again" | "fix">, string> = {
+const RETRY_CONTEXT: Record<
+  Exclude<Retry, "again" | "fix" | "stopped">,
+  string
+> = {
   faucet: ASKS_THE_FAUCET,
   balance: CHECKS_THE_BALANCE,
   authority: SWITCH_TO_AUTHORITY,
@@ -322,8 +337,15 @@ const FIX_AND_CALL = "Fix what the error says, then try again.";
 /** A failed build's, once its card closed: the compiler named the line */
 const FIX_AND_BUILD = "Fix the error, then build again.";
 
-/** The line a failed act's retry card shows */
-const retryContext = (act: ActBeat, retry: Retry | null): string => {
+/** A stopped act's retry line, naming the button under it (HOO-2822) */
+const stoppedLine = (button: string) =>
+  `Stopped. Press ${button} when you're ready.`;
+
+/** The line a failed act's retry card shows; a stopped one's is `stoppedLine` */
+const retryContext = (
+  act: ActBeat,
+  retry: Exclude<Retry, "stopped"> | null
+): string => {
   if (retry === "fix") {
     if (act.act === "build") return FIX_AND_BUILD;
     return act.act === "run" ? FIX_AND_RUN : FIX_AND_CALL;
@@ -334,24 +356,36 @@ const retryContext = (act: ActBeat, retry: Retry | null): string => {
 };
 
 /**
- * The retry card's button: a run or call, and a build the learner is fixing,
- * keep their own verb, the first word of the button ("Run again", "Call
- * again", "Chop again", "Build again"); a deploy or an airdrop reads "Try
+ * The retry card's button: a run or call, a build the learner is fixing, and
+ * any act the learner stopped keep their own verb, the first word of the
+ * button ("Run again", "Call again", "Chop again", "Build again", "Deploy
+ * again"); a stopped build-and-deploy keeps its whole button, since "Build
+ * again" would not say it deploys. A failed deploy or airdrop reads "Try
  * again", as the designers drew it
  */
-const retryButton = (act: ActBeat, retry: Retry | null): string =>
-  act.act === "run" || act.act === "call" || retry === "fix"
+const retryButton = (act: ActBeat, retry: Retry | null): string => {
+  if (retry === "stopped" && act.act === "buildDeploy") {
+    return `${act.button} again`;
+  }
+  return act.act === "run" ||
+    act.act === "call" ||
+    retry === "fix" ||
+    retry === "stopped"
     ? `${act.button.split(" ")[0]} again`
     : TRY_AGAIN;
+};
 
 /** A failed act as its retry card shows it */
-const tryAgain = (act: ActBeat, retry: Retry | null): ActBeat =>
-  Object.assign({}, act, {
-    button: retryButton(act, retry),
-    context: retryContext(act, retry),
+const tryAgain = (act: ActBeat, retry: Retry | null): ActBeat => {
+  const button = retryButton(act, retry);
+  return Object.assign({}, act, {
+    button,
+    context:
+      retry === "stopped" ? stoppedLine(button) : retryContext(act, retry),
     // The retry is one press; the card above keeps the others
     repeat: undefined,
   });
+};
 
 /** The assistant's line on Skip when the question has none of its own */
 export const SKIPPED_DEFAULT =
@@ -1004,10 +1038,14 @@ export const view = (
               // A planned failure closes once Explain or "I'll fix it
               // myself" entered `onFail`; any other failure waits on this
               // card while it is the act's latest run
+              // A stopped act closes at once: its retry card is the way on
+              const isStopped =
+                run.status === "failed" && isStoppedRun(run.result);
               const open =
                 run.status === "failed" &&
                 isLast &&
                 !done &&
+                !isStopped &&
                 run.explainedAt === undefined &&
                 run.selfFixAt === undefined &&
                 !(planned && p.cursor.kind === "step" && p.cursor.fail);
@@ -1108,8 +1146,11 @@ export const view = (
                 !(planned && p.cursor.kind === "step" && p.cursor.fail)
                   ? run.selfFixAt ?? offerAt
                   : null;
-              let failedRetry: Retry | null = open ? retryOf(run.result) : null;
-              if (fixingAt !== null) failedRetry = "fix";
+              let failedRetry: Retry | null =
+                open || (isStopped && isLast && !done)
+                  ? retryOf(run.result)
+                  : null;
+              if (fixingAt !== null && !isStopped) failedRetry = "fix";
               if (isTurnedDown || failedRetry !== null) {
                 turn({
                   id: `${b.id}:retry`,
@@ -1242,6 +1283,10 @@ if (import.meta.vitest) {
 
   describe("features/tutorial-conversation/model/view", () => {
     let freshProgress: typeof import("./progress").freshProgress;
+    let route: typeof import("./route").route;
+    beforeAll(async () => {
+      ({ route } = await import("./route"));
+    });
 
     describe("a repeating call act", () => {
       const repeating = (): TutorialDefinition => {
@@ -2460,13 +2505,13 @@ if (import.meta.vitest) {
         const txFailed = (
           act: "run" | "call",
           over: {
-            reason?: "no_wallet" | "no_transaction";
+            reason?: "no_wallet" | "no_transaction" | "stopped";
             mismatch?: true;
           }
         ): RunResult => {
           const failed: Extract<
             RunResult,
-            { reason?: "no_wallet" | "no_transaction" }
+            { reason?: "no_wallet" | "no_transaction" | "stopped" }
           > = {
             act,
             ok: false,
@@ -2498,7 +2543,7 @@ if (import.meta.vitest) {
         });
         const fundedFailed = (
           act: "airdrop" | "deploy" | "buildDeploy",
-          reason: "failed" | "no_wallet"
+          reason: "failed" | "no_wallet" | "stopped"
         ): RunResult => ({ act, ok: false, seconds: 1, reason, message: "No" });
         const fundedShort = (
           act: "airdrop" | "deploy" | "buildDeploy"
@@ -2513,7 +2558,7 @@ if (import.meta.vitest) {
           address: "WaLLet",
         });
         const buildFailed = (
-          reason: "unreachable" | "signed_out"
+          reason: "unreachable" | "signed_out" | "stopped"
         ): RunResult => ({
           act: "build",
           ok: false,
@@ -2609,6 +2654,23 @@ if (import.meta.vitest) {
             ]),
             "Sign in with GitHub",
           ],
+          // HOO-2822: a stop is no failure; the act's own verb follows at once
+          [
+            "build, stopped by the learner",
+            "s1.build",
+            toBuild().concat([
+              endedWith("s1.build", buildFailed("stopped"), 8000),
+            ]),
+            "Build again",
+          ],
+          [
+            "build, stopped while fixing",
+            "f1.build",
+            toFixBuild().concat([
+              endedWith("f1.build", buildFailed("stopped"), 11000),
+            ]),
+            "Build again",
+          ],
           // airdrop, deploy, build and deploy
           [
             "airdrop, failed or crashed",
@@ -2649,6 +2711,22 @@ if (import.meta.vitest) {
               endedWith("s2.deploy", fundedFailed("deploy", "no_wallet"), at),
             ]),
             "Create wallet",
+          ],
+          [
+            "deploy, stopped by the learner",
+            "s2.deploy",
+            toDeployPress().concat([
+              endedWith("s2.deploy", fundedFailed("deploy", "stopped"), at),
+            ]),
+            "Deploy again",
+          ],
+          [
+            "build and deploy, stopped by the learner",
+            "s4.ship",
+            toShipPress().concat([
+              endedWith("s4.ship", fundedFailed("buildDeploy", "stopped"), at),
+            ]),
+            "Build and deploy again",
           ],
           [
             "build and deploy, failed",
@@ -2706,6 +2784,14 @@ if (import.meta.vitest) {
             "Check again",
           ],
           [
+            "run, stopped by the learner",
+            "s3.run",
+            toRunPress().concat([
+              endedWith("s3.run", txFailed("run", { reason: "stopped" }), at),
+            ]),
+            "Run again",
+          ],
+          [
             "run, landed but the goal refused it",
             "s3.run",
             toRunPress().concat([endedWith("s3.run", RAN_NO_CALL, at)]),
@@ -2740,9 +2826,85 @@ if (import.meta.vitest) {
             ]),
             "Check again",
           ],
+          [
+            "call, stopped by the learner",
+            "s4.call",
+            toCallPress().concat([
+              endedWith("s4.call", txFailed("call", { reason: "stopped" }), at),
+            ]),
+            "Call again",
+          ],
         ] as const)("%s", (_label, beatId, actions, control) => {
           const v = view(hello, playStrict(Array.from(actions)), LATE);
           expect(controlOf(v, beatId)).toBe(control);
+        });
+
+        it("a stopped build: a closed card with nothing to explain, then Build again at once, which the composer's word presses", () => {
+          const state = playStrict(
+            toBuild().concat([
+              endedWith("s1.build", buildFailed("stopped"), 8000),
+            ])
+          );
+          const v = view(hello, state, LATE);
+          const result = v.turns.find((t) => t.id === "result:s1.build:0");
+          expect(result).toMatchObject({ kind: "result", open: false });
+          // Not the planned failure: a stop never enters the fix question
+          expect(state.progress.runs["s1.build"]?.at(-1)).not.toHaveProperty(
+            "planned"
+          );
+          expect(v.live).toMatchObject({
+            id: "s1.build:retry",
+            kind: "act",
+            state: "live",
+            at: 8000,
+            act: {
+              button: "Build again",
+              context: "Stopped. Press Build again when you're ready.",
+            },
+          });
+          // No "Show me the fix": nothing went to the assistant
+          expect(v.turns.some((t) => t.id.startsWith("fix:"))).toBe(false);
+          expect(route("build", v.live, 9000)).toMatchObject({
+            kind: "word",
+            action: { type: "act", beatId: "s1.build" },
+          });
+        });
+
+        it("a stopped deploy, run and call each say to press their own again", () => {
+          const contexts = [
+            [
+              "s2.deploy",
+              toDeployPress().concat([
+                endedWith("s2.deploy", fundedFailed("deploy", "stopped"), at),
+              ]),
+            ],
+            [
+              "s3.run",
+              toRunPress().concat([
+                endedWith("s3.run", txFailed("run", { reason: "stopped" }), at),
+              ]),
+            ],
+            [
+              "s4.call",
+              toCallPress().concat([
+                endedWith(
+                  "s4.call",
+                  txFailed("call", { reason: "stopped" }),
+                  at
+                ),
+              ]),
+            ],
+          ] as const;
+          expect(
+            contexts.map(([, actions]) => {
+              const v = view(hello, playStrict(Array.from(actions)), LATE);
+              return v.live?.kind === "act" ? v.live.act.context : null;
+            })
+          ).toEqual([
+            "Stopped. Press Deploy again when you're ready.",
+            "Stopped. Press Run again when you're ready.",
+            "Stopped. Press Call again when you're ready.",
+          ]);
         });
 
         it("a run cut short by a reload: the act card again", () => {

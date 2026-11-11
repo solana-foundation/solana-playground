@@ -14,7 +14,11 @@ const h = vi.hoisted(() => ({
   confirm: vi.fn(),
   /** The native RPC's balance read, which funding never asks */
   nativeGetBalance: vi.fn(),
+  /** The build act's runner, which a deploy's build stage calls */
+  runBuild: vi.fn(),
 }));
+
+vi.mock("./build", () => ({ runBuild: h.runBuild }));
 
 /** The cluster's native RPC, which airdrops go through */
 const native = vi.hoisted(() => ({
@@ -78,8 +82,11 @@ vi.mock("@/views/flow/stages/build-report", () => ({}));
 
 let tutorialRunner: typeof import("./real-deploy").tutorialRunner;
 let devnetFunding: typeof import("./real-deploy").devnetFunding;
+let realDeployPort: typeof import("./real-deploy").realDeployPort;
 beforeAll(async () => {
-  ({ tutorialRunner, devnetFunding } = await import("./real-deploy"));
+  ({ tutorialRunner, devnetFunding, realDeployPort } = await import(
+    "./real-deploy"
+  ));
 });
 
 beforeEach(() => {
@@ -160,5 +167,56 @@ describe("features/tutorial-conversation/model/runners/real-deploy: devnetFundin
   it("counts a transaction error as not confirmed", async () => {
     h.confirm.mockResolvedValueOnce({ err: "InstructionError" });
     await expect(devnetFunding.confirm("airdropSig")).resolves.toBe(false);
+  });
+});
+
+describe("features/tutorial-conversation/model/runners/real-deploy: realDeployPort.build", () => {
+  it("carries a build the learner stopped on as stopped (HOO-2822)", async () => {
+    h.runBuild.mockResolvedValue({
+      act: "build",
+      ok: false,
+      seconds: 0,
+      reason: "stopped",
+      // eslint-disable-next-line unicorn/no-null -- a build result with no compiler error holds null
+      error: null,
+      log: "Stopped.",
+    });
+    await expect(realDeployPort().build()).resolves.toEqual({
+      ok: false,
+      message: "Stopped.",
+      isStopped: true,
+    });
+  });
+
+  it("gives a build refused for sign-in the spec's line", async () => {
+    h.runBuild.mockResolvedValue({
+      act: "build",
+      ok: false,
+      seconds: 0,
+      reason: "signed_out",
+      // eslint-disable-next-line unicorn/no-null -- a build result with no compiler error holds null
+      error: null,
+      log: "Sign in with GitHub to build.",
+    });
+    await expect(realDeployPort().build()).resolves.toEqual({
+      ok: false,
+      message: "Sign in with GitHub to build.",
+    });
+  });
+
+  it("gives a failed build its line, not a stop", async () => {
+    h.runBuild.mockResolvedValue({
+      act: "build",
+      ok: false,
+      seconds: 0,
+      reason: "compiler",
+      // eslint-disable-next-line unicorn/no-null -- a build result with no compiler error holds null
+      error: null,
+      log: "error: could not compile",
+    });
+    await expect(realDeployPort().build()).resolves.toEqual({
+      ok: false,
+      message: "The build failed. See the terminal.",
+    });
   });
 });

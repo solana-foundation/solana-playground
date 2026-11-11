@@ -582,6 +582,27 @@ describe("BaseResultCard", () => {
     expect(screen.getByText(/Program log: Instruction: Hello/)).toBeTruthy();
   });
 
+  it("tells a run the closed RPC faucet left short to use the web faucet", () => {
+    txCard({
+      act: "run",
+      ok: false,
+      seconds: 1,
+      reason: "no_funds",
+      message:
+        '410 Gone: {"jsonrpc":"2.0","error":{"code": 410, "message":"The RPC faucet is closed on this cluster. Request test SOL at https://faucet.solana.com"}, "id": "1"}',
+      log: "",
+      funding: { balance: 0, cost: 500_000_000, address: "Wa11et" },
+    });
+    expect(
+      screen.getByText(
+        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet RPC faucet is closed: get SOL from the web faucet, or top the wallet up yourself."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
+    ).toBe("https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet");
+  });
+
   it("heads a run the faucet left short, and one with no wallet, by their reason", () => {
     const { unmount } = txCard({
       act: "run",

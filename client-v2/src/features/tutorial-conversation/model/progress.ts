@@ -294,10 +294,15 @@ export type RunRecord =
     };
 
 /**
- * Why a build failed: the code, a server that never answered, or a server
- * that builds only for a signed-in GitHub user (HOO-2422)
+ * Why a build failed: the code, a server that never answered, a server
+ * that builds only for a signed-in GitHub user (HOO-2422), or the learner's
+ * Stop (HOO-2822)
  */
-export type BuildFailure = "compiler" | "unreachable" | "signed_out";
+export type BuildFailure =
+  | "compiler"
+  | "unreachable"
+  | "signed_out"
+  | "stopped";
 
 /** A build whose server never answered: nothing to explain, only Try again */
 export const isUnreachable = (r: RunResult): boolean =>
@@ -316,6 +321,13 @@ export const isSignedOut = (r: RunResult): boolean =>
  */
 export const isUnconfirmed = (r: RunResult): boolean =>
   (r.act === "run" || r.act === "call") && !r.ok && r.reason === "unconfirmed";
+
+/**
+ * An act the learner stopped (HOO-2822): nothing failed, so nothing to
+ * explain; the act's own "again" card follows at once
+ */
+export const isStoppedRun = (r: RunResult): boolean =>
+  !r.ok && "reason" in r && r.reason === "stopped";
 
 /** A failed run or call the program could not match (HOO-2688) */
 export const isMismatch = (r: RunResult): boolean =>
@@ -414,7 +426,8 @@ export type RunResult =
       /**
        * `compiler`: the server answered and the build failed, or the server
        * refused the request; `unreachable`: no answer reached the browser;
-       * `signed_out`: the server builds only for a signed-in user
+       * `signed_out`: the server builds only for a signed-in user;
+       * `stopped`: the learner stopped it, and `log` is the stop's line
        */
       reason: BuildFailure;
       error: BuildError | null;
@@ -457,12 +470,19 @@ export type RunResult =
        * state, is
        * `immutable` (it can no longer be upgraded) or `not_authority`
        * (another wallet holds its upgrade authority): running it again as it
-       * is cannot fix either (HOO-2806)
+       * is cannot fix either (HOO-2806). `stopped`: the learner stopped
+       * the act (HOO-2822); today only its build stage can be stopped, and
+       * an airdrop never is
        */
       act: "airdrop" | "deploy" | "buildDeploy";
       ok: false;
       seconds: number;
-      reason: "failed" | "no_wallet" | "immutable" | "not_authority";
+      reason:
+        | "failed"
+        | "no_wallet"
+        | "immutable"
+        | "not_authority"
+        | "stopped";
       message: string;
     }
   | {
@@ -520,10 +540,12 @@ export type RunResult =
       log: string;
       /**
        * Why nothing reached the chain: no wallet, or the run sent no
-       * transaction. Absent for a run that sent and failed, or that could not
-       * run at all.
+       * transaction. `stopped`: it ended with a stop (HOO-2822), whatever
+       * it sent before, which no run or call can do today, since neither
+       * runs through a stoppable command. Absent for a run that sent and
+       * failed, or that could not run at all.
        */
-      reason?: "no_wallet" | "no_transaction";
+      reason?: "no_wallet" | "no_transaction" | "stopped";
       /**
        * The call did not match the program on chain: the IDL has no such
        * instruction, or the program refused it as one it does not know or
@@ -836,7 +858,8 @@ const parseResult = (v: unknown): RunResult | null => {
     v.act === "build" &&
     !v.ok &&
     v.reason !== "unreachable" &&
-    v.reason !== "signed_out"
+    v.reason !== "signed_out" &&
+    v.reason !== "stopped"
   ) {
     return { ...v, reason: "compiler" } as unknown as RunResult;
   }
@@ -1666,6 +1689,57 @@ if (import.meta.vitest) {
       expect(runs?.map((r) => "result" in r && r.result)).toEqual([refused]);
       expect(isSignedOut(refused)).toBe(true);
       expect(isUnreachable(refused)).toBe(false);
+    });
+
+    it("keeps an act the learner stopped stopped on load, never a compiler failure", () => {
+      const build: RunResult = {
+        act: "build",
+        ok: false,
+        seconds: 0,
+        reason: "stopped",
+        error: null,
+        log: "Stopped.",
+      };
+      const deploy: RunResult = {
+        act: "deploy",
+        ok: false,
+        seconds: 1,
+        reason: "stopped",
+        message: "Stopped.",
+      };
+      const run: RunResult = {
+        act: "run",
+        ok: false,
+        seconds: 1,
+        reason: "stopped",
+        message: "Stopped.",
+        log: "",
+      };
+      const saved = midway({
+        runs: {
+          "s1.build": [{ status: "failed", at: 3, took: 0, result: build }],
+          "s2.deploy": [{ status: "failed", at: 4, took: 1, result: deploy }],
+          "s3.run": [{ status: "failed", at: 5, took: 1, result: run }],
+        },
+      });
+      const runs = reload(saved)?.runs;
+      expect(
+        ["s1.build", "s2.deploy", "s3.run"].map((id) => {
+          const last = runs?.[id]?.at(-1);
+          return last && "result" in last ? last.result : null;
+        })
+      ).toEqual([build, deploy, run]);
+      expect([build, deploy, run].every(isStoppedRun)).toBe(true);
+      expect(
+        isStoppedRun({
+          act: "build",
+          ok: false,
+          seconds: 0,
+          reason: "compiler",
+          error: null,
+          log: "Stopped.",
+        })
+      ).toBe(false);
     });
 
     it("reloads an explained failure's moments, and drops one that is not a time", () => {
