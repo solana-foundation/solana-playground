@@ -380,60 +380,74 @@ export class PgThreadIndex {
   private static async _migrate() {
     const before = await PgThreadIndex._read();
     if ((await PgThreadIndex._adoptable(before)).length === 0) return;
-    await withSyncLock(async () => {
-      const index = await PgThreadIndex._read();
-      const adopted = await PgThreadIndex._adoptable(index);
-      if (adopted.length === 0) return;
+    try {
+      await withSyncLock(PgThreadIndex._adopt);
+    } catch (e) {
+      // The pass is kept for the whole load, so a rejection here would fail
+      // every read of the map until the next one; the files wait for it
+      report("migrate threads", e);
+    }
+  }
 
-      // The map before the renames, as `carry` does it: a file under a name
-      // no entry points at is adopted on the next load as a workspace named
-      // after its thread. A page that dies between the two leaves the file
-      // under its workspace's name, and the next load adopts it again under
-      // a new id, which replaces the planned entry.
-      const planned: Index = {
-        ...index,
-        ...Object.fromEntries(
-          adopted.map(({ id, threadId }) => [id, threadId])
-        ),
-      };
-      if (!(await PgThreadIndex._write(planned))) {
-        // Not `_commit`, whose read back waits on this very pass: the cache
-        // goes, so the next read takes the map storage still holds
-        PgThreadIndex._cache = undefined;
-        return;
+  /** `_migrate`'s work, under the lock */
+  private static async _adopt() {
+    const index = await PgThreadIndex._read();
+    const adopted = await PgThreadIndex._adoptable(index);
+    if (adopted.length === 0) return;
+
+    // The map before the renames, as `carry` does it: a file under a name
+    // no entry points at is adopted on the next load as a workspace named
+    // after its thread. A page that dies between the two leaves the file
+    // under its workspace's name, and the next load adopts it again under
+    // a new id, which replaces the planned entry.
+    const planned: Index = {
+      ...index,
+      ...Object.fromEntries(adopted.map(({ id, threadId }) => [id, threadId])),
+    };
+    if (!(await PgThreadIndex._write(planned))) {
+      // Not `_commit`, whose read back waits on this very pass: the cache
+      // goes, so the next read takes the map storage still holds
+      PgThreadIndex._cache = undefined;
+      return;
+    }
+
+    const failed = new Set<string>();
+    for (const { name, id, threadId } of adopted) {
+      try {
+        await renameConfigFile(`${DIR}/${name}`, pathOf(threadId));
+      } catch (e) {
+        report(`migrate ${id}`, e);
+        failed.add(id);
       }
+    }
+    if (failed.size === 0) return;
 
-      const failed = new Set<string>();
-      for (const { name, id, threadId } of adopted) {
-        try {
-          await renameConfigFile(`${DIR}/${name}`, pathOf(threadId));
-        } catch (e) {
-          report(`migrate ${id}`, e);
-          failed.add(id);
-        }
-      }
-      if (failed.size === 0) return;
-
-      // A file left under its workspace's name is adopted again on the next
-      // load; until then its entry would open an empty thread in its place.
-      // Against the map as it is now, and only where the entry is still the
-      // planned one: a thread minted during the renames keeps its entry.
-      const now = await PgThreadIndex._read();
-      const rolledBack = adopted.filter(
-        ({ id, threadId }) => failed.has(id) && now[id] === threadId
-      );
-      const dropped = new Set(rolledBack.map(({ id }) => id));
-      await PgThreadIndex._write({
-        ...Object.fromEntries(
-          Object.entries(now).filter(([id]) => !dropped.has(id))
-        ),
-        ...Object.fromEntries(
-          rolledBack
-            .filter(({ id }) => index[id] !== undefined)
-            .map(({ id }) => [id, index[id]])
-        ),
-      });
+    // A file left under its workspace's name is adopted again on the next
+    // load; until then its entry would open an empty thread in its place.
+    // Against the map as it is now, the cache included, since a thread
+    // minted during the renames may not have reached storage yet; and only
+    // where the entry is still the planned one, so that thread keeps it.
+    const now: Index = {
+      ...(await PgThreadIndex._read()),
+      ...PgThreadIndex._cache,
+    };
+    const rolledBack = adopted.filter(
+      ({ id, threadId }) => failed.has(id) && now[id] === threadId
+    );
+    const dropped = new Set(rolledBack.map(({ id }) => id));
+    const rolled = await PgThreadIndex._write({
+      ...Object.fromEntries(
+        Object.entries(now).filter(([id]) => !dropped.has(id))
+      ),
+      ...Object.fromEntries(
+        rolledBack
+          .filter(({ id }) => index[id] !== undefined)
+          .map(({ id }) => [id, index[id]])
+      ),
     });
+    // As after the planned write: the cache goes, so the next read takes
+    // the map storage still holds
+    if (!rolled) PgThreadIndex._cache = undefined;
   }
 
   /** The thread files no entry in `index` points at, each with its new id */
@@ -937,6 +951,46 @@ if (import.meta.vitest) {
           const w1 = await PgThreadIndex.get("w1");
           expect(await PgChatStorage.read(w1 ?? "")).toEqual([item(1)]);
           expect(threadFiles()).toHaveLength(2);
+        });
+
+        it("gives a workspace back the thread it had when its old file could not be renamed", async () => {
+          // A file named after a workspace the map already knows: the planned
+          // entry replaces the one it had, and a rollback that only drops the
+          // planned entry leaves the thread it had with none
+          const had = uuid();
+          await PgThreadIndex.set("w1", had);
+          await legacy("w1", [item(1)]);
+          vi.spyOn(PgFs, "rename").mockRejectedValue(
+            new Error("QuotaExceeded")
+          );
+
+          await PgThreadIndex.all();
+
+          expect(JSON.parse(mockFiles.get(INDEX_PATH) ?? "{}")).toEqual({
+            w1: had,
+          });
+          expect(await PgThreadIndex.get("w1")).toBe(had);
+        });
+
+        it("still reads the map when the lock cannot be taken", async () => {
+          // The pass is kept for the whole load: rejected, it failed every
+          // read of the map until the next load
+          await legacy("w1", [item(1)]);
+          Object.defineProperty(navigator, "locks", {
+            value: {
+              request: () => Promise.reject(new Error("SecurityError")),
+            },
+            configurable: true,
+          });
+
+          try {
+            await expect(PgThreadIndex.get("w2")).resolves.toBeNull();
+          } finally {
+            Object.defineProperty(navigator, "locks", {
+              value: undefined,
+              configurable: true,
+            });
+          }
         });
 
         it("migrates every workspace, not just the one being asked for", async () => {
