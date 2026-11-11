@@ -49,7 +49,6 @@ const BUILD: GuideStep = {
   },
 };
 
-// TODO: export the features the server enables on each crate, so a program that needs one builds its IDL locally
 /** The steps of each method between the download and the upload */
 export const STEPS: Record<IdlBuildMethod, GuideStep[]> = {
   docker: [
