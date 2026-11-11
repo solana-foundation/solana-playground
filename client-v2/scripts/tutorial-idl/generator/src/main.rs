@@ -7,7 +7,6 @@ fn main() {
     let path = std::env::args().nth(1).expect("usage: generator <program dir>");
     let idl = IdlBuilder::new()
         .program_path(PathBuf::from(path))
-        .no_docs(true)
         .skip_lint(true)
         .build()
         .unwrap_or_else(|e| {

@@ -40,6 +40,21 @@ export const build = createCmd({
     PgGlobal.update({ buildLoading: true });
     PgTerminal.println(PgTerminal.info("Building..."));
 
+    // `PgProgramInfo` follows the open project, so a reply for one built before a switch is not written into another
+    const workspace = PgExplorer.currentWorkspaceId;
+    // A temporary project has no name
+    const workspaceName = PgExplorer.currentWorkspaceName ?? "your project";
+    const isStillOpen = () => PgExplorer.currentWorkspaceId === workspace;
+    // Writing the verdict into a project that is not open would bypass sync's dirty mark, so the user is told instead
+    const sayDroppedUnlessOpen = () => {
+      if (isStillOpen()) return;
+      PgTerminal.println(
+        PgTerminal.warning(
+          `The result of building "${workspaceName}" was dropped because another project was opened. Build it again before you deploy it.`
+        )
+      );
+    };
+
     try {
       const files = getBuildFiles();
       const framework = frameworkOf(files);
@@ -53,10 +68,14 @@ export const build = createCmd({
           framework,
           reason: reasonOf(e),
         });
+        // Deploy's stale-build guard reads `lastBuildFailed`, so the previous binary is not shipped
+        if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
+        sayDroppedUnlessOpen();
         throw e;
       });
       // A reply that lands after a stop is dropped: nothing of it is kept
       throwIfStopped(signal, STOPPED);
+      sayDroppedUnlessOpen();
       // Server only returns `uuid` on the first build of a session, so we
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.
@@ -71,15 +90,23 @@ export const build = createCmd({
           has_idl: !!result.idl,
         });
       }
-      PgProgramInfo.update({
-        idl: result.idl,
-        uuid: result.uuid ?? undefined,
-        lastBuildFailed: failed,
-      });
+      if (isStillOpen()) {
+        PgProgramInfo.update({
+          uuid: result.uuid ?? undefined,
+          lastBuildFailed: failed,
+          // The stable server builds no IDL; a missing one keeps the IDL the browser holds
+          ...(result.idl && { idl: result.idl }),
+        });
+      }
       // `improveOutput` is lossy by design; the assistant needs the raw text.
       // The workspace travels with it: one output is kept for the session, so
       // without it the next project inherits this report.
-      PgBuildOutput.set(result.stderr, PgExplorer.currentWorkspaceName ?? null);
+      if (isStillOpen()) {
+        PgBuildOutput.set(
+          result.stderr,
+          PgExplorer.currentWorkspaceName ?? null
+        );
+      }
       PgTerminal.println(improveOutput(result.stderr));
     } finally {
       PgGlobal.update({ buildLoading: false });

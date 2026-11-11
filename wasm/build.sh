@@ -90,9 +90,9 @@ build() {
 
     # Rust Analyzer requires `--target web`
     if [ "$package" = "rust-analyzer" ]; then
-        wasm-pack build --target web
+        wasm-pack build --target web -- --locked
     else
-         wasm-pack build
+         wasm-pack build -- --locked
 
         # Handle a WASM bug from `solana_sdk::instruction::SystemInstruction`
         package_name=$(

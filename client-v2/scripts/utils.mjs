@@ -35,6 +35,10 @@ export async function exists(itemPath) {
   return !!(await fs.stat(itemPath).catch(() => false));
 }
 
+/** @returns whether this run builds on Vercel or CI, where every generated file must ship */
+export const isShippingBuild = () =>
+  Boolean(process.env.VERCEL || process.env.CI);
+
 /**
  * Exit 0 with a warning when `command` is not installed, so a machine without
  * Rust still builds the client; throw on Vercel and CI, where the crates must ship.
@@ -47,7 +51,7 @@ export function skipWithoutTool(command, what) {
   if (result.error?.code !== "ENOENT") return;
 
   const message = `\`${command}\` is not installed, so ${what} are not generated`;
-  if (process.env.VERCEL || process.env.CI) throw new Error(message);
+  if (isShippingBuild()) throw new Error(message);
   console.warn(`${message}. Skipping...`);
   process.exit(0);
 }
