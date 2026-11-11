@@ -100,7 +100,7 @@ wallet's signature on `--sign-only`, which never reaches the send step.
 
 ### Pre-check
 
-`checkKeyReadable` (HOO-2680) changes its question. Under the key origin it
+`checkKeyReadableWith` (HOO-2680) changes its question. Under the key origin it
 refuses a run whose tokens contain `--sign-only`. `solana` and `spl-token` both
 accept that flag. The `anchor idl` refusal list goes away, since every `anchor
 idl` subcommand now signs at send. The line keeps its wording from

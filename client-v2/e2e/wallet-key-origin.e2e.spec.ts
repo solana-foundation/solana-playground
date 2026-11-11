@@ -7,7 +7,7 @@ import {
   openTerminal,
   replaceFile,
   runInTerminal,
-  seedLocalWallet,
+  seedLocalWalletFor,
   seedWorkspace,
   terminalRows,
   test,
@@ -159,7 +159,7 @@ const seedWorkspaceWithKeysMoved = async (page: Page) => {
 
 test("wallet-storage: Three accounts move", async ({ page }) => {
   const { addresses, names, wallet } = threeAccounts();
-  await seedLocalWallet(page)(wallet);
+  await seedLocalWalletFor(page)(wallet);
 
   await seedWorkspaceWithKeysMoved(page);
 
@@ -233,7 +233,7 @@ test("wallet-signing: Project code signs through the page and the key page", asy
 }) => {
   const keypair = Keypair.generate();
   const address = keypair.publicKey.toBase58();
-  await seedLocalWallet(page)({
+  await seedLocalWalletFor(page)({
     state: "pg",
     accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
     currentIndex: 0,
@@ -260,7 +260,7 @@ test("wallet-storage: The key origin is blocked", async ({ page }) => {
   const address = keypair.publicKey.toBase58();
   const accounts = [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }];
   await page.route("http://127.0.0.1:*/**", (route) => route.abort());
-  await seedLocalWallet(page)({ state: "pg", accounts, currentIndex: 0 });
+  await seedLocalWalletFor(page)({ state: "pg", accounts, currentIndex: 0 });
 
   await seedWorkspace(page);
 
@@ -298,7 +298,7 @@ test("wallet-storage: The key origin is blocked", async ({ page }) => {
 const oneMovedAccount = async (page: Page) => {
   const keypair = Keypair.generate();
   const address = keypair.publicKey.toBase58();
-  await seedLocalWallet(page)({
+  await seedLocalWalletFor(page)({
     state: "pg",
     accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
     currentIndex: 0,

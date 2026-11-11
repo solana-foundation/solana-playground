@@ -11,7 +11,7 @@ import {
   openTerminal,
   replaceFile,
   runInTerminal,
-  seedLocalWallet,
+  seedLocalWalletFor,
   seedPlaynetProject,
   seedWorkspace,
   terminalRows,
@@ -51,7 +51,7 @@ test("wallet-signing: Project code signs with pg.wallet.keypair", async ({
   const keypair = Keypair.generate();
   const address = keypair.publicKey.toBase58();
 
-  await seedLocalWallet(page)({
+  await seedLocalWalletFor(page)({
     state: "pg",
     accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
     currentIndex: 0,
@@ -266,7 +266,7 @@ test.describe("wallet-signing in the sandbox", () => {
     page,
   }) => {
     const keypair = Keypair.generate();
-    await seedLocalWallet(page)({
+    await seedLocalWalletFor(page)({
       state: "pg",
       accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
       currentIndex: 0,

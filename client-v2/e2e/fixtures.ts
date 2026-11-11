@@ -66,7 +66,7 @@ export const startTutorialFromAbout = async (page: Page) => {
  * the first load only, so a reload finds what the wallet's migration wrote
  * rather than a fresh seed.
  */
-export const seedLocalWallet = (page: Page) => (wallet: unknown) =>
+export const seedLocalWalletFor = (page: Page) => (wallet: unknown) =>
   page.addInitScript((text) => {
     if (sessionStorage.getItem("e2e-wallet-seeded")) return;
     sessionStorage.setItem("e2e-wallet-seeded", "1");
@@ -785,7 +785,7 @@ export const seedPlaynetProject = async (
   const keypair = Keypair.generate();
   // `airdrop`, which `deployHelloWorldWith` runs, is for a signed-in account
   await stubSignedIn(context);
-  await seedLocalWallet(page)({
+  await seedLocalWalletFor(page)({
     state: "pg",
     accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
     currentIndex: 0,

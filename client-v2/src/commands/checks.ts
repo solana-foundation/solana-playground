@@ -54,7 +54,7 @@ export type KeyRead = (tokens: readonly string[]) => string | undefined;
  * @param readsKey which runs need the key in the page
  * @returns the pre-check
  */
-export const checkKeyReadable =
+export const checkKeyReadableWith =
   (readsKey: KeyRead) => (tokens: readonly string[]) => {
     if (PgWallet.hasKeysInPage()) return;
     const command = readsKey(tokens);

@@ -6,7 +6,7 @@ import {
   LONG,
   openTerminal,
   runInTerminal,
-  seedLocalWallet,
+  seedLocalWalletFor,
   seedWorkspace,
   test,
 } from "./fixtures";
@@ -157,7 +157,7 @@ test("wallet-storage: The copy fails", async ({ page }) => {
     currentIndex: 0,
   };
   await failWalletWrites(page);
-  await seedLocalWallet(page)(old);
+  await seedLocalWalletFor(page)(old);
 
   await seedWorkspace(page);
 
@@ -172,7 +172,7 @@ test("wallet-storage: IndexedDB is blocked", async ({ page }) => {
   const keypair = Keypair.generate();
   const address = keypair.publicKey.toBase58();
   await blockWalletDatabase(page);
-  await seedLocalWallet(page)({
+  await seedLocalWalletFor(page)({
     state: "disconnected",
     accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
     currentIndex: 0,
@@ -216,7 +216,7 @@ test("wallet-storage: A wallet in localStorage moves to IndexedDB", async ({
   const address = keypair.publicKey.toBase58();
 
   // The wallet as the previous version left it
-  await seedLocalWallet(page)({
+  await seedLocalWalletFor(page)({
     state: "pg",
     accounts: [{ kp, name: "Wallet 1" }],
     currentIndex: 0,
@@ -250,7 +250,7 @@ test("wallet-storage: A legacy single-key wallet moves to IndexedDB", async ({
   const address = keypair.publicKey.toBase58();
 
   // The pre-accounts format, which `migrate` upgrades before the move
-  await seedLocalWallet(page)({ setupCompleted: true, connected: true, sk });
+  await seedLocalWalletFor(page)({ setupCompleted: true, connected: true, sk });
 
   await seedWorkspace(page);
 
@@ -264,7 +264,7 @@ test("wallet-storage: A legacy single-key wallet moves to IndexedDB", async ({
 });
 
 /** Puts raw `text` in `localStorage['wallet']`, as a damaged copy would be */
-const putLocalText = (page: Page) => (text: string) =>
+const putLocalTextFor = (page: Page) => (text: string) =>
   page.evaluate((value) => localStorage.setItem("wallet", value), text);
 
 /** The console lines the wallet's storage logs, collected from now on */
@@ -302,7 +302,7 @@ const localCount = async (page: Page) =>
 test("wallet-storage: Two tabs load at once", async ({ context, page }) => {
   await seedWorkspace(page);
   const { address, kp, wallet } = walletWithNewAccount();
-  await putLocalText(page)(JSON.stringify(wallet));
+  await putLocalTextFor(page)(JSON.stringify(wallet));
   const other = await context.newPage();
 
   await Promise.all([page.reload(), other.goto("/")]);
@@ -319,7 +319,7 @@ test("wallet-storage: A localStorage wallet cannot be read", async ({
   await seedWorkspace(page);
   const shown = await createWallet(page);
   await expect.poll(() => storedCount(page), LONG).toBe(1);
-  await putLocalText(page)("{not json");
+  await putLocalTextFor(page)("{not json");
 
   await page.reload();
 
@@ -336,7 +336,7 @@ test("wallet-storage: Both stores hold a wallet", async ({ page }) => {
   await expect.poll(() => storedCount(page), LONG).toBe(1);
   const before = await storedWallet(page);
   const { address, kp, wallet } = walletWithNewAccount();
-  await putLocalText(page)(JSON.stringify(wallet));
+  await putLocalTextFor(page)(JSON.stringify(wallet));
 
   await page.reload();
 
@@ -409,7 +409,7 @@ test("wallet-storage: A save to IndexedDB fails", async ({ context, page }) => {
 test("wallet-storage: A failing migration is logged", async ({ page }) => {
   const { kp, wallet } = walletWithNewAccount();
   await failWalletWrites(page);
-  await seedLocalWallet(page)(wallet);
+  await seedLocalWalletFor(page)(wallet);
   const logs = walletLogsOf(page);
 
   await seedWorkspace(page);
@@ -534,7 +534,7 @@ const setAsideNotices = (page: Page) =>
 
 test("wallet-storage: One of three accounts is damaged", async ({ page }) => {
   const { addresses, damaged, read, wallet } = walletWithDamagedAccount(2);
-  await seedLocalWallet(page)(wallet);
+  await seedLocalWalletFor(page)(wallet);
 
   await seedWorkspace(page);
 
@@ -551,7 +551,7 @@ test("wallet-storage: The current account is the damaged one", async ({
   page,
 }) => {
   const { addresses, wallet } = walletWithDamagedAccount(1);
-  await seedLocalWallet(page)(wallet);
+  await seedLocalWalletFor(page)(wallet);
 
   await seedWorkspace(page);
 
