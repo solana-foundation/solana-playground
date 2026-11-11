@@ -105,7 +105,7 @@ const toggleStandardIfNeeded = async (walletName: string | undefined) => {
   }
 
   if (!wallet.connected) {
-    await makeStandardCurrent(wallet.name);
+    await setStandardCurrent(wallet.name);
     PgTerminal.println(PgTerminal.success(`Connected to ${wallet.name}.`));
   } else {
     await disconnectStandard(wallet.name);
@@ -131,7 +131,7 @@ const standardNamed = (name: string) => {
  * superseded meanwhile leaves the wallet connected but not current
  * @throws the wallet's own error when it declines; nothing changes then
  */
-export const makeStandardCurrentWhile =
+export const setStandardCurrentWith =
   (stillWanted: () => boolean) => async (name: string) => {
     const wallet = standardNamed(name);
     if (!wallet.connected) await wallet.connect();
@@ -139,8 +139,8 @@ export const makeStandardCurrentWhile =
     PgWallet.update({ state: "sol", standardName: wallet.name });
   };
 
-/** `makeStandardCurrentWhile` for a request nothing supersedes */
-export const makeStandardCurrent = makeStandardCurrentWhile(() => true);
+/** `setStandardCurrentWith` for a request nothing supersedes */
+export const setStandardCurrent = setStandardCurrentWith(() => true);
 
 /** Disconnect the standard wallet `name`; the Playground wallet is current again */
 export const disconnectStandard = async (name: string) => {

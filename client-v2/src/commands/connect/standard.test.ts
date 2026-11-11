@@ -27,8 +27,8 @@ vi.mock("../../utils", () => ({
 
 import {
   disconnectStandard,
-  makeStandardCurrent,
-  makeStandardCurrentWhile,
+  setStandardCurrent,
+  setStandardCurrentWith,
 } from "./connect";
 
 const phantom = (connected: boolean) => ({
@@ -45,7 +45,7 @@ describe("commands/connect, a standard wallet from a button", () => {
     const wallet = phantom(false);
     wallets.list = [wallet];
 
-    await makeStandardCurrent("Phantom");
+    await setStandardCurrent("Phantom");
 
     expect(wallet.connect).toHaveBeenCalledOnce();
     expect(update).toHaveBeenCalledWith({
@@ -58,7 +58,7 @@ describe("commands/connect, a standard wallet from a button", () => {
     const wallet = phantom(true);
     wallets.list = [wallet];
 
-    await makeStandardCurrent("Phantom");
+    await setStandardCurrent("Phantom");
 
     expect(wallet.connect).not.toHaveBeenCalled();
     expect(wallet.disconnect).not.toHaveBeenCalled();
@@ -72,7 +72,7 @@ describe("commands/connect, a standard wallet from a button", () => {
     const wallet = phantom(false);
     wallets.list = [wallet];
 
-    await makeStandardCurrentWhile(() => false)("Phantom");
+    await setStandardCurrentWith(() => false)("Phantom");
 
     expect(wallet.connect).toHaveBeenCalledOnce();
     expect(update).not.toHaveBeenCalled();
@@ -83,7 +83,7 @@ describe("commands/connect, a standard wallet from a button", () => {
     wallet.connect.mockRejectedValue(new Error("User rejected the request."));
     wallets.list = [wallet];
 
-    await expect(makeStandardCurrent("Phantom")).rejects.toThrow(
+    await expect(setStandardCurrent("Phantom")).rejects.toThrow(
       "User rejected"
     );
     expect(update).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe("commands/connect, a standard wallet from a button", () => {
   it("refuses a wallet that is not installed", async () => {
     wallets.list = [];
 
-    await expect(makeStandardCurrent("Phantom")).rejects.toThrow(
+    await expect(setStandardCurrent("Phantom")).rejects.toThrow(
       "Phantom is not installed in this browser."
     );
   });

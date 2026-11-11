@@ -37,7 +37,7 @@ const connectStandard = vi.hoisted(() => ({
   drop: vi.fn<(name: string) => Promise<void>>(async () => {}),
 }));
 vi.mock("@/commands/connect/connect", () => ({
-  makeStandardCurrentWhile: (stillWanted: () => boolean) => (name: string) =>
+  setStandardCurrentWith: (stillWanted: () => boolean) => (name: string) =>
     connectStandard.make(name, stillWanted),
   disconnectStandard: connectStandard.drop,
 }));

@@ -4,7 +4,7 @@ import { isAirdropRefused, refusalOf } from "@/commands/airdrop/report";
 import { isAirdropSignInGated } from "@/commands/airdrop/sign-in-gate";
 import {
   disconnectStandard,
-  makeStandardCurrentWhile,
+  setStandardCurrentWith,
 } from "@/commands/connect/connect";
 import { PgDeployRun } from "@/commands/deploy/run";
 import { useAirdrop } from "@/components/Wallet/hooks";
@@ -126,7 +126,7 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
     fundTelemetry.track("fund_wallet_connect_started", { wallet: name });
     try {
       // A request superseded while it waited does not take over on approval
-      await makeStandardCurrentWhile(() => attempt === attempts.current)(name);
+      await setStandardCurrentWith(() => attempt === attempts.current)(name);
       if (attempt !== attempts.current) return;
       fundTelemetry.track("fund_wallet_connected", {
         wallet: name,
