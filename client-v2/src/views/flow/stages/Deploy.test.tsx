@@ -9,6 +9,7 @@ import {
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NETWORKS } from "@/constants";
 import {
   initTelemetry,
   memoryProvider,
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   report: vi.fn(),
   markShown: vi.fn(),
+  markUnavailable: vi.fn(),
   flow: { build: "done", deploy: "active" },
   // eslint-disable-next-line unicorn/no-null -- `useProgramInfo()` answers `null` for a failed chain read, no keypair and no build
   programInfo: { onChain: null, pk: null, uuid: null as string | null },
@@ -28,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   setStage: vi.fn(),
   requestConsole: vi.fn(),
+  pickNetwork: vi.fn(),
   noop: () => ({ dispose: () => undefined }),
   wallet: {
     // eslint-disable-next-line unicorn/no-null -- `PgWallet.current` is `null` while no wallet is current
@@ -53,6 +56,10 @@ const mocks = vi.hoisted(() => ({
   automaticAirdrop: false,
   setModal: vi.fn(),
   ExportKey: () => undefined,
+  /** The network the deploy's endpoint answers for, read before any send */
+  endpointCluster: "devnet",
+  /** Runs while the network is read, as a user acting during a slow read */
+  duringNetworkRead: undefined as (() => void) | undefined,
 }));
 
 // The real barrels pull in the whole playground; the stage reads only these
@@ -73,6 +80,7 @@ vi.mock("../../../utils", () => ({
   },
   PgProgramInfo: { update: mocks.update },
   PgSettings: {
+    connection: { endpoint: "https://api.devnet.solana.com" },
     wallet: {
       get automaticAirdrop() {
         return mocks.automaticAirdrop;
@@ -85,6 +93,24 @@ vi.mock("../../../utils", () => ({
 vi.mock("../../../components/Wallet/Modals/KeyFile", () => ({
   ExportKey: mocks.ExportKey,
 }));
+// The real check reads the endpoint's genesis hash; here the endpoint
+// answers for `mocks.endpointCluster`
+vi.mock("@/commands/deploy/check-not-mainnet", async () => {
+  const { MainnetDeployRefusedError } = await import(
+    "@/commands/deploy/mainnet-block"
+  );
+  return {
+    checkNotMainnet: async () => {
+      mocks.duringNetworkRead?.();
+      if (mocks.endpointCluster === "mainnet-beta") {
+        throw new MainnetDeployRefusedError();
+      }
+      if (mocks.endpointCluster === "unread") {
+        throw new Error("Could not read which network the endpoint serves");
+      }
+    },
+  };
+});
 vi.mock("@/features/auth", () => ({
   PgSession: { signInFor: mocks.signInFor },
   isSignInFailure: () => false,
@@ -117,6 +143,9 @@ vi.mock("../state/deploy-history", () => ({
   PgDeployHistory: { list: () => mocks.history, onDidChange: mocks.noop },
 }));
 vi.mock("@/widgets/status", () => ({ useNetworkHold: () => mocks.hold }));
+// The real pick refuses while a deploy or an `anchor idl` write holds the
+// network (pick-network.test.ts); the stage only hands it the URL
+vi.mock("@/widgets/settings-page", () => ({ pickNetwork: mocks.pickNetwork }));
 vi.mock("./IdlActions", () => ({
   default: () => null,
   useIdlName: () => undefined,
@@ -127,11 +156,16 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
   reportButtonFailure: (action: string) =>
     action === "deploy" ? mocks.report : vi.fn(),
   markFailureShown: mocks.markShown,
+  markUnavailableHere: mocks.markUnavailable,
 }));
 
 import { PgStageDeploy } from "@/features/deploy";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
+import {
+  MAINNET_DEPLOY_BLOCKED,
+  MAINNET_DEPLOY_WAY_OUT,
+} from "../../../commands/deploy/mainnet-block";
 import {
   DeployCancelledError,
   DeployFundingError,
@@ -171,6 +205,8 @@ afterEach(() => {
   mocks.wallet.current = null;
   mocks.wallet.accounts = [];
   mocks.wallet.hasKeysInPage.mockReturnValue(true);
+  mocks.endpointCluster = "devnet";
+  mocks.duringNetworkRead = undefined;
   resetTelemetry();
   vi.clearAllMocks();
 });
@@ -294,6 +330,28 @@ describe("Deploy stage", () => {
     expect(
       screen.getByRole("button", { name: "Redeploy to devnet" })
     ).toBeTruthy();
+  });
+
+  // A switch from the stage goes through Settings' pick, which refuses while
+  // a deploy or an `anchor idl` write holds the network
+  it("asks Settings' pick for the network a deployment was made on", () => {
+    mocks.history = [
+      {
+        id: "a",
+        workspace: "counter",
+        cluster: "testnet",
+        programId: "Prog111",
+        // eslint-disable-next-line unicorn/no-null -- `DeployRecord.signature` is `null` when no signature was kept
+        signature: null,
+        at: 1,
+      },
+    ];
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Show / }));
+    expect(mocks.pickNetwork).toHaveBeenCalledWith(
+      NETWORKS.find((n) => n.cluster === "testnet")?.value
+    );
   });
 
   /** The Program id block's custom id is where the deploy goes */
@@ -826,6 +884,88 @@ describe("Deploy stage", () => {
     await act(async () => PgStageDeploy.start());
 
     expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  // HOO-2728: the stage shows the CLI guide on mainnet, but the network can
+  // move there before the press is read; the refusal comes before the wallet
+  it("refuses a mainnet deploy before creating a wallet, and counts no failure", async () => {
+    mocks.endpointCluster = "mainnet-beta";
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    expect(mocks.wallet.addFirst).not.toHaveBeenCalled();
+    expect(mocks.execute).not.toHaveBeenCalled();
+    const [refusal] = mocks.report.mock.calls[0] ?? [];
+    expect((refusal as Error | undefined)?.message).toBe(
+      MAINNET_DEPLOY_BLOCKED
+    );
+    // The toast names the way on, not "Could not deploy."
+    expect(mocks.markUnavailable).toHaveBeenCalledWith(
+      refusal,
+      MAINNET_DEPLOY_WAY_OUT
+    );
+    expect(events()).not.toContain("deploy_started");
+    expect(events()).not.toContain("deploy_failed");
+  });
+
+  // The command refuses an unread network in the terminal, with its own line
+  it("leaves an endpoint that did not answer to the deploy command", async () => {
+    mocks.wallet.current = pgWallet();
+    mocks.endpointCluster = "unread";
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+
+    expect(mocks.execute).toHaveBeenCalledOnce();
+  });
+
+  // The network read can wait on a slow endpoint; the press was for the
+  // project open when it was made, never for the one open after the wait
+  it("does not deploy a project opened while the network was read", async () => {
+    const utils = (await import("../../../utils")) as unknown as {
+      PgExplorer: { currentWorkspaceName: string };
+    };
+    mocks.wallet.current = pgWallet();
+    mocks.duringNetworkRead = () => {
+      utils.PgExplorer.currentWorkspaceName = "other";
+    };
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    try {
+      await pressDeploy();
+    } finally {
+      utils.PgExplorer.currentWorkspaceName = "counter";
+    }
+
+    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.report).not.toHaveBeenCalled();
+    expect(PgStageDeploy.state).toEqual({
+      phase: "stopped",
+      stop: { kind: "cancelled" },
+    });
+  });
+
+  // A custom RPC's cluster name can arrive during the read; the endpoint,
+  // and so the network, is the same one the press was for
+  it("deploys when only the cluster's name arrived during the network read", async () => {
+    const utils = (await import("../../../utils")) as unknown as {
+      PgConnection: { cluster: string | undefined };
+    };
+    mocks.wallet.current = pgWallet();
+    mocks.execute.mockResolvedValue(undefined);
+    mocks.duringNetworkRead = () => {
+      utils.PgConnection.cluster = "testnet";
+    };
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    try {
+      await pressDeploy();
+    } finally {
+      utils.PgConnection.cluster = "devnet";
+    }
+
+    expect(mocks.execute).toHaveBeenCalledOnce();
   });
 
   it("names the checks when a deploy fails before any step", async () => {

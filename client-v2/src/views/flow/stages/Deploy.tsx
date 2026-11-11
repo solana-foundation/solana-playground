@@ -10,6 +10,7 @@ import { ProgramKeypair } from "@/features/program-keypair";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { requestConsole } from "@/widgets/layout-shell";
+import { pickNetwork } from "@/widgets/settings-page";
 import { useNetworkHold } from "@/widgets/status";
 
 import {
@@ -24,7 +25,6 @@ import {
   PgConnection,
   PgExplorer,
   PgGlobal,
-  PgSettings,
   PgView,
   PgWallet,
 } from "../../../utils";
@@ -83,12 +83,12 @@ const signInThenDeploy = async () => {
 };
 
 /**
- * Switches the connection to the offered network of this cluster, as a pick
- * in Settings does
+ * Switches the connection to the offered network of this cluster through
+ * Settings' pick, so a running deploy or `anchor idl` write keeps its network
  */
 const showNetwork = (cluster: string) => {
   const network = NETWORKS.find((n) => n.cluster === cluster);
-  if (network) PgSettings.connection.endpoint = network.value;
+  if (network) pickNetwork(network.value);
 };
 
 /** The Deploy stage, connected: the flow, the history, the chain, commands */

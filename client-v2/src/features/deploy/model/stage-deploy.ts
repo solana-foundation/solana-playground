@@ -1,12 +1,19 @@
 import { useSyncExternalStore } from "react";
 
 import {
+  MAINNET_DEPLOY_WAY_OUT,
+  MainnetDeployRefusedError,
+} from "@/commands/deploy/mainnet-block";
+import {
   DeployCancelledError,
   DeployFundingError,
   PgDeployRun,
 } from "@/commands/deploy/run";
 import { createLogger } from "@/shared/lib/logger";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import {
+  markUnavailableHere,
+  reportButtonFailure,
+} from "@/shared/lib/report-button-failure";
 import type { Cluster } from "@/utils";
 import { isStopped } from "@/utils/stopped";
 
@@ -150,16 +157,45 @@ export class PgStageDeploy {
       // The stage's state says "unknown" with `undefined`; the connection's `null` stays here
       const cluster = PgConnection.cluster ?? undefined;
       const workspace = PgExplorer.currentWorkspaceName;
+      // The network the press was for. The endpoint, not `cluster`: a custom
+      // RPC's cluster name can arrive late without the network changing
+      const endpoint = PgSettings.connection.endpoint;
       const redeploy = PgProgramInfo.onChain?.deployed === true;
       // A step recorded by an earlier run says nothing about this one, which
       // may fail before it reaches the deploy command
       let reachedRun = false;
       let result: Awaited<ReturnType<typeof PgCommand.deploy.execute>>;
       try {
+        // First, as the command's own pre-check: a mainnet deploy creates no
+        // wallet and is no deploy attempt (HOO-2728). Only that refusal stops
+        // here; an endpoint that did not answer is the command's to refuse,
+        // in the terminal, with its own line.
+        const { checkNotMainnet } = await import(
+          "@/commands/deploy/check-not-mainnet"
+        );
+        await checkNotMainnet().catch((error: unknown) => {
+          if (error instanceof MainnetDeployRefusedError) throw error;
+          log.info("network unread before the wallet; the command refuses it", {
+            context: { error: String(error) },
+          });
+        });
         if (cluster) {
           deployTelemetry.track("deploy_started", { cluster, redeploy });
         }
         await ensurePlaygroundWallet(PgWallet);
+        // Both waits above can be long (a slow endpoint, a new wallet). The
+        // press was for the project and network open when it was made; one
+        // opened meanwhile is never deployed without its own press.
+        if (
+          PgExplorer.currentWorkspaceName !== workspace ||
+          PgSettings.connection.endpoint !== endpoint
+        ) {
+          log.info("project or network changed before the deploy; stopped", {
+            context: { workspace, cluster },
+          });
+          PgStageDeploy._set({ phase: "stopped", stop: { kind: "cancelled" } });
+          return;
+        }
         reachedRun = true;
         result = await PgDeployRun.runWith({
           confirmStaleBuild: PgStageDeploy._askStaleBuild,
@@ -199,8 +235,8 @@ export class PgStageDeploy {
       PgStageDeploy._set({ phase: "done", backupFor });
       try {
         // The network the run deployed to, which the user may have changed
-        // since it started. A run that could not name it sends no event:
-        // the network selected may not be the one it ran on.
+        // since it started. A run on a network of its own (`cluster` null)
+        // sends no event: the network selected may not be the one it ran on.
         if (result.cluster) {
           deployTelemetry.track("deploy_succeeded", {
             cluster: result.cluster,
@@ -282,7 +318,8 @@ export class PgStageDeploy {
       }
       return;
     }
-    if (cluster) {
+    // A mainnet refusal is the beta's rule, not a failed deploy
+    if (cluster && !(error instanceof MainnetDeployRefusedError)) {
       deployTelemetry.track("deploy_failed", {
         cluster,
         step: (run.reachedRun && PgDeployRun.lastStep) || "checks",
@@ -290,6 +327,10 @@ export class PgStageDeploy {
     }
     PgStageDeploy._set({ phase: "idle" });
     run.onFailed?.(error);
+    // Nothing broke: the toast names the way on, not "Could not deploy."
+    if (error instanceof MainnetDeployRefusedError) {
+      markUnavailableHere(error, MAINNET_DEPLOY_WAY_OUT);
+    }
     reportButtonFailure("deploy")(error);
   }
 

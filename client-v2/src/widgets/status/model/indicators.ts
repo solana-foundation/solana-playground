@@ -1,4 +1,5 @@
 import type { AnalyzerState } from "@/components/Editor/Monaco/languages/rust/rust-analyzer/status";
+import { clusterName } from "@/entities/cluster";
 
 /**
  * One indicator's state. `not-ready` waits on something outside it (offline,
@@ -95,6 +96,9 @@ export type AiInput =
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+/** A cluster's name as the network chips show it: "Mainnet" for `mainnet-beta` */
+export const shownClusterName = (name: string) => capitalize(clusterName(name));
+
 const NETWORK_ACTION: StatusAction = {
   kind: "network",
   text: "Change network",
@@ -104,7 +108,7 @@ export const networkIndicator = (
   { name, isConnected, slotStalled }: NetworkInput,
   online: boolean
 ): StatusIndicator => {
-  const shown = capitalize(name);
+  const shown = shownClusterName(name);
   const view = (
     state: StatusState,
     suffix: string | undefined,
@@ -415,6 +419,20 @@ if (import.meta.vitest) {
           "Change cluster, currently devnet",
           "Cluster: devnet",
           "Devnet · Ready",
+        ]);
+      });
+
+      // HOO-2488: the chips' name, never "Mainnet-beta"; the settings
+      // trigger's names keep the moniker its lookups use
+      it("shows mainnet-beta as Mainnet", () => {
+        const n = networkIndicator(
+          { name: "mainnet-beta", isConnected: true, slotStalled: false },
+          true
+        );
+        expect([n.words, n.tip, n.label]).toEqual([
+          "Mainnet",
+          "Mainnet · Ready",
+          "Change cluster, currently mainnet-beta",
         ]);
       });
 

@@ -6,10 +6,13 @@ import type { CustomRpc } from "@/entities/cluster";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import { StatusDot } from "@/shared/ui/status-dot";
 
+const NO_DEPLOYS = "Not available for deploys";
+
 /**
  * A chip. An offered network says how a deploy works there (free SOL only on
- * devnet, following Spec 03) and whether that spends real SOL (an amber dot);
- * a saved custom RPC says neither, since its cluster is unknown.
+ * devnet, following Spec 03; none at all on mainnet in the beta), with an
+ * amber dot where SOL is real; a saved custom RPC says neither, since its
+ * cluster is unknown.
  */
 interface Chip {
   label: string;
@@ -23,7 +26,7 @@ const NETWORKS: ReadonlyArray<Chip> = OFFERED.map(
     endpoint: value,
     foot:
       cluster === "mainnet-beta"
-        ? { line: "Deploys with real SOL", isRealSol: true }
+        ? { line: NO_DEPLOYS, isRealSol: true }
         : { line: "Deploys with free devnet SOL", isRealSol: false },
   })
 );
