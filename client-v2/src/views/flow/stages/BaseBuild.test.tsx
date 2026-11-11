@@ -377,19 +377,19 @@ describe("BaseBuild", () => {
       when: "an IDL held",
       hasIdl: true,
       sourceChanged: false,
-      line: "The program is ready to deploy. The Playground's build produces no IDL, so Interact keeps the IDL it already holds.",
+      line: "The program is ready to deploy. The Playground's stable build server produces no IDL, so Interact keeps the IDL it already holds.",
     },
     {
       when: "no IDL held",
       hasIdl: false,
       sourceChanged: false,
-      line: "The program is ready to deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.",
+      line: "The program is ready to deploy. The Playground's stable build server produces no IDL: build it locally and upload it to call the program from Interact.",
     },
     {
       when: "the code changed",
       hasIdl: false,
       sourceChanged: true,
-      line: "Your code changed after the last build. Build again before you deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.",
+      line: "Your code changed after the last build. Build again before you deploy. The Playground's stable build server produces no IDL: build it locally and upload it to call the program from Interact.",
     },
   ])(
     "says the build produces no IDL ($when)",

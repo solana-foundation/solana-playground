@@ -10,6 +10,7 @@ const SERVED: Record<string, unknown> = {
 vi.mock("../utils", () => ({
   PgCommon: {
     fetchJSON: async (path: string) => SERVED[path],
+    fetchText: async (path: string) => JSON.stringify(SERVED[path]),
     toKebabFromSnake: (name: string) => name.replaceAll("_", "-"),
   },
 }));
@@ -37,5 +38,17 @@ describe("frameworks/common", () => {
         'unknown-crate = "*"',
       ].join("\n")
     );
+  });
+
+  it("names the features file when it is not a map of feature lists", async () => {
+    const served = SERVED["/crates/features.json"];
+    SERVED["/crates/features.json"] = { "anchor-lang": "event-cpi" };
+    try {
+      await expect(
+        getRustDependencies([["src/lib.rs", "use anchor_lang::x;"]])
+      ).rejects.toThrow("/crates/features.json");
+    } finally {
+      SERVED["/crates/features.json"] = served;
+    }
   });
 });

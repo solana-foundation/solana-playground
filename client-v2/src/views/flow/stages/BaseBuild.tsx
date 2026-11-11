@@ -73,7 +73,7 @@ export interface BaseBuildProps {
   offline: boolean;
   onBuild: () => unknown;
   onContinue: () => void;
-  /** `PgProgramInfo` holds an IDL; never the build's, which produces none */
+  /** `PgProgramInfo` holds an IDL; never a stable build server's, which produces none */
   hasIdl: boolean;
   /** The code changed after the build on screen: Build again leads */
   sourceChanged: boolean;
@@ -417,8 +417,8 @@ const Restored = (p: BaseBuildProps & { failed: boolean }) => (
 
 const noIdlLine = (hasIdl: boolean) =>
   hasIdl
-    ? "The Playground's build produces no IDL, so Interact keeps the IDL it already holds."
-    : "The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.";
+    ? "The Playground's stable build server produces no IDL, so Interact keeps the IDL it already holds."
+    : "The Playground's stable build server produces no IDL: build it locally and upload it to call the program from Interact.";
 
 const successLine = ({ sourceChanged, hasIdl }: BaseBuildProps) => {
   const lead = sourceChanged

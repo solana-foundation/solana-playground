@@ -137,6 +137,10 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
 const isNothingToCall = (surface: InteractSurface) =>
   surface === "not-built" || surface === "not-deployed";
 
+/** Where Upload IDL and the guide sit: one answer per surface, so the guide's one portal slot is drawn exactly once */
+const idlPlacement = (surface: InteractSurface): "header" | "body" =>
+  surface === "no-idl" || isNothingToCall(surface) ? "body" : "header";
+
 /** The step that supplies what an empty surface lacks, if there is one */
 const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
   if (surface === "no-program-id") {
@@ -147,6 +151,7 @@ const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
       </BrandButton>
     );
   }
+  if (idlPlacement(surface) === "header") return undefined;
   if (isNothingToCall(surface)) {
     return (
       <>
@@ -163,15 +168,12 @@ const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
       </>
     );
   }
-  if (surface === "no-idl") {
-    return (
-      <>
-        {p.idlLoad}
-        {p.idlGuide}
-      </>
-    );
-  }
-  return undefined;
+  return (
+    <>
+      {p.idlLoad}
+      {p.idlGuide}
+    </>
+  );
 };
 
 const Empty = ({
@@ -356,8 +358,7 @@ const StageView = ({ p }: { p: BaseInteractProps }) => (
             ))}
           </NativeSelect>
         </label>
-        {/* In `no-idl` and before a deploy the stage's own foot offers Upload IDL and the guide */}
-        {p.surface !== "no-idl" && !isNothingToCall(p.surface) && (
+        {idlPlacement(p.surface) === "header" && (
           <>
             {p.idlLoad}
             {p.idlGuide}

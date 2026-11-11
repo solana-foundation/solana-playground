@@ -19,6 +19,7 @@ import {
 import {
   CLIENT_PATH,
   exists,
+  isShippingBuild,
   REPO_ROOT_PATH,
   skipWithoutTool,
   SUPPORTED_CRATES_PATH,
@@ -41,7 +42,7 @@ const LOCK_FILE_PATH = path.join(
 /** The server's manifest, whose declared features the export writes */
 const MANIFEST_PATH = path.join(path.dirname(LOCK_FILE_PATH), "Cargo.toml");
 
-/** The server's toolchain, which wrote the lock: an older cargo cannot read its lock version */
+/** The server's toolchain: its channel is new enough to read the lock's version, which an older cargo rejects */
 const TOOLCHAIN_PATH = path.join(
   REPO_ROOT_PATH,
   "server",
@@ -167,10 +168,28 @@ const servedBy = new Map();
 // TODO(HOO-2753): resolve `r#name` to `name.rs` during expansion, then serve both crates
 const skippedCrates = ["mpl-bubblegum", "mpl-token-metadata"];
 
+/** Reached crates `syn-file-expand-cli` is known to fail on; on Vercel and CI any other failure fails the build. */
+const unexpandableCrates = [
+  // Raw identifier modules (`mod r#ref`), as above (HOO-2753)
+  "schemars",
+  "zerocopy",
+  // A module with more than one `#[path]` attribute
+  "aes",
+  "k256",
+  "lazy_static",
+  "polyval",
+  // syn cannot parse a keyword where the tool expects a module name
+  "blake3",
+  "wincode-derive",
+];
+
 await clearSupportedCrates();
 
 const crates = await getCrates();
 await generateDependencies(crates, false);
+console.log(
+  `Skipped ${skippedCrates.length} crates: ${skippedCrates.join(", ")}`
+);
 
 await fs.writeFile(
   path.join(CRATES_PATH, "versions.json"),
@@ -279,6 +298,7 @@ async function generateCrate(servedAs, name, version, onlyProcMacros) {
     // A supported crate must generate; a reached one the tool cannot expand
     // leaves only the paths through it unresolved in the editor
     if (Object.hasOwn(crates, name)) throw e;
+    if (isShippingBuild() && !unexpandableCrates.includes(name)) throw e;
     console.warn(`Skipping \`${name}(v${version})\`: ${e.message}`);
     skippedCrates.push(name);
     return;

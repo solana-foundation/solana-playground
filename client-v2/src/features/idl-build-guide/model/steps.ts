@@ -38,7 +38,7 @@ export interface Tool {
  */
 export type GuideStep =
   | { kind: "command"; command: Command }
-  /** Folded: whoever has the tools skips it. `note` follows the tools */
+  /** Shown open; "if missing" in its title lets whoever has the tools skip it. `note` follows the tools */
   | { kind: "install"; title: string; tools: Tool[]; note: string };
 
 const BUILD: GuideStep = {

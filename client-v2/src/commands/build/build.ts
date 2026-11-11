@@ -36,7 +36,18 @@ export const build = createCmd({
 
     // `PgProgramInfo` follows the open project, so a reply for one built before a switch is not written into another
     const workspace = PgExplorer.currentWorkspaceId;
+    // A temporary project has no name
+    const workspaceName = PgExplorer.currentWorkspaceName ?? "your project";
     const isStillOpen = () => PgExplorer.currentWorkspaceId === workspace;
+    // Writing the verdict into a project that is not open would bypass sync's dirty mark, so the user is told instead
+    const sayDroppedUnlessOpen = () => {
+      if (isStillOpen()) return;
+      PgTerminal.println(
+        PgTerminal.warning(
+          `The result of building "${workspaceName}" was dropped because another project was opened. Build it again before you deploy it.`
+        )
+      );
+    };
 
     try {
       const result = await buildProgram(signal).catch((e: unknown) => {
@@ -45,10 +56,12 @@ export const build = createCmd({
         throwIfStopped(signal, STOPPED);
         // Deploy's stale-build guard reads `lastBuildFailed`, so the previous binary is not shipped
         if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
+        sayDroppedUnlessOpen();
         throw e;
       });
       // A reply that lands after a stop is dropped: nothing of it is kept
       throwIfStopped(signal, STOPPED);
+      sayDroppedUnlessOpen();
       // Server only returns `uuid` on the first build of a session, so we
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.

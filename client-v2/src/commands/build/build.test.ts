@@ -18,7 +18,11 @@ const utils = vi.hoisted(() => ({
   PgGlobal: { update: vi.fn() },
   PgProgramInfo: { update: vi.fn(), getPkStr: () => "Pk11111111111111" },
   PgServer: { build: vi.fn() },
-  PgTerminal: { println: vi.fn(), info: (text: string) => text },
+  PgTerminal: {
+    println: vi.fn(),
+    info: (text: string) => text,
+    warning: (text: string) => text,
+  },
   PgSettings: { build: { flags: {} } },
 }));
 vi.mock("../../utils", () => utils);
@@ -200,22 +204,35 @@ describe("commands/build/build", () => {
       // eslint-disable-next-line unicorn/no-null -- the build response carries `null` for no IDL
       ["a reply", async () => ({ stderr: "Finished release", idl: null })],
       [
+        "a failed compile",
+        // eslint-disable-next-line unicorn/no-null -- the build response carries `null` for no IDL
+        async () => ({ stderr: "error: could not compile `solpg`", idl: null }),
+      ],
+      [
         "a failure",
         async () => {
           throw new Error("Server request failed");
         },
       ],
-    ])("leaves that project's info alone on %s", async (_, answer) => {
-      utils.PgServer.build.mockImplementation(async () => {
-        utils.PgExplorer.currentWorkspaceId = "id-b";
-        return answer();
-      });
+    ])(
+      "leaves that project's info alone on %s, and says its result was dropped",
+      async (_, answer) => {
+        utils.PgServer.build.mockImplementation(async () => {
+          utils.PgExplorer.currentWorkspaceId = "id-b";
+          utils.PgExplorer.currentWorkspaceName = "b";
+          return answer();
+        });
 
-      await run().catch(() => undefined);
+        await run().catch(() => undefined);
 
-      expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
-      expect(PgBuildOutput.set).not.toHaveBeenCalled();
-    });
+        expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+        expect(PgBuildOutput.set).not.toHaveBeenCalled();
+        // Deploy's guard cannot see this verdict, so the user must hear of it
+        expect(utils.PgTerminal.println).toHaveBeenCalledWith(
+          expect.stringContaining('The result of building "a" was dropped')
+        );
+      }
+    );
 
     it("keeps the result of a project renamed during its build", async () => {
       utils.PgServer.build.mockImplementation(async () => {

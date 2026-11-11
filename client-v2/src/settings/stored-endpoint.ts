@@ -66,7 +66,7 @@ export const buildEndpointOptions = (
     ],
     "server.endpoint": [
       // The env's server under both keys a profile may hold: `configured`, and
-      // `foundation`, the "Solana Foundation" option the env now supplies.
+      // `foundation`, the "Solana Foundation" option the env supplies.
       // Without the env neither resolves, and the profile gets the default.
       ...(configuredServer
         ? [

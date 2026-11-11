@@ -13,7 +13,8 @@ const runGate = ({ VERCEL_ENV, REACT_APP_SERVER_URL }) =>
   });
 
 test("client-v2-build-server-endpoint: A preview build without the variable", () => {
-  const result = runGate({ VERCEL_ENV: "preview" });
+  // Empty, not absent: a Vercel variable cleared to "" must fail as one never set
+  const result = runGate({ VERCEL_ENV: "preview", REACT_APP_SERVER_URL: "" });
 
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /REACT_APP_SERVER_URL/);

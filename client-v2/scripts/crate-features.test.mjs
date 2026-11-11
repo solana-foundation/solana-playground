@@ -2,10 +2,23 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  appendFeaturesWith,
   declaredFeatures,
   featuresByCrate,
   renamedDependencies,
 } from "./crate-features.mjs";
+
+test("appends the features table the editor's Rust Analyzer reads", () => {
+  const manifest = appendFeaturesWith(["serde", "std"])(
+    '[package]\nname = "x"\nversion = "1.0.0"\n\n'
+  );
+
+  // `get_enabled_features` in `wasm/rust-analyzer/src/utils.rs` reads this table; a rename there must change it here
+  assert.equal(
+    manifest,
+    '[package]\nname = "x"\nversion = "1.0.0"\n\n[package.metadata.solana-playground]\nfeatures = ["serde","std"]\n'
+  );
+});
 
 test("lists the root's declared features on its normal dependencies only", () => {
   const features = declaredFeatures({

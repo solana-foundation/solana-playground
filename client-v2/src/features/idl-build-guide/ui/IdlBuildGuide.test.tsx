@@ -213,6 +213,41 @@ describe("features/idl-build-guide", () => {
     ]);
   });
 
+  it("reports an IDL the browser could not read as a failure, not a refusal", async () => {
+    const dialog = openFrom("build");
+    onLoadIdl.mockRejectedValue(new Error("NotReadableError"));
+
+    await drop(dialog);
+
+    expect(within(dialog).queryByRole("alert")).toBeNull();
+    expect(sent.events.map((e) => e.name)).toEqual(["idl_guide_opened"]);
+    expect(logged.entries.map((e) => e.ns)).toEqual(["ui:button"]);
+  });
+
+  it("opens again on Docker, with no old export error or loaded IDL", async () => {
+    utils.PgFramework.exportWorkspace.mockRejectedValue(new Error("disk full"));
+    const dialog = openFrom("build");
+    pick(dialog, "Local toolchain");
+    await act(async () =>
+      fireEvent.click(
+        within(dialog).getByRole("button", { name: "Download project" })
+      )
+    );
+    await drop(dialog);
+    expect(within(dialog).getByRole("alert")).toBeTruthy();
+    expect(within(dialog).getByRole("status")).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Build the IDL locally" })
+    );
+
+    const reopened = screen.getByRole("dialog");
+    expect(reopened.textContent).toContain("docker run");
+    expect(within(reopened).queryByRole("alert")).toBeNull();
+    expect(within(reopened).queryByRole("status")).toBeNull();
+  });
+
   it("starts both methods with Download project", () => {
     const dialog = openFrom("build");
     for (const method of ["Docker", "Local toolchain"] as const) {

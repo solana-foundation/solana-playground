@@ -1282,7 +1282,7 @@ Expect:
 ### I-3. the local method builds the IDL
 
 Precondition: I-1's project, on a machine without Rust, Solana, or Anchor installed (a fresh VM or user account). On
-Linux, the packages the "Install Rust" step names are installed.
+Linux, the packages the install step's note names are installed.
 
 Steps: in the guide, select "Local toolchain", then run each step's command in order in a terminal opened in the
 unzipped project.

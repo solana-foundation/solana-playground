@@ -1,6 +1,7 @@
 // What the editor's Rust Analyzer needs from a lockfile's resolution beyond the
 // sources: each crate's features, without which items behind
 // `#[cfg(feature = ...)]` vanish, and the names crates import each other under.
+// The project export reads `declaredFeatures` too, through `/crates/features.json`.
 
 /**
  * Features per crate version, from `cargo metadata --format-version 1`.
