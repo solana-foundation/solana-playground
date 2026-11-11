@@ -415,13 +415,16 @@ const Restored = (p: BaseBuildProps & { failed: boolean }) => (
   />
 );
 
+const noIdlLine = (hasIdl: boolean) =>
+  hasIdl
+    ? "The Playground's build produces no IDL, so Interact keeps the IDL it already holds."
+    : "The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.";
+
 const successLine = ({ sourceChanged, hasIdl }: BaseBuildProps) => {
-  if (sourceChanged) {
-    return "Your code changed after the last build. Build again before you deploy.";
-  }
-  return hasIdl
-    ? "The program is ready to deploy. The Playground's build produces no IDL, so Interact keeps the IDL it already holds."
-    : "The program is ready to deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.";
+  const lead = sourceChanged
+    ? "Your code changed after the last build. Build again before you deploy."
+    : "The program is ready to deploy.";
+  return `${lead} ${noIdlLine(hasIdl)}`;
 };
 
 const Succeeded = (p: BaseBuildProps) => (

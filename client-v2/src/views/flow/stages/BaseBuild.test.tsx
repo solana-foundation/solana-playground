@@ -351,16 +351,6 @@ describe("BaseBuild", () => {
       expect(p.onContinue).toHaveBeenCalled();
     });
 
-    it("says why", () => {
-      render(<BaseBuild {...changed()} />);
-
-      expect(
-        screen.getByText(
-          "Your code changed after the last build. Build again before you deploy."
-        )
-      ).toBeTruthy();
-    });
-
     it("shows the rebuild running on the brand pill", () => {
       const p = changed();
       p.building = true;
@@ -381,21 +371,32 @@ describe("BaseBuild", () => {
     });
   });
 
-  // Scenario "A successful build" (client-v2-idl-build-guide), with and without an IDL held
+  // Scenario "A successful build" (client-v2-idl-build-guide), with and without an IDL held, and after an edit
   it.each([
-    [
-      true,
-      "The program is ready to deploy. The Playground's build produces no IDL, so Interact keeps the IDL it already holds.",
-    ],
-    [
-      false,
-      "The program is ready to deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.",
-    ],
+    {
+      when: "an IDL held",
+      hasIdl: true,
+      sourceChanged: false,
+      line: "The program is ready to deploy. The Playground's build produces no IDL, so Interact keeps the IDL it already holds.",
+    },
+    {
+      when: "no IDL held",
+      hasIdl: false,
+      sourceChanged: false,
+      line: "The program is ready to deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.",
+    },
+    {
+      when: "the code changed",
+      hasIdl: false,
+      sourceChanged: true,
+      line: "Your code changed after the last build. Build again before you deploy. The Playground's build produces no IDL: build it locally and upload it to call the program from Interact.",
+    },
   ])(
-    "says the build produces no IDL, whether or not one is held (%s)",
-    (hasIdl, line) => {
+    "says the build produces no IDL ($when)",
+    ({ hasIdl, sourceChanged, line }) => {
       const p = props({ kind: "succeeded" });
       p.hasIdl = hasIdl;
+      p.sourceChanged = sourceChanged;
       render(<BaseBuild {...p} />);
 
       expect(screen.getByText(line)).toBeTruthy();
