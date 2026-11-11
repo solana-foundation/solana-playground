@@ -6,6 +6,7 @@ name: client-v2 checks
 #
 # Every action is pinned to a commit, the version tag beside it: a tag can
 # be moved, a commit cannot.
+# Runners are pinned to `ubuntu-26.04`, so the Chromium and Firefox results come from one known image; `ubuntu-latest` moves on GitHub's schedule.
 on:
   workflow_call:
     inputs:
@@ -38,7 +39,7 @@ jobs:
   wasm:
     name: wasm packages
     if: ${{ !inputs.use-wasm-stubs }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # A cold build takes about an hour on a laptop.
     timeout-minutes: 150
     # The e2e shards restore the crates the steps below cache, by this key.
@@ -158,7 +159,7 @@ jobs:
     needs: wasm
     # `wasm` is skipped on stubs; a skipped need would skip this job too.
     if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       CI: "true"
@@ -310,7 +311,7 @@ jobs:
     name: build
     needs: wasm
     if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     env:
       CI: "true"
@@ -424,7 +425,7 @@ jobs:
     name: e2e (${{ matrix.browser }}, ${{ matrix.shard }})
     needs: wasm
     if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # Measured on run 40369790881 (2026-10-26, 278 tests): about 4 minutes
     # from checkout to the first test (install, browser, dev-server compile),
     # and the slowest of four shards holds about 7 minutes of tests. By run
@@ -564,7 +565,7 @@ jobs:
   # (`yarn test-api`).
   e2e-report:
     name: e2e-report
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: e2e
     if: always()
@@ -618,7 +619,7 @@ jobs:
   # A job added above joins `needs` and the list below.
   gate:
     name: gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: [wasm, checks, build, e2e, e2e-report]
     if: always()

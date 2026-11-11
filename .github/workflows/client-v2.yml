@@ -5,6 +5,7 @@ name: client-v2
 # `reusable-client-v2.yml`; `client-v2-with-stubs.yml` runs the same jobs on
 # the stubs, by hand. A pull_request run reads this file from the PR's merge
 # commit (CLAUDE.md, "This is a fork").
+# Runners are pinned to `ubuntu-26.04`, as in `reusable-client-v2.yml`; `ubuntu-latest` moves on GitHub's schedule.
 on:
   push:
     branches: ["master"]
@@ -34,7 +35,7 @@ jobs:
   # base branch's head, so a depth of 2 holds both sides of the diff.
   changes:
     name: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       ui: ${{ steps.diff.outputs.ui }}
@@ -101,7 +102,7 @@ jobs:
   smoke:
     name: smoke
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'solana-foundation/solana-playground'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # 30 minutes of waiting for the deployment, one for the probe. A build
     # without a cache does not finish inside Vercel's own limit
     # (deploy-client-vercel.md, "Deploy"), so the wait is generous.
@@ -163,7 +164,7 @@ jobs:
   # passing. An empty `needs` fails rather than passes.
   client-v2:
     name: client-v2
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: [pipeline]
     if: always()
