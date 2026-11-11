@@ -113,9 +113,15 @@ export type FlowEvent =
   /**
    * What the workspace already knows about itself, read back after a
    * reload. `built` is `PgProgramInfo.lastBuildFailed`: `null` when this
-   * workspace has never been built.
+   * workspace has never been built, `undefined` before the file is read.
+   * `deployed` comes only with the cluster's own answer; without it, the
+   * deployment is not known yet.
    */
-  | { type: "restore"; built: boolean | null; deployed: boolean };
+  | {
+      type: "restore";
+      built: boolean | null | undefined;
+      deployed?: boolean;
+    };
 
 export const INITIAL_FLOW_STATE: FlowState = {
   stage: "write",
@@ -521,13 +527,24 @@ export class PgFlow {
       // A reload drops this state but not the workspace's own: the build
       // verdict is in `program-info.json` and the deployment is on the
       // cluster. The two arrive apart and in either order -- the file is read
-      // at once, the cluster may be slow or not answer -- so every change to
-      // the program info restores from both, and Deploy is offered on the
-      // verdict alone. Not `onDidChangeLastBuildFailed`: it stays quiet when
-      // a switched-to project has the same verdict as the one before, and the
-      // switch has just reset this state. This fires often; `restore` seeds
-      // only forward and returns the same state when nothing moves.
+      // at once, the cluster may be slow or not answer -- so each restores
+      // on its own, and Deploy is offered on the verdict alone. `restore`
+      // seeds only forward and returns the same state when nothing moves.
+      //
+      // The verdict, on any change to the program info: a switch to another
+      // project changes its `uuid` or `kp`. Not `onDidChangeLastBuildFailed`,
+      // which stays quiet when the next project has the same verdict, though
+      // the switch has just reset this state. `deployed` is left out here:
+      // `onChain` keeps the previous program's answer until the new fetch
+      // resolves, so read on any other change it can be another project's.
       PgProgramInfo.onDidChange(() =>
+        PgFlow._dispatch({
+          type: "restore",
+          built: PgProgramInfo.lastBuildFailed,
+        })
+      ),
+      // The deployment, only with the cluster's answer for this program
+      PgProgramInfo.onDidChangeOnChain(() =>
         PgFlow._dispatch({
           type: "restore",
           built: PgProgramInfo.lastBuildFailed,

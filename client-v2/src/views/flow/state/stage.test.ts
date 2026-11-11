@@ -45,6 +45,7 @@ vi.mock("../../../utils", () => ({
     lastBuildFailed: null,
     onChain: null,
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    onDidChangeOnChain: vi.fn(() => ({ dispose: vi.fn() })),
   },
 }));
 
@@ -957,6 +958,32 @@ describe("PgFlow.reduce, restoring a workspace after a reload", () => {
       deployed: true,
     });
     expect(s.deploy).toBe("failed");
+    // The program is on the cluster all the same
+    expect(s.interact).toBe("active");
+  });
+
+  it("leaves a deploy in flight running", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "deploy-start",
+      from: "command",
+    });
+    const s = PgFlow.reduce(running, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(s.deploy).toBe("running");
+  });
+
+  it("keeps Deploy offered after a build when only the verdict comes", () => {
+    const built = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "build-finish",
+      failed: false,
+      errorCount: 0,
+      ms: 1,
+    });
+    const s = PgFlow.reduce(built, { type: "restore", built: false });
+    expect(s.deploy).toBe("active");
   });
 
   it("hands back the same state when nothing moves", () => {
@@ -995,6 +1022,7 @@ describe("PgFlow.init, seeding a reloaded page", () => {
     const buildOutputModule = await mockedBuildOutput();
     let workspaceChange: (() => void) | undefined;
     let programInfoChange: (() => void) | undefined;
+    let onChainChange: (() => void) | undefined;
 
     vi.mocked(PgCommand.build.onDidStart).mockReturnValue({
       dispose: vi.fn(),
@@ -1019,14 +1047,25 @@ describe("PgFlow.init, seeding a reloaded page", () => {
       programInfoChange = () => cb(PgProgramInfo);
       return { dispose: vi.fn() };
     });
+    vi.mocked(PgProgramInfo.onDidChangeOnChain).mockImplementation((cb) => {
+      onChainChange = () => cb(PgProgramInfo.onChain);
+      return { dispose: vi.fn() };
+    });
 
     const sub = PgFlow.init();
     return {
       sub,
       reset: () =>
         requireFor("the workspace change listener")(workspaceChange)(),
+      /** Any field of the program info changed, the file read among them */
       programInfoChanged: () =>
         requireFor("the program info change listener")(programInfoChange)(),
+      /** The cluster answered for this program */
+      onChainArrived: () => {
+        requireFor("the on-chain change listener")(onChainChange)();
+        // `onChain` is a field of the program info: its change fires both
+        requireFor("the program info change listener")(programInfoChange)();
+      },
     };
   };
 
@@ -1055,7 +1094,7 @@ describe("PgFlow.init, seeding a reloaded page", () => {
     // The workspace built cleanly and its program is live on the cluster.
     info.lastBuildFailed = false;
     info.onChain = { deployed: true };
-    wiring.programInfoChanged();
+    wiring.onChainArrived();
 
     expect(PgFlow.state.build).toBe("done");
     expect(PgFlow.state.deploy).toBe("done");
@@ -1074,7 +1113,6 @@ describe("PgFlow.init, seeding a reloaded page", () => {
     wiring.reset();
 
     info.lastBuildFailed = false;
-    info.onChain = undefined;
     wiring.programInfoChanged();
 
     expect(PgFlow.state.build).toBe("done");
@@ -1082,25 +1120,10 @@ describe("PgFlow.init, seeding a reloaded page", () => {
 
     // The cluster answers later: the program is already there
     info.onChain = { deployed: true };
-    wiring.programInfoChanged();
+    wiring.onChainArrived();
 
     expect(PgFlow.state.deploy).toBe("done");
     expect(PgFlow.state.interact).toBe("active");
-    wiring.sub.dispose();
-  });
-
-  it("reads nothing into program info that has not loaded yet", async () => {
-    const info = await programInfo();
-    const wiring = await initWithCapturedCallbacks();
-    wiring.reset();
-
-    // The getters answer `undefined` before the first read of the file
-    info.lastBuildFailed = undefined;
-    info.onChain = undefined;
-    wiring.programInfoChanged();
-
-    expect(PgFlow.state.build).toBe("upcoming");
-    expect(PgFlow.state.deploy).toBe("upcoming");
     wiring.sub.dispose();
   });
 
@@ -1109,9 +1132,8 @@ describe("PgFlow.init, seeding a reloaded page", () => {
     const wiring = await initWithCapturedCallbacks();
     wiring.reset();
 
-    info.lastBuildFailed = undefined;
     info.onChain = { deployed: false };
-    wiring.programInfoChanged();
+    wiring.onChainArrived();
     expect(PgFlow.state.build).toBe("upcoming");
 
     info.lastBuildFailed = false;
@@ -1119,6 +1141,36 @@ describe("PgFlow.init, seeding a reloaded page", () => {
 
     expect(PgFlow.state.build).toBe("done");
     expect(PgFlow.state.deploy).toBe("active");
+    wiring.sub.dispose();
+  });
+
+  it("reads nothing into program info that has not loaded yet", async () => {
+    const wiring = await initWithCapturedCallbacks();
+    wiring.reset();
+
+    // The getters answer `undefined` before the first read of the file
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.build).toBe("upcoming");
+    expect(PgFlow.state.deploy).toBe("upcoming");
+    wiring.sub.dispose();
+  });
+
+  /**
+   * `onChain` keeps the previous program's answer until the new fetch
+   * resolves. The next project's verdict, read meanwhile, must not take it.
+   */
+  it("does not give a switched-to project the last one's deployment", async () => {
+    const info = await programInfo();
+    const wiring = await initWithCapturedCallbacks();
+    info.onChain = { deployed: true };
+    wiring.reset();
+
+    info.lastBuildFailed = false;
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.deploy).toBe("active");
+    expect(PgFlow.state.interact).toBe("upcoming");
     wiring.sub.dispose();
   });
 });
