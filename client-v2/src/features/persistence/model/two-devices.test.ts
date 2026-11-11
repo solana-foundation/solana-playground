@@ -973,6 +973,139 @@ describe("both devices changed it", () => {
     expect(buffers.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nb\nc\nd\nE\n");
   });
 
+  it("keeps the merged copy on disk when autosave writes the old buffer during the merge's upload", async () => {
+    // The merge writes the store, uploads, and only then brings the editor
+    // up. An autosave timer still running from an earlier keystroke or
+    // rewrite fires in that window and writes the buffer -- still the
+    // pre-merge copy -- over the merged file. The next pass then uploaded
+    // it, reverting the other device's line on the account.
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    captureWrites();
+    const path = `/${HELLO.name}/src/lib.rs`;
+    const buffers = editorHolds({ [path]: "a\nb\nc\nd\nE\n" });
+    const put = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(async (url, init) => {
+        if (init?.method === "PUT") {
+          storedFiles().set(path, requireFor("the buffer")(buffers.get(path)));
+        }
+        return (await fakeFetch(url as string, init)) as unknown as Response;
+      });
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+    put.mockRestore();
+
+    expect(storedFiles().get(path)).toBe("A\nb\nc\nd\nE\n");
+    await reconcile();
+    expect(serverRow(HELLO.id).snapshot).toEqual({
+      files: { "src/lib.rs": "A\nb\nc\nd\nE\n" },
+    });
+  });
+
+  it("writes the merged copy over a stale one it cannot read back", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    captureWrites();
+    const path = `/${HELLO.name}/src/lib.rs`;
+    editorHolds({ [path]: "a\nb\nc\nd\nE\n" });
+    let isUnreadable = false;
+    let puts = 0;
+    const put = vi
+      .spyOn(global, "fetch")
+      .mockImplementation(async (url, init) => {
+        // The second is the merge's own upload; the first is refused
+        if (init?.method === "PUT" && ++puts === 2) {
+          storedFiles().set(path, "a\nb\nc\nd\nE\n");
+          isUnreadable = true;
+        }
+        return (await fakeFetch(url as string, init)) as unknown as Response;
+      });
+    const read = PgFs.readToString.bind(PgFs);
+    vi.spyOn(PgFs, "readToString").mockImplementation(async (at: string) => {
+      if (isUnreadable && at === path) {
+        isUnreadable = false;
+        throw new Error("EIO: the store failed");
+      }
+      return await read(at);
+    });
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+    put.mockRestore();
+
+    expect(storedFiles().get(path)).toBe("A\nb\nc\nd\nE\n");
+    expect(getFailures().map((f) => f.what)).toEqual([`read ${path}`]);
+  });
+
+  it("does not let the editor's last save bring back a file the other device deleted", async () => {
+    // Dropping the model of a removed file flushes its pending autosave, and
+    // memory still lists the file until the re-open, so the save went
+    // through and wrote the file back for the next push to upload
+    await startFrom(
+      { "src/lib.rs": base, "tests/t.rs": "test" },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, {
+      "src/lib.rs": "a\nb\nc\nd\nE\n",
+      "tests/t.rs": "test",
+    });
+    captureWrites();
+    const removed = `/${HELLO.name}/tests/t.rs`;
+    editor = PgExplorer.registerEditorBuffers({
+      read: (at) => (at === removed ? "test" : undefined),
+      write: () => undefined,
+      discard: (at) => void storedFiles().set(at, "test"),
+    });
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+
+    expect(storedFiles().has(removed)).toBe(false);
+    await reconcile();
+    expect(serverRow(HELLO.id).snapshot).toEqual({
+      files: { "src/lib.rs": "A\nb\nc\nd\nE\n" },
+    });
+  });
+
+  it("removes a written-back file even when the store cannot read it", async () => {
+    await startFrom(
+      { "src/lib.rs": base, "tests/t.rs": "test" },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, {
+      "src/lib.rs": "a\nb\nc\nd\nE\n",
+      "tests/t.rs": "test",
+    });
+    captureWrites();
+    const removed = `/${HELLO.name}/tests/t.rs`;
+    let isUnreadable = false;
+    editor = PgExplorer.registerEditorBuffers({
+      read: (at) => (at === removed ? "test" : undefined),
+      write: () => undefined,
+      discard: (at) => {
+        storedFiles().set(at, "test");
+        isUnreadable = true;
+      },
+    });
+    const read = PgFs.readToString.bind(PgFs);
+    vi.spyOn(PgFs, "readToString").mockImplementation(async (at: string) => {
+      if (isUnreadable && at === removed) {
+        isUnreadable = false;
+        throw new Error("EIO: the store failed");
+      }
+      return await read(at);
+    });
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+
+    expect(storedFiles().has(removed)).toBe(false);
+  });
+
   it("folds in what was typed while the merge ran", async () => {
     await startFrom(
       { "src/lib.rs": base },
@@ -1012,6 +1145,34 @@ describe("both devices changed it", () => {
     expect(getFailures().map((f) => f.what)).toEqual([
       expect.stringContaining("src/lib.rs"),
     ]);
+  });
+
+  it("keeps a copy taken from the other device on disk when autosave writes the old buffer before the editor is caught up", async () => {
+    // As for a merge: the adoption writes the store, then the mark, and only
+    // then brings the editor up -- an autosave lands while the mark is written
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    captureWrites();
+    const path = `/${HELLO.name}/src/lib.rs`;
+    const buffers = editorHolds({ [path]: base });
+    const writeMark = PgSyncMark.write.bind(PgSyncMark);
+    const markWritten = vi
+      .spyOn(PgSyncMark, "write")
+      .mockImplementation(async (...args) => {
+        storedFiles().set(path, requireFor("the buffer")(buffers.get(path)));
+        return await writeMark(...args);
+      });
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+    markWritten.mockRestore();
+
+    expect(storedFiles().get(path)).toBe("A\nb\nc\nd\ne\n");
+    expect((await reconcile()).pushed).toEqual([]);
+    expect(serverRow(HELLO.id).snapshot).toEqual({
+      files: { "src/lib.rs": "A\nb\nc\nd\ne\n" },
+    });
   });
 
   it("brings the editor buffer up to a copy taken from the other device", async () => {
