@@ -785,11 +785,14 @@ const barGap = async (pane: Locator) => {
     .locator('[data-slot="merge-hunk-bar"]')
     .first()
     .boundingBox();
-  const bottom = await pane
-    .locator(".view-lines .view-line")
-    .evaluateAll((lines) =>
-      Math.max(...lines.map((line) => line.getBoundingClientRect().bottom))
-    );
+  // Not `evaluateAll`: over these lines it crashes Playwright 1.65's Firefox 159 content process
+  const bottom = await pane.evaluate((root) =>
+    Math.max(
+      ...Array.from(root.querySelectorAll(".view-lines .view-line")).map(
+        (line) => line.getBoundingClientRect().bottom
+      )
+    )
+  );
   return bar ? bar.y - bottom : null;
 };
 

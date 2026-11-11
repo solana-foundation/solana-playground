@@ -94,7 +94,7 @@
   "devDependencies": {
     "@craco/craco": "^6.4.3",
     "@fission-ai/openspec": "1.14.0",
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.65.0",
     "@sentry/cli": "^2",
     "@tailwindcss/postcss": "^4.3.3",
     "@testing-library/dom": "^10.4.2",

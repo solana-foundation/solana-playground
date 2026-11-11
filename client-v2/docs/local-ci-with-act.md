@@ -2,8 +2,15 @@
 
 Requires act 0.2.95 or later, with `--trust-project-actrc` on every command, as below. From 0.2.95, act ignores the flags of a project `.actrc` that reach the host (`--network host`, `--artifact-server-path`, `--container-options`) and leaves its `$HOME` unexpanded unless the command trusts the file. The flag works on the command line or in your user act config, never in `.actrc` itself. Without it the artifact server never starts, and an upload fails with `Unable to get the ACTIONS_RUNTIME_TOKEN env variable`.
 
+**Run on the real wasm packages, `--input use-wasm-stubs=false`, unless the person you are running it for asks
+for the stubs.** That is what `client-v2.yml` runs and every deployment ships; a run on the stubs leaves out the
+`@real-wasm` specs and the bundle checks, so it can pass where CI fails. The stubs only save the wasm build, and
+the commands below that use them are for a run where someone asked for exactly that. See
+[On the real packages](#on-the-real-packages) for the command.
+
 The jobs live in `reusable-client-v2.yml`, which `client-v2.yml` calls, so act runs that file with the
-`workflow_call` event. From the repository root, its `checks` job on the current tree and the wasm stubs:
+`workflow_call` event. From the repository root, its `checks` job on the current tree and the wasm stubs, when
+the stubs were asked for:
 
 ```sh
 cd client-v2 && act --trust-project-actrc workflow_call -C .. -W .github/workflows/reusable-client-v2.yml -j checks --input use-wasm-stubs=true
@@ -38,7 +45,7 @@ Drop the `$(grep ...)` part on an x86-64 host.
 | all of `ci.yml` | `act --trust-project-actrc pull_request -C .. -W .github/workflows/ci.yml` |
 | `cicd.yml` | `act --trust-project-actrc workflow_dispatch -C .. -W .github/workflows/cicd.yml` |
 
-`--input use-wasm-stubs=true` skips the `wasm` job, as `client-v2-with-stubs.yml` does, and no stub job runs `wasm-pack`, so the arm64 overrides apply. The input has no default: a run without it fails before any job starts. Without `-W`, `-j checks` also matches the `checks` jobs of `ci.yml` and `cicd.yml`.
+`--input use-wasm-stubs=true`, when the stubs were asked for, skips the `wasm` job, as `client-v2-with-stubs.yml` does, and no stub job runs `wasm-pack`, so the arm64 overrides apply. The input has no default: a run without it fails before any job starts. Without `-W`, `-j checks` also matches the `checks` jobs of `ci.yml` and `cicd.yml`.
 
 ## On the real packages
 
@@ -52,6 +59,20 @@ act --trust-project-actrc workflow_call -C .. -W .github/workflows/reusable-clie
   --local-repository actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a=$HOME/.cache/act-local/upload-artifact-v4.6.2 \
   --container-options "--group-add 0 -v $main/.git:$main/.git:ro -v $main/client/public:$main/client/public:ro"
 ```
+
+One shard of the `e2e` job, here Firefox shard 1, with the same flags; `-j e2e` also runs the `wasm` job first:
+
+```sh
+act --trust-project-actrc workflow_call -C .. -W .github/workflows/reusable-client-v2.yml -j e2e \
+  --input use-wasm-stubs=false --input firefox=true --matrix browser:firefox --matrix shard:1 \
+  --env PORT=13999 \
+  --local-repository actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9=$HOME/.cache/act-local/upload-artifact-v4.6.2 \
+  --local-repository actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a=$HOME/.cache/act-local/upload-artifact-v4.6.2 \
+  --container-options "--group-add 0 -v $main/.git:$main/.git:ro -v $main/client/public:$main/client/public:ro"
+```
+
+`--network host` (`.actrc`) puts the job's dev server on the host's ports, so `PORT` moves it off 3000 when a
+local dev server holds that port. The browsers run under amd64 emulation, several times slower than a runner.
 
 `-j build` runs the `wasm` job it needs first. act's artifact server, as of 0.2.95, cannot take an upload from the `upload-artifact` the workflows pin: v7 sends a `mime_type` field it rejects (`unknown field "mime_type"`), and v6's blob upload fails its signature check (`Error unauthorized`). The two `--local-repository` flags run both pinned commits from a v4.6.2 copy, which act accepts, while CI keeps v7; the pinned `download-artifact` v8 works as it is. Make the copy once:
 
