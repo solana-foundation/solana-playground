@@ -69,7 +69,7 @@ const fakeAccount = async (
      * was already on its way (the load's reconcile, on a slow runner) took
      * them before the test typed, and there was no overlap left to answer
      */
-    movesOnAtPut: null as Record<string, string> | null,
+    movesOnAtPut: undefined as Record<string, string> | undefined,
     deleted: false,
     putsAfterDelete: 0,
   };
@@ -130,7 +130,7 @@ const fakeAccount = async (
       if (state.movesOnAtPut && sendsLib) {
         row.snapshot = { files: state.movesOnAtPut };
         row.updatedAt = stamp();
-        state.movesOnAtPut = null;
+        state.movesOnAtPut = undefined;
       }
       // The server's compare-and-swap: a write names the version it was
       // made against, and anything else is refused
