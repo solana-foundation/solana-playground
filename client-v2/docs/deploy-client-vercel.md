@@ -248,7 +248,7 @@ Every `REACT_APP_*` variable a build sees is public: every visitor can read it i
 | `REACT_APP_SENTRY_DSN` | Sentry's DSN, which is public by design; never an auth token |
 | `REACT_APP_GA_MEASUREMENT_ID` | the GA4 id |
 | `REACT_APP_LOG_LEVEL` | the console log level |
-| `REACT_APP_VERCEL_GIT_COMMIT_SHA`, `REACT_APP_VERCEL_ENV` | set by `scripts/vercel-build.sh`; never set them in the project |
+| `REACT_APP_VERCEL_GIT_COMMIT_SHA`, `REACT_APP_VERCEL_ENV` | set by `scripts/vercel-build.sh`, which also unsets `REACT_APP_VERCEL_OBSERVABILITY_CLIENT_CONFIG`, added by Vercel for `@vercel/analytics` and `@vercel/speed-insights`, which the client does not install; never set them in the project |
 
 Every other variable stays on the server, read by `api/*.mjs` through `src/shared/config/server-env.mjs` and the build scripts; mark each credential among them **Sensitive** in Vercel.
 
