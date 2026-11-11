@@ -95,7 +95,7 @@ carries an address or an amount.
 - **WHEN** a transfer is confirmed on devnet
 - **THEN** `fund_sent` is emitted once with `cluster: "devnet"`
 
-#### Scenario: A refused ask from the chip is counted
+#### Scenario: A refused ask from the chip is counted (manual)
 
 - **WHEN** the chip's ask fails with the faucet's 429
 - **THEN** `fund_airdrop_requested` and then `fund_airdrop_refused` with `reason: "rate-limited"` are emitted once each

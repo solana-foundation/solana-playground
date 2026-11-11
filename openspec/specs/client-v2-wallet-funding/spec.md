@@ -278,21 +278,21 @@ faucet's form offers:
   "The faucet did not send SOL.";
 - the deploy's "Not enough SOL" card shows the steps for `airdrop_failed`.
 
-#### Scenario: A rate-limited airdrop in the terminal
+#### Scenario: A rate-limited airdrop in the terminal (manual)
 
 - **WHEN** `airdrop` runs on devnet and the RPC answers "429 Too Many Requests"
 - **THEN** the terminal prints "Airdrop refused: the devnet faucet is at its limit for now.", the three steps and a `https://faucet.solana.com/?walletAddress=…&amount=…&cluster=devnet` link, then the error
 
-#### Scenario: Any other refusal in the terminal
+#### Scenario: Any other refusal in the terminal (manual)
 
 - **WHEN** `airdrop` runs on devnet and the request fails with "fetch failed"
 - **THEN** the terminal prints "Airdrop refused: the devnet faucet did not send SOL.", the same steps and link, then the error
 
-#### Scenario: A local validator's failure keeps its own error
+#### Scenario: A local validator's failure keeps its own error (manual)
 - **WHEN** `airdrop` runs on localnet and the request fails with "fetch failed"
 - **THEN** the terminal prints no faucet note and the error is not a refusal
 
-#### Scenario: A sign-in failure is not a refusal
+#### Scenario: A sign-in failure is not a refusal (manual)
 
 - **WHEN** the wallet chip's Get SOL fails because the GitHub sign-in was cancelled
 - **THEN** the popover does not show the faucet steps
@@ -313,7 +313,7 @@ and forking solana-playground gives one; "Fund from a wallet" sends SOL from
 a browser wallet. It SHALL say the assistant explains these and cannot
 airdrop itself.
 
-#### Scenario: Asked for devnet SOL
+#### Scenario: Asked for devnet SOL (manual)
 
 - **WHEN** a user asks the assistant "how do I get devnet SOL?"
 - **THEN** its context holds the faucet steps and the link shape to answer from, and the synced copy matches `docs/assistant-context.md`
