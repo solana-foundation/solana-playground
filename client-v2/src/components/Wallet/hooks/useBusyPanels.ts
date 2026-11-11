@@ -41,8 +41,7 @@ export const useBusyPanels = () => {
   const blockDismiss = useBlockDismiss();
   useEffect(() => {
     if (!isBusy) return;
-    blockDismiss(true);
-    return () => blockDismiss(false);
+    return blockDismiss();
   }, [isBusy, blockDismiss]);
   return { isBusy, onBusy, whenIdle };
 };

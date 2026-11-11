@@ -161,9 +161,8 @@ export const ModalFrame = ({
   }, [name, openReport]);
 
   useEffect(() => {
-    if (!isTop) return;
-    blockDismiss(busy);
-    return () => blockDismiss(false);
+    if (!isTop || !busy) return;
+    return blockDismiss();
   }, [busy, isTop, blockDismiss]);
 
   const submit = async () => {

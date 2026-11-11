@@ -78,7 +78,7 @@ const submits = vi.hoisted(() => [] as Promise<unknown>[]);
 // The frame is the overlay system's; what is under test is the body, and
 // what Continue does.
 vi.mock("@/widgets/overlays", () => ({
-  useBlockDismiss: () => () => {},
+  useBlockDismiss: () => () => () => {},
   ModalFrame: ({
     children,
     buttonProps,
