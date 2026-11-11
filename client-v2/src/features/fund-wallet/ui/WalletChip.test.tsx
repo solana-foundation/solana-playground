@@ -20,7 +20,7 @@ const ADDRESS = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
 
 const balanceNow = vi.hoisted(() => ({ sol: 0 }));
 const clusterNow = vi.hoisted(() => ({ name: "devnet" }));
-const airdropAmount = vi.hoisted(() => ({ sol: 5 as number | null }));
+const airdropAmount = vi.hoisted(() => ({ sol: 5 as number | undefined }));
 vi.mock("@/hooks", () => ({
   useBalance: () => balanceNow.sol,
   useRenderOnChange: () => undefined,
@@ -254,7 +254,7 @@ describe("features/fund-wallet/ui/WalletChip", () => {
   });
 
   it("names the 5 SOL default in the faucet steps and link when the airdrop amount is unknown", async () => {
-    airdropAmount.sol = null;
+    airdropAmount.sol = undefined;
     airdrop.mockRejectedValueOnce(
       new AirdropRefusedError(new Error("429 Too Many Requests"))
     );
