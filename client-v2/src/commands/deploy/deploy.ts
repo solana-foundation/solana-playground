@@ -1081,17 +1081,25 @@ const leftoverReturnFor =
   }) =>
   async () => {
     let owed = 0;
+    // What this run's returns already sent, and what they cost in fees: a
+    // return that landed but whose confirmation threw is not sent again
     let returned = 0;
+    let feesPaid = 0;
     try {
       await sendAndConfirmTxWithRetries(
         async () => {
           // SOL that lands meanwhile (an airdrop, a web faucet top-up) is not
-          // `to`'s: never return more than `to` sent
-          owed =
+          // `to`'s: never return more than `to` sent. What went back is added
+          // to the balance again, so a retry measures the same total owed
+          const owedInTotal =
             Math.min(
-              (await connection.getBalance(from.publicKey)) - before,
+              (await connection.getBalance(from.publicKey)) -
+                before +
+                returned +
+                feesPaid,
               funded
             ) - TRANSFER_FEE;
+          owed = Math.max(0, owedInTotal - returned);
           if (owed <= 0) return "";
           const ixs = [
             PgWeb3.ComputeBudgetProgram.setComputeUnitPrice({
@@ -1104,7 +1112,8 @@ const leftoverReturnFor =
             }),
           ];
           const sig = await PgTx.send(ixs, { wallet: from, connection });
-          returned = owed;
+          returned += owed;
+          feesPaid += TRANSFER_FEE;
           return sig;
         },
         async () =>

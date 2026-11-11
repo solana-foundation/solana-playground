@@ -68,6 +68,7 @@ const transfer = vi.hoisted(() =>
 );
 const termPrintln = vi.hoisted(() => vi.fn());
 const send = vi.hoisted(() => vi.fn(async () => "sig"));
+const confirm = vi.hoisted(() => vi.fn(async () => ({})));
 const loadBuffer = vi.hoisted(() => vi.fn());
 const closeBuffer = vi.hoisted(() => vi.fn(async () => "sig"));
 const deployProgram = vi.hoisted(() => vi.fn(async () => "sig"));
@@ -152,7 +153,7 @@ vi.mock("../../utils", () => ({
       executeFromStr: (cmd: string) => env.executeFromStr(cmd),
     }),
   },
-  PgTx: { send, confirm: async () => ({}) },
+  PgTx: { send, confirm },
   PgView: { setMainSecondaryProgress: vi.fn() },
   PgWallet: {
     get current() {
@@ -1042,6 +1043,30 @@ describe("commands/deploy", () => {
       expect(result).not.toBeInstanceOf(Error);
       expect(returns()).toEqual([90_000_000 - FEE]);
       expect(env.pgLamports).toBe(1_000_000_000 + FEE);
+    });
+
+    it("sends nothing extra when a return lands but its confirmation throws, with outside SOL present", async () => {
+      fromStandard();
+      // A top-up of 5 SOL lands meanwhile, so the balance alone would owe more
+      createBuffer.mockImplementation(async () => {
+        movePg(-10_000_000 + 5_000_000_000);
+        return "sig";
+      });
+      let armed = false;
+      send.mockImplementation(async (...args: unknown[]) => {
+        const sig = await landTransfer(...args);
+        const opts = args[1] as { wallet?: unknown } | undefined;
+        if (opts?.wallet === pgWallet && !armed) {
+          armed = true;
+          confirm.mockRejectedValueOnce(new Error("confirmation timed out"));
+        }
+        return sig;
+      });
+
+      const result = await runDeploy();
+
+      expect(result).not.toBeInstanceOf(Error);
+      expect(returns()).toEqual([2_100_000_000 - FEE]);
     });
 
     it("sends nothing back and asks nothing more when the first approval is declined", async () => {
