@@ -1069,6 +1069,51 @@ describe("commands/deploy", () => {
       expect(returns()).toEqual([2_100_000_000 - FEE]);
     });
 
+    /** A return to the standard wallet: its send never lands, and its confirmation throws, `drops` times */
+    const dropReturns = (drops: number) => {
+      let dropped = 0;
+      send.mockImplementation(async (...args: unknown[]) => {
+        const ixs = (Array.isArray(args[0]) ? args[0] : [args[0]]) as {
+          transfer?: { toPubkey: unknown };
+        }[];
+        const isReturn = ixs.some(
+          (ix) => ix?.transfer?.toPubkey === standardWallet.publicKey
+        );
+        if (isReturn && dropped < drops) {
+          dropped++;
+          confirm.mockRejectedValueOnce(new Error("block height exceeded"));
+          return "dropped-sig";
+        }
+        return landTransfer(...args);
+      });
+    };
+    const printed = () => vi.mocked(PgTerminal.println).mock.calls.join("\n");
+
+    it("prints no Returned line when every return send is dropped, and says the SOL stayed", async () => {
+      fromStandard();
+      vi.mocked(PgTerminal.println).mockClear();
+      dropReturns(Infinity);
+
+      const result = await runDeploy();
+
+      expect(result).not.toBeInstanceOf(Error);
+      expect(printed()).not.toContain("Returned");
+      expect(printed()).toContain("stayed in your Playground wallet");
+      expect(env.pgLamports).toBe(1_000_000_000 + 90_000_000);
+    });
+
+    it("still owes the whole amount to the retry after a dropped send", async () => {
+      fromStandard();
+      vi.mocked(PgTerminal.println).mockClear();
+      dropReturns(1);
+
+      await runDeploy();
+
+      expect(returns()).toEqual([90_000_000 - FEE, 90_000_000 - FEE]);
+      expect(printed()).toContain("Returned 0.09 SOL to Phantom.");
+      expect(env.pgLamports).toBe(1_000_000_000 + FEE);
+    });
+
     it("sends nothing back and asks nothing more when the first approval is declined", async () => {
       fromStandard();
       send.mockImplementation(async (...args: unknown[]) => {

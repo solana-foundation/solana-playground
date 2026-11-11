@@ -1082,24 +1082,47 @@ const leftoverReturnFor =
   }) =>
   async () => {
     let owed = 0;
-    // What this run's returns already sent, and what they cost in fees: a
-    // return that landed but whose confirmation threw is not sent again
+    // What returns are known to have moved, and what they cost in fees. Only
+    // a return the chain confirmed counts: a send that returned a signature
+    // may have been dropped, and a count made before confirmation made the
+    // retry owe nothing and the terminal say "Returned" over a balance that
+    // never moved
     let returned = 0;
     let feesPaid = 0;
+    // A send whose outcome is not known yet: the balance before it, and what it
+    // moved. Settled at the next attempt, or when the run of attempts ends
+    let pending: { balanceBefore: number; amount: number } | undefined;
+    const settle = (landed: boolean, fee: number) => {
+      if (landed && pending) {
+        returned += pending.amount;
+        feesPaid += fee;
+      }
+      pending = undefined;
+    };
+    // Whether the unconfirmed send moved SOL, from the balance it left
+    const settleFromBalance = async () => {
+      if (!pending) return;
+      const now = await connection.getBalance(from.publicKey);
+      const drop = pending.balanceBefore - now;
+      // The fee is what left on top of the amount, up to the exact transfer fee
+      settle(
+        drop >= pending.amount,
+        Math.min(TRANSFER_FEE, Math.max(0, drop - pending.amount))
+      );
+    };
     try {
-      await sendAndConfirmTxWithRetries(
+      const sig = await sendAndConfirmTxWithRetries(
         async () => {
+          // A dropped send did not move SOL, a landed one whose confirmation
+          // threw did: the balance says which, before anything is owed again
+          await settleFromBalance();
           // SOL that lands meanwhile (an airdrop, a web faucet top-up) is not
           // `to`'s: never return more than `to` sent. What went back is added
           // to the balance again, so a retry measures the same total owed
+          const balanceBefore = await connection.getBalance(from.publicKey);
           const owedInTotal =
-            Math.min(
-              (await connection.getBalance(from.publicKey)) -
-                before +
-                returned +
-                feesPaid,
-              funded
-            ) - TRANSFER_FEE;
+            Math.min(balanceBefore - before + returned + feesPaid, funded) -
+            TRANSFER_FEE;
           owed = Math.max(0, owedInTotal - returned);
           if (owed <= 0) return "";
           const ixs = [
@@ -1112,14 +1135,15 @@ const leftoverReturnFor =
               lamports: owed,
             }),
           ];
-          const sig = await PgTx.send(ixs, { wallet: from, connection });
-          returned += owed;
-          feesPaid += TRANSFER_FEE;
-          return sig;
+          pending = { balanceBefore, amount: owed };
+          return await PgTx.send(ixs, { wallet: from, connection });
         },
         async () =>
           (await connection.getBalance(from.publicKey)) <= before + TRANSFER_FEE
       );
+      // A signature back means the last send was confirmed
+      if (sig) settle(true, TRANSFER_FEE);
+      await settleFromBalance();
       if (returned > 0) {
         PgTerminal.println(
           `Returned ${formatLamports(returned)} SOL to ${to.name}.`
