@@ -145,7 +145,11 @@ when a session reads a file matching the `paths` in the frontmatter.
   that exists, is listed and reads as `undefined`, and a ghost sync mark keeps
   its project out of `pushNeverSynced`. The mock's `__reloadBeforeTreeSave`
   drops what a flush has not saved, puts renamed files back and turns removed
-  ones into ghosts. One exception:
+  ones into ghosts. A thread file that moves (`PgThreadIndex.carry`,
+  `_migrate`) gets its new index entry before the rename and loses the old
+  one after it, so a page that dies in between leaves the file under a name
+  the index points at; renamed first, the next load adopted it as a
+  workspace named after the thread. One exception:
   `PgExplorer._saveWorkspaces` writes `/.config/workspaces.json` itself and
   flushes after every write.
 - **A save on unload never lands in Chromium, so the save at creation
