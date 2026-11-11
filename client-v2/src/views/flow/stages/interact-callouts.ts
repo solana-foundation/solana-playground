@@ -15,14 +15,20 @@ export const builtAfterDeploy = (
 export const solNeeded = (balance: number | undefined) =>
   balance !== undefined && balance < FEE_SOL;
 
-/** A program id shortened in the middle: "6PNd…AVkj" */
+/** A program id shortened in the middle: "Prog…nter" */
 export const shortenId = (id: string) =>
   id.length <= 10 ? id : `${id.slice(0, 4)}…${id.slice(-4)}`;
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { beforeAll, describe, it, expect } = import.meta.vitest;
 
   describe("views/flow/stages/interact-callouts", () => {
+    let PROGRAM_ID: typeof import("../__fixtures__/addresses").PROGRAM_ID;
+
+    beforeAll(async () => {
+      ({ PROGRAM_ID } = await import("../__fixtures__/addresses"));
+    });
+
     it("builtAfterDeploy compares a known build with a known deploy", () => {
       expect(builtAfterDeploy(2, 1)).toBe(true);
       expect(builtAfterDeploy(1, 2)).toBe(false);
@@ -38,9 +44,7 @@ if (import.meta.vitest) {
     });
 
     it("shortenId keeps four characters each side", () => {
-      expect(shortenId("6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj")).toBe(
-        "6PNd…AVkj"
-      );
+      expect(shortenId(PROGRAM_ID)).toBe("Prog…nter");
       expect(shortenId("short")).toBe("short");
     });
   });

@@ -16,6 +16,7 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | [client-v2 production build](#7-client-v2-production-build) | memory, the esbuild minifier, browser floor, type checks outside the build |
 | [Default backend access](#9-default-backend-access) | `/api/agent` refuses every request without a session, from the browser and from `curl` |
 | [Tutorial flow on devnet](#10-tutorial-flow-on-devnet) | Hello Anchor end to end on the real build server and devnet |
+| [IDL build guide](#11-idl-build-guide) | the guide's placement, its Docker and local commands on a real machine, and an uploaded IDL in Interact |
 
 Case IDs are stable: refer to a case by ID, not by position.
 
@@ -189,9 +190,10 @@ Expect: exit code 0 for each; `server/target/release/solpg-server` exists.
 
 ### B-5. client-v2: browser suite
 
-Mirrors the `e2e` matrix and the `e2e-report` job in
+Mirrors the `chromium` entries of the `e2e` matrix and the `e2e-report` job in
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml), which
-[client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages.
+[client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages. The Firefox variant at the end of this
+case mirrors the `firefox` entries.
 
 Precondition: B-7, or `yarn --cwd client-v2 setup:with-stubs` and `test-e2e:with-stubs` in place of `test-e2e`, which
 leaves out the `@real-wasm` specs as [client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) does; a
@@ -210,8 +212,11 @@ Devnet.
 ```sh
 k=5
 PORT=$((13000 + 10 * k)) PG_AI_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e
-grep -cv '^#\|^$' client-v2/e2e/known-skips.txt
+grep -c '^\[chromium\] \|^[^#[]' client-v2/e2e/known-skips.txt
 ```
+
+The `grep` counts the lines without a `[<project>] ` prefix and the `[chromium] ` lines: a `[firefox] ` line never
+skips in this run.
 
 Expect:
 
@@ -224,6 +229,18 @@ Expect:
       fails the run, which is where it gets fixed.
 - [ ] the two `client-v2-ai` tests in `e2e/assistant-pause.e2e.spec.ts` pass rather than skip: they stub
       `/api/agent` themselves, so they need no configured backend.
+
+Firefox variant: a run without `--project` declares only the `chromium` project, so Firefox needs its own run.
+
+```sh
+k=5
+yarn --cwd client-v2 playwright install firefox
+PORT=$((13000 + 10 * k)) PG_AI_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e --project=firefox
+grep -c '^\[firefox\] \|^[^#[]' client-v2/e2e/known-skips.txt
+```
+
+Expect: the same checks as the Chromium run, with the `grep` counting the lines without a prefix and the
+`[firefox] ` lines.
 
 ### B-6. compose images
 
@@ -312,15 +329,18 @@ Expect: an error page or message, not a blank screen.
 
 Precondition: `master`; B-7; nothing listens on port 8080.
 
-client-v2 defaults its server endpoint to the remote Foundation server, not to `localhost`. To test the "no server"
-case, point it at the local port:
+Without `REACT_APP_SERVER_URL`, client-v2 defaults its server endpoint to `http://localhost:8080` and logs a warning
+naming the variable. Leave the variable empty in `client-v2/.env` for this case:
 
 ```sh
-REACT_APP_SERVER_URL=http://localhost:8080 yarn --cwd client-v2 dev
+REACT_APP_SERVER_URL= yarn --cwd client-v2 dev
 curl -s http://localhost:3000/api/health
 ```
 
 Expect:
+
+- [ ] the browser console shows the `settings:server` warning naming `REACT_APP_SERVER_URL`, and Settings lists no
+      "Solana Foundation" build server.
 
 - [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the console, the IDE, the terminal `help`, and
       the network tab pass.
@@ -416,7 +436,7 @@ docker compose --profile v2 logs | grep -c 'local dev stub'
 ```
 
 Steps: in Settings, check that `experimental.unstable` is off and set the server to Local (client-v2 defaults to the
-remote Foundation server).
+server `REACT_APP_SERVER_URL` names, when it is set).
 
 Expect:
 
@@ -480,7 +500,7 @@ Use a minimal native program for `lib.rs`: `solana_program::entrypoint!` with a 
 
 Expect:
 
-- [ ] the build returns `200` with JSON: `uuid` is a string, `idl` is `null` (a native program), and `stderr` holds no
+- [ ] the build returns `200` with JSON: `uuid` is a string, `idl` is `null` (for every program), and `stderr` holds no
       `error`.
 - [ ] `/deploy/<uuid>` returns the program binary: its first bytes print as `177   E   L   F`.
 
@@ -736,7 +756,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST <production server URL>/unstabl
 curl -s -o /dev/null -w '%{http_code}\n' -X POST <production server URL>/build
 ```
 
-The production server URL is `FOUNDATION_ENDPOINT` in `client-v2/src/settings/server/default-endpoint.ts`.
+The production server URL is the Vercel projects' `REACT_APP_SERVER_URL`; ask a maintainer for it.
 
 Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which proves the URL is right.
 
@@ -1232,3 +1252,74 @@ Expect:
       case while it is a `fixme`.
 - [ ] the run took under five minutes. A deploy that waits on the faucet longer is the faucet, not the flow: run again
       later.
+
+## 11. IDL build guide
+
+The stable build server returns `"idl": null` for every program, so a user builds the IDL on their own machine and
+uploads it. The Flow offers this as "Build the IDL locally" ([idl-build-guide](../client-v2/src/features/idl-build-guide)):
+a dialog with a Docker method (the default, `quay.io/ottersec/anchor`) and a local toolchain method (Rust, the Solana
+CLI, and Anchor through avm), whose commands `model/steps.ts` holds. CI checks where the guide is offered and that it
+opens ([client-v2-idl-build-guide.e2e.spec.ts](../client-v2/e2e/client-v2-idl-build-guide.e2e.spec.ts)); no CI job runs
+its commands, so I-2 and I-3 run them on a real machine. Run I-2 and I-3 on macOS (Apple Silicon) and on Linux, and
+record the results in task 2.2 of [stable-anchor-1-1-2](../openspec/changes/stable-anchor-1-1-2/tasks.md).
+
+### I-1. the Flow offers the guide while no IDL is held
+
+Precondition: client-v2 against a stable build server (D-6, or `yarn dev` with a server on `http://localhost:8080`),
+and a new project from the default Anchor starter. No IDL has been uploaded to it.
+
+Steps: build the project, then open Deploy and Interact.
+
+Expect:
+
+- [ ] the Build stage says the build produces no IDL, shows no "Download IDL", and has "Build the IDL locally" first
+      in its downloads row.
+- [ ] Deploy shows "Build the IDL locally"; Interact's empty surface says the build does not produce an IDL and shows
+      "Build the IDL locally" and "Upload IDL".
+- [ ] the button opens "Build the IDL on your machine" with "Docker" selected; "Local toolchain" switches the steps,
+      and every step that runs a command has "Copy command".
+
+### I-2. the Docker method builds the IDL
+
+Precondition: I-1's project, and Docker running. On Apple Silicon, Docker runs amd64 images (P-1).
+
+Steps:
+
+1. In the guide, "Download project", unzip it, and open a terminal in its folder.
+2. Copy the Docker step's command and run it.
+
+Expect:
+
+- [ ] the command exits 0 and writes `idl.json` in the project folder.
+- [ ] `idl.json` names the program's instructions (`initialize` for the default starter).
+- [ ] the files the command wrote are owned by the user who ran it. If they are owned by `root`, record that in task 2.2:
+      the command needs `--user`.
+
+### I-3. the local method builds the IDL
+
+Precondition: I-1's project, on a machine without Rust, Solana, or Anchor installed (a fresh VM or user account). On
+Linux, the packages the install step's note names are installed.
+
+Steps: in the guide, select "Local toolchain", then run each step's command in order in a terminal opened in the
+unzipped project.
+
+Expect:
+
+- [ ] every command exits 0, and `solana --version` and `anchor --version` print the versions the guide's titles name.
+- [ ] the last command writes `idl.json` in the project folder, with the same instructions as I-2's.
+
+### I-4. the uploaded IDL drives Interact and survives a rebuild
+
+Precondition: an `idl.json` from I-2 or I-3, the program deployed (localnet, or devnet with a faucet that answers).
+
+Steps:
+
+1. In Interact, "Upload IDL" and choose `idl.json`.
+2. Call `initialize`.
+3. Build again without changing the program.
+
+Expect:
+
+- [ ] after the upload, Interact lists the IDL's instructions.
+- [ ] the `initialize` transaction succeeds.
+- [ ] after the rebuild, Interact still lists the same instructions: a build that returns no IDL keeps the uploaded one.

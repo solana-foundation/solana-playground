@@ -9,7 +9,7 @@ import {
   seedWorkspace,
   test,
 } from "./fixtures";
-import { DESK, PHONE } from "./viewports";
+import { DESK, openPhonePreview, PHONE } from "./viewports";
 
 /**
  * The scenarios of `client-v2-stages`: what the Build, Deploy and Interact
@@ -242,6 +242,8 @@ test.describe("client-v2-stages on a phone", () => {
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await page.setViewportSize(PHONE);
+    // The stage tabs are on the preview page, inert while Work shows
+    await openPhonePreview(page);
 
     await page.locator("#flow-stage-tab-build").click();
     const panel = page.locator("#flow-stage-panel-build");
@@ -288,6 +290,7 @@ test.describe("client-v2-stages on a phone", () => {
     await page.reload();
     await expect(page.locator("#root-dir")).toBeAttached(LONG);
     await page.setViewportSize(PHONE);
+    await openPhonePreview(page);
 
     await page.locator("#flow-stage-tab-deploy").click();
     const panel = page.locator("#flow-stage-panel-deploy");
@@ -316,6 +319,7 @@ test.describe("client-v2-stages on a phone", () => {
     await seedWorkspace(page);
     await stubProgramAccount(page, null);
     await page.setViewportSize(PHONE);
+    await openPhonePreview(page);
 
     const panel = await buildThenInteract(page);
     const actions = panel.locator('[data-slot="stage-empty-actions"]');
