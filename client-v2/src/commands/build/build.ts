@@ -43,7 +43,7 @@ export const build = createCmd({
         // The aborted request fails; say it was stopped, not that it failed.
         // Only "Stopped.": the server may still finish, its reply is not kept
         throwIfStopped(signal, STOPPED);
-        // Deploy's stale-build guard reads it, so the previous binary is not shipped
+        // Deploy's stale-build guard reads `lastBuildFailed`, so the previous binary is not shipped
         if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
         throw e;
       });
@@ -57,14 +57,19 @@ export const build = createCmd({
         PgProgramInfo.update({
           uuid: result.uuid ?? undefined,
           lastBuildFailed: failed,
-          // The stable server builds no IDL; a `null` keeps the one the user uploaded
+          // The stable server builds no IDL; a missing one keeps the IDL the browser holds
           ...(result.idl && { idl: result.idl }),
         });
       }
       // `improveOutput` is lossy by design; the assistant needs the raw text.
       // The workspace travels with it: one output is kept for the session, so
       // without it the next project inherits this report.
-      PgBuildOutput.set(result.stderr, PgExplorer.currentWorkspaceName ?? null);
+      if (isStillOpen()) {
+        PgBuildOutput.set(
+          result.stderr,
+          PgExplorer.currentWorkspaceName ?? null
+        );
+      }
       PgTerminal.println(improveOutput(result.stderr));
     } finally {
       PgGlobal.update({ buildLoading: false });

@@ -1,5 +1,5 @@
 // The Interact stage drawn from props: what each surface says, which action
-// it offers, and that the IDL action is on screen exactly once.
+// it offers, and that Upload IDL and the IDL guide are each on screen exactly once.
 import {
   fireEvent,
   render as rtlRender,

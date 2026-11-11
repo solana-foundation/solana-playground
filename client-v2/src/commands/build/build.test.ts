@@ -214,6 +214,7 @@ describe("commands/build/build", () => {
       await run().catch(() => undefined);
 
       expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+      expect(PgBuildOutput.set).not.toHaveBeenCalled();
     });
 
     it("keeps the result of a project renamed during its build", async () => {
@@ -227,6 +228,7 @@ describe("commands/build/build", () => {
       expect(utils.PgProgramInfo.update).toHaveBeenCalledWith(
         expect.objectContaining({ uuid: "u" })
       );
+      expect(PgBuildOutput.set).toHaveBeenCalledWith("", "renamed");
     });
   });
 });

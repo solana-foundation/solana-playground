@@ -297,8 +297,7 @@ const Program = ({
  * that one row, the picker at the start and the upload at the end.
  */
 const BaseInteract = (props: BaseInteractProps) => {
-  // One portal whose node moves between slots: a guide that moved in the tree
-  // when its own upload turned the surface ready would remount and close
+  // One portal node moves between slots, so the guide's own upload turning the surface ready does not remount it and close its dialog
   const [guideNode] = useState(() => {
     const el = document.createElement("div");
     el.className = "contents";
@@ -357,7 +356,7 @@ const StageView = ({ p }: { p: BaseInteractProps }) => (
             ))}
           </NativeSelect>
         </label>
-        {/* In `no-idl` and before a deploy the stage's own foot offers it */}
+        {/* In `no-idl` and before a deploy the stage's own foot offers Upload IDL and the guide */}
         {p.surface !== "no-idl" && !isNothingToCall(p.surface) && (
           <>
             {p.idlLoad}
