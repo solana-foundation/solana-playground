@@ -252,40 +252,40 @@ type Creates = { instruction: string; account: string };
  * finds only the second in use reads as the first existing; it takes an
  * undecoded call, which the deployed IDL normally rules out
  */
-const tieOf = (
-  tx: ReadTx,
-  creates: Creates,
-  address: string
-): "match" | "fallback" | "none" => {
-  if (tx.calls.length === 0) {
-    const named = tx.log.map((l) => INSTRUCTION.exec(l)?.[1]).find(Boolean);
-    return named !== undefined && sameIdlName(named, creates.instruction)
-      ? "fallback"
+const tieFor =
+  (creates: Creates) =>
+  (tx: ReadTx, address: string): "match" | "fallback" | "none" => {
+    if (tx.calls.length === 0) {
+      const named = tx.log.map((l) => INSTRUCTION.exec(l)?.[1]).find(Boolean);
+      return named !== undefined && sameIdlName(named, creates.instruction)
+        ? "fallback"
+        : "none";
+    }
+    // `wrote` carries IDL names; `accounts` has Anchor's display names
+    // ("Big Map"), which no IDL name matches
+    const wrote = tx.calls
+      .filter((c) => sameIdlName(c.instruction, creates.instruction))
+      .flatMap((c) => c.wrote);
+    if (wrote.length === 0) {
+      return tx.calls.some((c) =>
+        sameIdlName(c.instruction, creates.instruction)
+      )
+        ? "fallback"
+        : "none";
+    }
+    return wrote.some(
+      (a) => a.address === address && sameIdlName(a.name, creates.account)
+    )
+      ? "match"
       : "none";
-  }
-  // `wrote` carries IDL names; `accounts` has Anchor's display names
-  // ("Big Map"), which no IDL name matches
-  const wrote = tx.calls
-    .filter((c) => sameIdlName(c.instruction, creates.instruction))
-    .flatMap((c) => c.wrote);
-  if (wrote.length === 0) {
-    return tx.calls.some((c) => sameIdlName(c.instruction, creates.instruction))
-      ? "fallback"
-      : "none";
-  }
-  return wrote.some(
-    (a) => a.address === address && sameIdlName(a.name, creates.account)
-  )
-    ? "match"
-    : "none";
-};
+  };
 
 /**
  * The existing account behind a refusal of the instruction that creates it:
  * the System Program's "already in use" with its error 0, in that
  * instruction, at the address the call wrote as the account it creates. Every
  * failed transaction is read: one whose decoded call wrote the account there
- * wins; else one whose calls say nothing either way (see `tieOf`) lends the
+ * wins; else one whose calls say nothing either way (see `tieFor`) lends the
  * log line's address. Undefined for any other refusal, for an address a
  * decoded call shows is another account or another instruction's, or with
  * nothing to create. An "already in use" line that ties to no such account is
@@ -304,13 +304,12 @@ export const existingOf = (
   ) {
     return undefined;
   }
+  const tieOf = tieFor(creates);
   const inUse = sent.filter(failed).flatMap((tx) => {
     const line = inUseLine(tx.log);
     if (line === undefined) return [];
     const address = IN_USE_ADDRESS.exec(line)?.[1];
-    return [
-      { line, address, tie: address ? tieOf(tx, creates, address) : "none" },
-    ];
+    return [{ line, address, tie: address ? tieOf(tx, address) : "none" }];
   });
   const found =
     inUse.find((u) => u.tie === "match") ??
