@@ -65,6 +65,8 @@ describe("getImportedNames", () => {
       'import{BN}from"bn.js";import*as web3 from"@solana/web3.js";',
       ["BN", "web3"],
     ],
+    ['\uFEFFimport * as web3 from "@solana/web3.js";', ["web3"]],
+    ['const a = 1;\n\u00A0import web3 from "@solana/web3.js";', ["web3"]],
   ])("reads the names %s binds", (content, names) => {
     expect(getImportedNames(content)).toEqual(new Set(names));
   });
@@ -74,14 +76,10 @@ describe("getImportedNames", () => {
     ['/* import BN from "bn.js"; */\nconst amount = new BN(1);\n'],
     ['/*\nimport BN from "bn.js";\n*/\nconst amount = new BN(1);\n'],
     ["const doc = \"import BN from 'bn.js'\";\n"],
+    ["const doc = \"a; import BN from 'bn.js'\";\n"],
+    ["const doc = `\nimport BN from 'bn.js'`;\n"],
   ])("reads no name from an import in a comment or a string: %s", (content) => {
     expect(getImportedNames(content).size).toBe(0);
-  });
-
-  it("reads the names of a client that starts with a byte order mark", () => {
-    expect(
-      getImportedNames('\uFEFFimport * as web3 from "@solana/web3.js";\n')
-    ).toEqual(new Set(["web3"]));
   });
 
   it("reads no name from code that only mentions import", () => {
