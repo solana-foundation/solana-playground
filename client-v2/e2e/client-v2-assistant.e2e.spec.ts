@@ -860,6 +860,11 @@ test("assistant-composer-context: Remove an open tab from the context", async ({
     .getByRole("button", { name: "Remove lib.rs from the context" })
     .click();
   await send(page, "First");
+  // A turn in flight puts Stop where Send was; on a loaded runner the AI
+  // runtime's lazy chunk kept the first turn going past a click's 10 s
+  await expect(
+    page.getByRole("button", { name: "Send", exact: true })
+  ).toBeVisible(LONG);
   await send(page, "Second");
 
   await expect.poll(() => bodies.length, LONG).toBe(2);

@@ -916,6 +916,10 @@ test("typing folded into the other device's copy still merges with its next chan
   // upload
   let beforeNextWrite: (() => void) | null = null;
   const writes: unknown[] = [];
+  // `src/lib.rs` as the account held it after each write it accepted
+  const accepted: string[] = [];
+  // The next write the account accepts is the merge's own upload
+  let isMerging = false;
 
   await page.route("**/api/auth/get-session", (r) =>
     json(r, { user: { id: "u1", name: "T", image: null, login: "t" } })
@@ -935,13 +939,23 @@ test("typing folded into the other device's copy still merges with its next chan
       beforeNextWrite?.();
       beforeNextWrite = null;
       if (row.snapshot && body.baseUpdatedAt !== row.updatedAt) {
+        isMerging = true;
         return r.fulfill({
           status: 409,
           contentType: "application/json",
           body: JSON.stringify({ conflict: true, updatedAt: row.updatedAt }),
         });
       }
+      // Held past autosave's half second. The merge writes the store, then
+      // uploads, and only then brings the editor up to the merged copy: an
+      // autosave timer left by the fold before it fires in that window and
+      // writes the pre-merge buffer back (HOO-2821).
+      if (isMerging) {
+        isMerging = false;
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
       row = { snapshot: applyWrite(row.snapshot, body), updatedAt: stamp() };
+      accepted.push(row.snapshot.files["src/lib.rs"]);
       return json(r, { updatedAt: row.updatedAt });
     }
     const id = new URL(r.request().url()).searchParams.get("id");
@@ -998,6 +1012,13 @@ test("typing folded into the other device's copy still merges with its next chan
     )
     .toBe(true);
   await expect(banner).toHaveCount(0);
+  // No later write takes the other device's line out, even for a moment
+  await settled(page, writes);
+  const mergedAt = accepted.findIndex((lib) => lib.includes("// A2"));
+  expect(mergedAt).toBeGreaterThan(-1);
+  expect(
+    accepted.slice(mergedAt).filter((lib) => !lib.includes("// A2"))
+  ).toEqual([]);
   const merged = requireFor("the row's snapshot")(row.snapshot).files[
     "src/lib.rs"
   ];

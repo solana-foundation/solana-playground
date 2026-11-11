@@ -1475,10 +1475,13 @@ export class PgExplorer {
    * @param position position data
    */
   static saveEditorPosition(path: string, position: Position) {
-    path = this.convertToFullPath(path);
+    // The editor saves every second, and a workspace being re-read (Start in
+    // a tutorial switches it) has emptied the file map: nothing to keep then
+    const file = this.files[this.convertToFullPath(path)];
+    if (!file) return;
 
-    this.files[path].meta ??= {};
-    this.files[path].meta!.position = position;
+    file.meta ??= {};
+    file.meta.position = position;
   }
 
   /**
