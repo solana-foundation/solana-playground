@@ -6,6 +6,10 @@ the environment variables), and then release it on the custom domain. This is fo
 Vercel team. Nothing is deployed yet and no user data exists anywhere, so nothing is copied or migrated from an
 older system: the database starts empty and the migrations create its schema.
 
+Step 10 covers the build server (App Engine service `playground-server`, deployed by `.github/workflows/cicd.yml`):
+it moves the server's releases and rollbacks from the GCP console to GitHub Actions, and its sign-in from a stored
+key to OIDC. It does not depend on steps 1 to 9 and can run before or after them.
+
 This page gives the order, the check after each step, and what to do when a check fails. Some commands live in
 [Cloud SQL for client-v2](cloud-sql.md) ("cloud-sql.md" below), [Deploy the client to Vercel](deploy-client-vercel.md)
 ("deploy-client-vercel.md") and [Firewall](firewall.md); each step links the section it runs.
@@ -34,6 +38,8 @@ or Vercel, and none is a secret. Have each ready before step 1; the table says w
 | `<BUILD_SERVER_URL>` | The build server's `https://` origin, the one whose `PG_CLIENT_URLS` lists production | `<BUILD_SERVER_CONTACT>` |
 | `<NOUS_ACCOUNT>` | The Nous Research account whose credits the assistant spends | Your team |
 | `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team |
+| `<SERVER_PROJECT_ID>` | The Google Cloud project that runs App Engine service `playground-server`, the value of the `PROJECT_ID` Actions secret. May be `<PROJECT_ID>` or another project | Step 10 says how to find it |
+| `<SERVER_SA>` | The service account the server deploys as, the value of the `SERVICE_ACCOUNT` Actions secret | Step 10 says how to find it |
 
 cloud-sql.md writes some of these in lower case inside SQL and commands: `<project id>` is `<PROJECT_ID>`,
 `<operator e-mail>` is `<OPERATOR>`. Its "Values used below" also asks for `REPO`, which only the preview steps
@@ -58,12 +64,13 @@ On the machine that runs the steps (macOS or Linux):
 
 Accounts and access:
 
-- Google Cloud: IAM and Cloud SQL administration in `<PROJECT_ID>`.
+- Google Cloud: IAM and Cloud SQL administration in `<PROJECT_ID>`. For step 10, IAM administration in
+  `<SERVER_PROJECT_ID>` and the right to manage its App Engine traffic.
 - Doppler: write access to `<DOPPLER_PROJECT>`, and the right to add its Vercel integration.
 - Vercel: a member of `<TEAM_SLUG>` who can create a project and edit its settings, environment variables,
   Deployment Protection, Domains and Firewall, and the team's Security settings. The team's plan: Enterprise, so
   the build can use the Enhanced build machine.
-- GitHub: admin on `solana-foundation/solana-playground` (an Actions secret, the Vercel GitHub app) and on
+- GitHub: admin on `solana-foundation/solana-playground` (Actions secrets and variables, the Vercel GitHub app) and on
   `<GITHUB_OWNER>` (an OAuth app).
 - Nous Research: `<NOUS_ACCOUNT>`'s dashboard, to create keys and their spend limits.
 - Sentry: organization `solana-fndn` with a project `solana-playground`, and a token that may upload source maps
@@ -193,6 +200,7 @@ Optional. Without them the app uses the public Solana endpoints.
 | --- | --- | --- | --- |
 | `client-v2/.env` in your checkout (gitignored) | `VERCEL_DEPLOY_TEAM`, `VERCEL_DEPLOY_PROJECT_ID` | `<TEAM_SLUG>` and `<VERCEL_PROJECT_ID>`. Every Makefile target refuses a checkout linked to another project | Step 1 |
 | GitHub, `solana-foundation/solana-playground` → Settings → Secrets and variables → Actions → Repository secrets | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel → the project → Settings → Deployment Protection → Protection Bypass for Automation. **Why:** after each push to `master`, the `smoke` job of `.github/workflows/client-v2.yml` waits for that commit's production deployment and calls `GET /api/sync` on the deployment's own URL, which Deployment Protection hides; the job sends this secret to get past it. The run fails unless production answers `{"enabled":true,"db":"ok"}`, so a production that cannot reach its database shows as a red run. Without the secret the job passes with a warning and checks nothing | Step 8 |
+| GitHub, the same page → Variables → Repository variables | `GCP_WORKLOAD_IDENTITY_PROVIDER` | The full resource name of the server's Workload Identity provider. Set, the server's deploys and releases sign in to GCP through OIDC; empty, through the `GCP_KEY` secret. The secrets `GCP_KEY`, `SERVICE_ACCOUNT` and `PROJECT_ID` already exist there | Step 10 |
 | The build server's environment | `PG_CLIENT_URLS` | Must include `https://<VERCEL_APP_DOMAIN>` and, from step 9, `https://<CUSTOM_DOMAIN>`, or the browser's build requests are refused by CORS | Before step 7; step 9 |
 
 ## Step 1: the Vercel project
@@ -522,6 +530,135 @@ origin, `AUTH_BASE_URL`. The accounts and projects created while testing stay in
 **If a check fails:** as in step 7. **Rollback:** point the OAuth app and `AUTH_BASE_URL` back at
 `<VERCEL_APP_DOMAIN>`, remove the domain, and redeploy.
 
+## Step 10: the build server's releases and its sign-in to GCP
+
+Ticket HOO-484. How the two workflows behave is in [Server release](../../docs/server-release.md).
+
+**What for:** today a tagged commit on `master` parks a new server version with no traffic, and someone with
+console rights moves traffic to it, or back, in the GCP console. The deploy signs in with `GCP_KEY`, a
+service-account JSON key that never expires and that any workflow file on any branch can read. After this step:
+
+- **Actions → Server release → Run workflow** on `master` sends all of `playground-server`'s traffic to a named
+  version, or rolls back to the one before, and checks that the move took.
+- Both that workflow and the deploy sign in through Workload Identity Federation (OIDC), with a short-lived token
+  that only `master` of this repository can get. The key is deleted.
+
+**Preconditions:** none of steps 1 to 9. Until `GCP_WORKLOAD_IDENTITY_PROVIDER` is set, both workflows keep
+signing in with `GCP_KEY`, so the Server release workflow already works on the key; items 1 to 4 below move it to
+OIDC.
+
+**Run**, in one shell:
+
+1. **Find the two values.** The Actions secrets cannot be read back, so find them in GCP. `<SERVER_PROJECT_ID>` is
+   the project whose App Engine lists the service (`gcloud app services list --project=<id>` shows
+   `playground-server`). `<SERVER_SA>` is the `client_email` in the JSON key stored as `GCP_KEY`; without the file,
+   it is the account with a user-managed key among
+   `gcloud iam service-accounts list --project=<SERVER_PROJECT_ID>` (check each with
+   `gcloud iam service-accounts keys list --iam-account=<email> --managed-by=user`). If more than one account has a
+   key, tell Alexander before going on.
+
+   ```sh
+   SERVER_PROJECT_ID=<SERVER_PROJECT_ID>
+   SERVER_SA=<SERVER_SA>
+   REPO_ID=1003072868   # solana-foundation/solana-playground; check: gh api repos/solana-foundation/solana-playground --jq .id
+   ```
+
+2. **Let the account move traffic.** Deploying needs only `roles/appengine.deployer`, which cannot move traffic.
+   List the account's roles:
+
+   ```sh
+   gcloud projects get-iam-policy "$SERVER_PROJECT_ID" --flatten=bindings \
+     --filter="bindings.members:serviceAccount:$SERVER_SA" --format='value(bindings.role)'
+   ```
+
+   Unless the list has `roles/appengine.serviceAdmin`, `roles/appengine.appAdmin`, `roles/editor` or
+   `roles/owner`, grant the first:
+
+   ```sh
+   gcloud projects add-iam-policy-binding "$SERVER_PROJECT_ID" \
+     --member="serviceAccount:$SERVER_SA" --role=roles/appengine.serviceAdmin --condition=None
+   ```
+
+3. **Create the pool and provider.** The pool is `github-server`, not `github`: cloud-sql.md's step 9 creates a
+   `github` pool for previews, and the two may share a project. The condition admits tokens from `master` of this
+   repository only, by its id, which a rename cannot take over.
+
+   ```sh
+   gcloud services enable iamcredentials.googleapis.com sts.googleapis.com --project="$SERVER_PROJECT_ID"
+
+   gcloud iam workload-identity-pools create github-server \
+     --project="$SERVER_PROJECT_ID" --location=global \
+     --display-name="GitHub Actions: server"
+
+   gcloud iam workload-identity-pools providers create-oidc solana-playground \
+     --project="$SERVER_PROJECT_ID" --location=global \
+     --workload-identity-pool=github-server \
+     --display-name="solana-playground" \
+     --issuer-uri="https://token.actions.githubusercontent.com" \
+     --attribute-mapping="google.subject=assertion.sub,attribute.repository_id=assertion.repository_id" \
+     --attribute-condition="assertion.repository_id == '$REPO_ID' && assertion.ref == 'refs/heads/master'"
+
+   POOL=$(gcloud iam workload-identity-pools describe github-server \
+     --project="$SERVER_PROJECT_ID" --location=global --format='value(name)')
+
+   gcloud iam service-accounts add-iam-policy-binding "$SERVER_SA" \
+     --project="$SERVER_PROJECT_ID" \
+     --role=roles/iam.workloadIdentityUser \
+     --member="principalSet://iam.googleapis.com/$POOL/attribute.repository_id/$REPO_ID"
+
+   gcloud iam workload-identity-pools providers describe solana-playground \
+     --project="$SERVER_PROJECT_ID" --location=global \
+     --workload-identity-pool=github-server --format='value(name)'
+   ```
+
+   The last command prints `projects/<number>/locations/global/workloadIdentityPools/github-server/providers/solana-playground`.
+
+4. **Switch the workflows to OIDC.** On GitHub, add that output as the repository variable
+   `GCP_WORKLOAD_IDENTITY_PROVIDER` ([Outside Vercel](#outside-vercel)). From now on a CICD or Server release run
+   dispatched from any branch but `master` gets no token and fails; run both from `master`.
+
+**Check:**
+
+1. **OIDC, with nothing moving.** Find the live version:
+   `gcloud app versions list --service=playground-server --hide-no-traffic --project="$SERVER_PROJECT_ID"` lists it
+   with `TRAFFIC_SPLIT` `1.00` (more than one row: traffic is split; name the version that should have it all in
+   the next run). Run **Server release** on `master` with that version as `version`. The run is green, its annotations
+   say `GCP sign-in: Workload Identity Federation`, and its summary says the version `was already live; traffic not
+   changed`.
+2. **A rollback and back**, if an older version is still serving
+   (`gcloud app versions list --service=playground-server --project="$SERVER_PROJECT_ID"`). Run Server release with
+   `version` empty: the summary names the live version before and an older one as the target, and says the target
+   holds all traffic. Then run it with the version that was live, and check the same. Each move switches the build
+   server for every user, so do it when a minute of the older version does no harm. With no older serving version,
+   skip this check; the next release proves the move.
+3. **The next release.** After the next tagged commit on `master`, the CICD run's annotations say
+   `GCP sign-in: Workload Identity Federation` and the new version appears, parked, in the version list. Move
+   traffic to it as [Releasing the build server](#releasing-the-build-server) says.
+
+**If a check fails:**
+
+- `Permission 'iam.serviceAccounts.getAccessToken' denied` or `unauthorized_client` at the sign-in step: the run
+  was not on `master`, or the binding's `REPO_ID` or pool differ from the provider's; compare them with item 3.
+- `does not have permission ... appengine.services.update` (or a `403` on `set-traffic`): item 2's role is
+  missing.
+- A run that refuses its target names why (unknown or stopped version, nothing older, split traffic) and moves
+  nothing.
+- A run that fails after choosing its target lists in its summary where traffic is now. If it is not where it
+  should be, run Server release again with the version that was live, which the summary also names.
+
+**Rollback:** clear the variable `GCP_WORKLOAD_IDENTITY_PROVIDER`; both workflows sign in with `GCP_KEY` again.
+This works only until the key is deleted below.
+
+**Then retire the key**, once checks 1 and 3 passed:
+
+1. Delete the repository secret `GCP_KEY` on GitHub.
+2. Delete the key in GCP. List the account's user-managed keys:
+   `gcloud iam service-accounts keys list --iam-account="$SERVER_SA" --managed-by=user`. The one stored as `GCP_KEY`
+   has the id in its JSON's `private_key_id`; without the file, and with more than one key listed, ask whoever
+   created them before deleting any. Delete it:
+   `gcloud iam service-accounts keys delete <key id> --iam-account="$SERVER_SA"`.
+3. Tell Alexander: the key path then leaves the workflows' code.
+
 ## Operating production
 
 ### Deploying production
@@ -546,6 +683,24 @@ origin, `AUTH_BASE_URL`. The accounts and projects created while testing stay in
 Rolling back (Deployments → the previous one → Instant Rollback, or `vercel promote <url> --prod`) restores that
 deployment's code and variables. It does not undo a migration or a Firewall change. After an Instant Rollback,
 Vercel stops giving the production domain to new production deployments until you promote one or undo the rollback.
+
+### Releasing the build server
+
+A tagged commit on `master` deploys a new `playground-server` version with no traffic (`cicd.yml`); the App Engine
+version is the tag with dots as dashes (`1.2.3` → `1-2-3`). Nothing moves traffic but **Actions → Server
+release → Run workflow**, on `master`:
+
+- **Release:** `version` set to the new version (`1.2.3` or `1-2-3`). The run sends it all traffic, reads the
+  traffic back, and fails unless the version holds all of it.
+- **Roll back:** `version` empty. The run sends all traffic to the newest serving version created before the live
+  one. App Engine does not record which versions were ever live, so a version parked and never released counts,
+  and a second empty run goes further back instead of undoing the first. When a bad version sits in between, name
+  the version you want instead.
+
+Each run's summary names the version before and the target, written before traffic moves, so a run that fails
+afterwards still says which version to go back to. Run one at a time: a newer dispatch replaces a waiting one. A
+rollback returns the server's code, not its data. The client rolls back separately, in Vercel
+([Deploying production](#deploying-production)).
 
 ### Migrations
 
