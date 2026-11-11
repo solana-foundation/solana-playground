@@ -82,6 +82,13 @@ export const watchClientRuns = (
   port: ClientRunWatchPort
 ): Disposable => {
   let release: ((error: unknown) => void) | undefined;
+  /**
+   * Runs started and not ended. A run the command refuses (`RunBusyError`)
+   * starts, finishes and ends while the captured one is still going, and its
+   * events are not the captured run's: only an event that finds one run live
+   * is.
+   */
+  let live = 0;
   /** Stopped watching: a run still captured is left unjudged */
   let disposed = false;
   const settle = (error: unknown) => {
@@ -90,6 +97,7 @@ export const watchClientRuns = (
   };
   const subs = [
     port.onDidStart((input) => {
+      live += 1;
       if (release || !isClientRun(input)) return;
       const judging = begin();
       if (!judging) return;
@@ -132,8 +140,14 @@ export const watchClientRuns = (
           });
         });
     }),
-    port.onDidFinish((result) => settle(result.err)),
-    port.onDidEnd(() => settle(undefined)),
+    port.onDidFinish((result) => {
+      if (live <= 1) settle(result.err);
+    }),
+    port.onDidEnd(() => {
+      const isOutermost = live <= 1;
+      live = Math.max(0, live - 1);
+      if (isOutermost) settle(undefined);
+    }),
   ];
   return {
     dispose: () => {
@@ -145,9 +159,13 @@ export const watchClientRuns = (
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi } = import.meta.vitest;
+  const { describe, it, expect, vi, beforeAll } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/client-run-watch", () => {
+    let RunBusyError: typeof import("../../../../utils/js-runtime/busy").RunBusyError;
+    beforeAll(async () => {
+      ({ RunBusyError } = await import("../../../../utils/js-runtime/busy"));
+    });
     const INPUT: RunInput = { beatId: "client-run", log: "Hello, World!" };
     const RESULT: RunResult = {
       act: "run",
@@ -203,7 +221,11 @@ if (import.meta.vitest) {
       };
       /** Only the start: the run has not finished */
       const startOnly = (input: string) => start.forEach((cb) => cb(input));
-      return { port, read, run, startOnly };
+      /** The finish and the end of a run that started with `startOnly` or another run */
+      const finishOnly = (result: { err?: unknown }) =>
+        finish.forEach((cb) => cb(result));
+      const endOnly = () => end.forEach((cb) => cb());
+      return { port, read, run, startOnly, finishOnly, endOnly };
     };
 
     it("reads a run the terminal started against the live step, and hands the result on", async () => {
@@ -261,6 +283,33 @@ if (import.meta.vitest) {
       await new Promise((r) => setTimeout(r, 0));
       expect(read).not.toHaveBeenCalled();
       expect(onResult).not.toHaveBeenCalled();
+    });
+
+    it("keeps capturing when another run starts and is refused meanwhile", async () => {
+      const { port, read, startOnly, finishOnly, endOnly } = fakePort({
+        isBusy: false,
+        sent: SENT,
+      });
+      const onResult = vi.fn();
+      const watch = watchClientRuns(() => ({ input: INPUT, onResult }), port);
+
+      startOnly("run client.ts");
+      // The explorer's Run is refused while the first run waits
+      startOnly("run client.ts");
+      finishOnly({ err: new RunBusyError("A client is running") });
+      endOnly();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(read).not.toHaveBeenCalled();
+
+      finishOnly({});
+      endOnly();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(read).toHaveBeenCalledWith(
+        INPUT,
+        { captured: SENT, error: undefined },
+        1000
+      );
+      watch.dispose();
     });
 
     it("captures nothing when no step waits on a run, for help, or for another script", async () => {
