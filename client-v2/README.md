@@ -164,7 +164,10 @@ The compose file sets `DATABASE_URL` (the compose Postgres), `SYNC_ENABLED`,
 `.env`. Open the app on the origin `AUTH_BASE_URL` names,
 `http://127.0.0.1:3000` by default: the API refuses sync writes from any other
 origin, `http://localhost:3000` included. To use another origin, set
-`AUTH_BASE_URL` in the shell that runs `docker compose`. Everything else, such as the GitHub OAuth app, `AUTH_SECRET` and the
+`AUTH_BASE_URL` in the shell that runs `docker compose`. To use another build
+server than the compose one, set `REACT_APP_SERVER_URL` the same way, or name
+the file that holds it: `docker compose --env-file client-v2/.env.local --profile v2 up`.
+The `v2-unstable` profile always uses the compose server. Everything else, such as the GitHub OAuth app, `AUTH_SECRET` and the
 model keys, comes from `client-v2/.env` when it exists (names in
 `.env.example`). The file reaches the containers through `env_file`; it is
 kept out of the image.
