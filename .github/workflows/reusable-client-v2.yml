@@ -506,16 +506,20 @@ jobs:
       # only when the job succeeds: while the suite is red, every run would
       # download the browser again, and a red suite is when runs are frequent.
       # The key names the shard's browser: a cache saved by the other browser
-      # holds no binary for this one, and a hit would skip its install.
+      # holds no binary for this one, and a hit would skip its install. It
+      # names the runner image too (`ImageOS`, e.g. `ubuntu26`): `runner.os` is
+      # `Linux` on every release, so a browser built on another image would load.
       - name: Playwright version
         id: playwright
-        run: echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageOS:?a GitHub-hosted runner sets ImageOS}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}
+          key: playwright-${{ steps.playwright.outputs.image }}-${{ steps.playwright.outputs.version }}-${{ matrix.browser }}
 
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
