@@ -11,7 +11,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
-import { DESK, PHONE } from "./viewports";
+import { DESK, openPhoneMenu, PHONE, waitForPhonePage } from "./viewports";
 
 test.describe("on a desktop window", () => {
   test.use({ viewport: DESK });
@@ -262,7 +262,7 @@ test.describe("on a phone", () => {
     await page.keyboard.type("// kept ");
 
     const work = page.getByRole("region", { name: "Work" });
-    await work.getByRole("button", { name: "Menu" }).click();
+    await openPhoneMenu(page);
     await page
       .getByRole("region", { name: "Navigation" })
       .getByRole("button", { name: "Home", exact: true })
@@ -270,6 +270,7 @@ test.describe("on a phone", () => {
     // The menu gives way to Home on the work page
     await expect(home(page)).toBeInViewport();
     await expect(work.getByTestId("phone-bar")).toContainText("Home");
+    await waitForPhonePage(page, "Work");
 
     await homeRegion(page)
       .getByRole("button", { name: /^Continue / })

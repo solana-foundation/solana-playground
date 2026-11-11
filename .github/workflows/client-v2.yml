@@ -5,12 +5,18 @@ name: client-v2
 # `reusable-client-v2.yml`; `client-v2-with-stubs.yml` runs the same jobs on
 # the stubs, by hand. A pull_request run reads this file from the PR's merge
 # commit (CLAUDE.md, "This is a fork").
+# Runners are pinned to `ubuntu-26.04`, as in `reusable-client-v2.yml`; `ubuntu-latest` moves on GitHub's schedule.
 on:
   push:
     branches: ["master"]
   pull_request:
 
   workflow_dispatch:
+    inputs:
+      firefox:
+        description: Run the browser suite on Firefox as well as Chromium
+        type: boolean
+        default: false
 
 concurrency:
   group: client-v2-${{ github.ref }}
@@ -20,12 +26,60 @@ permissions:
   contents: read
 
 jobs:
+  # Whether a pull request changes anything under `client-v2/` or `wasm/`, or
+  # either client-v2 workflow, outside the Markdown the bundle never loads;
+  # any such change is when the browser suite also runs on Firefox.
+  # `design-system/` is left out.
+  # A push to `master` skips Firefox: the PR that brought the commit already
+  # ran it. The checkout is the PR's merge commit, whose first parent is the
+  # base branch's head, so a depth of 2 holds both sides of the diff.
+  changes:
+    name: changes
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      ui: ${{ steps.diff.outputs.ui }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+
+      - name: Compare the changed files with the client-v2 and wasm paths
+        id: diff
+        if: github.event_name == 'pull_request'
+        run: |
+          # Markdown no bundle loads; tutorial pages, `Local/*.md` and the assistant's `.md` are imported, so they run Firefox
+          excluded=(
+            ':(exclude,glob)client-v2/docs/**'
+            ':(exclude,glob)client-v2/bench/**'
+            ':(exclude,glob)client-v2/*.md'
+            ':(exclude,glob)client-v2/db/*.md'
+            ':(exclude,glob)client-v2/src/tutorials/*.md'
+            ':(exclude,glob)client-v2/static/**/*.md'
+          )
+          changed=$(git diff --name-only HEAD^1 HEAD -- \
+            client-v2 \
+            wasm \
+            .github/workflows/client-v2.yml \
+            .github/workflows/reusable-client-v2.yml \
+            "${excluded[@]}")
+          echo "client-v2 and wasm files changed:"
+          echo "${changed:-none}"
+          if [ -n "$changed" ]; then
+            echo "ui=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ui=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Named `client-v2` so its jobs report as `client-v2 / <job>`.
   pipeline:
     name: client-v2
+    needs: changes
     uses: ./.github/workflows/reusable-client-v2.yml
     with:
       use-wasm-stubs: false
+      firefox: ${{ inputs.firefox || needs.changes.outputs.ui == 'true' }}
 
   # After a push to `master`, fails unless that commit's production
   # deployment answers `{ "enabled": true, "db": "ok" }` on `GET /api/sync`:
@@ -51,7 +105,7 @@ jobs:
   smoke:
     name: smoke
     if: github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository == 'solana-foundation/solana-playground'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     # 30 minutes of waiting for the deployment, one for the probe. A build
     # without a cache does not finish inside Vercel's own limit
     # (deploy-client-vercel.md, "Deploy"), so the wait is generous.
@@ -113,7 +167,7 @@ jobs:
   # passing. An empty `needs` fails rather than passes.
   client-v2:
     name: client-v2
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     needs: [pipeline]
     if: always()
