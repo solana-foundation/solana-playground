@@ -8,6 +8,7 @@ import {
   isFaucetCluster,
   webFaucetSteps,
 } from "@/shared/lib/faucet";
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   Callout,
@@ -82,8 +83,10 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
       : undefined;
   // A refused airdrop rarely goes through on Try again soon after: the web
   // faucet is the way round, spelled out for someone who has never used it
+  // No faucet answered: its steps would send the user to another network call
+  const isUnreachable = p.cause === NETWORK_UNREACHABLE;
   const steps =
-    p.reason === "airdrop_failed" && faucetUrl
+    p.reason === "airdrop_failed" && faucetUrl && !isUnreachable
       ? webFaucetSteps(DEVNET_FAUCET_SOL, "Come back here and press Try again")
       : undefined;
 
@@ -97,8 +100,10 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
           {formatSol(p.needed)} SOL.
         </span>
         <span>
-          {reasonLine(p.reason, network)}
-          {p.cause && <span className="text-subtle"> {p.cause}</span>}
+          {isUnreachable ? NETWORK_UNREACHABLE : reasonLine(p.reason, network)}
+          {p.cause && !isUnreachable && (
+            <span className="text-subtle"> {p.cause}</span>
+          )}
         </span>
         {steps && (
           <ol
@@ -130,7 +135,7 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
       </CalloutDescription>
       <CalloutActions>
         <FundingAction p={p} />
-        {faucetUrl && (
+        {faucetUrl && !isUnreachable && (
           <CalloutAction asChild>
             <a href={faucetUrl} target="_blank" rel="noopener noreferrer">
               Open the web faucet

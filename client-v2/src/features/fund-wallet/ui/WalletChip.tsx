@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 
-import { isAirdropRefused, refusalOf } from "@/commands/airdrop/report";
+import {
+  isAirdropRefused,
+  isNetworkUnreachable,
+  refusalOf,
+} from "@/commands/airdrop/report";
 import { isAirdropSignInGated } from "@/commands/airdrop/sign-in-gate";
 import {
   disconnectStandard,
@@ -190,6 +194,17 @@ const WalletChip = ({ signedOut, isSignInFailure }: WalletChipProps) => {
         if (cause === "other") reportButtonFailure("airdrop")(error);
         setRefusal(cause);
         setState("refused");
+        return;
+      }
+      // No faucet answered: the web faucet is no way round, so the popover
+      // says the network is down and keeps the button for another try
+      if (isNetworkUnreachable(error)) {
+        markFailureShown(error);
+        fundTelemetry.track("fund_airdrop_refused", { reason: "failed" });
+        log.warn("the airdrop could not reach the network", {
+          context: { error: String(error.cause) },
+        });
+        setState("unreachable");
         return;
       }
       if (isSignInFailure(error)) markFailureShown(error);

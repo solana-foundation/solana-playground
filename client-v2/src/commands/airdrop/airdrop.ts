@@ -12,7 +12,14 @@ import { askAgain } from "../../utils/ask-again";
 import { checkWallet } from "../checks";
 import { createArgs, createCmd } from "../create";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
-import { AirdropRefusedError, receivedLine, refusedNote } from "./report";
+import {
+  AirdropRefusedError,
+  isRateLimited,
+  isUnreachableFailure,
+  NetworkUnreachableError,
+  receivedLine,
+  refusedNote,
+} from "./report";
 import { isAirdropSignInGated } from "./sign-in-gate";
 
 /**
@@ -83,11 +90,20 @@ export const airdrop = createCmd({
     // fail as before, with the same message, marked as a refusal so the wallet
     // chip and the wallet menu show the same steps
     let received: number;
+    // A balance read that fails says nothing about the faucet: the RPC did not
+    // answer, or answered with an error of its own. It is never a refusal
+    const readBalance = async () => {
+      try {
+        return await connection.getBalance(walletPk, "processed");
+      } catch (error) {
+        throw new BalanceReadError(error);
+      }
+    };
     try {
       // Airdrop tx is sometimes successful even when the balance hasn't changed.
       // Check the balance before and after instead of only confirming the tx
       // to mitigate.
-      const beforeBalance = await connection.getBalance(walletPk, "processed");
+      const beforeBalance = await readBalance();
 
       // Request an airdrop from the RPC.
       //
@@ -118,7 +134,7 @@ export const airdrop = createCmd({
       const MAX_RETRIES = 3;
       let afterBalance = beforeBalance;
       for (let i = 0; i < MAX_RETRIES; i++) {
-        afterBalance = await connection.getBalance(walletPk, "processed");
+        afterBalance = await readBalance();
         if (afterBalance !== beforeBalance) break;
         if (i === MAX_RETRIES - 1) throw new Error("Balance did not change");
 
@@ -127,7 +143,15 @@ export const airdrop = createCmd({
       }
 
       received = afterBalance - beforeBalance;
-    } catch (error) {
+    } catch (thrown) {
+      const error = thrown instanceof BalanceReadError ? thrown.cause : thrown;
+      // Nothing answered: the web faucet is no way round for a user offline
+      if (isUnreachableFailure(error)) throw new NetworkUnreachableError(error);
+      // A balance read the RPC answered with an error says nothing of the
+      // faucet, unless the answer is its limit
+      if (thrown instanceof BalanceReadError && !isRateLimited(error)) {
+        throw error;
+      }
       // A local validator has no web faucet to point to; its own error says
       // what went wrong
       if (!isFaucetCluster(cluster)) throw error;
@@ -147,5 +171,12 @@ export const airdrop = createCmd({
     PgTerminal.println(PgTerminal.success(receivedLine(amount, received)));
   },
 });
+
+/** A balance read that failed, told apart from the faucet's own answers */
+class BalanceReadError extends Error {
+  constructor(override readonly cause: unknown) {
+    super("Could not read the wallet balance");
+  }
+}
 
 let cachedTxHash: string;

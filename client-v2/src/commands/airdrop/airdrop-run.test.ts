@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
+
 import { PgConnection } from "../../utils";
 import { airdrop } from "./airdrop";
 import { AirdropRefusedError, isAirdropRefused } from "./report";
@@ -131,19 +133,21 @@ describe("airdrop, once the faucet answers", () => {
 
   it("links the web faucet for any other refusal, and keeps its message", async () => {
     connection.getBalance.mockResolvedValue(0);
-    connection.requestAirdrop.mockRejectedValueOnce(new Error("fetch failed"));
+    connection.requestAirdrop.mockRejectedValueOnce(
+      new Error("Internal error")
+    );
 
     const failure = await run().catch((e: unknown) => e);
 
     expect(isAirdropRefused(failure)).toBe(true);
-    expect((failure as Error).message).toBe("fetch failed");
+    expect((failure as Error).message).toBe("Internal error");
     expect(printed.at(-1)).toContain(
       `https://faucet.solana.com/?walletAddress=${WALLET}&amount=5&cluster=devnet`
     );
     expect(printed.at(-1)).toContain("1. Open the web faucet");
   });
 
-  it("adds no web faucet to a local validator's failure, and leaves it unwrapped", async () => {
+  it("adds no web faucet to a local validator that cannot be reached, and says so", async () => {
     const utils = await import("../../utils");
     const conn = utils.PgConnection as { cluster: string };
     conn.cluster = "localnet";
@@ -156,7 +160,7 @@ describe("airdrop, once the faucet answers", () => {
       const failure = await run().catch((e: unknown) => e);
 
       expect(isAirdropRefused(failure)).toBe(false);
-      expect((failure as Error).message).toBe("fetch failed");
+      expect((failure as Error).message).toBe(NETWORK_UNREACHABLE);
       expect(printed).toEqual(["Airdropping 5 SOL..."]);
     } finally {
       conn.cluster = "devnet";

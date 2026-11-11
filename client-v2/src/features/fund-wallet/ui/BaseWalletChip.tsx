@@ -1,7 +1,10 @@
 import { ArrowUpRight, Wallet } from "lucide-react";
 
 import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
-import { refusalHeadline } from "@/shared/lib/faucet-limit";
+import {
+  NETWORK_UNREACHABLE,
+  refusalHeadline,
+} from "@/shared/lib/faucet-limit";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortAddress } from "@/shared/lib/short-address";
 import { shortKey } from "@/shared/lib/short-key";
@@ -19,7 +22,14 @@ import { NO_EXTENSION } from "../model/no-extension";
  * Where asking the faucet stands: `away` while the web faucet is open in
  * another tab, until the balance rises
  */
-export type AirdropState = "idle" | "asking" | "refused" | "away" | "received";
+export type AirdropState =
+  | "idle"
+  | "asking"
+  | "refused"
+  /** No faucet answered: the network could not be reached */
+  | "unreachable"
+  | "away"
+  | "received";
 
 /** An installed wallet extension, as the connect list draws it */
 export interface ChipWallet {
@@ -234,6 +244,14 @@ const BaseWalletChip = ({
               </ol>
             </>
           )}
+          {state === "unreachable" && (
+            <p
+              role="alert"
+              className="text-[0.8125rem] font-act text-foreground"
+            >
+              {NETWORK_UNREACHABLE}
+            </p>
+          )}
           {state === "away" && (
             <p
               role="status"
@@ -251,29 +269,32 @@ const BaseWalletChip = ({
             </p>
           )}
 
-          {faucet && (state === "idle" || state === "asking") && (
-            <div className="flex flex-col gap-1.5">
-              <Button
-                className="w-full"
-                disabled={state === "asking"}
-                onClick={onAirdrop}
-              >
-                {state === "asking" ? (
-                  <>
-                    <Spinner className="size-3.5" />
-                    Asking the faucet…
-                  </>
-                ) : (
-                  `Get ${airdropSol} ${cluster ? `${cluster} ` : ""}SOL`
+          {faucet &&
+            (state === "idle" ||
+              state === "asking" ||
+              state === "unreachable") && (
+              <div className="flex flex-col gap-1.5">
+                <Button
+                  className="w-full"
+                  disabled={state === "asking"}
+                  onClick={onAirdrop}
+                >
+                  {state === "asking" ? (
+                    <>
+                      <Spinner className="size-3.5" />
+                      Asking the faucet…
+                    </>
+                  ) : (
+                    `Get ${airdropSol} ${cluster ? `${cluster} ` : ""}SOL`
+                  )}
+                </Button>
+                {signInFirst && state === "idle" && (
+                  <p className="text-center text-[0.75rem] text-muted-foreground">
+                    Asks you to sign in with GitHub first
+                  </p>
                 )}
-              </Button>
-              {signInFirst && state === "idle" && (
-                <p className="text-center text-[0.75rem] text-muted-foreground">
-                  Asks you to sign in with GitHub first
-                </p>
-              )}
-            </div>
-          )}
+              </div>
+            )}
           {state === "refused" && (
             <Button asChild className="w-full">
               <a

@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import type { BaseNotEnoughSolProps } from "./BaseNotEnoughSol";
@@ -55,6 +56,19 @@ describe("BaseNotEnoughSol", () => {
     ).toBe(
       `https://faucet.solana.com/?walletAddress=${ADDRESS}&amount=5&cluster=devnet`
     );
+  });
+
+  it("says the network is unreachable, with no web faucet, when the airdrop could not reach it", () => {
+    const { card } = renderCard({ cause: NETWORK_UNREACHABLE });
+
+    expect(card.textContent).toContain(NETWORK_UNREACHABLE);
+    expect(card.textContent).not.toContain("The faucet did not send SOL");
+    expect(
+      screen.queryByRole("link", { name: "Open the web faucet" })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("list", { name: "Get SOL from the web faucet" })
+    ).toBeNull();
   });
 
   it("spells out the web faucet once the faucet refused", () => {

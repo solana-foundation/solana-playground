@@ -7,6 +7,14 @@ const FAUCET_LIMIT = /\b429\b|too many requests|rate limit|airdrop limit/i;
  */
 export const isFaucetLimit = (message: string) => FAUCET_LIMIT.test(message);
 
+/**
+ * What an airdrop says when the network could not be reached: no faucet
+ * answered, so no faucet steps would help. One string for the terminal, the
+ * wallet chip and the cards.
+ */
+export const NETWORK_UNREACHABLE =
+  "The network is unreachable. Check your connection and try again.";
+
 /** What a refused airdrop names as its cause: the faucet's limit, or anything else */
 export type AirdropRefusal = "limit" | "other";
 
@@ -26,10 +34,12 @@ export const refusalHeadline = (refusal: AirdropRefusal) =>
  * disagree about one. No "try again in a minute": the faucet's limit rarely
  * lifts that soon, so the steps under it send the learner to the web faucet
  */
-export const airdropCause = (message: string) =>
-  isFaucetLimit(message)
+export const airdropCause = (message: string) => {
+  if (message === NETWORK_UNREACHABLE) return NETWORK_UNREACHABLE;
+  return isFaucetLimit(message)
     ? "The devnet faucet is at its limit."
     : `${refusalHeadline("other")}.`;
+};
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -49,6 +59,10 @@ if (import.meta.vitest) {
       ["fetch failed", "The faucet did not send SOL."],
     ])("names the cause of %j", (message, cause) => {
       expect(airdropCause(message)).toBe(cause);
+    });
+
+    it("names an unreachable network as such, not as a faucet failure", () => {
+      expect(airdropCause(NETWORK_UNREACHABLE)).toBe(NETWORK_UNREACHABLE);
     });
 
     it("reads any other failure as something else", () => {

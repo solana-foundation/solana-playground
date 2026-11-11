@@ -18,11 +18,16 @@ import { Icon } from "@/shared/ui/icon";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 
 import { NO_FAUCET } from "../../commands/airdrop/no-faucet";
-import { isAirdropRefused, refusalOf } from "../../commands/airdrop/report";
+import {
+  isAirdropRefused,
+  isNetworkUnreachable,
+  refusalOf,
+} from "../../commands/airdrop/report";
 import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { isSignInFailure } from "../../features/auth";
 import { FaucetRefusedToast } from "../../features/fund-wallet";
 import { useCopy } from "../../hooks";
+import { NETWORK_UNREACHABLE } from "../../shared/lib/faucet-limit";
 import { Fn, PgConnection, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import Img from "../Img";
@@ -159,6 +164,17 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                         },
                         options: { name: "airdrop-refused", duration: 15000 },
                       });
+                      return;
+                    }
+                    // No faucet answered: the web faucet is no way round
+                    if (isNetworkUnreachable(error)) {
+                      markFailureShown(error);
+                      PgView.setToast(
+                        () => <span>{NETWORK_UNREACHABLE}</span>,
+                        {
+                          options: { name: "airdrop-unreachable" },
+                        }
+                      );
                       return;
                     }
                     // A cancelled, blocked or refused sign-in is held in

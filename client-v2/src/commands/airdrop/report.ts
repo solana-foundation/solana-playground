@@ -1,6 +1,7 @@
 import type { FaucetLinkFill } from "@/shared/lib/faucet";
 import { faucetLink, offeredAmount, webFaucetSteps } from "@/shared/lib/faucet";
 import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
@@ -84,3 +85,34 @@ export const refusedNote = (error: unknown, fill: FaucetLinkFill): string => {
     ...steps,
   ].join("\n");
 };
+
+/**
+ * The airdrop could not reach the network (offline, the RPC down): no faucet
+ * answered, so it is not a refusal and the web faucet is no way round. The
+ * message is the line every surface shows.
+ */
+export class NetworkUnreachableError extends Error {
+  override readonly name = "NetworkUnreachableError";
+
+  constructor(cause: unknown) {
+    super(NETWORK_UNREACHABLE, { cause });
+  }
+}
+
+/** Whether the `airdrop` command threw because the network was unreachable */
+export const isNetworkUnreachable = (
+  error: unknown
+): error is NetworkUnreachableError => error instanceof NetworkUnreachableError;
+
+const UNREACHABLE_MESSAGE =
+  /failed to fetch|fetch failed|network ?error|load failed|econnrefused|econnreset|enotfound|etimedout|err_internet|err_network|socket hang up|\b50[234]\b|timed? ?out/i;
+
+/**
+ * Whether a failure from the RPC means it could not be reached, as opposed to
+ * an answer that says no: a fetch that threw (a `TypeError` in browsers), a
+ * timeout, or a gateway error. A 429 is the faucet answering, so it is not one.
+ */
+export const isUnreachableFailure = (error: unknown): boolean =>
+  (typeof navigator !== "undefined" && !navigator.onLine) ||
+  error instanceof TypeError ||
+  (error instanceof Error && UNREACHABLE_MESSAGE.test(error.message));

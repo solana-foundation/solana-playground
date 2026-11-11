@@ -1,6 +1,6 @@
 import { PgCommon, PgTerminal, PgView, PgWallet } from "../../utils";
-import { PgDeployRun } from "../deploy/run";
 import { createArgs, createCmd } from "../create";
+import { PgDeployRun } from "../deploy/run";
 import { SETUP_REJECTED } from "./setup-rejected";
 
 export const connect = createCmd({

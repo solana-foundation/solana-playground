@@ -1,24 +1,34 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
 
 import { checkSignedIn } from "../../features/auth";
-import { PgConnection } from "../../utils";
+import { PgConnection, PgTerminal } from "../../utils";
 import { airdrop } from "./airdrop";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
-import { isAirdropRefused } from "./report";
+import { isAirdropRefused, isNetworkUnreachable } from "./report";
+
+const rpc = vi.hoisted(() => ({
+  getBalance: vi.fn(),
+  requestAirdrop: vi.fn(),
+  confirm: vi.fn(),
+  commitment: "confirmed",
+}));
 
 // Only what `airdrop.handle` reads before it asks the RPC for SOL
 vi.mock("../../utils", () => ({
-  PgCommon: {},
+  PgCommon: { sleep: vi.fn(async () => {}) },
   PgConnection: {
+    current: rpc,
     // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is `null` before the cluster is read
     cluster: null,
     getAirdropAmountOn: vi.fn(),
     readCluster: vi.fn(),
   },
   PgTerminal: { println: vi.fn(), info: (text: string) => text },
-  PgTx: {},
-  PgWallet: {},
-  PgWeb3: {},
+  PgTx: { confirm: rpc.confirm },
+  PgWallet: { current: { publicKey: { toBase58: () => "Wa11et" } } },
+  PgWeb3: { solToLamports: (sol: number) => sol * 1e9, DEFAULT_MS_PER_SLOT: 0 },
 }));
 
 // Signed out: the session check throws, as the real one does
@@ -154,5 +164,54 @@ describe("airdrop", () => {
   it("asks no sign-in before the cluster is read, so the handler can say it is loading", async () => {
     // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is `null` before the cluster is read
     await expect(checkOn(null)).resolves.toBeUndefined();
+  });
+
+  describe("when the airdrop brings no SOL", () => {
+    const askDevnet = () => runOn("devnet", 5).catch((e: unknown) => e);
+    beforeEach(() => {
+      rpc.getBalance.mockReset().mockResolvedValue(0);
+      rpc.requestAirdrop.mockReset().mockResolvedValue("sig-1");
+      rpc.confirm.mockReset().mockResolvedValue({});
+      vi.mocked(PgConnection.getAirdropAmountOn).mockReturnValue(5);
+    });
+
+    it("says the network is unreachable, not a faucet refusal, when the RPC cannot be reached", async () => {
+      rpc.requestAirdrop.mockRejectedValue(new TypeError("Failed to fetch"));
+
+      const failure = await askDevnet();
+
+      expect((failure as Error).message).toBe(NETWORK_UNREACHABLE);
+      expect(isNetworkUnreachable(failure)).toBe(true);
+      expect(isAirdropRefused(failure)).toBe(false);
+    });
+
+    it("does not send an offline user to the web faucet when the balance read fails", async () => {
+      rpc.getBalance.mockRejectedValue(new TypeError("fetch failed"));
+      vi.mocked(PgTerminal.println).mockClear();
+
+      const failure = await askDevnet();
+
+      expect(isNetworkUnreachable(failure)).toBe(true);
+      expect(isAirdropRefused(failure)).toBe(false);
+      expect(vi.mocked(PgTerminal.println).mock.calls.join("\n")).not.toContain(
+        "web faucet"
+      );
+    });
+
+    it("keeps a balance read the RPC answered with an error out of the refusals", async () => {
+      rpc.getBalance.mockRejectedValue(new Error("Internal error"));
+
+      expect(isAirdropRefused(await askDevnet())).toBe(false);
+    });
+
+    it("still refuses when the faucet answered and sent no SOL", async () => {
+      rpc.requestAirdrop.mockRejectedValue(new Error("429 Too Many Requests"));
+
+      expect(isAirdropRefused(await askDevnet())).toBe(true);
+    });
+
+    it("refuses when the balance never moved", async () => {
+      expect(isAirdropRefused(await askDevnet())).toBe(true);
+    });
   });
 });

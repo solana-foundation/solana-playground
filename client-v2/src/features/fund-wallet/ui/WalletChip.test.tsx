@@ -3,7 +3,11 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AirdropRefusedError } from "@/commands/airdrop/report";
+import {
+  AirdropRefusedError,
+  NetworkUnreachableError,
+} from "@/commands/airdrop/report";
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -252,6 +256,22 @@ describe("features/fund-wallet/ui/WalletChip", () => {
     } finally {
       act(() => PgDeployRun.reset());
     }
+  });
+
+  it("says the network is unreachable, with no web faucet, when the airdrop could not reach it", async () => {
+    airdrop.mockRejectedValueOnce(
+      new NetworkUnreachableError(new TypeError("Failed to fetch"))
+    );
+    renderChip(() => false);
+    await getSol();
+
+    expect(screen.getByText(NETWORK_UNREACHABLE)).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: /Open the web faucet/ })
+    ).toBeNull();
+    // Ask again once the connection is back
+    expect(screen.getByRole("button", { name: /^Get / })).toBeTruthy();
+    expect(refusals()).toEqual([{ reason: "failed" }]);
   });
 
   it("names the 5 SOL default in the faucet steps and link when the airdrop amount is unknown", async () => {
