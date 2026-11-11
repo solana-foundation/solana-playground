@@ -1087,7 +1087,8 @@ describe("commands/deploy", () => {
         return landTransfer(...args);
       });
     };
-    const printedLines = () => vi.mocked(PgTerminal.println).mock.calls.join("\n");
+    const printedLines = () =>
+      vi.mocked(PgTerminal.println).mock.calls.join("\n");
 
     it("prints no Returned line when every return send is dropped, and says the SOL stayed", async () => {
       fromStandard();
