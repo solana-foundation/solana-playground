@@ -7,7 +7,9 @@ import {
 } from "@/shared/lib/telemetry";
 
 import { PgConnection, PgTx } from "../../utils";
+import { TerminalLineError } from "../../utils/terminal/line-error";
 import { airdrop } from "./airdrop";
+import { forgetFaucetClosed, isFaucetKnownClosed } from "./closed-faucet";
 import { withAirdropVia } from "./via";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -16,6 +18,7 @@ const WALLET = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
 /** The cluster's native RPC, which airdrops go through */
 const connection = {
   commitment: "confirmed",
+  rpcEndpoint: "https://api.devnet.solana.com",
   getBalance: vi.fn(),
   requestAirdrop: vi.fn(),
 };
@@ -176,6 +179,49 @@ describe("airdrop, once the faucet answers", () => {
 
     // The start line alone: no faucet note follows it
     expect(printed).toEqual(["Airdropping 5 SOL..."]);
+  });
+
+  describe("on a closed faucet", () => {
+    const CLOSED = `410 Gone: {"jsonrpc":"2.0","error":{"code": 410, "message":"The RPC faucet is closed on this cluster. Request test SOL at https://faucet.solana.com"}, "id": "1"}`;
+    const LINE = `The devnet RPC faucet is closed. Request test SOL at https://faucet.solana.com/?walletAddress=${WALLET}&cluster=devnet`;
+
+    beforeEach(() => {
+      connection.getBalance.mockResolvedValue(0);
+    });
+    afterEach(() => forgetFaucetClosed(connection.rpcEndpoint));
+
+    it("ends with one line to the web faucet, not the RPC's JSON", async () => {
+      connection.requestAirdrop.mockRejectedValueOnce(new Error(CLOSED));
+
+      const failure = await run().catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(TerminalLineError);
+      expect((failure as Error).message).toBe(LINE);
+      expect(printed).toEqual(["Airdropping 5 SOL..."]);
+      expect(isFaucetKnownClosed(connection.rpcEndpoint)).toBe(true);
+    });
+
+    it("reads a 410 from a balance read as that failure, not a closed faucet", async () => {
+      connection.getBalance.mockRejectedValueOnce(new Error(CLOSED));
+
+      await expect(run()).rejects.toThrow(CLOSED);
+
+      expect(isFaucetKnownClosed(connection.rpcEndpoint)).toBe(false);
+    });
+
+    it("still asks the faucet when the command runs again", async () => {
+      connection.requestAirdrop.mockRejectedValueOnce(new Error(CLOSED));
+      await expect(run()).rejects.toThrow(LINE);
+      connection.getBalance
+        .mockResolvedValueOnce(0)
+        .mockResolvedValueOnce(5 * LAMPORTS_PER_SOL);
+
+      await run();
+
+      expect(connection.requestAirdrop).toHaveBeenCalledTimes(2);
+      // The faucet sent SOL: it reopened
+      expect(isFaucetKnownClosed(connection.rpcEndpoint)).toBe(false);
+    });
   });
 
   describe("fund_airdropped", () => {

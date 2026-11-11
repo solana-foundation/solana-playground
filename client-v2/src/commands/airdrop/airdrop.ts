@@ -1,3 +1,5 @@
+import { faucetClosedLineFor, isFaucetClosed } from "@/shared/lib/faucet";
+
 import { checkSignedIn } from "../../features/auth";
 import { fundTelemetry } from "../../features/fund-wallet";
 import {
@@ -9,8 +11,10 @@ import {
   PgWeb3,
 } from "../../utils";
 import { askAgain } from "../../utils/ask-again";
+import { TerminalLineError } from "../../utils/terminal/line-error";
 import { checkWallet } from "../checks";
 import { createArgs, createCmd } from "../create";
+import { forgetFaucetClosed, rememberFaucetClosed } from "./closed-faucet";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
 import { isRateLimited, rateLimitNote, receivedLine } from "./report";
 import { isAirdropSignInGated } from "./sign-in-gate";
@@ -88,6 +92,27 @@ export const airdrop = createCmd({
     if (!wallet) throw new Error("No wallet to airdrop to");
     const walletPk = wallet.publicKey;
 
+    // A closed faucet will not send SOL if asked again at once: one line to
+    // the web faucet in place of the RPC's JSON, and the automatic airdrop and
+    // the deploy's top-up stop asking this RPC for the session. This command
+    // still asks it, since the faucet may reopen. Only the request itself is
+    // read so: a 410 from a balance read says nothing about the faucet
+    const closedLine = faucetClosedLineFor(cluster)(walletPk.toBase58());
+    const requestAirdrop = async () => {
+      try {
+        return await connection.requestAirdrop(
+          walletPk,
+          PgWeb3.solToLamports(amount)
+        );
+      } catch (error) {
+        if (error instanceof Error && isFaucetClosed(error.message)) {
+          rememberFaucetClosed(connection.rpcEndpoint);
+          throw new TerminalLineError(closedLine, { cause: error });
+        }
+        throw error;
+      }
+    };
+
     // A rate limit on any of the RPC's answers is not the end of the road:
     // the web faucet keeps a limit of its own. Point to it, then fail as before
     try {
@@ -102,10 +127,7 @@ export const airdrop = createCmd({
       // multiple requests, even after considerable amount of time has passed.
       // Retry until it returns a different hash to mitigate.
       while (1) {
-        const txHash = await connection.requestAirdrop(
-          walletPk,
-          PgWeb3.solToLamports(amount)
-        );
+        const txHash = await requestAirdrop();
         if (txHash !== cachedTxHash) {
           cachedTxHash = txHash;
           break;
@@ -141,6 +163,7 @@ export const airdrop = createCmd({
       // `readCluster` resolves from its genesis hash, so it is `FundCluster`
       // as it is
       fundTelemetry.track("fund_airdropped", { via, cluster });
+      forgetFaucetClosed(connection.rpcEndpoint);
     } catch (error) {
       if (isRateLimited(error)) {
         PgTerminal.println(

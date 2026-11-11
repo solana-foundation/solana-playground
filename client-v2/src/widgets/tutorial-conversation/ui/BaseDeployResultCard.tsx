@@ -11,7 +11,11 @@ import { useEffect, useState } from "react";
 
 import type { RunResult } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
-import { DEVNET_FAUCET_SOL, faucetUrlWith } from "@/shared/lib/faucet";
+import {
+  DEVNET_FAUCET_SOL,
+  faucetUrlWith,
+  isFaucetClosed,
+} from "@/shared/lib/faucet";
 import { isFaucetLimit } from "@/shared/lib/faucet-limit";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
@@ -72,11 +76,20 @@ const sol = (lamports: number) =>
 const aboutSol = (lamports: number) =>
   String(Math.round((lamports / 1e9) * 100) / 100);
 
+/**
+ * Why the faucet sent nothing when devnet's RPC faucet is closed (HOO-2824):
+ * asking it again will not help, the web faucet behind "Open faucet" will
+ */
+export const FAUCET_CLOSED_WHY =
+  "The devnet RPC faucet is closed: get SOL from the web faucet, or top the wallet up yourself.";
+
 /** Why the airdrop failed, in words true to the cause (Design alignment, 7 Nov) */
-const airdropWhy = (message: string) =>
-  isFaucetLimit(message)
+const airdropWhy = (message: string) => {
+  if (isFaucetClosed(message)) return FAUCET_CLOSED_WHY;
+  return isFaucetLimit(message)
     ? "The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
     : "The airdrop didn't go through: try again in a minute, or top the wallet up yourself.";
+};
 
 /** The red head every failed deploy shares, 48 tall while it waits on the learner */
 const FailedHead = ({ title, open }: { title: string; open: boolean }) => (

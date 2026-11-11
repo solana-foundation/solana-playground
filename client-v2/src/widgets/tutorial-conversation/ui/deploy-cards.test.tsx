@@ -232,6 +232,30 @@ describe("BaseDeployResultCard", () => {
     ).toBeTruthy();
   });
 
+  it("tells an airdrop the closed RPC faucet refused to use the web faucet", () => {
+    card({
+      act: "airdrop",
+      ok: false,
+      seconds: 1,
+      reason: "no_funds",
+      message:
+        '410 Gone: {"jsonrpc":"2.0","error":{"code": 410, "message":"The RPC faucet is closed on this cluster. Request test SOL at https://faucet.solana.com"}, "id": "1"}',
+      balance: 0,
+      cost: 2_806_300_000,
+      address: WALLET,
+    });
+    expect(
+      screen.getByText(
+        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The devnet RPC faucet is closed: get SOL from the web faucet, or top the wallet up yourself."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
+    ).toBe(
+      `https://faucet.solana.com/?walletAddress=${WALLET}&amount=5&cluster=devnet`
+    );
+  });
+
   it("reads the faucet's own limit message as a rate limit", () => {
     card({
       act: "airdrop",

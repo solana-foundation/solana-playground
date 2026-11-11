@@ -17,7 +17,7 @@ import type {
   RunResult,
 } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
-import { faucetUrlFor } from "@/shared/lib/faucet";
+import { faucetUrlFor, isFaucetClosed } from "@/shared/lib/faucet";
 import { PROGRAM_LOG, programLogText } from "@/shared/lib/program-log";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
@@ -31,6 +31,7 @@ import {
 } from "@/shared/ui/collapsible";
 
 import BaseAccountView from "./BaseAccountView";
+import { FAUCET_CLOSED_WHY } from "./BaseDeployResultCard";
 import { formatSeconds, Prose, READ } from "./Prose";
 import WalletAddress from "./WalletAddress";
 
@@ -343,9 +344,11 @@ const FundsCard = ({
           <p className={READ}>
             {`Your wallet has ${solOf(balance)} SOL, and this ${
               result.act
-            } needs about ${solOf(
-              cost
-            )} SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself.`}
+            } needs about ${solOf(cost)} SOL. ${
+              isFaucetClosed(result.message)
+                ? FAUCET_CLOSED_WHY
+                : "The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
+            }`}
           </p>
           {/* As the deploy's card: the whole address, Copy right after it */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption">
