@@ -8,6 +8,7 @@ import { Button } from "@/shared/ui/button";
 import ImportButton from "../../../components/ImportButton";
 import { useRenderOnChange } from "../../../hooks";
 import { PgCommon, PgProgramInfo } from "../../../utils";
+import { PgFlow } from "../state/stage";
 
 const log = createLogger("flow:idl-actions");
 
@@ -58,6 +59,30 @@ const DownloadIdl = ({ look }: { look: IdlLook }) => {
   );
 };
 
+/**
+ * Loads an IDL file into this browser; false when the file is not an Anchor
+ * IDL. The file is read outside the refusal: a file that cannot be read is
+ * not the user's malformed IDL, so that throw goes to the caller
+ */
+export const loadIdlFile = async (file: File) => {
+  const text = await file.text();
+  let parsed;
+  try {
+    parsed = parseIdl(text);
+  } catch (e) {
+    // The user's own file, not a fault of ours: say so and log it quietly
+    log.warn("Refused an IDL file", {
+      context: { name: file.name, reason: String(e) },
+    });
+    return false;
+  }
+  PgProgramInfo.update({ idl: parsed });
+  return true;
+};
+
+/** Takes the user to Interact, where the IDL in use is called */
+export const openInteract = () => PgFlow.setStage("interact");
+
 /** Names the IDL in use by its program, so the user can tell which is loaded */
 const idlLabel = (idl: object) => {
   const name = programName(idl);
@@ -86,21 +111,7 @@ const UploadIdl = ({
   /** Refuses a file that is not an IDL; a throw after that is ours */
   const load = async (file: File | undefined) => {
     if (!file) return;
-    // Read outside the try: a file that cannot be read is not the user's
-    // malformed IDL, and `ImportButton` reports it
-    const text = await file.text();
-    let parsed;
-    try {
-      parsed = parseIdl(text);
-    } catch (e) {
-      // The user's own file, not a fault of ours: say so and log it quietly
-      log.warn("Refused an IDL file", {
-        context: { name: file.name, reason: String(e) },
-      });
-      setRefusal({ over: idl });
-      return;
-    }
-    PgProgramInfo.update({ idl: parsed });
+    if (!(await loadIdlFile(file))) setRefusal({ over: idl });
   };
 
   // `ImportButton` reports a throw from `load` itself. The input lets go of

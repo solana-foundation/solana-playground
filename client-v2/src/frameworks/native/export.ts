@@ -8,6 +8,7 @@ import {
 import {
   addAfter,
   addImports,
+  fetchServerCargoLock,
   getJSDependencies,
   getRustDependencies,
   IMPORT_STATEMENT_REGEX,
@@ -63,6 +64,12 @@ no-entrypoint = []
 
 ${await getRustDependencies(files)}
 `,
+    ],
+
+    // The program is its own workspace root, so cargo reads the lock beside its manifest
+    [
+      PgCommon.joinPaths(PROGRAM_PATH, "Cargo.lock"),
+      await fetchServerCargoLock(),
     ],
 
     // .gitignore

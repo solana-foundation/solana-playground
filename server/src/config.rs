@@ -33,7 +33,7 @@ impl Config {
         Ok(Config {
             client_urls: get_env::<String>(
                 "CLIENT_URLS",
-                "http://localhost,http://127.0.0.1,https://beta.solpg.io",
+                "http://localhost,http://127.0.0.1,https://beta.solpg.io,https://playground.solana.com,https://solana-playground-two.vercel.app",
             )
             .split(',')
             .map(str::trim)
