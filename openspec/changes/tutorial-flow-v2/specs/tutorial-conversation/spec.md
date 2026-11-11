@@ -343,8 +343,14 @@ in this order:
    commands, no yarn, npm or npx); and the card the step waits on, by its
    buttons: the live act's, an open question's (answer, Hint, "Type it
    myself" on a wide screen, or Skip, before the step's next card), a
-   step-done card's "Next: <step>", or the card of a failed result. Its answer SHALL post in the feed as the
-   assistant's turn. With no model connected, the message SHALL route to
+   step-done card's "Next: <step>", or the card of a failed result. The
+   tutorial's current state, where the learner is and the card the step
+   waits on, SHALL also reach the model after the thread's history, with
+   the newest message, saying that earlier turns describe the tutorial as it
+   was then. The stored thread SHALL keep that message as typed, without
+   the state, and the menu tool's result SHALL say only that the menu
+   opened. The assistant's answer SHALL post in the feed as the assistant's
+   turn. With no model connected, the message SHALL route to
    connecting a model. While the assistant answers, a question SHALL wait in
    the composer, unsent, until the answer ends, under the note "The assistant
    is still answering. Press Enter again once it's done."; a live action's

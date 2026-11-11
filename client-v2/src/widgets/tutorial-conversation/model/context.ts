@@ -111,6 +111,75 @@ export const describeTutorial = (facts: TutorialFacts): string => {
 };
 
 /**
+ * The tutorial now, sent after the thread's history with the newest message
+ * (`AssistantMode.now`): where the learner is and the card the step waits
+ * on. When the learner asked "what now?" again, the model repeated its
+ * earlier answers from the history over the context before it ("press Start
+ * step 1" at a live Build card, HOO-2823). Before Start it repeats the
+ * invitation to begin: the note is never stored, so it cannot outlive Start
+ * as the menu's result did.
+ */
+export const describeNow = ({
+  definition,
+  progress,
+  live,
+}: Pick<TutorialFacts, "definition" | "progress" | "live">): string => {
+  const lines = [`The tutorial now: ${nowOf(definition, progress)}`];
+  const waits = waitsOn(definition, live);
+  if (waits) lines.push(waits);
+  lines.push(
+    "Earlier turns describe the tutorial as it was then: answer from this " +
+      "and the tutorial context, not from them."
+  );
+  return lines.join(" ");
+};
+
+const nowOf = (
+  definition: TutorialDefinition,
+  progress: ConversationProgress
+): string => {
+  const { cursor } = progress;
+  if (cursor.kind === "intro") {
+    return `they have not pressed Start yet: end your reply with "${BEGIN_INVITATION}"`;
+  }
+  if (cursor.kind === "finished") return "they finished every step.";
+  const i = definition.steps.findIndex((s) => s.id === cursor.stepId);
+  const step = definition.steps[i];
+  if (!step) return "they are in a step this tutorial no longer has.";
+  return `step ${i + 1} of ${definition.steps.length}, ${step.title}.`;
+};
+
+/**
+ * What the live card waits for (an open question, an act's button, a done
+ * step's Next, a failed result), or that the last step is done; "" for any
+ * other card or none. A win on a step the definition no longer has reads as
+ * the last, as in `whereNextIs`
+ */
+const waitsOn = (definition: TutorialDefinition, live: Turn | null): string => {
+  if (live?.kind === "ask" && live.open) {
+    return `It waits on the open question: "${textOf(live.ask.question)}".`;
+  }
+  if (live?.kind === "act") {
+    return (
+      `It waits for the "${live.act.button}" button on the ` +
+      `"${live.act.title}" card.${actStateOf(live)}`
+    );
+  }
+  if (live?.kind === "win") {
+    const { next } = nextAfter(definition, live);
+    if (!next) return "The last step is done.";
+    return (
+      "The step is done: the next one opens from the " +
+      `"${nextStepLabel(next.title)}" button.`
+    );
+  }
+  if (live?.kind === "result" && live.open) {
+    return "It waits on the failed result's card.";
+  }
+  return "";
+};
+
+/**
  * The foot buttons an open question's card shows (`BaseQuestionCard`): Hint
  * until it was taken, "Type it myself" for a question that writes, which the
  * phone layout (every viewport under the frame's width, `phoneLayoutOf`)
@@ -233,17 +302,19 @@ const BESIDES_THE_CARD: Record<ActBeat["act"], string> = {
  * card stands: live, running, or interrupted by a reload, after which the
  * learner presses it again; nothing resumes on its own.
  */
-const whereActIs = (live: Extract<Turn, { kind: "act" }>): string => {
-  let state = "";
-  if (live.state === "running") state = " It is running now.";
+const whereActIs = (live: Extract<Turn, { kind: "act" }>): string =>
+  `The step waits for the "${live.act.button}" button on the ` +
+  `"${live.act.title}" card in the tutorial feed, in this chat. ` +
+  `${BESIDES_THE_CARD[live.act.act]} Point the learner to that card.` +
+  actStateOf(live);
+
+/** How an act card stands, with a leading space, or "" when it is live */
+const actStateOf = (live: Extract<Turn, { kind: "act" }>): string => {
+  if (live.state === "running") return " It is running now.";
   if (live.state === "interrupted") {
-    state = " A reload interrupted its last run; pressing it runs it again.";
+    return " A reload interrupted its last run; pressing it runs it again.";
   }
-  return (
-    `The step waits for the "${live.act.button}" button on the ` +
-    `"${live.act.title}" card in the tutorial feed, in this chat. ` +
-    `${BESIDES_THE_CARD[live.act.act]} Point the learner to that card.${state}`
-  );
+  return "";
 };
 
 /**
@@ -255,9 +326,8 @@ const whereNextIs = (
   definition: TutorialDefinition,
   live: Extract<Turn, { kind: "win" }>
 ): string => {
-  const i = definition.steps.findIndex((s) => s.id === live.stepId);
-  const next = i === -1 ? undefined : definition.steps[i + 1];
-  if (live.last || !next) {
+  const { i, next } = nextAfter(definition, live);
+  if (!next) {
     return "The last step is done: the finish card follows in this chat by itself.";
   }
   return (
@@ -267,6 +337,19 @@ const whereNextIs = (
     )}" button, which opens the next step. Point the ` +
     "learner to that button."
   );
+};
+
+/**
+ * The passed step's index and the step its Next button opens: none after the
+ * last step, or after a step the definition no longer has
+ */
+const nextAfter = (
+  definition: TutorialDefinition,
+  live: Extract<Turn, { kind: "win" }>
+) => {
+  const i = definition.steps.findIndex((s) => s.id === live.stepId);
+  const next = i === -1 || live.last ? undefined : definition.steps[i + 1];
+  return { i, next };
 };
 
 /** The latest run to start, of any act, that has ended */
@@ -733,6 +816,95 @@ if (import.meta.vitest) {
         expectEveryContext(text);
         expect(text).toContain("there is no yarn, npm or npx");
       }
+    });
+
+    it("says where the tutorial is now and the card it waits on, and that earlier turns are older (HOO-2823)", () => {
+      // Only the fields `describeNow` reads
+      const turn = (fields: Record<string, unknown>) =>
+        fields as unknown as Turn;
+      const inStep = freshProgress();
+      inStep.startedAt = 1000;
+      inStep.cursor = {
+        kind: "step",
+        stepId: hello.steps[0].id,
+        beat: 0,
+        fail: false,
+      };
+      const now = (progress: ConversationProgress, live: Turn | null) =>
+        describeNow({ definition: hello, progress, live });
+      const older =
+        "Earlier turns describe the tutorial as it was then: answer from " +
+        "this and the tutorial context, not from them.";
+
+      expect(now(freshProgress(), turn({ kind: "intro" }))).toBe(
+        `The tutorial now: they have not pressed Start yet: end your reply with "${BEGIN_INVITATION}" ${older}`
+      );
+
+      const ask = hello.steps[0].beats.find((b) => b.kind === "ask");
+      const build = hello.steps[0].beats.find(
+        (b): b is ActBeat => b.kind === "act"
+      );
+      if (ask?.kind !== "ask" || !build) {
+        throw new Error("Hello Anchor's first step has no question or act");
+      }
+      const where = `The tutorial now: step 1 of 4, ${hello.steps[0].title}.`;
+      expect(
+        now(inStep, turn({ kind: "ask", open: true, beatId: ask.id, ask }))
+      ).toBe(
+        `${where} It waits on the open question: "${textOf(
+          ask.question
+        )}". ${older}`
+      );
+      const act = (state: string) =>
+        now(inStep, turn({ kind: "act", beatId: build.id, act: build, state }));
+      expect(act("live")).toBe(
+        `${where} It waits for the "${build.button}" button on the "${build.title}" card. ${older}`
+      );
+      expect(act("running")).toContain("card. It is running now.");
+      expect(act("interrupted")).toContain(
+        "A reload interrupted its last run; pressing it runs it again."
+      );
+      expect(
+        now(
+          inStep,
+          turn({ kind: "win", stepId: hello.steps[0].id, last: false })
+        )
+      ).toBe(
+        `${where} The step is done: the next one opens from the "${nextStepLabel(
+          hello.steps[1].title
+        )}" button. ${older}`
+      );
+      expect(
+        now(
+          inStep,
+          turn({ kind: "win", stepId: hello.steps[3].id, last: true })
+        )
+      ).toContain("The last step is done.");
+      expect(now(inStep, turn({ kind: "result", open: true }))).toContain(
+        "It waits on the failed result's card."
+      );
+      expect(now(inStep, null)).toBe(`${where} ${older}`);
+      // A closed question or result waits on nothing
+      expect(now(inStep, turn({ kind: "ask", open: false, ask }))).toBe(
+        `${where} ${older}`
+      );
+      expect(now(inStep, turn({ kind: "result", open: false }))).toBe(
+        `${where} ${older}`
+      );
+      // A save that outlived an edit of the tutorial
+      expect(
+        now(inStep, turn({ kind: "win", stepId: "gone", last: false }))
+      ).toContain("The last step is done.");
+      const gone = freshProgress();
+      gone.cursor = { kind: "step", stepId: "gone", beat: 0, fail: false };
+      expect(now(gone, null)).toBe(
+        `The tutorial now: they are in a step this tutorial no longer has. ${older}`
+      );
+      const done = freshProgress();
+      done.cursor = { kind: "finished" };
+      expect(now(done, null)).toBe(
+        `The tutorial now: they finished every step. ${older}`
+      );
     });
   });
 }
