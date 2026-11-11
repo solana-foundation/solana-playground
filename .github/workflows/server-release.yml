@@ -15,11 +15,16 @@ permissions:
 jobs:
   # Fails instead of skipping: a skipped job leaves a green run that reads as a finished rollback
   check_branch:
-    name: Check the branch
+    name: Check the repository and branch
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
+      # Forks such as hoodieshq hold no GCP access, and the OIDC provider admits this id only (docs/server-release.md)
       - run: |
+          if [ "$GITHUB_REPOSITORY_ID" != "1003072868" ]; then
+            echo "::error::Run this in solana-foundation/solana-playground; $GITHUB_REPOSITORY moved no traffic."
+            exit 1
+          fi
           if [ "$GITHUB_REF" != "refs/heads/master" ]; then
             echo "::error::Run this from master; $GITHUB_REF moved no traffic."
             exit 1

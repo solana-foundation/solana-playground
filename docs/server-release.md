@@ -13,7 +13,7 @@ A tagged commit on `master` deploys a parked version with no traffic ([cicd.yml]
 
 App Engine does not record which versions were ever live, so an empty input goes by creation time. A version that was parked and never went live counts, and a second rollback goes further back rather than undoing the first. If a bad version sits between the two, name the version you want.
 
-Dispatched from another branch the run fails and moves nothing. GitHub keeps one waiting run per workflow, so a newer dispatch replaces a waiting one; run them one at a time.
+Dispatched from another branch, or in a fork such as `hoodieshq/solana-playground`, the run fails and moves nothing. In a fork, CICD deploys nothing either: a push passes with a notice, a dispatch fails. GitHub keeps one waiting run per workflow, so a newer dispatch replaces a waiting one; run them one at a time.
 
 The run changes nothing and fails when the version is unknown or not serving, when the input is malformed, when there is nothing older to roll back to, or when an empty input meets split traffic. After a move it reads the traffic back and fails unless the target holds all of it. Its job summary shows the version before (`split` if traffic was divided) and the target, written before traffic moves, so a run that fails afterwards still names the version to go back to. Split traffic is listed with its shares. A run that fails after choosing its target also lists where traffic is now, since a failed move may still have taken.
 

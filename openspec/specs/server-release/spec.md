@@ -84,6 +84,21 @@ The promote and rollback workflow SHALL run only on `master`.
 - **WHEN** the workflow is dispatched on any other branch
 - **THEN** the run fails and no job that can reach GCP runs
 
+### Requirement: Runs only in the Foundation's repository
+The promote and rollback workflow and the deploy SHALL reach GCP only from `solana-foundation/solana-playground`, identified by its repository id.
+
+#### Scenario: Release dispatched in a fork (manual)
+- **WHEN** the promote and rollback workflow is dispatched in a fork such as `hoodieshq/solana-playground`
+- **THEN** the run fails, naming the repository, and no job that can reach GCP runs
+
+#### Scenario: Deploy dispatched in a fork (manual)
+- **WHEN** CICD is dispatched in a fork
+- **THEN** the run fails before resolving a version, and no deploy runs
+
+#### Scenario: Push to a fork's master (manual)
+- **WHEN** a commit, tagged or not, is pushed to a fork's `master`
+- **THEN** the CICD run passes with a notice and no deploy runs
+
 ### Requirement: Authenticate through OIDC when configured
 Deploy and promote SHALL authenticate through Workload Identity Federation when the repository variable `GCP_WORKLOAD_IDENTITY_PROVIDER` is set, and with the `GCP_KEY` secret when it is not.
 

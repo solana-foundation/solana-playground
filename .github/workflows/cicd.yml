@@ -28,6 +28,17 @@ jobs:
       - id: tag
         name: Compute App Engine version tag
         run: |
+          # Only solana-foundation/solana-playground (id 1003072868) deploys: forks such as hoodieshq hold no GCP access.
+          # A push there stays green with nothing to deploy; a dispatch there fails, so it does not read as a deploy.
+          if [ "$GITHUB_REPOSITORY_ID" != "1003072868" ]; then
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+              echo "::error::Deploy from solana-foundation/solana-playground; $GITHUB_REPOSITORY deploys nothing." >&2
+              exit 1
+            fi
+            echo "::notice::$GITHUB_REPOSITORY deploys nothing; only solana-foundation/solana-playground does."
+            echo "version_tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # Tags are already present from checkout (fetch-depth: 0); no network fetch needed.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             # Manual deploy: use the latest reachable tag; fail loudly rather than deploy a sentinel version.
