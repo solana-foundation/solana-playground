@@ -103,7 +103,7 @@ const drop = async (dialog: HTMLElement) => {
   );
 };
 
-const renderFor = async (framework: "Anchor" | "Native") => {
+const renderFor = async (framework: "Anchor" | "Native" | "Seahorse") => {
   utils.PgFramework.getFromFiles.mockResolvedValue({ name: framework });
   await act(async () => {
     render(
@@ -120,18 +120,21 @@ const renderFor = async (framework: "Anchor" | "Native") => {
 };
 
 describe("features/idl-build-guide", () => {
-  it("disables the guide for a Native project and says it is coming soon", async () => {
-    const user = userEvent.setup();
-    const trigger = await renderFor("Native");
-    expect(trigger).toHaveProperty("disabled", true);
+  it.each(["Native", "Seahorse"] as const)(
+    "disables the guide for a %s project and says it is coming soon",
+    async (framework) => {
+      const user = userEvent.setup();
+      const trigger = await renderFor(framework);
+      expect(trigger).toHaveProperty("disabled", true);
 
-    // The button takes no pointer events while disabled; its wrapper does
-    await user.hover(trigger.parentElement as HTMLElement);
+      // The button takes no pointer events while disabled; its wrapper does
+      await user.hover(trigger.parentElement as HTMLElement);
 
-    expect((await screen.findByRole("tooltip")).textContent).toBe(
-      "Coming soon"
-    );
-  });
+      expect((await screen.findByRole("tooltip")).textContent).toBe(
+        "Coming soon"
+      );
+    }
+  );
 
   it("keeps the guide open to an Anchor project", async () => {
     const trigger = await renderFor("Anchor");

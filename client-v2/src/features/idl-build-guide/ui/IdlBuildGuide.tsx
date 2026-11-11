@@ -32,10 +32,15 @@ const failureReason = (error: unknown): ExportFailureReason => {
   return "other";
 };
 
+/** Frameworks whose export `anchor idl build` cannot read: Native has no Anchor program, Seahorse ships Python and a placeholder `lib.rs` */
+const COMING_SOON_FRAMEWORKS = ["Native", "Seahorse"];
+
 /** An undetected framework keeps the guide available, so a detection miss never hides it */
 const readAvailability = async (): Promise<Availability> => {
   const framework = await PgFramework.getFromFiles();
-  return framework?.name === "Native" ? "coming-soon" : "available";
+  return framework && COMING_SOON_FRAMEWORKS.includes(framework.name)
+    ? "coming-soon"
+    : "available";
 };
 
 /** Re-read on a workspace switch or a save, since either can change the framework */

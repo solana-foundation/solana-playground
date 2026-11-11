@@ -37,7 +37,7 @@ export type Download = { state: "idle" } | { state: "failed"; message: string };
 /** What became of the file dropped on the last step */
 export type Landing = "waiting" | "loaded" | "refused";
 
-/** Whether the project can follow the guide; a Native project has no `idl-build` to run */
+/** Whether the project can follow the guide; a Native or Seahorse export has no Anchor program for `idl-build` to read */
 export type Availability = "available" | "coming-soon";
 
 export interface BaseIdlBuildGuideProps {

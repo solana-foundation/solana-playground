@@ -50,13 +50,13 @@ crate, so the local build resolves the crate versions and features the server bu
 
 The Flow's Build, Deploy, and Interact stages SHALL show a button with the text and `aria-label`
 "Build the IDL locally" beside each "Upload IDL" or "Download IDL" action. The button SHALL open a dialog titled
-"Build the IDL on your machine". For a Native project, the button SHALL show disabled, with a "Coming soon" tooltip,
+"Build the IDL on your machine". For a Native or Seahorse project, the button SHALL show disabled, with a "Coming soon" tooltip,
 and SHALL open no dialog; a project whose framework cannot be told keeps the button enabled. Interact's `no-idl`
 surface SHALL say that the build does not produce an IDL.
 
-#### Scenario: A Native project (manual)
+#### Scenario: A Native or Seahorse project (manual)
 
-- **WHEN** the open project is a Native project
+- **WHEN** the open project is a Native or Seahorse project
 - **THEN** "Build the IDL locally" shows disabled, and hovering it shows "Coming soon"
 
 #### Scenario: Interact without an IDL
