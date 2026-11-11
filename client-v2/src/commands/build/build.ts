@@ -35,8 +35,8 @@ export const build = createCmd({
     PgTerminal.println(PgTerminal.info("Building..."));
 
     // `PgProgramInfo` follows the open project, so a reply for one built before a switch is not written into another
-    const workspace = PgExplorer.currentWorkspaceName;
-    const isStillOpen = () => PgExplorer.currentWorkspaceName === workspace;
+    const workspace = PgExplorer.currentWorkspaceId;
+    const isStillOpen = () => PgExplorer.currentWorkspaceId === workspace;
 
     try {
       const result = await buildProgram(signal).catch((e: unknown) => {

@@ -7,6 +7,7 @@ const utils = vi.hoisted(() => ({
   PgExplorer: {
     getFileContent: vi.fn<(path: string) => string | undefined>(),
     files: {} as Record<string, { content: string }>,
+    currentWorkspaceId: "id-a" as string | undefined,
     currentWorkspaceName: "a" as string | undefined,
     getCurrentSrcPath: () => "/p/src/",
     getRelativePath: (path: string) => path.slice("/p/".length),
@@ -43,6 +44,7 @@ describe("commands/build/build", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     utils.PgExplorer.files = {};
+    utils.PgExplorer.currentWorkspaceId = "id-a";
     utils.PgExplorer.currentWorkspaceName = "a";
   });
 
@@ -205,13 +207,26 @@ describe("commands/build/build", () => {
       ],
     ])("leaves that project's info alone on %s", async (_, answer) => {
       utils.PgServer.build.mockImplementation(async () => {
-        utils.PgExplorer.currentWorkspaceName = "b";
+        utils.PgExplorer.currentWorkspaceId = "id-b";
         return answer();
       });
 
       await run().catch(() => undefined);
 
       expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+    });
+
+    it("keeps the result of a project renamed during its build", async () => {
+      utils.PgServer.build.mockImplementation(async () => {
+        utils.PgExplorer.currentWorkspaceName = "renamed";
+        return { stderr: "", uuid: "u", idl: undefined };
+      });
+
+      await run();
+
+      expect(utils.PgProgramInfo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ uuid: "u" })
+      );
     });
   });
 });
