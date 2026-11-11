@@ -160,7 +160,13 @@ const convertJSWith =
   (content: string) => {
     // Handle imports
     content = addImports(content);
-    if (!content.includes("@solana/web3.js")) {
+    // The globals below use `web3`, so the client needs that binding: the
+    // package name alone is not it (`import { PublicKey } from "@solana/web3.js"`)
+    if (
+      !/\bimport\s+(?:\*\s+as\s+)?web3\s+from\s+["']@solana\/web3\.js["']/.test(
+        content
+      )
+    ) {
       content = `import * as web3 from "@solana/web3.js";\n` + content;
     }
     content =

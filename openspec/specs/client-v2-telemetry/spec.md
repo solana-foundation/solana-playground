@@ -135,17 +135,17 @@ The scenarios on the cross-slice check are marked `(manual)`: the unit test
 holds them, not a Playwright test (the repository marks such scenarios
 inconsistently).
 
-#### Scenario: A parameter is not snake_case
+#### Scenario: A parameter is not snake_case (manual)
 
 - **WHEN** an event declares a parameter such as `signedIn`
 - **THEN** `yarn test-types` fails at the slice's `createTracker` call and names the parameter
 
-#### Scenario: A parameter is free text the slice did not opt into
+#### Scenario: A parameter is free text the slice did not opt into (manual)
 
 - **WHEN** an event declares a parameter typed as a wide `string`, and its slice's tracker does not opt into that name with a reason
 - **THEN** `yarn test-types` fails at the slice's `createTracker` call and names the parameter
 
-#### Scenario: An opt-in names no free-text parameter
+#### Scenario: An opt-in names no free-text parameter (manual)
 
 - **WHEN** a slice opts into free text for a name none of its events types as a wide `string`
 - **THEN** `yarn test-types` fails at the slice's `createTracker` call
