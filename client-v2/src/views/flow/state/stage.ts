@@ -374,32 +374,43 @@ export class PgFlow {
         // off `upcoming` knows more about this run than the workspace's
         // record does, so the record never overwrites it. That is also
         // what makes a repeated restore idempotent.
+        // Anything but a boolean is "never built": the getter also answers
+        // `undefined` until the file is first read
         const recorded: StageStatus =
-          ev.built === null ? "upcoming" : ev.built ? "failed" : "done";
+          ev.built === true
+            ? "failed"
+            : ev.built === false
+            ? "done"
+            : "upcoming";
         // A build in flight leaves `build` at "running" and `buildSettled`
         // on the previous verdict, so the same guard covers both: neither
         // is touched unless the stage is untouched.
         const fresh = state.build === "upcoming";
-        return {
-          ...state,
-          build: fresh ? recorded : state.build,
-          buildSettled: fresh ? recorded : state.buildSettled,
-          // A recorded success points at Deploy the way `build-finish` does,
-          // so a reload does not leave a finished Build with nothing saying
-          // where to go next.
-          deploy:
-            state.deploy !== "upcoming"
-              ? state.deploy
-              : ev.deployed
-              ? "done"
-              : recorded === "done"
-              ? "active"
-              : state.deploy,
-          interact:
-            ev.deployed && state.interact === "upcoming"
-              ? "active"
-              : state.interact,
-        };
+        const build = fresh ? recorded : state.build;
+        const buildSettled = fresh ? recorded : state.buildSettled;
+        // A program on the cluster is deployed, also when the verdict came
+        // first and left Deploy `active`. A run in flight or a failed deploy
+        // of this session knows more, so they stay. A recorded success points
+        // at Deploy the way `build-finish` does, so a reload does not leave a
+        // finished Build with nothing saying where to go next.
+        const deploy =
+          ev.deployed &&
+          (state.deploy === "upcoming" || state.deploy === "active")
+            ? "done"
+            : state.deploy === "upcoming" && recorded === "done"
+            ? "active"
+            : state.deploy;
+        const interact =
+          ev.deployed && state.interact === "upcoming"
+            ? "active"
+            : state.interact;
+        // Unchanged, the same state: listeners are not woken
+        return build === state.build &&
+          buildSettled === state.buildSettled &&
+          deploy === state.deploy &&
+          interact === state.interact
+          ? state
+          : { ...state, build, buildSettled, deploy, interact };
       }
     }
   }
@@ -509,10 +520,14 @@ export class PgFlow {
       PgExplorer.onDidReloadFiles(recheckSource),
       // A reload drops this state but not the workspace's own: the build
       // verdict is in `program-info.json` and the deployment is on the
-      // cluster. `onChain` is fetched asynchronously and re-derives on a
-      // cluster or program id change, so this fires more than once --
-      // `restore` seeds only forward, which is what makes that safe.
-      PgProgramInfo.onDidChangeOnChain(() =>
+      // cluster. The two arrive apart and in either order -- the file is read
+      // at once, the cluster may be slow or not answer -- so every change to
+      // the program info restores from both, and Deploy is offered on the
+      // verdict alone. Not `onDidChangeLastBuildFailed`: it stays quiet when
+      // a switched-to project has the same verdict as the one before, and the
+      // switch has just reset this state. This fires often; `restore` seeds
+      // only forward and returns the same state when nothing moves.
+      PgProgramInfo.onDidChange(() =>
         PgFlow._dispatch({
           type: "restore",
           built: PgProgramInfo.lastBuildFailed,
