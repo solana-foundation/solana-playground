@@ -2,8 +2,8 @@
 ARG HAS_SERVER
 # Default non-root user
 ARG USER
-# Base image; the tag matches .nvmrc
-ARG IMAGE="node:22.23.4"
+# Base image: the newest Node 22 patch; .nvmrc pins the exact version for local and CI runs
+ARG IMAGE="node:22"
 
 ################################## Has server ##################################
 FROM ${IMAGE} AS server-true

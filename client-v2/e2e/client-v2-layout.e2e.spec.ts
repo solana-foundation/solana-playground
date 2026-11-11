@@ -4,6 +4,7 @@ import { requireFor } from "../src/test-utils/require-for";
 import {
   consoleTrigger,
   currentProject,
+  editorTookFocus,
   expect,
   filesToggle,
   HELP_TAIL,
@@ -103,7 +104,7 @@ const seedThenResize = async (
 ) => {
   await page.setViewportSize(DESK);
   await seedWorkspace(page);
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await editorTookFocus(page);
   await page.setViewportSize(size);
 };
 
@@ -927,7 +928,7 @@ test("client-v2-layout: The navigation on a narrow window", async ({
   await seedWorkspace(page);
   // The editor focuses itself when it opens the first file; landing after
   // the menu opened, it would bring Work back
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await editorTookFocus(page);
   const navigation = page.getByRole("region", { name: "Navigation" });
   for (const width of [720, 740, 767]) {
     await page.setViewportSize({ width, height: 812 });
@@ -1010,6 +1011,7 @@ test.describe("on an iPhone", () => {
     // A project is started from the desktop's Home, as "on a phone" does
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
+    await editorTookFocus(page);
     await page.setViewportSize(PHONE);
     await waitForPhonePage(page, "Work");
     const lines = page.locator(".monaco-editor .view-lines");

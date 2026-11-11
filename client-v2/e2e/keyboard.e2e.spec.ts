@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, home, LONG, test } from "./fixtures";
+import { editorTookFocus, expect, home, LONG, test } from "./fixtures";
 import { DESK } from "./viewports";
 
 /**
@@ -134,9 +134,7 @@ test("keyboard: Enter opens a file from the tree, Space folds a folder", async (
   // The open focuses the editor, taking focus from any tree item
   // (`leavesFocusElsewhere`), and on a loaded runner it lands late: wait for
   // it, or the Space below types into lib.rs instead of folding `src`
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused(
-    LONG
-  );
+  await editorTookFocus(page);
 
   await src.focus();
   await expect(src).toBeFocused();
