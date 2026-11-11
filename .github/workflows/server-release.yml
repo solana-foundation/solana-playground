@@ -1,0 +1,104 @@
+name: Server release
+
+# Makes a deployed version of the server live, or rolls back. cicd.yml only parks versions. See docs/server-release.md.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version or tag to send all traffic to. Empty rolls back to the newest serving version created before the live one, which may never have been live.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # Fails instead of skipping: a skipped job leaves a green run that reads as a finished rollback
+  check_branch:
+    name: Check the repository and branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # Forks such as hoodieshq hold no GCP access, and the OIDC provider admits this id only (docs/server-release.md)
+      - run: |
+          if [ "$GITHUB_REPOSITORY_ID" != "1003072868" ]; then
+            echo "::error::Run this in solana-foundation/solana-playground; $GITHUB_REPOSITORY moved no traffic."
+            exit 1
+          fi
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::Run this from master; $GITHUB_REF moved no traffic."
+            exit 1
+          fi
+
+  release:
+    name: Move traffic
+    needs: check_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # A running move is never cancelled, so it cannot stop between moving traffic and checking it. GitHub keeps one waiting run: a newer dispatch replaces it.
+    concurrency:
+      group: server-release
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Sign in to GCP
+        uses: ./.github/actions/gcp-auth
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.GCP_KEY }}
+          project_id: ${{ secrets.PROJECT_ID }}
+
+      - name: Choose the target
+        id: select
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/versions.json"
+          node client-v2/scripts/lib/release/resolve-target.mjs select < "$RUNNER_TEMP/versions.json" >> "$GITHUB_OUTPUT"
+
+      # Before the move, so a run that fails after it still names the version to go back to
+      - name: Record the plan
+        env:
+          CURRENT_VERSION: ${{ steps.select.outputs.current }}
+          TARGET_VERSION: ${{ steps.select.outputs.target }}
+          CHANGED: ${{ steps.select.outputs.changed }}
+        run: |
+          if [ "$CHANGED" = "true" ]; then
+            echo "playground-server: \`$CURRENT_VERSION\` before, \`$TARGET_VERSION\` target." >> "$GITHUB_STEP_SUMMARY"
+            # The word alone could not restore the shares
+            if [ "$CURRENT_VERSION" = "split" ]; then
+              node client-v2/scripts/lib/release/resolve-target.mjs traffic < "$RUNNER_TEMP/versions.json" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            echo "playground-server: \`$TARGET_VERSION\` was already live; traffic not changed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Move all traffic
+        if: steps.select.outputs.changed == 'true'
+        env:
+          TARGET_VERSION: ${{ steps.select.outputs.target }}
+        run: gcloud app services set-traffic playground-server --splits="$TARGET_VERSION=1" --quiet
+
+      - name: Check the target is live
+        env:
+          TARGET_VERSION: ${{ steps.select.outputs.target }}
+        run: |
+          gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/after.json"
+          node client-v2/scripts/lib/release/resolve-target.mjs verify < "$RUNNER_TEMP/after.json"
+          echo "Checked: \`$TARGET_VERSION\` holds all traffic." >> "$GITHUB_STEP_SUMMARY"
+
+      # gcloud can fail after App Engine accepted the split, so a red move alone does not say where traffic is
+      - name: Report the traffic after a failure
+        if: "!success() && steps.select.outcome == 'success'"
+        run: |
+          gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/failed.json"
+          echo "Traffic after the failure:" >> "$GITHUB_STEP_SUMMARY"
+          node client-v2/scripts/lib/release/resolve-target.mjs traffic < "$RUNNER_TEMP/failed.json" >> "$GITHUB_STEP_SUMMARY"
