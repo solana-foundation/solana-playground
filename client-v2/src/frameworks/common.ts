@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { createLogger } from "../shared/lib/logger";
 import {
   JsRuntimePackageName,
   MergeUnion,
@@ -13,6 +14,8 @@ import {
   ValueOf,
 } from "../utils";
 import { SelectProgram } from "./SelectProgram";
+
+const log = createLogger("frameworks:export");
 
 /** The project an export converts: its name, its program keypair and id */
 export interface ExportedProject {
@@ -64,9 +67,21 @@ export const readExportedProject = async (
       ? new PgWeb3.PublicKey(saved.customPk)
       : kp?.publicKey;
     return { name, kp, pk };
-  } catch {
-    // No program info (never built), or none that reads as one: the export
-    // goes without a program id rather than with a wrong one
+  } catch (e) {
+    // The export goes without a program id rather than with a wrong one. A
+    // project never built has no program info, the ordinary case; any other
+    // failure says why, naming the kind of failure but no part of the file,
+    // which holds the program's secret key
+    const error = e as { code?: string; message?: string } | undefined;
+    const isMissing =
+      error?.code === "ENOENT" || !!error?.message?.includes("ENOENT");
+    if (!isMissing) {
+      log.warn(
+        `Exporting "${name}" without its program id: its program info is ${
+          e instanceof z.ZodError ? "malformed" : "unreadable"
+        }`
+      );
+    }
     return { name, kp: undefined, pk: undefined };
   }
 };

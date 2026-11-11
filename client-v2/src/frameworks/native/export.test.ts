@@ -38,6 +38,19 @@ vi.hoisted(() => {
 
 vi.mock("../../utils/package", () => ({ PgPackage: {} }));
 
+// The export's own logger, to see what a failed read of program info says;
+// every other logger stays the real one
+const exportLog = vi.hoisted(() => ({ warn: vi.fn() }));
+vi.mock("../../shared/lib/logger", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../../shared/lib/logger")
+  >();
+  return Object.assign({}, actual, {
+    createLogger: (scope: `${string}:${string}`) =>
+      scope === "frameworks:export" ? exportLog : actual.createLogger(scope),
+  });
+});
+
 const LIB = [
   "src/lib.rs",
   "use solana_program::entrypoint;\n\nentrypoint!(process_instruction);\n",
@@ -245,19 +258,52 @@ describe("convertFromPlayground", () => {
       expect(shipped.publicKey).not.toEqual(open.publicKey);
     });
 
-    it("ships no keypair for a project with no program info", async () => {
-      openWithKeypair();
-      vi.spyOn(PgExplorer.fs, "readToJSON").mockRejectedValue(
-        new Error("not found")
-      );
-
-      const files = await exportedAs("Other Project");
-
+    const shipsNoKeypair = (files: Map<string, string>) =>
       expect(
         Array.from(files.keys()).filter((path) =>
           path.endsWith("-keypair.json")
         )
       ).toEqual([]);
+
+    it("ships no keypair, quietly, for a project never built", async () => {
+      openWithKeypair();
+      exportLog.warn.mockClear();
+      vi.spyOn(PgExplorer.fs, "readToJSON").mockRejectedValue(
+        Object.assign(new Error("ENOENT: no such file"), { code: "ENOENT" })
+      );
+
+      shipsNoKeypair(await exportedAs("Other Project"));
+      expect(exportLog.warn).not.toHaveBeenCalled();
+    });
+
+    it("ships no keypair for malformed program info, and says why without its contents", async () => {
+      openWithKeypair();
+      exportLog.warn.mockClear();
+      const secret = Array.from(PgWeb3.Keypair.generate().secretKey);
+      vi.spyOn(PgExplorer.fs, "readToJSON").mockResolvedValue({
+        kp: secret.slice(0, 10),
+      });
+
+      shipsNoKeypair(await exportedAs("Other Project"));
+      expect(exportLog.warn).toHaveBeenCalledWith(
+        'Exporting "Other Project" without its program id: its program info is malformed'
+      );
+      expect(JSON.stringify(exportLog.warn.mock.calls)).not.toContain(
+        secret.slice(0, 4).join(",")
+      );
+    });
+
+    it("says why when the program info cannot be read", async () => {
+      openWithKeypair();
+      exportLog.warn.mockClear();
+      vi.spyOn(PgExplorer.fs, "readToJSON").mockRejectedValue(
+        new Error("QuotaExceededError")
+      );
+
+      shipsNoKeypair(await exportedAs("Other Project"));
+      expect(exportLog.warn).toHaveBeenCalledWith(
+        'Exporting "Other Project" without its program id: its program info is unreadable'
+      );
     });
   });
 
