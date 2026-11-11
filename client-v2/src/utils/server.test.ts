@@ -74,12 +74,6 @@ describe("the unstable switch", () => {
     await PgServer.deploy("abc");
     expect(requestedUrl()).toBe("http://server.test/unstable/deploy/abc");
   });
-
-  it("leaves the share routes alone: they have no sandbox to pick", async () => {
-    respond("share-id");
-    await PgServer.shareNew({ explorer: { files: {} } });
-    expect(requestedUrl()).toBe("http://server.test/new");
-  });
 });
 
 describe("PgServer failures", () => {

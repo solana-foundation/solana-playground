@@ -88,10 +88,10 @@ docker compose --profile prod up --build
 # Client only
 docker compose up client-standalone --build
 
-# Server + DB
+# Server, reading the root .env
 docker compose --profile dev up server --build
 
-# Server only
+# Server, without a .env
 docker compose up server-standalone --build
 
 # Client:  http://localhost:3000

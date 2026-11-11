@@ -1,4 +1,9 @@
 import { createLogger } from "@/shared/lib/logger";
+import {
+  isSecretQueryTerm,
+  isTokenLike,
+  queryTermsOf,
+} from "@/shared/lib/url-secret.mjs";
 
 import { CLUSTERS, Endpoint, offeredOf } from "./clusters";
 
@@ -54,20 +59,6 @@ export const hostOf = (url: string): string => new URL(url).host;
 /** What stands for a secret: four dots, whatever the secret's length */
 const MASK = "••••";
 
-/** A query name a provider puts a key under (`api-key`, `apiKey`, `access_token`…) */
-const KEY_NAME = /key|token|secret|auth|pass|sig|credential/i;
-
-/**
- * A value that reads as a token: 16 or more characters a key is written in
- * (letters, digits, `-`, `_`, `.`, `~`, `+`, `=`, `%`, so JWTs and base64
- * too), with a digit, or 24 or more in mixed case. A long slug with a digit
- * is masked as well: hiding a word is cheaper than showing a key.
- */
-const isTokenLike = (value: string) =>
-  /^[\w.~+=%-]{16,}$/.test(value) &&
-  (/\d/.test(value) ||
-    (value.length >= 24 && /[a-z]/.test(value) && /[A-Z]/.test(value)));
-
 /** A saved RPC's URL as the page draws it, and whether anything was masked */
 export interface MaskedUrl {
   /** For display only: never parse or fetch it, its secrets are `••••` */
@@ -112,17 +103,10 @@ export const maskRpcUrl = (url: string): MaskedUrl => {
   const path = parsed.pathname.split("/").map(maskToken).join("/");
   const query = parsed.search
     ? "?" +
-      parsed.search
-        .slice(1)
-        .split("&")
-        .map((pair) => {
-          const at = pair.indexOf("=");
-          if (at < 0) return maskToken(pair);
-          const name = pair.slice(0, at);
-          const value = pair.slice(at + 1);
-          const secret =
-            value !== "" && (KEY_NAME.test(name) || isTokenLike(value));
-          return `${name}=${secret ? mask() : value}`;
+      queryTermsOf(parsed.search)
+        .map(([name, value]) => {
+          if (value === undefined) return maskToken(name);
+          return `${name}=${isSecretQueryTerm(name, value) ? mask() : value}`;
         })
         .join("&")
     : "";

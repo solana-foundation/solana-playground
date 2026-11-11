@@ -12,10 +12,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use solpg_server::{
-    db,
-    log::{self, info},
-};
+use solpg_server::log::{self, info};
 use tokio::net::TcpListener;
 
 use self::{config::Config, middlewares::*, routes::*};
@@ -29,17 +26,12 @@ async fn main() -> Result<()> {
     #[cfg(feature = "unstable")]
     setup::setup().await?;
 
-    db::init(&config.db_uri, config.db_name).await?;
-    info!("DB initialized");
-
     let stable_routes = Router::new()
         .route(
             "/build",
             post(build).with_state(BuildState::new(config.build_concurrency)),
         )
-        .route("/deploy/{uuid}", get(deploy))
-        .route("/share/{id}", get(share_get))
-        .route("/new", post(share_new));
+        .route("/deploy/{uuid}", get(deploy));
 
     let unstable_routes = if cfg!(feature = "unstable") {
         let build_concurrency = config.unstable_build.limits.route.concurrency;
