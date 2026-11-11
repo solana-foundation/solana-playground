@@ -145,13 +145,19 @@ when a session reads a file matching the `paths` in the frontmatter.
   that exists, is listed and reads as `undefined`, and a ghost sync mark keeps
   its project out of `pushNeverSynced`. The mock's `__reloadBeforeTreeSave`
   drops what a flush has not saved, puts renamed files back and turns removed
-  ones into ghosts. A thread file that moves (`PgThreadIndex.carry`,
-  `_migrate`) gets its new index entry before the rename and loses the old
-  one after it, so a page that dies in between leaves the file under a name
-  the index points at; renamed first, the next load adopted it as a
-  workspace named after the thread. One exception:
+  ones into ghosts. One exception:
   `PgExplorer._saveWorkspaces` writes `/.config/workspaces.json` itself and
   flushes after every write.
+- **A thread file is renamed only under an index entry already written.**
+  A file under a name no entry points at is adopted by the next load's
+  `PgThreadIndex._migrate` as a workspace named after the thread.
+  `PgThreadIndex.carry` writes the new workspace's entry, renames, then drops
+  the old entry, so a page that dies in between leaves the file with one
+  workspace or the other. `_migrate` writes every planned entry, then renames;
+  a file whose rename never happened stays under its workspace's name and is
+  adopted again under a new id. `_migrate` takes the sync lock when it has
+  something to adopt, since two tabs on the first load after the update would
+  otherwise plan the same file.
 - **A save on unload never lands in Chromium, so the save at creation
   stays.** `effects/fs-flush` saves the tree when the page is hidden, for a
   page then frozen or discarded. A reload or a close is not covered: Chromium
