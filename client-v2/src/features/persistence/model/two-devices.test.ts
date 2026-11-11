@@ -973,6 +973,37 @@ describe("both devices changed it", () => {
     expect(buffers.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nb\nc\nd\nE\n");
   });
 
+  it("keeps the merged copy on disk when autosave writes the old buffer during the merge's upload", async () => {
+    // The merge writes the store, uploads, and only then brings the editor
+    // up. An autosave timer still running from an earlier keystroke or
+    // rewrite fires in that window and writes the buffer -- still the
+    // pre-merge copy -- over the merged file. The next pass then uploaded
+    // it, reverting the other device's line on the account.
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    captureWrites();
+    const path = `/${HELLO.name}/src/lib.rs`;
+    const buffers = editorHolds({ [path]: "a\nb\nc\nd\nE\n" });
+    global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PUT") {
+        storedFiles().set(path, requireFor("the buffer")(buffers.get(path)));
+      }
+      return await fakeFetch(url, init);
+    }) as unknown as typeof fetch;
+
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+    global.fetch = vi.fn(fakeFetch) as unknown as typeof fetch;
+
+    expect(storedFiles().get(path)).toBe("A\nb\nc\nd\nE\n");
+    await reconcile();
+    expect(serverRow(HELLO.id).snapshot).toEqual({
+      files: { "src/lib.rs": "A\nb\nc\nd\nE\n" },
+    });
+  });
+
   it("folds in what was typed while the merge ran", async () => {
     await startFrom(
       { "src/lib.rs": base },
@@ -1012,6 +1043,34 @@ describe("both devices changed it", () => {
     expect(getFailures().map((f) => f.what)).toEqual([
       expect.stringContaining("src/lib.rs"),
     ]);
+  });
+
+  it("keeps a copy taken from the other device on disk when autosave writes the old buffer before the editor is caught up", async () => {
+    // As for a merge: the adoption writes the store, records the mark, and
+    // only then brings the editor up -- and an autosave can land between
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    captureWrites();
+    const path = `/${HELLO.name}/src/lib.rs`;
+    const buffers = editorHolds({ [path]: base });
+    const writeMark = PgSyncMark.write.bind(PgSyncMark);
+    const markWritten = vi
+      .spyOn(PgSyncMark, "write")
+      .mockImplementation(async (...args) => {
+        storedFiles().set(path, requireFor("the buffer")(buffers.get(path)));
+        return await writeMark(...args);
+      });
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+    markWritten.mockRestore();
+
+    expect(storedFiles().get(path)).toBe("A\nb\nc\nd\ne\n");
+    expect((await reconcile()).pushed).toEqual([]);
+    expect(serverRow(HELLO.id).snapshot).toEqual({
+      files: { "src/lib.rs": "A\nb\nc\nd\ne\n" },
+    });
   });
 
   it("brings the editor buffer up to a copy taken from the other device", async () => {

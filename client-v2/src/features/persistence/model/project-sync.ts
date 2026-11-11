@@ -16,7 +16,7 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { Disposable } from "../../../utils/types";
 import { DELETED_REASON } from "./deleted.mjs";
-import { report } from "./diagnostics";
+import { isMissing, report } from "./diagnostics";
 import type { FileConflict, MergePlan, ResolvedFiles } from "./merge";
 import {
   baseAfterMerge,
@@ -1145,13 +1145,23 @@ export class PgProjectSync {
           if (buffer !== content) buffers.write(full, content);
           caughtUp.add(path);
           if (content !== after[path]) folded.push(path);
-          // Nothing more to do when nothing was folded in and the buffer held
-          // either copy: it holds `after` now, which the store has. A model
-          // the re-open built is already `after`, and writing it again would
+          // Nothing more to do when nothing was folded in, the buffer held
+          // either copy, and the store still holds `after`. A model the
+          // re-open built is already `after`, and writing it again would
           // announce a change to the other tabs that is none.
+          //
+          // The store is read, not assumed. The caller wrote `after` and then
+          // awaited its upload before getting here, and an autosave timer
+          // left by an earlier keystroke or rewrite can fire in between: it
+          // writes the buffer, still the old copy, over `after`. Skipped, that
+          // left the old copy in the store under a mark that says `after`,
+          // and the next push uploaded it -- reverting the other device's
+          // lines on the account. The buffer holds `after` from the line
+          // above, so no autosave can write the old copy after this read.
           if (
             content === after[path] &&
-            (buffer === read || buffer === content)
+            (buffer === read || buffer === content) &&
+            (await PgProjectSync._stored(full)) === content
           ) {
             continue;
           }
@@ -1560,6 +1570,20 @@ export class PgProjectSync {
    * own; this is for the paths that arrive without one: a push refused with a
    * 409, and an answer to the banner.
    */
+  /**
+   * What the store holds for a file, or `undefined` when it cannot say --
+   * missing or unreadable. A caller that compares against it then writes,
+   * which is the safe side of either.
+   */
+  private static async _stored(path: string): Promise<string | undefined> {
+    try {
+      return await PgFs.readToString(path);
+    } catch (e) {
+      if (!isMissing(e)) report(`read ${path}`, e);
+      return undefined;
+    }
+  }
+
   private static async _catchUpWithDisk(projectId: string) {
     if (projectId !== PgExplorer.currentWorkspaceId) return;
     try {
