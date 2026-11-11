@@ -20,6 +20,7 @@ import {
   stubSession,
   test,
 } from "./fixtures";
+import { hasSavedText } from "./saved-files";
 import { lineOf, linesOn } from "./telemetry";
 import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
 
@@ -73,35 +74,7 @@ const stallDevnet = (page: Page) =>
  * before that write reads the project as never built.
  */
 const buildIsSaved = (page: Page) =>
-  page.evaluate(async () => {
-    const dbs = await indexedDB.databases();
-    const name = dbs.map((d) => d.name).find((n) => n?.includes("solana"));
-    if (!name) return false;
-    const db: IDBDatabase = await new Promise((resolve, reject) => {
-      const open = indexedDB.open(name);
-      open.onsuccess = () => resolve(open.result);
-      open.onerror = () => reject(open.error);
-    });
-    const store = Array.from(db.objectStoreNames).find((s) =>
-      s.includes("files")
-    );
-    if (!store) {
-      db.close();
-      return false;
-    }
-    const values: unknown[] = await new Promise((resolve, reject) => {
-      const all = db.transaction(store, "readonly").objectStore(store).getAll();
-      all.onsuccess = () => resolve(all.result);
-      all.onerror = () => reject(all.error);
-    });
-    db.close();
-    const decoder = new TextDecoder();
-    return values.some(
-      (value) =>
-        value instanceof Uint8Array &&
-        decoder.decode(value).includes('"lastBuildFailed":false')
-    );
-  });
+  hasSavedText(page, '"lastBuildFailed":false');
 
 /**
  * On top of `stallDevnet`: every other devnet call is left unanswered, so the

@@ -239,10 +239,12 @@ export interface Wrote {
   file: string;
   lines: number[];
   /**
-   * Each written line's text as the block landed, in the order of `lines`:
-   * the card draws these, so the learner's later edits to the file leave it
-   * as the lesson wrote it. Absent in a save from before it was kept, where
-   * the card reads those lines from the file.
+   * Each written line's text as it landed, in the order of `lines`: the card
+   * draws these, so the learner's later edits to the file leave the card as
+   * the write made it, and finds the block by them when lines above it move. Absent for a created file (no lines), in a save from
+   * before the text was kept, and where the saved text did not pair with
+   * `lines` (`parseWrote` drops it); the card then reads those lines from
+   * the file.
    */
   text?: string[];
   created?: true;
@@ -666,9 +668,22 @@ const parseWrote = (v: unknown): Wrote | null => {
   if (!parsed.success) return null;
   const { file, lines, text, created, appended } = parsed.data;
   const wrote: Wrote = { file, lines };
-  // Text that does not pair with the lines is dropped: the card then reads
-  // the file, as for a save from before text was kept
+  // Text that is not a list of strings, or does not pair with the lines, is
+  // dropped: the card then reads the file, as for a save from before text
+  // was kept
   if (text && text.length === lines.length) wrote.text = text;
+  else if (isRecord(v) && v.text !== undefined) {
+    log.debug(
+      "a saved block's text is unusable, so its card reads the file and keeps its lines",
+      {
+        context: {
+          file,
+          lines: lines.length,
+          text: text ? text.length : "not a list of strings",
+        },
+      }
+    );
+  }
   if (created) wrote.created = true;
   if (appended) wrote.appended = true;
   return wrote;
@@ -1465,6 +1480,72 @@ if (import.meta.vitest) {
       expect(landed(["only one"])).toEqual(block);
       expect(landed([1, 2])).toEqual(block);
       expect(landed("a\nb")).toEqual(block);
+    });
+
+    describe("a block's dropped text", () => {
+      // Loaded here, so the bundle carries no test logger
+      let logger: typeof import("@/shared/lib/logger");
+      import.meta.vitest?.beforeAll(async () => {
+        logger = await import("@/shared/lib/logger");
+      });
+
+      it("is logged once per block, and nothing for text that pairs or none", () => {
+        const logged = logger.memoryProvider();
+        logger.initLogger({ providers: [logged] });
+        try {
+          const landed = (wrote: Record<string, unknown>) =>
+            reload(
+              midway({
+                beats: { "s1.boil": { kind: "written", at: 1100, wrote } },
+              })
+            );
+          landed({ file: "src/lib.rs", lines: [1, 2], text: ["only one"] });
+          landed({ file: "src/lib.rs", lines: [1, 2], text: "a\nb" });
+          landed({ file: "src/lib.rs", lines: [1, 2], text: ["a", 2] });
+          landed({ file: "src/lib.rs", lines: [1, 2] });
+          landed({ file: "src/lib.rs", lines: [1, 2], text: ["a", "b"] });
+          expect(
+            logged.entries
+              .filter((e) => e.message?.includes("text is unusable"))
+              .map((e) => e.context)
+          ).toEqual([
+            { file: "src/lib.rs", lines: 2, text: 1 },
+            { file: "src/lib.rs", lines: 2, text: "not a list of strings" },
+            { file: "src/lib.rs", lines: 2, text: "not a list of strings" },
+          ]);
+        } finally {
+          logger.resetLogger();
+        }
+      });
+    });
+
+    it("keeps a created file's landing across a reload, and reads a malformed flag as absent", () => {
+      const landed = (wrote: Record<string, unknown>) =>
+        reload(
+          midway({
+            beats: { "s3.file": { kind: "written", at: 3000, wrote } },
+          })
+        )?.beats["s3.file"];
+      expect(
+        landed({ file: "client/client.ts", lines: [], created: true })
+      ).toEqual({
+        kind: "written",
+        at: 3000,
+        wrote: { file: "client/client.ts", lines: [], created: true },
+      });
+      // A flag that is not `true` costs only itself, never the landing
+      expect(
+        landed({
+          file: "src/lib.rs",
+          lines: [1],
+          created: "yes",
+          appended: 1,
+        })
+      ).toEqual({
+        kind: "written",
+        at: 3000,
+        wrote: { file: "src/lib.rs", lines: [1] },
+      });
     });
 
     it("keeps a landed airdrop across a reload, so its card is not live again", () => {

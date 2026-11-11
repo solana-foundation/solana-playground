@@ -75,6 +75,21 @@ vi.mock("../../../utils/terminal", () => ({
 }));
 
 const NAME = "Hello Anchor";
+
+/** The file's rows at `lines`, in their order: what a landing's text must be */
+const rowsAt = (file: string, lines: readonly number[]) => {
+  const rows = file.split("\n");
+  return lines.map((line) => rows[line - 1]);
+};
+
+/** The lesson's block for the step 1 question, line by line */
+const Q1_BLOCK: string[] = requireFor("the s1.q1 write")(
+  hello.steps[0].beats.flatMap((b) =>
+    b.id === "s1.q1" && "writes" in b && b.writes && "block" in b.writes
+      ? [b.writes.block]
+      : []
+  )[0]
+).split("\n");
 /** A clock past every turn the tests post */
 const LATER = Date.now() + 1e9;
 
@@ -285,11 +300,19 @@ describe("PgConversation", () => {
     );
     expect(PgConversation.state.engine.progress.beats["s1.q1"]).toMatchObject({
       kind: "picked",
-      wrote: { file: "src/lib.rs", lines: [5, 6, 7, 8, 9, 10, 11, 12, 13] },
+      wrote: {
+        file: "src/lib.rs",
+        lines: [5, 6, 7, 8, 9, 10, 11, 12, 13],
+        text: Q1_BLOCK,
+      },
     });
+    // The text is the rows the write put at those lines
+    expect(
+      rowsAt(workspace.files["src/lib.rs"], [5, 6, 7, 8, 9, 10, 11, 12, 13])
+    ).toEqual(Q1_BLOCK);
     const saved = file[STORAGE_KEY] as { beats: Record<string, unknown> };
     expect(saved.beats["s1.q1"]).toMatchObject({
-      wrote: { lines: [5, 6, 7, 8, 9, 10, 11, 12, 13] },
+      wrote: { lines: [5, 6, 7, 8, 9, 10, 11, 12, 13], text: Q1_BLOCK },
     });
   });
 
@@ -350,12 +373,50 @@ describe("PgConversation", () => {
     await workspace.write("src/lib.rs", typed, NAME);
     PgConversation.edit("src/lib.rs", typed);
     await settle();
-    expect(PgConversation.state.engine.progress.beats["s1.q1"]).toMatchObject({
+    const typedBeat = PgConversation.state.engine.progress.beats["s1.q1"];
+    expect(typedBeat).toMatchObject({
       kind: "typed",
       wrote: { file: "src/lib.rs" },
     });
     expect(workspace.files["src/lib.rs"]).toContain('msg!("Hi there");');
     expect(workspace.files["src/lib.rs"]).toContain("#[program]");
+    // The saved text holds the learner's words, not the lesson's own line,
+    // and is the file's rows at the written lines
+    const wrote = requireFor("the typed answer's landing")(
+      typedBeat?.kind === "typed" ? typedBeat.wrote : undefined
+    );
+    expect(wrote.text).toContain('        msg!("Hi there");');
+    expect(wrote.text).not.toContain('        msg!("Hello, World!");');
+    expect(wrote.text).toEqual(
+      rowsAt(workspace.files["src/lib.rs"], wrote.lines)
+    );
+  });
+
+  it("records an appended block's own lines and text, not the gap or the learner's last line", async () => {
+    const workspace = memoryWorkspace({ "src/lib.rs": "" });
+    open(NAME, { workspace });
+    await settle();
+    PgConversation.start();
+    await settle();
+    // A line neither the step nor the write knows keeps the block from its
+    // place: it goes to the end, after one blank line
+    const MINE = "fn mine() {}";
+    const own = `${workspace.files["src/lib.rs"]}\n${MINE}\n`;
+    await workspace.write("src/lib.rs", own, NAME);
+    PgConversation.edit("src/lib.rs", own);
+    await settle();
+    PgConversation.pick("s1.q1", 1);
+    await settle();
+    const code = workspace.files["src/lib.rs"];
+    const rows = code.split("\n");
+    const last = rows.indexOf(MINE) + 1;
+    expect(rows[last]).toBe("");
+    const lines = Q1_BLOCK.map((_, i) => last + 2 + i);
+    expect(PgConversation.state.engine.progress.beats["s1.q1"]).toMatchObject({
+      kind: "picked",
+      wrote: { file: "src/lib.rs", lines, text: Q1_BLOCK, appended: true },
+    });
+    expect(rowsAt(code, lines)).toEqual(Q1_BLOCK);
   });
 
   it("creates a file for a create beat, once", async () => {

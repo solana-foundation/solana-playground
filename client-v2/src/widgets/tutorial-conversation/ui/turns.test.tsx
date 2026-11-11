@@ -1063,7 +1063,7 @@ describe("TurnView", () => {
       wrote,
       failed: false,
     });
-    const drawWith = (turn: Turn, file: string) =>
+    const drawWith = (turn: Turn, file: string, handlers: TurnHandlers) =>
       render(
         <TurnView
           turn={turn}
@@ -1073,9 +1073,51 @@ describe("TurnView", () => {
           passed={[]}
           read={() => file}
           nextTutorial={null}
-          on={on()}
+          on={handlers}
         />
       );
+    const BLOCK = ["fn hello() {", '    msg!("Hi");', "}"];
+
+    it("names and shows the block where it is now, once lines were added above it", async () => {
+      const handlers = on();
+      drawWith(
+        wroteTurn({ file: "src/lib.rs", lines: [3, 4, 5], text: BLOCK }),
+        ["use x;", "use y;", "use z;", ""].concat(BLOCK).join("\n"),
+        handlers
+      );
+      const card = screen.getByRole("button", {
+        name: "Show lines 5 to 7 in src/lib.rs",
+      });
+      // The numbers beside the code are the block's lines now, the code its own
+      expect(card.textContent).toContain('    msg!("Hi");');
+      expect(card.textContent).toContain("567");
+      await userEvent.click(card);
+      expect(handlers.showLine).toHaveBeenCalledWith("src/lib.rs", 5);
+    });
+
+    it("names and shows the saved lines once the block was edited", async () => {
+      const handlers = on();
+      // Lines added above, and the block's middle line changed: no place
+      // holds the block as written, so the card keeps the saved lines
+      drawWith(
+        wroteTurn({ file: "src/lib.rs", lines: [3, 4, 5], text: BLOCK }),
+        [
+          "use x;",
+          "use y;",
+          "use z;",
+          "",
+          "fn hello() {",
+          "    mine();",
+          "}",
+        ].join("\n"),
+        handlers
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Show lines 3 to 5 in src/lib.rs" })
+      );
+      expect(handlers.showLine).toHaveBeenCalledWith("src/lib.rs", 3);
+    });
+
     const edited = 'import "not-a-real-package";\n// const a = 1;\n// a();';
 
     it("shows the lines the lesson wrote, whatever the file holds now", () => {
@@ -1085,7 +1127,8 @@ describe("TurnView", () => {
           lines: [1, 2],
           text: ['console.log("My address:", pg.wallet.publicKey);', ""],
         }),
-        edited
+        edited,
+        on()
       );
       expect(
         screen.getByText('console.log("My address:", pg.wallet.publicKey);')
@@ -1096,7 +1139,8 @@ describe("TurnView", () => {
     it("shows the written text in line order when the lines are not", () => {
       drawWith(
         wroteTurn({ file: "a.ts", lines: [2, 1], text: ["second", "first"] }),
-        edited
+        edited,
+        on()
       );
       const rows = screen
         .getAllByText(/^(first|second)$/)
@@ -1105,7 +1149,11 @@ describe("TurnView", () => {
     });
 
     it("reads a save without text from the file, as before", () => {
-      drawWith(wroteTurn({ file: "client/client.ts", lines: [1, 2] }), edited);
+      drawWith(
+        wroteTurn({ file: "client/client.ts", lines: [1, 2] }),
+        edited,
+        on()
+      );
       expect(screen.getByText('import "not-a-real-package";')).toBeTruthy();
     });
   });

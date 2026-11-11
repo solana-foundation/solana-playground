@@ -1233,10 +1233,10 @@ export class PgConversation {
           let block = effect.block;
           const at = effect.key ? typedKey(before, effect.key) : null;
           if (at !== null) {
-            const rows = before.split("\n");
-            block = withOwnText(block, rows[at - 1]);
-            rows.splice(at - 1, 1);
-            base = rows.join("\n");
+            const beforeRows = before.split("\n");
+            block = withOwnText(block, beforeRows[at - 1]);
+            beforeRows.splice(at - 1, 1);
+            base = beforeRows.join("\n");
           }
           const { reference, start } = groundOf(effect, step);
           const placed = insertBlock(base, block, reference, start);

@@ -12,6 +12,7 @@ import { fakeBuildServer } from "./fake-build-server";
 import type { FakeDevnet } from "./fake-devnet";
 import { fakeDevnet } from "./fake-devnet";
 import { expect, LONG, test } from "./fixtures";
+import { hasSavedText } from "./saved-files";
 
 /**
  * Hello Anchor from the intro card to the finish card on the desktop, with
@@ -308,9 +309,10 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await expect(page.locator(".monaco-editor .view-lines")).toContainText(
       EDIT
     );
-    // The editor saves half a second after the last key; past that, the
-    // file holds the edit
-    await page.waitForTimeout(1500);
+    // Once the editor's autosave has stored the edit, the file holds it
+    await expect
+      .poll(() => hasSavedText(page, EDIT), { timeout: 10_000 })
+      .toBe(true);
     await expect(card()).toContainText(LESSON);
     await expect(card()).not.toContainText(EDIT);
     // After a reload, once the editor holds the edit again, the card still
@@ -322,6 +324,38 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     );
     await expect(card()).toContainText(LESSON);
     await expect(card()).not.toContainText(EDIT);
+  });
+
+  test("tutorial-conversation: The learner adds lines above the written lines", async ({
+    page,
+  }) => {
+    test.skip(isLive, "needs no build or devnet");
+    test.setTimeout(120_000);
+    const MINE = "// mine";
+    const card = (range: string) =>
+      feed(page).getByRole("button", {
+        name: new RegExp(`^Show lines ${range} in .*lib\\.rs$`),
+      });
+    await start(page);
+    await answer(page, beat("s1.q1", "ask"));
+    await expect(card("5 to 13")).toBeVisible(LONG);
+    // A quiet moment: the question is answered and Build waits, so an edit
+    // that answers nothing posts no turn
+    await expect(act(page, "s1.build")).toBeVisible(LONG);
+    // Two lines typed at the top of the file the block landed in
+    await card("5 to 13").click();
+    await page.locator(".monaco-editor .view-lines").first().click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.type(`${MINE}\n${MINE}\n`);
+    await expect
+      .poll(() => hasSavedText(page, `${MINE}\n${MINE}\nuse anchor_lang`), {
+        timeout: 10_000,
+      })
+      .toBe(true);
+    // The card names the block where it is now
+    await expect(card("7 to 15")).toBeVisible();
+    await expect(card("5 to 13")).toHaveCount(0);
   });
 
   test("tutorial-conversation: The planned failure", async ({ page }) => {

@@ -10,6 +10,7 @@ import type { Turn, Wrote } from "@/features/tutorial-conversation";
 import { shortKey } from "@/shared/lib/short-key";
 import { Button } from "@/shared/ui/button";
 
+import { linesNow } from "../model/lines-now";
 import BaseActCard from "./BaseActCard";
 import BaseApplyCard from "./BaseApplyCard";
 import BaseDeployResultCard, { isDeployResult } from "./BaseDeployResultCard";
@@ -152,9 +153,11 @@ const withProgram = (act: ActBeat, programId: string | null): ActBeat =>
 const linesOf = (content: string | null) => content?.split("\n") ?? [];
 
 /**
- * A block's lines, first to last, as the lesson wrote them: its saved text,
- * else (a save from before the text was kept) those lines as the file holds
- * them now
+ * A block's lines, first to last: the text saved when it landed (a lesson's
+ * block, the learner's own words in a typed answer included, or the line an
+ * applied proposal wrote), else, for a landing without text (an older save,
+ * or text that did not pair with its lines), those lines as the file holds
+ * them now, the learner's edits included
  */
 const previewOf = (
   read: (file: string) => string | null,
@@ -268,9 +271,16 @@ const TurnView = ({
       return <BaseYouPill text={turn.text} code={turn.code} />;
     case "wrote": {
       const wrote = turn.wrote;
+      // The range and Show follow the block to where it is now
+      const now = wrote
+        ? {
+            ...wrote,
+            lines: linesNow(wrote, read(wrote.file) ?? undefined),
+          }
+        : null;
       return (
         <BaseWroteCard
-          wrote={wrote}
+          wrote={now}
           failed={turn.failed}
           preview={wrote ? previewOf(read, wrote) : []}
           onShow={on.showLine}
