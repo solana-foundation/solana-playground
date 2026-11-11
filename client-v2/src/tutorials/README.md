@@ -41,7 +41,7 @@ Make sure you've done the initial setup mentioned in [How to add a tutorial](#ho
 
 1. Create a tutorial directory based on the tutorial template
 
-   Copy the template directory at [`client-v2/public/tutorials/__template`](../../public/tutorials/__template) and rename the directory to your tutorial's kebab-case name e.g. if your tutorial name is "Cool Tutorial" rename the directory you copied to "cool-tutorial".
+   Copy upstream's template directory, `tutorials/__template` in the [assets repository](https://github.com/solana-playground/assets/tree/7fa9f326867f48f7e3abf47494d9a1849beff01f/tutorials/__template), to `client-v2/public/tutorials/` and rename the directory to your tutorial's kebab-case name e.g. if your tutorial name is "Cool Tutorial" rename the directory you copied to "cool-tutorial". The template is not kept in `public/`: [`scripts/assets-import.txt`](../../scripts/assets-import.txt) leaves upstream's tutorials out.
 
 2. Adjust the template files as necessary:
 
@@ -53,7 +53,7 @@ Make sure you've done the initial setup mentioned in [How to add a tutorial](#ho
 
 3. Enable the tutorial
 
-   Add an entry for the directory name to [`markdown-tutorials.json`](markdown-tutorials.json), with `added` set to the Unix time in seconds when the tutorial is added: `"cool-tutorial": { "added": 1735689600 }`. The app shows only the tutorials listed there, and the build reads `added` as the tutorial's `unixTimestamp`. A listed name without its directory or `data.json` fails the build.
+   Add an entry for the directory name to [`markdown-tutorials.json`](markdown-tutorials.json), with `added` set to the Unix time in seconds when the tutorial is added: `"cool-tutorial": { "added": 1735689600 }`. The app shows only the tutorials listed there, and the build reads `added` as the tutorial's `unixTimestamp`. A listed name without its directory or `data.json` fails the build. An upstream sync imports the whole directory of a listed tutorial, so no line in `scripts/assets-import.txt` is needed.
 
 4. [Send pull requests](#send-pull-requests)
 
@@ -95,7 +95,9 @@ Make sure you've done the initial setup mentioned in [How to add a tutorial](#ho
 
 ## Storing assets
 
-Tutorial assets live in `client-v2/public/tutorials/<tutorial-name>/` and are added in the same pull request as the tutorial.
+Tutorial assets live in `client-v2/public/tutorials/<tutorial-name>/` and are added in the same pull request as the tutorial. A conversation tutorial keeps its thumbnail next to its `tutorial.json` instead (`"thumbnail": "thumbnail.jpg"`), and the build bundles it. A custom tutorial's asset that comes from upstream's assets repository also needs its path in [`scripts/assets-import.txt`](../../scripts/assets-import.txt), or an upstream sync leaves it out.
+
+Run `node scripts/optimise-image.mjs <file>...` from `client-v2/` on every image you add; `yarn test-api` fails on an image in `public/` or `src/tutorials/` that the script would still change.
 
 > **Warning**
 >

@@ -7,6 +7,8 @@
 //   sync-upstream.mjs prepare               fetch, merge into a sync worktree, commit when nothing conflicts
 //   sync-upstream.mjs commit [<worktree>]   commit the merge after conflicts were resolved by hand
 //   sync-upstream.mjs publish [<worktree>]  push the sync branch and open or update the PR
+//   sync-upstream.mjs assets <worktree> [<upstream commit>]
+//                                           import upstream's asset changes into client-v2/public/
 //
 // Env overrides: UPSTREAM_REMOTE (solpg), UPSTREAM_BRANCH (master), TARGET_REMOTE (foundation),
 //   TARGET_BRANCH (master), PUSH_REMOTE (hoodieshq), SYNC_BRANCH_PREFIX (sync/),
@@ -21,6 +23,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const env = process.env;
 const UPSTREAM_REMOTE = env.UPSTREAM_REMOTE || "solpg";
@@ -44,8 +47,40 @@ export const GUARDS = [
   "server/src/routes/share.rs",
 ];
 
+export const ASSETS_URL = "https://github.com/solana-playground/assets.git";
+const PUBLIC_DIR = "client-v2/public";
+const IMPORT_LIST = "client-v2/scripts/assets-import.txt";
+const ASSETS_COMMIT = "client-v2/scripts/assets-commit.txt";
+const MARKDOWN_TUTORIALS = "client-v2/src/tutorials/markdown-tutorials.json";
+const OPTIMISE_IMAGE = "client-v2/scripts/optimise-image.mjs";
+
+// Asset paths the fork changed, so `assets` reports upstream's change to them and never writes it.
+export const FORK_OWNED = [
+  /^favicon[^/]*$/,
+  /^apple-touch-icon\.png$/,
+  /^icon-[^/]*\.png$/,
+  /^manifest\.json$/,
+  /^og\.png$/,
+  /^programs\/programs\.json$/,
+];
+
 /** The `<to>` hash a sync commit subject names, or `undefined` for any other subject. */
 export const parseSyncedTo = (subject) => SUBJECT_RE.exec(subject)?.[3];
+
+/** The entries of an import list: one path a line, `#` starts a comment, a trailing `/` marks a folder. */
+export const parseImportList = (text) =>
+  text
+    .split("\n")
+    .map((line) => line.replace(/#.*/, "").trim())
+    .filter(Boolean);
+
+/** Whether an asset path is imported: an entry covers it, or it is in an enabled Markdown tutorial's folder. */
+export const isImported = (entries, tutorials, file) =>
+  entries.some((entry) =>
+    entry.endsWith("/") ? file.startsWith(entry) : file === entry
+  ) || tutorials.some((name) => file.startsWith(`tutorials/${name}/`));
+
+export const isForkOwned = (file) => FORK_OWNED.some((re) => re.test(file));
 
 /** One `- <hash8> <subject>` line per commit, oldest first; body lines become `  * ` sub-bullets. */
 export const formatMessage = (upstreamRef, from8, to8, commits) =>
@@ -125,7 +160,7 @@ export const message = (repo, from, to) =>
   );
 
 // Foundation merges PRs by squash or rebase, so the previous upstream tip survives only in the subject.
-const previousTo = (repo) => {
+const syncedTipOf = (repo, ref) => {
   const subject = git(
     repo,
     "log",
@@ -133,11 +168,10 @@ const previousTo = (repo) => {
     "--format=%s",
     "-E",
     "--grep=^chore\\(upstream\\): (sync|merge [^ ]+) to ",
-    `${TARGET_REMOTE}/${TARGET_BRANCH}`
+    ref
   );
   const to = parseSyncedTo(subject);
-  if (to === undefined)
-    die(`no upstream sync subject on ${TARGET_REMOTE}/${TARGET_BRANCH}`);
+  if (to === undefined) die(`no upstream sync subject on ${ref}`);
   const sha = tryRead("git", [
     "-C",
     repo,
@@ -324,7 +358,7 @@ const prepare = (repo) => {
 
   const target = git(repo, "rev-parse", `${TARGET_REMOTE}/${TARGET_BRANCH}`);
   const to = git(repo, "rev-parse", `${UPSTREAM_REMOTE}/${UPSTREAM_BRANCH}`);
-  const from = previousTo(repo);
+  const from = syncedTipOf(repo, `${TARGET_REMOTE}/${TARGET_BRANCH}`);
   if (from === to)
     die(
       `nothing to sync: ${TARGET_REMOTE}/${TARGET_BRANCH} already has ${short(
@@ -516,11 +550,160 @@ const publish = (repo, wt) => {
   }
 };
 
+/** A blob's bytes at `rev`, or `undefined` when the path is absent there. */
+const blobAt = (repo, rev, file) => {
+  const result = spawnSync(
+    "git",
+    ["-C", repo, "cat-file", "blob", `${rev}:${file}`],
+    {
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+    }
+  );
+  return result.status === 0 ? result.stdout : undefined;
+};
+
+const sameBytes = (a, b) =>
+  a === undefined || b === undefined ? a === b : a.equals(b);
+
+const assets = async (wt, toArg) => {
+  const to = toArg
+    ? git(wt, "rev-parse", "--verify", `${toArg}^{commit}`)
+    : syncedTipOf(wt, "HEAD");
+  const old = readFileSync(path.join(wt, ASSETS_COMMIT), "utf8").trim();
+  const gitlink = /^160000 commit ([0-9a-f]{40})\t/.exec(
+    git(wt, "ls-tree", to, "client/public")
+  );
+  if (!gitlink) die(`${short(wt, to)} has no client/public gitlink`);
+  const next = gitlink[1];
+  if (next === old) {
+    console.log(
+      `${ASSETS_COMMIT} already names ${next.slice(
+        0,
+        8
+      )}, the assets commit of ${short(wt, to)}`
+    );
+    return;
+  }
+
+  const state = stateDir(wt);
+  mkdirSync(state, { recursive: true });
+  const clone = path.join(state, "assets");
+  if (existsSync(clone)) git(clone, "fetch", "--quiet", "origin");
+  else show("git", ["clone", "--quiet", ASSETS_URL, clone]);
+  for (const rev of [old, next])
+    if (!succeeds("git", ["-C", clone, "cat-file", "-e", `${rev}^{commit}`]))
+      die(`${rev} is not in ${ASSETS_URL}`);
+
+  const entries = parseImportList(
+    readFileSync(path.join(wt, IMPORT_LIST), "utf8")
+  );
+  const tutorials = Object.keys(
+    JSON.parse(readFileSync(path.join(wt, MARKDOWN_TUTORIALS), "utf8"))
+  );
+  const changes = git(clone, "diff", "--no-renames", "--name-status", old, next)
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.split("\t"));
+
+  const report = {
+    written: [],
+    current: [],
+    forkOwned: [],
+    differs: [],
+    skipped: [],
+  };
+  // The worktree's own optimiser, so the bytes match what its fixed-point test expects
+  const { optimiseImage } = await import(
+    pathToFileURL(path.join(wt, OPTIMISE_IMAGE)).href
+  );
+  const optimised = async (bytes, file) =>
+    bytes === undefined ? undefined : optimiseImage(file, bytes);
+
+  for (const [status, file] of changes) {
+    const entry = `${status} ${file}`;
+    if (!isImported(entries, tutorials, file)) {
+      report.skipped.push(entry);
+      continue;
+    }
+    const local = path.join(wt, PUBLIC_DIR, file);
+    const localBytes = existsSync(local) ? readFileSync(local) : undefined;
+    const newBytes = await optimised(blobAt(clone, next, file), file);
+    if (isForkOwned(file)) report.forkOwned.push(entry);
+    else if (sameBytes(localBytes, newBytes)) report.current.push(entry);
+    // The local copy of an unchanged image is the optimised old blob, not the raw one
+    else if (
+      !sameBytes(localBytes, await optimised(blobAt(clone, old, file), file))
+    )
+      report.differs.push(entry);
+    else {
+      if (newBytes === undefined) rmSync(local);
+      else {
+        mkdirSync(path.dirname(local), { recursive: true });
+        writeFileSync(local, newBytes);
+      }
+      report.written.push(entry);
+    }
+  }
+
+  // A data.json marks a Markdown tutorial; a `_` folder is upstream's template.
+  const added = changes
+    .map(
+      ([status, file]) =>
+        status === "A" &&
+        /^tutorials\/([^_/][^/]*)\/data\.json$/.exec(file)?.[1]
+    )
+    .filter((name) => name && !tutorials.includes(name))
+    .map((name) => {
+      const dates = git(
+        clone,
+        "log",
+        "--format=%ad",
+        "--date=unix",
+        "--diff-filter=A",
+        next,
+        "--",
+        `tutorials/${name}/data.json`
+      );
+      return `${name}: added ${dates.split("\n").pop()}`;
+    });
+
+  writeFileSync(path.join(wt, ASSETS_COMMIT), `${next}\n`);
+
+  const section = (title, lines) =>
+    lines.length > 0 &&
+    console.log(`\n${title}:${lines.map((line) => `\n  ${line}`).join("")}`);
+  const old8 = old.slice(0, 8);
+  const next8 = next.slice(0, 8);
+  console.log(
+    `assets ${old8}..${next8}: ${changes.length} changed, ${
+      report.written.length
+    } written, ${report.current.length} already current, ${
+      report.forkOwned.length + report.differs.length
+    } for the user, ${report.skipped.length} not imported`
+  );
+  section("written", report.written);
+  section(
+    `fork-owned, not written (upstream's copy: git -C ${clone} show ${next8}:<path>)`,
+    report.forkOwned
+  );
+  section(`changed by the fork since ${old8}, not written`, report.differs);
+  section(`not imported, no entry in ${IMPORT_LIST}`, report.skipped);
+  section(
+    `new Markdown tutorials, not imported (to enable one, add it to ${MARKDOWN_TUTORIALS} and run: git -C ${clone} archive ${next8} tutorials/<name> | tar -x -C ${path.join(
+      wt,
+      PUBLIC_DIR
+    )})`,
+    added
+  );
+  console.log(`\n${ASSETS_COMMIT}: ${next}; nothing is committed`);
+};
+
 const worktreeArg = (arg) =>
   git(arg || process.cwd(), "rev-parse", "--show-toplevel");
 
-const main = (args) => {
-  const usage = `usage: ${self()} message <from> <to> | synced-to <subject> | prepare | commit [<worktree>] | publish [<worktree>]`;
+const main = async (args) => {
+  const usage = `usage: ${self()} message <from> <to> | synced-to <subject> | prepare | commit [<worktree>] | publish [<worktree>] | assets <worktree> [<upstream commit>]`;
   const repo = () => git(process.cwd(), "rev-parse", "--show-toplevel");
   switch (args[0]) {
     case "message":
@@ -543,10 +726,15 @@ const main = (args) => {
     case "publish":
       publish(repo(), worktreeArg(args[1]));
       break;
+    case "assets":
+      if (args.length < 2 || args.length > 3)
+        die(`usage: ${self()} assets <worktree> [<upstream commit>]`);
+      await assets(worktreeArg(args[1]), args[2]);
+      break;
     default:
       die(usage);
   }
 };
 
 if (process.argv[1] && realpathSync(process.argv[1]) === import.meta.filename)
-  main(process.argv.slice(2));
+  await main(process.argv.slice(2));

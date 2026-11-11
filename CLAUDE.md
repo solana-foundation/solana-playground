@@ -193,12 +193,18 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `craco.config.js` adds the brand icons and share card to its head when
   webpack writes the page (`scripts/brand-head.mjs`), with the card's domain
   from `SITE_URL`, else `VERCEL_PROJECT_PRODUCTION_URL`, else
-  `http://localhost:3000`. The rest started as upstream's assets repository at
-  the commit in `client-v2/scripts/assets-commit.txt`, which records where
-  the copy came from; an upstream sync brings asset changes in by hand.
+  `http://localhost:3000`. The rest is the part of upstream's assets
+  repository that `client-v2/scripts/assets-import.txt` lists, at the commit
+  in `client-v2/scripts/assets-commit.txt`; upstream's `tutorials/` is left
+  out, and the ladder tutorials keep their thumbnails in
+  `src/tutorials/<slug>/`. An upstream sync imports changes to the listed
+  paths with the `sync-upstream` skill's `assets` command. Every image there
+  and in `src/tutorials/` goes through `client-v2/scripts/optimise-image.mjs`
+  first; `yarn test-api` fails on one the script would still change.
   A Markdown tutorial under `public/tutorials/` shows only when
   `client-v2/src/tutorials/markdown-tutorials.json` lists its folder, with
-  its date; a listed folder that is missing fails the build. The `generate`
+  its date, and the sync then imports its whole folder; a listed folder that
+  is missing fails the build. The `generate`
   scripts write `public/crates`, `public/packages`, and each tutorial's
   `content.json`; those stay gitignored.
 - **`docs/assistant-context.md` is the in-product assistant's context**, not

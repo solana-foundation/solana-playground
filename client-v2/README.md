@@ -128,18 +128,32 @@ served, a README included, so notes about them live here. The
 `generate` scripts add `public/crates`, `public/packages`, and each Markdown
 tutorial's `content.json`, which stay gitignored.
 
-The files that are not the fork's own started as upstream's
-[assets repository](https://github.com/solana-playground/assets) at the commit
-in `scripts/assets-commit.txt`. That file records where the copy came from; an
-upstream sync copies upstream's asset changes as they are and updates it.
+The files that are not the fork's own are the part of upstream's
+[assets repository](https://github.com/solana-playground/assets) that
+[`scripts/assets-import.txt`](scripts/assets-import.txt) lists, at the commit
+in `scripts/assets-commit.txt`. The list leaves out upstream's `tutorials/`
+folder: the fork's own tutorials keep their thumbnails next to their
+`tutorial.json` in `src/tutorials/<slug>/`. An upstream sync (the `assets`
+command of the `sync-upstream` skill) copies upstream's changes to the listed
+paths and updates `assets-commit.txt`; a path the list does not cover is
+reported and never copied.
 
-Every upstream tutorial folder lands in `public/tutorials/`, but the app shows
-a Markdown tutorial only when
+Every SVG, PNG, and JPEG in `public/` and `src/tutorials/` is optimised by
+[`scripts/optimise-image.mjs`](scripts/optimise-image.mjs): SVG through svgo,
+PNG losslessly and JPEG through mozjpeg at `JPEG_QUALITY`, both with sharp.
+Run `node scripts/optimise-image.mjs <file>...` on an image before adding it;
+`scripts/optimise-image.test.mjs` (`yarn test-api`) fails on an image that the
+script would still change. The output depends on the svgo and sharp versions
+`package.json` pins, so a change that bumps either runs the script over every
+image again. The `assets` command optimises what it imports.
+
+The app shows a Markdown tutorial only when
 [`src/tutorials/markdown-tutorials.json`](src/tutorials/markdown-tutorials.json)
-lists its folder name. Each entry's `added` is the tutorial's date in Unix
-seconds, read as its `unixTimestamp`; the copy has no upstream history to date
-it from. The build fails on a listed name whose folder or `data.json` is
-missing ([`src/tutorials/README.md`](src/tutorials/README.md)).
+lists its folder name, and an upstream sync imports a listed tutorial's whole
+folder. Each entry's `added` is the tutorial's date in Unix seconds, read as
+its `unixTimestamp`; the copy has no upstream history to date it from. The
+build fails on a listed name whose folder or `data.json` is missing
+([`src/tutorials/README.md`](src/tutorials/README.md)).
 
 ### Brand icons
 

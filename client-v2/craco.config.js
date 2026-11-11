@@ -430,9 +430,18 @@ module.exports = {
           CUSTOM_TUTORIALS: defineFromPublicDir(
             "tutorials",
             (dirItems, tutorialsPath) => {
-              return dirItems.reduce((acc, tutorialName) => {
+              // A custom tutorial with pages in `src/` has no asset folder when the import list leaves it out
+              const srcPaged = fs
+                .readdirSync(path.join("src", "tutorials"))
+                .filter((name) =>
+                  fs.existsSync(path.join("src", "tutorials", name, "pages"))
+                );
+              const names = [...new Set([...dirItems, ...srcPaged])];
+              return names.reduce((acc, tutorialName) => {
                 const tutorialDir = path.join(tutorialsPath, tutorialName);
-                const tutorialDirItems = fs.readdirSync(tutorialDir);
+                const tutorialDirItems = fs.existsSync(tutorialDir)
+                  ? fs.readdirSync(tutorialDir)
+                  : [];
                 const tutorialDataFileName = tutorialDirItems.find(
                   (name) => name === "data.json"
                 );
@@ -612,9 +621,6 @@ const MARKDOWN_TUTORIAL_LIST = JSON.parse(
 const defineFromPublicDir = (dirName, cb) => {
   const publicPath = path.join("public", dirName);
 
-  if (!fs.existsSync(publicPath)) {
-    fs.mkdirSync(publicPath);
-  }
-
-  return JSON.stringify(cb(fs.readdirSync(publicPath), publicPath));
+  const dirItems = fs.existsSync(publicPath) ? fs.readdirSync(publicPath) : [];
+  return JSON.stringify(cb(dirItems, publicPath));
 };

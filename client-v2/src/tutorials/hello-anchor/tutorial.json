@@ -12,7 +12,7 @@
   "level": "Beginner",
   "framework": "Anchor",
   "languages": ["Rust", "TypeScript"],
-  "thumbnail": "/tutorials/hello-anchor/thumbnail.jpg",
+  "thumbnail": "thumbnail.jpg",
   "minutes": 10,
   "intro": {
     "promise": "You'll write a small Solana program, put it live on devnet and call it with your name.",

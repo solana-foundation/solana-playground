@@ -184,12 +184,12 @@ test("a new project's open tabs survive a reload right after it is made", async 
 test("a tutorial's progress file survives a reload right after START", async ({
   page,
 }) => {
-  await page.goto("/tutorials/bank-simulator");
+  await page.goto("/tutorials/hello-solana");
   await page.getByRole("button", { name: "Start", exact: true }).click();
-  await expect(page).toHaveURL(/\/tutorials\/bank-simulator\/1$/, LONG);
+  await expect(page).toHaveURL(/\/tutorials\/hello-solana\/1$/, LONG);
   await waitForStored(page, ['"pageNumber":1', '"completed":false']);
 
-  expect(await leaveAndRead(page, ["/Bank Simulator/.tutorial.json"])).toEqual([
+  expect(await leaveAndRead(page, ["/Hello Solana/.tutorial.json"])).toEqual([
     true,
   ]);
 });
