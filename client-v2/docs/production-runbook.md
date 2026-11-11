@@ -603,6 +603,30 @@ OIDC.
    re-run the failed CICD job. If a release cannot wait for that, grant `roles/editor` back, release, and remove it
    again. A different project holds no Cloud SQL instance of ours, so this paragraph does not apply there.
 
+   **The runtime account too.** The grant above lets the deploy account run server code as `$RUNTIME_SA`, so that
+   account must not reach `solpg` either. App Engine's default account (`<SERVER_PROJECT_ID>@appspot.gserviceaccount.com`)
+   is often an Editor. The build server holds no database and calls no Google Cloud API, so it needs only to write
+   logs and metrics. List the runtime account's roles:
+
+   ```sh
+   gcloud projects get-iam-policy "$SERVER_PROJECT_ID" --flatten=bindings \
+     --filter="bindings.members:serviceAccount:$RUNTIME_SA" --format='value(bindings.role)'
+   ```
+
+   If it holds `roles/editor`, `roles/owner` or any `roles/cloudsql.*`, grant the two it needs, then remove those,
+   each with the same `remove-iam-policy-binding` command for `$RUNTIME_SA`:
+
+   ```sh
+   for role in roles/logging.logWriter roles/monitoring.metricWriter; do
+     gcloud projects add-iam-policy-binding "$SERVER_PROJECT_ID" \
+       --member="serviceAccount:$RUNTIME_SA" --role="$role" --condition=None
+   done
+   ```
+
+   If another App Engine service in the project runs as the same account and needs more, tell Alexander before
+   removing anything: the server then needs an account of its own. Check 3 proves the runtime roles as well: the
+   new version must start and serve.
+
 3. **Create the pool and provider.** The pool is `github-server`, not `github`: cloud-sql.md's step 9 creates a
    `github` pool for previews, and the two may share a project. The condition admits tokens from `master` of this
    repository only, by its id, which a rename cannot take over.
@@ -656,14 +680,19 @@ OIDC.
    server for every user, so do it when a minute of the older version does no harm. With no older serving version,
    skip this check; the next release proves the move.
 3. **The next release.** After the next tagged commit on `master`, the CICD run's annotations say
-   `GCP sign-in: Workload Identity Federation` and the new version appears, parked, in the version list. Move
-   traffic to it as [Releasing the build server](#releasing-the-build-server) says.
-4. **No route to `solpg`**, when `<SERVER_PROJECT_ID>` is `<PROJECT_ID>`: this lists nothing.
+   `GCP sign-in: Workload Identity Federation` and the new version appears, parked, in the version list. The deploy
+   step finishes only once the new instances pass App Engine's health check, so a green run also proves the runtime
+   account's roles. Move traffic to it as [Releasing the build server](#releasing-the-build-server) says, then build
+   a program in the client: the build log shows no error.
+4. **No route to `solpg`**, when `<SERVER_PROJECT_ID>` is `<PROJECT_ID>`: this lists nothing, for the deploy and
+   the runtime account alike.
 
    ```sh
-   gcloud projects get-iam-policy "$PROJECT_ID" --flatten='bindings[].members' \
-     --filter="bindings.members:serviceAccount:$SERVER_SA AND bindings.role~^roles/(cloudsql|editor|owner)" \
-     --format='table(bindings.role)'
+   for sa in "$SERVER_SA" "$RUNTIME_SA"; do
+     gcloud projects get-iam-policy "$PROJECT_ID" --flatten='bindings[].members' \
+       --filter="bindings.members:serviceAccount:$sa AND bindings.role~^roles/(cloudsql|editor|owner)" \
+       --format='table(bindings.role)'
+   done
    ```
 
 **If a check fails:**
