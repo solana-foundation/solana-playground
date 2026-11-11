@@ -15,8 +15,8 @@ export type FrameworkParam<N extends string> = {
   /** Framework program language */
   language: LanguageName;
 
-  /** Image icon src, defaults to `/frameworks/icon.png` */
-  icon?: string;
+  /** Image icon src, an asset the framework's folder imports */
+  icon: string;
 
   /** Whether to make the image circular */
   circleImage?: boolean;
@@ -90,7 +90,7 @@ export type FrameworkParam<N extends string> = {
 /** Created framework */
 export type Framework<N extends string = string> = RequiredKey<
   FrameworkParam<N>,
-  "icon" | "getIsCurrent" | "getDefaultFiles" | "import" | "export"
+  "getIsCurrent" | "getDefaultFiles" | "import" | "export"
 >;
 
 /** What `exportWorkspace` throws when it cannot tell a project's framework */

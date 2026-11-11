@@ -743,7 +743,7 @@ const isMatchFor = (query: string) => (item: NormalizedItem) => {
 
 /**
  * `item` with a string `value` added to its `matches` (its label by default),
- * so an entry found inside a group (a program, a Pyth feed) is found by its
+ * so an entry found inside a group (a program, a token account) is found by its
  * address as well as its name. A function `matches` decides alone.
  */
 const withValueMatch = (item: NormalizedItem): NormalizedItem => {
@@ -765,8 +765,8 @@ const groupRowsOf = (rows: Row[]) =>
 
 /**
  * The lists of the groups among `items`, by group label. A list given as an
- * array is read as it is; one behind a function (Pyth, token and mint
- * accounts) is loaded the first time a search asks for it and kept until
+ * array is read as it is; one behind a function (token and mint accounts)
+ * is loaded the first time a search asks for it and kept until
  * `clear`, which the list's closing calls, so a reopened list loads afresh.
  * `items` is rebuilt on every render of most callers, so a group is known by
  * its label, not its identity. A list that fails to load is left out of the

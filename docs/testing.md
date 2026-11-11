@@ -694,7 +694,7 @@ The assets are the tracked files in `client-v2/public`. The paths in the S-10 co
 change renames one, pick another file from the same folder.
 
 ```sh
-for p in fonts/JetBrainsMono.woff2 icons/sidebar/build.png themes/dracula.json frameworks/anchor/icon.png \
+for p in favicon.svg themes/dracula.json programs/programs.json \
   languages/rust/grammar.tmLanguage.json packages/versions.json manifest.json; do
   curl -s -o /dev/null -w "%{http_code} %{content_type} $p\n" "http://localhost:3000/$p"
 done

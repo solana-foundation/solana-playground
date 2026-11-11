@@ -12,7 +12,6 @@ tutorial-runs: Passing step 3 from the Call panel
 [firefox] client-v2-assistant: Reading back during an answer
 [firefox] a message sent while scrolled up brings the reply into view
 [firefox] a swipe made while the editor loads stays on the preview
-[firefox] client-v2-layout: The editor's keyboard button on an iPhone
 [firefox] client-v2-layout: New project on a phone is a page
 [firefox] project-sync-limits: Five files of 100 KiB stop the project
 [firefox] assistant-own-key: A new thread takes the last chosen backend

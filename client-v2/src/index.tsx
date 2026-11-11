@@ -1,4 +1,7 @@
 import "./index.css";
+// The code fonts `themes/fonts.ts` lists; after index.css, whose webfont @import must lead the built CSS
+import "@fontsource/jetbrains-mono/400.css";
+import "./themes/hack.css";
 
 import React from "react";
 import { createRoot } from "react-dom/client";

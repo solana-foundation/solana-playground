@@ -198,9 +198,12 @@ Asked to build something in the client, look in `openspec/changes/` first.
   in `client-v2/scripts/assets-commit.txt`; upstream's `tutorials/` is left
   out, and the ladder tutorials keep their thumbnails in
   `src/tutorials/<slug>/`. An upstream sync imports changes to the listed
-  paths with the `sync-upstream` skill's `assets` command. Every image there
-  and in `src/tutorials/` goes through `client-v2/scripts/optimise-image.mjs`
-  first; `yarn test-api` fails on one the script would still change.
+  paths with the `sync-upstream` skill's `assets` command. The code fonts
+  (npm packages imported in `src/index.tsx`), the icons (`lucide-react`), and
+  the framework logos (`src/frameworks/<name>/`) are not in `public/`. Every
+  image there, in `src/tutorials/`, and in `src/frameworks/` goes through
+  `client-v2/scripts/optimise-image.mjs` first; `yarn test-api` fails on one
+  the script would still change.
   A Markdown tutorial under `public/tutorials/` shows only when
   `client-v2/src/tutorials/markdown-tutorials.json` lists its folder, with
   its date, and the sync then imports its whole folder; a listed folder that

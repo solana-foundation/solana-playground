@@ -24,6 +24,7 @@ const ALLOWED = [
   /^shared\/lib\/css-color\//,
   // Third-party logos keep their own colours on every ground
   /^languages\//,
+  /^frameworks\/[a-z-]+\/icon\.svg$/,
   // Brand art: a tutorial cover's grounds are the brand deck's own colours,
   // the same on every theme, and no token describes them
   /^entities\/tutorial\/ui\/art\//,

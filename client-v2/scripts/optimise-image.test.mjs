@@ -55,7 +55,7 @@ test("keeps an image whose re-encode is not smaller", async () => {
   assert.equal(await optimiseImage("a.png", bytes), bytes);
 });
 
-test("every image in public/ and src/tutorials/ is already optimised", async () => {
+test("every image in public/, src/tutorials/, and src/frameworks/ is already optimised", async () => {
   const files = execFileSync(
     "git",
     [
@@ -68,6 +68,7 @@ test("every image in public/ and src/tutorials/ is already optimised", async () 
       "--",
       "public",
       "src/tutorials",
+      "src/frameworks",
     ],
     { encoding: "utf8" }
   )

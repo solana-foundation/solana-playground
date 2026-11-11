@@ -1,0 +1,9 @@
+/* hack-font's own stylesheets declare four styles; the code font uses only the regular one */
+@font-face {
+  font-family: "Hack";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("hack-font/build/web/fonts/hack-regular-subset.woff2")
+    format("woff2");
+}

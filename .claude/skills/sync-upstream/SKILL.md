@@ -68,7 +68,9 @@ Upstream's assets live in `https://github.com/solana-playground/assets.git`, whi
 commit it came from in `client-v2/scripts/assets-commit.txt`. The part is the import list,
 `client-v2/scripts/assets-import.txt`: one asset path a line, a trailing `/` for a folder, `#` for a comment. A
 tutorial folder that `client-v2/src/tutorials/markdown-tutorials.json` lists is imported whole without a line
-there, so enabling a Markdown tutorial is one edit.
+there, so enabling a Markdown tutorial is one edit. Upstream's `fonts/`, `icons/`, and `frameworks/` are left
+out: client-v2 takes its code fonts from npm packages, its icons from `lucide-react`, and its framework logos
+from `client-v2/src/frameworks/<name>/`, so a change upstream makes there is reported as not imported.
 
 On the polish branch, run `S assets <worktree>`, after `yarn install` in its `client-v2/` (the command loads svgo
 and sharp from there). It reads `<old>` from `assets-commit.txt` and `<new>` from the
@@ -88,8 +90,8 @@ any other file as it is, because the fork keeps its images optimised:
 - any other path takes upstream's add, change, or delete, with the optimised bytes.
 
 The optimiser's output is the same only for the svgo and sharp versions `client-v2/package.json` pins. A change
-that bumps either one runs `node scripts/optimise-image.mjs` over every image in `client-v2/public/` and
-`client-v2/src/tutorials/` in the same change; otherwise this command reports every image as changed by the
+that bumps either one runs `node scripts/optimise-image.mjs` over every image in `client-v2/public/`,
+`client-v2/src/tutorials/`, and `client-v2/src/frameworks/` in the same change; otherwise this command reports every image as changed by the
 fork.
 
 It reports each tutorial folder upstream added with a `data.json` (names starting with `_` excluded) and
