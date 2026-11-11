@@ -26,6 +26,11 @@ const log = createLogger("tutorial-conversation:progress");
  */
 export interface ConversationProgress extends ConversationSave {
   version: 1;
+  /**
+   * 2 once the cursor counts Hello Anchor's `s4.client` beat; a save without
+   * it is older and `parseProgress` moves its cursor (`isBeforeRealignedBeat`)
+   */
+  format?: 2;
   passed: string[];
   finishedAt: number | null;
   /** When Start was pressed, in ms, or null before it */
@@ -572,6 +577,7 @@ export const freshProgress = (
   restartedAt: number | null = null
 ): ConversationProgress => ({
   version: 1,
+  format: 2,
   passed: [],
   finishedAt: null,
   startedAt: null,
@@ -617,20 +623,18 @@ const SKIP_VIAS: readonly SkipVia[] = ["button", "call_panel", "elsewhere"];
 /**
  * Hello Anchor's "greet-by-name" step gained a beat, `s4.client`, at index 2.
  * A cursor is the index of the next beat, so a save made before it, past the
- * second beat and without `s4.client` resolved, points one beat early: the
- * airdrop card would show as the live one instead of the deploy. The loader
- * moves such a cursor one on and records `s4.client` as said, which also
- * makes the move run once: the next load finds the beat resolved. The learner
- * skips only the client rewrite, and the call card sends its own arguments.
+ * second beat, points one beat early: the airdrop card would show as the live
+ * one instead of the deploy. Only a save without `format` is that old, and
+ * `parseProgress` stamps `format: 2` on what it returns, so the move runs
+ * once. The learner skips only the client rewrite, and the call card sends
+ * its own arguments.
  */
-const REALIGNED_BEAT = "s4.client";
-
-const isBeforeRealignedBeat = (cursor: Cursor, beats: unknown) =>
+const isBeforeRealignedBeat = (cursor: Cursor, format: unknown) =>
+  format === undefined &&
   cursor.kind === "step" &&
   cursor.stepId === "greet-by-name" &&
   !cursor.fail &&
-  cursor.beat >= 2 &&
-  !(isRecord(beats) && REALIGNED_BEAT in beats);
+  cursor.beat >= 2;
 
 const parseCursor = (v: unknown): Cursor | null => {
   if (!isRecord(v)) return null;
@@ -1137,7 +1141,7 @@ export const parseProgress = (
   if (!isStrings(saved.passed) || !isMsOrNull(saved.finishedAt)) return null;
   const parsed = parseCursor(saved.cursor);
   if (!parsed) return null;
-  const realigned = isBeforeRealignedBeat(parsed, saved.beats);
+  const realigned = isBeforeRealignedBeat(parsed, saved.format);
   const cursor: Cursor =
     realigned && parsed.kind === "step"
       ? { ...parsed, beat: parsed.beat + 1 }
@@ -1151,22 +1155,13 @@ export const parseProgress = (
   if (saved.deployed !== undefined && !deployed) onDrop("deployed");
   return {
     version: 1,
+    format: 2,
     passed: Array.from(new Set(saved.passed)),
     finishedAt: saved.finishedAt,
     startedAt: saved.startedAt,
     restartedAt,
     cursor,
-    beats: Object.assign(
-      parseEach(saved.beats, parseResolution, onDrop, "beats"),
-      realigned
-        ? {
-            [REALIGNED_BEAT]: {
-              kind: "said" as const,
-              at: typeof saved.startedAt === "number" ? saved.startedAt : 0,
-            },
-          }
-        : {}
-    ),
+    beats: parseEach(saved.beats, parseResolution, onDrop, "beats"),
     runs: parseEach(
       saved.runs,
       (entry, key) => parseRuns(entry, onDrop, key),
@@ -1191,8 +1186,8 @@ if (import.meta.vitest) {
 
   describe("features/tutorial-conversation/model/progress", () => {
     it("moves a cursor saved before s4.client one beat on", () => {
-      const save = (beat: number, beats: Record<string, unknown>) =>
-        JSON.parse(
+      const save = (beat: number, format?: 2) => {
+        const progress = JSON.parse(
           JSON.stringify(
             Object.assign(freshProgress(), {
               cursor: {
@@ -1201,26 +1196,29 @@ if (import.meta.vitest) {
                 beat,
                 fail: false,
               },
-              beats,
             })
           )
         );
+        if (format === undefined) delete progress.format;
+        return progress;
+      };
       const at = (v: unknown) => parseProgress(v)?.cursor;
-      expect(at(save(3, {}))).toEqual({
+      expect(at(save(3))).toEqual({
         kind: "step",
         stepId: "greet-by-name",
         beat: 4,
         fail: false,
       });
+      expect(at(save(2))).toMatchObject({ beat: 3 });
+      expect(at(save(1))).toMatchObject({ beat: 1 });
+      // A save of this build, at the same beat, is left alone
+      expect(at(save(3, 2))).toMatchObject({ beat: 3 });
+      expect(at(save(2, 2))).toMatchObject({ beat: 2 });
       // Loading the migrated save again moves nothing
-      const once = parseProgress(save(3, {}));
+      const once = parseProgress(save(3));
       expect(parseProgress(JSON.parse(JSON.stringify(once)))?.cursor).toEqual(
         once?.cursor
       );
-      expect(at(save(1, {}))).toMatchObject({ beat: 1 });
-      expect(
-        at(save(3, { "s4.client": { state: "said", at: 1 } }))
-      ).toMatchObject({ beat: 3 });
     });
 
     it("drops a landed airdrop whose balance or amount does not read as lamports", () => {
@@ -1354,6 +1352,7 @@ if (import.meta.vitest) {
       } = {}
     ) => ({
       version: 1 as const,
+      format: 2 as const,
       passed: opts.passed ?? ["write-program"],
       finishedAt: opts.finishedAt ?? null,
       startedAt: 1000,
