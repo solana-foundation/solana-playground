@@ -18,7 +18,15 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn, linesRead } from "./telemetry";
-import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
+import {
+  DESK,
+  openPhoneMenu,
+  openPhonePreview,
+  PHONE,
+  TABLET,
+  waitForPhonePage,
+  WIDE_DESK,
+} from "./viewports";
 
 /**
  * The one event line with this name: waits for it, then a moment more, so a
@@ -97,14 +105,6 @@ const seedThenResize = async (
   await seedWorkspace(page);
   await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
   await page.setViewportSize(size);
-};
-
-// A click retried mid-scroll can snap the pager to the menu page, leaving Work and its Menu inert
-const openPhoneMenu = async (page: Page) => {
-  await expect(page.getByRole("region", { name: "Work" })).toBeInViewport({
-    ratio: 1,
-  });
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
 };
 
 test("client-v2-layout: A resized assistant and an open console", async ({
@@ -529,7 +529,10 @@ test.describe("on a phone", () => {
 
   // The seed runs on a desktop-sized page, as the fixture waits on the tree
   // a phone keeps in a closed Sheet; the window is narrowed afterwards
-  const seedThenNarrow = (page: Page) => seedThenResize(page, PHONE);
+  const seedThenNarrow = async (page: Page) => {
+    await seedThenResize(page, PHONE);
+    await waitForPhonePage(page, "Work");
+  };
 
   test("the account is a page of its own on a phone", async ({ page }) => {
     await seedThenNarrow(page);
@@ -580,17 +583,15 @@ test.describe("on a phone", () => {
     ).toBeVisible();
     await expect(files).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Preview the build" }).click();
+    await openPhonePreview(page);
     await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
     await expect(consoleHandle(page)).toBeInViewport();
     await page.getByRole("button", { name: "Back to the code" }).click();
     await expect(page.locator(".monaco-editor")).toBeInViewport();
 
     await openPhoneMenu(page);
-    const menu = page.getByRole("region", { name: "Navigation" });
-    await expect(menu).toBeInViewport();
     await page.getByRole("button", { name: "Close the menu" }).click();
-    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
+    await waitForPhonePage(page, "Work");
     await page.getByRole("radio", { name: "Chat" }).click();
     // The composer is there and takes typing with nothing connected
     const composer = page.getByRole("textbox", {
@@ -1010,6 +1011,7 @@ test.describe("on an iPhone", () => {
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await page.setViewportSize(PHONE);
+    await waitForPhonePage(page, "Work");
     const lines = page.locator(".monaco-editor .view-lines");
     await expect(lines).toContainText("use anchor_lang");
     // A tap on the code does not always raise the keyboard on an iPhone, so

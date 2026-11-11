@@ -9,7 +9,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
-import { DESK, PHONE } from "./viewports";
+import { DESK, openPhoneMenu, PHONE } from "./viewports";
 
 const TITLE = "Continue on a computer";
 
@@ -17,10 +17,7 @@ const TITLE = "Continue on a computer";
 const openMenu = async (page: Page) => {
   await page.goto("/");
   await expect(home(page)).toBeVisible(LONG);
-  await page
-    .getByRole("region", { name: "Work" })
-    .getByRole("button", { name: "Menu" })
-    .click();
+  await openPhoneMenu(page);
   return page.getByRole("region", { name: "Navigation" });
 };
 

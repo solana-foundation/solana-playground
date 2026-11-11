@@ -12,7 +12,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn, linesRead } from "./telemetry";
-import { DESK, PHONE } from "./viewports";
+import { DESK, PHONE, waitForPhonePage } from "./viewports";
 
 /**
  * The assistant's composer: the model it names, sending without a key,
@@ -342,6 +342,7 @@ test.describe("Connect a model", () => {
       await page.setViewportSize(DESK);
       await openProject(page, "connect-phone");
       await page.setViewportSize(PHONE);
+      await waitForPhonePage(page, "Work");
       await page.getByRole("radio", { name: "Chat" }).click();
       const work = page.getByRole("region", { name: "Work" });
       await expect(work).toBeInViewport();
@@ -460,6 +461,7 @@ const openOnPhone = async (page: Page, name: string) => {
   await page.setViewportSize(DESK);
   await openProject(page, name);
   await page.setViewportSize(PHONE);
+  await waitForPhonePage(page, "Work");
   await page.getByRole("radio", { name: "Chat" }).click();
   await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
 };

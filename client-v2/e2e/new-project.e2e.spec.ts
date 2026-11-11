@@ -14,7 +14,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn, linesRead } from "./telemetry";
-import { DESK, PHONE } from "./viewports";
+import { DESK, openPhoneMenu, PHONE, waitForPhonePage } from "./viewports";
 
 /** One of the two lists, by its name (its count follows the name) */
 const list = (page: Page, name: "Tutorials" | "Programs") =>
@@ -166,12 +166,12 @@ test.describe("on a phone", () => {
     );
     await page.goto("/");
     await expect(home(page)).toBeVisible(LONG);
-    const work = page.getByRole("region", { name: "Work" });
-    await work.getByRole("button", { name: "Menu" }).click();
+    await openPhoneMenu(page);
     await page
       .getByRole("region", { name: "Navigation" })
       .getByRole("button", { name: "New project" })
       .click();
+    await waitForPhonePage(page, "Work");
 
     await expect(newProjectPage(page)).toBeVisible();
     await expect(
