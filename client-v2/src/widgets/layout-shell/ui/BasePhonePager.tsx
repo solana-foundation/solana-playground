@@ -20,6 +20,9 @@ const PHONE_CONSOLE_BAR_PX = 44;
 /** How long a scroll must rest before it counts as a swipe that settled */
 export const SWIPE_SETTLE_MS = 120;
 
+/** How far a finger may drift and still have tapped, not dragged */
+const TAP_SLOP_PX = 10;
+
 /** What the pager shows and the callbacks it reports through */
 export interface PhonePagerState {
   page: PhonePage;
@@ -255,8 +258,10 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
   // pages back where they were: that settle is finished, not read as a swipe.
   // Set only when the alignment has somewhere to go (a swipe's own report
   // re-renders on the page already shown), and cleared by the next settle or
-  // by a touch, pointer, wheel or key on the pager, which hand the scroll to
-  // the user.
+  // by a drag, wheel or key on the pager, which hand the scroll to the user.
+  // A click or a tap on a control in a page moves nothing: Chat chosen while
+  // the pager scrolled back to Work once cleared it, the snap carried on to
+  // Preview, and that settle was reported as a swipe.
   const moving = useRef(false);
   useLayoutEffect(() => {
     const el = ref.current!;
@@ -281,6 +286,9 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
   // A finger resting mid-drag fires no scroll events, so a rest is not a
   // settle while a touch is down; it is one when the finger lifts
   const touching = useRef(false);
+  // Where a touch began, and whether the pager was moving then: a touch that
+  // lifts where it began was a tap, and the move stays the pager's
+  const touchStart = useRef({ x: 0, moving: false });
   const armSettle = () => {
     window.clearTimeout(settle.current);
     settle.current = window.setTimeout(() => {
@@ -304,27 +312,33 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
   armSettleRef.current = armSettle;
   useEffect(() => {
     const el = ref.current!;
-    const down = () => {
+    const down = (e: TouchEvent) => {
       touching.current = true;
+      touchStart.current = {
+        x: e.touches[0]?.clientX ?? 0,
+        moving: moving.current,
+      };
       moving.current = false;
       window.clearTimeout(settle.current);
     };
     const userScroll = () => {
       moving.current = false;
     };
-    const up = () => {
+    const up = (e: TouchEvent) => {
       touching.current = false;
+      const x = e.changedTouches[0]?.clientX;
+      const tapped =
+        x !== undefined && Math.abs(x - touchStart.current.x) < TAP_SLOP_PX;
+      if (tapped) moving.current = touchStart.current.moving;
       armSettleRef.current();
     };
     el.addEventListener("touchstart", down, { passive: true });
     el.addEventListener("touchend", up, { passive: true });
     el.addEventListener("touchcancel", up, { passive: true });
     el.addEventListener("wheel", userScroll, { passive: true });
-    el.addEventListener("pointerdown", userScroll);
     el.addEventListener("keydown", userScroll);
     return () => {
       el.removeEventListener("wheel", userScroll);
-      el.removeEventListener("pointerdown", userScroll);
       el.removeEventListener("keydown", userScroll);
       el.removeEventListener("touchstart", down);
       el.removeEventListener("touchend", up);
