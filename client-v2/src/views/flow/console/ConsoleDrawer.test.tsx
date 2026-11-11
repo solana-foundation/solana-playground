@@ -34,7 +34,9 @@ const requestOpen = (open: boolean) =>
 
 // The wallet chip reads the wallet, the cluster and the session; it has tests
 // of its own, so the strip's tests draw nothing in its place
-vi.mock("../../../features/fund-wallet", () => ({ WalletChip: () => null }));
+vi.mock("../../../features/fund-wallet", () => ({
+  WalletChip: () => undefined,
+}));
 vi.mock("../../../features/auth", () => ({
   useSignedIn: () => true,
   isSignInFailure: () => false,
