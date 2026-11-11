@@ -9,5 +9,4 @@ export { ImportTemporary } from "./ImportTemporary";
 export { RenameItem } from "./RenameItem";
 export { RenameWorkspace } from "./RenameWorkspace";
 export { ReplaceItem } from "./ReplaceItem";
-export { Share } from "./Share";
 export { IMPORTED, isImported } from "./imported";

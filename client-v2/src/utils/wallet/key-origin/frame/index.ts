@@ -1,16 +1,16 @@
 // The entry of `wallet-keys.html`, the key page the app frames from the key
 // origin (`craco.config.js`). It imports only `@noble/ed25519` and the
-// key-origin modules (`scripts/wallet-keys-entry.test.mjs`): no app module
-// runs on the origin that holds the keys.
+// key-origin modules, plus `shared/config/client-env.ts` for the build's
+// public settings (`scripts/wallet-keys-entry.test.mjs`): no app module runs
+// on the origin that holds the keys.
+import { walletOriginEnv } from "../../../../shared/config/client-env";
 import { appOriginFor } from "../origin";
 import { awaitPortFor, serveWith } from "./channel";
 import { handlerWith, reportFailure } from "./handler";
 import { panelRouteOf, runPanelWith } from "./panel";
 import { indexedDbKeyStore, KEY_DB_NAME, requestPersistence } from "./store";
 
-const appOrigin = appOriginFor(process.env.REACT_APP_WALLET_APP_ORIGIN)(
-  window.location
-);
+const appOrigin = appOriginFor(walletOriginEnv().APP_ORIGIN)(window.location);
 
 // No fragment is the hidden frame; a panel fragment, the visible panel
 const isHidden = window.location.hash === "";

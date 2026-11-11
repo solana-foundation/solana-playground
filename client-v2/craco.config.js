@@ -26,6 +26,8 @@ const warnAboutMissingObservabilityIds = () => {
   }
 };
 
+const { assertPublicEnv } = require("./scripts/public-env.mjs");
+
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const { insertGoogleTag } = require("./scripts/google-tag.mjs");
 
@@ -322,6 +324,10 @@ module.exports = {
 
       // Here, not at the top: CRA's `config/env.js` has loaded `.env` by now
       warnAboutMissingObservabilityIds();
+
+      // Here, not at the top: CRA has loaded the `.env` files by now, and
+      // inlines every REACT_APP_* it found into the bundle
+      if (env === "production") assertPublicEnv(process.env);
 
       // `test-types` and `lint` run in CI and in `check`; in a production
       // build these plugins only add memory under Vercel's 8 GB limit

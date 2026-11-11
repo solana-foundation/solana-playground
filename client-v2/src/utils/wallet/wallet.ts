@@ -1,6 +1,7 @@
 import * as ed25519 from "@noble/ed25519";
 
 import type { WalletNoticeKind } from "../../entities/wallet";
+import { walletOriginEnv } from "../../shared/config/client-env";
 import { createLogger, toError } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
@@ -59,16 +60,15 @@ const defaultState: WalletState = {
  */
 // `src/settings` runs this module under Node with a `window` shim that has no
 // `location`, so both are checked
+const { KEY_ORIGIN: keyOriginSetting } = walletOriginEnv();
 const here = typeof window === "undefined" ? undefined : window.location;
-const keyOrigin = here
-  ? keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN)(here)
-  : undefined;
+const keyOrigin = here ? keyOriginFor(keyOriginSetting)(here) : undefined;
 
 // Logged here, once per load, not in `origin.ts`: the key page imports that
 // module too, and its bundle carries no logger
-if (here && process.env.REACT_APP_WALLET_KEY_ORIGIN && !keyOrigin) {
+if (here && keyOriginSetting && !keyOrigin) {
   createLogger("wallet:key-origin").warn(
-    `REACT_APP_WALLET_KEY_ORIGIN="${process.env.REACT_APP_WALLET_KEY_ORIGIN}" names no usable origin from ${here.origin}; the keys stay in the page`
+    `REACT_APP_WALLET_KEY_ORIGIN="${keyOriginSetting}" names no usable origin from ${here.origin}; the keys stay in the page`
   );
 }
 

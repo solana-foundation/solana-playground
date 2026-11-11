@@ -11,10 +11,14 @@ const ts = require("typescript");
 
 const KEY_ORIGIN = path.join(cwd, "src/utils/wallet/key-origin");
 const FRAME = path.join(KEY_ORIGIN, "frame");
-/** The only files outside `frame/` the key page may load */
-const SHARED = new Set(
-  ["protocol.ts", "origin.ts"].map((f) => path.join(KEY_ORIGIN, f))
-);
+/**
+ * The only files outside `frame/` the key page may load: `client-env.ts`
+ * imports nothing and holds only the build's public settings
+ */
+const SHARED = new Set([
+  ...["protocol.ts", "origin.ts"].map((f) => path.join(KEY_ORIGIN, f)),
+  path.join(cwd, "src/shared/config/client-env.ts"),
+]);
 /** The only package the key page may load */
 const PACKAGES = new Set(["@noble/ed25519"]);
 
@@ -92,7 +96,7 @@ const graphOf = (entry) => {
 };
 
 describe("the key page's entry", () => {
-  it("loads only key-origin/frame, protocol.ts, origin.ts and @noble/ed25519", () => {
+  it("loads only key-origin/frame, protocol.ts, origin.ts, client-env.ts and @noble/ed25519", () => {
     const { files, packages } = graphOf(path.join(FRAME, "index.ts"));
     const outside = [...files].filter(
       (f) => !f.startsWith(`${FRAME}${path.sep}`) && !SHARED.has(f)

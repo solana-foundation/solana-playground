@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { walletOriginEnv } from "@/shared/config/client-env";
 import { createLogger } from "@/shared/lib/logger";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
@@ -347,9 +348,7 @@ const connectPanel = (origin: string) =>
 export const KeyPanel = (props: KeyPanelProps) => (
   <BaseKeyPanel
     {...props}
-    origin={keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN)(
-      window.location
-    )}
+    origin={keyOriginFor(walletOriginEnv().KEY_ORIGIN)(window.location)}
     connect={connectPanel}
     readTokens={readThemeTokens}
   />

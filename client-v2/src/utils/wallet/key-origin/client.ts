@@ -1,3 +1,4 @@
+import { walletOriginEnv } from "../../../shared/config/client-env";
 import { keyOriginFor } from "./origin";
 import {
   type DistributiveOmit,
@@ -347,9 +348,7 @@ const keyFrameWith = (requestTimeoutMs: number) => {
   let connection: Promise<KeyFrame> | undefined;
   return (): Promise<KeyFrame> => {
     if (connection) return connection;
-    const origin = keyOriginFor(process.env.REACT_APP_WALLET_KEY_ORIGIN)(
-      window.location
-    );
+    const origin = keyOriginFor(walletOriginEnv().KEY_ORIGIN)(window.location);
     if (!origin) {
       return Promise.reject(
         new Error("No key origin is configured for the wallet.")

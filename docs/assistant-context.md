@@ -69,10 +69,11 @@ runs the deployment configures its bypass secret on the server.
   user supplies. Never an open unlimited endpoint.
 - **Traceability.** A record of what the assistant did and on what basis.
 - **Open by default.** The client and any service integrated into it stay public.
-- **No backend changes.** The build server, crate list, deploy mechanics and
-  sharing infrastructure are out of scope. Conversation and project sync is
-  the exception, and it is additive: new `api/*` routes and a Postgres of our
-  own. The build server and its database are still untouched.
+- **No backend changes.** The build server, crate list and deploy mechanics
+  are out of scope. Conversation and project sync is the exception, and it is
+  additive: new `api/*` routes and a Postgres of our own. The build server
+  holds no database and serves no share routes; projects are shared as GitHub
+  gists.
 
 ## How it works, technically
 

@@ -7,7 +7,7 @@
 export const GTAG_SRC = "https://www.googletagmanager.com/gtag/js";
 
 // The id lands inside an inline script, so anything but the GA4 shape is refused
-const GA4_ID = /^G-[A-Z0-9]+$/;
+export const GA4_ID = /^G-[A-Z0-9]+$/;
 
 /**
  * `html` with the Google tag placed right after `<head>`, as Google's install
