@@ -19,7 +19,6 @@ x-client-v2: &client-v2
     dockerfile: ./client-v2/Dockerfile
     args:
       USER: solpg
-      HAS_SERVER: true
     additional_contexts:
       solana-playground-wasm: service:wasm
   # Secrets the user supplies; `environment` wins over this file for the keys it sets
@@ -86,7 +85,6 @@ services:
       dockerfile: ./client-v2/Dockerfile
       args:
         USER: solpg
-        HAS_SERVER: false
         # The build server to use, from the shell; empty means a local one
         REACT_APP_SERVER_URL: ${REACT_APP_SERVER_URL:-}
       additional_contexts:
