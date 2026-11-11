@@ -640,6 +640,7 @@ test.describe("on a phone", () => {
     await page.getByRole("button", { name: "Preview the build" }).click();
     await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
     await page.waitForTimeout(400);
+    await linesRead(lines);
     const shown = lines.filter((line) =>
       line.startsWith("[telemetry:event] layout_page_shown ")
     );
@@ -837,6 +838,7 @@ test.describe("on a phone", () => {
       .toContain("via: swipe");
     // Settled once: the stage this page sets does not send a second move
     await page.waitForTimeout(400);
+    await linesRead(lines);
     const shown = lines.filter((line) =>
       line.startsWith("[telemetry:event] layout_page_shown ")
     );

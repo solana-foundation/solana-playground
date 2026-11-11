@@ -311,9 +311,9 @@ export const watchExternalWalletsWith =
         return [];
       }
     };
-    let stopped = false;
+    let isStopped = false;
     const publish = () => {
-      if (stopped) return;
+      if (isStopped) return;
       onChange(registry.get().filter(isListed).flatMap(bridgeListed));
     };
     let offRegister = () => {};
@@ -323,7 +323,7 @@ export const watchExternalWalletsWith =
     // ConnectorKit's `on` subscribes to nothing until `ready`, which Firefox settles after the app's first watch
     ready.then(
       () => {
-        if (stopped) return;
+        if (isStopped) return;
         publish();
         offRegister = registry.on("register", publish);
         offUnregister = registry.on("unregister", publish);
@@ -334,7 +334,7 @@ export const watchExternalWalletsWith =
     );
 
     return () => {
-      stopped = true;
+      isStopped = true;
       offRegister();
       offUnregister();
     };

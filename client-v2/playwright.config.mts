@@ -117,7 +117,7 @@ const ALL_PROJECTS_ENV = "E2E_ALL_PROJECTS";
 if (process.argv.some((arg) => arg.split("=", 1)[0] === "--project")) {
   process.env[ALL_PROJECTS_ENV] = "1";
 }
-const allProjects = process.env[ALL_PROJECTS_ENV] === "1";
+const shouldIncludeAllProjects = process.env[ALL_PROJECTS_ENV] === "1";
 
 /** Specs about a Firefox-only failure, which the `chromium` project leaves out */
 const FIREFOX_ONLY_SPECS = /-firefox\.e2e\.spec\.ts$/;
@@ -250,7 +250,9 @@ export default defineConfig({
       use: { browserName: CHROMIUM },
       testIgnore: FIREFOX_ONLY_SPECS,
     },
-    ...(allProjects ? [{ name: FIREFOX, use: { browserName: FIREFOX } }] : []),
+    ...(shouldIncludeAllProjects
+      ? [{ name: FIREFOX, use: { browserName: FIREFOX } }]
+      : []),
   ],
   webServer: {
     // `dev` runs `generate-fast`, then `generate-dev-crates`, which skips on

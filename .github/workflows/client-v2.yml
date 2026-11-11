@@ -27,9 +27,9 @@ permissions:
 
 jobs:
   # Whether a pull request changes anything under `client-v2/` or `wasm/`, or
-  # either client-v2 workflow, outside the paths that cannot change what the
-  # browser runs; any such change is when the browser suite also runs on
-  # Firefox. `design-system/` is left out.
+  # either client-v2 workflow, outside the Markdown the bundle never loads;
+  # any such change is when the browser suite also runs on Firefox.
+  # `design-system/` is left out.
   # A push to `master` skips Firefox: the PR that brought the commit already
   # ran it. The checkout is the PR's merge commit, whose first parent is the
   # base branch's head, so a depth of 2 holds both sides of the diff.
@@ -49,11 +49,14 @@ jobs:
         id: diff
         if: github.event_name == 'pull_request'
         run: |
-          # An exclusion list, so a new file under `client-v2/` runs Firefox unless it is named here
+          # Markdown no bundle loads; tutorial pages, `Local/*.md` and the assistant's `.md` are imported, so they run Firefox
           excluded=(
             ':(exclude,glob)client-v2/docs/**'
             ':(exclude,glob)client-v2/bench/**'
-            ':(exclude,glob)client-v2/**/*.md'
+            ':(exclude,glob)client-v2/*.md'
+            ':(exclude,glob)client-v2/db/*.md'
+            ':(exclude,glob)client-v2/src/tutorials/*.md'
+            ':(exclude,glob)client-v2/static/**/*.md'
           )
           changed=$(git diff --name-only HEAD^1 HEAD -- \
             client-v2 \

@@ -12,15 +12,15 @@ const tempDir = (t) => {
   return dir;
 };
 
-const specOn = (projectName) => (title, status) => ({
+const specFor = (projectName) => (title, status) => ({
   title,
   tests: [{ status, projectName }],
 });
-const spec = specOn("chromium");
+const spec = specFor("chromium");
 
 // The describe nesting of a real report: a file suite holding a describe
 // suite holding the specs. A shard always ran some test of its project.
-const reportOn =
+const reportFor =
   (project) =>
   ({ current, total, specs }) => ({
     config: { shard: { current, total } },
@@ -31,13 +31,13 @@ const reportOn =
           { title: "a describe", specs },
           {
             title: "b describe",
-            specs: [specOn(project)("passes", "expected")],
+            specs: [specFor(project)("passes", "expected")],
           },
         ],
       },
     ],
   });
-const report = reportOn("chromium");
+const report = reportFor("chromium");
 
 const shardFile = (dir, name) =>
   path.join(dir, `playwright-test-results-${name}`, "report.json");
@@ -78,7 +78,7 @@ const writeProjectShards = (shards, project, { current, total }) => {
     writeShard(
       shards,
       `${project}-${n}`,
-      reportOn(project)({ current: n, total, specs: [] })
+      reportFor(project)({ current: n, total, specs: [] })
     );
   }
 };
@@ -298,7 +298,7 @@ describe("scripts/e2e-report", () => {
       report({
         current: 1,
         total: 1,
-        specs: [specOn("firefox")("runs here too", "expected")],
+        specs: [specFor("firefox")("runs here too", "expected")],
       })
     );
     const known = writeKnownSkips(dir, []);
@@ -356,10 +356,10 @@ describe("scripts/e2e-report", () => {
       writeShard(
         shards,
         1,
-        reportOn(skippedOn)({
+        reportFor(skippedOn)({
           current: 1,
           total: 1,
-          specs: [specOn(skippedOn)("skips", status)],
+          specs: [specFor(skippedOn)("skips", status)],
         })
       );
       const known = writeKnownSkips(dir, [entry]);

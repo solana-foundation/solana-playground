@@ -632,6 +632,7 @@ test("project-sync-limits: A tutorial project", async ({ page }) => {
     .poll(() => account.sent("src/lib.rs", "// edited"), LONG)
     .toBe(true);
   await expect(banner(page)).toHaveCount(0);
+  await linesRead(lines);
   expect(limitEvents(lines)).toEqual([]);
 });
 

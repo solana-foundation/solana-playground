@@ -865,6 +865,7 @@ test("assistant-composer-context: Remove an open tab from the context", async ({
     expect(body).not.toContain(LIB_RS);
   }
   await expect(chip(page, "lib.rs")).toHaveCount(0);
+  await linesRead(lines);
   expect(
     lines.filter((line) => line.includes("assistant_file_chip_removed"))
   ).toHaveLength(1);
