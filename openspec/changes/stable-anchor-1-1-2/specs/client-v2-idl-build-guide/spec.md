@@ -26,7 +26,15 @@ response with an IDL SHALL replace it.
 
 The Anchor project export SHALL write an `idl-build` feature into the program's `Cargo.toml`. The feature SHALL list
 `anchor-lang/idl-build`, and `anchor-spl/idl-build` when the program imports `anchor_spl`. The `anchor-lang` and
-`anchor-spl` versions SHALL be the ones the stable build server compiles against.
+`anchor-spl` versions SHALL be the ones the stable build server compiles against. The export SHALL ship the build
+server's `Cargo.lock` and SHALL write each dependency with the features the build server's manifest declares on that
+crate, so the local build resolves the crate versions and features the server builds with.
+
+#### Scenario: A program that uses spl-token-2022 (manual)
+
+- **WHEN** a user exports a program whose source uses `spl_token_2022::` and runs the guide's Docker command in it
+- **THEN** the program's `Cargo.toml` has `spl-token-2022 = { version = "=10.0.0", features = ["no-entrypoint"] }`,
+  the project root has the server's `Cargo.lock`, and the command writes `idl.json` and exits 0
 
 #### Scenario: Export of the default starter (manual)
 

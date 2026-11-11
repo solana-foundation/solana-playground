@@ -46,7 +46,9 @@ users a guided way to build the IDL on their own machine and upload it.
 - `client-v2` keeps the IDL it already holds when a build returns `null`, so an uploaded IDL survives a rebuild.
   Today `build` overwrites it with the build's `idl`.
 - `client-v2`'s Anchor project export writes an `idl-build` feature into the program's `Cargo.toml`, so
-  `anchor idl build` works on the downloaded project.
+  `anchor idl build` works on the downloaded project. The Anchor and native exports also write the features the build
+  server enables on each crate and ship the server's `Cargo.lock`, so a local build resolves the same crate versions
+  and features as the server.
 - `client-v2` regenerates its editor crates and export versions from the new `server/programs/Cargo.lock` through
   the existing `generate-crates.mjs`: Rust Analyzer completes against Anchor 1.1.2. The editor serves no
   `mpl-token-metadata`, `mpl-bubblegum`, or `zerocopy`, whose raw-identifier modules (`mod r#ref` in `zerocopy`) the
@@ -93,6 +95,11 @@ users a guided way to build the IDL on their own machine and upload it.
   `server/src/routes/build.rs` change. The unstable routes and templates do not. The same exception covers
   `wasm/rust-analyzer`, which learns each crate's Cargo features so the editor resolves feature-gated items of the
   Solana 3 crates.
+- The build server's CORS allow-list admits the two `client-v2` deployments that call it: the Foundation's domain
+  `https://playground.solana.com` and its Vercel project `https://solana-playground-two.vercel.app`. The list lives in
+  three places: the `CLIENT_URLS` default in `server/src/config.rs`, `PG_CLIENT_URLS` in `server/app.yaml`, and
+  `PG_CLIENT_URLS` in `.env.example`. The three lists change together, or production, a local server, and the code's
+  default accept different origins.
 - **Depends on the change `dual-idl-reader`**. `anchor idl build` on 1.1.2 writes the IDL format of Anchor 0.30 and
   later, which `client-v2` reads through `entities/idl`, mapped onto the shape of the 0.29 client. Without it, an IDL
   built with the guide passes "Upload IDL" and fails in Interact.

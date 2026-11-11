@@ -107,9 +107,13 @@ change adds the `idl-build` feature to the program `Cargo.toml` in `frameworks/a
 **Docker command.** `docker run --rm --platform linux/amd64 -v "$PWD":/workdir -w /workdir
 quay.io/ottersec/anchor:v<anchor> anchor idl build -o idl.json`. The output sits at the project root because a
 fresh export has no `target/idl`, and `anchor idl build -o` does not create folders; the local method writes the
-same path. The export does not carry the server's `anchor-lang`/`anchor-spl` features, so a program using
-`init_if_needed`, `event-cpi`, or `lazy-account` fails its local IDL build; shipped knowingly,
-with TODOs at `getRustDependencies` and the guide's steps. `--platform` keeps Apple Silicon on the
+same path. The local build compiles what the server compiles because the export carries two files of the server's:
+its `Cargo.lock`, which `generate-crates.mjs` serves as `/crates/Cargo.lock`, and the features
+`server/programs/Cargo.toml` declares on each direct dependency, which `generate-crates.mjs` writes to
+`/crates/features.json` from `cargo metadata` and `getRustDependencies` writes into the program's `[dependencies]`.
+Without the lock, cargo resolves newer transitive crates that fail to compile; without the features, a program using
+`init_if_needed`, `event-cpi`, or `lazy-account` does not compile, and one using `spl_token_2022` links a second
+`entrypoint`. The Anchor and native exports both ship them. `--platform` keeps Apple Silicon on the
 published architecture. Task 2.2 confirms the image's entrypoint, user, and tag before the command is fixed in
 `model/steps.ts`.
 
