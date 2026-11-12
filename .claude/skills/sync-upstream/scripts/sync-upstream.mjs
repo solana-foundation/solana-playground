@@ -53,6 +53,8 @@ const IMPORT_LIST = "client-v2/scripts/assets-import.txt";
 const ASSETS_COMMIT = "client-v2/scripts/assets-commit.txt";
 const MARKDOWN_TUTORIALS = "client-v2/src/tutorials/markdown-tutorials.json";
 const OPTIMISE_IMAGE = "client-v2/scripts/optimise-image.mjs";
+// `yarn install` refuses to run without the wasm packages, so a fresh worktree needs `yarn setup` for these
+const OPTIMISER_PACKAGES = ["sharp", "svgo"];
 
 // Asset paths the fork changed, so `assets` reports upstream's change to them and never writes it.
 export const FORK_OWNED = [
@@ -585,6 +587,17 @@ const assets = async (wt, toArg) => {
     );
     return;
   }
+
+  const missing = OPTIMISER_PACKAGES.filter(
+    (name) => !existsSync(path.join(wt, "client-v2/node_modules", name))
+  );
+  if (missing.length > 0)
+    die(
+      `${missing.join(" and ")} not installed in ${path.join(
+        wt,
+        "client-v2"
+      )}: run \`yarn setup\` there first`
+    );
 
   const state = stateDir(wt);
   mkdirSync(state, { recursive: true });
