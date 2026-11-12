@@ -1789,7 +1789,7 @@ test("client-v2-layout: A cluster that is down", async ({
     if (body?.method !== "getSlot") return route.continue();
     return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
   });
-  await page.reload();
+  await reloadAndBoot(page);
 
   const row = nav(page).getByRole("button", {
     name: "Change cluster, currently devnet, not responding",
@@ -1819,7 +1819,7 @@ const reloadOn = async (page: Page, option: string) => {
     settings.connection.endpoint = { option: picked };
     localStorage.setItem("settings", JSON.stringify(settings));
   }, option);
-  await page.reload();
+  await reloadAndBoot(page);
 };
 
 const clusterRow = (page: Page) =>
