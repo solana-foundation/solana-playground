@@ -177,7 +177,7 @@ const getLeadingImportsEnd = (content: string) => {
     // the next line is not a statement, and ends the run
     const afterKeyword = skipSpaceAndComments(content, keyword.lastIndex);
     if (content[afterKeyword] === "(") return end;
-    const statementEnd = getModuleStringEnd(content, afterKeyword);
+    const statementEnd = getImportStatementEnd(content, afterKeyword);
     if (statementEnd === -1) return end;
     index = end = statementEnd;
   }
@@ -186,15 +186,17 @@ const getLeadingImportsEnd = (content: string) => {
 /**
  * Get the index after an import statement's module string, and after its
  * `;` when there is one. A quote in a comment is not the module's, and a
- * quote with no closing one on its line is read as code.
+ * quote with no closing one on its line is skipped with the rest of that line.
  *
  * @param content JS/TS code
  * @param index where the statement's text after `import` starts
  * @returns the index after the statement, `-1` if no module string follows
+ * or an unclosed `/*` comes first
  */
-const getModuleStringEnd = (content: string, index: number) => {
+const getImportStatementEnd = (content: string, index: number) => {
   while (true) {
     index = skipSpaceAndComments(content, index);
+    // `skipSpaceAndComments` stops at an unclosed `/*`: its quotes are not code
     if (index >= content.length || content.startsWith("/*", index)) return -1;
     if (content[index] !== '"' && content[index] !== "'") {
       index++;

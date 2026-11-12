@@ -187,6 +187,11 @@ describe("addAfterImports", () => {
       'import a from // "x"\n "a";\nrun();\n',
       'import a from // "x"\n "a";\nX\nrun();\n',
     ],
+    // A quote left open on its line is skipped; the next line's is the module's
+    [
+      'import a from "a\n "b";\nrun();\n',
+      'import a from "a\n "b";\nX\nrun();\n',
+    ],
     // An unclosed `/*` ends the scan; the imports before it still count
     ['import a from "a";\n/* open', 'import a from "a";\nX\n/* open'],
     [
