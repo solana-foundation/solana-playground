@@ -106,3 +106,21 @@ it("draws a signed out account as a plain user glyph, with no circle around it",
     .querySelector("svg");
   expect(glyph?.getAttribute("data-glyph")).toBe("user");
 });
+
+it("draws a signed in account with a photo as its avatar, not the user glyph", () => {
+  draw({
+    account: view({
+      session: {
+        status: "signed-in",
+        user: {
+          name: "Tester",
+          login: "t",
+          image: "https://example.com/t.png",
+        },
+      },
+    }),
+  });
+  const button = screen.getByRole("button", { name: /^Account/ });
+  expect(button.querySelector('[data-slot="avatar"]')).toBeTruthy();
+  expect(button.querySelector('[data-glyph="user"]')).toBeNull();
+});

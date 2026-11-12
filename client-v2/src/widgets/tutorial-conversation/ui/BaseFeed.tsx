@@ -223,7 +223,10 @@ const BaseFeed = ({
       reducedMotion() ? 0 : SCROLL_MS
     );
     setViewing(null);
-    setLiveOffScreen(false);
+    // Unknown stays unknown: with no IntersectionObserver the step rule decides
+    setLiveOffScreen((offScreen) =>
+      offScreen === undefined ? undefined : false
+    );
     onBack(liveIndex);
   };
 

@@ -413,7 +413,8 @@
           "button": "Create",
           "record": "Created the big map · 10 KB",
           "call": {
-            "instruction": "init_big_map"
+            "instruction": "init_big_map",
+            "creates": "big_map"
           },
           "account": {
             "kind": "memory",

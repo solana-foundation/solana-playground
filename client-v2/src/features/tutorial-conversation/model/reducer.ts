@@ -602,6 +602,24 @@ const createsOf = (goal: Goal | undefined): RunInput["creates"] =>
     ? { instruction: goal.instruction, account: goal.creates }
     : undefined;
 
+/** The account a call act's own instruction creates, if the act names one */
+const ownCreatesOf = (beat: ActBeat): RunInput["creates"] =>
+  beat.act === "call" && beat.call.creates !== undefined
+    ? { instruction: beat.call.instruction, account: beat.call.creates }
+    : undefined;
+
+/** The failed run found the account the act's own call creates already there */
+const hasOwnAccountThere = (beat: ActBeat, result: RunResult): boolean => {
+  const own = ownCreatesOf(beat);
+  const exists = existsOf(result);
+  return (
+    own !== undefined &&
+    exists !== undefined &&
+    sameIdlName(exists.instruction, own.instruction) &&
+    sameIdlName(exists.account, own.account)
+  );
+};
+
 /** A run in flight on an act card: the panel waits for it */
 export const running = (p: ConversationProgress) =>
   Object.values(p.runs).some((rs) => rs.at(-1)?.status === "started");
@@ -1230,7 +1248,8 @@ const reduceAction = (
       if (step.goal.kind === "call" && step.goal.log !== undefined) {
         input.log = step.goal.log;
       }
-      const creates = createsOf(step.goal);
+      // The act's own one-time call names its account before the goal's does
+      const creates = ownCreatesOf(beat) ?? createsOf(step.goal);
       if (creates && (beat.act === "run" || beat.act === "call")) {
         input.creates = creates;
       }
@@ -1317,6 +1336,11 @@ const reduceAction = (
         acceptsFailure(step.goal) &&
         !passed(p, step) &&
         ctx.judge(step.goal, result);
+      // The account the act's own one-time call creates was already there (a
+      // second pass with the same wallet): nothing to fix, so the lesson goes
+      // on as if it had landed, and the step still waits on its goal
+      const isExisting =
+        !result.ok && !refused && hasOwnAccountThere(beat, result);
       const measured = actionRunOf(
         {
           slug: ctx.slug,
@@ -1329,7 +1353,7 @@ const reduceAction = (
       let record: RunRecord;
       if (result.ok) {
         record = { status: "ok", at: run.at, took, result };
-      } else if (refused) {
+      } else if (refused || isExisting) {
         record = { status: "refused", at: run.at, took, result };
       } else if (isPlannedFailure(step, p.cursor, result)) {
         record = { status: "failed", at: run.at, took, result, planned: true };
@@ -1347,7 +1371,9 @@ const reduceAction = (
         result
       );
       const cleared: EngineState = { progress: recorded, stage: null };
-      if (!result.ok && !refused) return withEffect(same(cleared), measured);
+      if (!result.ok && !refused && !isExisting) {
+        return withEffect(same(cleared), measured);
+      }
       if (
         refused ||
         (!passed(recorded, step) && ctx.judge(step.goal, result))
@@ -5045,6 +5071,69 @@ if (import.meta.vitest) {
             instruction: "init_map",
             creates: "map",
           }),
+          // The counter's second pass (HOO-2730): a one-time call before the goal
+          step(
+            "count",
+            [
+              {
+                kind: "act",
+                id: "s4.init",
+                act: "call",
+                title: "Init",
+                context: "Sends initialize",
+                button: "Init",
+                call: { instruction: "initialize", creates: "counter" },
+              },
+              act("s4.inc", "increment", undefined, "Increment"),
+            ],
+            { kind: "call", instruction: "increment" }
+          ),
+          // The act's own account and the goal's, on one step
+          step(
+            "both",
+            [
+              {
+                kind: "act",
+                id: "s5.init",
+                act: "call",
+                title: "Init",
+                context: "Sends initialize",
+                button: "Init",
+                call: { instruction: "initialize", creates: "counter" },
+              },
+              act("s5.inc", "increment", undefined, "Increment"),
+            ],
+            { kind: "call", instruction: "increment", creates: "tally" }
+          ),
+          // A one-time call in the fix path, after the step's first try failed
+          {
+            id: "fix",
+            title: "fix",
+            short: "fix",
+            objective: "fix",
+            learned: "fix",
+            file: "src/lib.rs",
+            start: { "src/lib.rs": "" },
+            target: { "src/lib.rs": "" },
+            beats: [act("s6.go", "increment", undefined, "Go")],
+            goal: { kind: "call", instruction: "increment" },
+            win: { id: "fix.win", headline: "Won", line: "Won." },
+            explain: "fix",
+            planned: "It fails to build.",
+            failsWith: "error\\[E0425\\]",
+            onFail: [
+              {
+                kind: "act",
+                id: "s6.init",
+                act: "call",
+                title: "Init",
+                context: "Sends initialize",
+                button: "Init",
+                call: { instruction: "initialize", creates: "counter" },
+              },
+              act("s6.inc", "increment", undefined, "Increment"),
+            ],
+          },
         ],
         finish: {
           headline: "Done",
@@ -5232,6 +5321,173 @@ if (import.meta.vitest) {
           );
           expect(progress.runs["s2.create"]?.[0]?.status).toBe("failed");
           expect(progress.passed).not.toContain("create");
+        });
+      });
+
+      describe("a one-time call before the goal (HOO-2730)", () => {
+        const COUNTER = {
+          instruction: "initialize",
+          account: "counter",
+          address: "Counter1",
+        };
+        const refusedInit = (exists: typeof COUNTER): RunResult => ({
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "custom program error: 0x0",
+          log: "",
+          refused: {
+            instruction: "initialize",
+            error: { code: 0, name: null },
+          },
+          exists,
+        });
+        const refusedBare: RunResult = {
+          act: "call",
+          ok: false,
+          seconds: 1,
+          message: "custom program error: 0x0",
+          log: "",
+          refused: {
+            instruction: "initialize",
+            error: { code: 0, name: null },
+          },
+        };
+
+        it("sends the account its own call creates", () => {
+          const { effects } = run([press("s4.init", 2000)], at(5));
+          expect(effects).toContainEqual(
+            expect.objectContaining({
+              kind: "run",
+              input: expect.objectContaining({
+                creates: { instruction: "initialize", account: "counter" },
+              }),
+            })
+          );
+        });
+
+        it("records an existing counter refused and posts the next card, without passing the step", () => {
+          const out = refusedInit(COUNTER);
+          const { progress } = run(
+            [press("s4.init", 2000), ended("s4.init", 2000, out)],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]).toEqual([
+            { status: "refused", at: 2000, took: 900, result: out },
+          ]);
+          expect(progress.beats["s4.inc"]).toMatchObject({ kind: "said" });
+          expect(progress.passed).not.toContain("count");
+        });
+
+        it("passes the step on the goal's own call that follows", () => {
+          const { progress } = run(
+            [
+              press("s4.init", 2000),
+              ended("s4.init", 2000, refusedInit(COUNTER)),
+              press("s4.inc", 4000),
+              ended("s4.inc", 4000, landed("increment")),
+            ],
+            at(5)
+          );
+          expect(progress.passed).toContain("count");
+          expect(progress.times.count?.reason).toBeUndefined();
+        });
+
+        it("stays failed on an existing account its call does not name", () => {
+          const other = refusedInit({
+            instruction: "initialize",
+            account: "config",
+            address: "Config1",
+          });
+          const { progress } = run(
+            [press("s4.init", 2000), ended("s4.init", 2000, other)],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]?.[0]?.status).toBe("failed");
+          expect(progress.beats["s4.inc"]).toBeUndefined();
+        });
+
+        it("sends its own account over one the goal creates", () => {
+          const { effects } = run([press("s5.init", 2000)], at(6));
+          expect(effects).toContainEqual(
+            expect.objectContaining({
+              input: expect.objectContaining({
+                creates: { instruction: "initialize", account: "counter" },
+              }),
+            })
+          );
+        });
+
+        it("stays failed and posts nothing on any other refusal", () => {
+          const { progress } = run(
+            [press("s4.init", 2000), ended("s4.init", 2000, refusedBare)],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]?.[0]?.status).toBe("failed");
+          expect(progress.beats["s4.inc"]).toBeUndefined();
+        });
+
+        it("records a second press on the existing account refused again, and leaves the next card where the first posted it", () => {
+          const first = run(
+            [
+              press("s4.init", 2000),
+              ended("s4.init", 2000, refusedInit(COUNTER)),
+            ],
+            at(5)
+          ).progress.beats["s4.inc"];
+          const { progress } = run(
+            [
+              press("s4.init", 2000),
+              ended("s4.init", 2000, refusedInit(COUNTER)),
+              press("s4.init", 4000),
+              ended("s4.init", 4000, refusedInit(COUNTER)),
+            ],
+            at(5)
+          );
+          expect(progress.runs["s4.init"]?.map((r) => r.status)).toEqual([
+            "refused",
+            "refused",
+          ]);
+          expect(first).toMatchObject({ kind: "said" });
+          expect(progress.beats["s4.inc"]).toEqual(first);
+          expect(progress.passed).not.toContain("count");
+        });
+
+        it("records the existing account refused inside onFail and posts the fix path's next card", () => {
+          const { steps } = realCtx.definition;
+          const fix = steps.findIndex((s) => s.id === "fix");
+          expect(fix).toBeGreaterThan(-1);
+          // The cursor in the fix path (`onFail`), its one-time call posted
+          const from: EngineState = {
+            progress: {
+              version: 1,
+              passed: steps.slice(0, fix).map((s) => s.id),
+              finishedAt: null,
+              startedAt: 1000,
+              restartedAt: null,
+              said: [],
+              proposals: [],
+              accounts: {},
+              cursor: { kind: "step", stepId: "fix", beat: 1, fail: true },
+              beats: {
+                "s6.go": { kind: "said", at: 1000 },
+                "s6.init": { kind: "said", at: 1500 },
+              },
+              runs: {},
+              times: { fix: { from: 1000, to: null } },
+            },
+            stage: null,
+          };
+          const { progress } = run(
+            [
+              press("s6.init", 2000),
+              ended("s6.init", 2000, refusedInit(COUNTER)),
+            ],
+            from
+          );
+          expect(progress.runs["s6.init"]?.[0]?.status).toBe("refused");
+          expect(progress.beats["s6.inc"]).toMatchObject({ kind: "said" });
+          expect(progress.passed).not.toContain("fix");
         });
       });
 
