@@ -60,6 +60,8 @@ act --trust-project-actrc workflow_call -C .. -W .github/workflows/reusable-clie
   --container-options "--group-add 0 -v $main/.git:$main/.git:ro"
 ```
 
+`-j checks` in place of `-j build` runs the `checks` job, with the same flags.
+
 One shard of the `e2e` job, here Firefox shard 1, with the same flags; `-j e2e` also runs the `wasm` job first:
 
 ```sh
@@ -81,6 +83,12 @@ git clone --branch v4.6.2 --depth 1 https://github.com/actions/upload-artifact ~
 ```
 
 The build of the six packages took 18 min 52 s on an Apple Silicon host under amd64 emulation on 2026-11-03, with the cargo registry already cached; a later run restores them from act's cache.
+
+An interrupted run can leave its `act-*` volumes behind, and the next run then fails at `Set up job` with `volume is in use`. Remove them once no act run is left:
+
+```sh
+docker volume ls -q --filter name=act- | xargs docker volume rm
+```
 
 The same checks of the `build` job without act, from `client-v2`:
 

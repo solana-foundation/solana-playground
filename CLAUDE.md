@@ -26,7 +26,10 @@ against it; dev-process changes go straight to `master`.
 for `server/` and `wasm/`, but not `client/`'s build or tests;
 `client-v2.yml` guards `client-v2/` on the real wasm packages through
 `reusable-client-v2.yml`, whose `build` job runs the production build and the
-checks on what that build emits. `ci.yml`
+checks on what that build emits. To run these jobs locally, take the
+`act` commands from `client-v2/docs/local-ci-with-act.md`: they run
+`reusable-client-v2.yml` with `workflow_call` from `client-v2/`, where its
+`.actrc` sits, and need `--trust-project-actrc`. `ci.yml`
 and `client-v2.yml` run on pushes to `master` and on every PR: a
 `pull_request` run reads the workflow from the PR's merge commit, and no
 `pull_request` workflow runs while the PR has a merge conflict.
