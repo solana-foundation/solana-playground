@@ -163,6 +163,14 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     expect(sendButton().getAttribute("data-variant")).toBe("ring");
   });
 
+  it("draws no foot on the desk before a payer is connected: the cross closes it", async () => {
+    await renderOpen();
+
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    await connectPhantom();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+  });
+
   it("draws the phone's foot: no Cancel, the accent Send", async () => {
     viewport.current = "phone";
     await renderOpen();

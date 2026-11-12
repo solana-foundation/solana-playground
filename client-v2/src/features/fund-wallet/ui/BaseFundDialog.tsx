@@ -382,8 +382,8 @@ const BaseFundDialog = ({
           </Callout>
         )}
 
-        {/* A phone with no payer yet has nothing for the foot to hold */}
-        {(!isPhone || payer) && (
+        {/* With no payer the foot holds nothing the cross does not do */}
+        {payer && (
           <DialogFooter>
             {!isPhone && (
               <DialogClose asChild>
