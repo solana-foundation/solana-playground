@@ -334,9 +334,7 @@ const ExplorerLinks = ({ phone }: { phone: boolean }) => {
             </Link>
           )}
           {pk && <Link href={explorer.getAddressUrl(pk)}>Program</Link>}
-          {pk && (
-            <Link href={`${explorer.getAddressUrl(pk)}/idl`}>Program IDL</Link>
-          )}
+          {pk && <Link href={explorer.getIdlUrl(pk)}>Program IDL</Link>}
         </div>
       }
     />
