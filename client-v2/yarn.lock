@@ -5319,6 +5319,18 @@
 "@solana-playground/sugar-cli@../wasm/sugar-cli/pkg":
   version "1.1.0-alpha"
 
+"@solana-program/program-metadata@0.11.0":
+  version "0.11.0"
+  resolved "https://registry.yarnpkg.com/@solana-program/program-metadata/-/program-metadata-0.11.0.tgz#5a66f53e184874c7df4595ed2c3558a3554e3669"
+  integrity sha512-0iK5yRqGP+IeJPrSBceB4sGNPD/sUiG8vj9C3qLZJO7jCx/1p0aFvEwrekwa3bTrhQGB1NCmq2UrlUMg/G2NPQ==
+  dependencies:
+    "@solana-program/system" "^0.16.0"
+    commander "^13.0.0"
+    pako "^2.1.0"
+    picocolors "^1.1.1"
+    smol-toml "^1.6.1"
+    yaml "^2.7.0"
+
 "@solana-program/record@^0.6.0":
   version "0.6.0"
   resolved "https://registry.yarnpkg.com/@solana-program/record/-/record-0.6.0.tgz#2d6abe202a77a98382869c15a42ad96a7cab984e"
@@ -9722,7 +9734,7 @@ commander@^12.1.0:
   version "12.1.0"
   resolved "https://registry.yarnpkg.com/commander/-/commander-12.1.0.tgz#01423b36f501259fdaac4d0e4d60c96c991585d3"
 
-commander@^13.1.0:
+commander@^13.0.0, commander@^13.1.0:
   version "13.1.0"
   resolved "https://registry.yarnpkg.com/commander/-/commander-13.1.0.tgz#776167db68c78f38dcce1f9b8d7b8b9a488abf46"
 
@@ -18917,7 +18929,7 @@ smart-buffer@^4.2.0:
   resolved "https://registry.yarnpkg.com/smart-buffer/-/smart-buffer-4.2.0.tgz#6e1d71fa4f18c05f7d0ff216dd16a481d0e8d9ae"
   integrity sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg==
 
-smol-toml@1.9.1:
+smol-toml@1.9.1, smol-toml@^1.6.1:
   version "1.9.1"
   resolved "https://registry.yarnpkg.com/smol-toml/-/smol-toml-1.9.1.tgz#1262834a084c3ce2985900450956a580f95cf243"
   integrity sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ==
@@ -21088,7 +21100,7 @@ yaml@^1.10.0, yaml@^1.10.2, yaml@^1.7.2:
   resolved "https://registry.yarnpkg.com/yaml/-/yaml-1.10.3.tgz#76e407ed95c42684fb8e14641e5de62fe65bbcb3"
   integrity sha512-vIYeF1u3CjlhAFekPPAk2h/Kv4T3mAkMox5OymRiJQB0spDP10LHvt+K7G9Ny6NuuMAb25/6n1qyUjAcGNf/AA==
 
-yaml@^2.8.3:
+yaml@^2.7.0, yaml@^2.8.3:
   version "2.9.1"
   resolved "https://registry.yarnpkg.com/yaml/-/yaml-2.9.1.tgz#c16233fb31944e705cfefaff38795587f57588ce"
   integrity sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==

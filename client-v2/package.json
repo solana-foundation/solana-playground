@@ -31,6 +31,7 @@
     "@solana-playground/solana-cli": "../wasm/solana-cli/pkg",
     "@solana-playground/spl-token-cli": "../wasm/spl-token-cli/pkg",
     "@solana-playground/sugar-cli": "../wasm/sugar-cli/pkg",
+    "@solana-program/program-metadata": "0.11.0",
     "@solana-program/system": "0.16.0",
     "@solana-program/token-2022": "0.20.0",
     "@solana/buffer-layout": "^4.0.0",
