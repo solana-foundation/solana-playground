@@ -18,6 +18,13 @@ const FAUCET_CLUSTERS: readonly string[] = ["devnet", "testnet"];
 export const isFaucetCluster = (cluster: string): boolean =>
   FAUCET_CLUSTERS.includes(cluster);
 
+/**
+ * `sol` when the faucet's form offers it, else the most it gives on devnet: a
+ * link with another amount opens with none set, and the steps name it
+ */
+export const offeredAmount = (sol: number | undefined): number =>
+  sol !== undefined && FAUCET_AMOUNTS.includes(sol) ? sol : DEVNET_FAUCET_SOL;
+
 export interface FaucetLinkFill {
   walletAddress?: string;
   /** In SOL */
@@ -61,6 +68,20 @@ export const faucetUrlFor = linkWith({});
 
 /** {@link faucetUrlFor}, also asking for `sol` */
 export const faucetUrlWith = (sol: number) => linkWith({ amount: sol });
+
+/**
+ * The web faucet in three steps, for someone who has never used one: a
+ * prefilled link alone loses a newcomer on its sign-in page (Sergey, 10 Nov).
+ * `back` is the last step, what to do once the SOL is sent: a card with Try
+ * again says to press it, a live balance says it updates by itself.
+ */
+export const webFaucetSteps = (sol: number, back: string): string[] => [
+  // A GitHub account with no public repo gets nothing from the web faucet; a
+  // fork of Playground is one, and it passed (Natalia, 10 Nov)
+  "Open the web faucet and sign in with GitHub. It asks for a public repo: if you have none, fork solana-playground there",
+  `Confirm the airdrop. Your address and ${sol} SOL are filled in`,
+  back,
+];
 
 /**
  * A closed RPC faucet's answer to `requestAirdrop`, as web3.js reports it:
@@ -129,6 +150,12 @@ if (import.meta.vitest) {
       const url = new URL(faucetLink({ cluster: "testnet", amount: 1 }));
       expect(url.searchParams.get("cluster")).toBe("testnet");
       expect(url.searchParams.get("amount")).toBe("1");
+    });
+
+    it("asks for an amount the form offers, else the devnet most", () => {
+      expect(offeredAmount(2.5)).toBe(2.5);
+      expect(offeredAmount(3)).toBe(DEVNET_FAUCET_SOL);
+      expect(offeredAmount(undefined)).toBe(DEVNET_FAUCET_SOL);
     });
 
     it("is the bare faucet for a wallet link with no address", () => {

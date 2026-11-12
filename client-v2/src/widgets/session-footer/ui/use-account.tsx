@@ -4,7 +4,7 @@ import { connectWallet } from "@/commands/connect/connect-wallet";
 import { isSetupRejected } from "@/commands/connect/setup-rejected";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import { FeedbackMenuItems, useFeedbackSend } from "@/features/feedback";
-import { FundDialog } from "@/features/fund-wallet";
+import { openFundDialog } from "@/features/fund-wallet";
 import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { createLogger } from "@/shared/lib/logger";
@@ -68,7 +68,6 @@ export const useAccount = ({
   const balance = useBalance();
   const { sending, triggerRef } = useFeedbackSend();
   const online = useOnline();
-  const [funding, setFunding] = useState(false);
   const [signOutState, setSignOutState] = useState<SignOutState>({
     status: "idle",
   });
@@ -157,8 +156,8 @@ export const useAccount = ({
       closeSheet?.();
       PgWallet.show = true;
     },
-    // The dialog is mounted beside the menu, so it outlives the menu closing
-    "fund-wallet": () => setFunding(true),
+    // The one Fund dialog, mounted beside the toasts, outlives the menu closing
+    "fund-wallet": () => openFundDialog("account-menu"),
   };
 
   const pick = (item: AccountItem) => {
@@ -241,14 +240,10 @@ export const useAccount = ({
     />
   );
 
-  // Mounted beside the menu, so it outlives the menu closing
-  const dialog = <FundDialog open={funding} onOpenChange={setFunding} />;
-
   return {
     account,
     pick,
     menu,
-    dialog,
     onMenuOpenChange,
     accountRef: triggerRef,
   };

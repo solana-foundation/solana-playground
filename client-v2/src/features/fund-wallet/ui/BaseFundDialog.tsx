@@ -1,6 +1,13 @@
+import { ExternalLink, Minus, Plus } from "lucide-react";
+import type { KeyboardEvent } from "react";
+import { useState } from "react";
+
 import { networkInSentence } from "@/constants";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
+import { Badge } from "@/shared/ui/badge";
+import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
 import {
@@ -24,9 +31,17 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/shared/ui/input-group";
+import { Spinner } from "@/shared/ui/spinner";
 
 import type { Receiver, SendCheck } from "../model/fund";
-import { canSend, formatSol, maxAmount, parseAmount } from "../model/fund";
+import {
+  canSend,
+  formatSol,
+  maxAmount,
+  parseAmount,
+  stepAmountWith,
+} from "../model/fund";
+import { NO_EXTENSION } from "../model/no-extension";
 
 /** The amount field's id, which the spec and the tests find it by */
 export const AMOUNT_ID = "fund-amount";
@@ -41,6 +56,8 @@ export interface FundWalletOption {
 /** The connected wallet that pays */
 export interface FundPayer {
   name: string;
+  /** Data URI */
+  icon: string;
   /** Base58 */
   address: string;
   /** In SOL, or where reading it stands */
@@ -78,13 +95,48 @@ export interface BaseFundDialogProps {
   /** Sends the amount; the dialog's button waits on it */
   onSend: () => Promise<void>;
   failure: FundFailure | undefined;
+  /**
+   * The explorer page of an address on the Playground's cluster; `undefined`
+   * where the explorer cannot open that cluster, and the address stays text
+   */
+  addressUrl?: (address: string) => string | undefined;
+  /** A phone draws the modal frame's foot: no Cancel, Send across it */
+  isPhone?: boolean;
 }
 
 const shortAddress = (address: string) =>
   `${address.slice(0, 4)}…${address.slice(-4)}`;
 
+/** A short address, linked to the explorer in a new tab where it can open it */
+const AddressLink = ({ address, url }: { address: string; url?: string }) =>
+  url ? (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-0.5 font-mono text-primary-ink underline-offset-4 hover:underline"
+    >
+      {shortAddress(address)}
+      <ExternalLink aria-hidden="true" className="size-3" />
+    </a>
+  ) : (
+    <span className="font-mono">{shortAddress(address)}</span>
+  );
+
+/**
+ * Cancel and Send as `BaseModalFrame` draws a brand submit: a ghost Cancel at
+ * the brand button's 40 px on a desk; on a phone no Cancel (the dialog's close
+ * button is enough) and Send across the foot in the flat accent. Copied rather than
+ * built on that frame, which is a widget this feature cannot import.
+ */
+const DESK_CANCEL =
+  "h-10 rounded-full px-4 font-heading text-[0.9375rem] font-act";
+const DESK_SEND = "px-5";
+const PHONE_SEND = "h-12 w-full rounded-xl text-control";
+
 /** The line under the amount field: a problem, or where the SOL goes */
 const amountNoteFor =
+  (receiverName: string) =>
   (payer: FundPayer, cluster: string | undefined) =>
   (amount: string): { ok: boolean; error: boolean; text: string } => {
     if (payer.balance === "unavailable") {
@@ -102,7 +154,7 @@ const amountNoteFor =
       return {
         ok: true,
         error: false,
-        text: `Sent on ${
+        text: `Arrives in ${receiverName} on ${
           networkInSentence(cluster) ?? "the Playground's cluster"
         }.`,
       };
@@ -118,7 +170,9 @@ const amountNoteFor =
     };
     return {
       ok: false,
-      error: check.problem !== "checking",
+      // Any zero is a hint, not a mistake: the field starts there, and
+      // stepping down lands there
+      error: check.problem !== "checking" && check.problem !== "not-positive",
       text: notes[check.problem],
     };
   };
@@ -172,13 +226,40 @@ const BaseFundDialog = ({
   onConnect,
   onSend,
   failure,
+  addressUrl,
+  isPhone = false,
 }: BaseFundDialogProps) => {
-  const note = payer ? amountNoteFor(payer, cluster)(amount) : undefined;
+  const [isSending, setIsSending] = useState(false);
+  const note = payer
+    ? amountNoteFor(receiver.name)(payer, cluster)(amount)
+    : undefined;
   const unconfirmed =
     failure?.kind === "send-unconfirmed" || failure?.kind === "send-pending";
   const shown = failure ? failureText(failure) : undefined;
   const max =
     typeof payer?.balance === "number" ? maxAmount(payer.balance) : undefined;
+  const lower = stepAmountWith(-1)(amount);
+  // Less changes nothing at 0
+  const canLower = lower !== amount;
+
+  const handleAmountKey = (event: KeyboardEvent<HTMLInputElement>) => {
+    const isModified =
+      event.shiftKey || event.altKey || event.metaKey || event.ctrlKey;
+    if (isModified) return;
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    onAmountChange(stepAmountWith(event.key === "ArrowUp" ? 1 : -1)(amount));
+  };
+
+  // BrandButton has no wait of its own, so Send keeps one: a second press
+  // while the wallet asks would start a second transfer
+  const handleSend = () => {
+    setIsSending(true);
+    Promise.resolve()
+      .then(onSend)
+      .catch(reportButtonFailure("send the SOL"))
+      .finally(() => setIsSending(false));
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -187,20 +268,18 @@ const BaseFundDialog = ({
           <DialogTitle>Fund your Playground wallet</DialogTitle>
           <DialogDescription>
             Sends SOL from your wallet to <strong>{receiver.name}</strong>{" "}
-            <span className="font-mono">{shortAddress(receiver.address)}</span>,
-            the account that deploys.
+            <AddressLink
+              address={receiver.address}
+              url={addressUrl?.(receiver.address)}
+            />
+            , the account that deploys.
           </DialogDescription>
         </DialogHeader>
 
         {wallets.length === 0 && (
           <div>
-            <p className="font-medium">
-              No wallet extension found in this browser.
-            </p>
-            <p className="text-muted-foreground text-sm">
-              Install Phantom, Backpack or Solflare, then reload. Or keep using
-              the Playground wallet.
-            </p>
+            <p className="font-medium">{NO_EXTENSION.title}</p>
+            <p className="text-muted-foreground text-sm">{NO_EXTENSION.hint}</p>
           </div>
         )}
 
@@ -224,9 +303,16 @@ const BaseFundDialog = ({
 
         {payer && note && (
           <>
-            <p className="text-sm">
-              From <strong>{payer.name}</strong>{" "}
-              <span className="font-mono">{shortAddress(payer.address)}</span>
+            <p className="flex flex-wrap items-center gap-x-1.5 text-sm">
+              From
+              <Badge variant="secondary">
+                <img src={payer.icon} alt="" className="size-3" />
+                {payer.name}
+              </Badge>
+              <AddressLink
+                address={payer.address}
+                url={addressUrl?.(payer.address)}
+              />
               {" · "}
               {typeof payer.balance === "number"
                 ? formatSol(payer.balance)
@@ -242,8 +328,24 @@ const BaseFundDialog = ({
                   value={amount}
                   aria-invalid={note.error || undefined}
                   onChange={(event) => onAmountChange(event.target.value)}
+                  onKeyDown={handleAmountKey}
                 />
                 <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    size="icon-xs"
+                    aria-label="Less by 0.1 SOL"
+                    disabled={!canLower}
+                    onClick={() => onAmountChange(lower)}
+                  >
+                    <Minus />
+                  </InputGroupButton>
+                  <InputGroupButton
+                    size="icon-xs"
+                    aria-label="More by 0.1 SOL"
+                    onClick={() => onAmountChange(stepAmountWith(1)(amount))}
+                  >
+                    <Plus />
+                  </InputGroupButton>
                   <InputGroupButton
                     disabled={max === undefined}
                     onClick={() => max && onAmountChange(max)}
@@ -280,20 +382,34 @@ const BaseFundDialog = ({
           </Callout>
         )}
 
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
-          </DialogClose>
-          {payer && (
-            <AsyncButton
-              disabled={!note?.ok || unconfirmed}
-              onClick={onSend}
-              onError={reportButtonFailure("send the SOL")}
-            >
-              {sendLabel(amount)}
-            </AsyncButton>
-          )}
-        </DialogFooter>
+        {/* With no payer the foot holds nothing the cross does not do */}
+        {payer && (
+          <DialogFooter>
+            {!isPhone && (
+              <DialogClose asChild>
+                <Button variant="ghost" className={DESK_CANCEL}>
+                  Cancel
+                </Button>
+              </DialogClose>
+            )}
+            {payer && (
+              <BrandButton
+                variant={isPhone ? "accent" : "ring"}
+                // Busy is not unavailable: it keeps its colour, as AsyncButton does
+                className={cn(
+                  isPhone ? PHONE_SEND : DESK_SEND,
+                  isSending && "disabled:opacity-100"
+                )}
+                disabled={!note?.ok || unconfirmed || isSending}
+                aria-busy={isSending || undefined}
+                onClick={handleSend}
+              >
+                {isSending && <Spinner aria-hidden="true" />}
+                {sendLabel(amount)}
+              </BrandButton>
+            )}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

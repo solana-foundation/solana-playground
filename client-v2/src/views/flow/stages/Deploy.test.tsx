@@ -41,6 +41,8 @@ const mocks = vi.hoisted(() => ({
     accounts: [] as unknown[],
     currentIndex: -1,
     addFirst: vi.fn(),
+    // The Fund dialog's receiver when no Playground wallet is current
+    create: vi.fn(() => ({ publicKey: { toBase58: () => "F1rstAccount" } })),
     switch: vi.fn(),
     export: vi.fn(),
     hasKeysInPage: vi.fn(() => true),
@@ -160,6 +162,7 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
 }));
 
 import { PgStageDeploy } from "@/features/deploy";
+import { onDidRequestFundDialog } from "@/features/fund-wallet";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import {
@@ -761,6 +764,22 @@ describe("Deploy stage", () => {
     }
 
     expect(seen).toEqual([true]);
+  });
+
+  it("asks for the Fund dialog from the funding card", async () => {
+    mocks.wallet.current = pgWallet();
+    mocks.execute.mockRejectedValueOnce(airdropOff());
+    const asked: string[] = [];
+    const stop = onDidRequestFundDialog((from) => asked.push(from));
+    render(<Deploy onChangeNetwork={() => {}} />);
+
+    await pressDeploy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send from your wallet" })
+    );
+    stop();
+
+    expect(asked).toEqual(["deploy-card"]);
   });
 
   it("requests an airdrop only on the funding card's press", async () => {

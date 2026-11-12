@@ -7,7 +7,7 @@ import { withAirdropVia } from "../../commands/airdrop/via";
 import { PgSession } from "../../features/auth";
 import {
   faucetClosedLineFor,
-  faucetUrlFor,
+  faucetLink,
   isFaucetClosed,
   isFaucetCluster,
 } from "../../shared/lib/faucet";
@@ -98,7 +98,14 @@ export const automaticAirdrop = () => {
           [
             "Note: This was an automatic airdrop request.",
             ...(isFaucetCluster(cluster) && !hasLinkedFaucet
-              ? [`Visit ${faucetUrlFor(cluster)(address)} to obtain SOL.`]
+              ? [
+                  // The web faucet filled in, the amount too, so the user only confirms
+                  `Visit ${faucetLink({
+                    walletAddress: address,
+                    amount: airdropAmount,
+                    cluster,
+                  })} to obtain SOL.`,
+                ]
               : []),
             disable,
           ].join(" ")
