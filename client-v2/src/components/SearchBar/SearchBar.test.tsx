@@ -398,14 +398,14 @@ describe("components/SearchBar", () => {
       <Harness
         items={[
           {
-            label: "Pyth",
+            label: "Group",
             items: [
               {
-                label: "Crypto.BTC/USD",
+                label: "Item B",
                 value: "HovQMDrbAgAYPCmHVSrezcSmkMtXSSUsLDFANExrZh2J",
               },
               {
-                label: "Crypto.ETH/USD",
+                label: "Item E",
                 value: "EdVCmQ9FSPcVe5YySXDPCRmc8aDQLKJ9xvYBMZPie1Vw",
               },
             ],
@@ -415,30 +415,28 @@ describe("components/SearchBar", () => {
     );
     await userEvent.click(input());
     await userEvent.type(input(), "hovqm");
-    expect(optionNames()).toEqual(["Crypto.BTC/USD"]);
+    expect(optionNames()).toEqual(["Item B"]);
   });
 
   it("loads a group's list once to search it, and picks with the whole path", async () => {
     const setSelectedItems = vi.fn();
     const load = vi.fn(() =>
-      Promise.resolve([{ label: "Crypto.SOL/USD", value: "sol-feed" }])
+      Promise.resolve([{ label: "Item S", value: "sol-feed" }])
     );
     render(
       <Harness
-        items={[{ label: "Pyth", items: load }]}
+        items={[{ label: "Group", items: load }]}
         setSelectedItems={setSelectedItems}
       />
     );
     await userEvent.click(input());
-    await userEvent.type(input(), "sol");
-    expect(
-      await screen.findByRole("option", { name: "Crypto.SOL/USD" })
-    ).toBeTruthy();
+    await userEvent.type(input(), "item s");
+    expect(await screen.findByRole("option", { name: "Item S" })).toBeTruthy();
     expect(load).toHaveBeenCalledTimes(1);
 
-    await userEvent.click(option("Crypto.SOL/USD"));
+    await userEvent.click(option("Item S"));
     expect(input().value).toBe("sol-feed");
-    expect(lastLabels(setSelectedItems)).toEqual(["Pyth", "Crypto.SOL/USD"]);
+    expect(lastLabels(setSelectedItems)).toEqual(["Group", "Item S"]);
   });
 
   it("skips a group that fails to load while typing, without reporting it", async () => {
@@ -485,13 +483,11 @@ describe("components/SearchBar", () => {
 
   it("lists nested matches alone, with no empty-list line", async () => {
     render(
-      <Harness
-        items={["Random", { label: "Pyth", items: ["Crypto.BTC/USD"] }]}
-      />
+      <Harness items={["Random", { label: "Group", items: ["Item B"] }]} />
     );
     await userEvent.click(input());
-    await userEvent.type(input(), "btc");
-    expect(optionNames()).toEqual(["Crypto.BTC/USD"]);
+    await userEvent.type(input(), "item b");
+    expect(optionNames()).toEqual(["Item B"]);
     expect(screen.queryByText("No match")).toBeNull();
   });
 
@@ -513,18 +509,18 @@ describe("components/SearchBar", () => {
 
   it("loads a group's list again once the list was closed", async () => {
     const load = vi.fn(() =>
-      Promise.resolve([{ label: "Crypto.SOL/USD", value: "sol-feed" }])
+      Promise.resolve([{ label: "Item S", value: "sol-feed" }])
     );
-    render(<Harness items={[{ label: "Pyth", items: load }]} />);
+    render(<Harness items={[{ label: "Group", items: load }]} />);
     await userEvent.click(input());
-    await userEvent.type(input(), "sol");
-    await screen.findByRole("option", { name: "Crypto.SOL/USD" });
+    await userEvent.type(input(), "item s");
+    await screen.findByRole("option", { name: "Item S" });
 
     await userEvent.keyboard("{Escape}");
     await userEvent.clear(input());
     await userEvent.click(input());
-    await userEvent.type(input(), "sol");
-    await screen.findByRole("option", { name: "Crypto.SOL/USD" });
+    await userEvent.type(input(), "item s");
+    await screen.findByRole("option", { name: "Item S" });
     expect(load).toHaveBeenCalledTimes(2);
   });
 });
