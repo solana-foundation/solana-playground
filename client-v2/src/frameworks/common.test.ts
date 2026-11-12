@@ -19,8 +19,12 @@ vi.stubGlobal("CRATES", {
   importable: ["anchor_lang", "arrayref", "unknown_crate"],
 });
 
-const { getImportedNames, getRustDependencies, wrapTopLevelAwait } =
-  await import("./common");
+const {
+  addAfterImports,
+  getImportedNames,
+  getRustDependencies,
+  wrapTopLevelAwait,
+} = await import("./common");
 
 describe("frameworks/common", () => {
   it("pins the crate versions and features the server builds with", async () => {
@@ -142,5 +146,99 @@ describe("wrapTopLevelAwait", () => {
       '// import x from "x";\nconst a = "import y from \'y\'";\nconst b = `\nimport z from "z";\n`;\nawait a;\n';
 
     expect(wrapTopLevelAwait(client)).toBe("\n\n" + wrapped(client.trim()));
+  });
+});
+
+describe("addAfterImports", () => {
+  it.each([
+    ['import{BN}from"bn.js";\nrun();\n', 'import{BN}from"bn.js";\nX\nrun();\n'],
+    ['import*as x from "x";\nrun();\n', 'import*as x from "x";\nX\nrun();\n'],
+    ['import"x";\nrun();\n', 'import"x";\nX\nrun();\n'],
+    [
+      '// a\nimport a from "a";\n/* b */\n\nimport b from "b"; // why\nrun();\n',
+      '// a\nimport a from "a";\n/* b */\n\nimport b from "b"; // why\nX\nrun();\n',
+    ],
+    [
+      'import /* c */ a from "a";\nrun();\n',
+      'import /* c */ a from "a";\nX\nrun();\n',
+    ],
+    [
+      'import // c\n a from "a";\nrun();\n',
+      'import // c\n a from "a";\nX\nrun();\n',
+    ],
+    [
+      'import {\n  a,\n  b,\n} from "a";\nrun();\n',
+      'import {\n  a,\n  b,\n} from "a";\nX\nrun();\n',
+    ],
+    // Quotes in a comment after `import` are not the module's
+    [
+      'import // see ("docs")\n a from "a";\nrun();\n',
+      'import // see ("docs")\n a from "a";\nX\nrun();\n',
+    ],
+    [
+      'import /* "x" */ a from "a";\nrun();\n',
+      'import /* "x" */ a from "a";\nX\nrun();\n',
+    ],
+    [
+      'import {\n  a, // "x"\n  b,\n} from "a";\nrun();\n',
+      'import {\n  a, // "x"\n  b,\n} from "a";\nX\nrun();\n',
+    ],
+    [
+      'import a from // "x"\n "a";\nrun();\n',
+      'import a from // "x"\n "a";\nX\nrun();\n',
+    ],
+    // A quote left open on its line is skipped; the next line's is the module's
+    [
+      'import a from "a\n "b";\nrun();\n',
+      'import a from "a\n "b";\nX\nrun();\n',
+    ],
+    // An unclosed `/*` ends the scan; the imports before it still count
+    ['import a from "a";\n/* open', 'import a from "a";\nX\n/* open'],
+    [
+      'import a from "a";\nimport /* open "x"',
+      'import a from "a";\nX\nimport /* open "x"',
+    ],
+    // A `(` inside a comment is not a dynamic import's (the old lookahead
+    // could stop the comment early and find it)
+    [
+      'import // see (x)\n a from "a";\nrun();\n',
+      'import // see (x)\n a from "a";\nX\nrun();\n',
+    ],
+  ])("adds after the leading imports of %j", (content, expected) => {
+    expect(addAfterImports(content, "X")).toBe(expected);
+  });
+
+  it.each([
+    ["important();\n"],
+    ['import("x");\n'],
+    ['import ("x");\n'],
+    ['import /* c */ ("x");\n'],
+    ['import // c\n("x");\n'],
+    ['run();\nimport a from "a";\n'],
+  ])("adds at the top of %j, which has no leading import", (content) => {
+    expect(addAfterImports(content, "X")).toBe("X\n" + content);
+  });
+
+  // CodeQL js/redos. Inputs 0 and 2 reproduce the old lookahead's
+  // exponential backtracking; the rest time the loop on long comment runs
+  const comments = "//".repeat(50_000);
+  const imported = "import a from 'a';";
+  it.each([
+    ["import " + comments, "X\nimport " + comments],
+    ["import " + "*//*".repeat(50_000), "X\nimport " + "*//*".repeat(50_000)],
+    [
+      "import /*" + "*//*".repeat(50_000),
+      "X\nimport /*" + "*//*".repeat(50_000),
+    ],
+    [comments + "\n" + imported, comments + "\n" + imported + "\nX\n"],
+    [
+      "/**/".repeat(50_000) + imported,
+      "/**/".repeat(50_000) + imported + "\nX\n",
+    ],
+  ])("scans comments in linear time (input %#)", (content, expected) => {
+    const start = performance.now();
+    const result = addAfterImports(content, "X");
+    expect(performance.now() - start).toBeLessThan(100);
+    expect(result).toBe(expected);
   });
 });
