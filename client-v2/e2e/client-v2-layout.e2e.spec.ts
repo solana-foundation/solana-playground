@@ -23,6 +23,7 @@ import {
 import { lineOf, linesOn, linesRead } from "./telemetry";
 import {
   DESK,
+  DOCK_DESK,
   openPhoneMenu,
   openPhonePreview,
   PHONE,
@@ -30,6 +31,11 @@ import {
   waitForPhonePage,
   WIDE_DESK,
 } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * The one event line with this name: waits for it, then a moment more, so a
@@ -286,7 +292,7 @@ test("client-v2-layout: An unreadable saved layout", async ({
 }) => {
   await page.evaluate(() => localStorage.setItem("layout", "{"));
   await page.reload();
-  // A first visit's layout: the tree docked, which the suite's 1920 px
+  // A first visit's layout: the tree docked, which this spec's 1920 px
   // window has room for
   await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
   await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "true");
@@ -1330,7 +1336,7 @@ const boxOf = async (locator: ReturnType<Page["locator"]>) =>
   );
 
 test("client-v2-layout: A wide window", async ({ seededPage: page }) => {
-  // The suite's 1920 px window, wide enough for the tree's column
+  // This spec's 1920 px window, wide enough for the tree's column
   await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
   await expect(stagePanel(page)).toBeVisible();
   await expect(assistantPanel(page)).toBeVisible();

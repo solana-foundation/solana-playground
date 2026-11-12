@@ -103,10 +103,10 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
 
   // `PgExplorer.createWorkspace` hands the work over, then the explorer
   // re-initializes -- wait for the work, not just Home going away: its
-  // editor head, and the tree when it shows. At the suite's default width
-  // the seeded layout docks it (playwright.config's `viewport` and
-  // `storageState`); narrower, or undocked, the tree waits in its dropdown,
-  // which `openFiles` opens.
+  // editor head, and the tree when it shows. The seeded layout docks it
+  // (playwright.config's `storageState`), which shows as a column only in a
+  // spec at `DOCK_DESK`; at the default width, or undocked, the tree waits
+  // in its dropdown, which `openFiles` opens.
   const toggle = filesToggle(page);
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("aria-pressed")) === "true") {

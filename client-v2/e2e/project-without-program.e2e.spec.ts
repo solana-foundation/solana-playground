@@ -1,7 +1,12 @@
 import type { Page } from "@playwright/test";
 
 import { expect, json, LONG, test } from "./fixtures";
-import { openPhonePreview, PHONE } from "./viewports";
+import { DOCK_DESK, openPhonePreview, PHONE } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 const OWNER = "alice";
 const REPO = "ts-client";

@@ -11,9 +11,9 @@ export const TABLET = { width: 834, height: 1112 };
 export const DESK = { width: 1280, height: 800 };
 export const WIDE_DESK = { width: 1440, height: 900 };
 /**
- * The suite's default (`playwright.config.mts`): the narrowest common window
- * whose code area, beside the open navigation and assistant, is wide enough
- * (1100 px) to dock the project tree
+ * The narrowest common window whose code area, beside the open navigation
+ * and assistant, is wide enough (1100 px) to dock the project tree; a spec
+ * that drives the docked tree's column sets it with `test.use`
  */
 export const DOCK_DESK = { width: 1920, height: 1080 };
 

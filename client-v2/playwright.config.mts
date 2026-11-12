@@ -221,17 +221,13 @@ export default defineConfig({
   globalTimeout: process.env.CI ? 25 * 60_000 : 0,
   use: {
     baseURL: origin,
-    // Wide enough that the project tree docks: it takes a column only while
-    // the code area is 1100 px or more (`DOCK_MIN_PX`), which a 1280 or 1440
-    // px window with the navigation and the assistant open never reaches, and
-    // most specs drive the tree as that column. A spec about a narrower window
-    // sets its own (`e2e/viewports.ts`), where "Files" opens the tree as a
-    // dropdown.
-    viewport: { width: 1920, height: 1080 },
     // Every page starts as a visitor who left the file tree docked, as a
     // first visit opens it (client-v2-editor-head); a spec about a first
     // visit removes it and reloads (`client-v2-editor-head.e2e.spec.ts`,
-    // `first-run.e2e.spec.ts`).
+    // `first-run.e2e.spec.ts`). At the default window the code area is under
+    // 1100 px, so the docked tree has no column and "Files" opens it as the
+    // dropdown; a spec that drives the column sets `DOCK_DESK`
+    // (`e2e/viewports.ts`) itself.
     storageState: {
       cookies: [],
       origins: [

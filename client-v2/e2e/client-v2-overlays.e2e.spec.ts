@@ -3,7 +3,12 @@ import type { Locator, Page } from "@playwright/test";
 import { requireFor } from "../src/test-utils/require-for";
 import { expect, test } from "./fixtures";
 import { lineOf, linesOn, linesRead } from "./telemetry";
-import { waitForPhonePage } from "./viewports";
+import { DOCK_DESK, waitForPhonePage } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 const file = (page: Page, name: string): Locator =>
   page.locator("#root-dir").getByText(name, { exact: true });

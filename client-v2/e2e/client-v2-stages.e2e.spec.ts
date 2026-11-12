@@ -10,7 +10,12 @@ import {
   seedWorkspace,
   test,
 } from "./fixtures";
-import { DESK, openPhonePreview, PHONE } from "./viewports";
+import { DESK, DOCK_DESK, openPhonePreview, PHONE } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * The scenarios of `client-v2-stages`: what the Build, Deploy and Interact
@@ -469,7 +474,7 @@ test.describe("client-v2-stages: Interact", () => {
 
   // The stage at its 240 px minimum, less the scrollbar gutter on both
   // edges: Upload IDL, the IDL's name and "Build the IDL locally" on one
-  // centred row lost both ends. Reached on the suite's 1920 px window with
+  // centred row lost both ends. Reached on this spec's 1920 px window with
   // the assistant widened to its 560 px maximum (the code area still wide
   // enough, 1100 px, for the docked tree) and the files column dragged as
   // wide as the stage allows
