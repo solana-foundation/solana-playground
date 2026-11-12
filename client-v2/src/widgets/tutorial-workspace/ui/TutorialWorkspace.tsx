@@ -304,20 +304,21 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
       setDoc(undefined);
       writeFrontDoc(name, undefined);
     };
-    // `onDidOpenFile` replays the open file as it subscribes, in the call
-    // itself: that shows nothing new, and would hide the page a reload restores.
-    // With no file open yet (a slow boot) there is no replay, and the first
-    // report is the workspace opening its current file, which is the same
-    // restore arriving late: it must not take the page either
+    // `onDidOpenFile` calls a new subscriber at once with the current file, in
+    // the subscribe call itself: that shows nothing new, and would hide the page
+    // a reload restores. While the workspace is still loading that file is null,
+    // and the first file the explorer then reports is the workspace opening its
+    // current file, the same restore arriving late: it must not take the page
+    // either. Only a file after that is the lesson showing code
     let isReplay = true;
     let isRestored = false;
-    const opened = PgExplorer.onDidOpenFile(() => {
+    const opened = PgExplorer.onDidOpenFile((file) => {
       if (isReplay) {
-        isRestored = true;
+        isRestored = file !== null;
         return;
       }
       if (!isRestored) {
-        isRestored = true;
+        isRestored = file !== null;
         return;
       }
       toCode();

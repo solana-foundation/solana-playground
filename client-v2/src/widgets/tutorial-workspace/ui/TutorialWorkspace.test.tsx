@@ -227,58 +227,70 @@ describe("TutorialWorkspace's restored page", () => {
     JSON.parse(localStorage.getItem("tutorial-workspace.front-doc") ?? "{}");
 
   /**
-   * The explorer's `onDidOpenFile`: every subscriber hears `replay` in its own
-   * subscribe call, and `fire` reaches all of them later, as the event does
+   * The explorer's `onDidOpenFile` calls a new subscriber at once with the
+   * current file, null while the workspace is still loading; `fire` is the
+   * event reaching every subscriber later
    */
-  const subscribing = (replay: boolean) => {
+  const subscribingWith = (replayed: unknown) => {
     const subscribers: ((file: unknown) => unknown)[] = [];
     onDidOpenFile.mockImplementation((cb) => {
       subscribers.push(cb);
-      if (replay) cb({});
+      cb(replayed);
       return noop();
     });
-    return { fire: () => subscribers.forEach((cb) => cb({})) };
+    return { fire: (file: unknown) => subscribers.forEach((cb) => cb(file)) };
   };
+  /** A slow boot: nothing is open when the lesson subscribes */
+  const subscribingWithNullReplay = () => subscribingWith(null);
+  /** A fast boot: the workspace's file is already open */
+  const subscribingWithFileReplay = () => subscribingWith({});
 
   beforeEach(() => {
     localStorage.setItem("tutorial-workspace.docs", DOCS);
     localStorage.setItem("tutorial-workspace.front-doc", FRONT);
   });
 
-  it("keeps the page a reload restored when the workspace's own open arrives after the subscribe", () => {
-    // The explorer has no file open yet when this subscribes (a slow boot); its
-    // first report is the workspace opening its current file, not the lesson
-    // showing code
-    const opened = subscribing(false);
+  it("keeps the page a reload restored when the workspace's own open arrives after a null replay", () => {
+    const opened = subscribingWithNullReplay();
     workspace("frame");
     expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
 
-    act(() => opened.fire());
+    act(() => opened.fire({}));
+
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+    expect(frontKey()["Hello Anchor"]).toBe("idl.md");
+  });
+
+  it("does not take a null report for the restore", () => {
+    const opened = subscribingWithNullReplay();
+    workspace("frame");
+
+    act(() => opened.fire(null));
+    act(() => opened.fire({}));
 
     expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
     expect(frontKey()["Hello Anchor"]).toBe("idl.md");
   });
 
   it("goes back to the code on a file the lesson opens after the restore", () => {
-    const opened = subscribing(false);
+    const opened = subscribingWithNullReplay();
     workspace("frame");
-    act(() => opened.fire());
+    act(() => opened.fire({}));
     expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
 
-    act(() => opened.fire());
+    act(() => opened.fire({}));
 
     expect(screen.queryByTestId("tutorial-doc-page")).toBeNull();
     expect(frontKey()["Hello Anchor"]).toBeUndefined();
   });
 
-  it("goes back to the code on the first file opened once one was already open", () => {
-    // The subscribe call itself reports the open file (replay): that is the
-    // restore, and the next report is the lesson
-    const opened = subscribing(true);
+  it("goes back to the code on the first open after a replay that held a file", () => {
+    const opened = subscribingWithFileReplay();
     workspace("frame");
     expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
 
-    act(() => opened.fire());
+    act(() => opened.fire({}));
+
     expect(screen.queryByTestId("tutorial-doc-page")).toBeNull();
     expect(frontKey()["Hello Anchor"]).toBeUndefined();
   });
