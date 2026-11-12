@@ -436,6 +436,37 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       ).toHaveLength(1);
     });
 
+    it("does not let an old approval replace a wallet another path made current", async () => {
+      const asked: (() => boolean)[] = [];
+      connectStandard.make.mockImplementation(
+        (_name, isStillWanted) =>
+          new Promise<void>(() => {
+            asked.push(isStillWanted);
+          })
+      );
+      const view = renderChip(() => false);
+      openList();
+      // Phantom is asked from the chip and has not answered
+      fireEvent.click(screen.getByRole("button", { name: "Phantom" }));
+      expect(asked[0]()).toBe(true);
+
+      // `connect solflare` in the terminal makes Solflare current meanwhile
+      current.wallet = {
+        name: "Solflare",
+        icon: "data:,",
+        publicKey: { toBase58: () => ADDRESS },
+      };
+      // Before the chip has drawn it, and after
+      expect(asked[0]()).toBe(false);
+      view.rerender(
+        <TooltipProvider>
+          <WalletChip isSignedOut={false} isSignInFailure={() => false} />
+        </TooltipProvider>
+      );
+      // Phantom's late approval must not take Solflare's place
+      expect(asked[0]()).toBe(false);
+    });
+
     it("supersedes a connect still pending when a deploy begins", async () => {
       const asked: (() => boolean)[] = [];
       connectStandard.make.mockImplementation(

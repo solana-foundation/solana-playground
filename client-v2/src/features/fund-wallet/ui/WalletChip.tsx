@@ -35,6 +35,11 @@ import BaseWalletChip from "./BaseWalletChip";
 
 const log = createLogger("fund-wallet:wallet-chip");
 
+/** The standard wallet that is current, `undefined` for the Playground wallet or none */
+const standardNameOf = (
+  wallet: { isPg?: boolean; name?: string } | null | undefined
+) => (wallet && !wallet.isPg ? wallet.name : undefined);
+
 export interface WalletChipProps {
   /** Nobody is signed in: a public faucet then asks for GitHub first */
   isSignedOut: boolean;
@@ -105,12 +110,13 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
 
   // A wallet made current by another way (the terminal, the Fund dialog)
   // ends whatever the connect list was saying
-  const ownerName =
-    PgWallet.current && !PgWallet.current.isPg
-      ? PgWallet.current.name
-      : undefined;
+  const ownerName = standardNameOf(PgWallet.current);
   useEffect(() => {
-    if (ownerName) setConnect({ kind: "idle" });
+    if (ownerName) {
+      // Whatever the chip still waits on is older than that wallet
+      attempts.current++;
+      setConnect({ kind: "idle" });
+    }
   }, [ownerName]);
 
   const wallet = PgWallet.current;
@@ -132,11 +138,18 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
     // Only the latest request speaks: an older one's late answer would
     // otherwise overwrite the wait for the wallet picked after it
     const attempt = ++attempts.current;
+    // Which wallet is current now: an approval that finds another one current
+    // by then (the terminal's `connect`, the Fund dialog) is older than that
+    // choice and must not replace it, even before the chip has drawn it
+    const startedOwner = standardNameOf(PgWallet.current);
+    const isStillWanted = () =>
+      attempt === attempts.current &&
+      standardNameOf(PgWallet.current) === startedOwner;
     setConnect({ kind: "waiting", wallet: name });
     fundTelemetry.track("fund_wallet_connect_started", { wallet: name });
     try {
       // A request superseded while it waited does not take over on approval
-      await setStandardCurrentWith(() => attempt === attempts.current)(name);
+      await setStandardCurrentWith(isStillWanted)(name);
       if (attempt !== attempts.current) return;
       fundTelemetry.track("fund_wallet_connected", {
         wallet: name,
