@@ -444,6 +444,9 @@ test("wallet-storage: The tab closes before a save lands", async ({
   // Another tab takes the wallet's lock and keeps it
   const holder = await context.newPage();
   await holder.goto("/");
+  // The holder's app boots past the load event. On Firefox CI a click on the
+  // other tab waited out its 10 s behind that boot, so it ends first
+  await expect(holder.locator("#root-dir")).toBeVisible(LONG);
   await holder.evaluate(() => {
     void navigator.locks.request(
       "pg-wallet:wallet-state",
