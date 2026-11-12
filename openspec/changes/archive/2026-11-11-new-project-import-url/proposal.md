@@ -21,12 +21,13 @@ project; it is a design stand-in that imports nothing. HOO-2608 wires it.
   program picker is not a failure and returns the card to idle.
 - New project runs one action at a time across Start, the import and the
   cards.
-- `PgGithub` throws a typed `GithubNotFoundError` for a repository's 404, so
-  the card can tell "can't find" from the other failures without reading the
-  message.
+- The card tells "can't find" from the other failures by the typed errors
+  master's `PgGithub` throws: `GithubImportError` with reason `not-found` for
+  the repository's 404, and `GithubFileError` for one file's, which keeps its
+  own message.
 - The `?import=` design presets and the faked answer of #466 go.
-- Telemetry, `features/new-project`: adds `new_project_imported {source}` and
-  `new_project_import_failed {source, reason}`. `features/gist`: its
+- Telemetry, `features/new-project`: adds `new_project_imported {via}` and
+  `new_project_import_failed {via, reason}`. `features/gist`: its
   `GistImportSource` gains `"new-project"`, so `gist_import_*` from the card
   are told apart from the dialog's. No event is renamed or removed.
 - Funnel: step "Get a project: new" keeps `new_project_started` firing
@@ -44,15 +45,17 @@ project; it is a design stand-in that imports nothing. HOO-2608 wires it.
 
 ### Modified Capabilities
 
-- `gist-sharing`: the gist import's `from` gains `new-project`.
+- `gist-sharing`: the gist import's `via` gains `new-project`, and
+  `gist_import_failed` gains reason `unexpected` for the import's own faults.
 
 ## Impact
 
 - Code: `client-v2/src/features/new-project/` (the card, its outcome type
   and events), `client-v2/src/widgets/catalog/` (routing the link, since a
   feature never imports another, and New project's state holding the
-  import), `client-v2/src/utils/github.ts` (typed 404),
-  `client-v2/src/features/gist/model/telemetry.ts` (one source value).
+  import), `client-v2/src/utils/github.ts` (a file's 404 as `GithubFileError`),
+  `client-v2/src/features/gist/` (one `via` value, the `unexpected` reason,
+  `GistUnreachableError` for a request GitHub never answered).
 - Tests: unit tests for the link model and the card, an e2e spec that imports
   a TypeScript-only repository through the card and shows the bad-link and
   can't-find states.

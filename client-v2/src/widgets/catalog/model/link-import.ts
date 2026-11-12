@@ -1,4 +1,9 @@
-import { GistImportError, importGist, parseGistUrl } from "@/features/gist";
+import {
+  GistImportError,
+  GistUnreachableError,
+  importGist,
+  parseGistUrl,
+} from "@/features/gist";
 import type {
   LinkImport,
   LinkImportFailure,
@@ -73,9 +78,11 @@ const failed = ({
   if (error instanceof ConversionError) {
     return fail("no-program", error.message);
   }
+  if (error instanceof GistUnreachableError)
+    return fail("network", UNREACHABLE);
   if (error instanceof GistImportError) {
-    // The gist import reported its own faults already; what it calls a
-    // failed request is GitHub's, which the user can only retry
+    // What the gist import calls a failed request is GitHub's, which the user
+    // can only retry; its own faults come as `unexpected`
     return fail(
       error.reason === "request-failed" ? "network" : error.reason,
       error.message
@@ -116,7 +123,7 @@ export const importLink = async (link: string): Promise<LinkImport> => {
     };
   }
 
-  // One import at a time across the app, not per mount of New project: a
+  // One import of New project's at a time, not per mount of the page: a
   // page left and opened again mid-import would otherwise start a second one,
   // and two imports of the same new repository both pass the
   // existing-project check, so the later create throws. Queued, the later
@@ -133,6 +140,8 @@ export const importLink = async (link: string): Promise<LinkImport> => {
     }
     return { outcome: "imported", source };
   });
-  imports = run;
+  // `run` settles to an outcome, never rejects; the catch keeps the queue
+  // going should that ever change
+  imports = run.catch(() => undefined);
   return run;
 };

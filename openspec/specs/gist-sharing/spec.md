@@ -506,8 +506,9 @@ project is created or a view opened; `gist_import_failed`
 when it stops. Each carries `via`: `dialog`, `link` or `new-project` (New
 project's Import from GitHub card). `gist_import_succeeded`
 carries `layout`: `manifest` or `loose`. `gist_import_failed` carries
-`reason`: `not-found`, `rate-limited`, `too-large`, `invalid`, `no-program`
-or `request-failed`.
+`reason`: `not-found`, `rate-limited`, `too-large`, `invalid`, `no-program`,
+`request-failed` (GitHub refused, failed or never answered) or `unexpected`
+(a fault of the import itself, also reported).
 
 #### Scenario: A failed import is counted with its reason
 

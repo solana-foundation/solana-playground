@@ -12,10 +12,16 @@ vi.mock("@/features/gist", async () => {
       super(message);
     }
   }
+  class GistUnreachableError extends GistImportError {
+    constructor(message: string) {
+      super("request-failed", message);
+    }
+  }
   return {
     parseGistUrl: url.parseGistUrl,
     importGist: mockImportGist,
     GistImportError,
+    GistUnreachableError,
   };
 });
 
@@ -49,7 +55,7 @@ vi.mock("@/utils", () => {
   };
 });
 
-import { GistImportError } from "@/features/gist";
+import { GistImportError, GistUnreachableError } from "@/features/gist";
 import type { ConversionReason, GithubImportReason } from "@/utils";
 import {
   ConversionError,
@@ -221,6 +227,28 @@ describe("importLink says why an import failed", () => {
     await expect(importLink(GIST)).resolves.toMatchObject({
       reason: "network",
       message: "Could not reach GitHub.",
+    });
+  });
+
+  it("says GitHub could not be reached when a gist request never got an answer", async () => {
+    mockImportGist.mockRejectedValueOnce(
+      new GistUnreachableError(
+        'Could not reach GitHub to read Gist "a5". Check the connection and try again.'
+      )
+    );
+    await expect(importLink(GIST)).resolves.toMatchObject({
+      reason: "network",
+      message: "Could not reach GitHub. Check the connection and try again.",
+    });
+  });
+
+  it("counts a gist import's own fault as unexpected", async () => {
+    mockImportGist.mockRejectedValueOnce(
+      new GistImportError("unexpected", 'Could not import gist "a5".')
+    );
+    await expect(importLink(GIST)).resolves.toMatchObject({
+      reason: "unexpected",
+      message: 'Could not import gist "a5".',
     });
   });
 

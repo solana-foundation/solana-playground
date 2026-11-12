@@ -54,10 +54,11 @@ SHALL clear it. The message SHALL be:
   in the browser before any request;
 - "Playground can't find <owner>/<repo> on GitHub. It may be private,
   renamed or deleted." when GitHub answers 404 for the repository
-  (`GithubNotFoundError`);
+  (`GithubImportError` with reason `not-found`);
 - "Could not reach GitHub. Check the connection and try again." when a
-  request never got an answer;
-- the import's own message for every other failure (a gist not found, the
+  request never got an answer, for a repository and a gist alike;
+- the import's own message for every other failure (a gist not found, a
+  file of the listed tree that GitHub cannot find (`GithubFileError`), the
   rate limit, a repository too large, no Solana program and no TypeScript).
 
 Closing the program picker of a repository with several programs
@@ -102,9 +103,9 @@ disabled.
 
 The `features/new-project` tracker SHALL declare and send:
 
-- `new_project_imported {source}` once the import resolves, `source` being
+- `new_project_imported {via}` once the import resolves, `via` being
   `"github"` or `"gist"`;
-- `new_project_import_failed {source, reason}` when it fails, `source` being
+- `new_project_import_failed {via, reason}` when it fails, `via` being
   `"github"`, `"gist"` or `"unknown"` (a link that is neither), and `reason`
   one of `"bad-link"`, `"not-found"`, `"rate-limited"`, `"too-large"`,
   `"no-program"`, `"invalid"`, `"network"` (GitHub unreachable, refusing, or
@@ -118,16 +119,16 @@ showing "Could not import it.", and SHALL release New project's other
 actions.
 
 A closed program picker SHALL send neither. A gist import SHALL also send
-`gist_import_*` with `from: "new-project"`, a value `GistImportSource` gains.
+`gist_import_*` with `via: "new-project"`, a value `GistImportSource` gains.
 
 #### Scenario: A repository imports (manual)
 
 - **WHEN** a user imports a repository from the card
 - **THEN** the memory provider records `new_project_imported` once with
-  `source: "github"`
+  `via: "github"`
 
 #### Scenario: A bad link (manual)
 
 - **WHEN** a user imports `https://gitlab.com/acme/escrow`
 - **THEN** the memory provider records `new_project_import_failed` with
-  `source: "unknown"` and `reason: "bad-link"`
+  `via: "unknown"` and `reason: "bad-link"`

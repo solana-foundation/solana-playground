@@ -35,7 +35,8 @@ export type GistImportFailure =
   | "too-large"
   | "invalid"
   | "no-program"
-  | "request-failed";
+  | "request-failed"
+  | "unexpected";
 
 type GistEvents = {
   /**
@@ -81,7 +82,7 @@ type GistEvents = {
   };
   /**
    * The import stopped; the user saw the message for `reason`.
-   * `request-failed` also counts a fault of ours, which is reported as well.
+   * `unexpected` is a fault of ours, which is reported as well.
    */
   gist_import_failed: { via: GistImportSource; reason: GistImportFailure };
 };

@@ -1,5 +1,15 @@
 # Import from GitHub on New project: implementation plan
 
+> **As built (differs from this plan).** The branch merged master's typed import
+> errors, so `GithubNotFoundError` was never added: a repository's 404 is
+> `GithubImportError` with reason `not-found`, one file's is `GithubFileError`,
+> and failures map through `GITHUB_REASONS`, never read from the message. Event
+> parameters are `via`, not `source`/`from`. `NewProjectState` exposes
+> `isImportHeld` (not `importHeld`), and `BaseImportFromUrl` uses `isImporting`
+> / `canImport` (not `importing` / `usable`). The
+> gist import gained `GistUnreachableError` and the reason `unexpected`. The
+> synced specs `new-project-import` and `gist-sharing` hold the final text.
+
 > **For agentic workers:** executed inline (superpowers:executing-plans). Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** the "Import from GitHub" card on New project (from #466) imports a GitHub repository or gist and lands the user in it.

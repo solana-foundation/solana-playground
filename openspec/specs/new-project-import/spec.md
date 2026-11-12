@@ -65,7 +65,7 @@ SHALL clear it. The message SHALL be:
   renamed or deleted." when GitHub answers 404 for the repository
   (`GithubImportError` with reason `not-found`);
 - "Could not reach GitHub. Check the connection and try again." when a
-  request never got an answer;
+  request never got an answer, for a repository and a gist alike;
 - the import's own message for every other failure (a gist not found, a
   file of the listed tree that GitHub cannot find (`GithubFileError`), the
   rate limit, a repository too large, no Solana program and no TypeScript).
