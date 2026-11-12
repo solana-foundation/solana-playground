@@ -22,8 +22,11 @@ export type GistShareSource = "header" | "project_menu";
 /** Which link a copy in the shared state put on the clipboard */
 export type GistCopiedLink = "playground" | "github";
 
-/** Where a gist import started: the import dialog or a link */
-export type GistImportSource = "dialog" | "link";
+/**
+ * Where a gist import started: the import dialog, a link, or New project's
+ * Import from GitHub card
+ */
+export type GistImportSource = "dialog" | "link" | "new-project";
 
 /** Why a gist import stopped */
 export type GistImportFailure =

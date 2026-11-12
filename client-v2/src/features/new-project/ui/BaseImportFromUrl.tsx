@@ -16,6 +16,8 @@ export interface BaseImportFromUrlProps {
   onUrl: (url: string) => void;
   status: UrlImport;
   onImport: () => void;
+  /** Something else on the page runs: Import waits, the field stays */
+  held?: boolean;
   autoFocus?: boolean;
 }
 
@@ -29,11 +31,12 @@ const BaseImportFromUrl = ({
   onUrl,
   status,
   onImport,
+  held = false,
   autoFocus,
 }: BaseImportFromUrlProps) => {
   const importing = status.state === "importing";
   const error = status.state === "failed" ? status.error : undefined;
-  const usable = !importing && url.trim() !== "";
+  const usable = !importing && !held && url.trim() !== "";
   const errorId = useId();
   const urlId = useId();
 

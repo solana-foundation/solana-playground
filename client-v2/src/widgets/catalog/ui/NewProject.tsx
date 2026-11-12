@@ -1,5 +1,6 @@
 import { ImportFromUrl, StartFromScratch } from "@/features/new-project";
 
+import { importLink } from "../model/link-import";
 import type { NewProjectState } from "../model/use-new-project";
 import BaseNewProject from "./BaseNewProject";
 
@@ -18,7 +19,13 @@ const NewProject = ({ project }: { project: NewProjectState }) => (
           onStarted={project.closePage}
           onFailed={project.onStartFailed}
         />
-        <ImportFromUrl />
+        <ImportFromUrl
+          importLink={importLink}
+          held={project.importHeld}
+          onRunning={project.onImporting}
+          onImported={project.closePage}
+          onFailed={project.onImportFailed}
+        />
       </>
     }
   />

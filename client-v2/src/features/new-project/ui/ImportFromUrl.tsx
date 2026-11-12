@@ -1,61 +1,112 @@
 import { useState } from "react";
 
-import { PgGithub } from "@/utils";
+import { createLogger } from "@/shared/lib/logger";
 
+import type { LinkImport } from "../model/link-import";
+import { IMPORT_FALLBACK } from "../model/link-import";
+import { newProjectTelemetry } from "../model/telemetry";
 import type { UrlImport } from "./BaseImportFromUrl";
 import BaseImportFromUrl from "./BaseImportFromUrl";
 
-// Design prototype for sync log 9.1 (HOO-2608): no import runs. The states
-// come from `?import=empty|focus|typed|importing|bad|private|off`, and a
-// press fakes the answer from the link alone. Not meant to merge.
+const log = createLogger("new-project:import");
 
-const BAD = "This isn't a GitHub repo or gist link.";
-const PRIVATE =
-  "This repo is private. Make it public or import it from your machine.";
+export interface ImportFromUrlProps {
+  /**
+   * Imports the link and says how it ended; never throws. The widget passes
+   * it, since routing a link to the repository or the gist import meets two
+   * features
+   */
+  importLink: (link: string) => Promise<LinkImport>;
+  /** Something else runs (Start, a card's Open): Import waits for it */
+  held?: boolean;
+  /** Hears when an import starts and ends, so others can wait */
+  onRunning?: (running: boolean) => void;
+  /** Runs once the project is open: New project closes its page here */
+  onImported?: () => void;
+  /**
+   * Hears a failed import's message, after the field shows it: New project
+   * toasts it once its page was left, when no field is left to show it
+   */
+  onFailed?: (message: string) => void;
+}
 
-const SAMPLE = "https://github.com/solana-developers/program-examples";
+/**
+ * Import from GitHub, connected: the link goes to `importLink`, the card
+ * shows the import while it runs and what went wrong under the field. A
+ * closed program picker is the user changing their mind, not a failure.
+ */
+const ImportFromUrl = ({
+  importLink,
+  held = false,
+  onRunning,
+  onImported,
+  onFailed,
+}: ImportFromUrlProps) => {
+  const [url, setUrl] = useState("");
+  const [status, setStatus] = useState<UrlImport>({ state: "idle" });
 
-const PRESETS: Record<string, { url: string; status: UrlImport }> = {
-  typed: { url: SAMPLE, status: { state: "idle" } },
-  importing: { url: SAMPLE, status: { state: "importing" } },
-  bad: {
-    url: "https://gitlab.com/acme/escrow",
-    status: { state: "failed", error: BAD },
-  },
-  private: {
-    url: "https://github.com/acme/escrow-private",
-    status: { state: "failed", error: PRIVATE },
-  },
-};
-
-const getMode = () =>
-  new URLSearchParams(window.location.search).get("import") ?? "empty";
-
-const isGistLink = (url: string) =>
-  /^https?:\/\/gist\.github\.com\/[\w-]+\/[0-9a-f]+/i.test(url.trim());
-
-const ImportFromUrl = () => {
-  const mode = getMode();
-  const preset = PRESETS[mode];
-  const [url, setUrl] = useState(preset?.url ?? "");
-  const [status, setStatus] = useState<UrlImport>(
-    preset?.status ?? { state: "idle" }
-  );
-
-  // eslint-disable-next-line unicorn/no-null -- React's "draw nothing"
-  if (mode === "off") return null;
-
-  const fakeImport = () => {
+  const handleImport = async () => {
     const link = url.trim();
-    if (!PgGithub.isValidUrl(link) && !isGistLink(link)) {
-      setStatus({ state: "failed", error: BAD });
-      return;
-    }
-    if (link.includes("private")) {
-      setStatus({ state: "failed", error: PRIVATE });
-      return;
-    }
+    if (!link || held || status.state === "importing") return;
+
     setStatus({ state: "importing" });
+    onRunning?.(true);
+    let result: LinkImport;
+    try {
+      result = await importLink(link);
+    } catch (error) {
+      // `importLink` answers every failure itself; a throw is a fault of
+      // ours, shown like any other so the page is never left held
+      result = {
+        outcome: "failed",
+        source: "unknown",
+        reason: "unexpected",
+        message: IMPORT_FALLBACK,
+        error,
+      };
+    } finally {
+      onRunning?.(false);
+    }
+
+    switch (result.outcome) {
+      case "cancelled":
+        setStatus({ state: "idle" });
+        return;
+
+      case "failed": {
+        const { source, reason, message } = result;
+        // Only a fault of ours is reported; a link the user can fix and a
+        // GitHub that is down or refusing are theirs to retry
+        if (reason === "unexpected") {
+          log.error("error" in result ? result.error ?? message : message, {
+            report: true,
+            context: { source },
+          });
+        } else {
+          log.warn("import refused", { context: { source, reason, message } });
+        }
+        newProjectTelemetry.track("new_project_import_failed", {
+          via: source,
+          reason,
+        });
+        setStatus({ state: "failed", error: message });
+        onFailed?.(message);
+        return;
+      }
+
+      case "imported":
+        // The project is open from here on: nothing below may call it a
+        // failure
+        newProjectTelemetry.track("new_project_imported", {
+          via: result.source,
+        });
+        setStatus({ state: "idle" });
+        try {
+          onImported?.();
+        } catch (e) {
+          log.error(e, { report: true, context: { after: "imported" } });
+        }
+    }
   };
 
   return (
@@ -63,11 +114,11 @@ const ImportFromUrl = () => {
       url={url}
       onUrl={(next) => {
         setUrl(next);
-        setStatus({ state: "idle" });
+        if (status.state !== "importing") setStatus({ state: "idle" });
       }}
       status={status}
-      onImport={fakeImport}
-      autoFocus={mode === "focus"}
+      held={held}
+      onImport={handleImport}
     />
   );
 };
