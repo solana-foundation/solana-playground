@@ -5,7 +5,7 @@ Tasks 1.1 and 2.1 may run at the same time. Every task: ticket to file.
 
 ## 1. IDL upload from the terminal
 
-- [ ] 1.1 Create `client-v2/src/features/program-idl` from the HOO-2486 spike (commit `aaa4be84d`): add
+- [x] 1.1 Create `client-v2/src/features/program-idl` from the HOO-2486 spike (commit `aaa4be84d`): add
   `@solana-program/program-metadata` 0.11.0 to `client-v2/package.json`; move `uploadIdl`,
   `NotProgramAuthorityError`, `idlMetadataAddress`, and `toStages` to `model/upload.ts`; declare `idl_upload_started`,
   `idl_uploaded`, and `idl_upload_failed` with doc comments in `model/telemetry.ts`; register `"program-idl": "idl"`
@@ -24,7 +24,7 @@ Tasks 1.1 and 2.1 may run at the same time. Every task: ticket to file.
 
 ## 2. Remove the Anchor 0.29 CLI
 
-- [ ] 2.1 Pass `with: build: false` to `reusable-checks.yml` in `.github/workflows/cicd.yml`, pin every `uses:` line
+- [x] 2.1 Pass `with: build: false` to `reusable-checks.yml` in `.github/workflows/cicd.yml`, pin every `uses:` line
   of `cicd.yml` by commit SHA with the version as a comment, and correct the comment on the `build` input of
   `reusable-checks.yml`, which says `cicd.yml` runs the job. Verify: the workflow parses as YAML, each pinned SHA is
   the commit its tag names, and no caller of `reusable-checks.yml` leaves `build` at its default.
