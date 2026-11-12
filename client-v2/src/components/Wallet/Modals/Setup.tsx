@@ -11,7 +11,7 @@ import { ModalFrame } from "@/widgets/overlays";
 import { PgWallet, PgWeb3 } from "../../../utils";
 import { KeypairFileError } from "../../../utils/wallet/keypair-file";
 import { useBusyPanels, useDraftKey } from "../hooks";
-import { addImportedKey } from "../imported-key";
+import { addExistingImportedKey, addNewImportedKey } from "../imported-key";
 import { importedText } from "../imported-text";
 import { KeyPanel } from "../KeyPanel";
 import { SaveKeyPanel } from "./SaveKeyPanel";
@@ -118,7 +118,9 @@ const KeyOriginSetup = () => {
 
   const handleImported = (publicKey: string, isNew: boolean) => {
     try {
-      setText(addImportedKey(publicKey, isNew));
+      setText(
+        isNew ? addNewImportedKey(publicKey) : addExistingImportedKey(publicKey)
+      );
     } catch (err) {
       log.error(err, { report: true });
       setText(importFailure(err));

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PgWallet } from "../../utils";
-import { addImportedKey } from "./imported-key";
+import { addExistingImportedKey, addNewImportedKey } from "./imported-key";
 
 // The utils barrel needs build-time globals the unit runner does not define.
 vi.mock("../../utils", () => ({
@@ -22,9 +22,7 @@ afterEach(() => {
 describe("components/Wallet/imported-key", () => {
   it("adds the stored key's account and says so", () => {
     vi.mocked(PgWallet.add).mockReturnValueOnce(true);
-    expect(addImportedKey(IMPORTED, true)).toBe(
-      "Imported 7xKX…gAsU as Wallet 1."
-    );
+    expect(addNewImportedKey(IMPORTED)).toBe("Imported 7xKX…gAsU as Wallet 1.");
     expect(PgWallet.add).toHaveBeenCalledWith({ publicKey: IMPORTED });
     expect(PgWallet.forgetKey).not.toHaveBeenCalled();
   });
@@ -34,7 +32,7 @@ describe("components/Wallet/imported-key", () => {
     vi.mocked(PgWallet.add).mockImplementationOnce(() => {
       throw failure;
     });
-    expect(() => addImportedKey(IMPORTED, true)).toThrow(failure);
+    expect(() => addNewImportedKey(IMPORTED)).toThrow(failure);
     expect(PgWallet.forgetKey).toHaveBeenCalledWith(IMPORTED);
   });
 
@@ -42,7 +40,9 @@ describe("components/Wallet/imported-key", () => {
     vi.mocked(PgWallet.add).mockImplementationOnce(() => {
       throw new Error("Wallet unavailable");
     });
-    expect(() => addImportedKey(IMPORTED, false)).toThrow("Wallet unavailable");
+    expect(() => addExistingImportedKey(IMPORTED)).toThrow(
+      "Wallet unavailable"
+    );
     expect(PgWallet.forgetKey).not.toHaveBeenCalled();
   });
 });

@@ -6,7 +6,7 @@ import { ModalFrame } from "@/widgets/overlays";
 
 import { PgWallet } from "../../../utils";
 import { useBusyPanels } from "../hooks";
-import { addImportedKey } from "../imported-key";
+import { addExistingImportedKey, addNewImportedKey } from "../imported-key";
 import { KeyPanel } from "../KeyPanel";
 
 const log = createLogger("wallet:key-file");
@@ -20,7 +20,9 @@ export const ImportKey = () => {
   const { isBusy, onBusy } = useBusyPanels();
   const handleImported = (publicKey: string, isNew: boolean) => {
     try {
-      setText(addImportedKey(publicKey, isNew));
+      setText(
+        isNew ? addNewImportedKey(publicKey) : addExistingImportedKey(publicKey)
+      );
     } catch (err) {
       log.error(err, { report: true });
       setText(
