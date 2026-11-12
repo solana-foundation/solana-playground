@@ -19,8 +19,12 @@ vi.stubGlobal("CRATES", {
   importable: ["anchor_lang", "arrayref", "unknown_crate"],
 });
 
-const { getImportedNames, getRustDependencies, wrapTopLevelAwait } =
-  await import("./common");
+const {
+  addAfterImports,
+  getImportedNames,
+  getRustDependencies,
+  wrapTopLevelAwait,
+} = await import("./common");
 
 describe("frameworks/common", () => {
   it("pins the crate versions and features the server builds with", async () => {
@@ -142,5 +146,44 @@ describe("wrapTopLevelAwait", () => {
       '// import x from "x";\nconst a = "import y from \'y\'";\nconst b = `\nimport z from "z";\n`;\nawait a;\n';
 
     expect(wrapTopLevelAwait(client)).toBe("\n\n" + wrapped(client.trim()));
+  });
+});
+
+describe("addAfterImports", () => {
+  it.each([
+    ['import{BN}from"bn.js";\nrun();\n', 'import{BN}from"bn.js";\nX\nrun();\n'],
+    ['import*as x from "x";\nrun();\n', 'import*as x from "x";\nX\nrun();\n'],
+    ['import"x";\nrun();\n', 'import"x";\nX\nrun();\n'],
+    [
+      '// a\nimport a from "a";\n/* b */\n\nimport b from "b"; // why\nrun();\n',
+      '// a\nimport a from "a";\n/* b */\n\nimport b from "b"; // why\nX\nrun();\n',
+    ],
+    ['import a from "a";\n/* open', 'import a from "a";\nX\n/* open'],
+  ])("adds after the leading imports of %j", (content, expected) => {
+    expect(addAfterImports(content, "X")).toBe(expected);
+  });
+
+  it.each([
+    ["important();\n"],
+    ['import("x");\n'],
+    ['import ("x");\n'],
+    ['import /* c */ ("x");\n'],
+    ['import // c\n("x");\n'],
+    ['run();\nimport a from "a";\n'],
+  ])("adds at the top of %j, which has no leading import", (content) => {
+    expect(addAfterImports(content, "X")).toBe("X\n" + content);
+  });
+
+  // CodeQL js/redos: comments after `import` backtracked exponentially
+  it.each([
+    ["import " + "//".repeat(50_000)],
+    ["import " + "*//*".repeat(50_000)],
+    ["import /*" + "*//*".repeat(50_000)],
+    ["//".repeat(50_000) + "\nimport a from 'a';"],
+    ["/**/".repeat(50_000) + "import a from 'a';"],
+  ])("scans comments in linear time (input %#)", (content) => {
+    const start = performance.now();
+    addAfterImports(content, "X");
+    expect(performance.now() - start).toBeLessThan(100);
   });
 });

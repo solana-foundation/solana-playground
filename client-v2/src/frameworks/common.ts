@@ -164,21 +164,52 @@ export const wrapTopLevelAwait = (content: string) => {
  * @returns the index after the last leading import, `0` if there is none
  */
 const getLeadingImportsEnd = (content: string) => {
-  const skipped = /(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*/y;
   // `import{BN}`, `import*as x` and `import"x"` need no space after the keyword;
-  // lookaheads keep `important` and a dynamic `import(`, `import (`,
-  // `import /* c */ (` or `import // c` with `(` on the next line out
-  const importStatement =
-    /import(?=[\s{*"'])(?!(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*\()[\s\S]*?["'][^"'\n]*["'];?/y;
+  // the check keeps `important` out
+  const keyword = /import(?=[\s{*"'])/y;
+  const statementRest = /[\s\S]*?["'][^"'\n]*["'];?/y;
   let end = 0;
   let index = 0;
   while (true) {
-    skipped.lastIndex = index;
-    index += skipped.exec(content)?.[0].length ?? 0;
-    importStatement.lastIndex = index;
-    if (!importStatement.exec(content)) return end;
-    index = end = importStatement.lastIndex;
+    index = skipSpaceAndComments(content, index);
+    keyword.lastIndex = index;
+    if (!keyword.test(content)) return end;
+    // A dynamic `import(`, `import (`, `import /* c */ (` or `import // c`
+    // with `(` on the next line is not a statement
+    if (content[skipSpaceAndComments(content, keyword.lastIndex)] === "(") {
+      return end;
+    }
+    statementRest.lastIndex = keyword.lastIndex;
+    if (!statementRest.test(content)) return end;
+    index = end = statementRest.lastIndex;
   }
+};
+
+/**
+ * Get the index after the whitespace and comments that start at the given
+ * index. A loop, not one regex over `(?:\s|//…|/*…*\/)*`: those overlapping
+ * alternatives backtrack exponentially on a run of `//` (CodeQL `js/redos`).
+ *
+ * @param content JS/TS code
+ * @param index where to start
+ * @returns the index of the first other character, or of an unclosed `/*`
+ */
+const skipSpaceAndComments = (content: string, index: number) => {
+  while (index < content.length) {
+    if (/\s/.test(content[index])) {
+      index++;
+    } else if (content.startsWith("//", index)) {
+      const lineEnd = content.indexOf("\n", index);
+      index = lineEnd === -1 ? content.length : lineEnd;
+    } else if (content.startsWith("/*", index)) {
+      const commentEnd = content.indexOf("*/", index + 2);
+      if (commentEnd === -1) return index;
+      index = commentEnd + 2;
+    } else {
+      return index;
+    }
+  }
+  return index;
 };
 
 /**
