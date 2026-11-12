@@ -480,12 +480,19 @@ test.describe("client-v2-stages: Interact", () => {
     const handle = page.locator(
       '[data-slot="resizable-handle"][aria-controls="files"]'
     );
-    const box = requireFor("the files column's handle box")(
+    const handleBox = requireFor("the files column's handle box")(
       await handle.boundingBox()
     );
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.move(
+      handleBox.x + handleBox.width / 2,
+      handleBox.y + handleBox.height / 2
+    );
     await page.mouse.down();
-    await page.mouse.move(box.x + 900, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.move(
+      handleBox.x + 900,
+      handleBox.y + handleBox.height / 2,
+      { steps: 10 }
+    );
     await page.mouse.up();
     // eslint-disable-next-line unicorn/no-null -- the cluster's answer for an account that does not exist
     await stubProgramAccount(page, null);
@@ -515,11 +522,11 @@ test.describe("client-v2-stages: Interact", () => {
     // The buttons, and the IDL's name beside Upload IDL
     const parts = actions.getByRole("button").or(actions.getByRole("status"));
     for (const part of await parts.all()) {
-      const box = requireFor("an action's bounding box")(
+      const partBox = requireFor("an action's bounding box")(
         await part.boundingBox()
       );
-      expect(box.x).toBeGreaterThanOrEqual(frame.left - 0.5);
-      expect(box.x + box.width).toBeLessThanOrEqual(frame.right + 0.5);
+      expect(partBox.x).toBeGreaterThanOrEqual(frame.left - 0.5);
+      expect(partBox.x + partBox.width).toBeLessThanOrEqual(frame.right + 0.5);
     }
   });
 });
