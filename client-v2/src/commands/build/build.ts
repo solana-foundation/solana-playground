@@ -63,9 +63,11 @@ export const build = createCmd({
           if (isStillOpen()) markBuildRefused(workspace);
           throw e;
         }
-        clearBuildRefused();
         // Deploy's stale-build guard reads `lastBuildFailed`, so the previous binary is not shipped
-        if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
+        if (isStillOpen()) {
+          clearBuildRefused(workspace);
+          PgProgramInfo.update({ lastBuildFailed: true });
+        }
         sayDroppedUnlessOpen();
         throw e;
       });
@@ -77,7 +79,7 @@ export const build = createCmd({
       // `stderr` so deploy can warn before reusing a stale binary.
       const failed = result.stderr.includes("error: could not compile");
       if (isStillOpen()) {
-        clearBuildRefused();
+        clearBuildRefused(workspace);
         PgProgramInfo.update({
           uuid: result.uuid ?? undefined,
           lastBuildFailed: failed,

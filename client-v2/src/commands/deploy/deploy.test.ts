@@ -459,7 +459,7 @@ describe("commands/deploy", () => {
           lastBuildFailed: false,
         });
       } finally {
-        clearBuildRefused();
+        clearBuildRefused("id-a");
       }
 
       expect(PgCommand.build.execute).toHaveBeenCalledTimes(1);

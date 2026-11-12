@@ -35,7 +35,9 @@ const { PgBuildOutput } = await import(
   "../../views/sidebar/assistant/bridge/build-output"
 );
 const { isStopped } = await import("../../utils/stopped");
-const { isBuildRefused, markBuildRefused } = await import("./refused-build");
+const { clearBuildRefused, isBuildRefused, markBuildRefused } = await import(
+  "./refused-build"
+);
 
 /** Runs the command's handler as the command manager would */
 const run = (signal = new AbortController().signal) =>
@@ -233,6 +235,32 @@ describe("commands/build/build", () => {
       await run();
 
       expect(isBuildRefused("id-a")).toBe(false);
+    });
+
+    // A refusal in one project says nothing about another: building the open
+    // project must not let Deploy reuse the other's binary
+    it("keeps another project's mark when this one builds", async () => {
+      markBuildRefused("id-b");
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "",
+        uuid: "u",
+        idl: null,
+      });
+
+      await run();
+
+      expect(isBuildRefused("id-b")).toBe(true);
+      clearBuildRefused("id-b");
+    });
+
+    it("keeps another project's mark when this one fails to compile", async () => {
+      markBuildRefused("id-b");
+      utils.PgServer.build.mockRejectedValue(new Error("boom"));
+
+      await run().catch(() => undefined);
+
+      expect(isBuildRefused("id-b")).toBe(true);
+      clearBuildRefused("id-b");
     });
   });
 
