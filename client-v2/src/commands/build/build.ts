@@ -17,6 +17,7 @@ import { isMacroSymptomText } from "../../views/flow/stages/build-report";
 import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 import { createCmd } from "../create";
 import { emptySourceError, isEmptyProgram, PROGRAM_FILE } from "./empty-source";
+import { clearBuildRefused, markBuildRefused } from "./refused-build";
 
 export const build = createCmd({
   name: "build",
@@ -56,8 +57,13 @@ export const build = createCmd({
         // Only "Stopped.": the server may still finish, its reply is not kept
         throwIfStopped(signal, STOPPED);
         // A refusal for sign-in never reached the compiler, so the saved
-        // verdict stays: a reload would otherwise show a failed build
-        if (isSignInRefusalError(e)) throw e;
+        // verdict stays: a reload would otherwise show a failed build. It may
+        // be a pass for older code, so Deploy is told this source never built
+        if (isSignInRefusalError(e)) {
+          if (isStillOpen()) markBuildRefused(workspace);
+          throw e;
+        }
+        clearBuildRefused();
         // Deploy's stale-build guard reads `lastBuildFailed`, so the previous binary is not shipped
         if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
         sayDroppedUnlessOpen();
@@ -71,6 +77,7 @@ export const build = createCmd({
       // `stderr` so deploy can warn before reusing a stale binary.
       const failed = result.stderr.includes("error: could not compile");
       if (isStillOpen()) {
+        clearBuildRefused();
         PgProgramInfo.update({
           uuid: result.uuid ?? undefined,
           lastBuildFailed: failed,

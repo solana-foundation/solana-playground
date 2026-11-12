@@ -35,6 +35,7 @@ const { PgBuildOutput } = await import(
   "../../views/sidebar/assistant/bridge/build-output"
 );
 const { isStopped } = await import("../../utils/stopped");
+const { isBuildRefused, markBuildRefused } = await import("./refused-build");
 
 /** Runs the command's handler as the command manager would */
 const run = (signal = new AbortController().signal) =>
@@ -205,6 +206,33 @@ describe("commands/build/build", () => {
 
       expect((err as Error).message).toBe("Sign in with GitHub to build.");
       expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+    });
+    // The kept verdict may be a pass for older code, so Deploy must know the
+    // current source never built
+    it("marks the project when sign-in refuses its build", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          reason: "signed-out",
+        })
+      );
+
+      await run().catch(() => undefined);
+
+      expect(isBuildRefused("id-a")).toBe(true);
+      expect(isBuildRefused("id-b")).toBe(false);
+    });
+
+    it("clears the mark once a build reaches the compiler", async () => {
+      markBuildRefused("id-a");
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "error: could not compile `p`",
+        uuid: "u",
+        idl: null,
+      });
+
+      await run();
+
+      expect(isBuildRefused("id-a")).toBe(false);
     });
   });
 

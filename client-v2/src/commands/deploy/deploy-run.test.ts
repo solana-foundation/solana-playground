@@ -82,6 +82,7 @@ vi.mock("../../utils", () => {
       kp: { publicKey: pk },
       onChain: { deployed: false, upgradable: true, programDataLen: 0 },
     },
+    PgExplorer: { currentWorkspaceId: "id-a" },
     PgServer: {},
     PgTerminal: {
       println: vi.fn(),

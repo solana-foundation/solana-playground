@@ -133,6 +133,7 @@ vi.mock("../../utils", () => ({
     },
     pk: {},
   },
+  PgExplorer: { currentWorkspaceId: "id-a" },
   PgServer: { deploy: vi.fn() },
   PgTerminal: {
     bold: String,
@@ -408,6 +409,32 @@ describe("commands/deploy", () => {
 
       expect(PgTerminal.println).toHaveBeenCalledWith(
         expect.stringMatching(/^warning: Warning: Your last build failed/),
+        { noColor: true }
+      );
+    });
+
+    // A passing build, an edit, then a refusal: the saved verdict is the pass
+    // for the older code, so Deploy builds the current source first
+    it("builds again when sign-in refused the last build", async () => {
+      const { PgCommand } = await import("../../utils");
+      const { clearBuildRefused, markBuildRefused } = await import(
+        "../build/refused-build"
+      );
+      vi.mocked(PgCommand.build.execute).mockClear();
+      markBuildRefused("id-a");
+      try {
+        await checkProgram({
+          importedProgram: undefined,
+          uuid: "uuid",
+          lastBuildFailed: false,
+        });
+      } finally {
+        clearBuildRefused();
+      }
+
+      expect(PgCommand.build.execute).toHaveBeenCalledTimes(1);
+      expect(PgTerminal.println).toHaveBeenCalledWith(
+        expect.stringMatching(/^warning: Warning: Your last build was refused/),
         { noColor: true }
       );
     });

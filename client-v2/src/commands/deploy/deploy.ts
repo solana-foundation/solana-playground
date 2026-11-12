@@ -6,6 +6,7 @@ import {
   PgCommand,
   PgCommon,
   PgConnection,
+  PgExplorer,
   PgGlobal,
   PgProgramInfo,
   PgServer,
@@ -19,6 +20,7 @@ import {
 } from "../../utils";
 import { StoppedError, throwIfStopped } from "../../utils/stopped";
 import { isAirdropSignInGated } from "../airdrop/sign-in-gate";
+import { isBuildRefused } from "../build/refused-build";
 import { checkWallet } from "../checks";
 import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
@@ -130,6 +132,19 @@ async function checkProgram() {
     PgTerminal.println(PgTerminal.warning("Warning: Program is not built."), {
       noColor: true,
     });
+    await PgCommand.build.execute();
+  } else if (
+    isBuildRefused(PgExplorer.currentWorkspaceId) &&
+    !PgProgramInfo.importedProgram?.bytes.length
+  ) {
+    // The saved verdict may be a pass for the code before an edit; deploying
+    // now would upload that binary. A second refusal throws and stops here
+    PgTerminal.println(
+      PgTerminal.warning(
+        "Warning: Your last build was refused for sign-in. Building the current sources first."
+      ),
+      { noColor: true }
+    );
     await PgCommand.build.execute();
   }
 
