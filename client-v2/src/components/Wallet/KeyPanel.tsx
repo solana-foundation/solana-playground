@@ -6,10 +6,10 @@ import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 
 import {
-  connectKeyPanel,
+  connectKeyPanelFor,
   HANDSHAKE_TIMEOUT_MS,
   type KeyPanelRoute,
-  keyPanelUrl,
+  keyPanelUrlFor,
 } from "../../utils/wallet/key-origin/client";
 import { keyOriginFor } from "../../utils/wallet/key-origin/origin";
 import {
@@ -209,7 +209,7 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
     connect(origin)(
       frame,
       stopped.signal
-    )(keyPanelUrl(origin)(route, tokens)).then(
+    )(keyPanelUrlFor(origin)(route, tokens)).then(
       (connected) => {
         if (!isLive) {
           connected.close();
@@ -341,15 +341,15 @@ export const BaseKeyPanel = (props: BaseKeyPanelProps) => {
   );
 };
 
-const connectPanel = (origin: string) =>
-  connectKeyPanel(origin)(HANDSHAKE_TIMEOUT_MS);
+const connectPanelFor = (origin: string) =>
+  connectKeyPanelFor(origin)(HANDSHAKE_TIMEOUT_MS);
 
 /** The key page's panel on the build's key origin (`BaseKeyPanel`) */
 export const KeyPanel = (props: KeyPanelProps) => (
   <BaseKeyPanel
     {...props}
     origin={keyOriginFor(walletOriginEnv().KEY_ORIGIN)(window.location)}
-    connect={connectPanel}
+    connect={connectPanelFor}
     readTokens={readThemeTokens}
   />
 );

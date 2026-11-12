@@ -297,7 +297,7 @@ const base64UrlJson = (value: unknown) =>
  * @returns for the panel to show and the tokens it is drawn with, the URL of
  * the key page showing that panel
  */
-export const keyPanelUrl =
+export const keyPanelUrlFor =
   (origin: string) => (route: KeyPanelRoute, theme: ThemeTokens) => {
     const query = new URLSearchParams();
     if (route.mode === "export") query.set("name", route.name);
@@ -321,7 +321,7 @@ export const keyPanelUrl =
  * with the panel's port once the panel answers
  * @throws {KeyFrameUnavailable} when the panel does not answer in time
  */
-export const connectKeyPanel =
+export const connectKeyPanelFor =
   (origin: string) =>
   (timeoutMs: number) =>
   (frame: HTMLIFrameElement, signal: AbortSignal) =>
@@ -627,7 +627,7 @@ if (import.meta.vitest) {
         font: '"Stack Sans Text", sans-serif',
       };
       const exportUrl = new URL(
-        keyPanelUrl(ORIGIN)(
+        keyPanelUrlFor(ORIGIN)(
           {
             mode: "export",
             publicKey: "11111111111111111111111111111111",
@@ -645,7 +645,7 @@ if (import.meta.vitest) {
         name: "My wallet",
         theme,
       });
-      const importUrl = new URL(keyPanelUrl(ORIGIN)({ mode: "import" }, {}));
+      const importUrl = new URL(keyPanelUrlFor(ORIGIN)({ mode: "import" }, {}));
       expect(panelRouteOf(importUrl.hash)).toEqual({
         mode: "import",
         theme: {},
@@ -660,7 +660,7 @@ if (import.meta.vitest) {
     it("connects a panel frame the caller owns, and leaves it on a timeout", async () => {
       const frame = document.createElement("iframe");
       document.body.append(frame);
-      const connected = connectKeyPanel(ORIGIN)(1000)(
+      const connected = connectKeyPanelFor(ORIGIN)(1000)(
         frame,
         new AbortController().signal
       )(ORIGIN + "/wallet-keys.html#panel/import");
@@ -685,7 +685,7 @@ if (import.meta.vitest) {
       const silent = document.createElement("iframe");
       document.body.append(silent);
       const timedOut = expect(
-        connectKeyPanel(ORIGIN)(1000)(silent, new AbortController().signal)(
+        connectKeyPanelFor(ORIGIN)(1000)(silent, new AbortController().signal)(
           ORIGIN + "/wallet-keys.html"
         )
       ).rejects.toBeInstanceOf(KeyFrameUnavailable);
@@ -727,9 +727,10 @@ if (import.meta.vitest) {
       const frame = document.createElement("iframe");
       document.body.append(frame);
       const controller = new AbortController();
-      const stopped = connectKeyPanel(ORIGIN)(1000)(frame, controller.signal)(
-        ORIGIN + "/wallet-keys.html#panel/import"
-      );
+      const stopped = connectKeyPanelFor(ORIGIN)(1000)(
+        frame,
+        controller.signal
+      )(ORIGIN + "/wallet-keys.html#panel/import");
       const target = frame.contentWindow as Window;
       const post = vi
         .spyOn(target, "postMessage")
