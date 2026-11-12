@@ -42,6 +42,14 @@ interface BlockExplorerParam {
    * @returns the transaction URL
    */
   getTxUrl?(txHash: string, cluster?: Cluster | null): string;
+  /**
+   * Get the URL of a program's IDL tab for the configured explorer.
+   *
+   * @param programId program public key
+   * @param cluster the network the link opens; the selected network when omitted
+   * @returns the program's IDL URL, `/address/<id>/idl` unless overridden
+   */
+  getIdlUrl?(programId: string, cluster?: Cluster | null): string;
 }
 
 type BlockExplorer = Omit<
@@ -106,7 +114,9 @@ class _PgBlockExplorer {
   static all: BlockExplorer[];
 
   /**
-   * Create a block explorer.
+   * Create a block explorer. The address, transaction and IDL URLs it is not
+   * given follow `<url>/address/<key>`, `<url>/tx/<signature>` and
+   * `<url>/address/<id>/idl`, each with the cluster parameter last.
    *
    * @param b block explorer implementation
    * @returns the created block explorer
@@ -118,6 +128,9 @@ class _PgBlockExplorer {
         b.url + "/" + p + "/" + v + b.getClusterParam(cluster));
     b.getAddressUrl ??= getCommonUrl("address");
     b.getTxUrl ??= getCommonUrl("tx");
+    // The tab goes before the network parameter, never after it
+    b.getIdlUrl ??= (programId, cluster) =>
+      b.url + "/address/" + programId + "/idl" + b.getClusterParam(cluster);
 
     const opens = (cluster: Cluster | null) =>
       cluster === "mainnet-beta" || b.getClusterParam(cluster) !== "";
