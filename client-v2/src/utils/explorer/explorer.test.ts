@@ -135,6 +135,49 @@ describe("deleting the current workspace", () => {
   });
 });
 
+describe("creating a workspace while another is open", () => {
+  beforeEach(reset);
+  afterEach(() => vi.restoreAllMocks());
+
+  // `create` makes the new workspace current before `switchWorkspace` saves
+  // the old one's metadata, and that save found files outside the current
+  // workspace, took the state as invalid and saved nothing: entering a
+  // tutorial the first time (its workspace is made then) brought the project
+  // back at line 1 (HOO-2731)
+  it("keeps the open file's cursor and top line", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const file = requireFor("the open file")(PgExplorer.currentFilePath);
+    const position = { cursor: { from: 7, to: 9 }, topLineNumber: 3 };
+    PgExplorer.saveEditorPosition(file, position);
+
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    await PgExplorer.switchWorkspace("alpha");
+
+    expect(PgExplorer.getEditorPosition(file)).toEqual(position);
+  });
+
+  it("still creates the workspace when saving the one left fails", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    clearFailures();
+    const write = PgExplorer.fs.writeFile.bind(PgExplorer.fs);
+    vi.spyOn(PgExplorer.fs, "writeFile").mockImplementation(
+      async (path: string, data: string) => {
+        if (path.startsWith("/alpha/") && path.endsWith("metadata.json")) {
+          throw new Error("QuotaExceededError");
+        }
+        await write(path, data);
+      }
+    );
+
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+    expect(getFailures().map((f) => f.what)).toContain(
+      "save the metadata of the workspace left"
+    );
+  });
+});
+
 describe("PgExplorer.saveEditorPosition", () => {
   beforeEach(reset);
 

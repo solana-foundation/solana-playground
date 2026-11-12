@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 
 import type { StepJumpVia } from "@/entities/tutorial";
 import {
-  docForLink,
+  docRequestFor,
   isOnStartLadder,
   requestCode,
   requestDoc,
@@ -818,8 +818,8 @@ export const TutorialConversation = ({
   // A link to one of the tutorial's docs opens it as a tab beside the files;
   // with no workspace to show it, the link opens as a link
   const handleLink = (href: string) => {
-    const doc = docForLink(context.definition.docs, href);
-    return doc ? requestDoc(doc.file) : false;
+    const request = docRequestFor(context.definition.docs)(href);
+    return request ? requestDoc(request) : false;
   };
   const running = view.turns.some(
     (t) => t.kind === "act" && t.state === "running"
