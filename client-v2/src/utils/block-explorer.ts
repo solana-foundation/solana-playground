@@ -114,7 +114,9 @@ class _PgBlockExplorer {
   static all: BlockExplorer[];
 
   /**
-   * Create a block explorer.
+   * Create a block explorer. The address, transaction and IDL URLs it is not
+   * given follow `<url>/address/<key>`, `<url>/tx/<signature>` and
+   * `<url>/address/<id>/idl`, each with the cluster parameter last.
    *
    * @param b block explorer implementation
    * @returns the created block explorer
