@@ -14,9 +14,10 @@ export type OpenKind = "mount" | "later";
  * keeps focus, because nothing typed there asked for the open: sync
  * re-opening the workspace after an adoption, a merge or another tab's
  * write. So does any control in an open dialog or popover (`isInDialog`),
- * which focus leaving would close. The mount's open keeps focus wherever the
- * user put it, a field or a control: under load it lands late, after a click
- * on another control
+ * which focus leaving would close, and the bare document while the tree
+ * shows in one (a rename or delete of the open file from the Files
+ * dropdown). The mount's open keeps focus wherever the user put it, a field
+ * or a control: under load it lands late, after a click on another control
  * already moved focus (the tree's field too: the new file the user is still
  * naming has not been created yet). It takes focus from the bare document,
  * so a fresh load lands in the editor, and from an item of the tree, whose
@@ -42,8 +43,8 @@ export const leavesFocusElsewhere = ({
 }): boolean => {
   // A disabled control holds no focus: Chromium drops it to <body>, Firefox
   // keeps it there. A dialog's submit disables its button while it runs, so
-  // Rename's open of the renamed file would otherwise read as "in a dialog"
-  // in Firefox alone, and leave a pick's dropdown open behind it
+  // both read Rename's open of the renamed file as one with nothing focused,
+  // not as one "in a dialog" in Firefox alone
   const active = focused?.matches(":disabled") ? null : focused;
   // Focus scrolls the editor into view: on a phone, a swipe away from the
   // code before the file opened would be pulled back to it
@@ -64,6 +65,11 @@ export const leavesFocusElsewhere = ({
   // sheet (a dialog) included
   if (tree && active && tree.contains(active)) return false;
   if (isInDialog(editor, active)) return true;
+  // Nothing holds focus while the tree shows in a dropdown or sheet: an open
+  // nobody picked there would close it. A rename's or a delete's of the open
+  // file lands with focus on the dialog's disabled submit or on <body>,
+  // whichever the browser and timing give; both leave the tree open
+  if (isUnfocused(active) && isTreeInDialog(tree)) return true;
   return isTypingElsewhere(editor, active);
 };
 
@@ -90,6 +96,14 @@ const isInDialog = (editor: Element, active: Element | null) =>
   !!active &&
   !editor.contains(active) &&
   active.closest('[role="dialog"], [role="alertdialog"]') !== null;
+
+/** Nothing holds focus: the bare document, or a control focus left */
+const isUnfocused = (active: Element | null) =>
+  !active || active === document.body || active === document.documentElement;
+
+/** The explorer's tree is drawn in a dialog or popover, such as the Files dropdown */
+const isTreeInDialog = (tree: Element | null) =>
+  !!tree && tree.closest('[role="dialog"], [role="alertdialog"]') !== null;
 
 /** Focus sits on something outside the editor, not on the bare document */
 const isFocusedElsewhere = (editor: Element, active: Element | null) =>
@@ -229,6 +243,37 @@ if (import.meta.vitest) {
         sheet.append(tree);
         expect(
           leavesFocusElsewhere({ open: "later", editor, tree, active: item })
+        ).toBe(false);
+      });
+
+      it("leaves focus on a later open while nothing has it and the tree shows in a dialog", () => {
+        // A rename or delete of the open file from the Files dropdown: focus
+        // is on its dialog's submit, disabled while it runs, or already back
+        // on <body>, and the editor taking it would close the tree
+        const { editor, tree, button, pick } = page();
+        const sheet = document.createElement("div");
+        sheet.setAttribute("role", "dialog");
+        document.body.append(sheet);
+        sheet.append(tree);
+        pick.setAttribute("disabled", "");
+        expect(
+          leavesFocusElsewhere({ open: "later", editor, tree, active: pick })
+        ).toBe(true);
+        expect(
+          leavesFocusElsewhere({
+            open: "later",
+            editor,
+            tree,
+            active: document.body,
+          })
+        ).toBe(true);
+        expect(
+          // eslint-disable-next-line unicorn/no-null -- `document.activeElement` is null with nothing focused
+          leavesFocusElsewhere({ open: "later", editor, tree, active: null })
+        ).toBe(true);
+        // A control outside it still lets the editor take focus
+        expect(
+          leavesFocusElsewhere({ open: "later", editor, tree, active: button })
         ).toBe(false);
       });
 

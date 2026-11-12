@@ -65,7 +65,11 @@ the editor» SHALL dock the tree and close the dropdown; "Undock the files"
 SHALL undock it. The pin SHALL show only while the code area is wider than
 1100 px; narrower, a docked tree SHALL not take a column, "Files" opens it
 as the dropdown, and the dropdown shows no pin. An undocked tree SHALL stay
-undocked, at any width, until the pin docks it again. The tree SHALL keep its open folders, selection and
+undocked, at any width, until the pin docks it again. Picking a file in the
+dropdown SHALL close it, as a pick does in a tutorial; the tree's menu, its
+rename dialog and its delete dialog SHALL keep it open, and so SHALL the
+editor re-opening the open file under its new name or, after it is deleted,
+the next file. The tree SHALL keep its open folders, selection and
 scroll across every change. ⌘E SHALL do what "Files" does. The empty editor's
 "Show files" SHALL show the tree: it opens the dropdown unless the tree is
 docked and shown, and then leaves it as it is. In a lesson the column SHALL keep its Steps / Files
@@ -104,9 +108,10 @@ column.
 - **WHEN** a user opens the tree as the dropdown, clicks "+ New file",
   types `y.rs` and presses Enter, opens the dropdown again, then renames and
   deletes `y.rs` from its menu
-- **THEN** `y.rs` opens and the dropdown closes; the tree's menu and the
-  delete dialog keep the dropdown open; renaming the open file reopens it
-  under its new name, which closes the dropdown as a pick does
+- **THEN** `y.rs` opens and the dropdown closes, as a pick does; the tree's
+  menu, the rename dialog and the delete dialog keep the dropdown open,
+  including the editor re-opening the renamed open file as `z.rs` and,
+  after the delete, `lib.rs`
 
 ### Requirement: Terminal opens and closes the console
 

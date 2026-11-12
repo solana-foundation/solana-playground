@@ -66,35 +66,63 @@ const boxOf = async (page: Page, selector: string) =>
     await page.locator(selector).boundingBox()
   );
 
-/** What brings the tree back after a step that opened a file */
-type Reopen = (page: Page) => Promise<void>;
+/** Where the tree shows, and how a test reads that it still does */
+interface TreePlace {
+  /** Brings the tree back after "+ New file" opened the new file */
+  reopen: (page: Page) => Promise<void>;
+  /** The tree still shows where it did */
+  stays: (page: Page) => Promise<void>;
+}
 
 /** The docked column stays where it is */
-const inColumn: Reopen = async () => {};
+const inColumn: TreePlace = {
+  reopen: async () => {},
+  stays: async (page) => {
+    await expect(filesPanel(page)).toBeVisible();
+    await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "true");
+  },
+};
 
 /**
- * The dropdown: the new file opens, and an opened file closes the dropdown
- * as in a tutorial, so "Files" opens it again. Renaming the open file opens
- * it again under its new name, which closes the dropdown the same way.
+ * The dropdown: the new file opens from the tree's field, which closes the
+ * dropdown as a pick does, so "Files" opens it again. Its state, not its
+ * visibility, is read: a closing dropdown stays visible while it zooms out
  */
-const throughDropdown: Reopen = async (page) => {
-  await expect(filesDropdown(page)).toHaveCount(0);
-  await openFiles(page);
+const throughDropdown: TreePlace = {
+  reopen: async (page) => {
+    await expect(filesDropdown(page)).toHaveCount(0);
+    await openFiles(page);
+  },
+  stays: async (page) => {
+    await expect(filesDropdown(page)).toHaveAttribute("data-state", "open");
+    await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "true");
+  },
 };
+
+/**
+ * The editor shows `name`: its decision to take focus or leave it runs as
+ * the model is set, so whatever that decision closes has closed after this
+ */
+const editorOpened = (page: Page, name: string) =>
+  expect(page.locator(".monaco-editor[data-uri]")).toHaveAttribute(
+    "data-uri",
+    new RegExp(`/${name.replaceAll(".", String.raw`\.`)}$`)
+  );
 
 /**
  * "+ New file", then a rename and a delete from the file's menu, in whatever
  * shows the tree; the menu and its dialogs portal out of the dropdown and
- * keep it open
+ * keep it open, and so does the open file's re-open under its new name or,
+ * after the delete, of the next file, which nobody picked
  */
-const fileActionsWith = (reopen: Reopen) => async (page: Page) => {
+const fileActionsWith = (place: TreePlace) => async (page: Page) => {
   await page.getByRole("button", { name: "New file" }).click();
   const field = page.locator("#root-dir input");
   await expect(field).toBeFocused();
   await page.keyboard.type("y.rs");
   await page.keyboard.press("Enter");
   await expect(head(page).locator("#tabs")).toContainText("y.rs");
-  await reopen(page);
+  await place.reopen(page);
   const created = page.locator('#root-dir [data-path$="/y.rs"]');
   await expect(created).toBeVisible();
 
@@ -103,8 +131,10 @@ const fileActionsWith = (reopen: Reopen) => async (page: Page) => {
   const rename = page.getByRole("dialog", { name: "Rename 'y.rs'" });
   await rename.getByRole("textbox").fill("z.rs");
   await rename.getByRole("button", { name: "Rename" }).click();
+  await expect(rename).toHaveCount(0);
   await expect(head(page).locator("#tabs")).toContainText("z.rs");
-  await reopen(page);
+  await editorOpened(page, "z.rs");
+  await place.stays(page);
   const renamed = page.locator('#root-dir [data-path$="/z.rs"]');
   await expect(renamed).toBeVisible();
 
@@ -116,6 +146,8 @@ const fileActionsWith = (reopen: Reopen) => async (page: Page) => {
     .getByRole("button", { name: /^Delete/ })
     .click();
   await expect(renamed).toHaveCount(0);
+  await editorOpened(page, "lib.rs");
+  await place.stays(page);
 };
 
 test.describe("at 1440", () => {
@@ -297,8 +329,6 @@ test.describe("at 1440", () => {
     await openFiles(page);
     await expect(filesDropdown(page)).toBeVisible();
     await fileActionsWith(throughDropdown)(page);
-    // The menu and its dialogs portal out of the dropdown; none closed it
-    await expect(filesDropdown(page)).toBeVisible();
   });
 
   test("client-v2-editor-head: The terminal from the head", async ({
