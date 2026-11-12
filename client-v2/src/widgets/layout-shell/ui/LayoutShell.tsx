@@ -475,7 +475,8 @@ const LayoutShell = ({
   //   "end of line" (the assistant's composer), so a Control without a Meta
   //   in an editable target is the field's; ⌘E has no native meaning there;
   // - off a Mac, Ctrl+E in the terminal is the shell's end of line;
-  // - a dialog keeps its keys, unless it holds the tree (the phone's Files).
+  // - a dialog keeps its keys, except the phone's Files Sheet, which the key
+  //   opens and closes.
   // On a phone the key toggles the pager's own Files Sheet.
   useKeybind(
     FILES_KEY,
@@ -484,14 +485,14 @@ const LayoutShell = ({
         // Under Home or a page the key is not the shell's.
         // The frame has no column: ⌘E there is the workspace's tree
         if (isCovered(screenNow.current) || tutorialNow.current) return false;
-        const mac = PgCommon.getOS() === "MacOS";
-        if (mac && ev.ctrlKey && !ev.metaKey && isEditable(ev.target)) {
+        const isMac = PgCommon.getOS() === "MacOS";
+        if (isMac && ev.ctrlKey && !ev.metaKey && isEditable(ev.target)) {
           return false;
         }
         const target = ev.target instanceof Element ? ev.target : undefined;
-        if (!mac && target?.closest(".xterm")) return false;
+        if (!isMac && target?.closest(".xterm")) return false;
         const dialog = target?.closest("[role='dialog'], [role='alertdialog']");
-        if (dialog && !dialog.querySelector("[role='tree']")) return false;
+        if (dialog && !dialog.matches("[data-files-sheet]")) return false;
         if (phone) {
           setPhoneFiles(!filesNow.current, "key");
           return;

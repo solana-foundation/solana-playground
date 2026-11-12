@@ -1031,20 +1031,6 @@ it("should leave Cmd+E to a dialog it lands in", () => {
   node.remove();
 });
 
-it("should still fold the files column by Cmd+E from a dialog that holds the tree", () => {
-  savedFilesOpen();
-  onUserAgent(MAC);
-  shell();
-  const { node } = keyEater("");
-  node.setAttribute("role", "dialog");
-  const tree = document.createElement("ul");
-  tree.setAttribute("role", "tree");
-  node.append(tree);
-  fireEvent.keyDown(tree, { key: "e", metaKey: true });
-  expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
-  node.remove();
-});
-
 it("should fold the files column when Control is held with Cmd in a text field on a Mac", () => {
   savedFilesOpen();
   // The Meta makes it the shortcut, not the caret movement
@@ -1581,6 +1567,22 @@ describe("on a phone", () => {
       { view: "chat", via: "button" },
       { view: "code", via: "button" },
     ]);
+  });
+
+  it("closes the Files sheet by Cmd+E from inside it", () => {
+    phoneShell();
+    tap(button("Files"));
+    // Focus sits in the Sheet, a dialog: the key is still the Sheet's own
+    fireEvent.keyDown(button("Files column control"), {
+      key: "e",
+      metaKey: true,
+    });
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull();
+    expect(toggled().at(-1)).toEqual({
+      panel: "files",
+      open: false,
+      via: "key",
+    });
   });
 
   it("closes the Files sheet by the column's own button", () => {

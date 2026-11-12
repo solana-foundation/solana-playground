@@ -71,8 +71,8 @@ export class PgKeybind {
 
     const bubble = keybinds.filter(({ opts }) => !opts?.capture);
     const capture = keybinds.filter(({ opts }) => opts?.capture);
-    const onBubble = PgKeybind._listener(bubble);
-    const onCapture = PgKeybind._listener(capture);
+    const onBubble = PgKeybind._listenFor(bubble);
+    const onCapture = PgKeybind._listenFor(capture);
 
     if (bubble.length) document.addEventListener("keydown", onBubble);
     if (capture.length) {
@@ -91,7 +91,7 @@ export class PgKeybind {
    * Capture and bubble keybinds of one `add` get a listener each, so the
    * first match is per phase.
    */
-  private static _listener(keybinds: NormalizedKeybind[]) {
+  private static _listenFor(keybinds: NormalizedKeybind[]) {
     return (ev: KeyboardEvent) => {
       const keybind = keybinds.find(({ keybind: combination }) => {
         const keys = combination.toUpperCase().replaceAll(" ", "").split("+");
