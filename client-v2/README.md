@@ -142,7 +142,14 @@ The code fonts, the interface icons, and the framework logos are outside
 `public/`, so an upstream sync never touches them. JetBrains Mono and Hack
 come from the `@fontsource/jetbrains-mono` and `hack-font` packages, which
 `src/index.tsx` imports so webpack bundles their files;
-`src/themes/hack.css` declares Hack's regular face. Icons are `lucide-react`
+`src/themes/hack.css` declares Hack's regular face. The fontsource subsets
+leave out about 650 characters the terminal and the editor use, such as `→`,
+the box-drawing lines, and the Powerline separators, so
+`src/themes/jetbrains-mono-symbols.css` adds a face for exactly those code
+points. Its file, `src/themes/jetbrains-mono-symbols.woff2`, is
+upstream's `fonts/JetBrainsMono.woff2` at assets commit `7fa9f326` cut down to
+them with `subset-font` 2.9.0, and the browser fetches it only when a page
+shows one of them. Icons are `lucide-react`
 components. Each framework's logo sits in its folder,
 `src/frameworks/<name>/`, and the framework imports it.
 
