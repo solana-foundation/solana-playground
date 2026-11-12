@@ -198,7 +198,7 @@ describe("addAfterImports", () => {
   const comments = "//".repeat(50_000);
   const imported = "import a from 'a';";
   it.each([
-    ["import " + comments, "X\n" + "import " + comments],
+    ["import " + comments, "X\nimport " + comments],
     ["import " + "*//*".repeat(50_000), "X\nimport " + "*//*".repeat(50_000)],
     [
       "import /*" + "*//*".repeat(50_000),
