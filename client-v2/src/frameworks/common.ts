@@ -167,7 +167,6 @@ const getLeadingImportsEnd = (content: string) => {
   // `import{BN}`, `import*as x` and `import"x"` need no space after the keyword;
   // the lookahead keeps `important` and `import(` out
   const keyword = /import(?=[\s{*"'])/y;
-  const statementRest = /[\s\S]*?["'][^"'\n]*["'];?/y;
   let end = 0;
   let index = 0;
   while (true) {
@@ -178,10 +177,38 @@ const getLeadingImportsEnd = (content: string) => {
     // the next line is not a statement, and ends the run
     const afterKeyword = skipSpaceAndComments(content, keyword.lastIndex);
     if (content[afterKeyword] === "(") return end;
-    // From past those comments, so a quote in one is not the module's
-    statementRest.lastIndex = afterKeyword;
-    if (!statementRest.test(content)) return end;
-    index = end = statementRest.lastIndex;
+    const statementEnd = getModuleStringEnd(content, afterKeyword);
+    if (statementEnd === -1) return end;
+    index = end = statementEnd;
+  }
+};
+
+/**
+ * Get the index after an import statement's module string, and after its
+ * `;` when there is one. A quote in a comment is not the module's, and a
+ * quote with no closing one on its line is read as code.
+ *
+ * @param content JS/TS code
+ * @param index where the statement's text after `import` starts
+ * @returns the index after the statement, `-1` if no module string follows
+ */
+const getModuleStringEnd = (content: string, index: number) => {
+  while (true) {
+    index = skipSpaceAndComments(content, index);
+    if (index >= content.length || content.startsWith("/*", index)) return -1;
+    if (content[index] !== '"' && content[index] !== "'") {
+      index++;
+      continue;
+    }
+    let close = index + 1;
+    while (close < content.length && !"\"'\n".includes(content[close])) {
+      close++;
+    }
+    if (close < content.length && content[close] !== "\n") {
+      return content[close + 1] === ";" ? close + 2 : close + 1;
+    }
+    // No closing quote on this line: what it scanned holds no quote either
+    index = close;
   }
 };
 
