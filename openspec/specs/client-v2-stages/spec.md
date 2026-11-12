@@ -39,12 +39,12 @@ action, and, for an instruction that has inputs, "Fill with Random" and
 until the fields have been checked and every one holds a valid value; nothing
 once Send can run.
 
-#### Scenario: Send held for a wallet
+#### Scenario: Send held for a wallet (manual)
 
 - **WHEN** no wallet is connected and the user opens an instruction card
 - **THEN** Send is disabled and the row reads "Connect a wallet to send"
 
-#### Scenario: Send held for a field
+#### Scenario: Send held for a field (manual)
 
 - **WHEN** a wallet is connected and an argument of the instruction is empty
 - **THEN** Send is disabled and the row reads "Fill every field to send"
