@@ -1,86 +1,174 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// A file of its own: `src/commands/` is a runtime module the UI move rule
+// never touches, so its tests stay out of the modules (AGENTS.md). Every case
+// runs through `PgCommandManager.execute`, which finds the subcommand, runs
+// its pre-checks, and parses its arguments as the terminal does.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { Endpoint, UnknownClusterError } from "@/entities/cluster";
-
+import { IdlUploadRefusedError } from "@/features/program-idl";
 import {
-  PgConnection,
-  PgGlobal,
-  PgPackage,
-  PgSettings,
-  TerminalLineError,
-} from "../../utils";
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
+
+import { PgConnection, PgGlobal, PgProgramInfo } from "../../utils";
+import { PgCommandManager } from "../../utils/command";
+import { PgTerminal, TerminalLineError } from "../../utils/terminal";
 import {
   IDL_NETWORK_CHANGED,
   IDL_NETWORK_UNREAD,
   MAINNET_IDL_BLOCKED,
 } from "../deploy/mainnet-block";
-import { anchor, isIdlWrite } from "./anchor";
+import { anchor } from "./anchor";
 
-const runAnchor = vi.fn();
+const GIVEN_PROGRAM = "SysvarC1ock11111111111111111111111111111111";
+const METADATA = "BPFLoaderUpgradeab1e11111111111111111111111";
+const DEVNET = "https://api.devnet.solana.com";
+
+const env = vi.hoisted(() => ({
+  /** What `PgWallet.current` answers; `undefined` is no wallet connected */
+  wallet: undefined as { isPg: boolean } | undefined,
+  /** What `PgConnection.current` answers */
+  connection: { rpcEndpoint: "" },
+  /** The project's program id and the IDL it holds */
+  programId: "SysvarRent111111111111111111111111111111111",
+  idl: { address: "SysvarRent111111111111111111111111111111111" },
+}));
+const uploadProjectIdl = vi.hoisted(() => vi.fn());
+
+vi.mock("@/features/program-idl", async () => {
+  const actual = await vi.importActual<typeof import("@/features/program-idl")>(
+    "@/features/program-idl"
+  );
+  return {
+    IdlUploadRefusedError: actual.IdlUploadRefusedError,
+    uploadProjectIdl,
+  };
+});
 
 vi.mock("../../utils", async () => {
   const terminal = await import("../../utils/terminal");
   return {
     TerminalLineError: terminal.TerminalLineError,
+    PgTerminal: terminal.PgTerminal,
     PgGlobal: { isIdlWriting: false },
     PgConnection: {
-      // The cached cluster: the refusal must not trust it
-      cluster: "devnet",
-      current: { rpcEndpoint: "https://cached.example.com" },
+      get current() {
+        return env.connection;
+      },
       getCluster: vi.fn(),
     },
-    // The endpoint the WASM Anchor CLI sends to
-    PgSettings: { connection: { endpoint: "https://rpc.example.com" } },
-    PgPackage: { import: vi.fn() },
+    PgProgramInfo: {
+      get idl() {
+        return env.idl;
+      },
+      getPkStr: () => env.programId,
+    },
+    PgWallet: {
+      get current() {
+        return env.wallet;
+      },
+    },
   };
 });
 
-type Handle = NonNullable<typeof anchor.handle>;
+const run = (line: string) => PgCommandManager.execute(line.split(" "));
 
-const run = (raw: string) => {
-  if (!anchor.handle) throw new Error("`anchor` has no handler");
-  return anchor.handle({ raw } as Parameters<Handle>[0]);
-};
+describe("commands/anchor", () => {
+  let saved: typeof PgCommandManager.all;
 
-describe("isIdlWrite", () => {
-  it.each([
-    "anchor idl init",
-    "anchor idl upgrade",
-    "anchor idl write-buffer",
-    "anchor idl set-buffer 11111111111111111111111111111111",
-    "anchor idl close",
-    "anchor idl set-authority -n 11111111111111111111111111111111",
-    "anchor idl erase-authority",
-    "  anchor   idl   init   Prog1111  ",
-    // A subcommand a later CLI adds is refused until it is listed as a read
-    "anchor idl create-buffer",
-  ])("counts `%s` as a write", (raw) => {
-    expect(isIdlWrite(raw)).toBe(true);
-  });
-
-  it.each([
-    "anchor idl fetch",
-    "anchor idl authority",
-    "anchor idl",
-    "anchor --help",
-    "anchor idl init --help",
-    "anchor idl upgrade -h",
-    "anchor idl help init",
-  ])("lets `%s` through as a read", (raw) => {
-    expect(isIdlWrite(raw)).toBe(false);
-  });
-});
-
-describe("anchor", () => {
   beforeEach(() => {
-    PgSettings.connection.endpoint = "https://rpc.example.com";
+    saved = PgCommandManager.all;
+    PgCommandManager.all = { anchor } as never;
+    // The terminal prints a failure and rethrows it; only the rethrow matters here
+    vi.spyOn(PgTerminal, "process").mockImplementation(async (cb) => cb());
+    vi.spyOn(PgTerminal, "println").mockResolvedValue();
+    // The wallet question reaches the terminal through `get`, so a case that expects no question fails here
+    vi.spyOn(PgTerminal, "get").mockRejectedValue(
+      new Error("The command asked a wallet question")
+    );
+
+    // An external wallet: the program's upgrade authority need not be the Playground wallet
+    env.wallet = { isPg: false };
+    env.connection = { rpcEndpoint: DEVNET };
     PgGlobal.isIdlWriting = false;
-    vi.mocked(PgConnection.getCluster).mockReset();
-    runAnchor.mockReset();
-    vi.mocked(PgPackage.import).mockResolvedValue({ runAnchor } as never);
+    vi.mocked(PgConnection.getCluster).mockReset().mockResolvedValue("devnet");
+    uploadProjectIdl
+      .mockReset()
+      .mockResolvedValue({ metadata: METADATA, action: "created" });
   });
 
-  it("refuses an IDL write on mainnet-beta before the CLI loads", async () => {
+  afterEach(() => {
+    PgCommandManager.all = saved;
+    resetTelemetry();
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    {
+      label: "the project's program for `init` without an argument",
+      line: "anchor idl init",
+      programId: env.programId,
+      action: "created",
+    },
+    {
+      label: "the given program for `upgrade`",
+      line: `anchor idl upgrade ${GIVEN_PROGRAM}`,
+      programId: GIVEN_PROGRAM,
+      action: "replaced",
+    },
+  ])(
+    "uploads the project's IDL to $label and prints the account",
+    async ({ line, programId, action }) => {
+      uploadProjectIdl.mockResolvedValue({ metadata: METADATA, action });
+
+      await run(line);
+
+      expect(uploadProjectIdl).toHaveBeenCalledWith({
+        idl: env.idl,
+        programId,
+        connection: env.connection,
+        wallet: env.wallet,
+      });
+      expect(PgTerminal.println).toHaveBeenCalledWith(
+        `${PgTerminal.success(
+          `IDL ${action}.`
+        )} Program Metadata account: ${METADATA}`
+      );
+    }
+  );
+
+  it("refuses a program ID that is not an address before any request", async () => {
+    await expect(run("anchor idl init not-an-address")).rejects.toThrow(
+      "Program ID must be a base58 address"
+    );
+    expect(PgConnection.getCluster).not.toHaveBeenCalled();
+    expect(uploadProjectIdl).not.toHaveBeenCalled();
+  });
+
+  it("ends with one line, and starts no upload, when no program ID is given and the project has none", async () => {
+    // eslint-disable-next-line unicorn/no-null -- `getPkStr` answers `null` for a project without a program ID
+    vi.spyOn(PgProgramInfo, "getPkStr").mockReturnValue(null);
+
+    const result = run("anchor idl init");
+
+    await expect(result).rejects.toBeInstanceOf(TerminalLineError);
+    await expect(result).rejects.toThrow(
+      "The project has no program ID. Build the program first, or pass a program ID."
+    );
+    expect(uploadProjectIdl).not.toHaveBeenCalled();
+  });
+
+  it("refuses mainnet-beta, read from the endpoint it would send to, with nothing sent and no idl_upload_started", async () => {
+    const tracked = memoryProvider();
+    initTelemetry({ providers: [tracked] });
+    // The slice's own entry, which records `idl_upload_started` as soon as it runs
+    const actual = await vi.importActual<
+      typeof import("@/features/program-idl")
+    >("@/features/program-idl");
+    uploadProjectIdl.mockImplementation(actual.uploadProjectIdl);
+    const fetch = vi.spyOn(globalThis, "fetch");
+    env.connection = { rpcEndpoint: "https://mainnet.custom-rpc.test" };
     vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
 
     const result = run("anchor idl init");
@@ -88,93 +176,100 @@ describe("anchor", () => {
     await expect(result).rejects.toBeInstanceOf(TerminalLineError);
     await expect(result).rejects.toThrow(MAINNET_IDL_BLOCKED);
     expect(PgConnection.getCluster).toHaveBeenCalledWith(
-      "https://rpc.example.com"
+      "https://mainnet.custom-rpc.test"
     );
-    expect(PgPackage.import).not.toHaveBeenCalled();
-    expect(runAnchor).not.toHaveBeenCalled();
+    expect(tracked.events).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
-  // A custom RPC that is down could be mainnet: nothing on a guess
-  it("refuses an IDL write when the endpoint does not say its network", async () => {
-    vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
+  // A custom RPC that is down could be mainnet
+  it("refuses an endpoint that does not say which network it serves", async () => {
+    vi.mocked(PgConnection.getCluster).mockRejectedValue(
       new Error("429 Too Many Requests")
     );
+
     await expect(run("anchor idl upgrade")).rejects.toThrow(IDL_NETWORK_UNREAD);
-    expect(runAnchor).not.toHaveBeenCalled();
+    expect(uploadProjectIdl).not.toHaveBeenCalled();
   });
 
-  it.each(["devnet", "testnet", "localnet"] as const)(
-    "runs an IDL write on %s",
-    async (cluster) => {
-      vi.mocked(PgConnection.getCluster).mockResolvedValue(cluster);
-      await run("anchor idl init");
-      expect(runAnchor).toHaveBeenCalledWith("anchor idl init");
-    }
-  );
-
-  // Surfpool and other networks of their own
-  it("runs an IDL write on a network no cluster names", async () => {
-    vi.mocked(PgConnection.getCluster).mockRejectedValueOnce(
-      new UnknownClusterError("Own1111")
-    );
-    await run("anchor idl init");
-    expect(runAnchor).toHaveBeenCalledWith("anchor idl init");
-  });
-
-  it("runs a read on mainnet-beta without reading the network", async () => {
-    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
-    await run("anchor idl fetch");
-    expect(PgConnection.getCluster).not.toHaveBeenCalled();
-    expect(runAnchor).toHaveBeenCalledWith("anchor idl fetch");
-  });
-
-  // The CLI's first load can outlast a switch to mainnet in Settings
-  it("refuses an IDL write when the endpoint changed while the CLI loaded", async () => {
-    vi.mocked(PgConnection.getCluster).mockResolvedValue("devnet");
-    vi.mocked(PgPackage.import).mockImplementationOnce(async () => {
-      PgSettings.connection.endpoint = Endpoint.MAINNET_BETA;
-      return { runAnchor } as never;
+  // A custom RPC's network read can outlast a network change the hold does not cover
+  it("refuses when the endpoint changed between the network read and the upload", async () => {
+    vi.mocked(PgConnection.getCluster).mockImplementation(async () => {
+      env.connection = { rpcEndpoint: "https://api.mainnet-beta.solana.com" };
+      return "devnet";
     });
 
-    await expect(run("anchor idl init")).rejects.toThrow(IDL_NETWORK_CHANGED);
-    expect(runAnchor).not.toHaveBeenCalled();
+    const result = run("anchor idl init");
+
+    await expect(result).rejects.toBeInstanceOf(TerminalLineError);
+    await expect(result).rejects.toThrow(IDL_NETWORK_CHANGED);
+    expect(uploadProjectIdl).not.toHaveBeenCalled();
   });
 
-  // `idl init` writes after its create confirms, reading the endpoint again:
-  // Settings must not move the network meanwhile (Greptile on PR 131)
-  it("holds the network for the whole IDL write and releases it after", async () => {
-    vi.mocked(PgConnection.getCluster).mockResolvedValue("devnet");
+  it("holds the network from the network read until a failed upload ends, then releases it", async () => {
     const held: boolean[] = [];
-    vi.mocked(PgConnection.getCluster).mockImplementationOnce(async () => {
+    vi.mocked(PgConnection.getCluster).mockImplementation(async () => {
       held.push(PgGlobal.isIdlWriting);
       return "devnet";
     });
-    runAnchor.mockImplementationOnce(async () => {
+    uploadProjectIdl.mockImplementation(async () => {
       held.push(PgGlobal.isIdlWriting);
+      throw new Error("blockhash not found");
     });
 
-    await run("anchor idl init");
+    await expect(run("anchor idl init")).rejects.toThrow("blockhash not found");
 
     expect(held).toEqual([true, true]);
     expect(PgGlobal.isIdlWriting).toBe(false);
   });
 
-  it("releases the network when an IDL write is refused or fails", async () => {
-    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
-    await expect(run("anchor idl init")).rejects.toThrow(MAINNET_IDL_BLOCKED);
-    expect(PgGlobal.isIdlWriting).toBe(false);
+  it("prints an upload's refusal as its own line, without Process error:", async () => {
+    const line =
+      "The program has no upgrade authority, so no wallet can upload its IDL.";
+    uploadProjectIdl.mockRejectedValue(
+      new IdlUploadRefusedError("authority", line)
+    );
 
-    vi.mocked(PgConnection.getCluster).mockResolvedValue("devnet");
-    runAnchor.mockRejectedValueOnce(new Error("blockhash not found"));
-    await expect(run("anchor idl upgrade")).rejects.toThrow("blockhash");
-    expect(PgGlobal.isIdlWriting).toBe(false);
+    const result = run("anchor idl init");
+
+    await expect(result).rejects.toBeInstanceOf(TerminalLineError);
+    await expect(result).rejects.toThrow(line);
   });
 
-  it("does not hold the network for a read", async () => {
-    runAnchor.mockImplementationOnce(async () => {
-      expect(PgGlobal.isIdlWriting).toBe(false);
-    });
-    await run("anchor idl fetch");
-    expect(runAnchor).toHaveBeenCalledOnce();
+  it.each([
+    "authority",
+    "close",
+    "erase-authority",
+    "fetch",
+    "set-authority",
+    "set-buffer",
+    "write-buffer",
+  ])(
+    "ends `anchor idl %s` with the not-supported line, no wallet question, and no request",
+    async (name) => {
+      env.wallet = undefined;
+
+      const result = run(`anchor idl ${name} ${GIVEN_PROGRAM}`);
+
+      await expect(result).rejects.toBeInstanceOf(TerminalLineError);
+      await expect(result).rejects.toThrow(
+        `\`anchor idl ${name}\` is not supported in the Playground terminal. Run Anchor's CLI on your own machine.`
+      );
+      expect(PgTerminal.get).not.toHaveBeenCalled();
+      expect(PgConnection.getCluster).not.toHaveBeenCalled();
+      expect(uploadProjectIdl).not.toHaveBeenCalled();
+    }
+  );
+
+  it("lists init and upgrade for `anchor idl --help`, with no wallet question", async () => {
+    env.wallet = undefined;
+
+    await run("anchor idl --help");
+
+    const [[help]] = vi.mocked(PgTerminal.println).mock.calls;
+    expect(help).toContain("Usage: anchor idl <COMMAND>");
+    expect(help).toMatch(/init\s+Write the project's IDL/);
+    expect(help).toMatch(/upgrade\s+Replace the on-chain IDL/);
+    expect(PgTerminal.get).not.toHaveBeenCalled();
   });
 });

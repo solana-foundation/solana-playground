@@ -1,4 +1,4 @@
-import type { Cluster } from "@/entities/cluster";
+import { CLUSTERS, findClusterWith } from "@/entities/cluster";
 import { readIdl } from "@/entities/idl";
 import { createLogger } from "@/shared/lib/logger";
 
@@ -18,11 +18,12 @@ export interface ProjectIdlUpload {
   idl: object | undefined;
   /** Base58 */
   programId: string;
+  /** Its `rpcEndpoint` also names the events' `cluster` */
   connection: IdlUploadDeps["connection"];
   wallet: IdlUploadDeps["wallet"];
-  /** The cluster `connection` talks to, as the events name it */
-  cluster: Cluster;
 }
+
+const findCluster = findClusterWith(CLUSTERS);
 
 /** The JSON an upload sends: the project's IDL as it is, when it is in the Anchor 0.30+ format */
 const toUploadJson = (idl: object | undefined) => {
@@ -51,8 +52,9 @@ export const uploadProjectIdl = async ({
   programId,
   connection,
   wallet,
-  cluster,
 }: ProjectIdlUpload): Promise<IdlUploadResult> => {
+  // Named here, from the endpoint, so every caller's events name a cluster the same way
+  const cluster = findCluster(connection.rpcEndpoint) ?? "custom";
   programIdlTelemetry.track("idl_upload_started", {
     target: "metadata",
     cluster,

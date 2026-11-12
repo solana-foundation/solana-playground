@@ -24,7 +24,7 @@ run as `client-v2-program-idl` requires.
 - **WHEN** the endpoint is mainnet-beta and the user runs `anchor idl init`
 - **THEN** the terminal prints the refusal line and no transaction is sent
 
-#### Scenario: A subcommand that sends nothing on mainnet (manual)
+#### Scenario: IDL fetch on mainnet (manual)
 
 - **WHEN** the endpoint is mainnet-beta and the user runs `anchor idl fetch`
 - **THEN** the terminal prints the not-supported line of

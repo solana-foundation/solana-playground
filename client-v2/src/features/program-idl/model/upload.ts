@@ -7,6 +7,7 @@ import {
   createSolanaRpc,
   createTransactionMessage,
   createTransactionPlanner,
+  fetchEncodedAccount,
   getTransactionEncoder,
   type InstructionPlanInput,
   isSolanaError,
@@ -87,7 +88,7 @@ export class IdlUploadRefusedError extends Error {
   }
 }
 
-/** The cluster holds no program at the program id, or its program data is closed */
+/** The cluster holds no program at the program id: no account, an account that is not executable, or closed program data */
 class ProgramNotDeployedError extends IdlUploadRefusedError {
   override name = "ProgramNotDeployedError";
 
@@ -138,6 +139,14 @@ const fetchProgramAuthority = async (
   rpc: Parameters<typeof getProgramAuthority>[0],
   program: Address
 ) => {
+  const account = await fetchEncodedAccount(rpc, program);
+  // Read here because `getProgramAuthority` fails on a wallet or data account with an error that carries no code
+  if (account.exists && !account.executable) {
+    throw new ProgramNotDeployedError(
+      program,
+      new Error(`The account at ${program} is not executable`)
+    );
+  }
   try {
     return await getProgramAuthority(rpc, program);
   } catch (error) {

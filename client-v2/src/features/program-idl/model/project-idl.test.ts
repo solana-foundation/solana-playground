@@ -29,6 +29,7 @@ import {
 } from "@solana-program/program-metadata";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { Endpoint } from "@/entities/cluster";
 import {
   initLogger,
   memoryProvider as logMemoryProvider,
@@ -173,7 +174,7 @@ const connectionOf = () => {
   const sent: Uint8Array[] = [];
   const steps: string[] = [];
   return {
-    rpcEndpoint: "https://rpc.test",
+    rpcEndpoint: Endpoint.DEVNET as string, // one of the Playground's own, so the events name `devnet`
     sent,
     steps,
     sendRawTransaction: async (raw: Uint8Array) => {
@@ -221,13 +222,7 @@ const arrange = async (): Promise<Setup> => ({
 
 const run = ({ idl, accounts, wallet, connection }: Setup) => {
   stubRpc(accounts);
-  return uploadProjectIdl({
-    idl,
-    programId: PROGRAM,
-    connection,
-    wallet,
-    cluster: "devnet",
-  });
+  return uploadProjectIdl({ idl, programId: PROGRAM, connection, wallet });
 };
 
 describe("features/program-idl/model/project-idl", () => {
@@ -268,6 +263,19 @@ describe("features/program-idl/model/project-idl", () => {
       label: "a program id that holds no account",
       change: (setup: Setup) => {
         setup.accounts.clear();
+      },
+      line: `Program ${PROGRAM} is not deployed on the selected network.`,
+      sent: 0,
+    },
+    {
+      reason: "not_deployed",
+      label: "a program id that holds a wallet's account",
+      change: (setup: Setup) => {
+        setup.accounts.set(PROGRAM, {
+          owner: "11111111111111111111111111111111",
+          executable: false,
+          data: new Uint8Array(),
+        });
       },
       line: `Program ${PROGRAM} is not deployed on the selected network.`,
       sent: 0,
@@ -328,6 +336,27 @@ describe("features/program-idl/model/project-idl", () => {
       },
     ]);
     expect(setup.connection.sent).toHaveLength(sent);
+  });
+
+  it("names the cluster custom for an endpoint that is not one of the Playground's own", async () => {
+    const setup = await arrange();
+    setup.idl = undefined;
+    setup.connection.rpcEndpoint = "https://devnet.custom-rpc.test";
+
+    await expect(run(setup)).rejects.toThrow(
+      "The project has no IDL to upload."
+    );
+
+    expect(tracked.events).toEqual([
+      {
+        name: "idl_upload_started",
+        params: { target: "metadata", cluster: "custom" },
+      },
+      {
+        name: "idl_upload_failed",
+        params: { target: "metadata", cluster: "custom", reason: "not_found" },
+      },
+    ]);
   });
 
   it("uploads the JSON the project holds and reports the start, then the upload", async () => {

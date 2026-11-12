@@ -57,8 +57,8 @@ export const IDL_NETWORK_UNREAD =
 
 /**
  * The `anchor idl` writes' refusal when the endpoint changed between the
- * network read and the CLI's start: the network read is not the one it
- * would send to
+ * network read and the upload's start: the network selected is no longer
+ * the one that was read
  */
 export const IDL_NETWORK_CHANGED =
   "The network changed while the command started, so nothing was sent. Run it again.";

@@ -63,9 +63,9 @@ checks it.
 `uploadIdl`, `NotProgramAuthorityError`, `idlMetadataAddress`, and `toStages` move from the spike's entity module to
 `client-v2/src/features/program-idl/model/upload.ts`. An upload is a user action with events, and only a slice under
 `features/` or `widgets/` has a tracker (`src/app/slice-structure.test.ts`). The slice registers the prefix `idl` in
-`shared/lib/telemetry/prefixes.ts` and declares the three events in `model/telemetry.ts`. Its entry takes the IDL
-JSON, the program id, a connection, and a wallet, runs the checks, sends the events, and returns the account address
-and whether it created or replaced the IDL. The spike's `fetchProgramMetadataIdl` is not moved: `wbdi-flow` task 3.2
+`shared/lib/telemetry/prefixes.ts` and declares the three events in `model/telemetry.ts`. Its entry takes the IDL as
+the project holds it, the program id, a connection, and a wallet, runs the checks, sends the events, and returns the
+account address and whether it created or replaced the IDL. The spike's `fetchProgramMetadataIdl` is not moved: `wbdi-flow` task 3.2
 owns reading.
 
 The `wbdi-flow` change plans the same slice name and prefix (its task 3.1) and the Deploy stage's upload button (its
@@ -82,8 +82,8 @@ whose handler throws a `TerminalLineError` with the not-supported line. `needsCo
 keeps the offline line of `client-v2-terminal`. #131's `isIdlWrite` becomes the `init` and `upgrade` handlers
 themselves, so no list of names can fall out of date.
 
-The IDL comes from `PgProgramInfo.getIdlStr()`, sent as the project holds it, and only when
-`PgProgramInfo.readIdl()` returns `kind: "v1"`.
+The command passes `PgProgramInfo.idl`, the IDL as the project holds it, to the slice's entry. The entry uploads it
+only when `readIdl` of `entities/idl` returns `kind: "v1"`, and stringifies it with `JSON.stringify`.
 
 ### One approval for the whole upload
 
@@ -107,8 +107,9 @@ the `build` job on a `client/` that cannot install, and `deploy_server` needs `c
 
 ## Risks / Trade-offs
 
-- [#131 is not in `master`] → Task 1.2 starts after #131 merges and this branch is updated from `master`. The
-  `mainnet-deploy-warning` delta modifies a requirement #131 adds, so `openspec archive` fails before then.
+- [The command work depends on #131] → #131 merged into `master` as `e1af2dfc2`, which this branch contains. The
+  requirement the `mainnet-deploy-warning` delta modifies is in `openspec/specs/mainnet-deploy-warning/spec.md`, so
+  `openspec archive` applies the delta.
 - [An upload outlives its blockhash] → Every transaction shares one blockhash. A large IDL on a slow RPC can expire it
   midway. The command prints the failed transaction, and running it again starts a new write.
 - [An external wallet without `signAllTransactions`] → Not tested. The manual scenario "One approval from an

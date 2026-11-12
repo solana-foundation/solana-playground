@@ -1,71 +1,132 @@
+import { isAddress } from "@solana/kit";
+
 import {
+  IdlUploadRefusedError,
+  uploadProjectIdl,
+} from "@/features/program-idl";
+
+import {
+  PgConnection,
   PgGlobal,
-  PgPackage,
-  PgSettings,
+  PgProgramInfo,
+  PgTerminal,
+  PgWallet,
   TerminalLineError,
 } from "../../utils";
-import { checkPgWallet } from "../checks";
-import { createCmd } from "../create";
+import { checkWallet } from "../checks";
+import { createArgs, createCmd, createSubcmd } from "../create";
 import { refuseMainnetWith } from "../deploy/check-not-mainnet";
 import { IDL_NETWORK_CHANGED, IDL_REFUSAL } from "../deploy/mainnet-block";
 
 const refuseIdlWriteOnMainnet = refuseMainnetWith(IDL_REFUSAL);
 
-/**
- * The `anchor idl` subcommands that only read or print. Every other one is
- * taken as a send from the Playground wallet (`init`, `upgrade`, `close` and
- * the buffer and authority writes in wasm/anchor-cli/src/commands/idl.rs), so
- * a subcommand added there later is refused on mainnet until listed here.
- */
-const IDL_READS = new Set(["fetch", "authority", "help"]);
+/** The `anchor idl` subcommands of Anchor's CLI that act on the legacy IDL account, which an Anchor 1.1.2 program does not serve */
+const UNSUPPORTED_IDL_SUBCOMMANDS = [
+  "authority",
+  "close",
+  "erase-authority",
+  "fetch",
+  "set-authority",
+  "set-buffer",
+  "write-buffer",
+] as const;
 
-/** Whether `raw` (`anchor idl <sub> ...`) sends a transaction; help only prints */
-export const isIdlWrite = (raw: string) => {
-  const words = raw.trim().split(/\s+/);
-  const [, group, sub] = words;
-  if (words.includes("--help") || words.includes("-h")) return false;
-  return group === "idl" && sub !== undefined && !IDL_READS.has(sub);
+const programIdArg = {
+  name: "program_id",
+  description: "Program to write the IDL for (default: the project's program)",
+  optional: true,
+  parse: (token: string) => {
+    if (isAddress(token)) return token;
+    throw new Error("Program ID must be a base58 address");
+  },
+} as const;
+
+/**
+ * Writes the IDL the project holds to the canonical Program Metadata account
+ * of `programId`, or of the project's program when `programId` is `undefined`.
+ * Throws a {@link TerminalLineError} when it refuses before sending.
+ */
+const writeIdl = async (programId: string | undefined) => {
+  const wallet = PgWallet.current;
+  if (!wallet) throw new Error("No wallet is connected.");
+
+  // Settings' `pickNetwork` refuses a switch the user asks for while this is set, so the selected network stays the one the upload writes to
+  PgGlobal.isIdlWriting = true;
+  try {
+    const connection = PgConnection.current;
+    await refuseIdlWriteOnMainnet(connection.rpcEndpoint);
+    // The hold covers user switches only: after any other change the selected network is not the one that was read
+    if (PgConnection.current.rpcEndpoint !== connection.rpcEndpoint) {
+      throw new TerminalLineError(IDL_NETWORK_CHANGED);
+    }
+
+    const program = programId ?? PgProgramInfo.getPkStr();
+    if (!program) {
+      throw new TerminalLineError(
+        "The project has no program ID. Build the program first, or pass a program ID."
+      );
+    }
+
+    const { metadata, action } = await uploadProjectIdl({
+      idl: PgProgramInfo.idl ?? undefined,
+      programId: program,
+      connection,
+      wallet,
+    });
+    await PgTerminal.println(
+      `${PgTerminal.success(
+        `IDL ${action}.`
+      )} Program Metadata account: ${metadata}`
+    );
+  } catch (error) {
+    // A refusal's message is the whole line; thrown as it is, the terminal prints it after "Process error:"
+    if (error instanceof IdlUploadRefusedError) {
+      throw new TerminalLineError(error.message, { cause: error });
+    }
+    throw error;
+  } finally {
+    PgGlobal.isIdlWriting = false;
+  }
 };
 
 export const anchor = createCmd({
   name: "anchor",
   description: "Anchor CLI",
   needsConnection: true,
-  preChecks: checkPgWallet,
-  handle: async (input) => {
-    if (!isIdlWrite(input.raw)) {
-      const { runAnchor } = await PgPackage.import("anchor-cli", {
-        log: true,
-      });
-      await runAnchor(input.raw);
-      return;
-    }
-
-    // Mainnet IDL writes are refused in the beta (HOO-2737). The network is
-    // read from the endpoint the WASM CLI sends to, not the cached cluster,
-    // and it is held until the command ends: the CLI reads it again at each
-    // step (`idl init` makes a new client for its write once the create
-    // confirms, `idl upgrade` for its set-buffer). Every switch the user asks
-    // for goes through Settings' `pickNetwork`, which refuses meanwhile.
-    // A boolean is enough: the terminal is disabled while a command runs
-    // (`PgTerm.process`), so no second write starts meanwhile.
-    PgGlobal.isIdlWriting = true;
-    try {
-      const endpoint = PgSettings.connection.endpoint;
-      await refuseIdlWriteOnMainnet(endpoint);
-
-      const { runAnchor } = await PgPackage.import("anchor-cli", {
-        log: true,
-      });
-      // The hold covers user switches only: an endpoint changed while the CLI
-      // loaded, by anything else, was never checked
-      if (PgSettings.connection.endpoint !== endpoint) {
-        throw new TerminalLineError(IDL_NETWORK_CHANGED);
-      }
-
-      await runAnchor(input.raw);
-    } finally {
-      PgGlobal.isIdlWriting = false;
-    }
-  },
+  subcommands: [
+    createSubcmd({
+      name: "idl",
+      description: "Commands for interacting with interface definitions",
+      subcommands: [
+        // `init` and `upgrade` run the same write: each creates the account or replaces the IDL it holds
+        createSubcmd({
+          name: "init",
+          description:
+            "Write the project's IDL to the program's Program Metadata account",
+          args: createArgs([programIdArg]),
+          preChecks: checkWallet,
+          handle: (input) => writeIdl(input.args.program_id),
+        }),
+        createSubcmd({
+          name: "upgrade",
+          description:
+            "Replace the on-chain IDL with the project's; the same write as init",
+          args: createArgs([programIdArg]),
+          preChecks: checkWallet,
+          handle: (input) => writeIdl(input.args.program_id),
+        }),
+        ...UNSUPPORTED_IDL_SUBCOMMANDS.map((name) =>
+          createSubcmd({
+            name,
+            description: "Not supported in the Playground terminal",
+            handle: () => {
+              throw new TerminalLineError(
+                `\`anchor idl ${name}\` is not supported in the Playground terminal. Run Anchor's CLI on your own machine.`
+              );
+            },
+          })
+        ),
+      ],
+    }),
+  ],
 });

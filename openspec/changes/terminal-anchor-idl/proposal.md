@@ -23,8 +23,9 @@ cluster. Ticket: to file.
   IDL account, which an Anchor 1.1.2 program does not serve.
 - **BREAKING** An IDL in the Anchor 0.29 format is not uploaded.
 - A feature slice `program-idl` (event prefix `idl`) holds the upload, taken from the HOO-2486 spike. It adds three
-  events, with the names and parameters the `wbdi-flow` change gives them: `idl_upload_started`, `idl_uploaded`, and
-  `idl_upload_failed`. No event is renamed or removed.
+  events: `idl_upload_started`, `idl_uploaded`, and `idl_upload_failed`. This change's requirements "An IDL upload
+  sends its events" and "A failed upload names its reason" define their parameters, and the `wbdi-flow` change names
+  those requirements. No event is renamed or removed.
 - `client-v2` stops loading `@solana-playground/anchor-cli`, and `wasm/anchor-cli` is deleted. The real wasm packages
   go from six to five, and no wasm build compiles Anchor 0.29. For the user, a cold `yarn setup` and a cold Vercel
   build compile one package fewer.
@@ -46,8 +47,7 @@ cluster. Ticket: to file.
 - `client-v2-build`: the real wasm packages are the ones `WASM_PACKAGES` names, without `anchor-cli`; the
   requirements stop stating a count.
 - `mainnet-deploy-warning`: the refusal of `anchor idl` writes on mainnet covers `init` and `upgrade`, the only
-  subcommands that send a transaction. This modifies the requirement #131 adds, so the delta is valid once #131 is in
-  `master`.
+  subcommands that send a transaction. This modifies the requirement #131 added to `master` (`e1af2dfc2`).
 
 ## Impact
 
