@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import type { BaseNotEnoughSolProps } from "./BaseNotEnoughSol";
@@ -26,6 +27,7 @@ const renderCard = (props: Partial<BaseNotEnoughSolProps>) => {
         onRetry={onRetry}
         onAirdrop={onAirdrop}
         onSignIn={onSignIn}
+        onFund={props.onFund}
       />
     </TooltipProvider>
   );
@@ -48,10 +50,48 @@ describe("BaseNotEnoughSol", () => {
     expect(card.textContent).toContain("7xKX…gAsU");
     expect(card.textContent).toContain("429 Too Many Requests");
     expect(
-      screen.getByRole("link", { name: "Open faucet" }).getAttribute("href")
+      screen
+        .getByRole("link", { name: "Open the web faucet" })
+        .getAttribute("href")
     ).toBe(
-      `https://faucet.solana.com/?walletAddress=${ADDRESS}&cluster=devnet`
+      `https://faucet.solana.com/?walletAddress=${ADDRESS}&amount=5&cluster=devnet`
     );
+  });
+
+  it("says the network is unreachable, with no web faucet, when the airdrop could not reach it", () => {
+    const { card } = renderCard({ cause: NETWORK_UNREACHABLE });
+
+    expect(card.textContent).toContain(NETWORK_UNREACHABLE);
+    expect(card.textContent).not.toContain("The faucet did not send SOL");
+    expect(
+      screen.queryByRole("link", { name: "Open the web faucet" })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("list", { name: "Get SOL from the web faucet" })
+    ).toBeNull();
+  });
+
+  it("spells out the web faucet once the faucet refused", () => {
+    renderCard({});
+
+    const steps = screen.getByRole("list", {
+      name: "Get SOL from the web faucet",
+    });
+    expect(
+      Array.from(steps.querySelectorAll("li"), (li) => li.textContent)
+    ).toStrictEqual([
+      "1Open the web faucet and sign in with GitHub. It asks for a public repo: if you have none, fork solana-playground there",
+      "2Confirm the airdrop. Your address and 5 SOL are filled in",
+      "3Come back here and press Try again",
+    ]);
+  });
+
+  it("lists no steps while the faucet was not asked", () => {
+    renderCard({ reason: "airdrop_off" });
+
+    expect(
+      screen.queryByRole("list", { name: "Get SOL from the web faucet" })
+    ).toBeNull();
   });
 
   it("offers Request airdrop in place of Try again while automatic airdrop is off", () => {
@@ -91,7 +131,9 @@ describe("BaseNotEnoughSol", () => {
     renderCard({ cluster: "mainnet-beta", reason: "no_faucet" });
 
     expect(screen.getByText("Not enough mainnet SOL")).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Open faucet" })).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Open the web faucet" })
+    ).toBeNull();
   });
 
   it("names no network while the cluster is unknown", () => {
@@ -101,5 +143,51 @@ describe("BaseNotEnoughSol", () => {
     expect(
       screen.getByText("Sign in with GitHub to request SOL.")
     ).toBeTruthy();
+  });
+
+  describe("Send from your wallet", () => {
+    it.each([
+      "signed_out",
+      "no_faucet",
+      "airdrop_off",
+      "airdrop_failed",
+    ] as const)("is offered when the card shows for %s", (reason) => {
+      const onFund = vi.fn();
+      renderCard({ reason, onFund });
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Send from your wallet" })
+      );
+
+      expect(onFund).toHaveBeenCalledOnce();
+    });
+
+    it("comes after the web faucet", () => {
+      const { card } = renderCard({ reason: "airdrop_off", onFund: vi.fn() });
+
+      const labels = Array.from(card.querySelectorAll("a, button")).map(
+        (el) => el.textContent
+      );
+      expect(labels.indexOf("Send from your wallet")).toBeGreaterThan(
+        labels.indexOf("Open the web faucet")
+      );
+    });
+
+    it("is offered on a network with no faucet", () => {
+      renderCard({ reason: "no_faucet", cluster: "localnet", onFund: vi.fn() });
+
+      expect(screen.queryByRole("link", { name: /web faucet/ })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Send from your wallet" })
+      ).toBeTruthy();
+    });
+
+    it("is not drawn without a way to fund", () => {
+      renderCard({ reason: "airdrop_off" });
+
+      expect(
+        screen.queryByRole("button", { name: "Send from your wallet" })
+      ).toBeNull();
+    });
   });
 });
