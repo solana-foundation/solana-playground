@@ -1,3 +1,4 @@
+export { isRunBusy, RunBusyError } from "./busy";
 export { PgJsRuntimeImporter } from "./js-runtime-importer";
 export type { JsRuntimePackageName } from "./package";
 export { missingPackageOf } from "./missing-package";

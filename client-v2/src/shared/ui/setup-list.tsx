@@ -149,7 +149,7 @@ function SetupListLabel({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="setup-list-label"
-      className={cn("min-w-0 flex-1 truncate", className)}
+      className={cn("min-w-0 flex-1 truncate font-read", className)}
       {...props}
     />
   );
@@ -161,7 +161,7 @@ function SetupListValue({ className, ...props }: React.ComponentProps<"span">) {
     <span
       data-slot="setup-list-value"
       className={cn(
-        "ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-warning-ink [&_svg]:size-3",
+        "ml-auto shrink-0 text-xs font-label text-muted-foreground group-data-[status=warn]/setup-item:text-warning-ink [&_svg]:size-3",
         className
       )}
       {...props}

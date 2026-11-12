@@ -14,7 +14,11 @@ export {
   startTutorials,
 } from "./model/start-ladder";
 export { tutorialTelemetry } from "./model/telemetry";
-export type { QuestionResult, StepJumpVia } from "./model/telemetry";
+export type {
+  ActionWord,
+  QuestionResult,
+  StepJumpVia,
+} from "./model/telemetry";
 export type { TutorialEvents } from "./model/telemetry";
 export { checkDefinition, formatError, slugOf } from "./model/definition/check";
 export { loadDefinitionsWith } from "./model/definition/load";

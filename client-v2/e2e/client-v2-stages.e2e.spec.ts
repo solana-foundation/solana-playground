@@ -1,4 +1,5 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
+import { Keypair } from "@solana/web3.js";
 
 import { requireFor } from "../src/test-utils/require-for";
 import {
@@ -94,6 +95,104 @@ const buildThenInteract = async (page: Page, idl: object = IDL) => {
   return page.locator("#flow-stage-panel-interact");
 };
 
+/** Where one button sits sideways in one frame, and whether it was busy */
+type Edges = { left: number; right: number; busy: boolean };
+
+/**
+ * Starts recording, on every animation frame, the left and right edges of
+ * each of `buttons`; the function it returns stops and hands back the frames.
+ * A layout shift can last a frame or two, so sampling only at the start and
+ * the end would miss it.
+ */
+const recordEdges = async (page: Page, buttons: Locator[]) => {
+  const handles = await Promise.all(buttons.map((b) => b.elementHandle()));
+  await page.evaluate((elements) => {
+    const frames: Edges[][] = [];
+    const box = window as unknown as {
+      __edges: { frames: Edges[][]; stop: boolean };
+    };
+    box.__edges = { frames, stop: false };
+    const tick = () => {
+      frames.push(
+        elements.map((element) => {
+          if (!element) throw new Error("a recorded button left the page");
+          const r = element.getBoundingClientRect();
+          return {
+            left: r.left,
+            right: r.right,
+            busy: element.getAttribute("aria-busy") === "true",
+          };
+        })
+      );
+      if (!box.__edges.stop) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, handles);
+  return () =>
+    page.evaluate(() => {
+      const box = window as unknown as {
+        __edges: { frames: Edges[][]; stop: boolean };
+      };
+      box.__edges.stop = true;
+      return box.__edges.frames;
+    });
+};
+
+/**
+ * Waits until the recording holds five frames with the first button busy: the
+ * busy layout has been painted and measured several times over, however slow
+ * the machine
+ */
+const waitForBusyFrames = (page: Page) =>
+  expect
+    .poll(() =>
+      page.evaluate(() => {
+        const box = window as unknown as {
+          __edges: { frames: Edges[][] };
+        };
+        return box.__edges.frames.filter(([first]) => first.busy).length;
+      })
+    )
+    .toBeGreaterThanOrEqual(5);
+
+/**
+ * Every frame's edges equal the first frame's, and the recording caught the
+ * first button both idle and busy
+ */
+const expectHeldStill = (frames: Edges[][]) => {
+  expect(frames.some(([first]) => first.busy)).toBe(true);
+  expect(frames.some(([first]) => !first.busy)).toBe(true);
+  const [start] = frames;
+  const moved = frames.filter((frame) =>
+    frame.some(
+      (edges, i) =>
+        Math.abs(edges.left - start[i].left) > 0.5 ||
+        Math.abs(edges.right - start[i].right) > 0.5
+    )
+  );
+  expect(moved).toEqual([]);
+};
+
+/** The build server's answer to a build that succeeds with `IDL` */
+// eslint-disable-next-line unicorn/no-null -- the build server's wire shape
+const BUILT = { stderr: "", uuid: null, idl: IDL };
+
+/**
+ * Holds every `/build` request, in place of the routes before it, until the
+ * returned function is called, so a test can look at the stage while the
+ * build runs
+ */
+const holdBuild = async (page: Page) => {
+  let release: () => void = () => {};
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.unroute("**/build");
+  await page.route("**/build", async (route) => {
+    await released;
+    await json(route, BUILT);
+  });
+  return release;
+};
+
 test.describe("client-v2-stages", () => {
   test("client-v2-stages: A failed build marks the faulty line", async ({
     seededPage: page,
@@ -128,6 +227,42 @@ test.describe("client-v2-stages", () => {
       diagnostic.getByRole("button", { name: "Explain" })
     ).toBeVisible();
     await expect(diagnostic.getByRole("button", { name: "Fix" })).toBeVisible();
+  });
+
+  test("client-v2-stages: Build again keeps the action row in place", async ({
+    seededPage: page,
+  }) => {
+    // CI has no build server: the request is answered here
+    await page.route("**/build", (route) => json(route, BUILT));
+    await page.locator("#flow-stage-tab-build").click();
+    const panel = page.locator("#flow-stage-panel-build");
+    await panel.getByRole("button", { name: /^Build$/ }).click();
+    await expect(
+      panel.getByRole("heading", { name: "Build succeeded" })
+    ).toBeVisible(LONG);
+
+    // The frame keeps its scrollbar's room on both edges (headless Chromium
+    // draws no scrollbar, so the shift itself is the manual scenario's)
+    expect(
+      await panel
+        .locator("div.overflow-y-auto")
+        .first()
+        .evaluate((frame) => getComputedStyle(frame).scrollbarGutter)
+    ).toBe("stable both-edges");
+
+    const release = await holdBuild(page);
+    const again = panel.getByRole("button", { name: "Build again" });
+    const next = panel.getByRole("button", { name: "Continue to Deploy" });
+    const stop = await recordEdges(page, [again, next]);
+    await again.click();
+    // Busy, its name is the label it shows
+    await expect(
+      panel.getByRole("button", { name: "Building…", exact: true })
+    ).toHaveAttribute("aria-busy", "true");
+    await waitForBusyFrames(page);
+    release();
+    await expect(again).toBeEnabled(LONG);
+    expectHeldStill(await stop());
   });
 
   test("client-v2-stages: A deployment shows its program id to copy", async ({
@@ -194,12 +329,112 @@ test.describe("client-v2-stages: Interact", () => {
     await expect(
       panel.getByRole("button", { name: "Copy program id" })
     ).toBeVisible(LONG);
-    // Every instruction is a card, folded on arrival; opened, it ends in Test
+    // Every instruction is a card, folded on arrival; opened, it ends in Send
     const card = panel.getByRole("button", { name: /^initialize/ });
     await expect(card).toHaveAttribute("aria-expanded", "false");
     await card.click();
-    await expect(panel.getByRole("button", { name: "Test" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Send" })).toBeVisible();
     await expect(panel.locator('[data-slot="stage-empty"]')).toHaveCount(0);
+  });
+
+  test("client-v2-stages: Send keeps the card's row in place", async ({
+    seededPage: page,
+  }) => {
+    // A Playground wallet with SOL, so Send can run; the call then waits on
+    // the cluster for as long as the test holds it
+    const wallet = Keypair.generate();
+    await page.evaluate(
+      (kp) =>
+        localStorage.setItem(
+          "wallet",
+          JSON.stringify({
+            state: "pg",
+            accounts: [{ kp, name: "Wallet 1" }],
+            currentIndex: 0,
+          })
+        ),
+      Array.from(wallet.secretKey)
+    );
+
+    let release: () => void = () => {};
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const held: string[] = [];
+    let slot = 0;
+    await page.route("https://api.devnet.solana.com/**", async (route) => {
+      const body = (route.request().postDataJSON() ?? {}) as {
+        id?: unknown;
+        method?: string;
+      };
+      const answer = (result: unknown) =>
+        json(route, { jsonrpc: "2.0", id: body.id, result });
+      // Every account reads as the deployed program with 10 SOL in it: the
+      // wallet's balance is read from its account as well
+      if (body.method === "getAccountInfo") {
+        return answer({
+          context: { slot: 1 },
+          value: {
+            data: DEPLOYED_ACCOUNT.data,
+            executable: DEPLOYED_ACCOUNT.executable,
+            lamports: 10_000_000_000,
+            owner: DEPLOYED_ACCOUNT.owner,
+            rentEpoch: DEPLOYED_ACCOUNT.rentEpoch,
+            space: DEPLOYED_ACCOUNT.space,
+          },
+        });
+      }
+      if (body.method === "getBalance") {
+        return answer({ context: { slot: 1 }, value: 10_000_000_000 });
+      }
+      // The app polls the slot on its own, and reads a slot that stands
+      // still as a cluster that is down, so each answer moves it on
+      if (body.method === "getSlot") return answer((slot += 1));
+      // Only the call Send makes should get here: anything else waiting on
+      // the hold would leave Send busy for a reason that is not the layout's
+      held.push(body.method ?? "(no method)");
+      await released;
+      return route.abort();
+    });
+    // Reloaded once the cluster is stubbed: the wallet reads its balance as
+    // it loads
+    await page.reload();
+    await expect(page.locator("#root-dir")).toBeVisible(LONG);
+    const panel = await buildThenInteract(page);
+
+    await panel.getByRole("button", { name: /^initialize/ }).click(LONG);
+    await panel.getByRole("button", { name: "Fill with Random" }).click();
+    const send = panel.getByRole("button", { name: "Send" });
+    await expect(send).toBeEnabled(LONG);
+    const fill = panel.getByRole("button", { name: "Fill with Random" });
+    const reset = panel.getByRole("button", { name: "Reset" });
+    // Idle, the narrower label's text sits in the middle of the wider cell,
+    // not at its start: the stacked labels keep the button's own centring.
+    // Measured on the text itself, since its layer spans the whole cell
+    const offCentre = await send.evaluate((button) => {
+      const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+      let text = walker.nextNode();
+      while (text && text.textContent !== "Send") text = walker.nextNode();
+      if (!text) throw new Error("Send has no label text");
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const label = range.getBoundingClientRect();
+      const box = button.getBoundingClientRect();
+      return label.left + label.width / 2 - (box.left + box.width / 2);
+    });
+    expect(Math.abs(offCentre)).toBeLessThan(1);
+
+    const stop = await recordEdges(page, [send, fill, reset]);
+    expect(held).toEqual([]);
+    await send.click();
+    // Busy, its name is the label it shows
+    await expect(
+      panel.getByRole("button", { name: "Sending…", exact: true })
+    ).toHaveAttribute("aria-busy", "true");
+    await waitForBusyFrames(page);
+    // Send is busy because its own call is held on the cluster
+    await expect.poll(() => held.length).toBeGreaterThan(0);
+    release();
+    await expect(send).not.toHaveAttribute("aria-busy", "true", LONG);
+    expectHeldStill(await stop());
   });
 
   test("Interact keeps a long instruction name inside the form's column", async ({
@@ -230,6 +465,50 @@ test.describe("client-v2-stages: Interact", () => {
     expect(nameBox.x + nameBox.width).toBeLessThanOrEqual(
       cardBox.x + cardBox.width + 0.5
     );
+  });
+
+  // At 1024 px in the suite's layout (TREE_OPEN_LAYOUT in playwright.config:
+  // the navigation, the files and the assistant open), the stage is about
+  // 240 px wide, less the scrollbar gutter on both edges: Upload IDL, the
+  // IDL's name and "Build the IDL locally" on one centred row lost both ends
+  test("Interact keeps its IDL actions inside a narrow stage", async ({
+    seededPage: page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    // eslint-disable-next-line unicorn/no-null -- the cluster's answer for an account that does not exist
+    await stubProgramAccount(page, null);
+    const panel = await buildThenInteract(page);
+    await expect(
+      panel.getByRole("heading", { name: "Nothing to call yet" })
+    ).toBeVisible(LONG);
+
+    // The frame's content box, inside its gutters, where it clips. Under
+    // 300 px it cannot hold the two buttons side by side (about 270 px) with
+    // the IDL's name, so the row must wrap; wider, the test no longer reaches
+    // the case it guards
+    const frame = await panel
+      .locator("div.overflow-y-auto")
+      .first()
+      .evaluate((el) => {
+        // `clientWidth` leaves out both gutters, half of the difference each
+        const gutter = (el.offsetWidth - el.clientWidth) / 2;
+        const left = el.getBoundingClientRect().left + gutter;
+        return { left, right: left + el.clientWidth };
+      });
+    expect(frame.right - frame.left).toBeLessThan(300);
+    const actions = panel.locator('[data-slot="stage-empty-actions"]');
+    await expect(
+      actions.getByRole("button", { name: "Build the IDL locally" })
+    ).toBeVisible();
+    // The buttons, and the IDL's name beside Upload IDL
+    const parts = actions.getByRole("button").or(actions.getByRole("status"));
+    for (const part of await parts.all()) {
+      const box = requireFor("an action's bounding box")(
+        await part.boundingBox()
+      );
+      expect(box.x).toBeGreaterThanOrEqual(frame.left - 0.5);
+      expect(box.x + box.width).toBeLessThanOrEqual(frame.right + 0.5);
+    }
   });
 });
 

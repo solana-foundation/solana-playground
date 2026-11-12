@@ -280,6 +280,98 @@ describe("the assistant's provider", () => {
     ).toEqual([{ mode: "tutorial" }]);
   });
 
+  it("sends a mode's state now with the newest message, after the history, and keeps the message as typed", async () => {
+    const sent = respond(
+      anthropicText("First.", "end_turn"),
+      anthropicText("Second.", "end_turn")
+    );
+    let step = 1;
+    const mode = PgAssistant.setMode({
+      name: "tutorial",
+      context: () => "Tutorial: Hello Anchor",
+      now: () => `Now: step ${step}.`,
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      const provider = anthropic();
+      await provider.send("what now?");
+      step = 2;
+      await provider.send("and now?");
+    } finally {
+      mode.dispose();
+    }
+
+    // Anthropic takes system text only before the conversation: the state rides with the message
+    expect(JSON.stringify(sent[1].body.system)).toContain(
+      "Tutorial: Hello Anchor"
+    );
+    expect(messagesOf(sent[1].body)).toEqual([
+      { role: "user", content: [{ type: "text", text: "what now?" }] },
+      { role: "assistant", content: [{ type: "text", text: "First." }] },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "and now?" },
+          { type: "text", text: "Now: step 2." },
+        ],
+      },
+    ]);
+  });
+
+  it("sends the turn as typed when a mode's state now is empty", async () => {
+    const sent = respond(openAiText("Hi."));
+    const mode = PgAssistant.setMode({
+      name: "tutorial",
+      context: () => "Tutorial",
+      now: () => " ",
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      await createProvider({ id: "default", apiKey: "" }).send("hi");
+    } finally {
+      mode.dispose();
+    }
+
+    expect(messagesOf(sent[0].body).at(-1)).toEqual({
+      role: "user",
+      content: "hi",
+    });
+  });
+
+  it("sends the turn as typed when a mode's state now throws, and reports it", async () => {
+    const memory = memoryLog();
+    initLogger({ providers: [memory] });
+    const sent = respond(openAiText("Hi."));
+    const mode = PgAssistant.setMode({
+      name: "tutorial",
+      context: () => "Tutorial",
+      now: () => {
+        throw new Error("no definition");
+      },
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      await createProvider({ id: "default", apiKey: "" }).send("hi");
+    } finally {
+      mode.dispose();
+      resetLogger();
+    }
+
+    expect(messagesOf(sent[0].body).at(-1)).toEqual({
+      role: "user",
+      content: "hi",
+    });
+    expect(
+      memory.entries.filter((entry) => entry.report).map((e) => e.context)
+    ).toEqual([{ mode: "tutorial", what: "now" }]);
+  });
+
   it("asks Anthropic for droppable updates, effort, fallbacks, a cached prompt and 64000 tokens", async () => {
     const sent = respond(anthropicText("ok", "end_turn"));
 

@@ -1,4 +1,4 @@
-name: preview-shared-db
+name: "Preview: shared database"
 
 # Keeps the preview instance's shared database, `solpg_preview`, at master's
 # migrations. Once PREVIEW_DB_PROVIDER is `cloud-sql`, the previews the Vercel

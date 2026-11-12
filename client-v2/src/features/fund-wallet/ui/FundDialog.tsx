@@ -130,7 +130,7 @@ const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
   useEffect(() => {
     attempt.current++;
     if (!open) return;
-    fundTelemetry.track("fund_dialog_opened", { from: "account-menu" });
+    fundTelemetry.track("fund_dialog_opened", { via: "account-menu" });
     setFailure(unconfirmedFailure());
     setAmount(DEFAULT_AMOUNT);
     setPayerName(undefined);

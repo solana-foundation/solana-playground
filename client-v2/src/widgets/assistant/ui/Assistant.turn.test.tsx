@@ -11,8 +11,13 @@ import type { Turn } from "../model/use-turn";
 // `useTurn` runs, so what is under test is that the panel holds it above
 // both views. The thread and Sources stand in by name; the composer is its
 // Base, fed by the turn, with no chips or model of its own.
+// Counts its renders, so a test can tell typing never reaches the thread
+const thread = vi.hoisted(() => ({ renders: 0 }));
 vi.mock("./Thread", () => ({
-  Thread: () => <div>thread</div>,
+  Thread: () => {
+    thread.renders += 1;
+    return <div>thread</div>;
+  },
 }));
 vi.mock("../../../views/sidebar/assistant/Component/Grounding", () => ({
   default: () => <div>sources</div>,
@@ -20,6 +25,7 @@ vi.mock("../../../views/sidebar/assistant/Component/Grounding", () => ({
 vi.mock("../../../components/Link", () => ({ default: () => null }));
 vi.mock("./AssistantComposer", async () => {
   const { BaseAssistantComposer } = await import("./BaseAssistantComposer");
+  const { useDraft } = await import("@/shared/lib/draft");
   return {
     AssistantComposer: ({
       turn,
@@ -32,8 +38,8 @@ vi.mock("./AssistantComposer", async () => {
     }) => (
       <BaseAssistantComposer
         chips={[]}
-        value={turn.input}
-        onValueChange={turn.setInput}
+        value={useDraft(turn.draft)}
+        onValueChange={turn.draft.set}
         onSend={(text) => void turn.send(text)}
         onStop={turn.stop}
         busy={turn.busy}
@@ -96,6 +102,35 @@ afterEach(() => {
 });
 
 describe("Assistant's turn", () => {
+  it("re-renders the composer, not the thread, as the user types (HOO-2781)", async () => {
+    render(
+      <TooltipProvider>
+        <Assistant
+          widen={{
+            wide: false,
+            setWide: vi.fn(),
+            canWiden: true,
+            inSheet: false,
+          }}
+          onHide={vi.fn()}
+          openConnect={vi.fn()}
+        />
+      </TooltipProvider>
+    );
+    const input = screen.getByRole<HTMLInputElement>("textbox", {
+      name: "Message the assistant",
+    });
+    // The panel settles first: the default backend's probe re-renders it
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+    await act(async () => {});
+    const before = thread.renders;
+
+    await userEvent.setup().type(input, "a question");
+
+    expect(input.value).toBe("a question");
+    expect(thread.renders).toBe(before);
+  });
+
   it("outlives a visit to Sources: the composer comes back with what was typed", async () => {
     render(
       <TooltipProvider>

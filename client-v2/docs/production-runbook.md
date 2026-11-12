@@ -495,7 +495,7 @@ result.
 1. The repository's Settings → Environments lists `Production`. If it lists `Production – <VERCEL_PROJECT>` instead
    (Vercel names it so when more than one project builds this repository), tell Alexander: the smoke job looks for
    `Production`.
-2. The `smoke` job of that push's `client-v2` run passes and its summary shows `{"enabled":true,"db":"ok"}`. A Git
+2. The `smoke` job of that push's `Client v2` run passes and its summary shows `{"enabled":true,"db":"ok"}`. A Git
    build that times out fails the job, and production keeps the deployment it had ([Deploying
    production](#deploying-production)).
 3. **Remote Cache holds the packages.** That push's build log (Deployments → the build → Building) prints
@@ -541,13 +541,13 @@ Ticket HOO-484. How the two workflows behave is in [Server release](../../docs/s
 console rights moves traffic to it, or back, in the GCP console. The deploy signs in with `GCP_KEY`, a
 service-account JSON key that never expires and that any workflow file on any branch can read. After this step:
 
-- **Actions → Server release → Run workflow** on `master` sends all of `playground-server`'s traffic to a named
+- **Actions → Server: release → Run workflow** on `master` sends all of `playground-server`'s traffic to a named
   version, or rolls back to the one before, and checks that the move took.
 - Both that workflow and the deploy sign in through Workload Identity Federation (OIDC), with a short-lived token
   that only `master` of this repository can get. The key is deleted.
 
 **Preconditions:** none of steps 1 to 9. Until `GCP_WORKLOAD_IDENTITY_PROVIDER` is set, both workflows keep
-signing in with `GCP_KEY`, so the Server release workflow already works on the key; items 1 to 4 below move it to
+signing in with `GCP_KEY`, so the **Server: release** workflow already works on the key; items 1 to 4 below move it to
 OIDC.
 
 **Run**, in one shell:
@@ -603,7 +603,7 @@ OIDC.
    Remove them now, before the checks: while a broad role stays, a deploy succeeds whatever the narrow roles lack,
    so check 3 would prove nothing. Checks 1 and 2 then prove the traffic role, and check 3 the deploy roles. If
    check 3's deploy fails on a permission, its log names the one missing: grant it (never a Cloud SQL role) and
-   re-run the failed CICD job. If a release cannot wait for that, grant `roles/editor` back, release, and remove it
+   re-run the failed **Server: deploy** job. If a release cannot wait for that, grant `roles/editor` back, release, and remove it
    again. A different project holds no Cloud SQL instance of ours, so this paragraph does not apply there.
 
    **The runtime account too.** The grant above lets the deploy account run server code as `$RUNTIME_SA`, so that
@@ -665,7 +665,7 @@ OIDC.
    The last command prints `projects/<number>/locations/global/workloadIdentityPools/github-server/providers/solana-playground`.
 
 4. **Switch the workflows to OIDC.** On GitHub, add that output as the repository variable
-   `GCP_WORKLOAD_IDENTITY_PROVIDER` ([Outside Vercel](#outside-vercel)). From now on a CICD or Server release run
+   `GCP_WORKLOAD_IDENTITY_PROVIDER` ([Outside Vercel](#outside-vercel)). From now on a **Server: deploy** or **Server: release** run
    dispatched from any branch but `master` gets no token and fails; run both from `master`.
 
 **Check:**
@@ -673,16 +673,16 @@ OIDC.
 1. **OIDC, with nothing moving.** Find the live version:
    `gcloud app versions list --service=playground-server --hide-no-traffic --project="$SERVER_PROJECT_ID"` lists it
    with `TRAFFIC_SPLIT` `1.00` (more than one row: traffic is split; name the version that should have it all in
-   the next run). Run **Server release** on `master` with that version as `version`. The run is green, its annotations
+   the next run). Run **Server: release** on `master` with that version as `version`. The run is green, its annotations
    say `GCP sign-in: Workload Identity Federation`, and its summary says the version `was already live; traffic not
    changed`.
 2. **A rollback and back**, if an older version is still serving
-   (`gcloud app versions list --service=playground-server --project="$SERVER_PROJECT_ID"`). Run Server release with
+   (`gcloud app versions list --service=playground-server --project="$SERVER_PROJECT_ID"`). Run **Server: release** with
    `version` empty: the summary names the live version before and an older one as the target, and says the target
    holds all traffic. Then run it with the version that was live, and check the same. Each move switches the build
    server for every user, so do it when a minute of the older version does no harm. With no older serving version,
    skip this check; the next release proves the move.
-3. **The next release.** After the next tagged commit on `master`, the CICD run's annotations say
+3. **The next release.** After the next tagged commit on `master`, the **Server: deploy** run's annotations say
    `GCP sign-in: Workload Identity Federation` and the new version appears, parked, in the version list. The deploy
    step finishes only once the new instances pass App Engine's health check, so a green run also proves the runtime
    account's roles. Move traffic to it as [Releasing the build server](#releasing-the-build-server) says, then build
@@ -707,7 +707,7 @@ OIDC.
 - A run that refuses its target names why (unknown or stopped version, nothing older, split traffic) and moves
   nothing.
 - A run that fails after choosing its target lists in its summary where traffic is now. If it is not where it
-  should be, run Server release again with the version that was live, which the summary also names.
+  should be, run **Server: release** again with the version that was live, which the summary also names.
 
 **Rollback:** clear the variable `GCP_WORKLOAD_IDENTITY_PROVIDER`; both workflows sign in with `GCP_KEY` again.
 This works only until the key is deleted below.
@@ -750,8 +750,8 @@ Vercel stops giving the production domain to new production deployments until yo
 ### Releasing the build server
 
 A tagged commit on `master` deploys a new `playground-server` version with no traffic (`cicd.yml`); the App Engine
-version is the tag with dots as dashes (`1.2.3` → `1-2-3`). Nothing moves traffic but **Actions → Server
-release → Run workflow**, on `master`:
+version is the tag with dots as dashes (`1.2.3` → `1-2-3`). Nothing moves traffic but
+**Actions → Server: release → Run workflow**, on `master`:
 
 - **Release:** `version` set to the new version (`1.2.3` or `1-2-3`). The run sends it all traffic, reads the
   traffic back, and fails unless the version holds all of it.
