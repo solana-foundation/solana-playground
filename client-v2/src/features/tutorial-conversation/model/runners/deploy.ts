@@ -1,5 +1,6 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
 import { shortKey } from "@/shared/lib/short-key";
+import { isStopped } from "@/utils/stopped";
 
 import type { RunStage } from "../ports";
 import type { RunResult } from "../progress";
@@ -66,8 +67,13 @@ export interface DeployPort {
   createWallet(): Promise<string>;
   /** Read twice, before and after the build, so it answers live */
   program(): ProgramState;
-  /** Runs the build; a failure stops the deploy with its message */
-  build(): Promise<{ ok: true } | { ok: false; message: string }>;
+  /**
+   * Runs the build; a failure stops the deploy with its message, and a build
+   * the learner stopped (`isStopped`) stops it as stopped (HOO-2822)
+   */
+  build(): Promise<
+    { ok: true } | { ok: false; message: string; isStopped?: true }
+  >;
   /** The last build's binary */
   bytes(): Promise<Uint8Array>;
   /** Whether the program is on chain (an upgrade), its length and authority */
@@ -135,7 +141,7 @@ const failed = (
   act: "deploy" | "buildDeploy",
   started: number,
   now: number,
-  reason: "failed" | "no_wallet",
+  reason: "failed" | "no_wallet" | "immutable" | "not_authority" | "stopped",
   message: string
 ): RunResult => ({
   act,
@@ -150,17 +156,29 @@ const blocker = (
   onChain: OnChain,
   program: ProgramState,
   address: string
-): string | null => {
+): {
+  reason: "failed" | "immutable" | "not_authority";
+  message: string;
+} | null => {
   if (!onChain.deployed) {
     return program.keypair
       ? null
-      : "This workspace has only the program's id, not its keypair, so it cannot deploy it.";
+      : {
+          reason: "failed",
+          message:
+            "This workspace has only the program's id, not its keypair, so it cannot deploy it.",
+        };
   }
-  if (onChain.authority === null) return "This program is not upgradable.";
+  if (onChain.authority === null) {
+    return { reason: "immutable", message: "This program is not upgradable." };
+  }
   if (onChain.authority !== address) {
-    return `This program's upgrade authority is ${shortKey(
-      onChain.authority
-    )}, not your wallet, so it cannot be upgraded from here.`;
+    return {
+      reason: "not_authority",
+      message: `This program's upgrade authority is ${shortKey(
+        onChain.authority
+      )}, not your wallet, so it cannot be upgraded from here.`,
+    };
   }
   return null;
 };
@@ -238,7 +256,13 @@ export const runDeploy = async (
       stage(DEPLOY_STAGES.building);
       const built = await port.build();
       if (!built.ok) {
-        return failed(act, started, port.now(), "failed", built.message);
+        return failed(
+          act,
+          started,
+          port.now(),
+          built.isStopped ? "stopped" : "failed",
+          built.message
+        );
       }
     }
 
@@ -256,7 +280,9 @@ export const runDeploy = async (
     const bytes = await port.bytes();
     const onChain = await port.onChain(id);
     const blocked = blocker(onChain, built, address);
-    if (blocked) return failed(act, started, port.now(), "failed", blocked);
+    if (blocked) {
+      return failed(act, started, port.now(), blocked.reason, blocked.message);
+    }
     const need = (await port.rent(bytes.length, onChain)) + FEE_HEADROOM;
     // With no estimate checked, or a binary that outgrew it, the balance is
     // checked against the real need
@@ -303,21 +329,27 @@ export const runDeploy = async (
       instructions: port.instructions(),
     };
   } catch (e) {
-    port.report(e, current);
+    // A stop is no fault of the deploy's: not reported (HOO-2822). A guard:
+    // only the build stage can be stopped today, and it answers `stopped`
+    if (!isStopped(e)) port.report(e, current);
     return failed(
       act,
       started,
       port.now(),
-      "failed",
+      isStopped(e) ? "stopped" : "failed",
       e instanceof Error ? e.message : String(e)
     );
   }
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi } = import.meta.vitest;
+  const { beforeAll, describe, it, expect, vi } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/deploy", () => {
+    let StoppedError: typeof import("@/utils/stopped").StoppedError;
+    beforeAll(async () => {
+      ({ StoppedError } = await import("@/utils/stopped"));
+    });
     const SOL = 1_000_000_000;
     const WALLET = "Wa11et1111111111111111111111111111111111111";
     const PROGRAM = "Prog111111111111111111111111111111111111111";
@@ -588,6 +620,47 @@ if (import.meta.vitest) {
       expect(port.writeBuffer).not.toHaveBeenCalled();
     });
 
+    it("stops as stopped, not failed, when the learner stopped its build", async () => {
+      const { port } = portOf({
+        balances: [5 * SOL],
+        deployed: false,
+        stale: true,
+        id: null,
+        build: async () => ({
+          ok: false,
+          message: "Stopped.",
+          isStopped: true,
+        }),
+      });
+      await expect(
+        runDeploy(port, "buildDeploy", () => {})
+      ).resolves.toMatchObject({
+        act: "buildDeploy",
+        ok: false,
+        reason: "stopped",
+        message: "Stopped.",
+      });
+      expect(port.writeBuffer).not.toHaveBeenCalled();
+    });
+
+    it("turns a stop thrown in a stage into a stopped deploy, and reports nothing", async () => {
+      const { port } = portOf({
+        balances: [5 * SOL],
+        deployed: false,
+        stale: false,
+        id: PROGRAM,
+      });
+      port.writeBuffer = vi.fn(async () => {
+        throw new StoppedError("Stopped.");
+      });
+      await expect(runDeploy(port, "deploy", () => {})).resolves.toMatchObject({
+        ok: false,
+        reason: "stopped",
+        message: "Stopped.",
+      });
+      expect(port.report).not.toHaveBeenCalled();
+    });
+
     it("turns a throw from the chain into a failed deploy", async () => {
       const { port } = portOf({
         balances: [5 * SOL],
@@ -763,7 +836,7 @@ if (import.meta.vitest) {
       });
       await expect(runDeploy(port, "deploy", () => {})).resolves.toMatchObject({
         ok: false,
-        reason: "failed",
+        reason: "not_authority",
         message: expect.stringMatching(/upgrade authority is Other1…111111/),
       });
       expect(port.writeBuffer).not.toHaveBeenCalled();
@@ -779,7 +852,10 @@ if (import.meta.vitest) {
       }).port;
       await expect(
         runDeploy(immutable, "deploy", () => {})
-      ).resolves.toMatchObject({ message: "This program is not upgradable." });
+      ).resolves.toMatchObject({
+        reason: "immutable",
+        message: "This program is not upgradable.",
+      });
       const idOnly = portOf({
         balances: [5 * SOL],
         deployed: false,
@@ -791,6 +867,7 @@ if (import.meta.vitest) {
         runDeploy(idOnly, "deploy", () => {})
       ).resolves.toMatchObject({
         ok: false,
+        reason: "failed",
         message: expect.stringMatching(/not its keypair/),
       });
       expect(idOnly.writeBuffer).not.toHaveBeenCalled();

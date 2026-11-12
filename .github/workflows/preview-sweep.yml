@@ -1,4 +1,4 @@
-name: preview-sweep
+name: "Preview: sweep"
 
 # The safety net under preview.yml: deletes the preview databases no open,
 # labelled PR still needs. preview.yml drops one on close or unlabel, but a

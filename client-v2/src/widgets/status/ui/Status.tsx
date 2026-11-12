@@ -30,7 +30,7 @@ const track = (indicator: StatusIndicator, from: PickedFrom) =>
   statusTelemetry.track("status_indicator_picked", {
     indicator: indicator.id,
     state: measured(indicator.state),
-    from,
+    via: from,
   });
 
 /**
@@ -53,7 +53,7 @@ const retryWith =
       // A rejection is measured too, and goes on to the button's report
       statusTelemetry.track("status_retried", {
         indicator: indicator.id,
-        from,
+        via: from,
         answered,
       });
     }

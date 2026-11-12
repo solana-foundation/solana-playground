@@ -84,6 +84,7 @@ const handlers = (): TurnHandlers => ({
   copyFailed: vi.fn(),
   showLog: vi.fn(),
   createWallet: vi.fn(),
+  newProgramId: vi.fn(),
   signIn: vi.fn(),
   apply: vi.fn(),
   keep: vi.fn(),
@@ -140,4 +141,112 @@ describe("Hello Anchor's planned failure", () => {
     });
     expect(v.live).toMatchObject({ id: "f1.q2", kind: "ask" });
   });
+});
+
+describe("An act the learner stopped (HOO-2822)", () => {
+  const stopped: RunResult = {
+    act: "build",
+    ok: false,
+    seconds: 2,
+    reason: "stopped",
+    error: null,
+    log: "Stopped.",
+  };
+  const toStop = toFailure
+    .slice(0, -1)
+    .concat([{ type: "ended", beatId: "s1.build", result: stopped, at: 9000 }]);
+
+  it("draws Build stopped, with no failure, no error line and nothing to explain", () => {
+    const v = view(definition, play(toStop), LATE);
+    draw(requireFor("a result turn")(v.turns.find((t) => t.kind === "result")));
+    expect(screen.getByText("Build stopped")).toBeTruthy();
+    expect(screen.queryByText(/failed/i)).toBeNull();
+    expect(screen.queryByText("Stopped.")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Explain the error" })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "I'll fix it myself" })
+    ).toBeNull();
+  });
+
+  it("follows it at once with Build again, which builds", () => {
+    const v = view(definition, play(toStop), LATE);
+    const on = draw(requireFor("the live turn")(v.live));
+    expect(
+      screen.getByText("Stopped. Press Build again when you're ready.")
+    ).toBeTruthy();
+    screen.getByRole("button", { name: /Build again/ }).click();
+    expect(on.act).toHaveBeenCalledWith("s1.build", undefined);
+  });
+
+  const cases: { label: string; result: RunResult; title: string }[] = [
+    {
+      label: "deploy",
+      result: {
+        act: "deploy",
+        ok: false,
+        seconds: 1,
+        reason: "stopped",
+        message: "Stopped.",
+      },
+      title: "Deploy stopped",
+    },
+    {
+      label: "build and deploy",
+      result: {
+        act: "buildDeploy",
+        ok: false,
+        seconds: 1,
+        reason: "stopped",
+        message: "Stopped.",
+      },
+      title: "Build and deploy stopped",
+    },
+    {
+      label: "run",
+      result: {
+        act: "run",
+        ok: false,
+        seconds: 1,
+        reason: "stopped",
+        message: "Stopped.",
+        log: "",
+      },
+      title: "Run stopped",
+    },
+    {
+      label: "call",
+      result: {
+        act: "call",
+        ok: false,
+        seconds: 1,
+        reason: "stopped",
+        message: "Stopped.",
+        log: "",
+      },
+      title: "Call stopped",
+    },
+  ];
+  it.each(cases)(
+    "draws a stopped $label as stopped, never failed",
+    ({ result, title }) => {
+      draw({
+        id: "result:x:0",
+        kind: "result",
+        step: step1.id,
+        at: 1,
+        whole: true,
+        beatId: "x",
+        act: result.act,
+        result,
+        took: 1000,
+        planned: null,
+        open: false,
+      });
+      expect(screen.getByText(title)).toBeTruthy();
+      expect(screen.queryByText(/failed/i)).toBeNull();
+      expect(screen.queryByText("Stopped.")).toBeNull();
+    }
+  );
 });

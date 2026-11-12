@@ -1,4 +1,4 @@
-name: client-v2 checks
+name: "Client v2: reusable checks"
 
 # The fork's frontend checks, shared by `client-v2.yml` (real wasm packages)
 # and `client-v2-with-stubs.yml` (the stubs, run by hand). Upstream's ci.yml

@@ -88,7 +88,7 @@ const BaseStartFromScratch = ({
       <div className="grid gap-x-4 gap-y-3 md:grid-cols-[5.5rem_minmax(0,1fr)] md:items-start">
         <span
           aria-hidden="true"
-          className="text-caption text-muted-foreground max-md:text-control max-md:-mb-1.5 md:leading-8"
+          className="text-caption font-label text-muted-foreground max-md:text-control max-md:-mb-1.5 md:leading-8"
         >
           Framework
         </span>
@@ -122,7 +122,7 @@ const BaseStartFromScratch = ({
 
         <label
           htmlFor={nameId}
-          className="text-caption text-muted-foreground max-md:text-control max-md:-mb-1.5 md:leading-8"
+          className="text-caption font-label text-muted-foreground max-md:text-control max-md:-mb-1.5 md:leading-8"
         >
           Name
         </label>

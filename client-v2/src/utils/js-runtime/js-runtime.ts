@@ -6,6 +6,7 @@ import { PgProgramInfo } from "../program-info";
 import { PgTerminal } from "../terminal";
 import { PgWallet } from "../wallet";
 import { signRequestWith } from "../wallet/sign-bridge";
+import { RunBusyError } from "./busy";
 import { formatOutputFor } from "./output";
 import { serveSandboxWith } from "./page-channel";
 import { prepareCode } from "./prepare-code";
@@ -31,7 +32,10 @@ interface ExecuteParams {
   isTest: boolean;
 }
 
-/** How a run ended: its first uncaught error, if any */
+/**
+ * How a run ended: the first uncaught error of a script, or how many of a
+ * test file's tests failed, if any
+ */
 export type RunResult = { ok: true } | { ok: false; error: string };
 
 /** What is running now, if anything */
@@ -50,6 +54,7 @@ export class PgJsRuntime {
    * Run or test JS/TS code.
    *
    * @param params client parameters
+   * @throws {RunBusyError} when a client or tests are already running
    */
   static async execute({
     fileName,
@@ -57,14 +62,14 @@ export class PgJsRuntime {
     isTest,
   }: ExecuteParams): Promise<RunResult> {
     if (this._running === "client") {
-      throw new Error(
+      throw new RunBusyError(
         isTest
           ? "Please wait for client to finish."
           : "Client is already running!"
       );
     }
     if (this._running === "tests") {
-      throw new Error(
+      throw new RunBusyError(
         isTest
           ? "Tests are already running!"
           : "Please wait for tests to finish."

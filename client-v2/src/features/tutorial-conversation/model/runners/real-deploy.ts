@@ -5,6 +5,7 @@ import { createLogger } from "@/shared/lib/logger";
 import { additionalProgramLen } from "../../../../commands/deploy/additional-len";
 import { BpfLoaderUpgradeable } from "../../../../commands/deploy/bpf-loader-upgradeable";
 import { sendAndConfirmTxWithRetriesFor } from "../../../../commands/deploy/deploy";
+import { refusedWriteLine } from "../../../../commands/deploy/refused-write";
 import { unclosedBufferLineFor } from "../../../../commands/deploy/stopped";
 import type { Wallet } from "../../../../utils";
 import {
@@ -33,7 +34,7 @@ import { runDeploy } from "./deploy";
 import type { DeployWatchPort } from "./deploy-watch";
 import type { FundingChain } from "./fund";
 import { currentTarget } from "./real-run";
-import { runOnDevnet } from "./real-run";
+import { realClientRunWatch, runOnDevnet } from "./real-run";
 import { deploySlotOf, landedDeploy, recogniseDeploy } from "./recognise";
 import { targetGuardFor } from "./target";
 
@@ -66,14 +67,36 @@ type Connection = PgWeb3.Connection;
 const readBufferOf = (conn: Connection) =>
   PgConnection.getReadBufferConnection(conn);
 
-/** Devnet through the connection the settings hold, which `PgTx` sends on */
+/**
+ * The airdrop connection of the one the settings hold: the cluster's native
+ * RPC, whose faucet answers where a platform RPC refuses
+ */
+const airdropConnection = () =>
+  PgConnection.getAirdropConnection(PgConnection.current);
+
+/**
+ * Devnet: the balance through the connection the settings hold, which `PgTx`
+ * sends the deploy on; the airdrop and its confirmation through the airdrop
+ * connection, since a signature is confirmed on the RPC that issued it
+ */
 export const devnetFunding: FundingChain = {
   balance: (address) => PgConnection.current.getBalance(pk(address)),
   airdrop: (address, lamports) =>
-    PgConnection.current.requestAirdrop(pk(address), lamports),
+    airdropConnection().requestAirdrop(pk(address), lamports),
   confirm: async (signature) => {
-    const result = await PgTx.confirm(signature);
-    return !!result && !result.err;
+    // `PgTx.confirm` answers nothing for a transaction that landed, `{ err }`
+    // for one that failed, and throws when the wait times out
+    try {
+      const result = await PgTx.confirm(signature, {
+        connection: airdropConnection(),
+      });
+      return !result?.err;
+    } catch (e) {
+      // Unconfirmed is an answer: the airdrop may still have landed, and
+      // `fundForDeploy` lets the balance decide
+      log.warn("Could not confirm the airdrop", { context: { error: e } });
+      return false;
+    }
   },
 };
 
@@ -257,7 +280,9 @@ export const realDeployPort = (): DeployPort => {
     build: async () => {
       const built = await runBuild("build", { beatId: "deploy" }, () => {});
       if (built.ok || built.act !== "build") return { ok: true };
-      return { ok: false, message: buildFailureOf(built) };
+      return built.reason === "stopped"
+        ? { ok: false, message: built.log, isStopped: true }
+        : { ok: false, message: buildFailureOf(built) };
     },
     bytes: async () =>
       PgServer.deploy(needed(PgProgramInfo.uuid, "the build's uuid")),
@@ -337,10 +362,18 @@ export const realDeployPort = (): DeployPort => {
           wallet: payer,
           connection: conn,
           onWrite,
+          // Warnings, as the Deploy stage prints them
           onRateLimit: (retryAfter, reason) =>
             PgTerminal.println(
-              `Warning: Reached rate-limits (${reason}), waiting ${retryAfter}s...`
+              PgTerminal.warning(
+                `Warning: Reached rate-limits (${reason}), waiting ${retryAfter}s...`
+              ),
+              { noColor: true }
             ),
+          onRefusal: (message) =>
+            PgTerminal.println(PgTerminal.warning(refusedWriteLine(message)), {
+              noColor: true,
+            }),
         });
       } catch (e) {
         // The buffer already holds its rent: give it back before the write's
@@ -419,9 +452,8 @@ export const realDeployPort = (): DeployPort => {
 /** A failed build's line on the deploy's failed card */
 const buildFailureOf = (r: Extract<RunResult, { act: "build"; ok: false }>) => {
   if (r.reason === "unreachable") return "The build server didn't answer.";
-  // TODO(HOO-2661): untested; this module needs the app's globals to load,
-  // so an in-source block cannot reach it. The line is the one the
-  // tutorial-runs spec names for a build-and-deploy refused for sign-in
+  // The line the tutorial-runs spec names for a build-and-deploy refused
+  // for sign-in (HOO-2661); `real-deploy.test.ts` covers it
   if (r.reason === "signed_out") return "Sign in with GitHub to build.";
   const e = r.error;
   if (!e) return "The build failed. See the terminal.";
@@ -452,13 +484,20 @@ export const runDeployOnDevnet: ActRun = async (act, _input, onStage) => {
   );
   // The reason and the chain's message only: never a key or the wallet.
   // `runDeploy` answers only deploy results, so every failure has a reason
-  if (!result.ok && result.act !== "build" && "reason" in result) {
+  if (!result.ok && result.act !== "build" && result.reason === "stopped") {
+    // The learner's Stop: no failure (HOO-2822)
+    log.info(`The learner stopped a tutorial ${act}`);
+  } else if (!result.ok && result.act !== "build" && "reason" in result) {
     log.warn(`A tutorial ${act} stopped: ${result.reason}`, {
       context: { message: result.message },
     });
   }
   return withIdl(result);
 };
+
+/** The `run` command and devnet, for a client run outside its card (`watchClientRuns`) */
+export const realClientRuns = () =>
+  realClientRunWatch(devnetFunding, DEVNET_FAUCET_SOL);
 
 /**
  * The runner the tutorial frame passes to `PgConversation.init`. The build

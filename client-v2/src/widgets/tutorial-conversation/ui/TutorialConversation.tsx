@@ -22,6 +22,7 @@ import {
   judgeGoal,
   PgCallPanel,
   PgConversation,
+  realClientRuns,
   realDeployWatch,
   realWorkspace,
   stepOfBeat,
@@ -38,7 +39,7 @@ import {
   reportButtonFailure,
 } from "@/shared/lib/report-button-failure";
 import { Spinner } from "@/shared/ui/spinner";
-import { PgProgramInfo, PgWallet } from "@/utils";
+import { PgGlobal, PgProgramInfo, PgWallet, PgWeb3 } from "@/utils";
 import { PgEditor } from "@/utils/editor";
 import { PgExplorer } from "@/utils/explorer";
 import { PgTutorial } from "@/utils/tutorial";
@@ -403,17 +404,50 @@ const runner = announceDeploys(
 );
 
 /**
- * "Create wallet" on a deploy that found none: the Playground wallet, made as
+ * "Create wallet" on an act that found none: the Playground wallet, made as
  * Deploy makes it (`PgWallet.addFirst`, whose key the signer provider makes
- * and which becomes the current wallet), then the deploy runs again.
+ * and which becomes the current wallet), or, when one was made and then
+ * disconnected, connected again as `connect` does; then the act runs again.
  */
 const createWallet = async (beatId: string) => {
   try {
     if (!PgWallet.accounts.length) await PgWallet.addFirst();
+    else if (PgWallet.state === "setup" || PgWallet.state === "disconnected") {
+      PgWallet.state = "pg";
+    }
   } catch (error) {
     reportButtonFailure("create wallet")(error);
     return;
   }
+  PgConversation.act(beatId);
+};
+
+/**
+ * "Deploy under a new program id" on a program this wallet cannot upgrade
+ * (immutable, or another wallet's): a new program keypair, as the program
+ * keypair panel's Generate makes it, and no build id, so the deploy builds
+ * again with the new `declare_id!` and ships to a fresh address (HOO-2806)
+ */
+const newProgramId = (beatId: string) => {
+  // As the keypair panel's Generate: never under a running deploy, which
+  // would land at one address with another keypair stored
+  const isBusy =
+    PgGlobal.deployState !== "ready" ||
+    !!PgConversation.view()?.turns.some(
+      (t) => t.kind === "act" && t.state === "running"
+    );
+  if (isBusy) {
+    const refused = new Error("A run is in progress.");
+    markUnavailableHere(refused, "wait for the run to finish");
+    reportButtonFailure("use a new program id")(refused);
+    return;
+  }
+  // eslint-disable-next-line unicorn/no-null -- `null` clears the persisted values in program-info.json
+  PgProgramInfo.update({
+    kp: PgWeb3.Keypair.generate(),
+    customPk: null,
+    uuid: null,
+  });
   PgConversation.act(beatId);
 };
 
@@ -570,6 +604,7 @@ const handlers: Omit<
   keep: (id) => PgConversation.keep(id),
   showLog: () => PgConversation.showLog(),
   createWallet,
+  newProgramId,
   signIn,
 };
 
@@ -620,6 +655,9 @@ export const TutorialConversation = ({
         .dispose,
     []
   );
+  // A client run outside the run card (the terminal's `run`, the explorer's
+  // Run) passes the step's call goal as the card's would (HOO-2806)
+  useEffect(() => PgConversation.watchClientRuns(realClientRuns()).dispose, []);
   // An unplanned failure's Explain goes to the assistant with its log; once
   // its answer ends, the engine offers "Show me the fix"
   useEffect(() => {
@@ -679,8 +717,8 @@ export const TutorialConversation = ({
       if (!definition || !slug) return;
       tutorialTelemetry.track("tutorial_step_jumped", {
         tutorial: slug,
-        step: index + 1,
-        from: from + 1,
+        step_index: index + 1,
+        from_step: from + 1,
         via,
       });
       // On the phone a picked step takes the chat back to its divider
@@ -694,7 +732,7 @@ export const TutorialConversation = ({
     if (!slug) return;
     tutorialTelemetry.track("tutorial_step_back", {
       tutorial: slug,
-      step: step === null ? 0 : step + 1,
+      step_index: step === null ? 0 : step + 1,
     });
   }, []);
 

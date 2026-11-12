@@ -269,24 +269,30 @@ const kitPluginSignerFor =
     };
   };
 
-/** Runs mocha over what the code registered, posting each line and the counts */
-const runMocha = (channel: SandboxChannel) =>
-  new Promise<void>((resolve) => {
-    const runner = mocha.run(() => {
-      const stats = (
-        runner as {
-          stats?: { passes: number; failures: number; pending: number };
-        }
-      ).stats;
-      channel.post({
-        type: "result",
-        passes: stats?.passes ?? 0,
-        failures: stats?.failures ?? 0,
-        pending: stats?.pending ?? 0,
+/**
+ * Runs mocha over what the code registered, posting each line and the counts.
+ * Mocha prints each failure itself; the run only records that there were
+ * some, so the command can tell a failed test file from a passed one.
+ */
+const runMocha =
+  (channel: SandboxChannel) => (fail: (reason: unknown) => string) =>
+    new Promise<void>((resolve) => {
+      const runner = mocha.run((failures) => {
+        if (failures > 0) fail(`${failures} failing`);
+        const stats = (
+          runner as {
+            stats?: { passes: number; failures: number; pending: number };
+          }
+        ).stats;
+        channel.post({
+          type: "result",
+          passes: stats?.passes ?? 0,
+          failures: stats?.failures ?? 0,
+          pending: stats?.pending ?? 0,
+        });
+        resolve();
       });
-      resolve();
     });
-  });
 
 /**
  * Runs one piece of project code: builds `pg`, the packages and `console`,
@@ -388,7 +394,7 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
       }
     }
 
-    if (run.isTest) await runMocha(channel);
+    if (run.isTest) await runMocha(channel)(fail);
 
     const unsent = countUnsent();
     if (unsent) {

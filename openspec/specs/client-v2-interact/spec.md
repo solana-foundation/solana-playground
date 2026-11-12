@@ -21,28 +21,28 @@ mainnet-beta). Inside a sentence (the fee callout) the network is lower case.
 - **WHEN** a program is deployed on devnet and the person opens Interact
 - **THEN** the head shows "Program", the shortened id, a "Copy program id" button and "Devnet"
 
-### Requirement: The form calls with a Test button
+### Requirement: The form calls with a Send button
 
 The open card SHALL keep the typed Arguments and Accounts inputs, and SHALL
 show a Fee payer row naming who pays the fee and their balance ("Fee payer ·
 Playground wallet · 0.5 SOL", or the connected wallet's name) above its row.
-The row's primary button SHALL read "Test", and "Testing…" while the call is
+The row's primary button SHALL read "Send", and "Sending…" while the call is
 in flight, when the inputs are locked; "Fill with Random" and "Reset" SHALL sit
-beside it as quiet buttons for an instruction that has inputs. Test SHALL be
+beside it as quiet buttons for an instruction that has inputs. Send SHALL be
 off without a wallet, while the SOL needed callout shows, and while an input
 is invalid, and the row SHALL say why, first that applies: "Connect a wallet to
-test", "Add <network> SOL to test" (the network lower case, as inside a
-sentence), "Fill every field to test". The SOL needed callout stays as it is.
+send", "Add <network> SOL to send" (the network lower case, as inside a
+sentence), "Fill every field to send". The SOL needed callout stays as it is.
 
-#### Scenario: Test held for the fee (manual)
+#### Scenario: Send held for the fee (manual)
 
 - **WHEN** a wallet with 0 SOL on devnet is connected and the `increment` card is open
-- **THEN** Test is off and the row reads "Add devnet SOL to test"
+- **THEN** Send is off and the row reads "Add devnet SOL to send"
 
 #### Scenario: Calling (manual)
 
-- **WHEN** the person presses Test on a valid `increment` card
-- **THEN** the button reads "Testing…" and is off until the result arrives
+- **WHEN** the person presses Send on a valid `increment` card
+- **THEN** the button reads "Sending…" and is off until the result arrives
 
 ### Requirement: The result shows in the panel
 
@@ -67,8 +67,22 @@ call and its outcome.
 
 #### Scenario: The result follows its card (manual)
 
-- **WHEN** the IDL has `initialize` and `increment` and the person tests `increment`
+- **WHEN** the IDL has `initialize` and `increment` and the person sends `increment`
 - **THEN** "Call result" sits after the `increment` card, not after `initialize`
+
+### Requirement: A sent transaction's toast
+
+When the app sends a transaction, the toast SHALL read "Transaction sent" and
+show the signature shortened in the middle (`9hJqVk…WxCvBz`), linked to the
+transaction on the explorer picked in Settings. It SHALL fire for every
+transaction the app sends, not only from Interact, except one a tutorial card
+already links, one sent on playnet, and any while the "Show transaction
+notifications" setting is off.
+
+#### Scenario: The toast names the signature (manual)
+
+- **WHEN** the person sends `increment` and the transaction goes out
+- **THEN** a toast reads "Transaction sent" beside the shortened signature, which opens the transaction on the picked explorer
 
 ### Requirement: Calls join a history per program and network
 
@@ -106,14 +120,14 @@ with a "Redeploy" button that opens the Deploy stage.
 
 When the current wallet's balance is known and below one transaction fee
 (5000 lamports), the stage SHALL show the callout "This call needs a small fee
-in <network> SOL. Your wallet has <balance> SOL." and SHALL keep Test off. When
+in <network> SOL. Your wallet has <balance> SOL." and SHALL keep Send off. When
 the network has a faucet, the callout SHALL offer "Get <network> SOL", which
 requests an airdrop and keeps the cards' values.
 
 #### Scenario: Empty wallet on devnet (manual)
 
 - **WHEN** the Playground wallet has 0 SOL on devnet and the person opens Interact
-- **THEN** the callout shows with "Get devnet SOL" and Test is off
+- **THEN** the callout shows with "Get devnet SOL" and Send is off
 
 ### Requirement: Call history sits beside the form on a wide stage
 
@@ -148,7 +162,7 @@ SHALL NOT show a history section before the first call.
 The stage SHALL show one card per IDL instruction, in IDL order, drawn as
 the client-v2-stages capability on foundation master describes it: a head with
 the name and "n args · n accounts", "Arguments" and "Accounts" groups, and one
-row ending in Test. Each card SHALL
+row ending in Send. Each card SHALL
 fold on its own, so several may be open at once, and every card SHALL be
 folded on arrival. Which cards are open SHALL survive a re-render.
 

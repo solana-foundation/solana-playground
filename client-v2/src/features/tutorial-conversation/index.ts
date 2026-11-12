@@ -53,6 +53,7 @@ export { judgeGoal } from "./model/goals";
 export { actRunner } from "./model/runners/act-runner";
 export { DEPLOY_STAGES } from "./model/runners/deploy";
 export {
+  realClientRuns,
   realDeployWatch,
   tutorialRunner,
   watchBuildSource,

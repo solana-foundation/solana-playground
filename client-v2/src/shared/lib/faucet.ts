@@ -62,6 +62,36 @@ export const faucetUrlFor = linkWith({});
 /** {@link faucetUrlFor}, also asking for `sol` */
 export const faucetUrlWith = (sol: number) => linkWith({ amount: sol });
 
+/**
+ * A closed RPC faucet's answer to `requestAirdrop`, as web3.js reports it:
+ * "410 Gone: <body>" for the HTTP status (or "410 : <body>" over HTTP/2), and
+ * "airdrop to <address> failed: <message>" for a JSON-RPC error carried by a
+ * 200, whose code web3.js keeps out of the message, so only the words tell
+ * there. Since 3 Nov devnet
+ * answers `{"code": 410, "message": "The RPC faucet is closed on this
+ * cluster. Request test SOL at https://faucet.solana.com"}`.
+ */
+const FAUCET_CLOSED = /^410\b|"code"\s*:\s*410\b|faucet is closed/i;
+
+/**
+ * Whether a refused airdrop's message says the cluster's RPC faucet is
+ * closed: asking it again will not help until it reopens, the web faucet will
+ */
+export const isFaucetClosed = (message: string): boolean =>
+  FAUCET_CLOSED.test(message);
+
+/**
+ * The line the terminal and the deploy's funding card show once a closed RPC
+ * faucet refused an airdrop: the web faucet with the wallet's address filled
+ * in, in place of the RPC's JSON
+ */
+export const faucetClosedLineFor =
+  (cluster: string) =>
+  (address: string | undefined): string =>
+    `The ${cluster} RPC faucet is closed. Request test SOL at ${faucetUrlFor(
+      cluster
+    )(address)}`;
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -104,6 +134,39 @@ if (import.meta.vitest) {
     it("is the bare faucet for a wallet link with no address", () => {
       expect(faucetUrlWith(DEVNET_FAUCET_SOL)("devnet")(undefined)).toBe(
         FAUCET_URL
+      );
+    });
+
+    /** api.devnet.solana.com's answer to `requestAirdrop`, 11 Nov 2026 */
+    const CLOSED_BODY =
+      '{"jsonrpc":"2.0","error":{"code": 410, "message":"The RPC faucet is closed on this cluster. Request test SOL at https://faucet.solana.com"}, "id": "6f1c3a52-1d4b-4429-9a29-2c3e2b7d4291"}';
+
+    it.each([
+      ["the HTTP 410 web3.js reports", `410 Gone: ${CLOSED_BODY}`],
+      ["the HTTP/2 410, with no status text", `410 : ${CLOSED_BODY}`],
+      [
+        "the JSON-RPC error of a 200",
+        "airdrop to Wa11et failed: The RPC faucet is closed on this cluster. Request test SOL at https://faucet.solana.com",
+      ],
+    ])("reads %s as a closed faucet", (_, message) => {
+      expect(isFaucetClosed(message)).toBe(true);
+    });
+
+    it("reads a limit or any other failure as something else", () => {
+      expect(isFaucetClosed("429 Too Many Requests: rate limited")).toBe(false);
+      // Devnet's own answer at its limit sits closest to the closed one
+      expect(
+        isFaucetClosed(
+          `429 Too Many Requests: {"jsonrpc":"2.0","error":{"code": 429, "message":"You've either reached your airdrop limit today or the airdrop faucet has run dry. Please visit https://faucet.solana.com for alternate sources of test SOL"}, "id": "1"}`
+        )
+      ).toBe(false);
+      expect(isFaucetClosed("fetch failed")).toBe(false);
+      expect(isFaucetClosed("slot 4100 is not available")).toBe(false);
+    });
+
+    it("says the faucet is closed in one line, with the web faucet filled in", () => {
+      expect(faucetClosedLineFor("devnet")(WALLET)).toBe(
+        `The devnet RPC faucet is closed. Request test SOL at https://faucet.solana.com/?walletAddress=${WALLET}&cluster=devnet`
       );
     });
   });

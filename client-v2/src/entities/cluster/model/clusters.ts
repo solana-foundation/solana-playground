@@ -1,7 +1,7 @@
 // Imports nothing but `client-env`: `settings/stored-endpoint.ts`, which loads before everything else, reads this file
 import {
+  NATIVE_RPC_URLS,
   PLATFORM_RPC_URLS,
-  READ_BUFFER_RPC_URLS,
   SEND_TX_PER_SECOND,
 } from "@/shared/config/client-env";
 
@@ -39,7 +39,7 @@ type EnvCluster = "devnet" | "testnet" | "mainnet-beta";
 /** What the env sets for one cluster, spelled as `client-env` reads it */
 interface ClusterEnv {
   rpcUrl?: string;
-  readBufferRpcUrl?: string;
+  nativeRpcUrl?: string;
   sendTxPerSecond?: string;
 }
 
@@ -54,8 +54,8 @@ export interface ClusterInfo {
   url: string;
   /** Whether Settings offers it as a network chip */
   isOffered: boolean;
-  /** The RPC program buffer accounts are read through; `undefined` reads through the selected endpoint */
-  readBufferUrl: string | undefined;
+  /** The cluster's native RPC, which airdrops and buffer reads go through; `undefined` uses the selected endpoint */
+  nativeRpcUrl: string | undefined;
   /** The most `sendTransaction` calls per second a deploy sends; `undefined` caps nothing */
   sendTxPerSecond: number | undefined;
 }
@@ -89,7 +89,7 @@ const infoOf = (
   // `||` not `??`: sourcing an env file leaves unfilled keys as "", which is not nullish and would win
   url: env.rpcUrl || publicUrl,
   isOffered,
-  readBufferUrl: env.readBufferRpcUrl || undefined,
+  nativeRpcUrl: env.nativeRpcUrl || undefined,
   sendTxPerSecond: undefined,
 });
 
@@ -149,7 +149,7 @@ const envOf = (cluster: EnvCluster): ClusterEnv => {
   const key = ENV_KEYS[cluster];
   return {
     rpcUrl: PLATFORM_RPC_URLS[key],
-    readBufferRpcUrl: READ_BUFFER_RPC_URLS[key],
+    nativeRpcUrl: NATIVE_RPC_URLS[key],
     sendTxPerSecond: SEND_TX_PER_SECOND[key],
   };
 };
@@ -231,12 +231,12 @@ if (import.meta.vitest) {
 
     it("treats an empty string as unset", () => {
       const clusters = clustersFor({
-        devnet: { rpcUrl: "", readBufferRpcUrl: "" },
+        devnet: { rpcUrl: "", nativeRpcUrl: "" },
         testnet: { rpcUrl: "" },
       });
 
       expect(clusters.devnet.url).toBe(Endpoint.DEVNET);
-      expect(clusters.devnet.readBufferUrl).toBeUndefined();
+      expect(clusters.devnet.nativeRpcUrl).toBeUndefined();
       expect(clusters.testnet.url).toBe(Endpoint.TESTNET);
     });
 

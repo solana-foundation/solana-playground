@@ -13,6 +13,18 @@ const SCRIPT = path.join(
   "check-env-leaks.mjs"
 );
 
+/**
+ * The environment the throwaway repository's git runs in, without git's own
+ * variables. A git hook (the pre-push hook runs `yarn run check`) sets
+ * `GIT_DIR` and friends for its process; inherited, they point every git call
+ * here at the real repository, whose shared config then got this file's test
+ * identity and `core.bare=true`.
+ */
+const isolated = () =>
+  Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))
+  );
+
 const DIFF = [
   "diff --git a/client-v2/a.test.mjs b/client-v2/a.test.mjs",
   "--- a/client-v2/a.test.mjs",
@@ -140,7 +152,11 @@ function withTempDir(run) {
 const withRepo = (run) =>
   withTempDir((dir) => {
     const git = (...args) =>
-      execFileSync("git", args, { cwd: dir, encoding: "utf8" });
+      execFileSync("git", args, {
+        cwd: dir,
+        encoding: "utf8",
+        env: isolated(),
+      });
     git("init", "-q", "-b", "main");
     git("config", "user.email", "test@example.com");
     git("config", "user.name", "test");
@@ -156,6 +172,7 @@ const runCli = (dir, args) =>
   spawnSync(process.execPath, [SCRIPT, ...args], {
     cwd: dir,
     encoding: "utf8",
+    env: isolated(),
   });
 
 test("blocks a staged value even under diff.noprefix", () => {
@@ -190,5 +207,22 @@ test("passes a range that never held a value", () => {
     git("add", "a.txt");
     git("commit", "-q", "-m", "clean");
     assert.equal(runCli(dir, ["--range", base]).status, 0);
+  });
+});
+
+test("leaves the repository a git hook names alone", () => {
+  withTempDir((decoy) => {
+    const gitDir = path.join(decoy, "outer.git");
+    const saved = process.env.GIT_DIR;
+    process.env.GIT_DIR = gitDir;
+    try {
+      withRepo(({ git }) => {
+        assert.equal(git("config", "user.name").trim(), "test");
+      });
+    } finally {
+      if (saved === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = saved;
+    }
+    assert.equal(fs.existsSync(gitDir), false);
   });
 });

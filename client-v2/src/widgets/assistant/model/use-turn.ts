@@ -4,6 +4,8 @@ import { PgSession } from "@/features/auth";
 import { report, toReplayMessagesWith } from "@/features/persistence";
 import type { AiTurnError, ModelProvider } from "@/shared/lib/ai";
 import { isNetworkFailure } from "@/shared/lib/ai";
+import type { Draft } from "@/shared/lib/draft";
+import { createDraft } from "@/shared/lib/draft";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
@@ -232,9 +234,11 @@ export interface Turn {
   phase: TurnPhase;
   /** `phase` is not idle: a turn runs, waits on an approval or on a busy model, or unwinds */
   busy: boolean;
-  /** What is in the composer */
-  input: string;
-  setInput(value: string): void;
+  /**
+   * What is in the composer. A store, not a string, so typing re-renders only
+   * the composer that subscribes to it (`useDraft`)
+   */
+  draft: Draft;
   /** Open Connect a model, on `preset`'s backend when given */
   openConnect: ConnectOpener;
   /**
@@ -342,7 +346,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   // A session ending or starting changes whether the default can take a turn
   useEffect(() => PgSession.onDidChange(render).dispose, []);
 
-  const [input, setInput] = useState("");
+  const [draft] = useState(createDraft);
   const [focusRequest, focus] = useReducer((n: number) => n + 1, 0);
   // A prompt that arrived with no backend waits in the composer. Saying so is
   // the panel's job, not the conversation's: a notice item would outlive the
@@ -508,7 +512,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (current && restored.has(current)) {
       const backend = resolveSendBackend();
       if (backend.kind === "ask") {
-        setInput(text);
+        draft.set(text);
         openConnect(backend.via, backend.preset);
         return "connecting";
       }
@@ -519,7 +523,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (!current && !PgAssistant.connection) {
       const backend = resolveSendBackend();
       if (backend.kind === "ask") {
-        setInput(text);
+        draft.set(text);
         openConnect(backend.via, backend.preset);
         return "connecting";
       }
@@ -540,7 +544,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (!current) {
       // Nothing to send to: the prompt stays where the user can send it once
       // a backend is connected
-      setInput(text);
+      draft.set(text);
       openConnect("send");
       return "connecting";
     }
@@ -583,7 +587,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     PgAssistant.addUserMessage(trimmed);
     // Cleared only once the message is in: a store that throws leaves the
     // typed text where the user can send it again
-    setInput("");
+    draft.set("");
     await runTurn({ text: trimmed, attempt: 0 });
     return "sent";
   };
@@ -838,7 +842,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   useEffect(() => {
     /** A prompt the user did not type gets one look before it costs a turn */
     const place = (text: string) => {
-      setInput(text);
+      draft.set(text);
       focus();
     };
     /**
@@ -876,7 +880,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         if (!PgAssistant.connection) {
           const backend = resolveSendBackend();
           if (backend.kind === "ask") {
-            setInput(request.text);
+            draft.set(request.text);
             setPromptWaiting(true);
             openConnect(backend.via, backend.preset);
             return;
@@ -935,8 +939,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     tryNow,
     phase,
     busy,
-    input,
-    setInput,
+    draft,
     openConnect,
     addKey,
     promptWaiting,
