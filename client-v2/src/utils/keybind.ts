@@ -22,9 +22,10 @@ interface KeybindOpts {
    * Hear the key before the element it lands in: on the window, in the
    * capture phase. A field that acts on the key and stops it (Monaco binds
    * ⌘E, find with the selection) otherwise keeps it from a document
-   * listener. A key the handler takes, its default prevented, is stopped
-   * there, so the field does not act on it too; one it declines or prevents
-   * nothing for goes on to the field.
+   * listener. A key the handler takes is stopped there, before the target
+   * and the document, so the field does not act on it too; a key it declines
+   * (returns `false`) goes on to the field. Other capture listeners on the
+   * window still hear it.
    */
   capture?: boolean;
 }
@@ -33,6 +34,13 @@ interface KeybindOpts {
 type HandleKeybind =
   | HandleKeybindCb
   | { handle: HandleKeybindCb; opts?: KeybindOpts };
+
+/** A keybind with its handler and options pulled apart */
+interface NormalizedKeybind {
+  keybind: Keybind;
+  run: HandleKeybindCb;
+  opts: KeybindOpts | undefined;
+}
 
 /** A single keybind parameters */
 type SingleKeybind = [Keybind, HandleKeybind];
@@ -78,14 +86,12 @@ export class PgKeybind {
     };
   }
 
-  /** The keydown listener that runs the first of `keybinds` the event matches */
-  private static _listener(
-    keybinds: Array<{
-      keybind: Keybind;
-      run: HandleKeybindCb;
-      opts: KeybindOpts | undefined;
-    }>
-  ) {
+  /**
+   * The keydown listener that runs the first of `keybinds` the event matches.
+   * Capture and bubble keybinds of one `add` get a listener each, so the
+   * first match is per phase.
+   */
+  private static _listener(keybinds: NormalizedKeybind[]) {
     return (ev: KeyboardEvent) => {
       const keybind = keybinds.find(({ keybind: combination }) => {
         const keys = combination.toUpperCase().replaceAll(" ", "").split("+");
@@ -116,7 +122,7 @@ export class PgKeybind {
       const { run, opts } = keybind;
       if (run(ev) === false) return;
       if (!opts?.noPreventDefault) ev.preventDefault();
-      if (opts?.capture && ev.defaultPrevented) ev.stopPropagation();
+      if (opts?.capture) ev.stopPropagation();
     };
   }
 }
@@ -278,14 +284,31 @@ if (import.meta.vitest) {
           expect(fieldHeard).toHaveBeenCalledTimes(1);
         });
 
-        it("leaves a key to the field when it prevents nothing", () => {
-          // A handler under noPreventDefault that returns without acting
+        it("keeps a key it takes from the field under noPreventDefault too", () => {
           dispose = PgKeybind.add("Ctrl+E", {
-            handle: () => undefined,
+            handle,
             opts: { capture: true, noPreventDefault: true },
           }).dispose;
-          pressIn("e", { metaKey: true });
-          expect(fieldHeard).toHaveBeenCalledTimes(1);
+          const ev = pressIn("e", { metaKey: true });
+          expect(handle).toHaveBeenCalledTimes(1);
+          expect(ev.defaultPrevented).toBe(false);
+          expect(fieldHeard).not.toHaveBeenCalled();
+        });
+
+        it("leaves a declined key to the field when the default was prevented elsewhere", () => {
+          // Another window capture listener, ahead of this one
+          const other = (ev: KeyboardEvent) => ev.preventDefault();
+          window.addEventListener("keydown", other, { capture: true });
+          try {
+            dispose = PgKeybind.add("Ctrl+E", {
+              handle: () => false,
+              opts: { capture: true },
+            }).dispose;
+            pressIn("e", { metaKey: true });
+            expect(fieldHeard).toHaveBeenCalledTimes(1);
+          } finally {
+            window.removeEventListener("keydown", other, { capture: true });
+          }
         });
 
         it("keeps the other keybinds of the same call in the bubble phase", () => {
