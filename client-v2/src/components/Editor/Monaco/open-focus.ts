@@ -33,13 +33,18 @@ export const leavesFocusElsewhere = ({
   open,
   editor,
   tree,
-  active = document.activeElement,
+  active: focused = document.activeElement,
 }: {
   open: OpenKind;
   editor: Element;
   tree: Element | null;
   active?: Element | null;
 }): boolean => {
+  // A disabled control holds no focus: Chromium drops it to <body>, Firefox
+  // keeps it there. A dialog's submit disables its button while it runs, so
+  // Rename's open of the renamed file would otherwise read as "in a dialog"
+  // in Firefox alone, and leave a pick's dropdown open behind it
+  const active = focused?.matches(":disabled") ? null : focused;
   // Focus scrolls the editor into view: on a phone, a swipe away from the
   // code before the file opened would be pulled back to it
   if (isOffScreen(editor)) return true;
@@ -224,6 +229,19 @@ if (import.meta.vitest) {
         sheet.append(tree);
         expect(
           leavesFocusElsewhere({ open: "later", editor, tree, active: item })
+        ).toBe(false);
+      });
+
+      it("takes focus from a dialog's button disabled under it, as from the bare document", () => {
+        // A submit disables its button while it runs (Rename's opens the
+        // renamed file); Firefox keeps focus on it, Chromium drops it to <body>
+        const { editor, tree, pick } = page();
+        pick.setAttribute("disabled", "");
+        expect(
+          leavesFocusElsewhere({ open: "later", editor, tree, active: pick })
+        ).toBe(false);
+        expect(
+          leavesFocusElsewhere({ open: "mount", editor, tree, active: pick })
         ).toBe(false);
       });
 
