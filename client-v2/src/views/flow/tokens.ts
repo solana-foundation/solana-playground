@@ -19,6 +19,13 @@ export const BOTTOM_BAR_PX = 28;
 export const BOTTOM_BAR_HEIGHT = `${BOTTOM_BAR_PX}px`;
 
 /**
+ * The console's bar below 768 px: a finger's 44 px, not the wide 28
+ * (`BaseConsoleDrawer`'s `max-md:h-11`). Every phone layout that folds the
+ * console to its bar folds it to this height, or the bar's foot is cut off.
+ */
+export const PHONE_CONSOLE_BAR_PX = 44;
+
+/**
  * The product's gradient token, the same one `BrandButton`'s ring paints with
  * (logomark, stepper active dot, the one decisive CTA per view).
  */
