@@ -164,21 +164,83 @@ export const wrapTopLevelAwait = (content: string) => {
  * @returns the index after the last leading import, `0` if there is none
  */
 const getLeadingImportsEnd = (content: string) => {
-  const skipped = /(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*/y;
   // `import{BN}`, `import*as x` and `import"x"` need no space after the keyword;
-  // lookaheads keep `important` and a dynamic `import(`, `import (`,
-  // `import /* c */ (` or `import // c` with `(` on the next line out
-  const importStatement =
-    /import(?=[\s{*"'])(?!(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*\()[\s\S]*?["'][^"'\n]*["'];?/y;
+  // the lookahead keeps `important` and `import(` out
+  const keyword = /import(?=[\s{*"'])/y;
   let end = 0;
   let index = 0;
   while (true) {
-    skipped.lastIndex = index;
-    index += skipped.exec(content)?.[0].length ?? 0;
-    importStatement.lastIndex = index;
-    if (!importStatement.exec(content)) return end;
-    index = end = importStatement.lastIndex;
+    index = skipSpaceAndComments(content, index);
+    keyword.lastIndex = index;
+    if (!keyword.test(content)) return end;
+    // A dynamic `import (`, `import /* c */ (` or `import // c` with `(` on
+    // the next line is not a statement, and ends the run
+    const afterKeyword = skipSpaceAndComments(content, keyword.lastIndex);
+    if (content[afterKeyword] === "(") return end;
+    const statementEnd = getImportStatementEnd(content, afterKeyword);
+    if (statementEnd === -1) return end;
+    index = end = statementEnd;
   }
+};
+
+/**
+ * Get the index after an import statement's module string, and after its
+ * `;` when there is one. A quote in a comment is not the module's, and a
+ * quote with no closing one on its line is skipped with the rest of that line.
+ *
+ * @param content JS/TS code
+ * @param index where the statement's text after `import` starts
+ * @returns the index after the statement, `-1` if no module string follows
+ * or an unclosed `/*` comes first
+ */
+const getImportStatementEnd = (content: string, index: number) => {
+  while (true) {
+    index = skipSpaceAndComments(content, index);
+    // `skipSpaceAndComments` stops at an unclosed `/*`: its quotes are not code
+    if (index >= content.length || content.startsWith("/*", index)) return -1;
+    if (content[index] !== '"' && content[index] !== "'") {
+      index++;
+      continue;
+    }
+    let close = index + 1;
+    while (close < content.length && !"\"'\n".includes(content[close])) {
+      close++;
+    }
+    if (close < content.length && content[close] !== "\n") {
+      return content[close + 1] === ";" ? close + 2 : close + 1;
+    }
+    // No closing quote on this line: what it scanned holds no quote either
+    index = close;
+  }
+};
+
+/**
+ * Skip the whitespace and closed comments that start at the given index. A
+ * loop, not a regex over `(?:\s|//...|/*...*\/)*`: with something after it that
+ * can fail, as the `(` of a dynamic import, those overlapping alternatives
+ * backtrack exponentially on a run of `//` (CodeQL `js/redos`).
+ *
+ * @param content JS/TS code
+ * @param index where to start
+ * @returns the index of the first other character, of an unclosed `/*`, or
+ * `content.length` when nothing else follows
+ */
+const skipSpaceAndComments = (content: string, index: number) => {
+  while (index < content.length) {
+    if (/\s/.test(content[index])) {
+      index++;
+    } else if (content.startsWith("//", index)) {
+      const lineEnd = content.indexOf("\n", index);
+      index = lineEnd === -1 ? content.length : lineEnd;
+    } else if (content.startsWith("/*", index)) {
+      const commentEnd = content.indexOf("*/", index + 2);
+      if (commentEnd === -1) return index;
+      index = commentEnd + 2;
+    } else {
+      return index;
+    }
+  }
+  return index;
 };
 
 /**
