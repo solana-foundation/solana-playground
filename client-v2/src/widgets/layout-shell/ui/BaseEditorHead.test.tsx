@@ -137,6 +137,7 @@ describe("the tree's dropdown", () => {
     canDock: choice.canDock ?? true,
     onClose: vi.fn(),
     onDock: vi.fn(),
+    onClick: vi.fn(),
     body: <div>tree body</div>,
   });
   const drawWithTree = (dropdown: ReturnType<typeof tree>) =>
@@ -168,6 +169,14 @@ describe("the tree's dropdown", () => {
       within(sheet).getByRole("button", { name: "Dock beside the editor" })
     );
     expect(dropdown.onDock).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands a click inside it to the caller, by what it landed on", async () => {
+    const dropdown = tree({});
+    drawWithTree(dropdown);
+    const body = screen.getByText("tree body");
+    await userEvent.click(body);
+    expect(dropdown.onClick).toHaveBeenCalledWith(body);
   });
 
   it("offers no pin while the code area is too narrow to dock", () => {

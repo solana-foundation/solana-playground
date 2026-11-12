@@ -24,6 +24,8 @@ export interface EditorHeadTree {
   onClose: () => void;
   /** «Dock beside the editor» */
   onDock: () => void;
+  /** A click inside the dropdown, by what it landed on (a file's pick closes it) */
+  onClick: (target: EventTarget) => void;
   /** The tree, mounted only while the dropdown is up */
   body: ReactNode;
 }
@@ -170,6 +172,7 @@ const BaseEditorHead = ({
       onInteractOutside={(e) => {
         if (keepsTreeOpen(e.target)) e.preventDefault();
       }}
+      onClick={(e) => tree?.onClick(e.target)}
     >
       {tree?.canDock && <DockPin onDock={tree.onDock} />}
       {tree?.body}

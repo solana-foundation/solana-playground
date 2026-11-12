@@ -252,14 +252,20 @@ const shellTree = (
         files={({ collapsed, toggle, phone }) => (
           // Stands for a control inside the column; the editor head carries
           // "Files"
-          <button
-            type="button"
-            aria-expanded={!collapsed}
-            data-phone={phone}
-            onClick={toggle}
-          >
-            Files column control
-          </button>
+          <>
+            <button
+              type="button"
+              aria-expanded={!collapsed}
+              data-phone={phone}
+              onClick={toggle}
+            >
+              Files column control
+            </button>
+            {/* Stands for a file's row in the explorer's tree */}
+            <div className={PgView.classNames.FILE}>
+              <span>lib.rs</span>
+            </div>
+          </>
         )}
         stage={() => {
           shellRenders += 1;
@@ -438,6 +444,18 @@ it("should undock the tree by Cmd+E, then open its dropdown by its button, and s
       .filter((event) => event.name === "layout_files_dropdown_opened")
       .map((event) => event.params)
   ).toEqual([{ via: "button" }]);
+});
+
+it("should close the dropdown on a file's pick, the open file's too", () => {
+  savedFilesOpen();
+  shell();
+  press({ key: "e", metaKey: true });
+  fireEvent.click(filesToggle());
+  const dropdown = screen.getByRole("dialog", { name: "Files" });
+  // The open file sends no open event, so the pick itself closes it
+  fireEvent.click(within(dropdown).getByText("lib.rs"));
+  expect(screen.queryByRole("dialog", { name: "Files" })).toBeNull();
+  expect(filesPressed()).toBe("false");
 });
 
 it("should open an undocked tree's dropdown when the editor asks to show files", () => {

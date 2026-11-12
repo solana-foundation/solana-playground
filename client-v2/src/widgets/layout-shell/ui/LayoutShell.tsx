@@ -277,6 +277,19 @@ const LayoutShell = ({
     closeTree();
     setOpen("files", { open: false, via });
   };
+  /**
+   * A file's pick closes the dropdown, as a tutorial's does. Closing on the
+   * pick itself, not on the editor taking focus: the open file's pick opens
+   * nothing, so nothing else would close it
+   */
+  const handleTreeClick = (target: EventTarget) => {
+    if (
+      target instanceof Element &&
+      target.closest(`.${PgView.classNames.FILE}`) !== null
+    ) {
+      closeTree();
+    }
+  };
   /** "Files" and ⌘E: undock a docked, shown tree, else open or close the dropdown */
   const toggleFiles = (via: "button" | "key") => {
     if (isDockedShownNow.current) undockTree(via);
@@ -783,6 +796,7 @@ const LayoutShell = ({
             canDock,
             onClose: closeTree,
             onDock: () => dockTree("button"),
+            onClick: handleTreeClick,
             // The tree mounts once: here only while the column does not hold it
             body: isTreeShown
               ? files({
