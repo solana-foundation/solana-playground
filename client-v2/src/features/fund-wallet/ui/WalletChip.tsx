@@ -97,9 +97,16 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
   }, [shownAddress, shownCluster]);
 
   useEffect(() => {
-    if (state !== "away" && state !== "received") return;
+    if (state !== "away" && state !== "received" && state !== "refused") return;
     if (balance === undefined || from.current === undefined) return;
     if (balance > from.current) {
+      // SOL came by another way than the faucet's answer, the web faucet in
+      // another tab included: the refusal has nothing left to say
+      if (state === "refused") {
+        from.current = undefined;
+        setState("idle");
+        return;
+      }
       setReceived(balance - from.current);
       if (state === "away") {
         fundTelemetry.track("fund_airdrop_received", { via: "web-faucet" });

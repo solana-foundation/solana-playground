@@ -326,6 +326,24 @@ describe("features/fund-wallet/ui/WalletChip", () => {
       expect(screen.queryByText(/Got /)).toBeNull();
     });
 
+    it("drops a refusal when SOL arrives from elsewhere", async () => {
+      airdrop.mockRejectedValueOnce(
+        new AirdropRefusedError(new Error("429 Too Many Requests"))
+      );
+      const view = renderChip(() => false);
+      await getSol();
+      expect(screen.getByText("The faucet is at its limit")).toBeTruthy();
+
+      balanceNow.sol = 5;
+      view.rerender(
+        <TooltipProvider>
+          <WalletChip isSignedOut={false} isSignInFailure={() => false} />
+        </TooltipProvider>
+      );
+
+      expect(screen.queryByText("The faucet is at its limit")).toBeNull();
+    });
+
     it("drops a refusal when the cluster changes", async () => {
       airdrop.mockRejectedValueOnce(
         new AirdropRefusedError(new Error("429 Too Many Requests"))
