@@ -157,7 +157,7 @@ describe("useTurn", () => {
     expect(PgAssistant.connection?.id).toBe("default");
     expect(provider.send).toHaveBeenCalledTimes(1);
     expect(provider.send.mock.calls[0][0]).toBe("hi");
-    expect(result.current.input).toBe("");
+    expect(result.current.draft.get()).toBe("");
   });
 
   it("keeps the typed text and reports when the message cannot be added", async () => {
@@ -171,13 +171,13 @@ describe("useTurn", () => {
       .spyOn(reportModule, "reportButtonFailure")
       .mockReturnValue(report);
     const { result } = renderHook(() => useTestTurn());
-    act(() => result.current.setInput("hello"));
+    act(() => result.current.draft.set("hello"));
 
     expect(await act(() => result.current.send("hello"))).toBe("failed");
 
     expect(report).toHaveBeenCalledWith(failure);
     expect(reportFor).toHaveBeenCalledWith("send your message");
-    expect(result.current.input).toBe("hello");
+    expect(result.current.draft.get()).toBe("hello");
     expect(result.current.busy).toBe(false);
     expect(provider.send).not.toHaveBeenCalled();
     expect(turnEvents()).toEqual([]);
@@ -192,7 +192,7 @@ describe("useTurn", () => {
 
     expect(createProvider).not.toHaveBeenCalled();
     expect(pick).toHaveBeenCalledTimes(1);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(PgAssistant.items.length).toBe(0);
     expect(open).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledWith("send", undefined);
@@ -334,7 +334,7 @@ describe("useTurn", () => {
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() =>
-      expect(result.current.input).toBe("Explain this error")
+      expect(result.current.draft.get()).toBe("Explain this error")
     );
     expect(provider.send).toHaveBeenCalledTimes(1);
     act(() => result.current.stop());
@@ -364,7 +364,7 @@ describe("useTurn", () => {
     );
 
     await waitFor(() =>
-      expect(result.current.input).toBe("Explain this error")
+      expect(result.current.draft.get()).toBe("Explain this error")
     );
     expect(provider.send).toHaveBeenCalledTimes(1);
     expect(provider.send.mock.calls[0][0]).toBe("first");
@@ -685,7 +685,7 @@ describe("useTurn", () => {
       expect(result.current.busy).toBe(false);
       // In the thread once, not handed back to be sent a second time
       expect(userMessages()).toBe(1);
-      expect(result.current.input).toBe("");
+      expect(result.current.draft.get()).toBe("");
       expect(provider.send).toHaveBeenCalledTimes(1);
       expect(turnEvents()).toEqual([
         SENT_ON_DEFAULT,
@@ -918,7 +918,7 @@ describe("useTurn", () => {
 
     act(() => PgAssistant.requestPrompt("Explain this error", { send: false }));
 
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -929,7 +929,7 @@ describe("useTurn", () => {
     act(() => PgAssistant.requestPrompt("Explain this error", { send: false }));
 
     await waitFor(() =>
-      expect(result.current.input).toBe("Explain this error")
+      expect(result.current.draft.get()).toBe("Explain this error")
     );
     expect(result.current.focusRequest).toBeGreaterThan(before);
     // Nothing is to be sent, so nothing asks for a backend
@@ -963,7 +963,7 @@ describe("useTurn", () => {
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
     expect(reportFor).toHaveBeenCalledWith("send the prompt");
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
   });
 
   it("connects the default for a requested prompt and sends it", async () => {
@@ -1060,7 +1060,7 @@ describe("useTurn", () => {
 
     expect(PgAssistant.connection).toBeNull();
     expect(PgAssistant.isPickingBackend).toBe(true);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1074,7 +1074,7 @@ describe("useTurn", () => {
     await waitFor(() => expect(result.current.promptWaiting).toBe(true));
     expect(probe).toHaveBeenCalled();
     expect(PgAssistant.connection).toBeNull();
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1096,13 +1096,13 @@ describe("useTurn", () => {
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() => expect(result.current.promptWaiting).toBe(true));
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(pick).toHaveBeenCalledTimes(1);
     expect(provider.send).not.toHaveBeenCalled();
 
     act(() => PgAssistant.connect({ id: "default", apiKey: "" }));
     expect(result.current.promptWaiting).toBe(false);
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
   });
 });
 
@@ -1159,7 +1159,7 @@ describe("useTurn when the key is gone", () => {
 
     expect(PgAssistant.connection).toBeNull();
     expect(open).toHaveBeenCalledWith("thread", OPENAI);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1173,7 +1173,7 @@ describe("useTurn when the key is gone", () => {
     await act(() => result.current.send("hi"));
 
     expect(open).toHaveBeenCalledWith("thread", OPENAI);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1221,7 +1221,7 @@ describe("useTurn when the key is gone", () => {
 
     await waitFor(() => expect(open).toHaveBeenCalledWith("thread", OPENAI));
     expect(PgAssistant.connection).toBeNull();
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(provider.send).not.toHaveBeenCalled();
   });
 });
@@ -1237,7 +1237,7 @@ describe("useTurn without a session", () => {
 
     expect(PgAssistant.connection).toBeNull();
     expect(open).toHaveBeenCalledWith("send", undefined);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1295,7 +1295,7 @@ describe("useTurn without a session", () => {
     await act(() => result.current.send("hi"));
 
     expect(open).toHaveBeenCalledWith("send", undefined);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1306,7 +1306,7 @@ describe("useTurn without a session", () => {
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() => expect(result.current.promptWaiting).toBe(true));
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(open).toHaveBeenCalledWith("send", undefined);
     expect(provider.send).not.toHaveBeenCalled();
   });
@@ -1389,7 +1389,7 @@ describe("useTurn across a project switch", () => {
     const project = inProject("a");
     const { result } = renderHook(() => useTestTurn());
     // Typed into the composer, as a send from it always is
-    act(() => result.current.setInput("about project a"));
+    act(() => result.current.draft.set("about project a"));
 
     let sent!: Promise<unknown>;
     act(() => {
@@ -1402,7 +1402,7 @@ describe("useTurn across a project switch", () => {
     expect(provider.send).not.toHaveBeenCalled();
     expect(PgAssistant.items).toEqual([]);
     // Left where the user can send it to the project now open, or not
-    expect(result.current.input).toBe("about project a");
+    expect(result.current.draft.get()).toBe("about project a");
   });
 
   it("sends no requested prompt to a project opened while it waited on the probe", async () => {
@@ -1415,7 +1415,7 @@ describe("useTurn across a project switch", () => {
     await release(true);
 
     await waitFor(() =>
-      expect(result.current.input).toBe("Explain this error in a")
+      expect(result.current.draft.get()).toBe("Explain this error in a")
     );
     expect(provider.send).not.toHaveBeenCalled();
     expect(PgAssistant.items).toEqual([]);
@@ -1484,7 +1484,7 @@ describe("useTurn's failures and races", () => {
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
     expect(reportFor).toHaveBeenCalledWith("send the prompt");
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
   });
 
   it("keeps a requested prompt and reports when opening Connect throws", async () => {
@@ -1503,7 +1503,7 @@ describe("useTurn's failures and races", () => {
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
     expect(reportFor).toHaveBeenCalledWith("send the prompt");
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
   });
 
   describe("a reply cut off mid-stream", () => {

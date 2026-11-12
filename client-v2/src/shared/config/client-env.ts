@@ -19,8 +19,13 @@ export const PLATFORM_RPC_URLS = {
   testnet: process.env.REACT_APP_TESTNET_RPC_URL,
 };
 
-/** RPC endpoints program buffer accounts are read through, one per cluster; unset or `""` reads through the selected endpoint */
-export const READ_BUFFER_RPC_URLS = {
+/**
+ * The cluster's native RPC, one per cluster: airdrops request and confirm
+ * through it, and deploys read program buffer accounts through it, since a
+ * platform RPC can refuse the one and miss the other. Unset or `""` uses the
+ * selected endpoint. The env names keep `READ_BUFFER`, the first use.
+ */
+export const NATIVE_RPC_URLS = {
   devnet: process.env.REACT_APP_DEVNET_READ_BUFFER_RPC_URL,
   testnet: process.env.REACT_APP_TESTNET_READ_BUFFER_RPC_URL,
   mainnet: process.env.REACT_APP_MAINNET_READ_BUFFER_RPC_URL,

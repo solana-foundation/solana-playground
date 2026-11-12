@@ -33,10 +33,10 @@ interface InstructionProps {
   onCall: (ix: GeneratableInstruction) => Promise<unknown>;
   /**
    * The network, as said inside a sentence, whose SOL the fee payer lacks
-   * for one fee; Test waits for it
+   * for one fee; Send waits for it
    */
   solNeededOn?: string;
-  /** Test is held from outside, while another call is in flight */
+  /** Send is held from outside, while another call is in flight */
   callBlocked?: boolean;
   /** Who pays the fee, drawn above the actions */
   feePayer?: ReactNode;
@@ -47,7 +47,7 @@ interface InstructionProps {
 
 /**
  * One instruction as a card: its head counts the inputs, its body groups
- * them under Arguments and Accounts and ends in Test, which says what it
+ * them under Arguments and Accounts and ends in Send, which says what it
  * waits for
  */
 const Instruction: FC<InstructionProps> = ({
@@ -70,10 +70,10 @@ const Instruction: FC<InstructionProps> = ({
 
   // Enable when there is no args and no accounts.
   //
-  // This is intentionally done in a `useEffect` instead of changing the
-  // setting the default value of the `disabled`'s `useState` in order to:
+  // This is intentionally done in a `useEffect` instead of
+  // seeding `disabled`'s `useState` in order to:
   // - Enable the button when `idlInstruction` changes
-  // - Avoid flickering of the Test button i.e. the button renders as enabled
+  // - Avoid flickering of the Send button i.e. the button renders as enabled
   // and switches to disabled state after.
   useEffect(() => {
     if (!idlInstruction.args.length && !idlInstruction.accounts.length) {
@@ -83,7 +83,7 @@ const Instruction: FC<InstructionProps> = ({
 
   // Check the values the instruction was restored with. The inputs report
   // only what the user edits, so a valid form that comes back after a remount
-  // would otherwise keep Test off until a field changes.
+  // would otherwise keep Send off until a field changes.
   useEffect(() => {
     setDisabled(hasInstructionErrors(instruction.values));
     // Once, for the values the form mounted with
@@ -140,8 +140,8 @@ const Instruction: FC<InstructionProps> = ({
   const { args, accounts } = instruction.values;
   const hasInputs = args.length > 0 || accounts.length > 0;
   const network = useNetworkHold();
-  // Another call in flight holds Test on every card with no reason line:
-  // the running card's "Testing…" is the only sign. The card's own reasons
+  // Another call in flight holds Send on every card with no reason line:
+  // the running card's "Sending…" is the only sign. The card's own reasons
   // return once that call settles
   const held = callBlocked
     ? undefined
@@ -220,8 +220,8 @@ const Instruction: FC<InstructionProps> = ({
 
           {feePayer}
 
-          {/* Test is the card's one action; filling and clearing the fields
-            are quiet beside it, and a held Test says what it waits for */}
+          {/* Send is the card's one action; filling and clearing the fields
+            are quiet beside it, and a held Send says what it waits for */}
           <div
             className={cn(
               "flex flex-wrap items-center gap-x-2 gap-y-3",
@@ -230,11 +230,11 @@ const Instruction: FC<InstructionProps> = ({
           >
             <AsyncButton
               onClick={call}
-              onError={reportButtonFailure(`test ${instruction.name}`)}
+              onError={reportButtonFailure(`send ${instruction.name}`)}
               disabled={!!held || callBlocked}
-              loadingText="Testing…"
+              loadingText="Sending…"
             >
-              Test
+              Send
             </AsyncButton>
 
             {hasInputs && (
@@ -270,7 +270,7 @@ const plural = (n: number, word: string) =>
   n ? `${n} ${word}${n === 1 ? "" : "s"}` : "";
 
 /**
- * Why Test is held, said beside it; nothing once it can run. A network that
+ * Why Send is held, said beside it; nothing once it can run. A network that
  * is down comes first, then the fee before the fields: filling them does not
  * help while it cannot be paid
  */
@@ -286,9 +286,9 @@ const heldBecause = ({
   filled: boolean;
 }) => {
   if (network) return network;
-  if (!wallet) return "Connect a wallet to test";
-  if (solNeededOn) return `Add ${solNeededOn} SOL to test`;
-  if (!filled) return "Fill every field to test";
+  if (!wallet) return "Connect a wallet to send";
+  if (solNeededOn) return `Add ${solNeededOn} SOL to send`;
+  if (!filled) return "Fill every field to send";
   return undefined;
 };
 

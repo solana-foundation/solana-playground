@@ -125,10 +125,10 @@ describe("importGist", () => {
       { files: [["src/lib.rs", LIB]], skipNameValidation: true }
     );
     expect(events()).toEqual([
-      { name: "gist_import_started", params: { from: "dialog" } },
+      { name: "gist_import_started", params: { via: "dialog" } },
       {
         name: "gist_import_succeeded",
-        params: { from: "dialog", layout: "manifest" },
+        params: { via: "dialog", layout: "manifest" },
       },
     ]);
   });
@@ -144,7 +144,7 @@ describe("importGist", () => {
 
     expect(events().at(-1)).toEqual({
       name: "gist_import_succeeded",
-      params: { from: "dialog", layout: "loose" },
+      params: { via: "dialog", layout: "loose" },
     });
   });
 
@@ -310,8 +310,8 @@ describe("fetchGistFiles", () => {
     expect(error.reason).toBe(reason);
     expect(error.message).toMatch(message);
     expect(events()).toEqual([
-      { name: "gist_import_started", params: { from: "link" } },
-      { name: "gist_import_failed", params: { from: "link", reason } },
+      { name: "gist_import_started", params: { via: "link" } },
+      { name: "gist_import_failed", params: { via: "link", reason } },
     ]);
   });
 
@@ -450,7 +450,7 @@ describe("fetchGistFiles", () => {
     ).toEqual([{ level: "error", report: true }]);
     expect(events().at(-1)).toEqual({
       name: "gist_import_failed",
-      params: { from: "dialog", reason: "request-failed" },
+      params: { via: "dialog", reason: "request-failed" },
     });
   });
 
@@ -497,7 +497,7 @@ describe("fetchGistFiles", () => {
     ]);
     expect(events().at(-1)).toEqual({
       name: "gist_import_succeeded",
-      params: { from: "dialog", layout: "loose" },
+      params: { via: "dialog", layout: "loose" },
     });
   });
 
@@ -518,7 +518,7 @@ describe("fetchGistFiles", () => {
     );
     expect(events().at(-1)).toEqual({
       name: "gist_import_failed",
-      params: { from: "dialog", reason: "no-program" },
+      params: { via: "dialog", reason: "no-program" },
     });
   });
 });

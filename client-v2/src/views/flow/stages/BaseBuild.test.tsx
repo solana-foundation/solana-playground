@@ -135,6 +135,9 @@ describe("BaseBuild", () => {
     expect(screen.getByText(/^Compiling on the build server\./)).toBeTruthy();
     expect(screen.queryByText(/api\.solpg\.io/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Building/ })).toBeNull();
+    // HOO-2795: the first Build pill drops its play mark when busy, which is
+    // safe only because it is not drawn at all while the build runs
+    expect(brandButtons(container)).toHaveLength(0);
     expect(
       container.querySelector('[data-slot="stage-empty-progress"]')
     ).not.toBeNull();
@@ -361,6 +364,27 @@ describe("BaseBuild", () => {
       expect((busy as HTMLButtonElement).disabled).toBe(true);
     });
 
+    // HOO-2795: the pill swapped "Build again" for the wider "Building…", so
+    // the centred row moved sideways while the rebuild ran
+    it("keeps both of the pill's labels in one cell, busy or not", () => {
+      const p = changed();
+      const { rerender } = render(<BaseBuild {...p} />);
+      const idle = screen.getByText("Build again", { exact: true });
+      const busy = screen.getByText("Building…", { exact: true });
+      expect(idle.parentElement).toBe(busy.parentElement);
+      expect(idle.parentElement?.classList).toContain("inline-grid");
+      expect(busy.getAttribute("aria-hidden")).toBe("true");
+      expect(busy.classList).toContain("invisible");
+
+      const running = changed();
+      running.building = true;
+      rerender(<BaseBuild {...running} />);
+      expect(idle.getAttribute("aria-hidden")).toBe("true");
+      expect(idle.classList).toContain("invisible");
+      expect(busy.hasAttribute("aria-hidden")).toBe(false);
+      expect(busy.classList).not.toContain("invisible");
+    });
+
     it("waits offline, as every Build action does", () => {
       const p = changed();
       p.offline = true;
@@ -526,7 +550,7 @@ describe("BaseBuild", () => {
 
     const brand = brandButtons(container);
     expect(brand).toHaveLength(1);
-    expect(brand[0].textContent).toBe("Try again");
+    expect(screen.getByRole("button", { name: "Try again" })).toBe(brand[0]);
     expect(brand[0].getAttribute("data-variant")).toBe("ring");
     expect(brand[0].getAttribute("data-size")).toBe("default");
     expect(
@@ -781,6 +805,24 @@ describe("BaseBuild", () => {
       ).toBeTruthy();
     }
   );
+
+  // HOO-2782: the stage is centred, so an in-flow line mounted by the click
+  // took a gap and moved the action row down while the rebuild ran
+  it("keeps the slow line out of the flow until it has words", () => {
+    const surface: BuildSurfaceView = { kind: "succeeded" };
+    const { container, rerender } = render(
+      <BaseBuild {...props(surface, true)} />
+    );
+    const line = container.querySelector(
+      '[data-slot="stage-empty"] > p[role="status"]'
+    );
+    if (!line) throw new Error("the slow line is not mounted");
+    expect(line.matches(":empty")).toBe(true);
+    expect(line.classList).toContain("empty:sr-only");
+
+    rerender(<BaseBuild {...props(surface, true, true)} />);
+    expect(line.matches(":empty")).toBe(false);
+  });
 
   it("drops the slow line once the build is over", () => {
     render(<BaseBuild {...props({ kind: "succeeded" }, false, true)} />);

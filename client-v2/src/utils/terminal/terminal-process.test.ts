@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   initLogger,
   installGlobalHandlers,
+  markExpected,
   memoryProvider,
   resetLogger,
 } from "@/shared/lib/logger";
@@ -335,5 +336,48 @@ describe("PgTerm.process", () => {
 
     expect(logged.entries.map((entry) => entry.level)).toEqual(["panic"]);
     expect(logged.entries[0].report).toBe(true);
+  });
+});
+
+// HOO-2806: Enter started the command and dropped its promise, so every
+// failed command typed in the terminal (`run missing.ts`) also reached the
+// browser's console as "Uncaught (in promise)"
+describe("PgShell, Enter", () => {
+  afterEach(() => resetLogger());
+
+  /** A shell whose command fails with `failure`, typed and entered */
+  const enterFailing = async (failure: Error) => {
+    const logged = memoryProvider();
+    initLogger({ providers: [logged] });
+    const execute = vi.fn().mockRejectedValue(failure);
+    const shell = new PgShell(
+      { firstInit: false, input: "run missing.ts", print: vi.fn() } as never,
+      { execute } as never,
+      {} as never,
+      { getPrevious: () => undefined } as never,
+      {} as never
+    );
+
+    shell.handleTermData("\r");
+    await vi.waitFor(() => expect(logged.entries).toHaveLength(1));
+
+    expect(execute).toHaveBeenCalledWith(["run", "missing.ts"]);
+    return logged;
+  };
+
+  it("reports a refused command as expected, with no rejection left over", async () => {
+    const failure = new Error("No client file to run: add one under client/");
+    markExpected(failure);
+
+    const logged = await enterFailing(failure);
+
+    expect(logged.entries.map((entry) => entry.level)).toEqual(["warn"]);
+    expect(logged.entries[0].report).toBe(false);
+  });
+
+  it("still reports a fault in the command", async () => {
+    const logged = await enterFailing(new TypeError("x is undefined"));
+
+    expect(logged.entries.map((entry) => entry.level)).toEqual(["panic"]);
   });
 });

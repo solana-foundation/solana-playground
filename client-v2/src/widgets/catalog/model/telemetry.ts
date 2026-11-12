@@ -34,10 +34,10 @@ type CatalogEvents = {
   /** The Tutorials page's framework filter changed; `framework` is the one now picked */
   catalog_filtered: { page: "tutorials"; framework: FrameworkFilter };
   /**
-   * The Start here banner's action opened its tutorial; `state` is what the
-   * banner said: not started, started, or every start tutorial completed
+   * The Start here banner's action opened its tutorial; `banner_state` is what
+   * the banner said: not started, started, or every start tutorial completed
    */
-  catalog_banner_opened: { state: BannerState };
+  catalog_banner_opened: { banner_state: BannerState };
   /** In New project, the user picked the other list; `tab` is the one now shown */
   catalog_tab_switched: { tab: CatalogPage };
 };

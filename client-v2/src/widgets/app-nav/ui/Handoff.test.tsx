@@ -136,7 +136,7 @@ it("counts an opening signed out", () => {
   expect(sent.events).toEqual([
     expect.objectContaining({
       name: "nav_handoff_opened",
-      params: { signedIn: false },
+      params: { signed_in: false },
     }),
   ]);
 });
@@ -147,7 +147,7 @@ it("counts an opening signed in", () => {
   expect(sent.events).toEqual([
     expect.objectContaining({
       name: "nav_handoff_opened",
-      params: { signedIn: true },
+      params: { signed_in: true },
     }),
   ]);
 });

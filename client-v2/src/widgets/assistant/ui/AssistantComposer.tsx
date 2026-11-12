@@ -7,6 +7,7 @@ import {
   SIGN_IN_FAILED_UNKNOWN,
   useSignedIn,
 } from "@/features/auth";
+import { useDraft } from "@/shared/lib/draft";
 import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
@@ -163,6 +164,9 @@ export function AssistantComposer({
     return () => subs.forEach((sub) => sub.dispose());
   }, []);
   const contextFiles = realBridge.listContextFiles();
+  // Only the composer follows the draft: the thread does not re-render as
+  // the user types (HOO-2781)
+  const input = useDraft(turn.draft);
 
   const defaultBackend = useDefaultBackend();
   const connection = PgAssistant.connection;
@@ -310,8 +314,8 @@ export function AssistantComposer({
       <BaseAssistantComposer
         chips={contextChips(contextFiles)}
         addable={addableFiles(contextFiles)}
-        value={turn.input}
-        onValueChange={turn.setInput}
+        value={input}
+        onValueChange={turn.draft.set}
         onSend={(text) => {
           void turn.send(text);
         }}

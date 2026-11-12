@@ -1,9 +1,15 @@
+import { exportAsIs } from "@/features/project-export";
+import { trackExportAsIs } from "@/features/project-files";
 import { useExplorer } from "@/hooks";
-import { PgFramework } from "@/utils";
 
 import BaseExportProject, { exportRowCopyOf } from "./BaseExportProject";
 
-const exportProject = (name: string) => PgFramework.exportWorkspace({ name });
+/**
+ * The project as it is, counted as started from Settings (spec
+ * `client-v2-project-files`, "The settings page's export is counted")
+ */
+const exportProject = (name: string) =>
+  trackExportAsIs(() => exportAsIs(name), "settings");
 
 /** {@link exportRowCopyOf} for the open project */
 export const useExportRowCopy = () =>

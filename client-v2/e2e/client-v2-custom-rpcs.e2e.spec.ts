@@ -45,9 +45,20 @@ const stubRpcs = async (page: Page) => {
   return asked;
 };
 
+/**
+ * Opens the cluster settings. The trigger opens them at once while the
+ * cluster's state is unknown, and once it is known not to respond (the tests'
+ * clusters answer nothing), a Network dialog whose Change network leads there:
+ * a slow runner's first check lands before the click, a fast one's after
+ */
 const openSettings = async (page: Page) => {
   await page.getByRole("button", { name: /^Change cluster/ }).click();
   const settings = page.getByRole("region", { name: "Settings" });
+  const changeNetwork = page
+    .getByRole("dialog", { name: "Network" })
+    .getByRole("button", { name: "Change network" });
+  await expect(settings.or(changeNetwork)).toBeVisible();
+  if (await changeNetwork.isVisible()) await changeNetwork.click();
   await expect(settings).toBeVisible();
   return settings;
 };

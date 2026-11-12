@@ -210,11 +210,11 @@ tall.
 The slice SHALL send `status_indicator_picked` each time a user clicks an
 indicator or a sheet row's action, with `indicator` (`network`, `ai`, `rust`),
 `state` (`ready`, `working`, `not-ready`; a failure is sent as `not-ready` and
-an idle indicator as `ready`) and `from` (`row`, `rail`, `sheet`); and
+an idle indicator as `ready`) and `via` (`row`, `rail`, `sheet`); and
 `status_sheet_opened` each time the phone's sheet opens, with `worst`
 (`ready`, `working`, `not-ready`). It SHALL send `status_retried` each time
 a user's "Try again" on an indicator's panel or sheet row finishes asking,
-with `indicator` (`network`, `ai`), `from` (`row`, `rail`, `sheet`) and
+with `indicator` (`network`, `ai`), `via` (`row`, `rail`, `sheet`) and
 `answered` (`true` when the cluster, or the hosted model, answered; `false`
 otherwise). Connect a
 model opened from the AI indicator SHALL send the assistant's
@@ -230,7 +230,7 @@ presses its Dismiss, with `notice` (`offline`, `cluster-down`); and
 - **WHEN** a user clicks the AI indicator in the status row while no model
   is connected
 - **THEN** `status_indicator_picked` is sent with `indicator: "ai"`,
-  `state: "ready"`, `from: "row"`
+  `state: "ready"`, `via: "row"`
 
 #### Scenario: A notice is measured once per onset
 
@@ -248,7 +248,7 @@ presses its Dismiss, with `notice` (`offline`, `cluster-down`); and
 - **WHEN** a user presses "Try again" on the network panel in the status row
   and the cluster still does not answer
 - **THEN** `status_retried` is sent with `indicator: "network"`,
-  `from: "row"`, `answered: false`
+  `via: "row"`, `answered: false`
 
 ### Requirement: A notice over the stage says why work waits
 
@@ -336,7 +336,7 @@ Flow SHALL mount one visually hidden `role="status"` region. It SHALL say an ind
 
 ### Requirement: Deploy and Interact wait for the network
 
-While the browser is offline or the cluster does not answer, as the network indicator reads it, Deploy's pill and Interact's Test SHALL be disabled, with the reason where each gives its reason today: the pill's tooltip, and the line beside Test: "You're offline" or "Devnet is not responding". The notice over the stage is the visible reason where there is no tooltip. A cluster still connecting SHALL hold nothing. The `deploy` command SHALL refuse to start with "<reason>. Deploy waits for the network.", printed as its own line; pausing or resuming a deploy under way SHALL still work.
+While the browser is offline or the cluster does not answer, as the network indicator reads it, Deploy's pill and Interact's Send SHALL be disabled, with the reason where each gives its reason today: the pill's tooltip, and the line beside Send: "You're offline" or "Devnet is not responding". The notice over the stage is the visible reason where there is no tooltip. A cluster still connecting SHALL hold nothing. The `deploy` command SHALL refuse to start with "<reason>. Deploy waits for the network.", printed as its own line; pausing or resuming a deploy under way SHALL still work.
 
 #### Scenario: The cluster does not answer
 
@@ -346,7 +346,7 @@ While the browser is offline or the cluster does not answer, as the network indi
 #### Scenario: Offline on Interact (manual)
 
 - **WHEN** the form is filled and a wallet is connected, and the browser goes offline
-- **THEN** Test is disabled and the line reads "You're offline"
+- **THEN** Send is disabled and the line reads "You're offline"
 
 #### Scenario: A deploy from elsewhere
 

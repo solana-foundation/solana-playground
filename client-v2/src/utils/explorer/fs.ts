@@ -186,8 +186,9 @@ export class PgFs {
    * workspace methods call it). A file a workspace keeps beside its code
    * (`.workspace/*`, `.tutorial.json`) goes through `writeWorkspaceFile`,
    * which flushes on its first write, and a file under `/.config` through
-   * `writeConfigFile`, which flushes when the write creates it. It rewrites
-   * the whole tree, so never call it per write.
+   * `writeConfigFile`, which flushes when the write creates it.
+   * `effects/fs-flush` calls it when the page is hidden. It rewrites the
+   * whole tree, so never call it per write.
    */
   static async flush() {
     await this._fs.flush();

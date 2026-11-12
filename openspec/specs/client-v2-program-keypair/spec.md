@@ -142,7 +142,7 @@ no parameters unless named:
 - `keypair_import_refused` when an import is refused, with `reason`
   (`not_json`, `wrong_shape`);
 - `keypair_exported` when "Export keypair" or "Save keypair" downloads the
-  file, with `from` (`block`, `dialog`);
+  file, with `via` (`block`, `dialog`);
 - `keypair_custom_id_set` when "Change program id" sets an id;
 - `keypair_custom_id_removed` when "Remove custom id" removes one.
 
@@ -151,6 +151,6 @@ No event SHALL carry a secret key, a public key or a program id.
 #### Scenario: Events of a round trip (manual)
 
 - **WHEN** the user exports, then imports a keypair
-- **THEN** `keypair_exported` with `from: "block"` and `keypair_imported`
+- **THEN** `keypair_exported` with `via: "block"` and `keypair_imported`
   are sent, and neither carries a key (asserted through the memory provider
   in the slice's React tests)

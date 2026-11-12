@@ -1,4 +1,5 @@
 /* eslint-disable layers/curry-order, max-params -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
+import { isFaucetClosed } from "@/shared/lib/faucet";
 import { isFaucetLimit } from "@/shared/lib/faucet-limit";
 import { createLogger, toError } from "@/shared/lib/logger";
 
@@ -49,7 +50,7 @@ const SLOT_MS = 400;
  * shortfall plus headroom (`airdropTopUp`); a refusal, a rate limit or a
  * balance that never moves is a result, never a throw, so the act card can
  * post "Not enough devnet SOL" with the balance it read. Each is logged: the
- * faucet's limit as a warning, anything else reported.
+ * faucet's limit or a closed faucet as a warning, anything else reported.
  */
 export const fundForDeploy = async ({
   chain,
@@ -69,9 +70,13 @@ export const fundForDeploy = async ({
     signature = await chain.airdrop(address, sol * LAMPORTS_PER_SOL);
   } catch (e) {
     const error = toError(e);
-    // The faucet's limit is expected: a warning, never a report. Neither
-    // line carries the wallet's address
-    if (isFaucetLimit(error.message)) {
+    // The faucet's limit, or a closed faucet (HOO-2824), is expected: a
+    // warning, never a report. Neither line carries the wallet's address: a
+    // closed faucet's refusal carried by a 200 names it, so only the reason
+    // is logged for it
+    if (isFaucetClosed(error.message)) {
+      log.warn("The devnet faucet is closed");
+    } else if (isFaucetLimit(error.message)) {
       log.warn("The devnet faucet refused an airdrop", {
         context: { message: error.message },
       });
@@ -281,6 +286,21 @@ if (import.meta.vitest) {
           report: false,
           context: { message: "429 Too Many Requests" },
         }),
+      ]);
+      expect(JSON.stringify(logged.entries)).not.toContain(ADDRESS);
+    });
+
+    it("warns of a closed faucet without reporting it", async () => {
+      const closed = `airdrop to ${ADDRESS} failed: The RPC faucet is closed on this cluster. Request test SOL at https://faucet.solana.com`;
+      await expect(
+        fundShort(
+          chainOf([0.2 * SOL], async () => {
+            throw new Error(closed);
+          })
+        )
+      ).resolves.toMatchObject({ ok: false, message: closed });
+      expect(logged.entries).toEqual([
+        expect.objectContaining({ level: "warn", report: false }),
       ]);
       expect(JSON.stringify(logged.entries)).not.toContain(ADDRESS);
     });

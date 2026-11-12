@@ -107,8 +107,8 @@ carries a key, a prompt or a reply.
   `configured`). A 404 means the deployment serves no `/api/agent`, which is
   expected off a full deployment: it is logged as a warning, not reported,
   and sends no event.
-- `assistant_approval_answered {kind, answer}`: a user answered an approval
-  card; `kind` is `patch` or `command`, `answer` is `allow` or `deny`. Once
+- `assistant_approval_answered {kind, decision}`: a user answered an approval
+  card; `kind` is `patch` or `command`, `decision` is `allow` or `deny`. Once
   per card.
 - `assistant_suggestion_picked`: a user picked one of the empty thread's
   suggestions, which sends it, or opens Connect a model when nothing is
@@ -126,7 +126,7 @@ carries a key, a prompt or a reply.
 
 - **WHEN** a user presses Apply on a patch card and presses it again
 - **THEN** `assistant_approval_answered` is sent once, with `kind` `patch`
-  and `answer` `allow`
+  and `decision` `allow`
 
 ### Requirement: The thread reads at every width
 
