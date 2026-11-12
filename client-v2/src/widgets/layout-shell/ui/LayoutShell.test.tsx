@@ -432,6 +432,23 @@ it("should toggle the files column by Cmd+E and by its button, and say which", (
   ]);
 });
 
+it("should toggle the files column by Cmd+E from the editor, which stops the key", () => {
+  savedFilesOpen();
+  shell();
+  // Monaco binds Cmd+E (find with the selection) and stops the event where
+  // it lands, so a listener on the document never hears it (HOO-2828)
+  const editor = document.createElement("textarea");
+  editor.addEventListener("keydown", (ev) => ev.stopPropagation());
+  document.body.append(editor);
+  try {
+    fireEvent.keyDown(editor, { key: "e", metaKey: true });
+    expect(filesPressed()).toBe("false");
+    expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+  } finally {
+    editor.remove();
+  }
+});
+
 it("should open a folded files column when the editor asks to show files", () => {
   savedFilesOpen();
   shell();

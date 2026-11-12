@@ -467,8 +467,9 @@ const LayoutShell = ({
     [viewport, state.open.console]
   );
   // `PgKeybind` reads Meta as Ctrl, so this is ⌘E on a Mac. Monaco binds ⌘E
-  // (find with selection) while it has focus; this one wins only outside it.
-  // On macOS a text field keeps Control+E, which Cocoa's text bindings make
+  // (find with selection) while it has focus and stops the key, so this one
+  // listens in the capture phase and wins in the editor too, as the
+  // tutorial's ⌘E does (HOO-2828). On macOS a text field keeps Control+E, which Cocoa's text bindings make
   // "end of line" (the assistant's composer): a Control without a Meta in an
   // editable target is left to the field, unprevented. ⌘E has no native
   // meaning in one, so it still folds the column. On Windows and Linux Ctrl is
@@ -499,7 +500,7 @@ const LayoutShell = ({
         }
         setOpen("files", { open: !state.open.files, via: "key" });
       },
-      opts: { noPreventDefault: true },
+      opts: { noPreventDefault: true, capture: true },
     },
     [state.open.files, phone]
   );
