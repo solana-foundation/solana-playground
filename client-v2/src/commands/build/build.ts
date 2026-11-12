@@ -1,3 +1,9 @@
+import type {
+  BuildFailedReason,
+  BuildFramework,
+} from "@/features/program-build";
+import { buildTelemetry } from "@/features/program-build";
+
 import {
   PgCommon,
   PgExplorer,
@@ -52,10 +58,18 @@ export const build = createCmd({
     };
 
     try {
-      const result = await buildProgram(signal).catch((e: unknown) => {
+      const files = getBuildFiles();
+      const framework = frameworkOf(files);
+      buildTelemetry.track("build_started", { framework });
+      const result = await buildProgram(files, signal).catch((e: unknown) => {
         // The aborted request fails; say it was stopped, not that it failed.
-        // Only "Stopped.": the server may still finish, its reply is not kept
+        // Only "Stopped.": the server may still finish, its reply is not kept.
+        // A stop is no outcome, so it sends no event
         throwIfStopped(signal, STOPPED);
+        buildTelemetry.track("build_failed", {
+          framework,
+          reason: reasonOf(e),
+        });
         // A refusal for sign-in never reached the compiler, so the saved
         // verdict stays: a reload would otherwise show a failed build. It may
         // be a pass for older code, so Deploy is told this source never built
@@ -78,6 +92,16 @@ export const build = createCmd({
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.
       const failed = result.stderr.includes("error: could not compile");
+      // The one outcome of this build: what follows keeps its result, and a
+      // throw there is not the build's
+      if (failed) {
+        buildTelemetry.track("build_failed", { framework, reason: "compile" });
+      } else {
+        buildTelemetry.track("build_succeeded", {
+          framework,
+          has_idl: !!result.idl,
+        });
+      }
       if (isStillOpen()) {
         clearBuildRefused(workspace);
         PgProgramInfo.update({
@@ -103,14 +127,55 @@ export const build = createCmd({
   },
 });
 
+/** Seahorse's compiler refused the Python sources */
+class SeahorseCompileError extends Error {
+  constructor() {
+    super("Seahorse compile failed");
+    this.name = "SeahorseCompileError";
+  }
+}
+
+/**
+ * What the build's sources are written with, for its events: Python is
+ * Seahorse, a Rust file naming an `anchor_lang::` path is Anchor, any other
+ * Rust Native.
+ * By the file name and content, not `PgLanguage` or `PgFramework`: the
+ * command's tests stand the utils barrel in with a mock.
+ *
+ * @param files the files the build sends
+ * @returns the framework
+ */
+export const frameworkOf = (files: TupleFiles): BuildFramework => {
+  if (files.some(([path]) => path.endsWith(".py"))) return "seahorse";
+  const isAnchorSource = ([path, content]: [string, string]) =>
+    path.endsWith(".rs") && /\banchor_lang::/.test(content);
+  if (files.some(isAnchorSource)) return "anchor";
+  return "native";
+};
+
+/**
+ * Why a build did not succeed, for `build_failed`. A server error is read by
+ * shape (`answered`), as `buildFailureOf` in `views/flow/state/stage.ts`
+ * reads it.
+ *
+ * @param err what the build threw
+ * @returns the reason
+ */
+const reasonOf = (err: unknown): BuildFailedReason => {
+  if (err instanceof SeahorseCompileError) return "compile";
+  return (err as { answered?: unknown } | null)?.answered === false
+    ? "network"
+    : "server";
+};
+
 /**
  * Compile the current project.
  *
+ * @param buildFiles the files `getBuildFiles` gathered
  * @param signal aborts the request to the build server
  * @returns the build response
  */
-const buildProgram = async (signal: AbortSignal) => {
-  const buildFiles = getBuildFiles();
+const buildProgram = async (buildFiles: TupleFiles, signal: AbortSignal) => {
   const pythonFiles = buildFiles.filter(
     ([path]) => PgLanguage.getFromPath(path)?.name === "Python"
   );
@@ -252,7 +317,7 @@ const buildPython = async (pythonFiles: TupleFiles, signal: AbortSignal) => {
     const compiledContent = compileSeahorse(content, seahorseProgramName);
 
     if (compiledContent.length === 0) {
-      throw new Error("Seahorse compile failed");
+      throw new SeahorseCompileError();
     }
 
     // Seahorse compile outputs a flattened array like [filepath, content, filepath, content]

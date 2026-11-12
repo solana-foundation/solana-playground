@@ -1,11 +1,4 @@
-import type { KeyboardEvent } from "react";
 import { useRef, useState } from "react";
-
-/**
- * The class on a shortcut's hint: a phone has no keyboard to press it with,
- * so the hint is hidden there and the shortcut still works
- */
-export const KEY_HINT = "max-md:hidden";
 
 /**
  * A menu whose items open something (Sources in place of the chat, Connect a
@@ -17,13 +10,10 @@ export const KEY_HINT = "max-md:hidden";
  * that window shut. A dismissal (Escape, a click outside) still returns focus
  * to the trigger.
  *
- * `shortcuts` are single keys with no modifier, read here because the menu's
- * typeahead would take S but never K ("Connect…").
+ * The items carry no letter shortcuts: a key that worked only while the menu
+ * was open read as a global shortcut that did not work (HOO-2828).
  */
-export const usePickedMenu = (
-  focusPicked: () => boolean,
-  shortcuts: Record<string, () => void>
-) => {
+export const usePickedMenu = (focusPicked: () => boolean) => {
   const [open, setOpen] = useState(false);
   const picked = useRef(false);
 
@@ -33,20 +23,11 @@ export const usePickedMenu = (
     action();
   };
 
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const action = shortcuts[event.key.toLowerCase()];
-    if (!action) return;
-    // Keeps the menu's own typeahead from also acting on the key
-    event.preventDefault();
-    pick(action);
-  };
-
   const onCloseAutoFocus = (event: Event) => {
     const wasPicked = picked.current;
     picked.current = false;
     if (wasPicked && focusPicked()) event.preventDefault();
   };
 
-  return { open, setOpen, pick, onKeyDown, onCloseAutoFocus };
+  return { open, setOpen, pick, onCloseAutoFocus };
 };

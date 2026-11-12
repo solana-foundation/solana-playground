@@ -5,14 +5,6 @@ import { expect, it } from "vitest";
 
 const SRC = join(__dirname, "..");
 const LAYERS = ["features", "widgets"];
-/** Layers whose trackers the funnel table may name */
-/**
- * Where the funnel check scans for `createTracker<...>()` maps. `entities` is
- * here because `entities/tutorial` declares the tutorial events; `LAYERS`
- * leaves it out because the slice checks cover only slices with browser code.
- */
-const TRACKER_LAYERS = ["features", "widgets", "entities"];
-const REPO = join(SRC, "..", "..");
 
 /** Slices with browser code: those with an `index.ts` */
 const slices = () =>
@@ -25,10 +17,8 @@ const slices = () =>
       .filter((slice) => existsSync(join(SRC, slice, "index.ts")));
   });
 
-/** The event-map keys passed to `createTracker<...>()` in `file`, and whether each has a doc comment */
-const trackerEvents = (
-  file: string
-): { name: string; documented: boolean }[] => {
+/** The event maps passed to `createTracker<...>()` in `file`, `undefined` for one that is not a type literal */
+const eventMaps = (file: string) => {
   const source = ts.createSourceFile(
     file,
     readFileSync(file, "utf8"),
@@ -57,26 +47,30 @@ const trackerEvents = (
       ? aliases.get(type.typeName.text)
       : type;
 
-  return maps.flatMap((map) => {
-    const literal = resolve(map);
-    if (!literal || !ts.isTypeLiteralNode(literal))
-      return [{ name: "<map not found>", documented: false }];
-    const hasDocComment = (member: ts.Node) =>
-      (
-        ts.getLeadingCommentRanges(source.text, member.getFullStart()) ?? []
-      ).some(({ pos, end }) => source.text.slice(pos, end).startsWith("/**"));
-    return literal.members.map((member) => ({
-      name: member.name?.getText(source) ?? "<unnamed>",
-      documented: hasDocComment(member),
-    }));
-  });
+  return {
+    source,
+    literals: maps.map((map) => {
+      const literal = resolve(map);
+      return literal && ts.isTypeLiteralNode(literal) ? literal : undefined;
+    }),
+  };
 };
 
 /** Names of the event-map keys passed to `createTracker<...>()` that have no doc comment */
-const undocumentedEvents = (file: string): string[] =>
-  trackerEvents(file)
-    .filter((event) => !event.documented)
-    .map((event) => event.name);
+const undocumentedEvents = (file: string): string[] => {
+  const { source, literals } = eventMaps(file);
+  const hasDocComment = (member: ts.Node) =>
+    (ts.getLeadingCommentRanges(source.text, member.getFullStart()) ?? []).some(
+      ({ pos, end }) => source.text.slice(pos, end).startsWith("/**")
+    );
+  return literals.flatMap((literal) =>
+    literal
+      ? literal.members
+          .filter((member) => !hasDocComment(member))
+          .map((member) => member.name?.getText(source) ?? "<unnamed>")
+      : ["<map not found>"]
+  );
+};
 
 /** The one browser module allowed to import the Sentry SDK; craco swaps it out of builds without Sentry */
 const SENTRY_IMPORTER = join("shared", "lib", "reporter", "sentry.ts");
@@ -124,97 +118,177 @@ it.each(slices())(
   }
 );
 
-/** Every event name a tracker declares under `features/`, `widgets/` or `entities/` */
-const declaredEvents = () =>
-  new Set(
-    TRACKER_LAYERS.flatMap((layer) =>
-      existsSync(join(SRC, layer)) ? filesUnder(join(SRC, layer)) : []
-    )
+/** The tracker's own type tests, whose event maps are made up */
+const TELEMETRY_LIB = join("shared", "lib", "telemetry");
+
+/**
+ * Every event name declared through `createTracker<...>()` in a non-test
+ * source file anywhere under `src`: the slices and the legacy roots, whose
+ * funnel steps the slice rule above never reached.
+ */
+let declaredCache: Set<string> | undefined;
+const declaredEvents = (): Set<string> =>
+  (declaredCache ??= new Set(
+    filesUnder(SRC)
       .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
-      .flatMap((file) => trackerEvents(join(SRC, file)))
-      .map((event) => event.name)
-      .filter((name) => !name.startsWith("<"))
-  );
+      .filter((file) => !file.startsWith(TELEMETRY_LIB))
+      .flatMap((file) => {
+        const { source, literals } = eventMaps(join(SRC, file));
+        return literals.flatMap((literal) =>
+          (literal?.members ?? []).map(
+            (member) => member.name?.getText(source) ?? ""
+          )
+        );
+      })
+  ));
 
-/** The funnel table: the main spec, or the `funnel-events` delta while the main spec does not exist */
-const funnelSpec = () => {
-  const main = join(REPO, "openspec", "specs", "client-v2-funnels", "spec.md");
-  return existsSync(main)
-    ? main
-    : join(
-        REPO,
-        "openspec",
-        "changes",
-        "funnel-events",
-        "specs",
-        "client-v2-funnels",
-        "spec.md"
-      );
-};
+/**
+ * Every snake_case string literal in a non-test source file, outside its
+ * in-source test block (`if (import.meta.vitest)`), whose expectations name
+ * events too: an event name in quotes is a `track` call's (a map declares its
+ * keys bare), so a declared name that never appears here is never sent.
+ * Literals, not `track` calls: some sends pass a name held elsewhere
+ * (`tutorialTelemetry.track(effect.name, ...)`)
+ */
+let quotedCache: Set<string> | undefined;
+const quotedNames = (): Set<string> =>
+  (quotedCache ??= new Set(
+    filesUnder(SRC)
+      .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
+      .filter((file) => !file.startsWith(TELEMETRY_LIB))
+      .flatMap((file) => sentLiterals(join(SRC, file)))
+  ));
 
-/** The table that starts at the `Events` header: its header cells and each row's cells, ending at the first line that is not a table row */
-const funnelTable = () => {
-  const lines = readFileSync(funnelSpec(), "utf8").split("\n");
-  const start = lines.findIndex(
-    (line) => line.startsWith("|") && /\bEvents\b/.test(line)
+/** The in-source test block's guard */
+const isInSourceTests = (node: ts.Node) =>
+  ts.isIfStatement(node) && node.expression.getText() === "import.meta.vitest";
+
+/** The snake_case string literals in `file`, its in-source tests left out */
+const sentLiterals = (file: string): string[] => {
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true
   );
-  if (start < 0) return { header: [], rows: [] };
-  const end = lines.findIndex(
-    (line, index) => index > start && !line.startsWith("|")
-  );
-  const cells = lines
-    .slice(start, end < 0 ? undefined : end)
-    .map((line) => line.split(/(?<!\\)\|/).map((cell) => cell.trim()));
-  return {
-    header: cells[0],
-    rows: cells.slice(1).filter((row) => !/^:?-+:?$/.test(row[1])),
+  const names: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (isInSourceTests(node)) return;
+    if (ts.isStringLiteralLike(node) && /^[a-z][a-z0-9_]*$/.test(node.text)) {
+      names.push(node.text);
+    }
+    ts.forEachChild(node, visit);
   };
+  visit(source);
+  return names;
 };
 
-/** Each row of the funnel table: the backticked names of its Events column and its Source */
-const funnelRows = () => {
-  const { header, rows } = funnelTable();
-  const events = header.indexOf("Events");
-  const source = header.indexOf("Source");
-  return rows.map((cells) => ({
-    events: Array.from(cells[events].matchAll(/`([^`]+)`/g), (m) => m[1]),
-    source: cells[source],
-  }));
+/** The funnel table: the main spec once archived, the change's delta until then */
+const FUNNEL_SPECS = [
+  join("openspec", "specs", "client-v2-funnels", "spec.md"),
+  join(
+    "openspec",
+    "changes",
+    "funnel-events",
+    "specs",
+    "client-v2-funnels",
+    "spec.md"
+  ),
+].map((path) => join(SRC, "..", "..", path));
+
+interface FunnelRow {
+  step: string;
+  events: string[];
+  failures: string[];
+  /** The Failure events cell as written, for its `none: <why>` */
+  failuresCell: string;
+  source: string;
+}
+
+/** Backticked names in a table cell */
+const namesIn = (cell: string) =>
+  Array.from(cell.matchAll(/`([a-z][a-z0-9_]*)`/g), (match) => match[1]);
+
+/** The rows of the funnel table, whose header starts `| Step | Events | Failure events |` */
+const funnelRows = (): FunnelRow[] => {
+  const file = FUNNEL_SPECS.find((path) => existsSync(path));
+  if (!file) return [];
+  const lines = readFileSync(file, "utf8").split("\n");
+  const header = lines.findIndex((line) =>
+    /^\| Step \| Events \| Failure events \|/.test(line)
+  );
+  if (header === -1) return [];
+  const rows: FunnelRow[] = [];
+  for (const line of lines.slice(header + 2)) {
+    if (!line.startsWith("|")) break;
+    const cells = line
+      .split("|")
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+    // A cell with a pipe of its own would shift Source and hide the row
+    if (cells.length !== 5) throw new Error(`not five cells: ${line}`);
+    const [step, events, failures, , source] = cells;
+    rows.push({
+      step,
+      events: namesIn(events),
+      failures: namesIn(failures),
+      failuresCell: failures,
+      source,
+    });
+  }
+  return rows;
 };
 
-/** Rows that are neither GA4 nor pending, so a tracker must declare their events */
-const checkedRows = () =>
-  funnelTable().rows.filter((cells) => {
-    const source = cells[funnelTable().header.indexOf("Source")];
-    return source !== "GA4" && !source.startsWith("pending (");
-  });
+/** A row whose events GA4 sends, or another change has yet to */
+const isUntracked = (row: FunnelRow) =>
+  row.source === "GA4" || row.source.startsWith("pending (");
 
-it("should read the funnel table", () => {
-  const { header } = funnelTable();
-  expect(header, "the funnel table needs an Events column").toContain("Events");
-  expect(header, "the funnel table needs a Source column").toContain("Source");
-  expect(funnelRows()).toContainEqual({
-    events: ["auth_signed_in"],
-    source: "features/auth",
-  });
+it("should find the funnel table", () => {
+  expect(funnelRows().length).toBeGreaterThanOrEqual(15);
+  expect(funnelRows()).toContainEqual(
+    expect.objectContaining({
+      events: ["auth_signed_in"],
+      source: "features/auth",
+    })
+  );
   expect(declaredEvents()).toContain("auth_signed_in");
 });
 
-it("should have a tracker declare every funnel event that is not GA4 or pending", () => {
-  const declared = declaredEvents();
-  const missing = funnelRows()
-    .filter(({ source }) => source !== "GA4" && !source.startsWith("pending ("))
-    .flatMap(({ events }) => events)
-    .filter((event) => !declared.has(event));
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should name the funnel step %s's events in backticks",
+  (_, row) => {
+    if (isUntracked(row)) return;
+    expect(row.events.length).toBeGreaterThan(0);
+  }
+);
 
-  expect(missing).toEqual([]);
-});
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should declare every event the funnel step %s names",
+  (_, row) => {
+    if (isUntracked(row)) return;
+    const declared = declaredEvents();
+    expect(
+      row.events.concat(row.failures).filter((name) => !declared.has(name))
+    ).toEqual([]);
+  }
+);
 
-it("should name every funnel event that is not GA4 or pending in backticks", () => {
-  const events = funnelTable().header.indexOf("Events");
-  const unnamed = checkedRows()
-    .filter((cells) => cells[events] !== "" && !/`[^`]+`/.test(cells[events]))
-    .map((cells) => cells[events]);
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should send every event the funnel step %s names from somewhere",
+  (_, row) => {
+    if (isUntracked(row)) return;
+    const quoted = quotedNames();
+    expect(
+      row.events.concat(row.failures).filter((name) => !quoted.has(name))
+    ).toEqual([]);
+  }
+);
 
-  expect(unnamed).toEqual([]);
-});
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should have the funnel step %s name how it fails",
+  (_, row) => {
+    expect(
+      row.failures.length > 0 || row.failuresCell.startsWith("none:")
+    ).toBe(true);
+  }
+);
