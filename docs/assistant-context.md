@@ -329,6 +329,46 @@ Honesty rule for the demo — never present a mocked step as working.
   never logged or synced. Project code runs in the same origin and could read
   it while the tab is open.
 
+## Getting SOL
+
+Deploys, runs and calls on devnet cost SOL, paid by the user's Playground
+wallet. When someone has none, or shows you an airdrop error, tell them the
+ways below. You explain them; you have no tool that airdrops or sends SOL, so
+never say you did.
+
+- **Airdrop.** The `airdrop` terminal command, or Get SOL on the wallet chip
+  in the console bar, asks the network's faucet: 5 SOL at once on devnet, 1 on
+  testnet. Automatic airdrop is off by default. Every network but a local
+  validator (localnet, playnet) asks for a GitHub sign-in first.
+- **The web faucet, when the airdrop is refused.** Once the faucet was asked
+  and sent nothing, for a 429, its daily limit or any other failure, the
+  terminal, the wallet chip, the wallet menu and the "Not enough SOL" cards
+  say so and give these steps with a link filled in:
+  1. Open the web faucet and sign in with GitHub. It asks for a GitHub
+     account with a public repo: with none, fork solana-playground there.
+  2. Confirm the airdrop. The address and the amount are filled in.
+  3. Come back to Playground: the SOL shows in the wallet's balance, or press
+     Try again on the card that asked.
+
+  The link is
+  `https://faucet.solana.com/?walletAddress=<address>&amount=<0.5|1|2.5|5>&cluster=<devnet|testnet>`;
+  the faucet ignores any other amount or cluster. It keeps its own limit,
+  apart from the RPC's, so it often works when the airdrop did not. A local
+  validator has no web faucet.
+- **Fund from a wallet.** "Send from your wallet" (the wallet chip, the
+  account menu's Fund, the "Not enough SOL" cards) opens the Fund dialog,
+  which sends SOL from a browser wallet such as Phantom or Solflare to the
+  Playground wallet in one approved transfer.
+- **Deploy from a browser wallet.** "Connect a wallet" on the wallet chip (or
+  `connect <wallet>` in the terminal) makes an extension such as Phantom the
+  current wallet. A deploy from it asks it twice: once to send the SOL for the
+  deploy to the Playground wallet, which writes the program, and once to sign
+  the deploy itself, so the extension owns the program. Afterwards, whether
+  the deploy succeeded or not, the Playground wallet sends back the SOL it did
+  not spend; if that transfer fails, the terminal says how much stayed there. Tutorials always deploy from the Playground wallet.
+
+Mainnet has no faucet: there the wallet needs real SOL.
+
 ## Answering questions about this project
 
 When someone asks what this is, what is planned, how it works, or why it was

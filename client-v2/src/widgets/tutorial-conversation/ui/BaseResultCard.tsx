@@ -41,6 +41,8 @@ export interface BaseResultCardProps {
   signedIn: boolean;
   /** Sign in with GitHub, for a build refused for sign-in */
   onSignIn: () => Promise<unknown>;
+  /** Open the Fund dialog from a run's or call's short-wallet card */
+  onFund?: () => void;
   /** Make the Playground wallet a run or call found missing, then run it again */
   onCreateWallet: () => Promise<unknown> | void;
 }
@@ -160,6 +162,7 @@ const BaseResultCard = ({
   onRecheck,
   signedIn,
   onSignIn,
+  onFund,
   onCreateWallet,
 }: BaseResultCardProps) => {
   // A folded failed build opens again from its head, to read, never to act
@@ -177,6 +180,7 @@ const BaseResultCard = ({
         account={account}
         exists={exists}
         onRecheck={open ? onRecheck : undefined}
+        onFund={onFund}
         onCreateWallet={open ? onCreateWallet : undefined}
       />
     );

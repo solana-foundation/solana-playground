@@ -2,7 +2,13 @@ import { CircleAlert, ExternalLink } from "lucide-react";
 
 import type { FundingFailure } from "@/commands/deploy/run";
 import { networkInSentence, solOn } from "@/constants";
-import { faucetUrlFor, isFaucetCluster } from "@/shared/lib/faucet";
+import {
+  DEVNET_FAUCET_SOL,
+  faucetUrlWith,
+  isFaucetCluster,
+  webFaucetSteps,
+} from "@/shared/lib/faucet";
+import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   Callout,
@@ -32,6 +38,12 @@ export interface BaseNotEnoughSolProps {
    */
   onAirdrop: () => void;
   onSignIn: () => void;
+  /**
+   * Open the Fund dialog, to pay the wallet from one the user has: offered
+   * for every reason, and the only way in on a network with no faucet. The
+   * card draws it only when given
+   */
+  onFund?: () => void;
 }
 
 const reasonLine = (reason: FundingFailure, network: string | undefined) => {
@@ -68,7 +80,15 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
   const network = networkInSentence(p.cluster);
   const faucetUrl =
     p.cluster !== undefined && isFaucetCluster(p.cluster)
-      ? faucetUrlFor(p.cluster)(p.address)
+      ? faucetUrlWith(DEVNET_FAUCET_SOL)(p.cluster)(p.address)
+      : undefined;
+  // A refused airdrop rarely goes through on Try again soon after: the web
+  // faucet is the way round, spelled out for someone who has never used it
+  // No faucet answered: its steps would send the user to another network call
+  const isUnreachable = p.cause === NETWORK_UNREACHABLE;
+  const steps =
+    p.reason === "airdrop_failed" && faucetUrl && !isUnreachable
+      ? webFaucetSteps(DEVNET_FAUCET_SOL, "Come back here and press Try again")
       : undefined;
 
   return (
@@ -81,9 +101,26 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
           {formatSol(p.needed)} SOL.
         </span>
         <span>
-          {reasonLine(p.reason, network)}
-          {p.cause && <span className="text-subtle"> {p.cause}</span>}
+          {isUnreachable ? NETWORK_UNREACHABLE : reasonLine(p.reason, network)}
+          {p.cause && !isUnreachable && (
+            <span className="text-subtle"> {p.cause}</span>
+          )}
         </span>
+        {steps && (
+          <ol
+            aria-label="Get SOL from the web faucet"
+            className="flex flex-col gap-1"
+          >
+            {steps.map((step, i) => (
+              <li key={step} className="flex gap-2">
+                <span className="w-3 shrink-0 text-subtle tabular-nums">
+                  {i + 1}
+                </span>
+                {step}
+              </li>
+            ))}
+          </ol>
+        )}
         <span className="flex items-center gap-2 rounded-lg bg-surface-base px-3 py-1.5">
           <span className="text-caption text-subtle">Wallet</span>
           <code className="font-mono text-code" title={p.address}>
@@ -99,12 +136,17 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
       </CalloutDescription>
       <CalloutActions>
         <FundingAction p={p} />
-        {faucetUrl && (
+        {faucetUrl && !isUnreachable && (
           <CalloutAction asChild>
             <a href={faucetUrl} target="_blank" rel="noopener noreferrer">
-              Open faucet
+              Open the web faucet
               <ExternalLink data-icon="inline-end" />
             </a>
+          </CalloutAction>
+        )}
+        {p.onFund && (
+          <CalloutAction onClick={p.onFund}>
+            Send from your wallet
           </CalloutAction>
         )}
       </CalloutActions>
