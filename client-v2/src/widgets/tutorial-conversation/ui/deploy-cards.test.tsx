@@ -1,5 +1,5 @@
 /* eslint-disable layers/curry-order, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 
@@ -45,6 +45,7 @@ const card = (
     open: boolean;
     onShowLog: () => void;
     onCreateWallet: () => void;
+    onFund: () => void;
     onNewProgramId: () => void;
   }> = {}
 ) =>
@@ -55,6 +56,7 @@ const card = (
         open={over.open ?? true}
         onShowLog={over.onShowLog ?? vi.fn()}
         onCreateWallet={over.onCreateWallet ?? vi.fn()}
+        onFund={over.onFund}
         onNewProgramId={over.onNewProgramId ?? vi.fn()}
       />
     </TooltipProvider>
@@ -173,26 +175,58 @@ describe("BaseDeployResultCard", () => {
     );
   });
 
-  it("says how short the wallet is, with its whole address, Copy beside it and Open faucet; the retry is the act card under it", () => {
+  it("says how short the wallet is, the web faucet in three steps, its whole address with Copy beside it, and Open the web faucet; the retry is the act card under it", () => {
     card(noFunds);
     expect(screen.getByText("Not enough devnet SOL")).toBeTruthy();
     expect(
       screen.getByText(
-        "Your wallet has 0.12 SOL, and this deploy needs about 1.82 SOL. Get devnet SOL from the faucet, or top the wallet up yourself."
+        "Your wallet has 0.12 SOL, and this deploy needs about 1.82 SOL."
       )
     ).toBeTruthy();
+    const steps = screen.getByRole("list", {
+      name: "Get devnet SOL from the web faucet",
+    });
+    expect(
+      Array.from(steps.querySelectorAll("li"), (li) => li.textContent)
+    ).toStrictEqual([
+      "1Open the web faucet and sign in with GitHub. It asks for a public repo: if you have none, fork solana-playground there",
+      "2Confirm the airdrop. Your address and 5 SOL are filled in",
+      "3Come back here and press Try again",
+    ]);
     expect(screen.getByText("Your wallet")).toBeTruthy();
     // The whole address, with Copy right after it rather than at the row's end
     const copy = screen.getByRole("button", {
       name: "Copy the wallet address",
     });
     expect(copy.parentElement?.parentElement?.textContent).toBe(WALLET);
-    const faucet = screen.getByRole("link", { name: /Open faucet/ });
+    const faucet = screen.getByRole("link", { name: /Open the web faucet/ });
     expect(faucet.getAttribute("href")).toBe(
       `https://faucet.solana.com/?walletAddress=${WALLET}&amount=5&cluster=devnet`
     );
     expect(faucet.getAttribute("target")).toBe("_blank");
     expect(screen.queryByRole("button", { name: /Try again/ })).toBeNull();
+  });
+
+  it("offers Send from your wallet after Open the web faucet", () => {
+    const onFund = vi.fn();
+    const { container } = card(noFunds, { onFund });
+    const labels = Array.from(container.querySelectorAll("a, button")).map(
+      (el) => el.textContent
+    );
+    expect(labels.indexOf("Send from your wallet")).toBe(
+      labels.indexOf("Open the web faucet") + 1
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send from your wallet" })
+    );
+    expect(onFund).toHaveBeenCalledOnce();
+  });
+
+  it("draws no Send from your wallet without a way to fund", () => {
+    card(noFunds);
+    expect(
+      screen.queryByRole("button", { name: "Send from your wallet" })
+    ).toBeNull();
   });
 
   it("tells an airdrop the faucet refused that the faucet is at its limit", () => {
@@ -208,13 +242,15 @@ describe("BaseDeployResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0.12 SOL, and this deploy needs about 1.82 SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
+        "Your wallet has 0.12 SOL, and this deploy needs about 1.82 SOL. The devnet faucet is at its limit."
       )
     ).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Open faucet/ })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Open the web faucet/ })
+    ).toBeTruthy();
   });
 
-  it("tells an airdrop that failed otherwise that it didn't go through", () => {
+  it("tells an airdrop that failed otherwise that the faucet did not send SOL", () => {
     card({
       act: "airdrop",
       ok: false,
@@ -227,7 +263,7 @@ describe("BaseDeployResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The airdrop didn't go through: try again in a minute, or top the wallet up yourself."
+        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The faucet did not send SOL."
       )
     ).toBeTruthy();
   });
@@ -246,11 +282,16 @@ describe("BaseDeployResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The devnet RPC faucet is closed: get SOL from the web faucet, or top the wallet up yourself."
+        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The devnet RPC faucet is closed."
       )
     ).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
+      screen.getByRole("list", { name: "Get devnet SOL from the web faucet" })
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /Open the web faucet/ })
+        .getAttribute("href")
     ).toBe(
       `https://faucet.solana.com/?walletAddress=${WALLET}&amount=5&cluster=devnet`
     );
@@ -270,7 +311,7 @@ describe("BaseDeployResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0.1235 SOL, and this deploy needs about 2.81 SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
+        "Your wallet has 0.1235 SOL, and this deploy needs about 2.81 SOL. The devnet faucet is at its limit."
       )
     ).toBeTruthy();
   });

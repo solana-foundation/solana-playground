@@ -5,6 +5,7 @@ import { isSignInFailure, PgSession } from "@/features/auth";
 import type { GuideFrom } from "@/features/cli-deploy";
 import { CliDeployGuide } from "@/features/cli-deploy";
 import { PgStageDeploy, useDeployRun, useStageDeploy } from "@/features/deploy";
+import { fundFor } from "@/features/fund-wallet";
 import { IdlBuildGuide } from "@/features/idl-build-guide";
 import { ProgramKeypair } from "@/features/program-keypair";
 import { createLogger } from "@/shared/lib/logger";
@@ -132,6 +133,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         address: wallet.publicKey.toBase58(),
         balance: typeof balance === "number" ? balance : undefined,
         playground: wallet.isPg === true,
+        name: wallet.isPg ? undefined : wallet.name,
       }
     : undefined;
 
@@ -197,6 +199,7 @@ const Deploy = ({ onChangeNetwork }: { onChangeNetwork: () => void }) => {
         onSignIn={() =>
           void signInThenDeploy().catch(reportButtonFailure("deploy"))
         }
+        fundFor={fundFor("deploy-card")}
         onSaveKeypair={saveKeypair}
         onDismissBackup={() => PgStageDeploy.answerBackup(false)}
         onStaleBuildAnswer={(answer) => PgStageDeploy.answerStaleBuild(answer)}
