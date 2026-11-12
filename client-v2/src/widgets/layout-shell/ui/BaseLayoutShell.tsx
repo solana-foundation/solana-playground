@@ -669,6 +669,7 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
 
   // The code area, measured: the work group spans the files column and the
   // stage, so showing or hiding the column leaves its width as it was
+  // eslint-disable-next-line unicorn/no-null -- a callback ref hands React's null to this setter
   const [codeArea, setCodeArea] = useState<HTMLDivElement | null>(null);
   const onCodeWidth = useRef(props.onCodeWidth);
   onCodeWidth.current = props.onCodeWidth;

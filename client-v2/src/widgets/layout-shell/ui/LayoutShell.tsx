@@ -775,7 +775,7 @@ const LayoutShell = ({
                     toggle: closeTree,
                     phone: false,
                   })
-                : null,
+                : undefined,
           }}
           terminal={{
             open: state.open.console,
