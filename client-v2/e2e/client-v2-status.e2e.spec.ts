@@ -49,18 +49,18 @@ const OFFLINE_LINE =
  */
 const stallDevnet = async (page: Page) => {
   let slot = 123;
-  let moving = false;
+  let isMoving = false;
   await page.route("https://api.devnet.solana.com/**", async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
     } | null;
     if (body?.method !== "getSlot") return route.continue();
-    if (moving) slot += 1;
+    if (isMoving) slot += 1;
     return json(route, { jsonrpc: "2.0", result: slot, id: body.id });
   });
   return () => {
-    moving = true;
+    isMoving = true;
   };
 };
 
