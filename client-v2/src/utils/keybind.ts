@@ -14,10 +14,33 @@ type Keybind = string;
  */
 type HandleKeybindCb = (ev: KeyboardEvent) => false | void | Promise<void>;
 
+/** Options of a keybind */
+interface KeybindOpts {
+  /** Leave the default alone even when the handler takes the key */
+  noPreventDefault?: boolean;
+  /**
+   * Hear the key before the element it lands in: on the window, in the
+   * capture phase. A field that acts on the key and stops it (Monaco binds
+   * ⌘E, find with the selection) otherwise keeps it from a document
+   * listener. A key the handler takes is stopped there, before the target
+   * and the document, so the field does not act on it too; a key it declines
+   * (returns `false`) goes on to the field. Other capture listeners on the
+   * window still hear it.
+   */
+  capture?: boolean;
+}
+
 /** Handler for the keybind */
 type HandleKeybind =
   | HandleKeybindCb
-  | { handle: HandleKeybindCb; opts?: { noPreventDefault?: boolean } };
+  | { handle: HandleKeybindCb; opts?: KeybindOpts };
+
+/** A keybind with its handler and options pulled apart */
+interface NormalizedKeybind {
+  keybind: Keybind;
+  run: HandleKeybindCb;
+  opts: KeybindOpts | undefined;
+}
 
 /** A single keybind parameters */
 type SingleKeybind = [Keybind, HandleKeybind];
@@ -40,9 +63,36 @@ export class PgKeybind {
       typeof args[0] === "string"
         ? { keybind: args[0], handle: args[1]! }
         : args[0]
+    ).map(({ keybind, handle }) =>
+      typeof handle === "function"
+        ? { keybind, run: handle, opts: undefined }
+        : { keybind, run: handle.handle, opts: handle.opts }
     );
 
-    const handle = (ev: KeyboardEvent) => {
+    const bubble = keybinds.filter(({ opts }) => !opts?.capture);
+    const capture = keybinds.filter(({ opts }) => opts?.capture);
+    const onBubble = PgKeybind._listenFor(bubble);
+    const onCapture = PgKeybind._listenFor(capture);
+
+    if (bubble.length) document.addEventListener("keydown", onBubble);
+    if (capture.length) {
+      window.addEventListener("keydown", onCapture, { capture: true });
+    }
+    return {
+      dispose: () => {
+        document.removeEventListener("keydown", onBubble);
+        window.removeEventListener("keydown", onCapture, { capture: true });
+      },
+    };
+  }
+
+  /**
+   * The keydown listener that runs the first of `keybinds` the event matches.
+   * Capture and bubble keybinds of one `add` get a listener each, so the
+   * first match is per phase.
+   */
+  private static _listenFor(keybinds: NormalizedKeybind[]) {
+    return (ev: KeyboardEvent) => {
       const keybind = keybinds.find(({ keybind: combination }) => {
         const keys = combination.toUpperCase().replaceAll(" ", "").split("+");
 
@@ -69,16 +119,11 @@ export class PgKeybind {
       });
       if (!keybind) return;
 
-      const { handle: run, opts } =
-        typeof keybind.handle === "function"
-          ? { handle: keybind.handle, opts: undefined }
-          : keybind.handle;
+      const { run, opts } = keybind;
       if (run(ev) === false) return;
       if (!opts?.noPreventDefault) ev.preventDefault();
+      if (opts?.capture) ev.stopPropagation();
     };
-
-    document.addEventListener("keydown", handle);
-    return { dispose: () => document.removeEventListener("keydown", handle) };
   }
 }
 
@@ -183,6 +228,110 @@ if (import.meta.vitest) {
         const ev = press("r", { ctrlKey: true });
         expect(handle).toHaveBeenCalledTimes(1);
         expect(ev.defaultPrevented).toBe(false);
+      });
+
+      describe("capture", () => {
+        /** A field that, like Monaco, acts on the key and stops it */
+        let field: HTMLTextAreaElement;
+        let fieldHeard: Mock;
+        beforeEach(() => {
+          fieldHeard = vi.fn();
+          field = document.createElement("textarea");
+          field.addEventListener("keydown", (ev) => {
+            fieldHeard();
+            ev.stopPropagation();
+          });
+          document.body.append(field);
+        });
+        afterEach(() => field.remove());
+
+        /** Cmd plus `key` (Meta, read as Ctrl), in the field */
+        const pressIn = (key: string) => {
+          const ev = new KeyboardEvent("keydown", {
+            key,
+            metaKey: true,
+            cancelable: true,
+            bubbles: true,
+          });
+          field.dispatchEvent(ev);
+          return ev;
+        };
+
+        it("misses a key a field stops, without capture", () => {
+          bind("Ctrl+E");
+          pressIn("e");
+          expect(handle).not.toHaveBeenCalled();
+          expect(fieldHeard).toHaveBeenCalledTimes(1);
+        });
+
+        it("takes the key before the field, and keeps it from the field", () => {
+          dispose = PgKeybind.add("Ctrl+E", {
+            handle,
+            opts: { capture: true },
+          }).dispose;
+          const ev = pressIn("e");
+          expect(handle).toHaveBeenCalledTimes(1);
+          expect(ev.defaultPrevented).toBe(true);
+          expect(fieldHeard).not.toHaveBeenCalled();
+        });
+
+        it("leaves a key it declines to the field", () => {
+          dispose = PgKeybind.add("Ctrl+E", {
+            handle: () => false,
+            opts: { capture: true },
+          }).dispose;
+          const ev = pressIn("e");
+          expect(ev.defaultPrevented).toBe(false);
+          expect(fieldHeard).toHaveBeenCalledTimes(1);
+        });
+
+        it("keeps a key it takes from the field under noPreventDefault too", () => {
+          dispose = PgKeybind.add("Ctrl+E", {
+            handle,
+            opts: { capture: true, noPreventDefault: true },
+          }).dispose;
+          const ev = pressIn("e");
+          expect(handle).toHaveBeenCalledTimes(1);
+          expect(ev.defaultPrevented).toBe(false);
+          expect(fieldHeard).not.toHaveBeenCalled();
+        });
+
+        it("leaves a declined key to the field when the default was prevented elsewhere", () => {
+          // Another window capture listener, ahead of this one
+          const other = (ev: KeyboardEvent) => ev.preventDefault();
+          window.addEventListener("keydown", other, { capture: true });
+          try {
+            dispose = PgKeybind.add("Ctrl+E", {
+              handle: () => false,
+              opts: { capture: true },
+            }).dispose;
+            pressIn("e");
+            expect(fieldHeard).toHaveBeenCalledTimes(1);
+          } finally {
+            window.removeEventListener("keydown", other, { capture: true });
+          }
+        });
+
+        it("keeps the other keybinds of the same call in the bubble phase", () => {
+          const other = vi.fn();
+          dispose = PgKeybind.add([
+            { keybind: "Ctrl+E", handle: { handle, opts: { capture: true } } },
+            { keybind: "Ctrl+J", handle: other },
+          ]).dispose;
+          pressIn("j");
+          expect(other).not.toHaveBeenCalled();
+          press("j", { metaKey: true });
+          expect(other).toHaveBeenCalledTimes(1);
+        });
+
+        it("stops listening on dispose", () => {
+          PgKeybind.add("Ctrl+E", {
+            handle,
+            opts: { capture: true },
+          }).dispose();
+          pressIn("e");
+          expect(handle).not.toHaveBeenCalled();
+        });
       });
     });
   });

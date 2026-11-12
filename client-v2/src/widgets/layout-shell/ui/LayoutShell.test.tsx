@@ -458,6 +458,37 @@ it("should close the dropdown on a file's pick, the open file's too", () => {
   expect(filesPressed()).toBe("false");
 });
 
+it("should undock the tree by Cmd+E from the editor, which stops the key, then open its dropdown", () => {
+  savedFilesOpen();
+  shell();
+  // Monaco binds Cmd+E (find with the selection) and stops the event where
+  // it lands, so a listener on the document never hears it (HOO-2828)
+  const editor = document.createElement("textarea");
+  const editorHeard = vi.fn();
+  editor.addEventListener("keydown", (ev) => {
+    editorHeard();
+    ev.stopPropagation();
+  });
+  document.body.append(editor);
+  try {
+    fireEvent.keyDown(editor, { key: "e", metaKey: true });
+    expect(filesPressed()).toBe("false");
+    expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+    // And again: the handler renewed with the state still hears it
+    fireEvent.keyDown(editor, { key: "e", metaKey: true });
+    expect(filesPressed()).toBe("true");
+    expect(
+      sent.events
+        .filter((event) => event.name === "layout_files_dropdown_opened")
+        .map((event) => event.params)
+    ).toEqual([{ via: "key" }]);
+    // Taken, so the editor does not open its find bar as well
+    expect(editorHeard).not.toHaveBeenCalled();
+  } finally {
+    editor.remove();
+  }
+});
+
 it("should open an undocked tree's dropdown when the editor asks to show files", () => {
   savedFilesOpen();
   shell();
@@ -978,6 +1009,53 @@ it("should fold the files column by Ctrl+E from a text field on Windows and Linu
   expect(proceeded).toBe(false);
   expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
   field.remove();
+});
+
+/** A node that, like xterm and Monaco, acts on keys and stops them */
+const keyEater = (className: string) => {
+  const node = document.createElement("div");
+  node.className = className;
+  const heard = vi.fn();
+  node.addEventListener("keydown", (ev) => {
+    heard();
+    ev.stopPropagation();
+  });
+  document.body.append(node);
+  return { node, heard };
+};
+
+it("should leave Ctrl+E in the terminal its end of line on Windows and Linux", () => {
+  savedFilesOpen();
+  onUserAgent(WINDOWS);
+  shell();
+  const { node, heard } = keyEater("xterm");
+  fireEvent.keyDown(node, { key: "e", ctrlKey: true });
+  expect(heard).toHaveBeenCalledTimes(1);
+  expect(toggled()).toEqual([]);
+  node.remove();
+});
+
+it("should fold the files column by Cmd+E from the terminal on a Mac", () => {
+  savedFilesOpen();
+  onUserAgent(MAC);
+  shell();
+  const { node, heard } = keyEater("xterm");
+  fireEvent.keyDown(node, { key: "e", metaKey: true });
+  expect(heard).not.toHaveBeenCalled();
+  expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+  node.remove();
+});
+
+it("should leave Cmd+E to a dialog it lands in", () => {
+  savedFilesOpen();
+  onUserAgent(MAC);
+  shell();
+  const { node, heard } = keyEater("");
+  node.setAttribute("role", "dialog");
+  fireEvent.keyDown(node, { key: "e", metaKey: true });
+  expect(heard).toHaveBeenCalledTimes(1);
+  expect(toggled()).toEqual([]);
+  node.remove();
 });
 
 it("should fold the files column when Control is held with Cmd in a text field on a Mac", () => {
@@ -1516,6 +1594,22 @@ describe("on a phone", () => {
       { view: "chat", via: "button" },
       { view: "code", via: "button" },
     ]);
+  });
+
+  it("closes the Files sheet by Cmd+E from inside it", () => {
+    phoneShell();
+    tap(button("Files"));
+    // Focus sits in the Sheet, a dialog: the key is still the Sheet's own
+    fireEvent.keyDown(button("Files column control"), {
+      key: "e",
+      metaKey: true,
+    });
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull();
+    expect(toggled().at(-1)).toEqual({
+      panel: "files",
+      open: false,
+      via: "key",
+    });
   });
 
   it("closes the Files sheet by the column's own button", () => {

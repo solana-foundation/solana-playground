@@ -138,8 +138,8 @@ describe("BaseAssistantHead", () => {
     await user.click(more());
     const items = screen.getAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Sources and toolsS",
-      "Connect a model…K",
+      "Sources and tools",
+      "Connect a model…",
       "Clear conversation",
     ]);
     expect(
@@ -166,8 +166,8 @@ describe("BaseAssistantHead", () => {
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent)
     ).toEqual([
-      "Sources and toolsS",
-      "Connect a model…K",
+      "Sources and tools",
+      "Connect a model…",
       "Delete my key",
       "Clear conversation",
     ]);
@@ -226,7 +226,7 @@ describe("BaseAssistantHead", () => {
   it("gives focus back to More when the picked view takes none", async () => {
     const { user } = setup({ focusPicked: () => false });
     await user.click(more());
-    await user.keyboard("s");
+    await user.keyboard("{ArrowDown}{Enter}");
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(more());
   });
@@ -240,37 +240,20 @@ describe("BaseAssistantHead", () => {
     expect(document.activeElement).toBe(more());
   });
 
-  it("picks Sources and tools with S while the menu is open, and closes it", async () => {
+  it("has no letter shortcuts: S and K pick nothing, open or closed", async () => {
     const { user, onSources, onConnect } = setup();
     await user.click(more());
-    await user.keyboard("s");
-    expect(onSources).toHaveBeenCalledTimes(1);
+    // No hint is drawn beside the items
+    expect(screen.queryByText("S")).toBeNull();
+    expect(screen.queryByText("K")).toBeNull();
+    await user.keyboard("k");
     expect(onConnect).not.toHaveBeenCalled();
-    expect(screen.queryByRole("menu")).toBeNull();
-  });
-
-  it("picks Connect a model with K while the menu is open, and closes it", async () => {
-    const { user, onSources, onConnect } = setup();
-    await user.click(more());
-    await user.keyboard("K");
-    expect(onConnect).toHaveBeenCalledTimes(1);
     expect(onSources).not.toHaveBeenCalled();
-    expect(screen.queryByRole("menu")).toBeNull();
-  });
-
-  it("leaves S and K alone with the menu closed", async () => {
-    const { user, onSources, onConnect } = setup();
+    await user.keyboard("{Escape}");
     more().focus();
     await user.keyboard("sk");
     expect(onSources).not.toHaveBeenCalled();
     expect(onConnect).not.toHaveBeenCalled();
-  });
-
-  it("leaves S with a modifier to the browser", async () => {
-    const { user, onSources } = setup();
-    await user.click(more());
-    await user.keyboard("{Meta>}s{/Meta}");
-    expect(onSources).not.toHaveBeenCalled();
   });
 
   it("widens, and its label follows wide", async () => {
