@@ -30,3 +30,15 @@ HOO-2759 adds it.
 
 - `client-v2-block-explorers`: which block explorers the settings offer, which
   one is the default, and how each one's links open a network.
+
+## Impact
+
+- Code: `client-v2/src/block-explorers/` (Orb, the list order),
+  `utils/block-explorer.ts` (`getIdlUrl`), and the settings page's "Program
+  IDL" link.
+- Out of scope: the tutorial's Explorer links, which `tutorial-runs` pins to
+  Solana Explorer on devnet; and the places that build an explorer link
+  without asking `opens()` (the transaction toast, the wallet's transaction
+  list and a few others), which open an empty mainnet page on a local
+  validator for Solscan already and now for Orb too. That predates this
+  change and went to Intake.
