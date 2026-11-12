@@ -401,11 +401,13 @@ describe("BaseResultCard", () => {
       open = false,
       onRecheck = vi.fn(),
       exists,
+      onFund,
       onCreateWallet = vi.fn(),
     }: {
       open?: boolean;
       onRecheck?: () => void;
       exists?: string;
+      onFund?: () => void;
       onCreateWallet?: () => void;
     } = {}
   ) =>
@@ -424,10 +426,37 @@ describe("BaseResultCard", () => {
           onRecheck={onRecheck}
           signedIn={false}
           onSignIn={vi.fn()}
+          onFund={onFund}
           onCreateWallet={onCreateWallet}
         />
       </TooltipProvider>
     );
+
+  it("offers Send from your wallet on a run the faucet left short", () => {
+    const onFund = vi.fn();
+    const { container } = txCard(
+      {
+        act: "run",
+        ok: false,
+        seconds: 1,
+        reason: "no_funds",
+        message: "The airdrop failed",
+        log: "",
+        funding: { balance: 0, cost: 500_000_000, address: "Wa11et" },
+      },
+      { onFund }
+    );
+    const labels = Array.from(container.querySelectorAll("a, button")).map(
+      (el) => el.textContent
+    );
+    expect(labels.indexOf("Send from your wallet")).toBe(
+      labels.indexOf("Open the web faucet") + 1
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send from your wallet" })
+    );
+    expect(onFund).toHaveBeenCalledOnce();
+  });
 
   // HOO-2806: a run or call that found no wallet said so with no button
   it("offers Create wallet on a run with no wallet while it is live", async () => {
@@ -582,6 +611,26 @@ describe("BaseResultCard", () => {
     expect(screen.getByText(/Program log: Instruction: Hello/)).toBeTruthy();
   });
 
+  it("says the faucet is at its limit only when the airdrop said so", () => {
+    txCard({
+      act: "call",
+      ok: false,
+      seconds: 1,
+      reason: "no_funds",
+      message: "429 Too Many Requests",
+      log: "",
+      funding: { balance: 0, cost: 500_000_000, address: "Wa11et" },
+    });
+    expect(
+      screen.getByText(
+        "Your wallet has 0 SOL, and this call needs about 0.5 SOL. The devnet faucet is at its limit."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("list", { name: "Get devnet SOL from the web faucet" })
+    ).toBeTruthy();
+  });
+
   it("tells a run the closed RPC faucet left short to use the web faucet", () => {
     txCard({
       act: "run",
@@ -595,12 +644,19 @@ describe("BaseResultCard", () => {
     });
     expect(
       screen.getByText(
-        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet RPC faucet is closed: get SOL from the web faucet, or top the wallet up yourself."
+        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet RPC faucet is closed."
       )
     ).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
-    ).toBe("https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet");
+      screen.getByRole("list", { name: "Get devnet SOL from the web faucet" })
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /Open the web faucet/ })
+        .getAttribute("href")
+    ).toBe(
+      "https://faucet.solana.com/?walletAddress=Wa11et&amount=5&cluster=devnet"
+    );
   });
 
   it("heads a run the faucet left short, and one with no wallet, by their reason", () => {
@@ -614,9 +670,10 @@ describe("BaseResultCard", () => {
       funding: { balance: 0, cost: 500_000_000, address: "Wa11et" },
     });
     expect(screen.getByText("Not enough devnet SOL")).toBeTruthy();
+    // The cause is the airdrop's own: this one was not the faucet's limit
     expect(
       screen.getByText(
-        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
+        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The faucet did not send SOL."
       )
     ).toBeTruthy();
     // The whole address, with Copy right after it rather than at the row's end
@@ -625,8 +682,12 @@ describe("BaseResultCard", () => {
         ?.parentElement?.textContent
     ).toBe("Wa11etCopy");
     expect(
-      screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
-    ).toBe("https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet");
+      screen
+        .getByRole("link", { name: /Open the web faucet/ })
+        .getAttribute("href")
+    ).toBe(
+      "https://faucet.solana.com/?walletAddress=Wa11et&amount=5&cluster=devnet"
+    );
     unmount();
     txCard({
       act: "call",
@@ -1054,6 +1115,7 @@ describe("TurnView", () => {
     revealError: vi.fn(),
     showLog: vi.fn(),
     createWallet: vi.fn(),
+    fundFor: vi.fn(() => vi.fn()),
     newProgramId: vi.fn(),
     signIn: vi.fn(),
   });
@@ -1249,6 +1311,121 @@ describe("TurnView", () => {
       screen.getByRole("button", { name: /Create wallet/ })
     );
     expect(handlers.createWallet).toHaveBeenCalledWith("s2.deploy");
+  });
+
+  it("asks for the Fund dialog from a deploy the wallet was short for", async () => {
+    const handlers = on();
+    draw(
+      {
+        id: "result:s2.deploy:0",
+        kind: "result",
+        step: "deploy",
+        at: 2,
+        whole: true,
+        beatId: "s2.deploy",
+        act: "deploy",
+        result: {
+          act: "deploy",
+          ok: false,
+          seconds: 2,
+          reason: "no_funds",
+          message: "airdrop refused",
+          balance: 0,
+          cost: 1_820_000_000,
+          address: "Wa11et",
+        },
+        took: 0,
+        planned: null,
+        open: true,
+      },
+      false,
+      handlers
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Send from your wallet" })
+    );
+    expect(handlers.fundFor).toHaveBeenCalledWith("Wa11et");
+    expect(
+      vi.mocked(handlers.fundFor).mock.results[0]?.value
+    ).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [
+      "offers",
+      (address: string) => (address === "Wa11et" ? vi.fn() : undefined),
+      1,
+    ],
+    ["leaves out", () => undefined, 0],
+  ] as const)(
+    "%s Send from your wallet on a run the faucet left short",
+    (_, fundFor, buttons) => {
+      const handlers = on();
+      vi.mocked(handlers.fundFor).mockImplementation(fundFor);
+      draw(
+        {
+          id: "result:s3.run:0",
+          kind: "result",
+          step: "run",
+          at: 3,
+          whole: true,
+          beatId: "s3.run",
+          act: "run",
+          result: {
+            act: "run",
+            ok: false,
+            seconds: 1,
+            reason: "no_funds",
+            message: "The airdrop failed",
+            log: "",
+            funding: { balance: 0, cost: 500_000_000, address: "Wa11et" },
+          },
+          took: 0,
+          planned: null,
+          open: true,
+        },
+        false,
+        handlers
+      );
+      expect(handlers.fundFor).toHaveBeenCalledWith("Wa11et");
+      expect(
+        screen.queryAllByRole("button", { name: "Send from your wallet" })
+      ).toHaveLength(buttons);
+    }
+  );
+
+  it("leaves Send from your wallet out when the dialog would fund another wallet", () => {
+    const handlers = on();
+    vi.mocked(handlers.fundFor).mockReturnValue(undefined);
+    draw(
+      {
+        id: "result:s2.deploy:0",
+        kind: "result",
+        step: "deploy",
+        at: 2,
+        whole: true,
+        beatId: "s2.deploy",
+        act: "deploy",
+        result: {
+          act: "deploy",
+          ok: false,
+          seconds: 2,
+          reason: "no_funds",
+          message: "airdrop refused",
+          balance: 0,
+          cost: 1_820_000_000,
+          address: "Wa11et",
+        },
+        took: 0,
+        planned: null,
+        open: true,
+      },
+      false,
+      handlers
+    );
+    expect(
+      screen.queryByRole("button", { name: "Send from your wallet" })
+    ).toBeNull();
   });
 
   it("opens the terminal from a landed deploy's Log", async () => {
@@ -1780,6 +1957,7 @@ describe("TurnView's last win", () => {
           revealError: vi.fn(),
           showLog: vi.fn(),
           createWallet: vi.fn(),
+          fundFor: vi.fn(() => vi.fn()),
           newProgramId: vi.fn(),
           signIn: vi.fn(),
         }}
@@ -1897,6 +2075,7 @@ describe("TurnView's chip answer", () => {
     revealError: vi.fn(),
     showLog: vi.fn(),
     createWallet: vi.fn(),
+    fundFor: vi.fn(() => vi.fn()),
     newProgramId: vi.fn(),
     signIn: vi.fn(),
   });

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { isRateLimited, rateLimitNote, receivedLine } from "./report";
+import {
+  AirdropRefusedError,
+  isAirdropRefused,
+  isRateLimited,
+  receivedLine,
+  refusedNote,
+} from "./report";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
@@ -52,24 +58,71 @@ describe("isRateLimited", () => {
   });
 });
 
-describe("rateLimitNote", () => {
-  it("links the web faucet with the wallet, amount and cluster", () => {
-    const note = rateLimitNote({
-      walletAddress: "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin",
-      amount: 5,
-      cluster: "devnet",
-    });
-    expect(note).toContain(
-      "https://faucet.solana.com/?walletAddress=9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin&amount=5&cluster=devnet"
-    );
+describe("isAirdropRefused", () => {
+  it("reads a refusal the command threw", () => {
+    expect(
+      isAirdropRefused(new AirdropRefusedError(new Error("fetch failed")))
+    ).toBe(true);
+  });
+
+  it("keeps the request's message and its cause", () => {
+    const cause = new Error("429 Too Many Requests");
+    const refusal = new AirdropRefusedError(cause);
+    expect(refusal.message).toBe("429 Too Many Requests");
+    expect(refusal.cause).toBe(cause);
+    expect(isRateLimited(refusal)).toBe(true);
+  });
+
+  it.each([
+    new Error("This network has no faucet."),
+    new Error("Sign-in cancelled"),
+    "a string",
+    undefined,
+  ])("does not read %s as one", (error) => {
+    expect(isAirdropRefused(error)).toBe(false);
+  });
+});
+
+describe("refusedNote", () => {
+  const WALLET = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
+  const LINK = `https://faucet.solana.com/?walletAddress=${WALLET}&amount=5&cluster=devnet`;
+  const fill = { walletAddress: WALLET, amount: 5, cluster: "devnet" };
+
+  it("says the faucet is at its limit, with the link and the steps", () => {
+    const note = refusedNote(new Error("429 Too Many Requests"), fill);
     // The tutorial's airdrop card says it the same way (HOO-2677)
     expect(note).toMatch(
       /^Airdrop refused: the devnet faucet is at its limit for now\. Get SOL from the web faucet instead: /
     );
+    expect(note).toContain(LINK);
+    expect(note).toContain("1. Open the web faucet and sign in with GitHub");
+    expect(note).toContain(
+      "2. Confirm the airdrop. Your address and 5 SOL are filled in"
+    );
+    expect(note).toContain("3. ");
+  });
+
+  it("gives the same steps for any other refusal, worded for it", () => {
+    const note = refusedNote(new Error("fetch failed"), fill);
+    expect(note).toMatch(
+      /^Airdrop refused: the devnet faucet did not send SOL\. Get SOL from the web faucet instead: /
+    );
+    expect(note).toContain(LINK);
+    expect(note).toContain("1. Open the web faucet and sign in with GitHub");
+  });
+
+  it("asks the faucet for an amount its form offers, and says that one", () => {
+    const note = refusedNote(new Error("fetch failed"), {
+      walletAddress: WALLET,
+      amount: 3,
+      cluster: "devnet",
+    });
+    expect(note).toContain(LINK);
+    expect(note).toContain("Your address and 5 SOL are filled in");
   });
 
   it("names no cluster it does not know", () => {
-    expect(rateLimitNote({})).toMatch(
+    expect(refusedNote(new Error("429"), {})).toMatch(
       /^Airdrop refused: the faucet is at its limit for now\./
     );
   });

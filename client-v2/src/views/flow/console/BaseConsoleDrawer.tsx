@@ -44,6 +44,9 @@ interface BaseConsoleDrawerProps {
   empty?: string | null;
   /** The terminal's text for Copy, read when the console opens and as a run moves */
   log: string;
+  /** The deploying wallet, at the strip's end before the console's own
+   * controls; hidden on a phone, where the strip has no room for it */
+  wallet?: ReactNode;
   children?: ReactNode;
 }
 
@@ -67,6 +70,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
   empty = null,
   log,
+  wallet,
   children,
 }) => (
   <ConsoleDrawer
@@ -134,6 +138,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
         )}
       </ConsoleDrawerStatus>
       <ConsoleDrawerActions className="gap-2 max-md:gap-0">
+        {wallet && <div className="max-md:hidden">{wallet}</div>}
         {/* No keyboard on a phone to press it with */}
         {shortcut && (
           <Kbd aria-hidden className="max-md:hidden">
