@@ -17,7 +17,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -27,7 +26,7 @@ import { LogoPlay } from "@/shared/ui/logo";
 import { MenuItemText, MenuNote } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
-import { KEY_HINT, usePickedMenu } from "./use-picked-menu";
+import { usePickedMenu } from "./use-picked-menu";
 
 /** One thing the assistant reads each turn, named in the composer */
 export interface ComposerContextChip {
@@ -231,9 +230,6 @@ export function BaseAssistantComposer({
               </DropdownMenuSub>
               <DropdownMenuItem onSelect={() => add.pick(onSources)}>
                 <MenuItemText>Sources and tools</MenuItemText>
-                <DropdownMenuShortcut className={KEY_HINT}>
-                  S
-                </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

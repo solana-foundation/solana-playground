@@ -138,8 +138,8 @@ describe("BaseAssistantHead", () => {
     await user.click(more());
     const items = screen.getAllByRole("menuitem");
     expect(items.map((item) => item.textContent)).toEqual([
-      "Sources and toolsS",
-      "Connect a model…K",
+      "Sources and tools",
+      "Connect a model…",
       "Clear conversation",
     ]);
     expect(
@@ -166,8 +166,8 @@ describe("BaseAssistantHead", () => {
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent)
     ).toEqual([
-      "Sources and toolsS",
-      "Connect a model…K",
+      "Sources and tools",
+      "Connect a model…",
       "Delete my key",
       "Clear conversation",
     ]);
