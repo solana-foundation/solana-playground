@@ -20,9 +20,7 @@ flowchart LR
   format -- no --> refuse["Refused with the reason,<br/>previous IDL stays"]
   format -- yes --> use["IDL in use"]
   subgraph write["Upload, after a deploy, on the deployed cluster"]
-    project["Project IDL"] --> target{"Target"}
-    target -- default --> pmpw[("Program Metadata")]
-    target -- legacy --> anchorw[("Anchor IDL account")]
+    project["Project IDL"] --> pmpw[("Program Metadata")]
   end
 ```
 
@@ -89,9 +87,10 @@ device and is never written to the chain by loading it.
 ### Requirement: The project's IDL is uploaded on chain
 
 After a deploy, the user SHALL be able to upload the project's IDL to the
-cluster the program is deployed on, to the Program Metadata program by
-default or to the Anchor IDL account. An upload SHALL replace an earlier IDL
-at the same target and SHALL need the program's upgrade authority.
+cluster the program is deployed on. The upload SHALL call `uploadProjectIdl`,
+the entry of the `program-idl` slice, which writes the IDL to the program's
+canonical Program Metadata account. An upload SHALL replace an earlier IDL
+in that account and SHALL need the program's upgrade authority.
 
 #### Scenario: Upload to Program Metadata
 
@@ -123,12 +122,15 @@ the export publishes a mainnet IDL from the user's machine.
 
 ### Requirement: IDL telemetry
 
-The IDL slice SHALL emit `idl_loaded { source, format }`,
-`idl_load_failed { source, reason }`, `idl_uploaded { target, cluster }` and
-`idl_upload_failed { target, cluster, reason }`. `source`: `metadata`,
-`anchor`, `build`, `file`, `paste`; `format`: `anchor_legacy`, `anchor`,
-`codama`; `target`: `metadata`, `anchor`; `reason`: `not_found`, `invalid`,
-`rpc`, `authority`; `cluster` as in deploy.
+The IDL slice SHALL emit `idl_loaded { source, format }` and
+`idl_load_failed { source, reason }`. `source`: `metadata`, `anchor`,
+`build`, `file`, `paste`; `format`: `anchor_legacy`, `anchor`, `codama`;
+`reason`: `not_found`, `invalid`, `rpc`. The events of an upload,
+`idl_upload_started`, `idl_uploaded`, and `idl_upload_failed`, SHALL be the
+ones the requirements "An IDL upload sends its events" and "A failed upload
+names its reason" describe, with the parameters and values those
+requirements give. The `terminal-anchor-idl` change adds both requirements
+to this capability.
 
 #### Scenario: A pasted IDL is tracked
 
@@ -143,7 +145,8 @@ used, separate from the outcome events: the source picker
 `idl_source_selected { source }`, Load IDL file `idl_file_picker_opened`,
 Paste IDL `idl_paste_opened`, Clear local IDL `idl_local_cleared`, the upload
 target choice `idl_target_selected { target }` and Upload
-`idl_upload_started { target, cluster }`. Unlisted parameters are none.
+`idl_upload_started`, whose parameters the requirement "An IDL upload sends
+its events" gives. Unlisted parameters are none.
 
 #### Scenario: A file picker closed without a file
 

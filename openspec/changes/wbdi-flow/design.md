@@ -67,10 +67,8 @@ flowchart LR
   bin --> deploy["Deploy or upgrade<br/>(BPF Upgradeable Loader)"]
   deploy --> cluster[("Selected cluster<br/>Playnet, Localnet, Devnet,<br/>Testnet, Mainnet Beta, custom")]
   idl --> upload["IDL upload"]
-  upload --> pmp[("Program Metadata<br/>(default)")]
-  upload --> anchoridl[("Anchor IDL account<br/>(legacy)")]
+  upload --> pmp[("Program Metadata")]
   pmp --> cluster
-  anchoridl --> cluster
   cluster --> interact["Interact<br/>(simulate, send, logs)"]
   bin -. export .-> scripts["Local deploy scripts<br/>(user's Solana CLI)"]
   idl -. export .-> scripts
@@ -81,9 +79,13 @@ flowchart LR
 
 Both store an IDL for a program id, and the Explorer shows both. Program
 Metadata is the program the ecosystem is moving to and the one the Explorer
-reads first, so the playground uploads there by default and reads it first.
-The Anchor IDL account stays available both for reading and for upload,
-because programs deployed with older Anchor tooling publish only there.
+reads first, so the playground uploads there and reads it first. The Anchor
+IDL account stays available for reading, because programs deployed with
+older Anchor tooling publish only there. The playground does not upload to
+the Anchor IDL account: an upload calls `uploadProjectIdl` of the
+`program-idl` slice, and the design of the `terminal-anchor-idl` change
+gives the reason under "The upload writes the canonical Program Metadata
+account".
 Alternative considered: Anchor IDL account only, as `anchor idl init` does at
 0.29. Rejected: an IDL there is not what the Explorer reads first, so a user
 could publish and still see a stale IDL.
@@ -213,7 +215,9 @@ address by hand.
 
 New code goes in four feature slices with their own prefixes: `program-build`
 (`build`), `program-deploy` (`deploy`), `program-idl` (`idl`) and
-`program-interact` (`interact`). A feature never imports another, so the
+`program-interact` (`interact`). The `terminal-anchor-idl` change creates
+`program-idl` with the IDL upload and its three events, and this change
+extends that slice. A feature never imports another, so the
 Flow stages, a widget, join them. The legacy `commands/build` and
 `commands/deploy` stay where they are (the UI move rule keeps
 `src/commands/` in place); the slices call them and emit the events. Events

@@ -32,9 +32,11 @@ Functions client-v2 has, recorded so they are kept:
 
 Functions to add:
 
-- **IDL upload on chain**, to the Program Metadata program by default and to
-  the Anchor IDL account as the legacy option, on the cluster the program was
-  deployed to.
+- **IDL upload on chain**, to the program's canonical Program Metadata
+  account, on the cluster the program was deployed to. The upload calls
+  `uploadProjectIdl` of the `program-idl` slice, which the
+  `terminal-anchor-idl` change adds for the terminal's `anchor idl init` and
+  `anchor idl upgrade`.
 - **No mainnet deploy from the playground**: a deploy or IDL upload started
   on Mainnet Beta, by the button, the terminal or the assistant and with any
   wallet, sends nothing. A mainnet guard explains why and sends the user to
@@ -72,9 +74,12 @@ its own event, so a user's path through the flow can be rebuilt. Events added
   `deploy_keypair_imported`,
   `deploy_keypair_created`, `deploy_keypair_replace_warned`,
   `deploy_mainnet_warned`, `deploy_scripts_exported`.
-- IDL: `idl_loaded`, `idl_load_failed`, `idl_uploaded`, `idl_upload_failed`,
-  `idl_source_selected`, `idl_file_picker_opened`, `idl_paste_opened`,
-  `idl_local_cleared`, `idl_target_selected`, `idl_upload_started`.
+- IDL: `idl_loaded`, `idl_load_failed`, `idl_source_selected`,
+  `idl_file_picker_opened`, `idl_paste_opened`, `idl_local_cleared`,
+  `idl_target_selected`. An upload sends `idl_upload_started`,
+  `idl_uploaded`, and `idl_upload_failed`, which the `terminal-anchor-idl`
+  change adds with the requirements "An IDL upload sends its events" and "A
+  failed upload names its reason".
 - Interact: `interact_simulated`, `interact_sent`, `interact_failed`,
   `interact_simulate_started`, `interact_send_started`,
   `interact_simulate_toggled`, `interact_mainnet_confirmed`,
@@ -111,8 +116,10 @@ overlap.
 - Code in client-v2 only: `commands/build`, `commands/deploy`,
   `utils/program-info.ts`, `utils/program-interaction`, `effects/fetch-idl`,
   `views/flow/stages`, `views/sidebar/test`, `frameworks/*/export.*`,
-  `commands/solana`, `commands/anchor`, and new slices under `features/` for
-  IDL sources, IDL upload and the mainnet guard.
+  `commands/solana`, `commands/anchor`, and slices under `features/` for IDL
+  sources, IDL upload and the mainnet guard. The slices are new, except
+  `program-idl`: the `terminal-anchor-idl` change creates it with the IDL
+  upload, and this change extends it.
 - New dependencies: a client for the Program Metadata program, and Codama for
   reading Codama IDLs. The user sees IDLs that other tools published.
 - Depends on the Anchor 0.29 to 1.1.2 migration for the Anchor 0.30+ IDL

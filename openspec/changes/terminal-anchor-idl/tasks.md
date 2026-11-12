@@ -14,7 +14,7 @@ Tasks 1.1 and 2.1 may run at the same time. Every task: ticket to file.
   fake connection and wallet assert, through the memory provider, each `reason` of "A failed upload names its
   reason" and the event order of a successful upload; a test of `toStages` covers a sequential plan that holds a
   parallel one; `src/app/slice-structure.test.ts`, `yarn lint`, and `yarn test-types` pass.
-- [ ] 1.2 Rewrite `client-v2/src/commands/anchor/anchor.ts` as a `createCmd` tree: `idl init [PROGRAM_ID]` and
+- [x] 1.2 Rewrite `client-v2/src/commands/anchor/anchor.ts` as a `createCmd` tree: `idl init [PROGRAM_ID]` and
   `idl upgrade [PROGRAM_ID]` call the slice's entry after `checkWallet` and #131's mainnet refusal and network hold;
   the seven other subcommands throw the not-supported line without a wallet check; the command no longer imports
   `anchor-cli`. Verify: `anchor.test.ts` covers the project's program id and a given one, the mainnet refusal with
@@ -28,14 +28,14 @@ Tasks 1.1 and 2.1 may run at the same time. Every task: ticket to file.
   of `cicd.yml` by commit SHA with the version as a comment, and correct the comment on the `build` input of
   `reusable-checks.yml`, which says `cicd.yml` runs the job. Verify: the workflow parses as YAML, each pinned SHA is
   the commit its tag names, and no caller of `reusable-checks.yml` leaves `build` at its default.
-- [ ] 2.2 Delete `wasm/anchor-cli` and every reference [design.md](design.md) lists under "`wasm/anchor-cli` is
+- [x] 2.2 Delete `wasm/anchor-cli` and every reference [design.md](design.md) lists under "`wasm/anchor-cli` is
   deleted in the same PR, after the command stops loading it", and record in the wasm paragraph of `CLAUDE.md` that
   an upstream sync keeps the folder deleted. Verify: `yarn setup` builds five packages;
   `node scripts/wasm-stubs.mjs check-build build` passes on a `yarn build:bundle` output; `yarn test-api` passes;
   the wasm format and clippy commands of `reusable-checks.yml` pass; no manifest under `wasm/` names `anchor-lang`
   or `anchor-syn`; `yarn bundle:info` is run, `client-v2/bench/BUNDLE.md` is committed, and the PR description
   explains each moved row. Depends on 1.2 and 2.1.
-- [ ] 2.3 Update the `wbdi-flow` change with `/opsx:update`: its task 3.1 extends the existing `program-idl` slice;
+- [x] 2.3 Update the `wbdi-flow` change with `/opsx:update`: its task 3.1 extends the existing `program-idl` slice;
   its task 3.5 and its requirement "The project's IDL is uploaded on chain" drop the Anchor IDL account as an upload
   target and call the slice's entry; its requirement "IDL telemetry" names this change's event requirements instead
   of describing the upload events again. Verify: `yarn spec:validate` passes, and no requirement name in

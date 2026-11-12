@@ -48,10 +48,12 @@ describes and emits its spec's events with memory-provider tests.
 
 ## 3. IDL
 
-- [ ] 3.1 Create the `program-idl` slice with the `idl` prefix, recognising
-  Anchor before 0.30, Anchor 0.30+ and Codama, refusing anything else with a
+- [ ] 3.1 Extend the `program-idl` slice, which the `terminal-anchor-idl`
+  change creates with the `idl` prefix and the IDL upload: recognise Anchor
+  before 0.30, Anchor 0.30+ and Codama, and refuse anything else with a
   reason; verify with unit tests on fixtures of each format and
-  `idl_load_failed { reason: "invalid" }` (ticket to file)
+  `idl_load_failed { reason: "invalid" }` (ticket to file; after task 1.1 of
+  `terminal-anchor-idl`)
 - [ ] 3.2 Read the IDL from the Program Metadata program and the Anchor IDL
   account for any program id on the selected cluster; verify with the "A
   program with no IDL on chain" scenario and `idl_loaded` per `source`
@@ -62,9 +64,10 @@ describes and emits its spec's events with memory-provider tests.
 - [ ] 3.4 Add the paste editor (`idl-paste`) beside the file picker, both
   giving the same local IDL; verify with the "Paste an edited IDL" scenario
   (ticket to file; after 3.1)
-- [ ] 3.5 Upload the project's IDL to the Program Metadata program, and to
-  the Anchor IDL account as the legacy option, on the deployed cluster with
-  the authority check, and blocked on Mainnet Beta by the mainnet guard; verify on
+- [ ] 3.5 Upload the project's IDL on the deployed cluster by calling
+  `uploadProjectIdl`, the entry of the `program-idl` slice, which writes the
+  program's canonical Program Metadata account and checks the upgrade
+  authority, and blocked on Mainnet Beta by the mainnet guard; verify on
   Devnet with the upload scenarios and `idl_uploaded` (ticket to file; after
   3.2 and 2.3)
 
