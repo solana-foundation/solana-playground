@@ -8,6 +8,7 @@ import { IMPORT_FALLBACK } from "@/features/new-project";
 import type { GithubImportReason } from "@/utils";
 import {
   ConversionError,
+  GithubFileError,
   GithubImportError,
   ImportCancelledError,
   PgGithub,
@@ -61,7 +62,8 @@ const failed = ({
   });
 
   if (error instanceof GithubImportError) {
-    if (error.reason === "not-found") {
+    // A file missing from a tree GitHub just listed is not a missing repository
+    if (error.reason === "not-found" && !(error instanceof GithubFileError)) {
       const { owner, repo } = PgGithub.parseUrl(url);
       return fail("not-found", notFound(owner, repo));
     }

@@ -1,6 +1,10 @@
 import { PgExplorer, TupleFiles } from "./explorer";
 import { noProgramCode, PgFramework } from "./framework";
-import { GithubImportError, ImportCancelledError } from "./import-error";
+import {
+  GithubFileError,
+  GithubImportError,
+  ImportCancelledError,
+} from "./import-error";
 import { PgLanguage } from "./language";
 
 /** Single entry of a Git tree */
@@ -359,7 +363,8 @@ export class PgGithub {
       path
     );
     if (!response.ok) {
-      throw this._getError(response, path);
+      const { message, reason } = this._getError(response, path);
+      throw new GithubFileError(message, reason);
     }
 
     return await response.text();

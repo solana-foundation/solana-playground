@@ -66,7 +66,8 @@ SHALL clear it. The message SHALL be:
   (`GithubImportError` with reason `not-found`);
 - "Could not reach GitHub. Check the connection and try again." when a
   request never got an answer;
-- the import's own message for every other failure (a gist not found, the
+- the import's own message for every other failure (a gist not found, a
+  file of the listed tree that GitHub cannot find (`GithubFileError`), the
   rate limit, a repository too large, no Solana program and no TypeScript).
 
 Closing the program picker of a repository with several programs

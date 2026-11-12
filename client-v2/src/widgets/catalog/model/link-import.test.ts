@@ -26,6 +26,7 @@ vi.mock("@/utils", () => {
       super(message);
     }
   }
+  class GithubFileError extends GithubImportError {}
   class ConversionError extends Error {
     constructor(message: string, readonly reason: string) {
       super(message);
@@ -34,6 +35,7 @@ vi.mock("@/utils", () => {
   return {
     ImportCancelledError,
     GithubImportError,
+    GithubFileError,
     ConversionError,
     PgGithub: {
       isValidUrl: (url: string) =>
@@ -51,6 +53,7 @@ import { GistImportError } from "@/features/gist";
 import type { ConversionReason, GithubImportReason } from "@/utils";
 import {
   ConversionError,
+  GithubFileError,
   GithubImportError,
   ImportCancelledError,
 } from "@/utils";
@@ -150,6 +153,17 @@ describe("importLink says why an import failed", () => {
       message:
         "Playground can't find acme/escrow-private on GitHub. It may be private, renamed or deleted.",
       error,
+    });
+  });
+
+  it("keeps the message of a file GitHub cannot find", async () => {
+    failWith(
+      new GithubFileError('"src/lib.rs" was not found on GitHub.', "not-found")
+    );
+    await expect(importLink(REPO)).resolves.toMatchObject({
+      outcome: "failed",
+      reason: "not-found",
+      message: '"src/lib.rs" was not found on GitHub.',
     });
   });
 
