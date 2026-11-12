@@ -24,6 +24,32 @@ const runFor = (page: Page) => async (command: string, expected: RegExp) => {
   await expect(terminalRows(page)).toContainText(expected, LONG);
 };
 
+/**
+ * The terminal's text from its bottom up to its first line. The rows in the
+ * DOM are only the ones in view, and Firefox's stack of a failing test (its
+ * frames uncapped, async ones included) pushes mocha's summary above them.
+ */
+const scrollbackOf = async (page: Page) => {
+  const viewport = page.locator(".xterm-viewport").first();
+  const nextFrame = () =>
+    page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve))
+        )
+    );
+  let text = (await terminalRows(page).textContent()) ?? "";
+  for (let isAtTop = false; !isAtTop; ) {
+    isAtTop = await viewport.evaluate((el) => {
+      el.scrollTop = Math.max(0, el.scrollTop - el.clientHeight / 2);
+      return el.scrollTop === 0;
+    });
+    await nextFrame();
+    text = `${(await terminalRows(page).textContent()) ?? ""}${text}`;
+  }
+  return text;
+};
+
 test.describe("project-code-sandbox", () => {
   test("project-code-sandbox: The default client runs", async ({
     context,
@@ -137,10 +163,13 @@ test.describe("project-code-sandbox", () => {
       ].join("\n")
     );
 
-    await runFor(page)("test", /1 failing/);
-
-    await expect(terminalRows(page)).toContainText("1 passing");
+    await runInTerminal(page, "test");
+    await expect(terminalRows(page)).toContainText("Running tests", LONG);
     await expect(terminalRows(page)).toHaveText(/\$\s*$/, LONG);
+
+    const output = await scrollbackOf(page);
+    expect(output).toContain("1 passing");
+    expect(output).toContain("1 failing");
   });
 
   test("project-code-sandbox: Anchor workspace and program are ready", async ({
