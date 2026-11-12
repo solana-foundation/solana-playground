@@ -41,16 +41,17 @@ export type SizeKey = "h" | "w" | "vert";
 export const LAYOUT_STORAGE_KEY = "layout";
 
 /**
- * The layout a first visit gets: navigation and assistant open, the files
- * column and the console closed (DES-205: the tree takes room only once
- * wanted). No version bump for the files flag: a saved `files: true` is a
- * choice this cannot tell from the old default, so it is kept.
+ * The layout a first visit gets: navigation, assistant and the project tree
+ * docked open, the console closed. `files` says the tree is docked beside the
+ * stage rather than in its dropdown under the editor head (HOO-2827). No
+ * version bump for the files flag: a saved value is the user's choice, docked
+ * or not, and is kept.
  */
 export const DEFAULT_LAYOUT: LayoutState = Object.freeze({
   v: LAYOUT_VERSION,
   open: Object.freeze({
     nav: true,
-    files: false,
+    files: true,
     assistant: true,
     console: false,
   }),
@@ -332,12 +333,12 @@ if (import.meta.vitest) {
       vert: { stage: 60, console: 40 },
     };
 
-    it("should start with the files column closed when nothing is saved", () => {
+    it("should start with the tree docked when nothing is saved", () => {
       const restored = readLayout(() => memoryStorage());
       expect(restored).toEqual({ kind: "none" });
       expect(DEFAULT_LAYOUT).toEqual({
         v: 2,
-        open: { nav: true, files: false, assistant: true, console: false },
+        open: { nav: true, files: true, assistant: true, console: false },
       });
       expect(Object.isFrozen(DEFAULT_LAYOUT)).toBe(true);
       expect(Object.isFrozen(DEFAULT_LAYOUT.open)).toBe(true);

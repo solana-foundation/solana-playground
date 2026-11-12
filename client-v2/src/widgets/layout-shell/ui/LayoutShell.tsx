@@ -6,6 +6,7 @@ import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { isEditable } from "@/shared/lib/is-editable";
+import { canDockAt } from "@/shared/lib/tree-dock";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgFlow } from "@/views/flow/state/stage";
@@ -70,9 +71,12 @@ export interface LayoutShellProps {
    */
   showTabs?: boolean;
   /**
-   * The files column. `collapsed` is never true in the phone's Files Sheet;
-   * `phone` says the column is in that Sheet, where `toggle` closes it. A
-   * tutorial's frame has no files column.
+   * The project tree. From `LAYOUT_BREAKPOINTS.phone` up it is drawn once,
+   * either as the files column (docked and the code area wide enough, where
+   * `toggle` undocks it) or in the dropdown under the editor head (where
+   * `toggle` closes it), never both; `collapsed` is false wherever it is
+   * drawn. `phone` says it is in the phone's Files Sheet, where `toggle`
+   * closes the Sheet. A tutorial's frame has no files column.
    */
   files: (panel: {
     collapsed: boolean;
@@ -229,6 +233,44 @@ const LayoutShell = ({
   // one closed by a tap on its overlay a button
   const lastInput = useRef<ToggleSource>("key");
 
+  // The project tree as in a tutorial: `state.open.files` (saved) says docked;
+  // it shows as the column only while the code area is wide enough to dock,
+  // else, like an undocked tree, as the dropdown under the editor head. The
+  // code area is unmeasured until its first report, and wide until then
+  const [codeWidth, setCodeWidth] = useState<number>();
+  const canDock = codeWidth === undefined || canDockAt(codeWidth);
+  const dockedShown = state.open.files && canDock;
+  // The dropdown is the visit's, never saved
+  const [treeOpen, setTreeOpenState] = useState(false);
+  // Mirrors for ⌘E's handler, which is renewed only with the saved flag
+  const treeNow = useRef(false);
+  const dockedShownNow = useRef(dockedShown);
+  dockedShownNow.current = dockedShown;
+  /** Opens the dropdown, measured by what opened it */
+  const openTree = (via: "button" | "key") => {
+    if (treeNow.current) return;
+    treeNow.current = true;
+    setTreeOpenState(true);
+    layoutTelemetry.track("layout_files_dropdown_opened", { via });
+  };
+  /** Closes the dropdown; a close is not measured */
+  const closeTree = () => {
+    if (!treeNow.current) return;
+    treeNow.current = false;
+    setTreeOpenState(false);
+  };
+  /** Docks or undocks the tree; saved, and the dropdown closes either way */
+  const dockTree = (docked: boolean, via: ToggleSource) => {
+    closeTree();
+    setOpen("files", { open: docked, via });
+  };
+  /** "Files" and ⌘E: undock a docked, shown tree, else open or close the dropdown */
+  const toggleFiles = (via: "button" | "key") => {
+    if (dockedShownNow.current) dockTree(false, via);
+    else if (treeNow.current) closeTree();
+    else openTree(via);
+  };
+
   useEffect(() => {
     // Each input says what it was, for a Sheet that reports a change nobody
     // marked (the assistant's, the phone's Files), and drops any mark a
@@ -248,6 +290,16 @@ const LayoutShell = ({
       document.removeEventListener("keydown", onKey, true);
     };
   }, []);
+
+  // A docked tree that can show again takes the dropdown's place, and the
+  // dropdown goes with the head: off the work screen and on a phone, where the
+  // head is not drawn. Nobody closed it, so nothing is reported
+  const treeHasNoPlace = dockedShown || phone || screen.kind !== "work";
+  useEffect(() => {
+    if (treeHasNoPlace) closeTree();
+    // `closeTree` reads only a ref and a stable setter
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [treeHasNoPlace]);
 
   useEffect(() => {
     layoutTelemetry.track("layout_viewport", { viewport });
@@ -372,18 +424,19 @@ const LayoutShell = ({
     return () => subs.forEach((sub) => sub.dispose());
   }, [phone]);
 
-  // The editor's "Show files", from inside the work: opens, never folds, and
-  // like Ctrl+E means nothing under Home or a page
+  // The editor's "Show files", from inside the work: opens, never folds (a
+  // docked, shown tree stays as it is, an undocked one drops under the head),
+  // and like Ctrl+E means nothing under Home or a page
   useEffect(() => {
     const sub = PgView.onDidRequestFiles(() => {
       if (isCovered(screenNow.current)) return;
       if (phone) setPhoneFiles(true, "button");
-      else setOpen("files", { open: true, via: "button" });
+      else if (!dockedShownNow.current) openTree("button");
     });
     return () => sub.dispose();
-    // `setPhoneFiles` reads only refs and stable setters
+    // `setPhoneFiles` and `openTree` read only refs and stable setters
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone, setOpen]);
+  }, [phone]);
 
   const wideOrSheet = viewport === "wide" ? state.open.assistant : sheetOpen;
   const pagerOrFrame = phone ? view === "chat" : wideOrSheet;
@@ -497,7 +550,7 @@ const LayoutShell = ({
           setPhoneFiles(!filesNow.current, "key");
           return;
         }
-        setOpen("files", { open: !state.open.files, via: "key" });
+        toggleFiles("key");
       },
       opts: { noPreventDefault: true },
     },
@@ -621,10 +674,13 @@ const LayoutShell = ({
             ? setOpen("assistant", { open, via: "drag" })
             : setSheet(open, lastInput.current),
       }}
+      // The column is the tree docked and shown; a drag that folds it undocks
       filesState={{
-        open: state.open.files,
+        open: dockedShown,
         onOpenChange: (open) => setOpen("files", { open, via: "drag" }),
       }}
+      onUndockFiles={() => dockTree(false, "button")}
+      onCodeWidth={setCodeWidth}
       consoleState={{
         open: state.open.console,
         onOpenChange: (open) => setOpen("console", { open, via: "drag" }),
@@ -654,10 +710,10 @@ const LayoutShell = ({
             phone: true,
           });
         }
+        // Drawn only while docked and shown, so a control of its own undocks
         return files({
-          collapsed: !state.open.files,
-          toggle: () =>
-            setOpen("files", { open: !state.open.files, via: "button" }),
+          collapsed: false,
+          toggle: () => dockTree(false, "button"),
           phone: false,
         });
       }}
@@ -703,9 +759,23 @@ const LayoutShell = ({
       workHead={
         <BaseEditorHead
           files={{
-            open: state.open.files,
-            onToggle: () =>
-              setOpen("files", { open: !state.open.files, via: "button" }),
+            open: dockedShown || treeOpen,
+            onToggle: () => toggleFiles("button"),
+          }}
+          tree={{
+            open: treeOpen,
+            canDock,
+            onClose: closeTree,
+            onDock: () => dockTree(true, "button"),
+            // The tree mounts once: here only while the column does not hold it
+            body:
+              treeOpen && !dockedShown
+                ? files({
+                    collapsed: false,
+                    toggle: closeTree,
+                    phone: false,
+                  })
+                : null,
           }}
           terminal={{
             open: state.open.console,

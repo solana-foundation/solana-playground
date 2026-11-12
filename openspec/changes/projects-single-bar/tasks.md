@@ -14,8 +14,8 @@ All tasks: HOO-2827, one PR. 1.x and 2.1 are done by Almaz's commit 6f4c97f3b (`
 
 ## 3. The tree docks like the tutorial's (plan: [plans/1-one-row.md](plans/1-one-row.md), Task 3)
 
-- [ ] 3.1 Pull the pin, the unpin and the sheet style into `tutorial-workspace/ui/tree-dock.tsx`; the tutorial head and docked tree use it (no visible change)
-- [ ] 3.2 Projects: docked = `layout.open.files`, default docked; the column gets "Undock the files"; "Files" undocks or toggles a dropdown holding `LeftPanel` with «Dock beside the editor» while the code area is > 1100 px; `layout_files_dropdown_opened`; unit tests through the memory provider
+- [x] 3.1 Pull the pin, the unpin and the sheet style into `shared/lib/tree-dock.tsx`; the tutorial head and docked tree use it (no visible change)
+- [x] 3.2 Projects: docked = `layout.open.files`, default docked; the column gets "Undock the files"; "Files" undocks or toggles a dropdown holding `LeftPanel` with «Dock beside the editor» while the code area is > 1100 px; `layout_files_dropdown_opened`; unit tests through the memory provider
 
 ## 4. Tests and docs (plan: [plans/1-one-row.md](plans/1-one-row.md), Task 4)
 

@@ -8,6 +8,7 @@ import { RAIL_WIDTH } from "@/shared/lib/hooks/use-viewport";
 import { KeybindsActive } from "@/shared/lib/keybinds-active";
 import { createLogger } from "@/shared/lib/logger";
 import { Outlet, OutletContent, useOutletNode } from "@/shared/lib/outlet";
+import { UndockPin } from "@/shared/lib/tree-dock";
 import { cn } from "@/shared/lib/utils";
 import {
   ResizableHandle,
@@ -215,10 +216,20 @@ export interface BaseLayoutShellProps {
    */
   assistantState: PanelState;
   /**
-   * The files column, from `LAYOUT_BREAKPOINTS.phone` up, is folded or
-   * unfolded by dragging
+   * The files column, from `LAYOUT_BREAKPOINTS.phone` up: the project tree
+   * docked and shown. Folded or unfolded by dragging
    */
   filesState: PanelState;
+  /**
+   * "Undock the files", drawn at the files column's top right when given:
+   * the tree goes back to its dropdown under the editor head
+   */
+  onUndockFiles?: () => void;
+  /**
+   * The code area's width in px as it changes: the files column and the stage
+   * together, whether the column shows or not, measured with a ResizeObserver
+   */
+  onCodeWidth?: (width: number) => void;
   /** The console is folded or unfolded by dragging */
   consoleState: PanelState;
   horizontal?: HorizontalLayout;
@@ -653,6 +664,20 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
 
   const wide = props.viewport === "wide";
 
+  // The code area, measured: the work group spans the files column and the
+  // stage, so showing or hiding the column leaves its width as it was
+  const [codeArea, setCodeArea] = useState<HTMLDivElement | null>(null);
+  const onCodeWidth = useRef(props.onCodeWidth);
+  onCodeWidth.current = props.onCodeWidth;
+  useEffect(() => {
+    if (!codeArea) return;
+    const ro = new ResizeObserver(([entry]) => {
+      if (entry) onCodeWidth.current?.(entry.contentRect.width);
+    });
+    ro.observe(codeArea);
+    return () => ro.disconnect();
+  }, [codeArea]);
+
   // What stands where the columns go when the work is not mounted: a page in
   // Home's place under its own bar, else Home under the column bar
   const inPlace =
@@ -720,6 +745,7 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
     <ResizablePanelGroup
       orientation="horizontal"
       id="layout-work"
+      elementRef={setCodeArea}
       className="h-auto min-h-0 flex-1"
       defaultLayout={filesShown ? props.work : undefined}
       onLayoutChanged={
@@ -758,7 +784,13 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
             }
           }}
         >
-          {props.files({ isMobile: false })}
+          {/* The unpin sits over the tree's top right, as in a tutorial */}
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            {props.files({ isMobile: false })}
+            {props.onUndockFiles && (
+              <UndockPin onUndock={props.onUndockFiles} />
+            )}
+          </div>
         </ResizablePanel>
       )}
       {filesShown && <ResizableHandle />}

@@ -298,8 +298,8 @@ const shell = (
 ) => render(shellTree(home, work, cover));
 
 /**
- * A visitor who left the files column open: a first visit opens it closed
- * (DES-205), and these cases start from an open column
+ * A visitor who left the tree docked, as a first visit has it too; these
+ * cases say so rather than lean on the default
  */
 const savedFilesOpen = () =>
   localStorage.setItem(
@@ -419,29 +419,29 @@ it("should tell the files column it is not in the phone's Sheet", () => {
   ).toBe("false");
 });
 
-it("should toggle the files column by Cmd+E and by its button, and say which", () => {
+it("should undock the tree by Cmd+E, then open its dropdown by its button, and say which", () => {
   savedFilesOpen();
   shell();
   press({ key: "e", metaKey: true });
   expect(filesPressed()).toBe("false");
   fireEvent.click(filesToggle());
   expect(filesPressed()).toBe("true");
-  expect(toggled()).toEqual([
-    { panel: "files", open: false, via: "key" },
-    { panel: "files", open: true, via: "button" },
-  ]);
+  expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+  expect(
+    sent.events
+      .filter((event) => event.name === "layout_files_dropdown_opened")
+      .map((event) => event.params)
+  ).toEqual([{ via: "button" }]);
 });
 
-it("should open a folded files column when the editor asks to show files", () => {
+it("should open an undocked tree's dropdown when the editor asks to show files", () => {
   savedFilesOpen();
   shell();
   press({ key: "e", metaKey: true });
   act(() => PgView.showFiles());
   expect(filesPressed()).toBe("true");
-  expect(toggled()).toEqual([
-    { panel: "files", open: false, via: "key" },
-    { panel: "files", open: true, via: "button" },
-  ]);
+  expect(screen.getByRole("dialog", { name: "Files" })).toBeTruthy();
+  expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
 });
 
 it("should leave an open files column open when the editor asks to show files", () => {
@@ -809,7 +809,8 @@ it("should save the open state and read it back", () => {
 it("should fall back on a corrupt saved layout and report it", () => {
   localStorage.setItem(LAYOUT_STORAGE_KEY, "{");
   shell();
-  expect(filesPressed()).toBe("false");
+  // The defaults: the tree docked
+  expect(filesPressed()).toBe("true");
   expect(
     sent.events.filter((event) => event.name === "layout_restore_failed")
   ).toEqual([expect.objectContaining({ params: { reason: "corrupt" } })]);
@@ -2019,5 +2020,154 @@ describe("with a page over the work", () => {
     expect(
       sent.events.filter((e) => e.name === "layout_page_shown").at(-1)?.params
     ).toEqual({ page: "work", via: "auto" });
+  });
+});
+
+describe("the project tree, docked or as the dropdown", () => {
+  /** ResizeObserver callbacks by the element they watch */
+  let observed: Array<{
+    el: Element;
+    cb: (entries: Array<{ contentRect: { width: number } }>) => void;
+  }>;
+  beforeEach(() => {
+    observed = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(
+          private cb: (
+            entries: Array<{ contentRect: { width: number } }>
+          ) => void
+        ) {}
+        observe(el: Element) {
+          observed.push({ el, cb: this.cb });
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+  /**
+   * The code area measured at `px`: every observer of the work group hears
+   * it, the library's own too, so the entry carries what that one reads
+   */
+  const codeAreaAt = (px: number) => {
+    const work = observed.filter(({ el }) => el.id === "layout-work");
+    if (work.length === 0) throw new Error("the code area is not measured");
+    act(() =>
+      work.forEach(({ el, cb }) =>
+        cb([
+          {
+            target: el,
+            contentRect: { width: px, height: 800 },
+            borderBoxSize: [{ inlineSize: px, blockSize: 800 }],
+          } as never,
+        ])
+      )
+    );
+  };
+  const column = () =>
+    screen.queryByRole("button", { name: "Files column control" });
+  const dropdown = () => screen.queryByRole("dialog", { name: "Files" });
+  const pin = () =>
+    screen.queryByRole("button", { name: "Dock beside the editor" });
+  const opened = () =>
+    sent.events
+      .filter((event) => event.name === "layout_files_dropdown_opened")
+      .map((event) => event.params);
+
+  it("docks the tree on a first visit", () => {
+    shell();
+    expect(column()).not.toBeNull();
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("true");
+  });
+
+  it("undocks by Files, then drops the tree under the head with the pin, which docks it again", () => {
+    shell();
+    fireEvent.click(filesToggle());
+    expect(column()).toBeNull();
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    expect(JSON.parse(storedLayout()).open.files).toBe(false);
+
+    fireEvent.click(filesToggle());
+    const sheet = requireFor("the dropdown")(dropdown());
+    expect(
+      within(sheet).getByRole("button", { name: "Files column control" })
+    ).toBeTruthy();
+    expect(
+      within(sheet).getByRole("button", { name: "Dock beside the editor" })
+    ).toBeTruthy();
+    expect(filesPressed()).toBe("true");
+    expect(opened()).toEqual([{ via: "button" }]);
+
+    fireEvent.click(requireFor("the pin")(pin()));
+    expect(dropdown()).toBeNull();
+    expect(column()).not.toBeNull();
+    expect(filesPressed()).toBe("true");
+    expect(toggled()).toEqual([
+      { panel: "files", open: false, via: "button" },
+      { panel: "files", open: true, via: "button" },
+    ]);
+    expect(JSON.parse(storedLayout()).open.files).toBe(true);
+  });
+
+  it("closes the dropdown by Files again", () => {
+    shell();
+    fireEvent.click(filesToggle());
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    fireEvent.click(filesToggle());
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    expect(opened()).toEqual([{ via: "button" }]);
+  });
+
+  it("undocks by the column's unpin, and the tree stays undocked after a reload", () => {
+    const first = shell();
+    fireEvent.click(screen.getByRole("button", { name: "Undock the files" }));
+    expect(column()).toBeNull();
+    expect(toggled()).toEqual([{ panel: "files", open: false, via: "button" }]);
+    first.unmount();
+    shell();
+    expect(column()).toBeNull();
+    expect(filesPressed()).toBe("false");
+  });
+
+  it("shows a docked tree as the dropdown, with no pin, when the code area is 1000 px", () => {
+    shell();
+    codeAreaAt(1000);
+    expect(column()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    expect(pin()).toBeNull();
+    expect(filesPressed()).toBe("true");
+    // Still docked: back at a wide code area the column returns
+    expect(toggled()).toEqual([]);
+    expect(opened()).toEqual([{ via: "button" }]);
+    codeAreaAt(1300);
+    expect(dropdown()).toBeNull();
+    expect(column()).not.toBeNull();
+  });
+
+  it("opens the dropdown by Cmd+E once undocked, via key", () => {
+    shell();
+    press({ key: "e", metaKey: true });
+    expect(column()).toBeNull();
+    press({ key: "e", metaKey: true });
+    expect(dropdown()).not.toBeNull();
+    expect(filesPressed()).toBe("true");
+    expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+    expect(opened()).toEqual([{ via: "key" }]);
+  });
+
+  it("opens the dropdown when the editor asks to show an undocked tree", () => {
+    shell();
+    fireEvent.click(filesToggle());
+    act(() => PgView.showFiles());
+    expect(dropdown()).not.toBeNull();
+    expect(opened()).toEqual([{ via: "button" }]);
   });
 });

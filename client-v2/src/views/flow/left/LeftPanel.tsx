@@ -11,8 +11,9 @@ import { keepColumn, keptColumn } from "./kept-column";
 
 interface LeftPanelProps {
   /**
-   * Hidden by the editor head's Files or ⌘E: the column takes no width
-   * (design.md, "Frame chrome (5.25)"), so it draws nothing
+   * Defensive: the layout draws the tree only where it shows (the docked
+   * column, or the dropdown under the editor head), so this is false there;
+   * a collapsed panel draws nothing
    */
   collapsed: boolean;
   /** The phone's Files sheet, which keeps no scroll for the wide column */

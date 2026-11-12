@@ -9,6 +9,7 @@ import { onCodeRequest, onDocRequest } from "@/entities/tutorial";
 import { PgCallPanel } from "@/features/tutorial-conversation";
 import { useRenderOnChange } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
+import { canDockAt } from "@/shared/lib/tree-dock";
 import { PgCommon, PgExplorer, PgTutorial } from "@/utils";
 import { PgEditor } from "@/utils/editor";
 import { PgFlow } from "@/views/flow/state/stage";
@@ -40,9 +41,6 @@ const log = createLogger("tutorial-workspace:workspace");
 
 /** A doc page the tutorial lists, with the Markdown it carries */
 type DocPage = Doc & { markdown: string };
-
-/** The workspace is wide enough to dock the tree beside the editor from here */
-export const DOCK_MIN_PX = 1100;
 
 /** The tutorials whose tree is docked, by name: one small list per device */
 const DOCKED_KEY = "tutorial-workspace.docked";
@@ -195,7 +193,7 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
     const el = box.current;
     if (!el) return;
     const ro = new ResizeObserver(([entry]) =>
-      setWide(entry.contentRect.width >= DOCK_MIN_PX)
+      setWide(canDockAt(entry.contentRect.width))
     );
     ro.observe(el);
     return () => ro.disconnect();

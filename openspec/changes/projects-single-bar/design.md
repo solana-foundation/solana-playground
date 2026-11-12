@@ -25,8 +25,9 @@ list; changing the stage tabs; keyboard handling; the phone.
 
 1. **"One component" is the shell, not the list.** The pin, the unpin and
    the dropdown's sheet styling move out of `BaseWorkspaceHead` /
-   `BaseDockedTree` into one shared piece (`widgets/tutorial-workspace/ui/
-   tree-dock.tsx`: `DockPin`, `UndockPin`, `TREE_SHEET`), used by both
+   `BaseDockedTree` into one shared piece (`shared/lib/tree-dock.tsx`:
+   `DockPin`, `UndockPin`, `TREE_SHEET`, `DOCK_MIN_PX`; in `shared/lib`
+   since a widget may not import another widget's internals), used by both
    trees. The project tree keeps the Explorer body. Mapping PgExplorer into
    `TreeRow` would drop create, rename, delete, move and nested folders,
    which the tutorial list has no use for. Alternative rejected: one list

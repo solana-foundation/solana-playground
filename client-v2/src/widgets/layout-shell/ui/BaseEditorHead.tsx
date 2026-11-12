@@ -1,14 +1,41 @@
 import { Folder, Terminal } from "lucide-react";
 import type { ReactNode, RefCallback } from "react";
 
+import {
+  DockPin,
+  FILES_TOGGLE,
+  keepsTreeOpen,
+  TREE_SHEET,
+} from "@/shared/lib/tree-dock";
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
+import { Popover, PopoverAnchor, PopoverContent } from "@/shared/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import type { BarToggle } from "./BaseStageBar";
 
+/** The project tree's dropdown under the head, the tree not docked */
+export interface EditorHeadTree {
+  /** The dropdown is up */
+  open: boolean;
+  /** The code area is wide enough to dock: the pin shows */
+  canDock: boolean;
+  /** Escape or a press outside closed it */
+  onClose: () => void;
+  /** «Dock beside the editor» */
+  onDock: () => void;
+  /** The tree, mounted only while the dropdown is up */
+  body: ReactNode;
+}
+
 export interface BaseEditorHeadProps {
-  /** The files column's toggle */
+  /**
+   * "Files": pressed while the tree shows, docked or as the dropdown; its
+   * click undocks a docked tree, else opens or closes the dropdown
+   */
   files: BarToggle;
+  /** The tree's dropdown, anchored under the head */
+  tree?: EditorHeadTree;
   /** The console's toggle */
   terminal: BarToggle;
   /**
@@ -38,12 +65,15 @@ const HeadToggle = ({
   label,
   hint,
   toggle,
+  opensTree = false,
   children,
 }: {
   id: string;
   label: string;
   hint: string;
   toggle: BarToggle;
+  /** It opens the tree's dropdown, so a press on it is not outside that */
+  opensTree?: boolean;
   children: ReactNode;
 }) => (
   <Tooltip>
@@ -56,6 +86,7 @@ const HeadToggle = ({
         aria-label={label}
         aria-pressed={toggle.open}
         onClick={toggle.onToggle}
+        {...(opensTree ? { [FILES_TOGGLE]: "" } : {})}
       >
         {children}
       </Button>
@@ -68,9 +99,12 @@ const HeadToggle = ({
  * The 44 px head over the files column and the stage (DES-205): the editor's
  * tab row on its left, the Files and Terminal toggles on its right. It sits
  * outside the files/center group, so opening the tree moves nothing in it.
+ * An undocked tree drops under it as the tutorial's does: the same sheet,
+ * with the pin that docks it while the code area is wide enough.
  */
 const BaseEditorHead = ({
   files,
+  tree,
   terminal,
   showTabs,
   hostRef,
@@ -78,42 +112,69 @@ const BaseEditorHead = ({
   terminalKey,
   controls,
 }: BaseEditorHeadProps) => (
-  // 1 px on the right: the 32 px toggles hold their 18 px icon 7 px in, so
-  // the last icon ends 8 px from the edge, under the stepper's right edge
-  <div
-    id="editor-head"
-    data-slot="editor-head"
-    className="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-surface-base pr-px"
+  <Popover
+    open={tree?.open ?? false}
+    onOpenChange={(open) => {
+      if (!open) tree?.onClose();
+    }}
   >
-    {/* No display class of its own, so `hidden` takes it off the page. The
+    <PopoverAnchor asChild>
+      {/* 1 px on the right: the 32 px toggles hold their 18 px icon 7 px in,
+        so the last icon ends 8 px from the edge, under the stepper's right edge */}
+      <div
+        id="editor-head"
+        data-slot="editor-head"
+        className="flex h-11 shrink-0 items-center gap-1 border-b border-border bg-surface-base pr-px"
+      >
+        {/* No display class of its own, so `hidden` takes it off the page. The
       row fills the head: the head draws the fill and the bottom line, so the
       row's own height and line would stack a second one under it. `#tabs` is
       `PgView.ids.TABS`, the id `components/Tabs` gives the row */}
-    <div
-      ref={hostRef}
-      hidden={!showTabs}
-      className="min-w-0 flex-1 self-stretch [&>#tabs]:h-full [&>#tabs]:border-b-0"
-    />
-    <div className="ml-auto flex shrink-0 items-center gap-1">
-      <HeadToggle
-        id="editor-head-files"
-        label="Files"
-        hint={`Files (${filesKey})`}
-        toggle={files}
-      >
-        <Folder aria-hidden="true" />
-      </HeadToggle>
-      <HeadToggle
-        id="editor-head-terminal"
-        label="Terminal"
-        hint={`Terminal (${terminalKey})`}
-        toggle={terminal}
-      >
-        <Terminal aria-hidden="true" />
-      </HeadToggle>
-      {controls}
-    </div>
-  </div>
+        <div
+          ref={hostRef}
+          hidden={!showTabs}
+          className="min-w-0 flex-1 self-stretch [&>#tabs]:h-full [&>#tabs]:border-b-0"
+        />
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <HeadToggle
+            id="editor-head-files"
+            label="Files"
+            hint={`Files (${filesKey})`}
+            toggle={files}
+            opensTree
+          >
+            <Folder aria-hidden="true" />
+          </HeadToggle>
+          <HeadToggle
+            id="editor-head-terminal"
+            label="Terminal"
+            hint={`Terminal (${terminalKey})`}
+            toggle={terminal}
+          >
+            <Terminal aria-hidden="true" />
+          </HeadToggle>
+          {controls}
+        </div>
+      </div>
+    </PopoverAnchor>
+    {/* The tree keeps its own scroll and its "+ New file" at the foot, so the
+      sheet gives it a height and no padding of its own */}
+    <PopoverContent
+      side="bottom"
+      align="start"
+      sideOffset={0}
+      aria-label="Files"
+      className={cn(TREE_SHEET, "h-[min(32rem,70dvh)] overflow-hidden p-0")}
+      // Focus stays where it was: the tree's rows take it on a click
+      onOpenAutoFocus={(e) => e.preventDefault()}
+      onInteractOutside={(e) => {
+        if (keepsTreeOpen(e.target)) e.preventDefault();
+      }}
+    >
+      {tree?.canDock && <DockPin onDock={tree.onDock} />}
+      {tree?.body}
+    </PopoverContent>
+  </Popover>
 );
 
 export default BaseEditorHead;
