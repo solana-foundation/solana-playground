@@ -36,7 +36,7 @@ Tags are the unit of release. The deploy uses `git describe --exact-match`, so t
 2. Push the branch and tag together so the tagged commit is master's HEAD — e.g. `git push origin master --follow-tags`.
 3. The workflow normalizes the tag and deploys it as a parked App Engine version.
 
-Or run it manually (Actions → CICD → Run workflow) to deploy the latest tag.
+Or run it manually (Actions → Server: deploy → Run workflow) to deploy the latest tag.
 
 ## Required GitHub secrets
 
