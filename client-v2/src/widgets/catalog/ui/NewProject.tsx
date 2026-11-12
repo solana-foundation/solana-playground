@@ -1,4 +1,4 @@
-import { StartFromScratch } from "@/features/new-project";
+import { ImportFromUrl, StartFromScratch } from "@/features/new-project";
 
 import type { NewProjectState } from "../model/use-new-project";
 import BaseNewProject from "./BaseNewProject";
@@ -11,12 +11,15 @@ const NewProject = ({ project }: { project: NewProjectState }) => (
   <BaseNewProject
     {...project.view}
     scratch={
-      <StartFromScratch
-        held={project.busy}
-        onRunning={project.onStarting}
-        onStarted={project.closePage}
-        onFailed={project.onStartFailed}
-      />
+      <>
+        <StartFromScratch
+          held={project.busy}
+          onRunning={project.onStarting}
+          onStarted={project.closePage}
+          onFailed={project.onStartFailed}
+        />
+        <ImportFromUrl />
+      </>
     }
   />
 );

@@ -81,6 +81,9 @@ vi.mock("@/features/new-project", () => ({
       </button>
     );
   },
+  // The import card has tests of its own; the page's tests draw it as nothing
+  // eslint-disable-next-line unicorn/no-null -- a component that draws nothing returns `null`; React's types refuse `undefined`
+  ImportFromUrl: () => null,
 }));
 
 import { catalogPage } from "../model/catalog-page";
