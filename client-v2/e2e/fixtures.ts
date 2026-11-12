@@ -739,7 +739,7 @@ export const replaceFile =
     await expect(lines).not.toBeEmpty(LONG);
     await page.locator(".monaco-editor textarea.inputarea").focus();
     await page.keyboard.press("ControlOrMeta+A");
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await grantClipboard(context);
     await page.evaluate((text) => navigator.clipboard.writeText(text), code);
     await page.keyboard.press("ControlOrMeta+V");
     const last = code.trim().split("\n").at(-1) ?? "";
