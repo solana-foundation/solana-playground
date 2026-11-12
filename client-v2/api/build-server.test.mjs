@@ -7,9 +7,8 @@ import { handleWith } from "./build-server.mjs";
 
 const UUID = "0b9f4d3e-6c1a-4f7e-9a2b-3c4d5e6f7a8b";
 
-/** A request as Vercel hands it over: the rewrite's `?path=`, a JSON body */
-const makeReq = ({ method = "POST", path = "build", body } = {}) => {
-  const raw = body === undefined ? "" : JSON.stringify(body);
+/** A request as Vercel hands it over: the rewrite's `?path=`, a raw body ("" for none) */
+const request = (method, path, raw) => {
   const req = Readable.from(raw ? [Buffer.from(raw)] : []);
   req.method = method;
   req.url = `/api/build-server?path=${encodeURIComponent(path)}`;
@@ -19,6 +18,15 @@ const makeReq = ({ method = "POST", path = "build", body } = {}) => {
   };
   return req;
 };
+
+/** A build request carrying `body` as JSON */
+const postBuild = (body) => request("POST", "build", JSON.stringify(body));
+
+/** A build request with no body at all */
+const emptyBuild = () => request("POST", "build", "");
+
+/** A GET to `path`, as the deploy download sends it */
+const getPath = (path) => request("GET", path, "");
 
 /** A response that records what was written and supports backpressure */
 const makeRes = () => {
@@ -61,7 +69,8 @@ const makeRes = () => {
 const signedIn = async () => ({ status: "signed-in", user: { id: "u1" } });
 
 /** Every dependency stubbed; a case overrides what it is about */
-const deps = (over = {}) => {
+/** The handler's dependencies, each taken from `over` when it names one */
+const depsWith = (over) => {
   const query = mock.fn(async (text) =>
     /insert/.test(text) ? { rows: [{ id: "9" }] } : { rows: [] }
   );
@@ -83,16 +92,19 @@ const deps = (over = {}) => {
   };
 };
 
+/** The handler's dependencies for a signed-in build that succeeds */
+const deps = () => depsWith({});
+
 /** A first build: no program UUID yet, so the request carries none */
 const FILES = [["src/lib.rs", "fn main() {}"]];
 const BUILD = { files: FILES };
 
 describe("/api/build-server", () => {
   it("refuses a signed-out caller with 401 and never calls the server", async () => {
-    const d = deps({ readSession: async () => ({ status: "signed-out" }) });
+    const d = depsWith({ readSession: async () => ({ status: "signed-out" }) });
     const res = makeRes();
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(res.statusCode, 401);
     assert.deepEqual(JSON.parse(res.body), {
@@ -104,10 +116,10 @@ describe("/api/build-server", () => {
   });
 
   it("refuses another site's origin with 403", async () => {
-    const d = deps({ isAllowedOrigin: () => false });
+    const d = depsWith({ isAllowedOrigin: () => false });
     const res = makeRes();
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(res.statusCode, 403);
     assert.equal(d.fetch.mock.callCount(), 0);
@@ -115,10 +127,10 @@ describe("/api/build-server", () => {
 
   for (const status of ["unconfigured", "unavailable"]) {
     it(`answers 503 when sign-in is ${status}`, async () => {
-      const d = deps({ readSession: async () => ({ status }) });
+      const d = depsWith({ readSession: async () => ({ status }) });
       const res = makeRes();
 
-      await handleWith(d)(makeReq({ body: BUILD }), res);
+      await handleWith(d)(postBuild(BUILD), res);
 
       assert.equal(res.statusCode, 503);
       assert.equal(d.fetch.mock.callCount(), 0);
@@ -129,7 +141,7 @@ describe("/api/build-server", () => {
     const d = deps();
     const res = makeRes();
 
-    await handleWith(d)(makeReq({ method: "GET", path: "share/abc" }), res);
+    await handleWith(d)(getPath("share/abc"), res);
 
     assert.equal(res.statusCode, 404);
     assert.equal(d.fetch.mock.callCount(), 0);
@@ -138,7 +150,7 @@ describe("/api/build-server", () => {
   it("answers 405 with Allow for the wrong method", async () => {
     const res = makeRes();
 
-    await handleWith(deps())(makeReq({ method: "GET", path: "build" }), res);
+    await handleWith(deps())(getPath("build"), res);
 
     assert.equal(res.statusCode, 405);
     assert.equal(res.headers.allow, "POST");
@@ -147,7 +159,7 @@ describe("/api/build-server", () => {
   it("refuses a body over 1 MiB with 413", async () => {
     const d = deps();
     const res = makeRes();
-    const req = makeReq({ body: BUILD });
+    const req = postBuild(BUILD);
     req.headers["content-length"] = String(1024 * 1024 + 1);
 
     await handleWith(d)(req, res);
@@ -157,14 +169,14 @@ describe("/api/build-server", () => {
   });
 
   it("refuses with 503 when the audit row cannot be written", async () => {
-    const d = deps({
+    const d = depsWith({
       query: mock.fn(async () => {
         throw new Error("db down");
       }),
     });
     const res = makeRes();
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(res.statusCode, 503);
     assert.equal(d.fetch.mock.callCount(), 0);
@@ -175,7 +187,7 @@ describe("/api/build-server", () => {
     const res = makeRes();
     const body = { files: FILES, project: { id: "p1", name: "hello" } };
 
-    await handleWith(d)(makeReq({ body }), res);
+    await handleWith(d)(postBuild(body), res);
 
     assert.equal(res.statusCode, 200);
     assert.equal(JSON.parse(res.body).uuid, UUID);
@@ -195,21 +207,21 @@ describe("/api/build-server", () => {
   });
 
   it("sends no key header when none is configured", async () => {
-    const d = deps({ env: () => ({ URL: "https://server.test" }) });
+    const d = depsWith({ env: () => ({ URL: "https://server.test" }) });
 
-    await handleWith(d)(makeReq({ body: BUILD }), makeRes());
+    await handleWith(d)(postBuild(BUILD), makeRes());
 
     const [, init] = d.fetch.mock.calls[0].arguments;
     assert.equal("x-api-key" in init.headers, false);
   });
 
   it("refuses every build without PG_BUILD_SERVER_URL", async () => {
-    const d = deps({ env: () => ({ URL: undefined, API_KEY: "k3y" }) });
+    const d = depsWith({ env: () => ({ URL: undefined, API_KEY: "k3y" }) });
     const handle = handleWith(d);
 
     for (let i = 0; i < 2; i++) {
       const res = makeRes();
-      await handle(makeReq({ body: BUILD }), res);
+      await handle(postBuild(BUILD), res);
       assert.equal(res.statusCode, 503);
       assert.match(JSON.parse(res.body).error, /no build server configured/);
     }
@@ -218,7 +230,7 @@ describe("/api/build-server", () => {
   });
 
   it("keeps the program UUID the request already had", async () => {
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(
         async () =>
           // A rebuild: the server issues no new UUID
@@ -228,17 +240,14 @@ describe("/api/build-server", () => {
       ),
     });
 
-    await handleWith(d)(
-      makeReq({ body: { files: FILES, uuid: UUID } }),
-      makeRes()
-    );
+    await handleWith(d)(postBuild({ files: FILES, uuid: UUID }), makeRes());
 
     const [, updateParams] = d.query.mock.calls[1].arguments;
     assert.equal(updateParams[1], UUID);
   });
 
   it("relays a server error's status and text unchanged", async () => {
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(
         async () =>
           new Response("Invalid UUID", {
@@ -249,7 +258,7 @@ describe("/api/build-server", () => {
     });
     const res = makeRes();
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(res.statusCode, 500);
     assert.equal(res.body, "Invalid UUID");
@@ -258,14 +267,14 @@ describe("/api/build-server", () => {
   });
 
   it("answers 502 when the server cannot be reached, and records it", async () => {
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(async () => {
         throw new TypeError("fetch failed");
       }),
     });
     const res = makeRes();
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(res.statusCode, 502);
     assert.match(JSON.parse(res.body).error, /build server/i);
@@ -274,7 +283,7 @@ describe("/api/build-server", () => {
 
   it("relays a deploy's binary byte for byte, without an audit row", async () => {
     const bytes = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0, 1, 2, 255]);
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(
         async () =>
           new Response(bytes, {
@@ -285,10 +294,7 @@ describe("/api/build-server", () => {
     });
     const res = makeRes();
 
-    await handleWith(d)(
-      makeReq({ method: "GET", path: `deploy/${UUID}` }),
-      res
-    );
+    await handleWith(d)(getPath(`deploy/${UUID}`), res);
 
     assert.equal(res.statusCode, 200);
     assert.deepEqual(Buffer.concat(res.chunks), bytes);
@@ -323,10 +329,9 @@ describe("/api/build-server", () => {
   it("destroys, never ends, a deploy cut off after some bytes", async () => {
     const res = makeRes();
 
-    await handleWith(deps({ fetch: cutOffDeploy([new Uint8Array([1, 2])]) }))(
-      makeReq({ method: "GET", path: `deploy/${UUID}` }),
-      res
-    );
+    await handleWith(
+      depsWith({ fetch: cutOffDeploy([new Uint8Array([1, 2])]) })
+    )(getPath(`deploy/${UUID}`), res);
 
     assert.equal(res.ended, false);
     assert.equal(res.destroyed, true);
@@ -335,8 +340,8 @@ describe("/api/build-server", () => {
   it("answers 502 for a deploy cut off before its first byte", async () => {
     const res = makeRes();
 
-    await handleWith(deps({ fetch: cutOffDeploy([]) }))(
-      makeReq({ method: "GET", path: `deploy/${UUID}` }),
+    await handleWith(depsWith({ fetch: cutOffDeploy([]) }))(
+      getPath(`deploy/${UUID}`),
       res
     );
 
@@ -355,7 +360,7 @@ describe("/api/build-server", () => {
       queueMicrotask(() => this.emit("drain"));
       return false;
     };
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(
         async () =>
           new Response(
@@ -373,10 +378,7 @@ describe("/api/build-server", () => {
       ),
     });
 
-    await handleWith(d)(
-      makeReq({ method: "GET", path: `deploy/${UUID}` }),
-      res
-    );
+    await handleWith(d)(getPath(`deploy/${UUID}`), res);
 
     // Ending the response clears them anyway: count while it streams
     assert.ok(most <= 1, `${most} close listeners at once`);
@@ -385,7 +387,7 @@ describe("/api/build-server", () => {
   it("aborts the server request when the caller leaves", async () => {
     const res = makeRes();
     let signal;
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(async (_url, init) => {
         signal = init.signal;
         res.destroyed = true;
@@ -394,7 +396,7 @@ describe("/api/build-server", () => {
       }),
     });
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(signal.aborted, true);
     assert.equal(d.query.mock.calls[1].arguments[1][2], 499);
@@ -410,9 +412,9 @@ describe("/api/build-server", () => {
       }
       return { rows: [] };
     });
-    const d = deps({ query });
+    const d = depsWith({ query });
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(d.fetch.mock.callCount(), 0);
     assert.equal(query.mock.calls[1].arguments[1][2], 499);
@@ -423,11 +425,13 @@ describe("/api/build-server", () => {
     ["GET", `deploy/${UUID}`],
   ]) {
     it(`refuses a signed-out ${method} ${path} before any call`, async () => {
-      const d = deps({ readSession: async () => ({ status: "signed-out" }) });
+      const d = depsWith({
+        readSession: async () => ({ status: "signed-out" }),
+      });
       const res = makeRes();
 
       await handleWith(d)(
-        makeReq({ method, path, body: method === "POST" ? BUILD : undefined }),
+        request(method, path, method === "POST" ? JSON.stringify(BUILD) : ""),
         res
       );
 
@@ -438,7 +442,7 @@ describe("/api/build-server", () => {
 
   it("sends the build server only the headers it needs, never the caller's", async () => {
     const d = deps();
-    const req = makeReq({ body: BUILD });
+    const req = postBuild(BUILD);
     req.headers.cookie = "session=abc";
     req.headers.authorization = "Bearer user";
     req.headers["x-api-key"] = "forged";
@@ -455,7 +459,7 @@ describe("/api/build-server", () => {
 
   it("forwards a body the platform already parsed as JSON", async () => {
     const d = deps();
-    const req = makeReq({ body: BUILD });
+    const req = postBuild(BUILD);
     req.body = { files: FILES, project: { id: "p1", name: "hello" } };
 
     await handleWith(d)(req, makeRes());
@@ -469,7 +473,7 @@ describe("/api/build-server", () => {
 
   it("answers 400 for a body that is not JSON, with no audit row", async () => {
     const d = deps();
-    const req = makeReq();
+    const req = emptyBuild();
     req.body = "{not json";
     const res = makeRes();
 
@@ -481,14 +485,14 @@ describe("/api/build-server", () => {
   });
 
   it("turns the server refusing the route's key into a 502, not a sign-in prompt", async () => {
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(
         async () => new Response("Missing or invalid API key", { status: 401 })
       ),
     });
     const res = makeRes();
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(res.statusCode, 502);
     assert.equal(JSON.parse(res.body).reason, undefined);
@@ -500,10 +504,10 @@ describe("/api/build-server", () => {
     broken.text = async () => {
       throw new TypeError("terminated");
     };
-    const d = deps({ fetch: mock.fn(async () => broken) });
+    const d = depsWith({ fetch: mock.fn(async () => broken) });
     const res = makeRes();
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(res.statusCode, 502);
     assert.equal(d.query.mock.calls[1].arguments[1][2], 502);
@@ -511,14 +515,14 @@ describe("/api/build-server", () => {
 
   it("records 499, not the server's 200, when the caller left before the answer", async () => {
     const res = makeRes();
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(async () => {
         res.destroyed = true;
         return new Response(`{"stderr":"","uuid":"${UUID}"}`, { status: 200 });
       }),
     });
 
-    await handleWith(d)(makeReq({ body: BUILD }), res);
+    await handleWith(d)(postBuild(BUILD), res);
 
     assert.equal(d.query.mock.calls[1].arguments[1][2], 499);
     assert.equal(res.chunks.length, 0);
@@ -528,7 +532,7 @@ describe("/api/build-server", () => {
     const d = deps();
 
     await handleWith(d)(
-      makeReq({ body: { files: FILES, uuid: "x".repeat(5000) } }),
+      postBuild({ files: FILES, uuid: "x".repeat(5000) }),
       makeRes()
     );
 
@@ -536,14 +540,14 @@ describe("/api/build-server", () => {
   });
 
   it("records no UUID when neither side has a well-formed one", async () => {
-    const d = deps({
+    const d = depsWith({
       fetch: mock.fn(
         async () => new Response("error: could not compile", { status: 200 })
       ),
     });
 
     await handleWith(d)(
-      makeReq({ body: { files: FILES, uuid: "not-a-uuid" } }),
+      postBuild({ files: FILES, uuid: "not-a-uuid" }),
       makeRes()
     );
 
@@ -551,15 +555,15 @@ describe("/api/build-server", () => {
   });
 
   it("says once, in production, that the build server is open without a key", async () => {
-    const d = deps({
+    const d = depsWith({
       env: () => ({ URL: "https://server.test" }),
       isProduction: () => true,
     });
     const error = mock.method(console, "error", () => {});
     try {
       const handler = handleWith(d);
-      await handler(makeReq({ body: BUILD }), makeRes());
-      await handler(makeReq({ body: BUILD }), makeRes());
+      await handler(postBuild(BUILD), makeRes());
+      await handler(postBuild(BUILD), makeRes());
 
       const warnings = error.mock.calls.filter((c) =>
         JSON.stringify(c.arguments).includes("PG_BUILD_SERVER_API_KEY")
@@ -575,10 +579,7 @@ describe("/api/build-server", () => {
     const d = deps();
     const res = makeRes();
 
-    await handleWith(d)(
-      makeReq({ method: "GET", path: "deploy/not-a-uuid" }),
-      res
-    );
+    await handleWith(d)(getPath("deploy/not-a-uuid"), res);
 
     assert.equal(res.statusCode, 404);
     assert.equal(d.fetch.mock.callCount(), 0);
