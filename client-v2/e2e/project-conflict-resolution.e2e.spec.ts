@@ -468,7 +468,9 @@ test("project-conflict-resolution: Undoing a take", async ({ page }) => {
   await expect.poll(() => linesIn(pane.result)).toContain(MINE);
   await expect(take).toHaveCount(0);
 
-  await pane.result.locator(".view-lines").click();
+  // Focus the result on the line the take wrote: the middle of its lines can
+  // sit under a fold or the ribbon, depending on the window's size
+  await pane.result.locator(".view-line", { hasText: MINE }).click();
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+z" : "Control+z"
   );
