@@ -4,7 +4,7 @@ import type { ReactNode, RefCallback } from "react";
 import {
   DockPin,
   FILES_TOGGLE,
-  keepsTreeOpen,
+  shouldKeepTreeOpen,
   TREE_SHEET,
 } from "@/shared/lib/tree-dock";
 import { cn } from "@/shared/lib/utils";
@@ -170,7 +170,7 @@ const BaseEditorHead = ({
       // Focus stays where it was: the tree's rows take it on a click
       onOpenAutoFocus={(e) => e.preventDefault()}
       onInteractOutside={(e) => {
-        if (keepsTreeOpen(e.target)) e.preventDefault();
+        if (shouldKeepTreeOpen(e.target)) e.preventDefault();
       }}
       onClick={(e) => tree?.onClick(e.target)}
     >

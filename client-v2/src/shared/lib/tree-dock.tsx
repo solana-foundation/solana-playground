@@ -37,7 +37,7 @@ export const TREE_SHEET =
  * what opens it, or in a menu or dialog it opened, which portal out of it
  * (a file's context menu, its Rename and Delete dialogs)
  */
-export const keepsTreeOpen = (target: EventTarget | null) =>
+export const shouldKeepTreeOpen = (target: EventTarget | null) =>
   target instanceof Element &&
   target.closest(
     `[${FILES_TOGGLE}], [role="menu"], [role="dialog"], [role="alertdialog"]`
