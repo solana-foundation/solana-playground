@@ -337,7 +337,7 @@ describe("Assistant", () => {
   it("puts focus on Back when Sources and tools is picked from the keyboard", async () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.keyboard("s");
+    await user.keyboard("{ArrowDown}{Enter}");
     const back = screen.getByRole("button", { name: "Back" });
     await waitFor(() => expect(document.activeElement).toBe(back));
   });
@@ -345,7 +345,7 @@ describe("Assistant", () => {
   it("leaves focus in Connect a model when it is picked", async () => {
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.keyboard("k");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     expect(turn.openConnect).toHaveBeenCalledWith("menu");
     const field = screen.getByRole("textbox", { name: "Dialog field" });
     await waitFor(() => expect(document.activeElement).toBe(field));
@@ -355,7 +355,7 @@ describe("Assistant", () => {
     const { user } = setup();
     await openSources(user);
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.keyboard("k");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     expect(turn.openConnect).toHaveBeenCalledWith("menu");
     expect(screen.getByText("sources")).toBeTruthy();
   });
@@ -365,7 +365,7 @@ describe("Assistant", () => {
     const { user } = setup();
     const more = screen.getByRole("button", { name: "More" });
     await user.click(more);
-    await user.keyboard("k");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
     await waitFor(() => expect(document.activeElement).toBe(more));
   });
 
