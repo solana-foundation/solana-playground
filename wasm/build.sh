@@ -53,7 +53,6 @@ fi
 
 # All package names
 all_packages=(
-    "anchor-cli"
     "rust-analyzer"
     "seahorse-compile"
     "solana-cli"

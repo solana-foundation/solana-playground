@@ -23,7 +23,6 @@
     "@sentry/node": "11.4.0",
     "@sentry/react": "^11.4.0",
     "@shadcn/react": "^0.3.1",
-    "@solana-playground/anchor-cli": "../wasm/anchor-cli/pkg",
     "@solana-playground/playnet": "../wasm/pkgs/playnet",
     "@solana-playground/rust-analyzer": "../wasm/rust-analyzer/pkg",
     "@solana-playground/rustfmt": "../wasm/pkgs/rustfmt",

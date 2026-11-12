@@ -5295,9 +5295,6 @@
   optionalDependencies:
     "@react-native-async-storage/async-storage" "^1.17.7"
 
-"@solana-playground/anchor-cli@../wasm/anchor-cli/pkg":
-  version "0.29.0"
-
 "@solana-playground/playnet@../wasm/pkgs/playnet":
   version "0.1.0"
 

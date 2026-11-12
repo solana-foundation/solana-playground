@@ -6,7 +6,7 @@ set -euo pipefail
 
 # Vercel install hook for the client.
 #
-# Order matters: client/package.json has file-deps like "../wasm/anchor-cli/pkg"
+# Order matters: client/package.json has file-deps like "../wasm/solana-cli/pkg"
 # which don't exist until wasm-pack runs, so we must compile wasm BEFORE yarn install.
 
 # Rust state exceeds the Build Cache size limit, so it lives outside node_modules and only built output is cached.

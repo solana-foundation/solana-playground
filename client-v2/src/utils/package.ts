@@ -4,7 +4,6 @@ import { PgTerminal } from "./terminal";
 
 /** Mapped import results */
 interface ImportResult {
-  "anchor-cli": typeof import("@solana-playground/anchor-cli");
   playnet: typeof import("@solana-playground/playnet");
   rustfmt: typeof import("@solana-playground/rustfmt");
   "seahorse-compile": typeof import("@solana-playground/seahorse-compile");
@@ -54,8 +53,6 @@ If the problem continues, consider filing a bug report in ${PgTerminal.underline
    */
   private static async _import(name: PackageName) {
     switch (name) {
-      case "anchor-cli":
-        return await import("@solana-playground/anchor-cli");
       case "playnet":
         return await import("@solana-playground/playnet");
       case "rustfmt":
