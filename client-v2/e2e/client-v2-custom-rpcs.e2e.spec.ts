@@ -1,6 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 
-import { expect, test } from "./fixtures";
+import { expect, reloadAndBoot, test } from "./fixtures";
 
 /**
  * The scenarios of `client-v2-custom-rpcs`: several custom RPCs saved in
@@ -14,7 +14,6 @@ const RESULTS: Record<string, unknown> = {
   getGenesisHash: DEVNET_GENESIS,
   getVersion: { "solana-core": "2.0.0", "feature-set": 0 },
   getBalance: { context: { slot: 1 }, value: 0 },
-  getSlot: 1,
 };
 
 /**
@@ -23,12 +22,22 @@ const RESULTS: Record<string, unknown> = {
  */
 const stubRpcs = async (page: Page) => {
   const asked: string[] = [];
+  // The slot moves on every read: a cluster whose slot stands still between
+  // two reads a second apart is down (`PgConnection.getIsClusterDown`), and
+  // the cluster's indicator then opens its "not responding" panel instead of
+  // Settings. A run slow enough to click after that second read (Firefox on
+  // CI) never reached Settings.
+  let slot = 0;
+  const result = (method: string | undefined) => {
+    if (method === "getSlot") return (slot += 1);
+    // JSON-RPC answers an unknown call with a null result, not none
+    // eslint-disable-next-line unicorn/no-null -- the wire format's null
+    return RESULTS[method ?? ""] ?? null;
+  };
   const answer = (call: { id?: unknown; method?: string }) => ({
     jsonrpc: "2.0",
     id: call.id,
-    // JSON-RPC answers an unknown call with a null result, not none
-    // eslint-disable-next-line unicorn/no-null -- the wire format's null
-    result: RESULTS[call.method ?? ""] ?? null,
+    result: result(call.method),
   });
   const handle = async (route: Route) => {
     asked.push(new URL(route.request().url()).host);
@@ -93,7 +102,7 @@ test("client-v2-custom-rpcs: Two saved RPCs survive a reload", async ({
     "Triton",
   ]);
 
-  await page.reload();
+  await reloadAndBoot(page);
   await openSettings(page);
   await expect(network(page).getByRole("radio")).toHaveText([
     "Mainnet",
@@ -292,7 +301,7 @@ test("client-v2-custom-rpcs: A custom endpoint from before is listed", async ({
     localStorage.setItem("settings", JSON.stringify(settings));
     localStorage.removeItem("customRpcs");
   });
-  await page.reload();
+  await reloadAndBoot(page);
   await openSettings(page);
   await expect(
     network(page).getByRole("radio", { name: "own.rpc.test" })
