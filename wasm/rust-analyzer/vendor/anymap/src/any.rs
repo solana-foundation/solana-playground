@@ -8,65 +8,65 @@ use std::any::Any as StdAny;
 
 #[doc(hidden)]
 pub trait CloneToAny {
-    /// Clone `self` into a new `Box<CloneAny>` object.
-    fn clone_to_any(&self) -> Box<CloneAny>;
+    /// Clone `self` into a new `Box<dyn CloneAny>` object.
+    fn clone_to_any(&self) -> Box<dyn CloneAny>;
 
-    /// Clone `self` into a new `Box<CloneAny + Send>` object.
-    fn clone_to_any_send(&self) -> Box<CloneAny + Send> where Self: Send;
+    /// Clone `self` into a new `Box<dyn CloneAny + Send>` object.
+    fn clone_to_any_send(&self) -> Box<dyn CloneAny + Send> where Self: Send;
 
-    /// Clone `self` into a new `Box<CloneAny + Sync>` object.
-    fn clone_to_any_sync(&self) -> Box<CloneAny + Sync> where Self: Sync;
+    /// Clone `self` into a new `Box<dyn CloneAny + Sync>` object.
+    fn clone_to_any_sync(&self) -> Box<dyn CloneAny + Sync> where Self: Sync;
 
-    /// Clone `self` into a new `Box<CloneAny + Send + Sync>` object.
-    fn clone_to_any_send_sync(&self) -> Box<CloneAny + Send + Sync> where Self: Send + Sync;
+    /// Clone `self` into a new `Box<dyn CloneAny + Send + Sync>` object.
+    fn clone_to_any_send_sync(&self) -> Box<dyn CloneAny + Send + Sync> where Self: Send + Sync;
 }
 
 impl<T: Any + Clone> CloneToAny for T {
     #[inline]
-    fn clone_to_any(&self) -> Box<CloneAny> {
+    fn clone_to_any(&self) -> Box<dyn CloneAny> {
         Box::new(self.clone())
     }
 
     #[inline]
-    fn clone_to_any_send(&self) -> Box<CloneAny + Send> where Self: Send {
+    fn clone_to_any_send(&self) -> Box<dyn CloneAny + Send> where Self: Send {
         Box::new(self.clone())
     }
 
     #[inline]
-    fn clone_to_any_sync(&self) -> Box<CloneAny + Sync> where Self: Sync {
+    fn clone_to_any_sync(&self) -> Box<dyn CloneAny + Sync> where Self: Sync {
         Box::new(self.clone())
     }
 
     #[inline]
-    fn clone_to_any_send_sync(&self) -> Box<CloneAny + Send + Sync> where Self: Send + Sync {
+    fn clone_to_any_send_sync(&self) -> Box<dyn CloneAny + Send + Sync> where Self: Send + Sync {
         Box::new(self.clone())
     }
 }
 
 macro_rules! define {
     (CloneAny) => {
-        /// A type to emulate dynamic typing.
-        ///
-        /// Every type with no non-`'static` references implements `Any`.
+        // A type to emulate dynamic typing.
+        //
+        // Every type with no non-`'static` references implements `Any`.
         define!(CloneAny remainder);
     };
     (Any) => {
-        /// A type to emulate dynamic typing with cloning.
-        ///
-        /// Every type with no non-`'static` references that implements `Clone` implements `Any`.
+        // A type to emulate dynamic typing with cloning.
+        //
+        // Every type with no non-`'static` references that implements `Clone` implements `Any`.
         define!(Any remainder);
     };
     ($t:ident remainder) => {
-        /// See the [`std::any` documentation](https://doc.rust-lang.org/std/any/index.html) for
-        /// more details on `Any` in general.
-        ///
-        /// This trait is not `std::any::Any` but rather a type extending that for this library’s
-        /// purposes so that it can be combined with marker traits like 
-        /// <code><a class=trait title=core::marker::Send
-        /// href=http://doc.rust-lang.org/std/marker/trait.Send.html>Send</a></code> and
-        /// <code><a class=trait title=core::marker::Sync
-        /// href=http://doc.rust-lang.org/std/marker/trait.Sync.html>Sync</a></code>.
-        ///
+        // See the [`std::any` documentation](https://doc.rust-lang.org/std/any/index.html) for
+        // more details on `Any` in general.
+        //
+        // This trait is not `std::any::Any` but rather a type extending that for this library’s
+        // purposes so that it can be combined with marker traits like
+        // <code><a class=trait title=core::marker::Send
+        // href=http://doc.rust-lang.org/std/marker/trait.Send.html>Send</a></code> and
+        // <code><a class=trait title=core::marker::Sync
+        // href=http://doc.rust-lang.org/std/marker/trait.Sync.html>Sync</a></code>.
+        //
         define!($t trait);
     };
     (CloneAny trait) => {
@@ -108,14 +108,14 @@ pub trait IntoBox<A: ?Sized + UncheckedAnyExt>: Any {
 
 macro_rules! implement {
     ($base:ident, $(+ $bounds:ident)*) => {
-        impl fmt::Debug for $base $(+ $bounds)* {
+        impl fmt::Debug for dyn $base $(+ $bounds)* {
             #[inline]
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
                 f.pad(stringify!($base $(+ $bounds)*))
             }
         }
 
-        impl UncheckedAnyExt for $base $(+ $bounds)* {
+        impl UncheckedAnyExt for dyn $base $(+ $bounds)* {
             #[inline]
             unsafe fn downcast_ref_unchecked<T: 'static>(&self) -> &T {
                 &*(self as *const Self as *const T)
@@ -132,9 +132,9 @@ macro_rules! implement {
             }
         }
 
-        impl<T: $base $(+ $bounds)*> IntoBox<$base $(+ $bounds)*> for T {
+        impl<T: $base $(+ $bounds)*> IntoBox<dyn $base $(+ $bounds)*> for T {
             #[inline]
-            fn into_box(self) -> Box<$base $(+ $bounds)*> {
+            fn into_box(self) -> Box<dyn $base $(+ $bounds)*> {
                 Box::new(self)
             }
         }
@@ -152,7 +152,7 @@ implement!(CloneAny, + Sync);
 implement!(CloneAny, + Send + Sync);
 
 define!(CloneAny);
-impl_clone!(CloneAny, clone_to_any);
-impl_clone!((CloneAny + Send), clone_to_any_send);
-impl_clone!((CloneAny + Sync), clone_to_any_sync);
-impl_clone!((CloneAny + Send + Sync), clone_to_any_send_sync);
+impl_clone!(dyn CloneAny, clone_to_any);
+impl_clone!((dyn CloneAny + Send), clone_to_any_send);
+impl_clone!((dyn CloneAny + Sync), clone_to_any_sync);
+impl_clone!((dyn CloneAny + Send + Sync), clone_to_any_send_sync);
