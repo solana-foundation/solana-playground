@@ -11,6 +11,7 @@ import {
   PgWeb3,
   TupleFiles,
 } from "../../utils";
+import { isSignInRefusalError } from "../../utils/sign-in-refusal";
 import { STOPPED, throwIfStopped } from "../../utils/stopped";
 import { isMacroSymptomText } from "../../views/flow/stages/build-report";
 import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
@@ -54,6 +55,9 @@ export const build = createCmd({
         // The aborted request fails; say it was stopped, not that it failed.
         // Only "Stopped.": the server may still finish, its reply is not kept
         throwIfStopped(signal, STOPPED);
+        // A refusal for sign-in never reached the compiler, so the saved
+        // verdict stays: a reload would otherwise show a failed build
+        if (isSignInRefusalError(e)) throw e;
         // Deploy's stale-build guard reads `lastBuildFailed`, so the previous binary is not shipped
         if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
         sayDroppedUnlessOpen();

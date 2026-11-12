@@ -192,6 +192,20 @@ describe("commands/build/build", () => {
         lastBuildFailed: true,
       });
     });
+    // A refusal for sign-in never reached the compiler: the saved verdict
+    // stays what it was, so a reload does not show a failed build
+    it("keeps the saved verdict when the build is refused for sign-in", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          reason: "signed-out",
+        })
+      );
+
+      const err = await run().catch((e: unknown) => e);
+
+      expect((err as Error).message).toBe("Sign in with GitHub to build.");
+      expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+    });
   });
 
   describe("another project opened during the build", () => {
