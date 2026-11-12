@@ -1,6 +1,13 @@
 import type { Page } from "@playwright/test";
 
-import { expect, json, LONG, seedWorkspace, test } from "./fixtures";
+import {
+  expect,
+  json,
+  LONG,
+  reloadAndBoot,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 
 const SKILL = {
   id: "e2e-skill",
@@ -132,7 +139,7 @@ test("assistant-tool-config: A reload after turning a skill off and adding a ser
   await expect(page.getByRole("checkbox", { name: "My server" })).toBeVisible();
 
   await waitForStored(page);
-  await page.reload();
+  await reloadAndBoot(page);
   await openSources(page);
 
   await expect(
@@ -158,7 +165,7 @@ test("assistant-tool-config: The stored file after adding a server with a token"
   expect(before).not.toContain(TOKEN);
   expect(before).not.toContain(HEADER);
 
-  await page.reload();
+  await reloadAndBoot(page);
   await openSources(page);
 
   await expect(page.getByText(/Enter again for/)).toContainText(
