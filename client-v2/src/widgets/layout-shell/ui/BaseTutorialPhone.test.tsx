@@ -13,6 +13,7 @@ interface Drawn {
   chat: ReactNode;
   consoleNode: HTMLDivElement;
   consoleOpen: boolean;
+  tablet: boolean;
   stageNode?: HTMLDivElement;
 }
 
@@ -27,7 +28,7 @@ const tree = (drawn: Drawn) => (
     stageNode={drawn.stageNode ?? document.createElement("div")}
     consoleNode={drawn.consoleNode}
     consoleOpen={drawn.consoleOpen}
-    tablet={false}
+    tablet={drawn.tablet}
   />
 );
 
@@ -40,6 +41,7 @@ const draw = (space: TutorialSpace, onSpace: Drawn["onSpace"]) =>
       chat: <p>the feed</p>,
       consoleNode: document.createElement("div"),
       consoleOpen: false,
+      tablet: false,
     })
   );
 
@@ -109,14 +111,33 @@ describe("the spaces", () => {
       chat: <p>the feed</p>,
       consoleNode,
       consoleOpen,
+      tablet: false,
     });
     const { rerender } = render(tree(drawn(false)));
     const box = () => consoleNode.parentElement as HTMLElement;
-    expect(box().style.height).toBe("28px");
+    // Below 768 px the bar is a finger's 44 px (`BaseConsoleDrawer`'s
+    // `max-md:h-11`), as on the pager; a 28 px fold cut its foot off
+    expect(box().style.height).toBe("44px");
     expect(box().className).toContain("overflow-hidden");
     rerender(tree(drawn(true)));
     expect(box().style.height).toBe("");
     expect(box().className).toContain("max-h-[42dvh]");
+  });
+
+  it("folds the console to the wide bar's 28 px in the tablet band", () => {
+    const consoleNode = document.createElement("div");
+    render(
+      tree({
+        space: "code",
+        onSpace: vi.fn(),
+        chat: <p>the feed</p>,
+        consoleNode,
+        consoleOpen: false,
+        tablet: true,
+      })
+    );
+    const box = consoleNode.parentElement as HTMLElement;
+    expect(box.style.height).toBe("28px");
   });
 });
 
@@ -181,6 +202,7 @@ describe("a swipe", () => {
         ),
         consoleNode: document.createElement("div"),
         consoleOpen: false,
+        tablet: false,
       })
     );
     const block = screen.getByTestId("code-block");
@@ -209,6 +231,7 @@ describe("a swipe", () => {
         chat: <p>the feed</p>,
         consoleNode: document.createElement("div"),
         consoleOpen: false,
+        tablet: false,
         stageNode,
       })
     );

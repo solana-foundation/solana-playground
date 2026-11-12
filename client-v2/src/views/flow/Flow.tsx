@@ -11,6 +11,7 @@ import { useKeybind, useRenderOnChange } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
+import { Outlet, OutletContent, useOutletNode } from "@/shared/lib/outlet";
 import {
   SETTINGS_TRIGGER_ATTR,
   type SettingsExit,
@@ -109,7 +110,9 @@ const log = createLogger("flow:settings");
  * A tutorial's chat: the feed, and its composer at the foot (3.6). The frame
  * has no assistant panel (`LayoutShellProps.tutorial`), so the one live
  * assistant turn is held here while the chat shows, and the panel's own
- * holds it again once the frame goes.
+ * holds it again once the frame goes. Mounted once, through `chatNode`,
+ * which the frame and the phone layout both show. A turn still running when
+ * it unmounts keeps its Stop: the turn is the page's, not the hook's.
  */
 const TutorialChat = ({
   onAllTutorials,
@@ -118,7 +121,14 @@ const TutorialChat = ({
   onAllTutorials: () => void;
   onOpenMenu: () => void;
 }) => {
-  const turn = useTurn({ open: openConnectDialog });
+  // Keyed by the tutorial, so its draft is still there after Back to
+  // tutorials, which unmounts this chat, and the way back (HOO-2739)
+  const turn = useTurn({
+    open: openConnectDialog,
+    draftKey: PgTutorial.current
+      ? `tutorial:${PgTutorial.current.name}`
+      : undefined,
+  });
   // The composer counts a question only once the assistant has it
   const send = (text: string) =>
     turn.send(text).then((outcome) => outcome === "sent");
@@ -366,18 +376,22 @@ const FlowFrame = () => {
   const openMenu = useRef<() => void>(() => {});
   const conversation = useConversationStartOver();
   const marks = useConversationMarks();
+  // One chat for the frame and the phone layout, rendered into this node and
+  // shown by whichever of the two is drawn, as the stage and the console are:
+  // crossing the frame's width moves the node, so `useTurn` stays mounted and
+  // keeps the composer's draft and the Stop of an answer streaming. Mounted
+  // only while one of them is drawn (`isChatShown`)
+  const chatNode = useOutletNode("flex min-h-0 flex-1 flex-col");
+  const chatOutlet = (
+    <Outlet node={chatNode} className="flex min-h-0 flex-1 flex-col" />
+  );
   const tutorial = useTutorialFrame({
     // Back to the list the tutorial came from; the navigation's own way
     // there, so it reads as `nav`
     onBack: () => catalogPage.open("tutorials", "nav"),
     onStartOver: conversation.onStartOver,
     passed: conversation.passed,
-    body: (
-      <TutorialChat
-        onAllTutorials={() => catalogPage.open("tutorials", "nav")}
-        onOpenMenu={() => openMenu.current()}
-      />
-    ),
+    body: chatOutlet,
   });
 
   // The frame's workspace (2.2): its head and tree over the stage, and its
@@ -389,6 +403,15 @@ const FlowFrame = () => {
   // two spaces, the chat and the code, which the shell lays out. A tablet
   // gets the same screens, the chat centred (DES-160)
   const onPhone = tutorial.frame !== undefined && !inFrame;
+  // Where the shell draws a chat Outlet: the frame on the work, or under a
+  // page over it; the phone layout on the work only. Nowhere else may the
+  // chat stay mounted: on wide Home the assistant panel holds the one live
+  // turn, and a chat out of the page would still answer Enter, starting or
+  // advancing a step nobody sees
+  const isChatShown =
+    tutorial.frame !== undefined &&
+    page.view === "work" &&
+    (inFrame || catalog === null);
   // The live assistant's open_menu tool (3.6) opens the frame's navigation,
   // which exists only once the frame is built from the body above. Below the
   // frame's width that navigation is not drawn: the phone's steps sheet is
@@ -432,17 +455,7 @@ const FlowFrame = () => {
           onSheetOpenChange={setPhoneSteps}
         />
       ),
-      // TODO(SF#94 review, Greptile "Layout changes lose chat controls"): a
-      // second chat, not the frame's moved: crossing the frame's width
-      // remounts `useTurn`, which drops the composer's draft and the Stop of
-      // an answer streaming. One mounted chat moved between the layouts, as
-      // the editor and terminal are, is the follow-up
-      chat: (
-        <TutorialChat
-          onAllTutorials={() => catalogPage.open("tutorials", "nav")}
-          onOpenMenu={() => openMenu.current()}
-        />
-      ),
+      chat: chatOutlet,
       space: space.space,
       onSpace: space.setSpace,
     },
@@ -694,7 +707,7 @@ const FlowFrame = () => {
           assistant={({ open, toggle, ...widen }) => (
             // No fill, so the conversation sits on the window's pattern, as
             // the prototype's does. A tutorial's chat never sits here: the
-            // frame and the phone layout (5.1) hold it themselves
+            // frame and the phone layout (5.1) show the one chat, `chatNode`
             <aside className="relative flex h-full w-full flex-col overflow-hidden">
               {/* The head carries "Collapse assistant", and Widen while the
                 shell says it can widen. Hidden, the column takes no width and
@@ -718,6 +731,14 @@ const FlowFrame = () => {
         <LiveSettings focus={settings.focus} onClose={closeSettings} />
       )}
 
+      {isChatShown && (
+        <OutletContent node={chatNode}>
+          <TutorialChat
+            onAllTutorials={() => catalogPage.open("tutorials", "nav")}
+            onOpenMenu={() => openMenu.current()}
+          />
+        </OutletContent>
+      )}
       <ModalHost />
       <ToastHost />
       <FundDialogHost />

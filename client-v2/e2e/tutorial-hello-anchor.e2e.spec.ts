@@ -1,17 +1,19 @@
 import type { Page } from "@playwright/test";
 
-import type {
-  Ask,
-  Beat,
-  Text,
-  TutorialDefinition,
-} from "../src/entities/tutorial";
-import hello from "../src/tutorials/hello-anchor/tutorial.json";
 import type { FakeBuildServer } from "./fake-build-server";
 import { fakeBuildServer } from "./fake-build-server";
 import type { FakeDevnet } from "./fake-devnet";
 import { fakeDevnet } from "./fake-devnet";
 import { expect, LONG, test } from "./fixtures";
+import {
+  beat,
+  cardsFor,
+  escape,
+  lesson,
+  plain,
+  step,
+  words,
+} from "./hello-anchor";
 import { hasSavedText } from "./saved-files";
 
 /**
@@ -29,71 +31,11 @@ import { hasSavedText } from "./saved-files";
  */
 const isLive = Boolean(process.env.E2E_LIVE);
 
-/** The lesson as the app reads it */
-const lesson = hello as unknown as TutorialDefinition;
-
-const beat = <K extends Beat["kind"]>(id: string, kind: K) => {
-  const all = lesson.steps.flatMap((s) => s.beats.concat(s.onFail ?? []));
-  const found = all.find((b) => b.id === id);
-  if (!found || found.kind !== kind)
-    throw new Error(`Hello Anchor has no ${kind} beat "${id}"`);
-  return found as Extract<Beat, { kind: K }>;
-};
-const step = (id: string) => {
-  const found = lesson.steps.find((s) => s.id === id);
-  if (!found) throw new Error(`Hello Anchor has no step "${id}"`);
-  return found;
-};
-/** A text's desktop words */
-const words = (text: Text) => (typeof text === "string" ? text : text.text);
-
-const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 const chat = (page: Page) =>
   page.getByRole("complementary", { name: "Tutorial chat" });
 const feed = (page: Page) => chat(page).getByRole("log");
 
-/** Markdown's inline code as the page reads it: the words, no backticks */
-const plain = (text: string) => text.replace(/`/g, "");
-
-/** The option `index` of a question, as its button */
-const option = (ask: Ask, index: number) => (page: Page) =>
-  feed(page).getByRole("button", {
-    name: new RegExp(`^${escape(plain(ask.options[index]))}`),
-  });
-/** Picks the right answer of `ask` once it is in the feed */
-const answer = async (page: Page, ask: Ask) => {
-  await option(ask, ask.answer)(page).click(LONG);
-};
-
-/** The live act card of `id`, and its button */
-const act = (page: Page, id: string) => {
-  const a = beat(id, "act");
-  return feed(page).getByRole("button", { name: a.button, exact: true }).last();
-};
-
-/** The step's win card has landed: its headline is in the feed */
-const won = async (page: Page, id: string) => {
-  await expect(
-    feed(page)
-      .getByText(words(step(id).win.headline), { exact: false })
-      .first()
-  ).toBeVisible(LONG);
-};
-/** A passed step's act keeps no live button: only the latest card acts */
-const spent = async (page: Page, ...ids: string[]) => {
-  for (const id of ids) {
-    await expect(
-      feed(page).getByRole("button", {
-        name: beat(id, "act").button,
-        exact: true,
-      })
-    ).toHaveCount(0);
-  }
-};
-/** The live Next, "Next: <the next step's title>" */
-const next = (page: Page) =>
-  feed(page).getByRole("button", { name: /^Next/ }).last();
+const { optionFor, answer, act, won, spent, next } = cardsFor(feed);
 
 const start = async (page: Page) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -193,14 +135,14 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     // still in the feed
     const q3 = beat("s3.q3", "ask");
     const wrong = q3.why.findIndex((why) => why !== null);
-    await option(q3, wrong)(page).click(LONG);
-    await expect(option(q3, wrong)(page)).toHaveAttribute(
+    await optionFor(q3, wrong)(page).click(LONG);
+    await expect(optionFor(q3, wrong)(page)).toHaveAttribute(
       "aria-disabled",
       "true"
     );
     await page.reload();
-    await expect(option(q3, q3.answer)(page)).toBeVisible(LONG);
-    await expect(option(q3, wrong)(page)).toHaveAttribute(
+    await expect(optionFor(q3, q3.answer)(page)).toBeVisible(LONG);
+    await expect(optionFor(q3, wrong)(page)).toHaveAttribute(
       "aria-disabled",
       "true"
     );
@@ -259,6 +201,10 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await expect(
       finished.getByText("Program log: Hello, Alex!").first()
     ).toBeVisible();
+    // It leads on to the next tutorial of Home's Start here, Lumberjack
+    await expect(
+      feed(page).getByRole("button", { name: "Next: Lumberjack", exact: true })
+    ).toBeVisible();
   });
 
   test("tutorial-conversation: A wrong pick, then the right one", async ({
@@ -269,7 +215,7 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     const q1 = beat("s1.q1", "ask");
     const wrong = q1.why.findIndex((why) => why !== null);
     await start(page);
-    await option(q1, wrong)(page).click(LONG);
+    await optionFor(q1, wrong)(page).click(LONG);
     // The row is ruled out with the definition's reason under it, and the
     // build waits for the right pick
     await expect(
@@ -278,7 +224,7 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
         exact: true,
       })
     ).toHaveCount(0);
-    const ruled = option(q1, wrong)(page);
+    const ruled = optionFor(q1, wrong)(page);
     await expect(ruled).toHaveAttribute("aria-disabled", "true");
     await expect(ruled.getByText("Not quite.", { exact: true })).toBeVisible();
     await expect(ruled).toHaveAccessibleDescription(
