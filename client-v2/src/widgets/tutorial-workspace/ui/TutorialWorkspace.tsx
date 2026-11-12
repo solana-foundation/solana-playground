@@ -305,10 +305,22 @@ const TutorialWorkspace: FC<TutorialWorkspaceProps> = ({
       writeFrontDoc(name, undefined);
     };
     // `onDidOpenFile` replays the open file as it subscribes, in the call
-    // itself: that shows nothing new, and would hide the page a reload restores
+    // itself: that shows nothing new, and would hide the page a reload restores.
+    // With no file open yet (a slow boot) there is no replay, and the first
+    // report is the workspace opening its current file, which is the same
+    // restore arriving late: it must not take the page either
     let isReplay = true;
+    let isRestored = false;
     const opened = PgExplorer.onDidOpenFile(() => {
-      if (!isReplay) toCode();
+      if (isReplay) {
+        isRestored = true;
+        return;
+      }
+      if (!isRestored) {
+        isRestored = true;
+        return;
+      }
+      toCode();
     });
     isReplay = false;
     const stop = onCodeRequest(toCode);

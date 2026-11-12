@@ -8,19 +8,25 @@ import { requestDoc } from "@/entities/tutorial";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgExplorer } from "@/utils";
 
-const { useEditorLines, callPanel, noop } = vi.hoisted(() => ({
-  noop: () => ({ dispose: () => {} }),
-  useEditorLines: vi.fn(),
-  callPanel: {
-    isOpen: false,
-    callable: false,
-    dot: false,
-    close: vi.fn(),
-    toggle: vi.fn(),
-    onDidChange: () => ({ dispose: () => {} }),
-  },
-}));
-
+const { useEditorLines, callPanel, noop, onDidOpenFile } = vi.hoisted(() => {
+  const noSubscription = () => ({ dispose: () => {} });
+  return {
+    noop: noSubscription,
+    onDidOpenFile:
+      vi.fn<(cb: (file: unknown) => unknown) => { dispose: () => void }>(
+        noSubscription
+      ),
+    useEditorLines: vi.fn(),
+    callPanel: {
+      isOpen: false,
+      callable: false,
+      dot: false,
+      close: vi.fn(),
+      toggle: vi.fn(),
+      onDidChange: () => ({ dispose: () => {} }),
+    },
+  };
+});
 // The utils barrel needs build-time globals the unit runner does not define;
 // the workspace reads only these
 vi.mock("@/utils", () => ({
@@ -36,7 +42,7 @@ vi.mock("@/utils", () => ({
     files: { "/project/src/lib.rs": {} },
     currentFilePath: "/project/src/lib.rs",
     openFile: vi.fn(),
-    onDidOpenFile: noop,
+    onDidOpenFile,
     onDidCreateItem: noop,
     onDidDeleteItem: noop,
   },
@@ -97,6 +103,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
+  onDidOpenFile.mockReset();
+  onDidOpenFile.mockImplementation(() => noop());
   useEditorLines.mockClear();
   callPanel.isOpen = false;
 });
@@ -209,5 +217,69 @@ describe("TutorialWorkspace", () => {
     workspace("phone");
     await userEvent.keyboard("{Escape}");
     expect(callPanel.close).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TutorialWorkspace's restored page", () => {
+  const FRONT = JSON.stringify({ "Hello Anchor": "idl.md" });
+  const DOCS = JSON.stringify({ "Hello Anchor": ["idl.md"] });
+  const frontKey = () =>
+    JSON.parse(localStorage.getItem("tutorial-workspace.front-doc") ?? "{}");
+
+  /**
+   * The explorer's `onDidOpenFile`: every subscriber hears `replay` in its own
+   * subscribe call, and `fire` reaches all of them later, as the event does
+   */
+  const subscribing = (replay: boolean) => {
+    const subscribers: ((file: unknown) => unknown)[] = [];
+    onDidOpenFile.mockImplementation((cb) => {
+      subscribers.push(cb);
+      if (replay) cb({});
+      return noop();
+    });
+    return { fire: () => subscribers.forEach((cb) => cb({})) };
+  };
+
+  beforeEach(() => {
+    localStorage.setItem("tutorial-workspace.docs", DOCS);
+    localStorage.setItem("tutorial-workspace.front-doc", FRONT);
+  });
+
+  it("keeps the page a reload restored when the workspace's own open arrives after the subscribe", () => {
+    // The explorer has no file open yet when this subscribes (a slow boot); its
+    // first report is the workspace opening its current file, not the lesson
+    // showing code
+    const opened = subscribing(false);
+    workspace("frame");
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+
+    act(() => opened.fire());
+
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+    expect(frontKey()["Hello Anchor"]).toBe("idl.md");
+  });
+
+  it("goes back to the code on a file the lesson opens after the restore", () => {
+    const opened = subscribing(false);
+    workspace("frame");
+    act(() => opened.fire());
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+
+    act(() => opened.fire());
+
+    expect(screen.queryByTestId("tutorial-doc-page")).toBeNull();
+    expect(frontKey()["Hello Anchor"]).toBeUndefined();
+  });
+
+  it("goes back to the code on the first file opened once one was already open", () => {
+    // The subscribe call itself reports the open file (replay): that is the
+    // restore, and the next report is the lesson
+    const opened = subscribing(true);
+    workspace("frame");
+    expect(screen.getByTestId("tutorial-doc-page")).toBeTruthy();
+
+    act(() => opened.fire());
+    expect(screen.queryByTestId("tutorial-doc-page")).toBeNull();
+    expect(frontKey()["Hello Anchor"]).toBeUndefined();
   });
 });
