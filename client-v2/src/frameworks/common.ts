@@ -165,7 +165,7 @@ export const wrapTopLevelAwait = (content: string) => {
  */
 const getLeadingImportsEnd = (content: string) => {
   // `import{BN}`, `import*as x` and `import"x"` need no space after the keyword;
-  // the check keeps `important` out
+  // the lookahead keeps `important` and `import(` out
   const keyword = /import(?=[\s{*"'])/y;
   const statementRest = /[\s\S]*?["'][^"'\n]*["'];?/y;
   let end = 0;
@@ -174,8 +174,8 @@ const getLeadingImportsEnd = (content: string) => {
     index = skipSpaceAndComments(content, index);
     keyword.lastIndex = index;
     if (!keyword.test(content)) return end;
-    // A dynamic `import(`, `import (`, `import /* c */ (` or `import // c`
-    // with `(` on the next line is not a statement
+    // A dynamic `import (`, `import /* c */ (` or `import // c` with `(` on
+    // the next line is not a statement, and ends the run
     if (content[skipSpaceAndComments(content, keyword.lastIndex)] === "(") {
       return end;
     }
@@ -186,13 +186,15 @@ const getLeadingImportsEnd = (content: string) => {
 };
 
 /**
- * Get the index after the whitespace and comments that start at the given
- * index. A loop, not one regex over `(?:\s|//…|/*…*\/)*`: those overlapping
- * alternatives backtrack exponentially on a run of `//` (CodeQL `js/redos`).
+ * Skip the whitespace and closed comments that start at the given index. A
+ * loop, not a regex over `(?:\s|//…|/*…*\/)*`: with something after it that
+ * can fail, as the `(` of a dynamic import, those overlapping alternatives
+ * backtrack exponentially on a run of `//` (CodeQL `js/redos`).
  *
  * @param content JS/TS code
  * @param index where to start
- * @returns the index of the first other character, or of an unclosed `/*`
+ * @returns the index of the first other character, of an unclosed `/*`, or
+ * `content.length` when nothing else follows
  */
 const skipSpaceAndComments = (content: string, index: number) => {
   while (index < content.length) {

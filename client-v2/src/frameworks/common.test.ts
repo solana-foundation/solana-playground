@@ -158,7 +158,26 @@ describe("addAfterImports", () => {
       '// a\nimport a from "a";\n/* b */\n\nimport b from "b"; // why\nrun();\n',
       '// a\nimport a from "a";\n/* b */\n\nimport b from "b"; // why\nX\nrun();\n',
     ],
+    [
+      'import /* c */ a from "a";\nrun();\n',
+      'import /* c */ a from "a";\nX\nrun();\n',
+    ],
+    [
+      'import // c\n a from "a";\nrun();\n',
+      'import // c\n a from "a";\nX\nrun();\n',
+    ],
+    [
+      'import {\n  a,\n  b,\n} from "a";\nrun();\n',
+      'import {\n  a,\n  b,\n} from "a";\nX\nrun();\n',
+    ],
+    // An unclosed `/*` ends the scan; the imports before it still count
     ['import a from "a";\n/* open', 'import a from "a";\nX\n/* open'],
+    // A `(` inside a comment is not a dynamic import's (the old lookahead
+    // could stop the comment early and find it)
+    [
+      'import // see (x)\n a from "a";\nrun();\n',
+      'import // see (x)\n a from "a";\nX\nrun();\n',
+    ],
   ])("adds after the leading imports of %j", (content, expected) => {
     expect(addAfterImports(content, "X")).toBe(expected);
   });
@@ -174,16 +193,26 @@ describe("addAfterImports", () => {
     expect(addAfterImports(content, "X")).toBe("X\n" + content);
   });
 
-  // CodeQL js/redos: comments after `import` backtracked exponentially
+  // CodeQL js/redos. Inputs 0 and 2 reproduce the old lookahead's
+  // exponential backtracking; the rest time the loop on long comment runs
+  const comments = "//".repeat(50_000);
+  const imported = "import a from 'a';";
   it.each([
-    ["import " + "//".repeat(50_000)],
-    ["import " + "*//*".repeat(50_000)],
-    ["import /*" + "*//*".repeat(50_000)],
-    ["//".repeat(50_000) + "\nimport a from 'a';"],
-    ["/**/".repeat(50_000) + "import a from 'a';"],
-  ])("scans comments in linear time (input %#)", (content) => {
+    ["import " + comments, "X\n" + "import " + comments],
+    ["import " + "*//*".repeat(50_000), "X\nimport " + "*//*".repeat(50_000)],
+    [
+      "import /*" + "*//*".repeat(50_000),
+      "X\nimport /*" + "*//*".repeat(50_000),
+    ],
+    [comments + "\n" + imported, comments + "\n" + imported + "\nX\n"],
+    [
+      "/**/".repeat(50_000) + imported,
+      "/**/".repeat(50_000) + imported + "\nX\n",
+    ],
+  ])("scans comments in linear time (input %#)", (content, expected) => {
     const start = performance.now();
-    addAfterImports(content, "X");
+    const result = addAfterImports(content, "X");
     expect(performance.now() - start).toBeLessThan(100);
+    expect(result).toBe(expected);
   });
 });
