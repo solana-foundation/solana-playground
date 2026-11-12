@@ -1,6 +1,13 @@
 import type { Page } from "@playwright/test";
 
-import { expect, json, LONG, seedWorkspace, test } from "./fixtures";
+import {
+  expect,
+  json,
+  LONG,
+  reloadAndBoot,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 
 const SKILL = {
   id: "e2e-skill",
@@ -61,6 +68,53 @@ const readStored = (page: Page) =>
     return contents.filter((text) => text.includes('"mcpServers"'));
   });
 
+/**
+ * Where the file system's saved tree stands on `/.config/assistant-tools.json`.
+ * lightning-fs stores a file's bytes at once but its tree (`!root`) only
+ * 500 ms after the last write, debounced, so a reload in between finds the
+ * bytes and no file. "no-tree" means the probe no longer matches the
+ * library's layout, not that the save is slow
+ */
+const savedTreeState = (page: Page) =>
+  page.evaluate(async () => {
+    let hasSeenTree = false;
+    for (const { name } of await indexedDB.databases()) {
+      if (!name) continue;
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const open = indexedDB.open(name);
+        open.onsuccess = () => resolve(open.result);
+        open.onerror = () => reject(open.error);
+      });
+      try {
+        for (const storeName of Array.from(db.objectStoreNames)) {
+          const root = await new Promise<unknown>((resolve, reject) => {
+            const get = db
+              .transaction(storeName)
+              .objectStore(storeName)
+              .get("!root");
+            get.onsuccess = () => resolve(get.result);
+            get.onerror = () => reject(get.error);
+          });
+          if (!(root instanceof Map)) continue;
+          hasSeenTree = true;
+          const config = root.get("/")?.get(".config");
+          if (config instanceof Map && config.has("assistant-tools.json")) {
+            return "listed";
+          }
+        }
+      } finally {
+        db.close();
+      }
+    }
+    return hasSeenTree ? "not-yet" : "no-tree";
+  });
+
+/** Waits until a reload would read the stored file back */
+const waitForStored = async (page: Page) => {
+  await expect.poll(() => readStored(page).then((f) => f.length)).toBe(1);
+  await expect.poll(() => savedTreeState(page)).toBe("listed");
+};
+
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/mcp", (r) => json(r, { servers: [] }));
   await page.route("**/api/skills", (r) => json(r, { skills: [SKILL] }));
@@ -84,8 +138,8 @@ test("assistant-tool-config: A reload after turning a skill off and adding a ser
   await page.getByRole("button", { name: "Apply", exact: true }).click();
   await expect(page.getByRole("checkbox", { name: "My server" })).toBeVisible();
 
-  await expect.poll(() => readStored(page).then((f) => f.length)).toBe(1);
-  await page.reload();
+  await waitForStored(page);
+  await reloadAndBoot(page);
   await openSources(page);
 
   await expect(
@@ -105,13 +159,13 @@ test("assistant-tool-config: The stored file after adding a server with a token"
     .fill(JSON.stringify(ENTRY));
   await page.getByRole("button", { name: "Apply", exact: true }).click();
 
-  await expect.poll(() => readStored(page).then((f) => f.length)).toBe(1);
+  await waitForStored(page);
   const before = (await readStored(page)).join();
   expect(before).toContain('"mine"');
   expect(before).not.toContain(TOKEN);
   expect(before).not.toContain(HEADER);
 
-  await page.reload();
+  await reloadAndBoot(page);
   await openSources(page);
 
   await expect(page.getByText(/Enter again for/)).toContainText(

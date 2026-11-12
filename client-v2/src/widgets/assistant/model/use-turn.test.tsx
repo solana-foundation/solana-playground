@@ -157,7 +157,7 @@ describe("useTurn", () => {
     expect(PgAssistant.connection?.id).toBe("default");
     expect(provider.send).toHaveBeenCalledTimes(1);
     expect(provider.send.mock.calls[0][0]).toBe("hi");
-    expect(result.current.input).toBe("");
+    expect(result.current.draft.get()).toBe("");
   });
 
   it("keeps the typed text and reports when the message cannot be added", async () => {
@@ -171,13 +171,13 @@ describe("useTurn", () => {
       .spyOn(reportModule, "reportButtonFailure")
       .mockReturnValue(report);
     const { result } = renderHook(() => useTestTurn());
-    act(() => result.current.setInput("hello"));
+    act(() => result.current.draft.set("hello"));
 
     expect(await act(() => result.current.send("hello"))).toBe("failed");
 
     expect(report).toHaveBeenCalledWith(failure);
     expect(reportFor).toHaveBeenCalledWith("send your message");
-    expect(result.current.input).toBe("hello");
+    expect(result.current.draft.get()).toBe("hello");
     expect(result.current.busy).toBe(false);
     expect(provider.send).not.toHaveBeenCalled();
     expect(turnEvents()).toEqual([]);
@@ -192,7 +192,7 @@ describe("useTurn", () => {
 
     expect(createProvider).not.toHaveBeenCalled();
     expect(pick).toHaveBeenCalledTimes(1);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(PgAssistant.items.length).toBe(0);
     expect(open).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledWith("send", undefined);
@@ -334,7 +334,7 @@ describe("useTurn", () => {
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() =>
-      expect(result.current.input).toBe("Explain this error")
+      expect(result.current.draft.get()).toBe("Explain this error")
     );
     expect(provider.send).toHaveBeenCalledTimes(1);
     act(() => result.current.stop());
@@ -364,7 +364,7 @@ describe("useTurn", () => {
     );
 
     await waitFor(() =>
-      expect(result.current.input).toBe("Explain this error")
+      expect(result.current.draft.get()).toBe("Explain this error")
     );
     expect(provider.send).toHaveBeenCalledTimes(1);
     expect(provider.send.mock.calls[0][0]).toBe("first");
@@ -685,7 +685,7 @@ describe("useTurn", () => {
       expect(result.current.busy).toBe(false);
       // In the thread once, not handed back to be sent a second time
       expect(userMessages()).toBe(1);
-      expect(result.current.input).toBe("");
+      expect(result.current.draft.get()).toBe("");
       expect(provider.send).toHaveBeenCalledTimes(1);
       expect(turnEvents()).toEqual([
         SENT_ON_DEFAULT,
@@ -918,7 +918,7 @@ describe("useTurn", () => {
 
     act(() => PgAssistant.requestPrompt("Explain this error", { send: false }));
 
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -929,7 +929,7 @@ describe("useTurn", () => {
     act(() => PgAssistant.requestPrompt("Explain this error", { send: false }));
 
     await waitFor(() =>
-      expect(result.current.input).toBe("Explain this error")
+      expect(result.current.draft.get()).toBe("Explain this error")
     );
     expect(result.current.focusRequest).toBeGreaterThan(before);
     // Nothing is to be sent, so nothing asks for a backend
@@ -963,7 +963,7 @@ describe("useTurn", () => {
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
     expect(reportFor).toHaveBeenCalledWith("send the prompt");
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
   });
 
   it("connects the default for a requested prompt and sends it", async () => {
@@ -1060,7 +1060,7 @@ describe("useTurn", () => {
 
     expect(PgAssistant.connection).toBeNull();
     expect(PgAssistant.isPickingBackend).toBe(true);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1074,7 +1074,7 @@ describe("useTurn", () => {
     await waitFor(() => expect(result.current.promptWaiting).toBe(true));
     expect(probe).toHaveBeenCalled();
     expect(PgAssistant.connection).toBeNull();
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1096,13 +1096,13 @@ describe("useTurn", () => {
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() => expect(result.current.promptWaiting).toBe(true));
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(pick).toHaveBeenCalledTimes(1);
     expect(provider.send).not.toHaveBeenCalled();
 
     act(() => PgAssistant.connect({ id: "default", apiKey: "" }));
     expect(result.current.promptWaiting).toBe(false);
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
   });
 });
 
@@ -1159,7 +1159,7 @@ describe("useTurn when the key is gone", () => {
 
     expect(PgAssistant.connection).toBeNull();
     expect(open).toHaveBeenCalledWith("thread", OPENAI);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1173,7 +1173,7 @@ describe("useTurn when the key is gone", () => {
     await act(() => result.current.send("hi"));
 
     expect(open).toHaveBeenCalledWith("thread", OPENAI);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1221,7 +1221,7 @@ describe("useTurn when the key is gone", () => {
 
     await waitFor(() => expect(open).toHaveBeenCalledWith("thread", OPENAI));
     expect(PgAssistant.connection).toBeNull();
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(provider.send).not.toHaveBeenCalled();
   });
 });
@@ -1237,7 +1237,7 @@ describe("useTurn without a session", () => {
 
     expect(PgAssistant.connection).toBeNull();
     expect(open).toHaveBeenCalledWith("send", undefined);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1295,7 +1295,7 @@ describe("useTurn without a session", () => {
     await act(() => result.current.send("hi"));
 
     expect(open).toHaveBeenCalledWith("send", undefined);
-    expect(result.current.input).toBe("hi");
+    expect(result.current.draft.get()).toBe("hi");
     expect(provider.send).not.toHaveBeenCalled();
   });
 
@@ -1306,7 +1306,7 @@ describe("useTurn without a session", () => {
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() => expect(result.current.promptWaiting).toBe(true));
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
     expect(open).toHaveBeenCalledWith("send", undefined);
     expect(provider.send).not.toHaveBeenCalled();
   });
@@ -1389,7 +1389,7 @@ describe("useTurn across a project switch", () => {
     const project = inProject("a");
     const { result } = renderHook(() => useTestTurn());
     // Typed into the composer, as a send from it always is
-    act(() => result.current.setInput("about project a"));
+    act(() => result.current.draft.set("about project a"));
 
     let sent!: Promise<unknown>;
     act(() => {
@@ -1402,7 +1402,7 @@ describe("useTurn across a project switch", () => {
     expect(provider.send).not.toHaveBeenCalled();
     expect(PgAssistant.items).toEqual([]);
     // Left where the user can send it to the project now open, or not
-    expect(result.current.input).toBe("about project a");
+    expect(result.current.draft.get()).toBe("about project a");
   });
 
   it("sends no requested prompt to a project opened while it waited on the probe", async () => {
@@ -1415,7 +1415,7 @@ describe("useTurn across a project switch", () => {
     await release(true);
 
     await waitFor(() =>
-      expect(result.current.input).toBe("Explain this error in a")
+      expect(result.current.draft.get()).toBe("Explain this error in a")
     );
     expect(provider.send).not.toHaveBeenCalled();
     expect(PgAssistant.items).toEqual([]);
@@ -1484,7 +1484,7 @@ describe("useTurn's failures and races", () => {
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
     expect(reportFor).toHaveBeenCalledWith("send the prompt");
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
   });
 
   it("keeps a requested prompt and reports when opening Connect throws", async () => {
@@ -1503,7 +1503,7 @@ describe("useTurn's failures and races", () => {
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
     expect(reportFor).toHaveBeenCalledWith("send the prompt");
-    expect(result.current.input).toBe("Explain this error");
+    expect(result.current.draft.get()).toBe("Explain this error");
   });
 
   describe("a reply cut off mid-stream", () => {
@@ -2270,5 +2270,197 @@ describe("useTurn's turn events", () => {
 
       expect(turnEvents()).toStrictEqual([sent, failedWith(429)("provider")]);
     });
+  });
+});
+
+describe("useTurn across a remount", () => {
+  // HOO-2739: Back to tutorials unmounts the tutorial chat, and with it the
+  // hook; the way back mounts a new one
+
+  it("keeps a keyed draft for the next hook with the same key", () => {
+    const first = renderHook(() => useTurn({ open, draftKey: "tutorial:a" }));
+    act(() => first.result.current.draft.set("half a question"));
+    first.unmount();
+
+    const again = renderHook(() => useTurn({ open, draftKey: "tutorial:a" }));
+    expect(again.result.current.draft.get()).toBe("half a question");
+    const other = renderHook(() => useTurn({ open, draftKey: "tutorial:b" }));
+    expect(other.result.current.draft.get()).toBe("");
+    // The panel's hook keeps no draft of its own across a remount
+    expect(renderHook(() => useTestTurn()).result.current.draft.get()).toBe("");
+  });
+
+  it("never shows one account's draft to the next, mounted or not", async () => {
+    const first = renderHook(() => useTurn({ open, draftKey: "tutorial:f" }));
+    act(() => first.result.current.draft.set("my private question"));
+    first.unmount();
+
+    // Signed out and another account in, with no chat mounted meanwhile
+    act(() => PgSession.reset());
+    await act(() =>
+      PgSession.refreshWith({
+        id: "u2",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      })
+    );
+    const other = renderHook(() => useTurn({ open, draftKey: "tutorial:f" }));
+    expect(other.result.current.draft.get()).toBe("");
+
+    // And with the chat mounted while the account changes
+    act(() => other.result.current.draft.set("u2's question"));
+    await act(() => PgSession.refreshWith(USER));
+    expect(other.result.current.draft.get()).toBe("my private question");
+  });
+
+  it("keeps what was typed before the session read for the account it finds", async () => {
+    act(() => PgSession.reset());
+    const chat = renderHook(() => useTurn({ open, draftKey: "tutorial:g" }));
+    act(() => chat.result.current.draft.set("typed early"));
+
+    await act(() => PgSession.refreshWith(USER));
+    expect(chat.result.current.draft.get()).toBe("typed early");
+    // Still the read account's only: the next one in does not see it
+    await act(() =>
+      PgSession.refreshWith({
+        id: "u3",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      })
+    );
+    expect(chat.result.current.draft.get()).toBe("");
+    await act(() => PgSession.refreshWith(USER));
+    chat.unmount();
+    const again = renderHook(() => useTurn({ open, draftKey: "tutorial:g" }));
+    expect(again.result.current.draft.get()).toBe("typed early");
+  });
+
+  it("drops what a chat no longer on screen typed before the session read", async () => {
+    act(() => PgSession.reset());
+    const chat = renderHook(() => useTurn({ open, draftKey: "tutorial:h" }));
+    act(() => chat.result.current.draft.set("whose is this?"));
+    chat.unmount();
+
+    await act(() => PgSession.refreshWith(USER));
+    const later = renderHook(() => useTurn({ open, draftKey: "tutorial:h" }));
+    expect(later.result.current.draft.get()).toBe("");
+  });
+
+  it("forgets a keyed draft once it is cleared", () => {
+    const first = renderHook(() => useTurn({ open, draftKey: "tutorial:c" }));
+    act(() => first.result.current.draft.set("sent already"));
+    act(() => first.result.current.draft.set(""));
+    first.unmount();
+
+    const again = renderHook(() => useTurn({ open, draftKey: "tutorial:c" }));
+    expect(again.result.current.draft.get()).toBe("");
+  });
+
+  it("does not bring back a question once it is sent", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    const first = renderHook(() => useTurn({ open, draftKey: "tutorial:d" }));
+    act(() => first.result.current.draft.set("what is a PDA?"));
+    await act(() => first.result.current.send("what is a PDA?"));
+    first.unmount();
+
+    const again = renderHook(() => useTurn({ open, draftKey: "tutorial:d" }));
+    expect(again.result.current.draft.get()).toBe("");
+  });
+
+  it("is idle after a turn that ended while no hook was mounted", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    let finish!: () => void;
+    provider.send.mockImplementation(
+      () => new Promise<void>((resolve) => (finish = resolve))
+    );
+    const first = renderHook(() => useTestTurn());
+    act(() => {
+      void first.result.current.send("hi");
+    });
+    first.unmount();
+    await act(async () => finish());
+
+    const { result } = renderHook(() => useTestTurn());
+    expect(result.current.phase).toBe("idle");
+    provider.send.mockImplementation(() => Promise.resolve());
+    expect(await act(() => result.current.send("again"))).toBe("sent");
+  });
+
+  it("keeps the key held while a turn outlives its chat", async () => {
+    PgAssistant.connect({ id: "anthropic", apiKey: "sk-ant-fake" });
+    let finish!: () => void;
+    provider.send.mockImplementation(
+      () => new Promise<void>((resolve) => (finish = resolve))
+    );
+    const first = renderHook(() => useTestTurn());
+    act(() => {
+      void first.result.current.send("hi");
+    });
+    first.unmount();
+    expect(PgAssistant.keyHold).toBe("busy");
+
+    await act(async () => finish());
+    expect(PgAssistant.keyHold).toBe("ready");
+  });
+
+  it("says Stopped for a busy model that answers once its chat is gone", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    let busy!: () => void;
+    provider.send.mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          busy = () => reject(new ModelBusyError(30, "The model is busy."));
+        })
+    );
+    const first = renderHook(() => useTestTurn());
+    act(() => {
+      void first.result.current.send("hi");
+    });
+    first.unmount();
+    await act(async () => busy());
+
+    expect(lastItem()).toMatchObject({ kind: "notice", text: "Stopped." });
+    const { result } = renderHook(() => useTestTurn());
+    expect(result.current.phase).toBe("idle");
+  });
+
+  it("starts one turn for two chats sending while the default is probed", async () => {
+    defaultBackend(true);
+    const panel = renderHook(() => useTestTurn());
+    const chat = renderHook(() => useTurn({ open, draftKey: "tutorial:e" }));
+
+    await act(async () => {
+      await Promise.all([
+        panel.result.current.send("first"),
+        chat.result.current.send("second"),
+      ]);
+    });
+
+    expect(provider.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops from a remounted hook the turn an earlier one started", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockImplementation(untilAborted);
+    const first = renderHook(() => useTestTurn());
+    act(() => {
+      void first.result.current.send("hi");
+    });
+    const signal: AbortSignal = provider.send.mock.calls[0][1].signal;
+    first.unmount();
+
+    const { result } = renderHook(() => useTestTurn());
+    expect(result.current.phase).toBe("running");
+    act(() => result.current.stop());
+
+    expect(signal.aborted).toBe(true);
+    expect(
+      PgAssistant.items.some(
+        (item) => item.kind === "notice" && item.text === "Stopped."
+      )
+    ).toBe(true);
+    await waitFor(() => expect(result.current.phase).toBe("idle"));
   });
 });

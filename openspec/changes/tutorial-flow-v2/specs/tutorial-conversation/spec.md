@@ -177,6 +177,26 @@ learner sees what they saw on entering it.
 - **THEN** a wrote card reads "Created client/client.ts"
 - **AND** the workspace opens the `client.ts` tab
 
+#### Scenario: The learner edits the written lines
+
+- **WHEN** a write has posted its wrote card and the learner then changes
+  those lines in the editor
+- **THEN** the card still shows the lines as the write put them, after a
+  reload too
+- **AND** a card saved before the written text was kept shows those lines
+  as the file holds them
+
+#### Scenario: The learner adds lines above the written lines
+
+- **WHEN** a write has posted its wrote card and the learner then adds or
+  removes lines above the block
+- **THEN** the card's range and Show, and the lines the editor lights, name
+  the block where it is now, the nearest place that holds it as written (a
+  program id a build filled in aside)
+- **AND** they keep the lines it was written to once the block was edited,
+  when it holds fewer than two rows that are not blank or only brackets,
+  `;` and `,`, and for a card saved before the written text was kept
+
 ### Requirement: Act cards run one thing and show its stages
 
 An `act` beat SHALL render as an act card with an icon tile, a title, a
@@ -314,9 +334,23 @@ in this order:
    first, or press Skip. Then the button's yours."
 2. A finish chip SHALL get the definition's answer, with no model call.
 3. Anything else SHALL go to the product's assistant, with the tutorial, the
-   step, its objective, the open files, the last result and the tutorial's
-   doc list as its context. Its answer SHALL post in the feed as the
-   assistant's turn. With no model connected, the message SHALL route to
+   step, its objective, the steps still to come (or that it is the last),
+   the open files, the last result and the tutorial's doc list as its
+   context. The context SHALL also say where the lesson's actions are: on
+   the cards in this chat, by the action words of item 1, and in the work
+   area only by the Call panel and a client run, with no Build, Deploy or
+   Interact action or tab there; what the terminal runs (Playground's own
+   commands, no yarn, npm or npx); and the card the step waits on, by its
+   buttons: the live act's, an open question's (answer, Hint, "Type it
+   myself" on a wide screen, or Skip, before the step's next card), a
+   step-done card's "Next: <step>", or the card of a failed result. The
+   tutorial's current state, where the learner is and the card the step
+   waits on, SHALL also reach the model after the thread's history, with
+   the newest message, saying that earlier turns describe the tutorial as it
+   was then. The stored thread SHALL keep that message as typed, without
+   the state, and the menu tool's result SHALL say only that the menu
+   opened. The assistant's answer SHALL post in the feed as the assistant's
+   turn. With no model connected, the message SHALL route to
    connecting a model. While the assistant answers, a question SHALL wait in
    the composer, unsent, until the answer ends, under the note "The assistant
    is still answering. Press Enter again once it's done."; a live action's
@@ -432,7 +466,7 @@ The tutorial slice SHALL emit:
   - `attempts`: 1 to 3.
 - `tutorial_step_passed` when a step's goal passes, with:
   - `tutorial`;
-  - `step`: 1 to 6;
+  - `step_index`: 1 to 6;
   - `via`: `chat` (an act card), `client` (a client run) or `call_panel`;
   - `seconds`: the step's time.
 - `tutorial_finished` when the finish card shows, with:
@@ -448,14 +482,14 @@ The tutorial slice SHALL emit:
   assistant (not when it opens Connect a model, or waits while an answer
   runs) or a finish chip is pressed, with:
   - `tutorial`;
-  - `step`;
-  - `source`: `typed`, or `chip` when a finish chip is pressed (the event
+  - `step_index`;
+  - `via`: `typed`, or `chip` when a finish chip is pressed (the event
     fires for chips too, though their answer needs no model).
 - `tutorial_word_sent` when a composer message is only an action word whose
   action is live, or one an open question refuses, with (a word with
   nothing live to run goes to the assistant as a question):
   - `tutorial`;
-  - `step`;
+  - `step_index`;
   - `word`: the action word matched (`start`, `build`, `deploy`, `run`,
     `call`, `next` or `explain`), never the message itself;
   - `refused`: whether an open question refused it.
@@ -468,17 +502,17 @@ The tutorial slice SHALL emit:
 - `tutorial_step_reset` when a confirmed Reset on an appended wrote card
   puts the live step back as it was entered, with:
   - `tutorial`;
-  - `step`: 1 to 6.
+  - `step_index`: 1 to 6.
 - `tutorial_step_jumped` when a step bar segment, an item of its narrow
   menu, or ⌥↑ / ⌥↓ moves the feed to a step's divider, with:
   - `tutorial`;
-  - `step`: the divider's step, 1 to 6;
-  - `from`: the live step;
+  - `step_index`: the divider's step, 1 to 6;
+  - `from_step`: the live step;
   - `via`: `bar`, `menu` or `key`.
 - `tutorial_step_back` when the back pill takes the learner back to the
   live card, with:
   - `tutorial`;
-  - `step`: the live step, or 0 before Start.
+  - `step_index`: the live step, or 0 before Start.
 
 The text of the question is never sent.
 
@@ -493,5 +527,5 @@ The text of the question is never sent.
 - **WHEN** on step 3 the learner clicks the step bar's first segment, then
   the "Back to step 3" pill
 - **THEN** `tutorial_step_jumped` reaches the memory provider with
-  `step: 1`, `from: 3` and `via: "bar"`, then `tutorial_step_back` with
-  `step: 3`
+  `step_index: 1`, `from_step: 3` and `via: "bar"`, then `tutorial_step_back`
+  with `step_index: 3`

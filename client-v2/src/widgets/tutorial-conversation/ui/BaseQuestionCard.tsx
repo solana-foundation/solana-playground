@@ -14,6 +14,7 @@ import type { AskOutcome } from "@/features/tutorial-conversation";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 
+import { QUESTION_BUTTONS } from "../model/card-labels";
 import { typing } from "./keys";
 import { usePhone } from "./phone";
 import { HEADING, LISTING, Prose } from "./Prose";
@@ -485,7 +486,7 @@ const BaseQuestionCard = ({
             onClick={onTypeIt}
           >
             <PenLine />
-            Type it myself
+            {QUESTION_BUTTONS.typeIt}
           </Button>
         )}
         {!hinted && (
@@ -499,7 +500,7 @@ const BaseQuestionCard = ({
             onClick={onHint}
           >
             <Lightbulb />
-            Hint
+            {QUESTION_BUTTONS.hint}
           </Button>
         )}
         <Button
@@ -512,7 +513,7 @@ const BaseQuestionCard = ({
           )}
           onClick={onSkip}
         >
-          Skip
+          {QUESTION_BUTTONS.skip}
         </Button>
       </div>
     </section>

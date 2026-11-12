@@ -1,4 +1,4 @@
-name: client-v2 checks
+name: "Client v2: reusable checks"
 
 # The fork's frontend checks, shared by `client-v2.yml` (real wasm packages)
 # and `client-v2-with-stubs.yml` (the stubs, run by hand). Upstream's ci.yml
@@ -17,7 +17,7 @@ on:
       use-wasm-stubs:
         type: boolean
         required: true
-      # `true` adds a `firefox` entry to every shard of the `e2e` matrix.
+      # `true` adds the `firefox` shards to the `e2e` matrix.
       firefox:
         type: boolean
         default: false
@@ -454,10 +454,26 @@ jobs:
       # this job stays green, so `e2e-report` fails on the gap, per browser.
       # N is a matrix value, not `strategy.job-total`: a run filtered to some
       # jobs (`act --matrix`) would divide by the wrong count.
+      #
+      # Each browser has its own N (`e2e-report` checks each project's shards
+      # on their own). Firefox runs the same tests slower: on run 43196120551
+      # (SF#130, 2026-11-12) its seven shards held about 139 minutes of tests,
+      # 15.6 to 23.2 minutes each, and the seventh hit `globalTimeout` at 25
+      # with 4 tests unrun, while Chromium's slowest job took 18. Ten Firefox
+      # shards bring the average near 14 minutes. `exclude` drops Chromium's
+      # 8..10; `include` adds N to the entries of its browser, and lists
+      # Firefox only when Firefox runs, or it would add an entry of its own.
       matrix:
         browser: ${{ fromJSON(inputs.firefox && '["chromium","firefox"]' || '["chromium"]') }}
-        shard: [1, 2, 3, 4, 5, 6, 7]
-        shards: [7]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        exclude:
+          - browser: chromium
+            shard: 8
+          - browser: chromium
+            shard: 9
+          - browser: chromium
+            shard: 10
+        include: ${{ fromJSON(inputs.firefox && '[{"browser":"chromium","shards":7},{"browser":"firefox","shards":10}]' || '[{"browser":"chromium","shards":7}]') }}
 
     defaults:
       run:

@@ -1,4 +1,5 @@
 export { fundTelemetry } from "./model/telemetry";
+export type { AirdropVia, FundCluster } from "./model/telemetry";
 export { default as FundDialog } from "./ui/FundDialog";
 export type { FundDialogProps } from "./ui/FundDialog";
 export { default as BaseFundDialog } from "./ui/BaseFundDialog";

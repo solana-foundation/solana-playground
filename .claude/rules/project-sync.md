@@ -116,6 +116,15 @@ when a session reads a file matching the `paths` in the frontmatter.
   it can mount mid-sync, build its model from memory not yet re-read, and have
   the re-open reuse it -- the pane kept the replaced file (HOO-2119). The
   second pass also sets memory, which the re-open has already read.
+  `_catchUp` reads the store before skipping a file it thinks is level, never
+  assumes it: a merge awaits its upload, and an adopt its mark, between
+  writing the store and catching the buffer up, and a pending autosave fires
+  in that window with the old text. Assumed, the store kept that text
+  under a mark saying "merged", and the next reconcile uploaded it, reverting
+  the other device's lines on the account (HOO-2821). A file sync removed
+  is removed again, without a read first: discarding its model flushes the
+  pending autosave, and memory still lists the file, so the save writes it
+  back, and a failed read cannot tell that copy from no file.
 - **`dirty` is a hint, never a decision.** The `dirty` hint only lets
   reconcile skip re-hashing a project; `mark.files` + `name` decide whether
   anything is owed. Code decided on `dirty` twice, and was wrong both times: a
@@ -148,6 +157,24 @@ when a session reads a file matching the `paths` in the frontmatter.
   ones into ghosts. One exception:
   `PgExplorer._saveWorkspaces` writes `/.config/workspaces.json` itself and
   flushes after every write.
+- **A thread file is renamed only under an index entry already written.**
+  A file under a name no entry points at is adopted by the next load's
+  `PgThreadIndex._migrate` as a workspace named after the thread.
+  `PgThreadIndex.carry` writes the new workspace's entry, renames, then drops
+  the old entry, so a page that dies in between leaves the file with one
+  workspace or the other. `_migrate` writes every planned entry, then renames;
+  a file whose rename never happened stays under its workspace's name and is
+  adopted again under a new id. `_migrate` takes the sync lock when it has
+  something to adopt, since two tabs on the first load after the update would
+  otherwise plan the same file.
+- **A save on unload never lands in Chromium, so the save at creation
+  stays.** `effects/fs-flush` saves the tree when the page is hidden, for a
+  page then frozen or discarded. A reload or a close is not covered: Chromium
+  aborts an IndexedDB transaction still open when the document unloads, so a
+  flush started in `pagehide` (or the `hidden` change an unload brings) is
+  lost (HOO-2738, measured with a write and an immediate `page.reload()`).
+  Other engines are unmeasured. Never drop a flush at creation in favour of
+  it.
 - **Never do filesystem work per filesystem write.** The dirty flag is written
   at most once per debounce window. Writing the flag per write put a read on
   the same lightning-fs queue as the writes that triggered it and made

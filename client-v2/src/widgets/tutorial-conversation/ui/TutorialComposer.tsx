@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 
 import { PgConversation } from "@/features/tutorial-conversation";
+import type { Draft } from "@/shared/lib/draft";
+import { useDraft } from "@/shared/lib/draft";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
@@ -13,7 +15,7 @@ import { useConversationState } from "./TutorialConversation";
  * The live assistant's turn as the composer needs it: the one `useTurn`
  * (`widgets/assistant`) that `TutorialChat` in `views/flow/Flow.tsx` mounts
  * while the frame shows, described here by shape, since a widget does not
- * import another. Its `send` clears `input` itself, and only once the
+ * import another. Its `send` clears `draft` itself, and only once the
  * message is in, so a send it refuses leaves the text in the box.
  */
 export interface ComposerTurn {
@@ -26,8 +28,8 @@ export interface ComposerTurn {
   send: (text: string) => Promise<boolean>;
   stop: () => void;
   busy: boolean;
-  input: string;
-  setInput: (value: string) => void;
+  /** What is in the box; only the composer follows it (HOO-2781) */
+  draft: Draft;
 }
 
 export interface TutorialComposerProps {
@@ -42,12 +44,13 @@ const HELD =
  * The composer under the feed. A live action's word runs that action and a
  * word the open question refuses gets the lesson's refusal
  * (`PgConversation.say`); anything else goes to the live assistant, counted
- * as asked. A finish chip posts its answer with no model call. The box holds
- * the turn's own input, so a message the assistant could not send yet (no
- * model connected) comes back here.
+ * as asked. A finish chip posts its answer with no model call. The box shows
+ * the turn's draft, so a message the assistant could not send yet (no model
+ * connected) comes back here.
  */
 export const TutorialComposer = ({ turn }: TutorialComposerProps) => {
   const state = useConversationState();
+  const input = useDraft(turn.draft);
   const [held, setHeld] = useState(false);
   // Below the frame's width, the phone layout's composer
   const phone = useViewport() !== "wide";
@@ -70,7 +73,7 @@ export const TutorialComposer = ({ turn }: TutorialComposerProps) => {
     hasAnswered(PgAssistant.items, progress.restartedAt);
   const send = (text: string) => {
     if (PgConversation.say(text) === "lesson") {
-      turn.setInput("");
+      turn.draft.set("");
       return;
     }
     // A question while the assistant answers waits in the box, uncounted,
@@ -91,8 +94,8 @@ export const TutorialComposer = ({ turn }: TutorialComposerProps) => {
   };
   return (
     <BaseTutorialComposer
-      value={turn.input}
-      onChange={turn.setInput}
+      value={input}
+      onChange={turn.draft.set}
       placeholder={view.placeholder}
       busy={turn.busy}
       onSend={send}

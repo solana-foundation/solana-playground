@@ -72,7 +72,7 @@ const TutorialsPage = () => {
               // Counted apart from the Open: a throw here is not it failing
               try {
                 catalogTelemetry.track("catalog_banner_opened", {
-                  state: banner.state,
+                  banner_state: banner.state,
                 });
               } catch (e) {
                 log.error(e, { report: true });

@@ -135,6 +135,49 @@ describe("deleting the current workspace", () => {
   });
 });
 
+describe("creating a workspace while another is open", () => {
+  beforeEach(reset);
+  afterEach(() => vi.restoreAllMocks());
+
+  // `create` makes the new workspace current before `switchWorkspace` saves
+  // the old one's metadata, and that save found files outside the current
+  // workspace, took the state as invalid and saved nothing: entering a
+  // tutorial the first time (its workspace is made then) brought the project
+  // back at line 1 (HOO-2731)
+  it("keeps the open file's cursor and top line", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const file = requireFor("the open file")(PgExplorer.currentFilePath);
+    const position = { cursor: { from: 7, to: 9 }, topLineNumber: 3 };
+    PgExplorer.saveEditorPosition(file, position);
+
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    await PgExplorer.switchWorkspace("alpha");
+
+    expect(PgExplorer.getEditorPosition(file)).toEqual(position);
+  });
+
+  it("still creates the workspace when saving the one left fails", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    clearFailures();
+    const write = PgExplorer.fs.writeFile.bind(PgExplorer.fs);
+    vi.spyOn(PgExplorer.fs, "writeFile").mockImplementation(
+      async (path: string, data: string) => {
+        if (path.startsWith("/alpha/") && path.endsWith("metadata.json")) {
+          throw new Error("QuotaExceededError");
+        }
+        await write(path, data);
+      }
+    );
+
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+    expect(getFailures().map((f) => f.what)).toContain(
+      "save the metadata of the workspace left"
+    );
+  });
+});
+
 describe("PgExplorer.saveEditorPosition", () => {
   beforeEach(reset);
 
@@ -698,6 +741,313 @@ describe("creating a workspace from a temporary view", () => {
 
     expect(await PgExplorer.readAllWorkspaceNames()).toEqual(["alpha"]);
     expect(PgExplorer.isTemporary).toBe(true);
+  });
+});
+
+// The project list read `allWorkspaceNames`, which a temporary view leaves
+// undefined, so it went blank while a repository link was open (HOO-2794).
+// The list reads the stored workspaces instead, and none becomes current
+describe("the stored workspaces beside a temporary view", () => {
+  beforeEach(reset);
+
+  const LINK_FILES: Array<[string, string]> = [["/src/lib.rs", "from a link"]];
+  const openLink = async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    await PgExplorer.init({ files: LINK_FILES });
+  };
+  const storedIdOf = (name: string) =>
+    readConfig().workspaces.find((w) => w.name === name)?.id;
+  /** What another tab's create leaves in the store */
+  const anotherTabCreatesDelta = () =>
+    writeConfig({
+      workspaces: readConfig().workspaces.concat({
+        id: "w-delta",
+        name: "delta",
+      }),
+      currentId: readConfig().currentId,
+    });
+  const expectLinkStillOpen = () => {
+    expect(PgExplorer.isTemporary).toBe(true);
+    expect(PgExplorer.currentWorkspaceName).toBeUndefined();
+    expect(PgExplorer.allWorkspaceNames).toBeUndefined();
+    expect(PgExplorer.getFileContent("/src/lib.rs")).toBe("from a link");
+  };
+
+  it("lists them, with their ids, while the link's project stays open", async () => {
+    await openLink();
+
+    expect(PgExplorer.storedWorkspaceNames).toEqual(["alpha", "beta"]);
+    expect(PgExplorer.storedWorkspaceIdOf("alpha")).toBe(storedIdOf("alpha"));
+    expectLinkStillOpen();
+  });
+
+  it("opens one picked from the list", async () => {
+    await openLink();
+
+    await PgExplorer.switchWorkspace("alpha");
+
+    expect(PgExplorer.isTemporary).toBe(false);
+    expect(PgExplorer.currentWorkspaceName).toBe("alpha");
+    expect(PgExplorer.allWorkspaceNames).toEqual(["alpha", "beta"]);
+    expect(PgExplorer.getFileContent("/alpha/src/lib.rs")).toBe(
+      "declare_id!();"
+    );
+  });
+
+  it("renames one in place, leaving the link's project open", async () => {
+    await openLink();
+    const id = storedIdOf("alpha");
+
+    await PgExplorer.renameWorkspace("gamma", { from: "alpha" });
+
+    expect(PgExplorer.storedWorkspaceNames).toEqual(["gamma", "beta"]);
+    expect(storedIdOf("gamma")).toBe(id);
+    expect(stored().get("/gamma/src/lib.rs")).toBe("declare_id!();");
+    expect(stored().has("/alpha/src/lib.rs")).toBe(false);
+    expectLinkStillOpen();
+  });
+
+  it("announces a rename with the stored id", async () => {
+    await openLink();
+    const id = storedIdOf("alpha");
+    const announced: unknown[] = [];
+    const listening = PgExplorer.onDidRenameWorkspace((renamed) =>
+      announced.push(renamed)
+    );
+    try {
+      await PgExplorer.renameWorkspace("gamma", {
+        from: "alpha",
+        announce: true,
+      });
+    } finally {
+      listening.dispose();
+    }
+
+    expect(announced).toEqual([{ id }]);
+  });
+
+  it("deletes one, leaving the link's project open", async () => {
+    await openLink();
+
+    await PgExplorer.deleteWorkspace("alpha");
+
+    expect(PgExplorer.storedWorkspaceNames).toEqual(["beta"]);
+    expect(readConfig().workspaces.map((w) => w.name)).toEqual(["beta"]);
+    expect(stored().has("/alpha/src/lib.rs")).toBe(false);
+    expectLinkStillOpen();
+  });
+
+  // Another tab's change lands after the view read the list; a save of the
+  // list the view read would drop it, folder left behind with no name
+  it("keeps another tab's new workspace through a rename made beside the link", async () => {
+    await openLink();
+    anotherTabCreatesDelta();
+
+    await PgExplorer.renameWorkspace("gamma", { from: "alpha" });
+
+    expect(readConfig().workspaces.map((w) => w.name)).toEqual([
+      "gamma",
+      "beta",
+      "delta",
+    ]);
+    expect(PgExplorer.storedWorkspaceNames).toEqual(["gamma", "beta", "delta"]);
+  });
+
+  it("writes nothing when the second read of a rename beside the link fails", async () => {
+    await openLink();
+    const real = PgExplorer.fs.readToJSON.bind(PgExplorer.fs);
+    let reads = 0;
+    const failing = vi
+      .spyOn(PgExplorer.fs, "readToJSON")
+      .mockImplementation(async (path: string) => {
+        if (path === PgWorkspace.WORKSPACES_CONFIG_PATH) reads += 1;
+        // Another tab's create lands while the folder moves, and the read
+        // after it fails
+        if (reads === 2) {
+          anotherTabCreatesDelta();
+          throw new Error("store went away");
+        }
+        return real(path);
+      });
+    try {
+      await expect(
+        PgExplorer.renameWorkspace("gamma", { from: "alpha" })
+      ).rejects.toThrow("store went away");
+    } finally {
+      failing.mockRestore();
+    }
+
+    // The folder is back, and the store keeps another tab's workspace
+    expect(stored().get("/alpha/src/lib.rs")).toBe("declare_id!();");
+    expect(readConfig().workspaces.map((w) => w.name)).toEqual([
+      "alpha",
+      "beta",
+      "delta",
+    ]);
+  });
+
+  it("puts the folder back when a project is opened while a rename beside the link runs", async () => {
+    await openLink();
+    clearFailures();
+    const realRename = PgExplorer.fs.rename.bind(PgExplorer.fs);
+    const opening = vi
+      .spyOn(PgExplorer.fs, "rename")
+      .mockImplementationOnce(async (from: string, to: string) => {
+        await realRename(from, to);
+        // The user opens beta from the list while the folder moves
+        await PgExplorer.switchWorkspace("beta");
+      });
+    try {
+      await expect(
+        PgExplorer.renameWorkspace("gamma", { from: "alpha" })
+      ).rejects.toThrow(PgWorkspace.errors.LIST_CHANGED);
+    } finally {
+      opening.mockRestore();
+    }
+
+    expect(stored().get("/alpha/src/lib.rs")).toBe("declare_id!();");
+    expect(readConfig().workspaces.map((w) => w.name)).toEqual([
+      "alpha",
+      "beta",
+    ]);
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+    // Nothing failed to save: the list beta opened with never took the rename
+    expect(getFailures()).toEqual([]);
+  });
+
+  it("drops the name when a project is opened while a delete beside the link runs", async () => {
+    await openLink();
+    const realRemove = PgExplorer.fs.removeDir.bind(PgExplorer.fs);
+    const opening = vi
+      .spyOn(PgExplorer.fs, "removeDir")
+      .mockImplementationOnce(async (path, opts) => {
+        await realRemove(path, opts);
+        // The user opens beta from the list while the folder goes
+        await PgExplorer.switchWorkspace("beta");
+      });
+    try {
+      await PgExplorer.deleteWorkspace("alpha");
+    } finally {
+      opening.mockRestore();
+    }
+
+    expect(stored().has("/alpha/src/lib.rs")).toBe(false);
+    expect(readConfig().workspaces.map((w) => w.name)).toEqual(["beta"]);
+    expect(PgExplorer.allWorkspaceNames).toEqual(["beta"]);
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+  });
+
+  it("keeps another tab's new workspace through a delete made beside the link", async () => {
+    await openLink();
+    anotherTabCreatesDelta();
+
+    await PgExplorer.deleteWorkspace("alpha");
+
+    expect(readConfig().workspaces.map((w) => w.name)).toEqual([
+      "beta",
+      "delta",
+    ]);
+  });
+
+  it("keeps a current workspace when the one open before the link is deleted", async () => {
+    await openLink();
+    expect(readConfig().currentId).toBe(storedIdOf("beta"));
+
+    await PgExplorer.deleteWorkspace("beta");
+
+    expect(readConfig().currentId).toBe(storedIdOf("alpha"));
+    expectLinkStillOpen();
+  });
+
+  it("opens the link's files and lists nothing when the stored list cannot be read", async () => {
+    await openLink();
+    clearFailures();
+    stored().set(PgWorkspace.WORKSPACES_CONFIG_PATH, "{ not json");
+
+    await PgExplorer.init({ files: LINK_FILES });
+
+    expect(PgExplorer.getFileContent("/src/lib.rs")).toBe("from a link");
+    expect(PgExplorer.storedWorkspaceNames).toBeUndefined();
+    expect(getFailures()).toEqual([
+      expect.objectContaining({ what: "read the stored workspaces" }),
+    ]);
+  });
+
+  it("reads the names for an import without making one current", async () => {
+    await openLink();
+
+    expect(await PgExplorer.readAllWorkspaceNames()).toEqual(["alpha", "beta"]);
+    expectLinkStillOpen();
+  });
+
+  // Another tab's rename or delete reached the view's tab, but the list it
+  // showed kept the old names, and opening one of them failed
+  describe("when another tab changes the list", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    /** What another tab's rename of alpha and delete of beta leave behind */
+    const anotherTabRenamesAndDeletes = () =>
+      writeConfig({
+        workspaces: [
+          {
+            id: requireFor("alpha's stored id")(storedIdOf("alpha")),
+            name: "gamma",
+          },
+        ],
+        currentId: readConfig().currentId,
+      });
+
+    it("shows the store's names after a refresh, with the link left open", async () => {
+      await openLink();
+      const id = storedIdOf("alpha");
+      anotherTabRenamesAndDeletes();
+      const announced = vi.fn();
+      const listening = PgExplorer.onDidChangeWorkspaceList(announced);
+      try {
+        expect(await PgExplorer.refreshWorkspaces()).toBe(true);
+      } finally {
+        listening.dispose();
+      }
+
+      expect(PgExplorer.storedWorkspaceNames).toEqual(["gamma"]);
+      expect(PgExplorer.storedWorkspaceIdOf("gamma")).toBe(id);
+      expect(announced).toHaveBeenCalledTimes(1);
+      expectLinkStillOpen();
+    });
+
+    it("keeps the names shown when the store fails to read", async () => {
+      await openLink();
+      clearFailures();
+      stored().set(PgWorkspace.WORKSPACES_CONFIG_PATH, "{ not json");
+
+      expect(await PgExplorer.refreshWorkspaces()).toBe(false);
+
+      expect(PgExplorer.storedWorkspaceNames).toEqual(["alpha", "beta"]);
+      expect(getFailures()).toEqual([
+        expect.objectContaining({ what: "refresh workspaces" }),
+      ]);
+      expectLinkStillOpen();
+    });
+
+    it("leaves a list set during the read alone", async () => {
+      // A rename beside the link saves its list while the refresh reads an
+      // older store; taken after it, that read would bring the old name back
+      await openLink();
+      const read = PgExplorer.fs.readToJSON.bind(PgExplorer.fs);
+      vi.spyOn(PgExplorer.fs, "readToJSON").mockImplementationOnce(
+        async (path: string) => {
+          const before = await read(path);
+          await PgExplorer.renameWorkspace("gamma", { from: "alpha" });
+          return before;
+        }
+      );
+
+      expect(await PgExplorer.refreshWorkspaces()).toBe(true);
+
+      expect(PgExplorer.storedWorkspaceNames).toEqual(["gamma", "beta"]);
+      expectLinkStillOpen();
+    });
   });
 });
 

@@ -150,7 +150,7 @@ it.each(["footer", "rail"] as const)(
     draw(which);
     await openMenu();
     expect(eventsNamed("session_account_menu_opened")).toEqual([
-      { from: which },
+      { via: which },
     ]);
   }
 );

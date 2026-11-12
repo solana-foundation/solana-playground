@@ -85,7 +85,7 @@ describe("BaseRunCallout", () => {
     const { node } = callout({
       kind: "running",
       startedAt: 0,
-      source: "link",
+      isFromLink: true,
       previous: { kind: "done", ms: 2_000 },
     });
     expect(node?.getAttribute("data-state")).toBe("done");

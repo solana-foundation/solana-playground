@@ -401,7 +401,7 @@ describe("Assistant", () => {
     expect(sessionStorage.getItem("assistant.connection")).toBeNull();
     expect(events.events.map((e) => [e.name, e.params])).toContainEqual([
       "assistant_key_deleted",
-      {},
+      { via: "assistant" },
     ]);
     resetTelemetry();
   });

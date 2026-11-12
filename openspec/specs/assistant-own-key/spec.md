@@ -336,9 +336,9 @@ removed, Settings SHALL say so in the row, since its notice in the panel is
 hidden under Settings. Connecting to a backend
 that needs no key SHALL drop the key too.
 
-Pressing it in Settings SHALL fire `settings_key_deleted` with no
-parameters; picking it from the head's More SHALL fire
-`assistant_key_deleted` with no parameters.
+Pressing it SHALL fire `assistant_key_deleted` with `via`: `settings` from
+Settings, `assistant` from the head's More. The event is declared once, beside
+the store that holds the key, so both widgets send it.
 
 #### Scenario: Delete my key from Settings
 

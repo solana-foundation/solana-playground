@@ -32,7 +32,7 @@ preview is visible from another's, under the same GitHub account. That is test d
 own takes the label.
 
 By convention it carries the migrations on `master` and no others.
-[`preview-shared-db.yml`](../../.github/workflows/preview-shared-db.yml) migrates it on every push to `master` that changes `client-v2/db/migrations`, and on a manual run (Actions → preview-shared-db →
+[`preview-shared-db.yml`](../../.github/workflows/preview-shared-db.yml) migrates it on every push to `master` that changes `client-v2/db/migrations`, and on a manual run (Actions → Preview: shared database →
 Run workflow, with `master` selected: a run from any other branch is skipped). Nothing technical enforces this: a
 branch runs its own copy of the workflow on a manual run, and the `github-ci` service account that migrates the
 shared database also runs `preview.yml` on `pull_request`. The rule holds because no workflow that runs on a PR

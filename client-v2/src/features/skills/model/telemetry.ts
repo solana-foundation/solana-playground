@@ -8,4 +8,12 @@ type SkillsEvents = {
   skills_toggled: { id: string; enabled: boolean };
 };
 
-export const skillsTelemetry = createTracker<SkillsEvents>();
+/**
+ * Free text, opted in: no type lists the values, so the owner decides
+ * whether to keep it (HOO-2752)
+ */
+type SkillsFreeText = {
+  id: "a skill id from the list `/api/skills` returns, which the server owns";
+};
+
+export const skillsTelemetry = createTracker<SkillsEvents, SkillsFreeText>();

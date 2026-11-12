@@ -2,6 +2,7 @@ import "./Markdown.css";
 
 import { FC, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 
 import { cn } from "@/shared/lib/utils";
@@ -26,6 +27,14 @@ interface MarkdownProps {
   rootSrc?: string;
   /** Whether to support URL hashes `<URL>#<HASH>` */
   linkable?: boolean;
+  /**
+   * Give every heading the id its text gets on GitHub and the docs sites
+   * (`rehype-slug`), with no prefix, so a `page#section` address written for
+   * the original finds the same heading here. A tutorial's doc page turns it
+   * on; `linkable` has its own, prefixed ids and wins where both are set,
+   * for the h1 to h3 that `Header` renders
+   */
+  headingIds?: boolean;
 }
 
 /** react-markdown 9 passes one child where 8 passed an array. */
@@ -34,6 +43,7 @@ const first = <T,>(v: T | T[]) => (Array.isArray(v) ? v[0] : v);
 const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
   rootSrc,
   linkable,
+  headingIds,
   codeFontOnly,
   inheritFont,
   ...props
@@ -80,6 +90,7 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
         inheritFont && "pg-markdown-inherit-font"
       )}
       remarkPlugins={[remarkGfm]}
+      rehypePlugins={headingIds ? [rehypeSlug] : []}
       components={{
         /** Links */
         a: (linkProps) => <Link {...(linkProps as unknown as LinkProps)} />,

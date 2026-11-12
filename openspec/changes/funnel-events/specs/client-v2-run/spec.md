@@ -29,8 +29,8 @@ The `features/run` slice SHALL declare, describe, and export through its
 
 `processCommon` in `commands/run-and-test/run-and-test.ts`, which the `run`
 and `test` commands share whether typed in the terminal or started from the
-explorer, SHALL send `run_finished {kind, outcome}` once every file it was
-given has run. `kind` is `test` or `client`. `outcome` is `failed` when any
+explorer, SHALL send `run_finished {kind, outcome}` once the run ends: `test` has
+run every file it was given, or `run` has run its scripts until one failed. `kind` is `test` or `client`. `outcome` is `failed` when any
 file failed, else `passed`. `PgJsRuntime.execute` in
 `utils/js-runtime/js-runtime.ts` SHALL report whether a file failed: a test
 file when mocha reports a failure, a client script when it throws an error

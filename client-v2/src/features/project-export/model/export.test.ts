@@ -96,7 +96,7 @@ describe("features/project-export/model/export", () => {
 
   describe("exportConverted and exportAsIs", () => {
     it("converts a project with no program with the TypeScript profile", async () => {
-      const readme = await exportConverted("beta");
+      const exported = await exportConverted("beta");
 
       expect(zipped()).toEqual({
         name: "beta",
@@ -110,14 +110,12 @@ describe("features/project-export/model/export", () => {
           "playground.ts",
         ],
       });
-      expect(readme).toContain("npm install");
+      expect(exported.readme).toContain("npm install");
+      expect(exported.profile).toBe("typescript");
+      expect(exported.files).toBe(7);
       expect(utils.PgFramework.convertToFramework).not.toHaveBeenCalled();
-      expect(sent.events).toEqual([
-        {
-          name: "export_downloaded",
-          params: { profile: "typescript", files: 7 },
-        },
-      ]);
+      // The zip is counted where the export started, not here
+      expect(sent.events).toEqual([]);
     });
 
     it("never writes the RPC URL Playground uses into the zip", async () => {
@@ -145,21 +143,27 @@ describe("features/project-export/model/export", () => {
         framework: "Anchor",
       });
 
-      const readme = await exportConverted("beta");
+      const exported = await exportConverted("beta");
 
-      expect(utils.PgFramework.convertToFramework).toHaveBeenCalledWith(ANCHOR);
+      // The named project, so its own program id goes in the zip
+      expect(utils.PgFramework.convertToFramework).toHaveBeenCalledWith(
+        ANCHOR,
+        "beta"
+      );
       expect(utils.PgFramework.downloadZip).toHaveBeenCalledWith(
         "beta",
         anchorFiles
       );
-      expect(readme).toBe("anchor readme");
-      expect(sent.events).toEqual([
-        { name: "export_downloaded", params: { profile: "anchor", files: 2 } },
-      ]);
+      expect(exported).toEqual({
+        readme: "anchor readme",
+        profile: "anchor",
+        files: 2,
+      });
+      expect(sent.events).toEqual([]);
     });
 
-    it("exports the files as they are without converting", async () => {
-      await exportAsIs("open-one");
+    it("exports the files as they are without converting, and counts them", async () => {
+      expect(await exportAsIs("open-one")).toBe(2);
 
       expect(utils.PgFramework.readWorkspaceFiles).toHaveBeenCalledWith(
         "open-one"
@@ -168,9 +172,7 @@ describe("features/project-export/model/export", () => {
         "open-one",
         NO_PROGRAM
       );
-      expect(sent.events).toEqual([
-        { name: "export_downloaded", params: { profile: "as-is", files: 2 } },
-      ]);
+      expect(sent.events).toEqual([]);
     });
 
     it("counts a program no framework knows, and rethrows for the fallback", async () => {
@@ -203,24 +205,24 @@ describe("features/project-export/model/export", () => {
       ]);
     });
 
-    it("counts an export that downloaded nothing", async () => {
+    it("names the plain zip that did not download, and sends nothing", async () => {
       utils.PgFramework.downloadZip.mockRejectedValue(new Error("quota"));
 
-      await expect(exportAsIs("open-one")).rejects.toThrow("quota");
-      expect(sent.events).toEqual([
-        { name: "export_failed", params: { profile: "as-is" } },
-      ]);
+      const failure = await exportAsIs("open-one").catch((e: unknown) => e);
+      expect(isDownloadFailure(failure)).toBe(true);
+      expect(isDownloadFailure(failure) && failure.profile).toBe("as-is");
+      expect((failure as Error).message).toBe("quota");
+      expect(sent.events).toEqual([]);
     });
 
-    it("counts a converted zip that did not download, apart from a conversion", async () => {
+    it("tells a converted zip that did not download from a conversion, by its profile", async () => {
       utils.PgFramework.downloadZip.mockRejectedValue(new Error("quota"));
 
       const failure = await exportConverted("beta").catch((e: unknown) => e);
       expect(isDownloadFailure(failure)).toBe(true);
+      expect(isDownloadFailure(failure) && failure.profile).toBe("typescript");
       expect((failure as Error).message).toBe("quota");
-      expect(sent.events).toEqual([
-        { name: "export_failed", params: { profile: "typescript" } },
-      ]);
+      expect(sent.events).toEqual([]);
     });
 
     it("names the TypeScript profile when it fails", async () => {

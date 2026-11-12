@@ -13,6 +13,7 @@ import {
   leaveEditor,
   newProjectPage,
   projectRow,
+  reloadAndBoot,
   runInTerminal,
   seedWorkspace,
   stubSignedIn,
@@ -393,7 +394,7 @@ test("client-v2-layout: Folding the project panel", async ({
   // Hidden: the column is out of the layout and takes no width
   await expect(files).toHaveCount(0);
   // The fold is kept over a reload
-  await page.reload();
+  await reloadAndBoot(page);
   await expect(files).toHaveCount(0);
   await filesToggle(page).click();
   await expect(files).toHaveJSProperty("offsetWidth", 240);
@@ -1788,7 +1789,7 @@ test("client-v2-layout: A cluster that is down", async ({
     if (body?.method !== "getSlot") return route.continue();
     return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
   });
-  await page.reload();
+  await reloadAndBoot(page);
 
   const row = nav(page).getByRole("button", {
     name: "Change cluster, currently devnet, not responding",
@@ -1818,7 +1819,7 @@ const reloadOn = async (page: Page, option: string) => {
     settings.connection.endpoint = { option: picked };
     localStorage.setItem("settings", JSON.stringify(settings));
   }, option);
-  await page.reload();
+  await reloadAndBoot(page);
 };
 
 const clusterRow = (page: Page) =>
@@ -1911,7 +1912,7 @@ test("the wallet names the endpoint that does not answer", async ({
   seededPage: page,
 }) => {
   await refuseCluster(page);
-  await page.reload();
+  await reloadAndBoot(page);
   await connectWallet(page);
 
   await page.locator("#tabs").getByRole("button", { name: "Wallet" }).click();
@@ -2095,7 +2096,7 @@ test.describe("the settings page", () => {
 
     await expect
       .poll(() => lineOf(lines, "settings_opened"))
-      .toContain("from: key");
+      .toContain("via: key");
     await expect
       .poll(() => lineOf(lines, "settings_closed"))
       .toContain("via: escape");
@@ -2124,7 +2125,7 @@ test.describe("the settings page", () => {
     await expect(settingsPage(page)).toBeVisible();
     await expect
       .poll(() => lines.filter((l) => l.includes("settings_opened")).at(-1))
-      .toContain("from: stage");
+      .toContain("via: stage");
   });
 
   test("client-v2-layout: A menu open at ⌘, closes as the settings open", async ({
@@ -2221,7 +2222,9 @@ test.describe("the settings page at 1440 by 900", () => {
     for (const theme of ["Dark", "Light"]) {
       if (theme === "Light") {
         await page.evaluate(() => localStorage.setItem("theme", "Light"));
-        await page.reload();
+        // A click while the app boots again hangs in Firefox on a loaded
+        // runner: the page takes it only once its main thread is free
+        await reloadAndBoot(page);
         await page.locator("[data-settings-trigger]").first().click();
         await expect
           .poll(() =>

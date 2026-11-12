@@ -103,7 +103,7 @@ const LiveSettingsPage = ({
 }: SettingsPageProps) => {
   const phone = useViewport() === "phone";
   const online = useOnline();
-  const [current, setCurrent] = useState<string>(NETWORK);
+  const [current, setCurrent] = useState<SectionId>(NETWORK);
 
   // A modal opened from the page (Import from GitHub or files, a setting's
   // Custom value) owns Escape while any is up
@@ -216,7 +216,7 @@ const LiveSettingsPage = ({
     ),
   };
 
-  const sections: SettingsSection[] = SECTION_ORDER.filter(
+  const sections: SettingsSection<SectionId>[] = SECTION_ORDER.filter(
     // A phone has no keyboard for the shortcuts
     (id) => !(phone && id === "shortcuts")
   ).map((id) => ({

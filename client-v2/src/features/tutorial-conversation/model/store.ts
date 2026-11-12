@@ -21,18 +21,22 @@ import type {
   PassedVia,
   RunResult,
   UnreadTx,
+  Wrote,
 } from "./progress";
 import { freshProgress, parseProgress } from "./progress";
 import { WorkspaceMovedError } from "./real-workspace";
 import type { Action, Effect, EngineContext, EngineState } from "./reducer";
 import {
   actOf,
+  clientRunInput,
   INITIAL_ENGINE_STATE,
   panelInput,
   reduce,
   stepOfBeat,
 } from "./reducer";
 import { route } from "./route";
+import type { ClientRunWatchPort } from "./runners/client-run-watch";
+import { watchClientRuns } from "./runners/client-run-watch";
 import { tutorialTelemetry } from "./telemetry";
 import type { ConversationView } from "./view";
 import { isLaterAirdrop, view } from "./view";
@@ -244,6 +248,45 @@ export class PgConversation {
   /** A step's goal met outside the feed: the Call panel or a client run */
   static passed(via: Exclude<PassedVia, "chat">, result: RunResult) {
     PgConversation._dispatch({ type: "passed", via, result, at: Date.now() });
+  }
+
+  /**
+   * A run of the client file outside its card (the terminal's `run`, the
+   * explorer's Run, the docs' Run) is judged as the run act's and passes the
+   * live step's call goal it meets, as `client` (HOO-2806). A run that starts
+   * while the step waits on no call, or while an act runs, is not judged; a
+   * result that lands after another tutorial opened, this one started over,
+   * or the learner moved to another step, passes nothing.
+   *
+   * @param port the `run` command and the chain
+   * @returns a disposable that stops watching
+   */
+  static watchClientRuns(port: ClientRunWatchPort): Disposable {
+    return watchClientRuns(() => {
+      const { context, engine } = PgConversation._state;
+      if (!context) return undefined;
+      const judged = clientRunInput(context.definition, engine.progress);
+      if (!judged) return undefined;
+      const { name } = context.definition;
+      const { restartedAt } = engine.progress;
+      return {
+        input: judged.input,
+        onResult: (result) => {
+          const now = PgConversation._state;
+          const { cursor } = now.engine.progress;
+          if (
+            now.context?.definition.name === name &&
+            now.engine.progress.restartedAt === restartedAt &&
+            cursor.kind === "step" &&
+            cursor.stepId === judged.stepId
+          ) {
+            PgConversation.passed("client", result);
+          } else {
+            log.debug("A client run ended after its step or tutorial moved on");
+          }
+        },
+      };
+    }, port);
   }
 
   /**
@@ -1190,10 +1233,10 @@ export class PgConversation {
           let block = effect.block;
           const at = effect.key ? typedKey(before, effect.key) : null;
           if (at !== null) {
-            const rows = before.split("\n");
-            block = withOwnText(block, rows[at - 1]);
-            rows.splice(at - 1, 1);
-            base = rows.join("\n");
+            const beforeRows = before.split("\n");
+            block = withOwnText(block, beforeRows[at - 1]);
+            beforeRows.splice(at - 1, 1);
+            base = beforeRows.join("\n");
           }
           const { reference, start } = groundOf(effect, step);
           const placed = insertBlock(base, block, reference, start);
@@ -1202,12 +1245,19 @@ export class PgConversation {
             PgConversation._landedLate(name, effect.file);
             break;
           }
+          // The lines as they landed, for the card to draw whatever the
+          // learner does to the file afterwards
+          const rows = placed.code.split("\n");
+          const wrote: Wrote = {
+            file: effect.file,
+            lines: placed.lines,
+            text: placed.lines.map((line) => rows[line - 1] ?? ""),
+          };
+          if (placed.appended) wrote.appended = true;
           PgConversation._dispatch({
             type: "written",
             beatId: effect.beatId,
-            wrote: placed.appended
-              ? { file: effect.file, lines: placed.lines, appended: true }
-              : { file: effect.file, lines: placed.lines },
+            wrote,
             at: effect.at,
           });
         } catch (e) {

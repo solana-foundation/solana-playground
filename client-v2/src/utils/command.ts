@@ -62,6 +62,12 @@ export type CommandParam<
 /** What a command that needs a connection ends with offline (Spec 13) */
 export const OFFLINE_LINE = "You're offline. This command needs a connection.";
 
+/** The end of a refused value's line: what it could have been, if anything */
+const possibleValues = (values: string[]) =>
+  values.length
+    ? `(possible values: ${values.join(", ")})`
+    : "(there is nothing to choose from)";
+
 type WithSubcommands<S> = {
   /** Command arguments */
   args?: never;
@@ -154,6 +160,12 @@ export type Arg<
   multiple?: boolean;
   /** Accepted values */
   values?: V[] | ((token: string, tokens: string[]) => V[]);
+  /**
+   * `values` only completes the argument and is not checked here: the
+   * handler checks what it is given and says what is wrong itself (`run` and
+   * `test`, which count a rejected path as a failed run)
+   */
+  suggestOnly?: boolean;
   /** Parse the argument */
   parse?: (token: string, tokens: string[]) => P;
 };
@@ -582,7 +594,7 @@ Available subcommands: ${cmd.subcommands
               }
 
               // Validate values if specified
-              if (inputArgs.length && arg.values) {
+              if (inputArgs.length && arg.values && !arg.suggestOnly) {
                 const values =
                   typeof arg.values === "function"
                     ? arg.values(args[argIndex], tokens)
@@ -594,7 +606,7 @@ Available subcommands: ${cmd.subcommands
                   throw new Error(
                     [
                       `Incorrect argument value given: \`${invalidValue}\``,
-                      `(possible values: ${values.join(", ")})`,
+                      possibleValues(values),
                     ].join(" ")
                   );
                 }
@@ -633,7 +645,7 @@ Available subcommands: ${cmd.subcommands
                     throw new Error(
                       [
                         `Incorrect option value given: \`${val}\``,
-                        `(possible values: ${values.join(", ")})`,
+                        possibleValues(values),
                       ].join(" ")
                     );
                   }

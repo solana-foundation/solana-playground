@@ -1,5 +1,6 @@
 import { PgExplorer, TupleFiles } from "./explorer";
 import { noProgramCode, PgFramework } from "./framework";
+import { GithubImportError, ImportCancelledError } from "./import-error";
 import { PgLanguage } from "./language";
 
 /** Single entry of a Git tree */
@@ -47,14 +48,6 @@ const IGNORED_FILE_REGEX = /(^|\/)package-lock\.json$/;
  * a slash, as in marginfi's `marginfi/fuzz`. Keep the two in step.
  */
 const PROGRAM_SRC_REGEX = /programs\/(.+?)\/src/;
-
-/** Thrown when the user closes the program selection without choosing */
-export class ImportCancelledError extends Error {
-  constructor() {
-    super("Import cancelled");
-    this.name = "ImportCancelledError";
-  }
-}
 
 /** Progress of a repository import */
 export type ImportProgress = {
@@ -207,15 +200,20 @@ export class PgGithub {
     onProgress?.({ loaded: 0, total: null });
     const tree = await this._getTree(owner, repo, treeRef);
     if (tree.truncated) {
-      throw new Error(
+      throw new GithubImportError(
         `Repository "${owner}/${repo}" is too large to import because GitHub ` +
-          "only returns part of its file list."
+          "only returns part of its file list.",
+        "too-large"
       );
     }
 
     const items = filterRepoFiles(tree.tree, path);
-    if (!items.length)
-      throw new Error(noProgramCode(sourceOf(`${owner}/${repo}`, path)));
+    if (!items.length) {
+      throw new GithubImportError(
+        noProgramCode(sourceOf(`${owner}/${repo}`, path)),
+        "no-source"
+      );
+    }
 
     const files = await this._getFileContents(
       owner,
@@ -289,9 +287,9 @@ export class PgGithub {
     const url =
       `https://api.github.com/repos/${owner}/${repo}/git/trees/` +
       `${encodeURIComponent(ref)}?recursive=1`;
-    const response = await fetch(url);
+    const response = await this._fetch(url, `${owner}/${repo}`);
     if (!response.ok) {
-      throw new Error(this._getErrorMessage(response, `${owner}/${repo}`));
+      throw this._getError(response, `${owner}/${repo}`);
     }
 
     return (await response.json()) as GithubTree;
@@ -355,46 +353,78 @@ export class PgGithub {
     path: string
   ) {
     const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-    const response = await fetch(
+    const response = await this._fetch(
       `https://raw.githubusercontent.com/${owner}/${repo}/` +
-        `${encodeURIComponent(ref)}/${encodedPath}`
+        `${encodeURIComponent(ref)}/${encodedPath}`,
+      path
     );
     if (!response.ok) {
-      throw new Error(this._getErrorMessage(response, path));
+      throw this._getError(response, path);
     }
 
     return await response.text();
   }
 
   /**
-   * Turn a failed response into a message that explains what to do next.
+   * Fetch a GitHub URL; a request that gets no answer (`fetch` rejects with a
+   * `TypeError`) becomes a `GithubImportError` with reason `network`, so a
+   * programming error's `TypeError` is never read as one.
+   *
+   * @param url what to fetch
+   * @param subject repository or file the request is about
+   * @returns the response, whatever its status
+   */
+  private static async _fetch(url: string, subject: string) {
+    try {
+      return await fetch(url);
+    } catch (e) {
+      if (e instanceof TypeError) {
+        throw new GithubImportError(
+          `GitHub did not answer the request for "${subject}". Check the ` +
+            "connection and try again.",
+          "network"
+        );
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Turn a failed response into an error whose message explains what to do
+   * next and whose reason telemetry reports.
    *
    * @param response failed response
    * @param subject repository or file the request was about
-   * @returns the error message
+   * @returns the error
    */
-  private static _getErrorMessage(response: Response, subject: string) {
+  private static _getError(response: Response, subject: string) {
     switch (response.status) {
       case 403:
       case 429:
         if (response.headers.get("x-ratelimit-remaining") === "0") {
-          return (
+          return new GithubImportError(
             "GitHub's hourly request limit for this browser has been " +
-            "reached. Please try again later."
+              "reached. Please try again later.",
+            "rate-limited"
           );
         }
-        return `GitHub refused the request for "${subject}".`;
+        return new GithubImportError(
+          `GitHub refused the request for "${subject}".`,
+          "other"
+        );
 
       case 404:
-        return (
+        return new GithubImportError(
           `"${subject}" was not found on GitHub. It may be private or the ` +
-          "link may be out of date."
+            "link may be out of date.",
+          "not-found"
         );
 
       default:
-        return (
+        return new GithubImportError(
           `GitHub request for "${subject}" failed with status ` +
-          `${response.status}.`
+            `${response.status}.`,
+          "other"
         );
     }
   }

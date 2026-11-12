@@ -133,6 +133,7 @@ const handlers = (): TurnHandlers => ({
   revealError: vi.fn(),
   showLog: vi.fn(),
   createWallet: vi.fn(),
+  newProgramId: vi.fn(),
   signIn: vi.fn(),
 });
 
@@ -456,6 +457,19 @@ describe("BaseFeed", () => {
   it("falls back to the step the feed reads where the browser cannot watch the live card", async () => {
     vi.stubGlobal("IntersectionObserver", undefined);
     feed();
+    expect(screen.queryByRole("button", { name: /^Back to/ })).toBeNull();
+    await userEvent.click(segment(/^Step 1 of 4, Program, done$/));
+    expect(screen.getByRole("button", { name: "Back to step 3" })).toBeTruthy();
+  });
+
+  it("keeps that fallback after a press of the pill", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    feed();
+    await userEvent.click(segment(/^Step 1 of 4, Program, done$/));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Back to step 3" })
+    );
     expect(screen.queryByRole("button", { name: /^Back to/ })).toBeNull();
     await userEvent.click(segment(/^Step 1 of 4, Program, done$/));
     expect(screen.getByRole("button", { name: "Back to step 3" })).toBeTruthy();

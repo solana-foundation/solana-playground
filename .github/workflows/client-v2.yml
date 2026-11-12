@@ -1,4 +1,4 @@
-name: client-v2
+name: Client v2
 
 # Guards `client-v2/` on the real wasm packages, the ones every deployment
 # ships, and never touches the Rust workspaces otherwise. The jobs live in

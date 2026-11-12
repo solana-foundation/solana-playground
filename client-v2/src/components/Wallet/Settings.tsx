@@ -75,7 +75,7 @@ interface SettingsProps {
 const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
   showRename,
 }) => {
-  const { airdrop, faucet } = useAirdrop();
+  const { airdrop, faucet } = useAirdrop("wallet");
   const { darken, lighten } = useDarken();
 
   const wallet = PgWallet.current!;

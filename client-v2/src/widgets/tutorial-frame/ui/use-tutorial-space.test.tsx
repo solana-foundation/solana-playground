@@ -70,7 +70,7 @@ describe("useTutorialSpace", () => {
     const stop = onDocRequest(() => true);
     let shown: boolean | undefined;
     act(() => {
-      shown = requestDoc("idl.md");
+      shown = requestDoc({ file: "idl.md" });
     });
     stop();
     expect(shown).toBe(true);
@@ -81,7 +81,7 @@ describe("useTutorialSpace", () => {
     const { result } = draw(options({}));
     let shown: boolean | undefined;
     act(() => {
-      shown = requestDoc("missing.md");
+      shown = requestDoc({ file: "missing.md" });
     });
     expect(shown).toBe(false);
     expect(result.current.space).toBe("chat");
@@ -146,7 +146,7 @@ describe("useTutorialSpace", () => {
     act(() => {
       requestCode();
       requestLog();
-      shown = requestDoc("idl.md");
+      shown = requestDoc({ file: "idl.md" });
     });
     expect(result.current.space).toBe("chat");
     expect(shown).toBe(false);
@@ -171,7 +171,7 @@ describe("useTutorialSpace", () => {
     act(() => result.current.setSpace("chat", "toggle"));
     const stop = onDocRequest(() => true);
     act(() => {
-      requestDoc("idl.md");
+      requestDoc({ file: "idl.md" });
     });
     stop();
     expect(
