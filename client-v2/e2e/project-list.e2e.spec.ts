@@ -27,13 +27,16 @@ const twoProjects = async (page: Page) => {
   await startAnotherProject(page, "beta");
 };
 
+// Scoped by CSS: reading or counting under `getByRole("group", { name })`
+// crashes Playwright 1.65's Firefox 159 (Juggler) content process
 const projectNames = (page: Page) =>
   page
-    .getByRole("group", { name: "Projects" })
+    // The label's own group: an outer group of the navigation holds this one
+    .locator('[data-sidebar="group-label"]', { hasText: /^Projects$/ })
+    .locator("..")
     .locator('[data-sidebar="menu-button"]')
     .allInnerTexts();
 
-// Scoped by CSS: counting under `getByRole("group", { name })` crashes Playwright 1.65's Firefox 159 (Juggler) content process
 const pins = (page: Page) =>
   page.locator('[data-sidebar="group"]').getByTitle("Pinned");
 
