@@ -148,14 +148,14 @@ test.describe("tutorial: Hello Anchor on a phone, on a stubbed build server and 
     await page.getByRole("button", { name: /^Show the code/ }).click();
     await showing(page, "code");
     const terminal = code(page).getByRole("button", { name: "Terminal" });
-    // The drawer is Code's last child; folded it is its bar alone (28 px)
+    // The drawer is Code's last child; folded it is its bar alone, the phone bar's 44 px
     const drawerHeight = () =>
       code(page)
         .locator("> div")
         .last()
         .evaluate((el) => el.getBoundingClientRect().height);
     await expect(terminal).toHaveAttribute("aria-expanded", "false");
-    await expect.poll(drawerHeight).toBeLessThan(40);
+    await expect.poll(drawerHeight).toBe(44);
     await terminal.click();
     await expect(terminal).toHaveAttribute("aria-expanded", "true");
     // Open, it takes its share of the space: the bar alone reads expanded on
@@ -163,7 +163,7 @@ test.describe("tutorial: Hello Anchor on a phone, on a stubbed build server and 
     await expect.poll(drawerHeight).toBeGreaterThan(120);
     await terminal.click();
     await expect(terminal).toHaveAttribute("aria-expanded", "false");
-    await expect.poll(drawerHeight).toBeLessThan(40);
+    await expect.poll(drawerHeight).toBe(44);
     await page.getByRole("button", { name: "Back to the chat" }).click();
     await showing(page, "chat");
     await next(page).click();
