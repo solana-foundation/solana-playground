@@ -221,6 +221,7 @@ describe("PgGithub.getFiles", () => {
     ).rejects.toMatchObject({
       message: expect.stringMatching(/was not found on GitHub/),
       reason: "not-found",
+      name: "GithubImportError",
     });
   });
 
@@ -368,7 +369,11 @@ describe("PgGithub.getFiles", () => {
 
     await expect(
       PgGithub.getFiles("https://github.com/solana-labs/example")
-    ).rejects.toThrow(/"src\/lib\.rs" was not found on GitHub/);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/"src\/lib\.rs" was not found on GitHub/),
+      reason: "not-found",
+      name: "GithubFileError",
+    });
   });
 });
 

@@ -33,6 +33,17 @@ export class GithubImportError extends Error {
   }
 }
 
+/**
+ * A `GithubImportError` from downloading one file of a tree GitHub listed,
+ * so the repository itself was found
+ */
+export class GithubFileError extends GithubImportError {
+  constructor(message: string, reason: GithubImportReason) {
+    super(message, reason);
+    this.name = "GithubFileError";
+  }
+}
+
 /** Why an import's files could not become a project, as telemetry reports it */
 export type ConversionReason = "unsupported" | "no-source";
 
