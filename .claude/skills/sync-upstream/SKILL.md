@@ -39,8 +39,7 @@ Run every command from a checkout of this repository, with Node 22 or later. The
    unmerged. Stage the result, then run `S commit <worktree>`.
 3. **Read the stop reasons.** `commit` refuses while `client/` differs from foundation/master, and while the merge
    brings back a path or content in `GUARDS` that foundation/master lacks (the upstream client services in
-   `compose.yaml`, `update-static.mjs`, the `client/public` submodule entry, and
-   `server/src/routes/share.rs` once HOO-2727 removes it). Never edit `GUARDS` to get past a hit: remove what
+   `compose.yaml`, `update-static.mjs`, and `server/src/routes/share.rs` once HOO-2727 removes it). Never edit `GUARDS` to get past a hit: remove what
    came back.
 4. **Check what the merge deleted.** `-X theirs` also takes upstream's deletions of files the fork still needs.
    List them with `git -C <worktree> diff --no-renames --diff-filter=D --name-only <foundation/master sha> HEAD`
