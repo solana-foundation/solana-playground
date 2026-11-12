@@ -1,4 +1,4 @@
-name: preview
+name: Preview
 
 # A preview deployment of client-v2 with a database of its own, for a PR that
 # carries the `preview` label, and only for that PR. The Vercel Git

@@ -1,4 +1,4 @@
-name: client-v2 with stubs
+name: "Client v2: with stubs"
 
 # The `client-v2.yml` jobs on the wasm stubs (`USE_WASM_STUBS=true`): no Rust
 # build, and the specs and checks that need the real packages left out. Run by
