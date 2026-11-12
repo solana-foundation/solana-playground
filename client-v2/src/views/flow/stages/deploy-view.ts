@@ -55,8 +55,13 @@ export const deployViewFor =
     if (stage.phase === "stopped") {
       const { stop } = stage;
       if (stop.kind === "cancelled") return IDLE_VIEW;
+      // The card names the wallet the run stopped for, and "Send from your
+      // wallet" funds the current one: after a switch it would name an
+      // account nobody is deploying from
       const isOnThisProject =
-        stop.cluster === here.cluster && stop.workspace === here.workspace;
+        stop.cluster === here.cluster &&
+        stop.workspace === here.workspace &&
+        stop.detail.address === here.wallet;
       if (isOnThisProject) return { kind: "funding", stop: stop.detail };
     }
     if (flowDeploy === "failed") return { kind: "failed" };
@@ -74,9 +79,10 @@ if (import.meta.vitest) {
 
   describe("views/flow/stages/deploy-view", () => {
     let WALLET: typeof import("../__fixtures__/addresses").WALLET;
+    let FRESH_WALLET: typeof import("../__fixtures__/addresses").FRESH_WALLET;
 
     beforeAll(async () => {
-      ({ WALLET } = await import("../__fixtures__/addresses"));
+      ({ WALLET, FRESH_WALLET } = await import("../__fixtures__/addresses"));
     });
 
     /** The stage open on devnet, project "counter", the Playground wallet current */
@@ -158,6 +164,20 @@ if (import.meta.vitest) {
           flowDeploy: "failed",
         })
       ).toEqual({ kind: "failed" });
+    });
+
+    it("shows no card once another wallet is current than the one the run stopped for", () => {
+      expect(
+        deployViewFor({
+          cluster: "devnet",
+          workspace: "counter",
+          wallet: FRESH_WALLET,
+        })({
+          stage: fundingHere(),
+          deployState: "ready",
+          flowDeploy: "active",
+        })
+      ).toEqual(IDLE_VIEW);
     });
 
     it("shows no card for a funding stop in another project", () => {
