@@ -181,7 +181,8 @@ Done:
   menu; on a phone the three fold into one status chip in the top bar that
   opens a sheet), the
   assistant, then the work area. The assistant's head names the open
-  project (with no project open, the model; the composer's model button
+  project (beside a tutorial not yet started, its name; with neither, the
+  model; the composer's model button
   always shows the model) and its Collapse hides the assistant. Across the
   top of the work area runs the stepper (Write → Build → Deploy → Interact,
   state derived from real build/deploy events); under it the editor head,

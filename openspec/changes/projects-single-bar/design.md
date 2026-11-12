@@ -47,17 +47,21 @@ list; changing the stage tabs; keyboard handling; the phone.
    Narrower, the dropdown shows no pin. Files while docked and shown
    undocks; otherwise it toggles the dropdown. An unpinned tree stays a
    dropdown until pinned again.
-5. **The row.** `BaseEditorHead` gains `actions` (Share), an `assistant`
-   toggle drawn only while the assistant is hidden ("Expand assistant",
-   same name as before so the e2e path holds), and ⋯ ("More options" with
-   Solana documentation). The stage bar stays for Home and covers only.
-6. **Head label.** As Almaz's commit does it: the project name as a plain
-   label when a project is open, else the model label as before.
+5. **The row** (Almaz's commit). `BaseEditorHead` gains `controls`, the
+   stage bar's `BaseBarControls` (Share, "Expand assistant" only while the
+   assistant is hidden, ⋯ "More options" with Solana documentation), and
+   `tree`, the dropdown (open, body, pin). The stage bar stays for Home and
+   covers only.
+6. **Head label.** As Almaz's commit does it, in `Assistant`: the project
+   (or a not-yet-started tutorial's) name as a plain label, else
+   `headLabel` of the model as before; `headLabel` itself is unchanged.
 
 ## Risks / Trade-offs
 
-- Existing users with `files: false` saved see the dropdown, not the docked
-  default. Accepted: their choice is the remembered one.
+- A layout saved before this change keeps `files: false` (every panel
+  toggle saves the whole `open` object), so those users get the dropdown
+  until they pin the tree. Accepted: only a first visit gets the docked
+  default.
 - The Explorer inside a Popover: inline rename inputs and the context menu
   must keep focus; covered by an e2e case.
 - ⌘E is the parallel hotkeys session's; it keeps calling the same toggle.

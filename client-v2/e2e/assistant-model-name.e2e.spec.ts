@@ -60,6 +60,17 @@ const expectCutWithin = (height: number) => async (page: Page) => {
   await expect(page.getByRole("tooltip")).toHaveText(LONG_ID);
 };
 
+test("assistant-model-name: The project in the head", async ({ page }) => {
+  await stubAiStatus(page, "GLM 5.3 Flash");
+  await page.goto("/");
+  await startProject(page, "anchor-project", LONG);
+  const heading = page
+    .locator("#assistant[data-panel]")
+    .getByRole("heading", { level: 2 });
+  await expect(heading).toHaveText("anchor-project", LONG);
+  await expect(heading).not.toContainText("GLM 5.3 Flash");
+});
+
 test("assistant-model-name: Long name in the composer, desktop and phone", async ({
   page,
 }) => {

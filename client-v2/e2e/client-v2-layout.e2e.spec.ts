@@ -1639,6 +1639,17 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
   expect(Math.round(work.x - (assistant.x + assistant.width))).toBe(1);
 });
 
+test("client-v2-layout: The lines meet", async ({ seededPage: page }) => {
+  await page.setViewportSize(WIDE_DESK);
+  const head = assistantPanel(page)
+    .getByRole("heading", { level: 2 })
+    .locator("..");
+  // Both rows start at the top and are 44 px tall, so their bottom lines
+  // are level
+  await expect.poll(() => barOf(head)).toEqual({ y: 0, height: 44 });
+  await expect.poll(() => stageTabsRowOf(page)).toEqual({ y: 0, height: 44 });
+});
+
 test("client-v2-layout: No stage bar in a project", async ({
   seededPage: page,
 }) => {

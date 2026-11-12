@@ -58,8 +58,9 @@ SHALL undock it. The pin SHALL show only while the code area is wider than
 1100 px; narrower, a docked tree SHALL not take a column, "Files" opens it
 as the dropdown, and the dropdown shows no pin. An undocked tree SHALL stay
 undocked, at any width, until the pin docks it again. The tree SHALL keep its open folders, selection and
-scroll across every change. ⌘E and the empty editor's "Show files" SHALL do
-what "Files" does. In a lesson the column SHALL keep its Steps / Files
+scroll across every change. ⌘E SHALL do what "Files" does. The empty editor's
+"Show files" SHALL show the tree: it opens the dropdown unless the tree is
+docked and shown, and then leaves it as it is. In a lesson the column SHALL keep its Steps / Files
 switch at its top, and "Files" in the head SHALL open and close that same
 column.
 

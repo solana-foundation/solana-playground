@@ -11,6 +11,7 @@ import {
   startProject,
   test,
 } from "./fixtures";
+import { linesOn, linesRead } from "./telemetry";
 import {
   DESK,
   DOCK_DESK,
@@ -372,6 +373,25 @@ test.describe("at 1920", () => {
     await undockPin(page).click();
     await expect(filesPanel(page)).toHaveCount(0);
     await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("client-v2-editor-head: The dropdown from the button", async ({
+    page,
+  }) => {
+    await firstVisit(page);
+    await undockPin(page).click();
+    await expect(filesPanel(page)).toHaveCount(0);
+    const lines = linesOn(page);
+    await filesToggle(page).click();
+    await expect(filesDropdown(page).locator("#root-dir")).toBeVisible();
+    // A moment more, so a second copy sent by the same press fails the test
+    await page.waitForTimeout(300);
+    await linesRead(lines);
+    expect(
+      lines.filter((line) =>
+        line.startsWith("[telemetry:event] layout_files_dropdown_opened ")
+      )
+    ).toEqual([expect.stringContaining("via: button")]);
   });
 
   test("client-v2-editor-head: A saved open tree", async ({ page }) => {

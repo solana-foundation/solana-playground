@@ -211,6 +211,9 @@ const tap = (element: Element) => {
 
 const sheetOverlay = () => slot("sheet-overlay");
 
+/** How many times the shell has rendered: it calls `stage` on every render */
+let shellRenders = 0;
+
 // Only what the shell reads: the font a portaled Sheet is set in
 const theme = {
   font: {
@@ -258,7 +261,10 @@ const shellTree = (
             Files column control
           </button>
         )}
-        stage={() => work.stage ?? <main>stage</main>}
+        stage={() => {
+          shellRenders += 1;
+          return work.stage ?? <main>stage</main>;
+        }}
         console={({ open, toggle }) => (
           <button
             type="button"
@@ -2193,5 +2199,100 @@ describe("the project tree, docked or as the dropdown", () => {
     act(() => PgView.showFiles());
     expect(dropdown()).not.toBeNull();
     expect(opened()).toEqual([{ via: "button" }]);
+  });
+
+  it("does not render the shell for a resize that stays on one side of 1100 px", () => {
+    shell();
+    codeAreaAt(1300);
+    const wide = shellRenders;
+    codeAreaAt(1400);
+    codeAreaAt(1100);
+    expect(shellRenders).toBe(wide);
+    codeAreaAt(1000);
+    const narrow = shellRenders;
+    expect(narrow).toBeGreaterThan(wide);
+    codeAreaAt(900);
+    codeAreaAt(1099);
+    expect(shellRenders).toBe(narrow);
+  });
+
+  /** An undocked tree with its dropdown up, from one press of Files */
+  const undockedAndOpen = () => {
+    fireEvent.click(filesToggle());
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+  };
+
+  it.each([
+    ["Home", { home: () => <div>home</div> }],
+    [
+      "a page",
+      {
+        cover: {
+          title: "Tutorials",
+          content: <div>page slot</div>,
+          onClose: () => {},
+        },
+      },
+    ],
+  ] as const)(
+    "closes the dropdown under %s, and one press of Files opens it on return",
+    (_, over) => {
+      const { rerender } = shell();
+      undockedAndOpen();
+      rerender(
+        shellTree(
+          "home" in over ? over.home : undefined,
+          {},
+          "cover" in over ? over.cover : undefined
+        )
+      );
+      expect(dropdown()).toBeNull();
+      rerender(shellTree());
+      // Nobody asked for it back
+      expect(dropdown()).toBeNull();
+      expect(filesPressed()).toBe("false");
+      fireEvent.click(filesToggle());
+      expect(dropdown()).not.toBeNull();
+      expect(opened()).toEqual([{ via: "button" }, { via: "button" }]);
+    }
+  );
+
+  it("closes the dropdown at a phone's width, and one press of Files opens it back at a wide one", () => {
+    shell();
+    undockedAndOpen();
+    act(() => resizeTo(390));
+    act(() => resizeTo(1440));
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    expect(opened()).toEqual([{ via: "button" }, { via: "button" }]);
+  });
+
+  it("closes the dropdown by Escape, and one press of Files opens it again", () => {
+    shell();
+    undockedAndOpen();
+    fireEvent.keyDown(document.activeElement ?? document.body, {
+      key: "Escape",
+    });
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    expect(opened()).toEqual([{ via: "button" }, { via: "button" }]);
+  });
+
+  it("closes the dropdown by a press outside it, and one press of Files opens it again", async () => {
+    shell();
+    undockedAndOpen();
+    // Radix listens for a press outside only from the next tick on
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    fireEvent.pointerDown(screen.getByText("stage"));
+    expect(dropdown()).toBeNull();
+    expect(filesPressed()).toBe("false");
+    fireEvent.click(filesToggle());
+    expect(dropdown()).not.toBeNull();
+    expect(opened()).toEqual([{ via: "button" }, { via: "button" }]);
   });
 });

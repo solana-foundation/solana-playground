@@ -61,8 +61,8 @@ export interface LayoutShellProps {
     phone: boolean;
   }) => ReactNode;
   /**
-   * The stage tabs, in a row across the files column and the stage, under the
-   * shell's own stage bar; on a phone, in the preview page's bar
+   * The stage tabs, in a row across the files column and the stage, over the
+   * editor head; on a phone, in the preview page's bar
    */
   stageTabs: ReactNode;
   /**
@@ -133,8 +133,8 @@ export interface LayoutShellProps {
   /** While Home shows, keep the work mounted (`BaseLayoutShellProps.keepWork`) */
   keepWork?: boolean;
   /**
-   * Actions for the open project in the desktop stage bar, as the header's
-   * Share; not drawn under Home or over a page
+   * Actions for the open project in the desktop editor head, after its
+   * toggles, as the header's Share; not drawn under Home or over a page
    */
   stageBarActions?: ReactNode;
   /**
@@ -214,8 +214,8 @@ const LayoutShell = ({
   const [homeSheetOpen, setHomeSheetOpen] = useState(false);
   const homeSheetNow = useRef(false);
   useExplorer();
-  // The project's name shows in the stage bar and the phone's bar; a rename
-  // opens no file, so `useExplorer`'s events miss it
+  // The project's name shows in the phone's bar; a rename opens no file, so
+  // `useExplorer`'s events miss it
   useRenderOnChange(PgExplorer.onDidRenameWorkspace);
   // Below `LAYOUT_BREAKPOINTS.compact` the assistant is a Sheet, closed on
   // arrival and never saved
@@ -236,9 +236,17 @@ const LayoutShell = ({
   // The project tree as in a tutorial: `state.open.files` (saved) says docked;
   // it shows as the column only while the code area is wide enough to dock,
   // else, like an undocked tree, as the dropdown under the editor head. The
-  // code area is unmeasured until its first report, and wide until then
-  const [codeWidth, setCodeWidth] = useState<number>();
-  const canDock = codeWidth === undefined || canDockAt(codeWidth);
+  // code area is unmeasured until its first report, and wide until then.
+  // Only the side of `DOCK_MIN_PX` is kept, and only a change of side is set,
+  // so a resize that stays on one side renders nothing
+  const [canDock, setCanDock] = useState(true);
+  const canDockNow = useRef(true);
+  const onCodeWidth = (width: number) => {
+    const next = canDockAt(width);
+    if (canDockNow.current === next) return;
+    canDockNow.current = next;
+    setCanDock(next);
+  };
   const dockedShown = state.open.files && canDock;
   // The dropdown is the visit's, never saved
   const [treeOpen, setTreeOpenState] = useState(false);
@@ -259,14 +267,19 @@ const LayoutShell = ({
     treeNow.current = false;
     setTreeOpenState(false);
   };
-  /** Docks or undocks the tree; saved, and the dropdown closes either way */
-  const dockTree = (docked: boolean, via: ToggleSource) => {
+  /** Docks the tree beside the editor; saved, and the dropdown closes */
+  const dockTree = (via: ToggleSource) => {
     closeTree();
-    setOpen("files", { open: docked, via });
+    setOpen("files", { open: true, via });
+  };
+  /** Puts the tree back in its dropdown, closed; saved */
+  const undockTree = (via: ToggleSource) => {
+    closeTree();
+    setOpen("files", { open: false, via });
   };
   /** "Files" and ⌘E: undock a docked, shown tree, else open or close the dropdown */
   const toggleFiles = (via: "button" | "key") => {
-    if (dockedShownNow.current) dockTree(false, via);
+    if (dockedShownNow.current) undockTree(via);
     else if (treeNow.current) closeTree();
     else openTree(via);
   };
@@ -295,6 +308,9 @@ const LayoutShell = ({
   // dropdown goes with the head: off the work screen and on a phone, where the
   // head is not drawn. Nobody closed it, so nothing is reported
   const treeHasNoPlace = dockedShown || phone || screen.kind !== "work";
+  // What the head draws: the dropdown's open and its body read this one value,
+  // so they agree in the render before the effect below closes the dropdown
+  const treeShown = treeOpen && !treeHasNoPlace;
   useEffect(() => {
     if (treeHasNoPlace) closeTree();
     // `closeTree` reads only a ref and a stable setter
@@ -679,8 +695,8 @@ const LayoutShell = ({
         open: dockedShown,
         onOpenChange: (open) => setOpen("files", { open, via: "drag" }),
       }}
-      onUndockFiles={() => dockTree(false, "button")}
-      onCodeWidth={setCodeWidth}
+      onUndockFiles={() => undockTree("button")}
+      onCodeWidth={onCodeWidth}
       consoleState={{
         open: state.open.console,
         onOpenChange: (open) => setOpen("console", { open, via: "drag" }),
@@ -713,7 +729,7 @@ const LayoutShell = ({
         // Drawn only while docked and shown, so a control of its own undocks
         return files({
           collapsed: false,
-          toggle: () => dockTree(false, "button"),
+          toggle: () => undockTree("button"),
           phone: false,
         });
       }}
@@ -759,23 +775,22 @@ const LayoutShell = ({
       workHead={
         <BaseEditorHead
           files={{
-            open: dockedShown || treeOpen,
+            open: dockedShown || treeShown,
             onToggle: () => toggleFiles("button"),
           }}
           tree={{
-            open: treeOpen,
+            open: treeShown,
             canDock,
             onClose: closeTree,
-            onDock: () => dockTree(true, "button"),
+            onDock: () => dockTree("button"),
             // The tree mounts once: here only while the column does not hold it
-            body:
-              treeOpen && !dockedShown
-                ? files({
-                    collapsed: false,
-                    toggle: closeTree,
-                    phone: false,
-                  })
-                : undefined,
+            body: treeShown
+              ? files({
+                  collapsed: false,
+                  toggle: closeTree,
+                  phone: false,
+                })
+              : undefined,
           }}
           terminal={{
             open: state.open.console,

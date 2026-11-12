@@ -44,8 +44,10 @@ export const LAYOUT_STORAGE_KEY = "layout";
  * The layout a first visit gets: navigation, assistant and the project tree
  * docked open, the console closed. `files` says the tree is docked beside the
  * stage rather than in its dropdown under the editor head (HOO-2827). No
- * version bump for the files flag: a saved value is the user's choice, docked
- * or not, and is kept.
+ * version bump for the files flag: a saved layout keeps its `files` value.
+ * Every panel toggle saves the whole `open` object, so a layout saved before
+ * this change keeps the old closed default even if the tree was never
+ * touched; only a first visit gets the docked default.
  */
 export const DEFAULT_LAYOUT: LayoutState = Object.freeze({
   v: LAYOUT_VERSION,

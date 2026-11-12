@@ -10,6 +10,8 @@
 
 **Spec:** `openspec/changes/projects-single-bar/` (proposal, design, specs).
 
+> **Executed in part (12 Nov):** Tasks 1 and 2 were done by Almaz's commit 6f4c97f3b (`almaz/project-one-bar`), whose interfaces differ from the ones below (`controls`, `tree`; `headLabel` unchanged): design.md decisions 5 and 6 describe what shipped. Tasks 3 and 4 were executed as written, with the shared shell in `shared/lib/tree-dock.tsx`.
+
 ## Global Constraints
 
 - Keep ids and names: `#editor-head`, `#editor-head-files`, `#editor-head-terminal`, "Expand assistant", "Collapse assistant", "More options", "Documentation", "Dock beside the editor", "Undock the files".

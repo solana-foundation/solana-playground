@@ -254,13 +254,15 @@ export interface BaseLayoutShellProps {
    */
   files: (stock: FilesStock) => ReactNode;
   /**
-   * The 44 px bar at the top of the work area, over the files column and the
-   * stage (`BaseStageBar`); not on a phone, whose pager has its own bar
+   * The 44 px bar (`BaseStageBar`) over Home in the columns' place, or at the
+   * top of the work area when given there; not on a phone, whose pager has
+   * its own bar. `LayoutShell` gives it only under Home: in an open project
+   * the editor head is the work's one bar
    */
   stageBar: ReactNode;
   /**
-   * The stage tabs, in a row under `stageBar` across the files column and the
-   * stage; on a phone, in the bar of the preview page
+   * The stage tabs, in a row over the editor head across the files column
+   * and the stage; on a phone, in the bar of the preview page
    */
   stageTabs: ReactNode;
   /**
@@ -451,7 +453,7 @@ const NavSlot = ({ nav }: { nav: BaseLayoutShellProps["nav"] }) => {
 /**
  * The four-column frame: the navigation as the stock Sidebar, then the
  * assistant on a wide screen (a Sheet below `LAYOUT_BREAKPOINTS.compact`), then
- * the work area: the stage bar, the stage tabs and the editor head over the
+ * the work area: the stage tabs and the editor head over the
  * files column and the stage, the stage over the console. Below `LAYOUT_BREAKPOINTS.phone` the frame gives way
  * to `BasePhonePager`; the stage and the console are outlets, so their nodes
  * move between the two without remounting. Lays out what it is given; owns
@@ -743,7 +745,7 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
     </ResizablePanelGroup>
   );
 
-  // The files column beside the stage over the console, under the stage bar;
+  // The files column beside the stage over the console, under the editor head;
   // in a tutorial's frame the stage alone, beside the chat
   const workGroup = (
     <ResizablePanelGroup
@@ -938,8 +940,8 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
             </Sidebar>
             <SidebarInset className="relative min-h-0 min-w-0 bg-transparent">
               {!workInFrame ? (
-                // The column bar over Home (or over a page in Home's place) as
-                // over the work: no stage tabs, since no stage shows
+                // The column bar over Home (or over a page in Home's place),
+                // with no stage tabs or editor head, since no stage shows
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   {inPlace.bar}
                   <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
@@ -1039,18 +1041,11 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                           <ResizablePanel
                             id="work"
                             minSize={PANEL_SIZES.work.min}
-                            // Over the stage tabs the bar and the tabs read as
-                            // one head, so the bar drops its line there; with
-                            // no stage tabs (Home, a page, a tutorial before
-                            // Start) it keeps it over what comes next
-                            className={cn(
-                              "flex min-w-0 flex-col",
-                              props.stageTabs &&
-                                "[&>[data-slot=stage-bar]]:border-b-transparent"
-                            )}
+                            className="flex min-w-0 flex-col"
                           >
-                            {/* Over the files column and the stage both, as the prototype
-                draws them: the column bar, the stage tabs, then the editor head */}
+                            {/* Over the files column and the stage both: the stage tabs,
+                then the editor head, the work's one bar. A `stageBar`, when a
+                caller gives one here, goes first; `LayoutShell` gives none */}
                             {props.stageBar}
                             {props.stageTabs}
                             {props.workHead}

@@ -44,6 +44,12 @@ test.describe("on a desktop window", () => {
     await expect(page.locator(".monaco-editor")).toHaveCount(0);
   });
 
+  test("client-v2-layout: Home keeps its bar", async ({ page }) => {
+    await page.goto("/");
+    await expect(home(page)).toBeVisible();
+    await expect(page.locator('[data-slot="stage-bar"]')).toHaveText(/^Home/);
+  });
+
   test("client-v2-layout: New project from Home", async ({ page }) => {
     await page.goto("/");
     await startProject(page, "home-new");

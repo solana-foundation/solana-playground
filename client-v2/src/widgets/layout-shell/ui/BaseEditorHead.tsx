@@ -16,7 +16,7 @@ import type { BarToggle } from "./BaseStageBar";
 
 /** The project tree's dropdown under the head, the tree not docked */
 export interface EditorHeadTree {
-  /** The dropdown is up */
+  /** The dropdown is up; `body` is given exactly while it is */
   open: boolean;
   /** The code area is wide enough to dock: the pin shows */
   canDock: boolean;
