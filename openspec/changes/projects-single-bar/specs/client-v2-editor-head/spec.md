@@ -65,11 +65,11 @@ column.
 
 #### Scenario: Opening and closing the tree
 
-- **WHEN** a user on a 1440 px wide window with the tree undocked clicks
-  "Files", then clicks `lib.rs` in the dropdown, then clicks "Files" again
-- **THEN** the dropdown opens with `aria-pressed="true"` on "Files", the
-  editor shows `lib.rs` with its row highlighted, then the dropdown closes
-  and "Files" reads `aria-pressed="false"`
+- **WHEN** a user on a 1440 px wide window (code area under 1100 px)
+  clicks "Files", then clicks `lib.rs` in the dropdown
+- **THEN** the dropdown opens with `aria-pressed="true"` on "Files", then
+  the editor shows `lib.rs`, the dropdown closes and "Files" reads
+  `aria-pressed="false"`, as a pick does in a tutorial
 
 #### Scenario: The key and the head agree
 
@@ -79,7 +79,7 @@ column.
 
 #### Scenario: Undocking and docking again
 
-- **WHEN** a user on a 1440 px wide window with the tree docked clicks
+- **WHEN** a user on a 1920 px wide window with the tree docked clicks
   "Files", then "Files" again, then «Dock beside the editor»
 - **THEN** the column takes no width and "Files" reads
   `aria-pressed="false"`, then the dropdown shows the tree with "Files" at
@@ -93,9 +93,11 @@ column.
 #### Scenario: File actions from the tree
 
 - **WHEN** a user opens the tree as the dropdown, clicks "+ New file",
-  types `y.rs` and presses Enter, then renames and deletes `y.rs` from its
-  menu
-- **THEN** each action works as it does in the docked column
+  types `y.rs` and presses Enter, opens the dropdown again, then renames and
+  deletes `y.rs` from its menu
+- **THEN** `y.rs` opens and the dropdown closes; the tree's menu and the
+  delete dialog keep the dropdown open; renaming the open file reopens it
+  under its new name, which closes the dropdown as a pick does
 
 ### Requirement: The tree starts closed
 
@@ -104,8 +106,8 @@ docked. A saved layout SHALL keep the tree as it was saved, docked or not.
 
 #### Scenario: A first visit
 
-- **WHEN** a user with no saved layout opens a project on a 1440 px wide
-  window
+- **WHEN** a user with no saved layout opens a project on a 1920 px wide
+  window (code area over 1100 px)
 - **THEN** the tree is docked left of the stage and "Files" reads
   `aria-pressed="true"`
 

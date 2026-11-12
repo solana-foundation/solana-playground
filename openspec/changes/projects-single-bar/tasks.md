@@ -19,5 +19,5 @@ All tasks: HOO-2827, one PR. 1.x and 2.1 are done by Almaz's commit 6f4c97f3b (`
 
 ## 4. Tests and docs (plan: [plans/1-one-row.md](plans/1-one-row.md), Task 4)
 
-- [ ] 4.1 Update the e2e specs that assert the stage bar, "Hide the assistant", the closed-by-default tree and the "Assistant" head; add the dropdown's file actions case
-- [ ] 4.2 `docs/upstream-divergences.md` and `docs/assistant-context.md` where they describe the bar or the Files column
+- [x] 4.1 Update the e2e specs that assert the stage bar, "Hide the assistant", the closed-by-default tree and the "Assistant" head; add the dropdown's file actions case
+- [x] 4.2 `docs/assistant-context.md` (`docs/upstream-divergences.md` is not on master; it lives on the context archive) where they describe the bar or the Files column

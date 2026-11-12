@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { editorTookFocus, expect, home, LONG, test } from "./fixtures";
-import { DESK } from "./viewports";
+import { DESK, DOCK_DESK } from "./viewports";
 
 /**
  * The keyboard pass over the main dialogs and the keys that act globally
@@ -119,7 +119,10 @@ for (const [name, open] of DIALOGS) {
 test("keyboard: Enter opens a file from the tree, Space folds a folder", async ({
   seededPage: page,
 }) => {
-  const tree = page.locator("#root-dir");
+  // Wide enough for the docked tree's column: at 1280 it is a dropdown,
+  // which an opened file closes
+  await page.setViewportSize(DOCK_DESK);
+  const tree = page.locator("#files[data-panel] #root-dir");
   const src = tree.getByRole("button", { name: "src", exact: true });
   const lib = tree.getByRole("button", { name: "lib.rs", exact: true });
   await expect(lib).toBeVisible();

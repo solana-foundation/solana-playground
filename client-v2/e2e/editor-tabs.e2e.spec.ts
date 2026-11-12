@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 import { requireFor } from "../src/test-utils/require-for";
-import { LONG, test } from "./fixtures";
+import { filesDropdown, filesToggle, LONG, test } from "./fixtures";
 
 /**
  * The editor's tab strip in a real browser: what jsdom cannot lay out or
@@ -162,32 +162,29 @@ test("arrow keys in the editor stay in the editor", async ({
 test("a tab opened past the row's edge scrolls into view, and the wheel scrolls the row", async ({
   seededPage: page,
 }) => {
-  await page.setViewportSize({ width: 834, height: 900 });
   // The row spans the editor head, over the files column and the stage, so
-  // it takes a dozen tabs to overflow it at this width
+  // it takes a dozen tabs to overflow it at 834 px. They are made in the
+  // docked column first: at 834 the tree is a dropdown, which an opened file
+  // closes, as "+ New file" does
   const names = Array.from({ length: 12 }, (_, i) => `f${i + 1}.rs`);
   for (const name of names) await newFile(page, name);
+  await page.setViewportSize({ width: 834, height: 900 });
+  const tree = filesDropdown(page).locator("#root-dir");
   const lastName = names[names.length - 1];
   const list = page.locator('#tabs [role="tablist"]');
   const overflow = () => list.evaluate((el) => el.scrollWidth - el.clientWidth);
   await expect.poll(overflow).toBeGreaterThan(0);
 
   // The last tab, far right, opened from the explorer with the row scrolled
-  // to its start
-  await page
-    .locator("#root-dir")
-    .getByText("lib.rs", { exact: true })
-    .first()
-    .click();
+  // to its start; each pick closes the dropdown
+  await filesToggle(page).click();
+  await tree.getByText("lib.rs", { exact: true }).first().click();
   await expect.poll(() => currentName(page)).toBe("lib.rs");
   await list.evaluate((el) => {
     el.scrollLeft = 0;
   });
-  await page
-    .locator("#root-dir")
-    .getByText(lastName, { exact: true })
-    .first()
-    .click();
+  await filesToggle(page).click();
+  await tree.getByText(lastName, { exact: true }).first().click();
   await expect.poll(() => currentName(page)).toBe(lastName);
 
   const last = page.locator(`${TAB}[id$="/${lastName}"]`);

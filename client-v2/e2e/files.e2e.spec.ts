@@ -1,7 +1,13 @@
 import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
-import { filesToggle, LONG, projectMenu, test } from "./fixtures";
+import {
+  filesDropdown,
+  filesToggle,
+  LONG,
+  projectMenu,
+  test,
+} from "./fixtures";
 
 /** Closes every editor tab by its own close button */
 const closeEveryTab = async (page: Page) => {
@@ -24,16 +30,18 @@ test("client-v2-files: Closing the last tab", async ({ seededPage: page }) => {
   await expect(page.getByRole("heading", { name: "Tutorials" })).toHaveCount(0);
 });
 
-test("client-v2-files: Show files with the column folded", async ({
+test("client-v2-files: Show files with the tree undocked", async ({
   seededPage: page,
 }) => {
   await closeEveryTab(page);
+  // "Files" undocks the docked tree; Show files then does what "Files" does
+  // and opens it as the dropdown
   await filesToggle(page).click();
   await expect(page.locator("#root-dir")).toBeHidden();
 
   await page.getByRole("button", { name: "Show files" }).click();
 
-  await expect(page.locator("#root-dir")).toBeVisible();
+  await expect(filesDropdown(page).locator("#root-dir")).toBeVisible();
 });
 
 /** Creates a file from the Files column's foot, in `src` or under a path in it */

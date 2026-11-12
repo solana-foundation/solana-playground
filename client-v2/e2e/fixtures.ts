@@ -47,6 +47,13 @@ export const startProject = async (page: Page, name: string, timeout = {}) => {
 export const filesToggle = (page: Page) => page.locator("#editor-head-files");
 
 /**
+ * The project tree's dropdown under the editor head: the tree undocked, or
+ * docked on a code area too narrow (< 1100 px) to give it a column
+ */
+export const filesDropdown = (page: Page) =>
+  page.getByRole("dialog", { name: "Files" });
+
+/**
  * The editor holding the focus it takes when it mounts and opens the current
  * file. Monaco is a lazy chunk, and on a loaded runner it arrives well past
  * an assertion's 20 s (30 s seen on CI): the wait is the page load's,
@@ -96,9 +103,10 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
 
   // `PgExplorer.createWorkspace` hands the work over, then the explorer
   // re-initializes -- wait for the work, not just Home going away: its
-  // editor head, and the tree when the layout has it open. A spec that
-  // clears the tree-open seed (playwright.config's `storageState`) gets a
-  // closed tree, which `openFiles` opens.
+  // editor head, and the tree when it shows. At the suite's default width
+  // the seeded layout docks it (playwright.config's `viewport` and
+  // `storageState`); narrower, or undocked, the tree waits in its dropdown,
+  // which `openFiles` opens.
   const toggle = filesToggle(page);
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("aria-pressed")) === "true") {
@@ -113,7 +121,10 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
 export const consoleTrigger = (page: Page) =>
   page.locator('[data-slot="console-drawer-trigger"]');
 
-/** Opens the file tree from the editor head, if it is not open already */
+/**
+ * Shows the file tree from the editor head, if it does not show already: a
+ * docked tree that has its column shows; otherwise "Files" opens the dropdown
+ */
 export const openFiles = async (page: Page) => {
   const toggle = filesToggle(page);
   await expect(toggle).toBeVisible(LONG);

@@ -467,14 +467,26 @@ test.describe("client-v2-stages: Interact", () => {
     );
   });
 
-  // At 1024 px in the suite's layout (TREE_OPEN_LAYOUT in playwright.config:
-  // the navigation, the files and the assistant open), the stage is about
-  // 240 px wide, less the scrollbar gutter on both edges: Upload IDL, the
-  // IDL's name and "Build the IDL locally" on one centred row lost both ends
+  // The stage at its 240 px minimum, less the scrollbar gutter on both
+  // edges: Upload IDL, the IDL's name and "Build the IDL locally" on one
+  // centred row lost both ends. Reached on the suite's 1920 px window with
+  // the assistant widened to its 560 px maximum (the code area still wide
+  // enough, 1100 px, for the docked tree) and the files column dragged as
+  // wide as the stage allows
   test("Interact keeps its IDL actions inside a narrow stage", async ({
     seededPage: page,
   }) => {
-    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.getByRole("button", { name: "Widen the assistant" }).click();
+    const handle = page.locator(
+      '[data-slot="resizable-handle"][aria-controls="files"]'
+    );
+    const box = requireFor("the files column's handle box")(
+      await handle.boundingBox()
+    );
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 900, box.y + box.height / 2, { steps: 10 });
+    await page.mouse.up();
     // eslint-disable-next-line unicorn/no-null -- the cluster's answer for an account that does not exist
     await stubProgramAccount(page, null);
     const panel = await buildThenInteract(page);
@@ -567,7 +579,9 @@ test.describe("client-v2-stages on a phone", () => {
       [PROGRAM_ID, Date.now()] as const
     );
     await page.reload();
-    await expect(page.locator("#root-dir")).toBeAttached(LONG);
+    // The explorer back: at 1280 the tree is not on the page (its dropdown
+    // is closed), so the editor's tab says it
+    await expect(page.locator("#tabs")).toContainText("lib.rs", LONG);
     await page.setViewportSize(PHONE);
     await openPhonePreview(page);
 

@@ -48,7 +48,9 @@ test.describe("on a desktop window", () => {
     await page.goto("/");
     await startProject(page, "home-new");
 
-    await expect(page.locator("#root-dir")).toBeVisible();
+    // The project is open in the editor (at 1280 the tree waits in its
+    // dropdown, closed)
+    await expect(page.locator("#tabs")).toContainText("lib.rs", LONG);
     // The project switcher names the new project
     await expect(
       page.getByRole("button", { name: "home-new", exact: true })
@@ -193,7 +195,7 @@ test.describe("from an open project", () => {
     test.setTimeout(120_000);
     await page.goto("/");
     await startProject(page, "alpha");
-    await expect(page.locator("#root-dir")).toBeVisible(LONG);
+    await expect(page.locator("#tabs")).toContainText("lib.rs", LONG);
 
     const menu = await projectMenu(page, "alpha");
     await menu.getByRole("menuitem", { name: "Delete alpha" }).click();
