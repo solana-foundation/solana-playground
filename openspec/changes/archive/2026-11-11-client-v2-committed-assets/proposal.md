@@ -25,8 +25,10 @@ fork's assets are edited where they are served.
   for tutorial dates.
 - The app shows no upstream Markdown tutorial: its tutorial lists keep only the start ladder (Hello Anchor,
   Lumberjack, Zero Copy), all conversation tutorials. So the fork imports only the part of upstream's assets it
-  uses, named in `client-v2/scripts/assets-import.txt`: every top-level entry it imported before except
-  `tutorials/`. A tutorial folder that `markdown-tutorials.json` lists is imported whole. `public/tutorials/` is
+  uses, named in `client-v2/scripts/assets-import.txt`. Upstream's `tutorials/`, `fonts/`, `icons/`,
+  `frameworks/`, and `pyth/` are left out: the code fonts come from npm packages, the icons from `lucide-react`,
+  and the framework logos from `src/frameworks/<name>/`, and the Pyth generator and the Test sidebar page are
+  removed. A tutorial folder that `markdown-tutorials.json` lists is imported whole. `public/tutorials/` is
   deleted, and `markdown-tutorials.json` starts empty. Hello Anchor's and Lumberjack's thumbnails move next to
   their `tutorial.json`, as Zero Copy's already is, and the build bundles them. Hello Solana and Hello Seahorse
   lose their thumbnails; Seahorse's code stays until it is removed separately, and `craco.config.js` takes a
@@ -34,7 +36,8 @@ fork's assets are edited where they are served.
 - The `sync-upstream` skill's `assets` command applies upstream's changes to the listed paths, reports fork-owned
   and fork-changed paths, paths the list leaves out, and new upstream tutorials, and updates
   `scripts/assets-commit.txt`.
-- Every SVG, PNG, and JPEG in `client-v2/public/` and `client-v2/src/tutorials/` is optimised once, the brand
+- Every SVG, PNG, and JPEG in `client-v2/public/`, `client-v2/src/tutorials/`, and `client-v2/src/frameworks/` is
+  optimised once, the brand
   files included, by `client-v2/scripts/optimise-image.mjs` (svgo; sharp lossless PNG; sharp mozjpeg JPEG), and
   the `assets` command optimises what it imports. The 31 images were served as committed, 790,122 bytes;
   optimised, they take 520,571. A `yarn test-api` test fails on an image the script would still change, so an unoptimised image
@@ -72,7 +75,7 @@ None.
   takes its domain from the build environment, with two new scenarios. A new requirement, "One list enables the
   Markdown tutorials", says which Markdown tutorials the build includes, another, "An upstream sync imports
   only the listed assets", says which upstream assets reach `public/`, and a third, "The images are optimised",
-  says the images in `public/` and `src/tutorials/` are kept optimised.
+  says the images in `public/`, `src/tutorials/`, and `src/frameworks/` are kept optimised.
 
 ## Impact
 

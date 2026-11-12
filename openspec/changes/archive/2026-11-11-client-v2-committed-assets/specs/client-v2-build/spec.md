@@ -43,7 +43,8 @@ it, and SHALL NOT write a fork-owned path or a path whose copy the fork changed.
 
 ### Requirement: The images are optimised
 
-Every SVG, PNG, and JPEG tracked under `client-v2/public/` and `client-v2/src/tutorials/` SHALL be a fixed point
+Every SVG, PNG, and JPEG tracked under `client-v2/public/`, `client-v2/src/tutorials/`, and
+`client-v2/src/frameworks/` SHALL be a fixed point
 of `client-v2/scripts/optimise-image.mjs`: optimising it again SHALL return the same bytes. `yarn test-api` SHALL
 fail on an image that is not.
 

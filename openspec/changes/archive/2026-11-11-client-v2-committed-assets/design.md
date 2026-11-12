@@ -52,11 +52,11 @@ without git data of the checkout.
 - **Import only the assets the fork uses.** The app shows no upstream Markdown tutorial (`startTutorials` in
   `entities/tutorial/model/start-ladder.ts` keeps the three conversation tutorials), so `public/tutorials/` held
   13 tutorials and a template nobody could open, and every upstream sync would copy more. The import list,
-  `scripts/assets-import.txt`, names upstream paths one a line, a trailing `/` for a folder; it holds every
-  top-level entry imported before except `tutorials/`. Fonts, icons, languages, themes, and `pyth/` stay listed
-  until someone checks what reads them. A tutorial folder `markdown-tutorials.json` lists is imported whole, so
-  enabling a Markdown tutorial stays one edit. `frameworks/` stays listed whole, since the Seahorse framework
-  still reads `frameworks/seahorse/icon.png`. Rejected: a deny list. An upstream addition would then arrive
+  `scripts/assets-import.txt`, names upstream paths one a line, a trailing `/` for a folder. It leaves out
+  `tutorials/`, `fonts/`, `icons/`, `frameworks/`, and `pyth/`: client-v2 takes its code fonts from npm
+  packages, its icons from `lucide-react`, and its framework logos from `src/frameworks/<name>/`, and it has no
+  Pyth generator. A tutorial folder `markdown-tutorials.json` lists is imported whole, so enabling a Markdown
+  tutorial stays one edit. Rejected: a deny list. An upstream addition would then arrive
   unreviewed, which is what the list exists to stop.
 - **A ladder tutorial's thumbnail lives next to its `tutorial.json`.** `generate-tutorials.mjs` bundles a
   thumbnail found beside the definition, as it did for Zero Copy, so Hello Anchor's and Lumberjack's move into
@@ -74,8 +74,8 @@ without git data of the checkout.
   `JPEG_QUALITY`, with metadata stripped. A result that is not smaller keeps the input. A JPEG re-encode must
   save `JPEG_MIN_SAVING` of the size: a second mozjpeg pass at the same quality still saves 0.6 to 3.7 percent on
   the thumbnails, so without the margin an optimised JPEG would not be a fixed point and every pass would lose
-  quality. The test in `optimise-image.test.mjs` re-optimises each image in `public/` and `src/tutorials/` and
-  fails on any change. The `assets` command optimises what it writes and compares the local copy with the
+  quality. The test in `optimise-image.test.mjs` re-optimises each image in `public/`, `src/tutorials/`, and
+  `src/frameworks/` and fails on any change. The `assets` command optimises what it writes and compares the local copy with the
   optimised old blob, so an image the fork optimised but never edited still takes upstream's change. The output
   is the same only for the pinned svgo and sharp, so a bump of either re-optimises every image in the same change.
   Rejected: lossy PNG (palette quantisation), which changes pixels of the brand files.
