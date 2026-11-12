@@ -58,7 +58,9 @@ export const editorTookFocus = (page: Page) =>
 /**
  * A reload, then the app up again: every lazy chunk is fetched anew, so the
  * app's boot, not the step a test waits for after the reload, spends that
- * step's timeout
+ * step's timeout. A click that lands mid-boot hangs in Firefox, where the boot
+ * holds the main thread for seconds. Needs a project open in the editor: the
+ * editor taking focus is the boot's last step.
  */
 export const reloadAndBoot = async (page: Page) => {
   await page.reload();

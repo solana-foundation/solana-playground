@@ -46,27 +46,37 @@ const OFFLINE_LINE =
  * `PgConnection.getIsClusterDown`, which reads the slot twice a second apart.
  * `getAccountInfo` answers "no account" at once: the Deploy stage restores a
  * reload's build only after `PgProgramInfo.onChain` reads the program
- * account, and the real devnet can take longer than the test waits
+ * account, and the real devnet can take longer than the test waits.
+ * The function it returns lets the cluster recover: from then on the slot
+ * moves on every read. The stub, not the public devnet, answers the recovery,
+ * since a devnet that rate-limits the runner (429) never reads as recovered.
  */
-const stallDevnet = (page: Page) =>
-  page.route("https://api.devnet.solana.com/**", async (route) => {
+const stallDevnet = async (page: Page) => {
+  let slot = 123;
+  let isMoving = false;
+  await page.route("https://api.devnet.solana.com/**", async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
     } | null;
     if (body?.method === "getSlot") {
-      return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
+      if (isMoving) slot += 1;
+      return json(route, { jsonrpc: "2.0", result: slot, id: body.id });
     }
     if (body?.method === "getAccountInfo") {
       return json(route, {
         jsonrpc: "2.0",
         // eslint-disable-next-line unicorn/no-null -- the RPC's own "no account"
-        result: { context: { slot: 123 }, value: null },
+        result: { context: { slot }, value: null },
         id: body.id,
       });
     }
     return route.continue();
   });
+  return () => {
+    isMoving = true;
+  };
+};
 
 /**
  * Whether the build's verdict is on disk: a file in lightning-fs's IndexedDB
@@ -313,7 +323,7 @@ test.describe("on a 1440 px window", () => {
   test("client-v2-status: A cluster that does not answer on Deploy", async ({
     seededPage: page,
   }) => {
-    await stallDevnet(page);
+    const recover = await stallDevnet(page);
     await reloadAndBoot(page);
     await expect(
       row(page).getByRole("button", {
@@ -328,9 +338,12 @@ test.describe("on a 1440 px window", () => {
     await expect(notice(page).getByRole("alert")).toContainText(
       "Devnet is not responding. Try again, or change the network."
     );
-    // The cluster recovers; Try again asks it now, and the line clears
-    await page.unrouteAll({ behavior: "ignoreErrors" });
+    // The cluster recovers as Try again asks it, and the line clears. Try
+    // again reads the slot twice a second apart, so the recovery right after
+    // the click reaches its second read. Not before the click: the app's own
+    // recheck would then clear the line, and the button, under it.
     await notice(page).getByRole("button", { name: "Try again" }).click();
+    recover();
     await expect(notice(page)).toHaveCount(0, { timeout: 15_000 });
   });
 
