@@ -22,6 +22,7 @@ export const orb = PgBlockExplorer.create({
   url: URL,
   getClusterParam,
   // Orb names its IDL tab `anchor-idl`
+  // eslint-disable-next-line layers/curry-order -- the explorer interface's shape: id first, network optional
   getIdlUrl: (programId: string, cluster?: Cluster | null) =>
     `${URL}/address/${programId}/anchor-idl${getClusterParam(cluster)}`,
 });

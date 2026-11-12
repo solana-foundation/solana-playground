@@ -101,8 +101,10 @@ describe("block explorers", () => {
     expect(orb.opens("testnet")).toBe(true);
     expect(orb.opens("localnet")).toBe(false);
     expect(orb.opens("playnet")).toBe(false);
+    // `null` is a network with no cluster (a custom RPC), not the selected one
+    // eslint-disable-next-line unicorn/no-null -- the explorer API's own value for it
     expect(orb.opens(null)).toBe(false);
-    // `null` is a network with no cluster, not the selected one
+    // eslint-disable-next-line unicorn/no-null -- the explorer API's own value for it
     expect(orb.getTxUrl("sig", null)).toBe("https://orbmarkets.io/tx/sig");
   });
 
