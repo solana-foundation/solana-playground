@@ -57,7 +57,7 @@ type TutorialWorkspaceEvents = {
  */
 type TutorialWorkspaceFreeText = {
   doc: "a Markdown file name in a tutorial's `docs/` folder, read from the tutorial at run time";
-  section: "a heading id in a doc page, taken from the link the learner followed";
+  section: "a heading id in that Markdown file, read from the tutorial at run time";
 };
 
 export const tutorialWorkspaceTelemetry = createTracker<
