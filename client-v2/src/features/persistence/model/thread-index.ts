@@ -1,5 +1,10 @@
 import { isUuid, uuid } from "@/shared/lib/ids";
 
+import {
+  removeConfigFile,
+  renameConfigFile,
+  writeConfigFile,
+} from "../../../utils/explorer/config-file";
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgChatStorage } from "./chat-storage";
 import { report } from "./diagnostics";
@@ -181,6 +186,9 @@ export class PgThreadIndex {
    * so the caller must not go on to delete the old workspace: its delete
    * forgets the conversation that failed to move.
    */
+  // TODO(HOO-2726 review I3): no test fails when the renames here and in
+  // `_migrate` go back to a bare `PgFs.rename`, since the index write that
+  // follows flushes the tree too; a test needs a reload between the two.
   static async carry({ from, to }: { from: string; to: string }) {
     return withSyncLock(async () => {
       const threadId = (await PgThreadIndex._refresh())[from];
@@ -188,7 +196,7 @@ export class PgThreadIndex {
 
       const fresh = uuid();
       try {
-        await PgFs.rename(pathOf(threadId), pathOf(fresh));
+        await renameConfigFile(pathOf(threadId), pathOf(fresh));
       } catch (e) {
         // An entry with no file yet is an empty conversation, which the new
         // workspace starts with anyway
@@ -204,7 +212,7 @@ export class PgThreadIndex {
       // left under the new one it has no entry, and the next load's
       // migration adopts it as a workspace named after the thread
       try {
-        await PgFs.rename(pathOf(fresh), pathOf(threadId));
+        await renameConfigFile(pathOf(fresh), pathOf(threadId));
       } catch (e) {
         if (!isMissing(e)) report(`carry ${from} back`, e);
       }
@@ -229,7 +237,7 @@ export class PgThreadIndex {
   static async clear() {
     PgThreadIndex.reload();
     try {
-      await PgFs.removeFile(INDEX_PATH);
+      await removeConfigFile(INDEX_PATH);
     } catch (e) {
       if (!isMissing(e)) report("clear index", e);
     }
@@ -299,9 +307,7 @@ export class PgThreadIndex {
   private static async _write(index: Index): Promise<boolean> {
     PgThreadIndex._cache = index;
     try {
-      await PgFs.writeFile(INDEX_PATH, JSON.stringify(index), {
-        createParents: true,
-      });
+      await writeConfigFile(INDEX_PATH, JSON.stringify(index));
       return true;
     } catch (e) {
       report("write index", e);
@@ -365,7 +371,7 @@ export class PgThreadIndex {
       // the name looks like
       const threadId = uuid();
       try {
-        await PgFs.rename(`${DIR}/${name}`, pathOf(threadId));
+        await renameConfigFile(`${DIR}/${name}`, pathOf(threadId));
       } catch (e) {
         report(`migrate ${id}`, e);
         continue;
@@ -409,6 +415,27 @@ if (import.meta.vitest) {
     afterEach(() => vi.restoreAllMocks());
 
     describe("PgThreadIndex", () => {
+      it("keeps the index it just created through a reload before the folder tree is saved", async () => {
+        const id = uuid();
+        await PgThreadIndex.set("w1", id);
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+        PgThreadIndex.reload();
+
+        expect(await PgThreadIndex.get("w1")).toBe(id);
+      });
+
+      it("forgets the index it cleared through a reload before the folder tree is saved", async () => {
+        await PgThreadIndex.set("w1", uuid());
+        await PgThreadIndex.clear();
+        (
+          PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+        ).__reloadBeforeTreeSave();
+
+        expect(await PgFs.exists(INDEX_PATH)).toBe(false);
+      });
+
       it("mints a thread for a workspace that has never had one", async () => {
         const id = await PgThreadIndex.ensure("w1");
 
@@ -544,7 +571,7 @@ if (import.meta.vitest) {
       });
 
       describe("carrying a conversation to a new workspace", () => {
-        // "Keep as a new project": the project was deleted on another device,
+        // "Keep a copy": the project was deleted on another device,
         // its conversation tombstoned with it, and the user keeps this device's
         // work under a new id -- chat included
         it("moves the items under a fresh thread id, and drops the old one", async () => {
@@ -559,6 +586,22 @@ if (import.meta.vitest) {
           expect(await PgThreadIndex.get("p1")).toBeNull();
           expect(await PgChatStorage.read(fresh!)).toEqual([item(1), item(2)]);
           expect(threadFiles()).toHaveLength(1);
+        });
+
+        it("keeps the moved conversation through a reload before the folder tree is saved", async () => {
+          const old = uuid();
+          await PgThreadIndex.set("p1", old);
+          await PgChatStorage.write(old, [item(1)]);
+
+          await PgThreadIndex.carry({ from: "p1", to: "p2" });
+          (
+            PgFs as unknown as { __reloadBeforeTreeSave: () => void }
+          ).__reloadBeforeTreeSave();
+          PgThreadIndex.reload();
+
+          const fresh = await PgThreadIndex.get("p2");
+          expect(fresh).not.toBeNull();
+          expect(await PgChatStorage.read(fresh ?? "")).toEqual([item(1)]);
         });
 
         it("does nothing when the workspace had no conversation", async () => {

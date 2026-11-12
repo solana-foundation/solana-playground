@@ -1,3 +1,5 @@
+import type { McpServerEntry } from "@/features/mcp";
+
 import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
 import assistantContext from "../content/assistant-context.md";
 import { describeCatalog } from "../grounding";
@@ -34,23 +36,33 @@ How to write:
 - Be concrete: name the line, the type, the function. Skip preamble and pleasantries.
 - If you are unsure, say what you would need to check rather than guessing.
 
-When the learner is in a lesson step:
-
-- Inside a lesson step, this section overrides "Lead with the answer" and "Propose the smallest change that fixes the problem" above. Do not jump straight to a fix here.
-- Answer inside that step. Do not solve or explain a later step before they reach it.
-- The learner's own message names the rung they are asking for ("Hint 1 of 3", "Hint 2 of 3", "Hint 3 of 3"). On rung 1 and rung 2, respond only with a question or a pointer: no code, no file name paired with a line number, and never call write_file. Only escalate to naming a file and line, or proposing code, when the learner's own message names rung 3.
-- A learner who asks you outright to write the change overrides the rung limit for that turn — they have chosen to skip ahead, which is theirs to choose. Call write_file, then say in one line what you changed, whatever the rung.
-- Never say a step is finished. The toolchain decides that, not you.
-
 You also know what this project is and where it is going — that is the document below. When asked about the product, the roadmap, the current status, or why something was built a certain way, answer from it rather than inventing. If it does not cover the question, say so.`;
 
 /**
- * The behaviour prompt, the skill catalogue, and what the assistant knows
- * about this project.
+ * The MCP servers the user switched off, by name, so the model says so when
+ * asked for what one of them does (an on-chain lookup with the explorer off)
+ * instead of guessing or pretending to look it up. Names only: a server's
+ * tools are unknown while it is off. `undefined` while every server is on.
+ */
+export const describeOffServers = (servers: readonly McpServerEntry[]) => {
+  const off = servers.filter((server) => !server.enabled);
+  if (!off.length) return undefined;
+  const names = off.map((server) => server.name).join(", ");
+  return (
+    `MCP servers the user has switched off, so none of their tools is available to you: ${names}. ` +
+    "If the user asks for something only one of them does, such as inspecting an account, a transaction or a program on-chain, " +
+    "say that the server is off and that it can be turned on under Sources and tools in the assistant panel, or Settings › Assistant › Skills and MCP servers. " +
+    "Do not guess the result or pretend to have looked it up."
+  );
+};
+
+/**
+ * The behaviour prompt, the skill catalogue, the MCP servers switched off,
+ * and what the assistant knows about this project.
  *
  * Only skill names and descriptions go here — bodies arrive as tool results,
- * so the cached prefix survives a skill being loaded. Toggling a skill does
- * change this string and costs one cache write.
+ * so the cached prefix survives a skill being loaded. Toggling a skill or a
+ * server does change this string and costs one cache write.
  */
 export const systemPrompt = () =>
   [
@@ -58,8 +70,11 @@ export const systemPrompt = () =>
     `Skills you can load with load_skill:\n\n${describeCatalog(
       PgAssistant.enabledSkills
     )}`,
+    describeOffServers(PgAssistant.mcpServers),
     assistantContext,
-  ].join("\n\n---\n\n");
+  ]
+    .filter((part) => part !== undefined)
+    .join("\n\n---\n\n");
 
 /**
  * Describe the project as it stands right now.
@@ -90,20 +105,15 @@ export const describeProjectWith = (bridge: PlaygroundBridge) => {
   }
 
   if (ctx.programId) lines.push(`Program id: ${ctx.programId}`);
-  if (ctx.idl) {
+  if (ctx.idl?.refused) {
+    lines.push(
+      `Program interface: ${ctx.idl.name} — the Playground cannot call it: ${ctx.idl.refused}`
+    );
+  } else if (ctx.idl) {
     lines.push(
       `Program interface: ${ctx.idl.name} — instructions: ${
         ctx.idl.instructions.join(", ") || "none"
       }`
-    );
-  }
-
-  if (ctx.lesson) {
-    lines.push(
-      `\nLesson: ${ctx.lesson.name}, step ${ctx.lesson.stepIndex} of ${ctx.lesson.stepCount}`,
-      `Objective: ${ctx.lesson.objective}`,
-      `Proven by: ${ctx.lesson.verifiedBy}`,
-      `Step already satisfied: ${ctx.lesson.satisfied ? "yes" : "no"}`
     );
   }
 

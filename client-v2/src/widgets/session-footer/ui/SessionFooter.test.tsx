@@ -37,8 +37,11 @@ const wallet = vi.hoisted(() => ({
     name?: string;
   },
 }));
-const connect = vi.hoisted(() => ({ execute: vi.fn() }));
-const walletWindow = vi.hoisted(() => ({ show: false }));
+const connectWallet = vi.hoisted(() => vi.fn());
+const walletWindow = vi.hoisted(() => ({
+  show: false,
+  accounts: [] as unknown[],
+}));
 const balance = vi.hoisted(() => ({ current: 2.4 as number | undefined }));
 const setToast = vi.hoisted(() => vi.fn());
 const explorer = vi.hoisted(() => ({
@@ -54,12 +57,17 @@ vi.mock("@/hooks", () => ({
   useWallet: () => wallet.current,
   useBalance: () => balance.current,
 }));
+vi.mock("@/commands/connect/connect-wallet", () => ({ connectWallet }));
 vi.mock("@/utils", () => ({
-  PgCommand: { connect },
   PgCommon: { getOS: () => "MacOS" },
   PgExplorer: explorer,
   PgWallet: walletWindow,
   PgView: { setToast },
+}));
+// The Fund dialog has its own tests; here only the menu item that opens it counts
+vi.mock("@/features/fund-wallet", () => ({
+  // eslint-disable-next-line unicorn/no-null -- a React component renders nothing by returning `null`
+  FundDialog: () => null,
 }));
 vi.mock("@/features/feedback", () => ({
   FeedbackMenuItems: () => null,
@@ -95,13 +103,13 @@ let sent: ReturnType<typeof memoryProvider>;
 beforeEach(() => {
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
-  connect.execute.mockResolvedValue(undefined);
+  connectWallet.mockResolvedValue(undefined);
 });
 afterEach(() => {
   resetTelemetry();
   resetLogger();
   vi.restoreAllMocks();
-  connect.execute.mockReset();
+  connectWallet.mockReset();
   status.down = false;
   wallet.current = null;
   walletWindow.show = false;
@@ -480,14 +488,14 @@ it("opens the settings from the menu's Settings, showing ⌘, on a Mac", async (
 it("connects a wallet through the connect command", async () => {
   draw("footer");
   await pick("Connect wallet");
-  expect(connect.execute).toHaveBeenCalledOnce();
+  expect(connectWallet).toHaveBeenCalledOnce();
 });
 
 it("logs, reports and tells the user of a wallet connect that fails, and the menu still opens", async () => {
   const logged = logMemory();
   initLogger({ providers: [logged] });
   const failure = new Error("Failed to confirm wallet connection state");
-  connect.execute.mockRejectedValueOnce(failure);
+  connectWallet.mockRejectedValueOnce(failure);
   draw("footer");
 
   await pick("Connect wallet");
@@ -512,7 +520,7 @@ it("logs, reports and tells the user of a wallet connect that fails, and the men
 it("neither reports nor warns of a wallet setup the user dismissed", async () => {
   const logged = logMemory();
   initLogger({ providers: [logged] });
-  connect.execute.mockRejectedValueOnce(new Error(SETUP_REJECTED));
+  connectWallet.mockRejectedValueOnce(new Error(SETUP_REJECTED));
   draw("footer");
 
   await pick("Connect wallet");
@@ -570,5 +578,5 @@ it("disconnects a wallet through the same command", async () => {
   wallet.current = { publicKey: { toBase58: () => ADDRESS }, isPg: true };
   draw("footer");
   await pick("Disconnect wallet");
-  expect(connect.execute).toHaveBeenCalledOnce();
+  expect(connectWallet).toHaveBeenCalledOnce();
 });

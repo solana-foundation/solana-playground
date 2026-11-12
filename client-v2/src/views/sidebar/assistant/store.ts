@@ -1,3 +1,4 @@
+import type { AgentRefusalReason } from "@/features/agent";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import {
   closeConnection,
@@ -7,8 +8,11 @@ import {
   mcpTelemetry,
   sameConnection,
 } from "@/features/mcp";
-import type { ModelProvider } from "@/shared/lib/ai";
-import type { ToolResultEvent } from "@/shared/lib/ai";
+import type {
+  ModelProvider,
+  ToolDefinition,
+  ToolResultEvent,
+} from "@/shared/lib/ai";
 import { redactKey } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
@@ -35,6 +39,13 @@ import { isAlwaysOn, listGatewaySkills, skillsTelemetry } from "./grounding";
 import { type BackendParams, paramsOf } from "./model/backend-params";
 import { forgetBackend, rememberBackend } from "./model/remembered-backend";
 import {
+  type CredentialField,
+  encodeToolConfig,
+  readToolConfig,
+  type ToolConfig,
+  writeToolConfig,
+} from "./model/tool-config";
+import {
   type Effort,
   isDefaultBackend,
   type KeyHold,
@@ -44,6 +55,25 @@ import {
 export { isToolCallRecord, type ToolCallRecord };
 
 const log = createLogger("assistant:store");
+
+/**
+ * What a surface hands the assistant to narrow it while it is shown, such as
+ * a tutorial: its own context, its own tools, and which of the assistant's
+ * tools may still run. The assistant never imports the surface.
+ */
+export interface AssistantMode {
+  /** A name for logs and refusals: `tutorial` */
+  name: string;
+  /** Sent with every turn as a system message, after the project's state */
+  context(): string;
+  /** Tools of the surface's own, offered beside the allowed ones */
+  tools: readonly ToolDefinition[];
+  /** Whether one of the assistant's own tools may run; a refused one answers
+   * the model with a refusal instead */
+  allows(name: string): boolean;
+  /** Why a refused tool cannot run here, and what to do instead, told to the model */
+  refusal: string;
+}
 
 /** A change the assistant wants to make, waiting on the user */
 export interface PatchApproval {
@@ -60,6 +90,12 @@ export interface CommandApproval {
   name: "build" | "deploy";
   /** Plain-language description of what running it will do */
   effect: string;
+  /**
+   * The card's title, a question naming the program, and for a deploy the
+   * network and, when it could be estimated, the cost; absent on a card
+   * saved without one, which falls back to its name
+   */
+  question?: string;
 }
 
 export type ApprovalRequest = PatchApproval | CommandApproval;
@@ -75,8 +111,18 @@ export interface ApprovalAnswer {
  * question was still on screen. Kept apart from `denied` because the user
  * never said no, and history that puts words in their mouth is worse than
  * history that admits the turn was cut short.
+ *
+ * `failed` is a card the user allowed whose tool then did not do it: a write
+ * that threw, a build or a deploy that failed, a deploy the network changed
+ * under. Kept apart from
+ * `allowed`, which the card shows as "Applied".
  */
-export type ApprovalStatus = "pending" | "allowed" | "denied" | "unanswered";
+export type ApprovalStatus =
+  | "pending"
+  | "allowed"
+  | "denied"
+  | "unanswered"
+  | "failed";
 
 /** What every rendered item carries, whatever its kind */
 interface ChatItemBase {
@@ -154,7 +200,7 @@ export type ChatItem =
       kind: "error";
       text: string;
       /**
-       * The backend whose key the provider refused with a 401, for Enter key
+       * The backend whose key the provider refused with a 401, for Change key
        * to reopen Connect a model on it; a 403 keeps the provider's own
        * message (`isRejectedKey` in `use-turn`). Never the key.
        */
@@ -190,7 +236,8 @@ export const turnProducedApproval = (items: readonly ChatItem[]) => {
 /**
  * Whether the turn ending at the last item actually wrote something.
  *
- * Stricter than `turnProducedApproval`, which counts a card the user denied.
+ * Stricter than `turnProducedApproval`, which counts a card the user denied
+ * or whose tool failed.
  * An action offered on the strength of a rejected patch would point at code
  * that is not there.
  */
@@ -275,6 +322,13 @@ export interface PromptRequest {
   /** `false` puts it in the composer instead, for the user to edit and send */
   send: boolean;
 }
+
+/**
+ * Where asking the deployment for its hosted model stands: not asked yet, in
+ * flight, failed (no answer, an error status or a bad body), or answered,
+ * whether with a model or with none
+ */
+export type DefaultProbe = "unasked" | "checking" | "unreachable" | "answered";
 
 /** What the panel is doing right now */
 export type AssistantStatus =
@@ -367,6 +421,14 @@ type ToolResultRecord = Pick<
   "toolName" | "input" | "output" | "failed"
 >;
 
+/**
+ * The hosted default's limit a refusal recorded: a daily cap comes back at
+ * `until`, the next 00:00 UTC; a spent pool names no time.
+ */
+export type LimitReached =
+  | { reason: "daily-cap"; until: number }
+  | { reason: "pool-exhausted" };
+
 export class PgAssistant {
   static get items(): readonly ChatItem[] {
     return PgAssistant._items;
@@ -397,12 +459,12 @@ export class PgAssistant {
    * Choose a backend for this tab, keeping the conversation.
    *
    * A switch to a different backend does not clear the thread: `useTurn`
-   * rebuilds the provider for the new connection from what is rendered, as it
-   * does after a reload, so the next turn goes to the new backend with the
-   * conversation so far, and each reply's `origin` says which backend wrote
-   * it. Clearing here dropped the thread from the screen whenever the user
-   * entered their key again in a new tab (HOO-1719). Marks Connect a model
-   * closed.
+   * rebuilds the provider for the new connection from the thread's messages
+   * and finished tool calls (`toReplayMessagesWith`), as it does after a
+   * reload, so the next turn goes to the new backend with the conversation so
+   * far, and each reply's `origin` says which backend wrote it. Clearing here
+   * dropped the thread from the screen whenever the user entered their key
+   * again in a new tab (HOO-1719). Marks Connect a model closed.
    *
    * @param connection which provider, its key, and whatever it needs to be
    * reached — a base URL and model, or a model and effort
@@ -412,11 +474,15 @@ export class PgAssistant {
       ...connection,
       apiKey: connection.apiKey.trim(),
     };
+    const sameBackend = isSame(PgAssistant._connection, next);
     // A turn still running on the old backend is cut, not carried over: it
     // would go on spending the old key, and every reply it starts from here
     // would be stamped with the new backend's `origin`, which `threadBackend`
     // then trusts to pick where the next send goes
-    if (!isSame(PgAssistant._connection, next)) PgAssistant._cutTurn();
+    if (!sameBackend) PgAssistant._cutTurn();
+    // Another backend is not under the hosted default's limit
+    if (!sameBackend) PgAssistant._clearLimit();
+    PgAssistant._forgetProbeFailure();
     PgAssistant._connection = next;
     PgAssistant._pickingBackend = false;
     // So a later load can offer this backend again: its parameters, never
@@ -497,6 +563,85 @@ export class PgAssistant {
     return isDefaultBackend(PgAssistant._connection?.id) && !PgSession.get();
   }
 
+  /**
+   * Why the hosted default refused the last turn under a limit in this tab,
+   * or undefined once that has lifted: a daily cap holds until the next
+   * 00:00 UTC, a spent pool until a turn goes through, since only the
+   * upstream knows when it refills. Either clears when another backend is
+   * connected, the backend is forgotten, or someone else signs in, since the
+   * allowance is per user. No endpoint reports the allowance, so a reload
+   * forgets it until the next refusal.
+   */
+  static get limitReached(): LimitReached | undefined {
+    const limit = PgAssistant._limitReached;
+    if (!limit || limit.userId !== PgSession.get()?.id) return undefined;
+    if (limit.reached.reason === "pool-exhausted") return limit.reached;
+    return Date.now() < limit.reached.until ? limit.reached : undefined;
+  }
+
+  /**
+   * Record a turn the hosted default refused under its daily cap or spent
+   * pool. Nothing is recorded when another backend is connected by the time
+   * the refusal arrives: the limit is the hosted default's, and a key of the
+   * user's own is not under it.
+   */
+  static markLimitReached(reason: AgentRefusalReason) {
+    if (!isDefaultBackend(PgAssistant._connection?.id)) return;
+    PgAssistant._clearLimit();
+    const userId = PgSession.get()?.id;
+    if (reason === "pool-exhausted") {
+      PgAssistant._limitReached = { reached: { reason }, userId };
+    } else {
+      const at = new Date(Date.now());
+      const until = Date.UTC(
+        at.getUTCFullYear(),
+        at.getUTCMonth(),
+        at.getUTCDate() + 1
+      );
+      PgAssistant._limitReached = { reached: { reason, until }, userId };
+      PgAssistant._armLimitTimer(until);
+    }
+    PgAssistant._emitOnly();
+  }
+
+  /**
+   * A turn on the hosted default went through, so whatever refused the last
+   * one has lifted: a spent pool can refill well before 00:00 UTC.
+   */
+  static limitLifted() {
+    if (!PgAssistant._limitReached) return;
+    PgAssistant._clearLimit();
+    PgAssistant._emitOnly();
+  }
+
+  /** Where asking the deployment for its hosted model stands, for the status */
+  static get defaultProbe(): DefaultProbe {
+    return PgAssistant._defaultProbe;
+  }
+
+  /** Set by the default-backend probe as it asks and as it hears back */
+  static setDefaultProbe(probe: DefaultProbe) {
+    if (PgAssistant._defaultProbe === probe) return;
+    PgAssistant._defaultProbe = probe;
+    PgAssistant._emitOnly();
+  }
+
+  /**
+   * The model the deployment's hosted default serves, by id, as its status
+   * named it; `undefined` before it answers, or when it named none. The status and
+   * Settings name the hosted model from it rather than say "default".
+   */
+  static get hostedModel(): string | undefined {
+    return PgAssistant._hostedModel;
+  }
+
+  /** Set by the default-backend probe once the deployment has named its model */
+  static setHostedModel(model: string | undefined) {
+    if (PgAssistant._hostedModel === model) return;
+    PgAssistant._hostedModel = model;
+    PgAssistant._emitOnly();
+  }
+
   /** Mark Connect a model closed without changing anything */
   static keepBackend() {
     PgAssistant._pickingBackend = false;
@@ -515,6 +660,8 @@ export class PgAssistant {
    */
   static disconnect() {
     PgAssistant._connection = null;
+    PgAssistant._clearLimit();
+    PgAssistant._forgetProbeFailure();
     PgAssistant._pickingBackend = false;
     // Disconnecting is the user saying *not* to reconnect; without this the
     // next load would quietly undo it
@@ -566,6 +713,7 @@ export class PgAssistant {
       enabled
     );
     skillsTelemetry.track("skills_toggled", { id, enabled });
+    PgAssistant._writeToolConfig();
     PgAssistant._emit();
   }
 
@@ -576,11 +724,13 @@ export class PgAssistant {
    */
   static async loadSkills() {
     const seq = ++PgAssistant._skillsSeq;
+    const account = PgSession.get()?.id;
     try {
       const skills = await listGatewaySkills();
       if (seq !== PgAssistant._skillsSeq) return;
       PgAssistant._skills = skills;
       PgAssistant._skillsUnavailable = false;
+      PgAssistant._skillsListedFor = account;
     } catch (error) {
       if (seq !== PgAssistant._skillsSeq) return;
       // The slice logged the cause; the tab tells the user the server reported none
@@ -589,6 +739,7 @@ export class PgAssistant {
       });
       PgAssistant._skills = [];
       PgAssistant._skillsUnavailable = true;
+      PgAssistant._skillsListedFor = undefined;
     }
     PgAssistant._emit();
   }
@@ -632,6 +783,14 @@ export class PgAssistant {
     return PgAssistant._localServers;
   }
 
+  /** Per local entry, the credentials a reload took from it, until that entry is next applied with a change */
+  static get missingMcpCredentials(): ReadonlyMap<
+    string,
+    readonly CredentialField[]
+  > {
+    return PgAssistant._missingCredentials;
+  }
+
   /** The servers a turn should actually declare */
   static get enabledMcpServers(): readonly McpServerEntry[] {
     return PgAssistant.mcpServers.filter((s) => s.enabled && s.url.trim());
@@ -639,9 +798,18 @@ export class PgAssistant {
 
   /** Replace the local additions — edited as one JSON document */
   static setMcpServers(servers: readonly McpServerEntry[]) {
+    const before = new Map(PgAssistant._localServers.map((s) => [s.id, s]));
     PgAssistant._replaceServers(() => {
       PgAssistant._localServers = servers;
     });
+    // Applying an entry is the user's answer, with or without those fields; one they left as it was is still owed
+    PgAssistant._missingCredentials = new Map(
+      Array.from(PgAssistant._missingCredentials).filter(([id]) => {
+        const next = servers.find((s) => s.id === id);
+        return next && JSON.stringify(next) === JSON.stringify(before.get(id));
+      })
+    );
+    PgAssistant._writeToolConfig();
     PgAssistant._emit();
   }
 
@@ -668,6 +836,7 @@ export class PgAssistant {
       server: gateway ? "gateway" : "user",
       enabled,
     });
+    PgAssistant._writeToolConfig();
     PgAssistant._emit();
   }
 
@@ -704,14 +873,19 @@ export class PgAssistant {
    */
   static async loadMcpServers() {
     const seq = ++PgAssistant._gatewayServersSeq;
+    const account = PgSession.get()?.id;
     try {
       const gateway = await listGatewayServers();
       if (seq !== PgAssistant._gatewayServersSeq) return;
+      PgAssistant._gatewayServersListedFor = account;
       PgAssistant._replaceServers(() => {
         PgAssistant._gatewayServers = gateway;
       });
       PgAssistant._emit();
     } catch (err) {
+      if (seq === PgAssistant._gatewayServersSeq) {
+        PgAssistant._gatewayServersListedFor = undefined;
+      }
       log.warn("MCP gateway unavailable; using local servers only", {
         context: { error: err },
       });
@@ -721,13 +895,108 @@ export class PgAssistant {
   /**
    * Learn which skills and servers exist, and what the servers offer. Tool
    * discovery waits on the server list only, never on the skills route.
-   * Safe to call again, as on every mount and session change.
+   * The user's stored edits come first, so nothing is asked of a server they
+   * turned off. Safe to call again, as on every mount and session change.
    */
   static async initMcp() {
+    await PgAssistant._readToolConfig();
     await Promise.all([
       PgAssistant.loadMcpServers().then(() => PgAssistant.discoverMcpTools()),
       PgAssistant.loadSkills(),
     ]);
+  }
+
+  /** Layer the stored edits under anything already edited this session, once per page */
+  private static _readToolConfig() {
+    PgAssistant._toolConfigRead ??= readToolConfig()
+      .then((read) => {
+        PgAssistant._canWriteToolConfig = read.kind !== "unreadable";
+        // Storage failing may pass, so the next write reads again
+        if (read.kind === "unreadable") PgAssistant._toolConfigRead = undefined;
+        if (read.kind === "found") PgAssistant._layerToolConfig(read.config);
+      })
+      // Remembered for the page, so a throw here would stop every later `initMcp` and write
+      .catch((e) => report("apply tool config", e));
+    return PgAssistant._toolConfigRead;
+  }
+
+  private static _layerToolConfig(config: ToolConfig) {
+    PgAssistant._skillChoices = new Map(
+      Array.from(config.skillChoices).concat(
+        Array.from(PgAssistant._skillChoices)
+      )
+    );
+    PgAssistant._gatewayServersOff = new Set(
+      Array.from(config.gatewayServersOff).concat(
+        Array.from(PgAssistant._gatewayServersOff)
+      )
+    );
+    const edited = new Set(PgAssistant._localServers.map((s) => s.id));
+    PgAssistant._replaceServers(() => {
+      PgAssistant._localServers = config.servers
+        .filter((s) => !edited.has(s.id))
+        .concat(PgAssistant._localServers);
+    });
+    PgAssistant._missingCredentials = new Map(
+      Array.from(config.missing).filter(([id]) => !edited.has(id))
+    );
+    PgAssistant._emit();
+  }
+
+  /**
+   * Store the delta, after the read so an early edit cannot replace what is
+   * stored with itself alone, and on the write queue so writes keep their order.
+   * An id is unknown only against the whole list of the account signed in now:
+   * a signed-out list lacks `signedIn` sources, and a failed one lacks them all.
+   */
+  private static _writeToolConfig() {
+    PgAssistant._lastWrite = PgAssistant._afterWrites()
+      .then(() => PgAssistant._readToolConfig())
+      .then(() => {
+        // Storage failed the read: what it holds may be fine, and this delta lacks it
+        if (!PgAssistant._canWriteToolConfig) return;
+        const account = PgSession.get()?.id;
+        return writeToolConfig(
+          encodeToolConfig({
+            skillChoices: PgAssistant._skillChoices,
+            skills: PgAssistant._skills,
+            skillsListed: !!account && PgAssistant._skillsListedFor === account,
+            gatewayServersOff: PgAssistant._gatewayServersOff,
+            gatewayServerIds: PgAssistant._gatewayServers.map((s) => s.id),
+            gatewayServersListed:
+              !!account && PgAssistant._gatewayServersListedFor === account,
+            servers: PgAssistant._localServers,
+            missing: PgAssistant._missingCredentials,
+          })
+        );
+      });
+  }
+
+  /** The mode narrowing the assistant to one surface, or null (`AssistantMode`) */
+  static get mode(): AssistantMode | null {
+    // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+    return PgAssistant._modes[PgAssistant._modes.length - 1] ?? null;
+  }
+
+  /**
+   * Narrow the assistant while a surface is shown, as the tutorial feed does
+   * (`tutorial-flow-v2` 3.6). The next turn reads it; a turn in flight keeps
+   * the tools it started with.
+   *
+   * Modes stack: the latest set is the one in force. Clearing one, in any
+   * order, leaves the latest of those still set in force, so a surface
+   * unmounting never lifts another's narrowing.
+   *
+   * @returns clears this mode
+   */
+  static setMode(mode: AssistantMode): Disposable {
+    PgAssistant._modes.push(mode);
+    return {
+      dispose: () => {
+        const at = PgAssistant._modes.lastIndexOf(mode);
+        if (at !== -1) PgAssistant._modes.splice(at, 1);
+      },
+    };
   }
 
   /**
@@ -1279,6 +1548,23 @@ export class PgAssistant {
     return true;
   }
 
+  /**
+   * Record that an approved tool ran and did not do what the card proposed,
+   * with the reason, so the card says so whether or not the model relays it.
+   * Only an allowed card can fail: a declined one never ran.
+   *
+   * @returns `false` when the open thread no longer holds that allowed card
+   */
+  static setApprovalFailure(id: string, outcome: string) {
+    const item = PgAssistant._items.find((i) => i.id === id);
+    if (item?.kind !== "approval" || item.status !== "allowed") return false;
+    item.status = "failed";
+    item.outcome = outcome;
+    stamp(item);
+    PgAssistant._emit();
+    return true;
+  }
+
   /** Deny everything still waiting — used when a turn is abandoned */
   static cancelPending() {
     PgAssistant._denyPending();
@@ -1770,16 +2056,36 @@ export class PgAssistant {
   // A session change reloads the list, and the older session's answer must not land over it
   private static _skillsSeq = 0;
   private static _gatewayServersSeq = 0;
-  // Kept apart from the listed skills, which `loadSkills` replaces whole; in memory only
+  // Kept apart from the listed skills, which `loadSkills` replaces whole
   private static _skillChoices: ReadonlyMap<string, boolean> = new Map();
+  // The account `_skills` is the whole list of; undefined while signed out or after a failure
+  private static _skillsListedFor: string | undefined;
+  private static _gatewayServersListedFor: string | undefined;
+  private static _toolConfigRead: Promise<void> | undefined;
+  private static _canWriteToolConfig = true;
+  private static _missingCredentials: ReadonlyMap<
+    string,
+    readonly CredentialField[]
+  > = new Map();
   private static _turnBusy = false;
+  private static _limitReached:
+    | {
+        reached: LimitReached;
+        userId: string | undefined;
+      }
+    | undefined;
+  private static _limitTimer: ReturnType<typeof setTimeout> | undefined;
+  private static _defaultProbe: DefaultProbe = "unasked";
+  private static _hostedModel: string | undefined;
   private static _gatewayServers: readonly McpServerEntry[] = [];
-  // Kept apart from the gateway's list, which `loadMcpServers` replaces whole; in memory only, like `_localServers`
+  // Kept apart from the gateway's list, which `loadMcpServers` replaces whole
   private static _gatewayServersOff: ReadonlySet<string> = new Set();
   // Copied, so editing a server in the UI never mutates the registry default
   private static _localServers: readonly McpServerEntry[] =
     LOCAL_MCP_SERVERS.map((server) => ({ ...server }));
   private static _mcpTools: Readonly<Record<string, readonly McpTool[]>> = {};
+  /** Every mode a surface has set and not cleared, the one in force last */
+  private static _modes: AssistantMode[] = [];
   /**
    * The turn in flight, if `beginTurn` registered one. `cut` once its thread
    * has closed, until the turn ends.
@@ -1918,15 +2224,45 @@ export class PgAssistant {
     PgAssistant._emitOnly();
   }
 
+  /**
+   * Nothing else renders the status when the limit comes back, in a tab left
+   * open. A timer can fire before the wall clock reaches `until` (the clock
+   * was set back, or a sleep skewed it), so it waits again rather than tell
+   * the status about a limit that still holds.
+   */
+  private static _armLimitTimer(until: number) {
+    PgAssistant._limitTimer = setTimeout(() => {
+      if (Date.now() < until) PgAssistant._armLimitTimer(until);
+      else PgAssistant._emitOnly();
+    }, until - Date.now());
+  }
+
+  /**
+   * A failed asking of the deployment is about the moment it happened; once
+   * the user connects or forgets a backend, the AI reads Off until a send
+   * asks again, rather than a red "Not responding" from before. Each caller
+   * emits after its own change.
+   */
+  private static _forgetProbeFailure() {
+    if (PgAssistant._defaultProbe === "unreachable") {
+      PgAssistant._defaultProbe = "unasked";
+    }
+  }
+
+  private static _clearLimit() {
+    if (PgAssistant._limitTimer) clearTimeout(PgAssistant._limitTimer);
+    PgAssistant._limitReached = undefined;
+  }
+
   /** Notify without writing back — for changes that came *from* storage */
   private static _emitOnly() {
     for (const cb of PgAssistant._listeners) cb();
   }
 }
 
-// A handle on the panel's state for the browser console, and for the e2e tests
-// that cover thread persistence -- sending a message for real would need a
-// configured backend and a live model call, which is not what those assert.
+// A handle on the panel's state for the browser console and the e2e tests,
+// which drive the thread and the connection through it without a live model
+// call.
 //
 // Development only: `craco build` sets NODE_ENV to production, so this is
 // dropped from the shipped bundle rather than merely unused in it.
@@ -1993,6 +2329,40 @@ if (import.meta.vitest) {
       request: { type: "patch", path: "src/lib.rs", before: "a", after: "b" },
       status: "allowed",
     };
+
+    describe("turnAppliedApproval", () => {
+      const asked: ChatItem = {
+        kind: "user",
+        id: "u",
+        createdAt: at,
+        text: "go",
+      };
+      const failed: ChatItem = {
+        kind: "approval",
+        id: "f",
+        createdAt: at,
+        request: { type: "patch", path: "src/lib.rs", before: "a", after: "b" },
+        status: "failed",
+      };
+
+      it("counts a card the user allowed", () => {
+        expect(turnAppliedApproval([asked, approval, assistant("done")])).toBe(
+          true
+        );
+      });
+
+      it("does not count a card whose action failed", () => {
+        expect(turnAppliedApproval([asked, failed, assistant("done")])).toBe(
+          false
+        );
+      });
+
+      it("stops at the turn's user message", () => {
+        expect(turnAppliedApproval([approval, asked, assistant("done")])).toBe(
+          false
+        );
+      });
+    });
 
     describe("undoStrandedOutcome", () => {
       it("says which file, why, and whether it existed before", () => {
@@ -2073,6 +2443,149 @@ if (import.meta.vitest) {
         expect(PgAssistant.markUndoStranded(id, "stranded")).toBe(false);
 
         expect(undoOf(id)).toBeUndefined();
+      });
+    });
+
+    describe("PgAssistant defaultProbe", () => {
+      afterEach(() => {
+        PgAssistant.disconnect();
+        PgAssistant.setDefaultProbe("unasked");
+      });
+
+      it("forgets a failed asking once a backend is connected or forgotten", () => {
+        // The deployment did not answer, then the user brought a key and
+        // forgot it: the old failure is no longer what the AI reads
+        PgAssistant.setDefaultProbe("unreachable");
+        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+        expect(PgAssistant.defaultProbe).toBe("unasked");
+        PgAssistant.setDefaultProbe("unreachable");
+        PgAssistant.disconnect();
+        expect(PgAssistant.defaultProbe).toBe("unasked");
+      });
+
+      it("keeps an answer the deployment gave", () => {
+        PgAssistant.setDefaultProbe("answered");
+        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+        PgAssistant.disconnect();
+        expect(PgAssistant.defaultProbe).toBe("answered");
+      });
+    });
+
+    describe("PgAssistant limitReached", () => {
+      // The limit is the hosted default's, so a refusal is only ever marked on it
+      beforeEach(() => {
+        PgAssistant.connect({ id: "default", apiKey: "" });
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+        PgAssistant.disconnect();
+      });
+
+      it("holds until the next 00:00 UTC, then reads undefined", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 22, 30));
+        PgAssistant.markLimitReached("daily-cap");
+        expect(PgAssistant.limitReached).toEqual({
+          reason: "daily-cap",
+          until: Date.UTC(2026, 10, 5),
+        });
+        vi.setSystemTime(Date.UTC(2026, 10, 5, 0, 0));
+        expect(PgAssistant.limitReached).toBeUndefined();
+      });
+
+      it("tells the status when the limit comes back, in a tab left open", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 23, 0));
+        PgAssistant.markLimitReached("daily-cap");
+        const listener = vi.fn();
+        const sub = PgAssistant.onDidChange(listener);
+        vi.advanceTimersByTime(60 * 60 * 1000);
+        expect(listener).toHaveBeenCalledOnce();
+        expect(PgAssistant.limitReached).toBeUndefined();
+        sub.dispose();
+      });
+
+      it("holds a spent pool with no time until a turn goes through", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 22, 30));
+        PgAssistant.markLimitReached("pool-exhausted");
+        expect(PgAssistant.limitReached).toEqual({ reason: "pool-exhausted" });
+        // 00:00 UTC is the daily cap's reset, not the pool's
+        vi.setSystemTime(Date.UTC(2026, 10, 5, 1, 0));
+        expect(PgAssistant.limitReached).toEqual({ reason: "pool-exhausted" });
+        PgAssistant.limitLifted();
+        expect(PgAssistant.limitReached).toBeUndefined();
+      });
+
+      it("clears on connecting another backend, not on the same one", () => {
+        PgAssistant.connect({ id: "default", apiKey: "" });
+        PgAssistant.markLimitReached("daily-cap");
+        PgAssistant.connect({ id: "default", apiKey: "" });
+        expect(PgAssistant.limitReached).toBeDefined();
+        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+        expect(PgAssistant.limitReached).toBeUndefined();
+      });
+
+      it("does not hold for someone else signing in", async () => {
+        await PgSession.refreshWith({
+          id: "u1",
+          name: "One",
+          image: undefined,
+          login: undefined,
+        });
+        PgAssistant.markLimitReached("daily-cap");
+        expect(PgAssistant.limitReached).toBeDefined();
+        await PgSession.refreshWith({
+          id: "u2",
+          name: "Two",
+          image: undefined,
+          login: undefined,
+        });
+        expect(PgAssistant.limitReached).toBeUndefined();
+        PgSession.reset();
+      });
+
+      it("clears on Forget key", () => {
+        PgAssistant.markLimitReached("daily-cap");
+        PgAssistant.disconnect();
+        expect(PgAssistant.limitReached).toBeUndefined();
+      });
+
+      it("is not marked on a backend other than the hosted default", () => {
+        // A default turn refused after the user had already switched to a key
+        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+        PgAssistant.markLimitReached("daily-cap");
+        expect(PgAssistant.limitReached).toBeUndefined();
+      });
+
+      it("lifts once a turn on the hosted default goes through", () => {
+        PgAssistant.markLimitReached("daily-cap");
+        const listener = vi.fn();
+        const sub = PgAssistant.onDidChange(listener);
+        PgAssistant.limitLifted();
+        expect(PgAssistant.limitReached).toBeUndefined();
+        expect(listener).toHaveBeenCalledOnce();
+        PgAssistant.limitLifted();
+        expect(listener).toHaveBeenCalledOnce();
+        sub.dispose();
+      });
+
+      it("waits again when its timer fires before the clock reaches 00:00 UTC", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 23, 0));
+        PgAssistant.markLimitReached("daily-cap");
+        const listener = vi.fn();
+        const sub = PgAssistant.onDidChange(listener);
+        // The wall clock is set back a minute while the timer runs
+        vi.setSystemTime(Date.UTC(2026, 10, 4, 22, 59));
+        vi.advanceTimersByTime(60 * 60 * 1000);
+        expect(PgAssistant.limitReached).toBeDefined();
+        expect(listener).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(60 * 1000);
+        expect(PgAssistant.limitReached).toBeUndefined();
+        expect(listener).toHaveBeenCalledOnce();
+        sub.dispose();
       });
     });
 
@@ -2244,6 +2757,38 @@ if (import.meta.vitest) {
         PgAssistant.setApprovalOutcome(id, "built");
 
         expect(versionTimeOf(find(id))).toBeGreaterThan(answered);
+      });
+
+      it("marks an approval failed with its reason, and stamps it", () => {
+        void PgAssistant.requestApproval({
+          type: "command",
+          name: "deploy",
+          effect: "deploys",
+        });
+        const id = latestCard();
+        PgAssistant.resolveApproval(id, true);
+        const answered = versionOf(find(id));
+
+        PgAssistant.setApprovalFailure(id, "deploy failed: no wallet");
+
+        expect(find(id)).toMatchObject({
+          status: "failed",
+          outcome: "deploy failed: no wallet",
+        });
+        expect(versionOf(find(id))).toBeGreaterThan(answered);
+      });
+
+      it("never marks a declined approval failed", () => {
+        void PgAssistant.requestApproval({
+          type: "command",
+          name: "deploy",
+          effect: "deploys",
+        });
+        const id = latestCard();
+        PgAssistant.resolveApproval(id, false);
+
+        expect(PgAssistant.setApprovalFailure(id, "deploy failed")).toBe(false);
+        expect(find(id)).toMatchObject({ status: "denied" });
       });
 
       it("stamps an approval denied because the turn was stopped", () => {

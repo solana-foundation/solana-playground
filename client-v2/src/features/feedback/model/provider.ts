@@ -71,6 +71,7 @@ if (import.meta.vitest) {
       carried,
       init: vi.fn(),
       capture: vi.fn(),
+      trail: vi.fn(),
       sendFeedback: vi.fn(() => Promise.resolve()),
     });
 

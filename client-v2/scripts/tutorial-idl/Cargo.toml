@@ -1,0 +1,5 @@
+# Generates the IDL each tutorial step's program has, with the generator
+# Anchor 1.1.2's own CLI runs (anchor-lang-idl 0.1.4): see generate.mjs
+[workspace]
+resolver = "2"
+members = ["generator", "program"]

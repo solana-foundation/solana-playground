@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  initLogger,
+  installGlobalHandlers,
+  memoryProvider,
+  resetLogger,
+} from "@/shared/lib/logger";
+import {
   unavailableHere,
   wasFailureShown,
 } from "@/shared/lib/report-button-failure";
 
 import { StoppedError } from "../stopped";
-import { TonedLineError } from "./line-error";
+import { TerminalLineError, TonedLineError, toneWith } from "./line-error";
 import { PgShell } from "./shell";
 import { SLOW_RUN_LINE, SLOW_RUN_MS, watchSlowRun } from "./slow-run";
 import { isTerminalUnmounted, PgTerm, PgTerminal } from "./terminal";
@@ -139,7 +145,7 @@ describe.each([
   });
 });
 
-describe("PgTerm.process, a line with a tone", () => {
+describe("PgTerm.process, a line's variant", () => {
   const fakeTerm = (previousLine: string | undefined) => ({
     disable: vi.fn(),
     enable: vi.fn(),
@@ -156,18 +162,56 @@ describe("PgTerm.process, a line with a tone", () => {
       throw failure;
     });
 
-  it("prints it in the terminal's own colour for that tone", async () => {
+  it.each([
+    {
+      name: "an unknown command",
+      failure: new TerminalLineError("`biuld` is not a command."),
+      printed: PgTerminal.error("`biuld` is not a command."),
+    },
+    {
+      name: "a shell habit",
+      failure: new TerminalLineError("This terminal runs Playground commands."),
+      printed: PgTerminal.error("This terminal runs Playground commands."),
+    },
+    {
+      name: "a declined wallet question",
+      failure: new TerminalLineError("Run `connect` to connect a wallet."),
+      printed: PgTerminal.error("Run `connect` to connect a wallet."),
+    },
+    {
+      name: "a failure",
+      failure: new Error("boom"),
+      printed: PgTerminal.error("Process error: boom"),
+    },
+    {
+      name: "a toned line",
+      failure: new TonedLineError("error", "Offline."),
+      printed: PgTerminal.error("Offline."),
+    },
+    {
+      name: "a stopped run",
+      failure: new StoppedError("Stopped."),
+      printed: PgTerminal.warning("Stopped."),
+    },
+  ])("prints $name in its variant", async ({ failure, printed }) => {
     const term = fakeTerm(undefined);
-    const failure = new TonedLineError("error", "Offline.");
 
     await expect(failWith(term, failure)).rejects.toBe(failure);
 
-    expect(term.println).toHaveBeenCalledWith(PgTerminal.error("Offline."));
+    expect(term.println).toHaveBeenCalledWith(printed, { noColor: true });
+  });
+
+  it("keeps the thrown message plain for toasts and the assistant", async () => {
+    const failure = new TerminalLineError("`ls` is not a command.");
+
+    await expect(failWith(fakeTerm(undefined), failure)).rejects.toBe(failure);
+
+    expect(failure.message).toBe("`ls` is not a command.");
   });
 
   it("does not repeat a line already on screen, whatever its colour", async () => {
-    const term = fakeTerm("Offline.");
-    const failure = new TonedLineError("error", "Offline.");
+    const term = fakeTerm("Stopped.");
+    const failure = new StoppedError("Stopped.");
 
     await expect(failWith(term, failure)).rejects.toBe(failure);
 
@@ -231,5 +275,65 @@ describe("the terminal feeding the slow-run clock", () => {
 
     await vi.advanceTimersByTimeAsync(SLOW_RUN_MS);
     expect(printed).toEqual([SLOW_RUN_LINE]);
+  });
+});
+
+describe("PgTerm.process", () => {
+  afterEach(() => resetLogger());
+
+  /** The parts of a terminal `process` touches, without an xterm */
+  const fakeTerm = () =>
+    Object.assign(Object.create(PgTerm.prototype), {
+      disable: () => {},
+      enable: () => {},
+      scrollToBottom: () => {},
+      println: vi.fn(),
+      _tty: { getLine: () => undefined },
+    }) as PgTerm;
+
+  /** Runs a command that throws `failure` and leaves its rejection unhandled */
+  const runFailing = async (failure: Error) => {
+    const logged = memoryProvider();
+    initLogger({ providers: [logged] });
+    const uninstall = installGlobalHandlers();
+    const term = fakeTerm();
+
+    const reason = await term
+      .process(() => {
+        throw failure;
+      })
+      .catch((error: unknown) => error);
+    const event = new Event("unhandledrejection") as PromiseRejectionEvent;
+    Object.defineProperty(event, "reason", { value: reason });
+    globalThis.dispatchEvent(event);
+    uninstall();
+
+    return { reason, term, logged };
+  };
+
+  it("leaves a warning, never a panic, for a command failure the terminal printed", async () => {
+    const failure = new Error("Command `nope` not found.");
+
+    const { reason, term, logged } = await runFailing(failure);
+
+    expect(reason).toBe(failure);
+    // The line carries its own tone, so the terminal adds no colour of its own
+    expect(term.println).toHaveBeenCalledWith(
+      toneWith("error")("Process error: Command `nope` not found."),
+      { noColor: true }
+    );
+    expect(logged.entries.map((entry) => entry.level)).toEqual(["warn"]);
+    expect(logged.entries[0].report).toBe(false);
+  });
+
+  it("still reports a fault in a command, though the terminal printed it", async () => {
+    const failure = new TypeError(
+      "Cannot read properties of undefined (reading 'deploy')"
+    );
+
+    const { logged } = await runFailing(failure);
+
+    expect(logged.entries.map((entry) => entry.level)).toEqual(["panic"]);
+    expect(logged.entries[0].report).toBe(true);
   });
 });

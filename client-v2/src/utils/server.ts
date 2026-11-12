@@ -2,7 +2,10 @@ import type { Idl } from "@coral-xyz/anchor";
 
 import { PgCommon } from "./common";
 import type { TupleFiles } from "./explorer";
+import { PgServerError, UNREADABLE_BODY } from "./server-error";
 import { PgSettings } from "./settings";
+
+export { PgServerError };
 
 /** Rust `Option` type */
 type Option<T> = T | null;
@@ -22,15 +25,6 @@ interface BuildRequest {
     /** Whether to enable Anchor safety checks */
     safetyChecks?: Option<boolean>;
   }>;
-}
-
-/** `/new` request */
-interface ShareNewRequest {
-  explorer: {
-    files: {
-      [key: string]: { content?: string };
-    };
-  };
 }
 
 export class PgServer {
@@ -77,40 +71,6 @@ export class PgServer {
   }
 
   /**
-   * Get the shared project information.
-   *
-   * @param id share id
-   * @returns the shared project response
-   */
-  static async shareGet(id: string) {
-    /** `/share` response */
-    type ShareResponse = ShareNewRequest["explorer"];
-
-    const response = await this._send(`/share/${id}`, {
-      cache: true,
-      useDbServer: process.env.NODE_ENV === "production",
-    });
-    return (await response.json()) as ShareResponse;
-  }
-
-  /**
-   * Share a new project.
-   *
-   * @param req share request
-   * @returns the unique share id
-   */
-  static async shareNew(req: ShareNewRequest) {
-    /** `/new` response is the share id */
-    type ShareNewResponse = string;
-
-    const response = await this._send("/new", {
-      post: { body: JSON.stringify(req) },
-      useDbServer: process.env.NODE_ENV === "production",
-    });
-    return (await response.text()) as ShareNewResponse;
-  }
-
-  /**
    * Send an HTTP request to the Playground server.
    *
    * @param opts server send request options; an aborted `signal` fails the
@@ -121,15 +81,15 @@ export class PgServer {
   private static async _send(
     path: string,
     opts?: {
-      cache?: boolean;
       post?: { body: string };
-      useDbServer?: boolean;
       unstable?: boolean;
       signal?: AbortSignal;
     }
   ) {
-    const requestInit: RequestInit = { signal: opts?.signal };
-    if (!opts?.cache) requestInit.cache = "no-store";
+    const requestInit: RequestInit = {
+      signal: opts?.signal,
+      cache: "no-store",
+    };
 
     if (opts?.post) {
       requestInit.method = "POST";
@@ -137,38 +97,30 @@ export class PgServer {
       requestInit.body = opts.post.body;
     }
 
-    const serverUrl = opts?.useDbServer
-      ? "https://api.solpg.io"
-      : PgSettings.server.endpoint;
     if (opts?.unstable) path = PgCommon.joinPaths("unstable", path);
-    const requestUrl = PgCommon.joinPaths(serverUrl, path);
-    let answered = false;
+    const requestUrl = PgCommon.joinPaths(PgSettings.server.endpoint, path);
+    let response: Response;
     try {
-      const response = await fetch(requestUrl, requestInit);
-      answered = true;
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message);
-      }
-
-      return response;
+      response = await fetch(requestUrl, requestInit);
     } catch (e: any) {
-      throw new PgServerRequestError(
-        `Server request failed (${requestUrl}): ${e?.message}`,
-        answered
-      );
+      throw new PgServerError({
+        url: requestUrl,
+        status: undefined,
+        body: e?.message || String(e),
+        cause: e,
+      });
     }
-  }
-}
+    if (!response.ok) {
+      // A body cut off mid-read still leaves the status to report; the
+      // placeholder says in the error's message that the body was lost
+      const body = await response.text().catch(() => UNREADABLE_BODY);
+      throw new PgServerError({
+        url: requestUrl,
+        status: response.status,
+        body,
+      });
+    }
 
-/**
- * A request to the Playground server that failed. `answered` tells a server
- * that never replied (Spec 08's BUILD-04, "did not answer") from one that
- * replied with an error.
- */
-export class PgServerRequestError extends Error {
-  constructor(message: string, readonly answered: boolean) {
-    super(message);
-    this.name = "PgServerRequestError";
+    return response;
   }
 }

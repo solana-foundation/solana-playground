@@ -26,6 +26,53 @@ export interface BuildReport {
   raw: string;
 }
 
+/**
+ * What marks an error as the echo of another: inside `#[program]`, Anchor's
+ * macro cannot find the accounts or bumps a missing type would have made,
+ * e.g. `could not find \`__client_accounts_hello\``. The cause is reported
+ * separately, so these are never the error to show.
+ */
+const MACRO_SYMPTOMS: readonly (string | RegExp)[] = [
+  "__client_accounts",
+  "__cpi_client_accounts",
+  /`\S*Bumps`/,
+];
+
+/** Whether an error's text is a macro symptom (`MACRO_SYMPTOMS`) */
+export const isMacroSymptomText = (text: string) =>
+  MACRO_SYMPTOMS.some((pat) =>
+    typeof pat === "string" ? text.includes(pat) : pat.test(text)
+  );
+
+/** Whether a diagnostic is a macro symptom rather than a cause */
+export const isMacroSymptom = (d: BuildDiagnostic) =>
+  isMacroSymptomText(`${d.title}\n${d.excerpt}`);
+
+/**
+ * The diagnostic to show for a failed build: the one holding `mark` (a
+ * tutorial step's `failsWith`) when given and found, else the first that is
+ * not a macro symptom, else the first. Hello Anchor's planned E0412 at line 9
+ * comes after an E0432 symptom at line 5 (HOO-2355's spike, 2 Nov 2026).
+ */
+export const pickDiagnostic = (
+  diagnostics: readonly BuildDiagnostic[],
+  // eslint-disable-next-line layers/curry-order -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  mark?: string
+): BuildDiagnostic | null => {
+  const marked = mark
+    ? diagnostics.find(
+        (d) => d.title.includes(mark) || d.excerpt.includes(mark)
+      )
+    : undefined;
+  return (
+    marked ??
+    diagnostics.find((d) => !isMacroSymptom(d)) ??
+    diagnostics[0] ??
+    // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+    null
+  );
+};
+
 const HEADER = /^error(?:\[(E\d+)\])?: (.+)$/;
 // A top-level warning/note/help block. rustc emits these for lints and
 // linker notes that follow an error; they are not part of that error, so a
@@ -94,6 +141,32 @@ if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("views/flow/stages/build-report", () => {
+    it("picks the cause past Anchor's macro symptom, or the marked one", () => {
+      const { diagnostics } =
+        parseBuildReport(`error[E0432]: unresolved import \`crate\`
+ --> src/lib.rs:5:1
+  |
+5 | #[program]
+  | ^^^^^^^^^^ could not find \`__client_accounts_hello\` in the crate root
+
+error[E0412]: cannot find type \`Hello\` in this scope
+ --> src/lib.rs:9:32
+
+error[E0308]: mismatched types
+ --> src/lib.rs:12:5`);
+      expect(pickDiagnostic(diagnostics)).toMatchObject({
+        code: "E0412",
+        line: 9,
+      });
+      expect(pickDiagnostic(diagnostics, "mismatched")).toMatchObject({
+        code: "E0308",
+      });
+      expect(pickDiagnostic(diagnostics.slice(0, 1))).toMatchObject({
+        code: "E0432",
+      });
+      expect(pickDiagnostic([])).toBeNull();
+    });
+
     const STDERR = `Compiling hello v0.1.0
 error[E0308]: mismatched types
   --> src/lib.rs:12:18

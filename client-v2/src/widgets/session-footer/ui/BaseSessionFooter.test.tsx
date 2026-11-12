@@ -36,6 +36,7 @@ const view = (fields: Partial<AccountView>): AccountView => ({
   cluster: fields.cluster ?? { name: "devnet", down: false },
   sending: fields.sending ?? false,
   online: fields.online ?? true,
+  canFund: fields.canFund ?? false,
 });
 
 const MENU = (
@@ -107,6 +108,24 @@ it("says signed-out work is saved in this browser, with a wallet or without", ()
   draw({ account: view({ wallet: WALLET }) });
   const row = screen.getByRole("button", { name: "Account, signed out" });
   expect(row.textContent).toBe("Sign inSaved in this browser");
+});
+
+it("keeps the name over the session's end in warning tone, and announces it", () => {
+  draw({
+    account: view({
+      session: {
+        status: "expired",
+        user: { name: "Tester", login: "t", image: undefined },
+      },
+    }),
+  });
+  const row = screen.getByRole("button", {
+    name: "Account: t, session ended",
+  });
+  expect(row.textContent).toBe("TesterYour session ended");
+  const line = screen.getByRole("status");
+  expect(line.textContent).toBe("Your session ended");
+  expect(line.className).toContain("text-warning-ink");
 });
 
 it("says signed-in work saves here while offline", () => {

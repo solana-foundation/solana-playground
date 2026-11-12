@@ -38,7 +38,7 @@ const wallet = vi.hoisted(() => ({
   current: null as null | undefined | { publicKey: { toBase58: () => string } },
 }));
 const assistant = vi.hoisted(() => ({ connected: false }));
-const connect = vi.hoisted(() => ({ execute: vi.fn() }));
+const connectWallet = vi.hoisted(() => vi.fn());
 const setToast = vi.hoisted(() => vi.fn());
 
 // The hooks and utils barrels read generated globals that exist only in the built app
@@ -56,8 +56,8 @@ vi.mock("@/hooks", () => ({
   },
   useWallet: () => wallet.current,
 }));
+vi.mock("@/commands/connect/connect-wallet", () => ({ connectWallet }));
 vi.mock("@/utils", () => ({
-  PgCommand: { connect },
   PgConnection: connection,
   PgView: { setToast },
 }));
@@ -79,13 +79,13 @@ beforeEach(() => {
   initTelemetry({ providers: [sent] });
   logged = logMemory();
   initLogger({ providers: [logged] });
-  connect.execute.mockResolvedValue(undefined);
+  connectWallet.mockResolvedValue(undefined);
 });
 afterEach(() => {
   resetTelemetry();
   resetLogger();
   vi.restoreAllMocks();
-  connect.execute.mockReset();
+  connectWallet.mockReset();
   setToast.mockReset();
   wallet.current = null;
   assistant.connected = false;
@@ -147,7 +147,7 @@ const doAllFour = async () => {
 it("counts the default network as done on a fresh device", () => {
   draw();
   expect(title()?.textContent).toBe("Get set up· 1 of 4");
-  expect(screen.getByText("devnet")).toBeTruthy();
+  expect(screen.getByText("Devnet")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Choose a network" })).toBeNull();
 });
 
@@ -259,7 +259,7 @@ it("reports a sign-in that throws for another reason", async () => {
 });
 
 it("logs a closed wallet setup at info, with no toast", async () => {
-  connect.execute.mockRejectedValue(new Error(SETUP_REJECTED));
+  connectWallet.mockRejectedValue(new Error(SETUP_REJECTED));
   draw();
   await userEvent.click(
     screen.getByRole("button", { name: "Connect a wallet" })
@@ -273,7 +273,7 @@ it("logs a closed wallet setup at info, with no toast", async () => {
 });
 
 it("reports a wallet connection that fails, and tells the user", async () => {
-  connect.execute.mockRejectedValue(new Error("boom"));
+  connectWallet.mockRejectedValue(new Error("boom"));
   draw();
   await userEvent.click(
     screen.getByRole("button", { name: "Connect a wallet" })
@@ -352,7 +352,7 @@ describe("the network row", () => {
     health.slotStalled = reading.slotStalled;
     draw();
     expect(networkRow().getAttribute("data-status")).toBe("warn");
-    expect(networkRow().getAttribute("title")).toBe("devnet is not responding");
+    expect(networkRow().getAttribute("title")).toBe("Devnet is not responding");
   });
 
   it("keeps a network that does not answer in the count", () => {

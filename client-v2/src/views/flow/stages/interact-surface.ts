@@ -1,3 +1,5 @@
+import { readIdl } from "@/entities/idl";
+
 /** What the Interact stage shows: the form, or why the program cannot be called yet */
 export type InteractSurface =
   | "no-project"
@@ -14,8 +16,10 @@ export type InteractSurface =
 export interface InteractFacts {
   /** A workspace is open, or the explorer is temporary */
   hasProject: boolean;
-  /** `PgProgramInfo.idl`; only `instructions` is read */
+  /** `PgProgramInfo.idl` as stored; `instructions` is read here, the rest by `readIdl` */
   idl: { instructions?: unknown } | null;
+  /** `readIdl` refused the IDL: it cannot be called, whatever it holds */
+  refused?: boolean;
   /** `importedProgram` or `uuid` is set: the program was not built here */
   imported: boolean;
   hasProgramId: boolean;
@@ -34,6 +38,9 @@ export interface InteractFacts {
 export const interactSurface = (f: InteractFacts): InteractSurface => {
   if (!f.hasProject) return "no-project";
   if (!f.idl) return f.imported ? "no-idl" : "not-built";
+  // Refused first: a program id would not help, and the id's notice sends the
+  // user to Build with no word about the IDL
+  if (f.refused) return "bad-idl";
   if (!f.hasProgramId) return "no-program-id";
   if (!Array.isArray(f.idl.instructions)) return "bad-idl";
   if (f.onChain === undefined) return "checking";
@@ -55,6 +62,7 @@ export const interactFacts = (
 ): InteractFacts => ({
   hasProject: explorer.isTemporary || !!explorer.currentWorkspaceName,
   idl: programInfo.idl,
+  refused: !!programInfo.idl && readIdl(programInfo.idl).kind === "refused",
   imported: !!(programInfo.importedProgram || programInfo.uuid),
   hasProgramId: !!programInfo.pk,
   onChain: programInfo.onChain,
@@ -163,6 +171,32 @@ if (import.meta.vitest) {
         ).toBe("bad-idl");
       });
 
+      it("a refused IDL is a bad IDL even with a list of instructions", () => {
+        expect(
+          interactSurface({
+            hasProject: true,
+            idl: IDL,
+            refused: true,
+            imported: false,
+            hasProgramId: true,
+            onChain: { deployed: true },
+          })
+        ).toBe("bad-idl");
+      });
+
+      it("a refused IDL is said before a missing program id", () => {
+        expect(
+          interactSurface({
+            hasProject: true,
+            idl: { instructions: [] },
+            refused: true,
+            imported: false,
+            hasProgramId: false,
+            onChain: { deployed: true },
+          })
+        ).toBe("bad-idl");
+      });
+
       it("a missing program id is said before a bad IDL", () => {
         expect(
           interactSurface({
@@ -215,6 +249,33 @@ if (import.meta.vitest) {
     describe("interactFacts", () => {
       const PK = { toBase58: () => "6PNd" };
 
+      it("an Anchor 1.x IDL with a custom discriminator is refused", () => {
+        const idl = {
+          address: "11111111111111111111111111111111",
+          metadata: { name: "p", version: "0.1.0", spec: "0.1.0" },
+          instructions: [
+            { name: "initialize", discriminator: [1], accounts: [], args: [] },
+          ],
+        };
+        const facts = (
+          raw: typeof idl | { name: string; version: string; instructions: [] }
+        ) =>
+          interactFacts(
+            { isTemporary: false, currentWorkspaceName: "p" },
+            {
+              idl: raw,
+              importedProgram: undefined,
+              uuid: undefined,
+              pk: PK,
+              onChain: { deployed: true },
+            }
+          );
+        expect(facts(idl).refused).toBe(true);
+        expect(
+          facts({ name: "p", version: "0.1.0", instructions: [] }).refused
+        ).toBe(false);
+      });
+
       it("a temporary explorer counts as a project", () => {
         expect(
           interactFacts(
@@ -260,6 +321,7 @@ if (import.meta.vitest) {
         ).toEqual({
           hasProject: true,
           idl: null,
+          refused: false,
           imported: true,
           hasProgramId: true,
           onChain: null,

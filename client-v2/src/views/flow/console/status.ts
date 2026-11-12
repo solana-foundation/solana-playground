@@ -18,7 +18,7 @@ type DotVariants<T extends StatusDotVariant> = T;
  * reads as an error. tsc fails here if the dot drops one of them (an
  * `Extract` would drop the tone too, silently). */
 export type ConsoleStatusTone = DotVariants<
-  "idle" | "running" | "success" | "error"
+  "idle" | "running" | "success" | "warning" | "error"
 >;
 
 export interface ConsoleStatus {
@@ -65,7 +65,8 @@ const running = (what: string, elapsedMs: number | null): ConsoleStatus => ({
  * arrive slightly after the `build-finish` event that sets `flow.build`) and
  * on every tick of a run.
  *
- * Precedence (most recent/relevant first): a run in progress, then a
+ * Precedence (most recent/relevant first): a run in progress (a build, a
+ * deploy, then an airdrop: a deploy's own top-up shows as the deploy), then a
  * stop, then a deploy result (it is always newer than the build that
  * unlocked it), then the last build's result, then nothing before the first
  * build. A project with no program never builds: where nothing else is
@@ -79,6 +80,8 @@ export const describeConsoleStatus = (
 ): ConsoleStatus => {
   if (flow.build === "running") return running("Building…", elapsedMs);
   if (flow.deploy === "running") return running("Deploying…", elapsedMs);
+  // A deploy's own top-up is named by the deploy, above
+  if (flow.airdrops > 0) return running("Airdropping…", elapsedMs);
   // A stop is newer than any result, and shows none (Spec 13)
   if (flow.stopped === "build") return { text: "Build stopped", tone: "idle" };
   if (flow.stopped === "deploy") {
@@ -107,12 +110,13 @@ export const describeConsoleStatus = (
 };
 
 /**
- * Which run the strip's Stop is named after, or `null` while nothing runs.
- * A build a deploy runs first (when the program is not built) names it: it is
- * what the strip says is running. Stop itself stops every run in flight.
+ * Which run the strip's Stop is named after, or `null` when the strip shows
+ * no Stop. A running build names it, including the build a deploy runs first
+ * (when the program is not built): it is what the strip says is running, and
+ * Stop stops it and the deploy that started it. A deploy alone gets no Stop,
+ * since pressing it there showed no effect; Ctrl+C in the terminal still
+ * stops a deploy while it funds and writes. How the strip should stop a
+ * deploy is a later task.
  */
-export const runToStop = (flow: FlowState): RunKind | null => {
-  if (flow.build === "running") return "build";
-  if (flow.deploy === "running") return "deploy";
-  return null;
-};
+export const runToStop = (flow: FlowState): RunKind | null =>
+  flow.build === "running" ? "build" : null;

@@ -8,9 +8,15 @@ import {
   isUsableSnapshot,
   PgProjectSync,
 } from "./project-sync";
-import { hashFiles, snapshotOf } from "./snapshot";
+import {
+  diffFiles,
+  hashFiles,
+  snapshotOf,
+  SYNCED_WORKSPACE_FILES,
+} from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { withSyncLock } from "./sync-lock";
+import type { SyncMark } from "./sync-mark";
 import { PgSyncMark } from "./sync-mark";
 import { reloadCurrentFromDisk } from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
@@ -72,6 +78,35 @@ const isClean = async (projectId: string, localName: string) =>
       await snapshotOf(localName)
     ).files
   );
+
+/**
+ * Whether sign-out may delete a local project: the account holds everything
+ * it has. `isClean`, and on top of it what `isClean` leaves out on purpose:
+ *
+ * - The generated workspace files. A build rewrites `program-info.json` with a
+ *   new keypair, which exists nowhere else until a push takes it, and a push
+ *   the limits refuse never does. Here an identical rewrite on open costs
+ *   nothing: its hash matches the mark.
+ * - An outstanding question. A refused push (`too-large`, a divergence)
+ *   writes no mark, so the mark cannot say what the refusal left unsent.
+ *   `deleted-elsewhere` included, on purpose: `settleDeletes` raises it
+ *   only for a copy holding work the account never had (a clean one it
+ *   deletes), and deleting is one of the question's two answers, which
+ *   sign-out must not give for the user. The copy stays local; the same
+ *   account signing in is asked again, since its mark still names a row that
+ *   is gone, and another account never uploads it
+ *   (`PgSyncMark.belongsToAnotherAccount`).
+ */
+const isReleasable = async (projectId: string, localName: string) => {
+  if (PgProjectSync.conflictFor(projectId)) return false;
+  const mark = await PgSyncMark.read(projectId);
+  const { files } = await snapshotOf(localName);
+  if (!(await isCleanAgainst(mark, localName, files))) return false;
+  const hashes = await hashFiles({ files });
+  return SYNCED_WORKSPACE_FILES.every(
+    (path) => hashes[path] === mark!.files[path]
+  );
+};
 
 /**
  * Give a project back the server's name, where an adopt or a merge left the
@@ -248,7 +283,11 @@ const passUnlocked = async (): Promise<SyncResult> => {
 
       result.latest ??= local;
 
-      const mark = await PgSyncMark.read(project.id);
+      const mark =
+        (await PgSyncMark.read(project.id)) ??
+        (await rebaseWholeSnapshotMark(project, local));
+      // Left for the next pass, which can read the row
+      if (mark === "retry") continue;
 
       // The cheap path, and the overwhelmingly common one: this device has
       // nothing pending and the row is exactly where it was left. Neither side
@@ -306,6 +345,80 @@ const passUnlocked = async (): Promise<SyncResult> => {
   await pushNeverSynced(serverIds, result);
 
   return result;
+};
+
+/**
+ * Turn a whole-snapshot mark into a per-file one, where the row
+ * has not moved since.
+ *
+ * That mark holds no hash per file, so `read` returns `null` for it and the
+ * project would merge against an empty base: every file this device edited
+ * since asked as "both devices changed this", and every file it deleted
+ * brought back from the server, because with no base a file missing here
+ * reads as unchanged here, so the server's copy wins. But a row still at the mark's timestamp holds exactly
+ * what this device last agreed on, so its files are the base the mark lacks.
+ * Hashed into a per-file mark, the project goes down reconcile's
+ * ordinary path: a device that is ahead pushes the difference.
+ *
+ * The files this device changed keep their agreed content as a base, as a
+ * push would have kept them, so a write that overtakes the upload still
+ * merges by line.
+ *
+ * Where the row has moved, nothing here can say what was agreed, and the old
+ * mark is left to the merge against an empty base. Where the row could not
+ * be read, the project waits for the next pass: falling through to that
+ * merge on a dropped request is the very loss this exists to prevent.
+ *
+ * @returns the new mark; `undefined` when there is no whole-snapshot mark, the row
+ * has moved past it, or it holds no usable files to rebase on; `"retry"`
+ * when the row could not be read
+ */
+const rebaseWholeSnapshotMark = async (
+  project: ServerProject,
+  local: string
+): Promise<SyncMark | "retry" | undefined> => {
+  const old = await PgSyncMark.readWholeSnapshotMark(project.id);
+  if (!old || old.updatedAt !== project.updatedAt) return undefined;
+
+  const full = await PgProjectSync.fetch(project.id);
+  if (!full) {
+    // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
+    report(`rebase whole-snapshot mark ${project.id}: row unreadable`, null);
+    return "retry";
+  }
+  // Re-checked on the copy actually read: the row may move after the list
+  if (full.updatedAt !== old.updatedAt) return undefined;
+  if (!isUsableSnapshot(full.snapshot)) {
+    // No files to agree on: reconcile pushes this copy over the row, as it
+    // does for any row that holds no code
+    if (full.snapshot) {
+      report(
+        `rebase whole-snapshot mark ${project.id}: unusable snapshot`,
+        // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
+        null
+      );
+    }
+    return undefined;
+  }
+
+  const agreed = await hashFiles(full.snapshot);
+  const here = (await snapshotOf(local)).files;
+  // Flagged whatever the copy holds now: `markDirty` does nothing while the
+  // old mark is on disk, so an edit saved after `here` was read has nothing
+  // else to say it is owed. The pass re-hashes it below either way.
+  const mark: SyncMark = {
+    files: agreed,
+    name: full.name,
+    updatedAt: full.updatedAt,
+    dirty: true,
+  };
+
+  const { changed } = diffFiles(agreed, await hashFiles({ files: here }));
+  await PgSyncBase.capture(project.id, changed, agreed, full.snapshot.files);
+  // Not written, the old mark stays: `_push` finds no usable mark and sends
+  // the whole set with no token, which 409s and merges against an empty base
+  if (!(await PgSyncMark.write(project.id, mark))) return "retry";
+  return mark;
 };
 
 /**
@@ -559,10 +672,10 @@ export const releaseLocalProjects = async (): Promise<string[]> =>
     for (const name of names) {
       try {
         const id = PgExplorer.workspaceIdOf(name);
-        // No id means nothing was ever synced under it, and `isClean` is
+        // No id means nothing was ever synced under it, and `isReleasable` is
         // false for a project with no mark -- either way it is not ours to
         // delete
-        if (!id || !(await isClean(id, name))) continue;
+        if (!id || !(await isReleasable(id, name))) continue;
 
         await PgExplorer.deleteWorkspace(name);
         removed.push(name);

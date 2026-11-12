@@ -1,6 +1,7 @@
 import { createLogger } from "@/shared/lib/logger";
 
 import { emptyFileOf } from "../../../commands/build/empty-source";
+import { NetworkRefusedError } from "../../../commands/deploy/network-refused";
 import type { Disposable } from "../../../utils";
 import {
   PgCommand,
@@ -20,7 +21,7 @@ const log = createLogger("flow:stage");
 export type Stage = "write" | "build" | "deploy" | "interact";
 export type StageStatus = "upcoming" | "active" | "done" | "failed" | "running";
 
-/** A run the console strip can stop */
+/** A run the person can stop and the console strip reports as stopped */
 export type RunKind = "build" | "deploy";
 
 export interface FlowState {
@@ -56,6 +57,16 @@ export interface FlowState {
   /** Whether the open project has a program to build. Without one, only the
    * Write stage is offered (`stagesOf`). */
   hasProgram: boolean;
+  /** How many `airdrop` runs are in flight, for the console strip. The
+   * terminal, the wallet's button, the automatic airdrop and a deploy's
+   * top-up each start one, so two can overlap. It funds the wallet, not the
+   * project, so a project switch keeps it. */
+  airdrops: number;
+  /** The program's source differs from what the last successful build was
+   * given, so Build succeeded leads with Build again. `false` with no such
+   * build in this session for the open workspace: a reload's "Built earlier"
+   * claims no comparison, and this reads only on Build succeeded. */
+  sourceChanged: boolean;
 }
 
 /**
@@ -81,21 +92,36 @@ export type FlowEvent =
   /** The person stopped the build: no result is kept, the stage goes back to
    * its settled status */
   | { type: "build-stop" }
-  | { type: "deploy-start" }
-  | { type: "deploy-finish"; ok: boolean }
+  /**
+   * `from`: the deploy command, whose events route to the Deploy stage, or a
+   * tutorial's deploy act, which leaves the stage where it is
+   */
+  | { type: "deploy-start"; from: DeployFrom }
+  | { type: "deploy-finish"; ok: boolean; from: DeployFrom }
   /** The person stopped the deploy before its last step: the program on
    * chain is as it was, and the stage goes back to where it was */
   | { type: "deploy-stop" }
+  | { type: "airdrop-start" }
+  | { type: "airdrop-finish" }
+  /** The network was down, so the deploy never started: nothing changed */
+  | { type: "deploy-refused" }
   | { type: "set-stage"; stage: Stage }
   | { type: "workspace-change" }
   /** What the open project's files say: whether `src/` holds a program */
   | { type: "program"; has: boolean }
+  | { type: "source-change"; changed: boolean }
   /**
    * What the workspace already knows about itself, read back after a
    * reload. `built` is `PgProgramInfo.lastBuildFailed`: `null` when this
-   * workspace has never been built.
+   * workspace has never been built, `undefined` before the file is read.
+   * `deployed` comes only with the cluster's own answer; without it, the
+   * deployment is not known yet.
    */
-  | { type: "restore"; built: boolean | null; deployed: boolean };
+  | {
+      type: "restore";
+      built: boolean | null | undefined;
+      deployed?: boolean;
+    };
 
 export const INITIAL_FLOW_STATE: FlowState = {
   stage: "write",
@@ -112,6 +138,8 @@ export const INITIAL_FLOW_STATE: FlowState = {
   stopped: null,
   // Nothing hides until the explorer has answered
   hasProgram: true,
+  airdrops: 0,
+  sourceChanged: false,
 };
 
 /** Every stage; `stagesOf` gives the ones the open project offers */
@@ -155,10 +183,17 @@ export const countErrors = (stderr: string) =>
       return !!head && !SUMMARY.test(head[1]);
     }).length;
 
+/** Who ran a deploy: the deploy command, or a tutorial's deploy act */
+export type DeployFrom = "command" | "tutorial";
+
+/** The command's deploy routes to the Deploy stage; a tutorial's keeps the editor */
+const deployStage = (from: DeployFrom, state: FlowState): Stage =>
+  from === "command" ? "deploy" : state.stage;
+
 /**
  * What a `build` command's rejection says: about the server, or about an
  * empty program file it never sent. By shape, not `instanceof
- * PgServerRequestError`: the flow's tests stand the utils barrel in with a
+ * PgServerError`: the flow's tests stand the utils barrel in with a
  * mock.
  */
 const buildFailureOf = (err: unknown): BuildFailure => {
@@ -173,6 +208,64 @@ const buildFailureOf = (err: unknown): BuildFailure => {
   return { kind: answered === false ? "no-answer" : "other", message: text };
 };
 
+interface BuiltSource {
+  workspace: string | undefined;
+  source: string;
+}
+
+/** A program id's declaration, in Rust and in Python */
+const DECLARED_ID = /declare_id(!?)\(\s*(["'])\w*\2\s*\)/g;
+
+/**
+ * What a build is compared by: the stored text of the files it sends, the
+ * non-empty ones under `src/`. Two things are left out:
+ *
+ * - The declared program id. A build's start writes it into the open file
+ *   (`Monaco.tsx`), which autosave stores after the build has its baseline, and
+ *   the build sends the keypair's id whatever the file says; with it left in,
+ *   every first build read as changed code moments after it succeeded.
+ * - Paths, so a rename alone is no change, and so neither is moving a file
+ *   within `src/` or swapping two files' text.
+ */
+export const programSourceIn =
+  (srcPath: string) => (files: Record<string, { content?: string }>) =>
+    JSON.stringify(
+      Object.entries(files)
+        .filter(([path, { content }]) => path.startsWith(srcPath) && content)
+        .map(([, { content }]) =>
+          content?.replace(DECLARED_ID, "declare_id$1()")
+        )
+        .sort()
+    );
+
+/**
+ * The stored build verdict as a stage status. Anything but a boolean is
+ * "never built": the getter also answers `undefined` until the file is read.
+ */
+const recordedBuild = (
+  lastBuildFailed: boolean | null | undefined
+): StageStatus => {
+  if (lastBuildFailed === true) return "failed";
+  if (lastBuildFailed === false) return "done";
+  return "upcoming";
+};
+
+/**
+ * Deploy after a restore. A program on the cluster is deployed, also when the
+ * verdict came first and left Deploy `active`; a run in flight or a failed
+ * deploy of this session knows more, so they stay. A recorded success points
+ * at Deploy the way `build-finish` does, so a reload does not leave a finished
+ * Build with nothing saying where to go next.
+ */
+const restoredDeploy = (
+  deploy: StageStatus,
+  { recorded, deployed }: { recorded: StageStatus; deployed?: boolean }
+): StageStatus => {
+  if (deployed && (deploy === "upcoming" || deploy === "active")) return "done";
+  if (deploy === "upcoming" && recorded === "done") return "active";
+  return deploy;
+};
+
 /**
  * The dev loop as state. Pure reducer plus a tiny store; `init` wires the
  * reducer to the events the client already emits.
@@ -184,6 +277,21 @@ export class PgFlow {
 
   static setStage(stage: Stage) {
     PgFlow._dispatch({ type: "set-stage", stage });
+  }
+
+  /**
+   * A deploy that does not go through `PgCommand.deploy` started: a
+   * tutorial's deploy act (`tutorial-runs`). The terminal bar and the
+   * drawer's first-deploy opening read the same state for both. The stage
+   * stays where it is: the tutorial's editor, not the Deploy stage.
+   */
+  static deployStarted() {
+    PgFlow._dispatch({ type: "deploy-start", from: "tutorial" });
+  }
+
+  /** That deploy ended, landed (`ok`) or not */
+  static deployFinished(ok: boolean) {
+    PgFlow._dispatch({ type: "deploy-finish", ok, from: "tutorial" });
   }
 
   static onDidChange(cb: (s: FlowState) => void): Disposable {
@@ -249,7 +357,7 @@ export class PgFlow {
         if (state.deploy === "running") return state;
         return {
           ...state,
-          stage: "deploy",
+          stage: deployStage(ev.from, state),
           deploy: "running",
           deployBeforeRun: state.deploy,
           stopped: null,
@@ -262,19 +370,15 @@ export class PgFlow {
           // A stop of the build a deploy runs first is the build's stop
           stopped: state.stopped === "build" ? "build" : "deploy",
         };
-      case "deploy-finish":
+      case "deploy-refused":
+        if (state.deploy !== "running") return state;
+        return { ...state, deploy: state.deployBeforeRun ?? "active" };
+      case "deploy-finish": {
+        const stage = deployStage(ev.from, state);
         return ev.ok
-          ? {
-              ...state,
-              stage: "deploy",
-              deploy: "done",
-              interact: "active",
-            }
-          : {
-              ...state,
-              stage: "deploy",
-              deploy: "failed",
-            };
+          ? { ...state, stage, deploy: "done", interact: "active" }
+          : { ...state, stage, deploy: "failed" };
+      }
       case "set-stage":
         return { ...state, stage: ev.stage };
       case "program":
@@ -286,38 +390,46 @@ export class PgFlow {
         // The previous project's answer holds until `_readProgram` gives the
         // new one: a reset to "has a program" would flash the stages, and
         // move a phone off the preview a project with no program shows
-        return { ...INITIAL_FLOW_STATE, hasProgram: state.hasProgram };
+        return {
+          ...INITIAL_FLOW_STATE,
+          hasProgram: state.hasProgram,
+          airdrops: state.airdrops,
+        };
+      case "airdrop-start":
+        return { ...state, airdrops: state.airdrops + 1 };
+      case "airdrop-finish":
+        return state.airdrops
+          ? { ...state, airdrops: state.airdrops - 1 }
+          : state;
+      case "source-change":
+        return { ...state, sourceChanged: ev.changed };
       case "restore": {
         // Seeds only forward: a stage the live session has already moved
         // off `upcoming` knows more about this run than the workspace's
         // record does, so the record never overwrites it. That is also
         // what makes a repeated restore idempotent.
-        const recorded: StageStatus =
-          ev.built === null ? "upcoming" : ev.built ? "failed" : "done";
+        const recorded = recordedBuild(ev.built);
         // A build in flight leaves `build` at "running" and `buildSettled`
         // on the previous verdict, so the same guard covers both: neither
         // is touched unless the stage is untouched.
         const fresh = state.build === "upcoming";
-        return {
-          ...state,
-          build: fresh ? recorded : state.build,
-          buildSettled: fresh ? recorded : state.buildSettled,
-          // A recorded success points at Deploy the way `build-finish` does,
-          // so a reload does not leave a finished Build with nothing saying
-          // where to go next.
-          deploy:
-            state.deploy !== "upcoming"
-              ? state.deploy
-              : ev.deployed
-              ? "done"
-              : recorded === "done"
-              ? "active"
-              : state.deploy,
-          interact:
-            ev.deployed && state.interact === "upcoming"
-              ? "active"
-              : state.interact,
-        };
+        const build = fresh ? recorded : state.build;
+        const buildSettled = fresh ? recorded : state.buildSettled;
+        const deploy = restoredDeploy(state.deploy, {
+          recorded,
+          deployed: ev.deployed,
+        });
+        const interact =
+          ev.deployed && state.interact === "upcoming"
+            ? "active"
+            : state.interact;
+        // Unchanged, the same state: listeners are not woken
+        return build === state.build &&
+          buildSettled === state.buildSettled &&
+          deploy === state.deploy &&
+          interact === state.interact
+          ? state
+          : { ...state, build, buildSettled, deploy, interact };
       }
     }
   }
@@ -325,13 +437,29 @@ export class PgFlow {
   /** Subscribe to client events. Call once from the Flow layout. */
   static init(): Disposable {
     let startedAt = 0;
+    const recheckSource = () => PgFlow._recheckSource();
+    const onTreeChange = () => {
+      PgFlow._readProgram();
+      recheckSource();
+    };
     const subs: Disposable[] = [
       PgCommand.build.onDidStart(() => {
         startedAt = Date.now();
         PgFlow._dispatch({ type: "build-start", at: startedAt });
+        PgFlow._running = { at: startedAt, source: PgFlow._currentSource() };
       }),
       PgBuildOutput.onDidChange((out) => {
         if (!out) return;
+        // Subscribing replays the latest report, which may be older than the
+        // build in flight, so only this run's own report settles it. Before
+        // `build-finish`, so the surface never shows the success beside the
+        // old answer.
+        const run = PgFlow._running;
+        if (run && out.at >= run.at) {
+          if (!out.failed) PgFlow._built = run.source;
+          PgFlow._running = undefined;
+        }
+        PgFlow._recheckSource();
         PgFlow._dispatch({
           type: "build-finish",
           failed: out.failed,
@@ -346,6 +474,7 @@ export class PgFlow {
       // *this* run already arrived and handled it.
       PgCommand.build.onDidFinish((result) => {
         if (!("err" in result)) return;
+        PgFlow._running = undefined;
         if (isStopped(result.err)) {
           PgFlow._dispatch({ type: "build-stop" });
           return;
@@ -361,7 +490,7 @@ export class PgFlow {
         });
       }),
       PgCommand.deploy.onDidStart(() =>
-        PgFlow._dispatch({ type: "deploy-start" })
+        PgFlow._dispatch({ type: "deploy-start", from: "command" })
       ),
       PgCommand.deploy.onDidFinish((result) => {
         // A second click while a deploy is already running pauses it
@@ -375,26 +504,59 @@ export class PgFlow {
           PgFlow._dispatch({ type: "deploy-stop" });
           return;
         }
+        if ("err" in result && result.err instanceof NetworkRefusedError) {
+          PgFlow._dispatch({ type: "deploy-refused" });
+          return;
+        }
         PgFlow._dispatch({
           type: "deploy-finish",
           ok: !("err" in result),
+          from: "command",
         });
       }),
+      PgCommand.airdrop.onDidStart(() =>
+        PgFlow._dispatch({ type: "airdrop-start" })
+      ),
+      // Not `onDidFinish`, which `airdrop --help` never sends: the strip
+      // would say "Airdropping…" for good
+      PgCommand.airdrop.onDidEnd(() =>
+        PgFlow._dispatch({ type: "airdrop-finish" })
+      ),
       PgExplorer.onDidSwitchWorkspace(() => {
         PgFlow._dispatch({ type: "workspace-change" });
         // After the reset, which keeps the previous project's answer only
         // until this one replaces it
         PgFlow._readProgram();
+        // Sync re-opens the workspace after a merge: the same project, with
+        // another device's edit in it
+        recheckSource();
       }),
       PgExplorer.onDidInit(PgFlow._readProgram),
-      PgExplorer.onDidCreateItem(PgFlow._readProgram),
-      PgExplorer.onDidDeleteItem(PgFlow._readProgram),
-      PgExplorer.onDidRenameItem(PgFlow._readProgram),
+      PgExplorer.onDidSaveFile(recheckSource),
+      PgExplorer.onDidCreateItem(onTreeChange),
+      PgExplorer.onDidDeleteItem(onTreeChange),
+      PgExplorer.onDidRenameItem(onTreeChange),
+      PgExplorer.onDidReloadFiles(recheckSource),
       // A reload drops this state but not the workspace's own: the build
       // verdict is in `program-info.json` and the deployment is on the
-      // cluster. `onChain` is fetched asynchronously and re-derives on a
-      // cluster or program id change, so this fires more than once --
-      // `restore` seeds only forward, which is what makes that safe.
+      // cluster. The two arrive apart and in either order -- the file is read
+      // at once, the cluster may be slow or not answer -- so each restores
+      // on its own, and Deploy is offered on the verdict alone. `restore`
+      // seeds only forward and returns the same state when nothing moves.
+      //
+      // The verdict, on any change to the program info: a switch to another
+      // project changes its `uuid` or `kp`. Not `onDidChangeLastBuildFailed`,
+      // which stays quiet when the next project has the same verdict, though
+      // the switch has just reset this state. `deployed` is left out here:
+      // `onChain` keeps the previous program's answer until the new fetch
+      // resolves, so read on any other change it can be another project's.
+      PgProgramInfo.onDidChange(() =>
+        PgFlow._dispatch({
+          type: "restore",
+          built: PgProgramInfo.lastBuildFailed,
+        })
+      ),
+      // The deployment, only with the cluster's answer for this program
       PgProgramInfo.onDidChangeOnChain(() =>
         PgFlow._dispatch({
           type: "restore",
@@ -403,6 +565,8 @@ export class PgFlow {
         })
       ),
     ];
+    // The layout may have been away while files changed
+    recheckSource();
     return { dispose: () => subs.forEach((s) => s.dispose()) };
   }
 
@@ -425,6 +589,34 @@ export class PgFlow {
     PgFlow._dispatch({ type: "program", has: PgFramework.hasProgram(paths) });
   }
 
+  private static _currentSource(): BuiltSource {
+    return {
+      workspace: PgExplorer.currentWorkspaceName,
+      source: programSourceIn(PgExplorer.getCurrentSrcPath())(PgExplorer.files),
+    };
+  }
+
+  /**
+   * In memory only: this runs on every change to the tree or a file, and
+   * nothing here may touch the filesystem. By the workspace's name, as
+   * `ownOutput` keeps the report. A temporary project's build is kept under no
+   * name, which is also the name with no project open, so that state is
+   * checked first: it has no source to read.
+   */
+  private static _recheckSource() {
+    const built = PgFlow._built;
+    const hasProject =
+      PgExplorer.isTemporary || PgExplorer.currentWorkspaceName !== undefined;
+    const changed =
+      built !== undefined &&
+      hasProject &&
+      built.workspace === PgExplorer.currentWorkspaceName &&
+      built.source !== PgFlow._currentSource().source;
+    if (changed !== PgFlow._state.sourceChanged) {
+      PgFlow._dispatch({ type: "source-change", changed });
+    }
+  }
+
   private static _dispatch(ev: FlowEvent) {
     const next = PgFlow.reduce(PgFlow._state, ev);
     if (next === PgFlow._state) return;
@@ -433,5 +625,12 @@ export class PgFlow {
   }
 
   private static _state: FlowState = INITIAL_FLOW_STATE;
+  /** What the build in flight was given, until it settles */
+  private static _running?: { at: number; source: BuiltSource };
+  /** What the last successful build was given. A stopped or failed build
+   * leaves it, so a stopped rebuild goes back to the surface it left with the
+   * same answer. Static, as `_state` is: the layout re-subscribes on a remount
+   * with both still on screen. */
+  private static _built?: BuiltSource;
   private static readonly _listeners = new Set<(s: FlowState) => void>();
 }

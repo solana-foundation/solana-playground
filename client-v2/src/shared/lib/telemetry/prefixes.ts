@@ -5,16 +5,23 @@ export const EVENT_PREFIXES = {
   "app-nav": "nav",
   assistant: "assistant",
   catalog: "catalog",
+  "cli-deploy": "cli",
+  deploy: "deploy",
   "docs-link": "docs_link",
+  // The legacy `utils/explorer`, which has no slice yet
+  explorer: "explorer",
   feedback: "feedback",
+  "fund-wallet": "fund",
   gist: "gist",
   home: "home",
+  "idl-build-guide": "idl_guide",
   "layout-shell": "layout",
   mcp: "mcp",
   "new-project": "new_project",
   observability: "obs",
   overlays: "overlay",
   persistence: "sync",
+  "program-keypair": "keypair",
   "project-export": "export",
   "session-footer": "session",
   "settings-page": "settings",
@@ -22,6 +29,9 @@ export const EVENT_PREFIXES = {
   skills: "skills",
   status: "status",
   "unknown-command": "unknown_command",
+  tutorial: "tutorial",
+  "tutorial-frame": "tutorial_frame",
+  "tutorial-workspace": "tutorial_workspace",
 } as const;
 
 export type EventPrefix = typeof EVENT_PREFIXES[keyof typeof EVENT_PREFIXES];

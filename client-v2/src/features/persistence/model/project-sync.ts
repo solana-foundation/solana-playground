@@ -1,4 +1,10 @@
 // TODO(ui-migration 1.4): a feature importing a feature; project sync runs only for a signed-in session
+import {
+  checkProjectLimits,
+  isSyncedPath,
+  type LimitExceeded,
+  readLimitExceeded,
+} from "@/entities/project";
 import { PgSession } from "@/features/auth";
 import { uuid } from "@/shared/lib/ids";
 import { timeoutSignal } from "@/shared/lib/timeout-signal";
@@ -10,7 +16,7 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { Disposable } from "../../../utils/types";
 import { DELETED_REASON } from "./deleted.mjs";
-import { report } from "./diagnostics";
+import { isMissing, report } from "./diagnostics";
 import type { FileConflict, MergePlan, ResolvedFiles } from "./merge";
 import {
   baseAfterMerge,
@@ -20,6 +26,11 @@ import {
   settleConflicts,
   withLocalKeypair,
 } from "./merge";
+import {
+  MAX_PROJECT_BODY_BYTES,
+  NO_FILES_REASON,
+  projectKindOf,
+} from "./project-write.mjs";
 import type { FileHashes, Snapshot } from "./snapshot";
 import { diffFiles, hashFiles, sameUserFiles, snapshotOf } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
@@ -28,10 +39,27 @@ import { LOCKED_REQUEST_MS, withSyncLock } from "./sync-lock";
 import type { SyncMark } from "./sync-mark";
 import { PgSyncMark } from "./sync-mark";
 import { reloadCurrentFromDisk } from "./tab-reload";
+import { type LimitByParam, persistenceTelemetry } from "./telemetry";
 import { PgThreadIndex } from "./thread-index";
 import { PgWorkspaceRegistry } from "./workspace-registry";
 
-type PushResult = "ok" | "conflict" | "skipped";
+/**
+ * How a push ended. `unchanged`: the server already holds these files under
+ * this name, so there was nothing to send. `refused`: the server answered
+ * the body with a 400, which sending it again cannot change; reported
+ * already.
+ * `skipped`: not sent for any other reason, offline among them. `unchanged` and `skipped` are kept apart
+ * because "Try again" settles the question on `unchanged` and puts it back on
+ * `skipped`.
+ */
+type PushResult = "ok" | "conflict" | "unchanged" | "refused" | "skipped";
+
+/** `push`'s options -- see there */
+type PushOptions = {
+  immediate?: boolean;
+  merging?: boolean;
+  generation?: number;
+};
 
 /**
  * Why sync left a project alone as another account's.
@@ -89,7 +117,11 @@ const trimmedName = <T extends ServerProject>(project: T): T =>
  *
  * - `name-taken`: another live project in this account already holds this
  *   name, which the unique index on `(user_id, name)` will not have twice.
- * - `too-large`: the snapshot is over the size this endpoint accepts.
+ * - `too-large`: the project is over a limit (`limit` says which), or the
+ *   request body is over `MAX_PROJECT_BODY_BYTES` (no `limit`). `push` refuses
+ *   either before sending; the endpoint refuses either it receives. The
+ *   account cap (`too-many-projects`) arrives here too, from the server only:
+ *   the project stays local, writes no mark, and waits for "Try again".
  *
  * They share the conflict machinery because they need exactly what it gives:
  * pushes for the project stop (there is no point re-uploading every three
@@ -97,30 +129,42 @@ const trimmedName = <T extends ServerProject>(project: T): T =>
  * the only thing anywhere that says the project has stopped syncing. Before
  * this they were `!response.ok` -- a diagnostics line and silence.
  */
-export type ConflictKind =
-  | "divergent"
-  | "deleted-elsewhere"
-  | "name-taken"
-  | "too-large";
+export type ConflictKind = Refusal["kind"];
 
-export interface Conflict {
-  projectId: string;
-  kind: ConflictKind;
-  /**
-   * For `divergent`: the files both devices changed in the same place. Every
-   * other file has already been merged, so these are all the user is asked
-   * about. Absent when the merge could not get that far. Always `files`'
-   * paths, in order, when `files` is there.
-   */
-  paths?: string[];
-  /**
-   * For `divergent`: each of `paths` with the lines in question, or the
-   * whole file, and the hashes of the two copies it was read from. In memory
-   * only, as the conflict itself is: a reload re-raises it with fresh ones.
-   * Absent where `paths` is.
-   */
-  files?: FileConflict[];
-}
+/** A question as the server's refusal, or the client's own check, raises it */
+type Refusal =
+  | {
+      kind: "divergent";
+      /**
+       * The files both devices changed in the same place. Every other file
+       * has already been merged, so these are all the user is asked about.
+       * Absent when the merge could not get that far. Always `files`' paths,
+       * in order, when `files` is there.
+       */
+      paths?: string[];
+      /**
+       * Each of `paths` with the lines in question, or the whole file, and
+       * the hashes of the two copies it was read from. In memory only, as the
+       * conflict itself is: a reload re-raises it with fresh ones. Absent
+       * where `paths` is.
+       */
+      files?: FileConflict[];
+    }
+  | { kind: "deleted-elsewhere" }
+  | { kind: "name-taken" }
+  | {
+      kind: "too-large";
+      /**
+       * The limit it is over and what is over it: a project limit, from the
+       * client's own check or a 413's body, or the account cap, from a 413's
+       * body only. Absent for the body cap, which names no
+       * limit. A field rather than five more kinds: every one of them stops
+       * pushes and offers "Try again", as `too-large` does.
+       */
+      limit?: LimitExceeded;
+    };
+
+export type Conflict = { projectId: string } & Refusal;
 
 /**
  * What the user picked.
@@ -257,23 +301,41 @@ const answers = (
  * un-deletes the project for every device.
  *
  * A 413 comes here too, and is `too-large` whether or not its body says so.
+ * A limit's reason (`too-many-files` and the rest) is `too-large` with the
+ * body read into its `limit`, so the banner names a project limit as the
+ * client's own check would, and names the account cap, which no client
+ * check finds. A limit body this client cannot read is reported and asked
+ * as the plain `too-large`: the banner still goes up, without the measure.
  *
  * An unreadable body falls back to the older meaning, whose prompt is at least
  * about the right project.
  */
-const refusalKind = async (response: Response): Promise<ConflictKind> => {
-  let reason: unknown = null;
+const refusalOf = async (response: Response): Promise<Refusal> => {
+  let body: unknown;
   try {
-    reason = (await response.json())?.reason;
+    body = await response.json();
   } catch (e) {
-    // A refusal with no readable body is still a refusal
+    // A refusal with no readable body is still a refusal, read by its status
+    // alone. A platform's or a proxy's 413 is not JSON; it is reported here,
+    // once.
     report("read refusal body", e);
+    return response.status === 413
+      ? { kind: "too-large" }
+      : { kind: "divergent" };
   }
+  const reason = (body as { reason?: unknown } | undefined)?.reason;
 
-  if (reason === "name-taken") return "name-taken";
-  if (reason === DELETED_REASON) return "deleted-elsewhere";
-  if (reason === "too-large" || response.status === 413) return "too-large";
-  return "divergent";
+  if (reason === "name-taken") return { kind: "name-taken" };
+  if (reason === DELETED_REASON) return { kind: "deleted-elsewhere" };
+  const limit = readLimitExceeded(body);
+  if (limit) return { kind: "too-large", limit };
+  if (reason === "too-large" || response.status === 413) {
+    if (reason !== "too-large") {
+      report(`unreadable 413 body: ${JSON.stringify(body)}`, null);
+    }
+    return { kind: "too-large" };
+  }
+  return { kind: "divergent" };
 };
 
 /**
@@ -490,23 +552,28 @@ export class PgProjectSync {
   static async push(
     projectId: string,
     snapshot: Snapshot,
+    // eslint-disable-next-line layers/curry-order -- the public signature is the one project-restore and its tests spy on and assert; curried here it would break callers outside this change
     name?: string,
-    opts: { immediate?: boolean; merging?: boolean; generation?: number } = {}
+    // eslint-disable-next-line layers/curry-order -- same: the public `push(projectId, snapshot, name?, opts?)` stays
+    opts: PushOptions = {}
   ): Promise<PushResult> {
     // Held from reading the mark to writing the new one -- and through a
     // merge a refusal leads to -- so no other tab decides against a mark that
     // is about to change. Re-entrant within this tab: `pushCurrent`,
     // `reconcile` and the merge's own upload already hold it.
     return await withSyncLock(() =>
-      PgProjectSync._push(projectId, snapshot, name, opts)
+      PgProjectSync._push(opts, projectId, snapshot, name)
     );
   }
 
   private static async _push(
+    opts: PushOptions & {
+      /** Send the whole set even with a mark -- see the `no-files` 400 */
+      whole?: boolean;
+    },
     projectId: string,
     snapshot: Snapshot,
-    name: string | undefined,
-    opts: { immediate?: boolean; merging?: boolean; generation?: number }
+    name: string | undefined
   ): Promise<PushResult> {
     if (!(await PgProjectSync._ready())) return "skipped";
 
@@ -559,7 +626,8 @@ export class PgProjectSync {
     const storedName = pinned ? mark!.name : localName;
     // Relative to the last agreement, when there is one. Without a mark there
     // is nothing to be relative to.
-    const patch = mark ? diffFiles(mark.files, hashes) : null;
+    const patch =
+      mark && !opts.whole ? diffFiles(mark.files, hashes) : undefined;
 
     // Before anything that can decline to send. What these files held at the
     // last agreement is the one thing a later merge cannot rebuild, and a
@@ -599,28 +667,58 @@ export class PgProjectSync {
       !patch.removed.length &&
       mark!.name === storedName
     ) {
-      return "skipped";
+      return "unchanged";
+    }
+
+    // The whole project, not the patch: a patch is small even when the
+    // project it lands in is not, and the server would refuse it for the
+    // count or the size. Not sent, the mark stays as it was, and the banner
+    // holds pushes for the project until "Try again" finds it under every
+    // limit.
+    const limit = checkProjectLimits(snapshot.files);
+    if (limit) {
+      PgProjectSync._raiseFoundBy("client")({
+        projectId,
+        kind: "too-large",
+        limit,
+      });
+      return "conflict";
+    }
+
+    const body = JSON.stringify({
+      id: projectId,
+      name: storedName,
+      kind: projectKindOf(projectId),
+      ...(patch
+        ? {
+            changed: Object.fromEntries(
+              patch.changed.map((path) => [path, snapshot.files[path]])
+            ),
+            removed: patch.removed,
+          }
+        : { files: snapshot.files }),
+      baseUpdatedAt: mark?.updatedAt,
+    });
+
+    // Refused here, not sent to be refused: the handler would refuse it the
+    // same way, so this saves the round trip and raises the same banner --
+    // and, like the handler's refusal, nothing is recorded. Reached only by
+    // a body JSON escaping pushed past the cap, since the limits above
+    // already hold a project to half of it.
+    const bytes = new TextEncoder().encode(body).length;
+    if (bytes > MAX_PROJECT_BODY_BYTES) {
+      // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
+      report(`push project ${projectId}: ${bytes} bytes, over the limit`, null);
+      PgProjectSync._raise({ projectId, kind: "too-large" });
+      return "conflict";
     }
 
     try {
-      const response = await fetch("/api/projects", {
+      const response = await PgSession.fetchAuthed("/api/projects", {
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id: projectId,
-          name: storedName,
-          kind: projectId.startsWith("tut:") ? "tutorial" : "project",
-          ...(patch
-            ? {
-                changed: Object.fromEntries(
-                  patch.changed.map((path) => [path, snapshot.files[path]])
-                ),
-                removed: patch.removed,
-              }
-            : { files: snapshot.files }),
-          baseUpdatedAt: mark?.updatedAt,
-        }),
+        body,
         signal: timeoutSignal(LOCKED_REQUEST_MS),
       });
 
@@ -629,12 +727,12 @@ export class PgProjectSync {
       // workspace too big to upload is a project that has stopped syncing, and
       // reporting it only to the console meant nothing on screen ever said so.
       if (response.status === 409 || response.status === 413) {
-        const kind = await refusalKind(response);
+        const refusal = await refusalOf(response);
         // A swap that missed: another device wrote since this one last
         // agreed. Fold its changes in rather than asking -- the merge asks
         // only about lines both sides changed. Not from inside a merge,
         // which starts over on its own.
-        if (kind === "divergent" && !opts.merging) {
+        if (refusal.kind === "divergent" && !opts.merging) {
           const local = PgExplorer.workspaceNameOf(projectId);
           if (local) {
             const outcome = await PgProjectSync.mergeWithServer(
@@ -653,20 +751,55 @@ export class PgProjectSync {
         // Deliberately without recording anything: the upload has not been
         // accepted, and remembering it would make every later attempt look
         // unchanged and strand the project out of sync for good.
-        PgProjectSync._raise({ projectId, kind });
+        PgProjectSync._raiseFoundBy("server")({ projectId, ...refusal });
         return "conflict";
       }
       if (!response.ok) {
-        report(`push project ${projectId}: HTTP ${response.status}`, null);
-        return "skipped";
+        // The server's own words, when it sent any: a 400 names the check
+        // the body failed, which "HTTP 400" alone leaves to guesswork
+        const refusal = await response.json().then(
+          (answer) => answer,
+          // No readable body; the status is reported below all the same
+          () => undefined
+        );
+        // A patch that would leave the account's copy with no files. This
+        // device builds its patches from a non-empty snapshot, so the row is
+        // already empty -- emptied before the server refused that -- and the
+        // whole set puts the files back. Past the gate already, and a whole
+        // set is never refused for this, so it is sent once.
+        if (patch && refusal?.reason === NO_FILES_REASON) {
+          // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
+          report(`push project ${projectId}: account copy was empty`, null);
+          return await PgProjectSync._push(
+            {
+              immediate: true,
+              merging: opts.merging,
+              generation: opts.generation,
+              whole: true,
+            },
+            projectId,
+            snapshot,
+            name
+          );
+        }
+        const said = refusal?.error;
+        report(
+          `push project ${projectId}: HTTP ${response.status}` +
+            (typeof said === "string" ? ` (${said})` : ""),
+          // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
+          null
+        );
+        // A 400 is this body's and comes back for it every time; anything
+        // else (a 401, a 429, a 5xx) may pass on its own
+        return response.status === 400 ? "refused" : "skipped";
       }
 
-      const body = await response.json();
+      const accepted = await response.json();
       await PgSyncMark.write(projectId, {
         files: hashes,
         name: storedName,
         ...(pinned ? { localName } : {}),
-        updatedAt: body.updatedAt,
+        updatedAt: accepted.updatedAt,
         dirty: false,
       });
       await PgSyncBase.accepted(
@@ -695,7 +828,7 @@ export class PgProjectSync {
     if (!(await PgProjectSync._ready())) return null;
 
     try {
-      const response = await fetch("/api/projects", {
+      const response = await PgSession.fetchAuthed("/api/projects", {
         credentials: "include",
         cache: "no-store",
         signal: timeoutSignal(LOCKED_REQUEST_MS),
@@ -746,7 +879,7 @@ export class PgProjectSync {
     if (!(await PgProjectSync._ready())) return null;
 
     try {
-      const response = await fetch(
+      const response = await PgSession.fetchAuthed(
         `/api/projects?id=${encodeURIComponent(projectId)}`,
         {
           credentials: "include",
@@ -784,7 +917,7 @@ export class PgProjectSync {
     if (!(await PgProjectSync._ready())) return false;
 
     try {
-      const response = await fetch(
+      const response = await PgSession.fetchAuthed(
         `/api/projects?id=${encodeURIComponent(projectId)}`,
         { method: "DELETE", credentials: "include" }
       );
@@ -909,8 +1042,9 @@ export class PgProjectSync {
       // change, and the generated ones ride along on the next upload.
       const owed = await PgProjectSync._catchUp(local, before, files);
       // The account's copy of a file typed into is its base from here on --
-      // see `PgSyncBase`. Kept now, while it is known: the re-open above
-      // re-took the shadow from the folded copy.
+      // see `PgSyncBase`. Kept now, while it is known: the shadow is re-taken
+      // from memory, which holds the folded copy once typing is folded in,
+      // before the re-open or after it.
       await PgSyncBase.capture(projectId, owed, agreed, files);
       // Typing folded into the server's copy is on this device alone. After
       // the mark above, which said the copy was exactly the server's, or the
@@ -931,7 +1065,8 @@ export class PgProjectSync {
   /**
    * Bring every other copy of a workspace's files level with the store, once
    * sync has rewritten it: the editor's buffers, then -- for the current
-   * workspace -- the explorer's memory.
+   * workspace -- the explorer's memory, then any buffer that appeared during
+   * the re-open, as an editor that mounted in between has.
    *
    * `replaceWorkspaceFiles` writes the store and nothing else. The explorer
    * re-reads on a re-open, but Monaco keeps a model per path and reuses it on
@@ -955,70 +1090,139 @@ export class PgProjectSync {
     before: Record<string, string>,
     after: Record<string, string>
   ): Promise<string[]> {
-    const buffers = PgExplorer.editorBuffers;
-    const paths = new Set([...Object.keys(before), ...Object.keys(after)]);
+    const paths = [
+      ...new Set([...Object.keys(before), ...Object.keys(after)]),
+    ].sort();
     const folded: string[] = [];
+    // Paths a pass below has brought level, so the next one leaves them be.
+    // A path that failed is not among them, and the next pass tries it again.
+    const caughtUp = new Set<string>();
 
-    for (const path of buffers ? [...paths].sort() : []) {
-      const full = `/${localName}/${path}`;
-      let content: string | undefined;
-      try {
-        // Read and written with nothing awaited in between, so a keystroke
-        // cannot land after the read and be overwritten by the write
-        const buffer = buffers!.read(full);
-        if (buffer === undefined) continue;
-        const read = before[path];
+    const catchUpBuffers = async (when: "before re-open" | "after re-open") => {
+      // Read on every pass, not once: the editor can mount between them
+      const buffers = PgExplorer.editorBuffers;
+      if (!buffers) return;
 
-        if (!(path in after)) {
-          if (buffer !== read) {
-            report(
-              `catch up ${localName}: ${path} was edited here while sync removed it; the edit was discarded`,
-              null
-            );
+      for (const path of paths) {
+        if (caughtUp.has(path)) continue;
+        const full = `/${localName}/${path}`;
+        let content: string | undefined;
+        try {
+          // Read and written with nothing awaited in between, so a keystroke
+          // cannot land after the read and be overwritten by the write
+          const buffer = buffers.read(full);
+          if (buffer === undefined) continue;
+          const read = before[path];
+
+          if (!(path in after)) {
+            if (buffer !== read) {
+              report(
+                `catch up ${localName}: ${path} was edited here while sync removed it; the edit was discarded`,
+                // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
+                null
+              );
+            }
+            buffers.discard(full);
+            caughtUp.add(path);
+            // Dropping the model flushes its pending autosave, and memory
+            // still lists the file until the re-open, so that save -- or one
+            // that fired while the caller awaited -- wrote the file back.
+            // Left there, the next push uploads it over the other device's
+            // delete. Removed without reading first: a read that fails
+            // cannot tell a written-back file from an absent one.
+            try {
+              await PgFs.removeFile(full);
+            } catch (e) {
+              if (!isMissing(e)) report(`remove ${full}`, e);
+            }
+            continue;
           }
-          buffers!.discard(full);
+
+          content = after[path];
+          if (read !== undefined && buffer !== read && buffer !== content) {
+            // Nobody is asked here: the typing is seconds old and the user is
+            // still in the file, so an overlap keeps the synced copy and says so
+            const merged = merge3(read, buffer, content);
+            if (merged.kind === "conflict") {
+              report(
+                `catch up ${localName}: what was typed in ${path} during sync overlaps what sync wrote; the synced copy was kept`,
+                // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
+                null
+              );
+            } else {
+              content = merged.text;
+            }
+          }
+          if (buffer !== content) buffers.write(full, content);
+          caughtUp.add(path);
+          if (content !== after[path]) folded.push(path);
+          // Nothing more to do when nothing was folded in, the buffer held
+          // either copy, and the store still holds `after`: writing it again
+          // would announce a change to the other tabs that is none.
+          //
+          // Read, not assumed. Between writing `after` and getting here the
+          // caller awaited its upload (merge) or its mark (adopt), and a
+          // pending autosave fired in that window writes the old buffer over
+          // `after`. From here the buffer is `after`, and an autosave already
+          // under way with the old text is ahead of this read in the fs queue.
+          if (
+            content === after[path] &&
+            (buffer === read || buffer === content) &&
+            (await PgProjectSync._readStored(full)) === content
+          ) {
+            continue;
+          }
+        } catch (e) {
+          report(`catch up ${localName}: editor buffer ${path} (${when})`, e);
           continue;
         }
 
-        content = after[path];
-        if (read !== undefined && buffer !== read && buffer !== content) {
-          // Nobody is asked here: the typing is seconds old and the user is
-          // still in the file, so an overlap keeps the synced copy and says so
-          const merged = merge3(read, buffer, content);
-          if (merged.kind === "conflict") {
-            report(
-              `catch up ${localName}: what was typed in ${path} during sync overlaps what sync wrote; the synced copy was kept`,
-              null
-            );
-          } else {
-            content = merged.text;
-            if (content !== after[path]) folded.push(path);
+        // The store too, after any autosave that fired during the rewrite, or
+        // during the caller's await, with the old text. Before the re-open, so its re-read finds what
+        // the editor shows. After it, memory has been read already, so it is
+        // set here too: a fold that left the buffer as it was fires no
+        // autosave to bring memory along, and a build reads memory.
+        try {
+          await PgFs.writeFile(full, content, { createParents: true });
+          if (when === "after re-open") {
+            PgExplorer.saveFileToState(full, content);
           }
+        } catch (e) {
+          report(`catch up ${localName}: write ${path} (${when})`, e);
+          // The store lacks the fold: the next pass writes it again, and
+          // until one does, no base is kept for content the store never held
+          caughtUp.delete(path);
+          const at = folded.indexOf(path);
+          if (at !== -1) folded.splice(at, 1);
         }
-        if (buffer !== content) buffers!.write(full, content);
-        // Nothing more to do when the buffer was already the new content and
-        // nobody typed: the store has it. Otherwise the store is written too,
-        // after any autosave that fired during the rewrite with the old text,
-        // so the re-read below finds what the editor now shows.
-        if (content === after[path] && buffer === read) continue;
-      } catch (e) {
-        report(`catch up ${localName}: editor buffer ${path}`, e);
-        continue;
       }
+    };
 
-      try {
-        await PgFs.writeFile(full, content, { createParents: true });
-      } catch (e) {
-        report(`catch up ${localName}: write ${path}`, e);
-      }
-    }
+    await catchUpBuffers("before re-open");
 
     // Only the current workspace is held in memory. Re-opening it inside the
     // gate is safe now the gate is counted: the reconcile its switch starts
     // takes a hold of its own, and skips this project while a merge of it is
     // still running.
     if (localName === PgExplorer.currentWorkspaceName) {
-      await PgExplorer.switchWorkspace(localName);
+      // A failed re-open is reported, not thrown: the folds above are in the
+      // store already, and a caller that never gets `folded` keeps no base
+      // for them and leaves the mark clean, so the next exchange asked about
+      // the whole file, or never sent the typing at all
+      try {
+        await PgExplorer.switchWorkspace(localName);
+      } catch (e) {
+        report(`catch up ${localName}: re-open`, e);
+      }
+      // Again, for buffers the pass above could not reach. The editor
+      // registers its buffers only once its lazy chunk has loaded and
+      // `initLanguages` has resolved, which on a slow machine is after any
+      // rewrite that lands soon after load: the first reconcile's adoption,
+      // a banner answered at once. An editor that registered between the
+      // pass above and the re-read built its models from the text just
+      // replaced, and the re-open reused them, so the pane kept showing the
+      // replaced file. One that registers after this reads memory re-opened.
+      await catchUpBuffers("after re-open");
     }
 
     return folded;
@@ -1103,13 +1307,28 @@ export class PgProjectSync {
           PgProjectSync._raise({ projectId, kind: "deleted-elsewhere" });
           return "conflict";
         }
-        if (!full || !isUsableSnapshot(full.snapshot)) return "failed";
+        if (!full || !isUsableSnapshot(full.snapshot)) {
+          // Unreadable is reported where the read failed; a row holding
+          // nothing a merge can start from is reported here
+          if (full?.snapshot) {
+            // eslint-disable-next-line unicorn/no-null -- `report` records `null` for a failure with no exception; `undefined` would change the reported message
+            report(`merge project ${projectId}: unusable snapshot`, null);
+          }
+          return "failed";
+        }
 
-        const server = full.snapshot.files;
+        // Only what sync carries: a row stored before the server refused
+        // other `.workspace/` paths may hold one, which an upload may not
+        const server = Object.fromEntries(
+          Object.entries(full.snapshot.files).filter(([path]) =>
+            isSyncedPath(path)
+          )
+        );
         const local = carried ?? (await snapshotOf(localName)).files;
         first ??= local;
-        // The same window `pushCurrent` refuses: the explorer mid-re-read
-        // reads as a project with every file deleted, and merging that would
+        // The same state `push` refuses: a store emptied by
+        // `replaceWorkspaceFiles` or another tab reads as a project with every
+        // file deleted, and merging that would
         // delete them on the server too
         if (!Object.keys(local).length) {
           report(
@@ -1238,11 +1457,21 @@ export class PgProjectSync {
           localName,
           { immediate: true, merging: true }
         );
-        // "skipped" is either nothing left to send or no network; both leave
-        // a state the next reconcile continues from
+        // "unchanged" is nothing left to send, "skipped" most likely no
+        // network; both leave a state the next reconcile continues from. A
+        // refused upload merged nothing into the account's copy, and no
+        // question was up for it: the push cleared it above. Ask, or the
+        // project stops syncing with nothing on screen.
+        if (result === "refused") {
+          // TODO: a 400 asks the version question, whose answers
+          // meet the same refusal; it needs a refusal banner of its own
+          PgProjectSync._raise({ projectId, kind: "divergent" });
+          return "conflict";
+        }
         if (result !== "conflict") return "merged";
 
-        // A refusal that is not about versions is the user's to clear
+        // A refusal that is not about versions is the user's to clear: a
+        // merged project over a limit keeps the limit's banner
         if (PgProjectSync._conflicts.get(projectId)?.kind !== "divergent") {
           return "conflict";
         }
@@ -1265,8 +1494,8 @@ export class PgProjectSync {
           // What the merge wrote is the agreement for these files, or its
           // base is kept already -- the merged copy when its upload landed,
           // the server's when it did not. Kept now, as in `_adopt`: the
-          // re-open re-took the shadow from the folded copy, which no longer
-          // matches the mark.
+          // shadow is re-taken from memory, which holds the folded copy and
+          // so no longer matches the mark.
           const mark = await PgSyncMark.read(projectId);
           if (mark) {
             await PgSyncBase.capture(projectId, folded, mark.files, written!);
@@ -1334,6 +1563,20 @@ export class PgProjectSync {
       await PgSyncMark.write(projectId, settled);
       return true;
     });
+  }
+
+  /**
+   * What the store holds for a file, or `undefined` when it cannot say --
+   * missing or unreadable. `undefined` makes `_catchUp` write, which at worst
+   * repeats a write.
+   */
+  private static async _readStored(path: string): Promise<string | undefined> {
+    try {
+      return await PgFs.readToString(path);
+    } catch (e) {
+      if (!isMissing(e)) report(`read ${path}`, e);
+      return undefined;
+    }
   }
 
   /**
@@ -1467,7 +1710,7 @@ export class PgProjectSync {
           projectId,
           name,
           resolution.files,
-          PgProjectSync._conflicts.get(projectId)?.paths
+          PgProjectSync._askedPaths(projectId)
         );
         return outcome === "merged";
       }
@@ -1485,7 +1728,7 @@ export class PgProjectSync {
             projectId,
             name,
             resolution === "keep-local" ? "local" : "server",
-            PgProjectSync._conflicts.get(projectId)?.paths
+            PgProjectSync._askedPaths(projectId)
           );
           return outcome === "merged";
         }
@@ -1556,10 +1799,15 @@ export class PgProjectSync {
           // comes back by itself and says which refusal it hit this time --
           // renaming into a *second* taken name keeps the same prompt, and a
           // project that shrank below the size cap only to hit a real
-          // divergence gets the version question it now deserves. The one
-          // outcome that raises nothing is a push that never reached the
-          // server, which is why the original question is put back for it:
-          // being offline does not mean the name is free.
+          // divergence gets the version question it now deserves. A push with
+          // nothing to send is settled too: the user undid whatever went
+          // over a limit, and the server already holds the project as it is
+          // now. The outcomes that raise nothing are a push that never
+          // reached the server and one refused with a 400, which is why the
+          // original question is put back for them: being offline does not
+          // mean the name is free, and a refusal is no answer. Put
+          // back through `_raise`, so no limit event fires twice for one
+          // banner.
           const previous = PgProjectSync._conflicts.get(projectId) ?? null;
           PgProjectSync._clear(projectId);
 
@@ -1568,7 +1816,7 @@ export class PgProjectSync {
             await snapshotOf(name),
             name
           );
-          if (result === "ok") return true;
+          if (result === "ok" || result === "unchanged") return true;
 
           if (previous && !PgProjectSync._conflicts.has(projectId)) {
             PgProjectSync._raise(previous);
@@ -1621,6 +1869,15 @@ export class PgProjectSync {
    */
   static async isAvailable() {
     return await PgProjectSync._ready();
+  }
+
+  /**
+   * Whether the project rows go on reading marks with nobody signed in: a
+   * session that ended keeps its account's (`currentUserId` in `sync-mark`).
+   * Apart from `isAvailable`, because reconcile asks that, and must not run.
+   */
+  static async hasExpiredMarks() {
+    return !!PgSession.expiredUser && (await PgSyncClient.available());
   }
 
   /** Remember a name for a project whose workspace may not exist locally yet */
@@ -1783,26 +2040,45 @@ export class PgProjectSync {
    * The same question again is not announced: reconcile re-raises on every
    * pass. "The same" includes the copies a divergent conflict's files were
    * read from, so the same paths with a side that has moved since replace
-   * the files -- an answer pinned to the old ones can only be refused.
+   * the files -- an answer pinned to the old ones can only be refused. A
+   * limit question is identified by its limit and measure, so two different
+   * limits are never taken for the same question.
+   *
+   * Sends no limit event: it raises the questions no limit check found,
+   * reconcile's, and puts back a question after a retry that never reached
+   * the server, whose banner was counted when it first went up. A limit a
+   * check finds goes through `_raiseFoundBy`.
+   *
+   * @returns whether the question is new
    */
   private static _raise(conflict: Conflict) {
     const existing = PgProjectSync._conflicts.get(conflict.projectId);
-    /** What identifies a question, without the file contents */
-    const key = (c: Conflict) =>
-      JSON.stringify([
-        c.paths,
-        c.files?.map(({ kind, path, localHash, serverHash }) => [
-          kind,
-          path,
-          localHash,
-          serverHash,
-        ]),
-      ]);
-    if (existing?.kind === conflict.kind && key(existing) === key(conflict)) {
-      return;
-    }
+    if (existing && sameQuestion(existing, conflict)) return false;
     PgProjectSync._conflicts.set(conflict.projectId, conflict);
     PgProjectSync._emit();
+    return true;
+  }
+
+  /**
+   * `_raise` for a refusal a check found: the client's own (`by` "client")
+   * or a 413 (`by` "server"), the two places a limit is found. A limit's
+   * event fires only for a question that is new, so a banner already up
+   * sends nothing more while the user keeps editing, and after the banner is
+   * up, so an event that fails cannot keep it down.
+   */
+  private static _raiseFoundBy(by: LimitByParam) {
+    return (conflict: Conflict) => {
+      if (!PgProjectSync._raise(conflict)) return;
+      if (conflict.kind === "too-large" && conflict.limit) {
+        trackLimitFoundBy(by)(conflict.limit);
+      }
+    };
+  }
+
+  /** The files a divergent question up for the project named, if any */
+  private static _askedPaths(projectId: string) {
+    const conflict = PgProjectSync._conflicts.get(projectId);
+    return conflict?.kind === "divergent" ? conflict.paths : undefined;
   }
 
   private static _clear(projectId: string) {
@@ -1822,6 +2098,61 @@ export class PgProjectSync {
     );
   }
 }
+
+/** Whether two conflicts ask the same question, file contents aside */
+const sameQuestion = (a: Conflict, b: Conflict) => {
+  if (a.kind === "divergent" && b.kind === "divergent") {
+    const key = (c: typeof a) =>
+      JSON.stringify([
+        c.paths,
+        c.files?.map(({ kind, path, localHash, serverHash }) => [
+          kind,
+          path,
+          localHash,
+          serverHash,
+        ]),
+      ]);
+    return key(a) === key(b);
+  }
+  if (a.kind === "too-large" && b.kind === "too-large") {
+    return JSON.stringify(a.limit) === JSON.stringify(b.limit);
+  }
+  return a.kind === b.kind;
+};
+
+/** Send the event named for the limit a banner was raised for */
+const trackLimitFoundBy = (by: LimitByParam) => (limit: LimitExceeded) => {
+  switch (limit.reason) {
+    case "path-too-long":
+    case "file-too-large":
+      persistenceTelemetry.track("sync_file_limit_exceeded", {
+        by,
+        limit: limit.reason === "path-too-long" ? "path" : "size",
+        files: limit.paths.length,
+      });
+      return;
+    case "too-many-files":
+      persistenceTelemetry.track("sync_files_count_limit_exceeded", {
+        by,
+        files: limit.count,
+      });
+      return;
+    case "project-too-large":
+      persistenceTelemetry.track("sync_project_limit_exceeded", {
+        by,
+        kib: Math.ceil(limit.size / 1024),
+      });
+      return;
+    case "too-many-projects":
+      // Only the server counts an account's projects
+      persistenceTelemetry.track("sync_projects_count_limit_exceeded", {
+        by: "server",
+        kind: limit.kind,
+        projects: limit.count,
+      });
+      return;
+  }
+};
 
 /**
  * Whether a local copy's user files are exactly what a mark says this device
@@ -1844,6 +2175,11 @@ export const isCleanAgainst = async (
 /**
  * Whether a stored snapshot can be written to a workspace.
  *
+ * An empty file map is not: written, it is the workspace emptied, exactly as
+ * a malformed one would be. The server refuses any write that would leave
+ * one, but a row written before it did can hold one: a full write before it
+ * checked those, or a patch that removed every file before it checked that.
+ *
  * Exported because reconcile checks it before the same destructive call, and
  * both halves have to agree on what "usable" means.
  */
@@ -1852,5 +2188,9 @@ export const isUsableSnapshot = (
 ): snapshot is Snapshot => {
   const files = (snapshot as Snapshot | undefined)?.files;
   if (!files || typeof files !== "object" || Array.isArray(files)) return false;
-  return Object.values(files).every((content) => typeof content === "string");
+  const contents = Object.values(files);
+  return (
+    contents.length > 0 &&
+    contents.every((content) => typeof content === "string")
+  );
 };

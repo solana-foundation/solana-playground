@@ -23,7 +23,9 @@ const failedBuild: FlowState = {
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  airdrops: 0,
   hasProgram: true,
+  sourceChanged: false,
 };
 
 /** Every element a `ResizeObserver` watches (the fold's stepper root, the
@@ -85,9 +87,9 @@ describe("Stepper", () => {
     expect(build.getAttribute("data-slot")).toBe("stepper-item");
   });
 
-  it("says a failed build's count and the lesson target", () => {
-    render(<Stepper state={failedBuild} onSelect={() => {}} target="build" />);
-    const name = "Build: failed, 3 errors, current lesson target";
+  it("says a failed build's count", () => {
+    render(<Stepper state={failedBuild} onSelect={() => {}} />);
+    const name = "Build: failed, 3 errors";
     expect(screen.getByRole("tab", { name })).toBeTruthy();
     expect(
       screen.getByRole("tab", { name }).getAttribute("aria-selected")
@@ -109,8 +111,10 @@ describe("Stepper", () => {
       buildFailure: null,
       deployBeforeRun: null,
       stopped: null,
+      airdrops: 0,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     render(<Stepper state={noProgram} onSelect={vi.fn()} />);
     expect(screen.getAllByRole("tab").map((tab) => tab.id)).toEqual([
@@ -215,8 +219,10 @@ describe("phone", () => {
       buildFailure: null,
       deployBeforeRun: null,
       stopped: null,
+      airdrops: 0,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     render(<Stepper state={noProgram} onSelect={vi.fn()} phone />);
     expect(
@@ -243,8 +249,10 @@ describe("phone", () => {
       buildFailure: null,
       deployBeforeRun: null,
       stopped: null,
+      airdrops: 0,
       /* eslint-enable unicorn/no-null */
       hasProgram: false,
+      sourceChanged: false,
     };
     rerender(<Stepper state={noProgram} onSelect={vi.fn()} phone />);
     // The window widens past the phone breakpoint with the stepper mounted

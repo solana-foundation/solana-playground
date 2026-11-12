@@ -76,7 +76,7 @@ test("client-v2-files: A signed-out scratch project", async ({
   ).toBeVisible();
   await expect(
     dialog.getByText(
-      "Its files and its program keypair are deleted from this browser."
+      "Its files, its program keypair and its assistant chat are deleted from this browser."
     )
   ).toBeVisible();
   await expect(dialog.getByText(/your account/)).toHaveCount(0);

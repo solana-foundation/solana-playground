@@ -13,22 +13,22 @@ import {
 } from "react";
 
 import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
+import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
+import { Icon } from "@/shared/ui/icon";
 
 import Dnd, { DragEndEvent, DragStartEvent } from "../../../../components/Dnd";
-import {
-  Plus,
-  Rocket,
-  ShortArrow,
-  TestTube,
-  Triangle,
-  Wrench,
-} from "../../../../components/Icons";
 import LangIcon from "../../../../components/LangIcon";
 import { useKeybind } from "../../../../hooks";
-import { PgCommon, PgExplorer, PgTheme, PgView } from "../../../../utils";
+import {
+  ExplorerLimitError,
+  PgCommon,
+  PgExplorer,
+  PgTheme,
+  PgView,
+} from "../../../../utils";
 import ExplorerButtons from "./ExplorerButtons";
 import { ExplorerContextMenu } from "./ExplorerContextMenu";
 import { ReplaceItem } from "./Modals";
@@ -74,6 +74,7 @@ const SECTION_TOP_CLASSES =
 
 const SECTION_HEADER_CLASSES =
   "text-[0.7rem] font-semibold tracking-[0.1em] uppercase";
+const log = createLogger("explorer:folders");
 
 const Folders = () => {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -124,7 +125,7 @@ const Folders = () => {
                     onClick={ctxMenu.runBuild}
                     failureAction="build"
                     disabled={ctxMenu.buildLoading}
-                    icon={<Wrench />}
+                    icon={<Icon name="build" />}
                   >
                     Build
                   </SectionButton>
@@ -132,7 +133,7 @@ const Folders = () => {
                     onClick={ctxMenu.runDeploy}
                     failureAction="deploy"
                     disabled={ctxMenu.deployState !== "ready"}
-                    icon={<Rocket />}
+                    icon={<Icon name="deploy" />}
                   >
                     Deploy
                   </SectionButton>
@@ -141,7 +142,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.addProgram}
                   failureAction="add a program"
-                  icon={<Plus />}
+                  icon={<Icon name="add" />}
                 >
                   Add
                 </SectionButton>
@@ -161,7 +162,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.runClientFolder}
                   failureAction="run the client"
-                  icon={<Triangle rotate="90deg" />}
+                  icon={<Icon name="run" />}
                   title="Run All (in client dir)"
                 >
                   Run
@@ -170,7 +171,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.addClient}
                   failureAction="add a client"
-                  icon={<Plus />}
+                  icon={<Icon name="add" />}
                 >
                   Add client
                 </SectionButton>
@@ -180,7 +181,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.runTestFolder}
                   failureAction="run the tests"
-                  icon={<TestTube />}
+                  icon={<Icon name="test" />}
                   title="Test All (in tests dir)"
                 >
                   Test
@@ -189,7 +190,7 @@ const Folders = () => {
                 <SectionButton
                   onClick={ctxMenu.addTests}
                   failureAction="add tests"
-                  icon={<Plus />}
+                  icon={<Icon name="add" />}
                 >
                   Add tests
                 </SectionButton>
@@ -265,12 +266,26 @@ const ExplorerDndContext: FC<React.PropsWithChildren<unknown>> = ({
       await PgExplorer.renameItem(fromPath, newPath, {
         skipNameValidation: true,
       });
-    } catch (e: any) {
-      if (e.message === PgExplorer.errors.ALREADY_EXISTS) {
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "";
+      if (message === PgExplorer.errors.ALREADY_EXISTS) {
         await PgView.setModal(
           <ReplaceItem fromPath={fromPath} toPath={newPath} />
         );
+        return;
       }
+      // A limit or another refusal of the explorer's own: a drop has no
+      // dialog to show it in. Anything else was not expected.
+      if (
+        e instanceof ExplorerLimitError ||
+        Object.values(PgExplorer.errors).includes(message)
+      ) {
+        PgView.setToast(() => <span>{message}</span>, {
+          options: { name: "explorer-move-refused" },
+        });
+        return;
+      }
+      log.error(e, { report: true, context: { action: "move" } });
     }
   }, []);
 
@@ -457,16 +472,18 @@ const Folder = forwardRef<HTMLDivElement, FolderProps>(
       ref={ref}
       data-path={path}
       className={cn(
-        // The chevron: sized and turned from the row, as `ShortArrow` takes
-        // no class
-        "[&_svg]:size-[0.875rem] [&_svg]:[transition:transform_50ms_linear]",
+        // The chevron turns from the row, which knows whether it is open
+        "[&_svg]:[transition:transform_50ms_linear]",
         "[&.open_svg]:[transform:rotate(90deg)]",
         className
       )}
       {...props}
     >
       <div className="h-full" style={{ width: indentOf(depth) }} />
-      <ShortArrow color="textSecondary" />
+      <Icon
+        name="chevron-right"
+        className="size-4 text-[color:var(--text-secondary)]"
+      />
       <span className="ml-2 text-[color:var(--text-secondary)]">{name}</span>
     </div>
   )

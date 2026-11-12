@@ -6,6 +6,5 @@ import tutorialsIcon from "../icons/tutorials.svg";
 export const tutorials = createSidebarPage({
   name: "Tutorials",
   icon: tutorialsIcon,
-  keybind: "Ctrl+Shift+X",
   route: "/tutorials",
 });

@@ -282,10 +282,6 @@
   font: inherit;
 }
 
-.pg-markdown a:hover {
-  text-decoration: underline;
-}
-
 .pg-markdown hr:before {
   content: "";
   display: table;
@@ -920,7 +916,12 @@
   padding: 16px;
   font-size: 85%;
   line-height: 1.45;
-  overflow: auto;
+  /* Always keep room for the horizontal scrollbar. Without it, the bar comes
+   * in once a streamed line outgrows the block and moves the reply below
+   * (HOO-2694). Set here because this unlayered rule beats CodeBlock's
+   * Tailwind classes. */
+  overflow-x: scroll;
+  overflow-y: hidden;
 }
 
 .pg-markdown pre code,
@@ -1052,4 +1053,11 @@
 .pg-markdown.pg-markdown-code-font {
   font-family: var(--pg-font-code, var(--font-code)) !important;
   font-size: 0.8125rem !important;
+}
+
+/* Take the font and the text color from the parent, so the text reads as the
+   prose around it does (the tutorial feed's assistant turns) */
+.pg-markdown.pg-markdown-inherit-font {
+  font: inherit;
+  color: inherit;
 }

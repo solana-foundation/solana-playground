@@ -1,6 +1,7 @@
 import {
   ArrowUpRight,
   BookOpen,
+  HandCoins,
   LogOut,
   Settings,
   TriangleAlert,
@@ -100,7 +101,7 @@ const SessionItems = ({
     const { user } = session;
     return (
       <>
-        <DropdownMenuLabel className="flex items-center gap-2 font-normal">
+        <DropdownMenuLabel className="flex items-center gap-2 font-read">
           <AccountAvatar
             image={user.image}
             sending={false}
@@ -146,7 +147,7 @@ const SessionItems = ({
   if (session.status === "pending") {
     return (
       <>
-        <DropdownMenuLabel className="font-normal text-muted-foreground">
+        <DropdownMenuLabel className="font-read text-muted-foreground">
           Waiting for GitHub…
         </DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => onPick("cancel-sign-in")}>
@@ -161,7 +162,7 @@ const SessionItems = ({
   return (
     <>
       {failure && (
-        <DropdownMenuLabel className="font-normal text-destructive">
+        <DropdownMenuLabel className="font-read text-destructive">
           {failure}
         </DropdownMenuLabel>
       )}
@@ -178,16 +179,22 @@ const SessionItems = ({
   );
 };
 
-/** Spec 02's words on the sign-in item: off while offline, a retry after a failure */
+/**
+ * Spec 02's words on the sign-in item: off while offline, a retry after a
+ * failure; Almaz's "Sign in again" after a session ended
+ */
 const signInLabel = (account: AccountView) => {
   if (!account.online) return "You're offline";
   if (failureOf(account)) return "Try again";
+  if (account.session.status === "expired") return "Sign in again";
   return "Sign in with GitHub";
 };
 
-/** Whether the page's foot offers signing in: signed out, no sign-in under way */
+/** Whether the page's foot offers signing in: nobody signed in, no sign-in under way */
 const signsIn = (account: AccountView) =>
-  account.session.status === "idle" || account.session.status === "failed";
+  account.session.status === "idle" ||
+  account.session.status === "expired" ||
+  account.session.status === "failed";
 
 /**
  * The sign-out question, in place of the menu's items (Spec 02, "Sign-out
@@ -356,9 +363,11 @@ const BaseAccountMenu = ({
         <SessionItems account={account} onPick={pick} page={page} />
         {/* Signed out, a page's sign-in is its foot: nothing to rule off,
           unless a failure is said above */}
-        {!(page && account.session.status === "idle") && (
-          <DropdownMenuSeparator />
-        )}
+        {!(
+          page &&
+          (account.session.status === "idle" ||
+            account.session.status === "expired")
+        ) && <DropdownMenuSeparator />}
         <DropdownMenuItem
           {...settingsTrigger}
           onSelect={() => pick("settings")}
@@ -383,8 +392,14 @@ const BaseAccountMenu = ({
           <>
             <DropdownMenuItem onSelect={() => pick("wallet")}>
               <Wallet />
-              <span className="font-mono">{shortAddress(wallet.address)}</span>
-              <span className="ml-auto text-success">
+              {/* One line each: the address gives way, the balance never wraps */}
+              <span
+                className="min-w-0 truncate font-mono"
+                title={wallet.address}
+              >
+                {shortAddress(wallet.address)}
+              </span>
+              <span className="ml-auto shrink-0 whitespace-nowrap text-success">
                 {formatBalance(wallet.balance)}
               </span>
             </DropdownMenuItem>
@@ -395,6 +410,11 @@ const BaseAccountMenu = ({
         ) : (
           <DropdownMenuItem onSelect={() => pick("connect-wallet")}>
             <Wallet /> Connect wallet
+          </DropdownMenuItem>
+        )}
+        {account.canFund && (
+          <DropdownMenuItem onSelect={() => pick("fund-wallet")}>
+            <HandCoins /> Fund from a wallet…
           </DropdownMenuItem>
         )}
       </>

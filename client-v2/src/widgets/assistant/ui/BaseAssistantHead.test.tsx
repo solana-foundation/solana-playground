@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,6 +13,7 @@ import { BaseAssistantHead } from "./BaseAssistantHead";
 interface HeadChoice {
   wide?: boolean;
   canWiden?: boolean;
+  side?: "left" | "right";
   /** What the caller's `focusPicked` does; takes focus by default */
   focusPicked?: () => boolean;
   deleteKey?: DeleteKey;
@@ -64,6 +65,7 @@ const setup = (choice: HeadChoice = {}) => {
         onWiden={onWiden}
         onHide={onHide}
         canWiden={choice.canWiden ?? true}
+        side={choice.side ?? "left"}
         deleteKey={choice.deleteKey ?? "none"}
         onDeleteKey={onDeleteKey}
       />
@@ -294,6 +296,19 @@ describe("BaseAssistantHead", () => {
     expect(screen.queryByRole("button", { name: /Widen|Narrow/ })).toBeNull();
   });
 
+  it("points Collapse at the edge the assistant goes to", () => {
+    setup();
+    const icon = () =>
+      screen
+        .getByRole("button", { name: "Collapse assistant" })
+        .querySelector("svg")
+        ?.getAttribute("class");
+    expect(icon()).toContain("lucide-panel-left-close");
+    cleanup();
+    setup({ side: "right" });
+    expect(icon()).toContain("lucide-panel-right-close");
+  });
+
   it("hides as Collapse assistant", async () => {
     const { user, onHide } = setup();
     await user.click(
@@ -311,6 +326,13 @@ it("is the frame's 44 px column bar", () => {
   );
   expect(head.className).toMatch(/\bh-11\b/);
   expect(head.className).toMatch(/\bborder-b\b/);
+});
+
+it("keeps its icon buttons 44 px on a phone", () => {
+  setup();
+  expect(
+    screen.getByRole("button", { name: "Collapse assistant" }).className
+  ).toContain("max-md:size-11");
 });
 
 describe("BaseAssistantHead, the off status", () => {

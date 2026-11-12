@@ -1,18 +1,22 @@
 import type { FC } from "react";
 import { useEffect, useReducer, useState } from "react";
 
+import { useSetStatic } from "../../../hooks/useSetStatic";
+import { useViewport } from "../../../shared/lib/hooks/use-viewport";
 import { createLogger } from "../../../shared/lib/logger";
 import {
   PgCommandManager,
   PgCommon,
   PgExplorer,
   PgTerminal,
+  PgView,
 } from "../../../utils";
 import { CONSOLE_KEY, keyLabel } from "../../../widgets/layout-shell";
 import Terminal from "../../main/secondary/terminal/Component/Terminal";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { PgFlow } from "../state/stage";
 import BaseConsoleDrawer from "./BaseConsoleDrawer";
+import type { ConsoleStatus } from "./status";
 import {
   describeConsoleStatus,
   runToStop,
@@ -24,6 +28,11 @@ const log = createLogger("flow:console");
 interface ConsoleDrawerProps {
   open: boolean;
   onToggle: () => void;
+  /**
+   * A tutorial's own bar (`widgets/tutorial-workspace`): its status line in
+   * place of the dev loop's, no label, and a line before anything ran
+   */
+  tutorial?: { status: ConsoleStatus; empty: string | null };
 }
 
 /**
@@ -56,7 +65,12 @@ const useElapsed = (isRunning: boolean, startedAt: number | null) => {
  * the xterm buffer (scrollback, running process) survives while it is
  * closed.
  */
-const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
+const ConsoleDrawer: FC<ConsoleDrawerProps> = ({
+  open,
+  onToggle,
+  tutorial,
+}) => {
+  const viewport = useViewport();
   const [flow, setFlow] = useState(() => PgFlow.state);
   // `PgBuildOutput` fills in slightly after the `build-finish` event that
   // sets `flow.build`, and it carries the diagnostic code a failed status
@@ -92,6 +106,9 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
   const status = hasClientRun ? withoutClientRunHint(described) : described;
   const stop = runToStop(flow);
 
+  const [progress, setProgress] = useState(0);
+  useSetStatic(PgView.events.MAIN_SECONDARY_PROGRESS_SET, setProgress);
+
   // What `PgTerminal.process` needs to know whether a failure it printed
   // was seen
   useEffect(() => {
@@ -99,10 +116,35 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
     return () => PgTerminal.setConsoleOpen(false);
   }, [open]);
 
+  // Copy takes the log as it is when the console opens and again whenever a
+  // run's stage moves: a deploy opens the console before it has printed, and
+  // the run's whole text lands only as it ends
+  // TODO(intake: interface-2 carry review, PR 379): output a client Run or a typed
+  // command prints after the status settles is not re-read; reading at the
+  // click needs a value getter on the design system's CopyButton
+  const [logText, setLogText] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    PgTerminal.get()
+      .then((term) => {
+        if (live) setLogText(term.getText());
+      })
+      .catch((error: unknown) =>
+        log.error(error, { context: { action: "read the log for Copy" } })
+      );
+    return () => {
+      live = false;
+    };
+  }, [open, flow.build, flow.deploy]);
+
   const clear = () => {
-    PgTerminal.clear().catch((error: unknown) =>
-      log.error(error, { report: true, context: { action: "clear" } })
-    );
+    PgTerminal.clear()
+      // A cleared log has nothing left to copy
+      .then(() => setLogText(""))
+      .catch((error: unknown) =>
+        log.error(error, { report: true, context: { action: "clear" } })
+      );
   };
 
   return (
@@ -112,9 +154,18 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
       onOpenChange={(next) => {
         if (next !== open) onToggle();
       }}
-      status={status}
-      shortcut={keyLabel(CONSOLE_KEY, PgCommon.getOS())}
+      status={tutorial?.status ?? status}
+      progress={progress}
+      bare={tutorial !== undefined}
+      empty={tutorial?.empty}
+      // A tutorial below the frame's width is the phone's: no key hints
+      shortcut={
+        tutorial && viewport !== "wide"
+          ? undefined
+          : keyLabel(CONSOLE_KEY, PgCommon.getOS())
+      }
       onClear={clear}
+      log={logText}
       stop={stop && { run: stop, onStop: () => PgCommandManager.stop() }}
     >
       <Terminal />

@@ -1,0 +1,528 @@
+{
+  "$schema": "../tutorial.schema.json",
+  "version": 1,
+  "name": "Zero Copy",
+  "description": "Make accounts bigger than a program's memory",
+  "authors": [
+    {
+      "name": "Jonas Hahn",
+      "link": "https://twitter.com/solplay_jonas"
+    }
+  ],
+  "level": "Advanced",
+  "framework": "Anchor",
+  "languages": ["Rust"],
+  "thumbnail": "thumbnail.jpg",
+  "minutes": 12,
+  "intro": {
+    "promise": "You'll grow a game's map past the memory limits a program has: 10 KB to create an account, 32 KB of heap. Then you'll grow a map past the heap without copying it.",
+    "log": "Program log: Painted 2 bytes at 35000",
+    "files": {
+      "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n\n    pub fn init_big_map(_ctx: Context<InitBigMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow_big(_ctx: Context<GrowBig>, len: u32) -> Result<()> {\n        msg!(\"The big map is {} bytes\", len);\n        Ok(())\n    }\n\n    pub fn paint(ctx: Context<Paint>, text: String, at: u32) -> Result<()> {\n        let mut map = ctx.accounts.big_map.load_mut()?;\n        let at = at as usize;\n        map.tiles[at..at + text.len()].copy_from_slice(text.as_bytes());\n        msg!(\"Painted {} bytes at {}\", text.len(), at);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n\n#[derive(Accounts)]\npub struct InitBigMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct GrowBig<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Paint<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    pub signer: Signer<'info>,\n}\n\n#[account(zero_copy(unsafe))]\n#[repr(C)]\npub struct BigMap {\n    pub tiles: [u8; 40952],\n}\n"
+    }
+  },
+  "steps": [
+    {
+      "id": "create",
+      "title": "Create a map",
+      "short": "Create",
+      "objective": "Write a map account as big as one instruction can create",
+      "learned": "The 10 KB limit on creating an account",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": ""
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+      },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"zero_copy\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"init_map\",\"discriminator\":[163,12,151,71,84,91,171,218],\"accounts\":[{\"name\":\"map\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[109,97,112]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[]}],\"accounts\":[{\"name\":\"Map\",\"discriminator\":[182,30,142,151,42,241,180,244]}],\"types\":[{\"name\":\"Map\",\"type\":{\"kind\":\"struct\",\"fields\":[{\"name\":\"tiles\",\"type\":\"bytes\"}]}}]}",
+      "beats": [
+        {
+          "kind": "write",
+          "id": "s1.boil",
+          "text": "Same opening as every Anchor program: the import and the program's id.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n"
+          }
+        },
+        {
+          "kind": "say",
+          "id": "s1.why",
+          "text": "A program works inside fixed limits: 32 KB of heap, and a cap on how big an account can be made in one go. This lesson grows a map of a game world, one byte a tile, into both. `init` creates an account by calling the System Program, and that kind of call has a limit of its own."
+        },
+        {
+          "kind": "ask",
+          "id": "s1.q1",
+          "kicker": "Question",
+          "question": "What's the biggest map `init` can create?",
+          "options": [
+            "space = 40 * 1024,",
+            "space = 10 * 1024,",
+            "space = 10 * 1024 * 1024,"
+          ],
+          "code": true,
+          "answer": 1,
+          "right": "Yes, 10 KB. A call from one program into another can't create more than that. I've written `InitMap` with it.",
+          "why": [
+            "40 KB is fine for an account, just not in one go: `init` goes through a call into the System Program, and those stop at 10 KB.",
+            null,
+            "10 MB is the most an account can ever hold. It gets there 10 KB at a time."
+          ],
+          "hint": "`init` doesn't create the account itself: it asks the System Program to, from inside your program.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n"
+          },
+          "key": "space = 10 * 1024,",
+          "typed": "That's the limit, 10 KB. I've written `InitMap` with it."
+        },
+        {
+          "kind": "write",
+          "id": "s1.map",
+          "text": "The map keeps its tiles in a `Vec`, and Anchor reads it the way it reads every account: it copies the whole account into the heap. 10 KB is only the start, though: an account can grow after it's made, up to 10 KB more each instruction.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+          }
+        },
+        {
+          "kind": "write",
+          "id": "s1.fn",
+          "text": "And `init_map`. It does nothing itself: `InitMap` creates the map.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s1.build",
+          "act": "build",
+          "say": "That's a program that makes a 10 KB map. Let's build it.",
+          "title": "Build lib.rs",
+          "context": "Compiles lib.rs on Playground's build server",
+          "button": "Build"
+        }
+      ],
+      "goal": {
+        "kind": "build",
+        "instructions": ["init_map"]
+      },
+      "win": {
+        "id": "s1.win",
+        "headline": "Your map compiles",
+        "line": "Its IDL has one instruction, `init_map`, and one account type, `Map`."
+      },
+      "explain": "This step writes a map account as big as `init` can create in one instruction, 10 KB, and builds the program that creates it."
+    },
+    {
+      "id": "deploy",
+      "title": "Deploy and create",
+      "short": "Deploy",
+      "objective": "Put the program on devnet and create your map",
+      "learned": "Who pays rent for an account, and how much",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+      },
+      "readOnly": ["src/lib.rs"],
+      "beats": [
+        {
+          "kind": "act",
+          "id": "s2.airdrop",
+          "act": "airdrop",
+          "say": "A deploy pays in devnet SOL. Get some for your wallet first.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
+          "id": "s2.deploy",
+          "act": "deploy",
+          "say": "Deploy, and you can make the map.",
+          "title": "Deploy to devnet",
+          "context": "From your Playground wallet · free devnet SOL",
+          "button": "Deploy"
+        },
+        {
+          "kind": "ask",
+          "id": "s2.q2",
+          "kicker": "Question",
+          "question": "Who pays the rent for the map's 10 KB?",
+          "options": [
+            "Your wallet: `payer = signer`",
+            "The program, from its own balance",
+            "Nobody: accounts on devnet are free"
+          ],
+          "code": false,
+          "answer": 0,
+          "right": "Yes. `payer = signer` makes the wallet that signs the call pay the rent. For 10 KB that's about 0.053 SOL of devnet SOL.",
+          "why": [
+            null,
+            "A program holds no balance to spend. `payer` names an account that signs the call.",
+            "Devnet SOL is free to get, but rent is still paid in it, on every byte, as on mainnet."
+          ],
+          "hint": "Look at `InitMap`: which account does `payer` name?",
+          "skipped": "No problem. `payer = signer` makes your wallet pay the rent: about 0.053 SOL for 10 KB."
+        },
+        {
+          "kind": "act",
+          "id": "s2.create",
+          "act": "call",
+          "say": "Create your map, at the most one instruction can make.",
+          "title": "Create your map",
+          "context": "Sends `init_map` · about 0.053 SOL of rent",
+          "button": "Create",
+          "record": "Created your map · 10 KB",
+          "call": {
+            "instruction": "init_map"
+          },
+          "account": {
+            "kind": "memory",
+            "name": "map",
+            "capacity": 40960
+          }
+        }
+      ],
+      "goal": {
+        "kind": "call",
+        "instruction": "init_map",
+        "creates": "map"
+      },
+      "win": {
+        "id": "s2.win",
+        "headline": "Your map is on devnet",
+        "line": "10 KB, as much as one instruction can create, and your wallet paid its rent.",
+        "callPanelLine": "You created the map from the Call panel, which Playground built from the IDL.",
+        "existsLine": "Your map was already on devnet: this wallet ran this step before. Anchor's `init` creates an account only once, so `init_map` can't make it again. The next step works on the map you have."
+      },
+      "explain": "This step puts the program on devnet and calls `init_map`, which creates your 10 KB map at an address derived from your wallet. Your wallet pays the rent."
+    },
+    {
+      "id": "grow",
+      "title": "Grow past the heap",
+      "short": "Grow",
+      "objective": "Grow the map until the heap can't hold a copy",
+      "learned": "realloc, and the 32 KB heap",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+      },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"zero_copy\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"grow\",\"discriminator\":[1,21,159,221,109,244,39,40],\"accounts\":[{\"name\":\"map\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[109,97,112]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[{\"name\":\"len\",\"type\":\"u32\"}]},{\"name\":\"init_map\",\"discriminator\":[163,12,151,71,84,91,171,218],\"accounts\":[{\"name\":\"map\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[109,97,112]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[]}],\"accounts\":[{\"name\":\"Map\",\"discriminator\":[182,30,142,151,42,241,180,244]}],\"types\":[{\"name\":\"Map\",\"type\":{\"kind\":\"struct\",\"fields\":[{\"name\":\"tiles\",\"type\":\"bytes\"}]}}]}",
+      "beats": [
+        {
+          "kind": "ask",
+          "id": "s3.q3",
+          "kicker": "Question",
+          "question": "Which constraint grows `map` to `len` bytes?",
+          "options": [
+            "space = len as usize,",
+            "realloc = len as usize,",
+            "init_if_needed,"
+          ],
+          "code": true,
+          "answer": 1,
+          "right": "Right. `realloc` resizes an account that's already there; `realloc::payer` pays the rent for the new bytes and `realloc::zero` clears them. I've written `Grow` around it, with the map's `seeds`, so only you can grow your map.",
+          "why": [
+            "`space` only counts when the account is created. The map will already exist.",
+            null,
+            "That creates the account if it's missing. The map will be there; it needs more room."
+          ],
+          "hint": "By the time it grows, the map exists. Which constraint changes the size of one that does?",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+          },
+          "key": "realloc = len as usize,",
+          "typed": "That's the one. I've written the rest of `Grow` around it: who pays, that new bytes start at zero, and the map's `seeds`, so only you can grow your map."
+        },
+        {
+          "kind": "write",
+          "id": "s3.fn",
+          "text": "And `grow`. It fills the `Vec` out to the new size, so the map uses every byte it has. To do that, Anchor first copies the whole map into the heap.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s3.airdrop",
+          "act": "airdrop",
+          "say": "Putting `grow` on devnet is an upgrade, and it pays in devnet SOL. Top the wallet up if it runs short.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
+          "id": "s3.ship",
+          "act": "buildDeploy",
+          "say": "Build and deploy, so the program on devnet has `grow`.",
+          "title": "Build and deploy",
+          "context": "Upgrades {program} in place · from your wallet",
+          "button": "Build and deploy"
+        },
+        {
+          "kind": "act",
+          "id": "s3.grow",
+          "act": "call",
+          "say": "Now grow it, 10 KB a press. Watch the heap.",
+          "title": "Grow the map",
+          "context": "Sends `grow` with 10 KB more · about 0.052 SOL more rent",
+          "button": "Grow +10 KB",
+          "record": "Grew",
+          "call": {
+            "instruction": "grow",
+            "args": [
+              {
+                "name": "len",
+                "value": 20480,
+                "add": 10240
+              }
+            ]
+          },
+          "repeat": {
+            "label": "Grow until out of memory"
+          },
+          "account": {
+            "kind": "memory",
+            "name": "map",
+            "capacity": 40960
+          }
+        }
+      ],
+      "goal": {
+        "kind": "refused",
+        "instruction": "grow",
+        "log": "out of memory"
+      },
+      "win": {
+        "id": "s3.win",
+        "headline": "Out of memory at 30 KB",
+        "line": "The account could grow. The program couldn't: `Account` copied the 20 KB map into the heap, and `resize` needed a 30 KB buffer beside it, more than the 32 KB heap holds.",
+        "callPanelLine": "You grew the map from the Call panel until the heap ran out."
+      },
+      "explain": "This step grows the map with `realloc`, 10 KB at a time. `Account` copies the map into the 32 KB heap before `grow` runs, so at 30 KB the copy and its grown buffer no longer fit."
+    },
+    {
+      "id": "zero-copy",
+      "title": "Zero copy",
+      "short": "Zero copy",
+      "objective": "Grow a map past the heap and write into it, with no copy",
+      "learned": "Zero copy accounts with AccountLoader",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n\n    pub fn init_big_map(_ctx: Context<InitBigMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow_big(_ctx: Context<GrowBig>, len: u32) -> Result<()> {\n        msg!(\"The big map is {} bytes\", len);\n        Ok(())\n    }\n\n    pub fn paint(ctx: Context<Paint>, text: String, at: u32) -> Result<()> {\n        let mut map = ctx.accounts.big_map.load_mut()?;\n        let at = at as usize;\n        map.tiles[at..at + text.len()].copy_from_slice(text.as_bytes());\n        msg!(\"Painted {} bytes at {}\", text.len(), at);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n\n#[derive(Accounts)]\npub struct InitBigMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct GrowBig<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Paint<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    pub signer: Signer<'info>,\n}\n\n#[account(zero_copy(unsafe))]\n#[repr(C)]\npub struct BigMap {\n    pub tiles: [u8; 40952],\n}\n"
+      },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"zero_copy\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"grow\",\"discriminator\":[1,21,159,221,109,244,39,40],\"accounts\":[{\"name\":\"map\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[109,97,112]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[{\"name\":\"len\",\"type\":\"u32\"}]},{\"name\":\"grow_big\",\"discriminator\":[4,68,41,224,125,123,120,242],\"accounts\":[{\"name\":\"big_map\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[98,105,103,95,109,97,112]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[{\"name\":\"len\",\"type\":\"u32\"}]},{\"name\":\"init_big_map\",\"discriminator\":[226,69,23,207,147,127,17,103],\"accounts\":[{\"name\":\"big_map\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[98,105,103,95,109,97,112]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[]},{\"name\":\"init_map\",\"discriminator\":[163,12,151,71,84,91,171,218],\"accounts\":[{\"name\":\"map\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[109,97,112]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[]},{\"name\":\"paint\",\"discriminator\":[43,67,254,42,131,222,81,241],\"accounts\":[{\"name\":\"big_map\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[98,105,103,95,109,97,112]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"signer\":true}],\"args\":[{\"name\":\"text\",\"type\":\"string\"},{\"name\":\"at\",\"type\":\"u32\"}]}],\"accounts\":[{\"name\":\"BigMap\",\"discriminator\":[201,16,71,87,8,196,230,71]},{\"name\":\"Map\",\"discriminator\":[182,30,142,151,42,241,180,244]}],\"types\":[{\"name\":\"BigMap\",\"serialization\":\"bytemuckunsafe\",\"repr\":{\"kind\":\"c\"},\"type\":{\"kind\":\"struct\",\"fields\":[{\"name\":\"tiles\",\"type\":{\"array\":[\"u8\",40952]}}]}},{\"name\":\"Map\",\"type\":{\"kind\":\"struct\",\"fields\":[{\"name\":\"tiles\",\"type\":\"bytes\"}]}}]}",
+      "beats": [
+        {
+          "kind": "say",
+          "id": "s4.why",
+          "text": "Zero copy reads the account where it is: the program gets a view of its bytes, and nothing is copied into the heap. In return the struct has a fixed size and layout, so no `Vec`. That's a new kind of account, so a new map."
+        },
+        {
+          "kind": "ask",
+          "id": "s4.q4",
+          "kicker": "Question",
+          "question": "Which line lets the program read `BigMap` in place?",
+          "options": [
+            "#[account(zero_copy(unsafe))]",
+            "#[derive(Clone, Copy)]",
+            "Box<Account<'info, BigMap>>"
+          ],
+          "code": true,
+          "answer": 0,
+          "right": "Yes. `zero_copy` lays the struct out as plain bytes and reads it in place; `unsafe` lets it take an array this long, and `#[repr(C)]` fixes the layout. 40,952 bytes of tiles, plus the 8 byte discriminator: 40 KB. I've written `BigMap`.",
+          "why": [
+            null,
+            "`Copy` makes copying cheap to write, not free: the account still comes in through Borsh, into the heap.",
+            "`Box` moves the copy to the heap, and at 40 KB the heap is too small for it."
+          ],
+          "hint": "You don't want a smaller copy. You want no copy.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[account(zero_copy(unsafe))]\n#[repr(C)]\npub struct BigMap {\n    pub tiles: [u8; 40952],\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n\n#[account(zero_copy(unsafe))]\n#[repr(C)]\npub struct BigMap {\n    pub tiles: [u8; 40952],\n}\n"
+          },
+          "typed": "That's the attribute. I've written `BigMap` under it: 40 KB with its discriminator."
+        },
+        {
+          "kind": "write",
+          "id": "s4.accounts",
+          "text": "A zero copy account comes in through `AccountLoader` instead of `Account`: the map's two, to create and grow, and one to write. Each checks the big map's `seeds`, so only you can change yours.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[derive(Accounts)]\npub struct InitBigMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct GrowBig<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Paint<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    pub signer: Signer<'info>,\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n\n#[derive(Accounts)]\npub struct InitBigMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct GrowBig<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Paint<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    pub signer: Signer<'info>,\n}\n\n#[account(zero_copy(unsafe))]\n#[repr(C)]\npub struct BigMap {\n    pub tiles: [u8; 40952],\n}\n"
+          }
+        },
+        {
+          "kind": "write",
+          "id": "s4.fns",
+          "text": "And the instructions. `paint` calls `load_mut` for a view of the bytes, and copies its text into one slice of them.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "    pub fn init_big_map(_ctx: Context<InitBigMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow_big(_ctx: Context<GrowBig>, len: u32) -> Result<()> {\n        msg!(\"The big map is {} bytes\", len);\n        Ok(())\n    }\n\n    pub fn paint(ctx: Context<Paint>, text: String, at: u32) -> Result<()> {\n        let mut map = ctx.accounts.big_map.load_mut()?;\n        let at = at as usize;\n        map.tiles[at..at + text.len()].copy_from_slice(text.as_bytes());\n        msg!(\"Painted {} bytes at {}\", text.len(), at);\n        Ok(())\n    }",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_map(_ctx: Context<InitMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow(ctx: Context<Grow>, len: u32) -> Result<()> {\n        let map = &mut ctx.accounts.map;\n        map.tiles.resize(len as usize - 12, 0);\n        msg!(\"The map is {} bytes\", len);\n        Ok(())\n    }\n\n    pub fn init_big_map(_ctx: Context<InitBigMap>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn grow_big(_ctx: Context<GrowBig>, len: u32) -> Result<()> {\n        msg!(\"The big map is {} bytes\", len);\n        Ok(())\n    }\n\n    pub fn paint(ctx: Context<Paint>, text: String, at: u32) -> Result<()> {\n        let mut map = ctx.accounts.big_map.load_mut()?;\n        let at = at as usize;\n        map.tiles[at..at + text.len()].copy_from_slice(text.as_bytes());\n        msg!(\"Painted {} bytes at {}\", text.len(), at);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct Grow<'info> {\n    #[account(\n        mut,\n        seeds = [b\"map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub map: Account<'info, Map>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Map {\n    pub tiles: Vec<u8>,\n}\n\n#[derive(Accounts)]\npub struct InitBigMap<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 10 * 1024,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\n#[instruction(len: u32)]\npub struct GrowBig<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n        realloc = len as usize,\n        realloc::payer = signer,\n        realloc::zero = true,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Paint<'info> {\n    #[account(\n        mut,\n        seeds = [b\"big_map\", signer.key().as_ref()],\n        bump,\n    )]\n    pub big_map: AccountLoader<'info, BigMap>,\n    pub signer: Signer<'info>,\n}\n\n#[account(zero_copy(unsafe))]\n#[repr(C)]\npub struct BigMap {\n    pub tiles: [u8; 40952],\n}\n"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s4.airdrop",
+          "act": "airdrop",
+          "say": "The zero copy map goes to devnet as an upgrade, paid in devnet SOL. Top the wallet up if it runs short.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
+          "id": "s4.ship",
+          "act": "buildDeploy",
+          "say": "Build and deploy the zero copy map.",
+          "title": "Build and deploy",
+          "context": "Upgrades {program} in place · from your wallet",
+          "button": "Build and deploy"
+        },
+        {
+          "kind": "act",
+          "id": "s4.create",
+          "act": "call",
+          "say": "Create the big map. Like the first one, it starts at 10 KB.",
+          "title": "Create the big map",
+          "context": "Sends `init_big_map` · about 0.053 SOL of rent",
+          "button": "Create",
+          "record": "Created the big map · 10 KB",
+          "call": {
+            "instruction": "init_big_map"
+          },
+          "account": {
+            "kind": "memory",
+            "name": "big_map",
+            "capacity": 40960,
+            "zero": true
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s4.grow",
+          "act": "call",
+          "say": "Now the same press as before, on the big map. Watch the heap this time.",
+          "title": "Grow the big map",
+          "context": "Sends `grow_big` with 10 KB more · about 0.052 SOL more rent",
+          "button": "Grow +10 KB",
+          "record": "Grew",
+          "call": {
+            "instruction": "grow_big",
+            "args": [
+              {
+                "name": "len",
+                "value": 20480,
+                "add": 10240
+              }
+            ]
+          },
+          "repeat": {
+            "label": "Grow to 40 KB",
+            "until": "is 40960 bytes"
+          },
+          "account": {
+            "kind": "memory",
+            "name": "big_map",
+            "capacity": 40960,
+            "zero": true
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s4.paint",
+          "act": "call",
+          "say": "40 KB, and the heap never held a byte of it. Now write into the map past the 32 KB mark, where no copy could ever reach.",
+          "title": "Paint at byte 35,000",
+          "context": "Sends `paint` with \"gm\" · `load_mut` writes in place",
+          "button": "Paint",
+          "record": "Painted \"gm\" at byte 35,000",
+          "call": {
+            "instruction": "paint",
+            "args": [
+              {
+                "name": "text",
+                "value": "gm"
+              },
+              {
+                "name": "at",
+                "value": 35000
+              }
+            ]
+          },
+          "account": {
+            "kind": "memory",
+            "name": "big_map",
+            "capacity": 40960,
+            "zero": true
+          }
+        }
+      ],
+      "goal": {
+        "kind": "call",
+        "instruction": "paint",
+        "log": "Painted \\d+ bytes at \\d+"
+      },
+      "win": {
+        "id": "s4.win",
+        "headline": "40 KB, read in place",
+        "line": "The map is bigger than the heap, and `paint` wrote into it without copying a byte of it. The same way goes up to 10 MB.",
+        "callPanelLine": "You painted the big map from the Call panel, past the 32 KB a copy could hold."
+      },
+      "explain": "This step makes a 40 KB map with zero copy: the program reads its bytes in place through `AccountLoader`, so growing it takes nothing from the heap, and `paint` writes past the 32 KB mark."
+    }
+  ],
+  "finish": {
+    "headline": "You read 40 KB without copying it",
+    "line": "Your big map is 40 KB on devnet, more than the heap holds, and `paint` wrote into it in place.",
+    "learned": [
+      "The 10 KB limit on creating an account",
+      "Who pays rent for an account, and how much",
+      "realloc, and the 32 KB heap",
+      "Zero copy accounts with AccountLoader"
+    ],
+    "chips": [
+      {
+        "label": "What is devnet SOL?",
+        "answer": "Devnet is Solana's public test network. Its SOL is free and worth nothing, so you can deploy and call as much as you like. You get it from the devnet faucet with one button; if the faucet is busy, get some yourself at faucet.solana.com."
+      }
+    ],
+    "next": null
+  },
+  "docs": [
+    {
+      "title": "Zero Copy",
+      "url": "https://www.anchor-lang.com/docs/features/zero-copy",
+      "file": "zero-copy.md"
+    },
+    {
+      "title": "Account Constraints",
+      "url": "https://www.anchor-lang.com/docs/references/account-constraints",
+      "file": "account-constraints.md"
+    }
+  ]
+}

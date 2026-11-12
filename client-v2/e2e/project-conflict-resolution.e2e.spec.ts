@@ -191,7 +191,8 @@ const looksOf = (pane: Locator, text: string) =>
       .filter((name) => name.startsWith("pg-merge-hunk-"));
   }, text);
 
-const banner = (page: Page) => page.getByText("changed on another device");
+const banner = (page: Page) =>
+  page.getByRole("alert").filter({ hasText: "Changed on another device" });
 
 /**
  * Every file this browser has stored whose text holds `marker`, read from
@@ -316,6 +317,41 @@ test("project-conflict-resolution: A same-line conflict offers Resolve", async (
   ]) {
     await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
   }
+
+  // The answers first, and one look whether the action waits on its click
+  // (Keep this version, an AsyncButton) or not (Resolve…)
+  const actions = page
+    .getByRole("alert")
+    .filter({ hasText: "changed on another device" })
+    .getByRole("button");
+  await expect(actions).toHaveText([
+    "Keep this version",
+    "Take the other version",
+    "Resolve…",
+  ]);
+  const look = (name: string) =>
+    page.getByRole("button", { name, exact: true }).evaluate((button) => {
+      const style = getComputedStyle(button);
+      return {
+        fill: style.backgroundColor,
+        border: style.borderTopWidth,
+        height: style.height,
+        weight: style.fontWeight,
+      };
+    });
+  expect(await look("Keep this version")).toEqual(await look("Resolve…"));
+  const hovered = async (name: string) => {
+    const button = page.getByRole("button", { name, exact: true });
+    await button.hover();
+    return button.evaluate(async (element) => {
+      await Promise.all(element.getAnimations().map((a) => a.finished));
+      return {
+        fill: getComputedStyle(element).backgroundColor,
+        text: getComputedStyle(element).color,
+      };
+    });
+  };
+  expect(await hovered("Keep this version")).toEqual(await hovered("Resolve…"));
 });
 
 test("project-conflict-resolution: Opening the view on a one-line conflict", async ({
@@ -749,11 +785,14 @@ const barGap = async (pane: Locator) => {
     .locator('[data-slot="merge-hunk-bar"]')
     .first()
     .boundingBox();
-  const bottom = await pane
-    .locator(".view-lines .view-line")
-    .evaluateAll((lines) =>
-      Math.max(...lines.map((line) => line.getBoundingClientRect().bottom))
-    );
+  // Not `evaluateAll`: over these lines it crashes Playwright 1.65's Firefox 159 content process
+  const bottom = await pane.evaluate((root) =>
+    Math.max(
+      ...Array.from(root.querySelectorAll(".view-lines .view-line")).map(
+        (line) => line.getBoundingClientRect().bottom
+      )
+    )
+  );
   return bar ? bar.y - bottom : null;
 };
 

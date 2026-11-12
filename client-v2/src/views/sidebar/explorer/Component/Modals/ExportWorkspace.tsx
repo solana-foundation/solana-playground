@@ -16,6 +16,7 @@ import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Icon } from "@/shared/ui/icon";
 import type { ModalPageProps } from "@/widgets/overlays";
 import {
   ModalFrame,
@@ -24,7 +25,6 @@ import {
   useModalId,
 } from "@/widgets/overlays";
 
-import { ExportFile } from "../../../../../components/Icons";
 import Markdown from "../../../../../components/Markdown";
 import { PgExplorer, PgFramework, PgView } from "../../../../../utils";
 
@@ -187,7 +187,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
             onError={reportButtonFailure("export the project")}
           >
             Convert and export
-            <ExportFile data-icon="inline-end" />
+            <Icon name="export" data-icon="inline-end" />
           </AsyncButton>
           <AsyncButton
             type="button"
@@ -196,7 +196,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
             onError={reportButtonFailure("export the project")}
           >
             Export without changes
-            <ExportFile data-icon="inline-end" />
+            <Icon name="export" data-icon="inline-end" />
           </AsyncButton>
         </div>
       </div>

@@ -1,67 +1,105 @@
-import { PLATFORM_RPC_URLS } from "../shared/config/client-env";
+// The model file, not the slice's entry: `settings/stored-endpoint.ts` loads this before everything else
+import type {
+  Cluster,
+  ClusterKey,
+  Clusters,
+} from "../entities/cluster/model/clusters";
+import {
+  clusterName,
+  CLUSTERS,
+  offeredOf,
+} from "../entities/cluster/model/clusters";
 
-/** RPC endpoint */
-export enum Endpoint {
-  PLAYNET = "http://playnet",
-  LOCALNET = "http://localhost:8899",
-  DEVNET = "https://api.devnet.solana.com",
-  TESTNET = "https://api.testnet.solana.com",
-  MAINNET_BETA = "https://api.mainnet-beta.solana.com",
-}
+export { clusterName, Endpoint } from "../entities/cluster/model/clusters";
 
-/** Cluster moniker a platform endpoint talks to */
-type PlatformCluster = "devnet" | "testnet" | "mainnet-beta";
+/** Our clusters, written lowercase mid-sentence: "Deploy to devnet" */
+const LOWERCASE_IN_SENTENCE = new Set(
+  Object.values(CLUSTERS)
+    .filter((c) => c.key === c.cluster)
+    .map(({ name }) => name.toLowerCase())
+);
 
-/** RPC endpoint the deployment provides in addition to {@link Endpoint} */
-export interface PlatformEndpoint {
-  name: string;
-  value: string;
-  cluster: PlatformCluster;
-}
+/** What prose calls the network while the cluster is unknown */
+export const UNKNOWN_NETWORK = "the network";
 
-/** Configured platform RPC URLs, keyed by cluster */
-interface PlatformRpcUrls {
-  devnet?: string;
-  testnet?: string;
-  mainnet?: string;
-}
-
-/** Build the platform endpoint list, dropping clusters that have no URL. */
-export const buildPlatformEndpoints = (
-  urls: PlatformRpcUrls
-): PlatformEndpoint[] => {
-  const candidates: ReadonlyArray<
-    [string | undefined, string, PlatformCluster]
-  > = [
-    [urls.devnet, "Devnet (Platform)", "devnet"],
-    [urls.testnet, "Testnet (Platform)", "testnet"],
-    [urls.mainnet, "Mainnet Beta (Platform)", "mainnet-beta"],
-  ];
-
-  // Skipping URLs already listed keeps the endpoint the unique identity of an
-  // option: a duplicate would collide on the React key and leave `aria-checked`
-  // true on two entries at once.
-  const seen = new Set<string>(Object.values(Endpoint));
-
-  // `!value` rather than a nullish check: sourcing an env file leaves unfilled
-  // keys as "".
-  return candidates.flatMap(([value, name, cluster]) => {
-    if (!value || seen.has(value)) return [];
-    seen.add(value);
-    return [{ name, value, cluster }];
-  });
+/**
+ * The network as a sentence names it: our clusters lowercase ("Not enough
+ * devnet SOL"), any other name as it is, `undefined` while the cluster
+ * is unknown, so a caller can drop the word ("Not enough SOL") rather than
+ * print "the network SOL". Standalone labels such as pickers and chips keep
+ * `clusterName`.
+ */
+export const networkInSentence = (
+  cluster: string | null | undefined
+): string | undefined => {
+  if (cluster === null || cluster === undefined) return undefined;
+  const name = clusterName(cluster);
+  const lower = name.toLowerCase();
+  return LOWERCASE_IN_SENTENCE.has(lower) ? lower : name;
 };
 
-/** Resolve the endpoint a fresh profile starts on. */
-export const resolveDefaultEndpoint = (platformDevnet?: string): string =>
-  // `||` not `??`: sourcing an env file leaves unfilled keys as "", which is
-  // not nullish and would win.
-  platformDevnet || Endpoint.DEVNET;
+/**
+ * The network's SOL in a sentence: "devnet SOL", or plain "SOL" while the
+ * network (`networkInSentence`'s answer) is unknown
+ */
+export const solOn = (network: string | undefined): string =>
+  network === undefined ? "SOL" : `${network} SOL`;
 
-/** Platform-provided RPC endpoints; empty when the deployment configures none. */
-export const PLATFORM_ENDPOINTS = buildPlatformEndpoints(PLATFORM_RPC_URLS);
+/** A network Settings offers: one of ours, named as the cluster */
+export interface Network {
+  /**
+   * What the network is stored under, unique among the networks: the
+   * cluster, except Surfpool's, which shares Localnet's cluster
+   */
+  key: ClusterKey;
+  name: string;
+  value: string;
+  cluster: Cluster;
+}
 
-/** Default RPC endpoint, preferring the platform's devnet over the public one. */
-export const DEFAULT_ENDPOINT = resolveDefaultEndpoint(
-  PLATFORM_RPC_URLS.devnet
-);
+/** The networks Settings offers, in its order, from the cluster table */
+export const networksOf = (clusters: Clusters): Network[] =>
+  offeredOf(clusters).map(({ key, name, url, cluster }) => ({
+    key,
+    name,
+    value: url,
+    cluster,
+  }));
+
+/** The networks Settings offers, Mainnet first; Devnet is the default */
+export const NETWORKS = networksOf(CLUSTERS);
+
+/** Default RPC endpoint: the offered Devnet */
+export const DEFAULT_ENDPOINT = CLUSTERS.devnet.url;
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("constants/connection", () => {
+    it("networkInSentence lowercases the cluster mid-sentence, other names as they are", () => {
+      expect(networkInSentence("devnet")).toBe("devnet");
+      expect(networkInSentence("mainnet-beta")).toBe("mainnet");
+      expect(networkInSentence("testnet")).toBe("testnet");
+      expect(networkInSentence("localnet")).toBe("localnet");
+      expect(networkInSentence("playnet")).toBe("playnet");
+      expect(networkInSentence("Surfpool")).toBe("Surfpool");
+      expect(networkInSentence(undefined)).toBeUndefined();
+    });
+
+    it("networkInSentence lowercases every cluster that has a name", () => {
+      for (const { key, cluster, name } of Object.values(CLUSTERS)) {
+        if (key !== cluster) continue;
+        expect(networkInSentence(cluster)).toBe(name.toLowerCase());
+      }
+    });
+
+    it("solOn names the network's SOL, or plain SOL while it is unknown", () => {
+      expect(solOn("devnet")).toBe("devnet SOL");
+      expect(solOn(undefined)).toBe("SOL");
+    });
+
+    it("UNKNOWN_NETWORK is what prose says while the cluster is unknown", () => {
+      expect(UNKNOWN_NETWORK).toBe("the network");
+    });
+  });
+}

@@ -60,12 +60,6 @@ Folding a panel SHALL hide it without discarding what it holds.
 - **THEN** the folder is still open, the current file is still selected and
   the tree is scrolled where it was
 
-#### Scenario: A lesson's column keeps its tab
-
-- **WHEN** a user in a lesson picks the Files tab, hides the column and
-  shows it again
-- **THEN** the Files tab is still selected
-
 #### Scenario: Folding the navigation
 
 - **WHEN** a user presses ⌘B with the navigation open, then again
@@ -421,9 +415,8 @@ The settings SHALL open as a page that takes the whole window, in place of
 the app, which SHALL stay loaded beneath it: the open file, the editor's
 content and the terminal's session SHALL be as they were when the user comes
 back. From 768 px wide the page SHALL show "Back to app" over a list of its
-sections (Network, Project, Block Explorer, Build, Connection, Editor,
-Notification, Server, Test UI, UI, Wallet, Experimental) beside the sections
-themselves; a click on a section in the list SHALL bring that section into
+nine sections (Network, Assistant, Editor, Build, Wallet, Appearance,
+Keyboard shortcuts, Project, Advanced) beside the sections themselves; a click on a section in the list SHALL bring that section into
 view and mark it as current. Below 768 px the page SHALL show a bar with
 "Back to app" and the title, and no list. Nothing of the app SHALL be drawn
 over the page: a menu, popover or tooltip open when it opens SHALL close.
@@ -439,7 +432,7 @@ the page.
 
 - **WHEN** a user on a 1280 px wide window opens the settings and clicks
   "Editor" in the section list
-- **THEN** the page lists the twelve sections, the Editor section comes into
+- **THEN** the page lists the nine sections, the Editor section comes into
   view, and "Editor" is marked as current
 
 #### Scenario: Nothing draws over the settings
@@ -507,7 +500,9 @@ the page.
 ### Requirement: The settings page is measured
 
 The product SHALL send `settings_opened` with where it was opened from
-(`cluster`, `rail`, `menu` or `key`), `settings_closed` with how it was
+(`cluster` for the status row's network indicator, `rail` for the rail's
+network dot, `menu` for the account menu, `key` for ⌘, and `stage` for a
+stage's own network action: the Deploy stage's Change and the stage notice), `settings_closed` with how it was
 closed (`back`, `escape`, `key`, or `import` when a project imported from
 the page closed it), and `settings_section_picked` with the
 section, each time a user picks one in the section list.
@@ -544,10 +539,12 @@ columns from 720 px and one below, each with an Open action. Opening a
 tutorial SHALL open it in the work; opening a program SHALL import it as a
 project and open it. A page SHALL close when one of its cards opens, when a
 tutorial's route opens, when New project, Home or a project in the project
-list is picked, when the product asks for the assistant over the work, and
-on nothing else the user did; a project open before
+list is picked (once that project is open), when the product asks for the
+assistant over the work, when Back or Forward goes to a path other than the
+page's own, and on nothing else the user did; a project open before
 the page SHALL come back as it was. The routes
-`/tutorials` and `/programs` SHALL open their page.
+`/new`, `/tutorials` and `/programs` SHALL open their page and stay in the
+address while it shows.
 
 #### Scenario: Finding a tutorial by search
 
@@ -703,11 +700,13 @@ shows with no project open.
 
 The navigation's Home item SHALL show Home while a project is open, and
 deleting the last project on `/` SHALL show Home; so SHALL a navigation back
-to `/` with no project open. A route other than `/` SHALL NOT show Home by
-itself (a lesson's route goes to `/` on its own when its project is
+to `/` with no project open. Home's own path, `/home`, SHALL show Home,
+over the open project when there is one. Any other route SHALL NOT show
+Home by itself (a lesson's route goes to `/` on its own when its project is
 deleted). The navigation's Home SHALL do nothing until the start is
 decided, and a re-open of the project Home shows over (by sync) SHALL NOT
-leave Home. The address SHALL NOT change when Home shows. While a
+leave Home. The address SHALL follow Home as the requirement "Home, the
+pages and the work have their own addresses" says. While a
 project is open the editor and the console SHALL stay mounted under Home,
 so that going back to the project, by picking it in the navigation's list,
 by the phone's Continue, or by opening another project and coming back,
@@ -719,7 +718,7 @@ next project SHALL open in a filled editor.
 
 - **WHEN** a user with a project open types in the editor, clicks Home in
   the navigation, then picks the same project in the navigation's list
-- **THEN** Home shows with the address unchanged, then the editor shows the
+- **THEN** Home shows on `/home`, then the editor shows the
   same file with the cursor where it was, and undo removes the typing
 
 #### Scenario: Home from an open project on a phone
@@ -734,6 +733,45 @@ next project SHALL open in a filled editor.
 - **WHEN** a user deletes their only project
 - **THEN** Home shows and no gallery opens, and New project from Home opens
   the new project's default file in the editor
+
+### Requirement: Home, the pages and the work have their own addresses
+
+Home picked in the navigation SHALL show on `/home`, the New project,
+Tutorials and Programs pages on `/new`, `/tutorials` and `/programs`, and
+the work on its
+project's path: a tutorial's route at its saved page, or `/` for any other
+project. Each view the user picks SHALL add one history entry, so Back and
+Forward move between them and show what each address names. Home that
+shows on `/` by itself (the start with no project, the last project
+deleted, Back to `/` with nothing open) SHALL stay on `/`, and the work that
+replaces it there SHALL stay on `/` too. `/` itself SHALL go on resuming the
+project open last. A shared project (a docs link, a gist) SHALL keep its
+own address while Home or a page shows over it, since another route would
+drop its unsaved copy.
+
+#### Scenario: Home after a tutorial has Home's address
+
+- **WHEN** a user in a lesson picks Home in the navigation, then goes Back,
+  then Forward
+- **THEN** the address is `/home` with Home shown, then the lesson's route
+  with the lesson, then `/home` with Home again
+
+#### Scenario: Home's address survives a reload
+
+- **WHEN** a user on Home over a lesson reloads the page, then opens `/`
+- **THEN** Home shows on `/home` after the reload, and `/` resumes the lesson
+
+#### Scenario: Home over a docs link keeps the link
+
+- **WHEN** a user who opened a docs link picks Home, then Home again
+- **THEN** the address stays the link's, and the link's code is back in the
+  editor
+
+#### Scenario: A project picked over a page opens
+
+- **WHEN** a user in a lesson opens Programs and picks another project in
+  the navigation's list
+- **THEN** that project opens on its own address, not the lesson
 
 ### Requirement: Home is measured
 

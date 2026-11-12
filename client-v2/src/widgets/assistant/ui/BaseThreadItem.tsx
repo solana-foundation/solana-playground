@@ -1,8 +1,6 @@
 import { CheckIcon } from "lucide-react";
 
 import { isToolCallRecord } from "@/features/persistence";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { AsyncButton } from "@/shared/ui/async-button";
 import { Bubble, BubbleContent } from "@/shared/ui/bubble";
 import { Button } from "@/shared/ui/button";
 import {
@@ -20,30 +18,15 @@ import type { ApprovalAnswer } from "./BaseApprovalCard";
 import { BaseApprovalCard } from "./BaseApprovalCard";
 
 /**
- * How "Make this change" is offered: as the reply's next step, or inside a
- * lesson as a way out, since there the same click skips the hint ladder
- */
-export type MakeChangeMode = "next" | "lastResort";
-
-/**
  * The moves offered on a finished reply. Each is present only on the reply
- * that offers it; the thread decides which reply that is. A lesson offers
- * Build/Deploy and Skip one at a time, never together.
+ * that offers it; the thread decides which reply that is.
  */
 export type ReplyActions = {
   /**
    * Asks the assistant to turn what it just described into a patch, which
    * still arrives as an approval card
    */
-  makeChange?: { onClick: () => void; mode: MakeChangeMode };
-  /** Runs the action that can prove the current lesson step */
-  verifyStep?: {
-    onClick: () => void | Promise<unknown>;
-    stage: "build" | "deploy";
-    title: string;
-  };
-  /** The lesson's escape valve, recorded as a skip */
-  skipStep?: { onClick: () => void; title: string };
+  makeChange?: { onClick: () => void };
   /**
    * On an error whose provider refused the key: reopens Connect a model on
    * that backend for the key to be entered again
@@ -55,25 +38,6 @@ export type ReplyActions = {
    */
   useHosted?: () => void;
 };
-
-const MAKE_CHANGE: Record<
-  MakeChangeMode,
-  { label: string; title: string; variant: "outline" | "link" }
-> = {
-  next: {
-    label: "Make this change",
-    title: "Ask the assistant to write this change, for you to review",
-    variant: "outline",
-  },
-  lastResort: {
-    label: "Write it for me",
-    title:
-      "Skip the rest of the hints and have the assistant write it, for you to review",
-    variant: "link",
-  },
-};
-
-const VERIFY_LABEL = { build: "Build", deploy: "Deploy" } as const;
 
 /** Under a reply left unfinished: its request failed mid-stream, a switch of backend cut its turn, or a reload cut it short (`PgAssistant.isCutOff`) */
 const CUT_OFF = "This reply was cut off.";
@@ -206,12 +170,12 @@ export const BaseThreadItem = ({
     case "notice":
       return (
         <Callout role="status">
-          <CalloutDescription className="flex flex-wrap items-center justify-between gap-2">
-            {item.text}
-            {onRetry && (
+          <CalloutDescription>{item.text}</CalloutDescription>
+          {onRetry && (
+            <CalloutActions>
               <CalloutAction onClick={onRetry}>Try again</CalloutAction>
-            )}
-          </CalloutDescription>
+            </CalloutActions>
+          )}
         </Callout>
       );
 
@@ -228,50 +192,19 @@ export const BaseThreadItem = ({
 };
 
 const ReplyFooter = ({ actions }: { actions: ReplyActions }) => {
-  const { makeChange, verifyStep, skipStep } = actions;
-  if (!makeChange && !verifyStep && !skipStep) return null;
-  const change = makeChange && MAKE_CHANGE[makeChange.mode];
+  const { makeChange } = actions;
+  if (!makeChange) return null;
 
   return (
     <MessageFooter className="flex-wrap gap-2 px-0">
-      {makeChange && change && (
-        <Button
-          size="sm"
-          variant={change.variant}
-          title={change.title}
-          onClick={makeChange.onClick}
-        >
-          {change.label}
-        </Button>
-      )}
-      {verifyStep && (
-        <AsyncButton
-          size="sm"
-          title={verifyStep.title}
-          onClick={verifyStep.onClick}
-          onError={reportButtonFailure("check the step")}
-        >
-          {VERIFY_LABEL[verifyStep.stage]}
-        </AsyncButton>
-      )}
-      {skipStep && (
-        <Button
-          size="sm"
-          variant="link"
-          title={skipStep.title}
-          onClick={() => {
-            // A plain button has no `onError`; a throw from the lesson would
-            // otherwise reach no logger
-            try {
-              skipStep.onClick();
-            } catch (error) {
-              reportButtonFailure("skip the step")(error);
-            }
-          }}
-        >
-          Skip this step
-        </Button>
-      )}
+      <Button
+        size="sm"
+        variant="outline"
+        title="Ask the assistant to write this change, for you to review"
+        onClick={makeChange.onClick}
+      >
+        Make this change
+      </Button>
     </MessageFooter>
   );
 };

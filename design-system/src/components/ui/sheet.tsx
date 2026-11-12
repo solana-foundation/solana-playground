@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useReleaseFocus } from "@/hooks/use-release-focus"
 import { cn } from "@/lib/utils"
 import { Dialog as SheetPrimitive } from "radix-ui"
 
@@ -48,15 +49,18 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  ref,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
 }) {
+  const [releaseFocus] = useReleaseFocus(ref)
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
+        ref={releaseFocus}
         data-slot="sheet-content"
         data-side={side}
         className={cn(
@@ -114,7 +118,7 @@ function SheetTitle({
     <SheetPrimitive.Title
       data-slot="sheet-title"
       className={cn(
-        "font-heading text-base font-medium text-foreground",
+        "font-heading text-base font-headline text-foreground",
         className
       )}
       {...props}

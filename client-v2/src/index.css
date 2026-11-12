@@ -78,6 +78,214 @@
 }
 
 /*
+ * A tutorial's editor lines (`widgets/tutorial-workspace`, `model/lines.ts`),
+ * as Monaco decoration classes. The edge is an inset shadow because a
+ * decoration's line box has no border of its own. Written lines rest on a
+ * quiet edge; arriving ones flash green first, 40 ms apart
+ * (`pg-arrive-<n>`); the landing edge is dashed; an error is red with a wavy
+ * line under the token the compiler named. Under reduced motion every line
+ * shows at rest.
+ */
+.pg-line-written {
+  @apply shadow-[inset_2px_0_0_color-mix(in_oklab,var(--color-foreground)_25%,transparent)];
+}
+.pg-line-landing {
+  background-image: linear-gradient(
+    var(--color-border-strong) 50%,
+    transparent 50%
+  );
+  background-size: 2px 6px;
+  background-repeat: repeat-y;
+}
+.pg-line-error {
+  @apply bg-error/10 shadow-[inset_2px_0_0_var(--color-error)];
+}
+.pg-squiggle {
+  text-decoration: underline wavy var(--color-error) 1px;
+  text-underline-offset: 3px;
+  text-decoration-skip-ink: none;
+}
+.pg-landing-ghost,
+.pg-landing-zone {
+  @apply font-sans text-caption text-subtle select-none;
+}
+.pg-landing-ghost {
+  @apply pl-1;
+}
+.pg-landing-zone {
+  padding-left: 0.75rem;
+  background-image: linear-gradient(
+    var(--color-border-strong) 50%,
+    transparent 50%
+  );
+  background-size: 2px 6px;
+  background-repeat: repeat-y;
+}
+.pg-arrive {
+  animation: pg-arrive var(--duration-ground) var(--ease-out-value) both;
+}
+@keyframes pg-arrive {
+  from {
+    background-color: color-mix(
+      in oklab,
+      var(--color-success) 18%,
+      transparent
+    );
+  }
+}
+.pg-arrive-0 {
+  animation-delay: 0ms;
+}
+.pg-arrive-1 {
+  animation-delay: 40ms;
+}
+.pg-arrive-2 {
+  animation-delay: 80ms;
+}
+.pg-arrive-3 {
+  animation-delay: 120ms;
+}
+.pg-arrive-4 {
+  animation-delay: 160ms;
+}
+.pg-arrive-5 {
+  animation-delay: 200ms;
+}
+.pg-arrive-6 {
+  animation-delay: 240ms;
+}
+.pg-arrive-7 {
+  animation-delay: 280ms;
+}
+.pg-arrive-8 {
+  animation-delay: 320ms;
+}
+.pg-arrive-9 {
+  animation-delay: 360ms;
+}
+.pg-arrive-10 {
+  animation-delay: 400ms;
+}
+.pg-arrive-11 {
+  animation-delay: 440ms;
+}
+.pg-arrive-12 {
+  animation-delay: 480ms;
+}
+.pg-arrive-13 {
+  animation-delay: 520ms;
+}
+.pg-arrive-14 {
+  animation-delay: 560ms;
+}
+.pg-arrive-15 {
+  animation-delay: 600ms;
+}
+.pg-arrive-16 {
+  animation-delay: 640ms;
+}
+.pg-arrive-17 {
+  animation-delay: 680ms;
+}
+.pg-arrive-18 {
+  animation-delay: 720ms;
+}
+.pg-arrive-19 {
+  animation-delay: 760ms;
+}
+.pg-arrive-20 {
+  animation-delay: 800ms;
+}
+.pg-arrive-21 {
+  animation-delay: 840ms;
+}
+.pg-arrive-22 {
+  animation-delay: 880ms;
+}
+.pg-arrive-23 {
+  animation-delay: 920ms;
+}
+.pg-arrive-24 {
+  animation-delay: 960ms;
+}
+.pg-arrive-25 {
+  animation-delay: 1000ms;
+}
+.pg-arrive-26 {
+  animation-delay: 1040ms;
+}
+.pg-arrive-27 {
+  animation-delay: 1080ms;
+}
+.pg-arrive-28 {
+  animation-delay: 1120ms;
+}
+.pg-arrive-29 {
+  animation-delay: 1160ms;
+}
+.pg-arrive-30 {
+  animation-delay: 1200ms;
+}
+.pg-arrive-31 {
+  animation-delay: 1240ms;
+}
+.pg-arrive-32 {
+  animation-delay: 1280ms;
+}
+.pg-arrive-33 {
+  animation-delay: 1320ms;
+}
+.pg-arrive-34 {
+  animation-delay: 1360ms;
+}
+.pg-arrive-35 {
+  animation-delay: 1400ms;
+}
+.pg-arrive-36 {
+  animation-delay: 1440ms;
+}
+.pg-arrive-37 {
+  animation-delay: 1480ms;
+}
+.pg-arrive-38 {
+  animation-delay: 1520ms;
+}
+.pg-arrive-39 {
+  animation-delay: 1560ms;
+}
+.pg-editor-busy {
+  @apply opacity-60 transition-opacity duration-150;
+}
+/*
+ * A tutorial question's wrong pick shakes once, small, so it reads as "not
+ * that one" rather than as an error (`widgets/tutorial-conversation`,
+ * `BaseQuestionCard`).
+ */
+.pg-shake {
+  animation: pg-shake 260ms var(--ease-standard-value, ease-out);
+}
+@keyframes pg-shake {
+  20% {
+    transform: translateX(-3px);
+  }
+  45% {
+    transform: translateX(3px);
+  }
+  70% {
+    transform: translateX(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pg-arrive,
+  .pg-shake {
+    animation: none;
+  }
+  .pg-editor-busy {
+    transition: none;
+  }
+}
+
+/*
  * The legacy theme provider sets the code font on the app's root, so a
  * design-system element names the text font itself. Goes with the provider.
  */

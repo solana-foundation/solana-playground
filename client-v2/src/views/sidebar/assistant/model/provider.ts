@@ -52,6 +52,20 @@ const createReplies = () => {
   };
 };
 
+/** The mode's context as a system message, when a surface has set one */
+const modeContext = () => {
+  const mode = PgAssistant.mode;
+  if (!mode) return [];
+  try {
+    return [{ role: "system" as const, content: mode.context() }];
+  } catch (e) {
+    // A surface's context is a bug of that surface: the turn still runs,
+    // under its narrowed tools, without the context
+    log.error(e, { report: true, context: { mode: mode.name } });
+    return [];
+  }
+};
+
 /**
  * One conversation with any model provider, on `runTurn`. The history keeps the SDK's messages, so
  * tool calls and Gemini's thought signatures go back as sent; a failed turn leaves it unchanged.
@@ -96,6 +110,7 @@ export const createProvider = (
               role: "system",
               content: `Current project state:\n\n${describeProject()}`,
             },
+            ...modeContext(),
           ],
           // Built per turn, so MCP tools discovered since the last one are offered
           tools: supportsTools ? ai.toSdkTools(createTools()) : undefined,
@@ -137,6 +152,8 @@ export const createProvider = (
           });
         }
         if (refusal) {
+          // The status's AI indicator says so until the limit comes back
+          PgAssistant.markLimitReached(refusal.reason);
           // The conversation and the session stay: switching to a key-based
           // backend is how the user keeps going today
           agentTelemetry.track("agent_refused", {
@@ -186,6 +203,8 @@ export const createProvider = (
       }
 
       history = result.messages;
+      // A turn the hosted default answered means its limit has lifted
+      PgAssistant.limitLifted();
       if (result.reachedStepLimit) {
         throw new Error(
           `The model was still calling tools after ${MAX_STEPS} rounds. Stopped it.`

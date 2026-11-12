@@ -22,6 +22,8 @@ export interface Reporter {
   carried: boolean;
   init(config: ReporterConfig): void;
   capture(entry: LogEntry): void;
+  /** Keeps an entry as a breadcrumb, the trail later reports carry */
+  trail(entry: LogEntry): void;
   /** Resolves when the feedback is accepted; rejects when it is not delivered */
   sendFeedback(feedback: Feedback): Promise<void>;
 }

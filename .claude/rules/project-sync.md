@@ -51,14 +51,18 @@ when a session reads a file matching the `paths` in the frontmatter.
   questions; when both copies hold work, `reconcile` merges them and asks the
   user only about lines both changed. The mark is per account because a
   tutorial's id is derived from its name and so is identical across accounts.
-- **There is one in-browser migration: from the pre-sync layout to the
-  current one.** `PgWorkspace.migrate` (workspace ids) and
-  `PgThreadIndex._migrate` (thread files to `<threadId>.json` + index). No
-  intermediate format between #29 and now reached real users, so none gets
-  compatibility code: a sync mark `read` cannot parse is `null` ("never
-  agreed", merged against an empty base), yet still keeps its project out of
-  `pushNeverSynced` (`PgSyncMark.exists`). A future format change that ships
-  to users adds its own step; that step does not chain through dropped
+- **In-browser migration covers the pre-sync layout, plus one read of the
+  first sync client's mark.** `PgWorkspace.migrate` (workspace ids) and
+  `PgThreadIndex._migrate` (thread files to `<threadId>.json` + index). A
+  sync mark `read` cannot parse is `null` ("never agreed", merged against an
+  empty base), yet still keeps its project out of `pushNeverSynced`
+  (`PgSyncMark.exists`). One older shape is still read on purpose: the
+  whole-snapshot mark the first sync client wrote, which production browsers
+  hold. Where the row still stands at its `updatedAt`, reconcile rebuilds it
+  per file from the server's copy (`rebaseWholeSnapshotMark` in
+  `project-restore.ts`), so unpushed edits push and unpushed deletes stay
+  deleted instead of merging against nothing. A future format change that
+  ships to users adds its own step; that step does not chain through dropped
   formats.
 - **The sync mark holds a hash per file, and those hashes are the merge
   base.** `mark.files` is `path -> sha256` of what the server last accepted
@@ -106,7 +110,21 @@ when a session reads a file matching the `paths` in the frontmatter.
   The refresh goes through the explorer's editor-buffer seam
   (`registerEditorBuffers`), because Monaco reuses an existing model on
   re-open and Monaco's autosave would otherwise write the pre-merge text back.
-  Keystrokes typed during the merge are folded in with `merge3`.
+  Keystrokes typed during the merge are folded in with `merge3`. `_catchUp`
+  does it twice, before the re-open and after it: the editor registers its
+  buffers only once its lazy chunk and `initLanguages` are done, so under load
+  it can mount mid-sync, build its model from memory not yet re-read, and have
+  the re-open reuse it -- the pane kept the replaced file (HOO-2119). The
+  second pass also sets memory, which the re-open has already read.
+  `_catchUp` reads the store before skipping a file it thinks is level, never
+  assumes it: a merge awaits its upload, and an adopt its mark, between
+  writing the store and catching the buffer up, and a pending autosave fires
+  in that window with the old text. Assumed, the store kept that text
+  under a mark saying "merged", and the next reconcile uploaded it, reverting
+  the other device's lines on the account (HOO-2821). A file sync removed
+  is removed again, without a read first: discarding its model flushes the
+  pending autosave, and memory still lists the file, so the save writes it
+  back, and a failed read cannot tell that copy from no file.
 - **`dirty` is a hint, never a decision.** The `dirty` hint only lets
   reconcile skip re-hashing a project; `mark.files` + `name` decide whether
   anything is owed. Code decided on `dirty` twice, and was wrong both times: a
@@ -122,6 +140,23 @@ when a session reads a file matching the `paths` in the frontmatter.
   only files the snapshot deliberately carries were the only ones nothing ever
   scheduled an upload for. `PgFs.onDidWriteFile` exists for these three files;
   the sync effect filters `PgFs.onDidWriteFile` with `isSyncedWorkspaceFile`.
+- **A file under `/.config` is written with `writeConfigFile`**
+  (`utils/explorer/config-file.ts`), never a bare `PgFs.writeFile`.
+  lightning-fs saves its folder tree 500 ms after the last write, so a reload
+  inside that window loses a file just created: the chat thread, the thread
+  index, a sync mark, base or claim, the assistant's tool config, a deploy's
+  open-buffer record (HOO-2726).
+  `writeConfigFile` flushes the tree when its write creates the file, and only
+  then; a rename there goes through `renameConfigFile`, which flushes after it,
+  since a rename changes only the tree. A removal goes through
+  `removeConfigFile` or `removeConfigDir`, which flush after it: lightning-fs
+  deletes the content at once, so a reload before the save leaves a ghost
+  that exists, is listed and reads as `undefined`, and a ghost sync mark keeps
+  its project out of `pushNeverSynced`. The mock's `__reloadBeforeTreeSave`
+  drops what a flush has not saved, puts renamed files back and turns removed
+  ones into ghosts. One exception:
+  `PgExplorer._saveWorkspaces` writes `/.config/workspaces.json` itself and
+  flushes after every write.
 - **Never do filesystem work per filesystem write.** The dirty flag is written
   at most once per debounce window. Writing the flag per write put a read on
   the same lightning-fs queue as the writes that triggered it and made
@@ -136,9 +171,12 @@ when a session reads a file matching the `paths` in the frontmatter.
   `refreshing` flag stays as well: the flag drops a switch caused by the
   effect's own pass's re-open, so adopt -> re-open -> reconcile cannot repeat
   in a loop.
-- **`pushCurrent` refuses an empty snapshot.** The explorer clears its file
-  map before re-reading a workspace, so a push landing in that window would
-  upload nothing over whatever the server holds.
+- **`push` refuses an empty snapshot, whoever calls it.**
+  `replaceWorkspaceFiles` removes the directory before writing the taken copy
+  back, another tab can rename or delete it away, and an interrupted import
+  or replace can leave a registered workspace with no files in the
+  store; a push from that state (the editor's, reconcile's, or a banner's
+  `retry`) would upload nothing over whatever the server holds.
 - **`replaceWorkspaceFiles` preserves `.workspace/metadata.json`.** Which tabs
   are open is local state the snapshot deliberately excludes, so sync must not
   be what deletes `.workspace/metadata.json`. With no tabs there is no current
@@ -147,9 +185,10 @@ when a session reads a file matching the `paths` in the frontmatter.
   open file when the metadata names none, so re-reading a workspace always
   opens a file.
 - **Typing folded in by sync has its base kept at fold time.** A merge or an
-  adoption folds typing into the files it rewrote (`_catchUp`), then re-opens
-  the workspace. The sync effect then re-takes the shadow from that folded
-  copy, which no longer hashes to the mark. So `_adopt` and `_mergeWithServer`
+  adoption folds typing into the files it rewrote (`_catchUp`), before the
+  re-open or, for an editor that mounted meanwhile, after it. The sync effect
+  then re-takes the shadow from memory, which holds the folded copy and no
+  longer hashes to the mark. So `_adopt` and `_mergeWithServer`
   call `PgSyncBase.capture(..., from)` with what they wrote; without that
   capture the folded file had no base and the next exchange asked about the
   whole file. Tests that stub `switchWorkspace` (`captureWrites`) never fire
@@ -166,11 +205,34 @@ when a session reads a file matching the `paths` in the frontmatter.
   the user answers. A row that reads as 404 is raised as `deleted-elsewhere`
   (`PgProjectSync.read` returns `"gone"`), since both version answers would
   merge against nothing.
+- **No write may leave a project with no files.** A row with none reads back
+  as `snapshot: null`, which no device can merge with or take, so the server
+  refuses an empty `files` up front and a patch that empties the row inside
+  the transaction (`saveProject`, rolled back). The patch refusal is a 400
+  with `reason: "no-files"` (`NO_FILES_REASON`), never a 409; the browser
+  only meets it against a row emptied before the server checked, and answers
+  with its whole file set once (`_push`, `whole`).
+- **The account cap is the server's alone.** An account syncs at most
+  `ACCOUNT_LIMITS` projects and tutorials, counted apart: live rows of the
+  kind holding a synced file. `writeProject` counts only for a write that
+  makes a project count (a create, or a swap whose `had_files` is false),
+  after its writes, under a per-account `pg_advisory_xact_lock` taken in a
+  statement of its own so the count's snapshot starts after the wait. Over
+  the cap it is a 413 `too-many-projects`, which the client raises as a
+  `too-large` `Conflict` with the limit: no mark is written, so the project
+  stays local through reconcile and sign-out, and the outstanding question
+  stops its pushes until "Try again". The client never counts and the
+  explorer never refuses a project for the cap.
+- **`/api/projects` still takes the pre-hoodieshq/solana-playground#40 client's body.** A tab open
+  across that deploy sends `{snapshot: {files}, baseUpdatedAt, force: false}`
+  and drops every status but 409 and 413 silently, so `describeWrite` reads
+  `snapshot` as `files`, `force: false` as absent, and answers `force: true`
+  with a 409. Both doors can go once no such tab can still be open.
 - **Only a visible tab pushes.** Tabs share IndexedDB but hold the _current_
   workspace in memory separately, so a backgrounded tab's snapshot goes stale.
   A tab flushes on `visibilitychange` -> `hidden` (not `beforeunload`, which is
-  too late, and not `keepalive`, which caps at ~64 KB against an 8 MB limit)
-  and reconciles before it may push again.
+  too late, and not `keepalive`, which caps at ~64 KB against a 1 MiB body
+  limit) and reconciles before it may push again.
 - **Tabs agree through the store and one Web Lock.** Uploads are built from
   disk (`snapshotOf`), never from a tab's memory, which can be behind another
   tab's write. Reconcile passes, pushes, merges, adopts and banner answers all
@@ -187,6 +249,14 @@ when a session reads a file matching the `paths` in the frontmatter.
   `kp` into an account copy whose `kp` is null or absent. The mark keeps the
   _server's_ hash, so the keypair reads as a local change and the next push
   uploads it. If both sides have a `kp`, the account's still wins.
+- **A session that ended keeps its marks, and nothing else.** A session read that
+  finds nobody, with no accepted sign-out, sets `PgSession.expiredUser`. `PgSyncMark`
+  falls back to that id, so `markDirty` still flags an edit made meanwhile: without
+  the flag, reconcile's cheap path skips the project on the next sign-in and the edit
+  waits for the next edit. `get()` stays `undefined`, so `_ready` keeps pushes and
+  reconcile off; `PgSyncBase` and `PgSyncClaim` read the signed-in id only, and
+  `settleLocalDeletes` stands down: a delete made meanwhile cannot reach the account,
+  so the project comes back on the next sign-in with its mark and chat. The chat effect leaves the thread open: closing it would cut a running turn.
 - **Persistence failures are reported, not swallowed.** `chat-storage`,
   `chat-sync`, `project-sync` and `project-restore` all catch, because a lost
   write must not take the panel down. Every failure still goes through

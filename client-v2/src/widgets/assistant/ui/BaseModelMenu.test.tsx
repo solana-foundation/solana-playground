@@ -196,6 +196,7 @@ describe("BaseModelMenu", () => {
     setup(shownLong);
     const trigger = screen.getByRole("button", { name: LONG });
     expect(trigger.className).toContain("max-w-48");
+    expect(trigger.className).toContain("max-md:h-12");
     expect(trigger.getAttribute("data-slot")).toBe("composer-model");
     const text = screen.getByText(LONG);
     expect(text.hasAttribute("data-overflow")).toBe(true);

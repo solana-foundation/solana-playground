@@ -155,7 +155,8 @@ export const BUILTIN_TOOLS = [
     name: "deploy",
     description:
       "Deploy the compiled program to the configured cluster. Requires the " +
-      "user's approval. Costs SOL and needs a funded wallet.",
+      "user's approval. Costs SOL from the connected wallet; when it holds " +
+      "too little, the terminal asks the user whether to request an airdrop.",
     schema: NO_ARGUMENTS,
     approval: true,
   },

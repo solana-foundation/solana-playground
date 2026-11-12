@@ -15,10 +15,6 @@ pub struct Config {
     pub payload_limit: usize,
     /// Whether logs should be verbose
     pub verbose: bool,
-    /// Database URI
-    pub db_uri: String,
-    /// Database name
-    pub db_name: String,
     /// Maximum amount of concurrent builds
     pub build_concurrency: usize,
     /// Unstable build configuration
@@ -37,7 +33,7 @@ impl Config {
         Ok(Config {
             client_urls: get_env::<String>(
                 "CLIENT_URLS",
-                "http://localhost,http://127.0.0.1,https://beta.solpg.io",
+                "http://localhost,http://127.0.0.1,https://beta.solpg.io,https://playground.solana.com,https://solana-playground-two.vercel.app",
             )
             .split(',')
             .map(str::trim)
@@ -46,8 +42,6 @@ impl Config {
             port: get_env("PORT", 8080u16),
             payload_limit: get_env("PAYLOAD_LIMIT", 1024usize * 1024),
             verbose: get_env("VERBOSE", false),
-            db_uri: get_env("DB_URI", "mongodb://localhost:27017"),
-            db_name: get_env("DB_NAME", "solpg"),
             build_concurrency: get_env("BUILD_CONCURRENCY", 16usize),
             unstable_build: BuildConfig {
                 limits: Limits {

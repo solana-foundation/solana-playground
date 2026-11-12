@@ -100,15 +100,10 @@ it("stays open through the explorer's own switches and creates", () => {
   expect(catalogPage.current()).toBe("tutorials");
 });
 
-it("closes when a tutorial's route opens, not on the start route", () => {
+// Paths open and close the page in `useViewPath` (views/flow), not here
+it("listens to no path of its own", () => {
   renderHook(() => useCatalogPage());
-  act(() => catalogPage.open("tutorials", "link"));
-
-  act(() => router.changed.forEach((cb) => cb("/")));
-  expect(catalogPage.current()).toBe("tutorials");
-
-  act(() => router.changed.forEach((cb) => cb("/tutorials/hello-anchor")));
-  expect(catalogPage.current()).toBeNull();
+  expect(router.changed).toEqual([]);
 });
 
 it("stops listening once unmounted", () => {
@@ -116,4 +111,25 @@ it("stops listening once unmounted", () => {
   unmount();
 
   expect(router.changed).toEqual([]);
+});
+
+it("opens New project as a page of its own, from the empty editor too", () => {
+  catalogPage.open("new-project", "editor");
+
+  expect(catalogPage.current()).toBe("new-project");
+  expect(sent.events).toEqual([
+    { name: "catalog_shown", params: { page: "new-project", via: "editor" } },
+  ]);
+});
+
+it("closes a page by name only while that page shows", () => {
+  catalogPage.open("new-project", "nav");
+  catalogPage.open("tutorials", "nav");
+
+  // New project's Open or Start finishing after the user moved on
+  catalogPage.closePage("new-project");
+  expect(catalogPage.current()).toBe("tutorials");
+
+  catalogPage.closePage("tutorials");
+  expect(catalogPage.current()).toBeNull();
 });

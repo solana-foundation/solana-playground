@@ -3,7 +3,8 @@ import * as Sentry from "@sentry/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireFor } from "../../../test-utils/require-for";
-import { reporter } from "./sentry";
+import { scrubBreadcrumb, scrubEvent } from "./scrub";
+import { reporter, sentryOptions } from "./sentry";
 
 type Transport = NonNullable<
   NonNullable<Parameters<typeof Sentry.init>[0]>["transport"]
@@ -113,5 +114,204 @@ describe("reporter.sendFeedback", () => {
     statusCode = 500;
 
     await expect(reporter.sendFeedback(feedback)).rejects.toThrow();
+  });
+});
+
+describe("reporter scrub", () => {
+  // A 64-byte secret key's length in base58, and a 44-character public key
+  const KEY = "3Xz9".repeat(22);
+  const PUBKEY = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
+  const SECRET = Array.from({ length: 64 }, (_, i) => (i * 7) % 256);
+
+  interface ScrubbedEvent {
+    message?: string;
+    release?: string;
+    environment?: string;
+    fingerprint?: string[];
+    tags?: Record<string, unknown>;
+    breadcrumbs?: { category?: string; message?: string }[];
+    exception?: { values?: { value?: string }[] };
+    extra?: Record<string, unknown>;
+    contexts?: { feedback?: Record<string, unknown> };
+  }
+  // The session integration sends envelopes of its own; these are the events and feedback
+  const eventsOf = () =>
+    envelopes
+      .map((envelope) => itemsOf(envelope)[0])
+      .filter(
+        ([header]) => header.type === "event" || header.type === "feedback"
+      )
+      .map(([, event]) => event as ScrubbedEvent);
+
+  /** Starts Sentry with the production options, over the recording transport */
+  const start = (integrations: Sentry.BrowserOptions["integrations"]) => {
+    const options = sentryOptions({
+      dsn: DSN,
+      release: "abc123",
+      environment: "production",
+    });
+    Sentry.init({
+      dsn: options.dsn,
+      release: options.release,
+      environment: options.environment,
+      integrations,
+      beforeBreadcrumb: options.beforeBreadcrumb,
+      beforeSend: options.beforeSend,
+      transport: () => ({
+        send: async (envelope) => {
+          envelopes.push(envelope);
+          return { statusCode: 200 };
+        },
+        flush: async () => true,
+      }),
+    });
+  };
+
+  // The default integrations, less the ones `LEFT_OUT` drops, `Console` among them
+  beforeEach(async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    start(sentryOptions({ dsn: DSN }).integrations);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("should install the scrub and leave out console breadcrumbs when the reporter initialises", async () => {
+    await Sentry.close();
+    reporter.init({ dsn: DSN });
+
+    const client = Sentry.getClient();
+    expect(client?.getOptions().beforeSend).toBe(scrubEvent);
+    expect(client?.getOptions().beforeBreadcrumb).toBe(scrubBreadcrumb);
+    expect(client?.getIntegrationByName("Console")).toBeUndefined();
+  });
+
+  /** Stands in for the user's test printing through mocha to this window's console */
+  const userPrints = (...args: unknown[]) => {
+    // eslint-disable-next-line no-console -- the user's own output is what this test keeps out of Sentry
+    console.log(...args);
+  };
+
+  it("should send neither the user's test output nor a secret key", async () => {
+    userPrints(`  ✔ prints ${KEY}`);
+    userPrints("[test:run]", "balance 5 SOL");
+    reporter.trail({
+      ns: "persistence:sync",
+      level: "warn",
+      message: "push rejected",
+      report: false,
+      unhandled: false,
+    });
+    reporter.capture({
+      ns: "wallet:connect",
+      level: "error",
+      error: new Error(`bad key ${KEY}`),
+      context: { owner: PUBKEY, sk: new Uint8Array(SECRET), list: SECRET },
+      report: true,
+      unhandled: false,
+    });
+    await Sentry.flush();
+
+    const [event] = eventsOf();
+    const crumbs = (event.breadcrumbs ?? []).map((crumb) => crumb.message);
+    expect(crumbs).toEqual(["push rejected"]);
+    expect(event.exception?.values?.[0].value).toBe("bad key [redacted]");
+    expect(event.extra).toEqual({
+      owner: PUBKEY,
+      sk: "[redacted]",
+      list: "[redacted]",
+    });
+    const sent = JSON.stringify(envelopes);
+    expect(sent).not.toContain(KEY);
+    expect(sent).not.toContain("balance 5 SOL");
+  });
+
+  it("should redact a key quoted as a JSON byte array in an error's message", async () => {
+    reporter.capture({
+      ns: "wallet:import",
+      level: "error",
+      error: new Error(`Unexpected token in ${JSON.stringify(SECRET)}`),
+      report: true,
+      unhandled: false,
+    });
+    await Sentry.flush();
+
+    const [event] = eventsOf();
+    expect(event.exception?.values?.[0].value).toBe(
+      "Unexpected token in [redacted]"
+    );
+  });
+
+  it("should drop the console breadcrumbs even with the Console integration on", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    start((defaults) =>
+      defaults.filter((integration) => integration.name !== "GlobalHandlers")
+    );
+    userPrints(`  ✔ prints ${KEY}`);
+    reporter.capture({
+      ns: "wallet:connect",
+      level: "error",
+      error: new Error("bad"),
+      report: true,
+      unhandled: false,
+    });
+    await Sentry.flush();
+
+    expect(Sentry.getClient()?.getIntegrationByName("Console")).toBeDefined();
+    const [event] = eventsOf();
+    // Earlier tests' events stay on the scope as `sentry.event` crumbs; no console one may join them
+    const categories = (event.breadcrumbs ?? []).map((crumb) => crumb.category);
+    expect(categories).not.toContain("console");
+    expect(JSON.stringify(envelopes)).not.toContain(KEY);
+  });
+
+  it("should send a withheld report, telling deploys apart, for a tag it cannot scrub", async () => {
+    // Tags reach `beforeSend` as set: Sentry normalises extras and contexts, not tags
+    const hostile = {
+      get boom(): string {
+        throw new TypeError(`getter ${KEY}`);
+      },
+    };
+    Sentry.withScope((scope) => {
+      scope.setTag("hostile", hostile as unknown as string);
+      reporter.capture({
+        ns: "wallet:connect",
+        level: "error",
+        error: new Error(`bad ${KEY}`),
+        report: true,
+        unhandled: false,
+      });
+    });
+    await Sentry.flush();
+
+    const [event] = eventsOf();
+    expect(event).toMatchObject({
+      message: "Report withheld: scrubbing it failed",
+      release: "abc123",
+      environment: "production",
+      fingerprint: ["scrub-withheld", "wallet:connect"],
+      tags: {
+        ns: "wallet:connect",
+        exception_type: "Error",
+        scrub_error: "TypeError",
+      },
+    });
+    expect(JSON.stringify(envelopes)).not.toContain(KEY);
+  });
+
+  it("should send a feedback's text as the user wrote it, without the console", async () => {
+    userPrints("  ✔ the user's test");
+    await reporter.sendFeedback({
+      message: `my key is ${KEY}`,
+      source: "widget",
+      tags: { type: "feedback" },
+    });
+
+    const [event] = eventsOf();
+    expect(event.contexts?.feedback?.message).toBe(`my key is ${KEY}`);
+    expect(JSON.stringify(envelopes)).not.toContain("the user's test");
   });
 });

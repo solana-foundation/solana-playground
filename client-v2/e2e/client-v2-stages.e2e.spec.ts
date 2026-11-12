@@ -9,7 +9,7 @@ import {
   seedWorkspace,
   test,
 } from "./fixtures";
-import { DESK, PHONE } from "./viewports";
+import { DESK, openPhonePreview, PHONE } from "./viewports";
 
 /**
  * The scenarios of `client-v2-stages`: what the Build, Deploy and Interact
@@ -78,10 +78,10 @@ const stubProgramAccount = (page: Page, account: object | null) =>
  * Builds the project as a user does, which gives it a program id, with the
  * build server's answer stubbed to carry the IDL; then opens Interact
  */
-const buildThenInteract = async (page: Page) => {
+const buildThenInteract = async (page: Page, idl: object = IDL) => {
   // CI has no build server: the request is answered here
   await page.route("**/build", (route) =>
-    json(route, { stderr: "", uuid: null, idl: IDL })
+    json(route, { stderr: "", uuid: null, idl })
   );
   await page.locator("#flow-stage-tab-build").click();
   const build = page.locator("#flow-stage-panel-build");
@@ -161,7 +161,9 @@ test.describe("client-v2-stages", () => {
       .getByRole("status")
       .filter({ hasText: "Deployed to" });
     await expect(result).toContainText("Deployed to devnet", LONG);
-    await expect(result.locator("code")).toHaveText(PROGRAM_ID);
+    // Shortened in the middle, whole in its title
+    await expect(result.locator("code")).toHaveText("6PNd…AVkj");
+    await expect(result.locator("code")).toHaveAttribute("title", PROGRAM_ID);
     await expect(result.locator('[data-slot="copy-button"]')).toBeVisible();
   });
 });
@@ -189,14 +191,45 @@ test.describe("client-v2-stages: Interact", () => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
 
-    await expect(panel.getByText("Program: e2e_project")).toBeVisible(LONG);
     await expect(
-      panel.getByRole("heading", { name: "Instructions" })
-    ).toBeVisible();
-    await expect(
-      panel.getByRole("button", { name: "initialize" })
-    ).toBeVisible();
+      panel.getByRole("button", { name: "Copy program id" })
+    ).toBeVisible(LONG);
+    // Every instruction is a card, folded on arrival; opened, it ends in Test
+    const card = panel.getByRole("button", { name: /^initialize/ });
+    await expect(card).toHaveAttribute("aria-expanded", "false");
+    await card.click();
+    await expect(panel.getByRole("button", { name: "Test" })).toBeVisible();
     await expect(panel.locator('[data-slot="stage-empty"]')).toHaveCount(0);
+  });
+
+  test("Interact keeps a long instruction name inside the form's column", async ({
+    seededPage: page,
+  }) => {
+    const longName = "initialize_".repeat(12) + "account";
+    await stubProgramAccount(page, DEPLOYED_ACCOUNT);
+    const panel = await buildThenInteract(page, {
+      version: IDL.version,
+      name: IDL.name,
+      instructions: [
+        { name: longName, accounts: [], args: [] },
+        { name: "increment", accounts: [], args: [] },
+      ],
+    });
+
+    const card = panel.getByRole("button", {
+      name: new RegExp(`^${longName}`),
+    });
+    await expect(card).toBeVisible(LONG);
+    const nameBox = await card
+      .getByText(longName, { exact: true })
+      .boundingBox();
+    const cardBox = await card.boundingBox();
+    if (!nameBox || !cardBox) {
+      throw new Error("the instruction card or its name has no box");
+    }
+    expect(nameBox.x + nameBox.width).toBeLessThanOrEqual(
+      cardBox.x + cardBox.width + 0.5
+    );
   });
 });
 
@@ -209,6 +242,8 @@ test.describe("client-v2-stages on a phone", () => {
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
     await page.setViewportSize(PHONE);
+    // The stage tabs are on the preview page, inert while Work shows
+    await openPhonePreview(page);
 
     await page.locator("#flow-stage-tab-build").click();
     const panel = page.locator("#flow-stage-panel-build");
@@ -255,6 +290,7 @@ test.describe("client-v2-stages on a phone", () => {
     await page.reload();
     await expect(page.locator("#root-dir")).toBeAttached(LONG);
     await page.setViewportSize(PHONE);
+    await openPhonePreview(page);
 
     await page.locator("#flow-stage-tab-deploy").click();
     const panel = page.locator("#flow-stage-panel-deploy");
@@ -283,6 +319,7 @@ test.describe("client-v2-stages on a phone", () => {
     await seedWorkspace(page);
     await stubProgramAccount(page, null);
     await page.setViewportSize(PHONE);
+    await openPhonePreview(page);
 
     const panel = await buildThenInteract(page);
     const actions = panel.locator('[data-slot="stage-empty-actions"]');
@@ -319,7 +356,7 @@ test.describe("client-v2-stages on a phone", () => {
     // A long program id or meta line scrolls inside the stage, never the page
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth)
-    ).toBeLessThanOrEqual(390);
+    ).toBeLessThanOrEqual(PHONE.width);
   });
 });
 
@@ -330,7 +367,7 @@ test.describe("client-v2-search-field", () => {
   }) => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
-    await panel.getByRole("button", { name: "initialize" }).click();
+    await panel.getByRole("button", { name: /^initialize/ }).click();
 
     // Reached by its id: `updateRefs` (InstructionInput) finds dependent
     // inputs by it, so SearchBar must keep it

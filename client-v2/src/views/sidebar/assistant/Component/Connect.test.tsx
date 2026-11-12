@@ -1,8 +1,8 @@
-// The footer link reaches the utils barrel, whose generated globals exist only
-// once the app has booted; what it draws is not under test
+// The key's link reaches the utils barrel, whose generated globals exist only
+// once the app has booted; a plain anchor stands in for it
 vi.mock("../../../../components/Link", () => ({
-  default: (props: { children: React.ReactNode }) => (
-    <span>{props.children}</span>
+  default: (props: { href: string; children: React.ReactNode }) => (
+    <a href={props.href}>{props.children}</a>
   ),
 }));
 
@@ -56,6 +56,14 @@ const blockedPopup = async () => {
   PgSession.setOpenChannel(() => undefined);
   return PgSession.signIn().catch((error: unknown) => error);
 };
+
+/** The assistant's sign-in, `PgSession.signInFor("assistant")`, fails with `error` */
+const signInRejects = (error: unknown) =>
+  vi
+    .spyOn(PgSession, "signInFor")
+    .mockReturnValue(
+      vi.fn<(scopes: string[]) => Promise<void>>().mockRejectedValue(error)
+    );
 
 const checked = () =>
   screen
@@ -133,18 +141,23 @@ describe("Connect", () => {
     });
 
     it("signs in from the assistant when the action is pressed", async () => {
-      const signIn = vi.spyOn(PgSession, "signInWith").mockResolvedValue();
+      const signIn = vi.fn<(scopes: string[]) => Promise<void>>();
+      signIn.mockResolvedValue();
+      const signInFor = vi
+        .spyOn(PgSession, "signInFor")
+        .mockReturnValue(signIn);
       renderConnect({ defaultBackend: "present" });
 
       await act(async () => connect());
 
-      expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+      expect(signInFor).toHaveBeenCalledWith("assistant");
+      expect(signIn).toHaveBeenCalledWith([]);
       expect(PgAssistant.connection).toBeNull();
     });
 
     it("shows why a sign-in failed", async () => {
       const failure = await blockedPopup();
-      vi.spyOn(PgSession, "signInWith").mockRejectedValue(failure);
+      signInRejects(failure);
       renderConnect({ defaultBackend: "present" });
 
       await act(async () => connect());
@@ -157,9 +170,7 @@ describe("Connect", () => {
     it("reports a sign-in that failed for a reason it does not know", async () => {
       const logged = memoryProvider();
       initLogger({ providers: [logged] });
-      vi.spyOn(PgSession, "signInWith").mockRejectedValue(
-        new TypeError("Failed to fetch")
-      );
+      signInRejects(new TypeError("Failed to fetch"));
       renderConnect({ defaultBackend: "present" });
 
       await act(async () => connect());
@@ -185,9 +196,12 @@ describe("Connect", () => {
 
     it("clears the failure when the next sign-in starts", async () => {
       const failure = await blockedPopup();
-      vi.spyOn(PgSession, "signInWith")
-        .mockRejectedValueOnce(failure)
-        .mockReturnValueOnce(new Promise(() => {}));
+      vi.spyOn(PgSession, "signInFor").mockReturnValue(
+        vi
+          .fn<(scopes: string[]) => Promise<void>>()
+          .mockRejectedValueOnce(failure)
+          .mockReturnValueOnce(new Promise(() => {}))
+      );
       renderConnect({ defaultBackend: "present" });
       await act(async () => connect());
       await screen.findByRole("alert");
@@ -225,19 +239,29 @@ describe("Connect", () => {
     });
   });
 
-  it("offers no default the deployment does not serve, and falls back to a key", () => {
+  it("leaves out a default the deployment does not serve, and falls back to a key", () => {
     renderConnect({ defaultBackend: "absent" });
 
-    expect(screen.getByText(/Not configured on this deployment/)).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No built-in model on this deployment. Use your own key."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: /Default/ })).toBeNull();
     expect(checked()?.getAttribute("value")).toBe("anthropic");
+    // Nothing else to pick, so there is no toggle to hide the backends
+    expect(
+      screen.queryByRole("button", { name: "Hide other backends" })
+    ).toBeNull();
   });
 
   it("neither offers nor rules out the default while the probe is out", () => {
     renderConnect({ defaultBackend: "checking" });
 
+    expect(screen.getByText("Checking…")).toBeTruthy();
     expect(
-      screen.getByText("Checking this deployment for a default backend…")
-    ).toBeTruthy();
+      screen.getByRole("radio", { name: /Default/ }).hasAttribute("disabled")
+    ).toBe(true);
     expect(checked()).toBeUndefined();
   });
 
@@ -394,31 +418,56 @@ describe("Connect", () => {
     expect(screen.queryByText("Back to chat")).toBeNull();
   });
 
-  it("heads its lead with what the assistant is, as the prototype does", () => {
+  it("leads with one line on what the assistant does, and no heading", () => {
     renderConnect({ defaultBackend: "absent" });
 
     expect(
-      screen.getByRole("heading", {
-        name: "An assistant that can see your project",
-      })
+      screen.getByText(/The assistant reads your project and proposes fixes/)
     ).toBeTruthy();
+    expect(screen.queryByRole("heading")).toBeNull();
   });
 
-  it("heads the form Switch backend over a connection", () => {
+  it("drops the lead and the capabilities over a connection", () => {
     act(() => PgAssistant.connect(OWN));
     renderConnect({ defaultBackend: "present" });
 
+    expect(screen.queryByText(/The assistant reads your project/)).toBeNull();
     expect(
-      screen.getByRole("heading", { name: "Switch backend" })
-    ).toBeTruthy();
+      screen.queryByRole("button", { name: "What the assistant can access" })
+    ).toBeNull();
   });
 
-  it("draws each backend as a card, its radio circle kept for the keyboard only", () => {
+  it("keeps what the assistant can access folded until asked", async () => {
+    const user = userEvent.setup();
+    renderConnect({ defaultBackend: "absent" });
+
+    const toggle = screen.getByRole("button", {
+      name: "What the assistant can access",
+    });
+    expect(screen.queryByText("READS")).toBeNull();
+    await user.click(toggle);
+    expect(screen.getByText("READS")).toBeTruthy();
+  });
+
+  it("describes the key field with where the key goes and links to a new one", () => {
+    renderConnect({ defaultBackend: "absent" });
+
+    const field = screen.getByLabelText("API key");
+    expect(
+      document.getElementById(field.getAttribute("aria-describedby") ?? "")
+        ?.textContent
+    ).toMatch(/Sent only to Anthropic, never to our server/);
+    expect(
+      screen.getByRole("link", { name: /Get a key/ }).getAttribute("href")
+    ).toBe("https://console.anthropic.com/");
+  });
+
+  it("draws each backend as a row with its radio circle in view", () => {
     renderConnect({ defaultBackend: "absent" });
 
     for (const radio of screen.getAllByRole("radio")) {
-      expect(radio.classList.contains("opacity-0")).toBe(true);
-      expect(radio.classList.contains("size-full")).toBe(true);
+      expect(radio.classList.contains("opacity-0")).toBe(false);
+      expect(radio.closest("label")).toBeTruthy();
     }
   });
 
@@ -434,5 +483,110 @@ describe("Connect", () => {
     expect(screen.getByRole("combobox", { name: "Effort" }).textContent).toBe(
       "High"
     );
+  });
+
+  describe("by keyboard", () => {
+    // A picked backend's model presets measure themselves; jsdom has no
+    // `ResizeObserver`
+    beforeEach(() => {
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        }
+      );
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    const radio = (name: RegExp) => screen.getByRole("radio", { name });
+
+    /**
+     * One arrow, held while Radix moves the focus: it moves it a task later
+     * and checks the radio only while an arrow is down, which a real key
+     * press outlasts and user-event's instant keyup does not
+     */
+    const arrow = async (
+      user: ReturnType<typeof userEvent.setup>,
+      key: "ArrowUp" | "ArrowDown"
+    ) => {
+      await user.keyboard(`{${key}>}`);
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      await user.keyboard(`{/${key}}`);
+    };
+
+    it("keeps the picked bar focused when a click folds the list", async () => {
+      const user = userEvent.setup();
+      renderConnect({ defaultBackend: "present" });
+      await user.click(
+        screen.getByRole("button", { name: /Bring your own key/ })
+      );
+      await user.click(radio(/Anthropic/));
+
+      expect(screen.getAllByRole("radio")).toHaveLength(2);
+      expect(document.activeElement).toBe(radio(/Anthropic/));
+    });
+
+    it("walks back to the default and out to the others with the arrows", async () => {
+      const user = userEvent.setup();
+      renderConnect({ defaultBackend: "present" });
+      await user.click(
+        screen.getByRole("button", { name: /Bring your own key/ })
+      );
+      await user.click(radio(/Anthropic/));
+
+      await arrow(user, "ArrowUp");
+      expect(checked()?.getAttribute("value")).toBe("default");
+      expect(document.activeElement).toBe(checked());
+      expect(screen.getAllByRole("radio")).toHaveLength(PROVIDERS.length);
+
+      await arrow(user, "ArrowDown");
+      expect(checked()?.getAttribute("value")).toBe("anthropic");
+      expect(document.activeElement).toBe(checked());
+    });
+
+    it("opens the folded list on an arrow from the default", async () => {
+      const user = userEvent.setup();
+      renderConnect({ defaultBackend: "present" });
+      await user.tab();
+      expect(document.activeElement).toBe(checked());
+      expect(screen.getAllByRole("radio")).toHaveLength(1);
+
+      await arrow(user, "ArrowDown");
+      expect(screen.getAllByRole("radio")).toHaveLength(PROVIDERS.length);
+      expect(
+        screen
+          .getByRole("button", { name: /Hide other backends/ })
+          .getAttribute("aria-expanded")
+      ).toBe("true");
+
+      await arrow(user, "ArrowDown");
+      expect(checked()?.getAttribute("value")).not.toBe("default");
+      expect(document.activeElement).toBe(checked());
+    });
+
+    it("reaches every backend by keyboard alone, through Bring your own key", async () => {
+      const user = userEvent.setup();
+      renderConnect({ defaultBackend: "present" });
+      await user.tab();
+      expect(document.activeElement).toBe(checked());
+      await user.tab();
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: /Bring your own key/ })
+      );
+      await user.keyboard("{Enter}");
+      await user.tab({ shift: true });
+
+      const seen = new Set<string | null | undefined>();
+      for (let i = 0; i < PROVIDERS.length; i++) {
+        await arrow(user, "ArrowDown");
+        expect(document.activeElement).toBe(checked());
+        seen.add(checked()?.getAttribute("value"));
+      }
+      expect(Array.from(seen).sort()).toEqual(
+        PROVIDERS.map((p) => p.id).sort()
+      );
+    });
   });
 });

@@ -11,6 +11,7 @@ import { PgProjectSync } from "./project-sync";
 import type { Snapshot } from "./snapshot";
 import { hashFiles } from "./snapshot";
 import { PgSyncClaim } from "./sync-claim";
+import { PgSyncClient } from "./sync-client";
 import { PgSyncMark } from "./sync-mark";
 import * as tabReload from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
@@ -91,7 +92,10 @@ const serverHas = (
     if (!found) return "gone";
     return {
       ...found,
-      snapshot: id in snapshots ? snapshots[id] : { files: {} },
+      // Not `{files: {}}`, which reconcile treats as unusable: the cases
+      // that mean an empty row say so
+      snapshot:
+        id in snapshots ? snapshots[id] : { files: { "src/lib.rs": "" } },
     };
   });
 };
@@ -637,6 +641,19 @@ describe("reconcile", () => {
     expect(switchSpy).not.toHaveBeenCalled();
   });
 
+  it("does not import a project whose row holds no files", async () => {
+    // Imported, it would be a workspace with nothing in it -- and, once
+    // marked, one whose next push uploads that nothing over the row
+    withLocal({});
+    const created = stubCreation();
+    serverHas([project("empty", "alpha")], { empty: { files: {} } });
+
+    const result = await reconcile();
+
+    expect(result.imported).toEqual([]);
+    expect(created).toEqual([]);
+  });
+
   it("adopts the server's id, so the two devices converge", async () => {
     withLocal({});
     const created = stubCreation();
@@ -655,7 +672,15 @@ describe("reconcile", () => {
       project("b", "beta"),
     ]);
     vi.spyOn(PgProjectSync, "fetch").mockImplementation(async (id: string) =>
-      id === "b" ? { ...project("b", "beta"), snapshot: { files: {} } } : null
+      id === "b"
+        ? {
+            id: "b",
+            name: "beta",
+            kind: "project",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+            snapshot: { files: { "src/lib.rs": "" } },
+          }
+        : null
     );
 
     const result = await reconcile();
@@ -815,6 +840,61 @@ describe("releasing local projects at sign-out", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  it("keeps a project whose generated files changed since the last push", async () => {
+    // A build rewrites `program-info.json` with a new keypair. The user files
+    // still match the mark, but the keypair exists only here until a push
+    // takes it, and one the limits refuse never does.
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", {
+      "src/lib.rs": "same",
+      ".workspace/program-info.json": '{"kp":"new"}',
+    });
+    await agreed(
+      "p1",
+      {
+        files: {
+          "src/lib.rs": "same",
+          ".workspace/program-info.json": '{"kp":"old"}',
+        },
+      },
+      "t1"
+    );
+    const remove = stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("removes a project whose generated files the account already holds", async () => {
+    // The other half of the check above: a built project, synced, is no
+    // more this browser's to keep than one never built
+    withLocal({ alpha: "p1" });
+    const files = {
+      "src/lib.rs": "same",
+      ".workspace/program-info.json": '{"kp":"same"}',
+    };
+    withFiles("alpha", files);
+    await agreed("p1", { files }, "t1");
+    stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual(["alpha"]);
+  });
+
+  it("keeps a project with a sync question outstanding", async () => {
+    // A refused push (`too-large`, a divergence) writes no mark, so the mark
+    // says nothing about what the refusal left unsent
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    vi.spyOn(PgProjectSync, "conflictFor").mockImplementation((id) =>
+      id === "p1" ? { projectId: "p1", kind: "too-large" } : null
+    );
+    const remove = stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
   it("decides per project rather than for the set", async () => {
     // The mistake this mirrors the fix for, in `PgChatSync.forget`: one
     // project that cannot be handed over is no reason to leave the others on
@@ -840,5 +920,124 @@ describe("releasing local projects at sign-out", () => {
     await releaseLocalProjects();
 
     expect(await PgSyncMark.read("p1")).not.toBeNull();
+  });
+});
+
+describe("a project the account cap refused", () => {
+  /** The ten projects the account already holds, none of them local */
+  const ten = () =>
+    Array.from({ length: 10 }, (_, i) => project(`s${i}`, `synced ${i}`));
+
+  const capReached = {
+    reason: "too-many-projects",
+    kind: "project",
+    limit: 10,
+    count: 11,
+  };
+
+  /** Answer the probe, and every create with the account cap's 413 */
+  const refusingCreates = () =>
+    vi.spyOn(global, "fetch").mockImplementation((async (url: string) =>
+      url === "/api/sync"
+        ? { ok: true, json: async () => ({ enabled: true, db: "ok" }) }
+        : {
+            ok: false,
+            status: 413,
+            json: async () => ({
+              error: "The account syncs as many projects as it can",
+              reason: capReached.reason,
+              kind: capReached.kind,
+              limit: capReached.limit,
+              count: capReached.count,
+            }),
+          }) as unknown as typeof fetch);
+
+  const putCount = () =>
+    (
+      global.fetch as unknown as { mock: { calls: [string, RequestInit?][] } }
+    ).mock.calls.filter(
+      ([url, init]) => url === "/api/projects" && init?.method === "PUT"
+    ).length;
+
+  beforeEach(async () => {
+    PgSession.reset();
+    PgSyncClient.reset();
+    PgProjectSync.reset();
+    storedFiles().clear();
+    await signedIn();
+    vi.spyOn(PgProjectSync, "isAvailable").mockResolvedValue(true);
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("keeps it local, unmarked, and asked about once, through reconcile and sign-out", async () => {
+    withLocal({ eleventh: "p11" });
+    withFiles("eleventh", { "src/lib.rs": "only here" });
+    serverHas(ten());
+    stubCreation();
+    refusingCreates();
+    const remove = vi
+      .spyOn(PgExplorer, "deleteWorkspace")
+      .mockResolvedValue(undefined as never);
+
+    const first = await reconcile();
+
+    expect(first.pushed).toEqual([]);
+    expect(putCount()).toBe(1);
+    expect(PgProjectSync.conflictFor("p11")).toEqual({
+      projectId: "p11",
+      kind: "too-large",
+      limit: capReached,
+    });
+    expect(await PgSyncMark.exists("p11")).toBe(false);
+
+    // A refocus or another tab's pass: the outstanding question holds pushes
+    await reconcile();
+    expect(putCount()).toBe(1);
+
+    expect(await releaseLocalProjects()).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+    expect(storedFiles().get("/eleventh/src/lib.rs")).toBe("only here");
+  });
+
+  it("goes on to the next project past a refusal", async () => {
+    withLocal({ alpha: "pa", beta: "pb", gamma: "pc" });
+    withFiles("alpha", { "src/lib.rs": "a" });
+    withFiles("beta", { "src/lib.rs": "b" });
+    withFiles("gamma", { "src/lib.rs": "c" });
+    serverHas([]);
+    stubCreation();
+    // The account takes the first and last; the middle one meets the cap,
+    // as a create racing another device's would
+    const refusedFor = (id: string) => id === "pb";
+    vi.spyOn(global, "fetch").mockImplementation((async (
+      url: string,
+      init: RequestInit | undefined
+    ) => {
+      if (url === "/api/sync") {
+        return { ok: true, json: async () => ({ enabled: true, db: "ok" }) };
+      }
+      const { id } = JSON.parse(String(init?.body));
+      return refusedFor(id)
+        ? {
+            ok: false,
+            status: 413,
+            json: async () => ({
+              reason: capReached.reason,
+              kind: capReached.kind,
+              limit: capReached.limit,
+              count: capReached.count,
+            }),
+          }
+        : { ok: true, status: 200, json: async () => ({ updatedAt: "t2" }) };
+    }) as unknown as typeof fetch);
+
+    const result = await reconcile();
+
+    expect(result.pushed).toEqual(["alpha", "gamma"]);
+    expect(await PgSyncMark.exists("pa")).toBe(true);
+    expect(await PgSyncMark.exists("pc")).toBe(true);
+    expect(await PgSyncMark.exists("pb")).toBe(false);
+    expect(PgProjectSync.conflictFor("pb")?.kind).toBe("too-large");
   });
 });

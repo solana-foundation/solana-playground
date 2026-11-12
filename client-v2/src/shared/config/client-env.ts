@@ -6,17 +6,31 @@
 // sites: a literal comparison there is what lets the minifier drop
 // development-only branches from the production bundle.
 
-/** Build server override; unset means the Solana Foundation's server */
-export const SERVER_URL = process.env.REACT_APP_SERVER_URL;
+/** The deployment's build server, listed as "Solana Foundation"; unset means a local server */
+export const BUILD_SERVER_URL = process.env.REACT_APP_SERVER_URL;
 
 /** Default of `experimental.unstable`; only `"true"` turns it on */
-export const SERVER_UNSTABLE = process.env.REACT_APP_SERVER_UNSTABLE;
+export const BUILD_SERVER_UNSTABLE = process.env.REACT_APP_SERVER_UNSTABLE;
 
-/** Platform RPC endpoints, one per cluster; unset adds no endpoint */
+/** Platform RPC endpoints for Devnet, Mainnet and Testnet; unset falls back to the public one */
 export const PLATFORM_RPC_URLS = {
   devnet: process.env.REACT_APP_DEVNET_RPC_URL,
-  testnet: process.env.REACT_APP_TESTNET_RPC_URL,
   mainnet: process.env.REACT_APP_MAINNET_RPC_URL,
+  testnet: process.env.REACT_APP_TESTNET_RPC_URL,
+};
+
+/** RPC endpoints program buffer accounts are read through, one per cluster; unset or `""` reads through the selected endpoint */
+export const READ_BUFFER_RPC_URLS = {
+  devnet: process.env.REACT_APP_DEVNET_READ_BUFFER_RPC_URL,
+  testnet: process.env.REACT_APP_TESTNET_READ_BUFFER_RPC_URL,
+  mainnet: process.env.REACT_APP_MAINNET_READ_BUFFER_RPC_URL,
+};
+
+/** The most buffer writes per second a deploy sends on the cluster, set just below the RPC plan's `sendTransaction` limit; only a positive number overrides `DEFAULT_SEND_TX_PER_SECOND` in `entities/cluster` */
+export const SEND_TX_PER_SECOND = {
+  devnet: process.env.REACT_APP_DEVNET_SEND_TX_PER_SECOND,
+  testnet: process.env.REACT_APP_TESTNET_SEND_TX_PER_SECOND,
+  mainnet: process.env.REACT_APP_MAINNET_SEND_TX_PER_SECOND,
 };
 
 /**

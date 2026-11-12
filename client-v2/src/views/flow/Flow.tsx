@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { openConnectDialog } from "@/app/ConnectDialog";
@@ -5,7 +6,7 @@ import { openShareGistDialogFor, ShareButton } from "@/app/ShareGistDialog";
 import Wallet from "@/components/Wallet";
 import { FeedbackHost } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
-import { useKeybind } from "@/hooks";
+import { useKeybind, useRenderOnChange } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
@@ -15,40 +16,66 @@ import {
   type SettingsFocus,
   type SettingsRequest,
 } from "@/shared/lib/settings-request";
-import { LogoLockup } from "@/shared/ui/logo";
+import { LogoLockup, LogoLockupMark } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
-import { PgExplorer, PgView } from "@/utils";
+import { Tag } from "@/shared/ui/tag";
+import { PgCommon, PgExplorer, PgTutorial, PgView } from "@/utils";
+import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { AppNav, ProjectList, readProjectFiles } from "@/widgets/app-nav";
-import { Assistant } from "@/widgets/assistant";
+import {
+  Assistant,
+  displayModelName,
+  modelShown,
+  probeDefaultBackend,
+  retryDefaultBackend,
+  useDefaultBackend,
+  useTurn,
+} from "@/widgets/assistant";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { homeSlot, useStartView } from "@/widgets/home";
-import { LayoutShell } from "@/widgets/layout-shell";
+import { CONSOLE_KEY, keyLabel, LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
 import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
 import { SetupList } from "@/widgets/setup-list";
 import {
   StageNotice,
+  StatusAnnouncer,
   StatusChip,
   StatusRail,
   StatusRow,
 } from "@/widgets/status";
+import {
+  TutorialComposer,
+  TutorialConversation,
+  useConversationMarks,
+  useConversationStartOver,
+  useConversationSteps,
+} from "@/widgets/tutorial-conversation";
+import {
+  BaseTutorialPhoneHead,
+  useTutorialFrame,
+  useTutorialSpace,
+} from "@/widgets/tutorial-frame";
+import {
+  TutorialWorkspace,
+  useTutorialTerminal,
+  type WorkspaceLayout,
+} from "@/widgets/tutorial-workspace";
 
 import ConsoleDrawer from "./console/ConsoleDrawer";
-import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import StageBar from "./header/StageBar";
 import LeftPanel from "./left/LeftPanel";
-import type { LessonState } from "./lessons";
-// The barrel registers every lesson path as a side effect, so importing
-// it here is also what populates the registry for the whole app.
-import { describeStep, INITIAL_LESSON_STATE, PgLesson } from "./lessons";
-import LessonBar from "./lessons/LessonBar";
-import ObjectiveBand from "./lessons/ObjectiveBand";
-import Reader from "./lessons/Reader";
 import StageRouter from "./stages/StageRouter";
 import { PgDeployHistory } from "./state/deploy-history";
 import type { FlowState } from "./state/stage";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
+import { useStagesOffered } from "./use-stages-offered";
+import { useViewPath } from "./use-view-path";
+
+/** The status's Try again on the hosted model: whether the deployment answered */
+const retryHostedModel = async () =>
+  (await probeDefaultBackend()).state !== "unreachable";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
@@ -59,9 +86,10 @@ import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
  * assistant, the files
  * column, and the stage router over its collapsible console, with the shell's
  * stage bar (`BaseStageBar`) and then the `StageBar` stage tabs across the
- * last two. The sync banner sits above all four, full width. On `/` with no
- * project, `useStartView` hands the shell `homeSlot`, and Home stands where
- * the assistant and the work go.
+ * last two (a tutorial's frame draws neither the tabs nor the files column).
+ * The sync banner sits above all four, full width. On `/` with no project,
+ * `useStartView` hands the shell `homeSlot`, and Home stands where the
+ * assistant and the work go.
  *
  * The feedback form and its state sit in `FeedbackHost`, above the frame, not
  * in the footer with the account menu: below `LAYOUT_BREAKPOINTS.phone` the
@@ -77,6 +105,44 @@ const Flow = () => (
 const log = createLogger("flow:settings");
 
 /**
+ * A tutorial's chat: the feed, and its composer at the foot (3.6). The frame
+ * has no assistant panel (`LayoutShellProps.tutorial`), so the one live
+ * assistant turn is held here while the chat shows, and the panel's own
+ * holds it again once the frame goes.
+ */
+const TutorialChat = ({
+  onAllTutorials,
+  onOpenMenu,
+}: {
+  onAllTutorials: () => void;
+  onOpenMenu: () => void;
+}) => {
+  const turn = useTurn({ open: openConnectDialog });
+  // The composer counts a question only once the assistant has it
+  const send = (text: string) =>
+    turn.send(text).then((outcome) => outcome === "sent");
+  return (
+    <>
+      <TutorialConversation
+        onAllTutorials={onAllTutorials}
+        onOpenMenu={onOpenMenu}
+      />
+      <div className="px-5 pb-4">
+        <TutorialComposer
+          turn={{
+            send,
+            stop: turn.stop,
+            busy: turn.busy,
+            input: turn.input,
+            setInput: turn.setInput,
+          }}
+        />
+      </div>
+    </>
+  );
+};
+
+/**
  * Whether focus can land on `el`: on screen, and not inside an `inert` part,
  * such as a phone page out of view, where `focus()` does nothing
  */
@@ -84,6 +150,24 @@ const canTakeFocus = (el: HTMLElement) =>
   el.isConnected &&
   el.getClientRects().length > 0 &&
   el.closest("[inert]") === null;
+
+/**
+ * Ends the `visibility` transitions under `root`. The shell's reveal starts
+ * one on every control with `transition-all` (the design system's `Button`),
+ * and until its first frame the control still computes `hidden`, where
+ * `focus()` does nothing: on a slow machine the refocus after the settings
+ * closed landed there, and focus stayed on the body (HOO-2290).
+ */
+const revealAtOnce = (root: Element) => {
+  for (const animation of root.getAnimations({ subtree: true })) {
+    if (
+      animation instanceof CSSTransition &&
+      animation.transitionProperty === "visibility"
+    ) {
+      animation.finish();
+    }
+  }
+};
 
 /**
  * Focuses `el` once it shows. The shell comes back from `invisible`, and a
@@ -137,28 +221,64 @@ const shareFromCodeHead = (name: string) =>
     name
   );
 
+/**
+ * The settings page with whether the hosted model answers, and the asking
+ * again its row offers. Its own component, so the probe is read only while
+ * the page is open and the frame does not re-render on its answer.
+ */
+const LiveSettings = (
+  props: Omit<
+    ComponentProps<typeof SettingsPage>,
+    "hosted" | "hostedName" | "ownKey" | "onRetryHosted"
+  >
+) => {
+  const backend = useDefaultBackend();
+  useRenderOnChange(PgAssistant.onDidChange);
+  // Named as the composer's model button names them, so Settings and the
+  // chat never disagree about which model answers (HOO-2695)
+  const current = modelShown(PgAssistant.connection, backend);
+  return (
+    <SettingsPage
+      {...props}
+      hosted={backend.state}
+      hostedName={
+        PgAssistant.hostedModel && displayModelName(PgAssistant.hostedModel)
+      }
+      ownKey={current.kind === "keyed" ? current.label : undefined}
+      onRetryHosted={retryHosted}
+    />
+  );
+};
+
+/**
+ * The row's Try again. The probe answers its own failures and tells every
+ * reader; a rejection is a bug past them, reported as the composer's retry
+ * reports it, then rethrown for the button's own handler
+ */
+const retryHosted = () =>
+  retryDefaultBackend().catch((error: unknown) => {
+    log.error(error, { report: true, context: { from: "settings" } });
+    throw error;
+  });
+
 const FlowFrame = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
-  const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
-  const [reading, setReading] = useState(false);
   const [settings, setSettings] = useState<SettingsState>({ open: false });
   const settingsOpen = settings.open;
   const viewport = useViewport();
-  const phone = viewport === "phone";
 
   useEffect(() => {
     const subs = [
       PgFlow.init(),
-      PgLesson.init(),
       PgDeployHistory.init(),
       PgFlow.onDidChange(setState),
-      PgLesson.onDidChange(setLesson),
     ];
     return () => subs.forEach((s) => s.dispose());
   }, []);
 
-  const openGallery = () => PgView.setModal(NewWorkspaceModal);
-  // Back to the control that opened them, once the shell is no longer inert,
+  const shell = useRef<HTMLDivElement>(null);
+  // Back to the control that opened them, once the shell is no longer inert
+  // and its reveal's `visibility` transitions are over (`revealAtOnce`),
   // or, when that is gone or out of reach, to `fallbackFocus`. Only when they
   // close: on load, with the settings never opened, focus stays where the
   // browser puts it, not on a trigger whose tooltip opens on focus (HOO-2240)
@@ -168,6 +288,7 @@ const FlowFrame = () => {
     const closed = wasOpen.current && !settings.open;
     wasOpen.current = settings.open;
     if (!closed) return;
+    if (shell.current) revealAtOnce(shell.current);
     const target =
       refocus.current && canTakeFocus(refocus.current)
         ? refocus.current
@@ -230,18 +351,108 @@ const FlowFrame = () => {
   );
 
   const page = useStartView();
-  // The Tutorials or Programs page shown, if any (`widgets/catalog`)
+  // The New project, Tutorials or Programs page shown, if any (`widgets/catalog`)
   const catalog = useCatalogPage();
+  // Home, the page shown and the work, each on its own URL
+  useViewPath({
+    view: page.view,
+    homeVia: page.homeVia,
+    catalog: catalog ?? undefined,
+  });
 
-  const described = describeStep(lesson);
+  // A tutorial with a definition opens in its frame (`tutorial-flow-v2`
+  // 2.1), its chat holding the conversation (3.3), whose engine runs Start
+  // over, and the composer under the feed (3.6).
+  const openMenu = useRef<() => void>(() => {});
+  const conversation = useConversationStartOver();
+  const marks = useConversationMarks();
+  const tutorial = useTutorialFrame({
+    // Back to the list the tutorial came from; the navigation's own way
+    // there, so it reads as `nav`
+    onBack: () => catalogPage.open("tutorials", "nav"),
+    onStartOver: conversation.onStartOver,
+    passed: conversation.passed,
+    body: (
+      <TutorialChat
+        onAllTutorials={() => catalogPage.open("tutorials", "nav")}
+        onOpenMenu={() => openMenu.current()}
+      />
+    ),
+  });
 
-  const read = () => setReading(true);
+  // The frame's workspace (2.2): its head and tree over the stage, and its
+  // own terminal line, on a wide window, where the frame shows
+  const inFrame = tutorial.frame !== undefined && viewport === "wide";
+  const terminal = useTutorialTerminal();
 
-  // A learner who fixes the code while the page is open should come back
-  // to the editor, not to the next step's prose.
+  // Under the frame's width a tutorial is the phone's (5.1): its header over
+  // two spaces, the chat and the code, which the shell lays out. A tablet
+  // gets the same screens, the chat centred (DES-160)
+  const onPhone = tutorial.frame !== undefined && !inFrame;
+  // The live assistant's open_menu tool (3.6) opens the frame's navigation,
+  // which exists only once the frame is built from the body above. Below the
+  // frame's width that navigation is not drawn: the phone's steps sheet is
+  // the menu there
+  const [phoneSteps, setPhoneSteps] = useState(false);
   useEffect(() => {
-    setReading(false);
-  }, [described?.step.id]);
+    openMenu.current = onPhone
+      ? () => setPhoneSteps(true)
+      : () => tutorial.frame?.nav.onOpenChange(true);
+  });
+  let workspaceLayout: WorkspaceLayout | undefined;
+  if (onPhone) workspaceLayout = "phone";
+  else if (inFrame) workspaceLayout = "frame";
+  const steps = useConversationSteps();
+  const space = useTutorialSpace({
+    name: tutorial.frame ? PgTutorial.current?.name : undefined,
+    wrote: steps.wrote,
+    finished: steps.finished,
+    loaded: steps.loaded,
+    phone: onPhone,
+  });
+  const tutorialSlot = tutorial.frame && {
+    ...tutorial.frame,
+    phone: {
+      head: (
+        <BaseTutorialPhoneHead
+          name={PgTutorial.current?.name ?? ""}
+          steps={steps.steps}
+          live={steps.live}
+          started={steps.started}
+          finished={steps.finished}
+          minutes={steps.minutes}
+          space={space.space}
+          dot={space.dot}
+          passed={conversation.passed ?? 0}
+          onBack={() => catalogPage.open("tutorials", "nav")}
+          onSpace={space.setSpace}
+          onJump={steps.jump}
+          onStartOver={conversation.onStartOver}
+          sheetOpen={phoneSteps}
+          onSheetOpenChange={setPhoneSteps}
+        />
+      ),
+      // TODO(SF#94 review, Greptile "Layout changes lose chat controls"): a
+      // second chat, not the frame's moved: crossing the frame's width
+      // remounts `useTurn`, which drops the composer's draft and the Stop of
+      // an answer streaming. One mounted chat moved between the layouts, as
+      // the editor and terminal are, is the follow-up
+      chat: (
+        <TutorialChat
+          onAllTutorials={() => catalogPage.open("tutorials", "nav")}
+          onOpenMenu={() => openMenu.current()}
+        />
+      ),
+      space: space.space,
+      onSpace: space.setSpace,
+    },
+  };
+  // None before a tutorial's Start: its intro offers only Start
+  const stagesOffered = useStagesOffered();
+  // Narrow too: a tutorial's build state lives in the chat and the terminal
+  // strip, never on a Build page (Almaz, 3 Nov; HOO-2355)
+  const shownStage =
+    tutorial.frame !== undefined || !stagesOffered ? "write" : state.stage;
 
   return (
     // `h-dvh` is the visible height: on iPad and iPhone Safari 100vh is the
@@ -263,11 +474,22 @@ const FlowFrame = () => {
         fade={1}
         className="-z-10 will-change-transform"
       />
+      {/* Outside the part that goes inert, so it still speaks over the
+          settings. No stage while they cover the work: the stage's notice is
+          invisible and inert then, so the announcer says the outage itself */}
+      <StatusAnnouncer
+        stage={
+          page.view === "work" && !catalog && !settings.open
+            ? state.stage
+            : undefined
+        }
+      />
       {/* The app stays mounted under the settings page, invisible and inert
           (design.md, "Settings as a full page (5.20)"): `Write` must never
           unmount, and with `display: contents` and `visibility` the shell
           keeps its boxes, so no panel sees a resize and folds on its own */}
       <div
+        ref={shell}
         className={settings.open ? "contents invisible" : "contents"}
         inert={settings.open}
       >
@@ -286,6 +508,7 @@ const FlowFrame = () => {
                 })
               }
               onConnectAi={() => openConnectDialog("status")}
+              onRetryAi={retryHostedModel}
             />
           }
           home={homeSlot(
@@ -298,6 +521,7 @@ const FlowFrame = () => {
           cover={catalogSlot(catalog)}
           stageBarActions={<ShareButton />}
           onShare={shareFromCodeHead}
+          tutorial={tutorialSlot}
           nav={({ collapsed, toggle, closeSheet, phone: menuPage }) => {
             closeNavSheet.current = closeSheet;
             return (
@@ -321,12 +545,24 @@ const FlowFrame = () => {
                   // A phone's menu page would cover the page it just opened
                   closeSheet();
                 }}
-                onClosePage={catalogPage.close}
-                closeSheet={closeSheet}
                 phone={menuPage}
                 collapsed={collapsed}
                 onToggle={toggle}
-                logo={<LogoLockup aria-hidden="true" />}
+                // The frame, and so its pin, shows on a wide window only
+                pin={viewport === "wide" ? tutorial.pin : undefined}
+                logo={
+                  // Beta beside the lockup, on the line of "Playground"
+                  <span className="flex items-end gap-2">
+                    <LogoLockup aria-hidden="true" />
+                    <Tag
+                      variant="neutral"
+                      className="mb-px h-4 px-1 text-[0.5625rem] text-foreground"
+                    >
+                      Beta
+                    </Tag>
+                  </span>
+                }
+                railLogo={<LogoLockupMark aria-hidden="true" />}
                 projects={(open) => (
                   <ProjectList
                     onPicked={catalogPage.close}
@@ -355,6 +591,7 @@ const FlowFrame = () => {
                           })
                         }
                         onConnectAi={() => openConnectDialog("status")}
+                        onRetryAi={retryHostedModel}
                       />
                     }
                     onToggleSettings={toggleSettings(closeSheet)}
@@ -372,6 +609,7 @@ const FlowFrame = () => {
                           })
                         }
                         onConnectAi={() => openConnectDialog("status")}
+                        onRetryAi={retryHostedModel}
                       />
                     }
                     onToggleSettings={toggleSettings(closeSheet)}
@@ -386,80 +624,83 @@ const FlowFrame = () => {
               />
             );
           }}
-          stageTabs={<StageBar />}
+          // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+          stageTabs={stagesOffered ? <StageBar /> : null}
           // The editor's tab row belongs to Write, which stays mounted,
           // hidden, on the other stages
-          showTabs={state.stage === "write"}
-          files={({ collapsed, phone: isPhone }) => (
-            <LeftPanel
-              collapsed={collapsed}
-              startOn={isPhone ? "files" : undefined}
-            />
+          showTabs={shownStage === "write"}
+          files={({ collapsed, phone }) => (
+            <LeftPanel collapsed={collapsed} sheet={phone} />
           )}
-          stage={() => (
-            // The stage's column. The frame is flush (design.md, "Frame
-            // chrome (5.25)"): no card edges and no fill of its own, so a
-            // stage with nothing in it yet shows the window's pattern, as the
-            // prototype's does; the editor paints its own ground over it. The
-            // shell draws the dividers.
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-              <ObjectiveBand
-                state={lesson}
-                onRead={read}
-                onOpenGallery={openGallery}
-                phone={phone}
-              />
-              {/* Why work waits: offline on every stage, a cluster that does
-                  not answer on Deploy and Interact (Spec 08 NET-01, NET-02) */}
-              <StageNotice
-                stage={state.stage}
-                onOpenNetwork={() =>
-                  toggleSettings(closeNavSheet.current)({
-                    from: "cluster",
-                    focus: "network",
-                  })
-                }
-              />
-              {/* `flex` matters: Primary's own wrapper sizes itself with
-                  flex: 1; min-height: 0, which only takes effect inside a flex
-                  container. Without it the editor's height collapses to its
-                  content size and Monaco never gets a real box to paint into.
-                  `relative`: the lesson reader covers the stage, not the whole
-                  layout */}
-              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-                <StageRouter stage={state.stage} />
-                {reading && described && (
-                  <Reader
-                    key={described.step.id}
-                    step={described.step}
-                    onLoaded={() => PgLesson.opened(described.step.id)}
-                    onClose={() => setReading(false)}
-                  />
-                )}
-              </div>
-              {/* On a phone the step's controls sit at the foot of the code,
-                  under the thumb; the band above folds to the ask */}
-              {phone && (
-                <LessonBar
-                  state={lesson}
-                  onRead={read}
-                  onOpenGallery={openGallery}
+          stage={({ console }) => (
+            <TutorialWorkspace
+              layout={workspaceLayout}
+              console={console}
+              marks={marks}
+              keys={{
+                files: keyLabel("Ctrl+E", PgCommon.getOS()),
+                terminal: keyLabel(CONSOLE_KEY, PgCommon.getOS()),
+              }}
+            >
+              {/* The stage's column. The frame is flush (design.md, "Frame
+                  chrome (5.25)"): no card edges and no fill of its own, so a
+                  stage with nothing in it yet shows the window's pattern, as
+                  the prototype's does; the editor paints its own ground over
+                  it. The shell draws the dividers. */}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                {/* Why work waits: offline on every stage, a cluster that
+                    does not answer on Deploy and Interact (Spec 08 NET-01,
+                    NET-02) */}
+                <StageNotice
+                  stage={shownStage}
+                  onOpenNetwork={() =>
+                    toggleSettings(closeNavSheet.current)({
+                      from: "stage",
+                      focus: "network",
+                    })
+                  }
                 />
-              )}
-            </div>
+                {/* `flex` matters: Primary's own wrapper sizes itself with
+                    flex: 1; min-height: 0, which only takes effect inside a
+                    flex container. Without it the editor's height collapses
+                    to its content size and Monaco never gets a real box to
+                    paint into. A tutorial's frame shows the editor alone: its
+                    steps, builds and deploys are the chat's
+                    (`tutorial-frame-2nov`). The router stays mounted on the
+                    Write stage, whose editor must never unmount */}
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <StageRouter
+                    stage={shownStage}
+                    tabs={stagesOffered && tutorial.frame === undefined}
+                    // On the network choice, as the cluster row opens it
+                    onChangeNetwork={() =>
+                      toggleSettings(closeNavSheet.current)({
+                        from: "stage",
+                        focus: "network",
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </TutorialWorkspace>
           )}
           console={({ open, toggle }) => (
-            <ConsoleDrawer open={open} onToggle={toggle} />
+            <ConsoleDrawer
+              open={open}
+              onToggle={toggle}
+              tutorial={tutorial.frame ? terminal : undefined}
+            />
           )}
           assistant={({ open, toggle, ...widen }) => (
             // No fill, so the conversation sits on the window's pattern, as
-            // the prototype's does
+            // the prototype's does. A tutorial's chat never sits here: the
+            // frame and the phone layout (5.1) hold it themselves
             <aside className="relative flex h-full w-full flex-col overflow-hidden">
               {/* The head carries "Collapse assistant", and Widen while the
                 shell says it can widen. Hidden, the column takes no width and
                 the stage bar carries "Expand assistant" (design.md, "Frame
                 chrome (5.25)") */}
-              {open && (
+              {open && !onPhone && (
                 <Assistant
                   widen={widen}
                   onHide={toggle}
@@ -474,7 +715,7 @@ const FlowFrame = () => {
       </div>
 
       {settings.open && (
-        <SettingsPage focus={settings.focus} onClose={closeSettings} />
+        <LiveSettings focus={settings.focus} onClose={closeSettings} />
       )}
 
       <ModalHost />

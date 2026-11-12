@@ -21,7 +21,9 @@ use wasm_bindgen::prelude::*;
 
 use crate::{
     proc_macro, return_types, snippet, to_proto,
-    utils::{create_source_root, get_crate_id, get_file_id, get_file_position},
+    utils::{
+        create_source_root, get_crate_id, get_enabled_features, get_file_id, get_file_position,
+    },
 };
 
 #[wasm_bindgen]
@@ -264,6 +266,9 @@ version = "0.0.0""#
                 );
                 self.crate_graph.add_dep(crate_id, dep).unwrap();
             }
+
+            // A crate first loaded empty has the stub manifest's features, none
+            self.get_mut_crate_data(crate_id).cfg_options = Self::cfg_options(&manifest);
 
             // Set proc macros
             if proc_macro::get_is_proc_macro(&manifest) {
@@ -829,19 +834,25 @@ impl WorldState {
                 .get()
                 .map(|version| version.to_owned())
                 .ok(),
-            {
-                let mut cfg = CfgOptions::default();
-                cfg.insert_atom("unix".into());
-                cfg.insert_key_value("target_arch".into(), "x86_64".into());
-                cfg.insert_key_value("target_pointer_width".into(), "64".into());
-                cfg
-            },
+            Self::cfg_options(manifest),
             Default::default(),
             Env::default(),
             vec![],
             proc_macro::get_is_proc_macro(&manifest),
             CrateOrigin::default(),
         )
+    }
+
+    /// Get the cfg options of a crate, with the features its manifest enables.
+    fn cfg_options(manifest: &Manifest) -> CfgOptions {
+        let mut cfg = CfgOptions::default();
+        cfg.insert_atom("unix".into());
+        cfg.insert_key_value("target_arch".into(), "x86_64".into());
+        cfg.insert_key_value("target_pointer_width".into(), "64".into());
+        for feature in get_enabled_features(manifest) {
+            cfg.insert_key_value("feature".into(), feature.into());
+        }
+        cfg
     }
 
     /// Add crate root from its name.

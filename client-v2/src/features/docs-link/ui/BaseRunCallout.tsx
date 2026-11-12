@@ -1,8 +1,14 @@
 import { CircleAlert, CircleCheck, Info, Wallet } from "lucide-react";
 import type { FC, ReactNode } from "react";
 
-import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
+import { faucetUrlFor } from "@/shared/lib/faucet";
+import {
+  Callout,
+  CalloutAction,
+  CalloutActions,
+  CalloutDescription,
+  CalloutTitle,
+} from "@/shared/ui/callout";
 import { CopyButton } from "@/shared/ui/copy-button";
 
 import type { RunState } from "../model/run";
@@ -10,12 +16,9 @@ import type { RunState } from "../model/run";
 /** Where the open project came from, when a docs link opened it */
 export interface RunSourceInfo {
   title: string;
-  /** The page the link came from, already checked to be `https:` */
+  /** The page the link came from, already checked to be an `https:` Solana page */
   from?: string;
 }
-
-/** Where "Get devnet SOL" goes until Playground has a faucet of its own */
-export const FAUCET_URL = "https://faucet.solana.com";
 
 export interface BaseRunCalloutProps {
   state: RunState;
@@ -58,10 +61,8 @@ const Note: FC<NoteProps> = ({
   >
     {icon}
     <CalloutTitle>{title}</CalloutTitle>
-    <CalloutDescription>
-      {children}
-      {actions && <div className="mt-2 flex gap-2">{actions}</div>}
-    </CalloutDescription>
+    <CalloutDescription>{children}</CalloutDescription>
+    {actions && <CalloutActions>{actions}</CalloutActions>}
   </Callout>
 );
 
@@ -77,11 +78,7 @@ const BaseRunCallout: FC<BaseRunCalloutProps> = ({
   onNotNow,
   onCopyError,
 }) => {
-  const again = (
-    <Button variant="outline" size="xs" onClick={onRunAgain}>
-      Run again
-    </Button>
-  );
+  const again = <CalloutAction onClick={onRunAgain}>Run again</CalloutAction>;
 
   // A run in progress keeps showing what was there before it
   const shown = state.kind === "running" ? state.previous : state;
@@ -164,8 +161,12 @@ const BaseRunCallout: FC<BaseRunCalloutProps> = ({
         >
           <Wallet />
           <CalloutTitle>Not enough SOL on devnet</CalloutTitle>
-          <CalloutDescription>
-            <div id="client-run-funding">
+          {/* The card holds the words and the actions together, but draws no
+              box: both sit in the callout's grid, the actions a row of their
+              own, out of the description's link underline. Full opacity, as
+              in any callout with actions */}
+          <div id="client-run-funding" className="contents">
+            <CalloutDescription className="opacity-100">
               <p>
                 This script pays a few small fees. Your Playground wallet needs
                 about {sol(shown.needed)}.
@@ -178,30 +179,27 @@ const BaseRunCallout: FC<BaseRunCalloutProps> = ({
                 <dt>Needed</dt>
                 <dd>{sol(shown.needed)}</dd>
               </dl>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button size="xs" asChild>
-                  <a
-                    href={FAUCET_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    Get devnet SOL
-                  </a>
-                </Button>
-                <CopyButton
-                  value={shown.address}
-                  label="Copy address"
-                  onError={onCopyError}
-                />
-                <Button variant="outline" size="xs" onClick={onCheckAgain}>
-                  Check again
-                </Button>
-                <Button variant="ghost" size="xs" onClick={onNotNow}>
-                  Not now
-                </Button>
-              </div>
-            </div>
-          </CalloutDescription>
+            </CalloutDescription>
+            <CalloutActions>
+              <CalloutAction asChild>
+                <a
+                  href={faucetUrlFor("devnet")(shown.address)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Get devnet SOL
+                </a>
+              </CalloutAction>
+              <CopyButton
+                value={shown.address}
+                label="Copy address"
+                onError={onCopyError}
+                className="max-md:size-11"
+              />
+              <CalloutAction onClick={onCheckAgain}>Check again</CalloutAction>
+              <CalloutAction onClick={onNotNow}>Not now</CalloutAction>
+            </CalloutActions>
+          </div>
         </Callout>
       );
   }

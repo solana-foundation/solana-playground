@@ -24,7 +24,7 @@ const props = (
 ): BaseTutorialCardProps => ({
   title: "Hello Anchor",
   description: "Hello world program with Anchor framework",
-  caption: "Beginner · Anchor",
+  eyebrow: "Beginner · Anchor",
   framework: "Anchor",
   progress,
   open,
@@ -63,8 +63,6 @@ describe("BaseTutorialCard", () => {
       screen.getByRole("button", { name: "Hello Anchor completed. Open it" })
     ).toBeTruthy();
     expect(container.querySelector("[data-card-tick]")).not.toBeNull();
-    // On a phone too: the tick stays where other cards draw a chevron
-    expect(container.querySelector("[data-card-chevron]")).toBeNull();
     expect(screen.queryByText(/\d+ of \d+/)).toBeNull();
   });
 
@@ -108,12 +106,33 @@ describe("BaseTutorialCard", () => {
     expect(p.onOpen).toHaveBeenCalledTimes(1);
   });
 
-  it("is one card with one button, and ends in a chevron on a phone", () => {
+  it("is one card with one button, its corner square on every screen", () => {
     const { container } = render(
       <BaseTutorialCard {...props({ state: "new" })} />
     );
     expect(container.querySelector('[data-slot="action-card"]')).not.toBeNull();
     expect(screen.getAllByRole("button")).toHaveLength(1);
-    expect(container.querySelector("[data-card-chevron]")).not.toBeNull();
+    const corner = container.querySelector("[data-card-corner]");
+    expect(corner).not.toBeNull();
+    expect(corner?.className).not.toContain("max-md:hidden");
+  });
+
+  it("puts the word over the name", () => {
+    render(<BaseTutorialCard {...props({ state: "new" })} />);
+    const word = screen.getByText("Beginner · Anchor");
+    expect(word.dataset.slot).toBe("action-card-eyebrow");
+    const title = screen.getByRole("heading", { name: "Hello Anchor" });
+    expect(
+      word.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("draws no word for a tutorial without one", () => {
+    const { container } = render(
+      <BaseTutorialCard {...props({ state: "new" })} eyebrow="" />
+    );
+    expect(
+      container.querySelector('[data-slot="action-card-eyebrow"]')
+    ).toBeNull();
   });
 });

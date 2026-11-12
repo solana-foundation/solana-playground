@@ -8,7 +8,10 @@ vi.mock("./explorer", () => ({ PgExplorer: {} }));
 vi.mock("./framework", () => ({
   noProgramCode: (source: string) => `No program code found in ${source}.`,
   PgFramework: {
-    convertToPlaygroundLayoutWith: vi.fn(() => (files: unknown) => files),
+    // The middle step is a mock too, so a test can read the `source` it got
+    convertToPlaygroundLayoutWith: vi.fn(() =>
+      vi.fn(() => (files: unknown) => files)
+    ),
   },
 }));
 
@@ -147,10 +150,11 @@ describe("PgGithub.getFiles", () => {
       "https://github.com/solana-labs/example/tree/master/program"
     );
 
-    expect(PgFramework.convertToPlaygroundLayoutWith).toHaveBeenLastCalledWith({
-      root: "program",
-      source: "program in solana-labs/example",
-    });
+    const convertWith = vi.mocked(PgFramework.convertToPlaygroundLayoutWith);
+    expect(convertWith).toHaveBeenLastCalledWith("program");
+    expect(convertWith.mock.results.at(-1)?.value).toHaveBeenLastCalledWith(
+      "program in solana-labs/example"
+    );
   });
 
   it("reports progress from the layout request to the last file", async () => {
@@ -328,5 +332,75 @@ describe("PgGithub.getFiles", () => {
     await expect(
       PgGithub.getFiles("https://github.com/solana-labs/example")
     ).rejects.toThrow(/"src\/lib\.rs" was not found on GitHub/);
+  });
+});
+
+describe("PgGithub.isValidUrl", () => {
+  it("takes the URL a route gets after the router folds its double slash", () => {
+    // react-router turns `/https://github.com/…` into `/https:/github.com/…`
+    expect(
+      PgGithub.isValidUrl(
+        "https:/github.com/solana-foundation/program-examples/tree/main/basics"
+      )
+    ).toBe(true);
+  });
+
+  it("takes a URL with both slashes, and one without a scheme", () => {
+    expect(PgGithub.isValidUrl("https://github.com/a/b")).toBe(true);
+    expect(PgGithub.isValidUrl("github.com/a/b")).toBe(true);
+  });
+
+  it("still refuses a URL of another host", () => {
+    expect(PgGithub.isValidUrl("https:/gitlab.com/a/b")).toBe(false);
+  });
+});
+
+describe("PgGithub.routePath", () => {
+  it("puts GitHub's path after /github/, with or without the URL's scheme", () => {
+    const path =
+      "/github/solana-foundation/program-examples/tree/main/basics/create-account/anchor";
+    expect(
+      PgGithub.routePath(
+        "https://github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor"
+      )
+    ).toBe(path);
+    expect(
+      PgGithub.routePath(
+        "github.com/solana-foundation/program-examples/tree/main/basics/create-account/anchor/"
+      )
+    ).toBe(path);
+    // The folded form react-router makes of `https://` in a path
+    expect(PgGithub.routePath("https:/www.github.com/a/b")).toBe("/github/a/b");
+  });
+
+  it("is a URL the GitHub route accepts again", () => {
+    const path = PgGithub.routePath("https://github.com/a/b/tree/main/c");
+    expect(
+      PgGithub.isValidUrl(`github.com/${path.slice("/github/".length)}`)
+    ).toBe(true);
+    expect(
+      PgGithub.parseUrl(`github.com/${path.slice("/github/".length)}`)
+    ).toEqual({
+      owner: "a",
+      repo: "b",
+      ref: "main",
+      path: "c",
+    });
+  });
+});
+
+describe("PgGithub.parseUrl", () => {
+  it("reads the URL the router folded as it reads the full one", () => {
+    const url =
+      "github.com/solana-foundation/program-examples/tree/main/basics";
+    expect(PgGithub.parseUrl(`https:/${url}`)).toEqual(
+      PgGithub.parseUrl(`https://${url}`)
+    );
+    expect(PgGithub.parseUrl(`https:/${url}`)).toEqual({
+      owner: "solana-foundation",
+      repo: "program-examples",
+      ref: "main",
+      path: "basics",
+    });
   });
 });

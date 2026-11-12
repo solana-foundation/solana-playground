@@ -1,9 +1,16 @@
-// The connected thread: the store's items, the lesson's next move, the
-// turn's send, and what is reported when the user acts on them.
+// The connected thread: the store's items, the turn's send, and what is
+// reported when the user acts on them.
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SessionUser } from "@/features/auth";
 import { PgSession } from "@/features/auth";
+import { PgSyncClient } from "@/features/persistence";
+import {
+  initLogger,
+  memoryProvider as logMemory,
+  resetLogger,
+} from "@/shared/lib/logger";
 import * as reportModule from "@/shared/lib/report-button-failure";
 import {
   initTelemetry,
@@ -27,47 +34,8 @@ vi.mock("../model/default-backend", () => ({
   useDefaultBackend: () => backend,
 }));
 
-/** The open lesson as the thread sees it; no lesson unless a test opens one */
-const lesson = vi.hoisted(() => ({
-  open: false,
-  stage: "build" as "build" | "deploy",
-  attempted: false,
-  canPass: false,
-  pass: vi.fn(),
-  execute: vi.fn(() => Promise.resolve()),
-}));
-
-// The runtime's commands reach the utils barrel, which needs the build's
-// globals; what is under test is which command the reply's button runs
-vi.mock("../../../utils/command", () => ({
-  PgCommand: {
-    build: { execute: lesson.execute },
-    deploy: { execute: lesson.execute },
-  },
-}));
-// The lesson store reaches the same barrel. Its folds stand in for a lesson
-// whose current step is verified by `lesson.stage`.
-vi.mock("../../../views/flow/lessons", () => ({
-  INITIAL_LESSON_STATE: { path: null, record: [] },
-  PgLesson: {
-    onDidChange: (cb: (state: unknown) => void) => {
-      cb(lesson.open ? { path: {}, record: [] } : { path: null, record: [] });
-      return { dispose: () => {} };
-    },
-    canPass: () => lesson.canPass,
-    pass: lesson.pass,
-  },
-  foldRecord: () => ({}),
-  cursorStep: () => ({ id: "step-1", verify: {} }),
-  verifyingStage: () => lesson.stage,
-  attempted: () => lesson.attempted,
-}));
-vi.mock("../../../views/sidebar/assistant/bridge/lesson-context", () => ({
-  describeLesson: (state: { path: unknown }) =>
-    state.path ? { verifiedBy: "A build proves this step" } : null,
-}));
 // Undo reads and writes the project through the real bridge, which reaches
-// the same barrel; the thread only decides when to offer it and what to report
+// the utils barrel; the thread only decides when to offer it and what to report
 const undo = vi.hoisted(() => ({
   can: vi.fn(() => false),
   original: vi.fn((): string | undefined => undefined),
@@ -107,6 +75,10 @@ const finishedReply = (text: string) => {
   PgAssistant.setStatus("idle");
 };
 
+/** A reply that proposes code, the kind "Make this change" turns into a patch */
+const CHANGE_REPLY =
+  "Add a field to the account:\n\n```rust\npub count: u64,\n```";
+
 /** A turn that wrote a patch the user applied, then replied */
 const appliedPatchThenReply = () => {
   PgAssistant.addUserMessage("Fix it");
@@ -120,10 +92,6 @@ const appliedPatchThenReply = () => {
 beforeEach(() => {
   events = memoryTelemetry();
   initTelemetry({ providers: [events] });
-  lesson.open = false;
-  lesson.stage = "build";
-  lesson.attempted = false;
-  lesson.canPass = false;
   PgAssistant.clear();
 });
 
@@ -144,6 +112,204 @@ describe("Thread, an unreadable thread", () => {
     vi.spyOn(PgAssistant, "unsaved", "get").mockReturnValue(true);
     render(<Thread turn={stubTurn(false)} project="Counter" />);
     expect(screen.getByRole("status").textContent).toBe(THREAD_NOT_SAVED);
+  });
+});
+
+describe("Thread, signed out", () => {
+  const SIGN_IN_TO_KEEP =
+    "Sign in to keep this conversation on your other devices.";
+  const USER = { id: "u1", name: "Ada" } as unknown as SessionUser;
+  const SIGNED_OUT: SessionUser | undefined = undefined;
+
+  /** Who is signed in, and a way to change it the way `PgSession` would */
+  const session = (initial: SessionUser | undefined) => {
+    let user = initial;
+    const listeners = new Set<() => void>();
+    vi.spyOn(PgSession, "get").mockImplementation(() => user);
+    vi.spyOn(PgSession, "afterFirstRead").mockResolvedValue(undefined);
+    vi.spyOn(PgSession, "onDidChange").mockImplementation((cb) => {
+      listeners.add(cb as () => void);
+      return { dispose: () => listeners.delete(cb as () => void) };
+    });
+    return (next: SessionUser | undefined) => {
+      user = next;
+      listeners.forEach((cb) => cb());
+    };
+  };
+
+  const syncs = (available: boolean) =>
+    vi.spyOn(PgSyncClient, "available").mockResolvedValue(available);
+
+  it("a conversation ends in an offer to sign in", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(await screen.findByText(SIGN_IN_TO_KEEP)).toBeTruthy();
+  });
+
+  it("signing in from the offer stays in the project and is reported", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    const signIn = vi
+      .fn<(scopes: string[]) => Promise<void>>()
+      .mockResolvedValue();
+    const signInFor = vi.spyOn(PgSession, "signInFor").mockReturnValue(signIn);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Sign in with GitHub" })
+    );
+    expect(signInFor).toHaveBeenCalledWith("assistant");
+    expect(signIn).toHaveBeenCalledWith([]);
+    expect(tracked()).toEqual([["assistant_sign_in_offered_clicked", {}]]);
+  });
+
+  it("a session that ends shows the offer", async () => {
+    const setUser = session(USER);
+    syncs(true);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await act(async () => {});
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+
+    act(() => setUser(SIGNED_OUT));
+    expect(await screen.findByText(SIGN_IN_TO_KEEP)).toBeTruthy();
+  });
+
+  // The session effect's own read is what tells it the account signed in; a
+  // read started by the panel, which can mount first, hid that from it
+  it("never starts the session read itself", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    const whenRead = vi.spyOn(PgSession, "whenRead");
+    const refresh = vi.spyOn(PgSession, "refresh");
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await screen.findByText(SIGN_IN_TO_KEEP);
+    expect(whenRead).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("waits for the session read before offering anything", async () => {
+    session(USER);
+    syncs(true);
+    let answer!: () => void;
+    vi.spyOn(PgSession, "afterFirstRead").mockReturnValue(
+      new Promise<void>((resolve) => (answer = resolve))
+    );
+    // Before the read `get()` is `undefined` for everyone
+    vi.spyOn(PgSession, "get").mockReturnValue(SIGNED_OUT);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await act(async () => {});
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+
+    vi.spyOn(PgSession, "get").mockReturnValue(USER);
+    await act(async () => answer());
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+  });
+
+  it("a sign-in under way holds the button, and its end frees it", async () => {
+    const setUser = session(SIGNED_OUT);
+    syncs(true);
+    const state = vi
+      .spyOn(PgSession, "signInState")
+      .mockReturnValue({ status: "pending" });
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    const button = (await screen.findByRole("button", {
+      name: "Sign in with GitHub",
+    })) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+
+    state.mockReturnValue({ status: "idle" });
+    act(() => setUser(SIGNED_OUT));
+    expect(button.disabled).toBe(false);
+  });
+
+  it("signing in takes the offer away", async () => {
+    const setUser = session(SIGNED_OUT);
+    syncs(true);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await screen.findByText(SIGN_IN_TO_KEEP);
+
+    act(() => setUser(USER));
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+  });
+
+  it("a cancelled sign-in is logged, anything else reported", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    const logged = logMemory();
+    initLogger({ providers: [logged] });
+    // A real failure at a known step: the server refuses to start the sign-in
+    const refused = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({ ok: false } as Response);
+    const cancelled = await PgSession.signIn().catch((e: unknown) => e);
+    refused.mockRestore();
+    const broken = new Error("popup threw");
+    vi.spyOn(PgSession, "signInFor").mockReturnValue(
+      vi
+        .fn<(scopes: string[]) => Promise<void>>()
+        .mockRejectedValueOnce(cancelled)
+        .mockRejectedValueOnce(broken)
+    );
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    const button = await screen.findByRole("button", {
+      name: "Sign in with GitHub",
+    });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await act(async () => {});
+
+    const mine = logged.entries.filter(
+      (e) => e.ns === "assistant:sign-in-offer"
+    );
+    expect(mine).toEqual([
+      expect.objectContaining({ level: "info" }),
+      expect.objectContaining({ level: "error", error: broken, report: true }),
+    ]);
+    resetLogger();
+  });
+
+  it("an empty thread has nothing to keep", async () => {
+    session(SIGNED_OUT);
+    syncs(true);
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await act(async () => {});
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+  });
+
+  it("a deployment without sync offers nothing", async () => {
+    session(SIGNED_OUT);
+    syncs(false);
+    act(() => {
+      PgAssistant.addUserMessage("Hi");
+    });
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    await act(async () => {});
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
   });
 });
 
@@ -491,10 +657,55 @@ describe("Thread, a refused key", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
 
-    expect(openConnect).toHaveBeenCalledWith("key-rejected", {
+    expect(openConnect).toHaveBeenCalledWith("use-hosted", {
       provider: "default",
     });
     expect(PgAssistant.connection).toBeNull();
+  });
+
+  it("drops both buttons once the thread moved, so a pick counts once", async () => {
+    hosted();
+    await signIn();
+    refuse();
+    render(<Thread turn={withInput("", vi.fn())} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(
+      screen.queryByRole("button", { name: "Use hosted model" })
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change key" })).toBeNull();
+    expect(
+      tracked().filter(([name]) => name === "assistant_model_picked")
+    ).toHaveLength(1);
+  });
+
+  it("drops Change key once the thread moved to another key's backend", () => {
+    act(() =>
+      PgAssistant.connect({
+        id: "anthropic",
+        model: "claude-x",
+        apiKey: "sk-test",
+      } as Parameters<typeof PgAssistant.connect>[0])
+    );
+    refuse();
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(screen.queryByRole("button", { name: "Change key" })).toBeNull();
+  });
+
+  it("keeps Change key while the refused backend is still connected", () => {
+    act(() =>
+      PgAssistant.connect({
+        id: "openai",
+        model: "gpt-x",
+        apiKey: "sk-test",
+      } as Parameters<typeof PgAssistant.connect>[0])
+    );
+    refuse();
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(screen.getByRole("button", { name: "Change key" })).toBeTruthy();
   });
 
   it("offers nothing once a reply came after the error", () => {
@@ -535,28 +746,8 @@ describe("Thread, sending", () => {
     expect(tracked()).toEqual([["assistant_suggestion_picked", {}]]);
   });
 
-  it("offers the lesson's questions while a lesson is open", () => {
-    lesson.open = true;
-    const send = vi.fn().mockResolvedValue(undefined);
-    render(<Thread turn={stubTurn(false, send)} project="Hello Anchor" />);
-    for (const name of [
-      "Explain this step",
-      "Give me a hint",
-      "Why did my build fail?",
-    ]) {
-      expect(screen.getByRole("button", { name })).toBeTruthy();
-    }
-    expect(
-      screen.queryByRole("button", { name: "What does this program do?" })
-    ).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Give me a hint" }));
-    expect(send).toHaveBeenCalledWith("Give me a hint");
-    expect(tracked()).toEqual([["assistant_suggestion_picked", {}]]);
-  });
-
   it("make this change asks for a patch and is reported", () => {
-    act(() => finishedReply("Add a field to the account."));
+    act(() => finishedReply(CHANGE_REPLY));
     const send = vi.fn().mockResolvedValue(undefined);
     render(<Thread turn={stubTurn(false, send)} project="Counter" />);
 
@@ -567,8 +758,28 @@ describe("Thread, sending", () => {
     expect(tracked()).toEqual([["assistant_make_change_requested", {}]]);
   });
 
+  it("no make-change under an explanation", () => {
+    act(() =>
+      finishedReply(
+        "This account holds 2.5 SOL and the System Program owns it."
+      )
+    );
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(
+      screen.queryByRole("button", { name: "Make this change" })
+    ).toBeNull();
+  });
+
+  it("no make-change under a command to run", () => {
+    act(() => finishedReply("Run this:\n\n```bash\nanchor build\n```"));
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(
+      screen.queryByRole("button", { name: "Make this change" })
+    ).toBeNull();
+  });
+
   it("no make-change while a turn runs", () => {
-    act(() => finishedReply("Add a field to the account."));
+    act(() => finishedReply(CHANGE_REPLY));
     render(<Thread turn={stubTurn(true)} project="Counter" />);
     expect(
       screen.queryByRole("button", { name: "Make this change" })
@@ -577,8 +788,8 @@ describe("Thread, sending", () => {
 
   it("make-change only on the newest reply", () => {
     act(() => {
-      finishedReply("First answer.");
-      finishedReply("Second answer.");
+      finishedReply(CHANGE_REPLY);
+      finishedReply(CHANGE_REPLY);
     });
     render(<Thread turn={stubTurn(false)} project="Counter" />);
     expect(
@@ -592,67 +803,5 @@ describe("Thread, sending", () => {
     expect(
       screen.queryByRole("button", { name: "Make this change" })
     ).toBeNull();
-  });
-});
-
-describe("Thread, inside a lesson", () => {
-  it("make-change is offered as a last resort", () => {
-    lesson.open = true;
-    act(() => finishedReply("Here is a hint."));
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-    expect(
-      screen.getByRole("button", { name: "Write it for me" })
-    ).toBeTruthy();
-  });
-
-  it("after an applied patch the move is the step's build", async () => {
-    lesson.open = true;
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-
-    // Async: Build is an AsyncButton, which settles once the command resolves
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Build" }));
-    });
-
-    expect(lesson.execute).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "Skip this step" })).toBeNull();
-  });
-
-  it("a step verified by a deploy offers Deploy", () => {
-    lesson.open = true;
-    lesson.stage = "deploy";
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-    expect(screen.getByRole("button", { name: "Deploy" })).toBeTruthy();
-  });
-
-  it("an attempted step that can pass offers the skip, and only that", () => {
-    lesson.open = true;
-    lesson.attempted = true;
-    lesson.canPass = true;
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
-
-    expect(lesson.pass).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "Build" })).toBeNull();
-  });
-
-  it("an attempted step that cannot pass offers neither", () => {
-    lesson.open = true;
-    lesson.attempted = true;
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(false)} project="Counter" />);
-    expect(screen.queryByRole("button", { name: "Skip this step" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Build" })).toBeNull();
-  });
-
-  it("no lesson move while a turn runs", () => {
-    lesson.open = true;
-    act(() => appliedPatchThenReply());
-    render(<Thread turn={stubTurn(true)} project="Counter" />);
-    expect(screen.queryByRole("button", { name: "Build" })).toBeNull();
   });
 });

@@ -17,7 +17,7 @@ export type AssistantEvents = {
   };
   /** The user changed the reasoning effort in the composer's menu. */
   assistant_effort_changed: { effort: Effort };
-  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist, the Change key button of a rejected key (or its Use hosted model when signed out), the composer's + menu, the off row's Add an API key or the status indicators' Connect a model (`widgets/status`). */
+  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist, the Change key button of a rejected key, its Use hosted model when signed out, the off row's Add an API key or the status indicators' Connect a model (`widgets/status`). */
   assistant_connect_opened: {
     via:
       | "menu"
@@ -26,7 +26,7 @@ export type AssistantEvents = {
       | "thread"
       | "setup"
       | "key-rejected"
-      | "add"
+      | "use-hosted"
       | "ai-off"
       | "status";
   };
@@ -63,7 +63,9 @@ export type AssistantEvents = {
   };
   /** The user picked one of the empty thread's suggestions, which sends it (or, with nothing connected, opens Connect a model). */
   assistant_suggestion_picked: NoParams;
-  /** The user asked for a described change as a patch ("Make this change" or "Write it for me"). */
+  /** The user pressed "Sign in with GitHub" on the line a signed-out thread ends in; the sign-in's outcome is `auth`'s events. */
+  assistant_sign_in_offered_clicked: NoParams;
+  /** The user asked for a described change as a patch ("Make this change"). */
   assistant_make_change_requested: NoParams;
   /** The connection dropped during a turn: after text had streamed, cutting the reply off (`reason: "interrupted"`), or before any (`reason: "connection-lost"`). Other failures show their error and send nothing here. */
   assistant_reply_failed: { reason: "interrupted" | "connection-lost" };

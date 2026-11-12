@@ -1,6 +1,7 @@
 # client-v2-feedback Specification
 
 ## Purpose
+
 How a person using `client-v2` sends the team feedback from inside the
 product: its entries in the account menu, the form, what reaches Sentry, and
 the events `features/feedback` sends.

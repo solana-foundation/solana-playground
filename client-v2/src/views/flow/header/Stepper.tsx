@@ -10,14 +10,8 @@ import {
 
 import type { FlowState, Stage, StageStatus } from "../state/stage";
 import { stagesOf } from "../state/stage";
+import { STAGE_LABEL } from "../state/stage-label";
 import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
-
-const LABEL: Record<Stage, string> = {
-  write: "Write",
-  build: "Build",
-  deploy: "Deploy",
-  interact: "Interact",
-};
 
 /**
  * Writing has no completion signal of its own, so it is inferred: reaching a
@@ -42,8 +36,6 @@ export const statusOf = (state: FlowState, stage: Stage): StageStatus => {
 interface StepperProps {
   state: FlowState;
   onSelect: (stage: Stage) => void;
-  /** The stage the current lesson step is aiming at; `null` outside a lesson. */
-  target?: Stage | null;
   /**
    * Stretch the list across its row, the stages sharing the width equally
    * (the frame's stage tabs, design.md "Frame chrome (5.25)")
@@ -72,13 +64,7 @@ const DS_STATUS: Record<StageStatus, StepperStatus> = {
  * system's stepper. Each stage's status is carried by glyph shape as well as
  * color, so the sequence reads correctly without color vision.
  */
-const Stepper: FC<StepperProps> = ({
-  state,
-  onSelect,
-  target,
-  fill,
-  phone,
-}) => {
+const Stepper: FC<StepperProps> = ({ state, onSelect, fill, phone }) => {
   // The root fills its row, so what it measures is the room the row
   // gives, not the list's own width. Folding the labels shrinks the list but
   // not the root, so the fold cannot flip itself back. Until the first
@@ -129,13 +115,17 @@ const Stepper: FC<StepperProps> = ({
               value={stage}
               status={DS_STATUS[status]}
               errors={stage === "build" ? state.buildErrorCount : undefined}
-              target={stage === target}
               className={
-                phone ? "h-12 flex-1 justify-center text-control" : undefined
+                // 32 px drawn, so the 40 px pill has 10 px of air in the
+                // 60 px bar; the tap area stays 48 px through the invisible
+                // `before`
+                phone
+                  ? "h-8 flex-1 justify-center text-control before:absolute before:inset-x-0 before:-inset-y-2"
+                  : undefined
               }
               id={`flow-stage-tab-${stage}`}
               aria-controls={`flow-stage-panel-${stage}`}
-              aria-label={`${LABEL[stage]}: ${status}${
+              aria-label={`${STAGE_LABEL[stage]}: ${status}${
                 // Spoken here as well as drawn: a pre-compiler failure has no
                 // count, so saying "0 errors" would mislead.
                 stage === "build" &&
@@ -145,9 +135,9 @@ const Stepper: FC<StepperProps> = ({
                       state.buildErrorCount === 1 ? "" : "s"
                     }`
                   : ""
-              }${stage === target ? ", current lesson target" : ""}`}
+              }`}
             >
-              {LABEL[stage]}
+              {STAGE_LABEL[stage]}
             </StepperItem>
           );
         })}

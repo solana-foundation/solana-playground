@@ -13,7 +13,8 @@ export type AccountItem =
   | "cluster-down"
   | "connect-wallet"
   | "wallet"
-  | "disconnect-wallet";
+  | "disconnect-wallet"
+  | "fund-wallet";
 
 /** Where the account menu opens from: the footer's account row, or the rail's "Account" */
 export type AccountSurface = "footer" | "rail";
@@ -26,6 +27,8 @@ export type AccountUser = Pick<SessionUser, "name" | "login" | "image">;
  */
 export type AccountSession =
   | { status: "signed-in"; user: AccountUser }
+  /** The session ended without a sign-out; `user` is the account it held */
+  | { status: "expired"; user: AccountUser }
   | SignInState;
 
 export interface AccountWallet {
@@ -49,12 +52,18 @@ export interface AccountView {
   sending: boolean;
   /** What the browser says of the network (`navigator.onLine`) */
   online: boolean;
+  /**
+   * A Playground account exists to receive SOL, so the menu offers "Fund from
+   * a wallet" (`features/fund-wallet`); false before the wallet's setup
+   */
+  canFund: boolean;
 }
 
 /**
  * The one line under the account's name (Spec 02, "The account row says who
  * and where"): where work is saved, where a sign-in stands, who is signed
- * in, or that the network is down and work saves here. The wallet is not on
+ * in, that the network is down and work saves here, or that the session
+ * ended. The wallet is not on
  * the row; the menu's wallet group carries it.
  */
 export type AccountLine =
@@ -62,7 +71,8 @@ export type AccountLine =
   | { kind: "signing-in" }
   | { kind: "failed"; message: string }
   | { kind: "login"; login: string }
-  | { kind: "offline" };
+  | { kind: "offline" }
+  | { kind: "session-ended" };
 
 /** Where the sign-out question stands inside the account menu */
 export type SignOutState =
@@ -113,6 +123,26 @@ export const formatBalance = (balance: number | null) =>
 export const accountUser = ({ session }: AccountView) =>
   session.status === "signed-in" ? session.user : undefined;
 
+/** The avatar's image: a session that ended keeps its account's */
+export const accountImage = ({ session }: AccountView) =>
+  session.status === "signed-in" || session.status === "expired"
+    ? session.user.image
+    : undefined;
+
+/**
+ * The session with nobody signed in. A session that ended says so unless a
+ * sign-in is speaking for itself: under way, or failed and not cancelled.
+ */
+export const sessionWith =
+  (expired: AccountUser | undefined) =>
+  (signIn: SignInState): AccountSession => {
+    if (!expired || signIn.status === "pending") return signIn;
+    if (signIn.status === "failed" && signIn.reason !== "cancelled") {
+      return signIn;
+    }
+    return { status: "expired", user: expired };
+  };
+
 /** The short name in the account controls' label: the handle first */
 const displayName = (user: AccountUser) => user.login ?? user.name ?? "Account";
 
@@ -122,6 +152,9 @@ export const profileName = (user: AccountUser) =>
 
 /** The account controls' name: the visible text alone would not say what they open */
 export const accountLabel = (view: AccountView) => {
+  if (view.session.status === "expired") {
+    return `Account: ${displayName(view.session.user)}, session ended`;
+  }
   const user = accountUser(view);
   return user ? `Account: ${displayName(user)}` : "Account, signed out";
 };
@@ -169,6 +202,13 @@ export const accountLines = (
       line: signedInLine(user, view),
     };
   }
+  // Outranks offline: the browser's network is not what stopped the sync
+  if (view.session.status === "expired") {
+    return {
+      primary: profileName(view.session.user),
+      line: { kind: "session-ended" },
+    };
+  }
   return {
     primary: view.session.status === "pending" ? "Signing in…" : "Sign in",
     line: signedOutLine(view.session),
@@ -189,6 +229,8 @@ export const lineText = (line: AccountLine) => {
       return `@${line.login}`;
     case "offline":
       return "Offline · saving here";
+    case "session-ended":
+      return "Your session ended";
   }
 };
 
@@ -223,6 +265,7 @@ if (import.meta.vitest) {
       cluster: fields.cluster ?? UP,
       sending: fields.sending ?? false,
       online: fields.online ?? true,
+      canFund: fields.canFund ?? false,
     });
 
     const TESTER = { name: "Tester", login: "t", image: undefined };
@@ -238,6 +281,8 @@ if (import.meta.vitest) {
       name: null,
     };
 
+    const ENDED = { status: "expired", user: TESTER } as const;
+
     describe("accountLabel", () => {
       it("names the login, then the name, then says signed out", () => {
         expect(accountLabel(view({ session: signedIn(TESTER) }))).toBe(
@@ -247,6 +292,39 @@ if (import.meta.vitest) {
           "Account: Tester"
         );
         expect(accountLabel(view({}))).toBe("Account, signed out");
+        expect(accountLabel(view({ session: ENDED }))).toBe(
+          "Account: t, session ended"
+        );
+      });
+    });
+
+    describe("sessionWith", () => {
+      const FAILED = {
+        status: "failed",
+        reason: "popup-blocked",
+        message: "x",
+      } as const;
+      const CANCELLED = {
+        status: "failed",
+        reason: "cancelled",
+        message: "x",
+      } as const;
+
+      it("is the sign-in's own state when no session ended", () => {
+        expect(sessionWith(undefined)(IDLE)).toEqual(IDLE);
+        expect(sessionWith(undefined)(CANCELLED)).toEqual(CANCELLED);
+      });
+
+      it("is ended while nothing is happening, a cancelled sign-in included", () => {
+        expect(sessionWith(TESTER)(IDLE)).toEqual(ENDED);
+        expect(sessionWith(TESTER)(CANCELLED)).toEqual(ENDED);
+      });
+
+      it("lets a sign-in under way or a failure speak for itself", () => {
+        expect(sessionWith(TESTER)({ status: "pending" })).toEqual({
+          status: "pending",
+        });
+        expect(sessionWith(TESTER)(FAILED)).toEqual(FAILED);
       });
     });
 
@@ -256,6 +334,18 @@ if (import.meta.vitest) {
         expect(
           accountUser(view({ session: { status: "pending" } }))
         ).toBeUndefined();
+      });
+    });
+
+    describe("accountImage", () => {
+      it("is the account's image signed in or ended, and nothing otherwise", () => {
+        const image = "https://avatars/t.png";
+        const user = { name: "Tester", login: "t", image };
+        expect(accountImage(view({ session: signedIn(user) }))).toBe(image);
+        expect(
+          accountImage(view({ session: { status: "expired", user } }))
+        ).toBe(image);
+        expect(accountImage(view({}))).toBeUndefined();
       });
     });
 
@@ -361,6 +451,17 @@ if (import.meta.vitest) {
         });
       });
 
+      it("keeps the last account's name over the session's end, online or offline", () => {
+        const expected = {
+          primary: "Tester",
+          line: { kind: "session-ended" },
+        };
+        expect(accountLines(view({ session: ENDED }))).toEqual(expected);
+        expect(accountLines(view({ session: ENDED, online: false }))).toEqual(
+          expected
+        );
+      });
+
       it("says signed-in work saves here while offline", () => {
         expect(
           accountLines(view({ session: signedIn(TESTER), online: false })).line
@@ -383,6 +484,7 @@ if (import.meta.vitest) {
         );
         expect(lineText({ kind: "login", login: "t" })).toBe("@t");
         expect(lineText({ kind: "offline" })).toBe("Offline · saving here");
+        expect(lineText({ kind: "session-ended" })).toBe("Your session ended");
       });
     });
 

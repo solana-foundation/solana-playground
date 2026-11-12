@@ -1,10 +1,44 @@
 import { STOPPED } from "../../utils/stopped";
 
-/** What a stopped deploy left of its buffer account */
+/** What a deploy that ended early (stopped, cancelled or failed) left of its buffer account */
 export type StoppedBuffer =
   | { state: "none" }
   | { state: "closed" }
-  | { state: "kept"; address: string; sol: number | undefined };
+  /** Reads empty after a failed close: closed, or consumed by the deploy */
+  | { state: "gone" }
+  /** A create that failed, on an account that could not be read */
+  | {
+      state: "unknown";
+      address: string;
+      /** The RPC {@link closeBuffersCommandFor} names, when buffer reads use one */
+      readBufferUrl: string | undefined;
+    }
+  | {
+      state: "kept";
+      address: string;
+      sol: number | undefined;
+      /** The RPC {@link closeBuffersCommandFor} names, when buffer reads use one */
+      readBufferUrl: string | undefined;
+    };
+
+/** `value` as one single-quoted shell word, so zsh does not glob a URL's `?` */
+const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * The terminal command that closes a wallet's buffers. It names the read-buffer
+ * RPC when buffer reads use one, because the selected RPC may not list fresh buffers.
+ */
+export const closeBuffersCommandFor = (readBufferUrl: string | undefined) =>
+  readBufferUrl
+    ? `solana program close --buffers -u ${shellQuote(readBufferUrl)}`
+    : "solana program close --buffers";
+
+/** What the terminal says of a buffer whose close failed after a failed load */
+export const unclosedBufferLineFor =
+  (readBufferUrl: string | undefined) => (address: string) =>
+    `Its buffer ${address} could not be closed. Run \`${closeBuffersCommandFor(
+      readBufferUrl
+    )}\` to reclaim its SOL.`;
 
 /**
  * The words for an amount a kept buffer holds, to two decimals as the session
@@ -23,21 +57,44 @@ const heldWords = (sol: number | undefined) => {
  *
  * @param buffer the buffer account: never created, closed on the stop, or
  * kept because closing it failed, with the SOL it still holds
- * (`undefined` when they could not be read)
+ * (`undefined` when they could not be read). A stop locks out the final
+ * deploy, so after a stop a buffer that reads empty was closed.
  * @returns the line for `StoppedError`
  */
-export const deployStoppedLine = (buffer: StoppedBuffer) => {
-  const line = `${STOPPED} The program was not deployed.`;
+export const deployStoppedLine = (buffer: StoppedBuffer) =>
+  [
+    `${STOPPED} The program was not deployed.`,
+    bufferLeftLine(buffer.state === "gone" ? { state: "closed" } : buffer),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+/**
+ * What a deploy that ended early, stopped or failed, left of its buffer
+ * account: nothing to say when it was never created. `gone` is said as it is:
+ * the deploy may have consumed the buffer, or the close may have landed.
+ */
+export const bufferLeftLine = (buffer: StoppedBuffer) => {
   switch (buffer.state) {
     case "none":
-      return line;
+      return "";
     case "closed":
-      return `${line} Its buffer account was closed and the SOL returned.`;
+      return "Its buffer account was closed and the SOL returned.";
+    case "gone":
+      return "Its buffer account no longer exists; check whether the program was deployed.";
+    case "unknown":
+      return [
+        `Could not check whether its buffer ${buffer.address} was created.`,
+        `If it holds SOL, run \`${closeBuffersCommandFor(
+          buffer.readBufferUrl
+        )}\` to get it back.`,
+      ].join(" ");
     case "kept":
       return [
-        line,
         `Its buffer ${buffer.address} still holds ${heldWords(buffer.sol)}.`,
-        "Run `solana program close --buffers` to get it back.",
+        `Run \`${closeBuffersCommandFor(
+          buffer.readBufferUrl
+        )}\` to get it back.`,
       ].join(" ");
   }
 };

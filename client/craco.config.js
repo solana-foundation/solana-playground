@@ -283,9 +283,41 @@ module.exports = {
       "Cross-Origin-Opener-Policy": "same-origin",
     };
 
-    return devServerConfig;
+    return toDevServer5(devServerConfig);
   },
 };
+
+/**
+ * CRA 5's webpack-dev-server 4 options, as the webpack-dev-server 5 the
+ * resolutions install accepts them (its schema rejects the 4-only keys).
+ */
+const toDevServer5 = ({
+  onBeforeSetupMiddleware,
+  onAfterSetupMiddleware,
+  https,
+  ...config
+}) => ({
+  ...config,
+  // 5 also overlays runtime errors, over the page, by default; CRA's 4.8 did not
+  client: {
+    ...config.client,
+    overlay: { ...config.client?.overlay, runtimeErrors: false },
+  },
+  server: https
+    ? { type: "https", options: https === true ? {} : https }
+    : "http",
+  setupMiddlewares: (middlewares, devServer) => {
+    // react-scripts' start.js stops the server with `close()`, which 5 renamed `stop()`
+    devServer.close = () => devServer.stop();
+    // `app.use` here runs before the built-in middlewares, as the 4 hook did
+    onBeforeSetupMiddleware?.(devServer);
+    // The 4 hook ran after them: its `app.use` calls join the end of the list
+    onAfterSetupMiddleware?.({
+      app: { use: (middleware) => middlewares.push(middleware) },
+    });
+    return middlewares;
+  },
+});
 
 /**
  * Define global variable based on the items in `public` directory.

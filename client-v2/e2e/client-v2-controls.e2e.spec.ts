@@ -92,17 +92,21 @@ test.describe("client-v2-controls", () => {
   test("client-v2-controls: A setting select", async ({ seededPage: page }) => {
     await editorTookFocus(page);
     await page.locator("[data-settings-trigger]").first().click();
-    const row = page
-      .locator('[aria-label="Settings"]')
-      .locator("span", { hasText: /^Theme$/ })
-      .locator("xpath=../..");
-    await row.getByRole("combobox").focus();
+    // Commitment, not Theme: the Theme select offers Dark alone until Light
+    // is designed (HOO-2695)
+    const commitment = page
+      .getByRole("region", { name: "Settings" })
+      .getByRole("combobox", { name: "Commitment" });
+    await commitment.focus();
     await page.keyboard.press("ArrowDown");
 
-    const light = page.getByRole("option", { name: "Light", exact: true });
-    await expect(light).toBeVisible();
+    const finalized = page.getByRole("option", {
+      name: "Finalized",
+      exact: true,
+    });
+    await expect(finalized).toBeVisible();
     // The options sit above the settings page, not under it
-    const onTop = await light.evaluate((el) => {
+    const onTop = await finalized.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const hit = document.elementFromPoint(
         rect.x + rect.width / 2,
@@ -114,20 +118,16 @@ test.describe("client-v2-controls", () => {
 
     // Escape closes the options, and leaves the settings open
     await page.keyboard.press("Escape");
-    await expect(light).toBeHidden();
+    await expect(finalized).toBeHidden();
     await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
-    await row.getByRole("combobox").focus();
+    await commitment.focus();
     await page.keyboard.press("ArrowDown");
 
-    // The list opens on the chosen theme, Dark; Light is the next option
+    // The list opens on the chosen level, Confirmed; Finalized is the next option
     await page.keyboard.press("ArrowDown");
-    await expect(light).toBeFocused();
+    await expect(finalized).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect
-      .poll(() =>
-        page.evaluate(() => document.documentElement.classList.contains("dark"))
-      )
-      .toBe(false);
+    await expect(commitment).toHaveText("Finalized");
   });
 
   test("client-v2-controls: The backend list by keyboard", async ({ page }) => {

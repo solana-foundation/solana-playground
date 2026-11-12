@@ -106,6 +106,13 @@ const isAllowedFor =
     (!entry.isLesson || LESSON_ACTIONS.has(action)) &&
     (action !== "share-gist" || isCurrent);
 
+/**
+ * On the row's middle at both its heights, 28 px on a desk and 52 on a phone;
+ * `!` beats `SidebarMenuAction`'s own `peer-data-[size]` top, which fits a
+ * 32 px row
+ */
+const ROW_MIDDLE = "top-1/2! -translate-y-1/2";
+
 const pinAction = (entry: ProjectEntry): ProjectAction =>
   entry.pinned ? "unpin" : "pin";
 
@@ -143,8 +150,8 @@ const Group = ({
       {/* The prototype's section heading: small, grey, sentence case */}
       <SidebarGroupLabel
         id={labelId}
-        // On a phone, the label type, lined up with the 52 px rows' text
-        className="mb-1 h-4 text-xs font-normal text-subtle max-md:mb-1.5 max-md:px-3 max-md:text-caption max-md:font-label"
+        // The label type; on a phone, lined up with the 52 px rows' text
+        className="mb-1 h-4 text-xs font-label text-subtle max-md:mb-1.5 max-md:px-3 max-md:text-caption"
       >
         {label}
       </SidebarGroupLabel>
@@ -152,7 +159,12 @@ const Group = ({
         {list.loading &&
           SKELETON_ROWS.map((row) => (
             <SidebarMenuItem key={row}>
-              <SidebarMenuSkeleton showIcon />
+              {/* The rows' own height, inset and glyph, so the list does not
+                  jump when the names arrive: 28 px, and 52 px on a phone */}
+              <SidebarMenuSkeleton
+                showIcon
+                className="h-7 max-md:h-13 max-md:gap-3 max-md:px-3 max-md:[&>[data-sidebar=menu-skeleton-icon]]:size-5"
+              />
             </SidebarMenuItem>
           ))}
         {!list.loading &&
@@ -293,7 +305,7 @@ const Row = ({
             // `aria-describedby` reads the marker and the progress by id
             <span
               aria-hidden
-              className="ml-auto flex shrink-0 items-baseline gap-2 text-xs font-normal text-muted-foreground group-hover/menu-item:hidden"
+              className="ml-auto flex shrink-0 items-baseline gap-2 text-xs font-label text-muted-foreground group-hover/menu-item:hidden"
             >
               {entry.marker && <Marker id={markerId} marker={entry.marker} />}
               {entry.progress && (
@@ -314,6 +326,7 @@ const Row = ({
               the others show on hover */}
           <SidebarMenuAction
             showOnHover={!isCurrent}
+            className={ROW_MIDDLE}
             aria-label={`Actions for ${entry.name}`}
           >
             <EllipsisVertical />

@@ -3,8 +3,10 @@ import {
   normalizeProjectPath,
   PgAssistantContext,
 } from "@/entities/assistant-context";
+import { networkInSentence } from "@/features/deploy";
 import { merge3 } from "@/features/persistence/model/merge";
 
+import { estimateDeployCostWithin } from "../../../../commands/deploy/estimate";
 import {
   PgBlockExplorer,
   PgCommand,
@@ -14,16 +16,15 @@ import {
   PgProgramInfo,
   PgWallet,
 } from "../../../../utils";
-import { PgLesson } from "../../../flow/lessons";
 import { PgBuildOutput, stripKnownNoise } from "./build-output";
-import type { LessonContext } from "./lesson-context";
-import { describeLesson } from "./lesson-context";
 
 /** A condensed view of the program's interface, cheaper than the whole IDL */
 export interface IdlSummary {
   name: string;
   instructions: string[];
   accounts: string[];
+  /** Why the Playground cannot call this IDL; absent when it can */
+  refused?: string;
 }
 
 /** What the assistant is allowed to know about the project without asking */
@@ -45,8 +46,6 @@ export interface ProjectContext {
   deployState: "ready" | "loading" | "paused" | "cancelled";
   cluster: string;
   walletConnected: boolean;
-  /** The lesson step the learner is on, when they are in a lesson */
-  lesson: LessonContext | null;
 }
 
 /** A change the assistant proposes to one file */
@@ -95,6 +94,16 @@ export interface PlaygroundBridge {
   build(): Promise<void>;
   /** @returns where the deployed program can be seen, when that is known */
   deploy(): Promise<{ programId: string; explorerUrl: string } | null>;
+  /**
+   * @returns the network a deploy would go to, named as a sentence writes it
+   * ("devnet", `undefined` while unknown), its estimated cost in lamports (`null`
+   * when it cannot be estimated), and whether the Playground wallet pays
+   */
+  quoteDeploy(): Promise<{
+    network: string | undefined;
+    cost: number | null;
+    playground: boolean;
+  }>;
 }
 
 const toRelative = (fullPath: string) => {
@@ -106,7 +115,23 @@ const toRelative = (fullPath: string) => {
 };
 
 const summarizeIdl = (): IdlSummary | null => {
-  const idl = PgProgramInfo.idl;
+  const reading = PgProgramInfo.readIdl();
+  // TODO(HOO-1765 task 1.4): the refused branch has no unit test (the bridge
+  // reads the whole playground); `describeProject`'s test pins its wording
+  if (reading?.kind === "refused") {
+    const raw = PgProgramInfo.idl as {
+      name?: unknown;
+      metadata?: { name?: unknown };
+    };
+    const name = raw.metadata?.name ?? raw.name;
+    return {
+      name: typeof name === "string" ? name : "unknown",
+      instructions: [],
+      accounts: [],
+      refused: reading.reason,
+    };
+  }
+  const idl = PgProgramInfo.callableIdl();
   if (!idl) return null;
 
   return {
@@ -157,7 +182,6 @@ export const realBridge: PlaygroundBridge = {
       deployState: PgGlobal.deployState,
       cluster: PgConnection.current.rpcEndpoint,
       walletConnected: !!PgWallet.current,
-      lesson: describeLesson(PgLesson.state),
     };
   },
 
@@ -248,11 +272,25 @@ export const realBridge: PlaygroundBridge = {
     await PgCommand.build.execute();
   },
 
-  async deploy() {
-    await PgCommand.deploy.execute();
+  async quoteDeploy() {
+    const cluster = PgConnection.cluster;
+    return {
+      network: networkInSentence(cluster),
+      cost: await estimateDeployCostWithin(),
+      // No wallet yet: the Playground wallet is made on the deploy and pays
+      playground: !PgWallet.current || PgWallet.current.isPg === true,
+    };
+  },
 
-    // The deploy command prints the transaction to the terminal but does not
-    // return it; the program address is the stable thing to link to.
+  async deploy() {
+    // The command pauses or resumes a deploy that is already running and
+    // returns nothing; that press deployed nothing, so it is not a success
+    if (PgGlobal.deployState !== "ready") throw new Error(DEPLOY_BUSY);
+    const result = await PgCommand.deploy.execute();
+    if (!result) throw new Error(DEPLOY_BUSY);
+
+    // The program address is the stable thing to link to: an upgrade keeps
+    // it, while the transaction differs on every deploy.
     const programId = PgProgramInfo.getPkStr();
     if (!programId) return null;
     return {
@@ -261,6 +299,9 @@ export const realBridge: PlaygroundBridge = {
     };
   },
 };
+
+/** Why the assistant's deploy did nothing: another deploy holds the command */
+const DEPLOY_BUSY = "Another deploy is running; nothing was deployed.";
 
 // A deleted file's choices go with it, so a new file made at its path is not
 // in the context until the user adds it. Here, not in the composer: the

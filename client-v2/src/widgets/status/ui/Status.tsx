@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { useOnline } from "@/shared/lib/hooks/use-online";
+import { PgConnection } from "@/utils";
 
 import type { StatusIndicator } from "../model/indicators";
 import { chipOf } from "../model/indicators";
@@ -17,6 +18,8 @@ export interface StatusActions {
   onOpenNetwork: () => void;
   /** Opens Connect a model */
   onConnectAi: () => void;
+  /** Asks the deployment for its hosted model again; true when it answered */
+  onRetryAi: () => Promise<boolean>;
 }
 
 export interface StatusProps extends StatusActions {
@@ -29,6 +32,33 @@ const track = (indicator: StatusIndicator, from: PickedFrom) =>
     state: measured(indicator.state),
     from,
   });
+
+/**
+ * Asks again for an indicator a panel offers Try again on: the cluster, or
+ * the hosted model. Still down fails the press, so the button says "Could not
+ * reach …" rather than going quiet under the same panel.
+ */
+const retryWith =
+  (actions: StatusActions) =>
+  (from: PickedFrom) =>
+  async (indicator: StatusIndicator) => {
+    if (indicator.id === "rust") return;
+    let answered = false;
+    try {
+      answered =
+        indicator.id === "network"
+          ? await PgConnection.recheck()
+          : await actions.onRetryAi();
+    } finally {
+      // A rejection is measured too, and goes on to the button's report
+      statusTelemetry.track("status_retried", {
+        indicator: indicator.id,
+        from,
+        answered,
+      });
+    }
+    if (!answered) throw new Error(`${indicator.name} did not answer`);
+  };
 
 /** Runs an indicator's action; the analyzer's is a reload of the page */
 const act = (indicator: StatusIndicator, actions: StatusActions) => {
@@ -63,13 +93,14 @@ export const StatusRow = ({ settingsOpen, ...actions }: StatusProps) => {
       settingsOpen={settingsOpen}
       onPick={(indicator) => {
         track(indicator, "row");
-        // The analyzer's click only opens its panel
-        if (indicator.id !== "rust") act(indicator, actions);
+        // A click on an indicator with a panel only opens it
+        if (!indicator.panel) act(indicator, actions);
       }}
       onAction={(indicator) => {
         track(indicator, "row");
         act(indicator, actions);
       }}
+      onRetry={retryWith(actions)("row")}
     />
   );
 };
@@ -83,12 +114,13 @@ export const StatusRail = ({ settingsOpen, ...actions }: StatusProps) => {
       settingsOpen={settingsOpen}
       onPick={(indicator) => {
         track(indicator, "rail");
-        if (indicator.id !== "rust") act(indicator, actions);
+        if (!indicator.panel) act(indicator, actions);
       }}
       onAction={(indicator) => {
         track(indicator, "rail");
         act(indicator, actions);
       }}
+      onRetry={retryWith(actions)("rail")}
     />
   );
 };
@@ -115,6 +147,7 @@ export const StatusChip = (actions: StatusActions) => {
         track(indicator, "sheet");
         act(indicator, actions);
       }}
+      onRetry={retryWith(actions)("sheet")}
     />
   );
 };

@@ -1,25 +1,7 @@
 // One item of the thread, drawn from the design system's message parts.
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
-import type { FC } from "react";
-import { createElement } from "react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  initLogger,
-  memoryProvider as memoryLog,
-  resetLogger,
-} from "@/shared/lib/logger";
-import { BUTTON_FAILED_TOAST } from "@/shared/lib/report-button-failure";
-import { requireFor } from "@/test-utils/require-for";
-
-import type { ToastChildProps } from "../../../utils/view";
-import { PgView } from "../../../utils/view";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { BaseThreadItem } from "./BaseThreadItem";
 
@@ -29,16 +11,6 @@ vi.mock("../../../components/Markdown", () => ({
 }));
 
 const CREATED = "2026-10-19T00:00:00.000Z";
-
-/** What the failed-click toast says, from the last `setToast` call */
-const toastText = (setToast: ReturnType<typeof vi.spyOn>) => {
-  const [elementable] = requireFor("a call to setToast")(
-    setToast.mock.calls.at(-1)
-  );
-  const Toast = elementable as FC<ToastChildProps>;
-  return render(createElement(Toast, { id: BUTTON_FAILED_TOAST })).container
-    .textContent;
-};
 
 const reply = (text: string): ChatItem => ({
   id: "reply-1",
@@ -55,7 +27,6 @@ const user = (text: string): ChatItem => ({
 });
 
 afterEach(() => {
-  resetLogger();
   vi.restoreAllMocks();
 });
 
@@ -171,127 +142,17 @@ describe("BaseThreadItem", () => {
     );
   });
 
-  it("make change offered as the next step", () => {
+  it("make change offered on a finished reply", () => {
     const onClick = vi.fn();
     render(
       <BaseThreadItem
         item={reply("Add a counter")}
-        actions={{ makeChange: { onClick, mode: "next" } }}
+        actions={{ makeChange: { onClick } }}
         onAnswer={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Make this change" }));
     expect(onClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("make change as a last resort inside a lesson", () => {
-    render(
-      <BaseThreadItem
-        item={reply("A hint")}
-        actions={{ makeChange: { onClick: vi.fn(), mode: "lastResort" } }}
-        onAnswer={vi.fn()}
-      />
-    );
-    expect(
-      screen.getByRole("button", { name: "Write it for me" })
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Make this change" })
-    ).toBeNull();
-  });
-
-  it("the verify step is named by its stage and runs its action", async () => {
-    const onClick = vi.fn(() => Promise.resolve());
-    render(
-      <BaseThreadItem
-        item={reply("Done")}
-        actions={{
-          verifyStep: { onClick, stage: "deploy", title: "Proves it" },
-        }}
-        onAnswer={vi.fn()}
-      />
-    );
-    // Async: the verify step is an AsyncButton, which settles once `onClick` resolves
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
-    });
-    expect(onClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("skip this step is offered when asked for", () => {
-    const onClick = vi.fn();
-    render(
-      <BaseThreadItem
-        item={reply("Still stuck?")}
-        actions={{ skipStep: { onClick, title: "Not verified" } }}
-        onAnswer={vi.fn()}
-      />
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
-    expect(onClick).toHaveBeenCalledTimes(1);
-  });
-
-  it("a skip that throws is logged, not lost", () => {
-    const logs = memoryLog();
-    initLogger({ providers: [logs] });
-    render(
-      <BaseThreadItem
-        item={reply("Still stuck?")}
-        actions={{
-          skipStep: {
-            onClick: () => {
-              throw new Error("lesson listener failed");
-            },
-            title: "Not verified",
-          },
-        }}
-        onAnswer={vi.fn()}
-      />
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
-    expect(
-      logs.entries.some((e) => e.ns === "ui:button" && e.level === "error")
-    ).toBe(true);
-  });
-
-  it("a skip that throws tells the user the step was not skipped", () => {
-    const setToast = vi.spyOn(PgView, "setToast").mockImplementation(() => {});
-    render(
-      <BaseThreadItem
-        item={reply("Still stuck?")}
-        actions={{
-          skipStep: {
-            onClick: () => {
-              throw new Error("lesson listener failed");
-            },
-            title: "Not verified",
-          },
-        }}
-        onAnswer={vi.fn()}
-      />
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
-    expect(toastText(setToast)).toBe("Could not skip the step.");
-  });
-
-  it("a verify step that fails tells the user the step was not checked", async () => {
-    const setToast = vi.spyOn(PgView, "setToast").mockImplementation(() => {});
-    render(
-      <BaseThreadItem
-        item={reply("Done")}
-        actions={{
-          verifyStep: {
-            onClick: () => Promise.reject(new Error("build server down")),
-            stage: "build",
-            title: "Proves it",
-          },
-        }}
-        onAnswer={vi.fn()}
-      />
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Build" }));
-    await waitFor(() => expect(setToast).toHaveBeenCalled());
-    expect(toastText(setToast)).toBe("Could not check the step.");
   });
 
   it("an error is an alert", () => {
@@ -335,7 +196,12 @@ describe("BaseThreadItem", () => {
       />
     );
     expect(screen.getByRole("status").textContent).toContain("Stopped.");
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    const tryAgain = screen.getByRole("button", { name: "Try again" });
+    // Under the text, which is what brings the text to full strength
+    expect(tryAgain.parentElement?.getAttribute("data-slot")).toBe(
+      "callout-actions"
+    );
+    fireEvent.click(tryAgain);
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 

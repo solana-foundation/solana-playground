@@ -45,11 +45,13 @@ export class PgProgramInteraction {
    * Send a test transaction to the current program.
    *
    * @param ix generated instruction
+   * @param program the program to send through
    * @returns the transaction hash
    */
-  static async test(ix: GeneratableInstruction) {
-    const program = getAnchorProgram();
-
+  static async test(
+    ix: GeneratableInstruction,
+    program: ReturnType<typeof getAnchorProgram>
+  ) {
     const args = ix.values.args.map((arg) => {
       const value = generateValue(arg.generator, ix.values);
       const { parse } = getIdlType(arg.type, program.idl);

@@ -91,16 +91,45 @@ it.each([
   ["/", ["a"], "a", "work"],
   // Listed by sync but none opened: the work would throw in the explorer
   ["/", ["a"], undefined, "home"],
-  // The links to a page go on to `/`, so they start as `/` does
+  // A page's own path is a start path, so it starts as `/` does
   ["/programs", [], undefined, "home"],
   ["/tutorials", undefined, undefined, "pending"],
   ["/programs", ["a"], "a", "work"],
+  // Home's own path waits for the explorer too, then shows Home whatever is open
+  ["/home", undefined, undefined, "pending"],
+  ["/home", ["a"], "a", "home"],
 ] as const)(
   "decideStart(%s, %j, current %s) is %s",
   (path, workspaces, current, view) => {
     expect(decideStart({ path, workspaces, current })).toBe(view);
   }
 );
+
+it("shows Home on its own path, over a project too", async () => {
+  explorer.allWorkspaceNames = ["a"];
+  explorer.currentWorkspaceName = "a";
+  router.location.pathname = "/home";
+  const { result } = renderHook(() => useStartView());
+  expect(result.current.view).toBe("home");
+  expect(result.current.homeVia).toBe("start");
+  expect(result.current.workKept).toBe(true);
+});
+
+it("does not draw the work on Home's path with no project open", async () => {
+  explorer.allWorkspaceNames = [];
+  router.location.pathname = "/home";
+  const { result } = renderHook(() => useStartView());
+  expect(result.current.view).toBe("home");
+  expect(result.current.workKept).toBe(false);
+});
+
+it("does not draw the work on a page's path with no project open", async () => {
+  explorer.allWorkspaceNames = [];
+  router.location.pathname = "/programs";
+  const { result } = renderHook(() => useStartView());
+  expect(result.current.view).toBe("home");
+  expect(result.current.workKept).toBe(false);
+});
 
 it("shows Home once the explorer says there is no project", async () => {
   explorer.init.mockImplementation(async () => {
@@ -157,7 +186,7 @@ it("leaves Home when a tutorial route opens", async () => {
   expect(result.current.view).toBe("work");
 });
 
-it("stays on Home while a link to a page goes on to the start route", async () => {
+it("stays on Home from a page's path back to `/` with no project open", async () => {
   router.location.pathname = "/programs";
   noProjects();
   const { result } = renderHook(() => useStartView());
@@ -399,6 +428,18 @@ describe("from an open project", () => {
     expect(names()).toEqual([["home_shown", { via: "back" }]]);
   });
 
+  it.each(["/new", "/tutorials", "/programs"])(
+    "shows Home under the page on a way back to %s with no project open",
+    async (path) => {
+      router.location.pathname = "/tutorials/hello";
+      const { result } = renderHook(() => useStartView());
+      router.location.pathname = path;
+      act(() => router.changed.forEach((cb) => cb(path)));
+      expect(result.current.view).toBe("home");
+      expect(result.current.workKept).toBe(false);
+    }
+  );
+
   it("stays on the work on a way back to / with a project open", async () => {
     explorer.allWorkspaceNames = ["a"];
     explorer.currentWorkspaceName = "a";
@@ -468,6 +509,51 @@ describe("from an open project", () => {
     act(() => result.current.leaveHome("current-project"));
     expect(result.current.view).toBe("work");
     expect(names()).toEqual([]);
+  });
+
+  it("shows Home on its own path come back to, keeping the work", async () => {
+    const { result } = await onTheWork();
+    router.location.pathname = "/home";
+    act(() => router.changed.forEach((cb) => cb("/home")));
+    expect(result.current.view).toBe("home");
+    expect(result.current.workKept).toBe(true);
+    expect(names()).toEqual([["home_shown", { via: "back" }]]);
+  });
+
+  it("leaves Home for the lesson it opened over once Back goes there", async () => {
+    explorer.allWorkspaceNames = ["a"];
+    explorer.currentWorkspaceName = "a";
+    router.location.pathname = "/tutorials/hello/2";
+    const { result } = renderHook(() => useStartView());
+    act(() => result.current.showHome("nav"));
+
+    router.location.pathname = "/home";
+    act(() => router.changed.forEach((cb) => cb("/home")));
+    expect(result.current.view).toBe("home");
+
+    router.location.pathname = "/tutorials/hello/2";
+    act(() => router.changed.forEach((cb) => cb("/tutorials/hello/2")));
+    expect(result.current.view).toBe("work");
+  });
+
+  it("leaves Home for `/` with a project open, once the path has moved", async () => {
+    const { result } = await onTheWork();
+    act(() => result.current.showHome("nav"));
+    router.location.pathname = "/home";
+    act(() => router.changed.forEach((cb) => cb("/home")));
+    expect(result.current.view).toBe("home");
+
+    router.location.pathname = "/";
+    act(() => router.changed.forEach((cb) => cb("/")));
+    expect(result.current.view).toBe("work");
+  });
+
+  it("keeps Home under a page's path", async () => {
+    const { result } = await onTheWork();
+    act(() => result.current.showHome("nav"));
+    router.location.pathname = "/tutorials";
+    act(() => router.changed.forEach((cb) => cb("/tutorials")));
+    expect(result.current.view).toBe("home");
   });
 
   it("stays on Home opened from a lesson's route", async () => {

@@ -45,6 +45,28 @@ const isCancel = (error: unknown) => {
   );
 };
 
+/**
+ * Log why a sign-in ended without a session. `PgSession` holds why its last
+ * sign-in failed. One the user ended (cancelled, a blocked popup, a timeout)
+ * is theirs to see; one that could not start, or any other error, the team
+ * hears of too.
+ */
+const logSignInEnding = (error: unknown) => {
+  const state = PgSession.signInState();
+  const isUserEnded =
+    isSignInFailure(error) &&
+    state.status === "failed" &&
+    state.reason !== "request-failed";
+  if (isUserEnded) {
+    // `auth_sign_in_failed` has counted it with its reason
+    log.info("sign-in to share ended without a session", {
+      context: { reason: state.reason },
+    });
+  } else {
+    log.error(error, { report: true, context: { item: "sign-in" } });
+  }
+};
+
 /** The prompt's one button: sign in, cancel its own wait, or wait on another's */
 const buttonText = (waiting: boolean, cancellable: boolean) => {
   if (cancellable) return "Cancel sign-in";
@@ -93,6 +115,13 @@ const SignInToShare = () => {
     };
   }, []);
 
+  // A sign-in from the account menu ends with the session arriving under this
+  // dialog, which must keep the project it is sharing. It stays claimed if the
+  // dialog closes first: the user stays on the open project, which loses nothing
+  useEffect(() => {
+    if (waiting) PgSession.claimPendingSignIn("share");
+  }, [waiting]);
+
   // Only this prompt's own sign-in is its to cancel; one from the account
   // menu just waits here, as it did before the prompt could cancel
   const cancellable = waiting && ownSignIn.current;
@@ -105,24 +134,9 @@ const SignInToShare = () => {
     }
     setEnded(undefined);
     ownSignIn.current = true;
-    PgSession.signIn()
+    PgSession.signInFor("share")([])
       .catch((error: unknown) => {
-        // `PgSession` holds why its last sign-in failed. One the user ended
-        // (cancelled, a blocked popup, a timeout) is theirs to see; one that
-        // could not start, or any other error, the team hears of too
-        const state = PgSession.signInState();
-        const userEnded =
-          isSignInFailure(error) &&
-          state.status === "failed" &&
-          state.reason !== "request-failed";
-        if (userEnded) {
-          // `auth_sign_in_failed` has counted it with its reason
-          log.info("sign-in to share ended without a session", {
-            context: { reason: state.reason },
-          });
-        } else {
-          log.error(error, { report: true, context: { item: "sign-in" } });
-        }
+        logSignInEnding(error);
         if (mounted.current) {
           setEnded({
             kind: isCancel(error) ? "cancelled" : "failed",
@@ -250,10 +264,11 @@ const ConnectedShare = ({
 }: ShareGistDialogProps & { signedIn: boolean }) => {
   const control = useShareGist(
     {
-      signIn: (options) =>
-        PgSession.signInWith({ scopes: options?.scopes }).then(
+      signIn: (scopes) =>
+        PgSession.signInFor("share")(scopes).then(
           () => "signed-in" as const,
           (error: unknown) => {
+            logSignInEnding(error);
             if (isCancel(error)) return "cancelled" as const;
             throw error;
           }

@@ -2,7 +2,10 @@
   "globs": ["AGENTS.md", "docs/**/*.md", "src/**/*.md", "api/**/*.md"],
   "ignores": [
     // Generated from docs/assistant-context.md by scripts/sync-assistant-context.mjs
-    "src/views/sidebar/assistant/content/assistant-context.md"
+    "src/views/sidebar/assistant/content/assistant-context.md",
+    // A tutorial's doc pages are copies of the Anchor and Solana docs, kept
+    // as their sites word them; `yarn tutorial:check` still checks their links
+    "src/tutorials/*/docs/**"
   ],
   "config": {
     "MD013": false,

@@ -1,6 +1,7 @@
-import { TriangleAlertIcon } from "lucide-react";
+import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { limitBannerText } from "@/entities/project";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import {
@@ -8,11 +9,15 @@ import {
   CalloutAction,
   CalloutActions,
   CalloutDescription,
+  CalloutTitle,
 } from "@/shared/ui/callout";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
-import type { Conflict, Resolution } from "../model/project-sync";
+import { PgView } from "../../../utils/view";
+import { RenameWorkspace } from "../../../views/sidebar/explorer/Component/Modals/RenameWorkspace";
+import type { Conflict, ConflictKind, Resolution } from "../model/project-sync";
 import { PgProjectSync } from "../model/project-sync";
+import { MAX_PROJECT_BODY_LABEL } from "../model/project-write.mjs";
 import { persistenceTelemetry } from "../model/telemetry";
 import { ConflictResolver } from "../ui/ConflictResolver";
 
@@ -28,9 +33,12 @@ const describePaths = (paths: string[]) =>
  * A divergent conflict's files, by whether they still conflict (`open`) or
  * were raised again only because a refused answer was about them, and now
  * merge on their own (`settled`; see `refusedOf` in `project-sync.ts`). A
- * conflict that names no files counts every path as open.
+ * conflict that names no files counts every path as open; any other kind has
+ * none.
  */
-const splitPaths = ({ paths = [], files }: Conflict) => {
+const splitPaths = (conflict: Conflict) => {
+  if (conflict.kind !== "divergent") return { open: [], settled: [] };
+  const { paths = [], files } = conflict;
   if (!files) return { open: paths, settled: [] };
   const settled = files.filter((f) => f.kind === "settled").map((f) => f.path);
   const open = files.filter((f) => f.kind !== "settled").map((f) => f.path);
@@ -67,51 +75,92 @@ const divergentMessage = (conflict: Conflict) => {
   return "This project changed on another device, and this one has unsaved changes.";
 };
 
-/** What the user is shown, and what each answer does */
-const PROMPTS: Record<
-  Conflict["kind"],
-  {
-    message: (conflict: Conflict) => string;
-    // Only the answers a button can give alone; `resolved` carries content.
-    // The first is the one the banner expects
-    actions: {
-      label: string;
-      resolution: Extract<Resolution, string>;
-    }[];
-  }
-> = {
+/**
+ * What a banner button does: give an answer (`resolution`, only the answers a
+ * button can give alone, since `resolved` carries content), or open the rename
+ * dialog for the open project, which is the project the banner is about
+ */
+type Action = { label: string } & (
+  | { kind: "answer"; resolution: Extract<Resolution, string> }
+  | { kind: "rename" }
+);
+
+/**
+ * What the user is shown, and what each answer does. Titles and tones follow
+ * the designers' failure-states spec (Spec 08, ACCT-06 to ACCT-09): a question
+ * about two copies is a warning, a project that has stopped uploading is an
+ * error. The first action is the one the banner expects, after Resolve… where
+ * that shows
+ */
+type Prompt<K extends ConflictKind> = {
+  title: string;
+  variant: "warning" | "error";
+  message: (conflict: Extract<Conflict, { kind: K }>) => string;
+  actions: Action[];
+};
+
+const PROMPTS: { [K in ConflictKind]: Prompt<K> } = {
   divergent: {
+    title: "Changed on another device",
+    variant: "warning",
     message: divergentMessage,
     actions: [
-      { label: "Keep this version", resolution: "keep-local" },
-      { label: "Take the other version", resolution: "take-server" },
+      { label: "Keep this version", kind: "answer", resolution: "keep-local" },
+      {
+        label: "Take the other version",
+        kind: "answer",
+        resolution: "take-server",
+      },
     ],
   },
   "deleted-elsewhere": {
+    title: "Deleted on another device",
+    variant: "warning",
     message: () =>
-      "This project was deleted on another device, but you have unsaved changes here.",
+      "This project was deleted on another device, but this one has unsaved changes.",
     actions: [
-      { label: "Keep as a new project", resolution: "keep-as-new" },
-      { label: "Delete anyway", resolution: "delete-local" },
+      { label: "Keep a copy", kind: "answer", resolution: "keep-as-new" },
+      { label: "Delete anyway", kind: "answer", resolution: "delete-local" },
     ],
   },
   // The two below are refusals rather than questions, so they name the thing
-  // the user has to go and change and then offer the one answer there is. The
-  // retry is not a convenience: a project with a question outstanding is not
-  // pushed again, so without something to press, renaming the project or
-  // deleting the file that made it too big would fix the cause and leave it
-  // stuck anyway.
+  // the user has to go and change and then offer a retry. The retry is not a
+  // convenience: a project with a question outstanding is not pushed again, so
+  // without something to press, renaming the project or deleting the file
+  // that made it too big would fix the cause and leave it stuck anyway. A
+  // taken name also offers the rename itself; renaming still uploads nothing
+  // while the question stands, so the retry stays a press of its own
   "name-taken": {
+    title: "Not syncing",
+    variant: "error",
     message: () =>
-      "Another project in your account already uses this name, so this one cannot be uploaded. Rename it, then try again.",
-    actions: [{ label: "Try again", resolution: "retry" }],
+      "Another project in your account uses this name. Rename this one, then try again.",
+    actions: [
+      { label: "Rename", kind: "rename" },
+      { label: "Try again", kind: "answer", resolution: "retry" },
+    ],
   },
+  // A limit names itself and what is over it; the body cap names no limit
   "too-large": {
-    message: () =>
-      "This project is too large to sync. Remove or shrink its largest files, then try again.",
-    actions: [{ label: "Try again", resolution: "retry" }],
+    title: "Too large to sync",
+    variant: "error",
+    message: ({ limit }) =>
+      limit
+        ? limitBannerText(limit)
+        : `This project is over ${MAX_PROJECT_BODY_LABEL}. Remove or shrink its largest files, then try again.`,
+    actions: [{ label: "Try again", kind: "answer", resolution: "retry" }],
   },
 };
+
+/**
+ * `conflict`'s prompt, typed for any conflict. TypeScript cannot tie
+ * `PROMPTS[conflict.kind]` to `conflict`'s own kind, so the one widening is
+ * here: the mapped type above has already checked each entry against its kind.
+ */
+const promptFor = (conflict: Conflict) =>
+  PROMPTS[conflict.kind] as Prompt<ConflictKind> & {
+    message: (conflict: Conflict) => string;
+  };
 
 /**
  * Say why a project has stopped syncing, and offer the way out.
@@ -147,6 +196,10 @@ const SyncBanner = () => {
   const closeResolver = useCallback(() => setResolving(null), []);
 
   const refresh = useCallback(() => {
+    // TODO(HOO-2602): a project refused while not open (reconcile,
+    // `pushNeverSynced`) shows nothing until it is opened. The account cap
+    // (HOO-2538) meets this most: a device signing in with more unsynced
+    // projects than the account can take learns of each only on opening it.
     setConflict(PgProjectSync.conflictFor(PgExplorer.currentWorkspaceId));
   }, []);
 
@@ -183,8 +236,17 @@ const SyncBanner = () => {
     }
   };
 
+  /** What pressing `action` does, and what a failure says did not happen */
+  const pressOf = (action: Action) =>
+    action.kind === "rename"
+      ? {
+          run: () => PgView.setModal(RenameWorkspace),
+          failure: "rename the project",
+        }
+      : { run: () => answer(action.resolution), failure: "apply your choice" };
+
   const renderBanner = (shown: Conflict) => {
-    const prompt = PROMPTS[shown.kind];
+    const prompt = promptFor(shown);
     // Line by line needs the lines: a divergence the merge never got as far as
     // naming files keeps the two whole-project answers only
     const resolvable = shown.kind === "divergent" && !!shown.files?.length;
@@ -192,13 +254,14 @@ const SyncBanner = () => {
 
     const named = namedPath(shown);
     const at = named ? message.indexOf(named) : -1;
+    const Icon =
+      prompt.variant === "error" ? CircleAlertIcon : TriangleAlertIcon;
 
     return (
-      <Callout variant="warning">
-        <TriangleAlertIcon />
-        {/* The question, then its answers under it (the kit's CalloutActions).
-            Full opacity: the message is the point of the banner */}
-        <CalloutDescription className="min-w-0 opacity-100">
+      <Callout variant={prompt.variant} data-testid="sync-banner">
+        <Icon />
+        <CalloutTitle>{prompt.title}</CalloutTitle>
+        <CalloutDescription>
           <p className="m-0 text-foreground wrap-anywhere">
             {named && at >= 0 ? (
               <>
@@ -214,6 +277,21 @@ const SyncBanner = () => {
           </p>
         </CalloutDescription>
         <CalloutActions>
+          {prompt.actions.map((action) => {
+            const { run, failure } = pressOf(action);
+            return (
+              <CalloutAction key={action.label} asChild>
+                <AsyncButton
+                  size="sm"
+                  disabled={busy}
+                  onClick={run}
+                  onError={reportButtonFailure(failure)}
+                >
+                  {action.label}
+                </AsyncButton>
+              </CalloutAction>
+            );
+          })}
           {resolvable && (
             <CalloutAction
               disabled={busy || !!resolving}
@@ -222,19 +300,6 @@ const SyncBanner = () => {
               Resolve…
             </CalloutAction>
           )}
-          {prompt.actions.map((action) => (
-            <CalloutAction key={action.resolution} asChild>
-              <AsyncButton
-                variant="ghost"
-                size="sm"
-                disabled={busy}
-                onClick={() => answer(action.resolution)}
-                onError={reportButtonFailure("apply your choice")}
-              >
-                {action.label}
-              </AsyncButton>
-            </CalloutAction>
-          ))}
         </CalloutActions>
       </Callout>
     );

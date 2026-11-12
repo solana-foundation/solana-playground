@@ -29,8 +29,11 @@ import { ModalLayerContext } from "@/widgets/overlays/ui/modal-layer";
 // and its icons' `Svg` reads `PgTheme` for styles that do not matter here
 const utils = vi.hoisted(() => {
   class ImportCancelledError extends Error {}
+  // The dialog's limit guard reads it: a refusal other than a limit passes on
+  class ExplorerLimitError extends Error {}
   return {
     ImportCancelledError,
+    ExplorerLimitError,
     PgCommon: { transition: <T,>(p: Promise<T>) => p },
     PgFramework: {
       all: [
@@ -45,8 +48,15 @@ const utils = vi.hoisted(() => {
     PgGithub: {
       import: vi.fn(),
       isValidUrl: (url: string) => url.startsWith("https://github.com/"),
+      routePath: (url: string) =>
+        url.replace("https://github.com/", "/github/"),
     },
-    PgRouter: { getPathUrl: (u: string) => u, navigate: vi.fn() },
+    // An absolute URL, as the real one: a path would make the explainer's
+    // link a router link, which needs a router around it
+    PgRouter: {
+      getPathUrl: (path: string) => `https://pg.test${path}`,
+      navigate: vi.fn(),
+    },
     PgView: { closeModal: vi.fn(), classNames: { ERROR: "error" } },
     PgTheme: { convertToCSS: () => "", getColor: () => "inherit" },
   };
@@ -86,12 +96,12 @@ const draw = () =>
     </Modal>
   );
 
-/** The row of the "Anchor - Hello" example */
+/** The row of the "Anchor – Hello" example */
 const exampleRow = () =>
   requireFor("the example's row")(
-    requireFor("the example's title container")(
-      screen.getByText("Anchor - Hello").closest("div")
-    ).parentElement
+    screen
+      .getByText("Anchor – Hello")
+      .closest<HTMLElement>('[data-testid="github-example"]')
   );
 
 /** The example's own Import, not the dialog's submit */
@@ -158,9 +168,7 @@ it("closes the dialog as imported when an example is opened", () => {
 
   fireEvent.click(within(row).getByRole("button", { name: /^open$/i }));
 
-  expect(utils.PgRouter.navigate).toHaveBeenCalledWith(
-    "/https://github.com/a/b"
-  );
+  expect(utils.PgRouter.navigate).toHaveBeenCalledWith("/github/a/b");
   expect(utils.PgView.closeModal).toHaveBeenCalledWith(
     IMPORTED,
     "import-github"

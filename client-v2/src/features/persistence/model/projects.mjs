@@ -6,8 +6,15 @@
  * That is the difference between "your other device won" and "your other
  * device's work is gone".
  */
+import {
+  ACCOUNT_LIMITS,
+  limitExceeded,
+  PROJECT_LIMITS,
+  SYNCED_WORKSPACE_FILES,
+} from "../../../entities/project/server.mjs";
 import { query, transaction } from "./db.mjs";
 import { DELETED_REASON } from "./deleted.mjs";
+import { NO_FILES_REASON } from "./project-write.mjs";
 
 export const listProjects = async (userId) => {
   const { rows } = await query(
@@ -99,11 +106,25 @@ const TOMBSTONED = `(select deleted_at is not null from projects
  * another write can land, and the token handed back with the conflict would
  * already be the wrong one to retry with. The CTEs share a single snapshot, so
  * `current` is the value that was there when the swap missed.
+ *
+ * `had_files` says whether the row held a synced file before the swap, from
+ * the same snapshot: a swap onto an empty row (the parent a chat turn makes)
+ * makes a project count toward the account cap, as a create does. A swap
+ * that lands read a snapshot no other write to this row has moved since: one
+ * that committed meanwhile would have bumped `updated_at` and missed this
+ * swap's predicate.
  */
 const SWAP = `
   with target as (
     select updated_at from projects
      where user_id = $1 and id = $2 and deleted_at is null
+  ),
+  had as (
+    select exists(
+      select 1 from project_files
+       where user_id = $1 and project_id = $2
+         and (path = any($6::text[]) or not starts_with(path, '.workspace/'))
+    ) as had_files
   ),
   swapped as (
     update projects
@@ -114,7 +135,8 @@ const SWAP = `
   )
   select (select updated_at from swapped) as written,
          (select updated_at from target)  as current,
-         ${TOMBSTONED}                    as deleted`;
+         ${TOMBSTONED}                    as deleted,
+         (select had_files from had)      as had_files`;
 
 /**
  * Create-only: a new row, a live row that holds no files yet, or a tutorial's
@@ -166,18 +188,145 @@ const UPSERT_FILES = `
     set content = excluded.content
   where project_files.content is distinct from excluded.content`;
 
-/** Read after an adoption, in a statement of its own -- see `CREATE` */
+/**
+ * Read in a statement of its own, twice. After an adoption, so it sees a
+ * writer the adopting statement's snapshot did not -- see `CREATE`. After a
+ * patch that adds nothing, the only `saveProject` write that can empty a row,
+ * so it sees that patch's own `DELETE_NAMED`.
+ *
+ * Only the paths sync carries count, as in `MEASURE`: a stored `.workspace/`
+ * row sync does not carry is no file to a client, so a patch that removes
+ * every synced file, leaving only an unsynced `.workspace/` row, is still
+ * refused.
+ */
 const HAS_FILES = `
   select exists(
-    select 1 from project_files where user_id = $1 and project_id = $2
+    select 1 from project_files
+     where user_id = $1 and project_id = $2
+       and (path = any($3::text[]) or not starts_with(path, '.workspace/'))
   ) as has_files`;
 
 /**
  * Thrown from inside the transaction so that it rolls back, and caught by
- * `saveProject` outside it. Returning a conflict instead would commit the
- * adoption's change to the row.
+ * `saveProject` outside it, which returns `outcome`. Returning the outcome
+ * instead would commit the swap's or the adoption's change to the row. A
+ * conflict `settle` reports is returned instead: it comes before any write,
+ * so there is nothing to roll back.
  */
-class AdoptionRefused extends Error {}
+class WriteRefused extends Error {
+  constructor(outcome) {
+    super(`write refused: ${JSON.stringify(outcome)}`);
+    this.outcome = outcome;
+  }
+}
+
+/**
+ * The project a write produced, measured after its writes inside the same
+ * transaction: the paths over the path limit, the files over the file limit
+ * with their sizes, the counted files (the generated workspace files left
+ * out) and the bytes of every file, all over the files sync carries
+ * (`isSyncedPath`), so a `.workspace/` row stored before the route refused
+ * them weighs nothing the client cannot see. `octet_length` of a `text`
+ * column is its UTF-8 byte count and `char_length` its code points, the
+ * measures `checkProjectLimits` takes on the client.
+ *
+ * Every stored row is measured, not only the request's: `describeWrite`
+ * already refuses a request file over the path or file limit, so `long` and
+ * `large` find only a row stored before the limits, or by a path that skipped
+ * that check.
+ *
+ * Measured rather than predicted: computing the result in JavaScript from the
+ * stored rows and the patch would be a second model of `DELETE_OTHERS` and
+ * `UPSERT_FILES` that could disagree with the statements themselves.
+ */
+const MEASURE = `
+  select array_agg(path) filter (where char_length(path) > $4) as long,
+         jsonb_object_agg(path, octet_length(content))
+           filter (where octet_length(content) > $5) as large,
+         count(*) filter (where not (path = any($3::text[])))::int as files,
+         coalesce(sum(octet_length(content)), 0)::bigint as bytes
+    from project_files
+   where user_id = $1 and project_id = $2
+     and (path = any($3::text[]) or not starts_with(path, '.workspace/'))`;
+
+/**
+ * Throw `WriteRefused` with `{limit}` when the project as written is over a
+ * limit, so that the writes roll back. Path, file size, count, then project
+ * size: the order `checkProjectLimits` reports them in.
+ */
+const refuseOverLimit = async (q, userId, id) => {
+  const { rows } = await q(MEASURE, [
+    userId,
+    id,
+    SYNCED_WORKSPACE_FILES,
+    PROJECT_LIMITS.pathChars,
+    PROJECT_LIMITS.fileBytes,
+  ]);
+  const { long, large, files } = rows[0];
+  const bytes = Number(rows[0].bytes);
+  let limit = null;
+  if (long) {
+    limit = limitExceeded.pathTooLong(long);
+  } else if (large) {
+    limit = limitExceeded.fileTooLarge(large);
+  } else if (files > PROJECT_LIMITS.files) {
+    limit = limitExceeded.tooManyFiles(files);
+  } else if (bytes > PROJECT_LIMITS.projectBytes) {
+    limit = limitExceeded.projectTooLarge(bytes);
+  }
+  if (limit) throw new WriteRefused({ limit });
+};
+
+/**
+ * Serialises one account's writes that make a project count, so two creates
+ * at 9 cannot each count 9 others and both pass. Transaction-scoped: released
+ * at commit or rollback, never held past the write.
+ *
+ * A statement of its own, before `COUNT_PROJECTS` in the next: under READ
+ * COMMITTED a statement's snapshot is taken when it starts, so a count in
+ * the same statement would read from before the wait. Keyed by a hash of the
+ * user id; two users whose keys collide only queue behind each other.
+ */
+const LOCK_ACCOUNT = `
+  select pg_advisory_xact_lock(hashtextextended('projects-cap:' || $1, 0))`;
+
+/**
+ * The account's live projects of one kind that hold a synced file, this
+ * write's own included: a tombstone and an empty parent row do not count.
+ * Served by `projects_user_idx` and the `project_files` key.
+ */
+const COUNT_PROJECTS = `
+  select count(*)::int as projects
+    from projects p
+   where p.user_id = $1 and p.kind = $2 and p.deleted_at is null
+     and exists (
+       select 1 from project_files f
+        where f.user_id = p.user_id and f.project_id = p.id
+          and (f.path = any($3::text[]) or not starts_with(f.path, '.workspace/'))
+     )`;
+
+/**
+ * Throw `WriteRefused` with `{limit}` when the write takes the account past
+ * its cap for the project's kind (`ACCOUNT_LIMITS`), so that the writes roll
+ * back. Called only for a write that makes a project count, after its writes:
+ * the lock is taken last and nothing waits on a row while holding it, so it
+ * cannot deadlock with the row locks another write holds.
+ */
+const refuseOverAccountCap = async (q, { userId, kind }) => {
+  await q(LOCK_ACCOUNT, [userId]);
+  const { rows } = await q(COUNT_PROJECTS, [
+    userId,
+    kind,
+    SYNCED_WORKSPACE_FILES,
+  ]);
+  const cap =
+    kind === "tutorial" ? ACCOUNT_LIMITS.tutorials : ACCOUNT_LIMITS.projects;
+  if (rows[0].projects > cap) {
+    throw new WriteRefused({
+      limit: limitExceeded.tooManyProjects(kind, rows[0].projects),
+    });
+  }
+};
 
 const DELETE_NAMED = `
   delete from project_files
@@ -231,17 +380,36 @@ const DELETE_OTHERS = `
  * A patch is only ever accepted together with a token, so "what it differs
  * from" is always the row the caller read.
  *
- * @param {{id: string, name: string, kind: string, baseUpdatedAt?: string,
+ * A write that leaves the project over any limit is rolled back and answered
+ * `{limit}`; `answerWrite` sends the limit's own fields as the route's 413
+ * body. A patch is small even when its
+ * project is not, so the project it produces is what counts. A write that
+ * makes a project count toward the account cap (`ACCOUNT_LIMITS`) and takes
+ * the account past it is rolled back the same way, answered with
+ * `too-many-projects`; see `refuseOverAccountCap`.
+ *
+ * A patch after which the row holds no files is refused and rolled back
+ * (`refused: "no-files"`). Such a row reads back as no snapshot, so no device
+ * can merge with it or take it, and `CREATE` lets any device that never read
+ * it overwrite it: the work on every other device is no longer reachable by
+ * merge. A full write is the caller's to keep non-empty: `api/projects.mjs`
+ * refuses an empty `files` before it gets here, and only a patch needs the
+ * row to judge.
+ *
+ * @param {{id: string, name: string, kind: "project" | "tutorial",
+ *          baseUpdatedAt?: string,
  *          files?: Record<string, string>,
  *          changed?: Record<string, string>, removed?: string[]}} input
  * @returns {Promise<{updatedAt: string} |
- *   {conflict: true, updatedAt: string | null, reason?: "deleted"}>}
+ *   {conflict: true, updatedAt: string | null, reason?: "deleted"} |
+ *   {refused: typeof NO_FILES_REASON} |
+ *   {limit: import("../../../entities/project/limits.mjs").LimitExceeded}>}
  */
 export const saveProject = async (userId, input) => {
   try {
     return await transaction((q) => writeProject(q, userId, input));
   } catch (e) {
-    if (e instanceof AdoptionRefused) return e.outcome;
+    if (e instanceof WriteRefused) return e.outcome;
     throw e;
   }
 };
@@ -251,8 +419,10 @@ export const saveProject = async (userId, input) => {
  *
  * A constant number of statements whatever the file count: every file of a
  * write travels as one `jsonb` parameter and is expanded by
- * `jsonb_each_text` inside a single upsert. A project created from a template
- * is two statements, not one per file. Exported so a test can count them.
+ * `jsonb_each_text` inside a single upsert, and one more measures the result.
+ * A write that makes a project count adds two, the account cap's lock and
+ * count, so a project created from a template is five statements, not one per
+ * file. Exported so a test can count them.
  *
  * @param {(text: string, params?: unknown[]) => Promise<import("pg").QueryResult>} q
  */
@@ -261,24 +431,35 @@ export const writeProject = async (q, userId, input) => {
   const creating = !baseUpdatedAt;
 
   const { rows } = baseUpdatedAt
-    ? await q(SWAP, [userId, id, name, kind, baseUpdatedAt])
+    ? await q(SWAP, [
+        userId,
+        id,
+        name,
+        kind,
+        baseUpdatedAt,
+        SYNCED_WORKSPACE_FILES,
+      ])
     : await q(CREATE, [userId, id, name, kind]);
 
   const outcome = settle(rows[0]);
+  // Before `refuseOverLimit`: a missed swap on a project stored over a limit
+  // is a version question, which the other device merges, not a 413
   if (outcome.conflict) return outcome;
 
   if (rows[0].adopted) {
     // A new statement gets a fresh snapshot, and the row lock this
     // transaction now holds means any earlier writer has committed, so its
     // files are visible here and were not to the adopting statement itself.
-    const { rows: seen } = await q(HAS_FILES, [userId, id]);
+    const { rows: seen } = await q(HAS_FILES, [
+      userId,
+      id,
+      SYNCED_WORKSPACE_FILES,
+    ]);
     if (seen[0].has_files) {
       // The other writer's `updated_at` is gone -- this transaction just
       // overwrote it -- so the token is null, which only makes the client
       // read the project again.
-      const refused = new AdoptionRefused();
-      refused.outcome = { conflict: true, updatedAt: null };
-      throw refused;
+      throw new WriteRefused({ conflict: true, updatedAt: null });
     }
   }
 
@@ -293,13 +474,35 @@ export const writeProject = async (q, userId, input) => {
     if (removed?.length) await q(DELETE_NAMED, [userId, id, removed]);
     if (changed && Object.keys(changed).length) {
       await q(UPSERT_FILES, [userId, id, JSON.stringify(changed)]);
+    } else {
+      // Nothing added, so the row may now be empty -- or was already, and a
+      // swap would bump its token over an empty project. A full write needs
+      // no check: `saveProject`'s caller refuses an empty `files`.
+      const { rows: left } = await q(HAS_FILES, [
+        userId,
+        id,
+        SYNCED_WORKSPACE_FILES,
+      ]);
+      if (!left[0].has_files) {
+        throw new WriteRefused({ refused: NO_FILES_REASON });
+      }
     }
+  }
+  await refuseOverLimit(q, userId, id);
+  // A write that makes the project count toward the account cap: one to a
+  // row with no synced file before it. `CREATE` lets only such a row through;
+  // a swap reaches one when a client swaps files into an empty parent row. A
+  // project that already counts is never refused by the count. A swap never
+  // moves a counted row to the other kind's count: the route binds `kind` to
+  // the id (`projectKindOf`).
+  if (creating || !rows[0].had_files) {
+    await refuseOverAccountCap(q, { userId, kind });
   }
   return outcome;
 };
 
 /**
- * Tombstone a project.
+ * Tombstone a project and erase what its chat said.
  *
  * The row stays so another device's next sync sees "deleted" rather than
  * "missing" and does not push its local copy back up. Its files go: a
@@ -311,6 +514,16 @@ export const writeProject = async (q, userId, input) => {
  * conversation left live here was handed to the new run as the previous
  * run's chat. Scoped by user as well as project: a tutorial's id is the same
  * string in every account that started it.
+ *
+ * What the conversations said goes too: their messages are deleted and their
+ * titles cleared, for every conversation under the project, including one a
+ * previous run of a tutorial left tombstoned. The conversation rows stay,
+ * holding only ids, owner, project and timestamps. While the project is
+ * deleted its own tombstone refuses every push; once a tutorial is started
+ * again under the same id, the conversation's tombstone is what answers a
+ * device still holding the old run's thread with `ThreadDeleted("thread")`
+ * instead of taking its push as a new thread. A push in flight during the
+ * delete is ordered against it by the lock `ensureThread` takes.
  */
 export const deleteProject = async (userId, id) => {
   await transaction(async (q) => {
@@ -326,6 +539,17 @@ export const deleteProject = async (userId, id) => {
     await q(
       `update conversations set deleted_at = now()
         where user_id = $1 and project_id = $2 and deleted_at is null`,
+      [userId, id]
+    );
+    await q(
+      `delete from messages m using conversations c
+        where m.conversation_id = c.id
+          and c.user_id = $1 and c.project_id = $2`,
+      [userId, id]
+    );
+    await q(
+      `update conversations set title = null
+        where user_id = $1 and project_id = $2 and title is not null`,
       [userId, id]
     );
   });

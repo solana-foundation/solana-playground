@@ -1,56 +1,85 @@
 import { useState } from "react";
 
-import { TutorialCover } from "@/entities/tutorial";
+import { ladderLine, startTutorials } from "@/entities/tutorial";
+import { createLogger } from "@/shared/lib/logger";
 import { PgTutorial } from "@/utils";
 
+import { matchesTutorial } from "../lib/filter";
+import type { FrameworkFilter } from "../lib/levels";
+import { frameworkCount } from "../lib/levels";
+import { bannerOf, featuredOf } from "../model/banner";
+import { catalogTelemetry } from "../model/telemetry";
 import { useCardOpen } from "../model/use-card-open";
 import { useSearchTelemetry } from "../model/use-search-telemetry";
 import type { TutorialItem } from "../model/use-tutorial-list";
 import { useTutorialList } from "../model/use-tutorial-list";
-import type { CatalogCard, CatalogList } from "./BaseCatalogGrid";
-import BaseCatalogPage from "./BaseCatalogPage";
+import BaseTutorialsPage from "./BaseTutorialsPage";
 
-// TODO(HOO-2254, tutorials-gallery-stand task 3): the page draws the
-// tutorial card with its level groups; until then it keeps the catalog card
-/** A tutorial as the catalog card draws it, with the brand cover */
-const asCatalogCard = (t: TutorialItem): CatalogCard => ({
-  id: t.id,
-  title: t.title,
-  description: t.description,
-  media: <TutorialCover name={t.title} framework={t.framework} />,
-  tags: [{ label: t.level }, ...(t.framework ? [{ label: t.framework }] : [])],
-  open: t.open,
-});
+/** The id the banner's Open runs under, apart from its tutorial's card */
+const BANNER = "banner";
 
-const asCatalogList = (items: CatalogList<TutorialItem>): CatalogList =>
-  items.state === "ready"
-    ? { state: "ready", cards: items.cards.map(asCatalogCard) }
-    : items;
+const log = createLogger("catalog:banner");
 
 /**
- * Every registered tutorial, searched by name and description. Open
- * navigates to the tutorial's route (`PgTutorial.open`); a failure there is
- * shown on the card, while what the route then fails to load is the
- * route's to report.
+ * The start's tutorials (`startTutorials`), searched by name and
+ * description, filtered by framework, under the Start here banner. Open, on
+ * a card or the banner, navigates to the tutorial's route
+ * (`PgTutorial.open`); a failure there is shown where it was pressed, while
+ * what the route then fails to load is the route's to report.
  */
 const TutorialsPage = () => {
   const [query, setQuery] = useState("");
+  const [framework, setFramework] = useState<FrameworkFilter>("all");
   const { open, busy, cardOpen } = useCardOpen("tutorials");
-  const list = asCatalogList(useTutorialList(query, cardOpen).list);
-  useSearchTelemetry(
-    "tutorials",
-    query,
-    list.state === "ready" && list.cards.length === 0
+  const pool = startTutorials(PgTutorial.all);
+  // Read with no query: the banner and the filter go by the whole list
+  const { list } = useTutorialList("", cardOpen, pool);
+  const all = list.state === "ready" ? list.cards : [];
+  const items = all.filter(
+    (t) =>
+      matchesTutorial({ name: t.title, description: t.description }, query) &&
+      (framework === "all" || t.framework === framework)
   );
+  useSearchTelemetry("tutorials", query, items.length === 0);
+
+  const featured = featuredOf<TutorialItem>(all);
+  const banner = featured && bannerOf(featured, ladderLine(featured.id));
 
   return (
-    <BaseCatalogPage
-      label="tutorials"
+    <BaseTutorialsPage
       query={query}
       onQuery={setQuery}
-      list={list}
+      framework={framework}
+      onFramework={(f) => {
+        setFramework(f);
+        catalogTelemetry.track("catalog_filtered", {
+          page: "tutorials",
+          framework: f,
+        });
+      }}
+      filterable={frameworkCount(all) >= 2}
+      count={pool.length}
+      items={items}
       busy={busy}
       onOpen={(name) => open(name, () => PgTutorial.open(name))}
+      banner={
+        banner && {
+          banner,
+          open: cardOpen(BANNER),
+          onOpen: () =>
+            open(BANNER, async () => {
+              await PgTutorial.open(banner.id);
+              // Counted apart from the Open: a throw here is not it failing
+              try {
+                catalogTelemetry.track("catalog_banner_opened", {
+                  state: banner.state,
+                });
+              } catch (e) {
+                log.error(e, { report: true });
+              }
+            }),
+        }
+      }
     />
   );
 };

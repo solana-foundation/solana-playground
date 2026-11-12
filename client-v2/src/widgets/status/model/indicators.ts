@@ -1,13 +1,15 @@
 import type { AnalyzerState } from "@/components/Editor/Monaco/languages/rust/rust-analyzer/status";
+import { clusterName } from "@/entities/cluster";
 
 /**
  * One indicator's state. `not-ready` waits on something outside it (offline,
- * a cluster that does not answer, a start that takes longer) and draws the
- * warning colour the offline notice has; `failed` is broken (the analyzer
- * threw) and is the only red. `idle` is neither ready nor not ready (the
- * analyzer before a Rust file, or where the browser cannot run it; the AI
- * with no model connected, which is the user's choice and not a failure):
- * grey, and left out of the phone chip's count.
+ * a cluster that does not answer, a start that takes longer, the hosted
+ * model's free daily limit) and draws the warning colour the offline notice
+ * has; `failed` is broken (the analyzer threw, or the deployment did not
+ * answer whether it serves a hosted model) and is the only red. `idle` is
+ * neither ready nor not ready (the analyzer before a Rust file, or where the
+ * browser cannot run it; the AI with no model connected, which is the user's
+ * choice and not a failure): grey, and left out of the phone chip's count.
  */
 export type StatusState = "ready" | "working" | "not-ready" | "failed" | "idle";
 
@@ -16,7 +18,7 @@ export type IndicatorId = "network" | "ai" | "rust";
 /** What fixes an indicator, from its panel or its sheet row */
 export type StatusAction =
   | { kind: "network"; text: "Change network" }
-  | { kind: "ai"; text: "Connect a model" | "Change model" }
+  | { kind: "ai"; text: "Connect a model" | "Change model" | "Add an API key" }
   | { kind: "reload"; text: "Reload" };
 
 /** Everything a view needs to draw one indicator, in any of its places */
@@ -35,10 +37,24 @@ export interface StatusIndicator {
    * with the state said even where the row leaves it out ("Devnet · Ready"),
    * because the rail shows no words beside its dot */
   tip: string;
+  /** What the live region says, where `label` names an action rather than
+   * the state: "Devnet, not responding"; `label` otherwise */
+  announced?: string;
   /** What it means when not ready, for the panel and the sheet; undefined when
    * there is nothing to add to the words */
   detail: string | undefined;
   action: StatusAction | undefined;
+  /** The panel a press opens with `detail` and the buttons; without one a
+   * press goes straight to `action`. Only where the panel adds something:
+   * the analyzer, a cluster that does not answer, the AI's limit and failure.
+   * `retry`: whether the panel and the sheet row offer "Try again" before
+   * `action`, which is why it lives here and not beside it */
+  panel: IndicatorPanel | undefined;
+}
+
+/** What an indicator's panel holds beyond its line and action */
+export interface IndicatorPanel {
+  retry: boolean;
 }
 
 /** The phone chip: the worst state of the three, in words; one that failed
@@ -67,10 +83,21 @@ export interface NetworkInput {
 
 export type AiInput =
   | { kind: "ready"; model: string }
+  /** Nothing connected, and asking the deployment for its hosted model failed */
+  | { kind: "unreachable" }
+  /** The hosted model refused a turn under its free daily limit; `until` is
+   * when it comes back, as a time */
+  | { kind: "limit"; until: number }
+  /** The hosted model refused a turn because its tier's pool is spent; only
+   * the upstream knows when it refills, so no time is named */
+  | { kind: "out-of-capacity" }
   /** `needsSignIn`: the default backend while nobody is signed in */
   | { kind: "off"; needsSignIn: boolean };
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** A cluster's name as the network chips show it: "Mainnet" for `mainnet-beta` */
+export const shownClusterName = (name: string) => capitalize(clusterName(name));
 
 const NETWORK_ACTION: StatusAction = {
   kind: "network",
@@ -81,7 +108,7 @@ export const networkIndicator = (
   { name, isConnected, slotStalled }: NetworkInput,
   online: boolean
 ): StatusIndicator => {
-  const shown = capitalize(name);
+  const shown = shownClusterName(name);
   const view = (
     state: StatusState,
     suffix: string | undefined,
@@ -93,6 +120,9 @@ export const networkIndicator = (
     const spoken = suffix && state === "not-ready" ? `, ${suffix}` : "";
     // Only ready and an unstarted Playnet come without a suffix
     const tipWord = suffix ?? (state === "idle" ? "not started" : "ready");
+    // Asking again only helps a cluster that is reached and does not answer:
+    // offline, the line already says what it waits for
+    const down = state === "not-ready" && online;
     return {
       id: "network",
       name: "Network",
@@ -103,8 +133,10 @@ export const networkIndicator = (
       label: `Change cluster, currently ${name}${spoken}`,
       railLabel: `Cluster: ${name}${spoken}`,
       tip: `${shown} · ${capitalize(tipWord)}`,
+      announced: `${shown}${spoken}`,
       detail,
       action: NETWORK_ACTION,
+      panel: down ? { retry: true } : undefined,
     };
   };
 
@@ -127,8 +159,22 @@ export const networkIndicator = (
   return view("ready", undefined, undefined);
 };
 
+/** "05:00", in the user's own clock */
+const clockTime = (at: number) =>
+  new Date(at).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+const ADD_KEY: StatusAction = { kind: "ai", text: "Add an API key" };
+
 export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
-  const base = { id: "ai" as const, name: "AI" };
+  const base = {
+    id: "ai" as const,
+    name: "AI",
+    panel: undefined,
+  };
   if (!online) {
     return {
       ...base,
@@ -155,6 +201,52 @@ export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
       action: { kind: "ai", text: "Change model" },
     };
   }
+  if (ai.kind === "limit") {
+    // Waiting, not broken: it comes back by itself at `until`
+    return {
+      ...base,
+      state: "not-ready",
+      words: "AI · Limit reached",
+      label: "AI, limit reached",
+      railLabel: "AI, limit reached",
+      tip: "AI · Limit reached",
+      detail: `The free daily limit is used. It comes back at ${clockTime(
+        ai.until
+      )}, or add a key of your own to keep going.`,
+      action: ADD_KEY,
+      panel: { retry: false },
+    };
+  }
+  if (ai.kind === "out-of-capacity") {
+    // Waiting too, with the chat's own sentence: no time to promise
+    return {
+      ...base,
+      state: "not-ready",
+      words: "AI · Limit reached",
+      label: "AI, limit reached",
+      railLabel: "AI, limit reached",
+      tip: "AI · Limit reached",
+      detail:
+        "The free assistant is out of capacity for now. Try again later, or add a key of your own to keep going.",
+      action: ADD_KEY,
+      panel: { retry: false },
+    };
+  }
+  if (ai.kind === "unreachable") {
+    // A failure that would otherwise hide as "Off"
+    return {
+      ...base,
+      state: "failed",
+      words: "AI · Not responding",
+      label: "AI, not responding",
+      railLabel: "AI, not responding",
+      tip: "AI · Not responding",
+      detail:
+        "The hosted model is not responding. Try again, or add a key of your own.",
+      action: ADD_KEY,
+      panel: { retry: true },
+    };
+  }
   // No model is the user's choice, not a failure: grey like the analyzer's
   // Off, and not counted by the phone chip. Red stays for what is broken.
   return {
@@ -170,6 +262,23 @@ export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
     action: { kind: "ai", text: "Connect a model" },
   };
 };
+
+/** A run a reload of the page would throw away */
+export type RunUnderWay = "build" | "deploy";
+
+/** A reload would throw the run away, and a first build does not start again
+ * (Spec 06 RUN-33), so an indicator offering one says when it comes back */
+export const holdingReload = (
+  indicator: StatusIndicator,
+  run: RunUnderWay
+): StatusIndicator =>
+  indicator.action?.kind === "reload"
+    ? {
+        ...indicator,
+        detail: `${indicator.detail} Reload comes back when the ${run} ends.`,
+        action: undefined,
+      }
+    : indicator;
 
 const RELOAD: StatusAction = { kind: "reload", text: "Reload" };
 const ANALYZER_WAITING =
@@ -197,6 +306,8 @@ export const analyzerIndicator = (
     tip: `Rust · ${word ?? "Not started"}`,
     detail,
     action,
+    // The analyzer has no settings to go to: its panel is where it is explained
+    panel: { retry: false },
   });
 
   // Offline reads the same on all three (Spec 06, "Offline"); a reload would
@@ -290,7 +401,7 @@ export const chipOf = (
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, expectTypeOf } = import.meta.vitest;
 
   describe("widgets/status/model/indicators", () => {
     const UP: NetworkInput = {
@@ -308,6 +419,20 @@ if (import.meta.vitest) {
           "Change cluster, currently devnet",
           "Cluster: devnet",
           "Devnet · Ready",
+        ]);
+      });
+
+      // HOO-2488: the chips' name, never "Mainnet-beta"; the settings
+      // trigger's names keep the moniker its lookups use
+      it("shows mainnet-beta as Mainnet", () => {
+        const n = networkIndicator(
+          { name: "mainnet-beta", isConnected: true, slotStalled: false },
+          true
+        );
+        expect([n.words, n.tip, n.label]).toEqual([
+          "Mainnet",
+          "Mainnet · Ready",
+          "Change cluster, currently mainnet-beta",
         ]);
       });
 
@@ -359,6 +484,34 @@ if (import.meta.vitest) {
         });
       });
 
+      it("announces the network by name and state", () => {
+        const n = networkIndicator(
+          { name: "devnet", isConnected: false, slotStalled: undefined },
+          true
+        );
+        expect(n.announced).toBe("Devnet, not responding");
+      });
+
+      it("opens a panel with Try again only while the cluster does not answer", () => {
+        const down = networkIndicator(
+          { name: "devnet", isConnected: false, slotStalled: undefined },
+          true
+        );
+        const connecting = networkIndicator(
+          { name: "devnet", isConnected: undefined, slotStalled: undefined },
+          true
+        );
+        const offline = networkIndicator(UP, false);
+        const views = [down, networkIndicator(UP, true), connecting, offline];
+        expect(views.map((n) => n.panel)).toEqual([
+          { retry: true },
+          undefined,
+          undefined,
+          // Asking again goes nowhere offline; the line says why it waits
+          undefined,
+        ]);
+      });
+
       it("says offline over any other state", () => {
         const n = networkIndicator(UP, false);
         expect([n.state, n.words, n.detail]).toEqual([
@@ -396,6 +549,54 @@ if (import.meta.vitest) {
         expect(a.detail).toBe(
           "Sign in with GitHub to use the hosted model, or add a key of your own."
         );
+      });
+
+      it("reads Limit reached, waiting, with a panel saying when it comes back", () => {
+        // 05:00 in the zone the test runs in, whatever that zone is
+        const until = new Date(2026, 10, 5, 5, 0).getTime();
+        const a = aiIndicator({ kind: "limit", until }, true);
+        expect([a.state, a.words, a.label, a.tip, a.panel, a.action]).toEqual([
+          "not-ready",
+          "AI · Limit reached",
+          "AI, limit reached",
+          "AI · Limit reached",
+          { retry: false },
+          { kind: "ai", text: "Add an API key" },
+        ]);
+        expect(a.detail).toBe(
+          "The free daily limit is used. It comes back at 05:00, or add a key of your own to keep going."
+        );
+      });
+
+      it("reads Limit reached after a spent pool, with a panel naming no time", () => {
+        const a = aiIndicator({ kind: "out-of-capacity" }, true);
+        expect([a.state, a.words, a.label, a.panel, a.action]).toEqual([
+          "not-ready",
+          "AI · Limit reached",
+          "AI, limit reached",
+          { retry: false },
+          { kind: "ai", text: "Add an API key" },
+        ]);
+        expect(a.detail).toBe(
+          "The free assistant is out of capacity for now. Try again later, or add a key of your own to keep going."
+        );
+      });
+
+      it("reads Not responding, failed, with Try again when the check fails", () => {
+        const a = aiIndicator({ kind: "unreachable" }, true);
+        expect([a.state, a.words, a.label, a.panel, a.action]).toEqual([
+          "failed",
+          "AI · Not responding",
+          "AI, not responding",
+          { retry: true },
+          { kind: "ai", text: "Add an API key" },
+        ]);
+      });
+
+      it("opens no panel when ready or off", () => {
+        const ready = aiIndicator({ kind: "ready", model: "Opus 5.5" }, true);
+        const off = aiIndicator({ kind: "off", needsSignIn: false }, true);
+        expect([ready.panel, off.panel]).toEqual([undefined, undefined]);
       });
 
       it("reads Offline offline", () => {
@@ -461,6 +662,27 @@ if (import.meta.vitest) {
         ]);
       });
 
+      it("keeps Reload away from a build or a deploy under way, and says so", () => {
+        const slow = { kind: "starting", since: 0 } as const;
+        const building = holdingReload(
+          analyzerIndicator(slow, SLOW_AFTER_MS, true),
+          "build"
+        );
+        expect(building.words).toBe("Rust · Taking longer");
+        expect(building.action).toBeUndefined();
+        expect(building.detail).toContain(
+          "Reload comes back when the build ends."
+        );
+        const failed = holdingReload(
+          analyzerIndicator({ kind: "failed" }, 0, true),
+          "deploy"
+        );
+        expect(failed.action).toBeUndefined();
+        expect(failed.detail).toContain(
+          "Reload comes back when the deploy ends."
+        );
+      });
+
       it("reads Offline offline, with nothing to press", () => {
         const r = analyzerIndicator({ kind: "ready" }, 0, false);
         expect([r.state, r.words, r.action]).toEqual([
@@ -468,6 +690,17 @@ if (import.meta.vitest) {
           "Rust · Offline",
           undefined,
         ]);
+      });
+    });
+
+    describe("StatusIndicator", () => {
+      it("offers Try again only inside a panel", () => {
+        // A retry is a field of the panel, so an indicator cannot offer one
+        // without a panel to hold it
+        expectTypeOf<StatusIndicator>().not.toHaveProperty("retry");
+        expectTypeOf<StatusIndicator["panel"]>().toEqualTypeOf<
+          { retry: boolean } | undefined
+        >();
       });
     });
 
@@ -512,6 +745,24 @@ if (import.meta.vitest) {
           state: "not-ready",
           words: "Offline",
           label: "Status, offline",
+        });
+      });
+
+      it("counts the AI at its limit as not ready and not responding as failed", () => {
+        const limit = aiIndicator(
+          { kind: "limit", until: Date.UTC(2026, 10, 5) },
+          true
+        );
+        expect(chipOf([ready, limit, idle], true)).toEqual({
+          state: "not-ready",
+          words: "1 not ready",
+          label: "Status, 1 not ready",
+        });
+        const unreachable = aiIndicator({ kind: "unreachable" }, true);
+        expect(chipOf([ready, unreachable, idle], true)).toEqual({
+          state: "failed",
+          words: "1 not ready",
+          label: "Status, 1 not ready",
         });
       });
 

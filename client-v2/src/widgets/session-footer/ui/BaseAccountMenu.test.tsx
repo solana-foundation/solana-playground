@@ -22,6 +22,7 @@ const view = (fields: Partial<AccountView>): AccountView => ({
   cluster: fields.cluster ?? UP,
   sending: fields.sending ?? false,
   online: fields.online ?? true,
+  canFund: fields.canFund ?? false,
 });
 
 const IDLE: SignOutState = { status: "idle" };
@@ -107,6 +108,28 @@ it("says why a sign-in failed above Sign in with GitHub, for the rail too", asyn
     screen.getByText("Allow pop-ups for this site to sign in with GitHub.")
   ).toBeTruthy();
   expect(items()[0]).toBe("Tryagain");
+});
+
+const ENDED = { status: "expired", user: TESTER } as const;
+
+it("offers Sign in again first after a session ended", async () => {
+  const onPick = await open(view({ session: ENDED }));
+  expect(items()[0]).toBe("Signinagain");
+  expect(screen.queryByRole("menuitem", { name: "Sign out" })).toBeNull();
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Sign in again" })
+  );
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("sign-in");
+});
+
+it("says offline over Sign in again, and turns it off", async () => {
+  await open(view({ session: ENDED, online: false }));
+  expect(items()[0]).toBe("You'reoffline");
+  expect(
+    screen
+      .getByRole("menuitem", { name: "You're offline" })
+      .getAttribute("aria-disabled")
+  ).toBe("true");
 });
 
 it("retries a failed sign-in from Try again", async () => {
@@ -225,6 +248,21 @@ it("shows a connected wallet and offers to disconnect it", async () => {
   expect(onPick).toHaveBeenCalledExactlyOnceWith("wallet");
 });
 
+it("keeps a large balance and the address on one line each", async () => {
+  await open(
+    view({
+      wallet: { address: WALLET.address, balance: 940000, name: WALLET.name },
+    })
+  );
+  const balance = screen.getByText("940000.00 SOL");
+  expect(balance.classList).toContain("whitespace-nowrap");
+  expect(balance.classList).toContain("shrink-0");
+  const address = screen.getByText("7Hq5…Xk2P");
+  expect(address.classList).toContain("truncate");
+  // A flex item truncates only once it may shrink below its text
+  expect(address.classList).toContain("min-w-0");
+});
+
 it("names the extension wallet it disconnects, which hands back to the Playground wallet", async () => {
   await open(
     view({
@@ -311,6 +349,24 @@ it("opens Docs and the profile in a new tab and reports the pick", async () => {
   expect(onPick).toHaveBeenCalledExactlyOnceWith("docs");
 });
 
+it("offers funding in the wallet group once a Playground wallet exists", async () => {
+  const onPick = await open(view({ wallet: WALLET, canFund: true }));
+
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Fund from a wallet…" })
+  );
+
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("fund-wallet");
+});
+
+it("offers no funding before the Playground wallet is set up", async () => {
+  await open(view({ canFund: false }));
+
+  expect(
+    screen.queryByRole("menuitem", { name: "Fund from a wallet…" })
+  ).toBeNull();
+});
+
 const openPage = async (account: AccountView, onPick = vi.fn()) => {
   render(
     <DropdownMenu>
@@ -350,6 +406,15 @@ it("as a phone's page, signed out, pins Sign in with GitHub at its foot with wha
   const signIns = screen.getAllByRole("menuitem", {
     name: "Sign in with GitHub",
   });
+  expect(signIns).toHaveLength(1);
+  expect(signIns[0].closest("[data-account-foot]")).toBeTruthy();
+  await userEvent.click(signIns[0]);
+  expect(onPick).toHaveBeenCalledWith("sign-in");
+});
+
+it("as a phone's page, after a session ended, pins Sign in again at its foot", async () => {
+  const onPick = await openPage(view({ session: ENDED }));
+  const signIns = screen.getAllByRole("menuitem", { name: "Sign in again" });
   expect(signIns).toHaveLength(1);
   expect(signIns[0].closest("[data-account-foot]")).toBeTruthy();
   await userEvent.click(signIns[0]);

@@ -1,5 +1,7 @@
 import type { FC, ReactNode } from "react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
   ConsoleDrawer,
@@ -8,6 +10,7 @@ import {
   ConsoleDrawerContent,
   ConsoleDrawerStatus,
 } from "@/shared/ui/console-drawer";
+import { CopyButton } from "@/shared/ui/copy-button";
 import { Kbd } from "@/shared/ui/kbd";
 import { StatusDot } from "@/shared/ui/status-dot";
 
@@ -23,12 +26,24 @@ interface BaseConsoleDrawerProps {
   /** The state the drawer asks for, which may be the one it is in */
   onOpenChange: (open: boolean) => void;
   onClear: () => void;
-  /** The run Stop names and the handler that stops it, while a build or a
-   * deploy runs; `null` otherwise */
+  /** The run Stop names and the handler that stops it, or `null` for no
+   * Stop; `runToStop` decides which run gets one (a build, never a deploy
+   * alone) */
   stop: { run: RunKind; onStop: () => void } | null;
   status: ConsoleStatus;
-  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere */
-  shortcut: string;
+  /** How far a long command (a deploy's buffer writes) has got, 0 to 100; 0 draws no bar */
+  progress?: number;
+  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere; none on a touch layout */
+  shortcut?: string;
+  /**
+   * A tutorial's bar: the dot and its line only, no "Terminal" label, as
+   * the prototype draws it
+   */
+  bare?: boolean;
+  /** A line over the terminal before anything has run */
+  empty?: string | null;
+  /** The terminal's text for Copy, read when the console opens and as a run moves */
+  log: string;
   children?: ReactNode;
 }
 
@@ -46,7 +61,12 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   onClear,
   stop,
   status,
+  progress = 0,
   shortcut,
+  bare = false,
+  // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  empty = null,
+  log,
   children,
 }) => (
   <ConsoleDrawer
@@ -54,26 +74,82 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     onOpenChange={onOpenChange}
     hotkey={null}
     contentId={CONSOLE_BODY_ID}
-    className="h-full bg-surface"
+    // On a phone the open console is a sheet (`BasePhonePager`): its bar
+    // rides on top as the sheet's head, under a grabber
+    className="h-full bg-surface max-md:flex-col"
   >
-    <ConsoleDrawerBar triggerLabel="Terminal" className="shrink-0">
+    {open && (
+      <div
+        aria-hidden
+        className="flex shrink-0 justify-center bg-surface-well pt-2 md:hidden"
+      >
+        <span className="h-1 w-9 rounded-full bg-border" />
+      </div>
+    )}
+    <ConsoleDrawerBar
+      triggerLabel="Terminal"
+      // A finger's 44 px on a phone, the bar and every control on it, with
+      // 20 px glyphs and 14 px words; the chevron is the drawer's own, so it
+      // is sized from here. Open, the bar is the sheet's head: one surface
+      // with the log under it, a hairline between them, and 12 px more under
+      // its row so the words sit as far from the hairline as from the edge
+      className="relative shrink-0 max-md:h-11 max-md:px-3 max-md:text-sm max-md:[&_[data-slot=console-drawer-trigger]]:size-11 max-md:[&_[data-slot=console-drawer-trigger]_svg]:size-5 max-md:group-data-[state=open]/console-drawer:h-14 max-md:group-data-[state=open]/console-drawer:pb-3 max-md:group-data-[state=open]/console-drawer:border-t-0 max-md:group-data-[state=open]/console-drawer:border-b max-md:group-data-[state=open]/console-drawer:bg-surface-well"
+    >
+      {progress > 0 && (
+        <div
+          role="progressbar"
+          aria-label="Progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress)}
+          className="pointer-events-none absolute inset-x-0 top-0 h-0.5"
+        >
+          <div
+            className="h-full bg-primary transition-[width] duration-300"
+            style={{ width: `${Math.min(progress, 100)}%` }}
+          />
+        </div>
+      )}
       <ConsoleDrawerStatus>
         <StatusDot variant={status.tone} />
-        <span
-          data-console-label
-          className="font-semibold tracking-wide text-foreground"
-        >
-          Terminal
-        </span>
+        {!bare && (
+          <span
+            data-console-label
+            className="font-label tracking-wide text-foreground"
+          >
+            Terminal
+          </span>
+        )}
         {status.text && (
-          <span className={status.tone === "error" ? "text-error" : undefined}>
+          <span
+            data-console-status
+            className={cn(
+              "truncate",
+              status.tone === "error" && "text-error",
+              status.tone === "warning" && "text-warning"
+            )}
+          >
             {status.text}
           </span>
         )}
       </ConsoleDrawerStatus>
-      <ConsoleDrawerActions>
-        <Kbd aria-hidden>{shortcut}</Kbd>
-        {/* Spec 13: while a build or a deploy runs, Clear is off with Stop
+      <ConsoleDrawerActions className="gap-2 max-md:gap-0">
+        {/* No keyboard on a phone to press it with */}
+        {shortcut && (
+          <Kbd aria-hidden className="max-md:hidden">
+            {shortcut}
+          </Kbd>
+        )}
+        {/* Spec 08: the full log comes with a Copy */}
+        {open && log && (
+          <CopyButton
+            value={log}
+            label="Copy log"
+            className="max-md:min-h-11 max-md:min-w-11 max-md:[&_svg]:size-5!"
+            onError={reportButtonFailure("copy the log")}
+          />
+        )}
+        {/* Spec 13: while a build runs, Clear is off with Stop
             beside it; on a phone Stop takes Clear's place, a fingertip
             wide. Stop shows folded too: the strip is all a folded console
             shows. */}
@@ -83,7 +159,11 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
             variant="ghost"
             size="xs"
             disabled={!!stop}
-            className={stop ? "max-md:hidden" : undefined}
+            className={
+              stop
+                ? "max-md:hidden"
+                : "max-md:min-h-11 max-md:min-w-11 max-md:text-sm"
+            }
             onClick={onClear}
           >
             Clear
@@ -109,8 +189,16 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     <ConsoleDrawerContent className="flex h-auto min-h-0 flex-1 flex-col overflow-hidden max-md:data-[state=open]:h-auto">
       {/* The terminal's own root has no height. One grid cell the well's
           size stretches it, whatever element it is, so xterm's fit sees a
-          real size and counts the right rows. */}
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)]">
+          real size and counts the right rows. The column is `minmax(0,1fr)`
+          too: an `auto` one is never narrower than the terminal's own width,
+          so the terminal outgrows a narrowing stage and fit, which takes the
+          scrollbar off that width, gets there one scrollbar per pass. */}
+      {empty && (
+        <p className="shrink-0 px-4 pt-3 font-mono text-code text-muted-foreground">
+          {empty}
+        </p>
+      )}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
         {children}
       </div>
     </ConsoleDrawerContent>

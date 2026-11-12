@@ -1,7 +1,7 @@
 import type { Stage } from "@/views/flow/state/stage";
 
 import type { NetworkInput } from "./indicators";
-import { networkIndicator, OFFLINE_LINE } from "./indicators";
+import { networkIndicator, OFFLINE_LINE, shownClusterName } from "./indicators";
 
 /**
  * What keeps work waiting: the browser is offline (Spec 08 NET-01) or the
@@ -19,8 +19,6 @@ export interface StageNoticeView {
 
 /** The stages that wait for the cluster; Write and Build do not */
 const WAITS_FOR_CLUSTER: ReadonlySet<Stage> = new Set(["deploy", "interact"]);
-
-const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
  * The condition. Whether the cluster is down is read through
@@ -46,12 +44,30 @@ export const stageNotice = (
   if (condition === "cluster-down" && WAITS_FOR_CLUSTER.has(stage)) {
     return {
       kind: "cluster-down",
-      text: `${capitalize(
+      text: `${shownClusterName(
         name
       )} is not responding. Try again, or change the network.`,
     };
   }
   return undefined;
+};
+
+/**
+ * Why Deploy and Interact's action is held, if it is. The notice's condition,
+ * whatever the stage, so the status and the buttons cannot disagree.
+ */
+export const networkHold = (
+  network: NetworkInput,
+  online: boolean
+): string | undefined => {
+  switch (noticeCondition(network, online)) {
+    case "offline":
+      return "You're offline";
+    case "cluster-down":
+      return `${shownClusterName(network.name)} is not responding`;
+    default:
+      return undefined;
+  }
 };
 
 if (import.meta.vitest) {
@@ -109,12 +125,24 @@ if (import.meta.vitest) {
       expect(stageNotice("cluster-down", "testnet", "interact")?.text).toBe(
         "Testnet is not responding. Try again, or change the network."
       );
+      // HOO-2488: the chips' name, never the raw `mainnet-beta`
+      expect(stageNotice("cluster-down", "mainnet-beta", "deploy")?.text).toBe(
+        "Mainnet is not responding. Try again, or change the network."
+      );
       expect(stageNotice("cluster-down", "devnet", "write")).toBeUndefined();
       expect(stageNotice("cluster-down", "devnet", "build")).toBeUndefined();
     });
 
     it("shows nothing with nothing wrong", () => {
       expect(stageNotice(undefined, "devnet", "deploy")).toBeUndefined();
+    });
+
+    it("gives Deploy and Interact the reason they wait, if any", () => {
+      expect(networkHold(DOWN, false)).toBe("You're offline");
+      expect(networkHold(DOWN, true)).toBe("Devnet is not responding");
+      expect(networkHold(STALLED, true)).toBe("Devnet is not responding");
+      expect(networkHold(UP, true)).toBeUndefined();
+      expect(networkHold(CONNECTING, true)).toBeUndefined();
     });
   });
 }

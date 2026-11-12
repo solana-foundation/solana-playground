@@ -1,9 +1,8 @@
 import { ComponentPropsWithoutRef, forwardRef } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink } from "react-router";
 
 import { cn } from "@/shared/lib/utils";
-
-import { External } from "../Icons";
+import { Icon } from "@/shared/ui/icon";
 
 export interface LinkProps extends ComponentPropsWithoutRef<"a"> {
   href: RoutePath;
@@ -15,7 +14,7 @@ const WRAPPER_CLASSES = cn(
 );
 
 const TEXT_CLASSES =
-  "border-b border-transparent text-primary [transition:border-bottom-color_50ms_linear] hover:border-primary [&_svg]:ml-1";
+  "border-b border-transparent text-primary-ink [transition:border-bottom-color_50ms_linear] hover:border-primary-ink [&_svg]:ml-1";
 
 const Link = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => {
   // `Markdown` component may set `props.children` to an array
@@ -42,7 +41,13 @@ const Link = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => {
     >
       {props.children}
 
-      {!isWrapper && <External />}
+      {!isWrapper && (
+        <Icon
+          name="external"
+          size={16}
+          className="inline-block align-[-0.2em]"
+        />
+      )}
     </a>
   );
 });

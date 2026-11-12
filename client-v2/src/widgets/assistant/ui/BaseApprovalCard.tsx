@@ -36,6 +36,7 @@ const STATUS_LABEL: Record<ApprovalStatus, string> = {
   allowed: "Applied",
   denied: "Declined",
   unanswered: "Not answered",
+  failed: "Failed",
 };
 
 /** A patch's words for the same statuses (Spec 04): it is discarded, not declined */
@@ -50,9 +51,13 @@ const OUTCOME: Record<Exclude<ApprovalStatus, "pending">, string> = {
   allowed: "Done",
   denied: "Not applied",
   unanswered: "Not applied: the session ended before you answered",
+  failed: "Failed",
 };
 
-/** An undo that did not finish is a warning; a patch still applied, a success */
+/**
+ * An undo that did not finish is a warning, a tool that failed an error, a
+ * patch still applied a success
+ */
 const outcomeTone = ({
   status,
   undone,
@@ -63,6 +68,7 @@ const outcomeTone = ({
   stranded: boolean;
 }) => {
   if (stranded) return "text-warning";
+  if (status === "failed") return "text-destructive";
   if (status === "allowed" && !undone) return "text-success";
   return "text-muted-foreground";
 };
@@ -70,6 +76,18 @@ const outcomeTone = ({
 // The answers sit in one row of thumb-sized targets on a phone, where the
 // card is most likely to end up half under the keyboard
 const ANSWER = "h-11 md:h-8";
+
+// A question is read whole, so it wraps instead of truncating
+const QUESTION_TITLE = "font-sans text-sm whitespace-normal text-foreground";
+
+/** The card's title: the command's question, else the file or command name */
+const cardTitle = (request: ApprovalItem["request"]) => {
+  if (request.type === "patch") return { text: request.path };
+  if (request.question) {
+    return { text: request.question, className: QUESTION_TITLE };
+  }
+  return { text: `wants to run ${request.name}` };
+};
 
 /**
  * A change or a command the assistant wants to make, with the user's answer.
@@ -99,17 +117,19 @@ export const BaseApprovalCard = ({
 
   // A patch is discarded, a command declined (Spec 04)
   const labels = patch ? PATCH_STATUS_LABEL : STATUS_LABEL;
+  const title = cardTitle(request);
 
   return (
     <Diff data-status={status} className={cn(pending && "border-primary")}>
       <DiffHeader>
-        <DiffTitle>
-          {patch ? request.path : `wants to run ${request.name}`}
-        </DiffTitle>
+        <DiffTitle className={title.className}>{title.text}</DiffTitle>
         {patch ? <PatchStat request={request} /> : <span className="ml-auto" />}
         <Badge
           variant={pending ? "default" : "outline"}
-          className={cn(status === "allowed" && !undone && "text-success")}
+          className={cn(
+            status === "allowed" && !undone && "text-success",
+            status === "failed" && "text-destructive"
+          )}
         >
           {undone ? "Undone" : labels[status]}
         </Badge>

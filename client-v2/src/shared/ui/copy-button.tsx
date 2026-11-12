@@ -13,6 +13,7 @@ function CopyButton({
   value,
   label = "Copy",
   onError,
+  onCopied,
   className,
   ...props
 }: Omit<
@@ -24,6 +25,8 @@ function CopyButton({
   label?: string;
   /** where a refused copy goes */
   onError?: (error: unknown) => void;
+  /** runs once the clipboard holds the value, never after a refused copy */
+  onCopied?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -39,6 +42,7 @@ function CopyButton({
       return;
     }
     setCopied(true);
+    onCopied?.();
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => setCopied(false), 1400);
   };
@@ -61,9 +65,9 @@ function CopyButton({
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        <span className={copied ? "text-success" : undefined}>
-          {copied ? "Copied" : label}
-        </span>
+        {/* The tooltip's own ink: it sits on the inverse of the page, so a
+            page ink such as success-ink loses its contrast there */}
+        {copied ? "Copied" : label}
       </TooltipContent>
     </Tooltip>
   );

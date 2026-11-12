@@ -1,3 +1,5 @@
+import { Plug } from "lucide-react";
+
 import { ComposerModel } from "@/shared/ui/composer";
 import {
   DropdownMenu,
@@ -53,7 +55,14 @@ export function BaseModelMenu({
   }
   if (model.kind === "none") {
     return (
-      <ComposerModel onClick={onConnect} disabled={disabled}>
+      // The one thing to do in the box while nothing is connected, so it
+      // reads as a button: the foreground and a plug, not the chips' grey
+      <ComposerModel
+        className="text-foreground"
+        onClick={onConnect}
+        disabled={disabled}
+      >
+        <Plug aria-hidden />
         Connect a model
       </ComposerModel>
     );

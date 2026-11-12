@@ -87,6 +87,9 @@ export const filterRepoFiles = (tree: GithubTreeItem[], path: string) => {
   });
 };
 
+/** Where the app opens a GitHub repository: `/github/<owner>/<repo>…` */
+export const GITHUB_ROUTE = "/github";
+
 /** How a refusal names an imported repository, and the folder in it if any */
 const sourceOf = (repository: string, path: string) =>
   path ? `${path} in ${repository}` : repository;
@@ -95,11 +98,30 @@ export class PgGithub {
   /**
    * Get whether the given URL is a GitHub URL.
    *
+   * A URL without its scheme passes, as the import dialog's field takes one;
+   * so does a single slash after `https:`, the form react-router folds
+   * `https://` into inside a path (`parseUrl` reads both).
+   *
    * @param url URL to check
    * @returns whether the URL is a GitHub URL
    */
   static isValidUrl(url: string) {
-    return /^(https:\/\/)?(www\.)?github\.com\/.+?\/.+/.test(url);
+    return /^(https:\/\/?)?(www\.)?github\.com\/.+?\/.+/.test(url);
+  }
+
+  /**
+   * The app's own path that opens the given GitHub URL: `/github/` and
+   * GitHub's path after it (`/github/<owner>/<repo>/tree/<ref>/<folder>`),
+   * a catch-all segment a file-based router serves too. Takes a URL with or
+   * without its scheme, as {@link isValidUrl} does, since the import
+   * dialog's field takes both.
+   *
+   * @param url GitHub URL
+   * @returns the route path
+   */
+  static routePath(url: string) {
+    const path = url.replace(/^(https:\/\/?)?(www\.)?github\.com\//, "");
+    return `${GITHUB_ROUTE}/${path.replace(/\/+$/, "")}`;
   }
 
   /**
@@ -134,7 +156,7 @@ export class PgGithub {
     const githubWorkspaceName = `github-${owner}/${repo}/${path}`;
 
     // Read from the store: a repository link's temporary view holds no list
-    const names = await PgExplorer.getAllWorkspaceNames();
+    const names = await PgExplorer.readAllWorkspaceNames();
     if (names.includes(githubWorkspaceName)) {
       // Switch to the existing workspace
       await PgExplorer.switchWorkspace(githubWorkspaceName);
@@ -160,10 +182,9 @@ export class PgGithub {
       url,
       onProgress
     );
-    const convertedFiles = await PgFramework.convertToPlaygroundLayoutWith({
-      root: path,
-      source: sourceOf(`${owner}/${repo}`, path),
-    })(files);
+    const convertedFiles = await PgFramework.convertToPlaygroundLayoutWith(
+      path
+    )(sourceOf(`${owner}/${repo}`, path))(files);
     return convertedFiles;
   }
 

@@ -2,8 +2,10 @@ import { expect, type Page } from "@playwright/test";
 
 import {
   consoleTrigger,
+  editorTookFocus,
   HELP_TAIL,
   home,
+  LONG,
   runInTerminal,
   test,
 } from "./fixtures";
@@ -25,19 +27,33 @@ const isDark = (page: Page) =>
 /** The theme select on the Settings page, opened */
 const openThemeSelect = async (page: Page) => {
   await page.locator("[data-settings-trigger]").first().click();
-  const row = page
-    .locator('[aria-label="Settings"]')
-    .locator("span", { hasText: /^Theme$/ })
-    .locator("xpath=../..");
-  await row.getByRole("combobox").focus();
+  await page
+    .getByRole("region", { name: "Settings" })
+    .getByRole("combobox", { name: "Theme" })
+    .focus();
   await page.keyboard.press("ArrowDown");
 };
 
-const pickTheme = async (page: Page, name: "Dark" | "Light") => {
+/** Pick Dark in Settings, the one theme offered (HOO-2695), and go back to the app */
+const pickDark = async (page: Page) => {
   await openThemeSelect(page);
-  await page.getByRole("option", { name, exact: true }).click();
+  await page.getByRole("option", { name: "Dark", exact: true }).click();
   // Back to the app, which the page covers, to read its colours
   await page.getByRole("button", { name: "Back to app" }).click();
+};
+
+/**
+ * Reload on the Light theme, as a user who picked it before it was taken
+ * off the select (HOO-2695): the theme still applies, so its colours are
+ * still checked, and switching away from it is the in-place switch
+ */
+const reloadOnLight = async (page: Page) => {
+  await page.evaluate(() => localStorage.setItem("theme", "Light"));
+  await page.reload();
+  await expect.poll(() => isDark(page)).toBe(false);
+  // The editor focuses itself once it reopens the file; wait, so it does not
+  // take keys meant for the terminal or the select
+  await editorTookFocus(page);
 };
 
 /**
@@ -78,26 +94,33 @@ test.describe("client-v2-themes", () => {
       page.locator(".monaco-editor textarea.inputarea")
     ).toBeFocused();
     await openThemeSelect(page);
-    await expect(page.getByRole("option")).toHaveText(["Dark", "Light"]);
+    await expect(page.getByRole("option")).toHaveText(["Dark", /^Light/]);
+    // Light was never designed: listed, marked, not offered (HOO-2695)
+    const light = page.getByRole("option", { name: /^Light/ });
+    await expect(light).toContainText("Coming soon");
+    await expect(light).toHaveAttribute("aria-disabled", "true");
   });
 
-  test("client-v2-themes: Switching to light", async ({ seededPage: page }) => {
+  test("client-v2-themes: Switching from a saved light to dark", async ({
+    seededPage: page,
+  }) => {
+    await reloadOnLight(page);
     await runHelp(page);
-    const darkEditor = await computed(page, EDITOR_TEXT, "color");
-    const darkTerminal = await computed(page, TERMINAL_TEXT, "color");
+    const lightEditor = await computed(page, EDITOR_TEXT, "color");
+    const lightTerminal = await computed(page, TERMINAL_TEXT, "color");
 
-    await pickTheme(page, "Light");
+    await pickDark(page);
 
-    await expect.poll(() => isDark(page)).toBe(false);
+    await expect.poll(() => isDark(page)).toBe(true);
     await expect
       .poll(() => computed(page, EDITOR_TEXT, "color"))
-      .not.toBe(darkEditor);
+      .not.toBe(lightEditor);
     await expect
       .poll(() => computed(page, TERMINAL_TEXT, "color"))
-      .not.toBe(darkTerminal);
+      .not.toBe(lightTerminal);
 
     await page.reload();
-    await expect.poll(() => isDark(page)).toBe(false);
+    await expect.poll(() => isDark(page)).toBe(true);
   });
 
   test("client-v2-themes: A saved Dracula theme", async ({
@@ -110,7 +133,7 @@ test.describe("client-v2-themes", () => {
 
     await expect.poll(() => isDark(page)).toBe(true);
     const notice = page.getByText(
-      "The Dracula theme was removed. Playground now uses Dark; Light is in Settings."
+      "The Dracula theme was removed. Playground now uses Dark."
     );
     await expect(notice).toBeVisible();
     await expect(home(page)).toBeHidden();
@@ -130,19 +153,60 @@ test.describe("client-v2-themes", () => {
     await expect(page.getByText(/theme was removed/)).toHaveCount(0);
   });
 
+  test("the editor's brackets and active line follow the theme, not Monaco", async ({
+    seededPage: page,
+  }) => {
+    // What a token computes to now, in the same form as a computed colour
+    const token = (name: string) =>
+      page.evaluate((n) => {
+        const probe = document.createElement("span");
+        probe.style.color = `var(${n})`;
+        document.body.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      }, name);
+
+    const expectOnTokens = async () => {
+      const expected: [string, string][] = [
+        [".bracket-highlighting-0", "--text-secondary"],
+        [".bracket-highlighting-1", "--syntax-number"],
+        [".bracket-highlighting-2", "--syntax-type"],
+        [".active-line-number", "--text-secondary"],
+      ];
+      for (const [selector, name] of expected) {
+        await expect
+          .poll(() => computed(page, `.monaco-editor ${selector}`, "color"))
+          .toBe(await token(name));
+      }
+    };
+
+    await expectOnTokens();
+
+    // Monaco's own find match is orange, in both themes
+    await page.keyboard.press("ControlOrMeta+f");
+    await page.keyboard.type("data");
+    await expect
+      .poll(() =>
+        computed(page, ".monaco-editor .findMatch", "backgroundColor")
+      )
+      .not.toBe("rgba(234, 92, 0, 0.33)");
+    await page.keyboard.press("Escape");
+
+    await reloadOnLight(page);
+    await expectOnTokens();
+  });
+
   test("code blocks in Markdown keep their syntax colours", async ({
     page,
   }) => {
     // A tutorial page renders Markdown through the same CodeBlock as the
-    // assistant's answers, and needs no backend. A lesson lands on its code;
-    // the page opens from the band
-    await page.goto("/tutorials/hello-anchor/1");
-    await page
-      .locator('[data-slot="objective-band"]')
-      .getByRole("button", { name: "Read the page" })
-      .click();
+    // assistant's answers, and needs no backend. Upstream's pages stay;
+    // Hello Seahorse's first one holds code
+    await page.goto("/tutorials/hello-seahorse");
+    await page.getByRole("button", { name: "Start", exact: true }).click(LONG);
     const code = page.locator("pre.shiki").first();
-    await expect(code).toBeVisible();
+    await expect(code).toBeVisible(LONG);
 
     const colours = () =>
       code.evaluate(
@@ -161,11 +225,12 @@ test.describe("client-v2-themes", () => {
   test("client-v2-themes: Theme change with a file open", async ({
     seededPage: page,
   }) => {
+    await reloadOnLight(page);
     const terminal = await runHelp(page);
     const editorBefore = await computed(page, EDITOR_TEXT, "color");
     const terminalBefore = await computed(page, TERMINAL_TEXT, "color");
 
-    await pickTheme(page, "Light");
+    await pickDark(page);
 
     await expect
       .poll(() => computed(page, EDITOR_TEXT, "color"))

@@ -87,6 +87,16 @@ describe("reloadCurrentFromDisk", () => {
     expect(PgExplorer.switchWorkspace).not.toHaveBeenCalled();
   });
 
+  // Build's comparison with the last build hears other tabs' edits by this
+  it("announces a reload that changed contents, and only that", async () => {
+    await reloadCurrentFromDisk();
+    expect(dispatched()).not.toContain(PgExplorer.events.ON_DID_RELOAD_FILES);
+
+    store().set("/alpha/src/lib.rs", "from the other tab");
+    await reloadCurrentFromDisk();
+    expect(dispatched()).toContain(PgExplorer.events.ON_DID_RELOAD_FILES);
+  });
+
   it("keeps a file the user is typing in", async () => {
     store().set("/alpha/src/lib.rs", "from the other tab");
     (PgEditorModels.valueOf as Mock).mockResolvedValueOnce("typing");

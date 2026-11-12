@@ -226,6 +226,60 @@ describe("the assistant's provider", () => {
     ]);
   });
 
+  it("sends a mode's context after the project's state while the mode is set", async () => {
+    const sent = respond(openAiText("Hi."));
+    const mode = PgAssistant.setMode({
+      name: "tutorial",
+      context: () => "Tutorial: Hello Anchor, step 1 of 4",
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      await createProvider({ id: "default", apiKey: "" }).send("hi");
+    } finally {
+      mode.dispose();
+    }
+
+    expect(messagesOf(sent[0].body).slice(0, 3)).toEqual([
+      { role: "system", content: "system" },
+      { role: "system", content: "Current project state:\n\nproject" },
+      { role: "system", content: "Tutorial: Hello Anchor, step 1 of 4" },
+    ]);
+  });
+
+  it("still sends the turn when a mode's context throws, without it, and reports it", async () => {
+    // A logger of its own: one not yet set up buffers the report and replays
+    // it into the next test that sets one up
+    const memory = memoryLog();
+    initLogger({ providers: [memory] });
+    const sent = respond(openAiText("Hi."));
+    const mode = PgAssistant.setMode({
+      name: "tutorial",
+      context: () => {
+        throw new Error("no definition");
+      },
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      await createProvider({ id: "default", apiKey: "" }).send("hi");
+    } finally {
+      mode.dispose();
+      resetLogger();
+    }
+
+    expect(messagesOf(sent[0].body).slice(0, 3)).toEqual([
+      { role: "system", content: "system" },
+      { role: "system", content: "Current project state:\n\nproject" },
+      { role: "user", content: "hi" },
+    ]);
+    expect(
+      memory.entries.filter((entry) => entry.report).map((e) => e.context)
+    ).toEqual([{ mode: "tutorial" }]);
+  });
+
   it("asks Anthropic for droppable updates, effort, fallbacks, a cached prompt and 64000 tokens", async () => {
     const sent = respond(anthropicText("ok", "end_turn"));
 
@@ -984,7 +1038,7 @@ describe("the assistant's provider", () => {
       });
 
       await expect(defaultBackend().send("hi")).rejects.toThrow(
-        /^The free assistant is out of capacity for today\. It resets at 00:00 UTC, or bring your own key to keep going\.$/
+        /^The free assistant is out of capacity for now\. Try again later, or bring your own key to keep going\.$/
       );
       expect(refused()).toEqual([
         {
@@ -1016,6 +1070,37 @@ describe("the assistant's provider", () => {
       await expect(defaultBackend().send("hi")).rejects.toThrow(/^Sign in\.$/);
 
       expect(refused()).toEqual([]);
+    });
+
+    describe("the status's Limit reached", () => {
+      // The limit is recorded only while the hosted default is the connection
+      beforeEach(() => PgAssistant.connect({ id: "default", apiKey: "" }));
+      afterEach(() => PgAssistant.disconnect());
+
+      it("holds after a daily-cap refusal", async () => {
+        refuses(429, { error: "server text", reason: "daily-cap" });
+        await expect(defaultBackend().send("hi")).rejects.toThrow();
+        expect(PgAssistant.limitReached?.reason).toBe("daily-cap");
+      });
+
+      it("holds after a spent-pool refusal", async () => {
+        refuses(503, { error: "server text", reason: "pool-exhausted" });
+        await expect(defaultBackend().send("hi")).rejects.toThrow();
+        expect(PgAssistant.limitReached).toEqual({ reason: "pool-exhausted" });
+      });
+
+      it("does not hold after a signed-out refusal", async () => {
+        refuses(401, { error: "Sign in.", reason: "signed-out" });
+        await expect(defaultBackend().send("hi")).rejects.toThrow();
+        expect(PgAssistant.limitReached).toBeUndefined();
+      });
+
+      it("lifts once a turn goes through", async () => {
+        PgAssistant.markLimitReached("daily-cap");
+        respond(openAiText("Hi."));
+        await defaultBackend().send("hi");
+        expect(PgAssistant.limitReached).toBeUndefined();
+      });
     });
 
     it("reads another backend's 429 in the same shape as busy, not as a cap", async () => {

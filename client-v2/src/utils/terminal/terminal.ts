@@ -2,7 +2,7 @@ import { ITerminalOptions, ITheme, Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
 
-import { createLogger } from "@/shared/lib/logger";
+import { createLogger, markExpected } from "@/shared/lib/logger";
 import {
   markFailureShown,
   markUnavailableHere,
@@ -12,6 +12,7 @@ import { PgCommon } from "../common";
 import { isStopped } from "../stopped";
 import type { ClassReturnType, Methods, SyncOrAsync } from "../types";
 import { PgAutocomplete } from "./autocomplete";
+import { fitBuffersTableWith } from "./buffers-table";
 import { confirmReply, confirmSuffix } from "./confirm";
 import { PgHistory } from "./history";
 import { lineTone, processErrorLine, toneWith } from "./line-error";
@@ -59,7 +60,7 @@ export class PgTerminal {
   }
 
   static warning(text: string) {
-    return `\x1b[1;33m${text}\x1b[0m`;
+    return toneWith("warning")(text);
   }
 
   static info(text: string) {
@@ -92,9 +93,9 @@ export class PgTerminal {
 
   /** Get whether the terminal is focused or in blur. */
   static isFocused() {
-    return document
-      .getElementsByClassName("terminal xterm xterm-dom-renderer-owner-1")[0]
-      ?.classList.contains("focus");
+    // By where focus is, not by the renderer's class: that names the first
+    // terminal only, and a remount renames it
+    return Boolean(document.activeElement?.closest(".xterm"));
   }
 
   /** Dispatch enable terminal custom event; dropped while none is mounted. */
@@ -119,7 +120,7 @@ export class PgTerminal {
 
   /**
    * `run`, doing nothing while no terminal is mounted. For `enable`,
-   * `println`, `focus` and `clear`, which are called without `await` all over
+   * `println`, `printlnWasm`, `focus` and `clear`, which are called without `await` all over
    * the app: under Home,
    * which mounts no terminal, there is nothing to print to or focus, and a
    * rejection there would go unhandled.
@@ -142,7 +143,11 @@ export class PgTerminal {
    * Mainly used from WASM
    */
   static logWasm(msg: any) {
-    this.println(msg);
+    // WASM does not await this, so a failure is logged here; rethrown, it
+    // would be an unhandled rejection and the output lost without a trace
+    PgTerminal._runIfMounted({ printlnWasm: [msg] }).catch((e) =>
+      log.error(e, { report: true })
+    );
   }
 
   /**
@@ -420,8 +425,15 @@ export class PgTerm {
     this._isUntouched = true;
   }
 
-  /** Fit terminal. */
+  /**
+   * Fit terminal, unless its container shows less than two rows. A collapsed
+   * console fits to one row, and growing back from it leaves xterm's view at
+   * the top, so new output lands below what shows; the terminal keeps its
+   * last size until there is room for it.
+   */
   fit() {
+    const dims = this._fitAddon.proposeDimensions();
+    if (!dims || dims.rows < 2) return;
     this._fitAddon.fit();
   }
 
@@ -478,6 +490,15 @@ export class PgTerm {
   }
 
   /**
+   * Print what a WASM package logs; the buffers table solana-cli prints is
+   * first laid out for the terminal's width (see {@link fitBuffersTableWith}).
+   * Called through `PgTerminal.logWasm`, not directly.
+   */
+  printlnWasm(msg: any) {
+    this.println(fitBuffersTableWith(this._tty.size.cols)(msg));
+  }
+
+  /**
    * Clear terminal screen. This will move the cursor to the top of the terminal
    * but will not clear xterm buffer by default.
    *
@@ -506,6 +527,23 @@ export class PgTerm {
   /** Scroll the terminal to bottom. */
   scrollToBottom() {
     this._xterm.scrollToBottom();
+  }
+
+  /** The whole buffer as plain text, wrapped lines joined: the log's Copy */
+  getText() {
+    const buffer = this._xterm.buffer.active;
+    let text = "";
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i);
+      if (!line) continue;
+      // A row the next one continues keeps its trailing space: the wrap may
+      // have broken the line there
+      const isContinued = buffer.getLine(i + 1)?.isWrapped ?? false;
+      text +=
+        (line.isWrapped || i === 0 ? "" : "\n") +
+        line.translateToString(!isContinued);
+    }
+    return text.trimEnd();
   }
 
   /** Destroy the current xterm instance. */
@@ -716,10 +754,14 @@ export class PgTerm {
       // Compared plain: xterm's text carries no colour codes
       const previousLine = this._tty.getLine(1)?.translateToString().trim();
       if (previousLine !== msg) {
-        const tone = lineTone(e);
-        this.println(tone ? toneWith(tone)(msg) : msg);
+        // The highlighter reads a colour code's digits as words, and its own
+        // colours end this one early
+        this.println(toneWith(lineTone(e))(msg), { noColor: true });
       }
 
+      // An unknown command, a bad option or a declined question is an outcome,
+      // not a bug; a fault such as a `TypeError` is left unmarked and reported
+      markExpected(e);
       throw e;
     } finally {
       this.enable();
@@ -789,4 +831,64 @@ export class PgTerm {
 
     return true;
   };
+}
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("utils/terminal/terminal", () => {
+    /** A terminal whose buffer holds these rows, each `[text, isWrapped]` */
+    const termOf = (rows: Array<[string, boolean]>) =>
+      ({
+        _xterm: {
+          buffer: {
+            active: {
+              length: rows.length,
+              getLine: (i: number) =>
+                rows[i] && {
+                  isWrapped: rows[i][1],
+                  // xterm pads a row to the terminal's width
+                  translateToString: (trimRight: boolean) =>
+                    trimRight ? rows[i][0].trimEnd() : rows[i][0],
+                },
+            },
+          },
+        },
+      } as unknown as PgTerm);
+
+    it("getText joins a wrapped row to the line it continues", () => {
+      const term = termOf([
+        ["$ build", false],
+        ["Compiling a very long ", false],
+        ["line", true],
+        ["Done", false],
+      ]);
+      expect(PgTerm.prototype.getText.call(term)).toBe(
+        "$ build\nCompiling a very long line\nDone"
+      );
+    });
+
+    it("getText keeps the space a wrapped row breaks at", () => {
+      const term = termOf([
+        ["Compiling a very ", false],
+        ["long line", true],
+      ]);
+      expect(PgTerm.prototype.getText.call(term)).toBe(
+        "Compiling a very long line"
+      );
+    });
+
+    it("getText drops the empty rows under the last output", () => {
+      const term = termOf([
+        ["Done", false],
+        ["", false],
+        ["", false],
+      ]);
+      expect(PgTerm.prototype.getText.call(term)).toBe("Done");
+    });
+
+    it("getText reads an empty buffer as no text", () => {
+      expect(PgTerm.prototype.getText.call(termOf([]))).toBe("");
+    });
+  });
 }

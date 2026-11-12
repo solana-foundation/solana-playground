@@ -1,48 +1,84 @@
+import { Globe, Keyboard, Palette } from "lucide-react";
+import type { ReactNode } from "react";
 import { useState, useSyncExternalStore } from "react";
 
-import { ExportFile, Github, ImportFile } from "@/components/Icons";
+import { Github } from "@/components/Icons";
 import Link from "@/components/Link";
-import {
-  useBlockExplorer,
-  useProgramInfo,
-  useRenderOnChange,
-  useWallet,
-} from "@/hooks";
+import { useBlockExplorer, useProgramInfo, useWallet } from "@/hooks";
+import { useOnline } from "@/shared/lib/hooks/use-online";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import type {
   SettingsExit,
   SettingsFocus,
 } from "@/shared/lib/settings-request";
-import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
-import { PgFramework, PgProgramInfo, PgSettings, PgView } from "@/utils";
+import { Icon } from "@/shared/ui/icon";
+import { PgCommon, PgProgramInfo, PgSettings, PgView } from "@/utils";
 import {
   ImportFs,
   ImportGithub,
   isImported,
 } from "@/views/sidebar/explorer/Component/Modals";
 
-import type { SectionId } from "../model/sections";
-import { groupSettings, sectionTitle } from "../model/sections";
+import type { GroupId, SectionId, SettingRow } from "../model/sections";
+import {
+  GROUPS,
+  SECTION_DESCRIPTIONS,
+  SECTION_ORDER,
+  sectionTitle,
+  settingRows,
+} from "../model/sections";
 import { settingsTelemetry } from "../model/telemetry";
 import AssistantKey from "./AssistantKey";
-import BaseNetworkChoice from "./BaseNetworkChoice";
+import AssistantSources from "./AssistantSources";
+import type { HostedModel } from "./BaseAssistantStatus";
+import BaseAssistantStatus from "./BaseAssistantStatus";
 import BaseSettingRow from "./BaseSettingRow";
+import BaseSettingsCard from "./BaseSettingsCard";
 import type { SettingsSection } from "./BaseSettingsPage";
 import BaseSettingsPage from "./BaseSettingsPage";
+import BaseShortcuts from "./BaseShortcuts";
+import CodeSample from "./CodeSample";
+import ExportProject, { useExportRowCopy } from "./ExportProject";
+import NetworkSection from "./NetworkSection";
 import { SettingControl } from "./SettingControl";
 import SettingsBoundary from "./SettingsBoundary";
 
-// The sections the page draws itself, typed so a rename in `SECTION_ORDER`
-// fails to compile here
 const NETWORK: SectionId = "network";
-const ASSISTANT: SectionId = "assistant";
-const PROJECT: SectionId = "project";
-const BLOCK_EXPLORER: SectionId = "blockExplorer";
+
+type Row = SettingRow<typeof PgSettings.all[number]>;
+
+// The line set's glyphs; it has none yet for a network, a theme or a
+// keyboard, so those three are Lucide at the set's stroke
+const ICONS: Record<SectionId, ReactNode> = {
+  network: <Globe strokeWidth={1.5} aria-hidden />,
+  assistant: <Icon name="assistant" />,
+  editor: <Icon name="write" />,
+  build: <Icon name="build" />,
+  wallet: <Icon name="wallet" />,
+  appearance: <Palette strokeWidth={1.5} aria-hidden />,
+  shortcuts: <Keyboard strokeWidth={1.5} aria-hidden />,
+  project: <Icon name="folder" />,
+  advanced: <Icon name="settings" />,
+};
+
+/** Settings whose few values read better side by side than in a select */
+const SEGMENTED = new Set(["editor.keybinding"]);
+
+/** What the Editor section says on a phone, where Vim keys need a keyboard */
+const PHONE_EDITOR_NOTE = "Vim key bindings need a hardware keyboard.";
 
 interface SettingsPageProps {
   focus: SettingsFocus;
+  /** Whether the hosted model answers, as the assistant's probe says */
+  hosted: HostedModel;
+  /** The hosted model's name, when the deployment says which model it is */
+  hostedName?: string;
+  /** The model chat uses on the user's own key, while one is connected */
+  ownKey?: string;
+  /** Ask the hosted model again: the Try again on its row */
+  onRetryHosted: () => Promise<unknown>;
   /** ⌘, is the key's own, handled where it is bound */
   onClose: (via: Exclude<SettingsExit, "key">) => void;
 }
@@ -51,12 +87,22 @@ const subscribeToModals = (onChange: () => void) =>
   PgView.onDidChangeModals(onChange).dispose;
 
 /**
- * `BaseSettingsPage` on the live settings: the network chips, Delete my key,
- * the project's export and imports, then every group of `PgSettings.all`.
- * Mounted only while the settings are open.
+ * `BaseSettingsPage` on the live settings, in the designed sections (Spec 07):
+ * the network chips, the hosted model, every row of `PgSettings.all` under its
+ * designed label on cards by group, the shortcuts, the project's export and
+ * imports, and the user's key last, in Advanced. Mounted only while the
+ * settings are open.
  */
-const LiveSettingsPage = ({ focus, onClose }: SettingsPageProps) => {
+const LiveSettingsPage = ({
+  focus,
+  hosted,
+  hostedName,
+  ownKey,
+  onRetryHosted,
+  onClose,
+}: SettingsPageProps) => {
   const phone = useViewport() === "phone";
+  const online = useOnline();
   const [current, setCurrent] = useState<string>(NETWORK);
 
   // A modal opened from the page (Import from GitHub or files, a setting's
@@ -66,56 +112,124 @@ const LiveSettingsPage = ({ focus, onClose }: SettingsPageProps) => {
     () => PgView.getOpenModals().length > 0
   );
 
-  // The chips follow an endpoint picked elsewhere too, such as the
-  // Connection section's Endpoint select
-  useRenderOnChange(PgSettings.onDidChangeConnectionEndpoint);
+  const rows = settingRows(PgSettings.all);
+  const rowOf = ({ setting, label, help, tag, disabled, notReady }: Row) => {
+    const controlId = `setting-${setting.id}`;
+    const note =
+      phone && setting.id === "editor.keybinding" ? PHONE_EDITOR_NOTE : help;
+    const row = (
+      <BaseSettingRow
+        key={setting.id}
+        name={label}
+        description={note}
+        tag={tag}
+        controlId={controlId}
+        control={
+          <SettingControl
+            {...setting}
+            name={label}
+            controlId={controlId}
+            segmented={SEGMENTED.has(setting.id)}
+            disabled={disabled}
+            notReady={notReady}
+          />
+        }
+        // A switch or a few side by side fit beside the text
+        small={!setting.values || SEGMENTED.has(setting.id)}
+        phone={phone}
+      />
+    );
+    if (setting.id !== "ui.font") return row;
+    // A font is easier to pick when it shows; one cell, so no hairline
+    // between the row and its sample
+    return (
+      <div key={setting.id}>
+        {row}
+        <CodeSample setting={setting} />
+      </div>
+    );
+  };
 
-  const own: SettingsSection[] = [
-    {
-      id: NETWORK,
-      title: "Network",
-      content: (
-        <BaseNetworkChoice
-          endpoint={PgSettings.connection.endpoint}
-          onPick={(endpoint) => (PgSettings.connection.endpoint = endpoint)}
-        />
-      ),
-    },
-    {
-      id: ASSISTANT,
-      title: "Assistant",
-      content: <AssistantKey phone={phone} />,
-    },
-    {
-      id: PROJECT,
-      title: "Project",
-      content: <Project phone={phone} onImported={() => onClose("import")} />,
-    },
-  ];
-  const groups = groupSettings(PgSettings.all).map(({ id, settings }) => ({
-    id,
-    title: sectionTitle(id),
-    content: (
-      <div className="flex flex-col">
-        {settings.map((setting) => (
-          <BaseSettingRow
-            key={setting.id}
-            name={setting.name}
-            description={setting.description}
-            control={<SettingControl {...setting} />}
-            // A setting without values is a checkbox
-            small={!setting.values}
+  /** A section's rows, one card per run of rows in the same group */
+  const cardsOf = (id: SectionId, links?: ReactNode) => {
+    const runs: { group?: GroupId; rows: Row[] }[] = [];
+    for (const row of rows.get(id) ?? []) {
+      const last = runs.at(-1);
+      if (last && last.group === row.group) last.rows.push(row);
+      else runs.push({ group: row.group, rows: [row] });
+    }
+    return runs.map(({ group, rows: run }) => (
+      <BaseSettingsCard key={group ?? "rows"} title={group && GROUPS[group]}>
+        {run.map(rowOf)}
+        {group === "links" && links}
+      </BaseSettingsCard>
+    ));
+  };
+
+  const content: Record<SectionId, ReactNode> = {
+    network: (
+      <>
+        <BaseSettingsCard>
+          <NetworkSection />
+        </BaseSettingsCard>
+        {cardsOf("network", <ExplorerLinks phone={phone} />)}
+      </>
+    ),
+    assistant: (
+      <>
+        <BaseSettingsCard>
+          <BaseAssistantStatus
+            hosted={hosted}
+            hostedName={hostedName}
+            ownKey={ownKey}
+            online={online}
+            onRetry={onRetryHosted}
             phone={phone}
           />
-        ))}
-        {id === BLOCK_EXPLORER && <ExplorerLinks phone={phone} />}
-      </div>
+        </BaseSettingsCard>
+        <BaseSettingsCard title={GROUPS.sources}>
+          <AssistantSources />
+        </BaseSettingsCard>
+      </>
     ),
+    editor: cardsOf("editor"),
+    build: cardsOf("build"),
+    wallet: cardsOf("wallet"),
+    appearance: cardsOf("appearance"),
+    shortcuts: <BaseShortcuts mac={PgCommon.getOS() === "MacOS"} />,
+    project: (
+      <BaseSettingsCard>
+        <Project phone={phone} onImported={() => onClose("import")} />
+      </BaseSettingsCard>
+    ),
+    advanced: (
+      <>
+        {cardsOf("advanced")}
+        <BaseSettingsCard title={GROUPS.key}>
+          <AssistantKey
+            phone={phone}
+            ownKey={ownKey}
+            isHostedAvailable={hosted === "present"}
+          />
+        </BaseSettingsCard>
+      </>
+    ),
+  };
+
+  const sections: SettingsSection[] = SECTION_ORDER.filter(
+    // A phone has no keyboard for the shortcuts
+    (id) => !(phone && id === "shortcuts")
+  ).map((id) => ({
+    id,
+    title: sectionTitle(id),
+    description: SECTION_DESCRIPTIONS[id],
+    icon: ICONS[id],
+    content: <div className="flex flex-col gap-6">{content[id]}</div>,
   }));
 
   return (
     <BaseSettingsPage
-      sections={[...own, ...groups]}
+      sections={sections}
       current={current}
       onPick={(id) => {
         setCurrent(id);
@@ -139,8 +253,8 @@ const SettingsPage = (props: SettingsPageProps) => (
 
 export default SettingsPage;
 
-/** On a phone the prototype's buttons: a fingertip tall in the control type */
-const PHONE_BUTTON = "h-12 rounded-xl text-control font-act";
+/** Row buttons on a phone: a fingertip tall in the control type */
+const PHONE_BUTTON = "h-11 flex-1 rounded-lg text-control font-act";
 
 interface ProjectProps {
   phone: boolean;
@@ -148,40 +262,55 @@ interface ProjectProps {
   onImported: () => void;
 }
 
+/** Export and import as two rows of the Project card */
 const Project = ({ phone, onImported }: ProjectProps) => {
   const open = (dialog: typeof ImportGithub | typeof ImportFs) => async () => {
     if (isImported(await PgView.setModal(dialog))) onImported();
   };
+  const size = phone ? "default" : "sm";
+  // Names what Export takes: the page shows no other sign of it (HOO-2691)
+  const exportRow = useExportRowCopy();
   return (
-    <div className={cn("flex gap-2", phone ? "flex-col" : "flex-wrap")}>
-      <AsyncButton
-        variant="outline"
-        className={phone ? PHONE_BUTTON : undefined}
-        onClick={() => PgFramework.exportWorkspace()}
-        onError={reportButtonFailure("export the project")}
-      >
-        <ExportFile data-icon="inline-start" />
-        Export project (zip)
-      </AsyncButton>
-      <AsyncButton
-        variant="outline"
-        className={phone ? PHONE_BUTTON : undefined}
-        onClick={open(ImportGithub)}
-        onError={reportButtonFailure("open the GitHub import")}
-      >
-        <Github data-icon="inline-start" />
-        From GitHub
-      </AsyncButton>
-      <AsyncButton
-        variant="outline"
-        className={phone ? PHONE_BUTTON : undefined}
-        onClick={open(ImportFs)}
-        onError={reportButtonFailure("open the file import")}
-      >
-        <ImportFile data-icon="inline-start" />
-        From files
-      </AsyncButton>
-    </div>
+    <>
+      <BaseSettingRow
+        name={exportRow.name}
+        description={exportRow.description}
+        descriptionTestId="settings-open-project"
+        phone={phone}
+        control={<ExportProject className={phone ? PHONE_BUTTON : undefined} />}
+      />
+      <BaseSettingRow
+        name="Import"
+        description="Open a project from GitHub or your computer."
+        phone={phone}
+        control={
+          <div className="flex w-full justify-end gap-2">
+            <AsyncButton
+              variant="outline"
+              size={size}
+              className={phone ? PHONE_BUTTON : undefined}
+              aria-label="Import from GitHub"
+              onClick={open(ImportGithub)}
+              onError={reportButtonFailure("open the GitHub import")}
+            >
+              <Github data-icon="inline-start" />
+              GitHub
+            </AsyncButton>
+            <AsyncButton
+              variant="outline"
+              size={size}
+              className={phone ? PHONE_BUTTON : undefined}
+              aria-label="Import from files"
+              onClick={open(ImportFs)}
+              onError={reportButtonFailure("open the file import")}
+            >
+              <Icon name="import" data-icon="inline-start" />
+              Files
+            </AsyncButton>
+          </div>
+        }
+      />
+    </>
   );
 };
 
@@ -195,9 +324,10 @@ const ExplorerLinks = ({ phone }: { phone: boolean }) => {
   return (
     <BaseSettingRow
       name="Open in explorer"
+      description="Your wallet and program in the block explorer."
       phone={phone}
       control={
-        <div className="flex flex-wrap gap-3 text-sm">
+        <div className="flex flex-wrap justify-end gap-3 text-caption">
           {wallet && (
             <Link href={explorer.getAddressUrl(wallet.publicKey.toBase58())}>
               Wallet

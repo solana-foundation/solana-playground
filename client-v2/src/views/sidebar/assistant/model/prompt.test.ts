@@ -1,6 +1,6 @@
 // The store and the bridge reach the `utils` barrel; only the text matters here
 const store = vi.hoisted(() => ({
-  PgAssistant: { enabledSkills: [] as unknown[] },
+  PgAssistant: { enabledSkills: [] as unknown[], mcpServers: [] as unknown[] },
 }));
 vi.mock("../store", () => store);
 vi.mock("../bridge/playground-bridge", () => ({ realBridge: {} }));
@@ -31,6 +31,45 @@ describe("systemPrompt", () => {
     );
     expect(systemPrompt()).not.toContain("- solana-dev (");
   });
+
+  it("names the MCP servers switched off, so the model says so instead of guessing", () => {
+    store.PgAssistant.mcpServers = [
+      {
+        id: "solana",
+        name: "Solana Developer",
+        url: "/api/mcp",
+        enabled: true,
+      },
+      {
+        id: "explorer",
+        name: "Solana Explorer",
+        url: "/api/mcp",
+        enabled: false,
+      },
+    ];
+
+    const prompt = systemPrompt();
+    expect(prompt).toContain(
+      "MCP servers the user has switched off, so none of their tools is available to you: Solana Explorer."
+    );
+    expect(prompt).toContain("Settings › Assistant › Skills and MCP servers");
+    expect(prompt).not.toMatch(/switched off[^.]*Solana Developer/);
+  });
+
+  it("says nothing about servers while every one is on", () => {
+    store.PgAssistant.mcpServers = [
+      {
+        id: "explorer",
+        name: "Solana Explorer",
+        url: "/api/mcp",
+        enabled: true,
+      },
+    ];
+
+    expect(systemPrompt()).not.toContain(
+      "MCP servers the user has switched off"
+    );
+  });
 });
 
 describe("describeProject", () => {
@@ -46,7 +85,6 @@ describe("describeProject", () => {
       ],
       programId: null,
       idl: null,
-      lesson: null,
       currentFilePath: "src/lib.rs",
       buildError: null,
     }),
@@ -78,12 +116,52 @@ describe("describeProject", () => {
         contextFiles: [{ path: "tests/a.ts", content: "it('works')" }],
         programId: null,
         idl: null,
-        lesson: null,
         currentFilePath: "src/lib.rs",
         buildError: null,
       }),
       /* eslint-enable unicorn/no-null */
     } as unknown as PlaygroundBridge;
     expect(describeProjectWith(removed)).not.toContain("src/lib.rs");
+  });
+
+  /** A project whose context carries `idl` and no files */
+  const withIdl = (idl: unknown) =>
+    ({
+      /* eslint-disable unicorn/no-null -- `ProjectContext` types these fields `| null` */
+      getProjectContext: () => ({
+        workspaceName: "p",
+        cluster: "devnet",
+        walletConnected: false,
+        contextFiles: [],
+        programId: null,
+        idl,
+        lesson: null,
+        currentFilePath: null,
+        buildError: null,
+      }),
+      /* eslint-enable unicorn/no-null */
+    } as unknown as PlaygroundBridge);
+
+  it("names why the Playground cannot call a refused IDL", () => {
+    expect(
+      describeProjectWith(
+        withIdl({
+          name: "counter",
+          instructions: [],
+          accounts: [],
+          refused: "a custom discriminator on initialize",
+        })
+      )
+    ).toContain(
+      "Program interface: counter — the Playground cannot call it: a custom discriminator on initialize"
+    );
+  });
+
+  it("lists a callable IDL's instructions", () => {
+    expect(
+      describeProjectWith(
+        withIdl({ name: "counter", instructions: ["increment"], accounts: [] })
+      )
+    ).toContain("Program interface: counter — instructions: increment");
   });
 });

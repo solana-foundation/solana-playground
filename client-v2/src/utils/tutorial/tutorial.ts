@@ -1,3 +1,5 @@
+import { isMissing } from "../../shared/lib/is-missing";
+import { createLogger } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
 import {
   createDerivable,
@@ -16,6 +18,9 @@ import type {
   TutorialState,
   TutorialStorageData,
 } from "./types";
+
+const log = createLogger("tutorial:open");
+const storageLog = createLogger("tutorial:storage");
 
 const defaultState: TutorialState = {
   pageNumber: null,
@@ -47,9 +52,41 @@ const storage = {
       return;
     }
 
-    await PgExplorer.fs.writeFile(this.PATH, JSON.stringify(state));
+    // The default state is what `read` returns for a missing file, so it has
+    // nothing to save. `refresh` reads it while the tutorial's workspace is
+    // not yet current, and the batched write of it could land once
+    // `PgExplorer.createWorkspace` had made the workspace current but before
+    // its folder was on disk (ENOENT on a fresh profile's first open,
+    // HOO-2593), or over a saved page of a workspace that already had one.
+    // Checked here because `updatable`'s own default check compares by
+    // identity and never matches.
+    if (PgCommon.isEqual(state, defaultState)) return;
+
+    // Through `writeWorkspaceFile`: `PgTutorial.start` creates this file,
+    // right after `createWorkspace` saved the folder tree or for a synced
+    // tutorial that came without it, and a reload before the next save of the
+    // tree would lose it.
+    //
+    // `updatable` calls this without awaiting it, so a failure is logged
+    // here; rethrown, it would be an unhandled rejection naming nothing
+    try {
+      await writeWorkspaceFile(this.PATH, JSON.stringify(state));
+    } catch (e) {
+      storageLog.error(e, { report: true });
+    }
   },
 };
+
+/**
+ * A tutorial workspace's storage file, relative to the workspace. Exported
+ * so the conversation engine's store can tell a missing file from an
+ * unreadable one against the same path `getStorage` writes.
+ */
+export const storageDataPath = () =>
+  PgCommon.joinPaths(
+    PgExplorer.PATHS.WORKSPACE_DIRNAME,
+    "tutorial-storage.json"
+  );
 
 const onDidInit = () => {
   let lastTutorialName: string | undefined;
@@ -164,6 +201,23 @@ class _PgTutorial {
   }
 
   /**
+   * Get the given tutorial's storage data from file system: what
+   * `getStorage` keeps for the open tutorial, read for any started one.
+   *
+   * @param name tutorial name
+   * @returns the tutorial's storage data
+   */
+  static async getStorageData(name: string) {
+    return await PgExplorer.fs.readToJSON<TutorialStorageData>(
+      PgCommon.joinPaths(
+        PgExplorer.PATHS.ROOT_DIR_PATH,
+        name,
+        storageDataPath()
+      )
+    );
+  }
+
+  /**
    * Open the given tutorial.
    *
    * @param name tutorial name
@@ -174,12 +228,16 @@ class _PgTutorial {
 
     const tutorialPath = `/tutorials/${PgCommon.toKebabFromTitle(name)}`;
     if (this.isStarted(name)) {
+      let pageNumber = 1;
       try {
-        const { pageNumber } = await this.getMetadata(name);
-        await PgRouter.navigate(tutorialPath + "/" + pageNumber);
-      } catch {
-        await PgRouter.navigate(tutorialPath + "/" + 1);
+        ({ pageNumber } = await this.getMetadata(name));
+      } catch (e) {
+        // A started tutorial whose saved page cannot be read opens on its
+        // first page; a missing file is a warning, anything else is reported
+        if (isMissing(e)) log.warn(`no saved page for ${name}`);
+        else log.error(e, { report: true, context: { tutorial: name } });
       }
+      await PgRouter.navigate(tutorialPath + "/" + pageNumber);
     } else {
       await PgRouter.navigate(tutorialPath);
     }
@@ -357,10 +415,7 @@ class _PgTutorial {
       }
 
       /** Relative path to the tutorial storage JSON file */
-      private static _PATH = PgCommon.joinPaths(
-        PgExplorer.PATHS.WORKSPACE_DIRNAME,
-        "tutorial-storage.json"
-      );
+      private static _PATH = storageDataPath();
     }
 
     return new PgTutorialStorage();

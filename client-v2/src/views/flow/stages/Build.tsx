@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { DownloadProgram } from "@/features/cli-deploy";
+import { IdlBuildGuide } from "@/features/idl-build-guide";
 import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { requestConsole } from "@/widgets/layout-shell";
@@ -7,6 +9,7 @@ import { requestConsole } from "@/widgets/layout-shell";
 import { useRenderOnChange } from "../../../hooks";
 import {
   PgCommand,
+  PgCommandManager,
   PgExplorer,
   PgProgramInfo,
   PgSettings,
@@ -19,7 +22,7 @@ import { PgFlow } from "../state/stage";
 import BaseBuild from "./BaseBuild";
 import { buildSurface, ownOutput } from "./build-surface";
 import { failedView } from "./build-view";
-import IdlActions from "./IdlActions";
+import IdlActions, { loadIdlFile, openInteract } from "./IdlActions";
 import { toldByStage } from "./stage-failure";
 import { useSlowBuild } from "./use-slow-build";
 
@@ -87,10 +90,28 @@ const Build = () => {
       onBuild={() => PgCommand.build.execute().catch(toldByStage("build"))}
       onContinue={() => PgFlow.setStage("deploy")}
       hasIdl={!!idl}
+      sourceChanged={flow.sourceChanged}
       onAsk={(prompt) => PgAssistant.requestPrompt(prompt)}
       onOpenFile={(path) => PgExplorer.openFile(path)}
       onShowLog={requestConsole}
-      idlActions={<IdlActions mode="download" look="link" />}
+      // The console's own Stop. When nothing stoppable runs, the terminal
+      // says why, so the console opens to show it
+      onStop={() => {
+        if (!PgCommandManager.stop()) requestConsole();
+      }}
+      idlActions={
+        <>
+          <IdlActions mode="download" look="link" />
+          <DownloadProgram from="build-stage" look="link" />
+        </>
+      }
+      idlGuide={
+        <IdlBuildGuide
+          surface="build"
+          onLoadIdl={loadIdlFile}
+          onInteract={openInteract}
+        />
+      }
     />
   );
 };

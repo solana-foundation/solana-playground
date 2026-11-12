@@ -6,7 +6,7 @@ export {
   toError,
 } from "./logger";
 export type { Log } from "./logger";
-export { installGlobalHandlers } from "./global-handlers";
+export { installGlobalHandlers, markExpected } from "./global-handlers";
 export { LoggerErrorBoundary } from "./error-boundary";
 export { consoleProvider } from "./providers/console";
 export { memoryProvider } from "./providers/memory";

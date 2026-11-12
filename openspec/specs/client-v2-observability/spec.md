@@ -1,6 +1,7 @@
 # client-v2-observability Specification
 
 ## Purpose
+
 The widget that turns the logger, Sentry, and telemetry on for the app, so
 their configuration is one typed contract instead of calls scattered through
 start-up.

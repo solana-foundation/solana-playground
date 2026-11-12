@@ -1,6 +1,12 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { consoleTrigger, expect, seedWorkspace, test } from "./fixtures";
+import {
+  consoleTrigger,
+  expect,
+  grantClipboard,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 
 type AssistantWindow = Window & {
   __pgAssistant?: {
@@ -14,6 +20,9 @@ const CODE = "anchor build\nanchor deploy";
 /** Longer than a toast takes to appear once it is raised */
 const TOAST_RENDER_MS = 1000;
 
+/** What the build server answers for a clean build */
+const BUILT = JSON.stringify({ stderr: "", uuid: "e2e-build", idl: null });
+
 /**
  * A ring brand button at rest, on the page itself rather than in a dialog:
  * the Build stage's Continue to Deploy, after a build the stub answers.
@@ -22,7 +31,7 @@ const ringAction = async (page: Page) => {
   await page.route("**/build", (route) =>
     route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ stderr: "", uuid: "e2e-build", idl: null }),
+      body: BUILT,
     })
   );
   await page.locator("#flow-stage-tab-build").click();
@@ -69,7 +78,7 @@ test.describe("client-v2-buttons", () => {
     context,
   }) => {
     test.setTimeout(120_000);
-    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await grantClipboard(context);
 
     // An assistant reply is rendered by `components/Markdown`, which draws
     // fenced code through `components/CodeBlock`. Sending a message for real
@@ -211,30 +220,91 @@ test.describe("client-v2-buttons", () => {
       await held;
       await route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ stderr: "", uuid: "e2e-build", idl: null }),
+        body: BUILT,
       });
     });
 
     await page.locator("#flow-stage-tab-build").click();
-    await page.getByRole("button", { name: "Build", exact: true }).click();
+    const stage = page.locator("#flow-stage-panel-build");
+    // From the keyboard, so the test sees where focus goes (HOO-2648)
+    await stage.getByRole("button", { name: "Build", exact: true }).focus();
+    await page.keyboard.press("Enter");
 
-    // While the run is in flight the surface shows its progress in the
-    // button's place (DES-199), so nothing on it can start a second build
+    // While the run is in flight the surface shows its progress and Stop in
+    // the button's place (DES-199, HOO-2648)
     await expect(
-      page.getByRole("heading", { name: "Building…" })
+      stage.getByRole("heading", { name: "Building…" })
     ).toBeVisible();
     await expect(
-      page.locator('[data-slot="stage-empty-progress"]')
+      stage.locator('[data-slot="stage-empty-progress"]')
     ).toBeVisible();
+    await expect(stage.getByRole("status")).toHaveText(
+      /^Compiling on the build server\./
+    );
+    // Focus went from Build to Stop, never to the page
+    await expect(stage.getByRole("button", { name: "Stop" })).toBeFocused();
+    // Nothing on the stage can start a second build: Stop and the log are
+    // all it holds. Tab to "Show full log" and press it: no second request
+    await expect(stage.getByRole("button")).toHaveText([
+      "Stop",
+      "Show full log",
+    ]);
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Enter");
     await expect(
-      page.getByRole("button", { name: "Build", exact: true })
-    ).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "Building…", exact: true })
-    ).toHaveCount(0);
+      stage.getByRole("heading", { name: "Building…" })
+    ).toBeVisible();
 
     release();
     await expect(page.getByText("Build succeeded")).toBeVisible();
+    expect(builds).toBe(1);
+  });
+
+  test("client-v2-buttons: A first build stops from the stage", async ({
+    seededPage: page,
+  }) => {
+    test.setTimeout(120_000);
+    let builds = 0;
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    // A build server that hangs, then answers after the stop
+    await page.route("**/build", async (route) => {
+      builds += 1;
+      await held;
+      await route
+        .fulfill({
+          contentType: "application/json",
+          body: BUILT,
+        })
+        // The stop aborted the request, so the page may no longer take
+        // this reply; what the page shows afterwards is the assertion
+        .catch(() => undefined);
+    });
+
+    await page.locator("#flow-stage-tab-build").click();
+    const stage = page.locator("#flow-stage-panel-build");
+    await stage.getByRole("button", { name: "Build", exact: true }).click();
+    await expect(
+      stage.getByRole("heading", { name: "Building…" })
+    ).toBeVisible();
+
+    await stage.getByRole("button", { name: "Stop" }).click();
+
+    // Back to how it was, with no failure card, focus on the title
+    await expect(
+      stage.getByRole("heading", { name: "Nothing built yet" })
+    ).toBeFocused();
+    await expect(
+      stage.getByRole("button", { name: "Build", exact: true })
+    ).toBeEnabled();
+    await expect(stage.getByRole("alert")).toHaveCount(0);
+
+    // The late reply is dropped: the stage stays as it was
+    release();
+    await page.waitForTimeout(500);
+    await expect(
+      stage.getByRole("heading", { name: "Nothing built yet" })
+    ).toBeVisible();
     expect(builds).toBe(1);
   });
 
@@ -245,7 +315,7 @@ test.describe("client-v2-buttons", () => {
     await page.route("**/build", (route) =>
       route.fulfill({
         contentType: "application/json",
-        body: JSON.stringify({ stderr: "", uuid: "e2e-build", idl: null }),
+        body: BUILT,
       })
     );
 

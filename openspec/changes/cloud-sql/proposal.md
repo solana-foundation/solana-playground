@@ -57,17 +57,17 @@ preview Neon project behind it, so previews need a Cloud SQL home as well.
 - **Migrations.** A labelled PR's database is migrated by `preview.yml` on
   every deploy, as today. `solpg_preview` is migrated by a workflow on push to `master`, never from a PR's run, since a
   PR's run executes the PR's code. `migrate-production-db` stays a person's step and migrates the one
-  database production reads: the production Neon project until the cutover,
-  `solpg` after it, through the Cloud SQL Auth Proxy as the operator's own
+  database production reads, chosen by Production's `DB_PROVIDER`: `solpg`
+  on Cloud SQL, through the Cloud SQL Auth Proxy as the operator's own
   Google identity. No CI identity holds a role on `solpg`. Nothing migrates
   from a serverless function, as before.
-- **Cutover.** Production has no users yet, so no data moves and nothing is
-  frozen: `solpg` is migrated from zero, the Production environment switches
-  provider, and `/api/sync` reports `db: "ok"`. Rollback is restoring
-  `DATABASE_URL`; the production Neon project is left untouched. The cutover
-  runs on the project's Vercel-generated production domain; before the custom
-  domain is attached, `solpg` is dropped, created again and migrated, so the
-  release starts with no test account in it.
+- **Production from nothing.** The Foundation's production has no earlier
+  database, so no data moves and nothing is frozen: Production's variables
+  name `solpg`, `solpg` is migrated from zero, and the first production
+  deployment, on the project's Vercel-generated domain, reports `db: "ok"` on
+  `/api/sync`. Vercel's Instant Rollback rolls back a bad deployment; it does
+  not undo a migration. The custom domain is attached once the run on the
+  generated domain is finished, and `solpg` keeps the rows written during it.
 - **Telemetry.** The change touches `features/persistence` and
   `features/auth` on their server side only (`.mjs` modules the functions
   load). It adds, renames, and removes no telemetry event. A provider that
@@ -89,7 +89,8 @@ preview Neon project behind it, so previews need a Cloud SQL home as well.
   the sweep.
 - `client-v2-production-database`: production's database on Cloud SQL, the
   identity it connects with, the instance settings that keep Postgres's port
-  closed, who migrates it and where, the cutover and rollback, the release on
+  closed, who migrates it and where, its setup from nothing and the rollback
+  of a deployment, the release on
   the custom domain, and the maintainer guide that sets the pipeline up from
   nothing.
 
@@ -133,19 +134,14 @@ how the functions reach Postgres.
   `solpg_preview`.
 - Docs: `client-v2/docs/cloud-sql.md` (new), a guide for maintainers of
   `solana-foundation/solana-playground`: the design of the pipeline, then
-  every step to set it up in Google Cloud, Vercel, and GitHub, and the
-  cutover and rollback runbook; `client-v2/docs/neon.md`,
+  every step to set it up in Google Cloud, Vercel, and GitHub, production's
+  among them; `client-v2/docs/production-runbook.md` (new), which orders
+  production's steps for the Foundation; `client-v2/docs/neon.md`,
   `client-v2/docs/deploy-client-vercel.md`, the root `CLAUDE.md` "Gotchas"
   entry on the production database.
-- User-visible: the cutover starts production on an empty `solpg`, so the
-  team's test accounts and their synced rows on the production Neon project
-  stay behind, and the reset before the custom domain drops those written to
-  `solpg` on the generated domain. A test account that signs in again gets a new, empty account
-  with a new user id. Its browser uploads only local projects it never
-  synced. A project it synced before keeps a sync mark under the old user id,
-  so `pushNeverSynced` treats it as another account's and leaves it in the
-  browser only. To carry one over, export it (Export workspace) and import it
-  under a new name, which makes a new project with a new id. An unlabelled preview reads and writes the shared `solpg_preview`, so
+- User-visible: production starts on an empty `solpg`, and the accounts and
+  rows the team writes on the generated domain are still there after the
+  release. An unlabelled preview reads and writes the shared `solpg_preview`, so
   it sees rows written from every other PR's preview. A preview labelled
   `preview` starts with the rows of `solpg_preview` at its first deploy,
   without anyone's sign-in: sessions are not copied. Otherwise nothing changes for a user.

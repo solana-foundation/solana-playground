@@ -33,7 +33,7 @@ test("the manifest's colours are the product background", () => {
   assert.equal(manifest.background_color, "#101011");
 });
 
-test("the manifest carries the names Kat approved, and no SolPg", () => {
+test("the manifest carries the names Cat McGee approved, and no SolPg", () => {
   assert.equal(manifest.name, "Solana Playground");
   assert.equal(manifest.short_name, "Playground");
 });

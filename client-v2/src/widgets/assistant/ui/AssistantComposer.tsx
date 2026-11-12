@@ -5,16 +5,14 @@ import {
   isSignInFailure,
   PgSession,
   SIGN_IN_FAILED_UNKNOWN,
+  useSignedIn,
 } from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgProgramInfo } from "../../../utils/program-info";
-import type { LessonState } from "../../../views/flow/lessons";
-import { INITIAL_LESSON_STATE, PgLesson } from "../../../views/flow/lessons";
 import { PgBuildOutput } from "../../../views/sidebar/assistant/bridge/build-output";
-import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
 import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-bridge";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
@@ -22,14 +20,13 @@ import type { AiOffInput, AiOffReason } from "../model/ai-off";
 import { aiOff } from "../model/ai-off";
 import type { ModelOption } from "../model/choice";
 import { modelOptions, modelShown } from "../model/choice";
-import { connectLabel, DEFAULT_CONNECTION } from "../model/connection";
+import { DEFAULT_CONNECTION } from "../model/connection";
 import {
   retryDefaultBackend,
   useDefaultBackend,
 } from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";
 import { withEffort, withModel } from "../model/tune";
-import { useSignedIn } from "../model/use-signed-in";
 import type { Turn, TurnPhase } from "../model/use-turn";
 import { AI_OFF_SEND_BLOCKED, BaseAiOffRow } from "./BaseAiOffRow";
 import {
@@ -48,19 +45,17 @@ const sent = (what: string) => `Sent with this message: ${what}`;
 const workspace = () => PgExplorer.currentWorkspaceId;
 
 /**
- * What the assistant reads each turn, as chips over the input: the lesson
- * step, one chip per file in the context (each removable until it is added
- * back), the build error and the IDL.
+ * What the assistant reads each turn, as chips over the input: one chip per
+ * file in the context (each removable until it is added back), the build
+ * error and the IDL.
  *
  * Mirrors what `describeProject()` sends, so the row cannot claim less than
  * the model gets. Paths only, never file content: this runs on every render,
  * including every streamed token.
  */
 const contextChips = (
-  lessonState: LessonState,
   contextFiles: readonly string[]
 ): ComposerContextChip[] => {
-  const lesson = describeLesson(lessonState);
   const files = contextFiles.map((path): ComposerContextChip => {
     const name = PgExplorer.getItemNameFromPath(path);
     return {
@@ -76,18 +71,8 @@ const contextChips = (
       },
     };
   });
-  // Where you are, the files (tabs in tab order, then the added ones),
-  // then what else is sent
+  // The files (tabs in tab order, then the added ones), then what else is sent
   return [
-    lesson
-      ? {
-          label: `Step ${lesson.stepIndex} of ${lesson.stepCount}`,
-          title: lesson.objective,
-          spoken: sent(
-            `step ${lesson.stepIndex} of ${lesson.stepCount} and its goal`
-          ),
-        }
-      : null,
     ...files,
     PgBuildOutput.latest?.failed
       ? {
@@ -96,7 +81,7 @@ const contextChips = (
           spoken: sent("the last build's compiler output"),
         }
       : null,
-    PgProgramInfo.idl
+    PgProgramInfo.callableIdl()
       ? {
           label: "idl",
           title: "The built program's interface",
@@ -179,10 +164,6 @@ export function AssistantComposer({
   }, []);
   const contextFiles = realBridge.listContextFiles();
 
-  const [lessonState, setLessonState] =
-    useState<LessonState>(INITIAL_LESSON_STATE);
-  useEffect(() => PgLesson.onDidChange(setLessonState).dispose, []);
-
   const defaultBackend = useDefaultBackend();
   const connection = PgAssistant.connection;
   const shown = modelShown(connection, defaultBackend);
@@ -200,7 +181,7 @@ export function AssistantComposer({
   /** The off row's sign-in: Connect a model's, which keeps the open project */
   const signIn = () => {
     setSignInError(undefined);
-    PgSession.signInWith({ from: "assistant" }).catch((error: unknown) => {
+    PgSession.signInFor("assistant")([]).catch((error: unknown) => {
       if (isSignInFailure(error)) {
         // Not reported: a blocked popup or a cancelled sign-in is expected,
         // and its message says what to do
@@ -327,7 +308,7 @@ export function AssistantComposer({
         </Callout>
       )}
       <BaseAssistantComposer
-        chips={contextChips(lessonState, contextFiles)}
+        chips={contextChips(contextFiles)}
         addable={addableFiles(contextFiles)}
         value={turn.input}
         onValueChange={turn.setInput}
@@ -351,8 +332,6 @@ export function AssistantComposer({
         effort={effort}
         focusRequest={turn.focusRequest}
         onSources={onSources}
-        onConnect={() => turn.openConnect("add")}
-        connectLabel={connectLabel(connection)}
         focusPicked={focusPicked}
         // While no model can answer this user, Send waits with the reason
         // and the off row above names the way in

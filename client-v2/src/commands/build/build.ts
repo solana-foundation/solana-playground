@@ -12,6 +12,7 @@ import {
   TupleFiles,
 } from "../../utils";
 import { STOPPED, throwIfStopped } from "../../utils/stopped";
+import { isMacroSymptomText } from "../../views/flow/stages/build-report";
 import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 import { createCmd } from "../create";
 import { emptySourceError, isEmptyProgram, PROGRAM_FILE } from "./empty-source";
@@ -33,28 +34,55 @@ export const build = createCmd({
     PgGlobal.update({ buildLoading: true });
     PgTerminal.println(PgTerminal.info("Building..."));
 
+    // `PgProgramInfo` follows the open project, so a reply for one built before a switch is not written into another
+    const workspace = PgExplorer.currentWorkspaceId;
+    // A temporary project has no name
+    const workspaceName = PgExplorer.currentWorkspaceName ?? "your project";
+    const isStillOpen = () => PgExplorer.currentWorkspaceId === workspace;
+    // Writing the verdict into a project that is not open would bypass sync's dirty mark, so the user is told instead
+    const sayDroppedUnlessOpen = () => {
+      if (isStillOpen()) return;
+      PgTerminal.println(
+        PgTerminal.warning(
+          `The result of building "${workspaceName}" was dropped because another project was opened. Build it again before you deploy it.`
+        )
+      );
+    };
+
     try {
       const result = await buildProgram(signal).catch((e: unknown) => {
         // The aborted request fails; say it was stopped, not that it failed.
         // Only "Stopped.": the server may still finish, its reply is not kept
         throwIfStopped(signal, STOPPED);
+        // Deploy's stale-build guard reads `lastBuildFailed`, so the previous binary is not shipped
+        if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
+        sayDroppedUnlessOpen();
         throw e;
       });
       // A reply that lands after a stop is dropped: nothing of it is kept
       throwIfStopped(signal, STOPPED);
+      sayDroppedUnlessOpen();
       // Server only returns `uuid` on the first build of a session, so we
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.
       const failed = result.stderr.includes("error: could not compile");
-      PgProgramInfo.update({
-        idl: result.idl,
-        uuid: result.uuid ?? undefined,
-        lastBuildFailed: failed,
-      });
+      if (isStillOpen()) {
+        PgProgramInfo.update({
+          uuid: result.uuid ?? undefined,
+          lastBuildFailed: failed,
+          // The stable server builds no IDL; a missing one keeps the IDL the browser holds
+          ...(result.idl && { idl: result.idl }),
+        });
+      }
       // `improveOutput` is lossy by design; the assistant needs the raw text.
       // The workspace travels with it: one output is kept for the session, so
       // without it the next project inherits this report.
-      PgBuildOutput.set(result.stderr, PgExplorer.currentWorkspaceName ?? null);
+      if (isStillOpen()) {
+        PgBuildOutput.set(
+          result.stderr,
+          PgExplorer.currentWorkspaceName ?? null
+        );
+      }
       PgTerminal.println(improveOutput(result.stderr));
     } finally {
       PgGlobal.update({ buildLoading: false });
@@ -338,19 +366,7 @@ const improveOutput = (output: string) => {
       //
       // Macro errors like the above are not the cause of the error, they are a
       // symptom of another error.
-      const HIDDEN_PATTERNS = [
-        "__client_accounts",
-        "__cpi_client_accounts",
-        /`\S*Bumps`/,
-      ];
-      const hiddenErrors = errors.reduce((acc, cur) => {
-        const isHidden = HIDDEN_PATTERNS.some((pat) => {
-          return typeof pat === "string" ? cur.includes(pat) : pat.test(cur);
-        });
-        if (isHidden) acc.push(cur);
-
-        return acc;
-      }, [] as string[]);
+      const hiddenErrors = errors.filter(isMacroSymptomText);
 
       // Prioritize the most common errors, order matters
       const prioritizedErrors: string[] = [];

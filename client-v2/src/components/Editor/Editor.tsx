@@ -1,9 +1,13 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 
+import { catalogPage } from "@/widgets/catalog";
 import { NoFileOpen } from "@/widgets/layout-shell";
 
+import { createLogger } from "../../shared/lib/logger";
 import { PgCommon, PgExplorer } from "../../utils";
 import { SpinnerWithBg } from "../Loading";
+
+const log = createLogger("editor:editor");
 
 const Monaco = lazy(() => import("./Monaco"));
 
@@ -26,7 +30,7 @@ export const Editor = () => {
   useEffect(() => {
     // Save metadata to IndexedDB every 5s
     const saveMetadataIntervalId = PgCommon.setIntervalOnFocus(() => {
-      PgExplorer.saveMeta().catch();
+      PgExplorer.saveMeta().catch((e) => log.error(e, { report: true }));
     }, 5000);
 
     return () => clearInterval(saveMetadataIntervalId);
@@ -39,7 +43,13 @@ export const Editor = () => {
       {/* Monaco cannot draw a background image, so its own background is
           transparent and this wrapper paints the surface under it */}
       <div className="h-full w-full overflow-auto bg-surface-panel">
-        {noFile ? <NoFileOpen /> : <Monaco />}
+        {noFile ? (
+          <NoFileOpen
+            onStartProject={() => catalogPage.open("new-project", "editor")}
+          />
+        ) : (
+          <Monaco />
+        )}
       </div>
     </Suspense>
   );

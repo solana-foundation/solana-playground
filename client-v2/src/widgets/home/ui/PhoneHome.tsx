@@ -1,10 +1,16 @@
+import { startTutorials } from "@/entities/tutorial";
 import { PgSession } from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
-import { PgExplorer, PgFramework, PgTutorial } from "@/utils";
+import {
+  ExplorerLimitError,
+  PgExplorer,
+  PgFramework,
+  PgTutorial,
+} from "@/utils";
 
 import { runExample } from "../model/example";
 import { useSessionRetry } from "../model/session-retry";
-import type { PageTile } from "../model/telemetry";
+import type { HomeTile } from "../model/telemetry";
 import { homeTelemetry } from "../model/telemetry";
 import { useProgramCount } from "../model/use-program-count";
 import { useVisit } from "../model/use-visit";
@@ -17,8 +23,8 @@ export interface PhoneHomeProps {
   onAsk: () => void;
   /** Continue was picked: go back to the project open under Home */
   onContinue: () => void;
-  /** Open the Tutorials or Programs page, in Home's place */
-  onOpenPage: (page: PageTile) => void;
+  /** Open the Tutorials or Programs page, in Home's place (the phone has no New project tile) */
+  onOpenPage: (page: Exclude<HomeTile, "new-project">) => void;
 }
 
 const log = createLogger("home:actions");
@@ -93,7 +99,9 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
   );
 
   const framework = newFramework();
-  const tutorial = PgTutorial.all.find((t) => t.level === "Beginner");
+  // The start offers only its ladder: Hello Anchor, Lumberjack, Zero Copy
+  const start = startTutorials(PgTutorial.all);
+  const tutorial = start.find((t) => t.level === "Beginner");
   const current = PgExplorer.currentWorkspaceName;
 
   const quickstarts: PhoneQuickstart[] = [];
@@ -134,18 +142,28 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
     <BasePhoneHome
       // One lead, New project and one tutorial: three, the spec's most
       quickstarts={quickstarts}
-      tutorialCount={PgTutorial.all.length}
+      tutorialCount={start.length}
       programCount={programCount}
       onQuickstart={async (quickstart) => {
         try {
           await openQuickstart(quickstart, onContinue);
         } catch (e) {
           // Logged once here and told by a toast, so the button's own
-          // `onError` never sees it
-          log.error(e, {
-            report: true,
-            context: { quickstart: quickstart.id },
-          });
+          // `onError` never sees it. A limit refusal is the explorer's on
+          // purpose, and the toast names it; it is not reported.
+          if (e instanceof ExplorerLimitError) {
+            log.warn("refused by a project limit", {
+              context: {
+                quickstart: quickstart.id,
+                limit: e.message,
+              },
+            });
+          } else {
+            log.error(e, {
+              report: true,
+              context: { quickstart: quickstart.id },
+            });
+          }
           toastActionFailed(e);
           return;
         }

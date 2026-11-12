@@ -1,71 +1,277 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
-// The utils and hooks barrels read build-time globals jsdom lacks, and the
-// inputs need a connected program; the folds under test need none of it.
+// One instruction card: its head counts the inputs, its body groups them and
+// ends in Test, which says what it waits for.
+
+const network = vi.hoisted(() => ({ hold: undefined as string | undefined }));
+vi.mock("@/widgets/status", () => ({ useNetworkHold: () => network.hold }));
+
+// The utils barrel reads build-time globals jsdom lacks, and the inputs need
+// a connected program; the form under test needs none of it.
 vi.mock("../../../../../utils", () => ({
-  PgCommand: {},
   PgCommon: { debounce: (fn: () => void) => fn },
-  PgConnection: {},
-  PgSettings: {},
-  PgTerminal: {},
-  PgTx: {},
+}));
+// What the store holds for an instruction: a filled form the user left and
+// came back to, or an empty custom field, or a field with a parse error
+const stored = vi.hoisted(() => ({
+  amount: { value: "5", error: false },
 }));
 vi.mock("../../../../../utils/program-interaction", () => ({
   PgProgramInteraction: {
-    getOrCreateInstruction: (ix: { name: string }) => ({
-      name: ix.name,
-      values: { args: [{ name: "amount" }], accounts: [{ name: "owner" }] },
-    }),
+    // "ping" takes nothing; every other instruction one arg and one account
+    getOrCreateInstruction: (ix: { name: string }) =>
+      ix.name === "ping"
+        ? { name: ix.name, values: { args: [], accounts: [] } }
+        : {
+            name: ix.name,
+            values: {
+              args: [
+                {
+                  name: "amount",
+                  error: stored.amount.error,
+                  generator: { type: "Custom", value: stored.amount.value },
+                },
+              ],
+              accounts: [
+                {
+                  name: "owner",
+                  error: false,
+                  generator: { type: "Custom", value: "owner-key" },
+                },
+              ],
+            },
+          },
     saveInstruction: vi.fn(),
   },
 }));
-vi.mock("../../../../../hooks", () => ({ useWallet: () => ({}) }));
-vi.mock("../../../../../components/Button", () => ({
-  default: (props: { children: string }) => <button>{props.children}</button>,
-}));
+const session = vi.hoisted(() => ({ wallet: {} as object | undefined }));
+vi.mock("../../../../../hooks", () => ({ useWallet: () => session.wallet }));
 vi.mock("./InstructionInput", () => ({ default: () => null }));
 vi.mock("../IdlProvider", () => ({ useIdl: () => ({ idl: {} }) }));
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import Instruction from "./Instruction";
 
-const draw = () =>
-  render(
-    <Instruction
-      idlInstruction={
-        {
-          name: "increment",
-          args: [{ name: "amount" }],
-          accounts: [{ name: "owner" }],
-        } as unknown as Parameters<typeof Instruction>[0]["idlInstruction"]
-      }
-    />
-  );
+type Props = Parameters<typeof Instruction>[0];
 
-it("heads the card with what it takes", () => {
-  draw();
+const IX = {
+  name: "increment",
+  args: [],
+  accounts: [],
+} as unknown as Props["idlInstruction"];
+
+it("counts the inputs in the head: one arg and one account", () => {
+  render(<Instruction idlInstruction={IX} onCall={vi.fn()} />);
+
   expect(
-    screen.getByRole("button", { name: /^increment/ }).textContent
+    screen.getByRole("button", { name: /increment/ }).textContent
   ).toContain("1 arg · 1 account");
 });
 
-it("names the arguments and the accounts as plain groups, not folds", () => {
-  draw();
-  fireEvent.click(screen.getByRole("button", { name: /^increment/ }));
+it("draws an instruction that takes nothing with no count, no groups and no Fill or Reset", () => {
+  const PING = {
+    name: "ping",
+    args: [],
+    accounts: [],
+  } as unknown as Props["idlInstruction"];
+  render(<Instruction idlInstruction={PING} onCall={vi.fn()} open />);
 
-  expect(screen.getByRole("heading", { name: "Arguments" })).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Accounts" })).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Args" })).toBeNull();
+  expect(screen.getByRole("button", { name: "ping" }).textContent).toBe("ping");
+  expect(screen.queryByRole("region")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Fill with Random" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
+  expect(testButton().disabled).toBe(false);
 });
 
-it("says why Test waits while a field is empty", () => {
-  draw();
-  fireEvent.click(screen.getByRole("button", { name: /^increment/ }));
+it("starts folded, and opens through the card's own head when nobody holds it", () => {
+  render(<Instruction idlInstruction={IX} onCall={vi.fn()} />);
+  expect(screen.queryByRole("button", { name: "Test" })).toBeNull();
 
-  expect(screen.getByRole("button", { name: "Test" })).toHaveProperty(
-    "disabled",
-    true
+  fireEvent.click(screen.getByRole("button", { name: /increment/ }));
+  expect(screen.getByRole("button", { name: "Test" })).toBeTruthy();
+});
+
+it("reports a toggle of its head to the holder", () => {
+  const onOpenChange = vi.fn();
+  render(
+    <Instruction
+      idlInstruction={IX}
+      onCall={vi.fn()}
+      open={false}
+      onOpenChange={onOpenChange}
+    />
   );
+  fireEvent.click(screen.getByRole("button", { name: /increment/ }));
+  expect(onOpenChange).toHaveBeenCalledWith(true);
+});
+
+it("groups the inputs under plain Arguments and Accounts groups, not folds", () => {
+  render(<Instruction idlInstruction={IX} onCall={vi.fn()} open />);
+
+  expect(screen.getByRole("region", { name: "Arguments" })).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Accounts" })).toBeTruthy();
+  // No heading level skipped under the page's h2
+  expect(screen.queryByRole("heading")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Args" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Accounts" })).toBeNull();
+});
+
+it("ends in Test with quiet Fill with Random and Reset", () => {
+  render(<Instruction idlInstruction={IX} onCall={vi.fn()} open />);
+
+  expect(screen.getByRole("button", { name: "Test" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Fill with Random" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Reset" })).toBeTruthy();
+});
+
+it("tests the instruction through onCall", () => {
+  const onCall = vi.fn(() => Promise.resolve());
+  render(<Instruction idlInstruction={IX} onCall={onCall} open />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Test" }));
+  expect(onCall).toHaveBeenCalledWith(
+    expect.objectContaining({ name: "increment" })
+  );
+});
+
+it("holds Test for a wallet first, and says so", () => {
+  session.wallet = undefined;
+  render(
+    <Instruction
+      idlInstruction={IX}
+      onCall={vi.fn()}
+      open
+      solNeededOn="devnet"
+    />
+  );
+
+  expect(testButton().disabled).toBe(true);
+  expect(screen.getByText("Connect a wallet to test")).toBeTruthy();
+});
+
+it("holds Test for the fee before the fields, and names the network", () => {
+  stored.amount = { value: "", error: false };
+  render(
+    <Instruction
+      idlInstruction={IX}
+      onCall={vi.fn()}
+      open
+      solNeededOn="devnet"
+    />
+  );
+
+  expect(testButton().disabled).toBe(true);
+  expect(screen.getByText("Add devnet SOL to test")).toBeTruthy();
+  expect(screen.queryByText("Fill every field to test")).toBeNull();
+});
+
+it("holds Test for an empty field and says so", () => {
+  stored.amount = { value: "", error: false };
+  render(<Instruction idlInstruction={IX} onCall={vi.fn()} open />);
+
+  expect(testButton().disabled).toBe(true);
   expect(screen.getByText("Fill every field to test")).toBeTruthy();
+});
+
+it("says nothing once Test can run", () => {
+  render(<Instruction idlInstruction={IX} onCall={vi.fn()} open />);
+
+  expect(testButton().disabled).toBe(false);
+  expect(screen.queryByText(/to test$/)).toBeNull();
+});
+
+it("draws the fee payer slot above the actions", () => {
+  render(
+    <Instruction
+      idlInstruction={IX}
+      onCall={vi.fn()}
+      open
+      feePayer={<p>Fee paid by Playground wallet · 1 SOL</p>}
+    />
+  );
+  expect(
+    screen.getByText("Fee paid by Playground wallet · 1 SOL")
+  ).toBeTruthy();
+});
+
+it("reads Testing… and locks the form until the test settles", async () => {
+  let settle: () => void = () => {};
+  const onCall = vi.fn(
+    () => new Promise<void>((resolve) => (settle = resolve))
+  );
+  const { container } = render(
+    <Instruction idlInstruction={IX} onCall={onCall} open />
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Test" }));
+  const busy = await screen.findByRole("button", { name: /Testing…/ });
+  expect((busy as HTMLButtonElement).disabled).toBe(true);
+  expect(container.querySelector("fieldset")?.disabled).toBe(true);
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Fill with Random",
+      }) as HTMLButtonElement
+    ).disabled
+  ).toBe(true);
+
+  await act(async () => settle());
+  expect(testButton().disabled).toBe(false);
+  expect(container.querySelector("fieldset")?.disabled).toBe(false);
+});
+
+const FORM_IX = {
+  name: "deposit",
+  args: [{ name: "amount" }],
+  accounts: [{ name: "owner" }],
+} as unknown as Props["idlInstruction"];
+
+const testButton = () =>
+  screen.getByRole("button", { name: "Test" }) as HTMLButtonElement;
+
+afterEach(() => {
+  stored.amount = { value: "5", error: false };
+  session.wallet = {};
+  network.hold = undefined;
+});
+
+// Every card mounts its form, and a remount (a rebuilt IDL) restores the
+// stored values; the inputs report nothing on mount, so the form has to read
+// its restored values itself
+it("enables Test for a valid form restored after leaving and returning", () => {
+  const first = render(
+    <Instruction idlInstruction={FORM_IX} onCall={vi.fn()} open />
+  );
+  first.unmount();
+
+  render(<Instruction idlInstruction={FORM_IX} onCall={vi.fn()} open />);
+
+  expect(testButton().disabled).toBe(false);
+});
+
+it("keeps Test off for a restored form with a field in error", () => {
+  stored.amount = { value: "x", error: true };
+  render(<Instruction idlInstruction={FORM_IX} onCall={vi.fn()} open />);
+
+  expect(testButton().disabled).toBe(true);
+});
+
+// Another call in flight holds every card's Test; the reason is the stage's
+it("holds Test while the caller blocks it, without a reason of its own", () => {
+  session.wallet = undefined;
+  render(<Instruction idlInstruction={IX} onCall={vi.fn()} open callBlocked />);
+
+  expect(testButton().disabled).toBe(true);
+  expect(screen.queryByText("Connect a wallet to test")).toBeNull();
+});
+
+it("holds Test while the network is down, and says why first", () => {
+  network.hold = "Devnet is not responding";
+  stored.amount = { value: "", error: false };
+  render(<Instruction idlInstruction={FORM_IX} onCall={vi.fn()} open />);
+
+  expect(testButton().disabled).toBe(true);
+  expect(screen.getByText("Devnet is not responding")).toBeTruthy();
+  expect(screen.queryByText("Fill every field to test")).toBeNull();
 });

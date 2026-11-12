@@ -1,0 +1,62 @@
+name: client-v2 live links
+
+# The `@live-links` browser specs: the GitHub links the import dialog and the
+# build server's tip offer (`LINKS` in the spec), requested from github.com. Kept
+# out of the PR suite (`reusable-client-v2.yml`), where a GitHub outage would
+# fail unrelated PRs; weekly, so a path the examples repository drops shows up
+# here before a user meets it. On the wasm stubs: no spec here needs them.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # A failed run opens an issue: a scheduled run's failure reaches nobody else
+  issues: write
+
+jobs:
+  live-links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      USE_WASM_STUBS: "true"
+    defaults:
+      run:
+        working-directory: client-v2
+
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: client-v2/.nvmrc
+          cache: "yarn"
+          cache-dependency-path: "client-v2/yarn.lock"
+
+      - name: Stub the WASM packages and install
+        run: bash scripts/setup-wasm.sh
+
+      - name: Install Chromium
+        run: yarn playwright install --with-deps chromium
+
+      - name: Live link specs
+        run: yarn test-e2e --grep @live-links
+
+      - name: Report a dead link
+        if: failure()
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="A GitHub link in the app no longer resolves"
+          open=$(gh issue list --state open --search "\"$title\" in:title" --json number -q '.[0].number')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Still failing: $RUN_URL"
+          else
+            gh issue create --title "$title" --body "The weekly \`@live-links\` run failed: $RUN_URL. Its log names each URL that did not answer 200; the list is \`LINKS\` in \`client-v2/e2e/github-import-links.e2e.spec.ts\`."
+          fi

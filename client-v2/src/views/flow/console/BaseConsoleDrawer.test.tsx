@@ -3,6 +3,8 @@ import path from "node:path";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import { requireFor } from "../../../test-utils/require-for";
 import { BOTTOM_BAR_PX } from "../tokens";
 import BaseConsoleDrawer, { CONSOLE_BODY_ID } from "./BaseConsoleDrawer";
@@ -15,19 +17,25 @@ const draw = (
     onOpenChange?: (open: boolean) => void;
     onClear?: () => void;
     stop?: { run: "build" | "deploy"; onStop: () => void } | null;
+    progress?: number;
+    log?: string;
   }
 ) =>
   render(
     <BaseConsoleDrawer
       open={open}
       status={idle}
+      progress={handlers.progress}
       onOpenChange={handlers.onOpenChange ?? vi.fn()}
       onClear={handlers.onClear ?? vi.fn()}
       stop={handlers.stop ?? null}
       shortcut="⌘J"
+      log={handlers.log ?? ""}
     >
       <div className="xterm" />
-    </BaseConsoleDrawer>
+    </BaseConsoleDrawer>,
+    // Copy, shown once there is a log, has a tooltip that needs the provider
+    { wrapper: TooltipProvider }
   );
 
 it("names its button Terminal and controls the body by its fixed id", () => {
@@ -78,7 +86,9 @@ it("clears without toggling", () => {
   expect(onOpenChange).not.toHaveBeenCalled();
 });
 
-// Spec 13: Stop shows while a build or a deploy runs, folded or open
+// The prop contract: the drawer draws whatever Stop it is handed, folded or
+// open. Which run gets one is `runToStop`'s rule (a build, never a deploy
+// alone).
 it.each([
   ["build", true],
   ["build", false],
@@ -97,6 +107,18 @@ it.each([
 });
 
 // Spec 13 (TRM-28): Clear is off beside Stop; a phone hides it for Stop
+it("offers Copy log only while open with a log to copy", () => {
+  const { unmount } = draw(true, { log: "Done" });
+  expect(screen.getByRole("button", { name: "Copy log" })).toBeTruthy();
+  unmount();
+
+  draw(true, { log: "" }).unmount();
+  expect(screen.queryByRole("button", { name: "Copy log" })).toBeNull();
+
+  draw(false, { log: "Done" });
+  expect(screen.queryByRole("button", { name: "Copy log" })).toBeNull();
+});
+
 it("turns Clear off while a run can be stopped", () => {
   draw(true, { stop: { run: "build", onStop: vi.fn() } });
 
@@ -120,6 +142,7 @@ it("shows the status text with a dot of its tone", () => {
       onClear={vi.fn()}
       stop={null}
       shortcut="⌘J"
+      log=""
     />
   );
   expect(screen.getByText("build failed")).toBeTruthy();
@@ -129,6 +152,20 @@ it("shows the status text with a dot of its tone", () => {
       ?.getAttribute("data-variant")
   ).toBe("error");
 });
+
+it.each([
+  { progress: 0, shown: undefined },
+  { progress: 40, shown: "40" },
+])(
+  "draws a progress bar along the strip for $progress: $shown",
+  ({ progress, shown }) => {
+    draw(false, { progress });
+    expect(
+      screen.queryByRole("progressbar")?.getAttribute("aria-valuenow") ??
+        undefined
+    ).toBe(shown);
+  }
+);
 
 // The shell folds the panel to `BOTTOM_BAR_PX`; the bar draws itself `h-bar`
 // tall, from the design system's `--layout-bar`

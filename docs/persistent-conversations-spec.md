@@ -47,8 +47,8 @@ Facts established while designing, which contradict the original brief:
 ### Runtime and data access
 
 - New endpoints are **`client-v2/api/*.mjs` Vercel functions** — the only
-  runtime the fork owns end to end. **The Rust build server and its MongoDB are
-  untouched**, which keeps this inside the "No backend changes" principle in
+  runtime the fork owns end to end. **The Rust build server holds no database,
+  and this work does not touch it**, which keeps this inside the "No backend changes" principle in
   `docs/assistant-context.md` as it was meant (the *build* server).
 - **Plain `pg` against a pooled connection string.** No ORM, no query builder.
   Portable across Neon / Supabase / RDS Proxy / PgBouncer, which matters because
@@ -217,7 +217,9 @@ Two rules: a tab only pushes while it is visible, and a tab that has just become
 visible reconciles before it is allowed to push again. The pending upload is
 flushed on the way out (`visibilitychange` → `hidden`), where the document is
 still alive and an ordinary fetch completes — `beforeunload` is too late and
-`keepalive`/`sendBeacon` cap the body at ~64 KB against an 8 MB snapshot limit.
+`keepalive`/`sendBeacon` cap the body at ~64 KB against a 1 MiB request-body limit
+(`MAX_PROJECT_BODY_BYTES`) and a 512 KiB project limit (`PROJECT_LIMITS` in
+`client-v2/src/entities/project`).
 
 ### Identity and lifecycle of projects
 

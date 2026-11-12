@@ -6,9 +6,17 @@ vi.mock("../../../../hooks", async () => ({
   useRenderOnChange: (await import("../../../../hooks/useRenderOnChange"))
     .useRenderOnChange,
 }));
-vi.mock("./ServerConsole", () => ({ __esModule: true, default: () => null }));
+// The console stands in as the id prefix it was given, so a test can see each view's
+const consoleScopes = vi.hoisted(() => [] as string[]);
+vi.mock("./ServerConsole", () => ({
+  __esModule: true,
+  default: ({ scope }: { scope: string }) => {
+    consoleScopes.push(scope);
+    return null;
+  },
+}));
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
@@ -257,5 +265,106 @@ describe("Grounding", () => {
       expect(screen.getByText(/takes no tools/)).toBeTruthy();
       expect(screen.queryAllByRole("checkbox")).toEqual([]);
     });
+  });
+
+  it("names the credentials a restored server lost until the entry is applied changed", () => {
+    PgAssistant.setMcpServers([
+      {
+        id: "docs",
+        name: "Docs",
+        url: "https://docs.test/mcp",
+        enabled: true,
+      },
+    ]);
+    Reflect.set(
+      PgAssistant,
+      "_missingCredentials",
+      new Map([["docs", ["authToken", "url query"]]])
+    );
+
+    renderGrounding();
+    expect(screen.getByText(/Enter again for/).textContent).toBe(
+      "Enter again for docs: authToken, the query in url. Credentials aren't saved, so a reload clears them."
+    );
+
+    act(() =>
+      PgAssistant.setMcpServers([
+        {
+          id: "docs",
+          name: "Renamed",
+          url: "https://docs.test/mcp",
+          enabled: true,
+        },
+      ])
+    );
+    expect(screen.queryByText(/Enter again for/)).toBeNull();
+  });
+
+  it("moves a clean draft with the store and leaves a dirty one", () => {
+    const entry = (id: string) => ({
+      id,
+      name: id,
+      url: "https://docs.test/mcp",
+      enabled: true,
+    });
+    const editor = () =>
+      screen.getByLabelText<HTMLTextAreaElement>("MCP server configuration");
+    PgAssistant.setMcpServers([entry("first")]);
+    renderGrounding();
+
+    act(() => PgAssistant.setMcpServers([entry("restored")]));
+    expect(editor().value).toContain('"restored"');
+
+    fireEvent.change(editor(), { target: { value: "[ typing" } });
+    act(() => PgAssistant.setMcpServers([entry("later")]));
+    expect(editor().value).toBe("[ typing");
+  });
+
+  it("Settings and the panel share one state: a skill unticked in one is off in both and for the next turn", async () => {
+    PgAssistant.setMcpServers([
+      { id: "docs", name: "Docs", url: "https://docs.test/mcp", enabled: true },
+    ]);
+    consoleScopes.length = 0;
+    render(
+      <TooltipProvider>
+        <section aria-label="Panel">
+          <Grounding />
+        </section>
+        <section aria-label="Settings">
+          <Grounding embedded />
+        </section>
+      </TooltipProvider>
+    );
+    const panel = within(screen.getByRole("region", { name: "Panel" }));
+    const settings = within(screen.getByRole("region", { name: "Settings" }));
+
+    // A click on the name in Settings reaches Settings' own checkbox
+    fireEvent.click(settings.getByText("Skill solana-dev"));
+
+    for (const view of [panel, settings]) {
+      expect(
+        view
+          .getByRole("checkbox", { name: "Skill solana-dev" })
+          .getAttribute("aria-checked")
+      ).toBe("false");
+    }
+    const loadSkill = createSkillTools().find((t) => t.name === "load_skill");
+    expect(await loadSkill?.run({ id: "solana-dev" }, {})).not.toBe(
+      "text of https://skills.test/solana-dev/SKILL.md"
+    );
+
+    // Each view's labels point at its own controls: no id repeats, and each
+    // view's server console gets its own prefix
+    for (const view of [panel, settings]) {
+      view
+        .getAllByRole("button", { name: /Call a tool|Community skills/ })
+        .forEach((button) => fireEvent.click(button));
+    }
+    const ids = Array.from(
+      document.querySelectorAll("section [id]"),
+      (el) => el.id
+    );
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
+    expect(new Set(consoleScopes).size).toBe(2);
   });
 });

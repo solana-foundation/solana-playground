@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Endpoint } from "@/constants";
 
-import BaseNetworkChoice from "./BaseNetworkChoice";
+import BaseNetworkChoice, { chipKey } from "./BaseNetworkChoice";
 
 describe("BaseNetworkChoice", () => {
   beforeEach(() => {
@@ -32,10 +32,73 @@ describe("BaseNetworkChoice", () => {
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={onPick} />);
     act(() => screen.getByRole("radio", { name: "Devnet" }).focus());
     await userEvent.keyboard("{ArrowRight}");
-    expect(onPick).toHaveBeenCalledWith(Endpoint.TESTNET);
+    expect(onPick).toHaveBeenCalledWith(
+      Endpoint.TESTNET,
+      chipKey("Testnet", Endpoint.TESTNET)
+    );
     expect(document.activeElement).toBe(
       screen.getByRole("radio", { name: "Testnet" })
     );
+  });
+
+  describe("chips that share a URL", () => {
+    const custom = [
+      { name: "Mine", url: Endpoint.DEVNET },
+      { name: "Public too", url: Endpoint.DEVNET },
+    ];
+    const checked = () =>
+      screen
+        .getAllByRole("radio")
+        .filter((r) => r.getAttribute("aria-checked") === "true")
+        .map((r) => r.textContent);
+
+    it("checks one chip only, the first that lists the endpoint", () => {
+      render(
+        <BaseNetworkChoice
+          endpoint={Endpoint.DEVNET}
+          custom={custom}
+          onPick={() => {}}
+        />
+      );
+      expect(checked()).toEqual(["Devnet"]);
+    });
+
+    it("checks the chosen chip while the endpoint is its URL", () => {
+      const { rerender } = render(
+        <BaseNetworkChoice
+          endpoint={Endpoint.DEVNET}
+          custom={custom}
+          chosen={chipKey("Public too", Endpoint.DEVNET)}
+          onPick={() => {}}
+        />
+      );
+      expect(checked()).toEqual(["Public too"]);
+      rerender(
+        <BaseNetworkChoice
+          endpoint={Endpoint.MAINNET_BETA}
+          custom={custom}
+          chosen={chipKey("Public too", Endpoint.DEVNET)}
+          onPick={() => {}}
+        />
+      );
+      expect(checked()).toEqual(["Mainnet"]);
+    });
+
+    it("answers the URL and the key of the chip clicked", async () => {
+      const onPick = vi.fn();
+      render(
+        <BaseNetworkChoice
+          endpoint={Endpoint.DEVNET}
+          custom={custom}
+          onPick={onPick}
+        />
+      );
+      await userEvent.click(screen.getByRole("radio", { name: "Mine" }));
+      expect(onPick).toHaveBeenCalledWith(
+        Endpoint.DEVNET,
+        chipKey("Mine", Endpoint.DEVNET)
+      );
+    });
   });
 
   it("picks nothing on a click on the network already chosen", async () => {
@@ -72,21 +135,172 @@ describe("BaseNetworkChoice", () => {
       </>
     );
     // Radix keeps the last focused chip as the group's tab stop, not the
-    // checked one, so coming back lands on Testnet.
-    act(() => screen.getByRole("radio", { name: "Testnet" }).focus());
+    // checked one, so coming back lands on Mainnet.
+    act(() => screen.getByRole("radio", { name: "Mainnet" }).focus());
     await userEvent.tab();
     await userEvent.tab({ shift: true });
     expect(document.activeElement).toBe(
-      screen.getByRole("radio", { name: "Testnet" })
+      screen.getByRole("radio", { name: "Mainnet" })
     );
     expect(onPick).not.toHaveBeenCalled();
+  });
+
+  it("offers Mainnet, Devnet, Testnet, Localnet and Surfpool, in that order", () => {
+    render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual([
+      "Mainnet",
+      "Devnet",
+      "Testnet",
+      "Localnet",
+      "Surfpool",
+    ]);
+  });
+
+  it.each([
+    ["Testnet", Endpoint.TESTNET],
+    ["Localnet", Endpoint.LOCALNET],
+    ["Surfpool", Endpoint.SURFPOOL],
+  ])("checks %s on its address, with deploys open there", (name, endpoint) => {
+    render(<BaseNetworkChoice endpoint={endpoint} onPick={() => {}} />);
+    expect(
+      screen.getByRole("radio", { name }).getAttribute("aria-checked")
+    ).toBe("true");
+    expect(screen.queryByText("Not available for deploys")).toBeNull();
+  });
+
+  it("offers Mainnet, described as not available for deploys", () => {
+    render(
+      <BaseNetworkChoice endpoint={Endpoint.MAINNET_BETA} onPick={() => {}} />
+    );
+    expect(
+      screen
+        .getByRole("radio", { name: "Mainnet" })
+        .getAttribute("aria-checked")
+    ).toBe("true");
+    expect(
+      screen.getByRole("radiogroup", {
+        name: "Network",
+        description: "Not available for deploys",
+      })
+    ).toBeTruthy();
+    // The amber dot marks a network offered without deploys
+    expect(
+      screen
+        .getByText("Not available for deploys")
+        .querySelector('[data-slot="status-dot"][data-variant="warning"]')
+    ).toBeTruthy();
+  });
+
+  it("does not refuse deploys on Devnet", () => {
+    render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
+    expect(screen.queryByText("Not available for deploys")).toBeNull();
   });
 
   it("picks once on a click", async () => {
     const onPick = vi.fn();
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={onPick} />);
-    await userEvent.click(screen.getByRole("radio", { name: "Testnet" }));
+    await userEvent.click(screen.getByRole("radio", { name: "Mainnet" }));
     expect(onPick).toHaveBeenCalledTimes(1);
-    expect(onPick).toHaveBeenCalledWith(Endpoint.TESTNET);
+    expect(onPick).toHaveBeenCalledWith(
+      Endpoint.MAINNET_BETA,
+      chipKey("Mainnet", Endpoint.MAINNET_BETA)
+    );
+  });
+  it("puts a chip for each saved RPC after the offered networks, under its name", () => {
+    render(
+      <BaseNetworkChoice
+        endpoint="https://h.test/"
+        custom={[
+          { name: "Helius", url: "https://h.test/" },
+          { name: "Triton", url: "https://t.test/" },
+        ]}
+        onPick={() => {}}
+      />
+    );
+    expect(screen.getAllByRole("radio").map((r) => r.textContent)).toEqual([
+      "Mainnet",
+      "Devnet",
+      "Testnet",
+      "Localnet",
+      "Surfpool",
+      "Helius",
+      "Triton",
+    ]);
+    expect(
+      screen.getByRole("radio", { name: "Helius" }).getAttribute("aria-checked")
+    ).toBe("true");
+  });
+
+  it("picks a saved RPC's URL on a click on its chip", async () => {
+    const onPick = vi.fn();
+    render(
+      <BaseNetworkChoice
+        endpoint={Endpoint.DEVNET}
+        custom={[{ name: "Helius", url: "https://h.test/" }]}
+        onPick={onPick}
+      />
+    );
+    await userEvent.click(screen.getByRole("radio", { name: "Helius" }));
+    expect(onPick).toHaveBeenCalledWith(
+      "https://h.test/",
+      chipKey("Helius", "https://h.test/")
+    );
+  });
+
+  it("says how a deploy works on Devnet in the card's foot, with a green dot", () => {
+    render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
+    const foot = screen.getByText("Deploys with free devnet SOL");
+    expect(foot.querySelector(".bg-success")).toBeTruthy();
+    expect(
+      screen.getByRole("radiogroup", {
+        name: "Network",
+        description: "Deploys with free devnet SOL",
+      })
+    ).toBeTruthy();
+  });
+
+  it("has no foot for a saved custom RPC", () => {
+    render(
+      <BaseNetworkChoice
+        endpoint="https://h.test/"
+        custom={[{ name: "Helius", url: "https://h.test/" }]}
+        onPick={() => {}}
+      />
+    );
+    expect(screen.queryByText(/^Deploys with/)).toBeNull();
+    expect(
+      screen
+        .getByRole("radiogroup", { name: "Network" })
+        .getAttribute("aria-describedby")
+    ).toBeNull();
+  });
+
+  it("has no foot for an endpoint no chip lists", () => {
+    render(
+      <BaseNetworkChoice endpoint="https://unknown.test/" onPick={() => {}} />
+    );
+    expect(screen.queryByText(/^Deploys with/)).toBeNull();
+    expect(
+      screen
+        .getByRole("radiogroup", { name: "Network" })
+        .getAttribute("aria-describedby")
+    ).toBeNull();
+  });
+
+  it("puts what it is given between the chips and the foot", () => {
+    render(
+      <BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}}>
+        <p>middle</p>
+      </BaseNetworkChoice>
+    );
+    const group = screen.getByRole("radiogroup", { name: "Network" });
+    const middle = screen.getByText("middle");
+    const foot = screen.getByText("Deploys with free devnet SOL");
+    expect(
+      group.compareDocumentPosition(middle) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      middle.compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 });

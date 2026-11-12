@@ -1,6 +1,7 @@
 # client-v2-handoff Specification
 
 ## Purpose
+
 Lets a person on a phone take the project they are on to a computer: where
 the way out shows, what it tells them, and the link it hands over.
 

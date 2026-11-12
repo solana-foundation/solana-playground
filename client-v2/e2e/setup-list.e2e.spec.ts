@@ -10,7 +10,7 @@ import {
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
-import { DESK, PHONE } from "./viewports";
+import { DESK, openPhoneMenu, PHONE } from "./viewports";
 
 /**
  * The navigation's Get set up checklist. Every test stubs `/api/ai/status` with
@@ -75,7 +75,7 @@ test("client-v2-layout: Counting the steps", async ({ page }) => {
   // A user who comes back with the wallet still connected
   await page.reload();
   await expect(title(page)).toHaveText("Get set up· 2 of 4", LONG);
-  await expect(doneStep(page, "Choose a network")).toContainText("devnet");
+  await expect(doneStep(page, "Choose a network")).toContainText("Devnet");
   await expect(doneStep(page, "Connect a wallet")).toContainText(/\w{4}…\w{4}/);
   await expect(step(page, "Sign in with GitHub")).toBeVisible();
   await expect(step(page, "Connect the assistant")).toBeVisible();
@@ -84,7 +84,7 @@ test("client-v2-layout: Counting the steps", async ({ page }) => {
 test("client-v2-layout: The default network counts", async ({ page }) => {
   await seedWorkspace(page);
   await expect(title(page)).toHaveText("Get set up· 1 of 4", LONG);
-  await expect(doneStep(page, "Choose a network")).toContainText("devnet");
+  await expect(doneStep(page, "Choose a network")).toContainText("Devnet");
   await expect(step(page, "Choose a network")).toHaveCount(0);
 });
 
@@ -117,7 +117,7 @@ test("client-v2-layout: The checklist on a phone's menu page", async ({
   await page.setViewportSize(DESK);
   await seedWorkspace(page);
   await page.setViewportSize(PHONE);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await expect(title(page)).toHaveText("Get set up· 1 of 4");
   // Folded to its one line on a phone, as the prototype keeps it
   await expect(title(page)).toHaveAttribute("aria-expanded", "false");
@@ -126,7 +126,7 @@ test("client-v2-layout: The checklist on a phone's menu page", async ({
 
   // Unfolded by the user, it stays so
   await page.reload();
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await expect(title(page)).toHaveAttribute("aria-expanded", "true", LONG);
 });
 

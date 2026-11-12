@@ -1,6 +1,7 @@
 import type { Idl } from "@coral-xyz/anchor";
 import { decodeIdlAccount, idlAddress } from "@coral-xyz/anchor/dist/cjs/idl";
 
+import { type IdlReading, type IdlV1, readIdl } from "../entities/idl";
 import { createLogger } from "../shared/lib/logger";
 import { PgCodec } from "./codec";
 import { PgCommand } from "./command";
@@ -19,6 +20,7 @@ import type { Nullable } from "./types";
 import { PgWeb3 } from "./web3";
 
 const log = createLogger("program-info:storage");
+const fetchLog = createLogger("program-info:fetch");
 
 /** Program info state */
 type ProgramInfo = Nullable<{
@@ -28,8 +30,8 @@ type ProgramInfo = Nullable<{
   kp: PgWeb3.Keypair;
   /** Program's custom public key */
   customPk: PgWeb3.PublicKey;
-  /** Program's Anchor IDL */
-  idl: Idl;
+  /** Program's Anchor IDL, 0.29 or 1.x, as it arrived; read it through `readIdl` */
+  idl: Idl | IdlV1;
   /** Imported program binary file */
   importedProgram: {
     bytes: Uint8Array;
@@ -44,7 +46,7 @@ type SerializedProgramInfo = Nullable<{
   uuid: string;
   kp: Array<number>;
   customPk: string;
-  idl: Idl;
+  idl: Idl | IdlV1;
   lastBuildFailed: boolean;
 }>;
 
@@ -142,7 +144,13 @@ const derive = () => ({
 
   /** On-chain data of the program */
   onChain: createDerivable({
-    derive: () => _PgProgramInfo.fetch(),
+    // No id, nothing to fetch: `undefined` is "not known yet". `null` is any
+    // failed fetch, which Interact (`interactSurface`) shows as "can't reach
+    // the network", so it must not stand for a missing id
+    // (Typed by hand: inferring it through `PgProgramInfo.pk` would make the
+    // class's type depend on itself)
+    derive: (): ReturnType<typeof _PgProgramInfo.fetch> | undefined =>
+      PgProgramInfo.pk ? _PgProgramInfo.fetch() : undefined,
     onChange: ["pk", PgConnection.onDidChange, PgCommand.deploy.onDidFinish],
   }),
 });
@@ -154,6 +162,35 @@ const migrate = () => {
   localStorage.removeItem("programInfo");
 };
 
+/** The program data's header: tag (4), slot (8), authority option (1 + 32) */
+const PROGRAM_DATA_HEADER_LEN = 45;
+
+/**
+ * The program data's full length. The RPC reports it as `space` beside a
+ * sliced read; web3.js 1.98 keeps the field without typing it. Without it
+ * this reads the whole account, the slow path a large program pays, so the
+ * fallback is logged.
+ */
+const programDataLenWith =
+  (conn: typeof PgConnection.current) =>
+  async (
+    programDataPk: InstanceType<typeof PgWeb3.PublicKey>,
+    sliced: { data: Buffer }
+  ) => {
+    // A `space` below the slice is an RPC answering with the slice's length
+    if (
+      "space" in sliced &&
+      typeof sliced.space === "number" &&
+      sliced.space >= sliced.data.length
+    ) {
+      return sliced.space;
+    }
+    fetchLog.info("The RPC sent no `space`; reading the whole program data");
+    const whole = await conn.getAccountInfo(programDataPk);
+    // Closed between the two reads: no length, as for no account at all
+    return whole?.data.length;
+  };
+
 @initable({ onDidInit })
 @derivable(derive)
 @updatable({ defaultState, storage, migrate })
@@ -161,6 +198,31 @@ class _PgProgramInfo {
   /** Get the current program's pubkey as base58 string. */
   static getPkStr() {
     return PgProgramInfo.pk?.toBase58() ?? null;
+  }
+
+  /** How the stored IDL reads, or `null` when there is none */
+  static readIdl(): IdlReading | null {
+    // eslint-disable-next-line unicorn/no-null -- `null` for no IDL is what every caller and mock of `readIdl()` reads
+    return PgProgramInfo.idl ? readIdl(PgProgramInfo.idl) : null;
+  }
+
+  /**
+   * The IDL in the 0.29 shape the client calls a program with, or `null`
+   * when there is none or it was refused (`readIdl` says why).
+   */
+  static callableIdl(): Idl | null {
+    const reading = _PgProgramInfo.readIdl();
+    // eslint-disable-next-line unicorn/no-null -- `null` for no callable IDL is what every caller and mock of `callableIdl()` reads
+    return reading && reading.kind !== "refused" ? reading.idl : null;
+  }
+
+  /** Why `callableIdl()` is null, worded for the person who hit it */
+  static noCallableIdlMessage() {
+    const reading = _PgProgramInfo.readIdl();
+    if (reading?.kind === "refused") {
+      return `The program's IDL can't be called: ${reading.reason}.`;
+    }
+    return "IDL not found, build the program to create the IDL.";
   }
 
   /** Get the JSON.stringified IDL from state. */
@@ -196,7 +258,11 @@ class _PgProgramInfo {
 
     const programDataPkBuffer = programAccountInfo.data.slice(4);
     const programDataPk = new PgWeb3.PublicKey(programDataPkBuffer);
-    const programDataAccountInfo = await conn.getAccountInfo(programDataPk);
+    // Only the header is needed, and a large program's data runs to
+    // megabytes (Drift on devnet: 7 MB, 9.3 MB as base64)
+    const programDataAccountInfo = await conn.getAccountInfo(programDataPk, {
+      dataSlice: { offset: 0, length: PROGRAM_DATA_HEADER_LEN },
+    });
     if (!programDataAccountInfo) return { deployed, upgradable: true };
 
     // Check if program authority exists
@@ -204,14 +270,15 @@ class _PgProgramInfo {
     const upgradable = !!authorityExists;
     if (!upgradable) return { deployed, upgradable };
 
+    const programDataLen = await programDataLenWith(conn)(
+      programDataPk,
+      programDataAccountInfo
+    );
+    if (programDataLen === undefined) return { deployed, upgradable: true };
+
     const authorityBuffer = programDataAccountInfo.data.slice(13, 45);
     const authority = new PgWeb3.PublicKey(authorityBuffer);
-    return {
-      deployed,
-      upgradable,
-      authority,
-      programDataLen: programDataAccountInfo.data.length,
-    };
+    return { deployed, upgradable, authority, programDataLen };
   }
 
   /**
@@ -234,7 +301,8 @@ class _PgProgramInfo {
     const idlAccount = decodeIdlAccount(accountInfo.data.slice(8));
     const { inflate } = await import("pako");
     const inflatedIdl = inflate(idlAccount.data);
-    const idl: Idl = JSON.parse(PgCodec.decodeText(inflatedIdl));
+    // Either version; readers go through `readIdl`
+    const idl: Idl | IdlV1 = JSON.parse(PgCodec.decodeText(inflatedIdl));
     return { idl, authority: idlAccount.authority };
   }
 }

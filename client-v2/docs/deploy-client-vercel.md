@@ -6,7 +6,12 @@ Three things deploy `client-v2`:
 - **`preview.yml`** deploys a preview of a PR that carries the `preview` label, built on a GitHub runner, with a database of its own ([Preview databases](preview-databases.md), and [Neon preview databases](neon.md) while the Neon path remains). A ticket branch gets a preview this way or from a local `make` deploy.
 - **The `Makefile.vercel` targets** build wherever `make` runs, also with a database of its own per preview. They pin `client-v2` themselves, whatever the dashboard holds ([Which client gets deployed](#which-client-gets-deployed)).
 
+Every Makefile target acts on the Vercel project `VERCEL_DEPLOY_PROJECT_ID` names, and the targets listed in [One-time setup](#one-time-setup) step 5 refuse a checkout linked to any other project. The team keeps that variable on its staging project, so `make deploy-client-to-vercel-preview` delivers a build from a laptop there, separate from the production project the Git integration deploys. To migrate or deploy that production project from a laptop, set its ID for the run, as [Migrations](#migrations) shows. The root `Makefile` includes `client-v2/Makefile.vercel`, so every target runs from the repository root as `make <target>`, the same as `make -f client-v2/Makefile.vercel <target>`; `make help` lists them.
+
 ## Release checklist: `client-v2` to production
+
+The Foundation's production on Cloud SQL is set up by the [production runbook](production-runbook.md) instead; this
+checklist describes a project whose production database is on Neon.
 
 Production builds `client-v2` from `master`
 ([settings](#verified-vercel-project-settings)), so every push to `master` is a
@@ -40,6 +45,11 @@ never been run end to end as one pass ([Known gaps](#known-gaps)).
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `SENTRY_AUTH_TOKEN`: a production build fails without it
+     (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a
+     Sensitive variable as an empty value, which fails the same way, so a
+     production built locally needs it stored as a variable that is not
+     Sensitive.
    - `PG_AI_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
      `GITHUB_CLIENT_SECRET`, `DATABASE_URL`) and the [firewall](firewall.md)
      rules. `/api/agent` answers only signed-in users, and a production build
@@ -62,8 +72,11 @@ never been run end to end as one pass ([Known gaps](#known-gaps)).
    the preview Neon project, so the dry run runs on preview data. On the preview URL:
    `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in works, and a
    project edited in one browser shows up in a second.
-6. **Migrate production**, from the same checkout. The build serving production
-   keeps running until step 8, so the migration must work with that build too:
+6. **Migrate production**, from the same checkout, with the ID of the project
+   the Git integration deploys, not the staging project
+   `VERCEL_DEPLOY_PROJECT_ID` holds ([Migrations](#migrations) shows the link
+   and the variable). The build serving production keeps running until step 8,
+   so the migration must work with that build too:
 
    ```sh
    make -f client-v2/Makefile.vercel migrate-production-db
@@ -144,14 +157,33 @@ All three paths build `client-v2`, each from its own setting:
 2. Build Machine: Enhanced on Enterprise; default on Pro.
 3. Production Branch: `master`. Ignored Build Step: leave it; `vercel.json`'s `ignoreCommand` overrides it.
 4. A Vercel token, only if you need one — see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
-5. Link the local checkout (from repo root):
+5. Set `VERCEL_DEPLOY_PROJECT_ID` in `client-v2/.env` to the Project ID (`prj_…`) from the project's Settings → General. Two teams each have a project named `solana-playground`, so these targets stop unless `.vercel/project.json` links this project:
+   - `vercel-link-preview` and `vercel-link-production`, and the preview and full production deploys, which run them first: the project check, then the login check (`vercel whoami`, see [Tokens](#tokens)).
+   - `deploy-client-to-vercel-prod-fast` and `migrate-production-db`: the project check only.
+   - `preview-db-branch` and `migrate-preview-db` with `DB_PROVIDER=cloud-sql`: the project check only, because that path reads the link's Preview pull. With `DB_PROVIDER=url` they read `NEON_PROJECT_ID` and need no link.
+6. Set `VERCEL_DEPLOY_TEAM` in `client-v2/.env` to the slug or ID of the team that owns that project, for example `hoodies` (`vercel teams ls`, `id` column). Only linking reads it.
+
+   Either value can be given for one run instead, and wins over `client-v2/.env`; an empty value counts as unset:
 
    ```sh
-   VERCEL_PROJECT_ID=prj_xxx make -f client-v2/Makefile.vercel vercel-bootstrap
+   VERCEL_DEPLOY_PROJECT_ID=prj_xxx make vercel-link
+   make vercel-link VERCEL_DEPLOY_PROJECT_ID=prj_xxx
    ```
 
-   The root `Makefile` includes `client-v2/Makefile.vercel`, so a bare `make <target>` from the repo root runs the same targets, and `make help` lists them.
-6. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable); see [Neon preview databases](neon.md#configuration).
+7. Log in to the Vercel CLI with an account in that team (from repo root). The target runs the CLI version pinned as `VERCEL_CLI`; the session it stores serves every target that runs without `VERCEL_TOKEN`:
+
+   ```sh
+   make vercel-login
+   ```
+
+8. Link the local checkout (from repo root):
+
+   ```sh
+   make vercel-link
+   ```
+
+   No token is needed. The target runs `vercel link --yes --team "$VERCEL_DEPLOY_TEAM" --project "$VERCEL_DEPLOY_PROJECT_ID"` in a temporary directory under `.vercel/`. It accepts only a `prj_` ID, because a project name could make `vercel link --yes` create a project in the team. It copies only `orgId` and `projectId` into `.vercel/project.json`, and copies only `orgId` and `projectId` into `.vercel/project.json`, because `vercel link` also writes a `.env.local` with an OIDC token and edits `.gitignore` in the directory it links.
+9. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable); see [Neon preview databases](neon.md#configuration).
 
 Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://github.com/solana-playground/solana-playground/blob/cd5555155c61572c8c49fb351890519af9e493ef/.env.example#L3) environment variable or CORS will reject every request.
 
@@ -159,7 +191,7 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 
 - **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to `master-production` or to a `scope/*`, `integration/*` or `new-face-polish-<n>` branch deploys a preview (any other branch is skipped), reachable at its per-commit URL and at the branch's alias, both of which sign in ([Sign-in on previews](#sign-in-on-previews)).
 - **Local preview:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
-- **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending.
+- **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending. Like the fast deploy below, it deploys to the project `VERCEL_DEPLOY_PROJECT_ID` names; [Migrations](#migrations) shows how to name the Git-integration production project for one run.
 - **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real — not stubbed — `wasm/*/pkg` packages on disk. It deploys whatever is in the working tree, committed or not.
 
 `vercel-link-preview` or `vercel-link-production` runs automatically as a prerequisite of the preview and full production targets.
@@ -171,6 +203,10 @@ To pick up only changed **server-side** variables (anything `api/*.mjs` reads), 
 `deploy-client-to-vercel-preview` resolves this git branch's Neon branch first, before building, and passes it as `-e DATABASE_URL=<pooled url>` so the deployment overrides the project-level variable. Resolving first is deliberate: a Neon failure should not cost a full wasm build.
 
 `--archive=tgz` is not optional. The prebuilt output is about 16k files and the upload API rejects more than 15000 (`files should NOT have more than 15000 items`), so the tree goes up as a single tarball.
+
+### Smoke test after a push to `master`
+
+The `smoke` job of `client-v2.yml` runs on every push to `master` in `solana-foundation/solana-playground` and fails unless that commit's production deployment answers `{"enabled":true,"db":"ok"}` on `GET /api/sync`, so a database production cannot reach is a red run, not users staying local unnoticed. It reads the commit's `Production` deployment from the GitHub deployments API, where the Vercel GitHub app records it (no Vercel token), waits up to 30 minutes for a `success` status, and probes that deployment's own URL with `scripts/smoke-sync.mjs <url>`, which you can run by hand against any URL (set `SMOKE_BYPASS_SECRET` for a protected one). A failed probe names the URL and the body in the log and the run summary; a failed or timed-out deployment names the commit and Vercel's log URL. The deployment's URL is behind Deployment Protection, so the job sends Vercel's Protection Bypass for Automation secret from the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`; without it the job passes with a warning and a summary entry saying production was not checked.
 
 ## Build cache
 
@@ -208,6 +244,33 @@ So `scripts/vercel-install.sh` installs each version itself, into `.cache/rust/w
 
 The version comes from the lockfile, the file wasm-pack reads, after `cargo metadata --locked` has accepted it, so a bump without `cargo update` stops the build before wasm-pack asks for a version the script did not install. To bump: change the two manifests, then `cargo update -p wasm-bindgen` in `wasm/` and in `wasm/rust-analyzer/`.
 
+## Public variables
+
+Every `REACT_APP_*` variable a build sees is public: every visitor can read it in the bundle. CRA defines `process.env` as one object holding all of them, and third-party code that reads `process.env.<anything>` makes webpack inline that object, values and all, whether or not our code reads the variable. Set no other `REACT_APP_*` in any environment. The client reads only these, all in `src/shared/config/client-env.ts`:
+
+| Variable | Holds |
+| --- | --- |
+| `REACT_APP_SERVER_URL`, `REACT_APP_SERVER_UNSTABLE` | the build server, and whether to use its `/unstable` routes |
+| `REACT_APP_{DEVNET,TESTNET,MAINNET}_RPC_URL` | the platform RPC endpoints |
+| `REACT_APP_{DEVNET,TESTNET,MAINNET}_READ_BUFFER_RPC_URL` | the RPC a deploy reads its program buffer through |
+| `REACT_APP_{DEVNET,TESTNET,MAINNET}_SEND_TX_PER_SECOND` | a deploy's buffer writes per second |
+| `REACT_APP_SENTRY_DSN` | Sentry's DSN, which is public by design; never an auth token |
+| `REACT_APP_GA_MEASUREMENT_ID` | the GA4 id |
+| `REACT_APP_LOG_LEVEL` | the console log level |
+| `REACT_APP_VERCEL_GIT_COMMIT_SHA`, `REACT_APP_VERCEL_ENV` | set by `scripts/vercel-build.sh`, which also unsets `REACT_APP_VERCEL_OBSERVABILITY_CLIENT_CONFIG`, added by Vercel for `@vercel/analytics` and `@vercel/speed-insights`, which the client does not install; never set them in the project |
+
+Every other variable stays on the server, read by `api/*.mjs` through `src/shared/config/server-env.mjs` and the build scripts; mark each credential among them **Sensitive** in Vercel.
+
+Two checks in `scripts/public-env.mjs` cover both sides:
+
+- **Before webpack runs**, in every production `craco build` (`build-fast` included), `craco.config.js` fails the build on a `REACT_APP_*` the client does not read, whatever its letter case (CRA matches the prefix that way), and on a public value that:
+  - is outside its variable's shape in `VALUE_SHAPES`: a log level, a GA4 id, a number, a sha, a Sentry DSN that is an `https` URL with a public key and no legacy secret key. A name the client reads without an entry there fails too, so a new public variable states what it may hold.
+  - is a URL with a user or password before the host, or with a query term, path segment or fragment that `src/shared/lib/url-secret.mjs` reads as a key, the same code the custom RPC list masks by. The query is judged as written, not decoded. Host labels are left out: a keyless provider hostname can hold a long label with a digit.
+  - starts like a token (`sk-`, `sntrys_`, `ghp_`, `postgres://`, …), or equals a secret variable's value.
+- **After `craco build`**, in `build:bundle`, which every deployment runs, before the source maps go to Sentry: `node scripts/public-env.mjs check-build build` fails when any file in `build/` holds the value of a secret variable, as written or escaped inside a double- or single-quoted string literal. A secret variable is one whose name `isSecretName` matches, in any letter case (it contains `SECRET`, `TOKEN`, `PASSWORD`, `PASSWD`, `CREDENTIAL`, `PRIVATE` or `BYPASS`, is `KEY` or ends in `_KEY`, or starts with `DATABASE_URL`), or one whose value is a URL with a password, such as `POSTGRES_URL`. It reads the process environment and the `.env` files CRA reads, parsed both by `util.parseEnv` and by CRA's dotenv with dotenv-expand. A local `vercel build` sees a Sensitive variable as empty and cannot look for its value; only the build on Vercel can.
+
+Both name variables, never their values. An RPC key the provider restricts to the production origin may be published: list its variable in `PUBLIC_ENV_RESTRICTED_KEYS` (comma-separated; a build-time variable, not `REACT_APP_*`) to skip the key checks of that URL. Credentials before the host still fail, and `check-build` still fails when a secret variable holds the same key. Do that only once the restriction is confirmed in the provider's dashboard; a key that was ever deployed unrestricted is published, so rotate it.
+
 ## Tokens
 
 `Makefile.vercel` passes `--token` only when `VERCEL_TOKEN` is set. Unset, the
@@ -216,10 +279,9 @@ CLI uses the session from `vercel login`, so local deploys need no token at all.
 The targets that link first (`vercel-link-preview`, `vercel-link-production`,
 and the preview and full production deploys) run `vercel whoami` with the same
 credentials, and stop with the fix when they are rejected. Run
-`make -f client-v2/Makefile.vercel vercel-auth` to run only that check.
-
-`vercel-bootstrap` is the exception to both: it calls the REST API with `curl`,
-and a raw HTTP request has no stored login to fall back on.
+`make -f client-v2/Makefile.vercel vercel-auth` to run only that check; it needs
+no link, so it works before `vercel-link`.
+`vercel-link` prints the same fix when `vercel link` fails.
 
 **A project-scoped token cannot drive the CLI.**
 Choosing a single project in Account Settings → Tokens creates a
@@ -231,12 +293,12 @@ CLI calls `/v2/user` and `/v3/user/tokens/current` on startup and lists
 Error: Could not retrieve Project Settings. To link your Project, remove the `.vercel` directory and deploy again.
 ```
 
-The `.vercel` directory is fine. When the same token works for
-`vercel-bootstrap` (`/v9/projects/<id>` is a project-level call) and the CLI
-fails, the token's scope is the cause. An All Projects token is team-scoped
-and works, at the cost of org-wide CLI access. Vercel's documented
-`--project` flag answers `projectId is not supported (400)`; project-scoped
-CLI support has been an open request since July 2025.
+The `.vercel` directory is fine. When the same token works for a raw `curl`
+of `/v9/projects/<id>` (a project-level call) and the CLI fails, the token's
+scope is the cause. An All Projects token is team-scoped and works, at the
+cost of org-wide CLI access. Vercel's documented `--project` flag answers
+`projectId is not supported (400)`; project-scoped CLI support has been an
+open request since July 2025.
 
 In CI, only `preview.yml` needs a Vercel token: it deploys from a GitHub
 runner with the `VERCEL_TOKEN` secret. The Git integration builds on Vercel
@@ -319,27 +381,83 @@ and the request rate per client is capped by the [firewall](firewall.md) rules.
 
 ### Default backend spend
 
-The upstream is Vercel AI Gateway (HOO-1751, OpenSpec change
-`default-backend-cost-gate`). Three limits stack:
+The upstream is Nous Research, the `PG_AI_BASE_URL` default, paid from the
+client's prepaid Nous credits (HOO-1751, OpenSpec change
+`default-backend-cost-gate`). Vercel AI Gateway is the documented fallback,
+for when those credits are used up ([Fallback: Vercel AI
+Gateway](#fallback-vercel-ai-gateway)). Three limits stack:
 
-- **The Gateway's budgets, the ceiling.** Each tier spends through its own
-  Gateway API key with a daily budget, and the team has a monthly budget above
-  both. They are set in the Gateway dashboard, outside our code, so they hold
-  even when the ledger below is wrong. A budget is soft: the request that
-  crosses it completes, at most one worst-case turn (about $0.023).
+- **The keys' spend limits, the ceiling.** Each tier spends through its own
+  Nous key, each with a daily and a monthly spend limit set in the Nous
+  dashboard, outside our code, so they hold even when the ledger below is
+  wrong. Past its limit a key is refused with `402`
+  `key_spend_limit_reached`. The daily limit is a rolling window that starts
+  with the key's first request, not a fixed hour. The prepaid balance, with
+  no auto top-up, bounds everything beyond the keys.
 - **A per-user daily cap, by tier.** A signed-in user is `newcomer` while their
   GitHub account is younger than `PG_AI_NEWCOMER_AGE_DAYS`, or its creation
   date is not stored yet, and `established` after. `/api/agent` keeps a ledger
   in Postgres (`agent_spend`): a turn reserves its worst-case cost before the
-  upstream call and settles to the reported usage once the response has ended.
+  upstream call and settles to what it cost once the response has ended.
   The date is stored at sign-in, or looked up from GitHub after the user's
-  first turn when sign-in did not store it.
+  first turn when sign-in did not store it. The cap resets at 00:00 UTC.
 - **Bounds on one request.** A body over `PG_AI_MAX_BODY_BYTES` is refused, and
   every upstream request carries `max_completion_tokens`, so a turn's worst case is known
-  before the call. Every request also restricts the Gateway to
-  `PG_AI_PROVIDERS`.
+  before the call.
 
-Every day boundary is 00:00 UTC, where the Gateway's daily budgets reset too.
+The model id `z-ai/glm-5.3-flash:US` is Nous's Fireworks-hosted US SKU, so
+turns stay in the US with no routing field.
+
+**Nous setup, once, by a person** (no agent handles the keys):
+
+1. Create two keys in the Nous dashboard, `established` and `newcomer`, each
+   with a daily and a monthly spend limit: `newcomer` $10 a day and $250 a
+   month, `established` $50 a day and $1,250 a month. The $1,500 monthly
+   total needs sign-off before it is set.
+2. Name the person who tops up the prepaid balance. There is no auto top-up:
+   an empty balance refuses every turn with `pool-exhausted` until credits are
+   added, and `/api/agent` reports it to Sentry as the `api:agent` error
+   `upstream credit balance is empty`. Nous has no API for the balance or a
+   key's limit; read both in the dashboard.
+3. Set the variables below in Vercel, for Production and Preview.
+   `PG_AI_BASE_URL` and `PG_AI_MODEL` stay unset, on the Nous defaults.
+
+| Variable | Value on Nous |
+| --- | --- |
+| `PG_AI_API_KEY` | The `established` key. Secret |
+| `PG_AI_NEWCOMER_API_KEY` | The `newcomer` key. Secret. Optional: without it newcomers spend through `PG_AI_API_KEY`, still held to the newcomer cap, and the pools are shared |
+
+The limits are optional and default to the starting values in the change's
+`design.md`; each is read by `agentEnv` (`src/shared/config/server-env.mjs`):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `PG_AI_PROVIDERS` | `baseten,fireworks` when `PG_AI_BASE_URL` is the Gateway, none otherwise | Gateway provider slugs a turn may be served by: the US-region endpoints for the model with zero data retention and no training. Any other upstream refuses the field (Nous: `400 unknown_parameter`), so it gets none by default. Set but empty, it sends no restriction even to the Gateway. Check `/v1/models/<model>/endpoints` before changing it |
+| `PG_AI_PRICE_INPUT` / `PG_AI_PRICE_OUTPUT` | `0.2475` / `0.825` | USD per million tokens, Nous's price for the default model. These prices size the reservation and set the floor of the charge: a turn is charged the larger of the `usage.cost` the upstream reports and its tokens at these prices. Above the Gateway's list price ($0.15 / $0.50), so on the fallback they overcharge, never under, even where the Gateway reports `cost: 0` |
+| `PG_AI_MAX_BODY_BYTES` | `524288` | A larger body is refused with `413` |
+| `PG_AI_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_completion_tokens` |
+| `PG_AI_NEWCOMER_AGE_DAYS` | `30` | Younger GitHub accounts are `newcomer` |
+| `PG_AI_NEWCOMER_DAILY_CAP` | `0.10` | USD per user per UTC day |
+| `PG_AI_ESTABLISHED_DAILY_CAP` | `0.50` | USD per user per UTC day |
+
+A malformed number falls back to its default and logs `server-env: ...`.
+
+**Order.** The change adds a migration (`agent_spend` and
+`"user"."githubCreatedAt"`): run `migrate-production-db` first, then merge to
+`master` ([Conversation and project sync](#conversation-and-project-sync)).
+The keys and the merge can come in either order: without
+`PG_AI_NEWCOMER_API_KEY`, newcomers spend through `PG_AI_API_KEY`, and the
+ledger and caps apply already.
+
+#### Fallback: Vercel AI Gateway
+
+The Gateway is a change of variables, with no code. Its budgets play the part
+of the Nous key limits: a daily budget per key under a team monthly budget,
+refusing with `402` `quota_for_entity_exceeded`, and an empty balance with
+`402` `insufficient_funds`; `/api/agent` treats both as it treats the Nous
+codes. A budget is soft: the request that crosses it completes, at most one
+worst-case turn. Every request to the Gateway is restricted to
+`PG_AI_PROVIDERS`.
 
 **Gateway setup, once, by a person** (no agent handles the keys):
 
@@ -367,31 +485,8 @@ Every day boundary is 00:00 UTC, where the Gateway's daily budgets reset too.
 | `PG_AI_API_KEY` | The `established` key. Secret |
 | `PG_AI_NEWCOMER_API_KEY` | The `newcomer` key. Secret. Optional: without it newcomers spend through `PG_AI_API_KEY`, still held to the newcomer cap, and the pools are shared |
 
-The limits are optional and default to the starting values in the change's
-`design.md`; each is read by `agentEnv` (`src/shared/config/server-env.mjs`):
-
-| Variable | Default | Meaning |
-| --- | --- | --- |
-| `PG_AI_PROVIDERS` | `baseten,fireworks` when `PG_AI_BASE_URL` is the Gateway, none otherwise | Gateway provider slugs a turn may be served by: the US-region endpoints for the model with zero data retention and no training. Any other upstream refuses the field (Nous: `400 unknown_parameter`), so it gets none by default. Set but empty, it sends no restriction even to the Gateway. Check `/v1/models/<model>/endpoints` before changing it |
-| `PG_AI_PRICE_INPUT` / `PG_AI_PRICE_OUTPUT` | `0.15` / `0.50` | USD per million tokens, the Gateway's list price. The ledger charges reported usage at these prices: the cost in the Gateway's streamed usage is undocumented, so it is not used |
-| `PG_AI_MAX_BODY_BYTES` | `524288` | A larger body is refused with `413` |
-| `PG_AI_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_completion_tokens` |
-| `PG_AI_NEWCOMER_AGE_DAYS` | `30` | Younger GitHub accounts are `newcomer` |
-| `PG_AI_NEWCOMER_DAILY_CAP` | `0.10` | USD per user per UTC day |
-| `PG_AI_ESTABLISHED_DAILY_CAP` | `0.50` | USD per user per UTC day |
-
-A malformed number falls back to its default and logs `server-env: ...`.
-
-**Order.** The change adds a migration (`agent_spend` and
-`"user"."githubCreatedAt"`): run `migrate-production-db` first, then merge to
-`master` ([Conversation and project sync](#conversation-and-project-sync)). The
-merge alone moves nothing: with `PG_AI_BASE_URL` unset, turns still go to the
-Nous Research default, with no provider restriction, and the ledger and caps
-apply to them already.
-
-**The switch** to the Gateway is a change of variables, not of code, and can
-come before or after the merge. In Vercel, for Production (and Preview, to try
-it there first):
+**The switch** to the Gateway is a change of variables, not of code. In
+Vercel, for Production (and Preview, to try it there first):
 
 1. **Set** `PG_AI_BASE_URL` to `https://ai-gateway.vercel.sh/v1` and
    `PG_AI_MODEL` to `zai/glm-5.3-flash`. Setting the base URL is the switch:
@@ -403,19 +498,18 @@ it there first):
    refused the default backend`), so change the base URL and the key together.
 3. Redeploy: a function reads its variables when the deployment is built.
 
-A day after production traffic moves to the Gateway, revoke the Nous Research
-key, so nothing can spend outside the budgets.
+A day after production traffic moves to the Gateway, revoke the Nous keys, so
+nothing can spend outside the budgets.
 
-**Rollback**, before the Nous key is revoked (on a project that still sets any
-`AGENT_*` twin, change or delete it alongside: an unset `PG_AI_*` falls back to
-it): restore the previous
-`PG_AI_API_KEY`, unset `PG_AI_NEWCOMER_API_KEY` (left set, newcomers' turns
-send its Gateway key to Nous and get `502`), and unset `PG_AI_BASE_URL` and
-`PG_AI_MODEL` (or set them back to the Nous values), then redeploy. Unset,
-`PG_AI_PROVIDERS` follows the base URL and sends no restriction to Nous; if it
-was set by hand, unset it too, since Nous refuses the restriction. The ledger works against any
-upstream that reports usage on the stream. After the Nous key is revoked, a
-rollback needs a new one.
+**Back to Nous**, before the Nous keys are revoked (on a project that still
+sets any `AGENT_*` twin, change or delete it alongside: an unset `PG_AI_*`
+falls back to it): restore the Nous `PG_AI_API_KEY` and
+`PG_AI_NEWCOMER_API_KEY` (a Gateway key sent to Nous gets `502`), and unset
+`PG_AI_BASE_URL` and `PG_AI_MODEL`, then redeploy. Unset, `PG_AI_PROVIDERS`
+follows the base URL and sends no restriction to Nous; if it was set by hand,
+unset it too, since Nous refuses the restriction. The ledger works against any
+upstream that reports usage on the stream. After the Nous keys are revoked,
+going back needs new ones.
 
 What `POST /api/agent` answers past sign-in:
 
@@ -423,42 +517,61 @@ What `POST /api/agent` answers past sign-in:
 | --- | --- |
 | `413` | The body is larger than `PG_AI_MAX_BODY_BYTES`. No charge |
 | `429`, `reason: "daily-cap"` | The turn's worst case would pass the user's cap today. Carries `tier` and `Retry-After` (seconds to 00:00 UTC). The upstream is not called |
-| `503`, `reason: "pool-exhausted"` | The Gateway answered `402` `quota_for_entity_exceeded` (the tier's key or the team is out of budget) or `insufficient_funds`. Carries `tier` and `Retry-After`; logged as `agent: tier pool exhausted`. No charge |
-| `503`, no `reason` | The ledger could not be read; logged as `agent: spend ledger unavailable`. The upstream is not called |
+| `503`, `reason: "pool-exhausted"` | The upstream answered `402`, whatever its code. Carries `tier`, and the upstream's `Retry-After` when it sent one (a key's daily window is the upstream's to know). No charge. Logged by cause: `key_spend_limit_reached` (Gateway: `quota_for_entity_exceeded`) as the `api:agent` warning `tier key limit reached`; `insufficient_credits_for_paid_model` (Gateway: `insufficient_funds`) reported to Sentry as `upstream credit balance is empty`, which needs a person to add credits; any other `402` reported as `upstream 402 with an unknown cause`, with its body |
+| `503`, no `reason` | The ledger could not be read; reported to Sentry as an `api:agent` error with the database's message and `code`. The upstream is not called |
 
-A turn is charged its reported usage; a turn the caller abandoned, or one that
+A turn is charged the larger of the `usage.cost` the upstream reported and
+its tokens at the prices, or the one of the two its usage allows; a turn the caller abandoned, or one that
 ended without usage, its whole reservation; a turn the upstream refused,
 nothing. A function that dies between reserve and settle leaves the
-reservation spent for the day: the ledger may overcharge, never undercharge.
-Failures after the answer are logged as `agent: settling a turn failed`,
-`agent: counting a capped turn failed` and `agent: account age lookup failed`.
+reservation spent for the day and its `agent_turn` row `started`: the ledger
+may overcharge, never undercharge. Failures after the answer are reported as
+`api:agent` errors with the database's message (counting a capped turn, with
+its `tier` and `day`) and, for the account age, as the `agent:account-age`
+warning `account age not learned` or an error with the database's message;
+a settle that fails is reported as an `api:agent` error with the database's
+message, carrying the turn's `turnId`, `end`, `reserved` and `charge`. A
+settle that finds no
+`started` row for its turn is reported as the `api:agent` warning `settle
+found no started turn`, with the `userId`: harmless when that user was deleted
+mid-turn, a lost charge record otherwise.
 
 **After a week**, read:
 
 - `agent_refused` in analytics, by `reason` and `tier`: how often each tier
   reaches its cap (`daily-cap`) or its pool (`pool-exhausted`). Frequent
-  `pool-exhausted` for `established` means the key's daily budget is too low
+  `pool-exhausted` for `established` means the key's daily limit is too low
   for the users it serves; frequent `daily-cap` with little `pool-exhausted`
   means the per-user cap binds first.
-- The Gateway's logs and spend, per key: the actual cost per turn, which
-  replaces the design's estimate of a typical step, and how close each key
-  comes to its daily budget.
+- The Nous dashboard's spend per key and the balance: how close each key comes
+  to its limits, and how long the balance lasts. `agent_turn.charged` holds
+  each completed turn's charge, its reported cost unless the tokens at the
+  prices came to more, which replaces the design's estimate of a typical
+  step.
 - `agent_spend` for the spread: `select day, count(*), sum(spent) / 1e6 as usd
   from agent_spend group by day order by day desc`.
 
 - `agent_turn` for usage per account in any window (HOO-2396): one row per
-  admitted turn, with its reserve `day`, its settle time `at`, tier, outcome,
-  reported tokens and charge, for example `select user_id,
-  date_trunc('hour', at) as hour, count(*), sum(prompt_tokens),
-  sum(completion_tokens), sum(charged) / 1e6 as usd from agent_turn group by
-  1, 2 order by 2 desc`. Grouped by `day`, `charged` sums to
-  `agent_spend.spent`, short of any turn whose settle failed. Turns the cap
-  refused are counted in `agent_spend.capped`, not logged. The migration that
-  adds both runs before the code that writes them merges: until then every
-  settle fails and leaves its reservation spent.
+  admitted turn, written when it is reserved, with its reserve `day`, its
+  reserve time `at`, its settle time `settled_at`, tier, the `model` the route
+  asked the upstream for (`PG_AI_MODEL` or its default), outcome, reported
+  tokens and charge, for example `select
+  user_id, model, date_trunc('hour', at) as hour, count(*),
+  sum(prompt_tokens), sum(completion_tokens), sum(charged) / 1e6 as usd from
+  agent_turn group by 1, 2, 3 order by 3 desc`. A row still `started` long
+  after the function's `maxDuration` is a turn that never settled, killed or
+  with a failed settle; it is charged its reservation. `settled_at - at` is a
+  turn's duration (rows from before the `model` column have `at` equal to
+  `settled_at`). Grouped by `day`, on a day after the `model` migration has
+  deployed, `charged` sums to `agent_spend.spent` plus `agent_spend.reserved`.
+  Turns the cap refused are counted in `agent_spend.capped`, not logged. The
+  migrations that add both run before the code that writes them merges: until
+  then every reserve fails and the route answers 503. The code deployed
+  before the `model` migration keeps settling after it, as rows with no
+  `model`.
 
-Adjust the caps and budgets together: the sum of per-user caps a pool serves
-can exceed its budget, but the budget is what binds.
+Adjust the caps and key limits together: the sum of per-user caps a pool
+serves can exceed its key's limit, but the limit is what binds.
 
 **Rotating the keys.** `PG_AI_API_KEY` and `PG_AI_NEWCOMER_API_KEY` live only
 in Vercel's encrypted variables and are read only by server code, through
@@ -468,12 +581,13 @@ every run of eight or more of their characters from the error text it relays
 or logs (the upstream's own successful stream is forwarded as it comes). To rotate one, or
 after a suspected leak:
 
-1. Create a new key in the Gateway with the same daily budget as the old one.
+1. Create a new key at the upstream (the Nous dashboard, or the Gateway on the
+   fallback) with the same spend limits as the old one.
 2. Set it in Vercel for Production and Preview, replacing the old value.
-3. Redeploy, and send one turn as a signed-in user: the Gateway logs it under
-   the new key.
-4. Revoke the old key in the Gateway. After a leak, do this first and accept
-   the minutes of `502` until the redeploy is live.
+3. Redeploy, and send one turn as a signed-in user: the upstream's dashboard
+   shows its spend under the new key.
+4. Revoke the old key. After a leak, do this first and accept the minutes of
+   `502` until the redeploy is live.
 
 ## Sources catalogue
 
@@ -566,6 +680,21 @@ included. A `context` passed with `report: true` reaches Sentry as the event's
 an event because they are only ever sent outbound, from the function's
 environment.
 
+**A project write is at most 1 MiB of request body**
+(`MAX_PROJECT_BODY_BYTES` in `src/features/persistence/model/project-write.mjs`).
+It is twice the 512 KiB project limit (`PROJECT_LIMITS` in
+`src/entities/project`), and below Vercel's own cap: Vercel refuses a Function
+request body over 4.5 MB with its own `413`
+([Functions limits](https://vercel.com/docs/functions/limitations)) on every
+plan, before the handler runs. The project limits refuse a project first and
+the banner names the limit; a body over the cap with every limit met (content
+JSON escapes heavily) is refused by the browser before sending and by
+`PUT /api/projects` again, both as `too-large`, with the banner's "This
+project is over 1 MiB. Remove or shrink its largest files, then try again."
+The user never sees the platform's error.
+
+### Migrations
+
 **Migrations are never applied by a function.** A preview from `preview.yml` or
 the Makefile gets its own Neon branch, so its schema is its own problem. A
 Git-triggered preview runs on the Preview-scoped `DATABASE_URL`, which nothing
@@ -593,7 +722,29 @@ It pulls the **Production** environment's `DATABASE_URL_UNPOOLED` into
 pull: that one resolves for the checked-out git branch, so it can name a
 preview branch's database. Once it did: run from an integration branch, the target
 checked that branch's Neon branch and reported nothing pending while
-production's `main` had no schema at all. The target prints the host first,
+production's `main` had no schema at all.
+
+It refuses to run unless the linked project is the one
+`VERCEL_DEPLOY_PROJECT_ID` names ([One-time setup](#one-time-setup)).
+The team keeps that variable on its staging project, so the production
+database the Git integration deploys against is migrated only with that
+project's ID set for the run, and the checkout linked to it. Linking also needs
+the team that owns that project, which is not the staging team:
+
+```sh
+VERCEL_DEPLOY_TEAM=<production team> VERCEL_DEPLOY_PROJECT_ID=prj_… make vercel-link
+VERCEL_DEPLOY_PROJECT_ID=prj_… make migrate-production-db
+make vercel-link
+```
+
+Skip the first `vercel-link` when `.vercel/project.json` already links that
+project. Only linking reads the team, so the migration takes the project ID
+alone. The last one links the staging project back, since the targets in
+[One-time setup](#one-time-setup) step 5 refuse a link to another project.
+`deploy-client-to-vercel-production`, `deploy-client-to-vercel-prod-fast`,
+and `vercel-link-production` take the production project's ID the same way.
+
+`migrate-production-db` prints the host first,
 then the pending migrations, then asks for a typed `yes`. With nothing
 pending it does not ask, so the prompt never becomes something to click
 through.
@@ -709,5 +860,4 @@ database behind it, use the per-commit URL `preview.yml` posts on the PR.
 
 ## Endpoint routing
 
-- All non-share routes → the hardcoded Solana Foundation server URL in `client-v2/src/settings/server/server.ts` (also user-overridable via the `server.endpoint` setting), so forks can point at their own backend.
-- Share routes (`/share/*`, `/new`) → hardcoded `https://api.solpg.io` so shared snippets stay discoverable across hosts.
+- Every server route → the hardcoded Solana Foundation server URL in `client-v2/src/settings/server/server.ts` (also user-overridable via the `server.endpoint` setting), so forks can point at their own backend.

@@ -26,6 +26,8 @@ const warnAboutMissingObservabilityIds = () => {
   }
 };
 
+const { assertPublicEnv } = require("./scripts/public-env.mjs");
+
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const { insertGoogleTag } = require("./scripts/google-tag.mjs");
 
@@ -184,6 +186,10 @@ module.exports = {
       // Here, not at the top: CRA's `config/env.js` has loaded `.env` by now
       warnAboutMissingObservabilityIds();
 
+      // Here, not at the top: CRA has loaded the `.env` files by now, and
+      // inlines every REACT_APP_* it found into the bundle
+      if (env === "production") assertPublicEnv(process.env);
+
       // `test-types` and `lint` run in CI and in `check`; in a production
       // build these plugins only add memory under Vercel's 8 GB limit
       if (env === "production") {
@@ -271,6 +277,11 @@ module.exports = {
         path: false,
         zlib: false,
         vm: false, // parse-asn1's asn1.js 4 requires `vm` in a try/catch: unresolved it warns, stubbed it falls back
+
+        // ConnectorKit imports WalletConnect lazily, only when it is
+        // configured, and the app does not configure it
+        // (`entities/external-wallet`); the peer is not installed
+        "@walletconnect/universal-provider": false,
       };
 
       // Webpack treats `node:` as a URI scheme and rejects it before
@@ -439,7 +450,24 @@ module.exports = {
                 if (thumbnailFileName)
                   acc[tutorialName].thumbnail = thumbnailFileName;
 
-                // Page count
+                // Page count: a conversation tutorial has no pages, its
+                // steps are in its definition
+                const definitionFile = path.join(
+                  "src",
+                  "tutorials",
+                  tutorialName,
+                  "tutorial.json"
+                );
+                if (fs.existsSync(definitionFile)) {
+                  const steps = JSON.parse(
+                    fs.readFileSync(definitionFile, "utf8")
+                  ).steps;
+                  if (!Array.isArray(steps)) {
+                    throw new Error(`${definitionFile} has no steps`);
+                  }
+                  acc[tutorialName].pageCount = steps.length;
+                  return acc;
+                }
                 const pagesDirs = [
                   path.join(tutorialDir, "pages"),
                   path.join("src", "tutorials", tutorialName, "pages"),
@@ -515,17 +543,48 @@ module.exports = {
 
     // Serve `api/*.mjs` from the dev server itself, so local API work needs
     // neither `vercel dev` (which wants a login and team access) nor a second
-    // process. Wrapping CRA's hook rather than using `setupMiddlewares`:
-    // webpack-dev-server 4 throws if both are set, and CRA sets this one.
+    // process. Wrapping CRA's hook, which `toDevServer5` then translates.
     const onBefore = devServerConfig.onBeforeSetupMiddleware;
     devServerConfig.onBeforeSetupMiddleware = (devServer) => {
       onBefore?.(devServer);
       devServer.app.use("/api", serveApiRoute);
     };
 
-    return devServerConfig;
+    return toDevServer5(devServerConfig);
   },
 };
+
+/**
+ * CRA 5's webpack-dev-server 4 options, as the webpack-dev-server 5 the
+ * resolutions install accepts them (its schema rejects the 4-only keys).
+ */
+const toDevServer5 = ({
+  onBeforeSetupMiddleware,
+  onAfterSetupMiddleware,
+  https,
+  ...config
+}) => ({
+  ...config,
+  // 5 also overlays runtime errors, over the page, by default; CRA's 4.8 did not
+  client: {
+    ...config.client,
+    overlay: { ...config.client?.overlay, runtimeErrors: false },
+  },
+  server: https
+    ? { type: "https", options: https === true ? {} : https }
+    : "http",
+  setupMiddlewares: (middlewares, devServer) => {
+    // react-scripts' start.js stops the server with `close()`, which 5 renamed `stop()`
+    devServer.close = () => devServer.stop();
+    // `app.use` here runs before the built-in middlewares, as the 4 hook did
+    onBeforeSetupMiddleware?.(devServer);
+    // The 4 hook ran after them: its `app.use` calls join the end of the list
+    onAfterSetupMiddleware?.({
+      app: { use: (middleware) => middlewares.push(middleware) },
+    });
+    return middlewares;
+  },
+});
 
 /** Real asset-repo dates captured by `make update-static`; see that script */
 const TUTORIAL_TIMESTAMPS = (() => {

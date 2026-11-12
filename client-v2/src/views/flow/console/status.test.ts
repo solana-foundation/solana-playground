@@ -36,7 +36,9 @@ const DEFAULT_STATE: FlowState = {
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  airdrops: 0,
   hasProgram: true,
+  sourceChanged: false,
 };
 
 const state = (overrides: Partial<FlowState>): FlowState => ({
@@ -91,6 +93,28 @@ describe("describeConsoleStatus", () => {
     expect(
       describeConsoleStatus(state({ build: "done", deploy: "running" }))
     ).toEqual({ text: "Deploying…", tone: "running" });
+  });
+
+  it("shows airdropping while an airdrop runs, counting its seconds", () => {
+    expect(
+      describeConsoleStatus(state({ build: "done", airdrops: 1 }), 3_000)
+    ).toEqual({ text: "Airdropping… \u00b7 3 s", tone: "running" });
+  });
+
+  it("names the deploy while a deploy's own airdrop runs", () => {
+    expect(
+      describeConsoleStatus(
+        state({ build: "done", deploy: "running", airdrops: 1 })
+      )
+    ).toEqual({ text: "Deploying…", tone: "running" });
+  });
+
+  it("goes back to the last result once the airdrop is over", () => {
+    expect(
+      describeConsoleStatus(
+        state({ build: "done", buildMs: 3400, airdrops: 0 })
+      )
+    ).toEqual({ text: "Built in 3.4 s", tone: "success" });
   });
 
   it("shows the last build's time and result once it finishes", () => {
@@ -172,9 +196,13 @@ describe("runToStop", () => {
     expect(runToStop(state({ build: "running" }))).toBe("build");
   });
 
-  it("is the deploy while one runs", () => {
-    expect(runToStop(state({ build: "done", deploy: "running" }))).toBe(
-      "deploy"
+  it("is nothing while a deploy runs", () => {
+    expect(runToStop(state({ build: "done", deploy: "running" }))).toBeNull();
+  });
+
+  it("is the build while a deploy builds first", () => {
+    expect(runToStop(state({ build: "running", deploy: "running" }))).toBe(
+      "build"
     );
   });
 });

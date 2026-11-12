@@ -1,130 +1,163 @@
-import type { PlatformEndpoint } from "../connection";
-import {
-  buildPlatformEndpoints,
-  Endpoint,
-  resolveDefaultEndpoint,
-} from "../connection";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-describe("buildPlatformEndpoints", () => {
-  it("yields no entries when nothing is configured", () => {
-    expect(buildPlatformEndpoints({})).toEqual([]);
+import { clustersFor } from "@/entities/cluster";
+
+import type { Network } from "../connection";
+import { clusterName, Endpoint, networksOf } from "../connection";
+
+/** The offered networks with the remote ones on the given platform URLs */
+const buildNetworks = (urls: {
+  devnet?: string;
+  mainnet?: string;
+  testnet?: string;
+}) =>
+  networksOf(
+    clustersFor({
+      devnet: { rpcUrl: urls.devnet },
+      "mainnet-beta": { rpcUrl: urls.mainnet },
+      testnet: { rpcUrl: urls.testnet },
+    })
+  );
+
+/** The five networks, the remote ones on the given URLs, in Settings' order */
+const offered = (urls: {
+  mainnet: string;
+  devnet: string;
+  testnet: string;
+}) => [
+  {
+    key: "mainnet-beta",
+    name: "Mainnet",
+    value: urls.mainnet,
+    cluster: "mainnet-beta",
+  },
+  { key: "devnet", name: "Devnet", value: urls.devnet, cluster: "devnet" },
+  { key: "testnet", name: "Testnet", value: urls.testnet, cluster: "testnet" },
+  {
+    key: "localnet",
+    name: "Localnet",
+    value: Endpoint.LOCALNET,
+    cluster: "localnet",
+  },
+  {
+    key: "surfpool",
+    name: "Surfpool",
+    value: Endpoint.SURFPOOL,
+    cluster: "localnet",
+  },
+];
+
+describe("buildNetworks", () => {
+  it("offers Mainnet, Devnet, Testnet, Localnet and Surfpool, the remote ones on the public URLs when nothing is configured", () => {
+    expect(buildNetworks({})).toEqual(
+      offered({
+        mainnet: Endpoint.MAINNET_BETA,
+        devnet: Endpoint.DEVNET,
+        testnet: Endpoint.TESTNET,
+      })
+    );
   });
 
   // Sourcing an env file leaves unfilled keys as "", which is not nullish.
-  it("skips empty strings", () => {
+  it("treats an empty string as unset", () => {
     expect(
-      buildPlatformEndpoints({ devnet: "", testnet: "", mainnet: "" })
-    ).toEqual([]);
+      buildNetworks({ devnet: "", mainnet: "", testnet: "" }).map(
+        (n) => n.value
+      )
+    ).toEqual([
+      Endpoint.MAINNET_BETA,
+      Endpoint.DEVNET,
+      Endpoint.TESTNET,
+      Endpoint.LOCALNET,
+      Endpoint.SURFPOOL,
+    ]);
   });
 
-  it("yields one labelled entry per configured cluster, in cluster order", () => {
+  it("points each remote network at the platform URL the env configures", () => {
     expect(
-      buildPlatformEndpoints({
+      buildNetworks({
         mainnet: "https://mainnet.example.com",
         devnet: "https://devnet.example.com",
+        testnet: "https://testnet.example.com",
       })
-    ).toEqual([
-      {
-        name: "Devnet (Platform)",
-        value: "https://devnet.example.com",
-        cluster: "devnet",
-      },
-      {
-        name: "Mainnet Beta (Platform)",
-        value: "https://mainnet.example.com",
-        cluster: "mainnet-beta",
-      },
-    ]);
-  });
-
-  // A duplicate URL collides on the React key and leaves `aria-checked` true
-  // on two options at once.
-  it("skips a URL that a native endpoint already covers", () => {
-    expect(
-      buildPlatformEndpoints({
+    ).toEqual(
+      offered({
+        mainnet: "https://mainnet.example.com",
         devnet: "https://devnet.example.com",
-        testnet: Endpoint.TESTNET,
+        testnet: "https://testnet.example.com",
       })
-    ).toEqual([
-      {
-        name: "Devnet (Platform)",
-        value: "https://devnet.example.com",
-        cluster: "devnet",
-      },
-    ]);
+    );
   });
 
-  it("skips a URL another platform entry already used", () => {
-    expect(
-      buildPlatformEndpoints({
-        devnet: "https://same.example.com",
-        mainnet: "https://same.example.com",
-      })
-    ).toEqual([
-      {
-        name: "Devnet (Platform)",
-        value: "https://same.example.com",
-        cluster: "devnet",
-      },
-    ]);
+  it("gives every network a key of its own and a URL of its own", () => {
+    const networks = buildNetworks({});
+    expect(new Set(networks.map((n) => n.key)).size).toBe(networks.length);
+    expect(new Set(networks.map((n) => n.value)).size).toBe(networks.length);
+  });
+});
+
+describe("clusterName", () => {
+  it.each([
+    ["devnet", "Devnet"],
+    ["mainnet-beta", "Mainnet"],
+    ["testnet", "Testnet"],
+    ["localnet", "Localnet"],
+    ["playnet", "Playnet"],
+  ])("names %s as %s", (cluster, name) => {
+    expect(clusterName(cluster)).toBe(name);
   });
 
-  it("keeps the native endpoints out of the list", () => {
-    const values = buildPlatformEndpoints({
-      devnet: "https://devnet.example.com",
-    }).map((e) => e.value);
-    expect(values).not.toContain(Endpoint.DEVNET);
+  it("keeps an unknown cluster as it is", () => {
+    expect(clusterName("unknown")).toBe("unknown");
+  });
+
+  it("returns undefined for no cluster", () => {
+    // eslint-disable-next-line unicorn/no-null -- the cluster is `null` until read
+    expect(clusterName(null)).toBeUndefined();
   });
 });
 
 // Guards the `process.env` var names, which nothing else would catch: a typo
-// there just yields an empty list.
+// there just yields the public URLs.
 describe("env wiring", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();
   });
 
-  it("reads REACT_APP_<CLUSTER>_RPC_URL", async () => {
+  it("reads REACT_APP_DEVNET_RPC_URL, REACT_APP_MAINNET_RPC_URL and REACT_APP_TESTNET_RPC_URL", async () => {
     vi.stubEnv("REACT_APP_DEVNET_RPC_URL", "https://devnet.example.com");
-    vi.stubEnv("REACT_APP_TESTNET_RPC_URL", "https://testnet.example.com");
     vi.stubEnv("REACT_APP_MAINNET_RPC_URL", "https://mainnet.example.com");
+    vi.stubEnv("REACT_APP_TESTNET_RPC_URL", "https://testnet.example.com");
 
     vi.resetModules();
     const mod = await import("../connection");
 
-    expect(
-      mod.PLATFORM_ENDPOINTS.map((e: PlatformEndpoint) => e.value)
-    ).toEqual([
+    expect(mod.NETWORKS.map((n: Network) => n.value)).toEqual([
+      "https://mainnet.example.com",
       "https://devnet.example.com",
       "https://testnet.example.com",
-      "https://mainnet.example.com",
+      Endpoint.LOCALNET,
+      Endpoint.SURFPOOL,
     ]);
     expect(mod.DEFAULT_ENDPOINT).toBe("https://devnet.example.com");
   });
 
-  it("adds nothing and keeps the native default when unset", async () => {
+  it("falls back to the public URLs and the public devnet default when unset", async () => {
     vi.stubEnv("REACT_APP_DEVNET_RPC_URL", undefined);
-    vi.stubEnv("REACT_APP_TESTNET_RPC_URL", undefined);
     vi.stubEnv("REACT_APP_MAINNET_RPC_URL", undefined);
+    vi.stubEnv("REACT_APP_TESTNET_RPC_URL", undefined);
 
     vi.resetModules();
     const mod = await import("../connection");
 
-    expect(mod.PLATFORM_ENDPOINTS).toEqual([]);
+    expect(mod.NETWORKS.map((n: Network) => n.value)).toEqual([
+      Endpoint.MAINNET_BETA,
+      Endpoint.DEVNET,
+      Endpoint.TESTNET,
+      Endpoint.LOCALNET,
+      Endpoint.SURFPOOL,
+    ]);
     expect(mod.DEFAULT_ENDPOINT).toBe(Endpoint.DEVNET);
-  });
-});
-
-describe("resolveDefaultEndpoint", () => {
-  it("falls back to the native devnet endpoint", () => {
-    expect(resolveDefaultEndpoint(undefined)).toBe(Endpoint.DEVNET);
-    expect(resolveDefaultEndpoint("")).toBe(Endpoint.DEVNET);
-  });
-
-  it("prefers the platform devnet endpoint", () => {
-    expect(resolveDefaultEndpoint("https://devnet.example.com")).toBe(
-      "https://devnet.example.com"
-    );
   });
 });

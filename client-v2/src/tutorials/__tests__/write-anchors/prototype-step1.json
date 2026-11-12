@@ -1,0 +1,77 @@
+{
+  "lumberjack": {
+    "file": "src/lib.rs",
+    "start": "",
+    "target": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+    "writes": [
+      {
+        "id": "s1.boil",
+        "file": "src/lib.rs",
+        "block": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;"
+      },
+      {
+        "id": "s1.data",
+        "file": "src/lib.rs",
+        "block": "#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+      },
+      {
+        "id": "s1.accounts",
+        "file": "src/lib.rs",
+        "block": "#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n}",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+      },
+      {
+        "id": "s1.init",
+        "file": "src/lib.rs",
+        "block": "#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+      },
+      {
+        "id": "f1.q",
+        "file": "src/lib.rs",
+        "block": "    pub system_program: Program<'info, System>,",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+      }
+    ]
+  },
+  "zeroCopy": {
+    "file": "src/lib.rs",
+    "start": "",
+    "target": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_board(_ctx: Context<InitBoard>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitBoard<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + 12 * (1 + 128),\n        seeds = [b\"board\", signer.key().as_ref()],\n        bump,\n    )]\n    pub board: Box<Account<'info, Board>>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Board {\n    pub cells: [Option<Cell>; 12],\n}\n\n#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]\npub struct Cell {\n    pub owner: Pubkey,\n    pub unit: Pubkey,\n    pub item: Pubkey,\n    pub ally: Pubkey,\n}",
+    "writes": [
+      {
+        "id": "s1.boil",
+        "file": "src/lib.rs",
+        "block": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");"
+      },
+      {
+        "id": "s1.board",
+        "file": "src/lib.rs",
+        "block": "#[account]\npub struct Board {\n    pub cells: [Option<Cell>; 12],\n}\n\n#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]\npub struct Cell {\n    pub owner: Pubkey,\n    pub unit: Pubkey,\n    pub item: Pubkey,\n    pub ally: Pubkey,\n}",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[account]\npub struct Board {\n    pub cells: [Option<Cell>; 12],\n}\n\n#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]\npub struct Cell {\n    pub owner: Pubkey,\n    pub unit: Pubkey,\n    pub item: Pubkey,\n    pub ally: Pubkey,\n}"
+      },
+      {
+        "id": "s1.q1",
+        "file": "src/lib.rs",
+        "block": "#[derive(Accounts)]\npub struct InitBoard<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + 12 * (1 + 128),\n        seeds = [b\"board\", signer.key().as_ref()],\n        bump,\n    )]\n    pub board: Account<'info, Board>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[derive(Accounts)]\npub struct InitBoard<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + 12 * (1 + 128),\n        seeds = [b\"board\", signer.key().as_ref()],\n        bump,\n    )]\n    pub board: Account<'info, Board>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Board {\n    pub cells: [Option<Cell>; 12],\n}\n\n#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]\npub struct Cell {\n    pub owner: Pubkey,\n    pub unit: Pubkey,\n    pub item: Pubkey,\n    pub ally: Pubkey,\n}"
+      },
+      {
+        "id": "s1.init",
+        "file": "src/lib.rs",
+        "block": "#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_board(_ctx: Context<InitBoard>) -> Result<()> {\n        Ok(())\n    }\n}",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_board(_ctx: Context<InitBoard>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitBoard<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + 12 * (1 + 128),\n        seeds = [b\"board\", signer.key().as_ref()],\n        bump,\n    )]\n    pub board: Account<'info, Board>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Board {\n    pub cells: [Option<Cell>; 12],\n}\n\n#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]\npub struct Cell {\n    pub owner: Pubkey,\n    pub unit: Pubkey,\n    pub item: Pubkey,\n    pub ally: Pubkey,\n}"
+      },
+      {
+        "id": "f1.q",
+        "file": "src/lib.rs",
+        "block": "    pub board: Box<Account<'info, Board>>,",
+        "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_board(_ctx: Context<InitBoard>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitBoard<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + 12 * (1 + 128),\n        seeds = [b\"board\", signer.key().as_ref()],\n        bump,\n    )]\n    pub board: Box<Account<'info, Board>>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Board {\n    pub cells: [Option<Cell>; 12],\n}\n\n#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]\npub struct Cell {\n    pub owner: Pubkey,\n    pub unit: Pubkey,\n    pub item: Pubkey,\n    pub ally: Pubkey,\n}",
+        "start": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod zero_copy {\n    use super::*;\n\n    pub fn init_board(_ctx: Context<InitBoard>) -> Result<()> {\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitBoard<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + 12 * (1 + 128),\n        seeds = [b\"board\", signer.key().as_ref()],\n        bump,\n    )]\n    pub board: Account<'info, Board>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\npub struct Board {\n    pub cells: [Option<Cell>; 12],\n}\n\n#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]\npub struct Cell {\n    pub owner: Pubkey,\n    pub unit: Pubkey,\n    pub item: Pubkey,\n    pub ally: Pubkey,\n}"
+      }
+    ]
+  }
+}

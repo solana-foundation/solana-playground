@@ -229,6 +229,12 @@ type ExecutableCommand<
       result: { ok: Awaited<R>; err?: never } | { err: Error; ok?: never }
     ) => void
   ): Disposable;
+  /**
+   * @param cb callback function to run each time a run that started ends,
+   * once per run, help included, which `onDidFinish` leaves out
+   * @returns a dispose function to clear the event
+   */
+  onDidEnd(cb: () => void): Disposable;
 };
 
 /** Name of all the available commands (only code) */
@@ -260,6 +266,7 @@ export const PgCommand: Commands = new Proxy({} as any, {
         execute: (...args) => PgCommandManager.execute([name, ...args]),
         onDidStart: (cb) => PgCommandManager.onDidStart(name, cb),
         onDidFinish: (cb) => PgCommandManager.onDidFinish(name, cb),
+        onDidEnd: (cb) => PgCommandManager.onDidEnd(name, cb),
       };
     }
 
@@ -396,7 +403,8 @@ export class PgCommandManager {
       // A run that started finishes however it ends: a pre-check or a parse
       // that throws would otherwise leave every `onDidFinish` listener, the
       // flow's stages among them, on "running". Help and a bare parent
-      // command print and end without a result, and finish nothing.
+      // command print and end without a result, and finish nothing; every
+      // run that started still ends (`onDidEnd`).
       let result: { ok: unknown } | { err: unknown } | undefined;
       // One clock per top-level run: a run another run starts (deploy
       // building first) is part of the outer one's quiet (Spec 13, TRM-52)
@@ -663,6 +671,7 @@ Available subcommands: ${cmd.subcommands
         if (result) {
           PgCommon.createAndDispatchCustomEvent(eventNames.finish, result);
         }
+        PgCommon.createAndDispatchCustomEvent(eventNames.end);
       }
     });
   }
@@ -697,7 +706,10 @@ Available subcommands: ${cmd.subcommands
     const why = runs.some((run) => run.stoppability === "step")
       ? "This step can't be stopped."
       : `\`${last.name}\` can't be stopped.`;
-    PgTerminal.println(`^C\n${why} Wait for it to finish.`);
+    PgTerminal.println(
+      `^C\n${PgTerminal.warning(`${why} Wait for it to finish.`)}`,
+      { noColor: true }
+    );
     return false;
   }
 
@@ -730,11 +742,28 @@ Available subcommands: ${cmd.subcommands
     return PgCommon.onDidChange(this._getEventNames(name).finish, ...params);
   }
 
+  /**
+   * Runs each time a run of the command that started ends, once per run,
+   * however it ended: with a result, an error, or only its help. A listener that pairs
+   * itself with `onDidStart` and asks nothing of the result takes this one,
+   * since `onDidFinish` never comes for help.
+   *
+   * @param name command name
+   * @returns a disposable to clear the event listener
+   */
+  static onDidEnd(
+    name: string,
+    ...params: Parameters<ExecutableCommand["onDidEnd"]>
+  ) {
+    return PgCommon.onDidChange(this._getEventNames(name).end, ...params);
+  }
+
   /** Get custom event names of the given command. */
   private static _getEventNames(name: string) {
     return {
       start: "ondidrunstart" + name,
       finish: "ondidrunfinish" + name,
+      end: "ondidrunend" + name,
     };
   }
 

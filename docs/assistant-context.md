@@ -69,10 +69,11 @@ runs the deployment configures its bypass secret on the server.
   user supplies. Never an open unlimited endpoint.
 - **Traceability.** A record of what the assistant did and on what basis.
 - **Open by default.** The client and any service integrated into it stay public.
-- **No backend changes.** The build server, crate list, deploy mechanics and
-  sharing infrastructure are out of scope. Conversation and project sync is
-  the exception, and it is additive: new `api/*` routes and a Postgres of our
-  own. The build server and its database are still untouched.
+- **No backend changes.** The build server, crate list and deploy mechanics
+  are out of scope. Conversation and project sync is the exception, and it is
+  additive: new `api/*` routes and a Postgres of our own. The build server
+  holds no database and serves no share routes; projects are shared as GitHub
+  gists.
 
 ## How it works, technically
 
@@ -123,11 +124,9 @@ the browser, behind the same approval gates.
   it, and it is the page the app opens on.
 - You stay in control of a turn: the backend is named above the chat and can be
   changed without losing the conversation, **Stop** ends a turn in flight (and
-  denies anything waiting on your approval), and when a reply describes an edit
-  in prose instead of writing it, **Make this change** asks for the same edit as
-  a patch — which still arrives as a diff you accept or reject. Inside a lesson
-  step it reads **Write it for me**, because taking it skips the rest of the
-  hints.
+  denies anything waiting on your approval), and when a reply shows an edit as a
+  code block instead of writing it, **Make this change** asks for the same edit
+  as a patch — which still arrives as a diff you accept or reject.
 
 **One gap we had to close.** The client did not keep the compiler's output
 anywhere — the raw `stderr` was printed to the terminal and discarded, leaving
@@ -171,15 +170,18 @@ Done:
   columns with no header. From the left: the navigation (Home, New project,
   Tutorials, Programs, the project list under them, and its session
   footer: a status row of three indicators, each a dot and words (the
-  network, which opens the settings on the cluster; the AI, which opens
-  Connect a model; the Rust analyzer, which opens a short panel), and an
+  network, which opens the settings on the cluster, or a short panel with
+  Try again and Change network while the cluster does not answer; the AI,
+  which opens Connect a model, and opens a short panel at "AI · Limit
+  reached" (the free daily limit is used) or "AI · Not responding"; the Rust
+  analyzer, which opens a short panel), and an
   account row whose menu holds sign-in, Settings (Cmd+,), Docs, the feedback
   entries and the wallet; Cmd+B folds it to a rail of icons, whose footer
   keeps the three status dots and an Account button that opens the same
   menu; on a phone the three fold into one status chip in the top bar that
   opens a sheet), the
   assistant, then the work area. Across the top of the work area runs the
-  stage bar (the project's name while the assistant is hidden, the
+  stage bar (the project's name, whether or not the assistant shows, the
   assistant's toggle, Docs); under it the stepper (Write → Build → Deploy →
   Interact, state derived from real build/deploy events); under that the
   editor head, with the open files' tabs on the left and two toggles on the
@@ -195,7 +197,8 @@ Done:
   of Work, not a Sheet. The editor edits at every width. A start with no
   project opens Home ("Where should we begin?"), not a popup. From 768 px
   Home has a composer, New project, Follow a tutorial and Open a program
-  tiles, and four tutorial cards; below 768 px it has quick starts (a new
+  tiles, and the three start tutorials (Hello Anchor, Lumberjack, Zero
+  Copy, one per level); below 768 px it has quick starts (a new
   Anchor project, a beginner tutorial), a Browse button that opens the
   Tutorials page, and the composer. The navigation's Home opens Home from an
   open project too, and deleting the last project lands there; picking the
@@ -204,8 +207,12 @@ Done:
   Programs in the navigation (and Home's tiles, and the `/tutorials` and
   `/programs` links) open pages with a search field and cards, over the open
   project, which comes back as it was; opening a card opens the tutorial or
-  imports the program. The New Workspace gallery (New project) starts a
-  project from scratch, from one of 11 programs that build on the default
+  imports the program. The Tutorials page lists the same three start
+  tutorials by level under a Start here banner, which features the first
+  not completed ("Start here", "Continue · Step n of m", or "Completed" once
+  all three are done); the other tutorials stay reachable from New project.
+  New project, a page of its own beside them (also at `/new`), starts a
+  project from scratch, from one of 10 programs that build on the default
   server, or from one of 16 tutorials. The cluster row, the account menu's
   Settings or Cmd+, open Settings as a page of its
   own over the whole window: a list of sections (Network, Project, Block
@@ -214,6 +221,9 @@ Done:
   to app", Escape or Cmd+, to return to the work as it was.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
+- The user's choices in Sources and tools are kept on the device: skills
+  switched, gateway servers turned off, and servers added. Credentials of an
+  added server are not kept, so a reload asks for them again.
 - Conversations and project code are persisted. Threads are keyed by project
   or tutorial, kept in IndexedDB on the device, and synced to Postgres when
   signed in. A restored thread is history the model can read back, not a
@@ -274,8 +284,8 @@ Honesty rule for the demo — never present a mocked step as working.
   their GitHub account is under a month old, that resets at 00:00 UTC. At the
   limit the panel says "You have used today's free assistant allowance. It
   resets at 00:00 UTC, or bring your own key to keep going."; when the free
-  backend as a whole is out for the day it says "The free assistant is out of
-  capacity for today." with the same advice. The conversation stays, and a
+  backend as a whole is out it says "The free assistant is out of capacity for
+  now. Try again later," with the same advice. The conversation stays, and a
   backend on the user's own key has no such limit.
 - **Real, with a gap:** deploy history. It is a genuine client-side store,
   not seeded or scripted, and records every real deploy — but not the
@@ -285,7 +295,7 @@ Honesty rule for the demo — never present a mocked step as working.
   saves the IDL a successful build already produced; "Upload IDL" on
   Deploy and Interact replaces the IDL this browser uses -- neither
   generates anything or writes anything on-chain.
-- **Not view-only:** the Programs page's and the gallery's ecosystem program cards
+- **Not view-only:** the Programs page's and New project's ecosystem program cards
   import from GitHub through upstream's own mechanism (`PgGithub.import`)
   into a normal, editable project -- they open as a normal project; those
   targeting Anchor newer than the pinned 0.29 will not compile on this build
@@ -300,8 +310,7 @@ Honesty rule for the demo — never present a mocked step as working.
   — including in a console with no model connected. The Explorer MCP goes
   through the same gateway and is listed for everyone, signed in or not. Each
   server and each skill has a checkbox in the Sources tab; one switched off
-  offers nothing to the next turn, and the choice lasts until the page
-  reloads.
+  offers nothing to the next turn, and the choice survives a reload.
 - **Real, stubbed only on request:** Rust intellisense and the `solana`,
   `anchor`, `spl-token`, `sugar` terminal commands. A deployment always ships
   the real packages. Local UI work may stub them with `USE_WASM_STUBS=true` to

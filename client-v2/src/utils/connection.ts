@@ -1,16 +1,29 @@
+import type { Cluster, Clusters } from "@/entities/cluster";
+import {
+  CLUSTERS,
+  fetchClusterByGenesisHash,
+  getConnectionFor,
+  getKnownCluster,
+  getReadBufferConnectionFor,
+  PgSelectedConnection,
+} from "@/entities/cluster";
 import { recheckWhileBad } from "@/shared/lib/backoff-recheck";
+import { createLogger } from "@/shared/lib/logger";
 
-import { PLATFORM_ENDPOINTS } from "../constants";
-import { askAgain, onAskAgain } from "./ask-again";
+import { askAgain, hasAnsweredAgain, onAskAgain } from "./ask-again";
 import { PgCommon } from "./common";
-import { createDerivable, declareDecorator, derivable } from "./decorators";
+import {
+  createDerivable,
+  declareDecorator,
+  derivable,
+  initable,
+} from "./decorators";
 import { OverridableConnection, PgPlaynet } from "./playnet";
 import { PgSettings } from "./settings";
 import type { Disposable } from "./types";
 import { PgWeb3 } from "./web3";
 
-/** Solana public clusters or "localnet" */
-export type Cluster = "playnet" | "localnet" | PgWeb3.Cluster;
+export type { Cluster } from "@/entities/cluster";
 
 const derive = () => ({
   /** Globally sycned connection instance */
@@ -33,7 +46,9 @@ const derive = () => ({
         PgPlaynet.destroy();
       }
 
-      return _PgConnection.create();
+      return getConnectionFor(PgSettings.connection.commitment)(
+        PgSettings.connection.endpoint
+      );
     },
     onChange: [
       PgSettings.onDidChangeConnectionEndpoint,
@@ -109,8 +124,10 @@ const derive = () => ({
 
   /** Current cluster name based on the current endpoint */
   cluster: createDerivable({
-    derive: _PgConnection.getCluster,
-    onChange: PgSettings.onDidChangeConnectionEndpoint,
+    derive: () => _PgConnection.readCluster(),
+    // A "Try again" re-reads a cluster whose read failed, as the airdrop's
+    // retry does
+    onChange: [PgSettings.onDidChangeConnectionEndpoint, onAskAgain],
   }),
 
   /** Whether the cluster is down. `null` indicates potential connection error. */
@@ -139,27 +156,58 @@ const recheckWhileStalled = (cb: () => void): Disposable =>
     maxMs: 60000,
   });
 
+const log = createLogger("connection:cluster");
+
+/**
+ * The cluster of `connection`: known from its endpoint, or, for the selected
+ * custom endpoint, the one `readCluster` resolved from its genesis hash, once
+ * it is no longer the previous endpoint's.
+ */
+const getClusterOf = (connection: PgWeb3.Connection): Cluster | undefined =>
+  getKnownCluster(connection.rpcEndpoint) ??
+  (connection.rpcEndpoint === PgSettings.connection.endpoint &&
+  !PgConnection.clusterIsStale
+    ? PgConnection.cluster ?? undefined
+    : undefined);
+
+/** The send cap of `connection`'s cluster; `undefined` for a cluster with none or a cluster not known */
+const sendTxPerSecondWith =
+  (clusters: Clusters) => (connection: PgWeb3.Connection) => {
+    const cluster = getClusterOf(connection);
+    return cluster && clusters[cluster].sendTxPerSecond;
+  };
+
+const getSendTxPerSecond = sendTxPerSecondWith(CLUSTERS);
+
+/** The derivables stay the source; the slice's store mirrors them for its hook */
+const mirrorToStore = () =>
+  PgConnection.onDidChange(() =>
+    PgSelectedConnection.set({
+      connection: PgConnection.current,
+      cluster: PgConnection.cluster,
+      isConnected: PgConnection.isConnected,
+      isClusterDown: PgConnection.isClusterDown,
+    })
+  );
+
 @derivable(derive)
+@initable({ onDidInit: mirrorToStore })
 class _PgConnection {
   /**
-   * Create a connection with the given options or defaults from settings.
-   *
-   * @param opts connection options
-   * @returns a new `Connection` instance
+   * The connection program buffer accounts are read through: the read-buffer
+   * RPC the env configures for `connection`'s cluster, else `connection`
+   * itself. Sends and every other read stay on `connection`.
    */
-  static create(opts?: { endpoint?: string } & PgWeb3.ConnectionConfig) {
-    const conn = new PgWeb3.Connection(
-      opts?.endpoint ?? PgSettings.connection.endpoint,
-      opts ?? PgSettings.connection.commitment
-    );
+  static getReadBufferConnection(connection: PgWeb3.Connection) {
+    return getReadBufferConnectionFor(getClusterOf(connection))(connection);
+  }
 
-    // If the WS connection fails for whatever reason, removing listeners does
-    // *not* work properly, as it tries to reconnect indefinitely. To fix this
-    // leakage, change the `reconnect` property of the internal WS object.
-    // @ts-ignore
-    conn._rpcWebSocket.reconnect = false;
-
-    return conn;
+  /**
+   * The `sendTransaction` calls per second the env allows on `connection`'s
+   * cluster, or `undefined` when the env sets no cap there.
+   */
+  static getSendTxPerSecond(connection: PgWeb3.Connection) {
+    return getSendTxPerSecond(connection);
   }
 
   /**
@@ -202,6 +250,72 @@ class _PgConnection {
     }
   }
 
+  /** The endpoint `cluster` was last read from */
+  private static _clusterEndpoint: string | undefined;
+
+  /**
+   * Whether `cluster` still names the previous endpoint's network: a custom
+   * RPC takes a genesis-hash round trip to read. Anything spending a faucet on
+   * that name waits, as a Localnet name would ask a public RPC for 100 SOL.
+   */
+  static get clusterIsStale() {
+    return _PgConnection._clusterEndpoint !== PgSettings.connection.endpoint;
+  }
+
+  /** The endpoint whose last cluster read failed, until a read of it succeeds */
+  private static _clusterFailedEndpoint: string | undefined;
+
+  /**
+   * Whether the selected endpoint's cluster read failed: a custom RPC that is
+   * down, or one whose genesis hash names no known cluster. `clusterIsStale`
+   * stays true for it, so this is what tells a wait that will never end from
+   * one that will.
+   */
+  static get hasClusterReadFailed() {
+    return (
+      _PgConnection._clusterFailedEndpoint === PgSettings.connection.endpoint
+    );
+  }
+
+  /**
+   * Read the selected endpoint's cluster, remembering which endpoint it was.
+   *
+   * @returns the cluster name
+   */
+  static async readCluster(): Promise<Cluster> {
+    const endpoint = PgSettings.connection.endpoint;
+    // A read of an endpoint no longer selected may finish last, and what it
+    // returns is what `cluster` keeps: it answers for the selected one instead
+    const hasEndpointChanged = () =>
+      endpoint !== PgSettings.connection.endpoint;
+    let cluster: Cluster;
+    try {
+      cluster = await _PgConnection.getCluster(endpoint);
+    } catch (e) {
+      if (!hasEndpointChanged()) {
+        // The derivable that calls this swallows the throw; without this line
+        // a custom RPC that is down leaves no trace while `clusterIsStale`
+        // stays true for it
+        log.warn("could not read the selected endpoint's cluster", {
+          context: { error: String(e) },
+        });
+        _PgConnection._clusterFailedEndpoint = endpoint;
+        throw e;
+      }
+      log.info(
+        "a previous endpoint's cluster read failed, reading the current",
+        {
+          context: { error: String(e) },
+        }
+      );
+      return _PgConnection.readCluster();
+    }
+    if (hasEndpointChanged()) return _PgConnection.readCluster();
+    _PgConnection._clusterEndpoint = endpoint;
+    _PgConnection._clusterFailedEndpoint = undefined;
+    return cluster;
+  }
+
   /**
    * Get the cluster name from the given `endpoint`.
    *
@@ -211,48 +325,7 @@ class _PgConnection {
   static async getCluster(
     endpoint: string = PgConnection.current.rpcEndpoint
   ): Promise<Cluster> {
-    // Playnet
-    if (PgPlaynet.isUrlPlaynet(endpoint)) return "playnet";
-
-    // Local
-    if (endpoint.includes("localhost") || endpoint.includes("127.0.0.1")) {
-      return "localnet";
-    }
-
-    // Public
-    //
-    // For some reason only `mainnet-beta` returns with `/` appended at the end,
-    // so compare the `/` appended strings for consistency
-    switch (PgCommon.appendSlash(endpoint)) {
-      case PgCommon.appendSlash(PgWeb3.clusterApiUrl("devnet")):
-        return "devnet";
-      case PgCommon.appendSlash(PgWeb3.clusterApiUrl("testnet")):
-        return "testnet";
-      case PgCommon.appendSlash(PgWeb3.clusterApiUrl("mainnet-beta")):
-        return "mainnet-beta";
-    }
-
-    // Platform endpoints declare their cluster, so resolve them without
-    // paying for the genesis hash round trip below.
-    const platform = PLATFORM_ENDPOINTS.find((e) => e.value === endpoint);
-    if (platform) return platform.cluster;
-
-    // Decide custom endpoints from the genesis hash of the cluster
-    const genesisHash = await PgConnection.create({
-      endpoint,
-    }).getGenesisHash();
-    switch (genesisHash) {
-      case "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG":
-        return "devnet";
-      case "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY":
-        return "testnet";
-      case "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d":
-        return "mainnet-beta";
-      default:
-        throw new Error(
-          `Genesis hash ${genesisHash} did not match any cluster`
-        );
-    }
+    return getKnownCluster(endpoint) ?? fetchClusterByGenesisHash(endpoint);
   }
 
   /**
@@ -290,7 +363,8 @@ class _PgConnection {
    * too and awaited, which keeps the button busy for as long as the slower
    * one, the stall check, takes.
    *
-   * @returns whether the cluster answered with a moving slot
+   * @returns whether the cluster answered and its slot is not stalled
+   * (`hasAnsweredAgain`)
    */
   static async recheck(): Promise<boolean> {
     askAgain();
@@ -298,7 +372,7 @@ class _PgConnection {
       _PgConnection.getIsConnected(),
       _PgConnection.getIsClusterDown(),
     ]);
-    return connected === true && stalled === false;
+    return hasAnsweredAgain(connected, stalled);
   }
 
   /**
@@ -307,7 +381,12 @@ class _PgConnection {
    * @returns airdrop amount in SOL
    */
   static getAirdropAmount() {
-    switch (PgConnection.cluster) {
+    return _PgConnection.getAirdropAmountOn(PgConnection.cluster);
+  }
+
+  /** {@link getAirdropAmount} on `cluster`, read by the caller */
+  static getAirdropAmountOn(cluster: Cluster | null) {
+    switch (cluster) {
       case "playnet":
         return 1000;
       case "localnet":

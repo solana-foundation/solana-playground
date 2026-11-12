@@ -2,7 +2,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 
 import { useTutorialProgress } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
-import { PgExplorer, PgTutorial, PgView } from "@/utils";
+import { ExplorerLimitError, PgExplorer, PgTutorial, PgView } from "@/utils";
 import { PgWorkspace } from "@/utils/explorer/workspace";
 import {
   DeleteWorkspace,
@@ -84,8 +84,8 @@ export type ProjectListProps = {
   /** The project already open was picked: no switch, the page shows it */
   onPickCurrent?: () => void;
   /**
-   * A project or lesson was picked to open, the one already open included:
-   * a page over the work makes way for it
+   * A project or lesson was picked and is open, the one already open
+   * included: a page over the work makes way for it
    */
   onPicked?: () => void;
   /**
@@ -196,15 +196,23 @@ const ProjectList = ({
   );
 
   const fail = (entry: ProjectEntry, action: ProjectAction, e: unknown) => {
-    log.error(asError(e), {
-      report: true,
-      context: { action, isLesson: entry.isLesson },
-    });
+    // A project over a limit is refused a copy on purpose (the explorer
+    // sends its own event); the toast says which limit, and nothing is
+    // reported
+    const limit = e instanceof ExplorerLimitError ? e.message : null;
+    if (limit) {
+      log.warn("refused by a project limit", { context: { action, limit } });
+    } else {
+      log.error(asError(e), {
+        report: true,
+        context: { action, isLesson: entry.isLesson },
+      });
+    }
     navTelemetry.track("nav_project_action_failed", { action });
     PgView.setToast(
       () => (
         <span>
-          Could not {VERB[action]} {entry.name}.
+          Could not {VERB[action]} {entry.name}.{limit && ` ${limit}`}
         </span>
       ),
       { options: { name: `project-${action}-failed` } }
@@ -214,14 +222,17 @@ const ProjectList = ({
   const perform = async (entry: ProjectEntry, action: ProjectAction) => {
     switch (action) {
       case "open":
-        onPicked?.();
         // Already open: the page may show Home over it, and goes back to it
         if (entry.name === PgExplorer.currentWorkspaceName) {
+          onPicked?.();
           onPickCurrent?.();
           return;
         }
         if (entry.isLesson) await PgTutorial.open(entry.name);
         else await PgExplorer.switchWorkspace(entry.name);
+        // Only once the pick is open: a page closed before it would send the
+        // address bar back to the project that was open
+        onPicked?.();
         return;
       case "pin":
       case "unpin": {

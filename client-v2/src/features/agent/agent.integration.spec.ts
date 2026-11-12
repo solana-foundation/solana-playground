@@ -51,10 +51,13 @@ const db = vi.hoisted(() => {
     spend: new Map<string, { reserved: number; spent: number }>(),
     /** `agent_spend.capped` by `${userId}|${day}`, kept apart so `spend` rows compare as before */
     capped: new Map<string, number>(),
-    /** `agent_turn`, in insertion order */
+    /** `agent_turn`, in insertion order; `id` is the row's serial, as text */
     turns: [] as {
+      id: string;
       userId: string;
+      day: string;
       tier: string;
+      model: string;
       outcome: string;
       promptTokens: number | null;
       completionTokens: number | null;
@@ -63,6 +66,8 @@ const db = vi.hoisted(() => {
     /** Every query and upstream call, in order */
     log: [] as string[],
     down: false,
+    /** The last `agent_turn.id` handed out: a serial, never reused */
+    lastTurnId: 0,
     /** Runs while a statement is in flight, before it answers */
     during: null as ((text: string) => void) | null,
   };
@@ -78,8 +83,8 @@ const db = vi.hoisted(() => {
       return { rows: [] };
     }
     if (text.includes("insert into agent_spend")) {
-      const [userId, day, ageDays, amount, newcomerCap, establishedCap] =
-        params as [string, string, number, number, number, number];
+      const [userId, day, ageDays, amount, newcomerCap, establishedCap, model] =
+        params as [string, string, number, number, number, number, string];
       const user = state.users.get(userId);
       if (!user) return { rows: [] };
       const createdAt = user.githubCreatedAt;
@@ -100,41 +105,52 @@ const db = vi.hoisted(() => {
         row.reserved += amount;
         admitted = true;
       }
-      return { rows: [{ tier, dated, admitted }] };
+      // The same statement records an admitted turn as started
+      if (!admitted) {
+        // eslint-disable-next-line unicorn/no-null -- a Postgres row: no turn is SQL `NULL`
+        return { rows: [{ tier, dated, turn_id: null }] };
+      }
+      state.lastTurnId += 1;
+      const id = String(state.lastTurnId);
+      state.turns.push({
+        id,
+        userId,
+        day,
+        tier,
+        model,
+        outcome: "started",
+        promptTokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        completionTokens: null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        charged: amount,
+      });
+      return { rows: [{ tier, dated, turn_id: id }] };
     }
-    if (text.includes("update agent_spend")) {
-      const [userId, day, reserved, charge] = params as [
-        string,
+    if (text.includes("update agent_turn")) {
+      // Checked before `update agent_spend`: this statement holds both
+      const [id, charge, outcome, promptTokens, completionTokens] = params as [
         string,
         number,
-        number
+        string,
+        number | null,
+        number | null
       ];
-      const row = state.spend.get(`${userId}|${day}`);
+      const turn = state.turns.find(
+        (t) => t.id === id && t.outcome === "started"
+      );
+      if (!turn) return { rows: [{ ended: 0 }] };
+      // The reservation the row held, as the statement's `held` reads it
+      const reserved = turn.charged;
+      turn.outcome = outcome;
+      turn.promptTokens = promptTokens;
+      turn.completionTokens = completionTokens;
+      turn.charged = charge;
+      // The same statement settles the day the turn was reserved on
+      const row = state.spend.get(`${turn.userId}|${turn.day}`);
       if (row) {
         row.reserved -= reserved;
         row.spent += charge;
       }
-      // The same statement records the turn
-      const [, , , , tier, outcome, promptTokens, completionTokens] =
-        params as [
-          string,
-          string,
-          number,
-          number,
-          string,
-          string,
-          number | null,
-          number | null
-        ];
-      state.turns.push({
-        userId,
-        tier,
-        outcome,
-        promptTokens,
-        completionTokens,
-        charged: charge,
-      });
-      return { rows: [] };
+      return { rows: [{ ended: 1 }] };
     }
     if (text.includes('"accessToken"')) {
       const token = state.users.get(params[0] as string)?.token;
@@ -192,6 +208,7 @@ beforeEach(() => {
   db.state.users.clear();
   db.state.spend.clear();
   db.state.turns.length = 0;
+  db.state.lastTurnId = 0;
   db.state.capped.clear();
   db.state.log.length = 0;
   db.state.down = false;
@@ -801,13 +818,13 @@ describe("POST /api/agent spend gate", () => {
   const TURN = '{"messages":[{"role":"user","content":"hi"}]}';
   const USAGE = { prompt_tokens: 1000, completion_tokens: 100 };
   /** What `USAGE` costs at the default prices, in micro-USD */
-  const USAGE_COST = Math.ceil(1000 * 0.15 + 100 * 0.5);
+  const USAGE_COST = Math.ceil(1000 * 0.2475 + 100 * 0.825);
   const CAP = { newcomer: toMicro(0.1), established: toMicro(0.5) };
   /** The reservation `TURN` takes at the default limits */
   const RESERVED = worstCaseCost({
     bytes: Buffer.byteLength(TURN),
     maxOutputTokens: 8192,
-    prices: { input: 0.15, output: 0.5 },
+    prices: { input: 0.2475, output: 0.825 },
   });
 
   beforeEach(() => {
@@ -845,11 +862,14 @@ describe("POST /api/agent spend gate", () => {
   };
 
   /** `Response.json`, which the TypeScript DOM lib here does not declare */
-  const json = (body: unknown, init: ResponseInit = {}) =>
-    new Response(JSON.stringify(body), {
+  const json = (body: unknown, init: ResponseInit = {}) => {
+    const headers = new Headers(init.headers);
+    headers.set("content-type", "application/json");
+    return new Response(JSON.stringify(body), {
       status: init.status ?? 200,
-      headers: { "content-type": "application/json" },
+      headers,
     });
+  };
 
   type Answer = (init: RequestInit) => Response | Promise<Response>;
 
@@ -1005,7 +1025,28 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("A turn is charged what it cost", () => {
-    it("charges a completed turn its reported usage", async () => {
+    it("charges a completed turn its reported cost", async () => {
+      network(() =>
+        streamed({ prompt_tokens: 1000, completion_tokens: 100, cost: 0.0005 })
+      );
+
+      await postJson(handler, TURN);
+
+      expect(spend()).toEqual({ reserved: 0, spent: 500 });
+    });
+
+    it("charges a completed turn its tokens when the reported cost is below them", async () => {
+      // The Gateway reported `cost: 0` for a free-tier turn on 2026-10-29
+      network(() =>
+        streamed({ prompt_tokens: 1000, completion_tokens: 100, cost: 0 })
+      );
+
+      await postJson(handler, TURN);
+
+      expect(spend()).toEqual({ reserved: 0, spent: USAGE_COST });
+    });
+
+    it("charges a completed turn with no reported cost its tokens", async () => {
       network();
 
       await postJson(handler, TURN);
@@ -1345,46 +1386,176 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("An exhausted pool is reported as such", () => {
+    /** The 503 every upstream 402 becomes, with the turn left uncharged */
+    const expectPoolExhausted = (res: Awaited<ReturnType<typeof postJson>>) => {
+      expect(res.statusCode).toBe(503);
+      expect(jsonBody(res)).toMatchObject({
+        reason: "pool-exhausted",
+        tier: "established",
+      });
+      expect(spend()).toEqual({ reserved: 0, spent: 0 });
+    };
+
+    it("answers a spent key limit with the upstream's Retry-After", async () => {
+      const logged = serverLog();
+      network(() =>
+        json(
+          { code: "key_spend_limit_reached", message: "limit reached" },
+          { status: 402, headers: { "retry-after": "3600" } }
+        )
+      );
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(res.headers["retry-after"]).toBe("3600");
+      // The gate working: a warning, not a report
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "warn",
+          message: "tier key limit reached",
+          report: false,
+        })
+      );
+    });
+
+    it("reports an empty credit balance to the maintainers", async () => {
+      const logged = serverLog();
+      network(() =>
+        json(
+          { code: "insufficient_credits_for_paid_model", message: "top up" },
+          { status: 402 }
+        )
+      );
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(logged).toContainEqual(
+        expect.objectContaining({ level: "error", report: true })
+      );
+    });
+
     it.each([
-      ["the tier's pool is empty", "quota_for_entity_exceeded"],
-      ["the credit balance is empty", "insufficient_funds"],
-    ])("reports an exhausted pool when %s", async (_, type) => {
-      vi.spyOn(console, "warn").mockImplementation(() => {});
+      {
+        refusal: "the Gateway's spent budget",
+        type: "quota_for_entity_exceeded",
+        level: "warn",
+        report: false,
+      },
+      {
+        refusal: "the Gateway's empty balance",
+        type: "insufficient_funds",
+        level: "error",
+        report: true,
+      },
+    ])("answers $refusal the same way", async ({ type, level, report }) => {
+      const logged = serverLog();
       network(() =>
         json({ error: { message: "spent", type } }, { status: 402 })
       );
 
       const res = await postJson(handler, TURN);
 
-      expect(res.statusCode).toBe(503);
-      expect(jsonBody(res)).toMatchObject({
-        reason: "pool-exhausted",
-        tier: "established",
-      });
-      expect(res.headers["retry-after"]).toBe("43200");
-      expect(spend()).toEqual({ reserved: 0, spent: 0 });
+      expectPoolExhausted(res);
+      expect(logged).toContainEqual(expect.objectContaining({ level, report }));
     });
 
-    it("relays a 402 that is not the Gateway's budget as the upstream's", async () => {
+    it.each([
+      {
+        where: "a nested error.code",
+        body: { error: { code: "insufficient_credits_for_paid_model" } },
+      },
+      {
+        where: "error.type behind a numeric error.code",
+        body: { error: { code: 402, type: "insufficient_funds" } },
+      },
+      {
+        where: "error.type behind a generic top-level code",
+        body: {
+          code: "payment_required",
+          error: { type: "insufficient_funds" },
+        },
+      },
+    ])("reports an empty balance named in $where", async ({ body }) => {
+      const logged = serverLog();
+      network(() => json(body, { status: 402 }));
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "error",
+          error: expect.objectContaining({
+            message: "upstream credit balance is empty",
+          }),
+          report: true,
+        })
+      );
+    });
+
+    it.each([
+      { what: "an unmapped code", code: "payment_required" },
+      { what: "an inherited key", code: "constructor" },
+    ])(
+      "reports a JSON 402 naming $what as an unknown cause",
+      async ({ code }) => {
+        const logged = serverLog();
+        network(() => json({ code }, { status: 402 }));
+
+        const res = await postJson(handler, TURN);
+
+        expectPoolExhausted(res);
+        expect(logged).toContainEqual(
+          expect.objectContaining({
+            level: "warn",
+            message: "upstream 402 with an unknown cause",
+            report: true,
+          })
+        );
+      }
+    );
+
+    it("answers an unrecognised 402 as an exhausted pool and reports it", async () => {
       const logged = serverLog();
       network(() => new Response("Payment required", { status: 402 }));
 
       const res = await postJson(handler, TURN);
 
-      expect(res.statusCode).toBe(402);
-      expect(jsonBody<{ reason?: string }>(res).reason).toBeUndefined();
-      // Why it was relayed, without the body
+      expectPoolExhausted(res);
       expect(logged).toContainEqual(
         expect.objectContaining({
           level: "warn",
-          message: "upstream error body is not JSON",
-          context: {
-            check: "pool-exhausted",
-            status: 402,
-            error: "SyntaxError",
-          },
+          message: "upstream 402 with an unknown cause",
+          report: true,
         })
       );
+    });
+
+    it("sends no Retry-After when the upstream sent none", async () => {
+      serverLog();
+      network(() => json({ code: "key_spend_limit_reached" }, { status: 402 }));
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(res.headers["retry-after"]).toBeUndefined();
+    });
+
+    it("drops an upstream Retry-After that is neither seconds nor a date", async () => {
+      serverLog();
+      network(() =>
+        json(
+          { code: "key_spend_limit_reached" },
+          { status: 402, headers: { "retry-after": "soon" } }
+        )
+      );
+
+      const res = await postJson(handler, TURN);
+
+      expectPoolExhausted(res);
+      expect(res.headers["retry-after"]).toBeUndefined();
     });
   });
 
@@ -1553,13 +1724,14 @@ describe("POST /api/agent spend gate", () => {
       tokens?: [number, number];
     }) => [
       {
+        id: "1",
         userId: "user-1",
+        day: today(),
         tier: "established",
+        model: "test-model",
         outcome: turn.outcome,
-        /* eslint-disable unicorn/no-null -- the `agent_turns` row: no usage is SQL `NULL` */
-        promptTokens: turn.tokens?.[0] ?? null,
-        completionTokens: turn.tokens?.[1] ?? null,
-        /* eslint-enable unicorn/no-null */
+        promptTokens: turn.tokens?.[0] ?? null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
+        completionTokens: turn.tokens?.[1] ?? null, // eslint-disable-line unicorn/no-null -- an `agent_turn` column: no usage is SQL `NULL`
         charged: turn.charged,
       },
     ];
@@ -1623,10 +1795,13 @@ describe("POST /api/agent spend gate", () => {
       expect(res.statusCode).toBe(200);
       expect(db.state.turns).toEqual([
         {
+          id: "1",
           userId: "user-1",
+          day: today(),
           tier: "established",
+          model: "test-model",
           outcome: "completed",
-          // eslint-disable-next-line unicorn/no-null -- the `agent_turns` row: a count the upstream left out is SQL `NULL`
+          // eslint-disable-next-line unicorn/no-null -- the `agent_turn` row: a count the upstream left out is SQL `NULL`
           promptTokens: null,
           completionTokens: 5,
           charged: RESERVED,
@@ -1635,24 +1810,54 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: RESERVED });
     });
 
-    it("logs a settle that fails, with what it would have charged", async () => {
+    it("warns, and charges nothing more, when the turn has no started row to settle", async () => {
       const logged = serverLog();
       network();
       db.state.during = (text) => {
-        if (text.includes("insert into agent_turn")) db.state.down = true;
+        if (text.includes("update agent_turn")) db.state.turns.length = 0;
+      };
+
+      const res = await postJson(handler, TURN);
+
+      expect(res.statusCode).toBe(200);
+      expect(spend()).toEqual({ reserved: RESERVED, spent: 0 });
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "warn",
+          message: "settle found no started turn",
+          report: true,
+          context: {
+            userId: "user-1",
+            turnId: "1",
+            end: "completed",
+            day: today(),
+          },
+        })
+      );
+    });
+
+    it("leaves the turn started, at its reservation, when its settle fails", async () => {
+      const logged = serverLog();
+      network();
+      db.state.during = (text) => {
+        if (text.includes("update agent_turn")) db.state.down = true;
       };
 
       const res = await postJson(handler, TURN);
 
       expect(res.statusCode).toBe(200);
       expect(res.ended).toBe(true);
-      expect(db.state.turns).toEqual([]);
+      expect(db.state.turns).toEqual(
+        recorded({ outcome: "started", charged: RESERVED })
+      );
+      expect(spend()).toEqual({ reserved: RESERVED, spent: 0 });
       expect(logged).toContainEqual(
         expect.objectContaining({
           level: "error",
           report: true,
           error: expect.objectContaining({ message: "connect ECONNREFUSED" }),
           context: expect.objectContaining({
+            turnId: "1",
             end: "completed",
             tier: "established",
             day: today(),

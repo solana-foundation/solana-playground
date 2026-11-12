@@ -51,7 +51,17 @@ export const addAfter = (
  */
 export const getRustDependencies = async (files: TupleFiles) => {
   const versions = await getVersions("crates");
-  const getVersion = (crateName: string) => versions[crateName] ?? "*";
+  // Without them, `spl-token-2022` exports a second `entrypoint` and `init_if_needed` does not compile
+  const features = await fetchCrateFeatures();
+  // Exact: a bare "1.1.2" lets Cargo take a later 1.x than the server builds with
+  const getVersion = (crateName: string) =>
+    versions[crateName] ? `"=${versions[crateName]}"` : `"*"`;
+  const getRequirement = (crateName: string) => {
+    const crateFeatures = features[crateName];
+    if (!crateFeatures) return getVersion(crateName);
+    const list = crateFeatures.map((feature) => `"${feature}"`).join(", ");
+    return `{ version = ${getVersion(crateName)}, features = [${list}] }`;
+  };
 
   const dependencies: Dependencies = {};
   const rustContents = files
@@ -65,15 +75,53 @@ export const getRustDependencies = async (files: TupleFiles) => {
         !dependencies[dependencyName] &&
         new RegExp(`${crateName}::`, "gm").test(content)
       ) {
-        dependencies[dependencyName] = getVersion(dependencyName);
+        dependencies[dependencyName] = getRequirement(dependencyName);
       }
     }
   }
 
-  return Object.entries(dependencies).reduce((acc, [name, version]) => {
-    return acc + `\n${name} = "${version}"`;
+  return Object.entries(dependencies).reduce((acc, [name, requirement]) => {
+    return acc + `\n${name} = ${requirement}`;
   }, "[dependencies]");
 };
+
+const CRATE_FEATURES_PATH = "/crates/features.json";
+
+const isCrateFeatures = (value: unknown): value is Record<string, string[]> =>
+  typeof value === "object" &&
+  value !== null &&
+  !Array.isArray(value) &&
+  Object.values(value).every(
+    (features) =>
+      Array.isArray(features) &&
+      features.every((feature) => typeof feature === "string")
+  );
+
+/**
+ * Fetch the features `generate-crates.mjs` serves for each crate.
+ *
+ * @throws if the file is not served or is not a map of crate name to feature list
+ */
+const fetchCrateFeatures = async () => {
+  const features: unknown = JSON.parse(
+    await PgCommon.fetchText(CRATE_FEATURES_PATH)
+  );
+  if (!isCrateFeatures(features)) {
+    throw new Error(
+      `${CRATE_FEATURES_PATH} is not a map of crate name to feature list`
+    );
+  }
+  return features;
+};
+
+/**
+ * Fetch the build server's `Cargo.lock`, which `generate-crates.mjs` serves beside the crates. The exports ship it,
+ * since the manifest pins only the crates the source names and the lock also holds the server's transitive versions.
+ *
+ * @throws if the file is not served
+ */
+export const fetchServerCargoLock = () =>
+  PgCommon.fetchText("/crates/Cargo.lock");
 
 /**
  * Get the packages the given files import or use as Playground globals, with

@@ -23,6 +23,9 @@ describe("BaseEffortMenu", () => {
   it("names the level and its place on the ladder", () => {
     setup("medium");
     expect(screen.getByRole("button", { name: "Medium: 2 of 5" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Medium: 2 of 5" }).className
+    ).toContain("max-md:h-12");
   });
 
   it("writes xhigh as Extra high", () => {

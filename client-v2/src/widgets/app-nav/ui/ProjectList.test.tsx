@@ -78,9 +78,11 @@ const app = vi.hoisted(() => {
       open: vi.fn(),
     },
     PgView: { setModal: vi.fn(), setToast: vi.fn() },
+    ExplorerLimitError: class ExplorerLimitError extends Error {},
   };
 });
 vi.mock("@/utils", () => ({
+  ExplorerLimitError: app.ExplorerLimitError,
   PgExplorer: app.PgExplorer,
   PgTutorial: app.PgTutorial,
   PgView: app.PgView,
@@ -359,6 +361,30 @@ describe("ProjectList", () => {
     ]);
   });
 
+  it("names the limit a refused duplicate is over, and does not report it", async () => {
+    files.readWorkspaceFiles.mockResolvedValue([["/alpha/src/lib.rs", ""]]);
+    app.PgExplorer.createWorkspace.mockRejectedValue(
+      new app.ExplorerLimitError(
+        "This project has 64 files. A project can have at most 50."
+      )
+    );
+    draw();
+
+    fireEvent.keyDown(menuOf("alpha"), { key: "d" });
+
+    await waitFor(() => expect(toasts()).toEqual(["project-duplicate-failed"]));
+    const [Toast] = app.PgView.setToast.mock.calls[0];
+    render(<Toast />);
+    expect(
+      screen.getByText(
+        "Could not duplicate alpha. This project has 64 files. A project can have at most 50."
+      )
+    ).toBeTruthy();
+    expect(logged.entries).toEqual([
+      expect.objectContaining({ level: "warn", report: false }),
+    ]);
+  });
+
   it("duplicates into the next free copy name, from the store", async () => {
     app.state.names = ["alpha", "alpha copy", "beta"];
     files.readWorkspaceFiles.mockResolvedValue([
@@ -411,12 +437,29 @@ describe("ProjectList", () => {
     expect(app.PgExplorer.switchWorkspace).not.toHaveBeenCalled();
   });
 
-  it("says a project was picked, the one already open included", () => {
+  it("says a project was picked, the one already open included", async () => {
     const onPicked = vi.fn();
     draw(onPicked);
     fireEvent.click(screen.getByRole("button", { name: "beta" }));
     fireEvent.click(screen.getByRole("button", { name: "alpha" }));
-    expect(onPicked).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(onPicked).toHaveBeenCalledTimes(2));
+  });
+
+  it("says a project was picked only once it is open", async () => {
+    let switched = () => {};
+    app.PgExplorer.switchWorkspace.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (switched = resolve))
+    );
+    const onPicked = vi.fn();
+    draw(onPicked);
+    fireEvent.click(screen.getByRole("button", { name: "alpha" }));
+    await waitFor(() =>
+      expect(app.PgExplorer.switchWorkspace).toHaveBeenCalledWith("alpha")
+    );
+    expect(onPicked).not.toHaveBeenCalled();
+
+    switched();
+    await waitFor(() => expect(onPicked).toHaveBeenCalledTimes(1));
   });
 
   it("hands export and delete to their dialogs, with the project's name", () => {

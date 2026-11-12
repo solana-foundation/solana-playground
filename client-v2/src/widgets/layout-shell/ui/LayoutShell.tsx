@@ -5,6 +5,7 @@ import { useTheme } from "styled-components";
 import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { isEditable } from "@/shared/lib/is-editable";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgFlow } from "@/views/flow/state/stage";
@@ -31,9 +32,15 @@ import type { ToggleSource } from "../model/telemetry";
 import { layoutTelemetry } from "../model/telemetry";
 import { useLayoutState } from "../model/use-layout-state";
 import BaseEditorHead from "./BaseEditorHead";
-import type { AssistantWide } from "./BaseLayoutShell";
+import type { AssistantWide, TutorialFrameSlot } from "./BaseLayoutShell";
 import BaseLayoutShell from "./BaseLayoutShell";
 import BaseStageBar from "./BaseStageBar";
+
+/** The console as the stage sees it (`LayoutShellProps.stage`) */
+export interface StageConsole {
+  open: boolean;
+  setOpen: (open: boolean, via: "button" | "auto") => void;
+}
 
 export interface LayoutShellProps {
   /**
@@ -64,21 +71,28 @@ export interface LayoutShellProps {
   showTabs?: boolean;
   /**
    * The files column. `collapsed` is never true in the phone's Files Sheet;
-   * `phone` says the column is in that Sheet, where `toggle` closes it.
+   * `phone` says the column is in that Sheet, where `toggle` closes it. A
+   * tutorial's frame has no files column.
    */
   files: (panel: {
     collapsed: boolean;
     toggle: () => void;
     phone: boolean;
   }) => ReactNode;
-  /** The stage */
-  stage: () => ReactNode;
+  /**
+   * The stage. `console` is the console's state, for a stage that carries
+   * its own Terminal control (a tutorial's workspace head); `setOpen` with
+   * `auto` is the stage opening it by its own rules.
+   */
+  stage: (panel: { console: StageConsole }) => ReactNode;
   console: (panel: { open: boolean; toggle: () => void }) => ReactNode;
   /**
    * The assistant, in its panel or, below `LAYOUT_BREAKPOINTS.compact`, its
    * Sheet. `toggle` folds the panel or closes the Sheet; `wide` and `setWide`
    * size the panel to its maximum and back for the visit (`AssistantWide`),
    * and `canWiden` says when that can happen: never for the Sheet.
+   * `inSheet` says the assistant is the right Sheet, so its Collapse points
+   * right.
    */
   assistant: (
     panel: { open: boolean; toggle: () => void } & AssistantWide
@@ -105,7 +119,13 @@ export interface LayoutShellProps {
    * the work, `onClose` is called first, since the assistant is under the
    * page. On a phone the work page shows it, and opening it goes there.
    */
-  cover?: { title: string; content: ReactNode; onClose: () => void };
+  cover?: {
+    title: string;
+    /** It draws its own large title, so a phone's bar names nothing */
+    hasOwnHeading?: boolean;
+    content: ReactNode;
+    onClose: () => void;
+  };
   /** While Home shows, keep the work mounted (`BaseLayoutShellProps.keepWork`) */
   keepWork?: boolean;
   /**
@@ -121,14 +141,15 @@ export interface LayoutShellProps {
   onShare?: (project: string) => void;
   /** The phone's status chip, in the work page's bar */
   phoneStatus?: ReactNode;
+  /**
+   * A tutorial's frame (`BaseLayoutShellProps.tutorial`). On a wide window
+   * it has neither the assistant panel nor the files column, so Ctrl+R and
+   * the assistant's own requests to open do nothing while it holds the work,
+   * and ⌘E opens the workspace's tree; the frame's navigation state is its
+   * own and never saved.
+   */
+  tutorial?: TutorialFrameSlot;
 }
-
-/** Whether a key pressed on `target` is typed into something */
-const isEditable = (target: EventTarget | null) =>
-  target instanceof Element &&
-  target.closest(
-    'input, textarea, select, [contenteditable]:not([contenteditable="false"])'
-  ) !== null;
 
 /**
  * The frame and the phone's pager, connected: the layout state and its
@@ -151,6 +172,7 @@ const LayoutShell = ({
   stageBarActions,
   onShare,
   phoneStatus,
+  tutorial,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -180,6 +202,10 @@ const LayoutShell = ({
   // Read by the keys and the subscriptions, which outlive renders
   const screenNow = useRef(screen);
   screenNow.current = screen;
+  // The frame holds the work: no assistant panel and no files column
+  const tutorialNow = useRef(false);
+  tutorialNow.current =
+    tutorial !== undefined && viewport === "wide" && screen.kind === "work";
   // The assistant's Sheet while Home shows: the visit's, never saved
   const [homeSheetOpen, setHomeSheetOpen] = useState(false);
   const homeSheetNow = useRef(false);
@@ -363,6 +389,9 @@ const LayoutShell = ({
   const pagerOrFrame = phone ? view === "chat" : wideOrSheet;
   const assistantShown = homeShown ? homeSheetOpen : pagerOrFrame;
   const setAssistant = (open: boolean, via: ToggleSource) => {
+    // The frame has no assistant panel: its chat holds the assistant's
+    // thread, whose `useTurn` takes a requested prompt itself
+    if (tutorialNow.current) return;
     const now = screenNow.current;
     // A page over the work covers the assistant: it makes way first
     if (open && now.kind === "page" && now.over === "work") now.cover.onClose();
@@ -382,10 +411,13 @@ const LayoutShell = ({
   /**
    * The console opening on its own (`auto`), or from a stage's button: the
    * visit's on a phone, else saved. Not under Home or a page, which show no
-   * console to open.
+   * console to open. In a tutorial's frame it never opens on its own: the
+   * workspace opens its drawer by its own rules (a failed build, the first
+   * deploy), not on every deploy.
    */
   const openConsoleVia = (via: "auto" | "button") => () => {
     if (isCovered(screenNow.current)) return;
+    if (via === "auto" && tutorialNow.current) return;
     if (phone) setPhoneConsoleOpen(true, via);
     else setOpen("console", { open: true, via });
   };
@@ -414,7 +446,9 @@ const LayoutShell = ({
   useKeybind(
     "Ctrl+R",
     () => {
-      if (isCovered(screenNow.current)) return;
+      // Under Home or a page the key is not the shell's: ⌘R reloads there.
+      // The tutorial frame has no assistant panel to toggle
+      if (isCovered(screenNow.current) || tutorialNow.current) return false;
       if (phone) {
         // The view is shown on Work: bring it into view first
         showPage("work", "key");
@@ -426,7 +460,7 @@ const LayoutShell = ({
   useKeybind(
     CONSOLE_KEY,
     () => {
-      if (isCovered(screenNow.current)) return;
+      if (isCovered(screenNow.current)) return false;
       if (phone) setPhoneConsoleOpen(!phoneConsoleNow.current, "key");
       else setOpen("console", { open: !state.open.console, via: "key" });
     },
@@ -446,7 +480,8 @@ const LayoutShell = ({
     {
       handle: (ev) => {
         // Before `preventDefault`: under Home or a page the key is not the shell's
-        if (isCovered(screenNow.current)) return;
+        // The frame has no column: ⌘E there is the workspace's tree
+        if (isCovered(screenNow.current) || tutorialNow.current) return;
         if (
           PgCommon.getOS() === "MacOS" &&
           ev.ctrlKey &&
@@ -558,7 +593,9 @@ const LayoutShell = ({
 
   let phoneTitle = PgExplorer.currentWorkspaceName ?? "";
   if (screen.kind === "home") phoneTitle = homeTitle ?? "";
-  if (screen.kind === "page") phoneTitle = screen.cover.title;
+  if (screen.kind === "page") {
+    phoneTitle = screen.cover.hasOwnHeading ? "" : screen.cover.title;
+  }
 
   // Share acts on the open project, so none is offered over Home or a page
   const shareName = PgExplorer.currentWorkspaceName;
@@ -567,17 +604,19 @@ const LayoutShell = ({
       ? () => onShare(shareName)
       : undefined;
 
-  // The bar names the project while the assistant is out of view, since its
-  // head cannot; under Home it names Home, as the phone's bar does
-  let barTitle: string | null = null;
-  if (homeShown) barTitle = homeTitle;
-  else if (!assistantShown) barTitle = PgExplorer.currentWorkspaceName ?? null;
+  // The bar names the project whether the assistant shows or not: the
+  // assistant's head names the model, so a toggle that took the name away
+  // left the work unnamed. Under Home it names Home, as the phone's bar does
+  const barTitle = homeShown
+    ? homeTitle
+    : PgExplorer.currentWorkspaceName ?? null;
 
   return (
     <BaseLayoutShell
       viewport={viewport}
       keepWork={keepWork}
       phoneStatus={phoneStatus}
+      tutorial={tutorial}
       navOpen={navOpen}
       onNavOpenChange={onNavOpenChange}
       assistantState={{
@@ -649,6 +688,7 @@ const LayoutShell = ({
         stageOn: stagePageOf(flowStage),
         consoleOpen: phoneConsole,
         onShare: phoneShare,
+        onConsoleClose: (via) => setPhoneConsoleOpen(false, via),
       }}
       stageBar={
         <BaseStageBar
@@ -683,7 +723,15 @@ const LayoutShell = ({
           terminalKey={keyLabel(CONSOLE_KEY, PgCommon.getOS())}
         />
       }
-      stage={stage()}
+      stage={stage({
+        console: {
+          open: phone ? phoneConsole : state.open.console,
+          setOpen: (open, via) => {
+            if (phone) setPhoneConsoleOpen(open, via);
+            else setOpen("console", { open, via });
+          },
+        },
+      })}
       console={console({
         open: phone ? phoneConsole : state.open.console,
         toggle: () => {
@@ -691,7 +739,7 @@ const LayoutShell = ({
           else setOpen("console", { open: !state.open.console, via: "button" });
         },
       })}
-      assistant={({ wide, setWide, canWiden }) =>
+      assistant={({ wide, setWide, canWiden, inSheet }) =>
         assistant({
           open: assistantShown,
           toggle: () => setAssistant(!assistantShown, "button"),
@@ -706,6 +754,7 @@ const LayoutShell = ({
             return changed;
           },
           canWiden,
+          inSheet,
         })
       }
       cover={

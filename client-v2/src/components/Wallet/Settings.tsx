@@ -13,22 +13,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+import { Icon } from "@/shared/ui/icon";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 
+import { NO_FAUCET } from "../../commands/airdrop/no-faucet";
+import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { isSignInFailure } from "../../features/auth";
 import { useCopy } from "../../hooks";
-import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
+import { Fn, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
-import {
-  Airdrop,
-  Copy,
-  Edit,
-  ExportFile,
-  ImportFile,
-  Plus,
-  ThreeDots,
-  Trash,
-} from "../Icons";
 import Img from "../Img";
 import { useAirdrop, useDarken } from "./hooks";
 import { importedText } from "./imported-text";
@@ -82,7 +75,7 @@ interface SettingsProps {
 const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
   showRename,
 }) => {
-  const { airdrop, airdropCondition } = useAirdrop();
+  const { airdrop, faucet } = useAirdrop();
   const { darken, lighten } = useDarken();
 
   const wallet = PgWallet.current!;
@@ -112,11 +105,11 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
       >
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-sm" title="More">
-            <ThreeDots />
+            <Icon name="more" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          // Wide enough for "Disconnect from <wallet>" on one line
+          // Wide enough for "Disconnect <wallet> Wallet" on one line
           className="min-w-56"
           onCloseAutoFocus={(ev) => {
             if (!choseRename.current) return;
@@ -129,10 +122,10 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           }}
         >
           <DropdownMenuItem onSelect={copyAddress}>
-            <Copy />
+            <Icon name="copy" />
             <MenuItemText>Copy address</MenuItemText>
           </DropdownMenuItem>
-          {airdropCondition && (
+          {faucet === "available" && (
             <DropdownMenuItem
               onSelect={() => {
                 airdrop().catch((error: unknown) => {
@@ -143,8 +136,14 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                 });
               }}
             >
-              <Airdrop />
+              <Icon name="airdrop" />
               <MenuItemText>Airdrop</MenuItemText>
+            </DropdownMenuItem>
+          )}
+          {faucet === "none" && (
+            <DropdownMenuItem disabled>
+              <Icon name="airdrop" />
+              <MenuItemText>{NO_FAUCET}</MenuItemText>
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
@@ -155,12 +154,12 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
               })
             }
           >
-            <Plus />
+            <Icon name="add" />
             <MenuItemText>Add</MenuItemText>
           </DropdownMenuItem>
           {isPg && (
             <DropdownMenuItem onSelect={rename}>
-              <Edit />
+              <Icon name="edit" />
               <MenuItemText>Rename</MenuItemText>
             </DropdownMenuItem>
           )}
@@ -174,17 +173,17 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                 })
               }
             >
-              <Trash />
+              <Icon name="delete" />
               <MenuItemText>Remove</MenuItemText>
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onSelect={importWallet}>
-            <ImportFile />
+            <Icon name="import" />
             <MenuItemText>Import</MenuItemText>
           </DropdownMenuItem>
           {isPg && (
             <DropdownMenuItem onSelect={() => PgWallet.export()}>
-              <ExportFile />
+              <Icon name="export" />
               <MenuItemText>Export</MenuItemText>
             </DropdownMenuItem>
           )}
@@ -193,22 +192,25 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
               key={standardWallet.name}
               variant={standardWallet.connected ? "destructive" : "default"}
               onSelect={() => {
-                PgCommand.connect
-                  .execute(standardWallet.name.toLowerCase())
-                  .catch(
-                    reportButtonFailure(
-                      standardWallet.connected
-                        ? `disconnect from ${standardWallet.name}`
-                        : `connect ${standardWallet.name}`
-                    )
-                  );
+                toggleWallet(standardWallet.name.toLowerCase()).catch(
+                  reportButtonFailure(
+                    standardWallet.connected
+                      ? `disconnect from ${standardWallet.name}`
+                      : `connect ${standardWallet.name}`
+                  )
+                );
               }}
             >
-              <Img src={standardWallet.icon} alt={standardWallet.name} />
+              {/* An image, which the item does not size as it does its icons */}
+              <Img
+                src={standardWallet.icon}
+                alt={standardWallet.name}
+                className="size-4 shrink-0 rounded-sm"
+              />
               <MenuItemText>
                 {standardWallet.connected
-                  ? `Disconnect from ${standardWallet.name}`
-                  : `Connect to ${standardWallet.name}`}
+                  ? `Disconnect ${walletOf(standardWallet.name)}`
+                  : `Connect ${walletOf(standardWallet.name)}`}
               </MenuItemText>
             </DropdownMenuItem>
           ))}
@@ -217,6 +219,10 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
     </Wrapper>
   );
 };
+
+/** A wallet's name as the menu says it: "Phantom Wallet", "Coinbase Wallet" */
+const walletOf = (name: string) =>
+  /\bwallet$/i.test(name) ? name : `${name} Wallet`;
 
 const Wrapper = styled.div`
   position: absolute;

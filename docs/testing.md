@@ -8,13 +8,15 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | [Prerequisites](#0-prerequisites) | macOS and Docker set-up, toolchains, branches |
 | [Builds](#1-builds) | wasm, client, client-v2 and its browser suite, server, compose images, real wasm packages |
 | [Client dev servers](#2-client-dev-servers-without-a-server) | client and client-v2 start with no build server running |
-| [Full suite with compose](#3-full-suite-with-docker-compose) | client, server, and database together; client-server requests |
+| [Full suite with compose](#3-full-suite-with-docker-compose) | client and server together; client-server requests |
 | [Static assets](#4-static-assets-default-rs-files-and-templates) | rust-analyzer `.rs` files in local, Vercel, and Docker builds; templates, tutorials |
 | [Release gate](#5-release-gate-unstable-and-stubs-stay-out-of-production) | unstable and the wasm stubs stay out of production |
 | [Optional: unstable server](#6-optional-unstable-server) | the server's unstable functionality, tested on purpose |
 | [Parallel runs](#8-parallel-runs) | groups of cases run at once, on rotated ports |
 | [client-v2 production build](#7-client-v2-production-build) | memory, the esbuild minifier, browser floor, type checks outside the build |
 | [Default backend access](#9-default-backend-access) | `/api/agent` refuses every request without a session, from the browser and from `curl` |
+| [Tutorial flow on devnet](#10-tutorial-flow-on-devnet) | Hello Anchor end to end on the real build server and devnet |
+| [IDL build guide](#11-idl-build-guide) | the guide's placement, its Docker and local commands on a real machine, and an uploaded IDL in Interact |
 
 Case IDs are stable: refer to a case by ID, not by position.
 
@@ -32,6 +34,8 @@ test a failure on purpose (C-2, C-3, C-5, M-4, G-2 to G-5) say so in their title
 
 The browser's `ResizeObserver loop completed with undelivered notifications.` is not in the table: client-v2's global
 error handler drops it (HOO-2125). A `logger:global` error with that text means the filter regressed, and C-4 fails.
+client-v2's own code raises none on a load of Home or a project (`client-v2/e2e/resize-observer-loop.e2e.spec.ts`,
+HOO-2187), so a notice seen in C-4 comes from a dependency or a browser extension.
 
 ## 0. Prerequisites
 
@@ -84,7 +88,7 @@ scenario adds a service or a profile to that file; it never adds a second compos
 
 | Case | Profile |
 | --- | --- |
-| B-6, D-1, D-4, D-5, D-9 | `dev` |
+| B-6, D-1, D-5, D-9 | `dev` |
 | D-2, D-3 | `prod` |
 | D-6 | `v2` |
 | D-7 | `v2-prod` |
@@ -96,12 +100,12 @@ client-v2 adds profiles; it does not rename or remove these:
 
 | Profile | Runs |
 | --- | --- |
-| `dev` | client, server, database |
-| `prod` | production build of the client, server, database |
+| `dev` | client, server |
+| `prod` | production build of the client, server |
 | `client-standalone` | client without a server |
-| `server-standalone` | server without a database |
+| `server-standalone` | server that starts without the root `.env` |
 
-The `v2` and `v2-prod` profiles run the `server-standalone` service too, and neither runs `server` or `db` (MongoDB).
+The `v2` and `v2-prod` profiles run the `server-standalone` service too, and neither runs `server`.
 
 - [ ] `docker compose config --profiles` lists all four.
 - [ ] `docker compose --profile client-standalone config --services` includes `client-standalone` and no client-v2
@@ -186,9 +190,10 @@ Expect: exit code 0 for each; `server/target/release/solpg-server` exists.
 
 ### B-5. client-v2: browser suite
 
-Mirrors the `e2e` matrix and the `e2e-report` job in
+Mirrors the `chromium` entries of the `e2e` matrix and the `e2e-report` job in
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml), which
-[client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages.
+[client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages. The Firefox variant at the end of this
+case mirrors the `firefox` entries.
 
 Precondition: B-7, or `yarn --cwd client-v2 setup:with-stubs` and `test-e2e:with-stubs` in place of `test-e2e`, which
 leaves out the `@real-wasm` specs as [client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) does; a
@@ -197,16 +202,21 @@ free slot port from "Slots" in
 server, no Postgres, and no default backend: every spec answers the account and model endpoints with `page.route`.
 `PG_AI_API_KEY=` on the command empties what `client-v2/.env` would set, so the dev server reports no default
 backend, as CI's does. With one configured, the panel opens with "Bring your own key" collapsed, and the specs that
-fill that form without expanding it fail. The platform RPC variables in `client-v2/.env.local`
-(`REACT_APP_DEVNET_RPC_URL` and the others) can stay set: the `test` fixture in
-[e2e/fixtures.ts](../client-v2/e2e/fixtures.ts) starts every fresh profile on the public devnet, the endpoint the
-specs stub, instead of the platform devnet those variables make the default.
+fill that form without expanding it fail. The platform RPC variables in `client-v2/.env`
+(`REACT_APP_DEVNET_RPC_URL`, `REACT_APP_MAINNET_RPC_URL` and `REACT_APP_TESTNET_RPC_URL`) can stay set: the suite's
+dev server blanks them ([playwright.config.mts](../client-v2/playwright.config.mts)), so Mainnet, Devnet and Testnet
+are the public endpoints the
+specs stub, and the `test` fixture in [e2e/fixtures.ts](../client-v2/e2e/fixtures.ts) starts every fresh profile on
+Devnet.
 
 ```sh
 k=5
 PORT=$((13000 + 10 * k)) PG_AI_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e
-grep -cv '^#\|^$' client-v2/e2e/known-skips.txt
+grep -c '^\[chromium\] \|^[^#[]' client-v2/e2e/known-skips.txt
 ```
+
+The `grep` counts the lines without a `[<project>] ` prefix and the `[chromium] ` lines: a `[firefox] ` line never
+skips in this run.
 
 Expect:
 
@@ -219,6 +229,18 @@ Expect:
       fails the run, which is where it gets fixed.
 - [ ] the two `client-v2-ai` tests in `e2e/assistant-pause.e2e.spec.ts` pass rather than skip: they stub
       `/api/agent` themselves, so they need no configured backend.
+
+Firefox variant: a run without `--project` declares only the `chromium` project, so Firefox needs its own run.
+
+```sh
+k=5
+yarn --cwd client-v2 playwright install firefox
+PORT=$((13000 + 10 * k)) PG_AI_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e --project=firefox
+grep -c '^\[firefox\] \|^[^#[]' client-v2/e2e/known-skips.txt
+```
+
+Expect: the same checks as the Chromium run, with the `grep` counting the lines without a prefix and the
+`[firefox] ` lines.
 
 ### B-6. compose images
 
@@ -262,8 +284,8 @@ was packaged without a rebuild, which `seed_target_dirs` in `client-v2/scripts/s
 
 Goal: the client starts and stays usable when no build server is reachable. Only the actions that call the server fail.
 
-Requests that need the server: `POST /build`, `GET /deploy/{uuid}`, `GET /share/{id}`, and `POST /new`. Nothing calls
-the server on page load at `/`.
+Requests that need the server: `POST /build` and `GET /deploy/{uuid}`. Upstream's `client/` also sends `GET /share/{id}`
+and `POST /new` from Share, which the server answers with 404. Nothing calls the server on page load at `/`.
 
 ### C-1. client starts
 
@@ -307,15 +329,18 @@ Expect: an error page or message, not a blank screen.
 
 Precondition: `master`; B-7; nothing listens on port 8080.
 
-client-v2 defaults its server endpoint to the remote Foundation server, not to `localhost`. To test the "no server"
-case, point it at the local port:
+Without `REACT_APP_SERVER_URL`, client-v2 defaults its server endpoint to `http://localhost:8080` and logs a warning
+naming the variable. Leave the variable empty in `client-v2/.env` for this case:
 
 ```sh
-REACT_APP_SERVER_URL=http://localhost:8080 yarn --cwd client-v2 dev
+REACT_APP_SERVER_URL= yarn --cwd client-v2 dev
 curl -s http://localhost:3000/api/health
 ```
 
 Expect:
+
+- [ ] the browser console shows the `settings:server` warning naming `REACT_APP_SERVER_URL`, and Settings lists no
+      "Solana Foundation" build server.
 
 - [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the console, the IDE, the terminal `help`, and
       the network tab pass.
@@ -363,8 +388,8 @@ docker compose --profile dev up --build
 
 Expect:
 
-- [ ] `wasm` exits 0; `db`, `server`, and `client` stay running.
-- [ ] the server log shows it listening on 8080 with no MongoDB connection error.
+- [ ] `wasm` exits 0; `server` and `client` stay running.
+- [ ] the server log shows it listening on 8080.
 - [ ] the client answers on `http://localhost:3000` (`PG_CLIENT_PORT` overrides the port), and the C-1 checks for
       the IDE, the terminal `help`, and the network tab pass.
 - [ ] D-9 passes: the server builds a program.
@@ -390,15 +415,6 @@ Steps: click Deploy.
 Expect: `GET http://localhost:8080/deploy/{uuid}` returns 200; the terminal prints the program ID; `solana program show
 <program ID>` in the playground terminal shows the program on the selected cluster.
 
-### D-4. share round trip
-
-Precondition: D-1 session (`dev` profile). A production build always sends share requests to `https://api.solpg.io`,
-so only a development build exercises the local server here.
-
-Steps: click Share, copy the link, open it in a new tab.
-
-Expect: `POST /new` to `http://localhost:8080` returns an ID; `GET /share/{id}` returns the same files that were shared.
-
 ### D-5. CORS
 
 ```sh
@@ -420,16 +436,15 @@ docker compose --profile v2 logs | grep -c 'local dev stub'
 ```
 
 Steps: in Settings, check that `experimental.unstable` is off and set the server to Local (client-v2 defaults to the
-remote Foundation server).
+server `REACT_APP_SERVER_URL` names, when it is set).
 
 Expect:
 
-- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running; no `db` or `server`
-      service exists.
+- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running; no `server` service
+      exists.
 - [ ] the `grep -c` prints `0`: the `yarn start` guard found the real packages.
 - [ ] `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/sync` prints a status other than `404`.
-- [ ] the D-2 and D-3 steps pass against the client-v2 UI, and no request path contains `/unstable/`. D-4 does not
-      apply: sharing needs MongoDB, which this profile does not run.
+- [ ] the D-2 and D-3 steps pass against the client-v2 UI, and no request path contains `/unstable/`.
 
 ### D-7. client-v2 production stack
 
@@ -485,7 +500,7 @@ Use a minimal native program for `lib.rs`: `solana_program::entrypoint!` with a 
 
 Expect:
 
-- [ ] the build returns `200` with JSON: `uuid` is a string, `idl` is `null` (a native program), and `stderr` holds no
+- [ ] the build returns `200` with JSON: `uuid` is a string, `idl` is `null` (for every program), and `stderr` holds no
       `error`.
 - [ ] `/deploy/<uuid>` returns the program binary: its first bytes print as `177   E   L   F`.
 
@@ -509,10 +524,12 @@ when its key file there matches its inputs:
 | `yarn --cwd client-v2 generate` (`setup`, `build`, `start`) | `generate-default-crates.mjs` | `generate-crates.mjs` (`cargo fetch` first) |
 | Vercel build (S-6) | `vercel-install.sh`: Build Cache, then Remote Cache, else generated | `yarn generate` in every build, no cache |
 | Docker image build (S-7) | the crates step in `client-v2/Dockerfile` | the same step |
-| `yarn dev`, `build-fast` (`generate-fast`) | not generated | not generated |
+| `yarn dev`, `dev-vercel` (`generate-dev-crates`) | `generate-default-crates.mjs`, skipped on the stubs | `generate-crates.mjs`, skipped on the stubs |
+| `build-fast` (`generate-fast`) | not generated | not generated |
 
-Run S-1 to S-3 against a dev server only after `yarn --cwd client-v2 generate`: `yarn dev` serves whatever an earlier
-run left in `public/crates`.
+`yarn dev` generates the crates itself unless rust-analyzer is a stub; the first run takes minutes, later ones skip by
+key. Outside CI, without cargo or rustup it warns and starts anyway, and Rust Analyzer turns itself off (no default
+crates) or skips the crate (a missing supported crate) with a warning.
 
 ### S-1. rust-analyzer default crates
 
@@ -739,7 +756,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST <production server URL>/unstabl
 curl -s -o /dev/null -w '%{http_code}\n' -X POST <production server URL>/build
 ```
 
-The production server URL is `FOUNDATION_ENDPOINT` in `client-v2/src/settings/server/default-endpoint.ts`.
+The production server URL is the Vercel projects' `REACT_APP_SERVER_URL`; ask a maintainer for it.
 
 Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which proves the URL is right.
 
@@ -753,7 +770,8 @@ Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which prov
 ### R-4. the deployment carries no stub
 
 A stub in production makes the `solana`, `anchor`, `spl-token`, and `sugar` commands throw, and leaves Rust
-intellisense empty. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
+intellisense empty. The requirement is "A deployment never carries a wasm stub" in
+`openspec/specs/client-v2-build/spec.md`. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
 any of the six packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
 [vercel.json](../client-v2/vercel.json)), and CI runs the same check after its production build, in
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml); this case checks what was deployed. For a protected preview, add
@@ -794,8 +812,7 @@ Expect: exit code 0; binaries `solpg-server`, `build-program`, and `bundle` in `
 
 ### U-2. unstable routes
 
-Precondition: U-1 done; the P-1 Darwin export in the same shell; MongoDB reachable at `PG_DB_URI` (the compose `db`
-service publishes no port).
+Precondition: U-1 done; the P-1 Darwin export in the same shell.
 
 ```sh
 PG_PORT=8081 server/target/release/solpg-server
@@ -880,7 +897,8 @@ docker compose --profile v2-unstable down
 
 The production build minifies with esbuild through `terser-webpack-plugin`'s `esbuildMinify`; the Terser library does
 not run. It also leaves the type check and ESLint to CI and `yarn run check`. The requirements are the spec
-`openspec/specs/client-v2-build/spec.md`; M-1 to M-7 walk its manual scenarios.
+`openspec/specs/client-v2-build/spec.md`; M-1 to M-7 walk the manual scenarios of its memory, minification, type
+check, and bundle requirements, and R-4 checks a deployment against "A deployment never carries a wasm stub".
 The bundle is about 15% larger than Terser's, accepted on purpose; shrinking it is a postponed improvement.
 
 ### M-1. the build fits Vercel's standard machine
@@ -1044,7 +1062,7 @@ different port is a different origin.
 
 | Group | Cases | Profile | Slot |
 | --- | --- | --- | --- |
-| upstream dev | D-1, D-4, D-5, D-9, C-3 | `dev` | 1 |
+| upstream dev | D-1, D-5, D-9, C-3 | `dev` | 1 |
 | upstream prod | D-2, then D-3 | `prod` | 2 |
 | v2 stack | D-6, then D-7 | `v2`, then `v2-prod` | 3 |
 | v2 standalone | D-8, S-7, S-1 to S-3, S-10 | `client-v2-standalone` | 4 |
@@ -1212,3 +1230,98 @@ Run G-1 to G-4 against a preview or production origin, then the rules in
 [Firewall](../client-v2/docs/firewall.md#verifying).
 
 Expect: the same answers as locally, and `429` once a loop passes the `/api/agent` rate limit.
+
+## 10. Tutorial flow on devnet
+
+CI walks Hello Anchor from the intro card to the finish card in
+[tutorial-hello-anchor.e2e.spec.ts](../client-v2/e2e/tutorial-hello-anchor.e2e.spec.ts), with the build server and
+devnet answered in the test ([fake-build-server.ts](../client-v2/e2e/fake-build-server.ts),
+[fake-devnet.ts](../client-v2/e2e/fake-devnet.ts)). The fakes check no signature and model only what Hello Anchor
+sends: T-1 is the same walk against the real ones, which only a real network shows (the server's logs, devnet's answers and its faucet).
+
+### T-1. Hello Anchor on the build server and devnet
+
+Precondition: a network that reaches the build server and `api.devnet.solana.com`, and a devnet faucet that is not at
+its daily limit for this machine. Like the rest of the browser suite it takes no slot: leave `PORT` unset.
+
+```sh
+PG_AI_API_KEY= E2E_LIVE=1 yarn --cwd client-v2 test-e2e:with-stubs e2e/tutorial-hello-anchor.e2e.spec.ts
+```
+
+Expect:
+
+- [ ] `1 passed` and `4 skipped`: the walk passes; the cases that steer the fakes skip, and so does the Call panel
+      case while it is a `fixme`.
+- [ ] the run took under five minutes. A deploy that waits on the faucet longer is the faucet, not the flow: run again
+      later.
+
+## 11. IDL build guide
+
+The stable build server returns `"idl": null` for every program, so a user builds the IDL on their own machine and
+uploads it. The Flow offers this as "Build the IDL locally" ([idl-build-guide](../client-v2/src/features/idl-build-guide)):
+a dialog with a Docker method (the default, `quay.io/ottersec/anchor`) and a local toolchain method (Rust, the Solana
+CLI, and Anchor through avm), whose commands `model/steps.ts` holds. CI checks where the guide is offered and that it
+opens ([client-v2-idl-build-guide.e2e.spec.ts](../client-v2/e2e/client-v2-idl-build-guide.e2e.spec.ts)); no CI job runs
+its commands, so I-2 and I-3 run them on a real machine. Run I-2 and I-3 on macOS (Apple Silicon) and on Linux, and
+record the results in task 2.2 of [stable-anchor-1-1-2](../openspec/changes/stable-anchor-1-1-2/tasks.md).
+
+### I-1. the Flow offers the guide while no IDL is held
+
+Precondition: client-v2 against a stable build server (D-6, or `yarn dev` with a server on `http://localhost:8080`),
+and a new project from the default Anchor starter. No IDL has been uploaded to it.
+
+Steps: build the project, then open Deploy and Interact.
+
+Expect:
+
+- [ ] the Build stage says the build produces no IDL, shows no "Download IDL", and has "Build the IDL locally" first
+      in its downloads row.
+- [ ] Deploy shows "Build the IDL locally"; Interact's empty surface says the build does not produce an IDL and shows
+      "Build the IDL locally" and "Upload IDL".
+- [ ] the button opens "Build the IDL on your machine" with "Docker" selected; "Local toolchain" switches the steps,
+      and every step that runs a command has "Copy command".
+
+### I-2. the Docker method builds the IDL
+
+Precondition: I-1's project, and Docker running. On Apple Silicon, Docker runs amd64 images (P-1).
+
+Steps:
+
+1. In the guide, "Download project", unzip it, and open a terminal in its folder.
+2. Copy the Docker step's command and run it.
+
+Expect:
+
+- [ ] the command exits 0 and writes `idl.json` in the project folder.
+- [ ] `idl.json` names the program's instructions (`initialize` for the default starter).
+- [ ] the files the command wrote are owned by the user who ran it. If they are owned by `root`, record that in task 2.2:
+      the command needs `--user`.
+
+### I-3. the local method builds the IDL
+
+Precondition: I-1's project, on a machine without Rust, Solana, or Anchor installed (a fresh VM or user account). On
+Linux, the packages the install step's note names are installed.
+
+Steps: in the guide, select "Local toolchain", then run each step's command in order in a terminal opened in the
+unzipped project.
+
+Expect:
+
+- [ ] every command exits 0, and `solana --version` and `anchor --version` print the versions the guide's titles name.
+- [ ] the last command writes `idl.json` in the project folder, with the same instructions as I-2's.
+
+### I-4. the uploaded IDL drives Interact and survives a rebuild
+
+Precondition: an `idl.json` from I-2 or I-3, the program deployed (localnet, or devnet with a faucet that answers).
+
+Steps:
+
+1. In Interact, "Upload IDL" and choose `idl.json`.
+2. Call `initialize`.
+3. Build again without changing the program.
+
+Expect:
+
+- [ ] after the upload, Interact lists the IDL's instructions.
+- [ ] the `initialize` transaction succeeds.
+- [ ] after the rebuild, Interact still lists the same instructions: a build that returns no IDL keeps the uploaded one.

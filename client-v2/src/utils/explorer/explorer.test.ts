@@ -1,7 +1,15 @@
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import nodePath from "path";
+
 import {
   clearFailures,
   getFailures,
 } from "../../features/persistence/model/diagnostics";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "../../shared/lib/telemetry";
 import { requireFor } from "../../test-utils/require-for";
 import { PgExplorer } from "./explorer";
 import { PgWorkspace } from "./workspace";
@@ -124,6 +132,61 @@ describe("deleting the current workspace", () => {
     }
 
     expect(PgExplorer.allWorkspaceNames).toEqual([]);
+  });
+});
+
+describe("PgExplorer.saveEditorPosition", () => {
+  beforeEach(reset);
+
+  // The editor saves its position every second; a workspace being re-read
+  // (Start in a tutorial) has emptied the file map, and the save threw
+  // "reading 'meta'" (HOO-2585)
+  it("skips a file the open workspace does not hold", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const position = { cursor: { from: 0, to: 0 }, topLineNumber: 1 };
+
+    expect(() =>
+      PgExplorer.saveEditorPosition("src/gone.rs", position)
+    ).not.toThrow();
+  });
+
+  it("keeps the position of a file it holds", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const path = requireFor("a file of alpha")(
+      Object.keys(PgExplorer.files).find((p) => p.endsWith(".rs"))
+    );
+    const position = { cursor: { from: 1, to: 2 }, topLineNumber: 3 };
+
+    PgExplorer.saveEditorPosition(path, position);
+
+    expect(PgExplorer.files[path].meta?.position).toEqual(position);
+  });
+});
+
+describe("deleting a workspace that is not open", () => {
+  beforeEach(reset);
+
+  it("deletes it and leaves the open one current", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+
+    await PgExplorer.deleteWorkspace("alpha");
+
+    expect(PgExplorer.allWorkspaceNames).toEqual(["beta"]);
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+  });
+
+  it("drops one whose folder is already gone from storage", async () => {
+    // A workspace listed in the config with no files under its folder: made
+    // by another build, or a delete that removed the files and failed after
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    await PgExplorer.fs.removeDir("/alpha/", { recursive: true });
+
+    await PgExplorer.deleteWorkspace("alpha");
+
+    expect(PgExplorer.allWorkspaceNames).toEqual(["beta"]);
   });
 });
 
@@ -619,7 +682,7 @@ describe("creating a workspace from a temporary view", () => {
   it("leaves the temporary view when it switches to a stored workspace", async () => {
     await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
     await PgExplorer.init({ files: [["/src/lib.rs", "temporary"]] });
-    await PgExplorer.getAllWorkspaceNames();
+    await PgExplorer.readAllWorkspaceNames();
 
     await PgExplorer.switchWorkspace("alpha");
 
@@ -633,7 +696,7 @@ describe("creating a workspace from a temporary view", () => {
     await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
     await PgExplorer.init({ files: [["/src/lib.rs", "temporary"]] });
 
-    expect(await PgExplorer.getAllWorkspaceNames()).toEqual(["alpha"]);
+    expect(await PgExplorer.readAllWorkspaceNames()).toEqual(["alpha"]);
     expect(PgExplorer.isTemporary).toBe(true);
   });
 });
@@ -656,4 +719,760 @@ describe("PgExplorer.getElFromPath", () => {
       expect(PgExplorer.getElFromPath(path)).toBe(el);
     });
   }
+});
+
+describe("writes past a project limit", () => {
+  const storedFiles = () =>
+    (PgExplorer.fs as unknown as { __files: Map<string, string> }).__files;
+  let sent: ReturnType<typeof memoryProvider>;
+
+  /** `count` small files under `/name/src/`, `f0.rs` onward */
+  const many = (name: string, count: number): Array<[string, string]> =>
+    Array.from({ length: count }, (_, i) => [`/${name}/src/f${i}.rs`, "x"]);
+
+  const refusals = () =>
+    sent.events.filter(({ name }) => name === "explorer_limit_refused");
+
+  beforeEach(async () => {
+    await reset();
+    sent = memoryProvider();
+    initTelemetry({ providers: [sent] });
+  });
+  afterEach(() => resetTelemetry());
+
+  describe("creating a file", () => {
+    it("refuses the 51st file and writes nothing", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 50) });
+
+      await expect(PgExplorer.createItem("src/extra.rs")).rejects.toThrow(
+        "A project can have at most 50 files."
+      );
+      expect(storedFiles().has("/alpha/src/extra.rs")).toBe(false);
+      expect(PgExplorer.files["/alpha/src/extra.rs"]).toBeUndefined();
+      expect(refusals()).toEqual([
+        {
+          name: "explorer_limit_refused",
+          params: { action: "create", limit: "count" },
+        },
+      ]);
+    });
+
+    it("creates a folder, which is not a file", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 50) });
+
+      await PgExplorer.createItem("src/more/");
+      expect(PgExplorer.files["/alpha/src/more/"]).toEqual({});
+      expect(refusals()).toEqual([]);
+    });
+
+    it("keeps a file's content when an overwrite is over the size limit", async () => {
+      // What the assistant's file write does: `createItem` with `override`
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", "before"]],
+      });
+
+      await expect(
+        PgExplorer.createItem("src/lib.rs", "a".repeat(200_000), {
+          override: true,
+        })
+      ).rejects.toThrow("A file can be at most 128 KB.");
+      expect(storedFiles().get("/alpha/src/lib.rs")).toBe("before");
+      expect(PgExplorer.files["/alpha/src/lib.rs"].content).toBe("before");
+      expect(refusals()[0].params).toEqual({
+        action: "create",
+        limit: "size",
+      });
+    });
+
+    it("refuses another file in a project restored over the limit", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 1) });
+      // A restore is not refused, so a project stored before the limits
+      // arrives whole
+      await PgExplorer.replaceWorkspaceFiles(
+        "alpha",
+        Object.fromEntries(
+          Array.from({ length: 60 }, (_, i) => [`src/f${i}.rs`, "x"])
+        )
+      );
+      await PgExplorer.switchWorkspace("alpha");
+
+      await expect(PgExplorer.createItem("src/extra.rs")).rejects.toThrow(
+        "A project can have at most 50 files."
+      );
+      expect(storedFiles().has("/alpha/src/extra.rs")).toBe(false);
+    });
+
+    it("refuses an edit to an existing file in a project restored over the limit", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 1) });
+      await PgExplorer.replaceWorkspaceFiles(
+        "alpha",
+        Object.fromEntries(
+          Array.from({ length: 60 }, (_, i) => [`src/f${i}.rs`, "x"])
+        )
+      );
+      await PgExplorer.switchWorkspace("alpha");
+
+      // What the assistant's file write does: `createItem` with `override`
+      await expect(
+        PgExplorer.createItem("src/f1.rs", "y", { override: true })
+      ).rejects.toThrow("A project can have at most 50 files.");
+      expect(storedFiles().get("/alpha/src/f1.rs")).toBe("x");
+    });
+
+    it("creates a small file beside another file over the size limit", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", ""]],
+      });
+      // Pasted in the editor, which is not refused
+      await PgExplorer.replaceWorkspaceFiles("alpha", {
+        "src/lib.rs": "a".repeat(150_000),
+      });
+      await PgExplorer.switchWorkspace("alpha");
+
+      await PgExplorer.createItem("notes.md");
+      expect(storedFiles().has("/alpha/notes.md")).toBe(true);
+    });
+
+    it("refuses an overwrite that leaves a project over the size limit", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", ""]],
+      });
+      await PgExplorer.replaceWorkspaceFiles(
+        "alpha",
+        Object.fromEntries(
+          Array.from({ length: 5 }, (_, i) => [
+            `src/f${i}.rs`,
+            "a".repeat(110_000),
+          ])
+        )
+      );
+      await PgExplorer.switchWorkspace("alpha");
+
+      await expect(
+        PgExplorer.createItem("src/f0.rs", "a".repeat(110_001), {
+          override: true,
+        })
+      ).rejects.toThrow("A project can be at most 512 KB.");
+      // 540,000 bytes: smaller, still over
+      await expect(
+        PgExplorer.createItem("src/f0.rs", "a".repeat(100_000), {
+          override: true,
+        })
+      ).rejects.toThrow("A project can be at most 512 KB.");
+      // 441,000 bytes: back under
+      await PgExplorer.createItem("src/f0.rs", "a".repeat(1_000), {
+        override: true,
+      });
+      expect(storedFiles().get("/alpha/src/f0.rs")).toHaveLength(1_000);
+    });
+
+    it("counts the generated files sync carries toward the project size", async () => {
+      // 524,000 bytes of user files: 288 bytes under the limit
+      await PgExplorer.createWorkspace("alpha", {
+        files: Array.from({ length: 4 }, (_, i) => [
+          `/alpha/src/f${i}.rs`,
+          "a".repeat(131_000),
+        ]),
+      });
+      // Written straight to the store, as `PgProgramInfo` does, so the
+      // explorer's file map never holds it
+      await PgExplorer.fs.writeFile(
+        "/alpha/.workspace/program-info.json",
+        "a".repeat(200),
+        { createParents: true }
+      );
+
+      await expect(
+        PgExplorer.createItem("notes.md", "a".repeat(100))
+      ).rejects.toThrow("A project can be at most 512 KB.");
+      expect(storedFiles().has("/alpha/notes.md")).toBe(false);
+    });
+
+    it("counts a dot-named user file only the store holds toward the project size", async () => {
+      // 524,000 bytes of user files: 288 bytes under the limit
+      await PgExplorer.createWorkspace("alpha", {
+        files: Array.from({ length: 4 }, (_, i) => [
+          `/alpha/src/f${i}.rs`,
+          "a".repeat(131_000),
+        ]),
+      });
+      // As an import or another device writes it: `isItemNameValid` keeps
+      // it out of the explorer's file map, yet sync uploads it
+      await PgExplorer.fs.writeFile("/alpha/.github/ci.yml", "a".repeat(200), {
+        createParents: true,
+      });
+
+      const refused = PgExplorer.createItem("notes.md", "a".repeat(100));
+      await expect(refused).rejects.toThrow("A project can be at most 512 KB.");
+      await expect(refused).rejects.toMatchObject({
+        limit: { reason: "project-too-large", limit: 524_288 },
+      });
+      expect(storedFiles().has("/alpha/notes.md")).toBe(false);
+    });
+
+    it("leaves the workspace's local state out of the project size", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: Array.from({ length: 4 }, (_, i) => [
+          `/alpha/src/f${i}.rs`,
+          "a".repeat(131_000),
+        ]),
+      });
+      // Which tabs are open: local, never synced
+      await PgExplorer.fs.writeFile(
+        "/alpha/.workspace/metadata.json",
+        "a".repeat(200),
+        { createParents: true }
+      );
+
+      await PgExplorer.createItem("notes.md", "a".repeat(100));
+      expect(storedFiles().has("/alpha/notes.md")).toBe(true);
+    });
+  });
+
+  describe("renaming", () => {
+    it("refuses a folder rename that pushes a file path over 256 characters", async () => {
+      // `dir/` + 242 + `.rs` is 249 code points, under the 256 limit; under a
+      // 13-character folder name it is 259
+      const file = `${"n".repeat(242)}.rs`;
+      await PgExplorer.createWorkspace("alpha", {
+        files: [
+          ["/alpha/src/lib.rs", ""],
+          [`/alpha/dir/${file}`, "x"],
+        ],
+      });
+
+      await expect(
+        PgExplorer.renameItem("/alpha/dir/", `/alpha/${"d".repeat(13)}`)
+      ).rejects.toThrow("A file path can be at most 256 characters.");
+      expect(storedFiles().get(`/alpha/dir/${file}`)).toBe("x");
+      expect(PgExplorer.files[`/alpha/dir/${file}`]).toBeDefined();
+      expect(refusals()[0].params).toEqual({
+        action: "rename",
+        limit: "path",
+      });
+    });
+
+    it("refuses a file rename that pushes its path over 256 characters", async () => {
+      // `src/` + 249 + `.rs` is 256 code points, at the limit; one more is 257
+      const file = `${"n".repeat(249)}.rs`;
+      await PgExplorer.createWorkspace("alpha", {
+        files: [
+          ["/alpha/src/lib.rs", ""],
+          [`/alpha/src/${file}`, "x"],
+        ],
+      });
+
+      await expect(
+        PgExplorer.renameItem(`/alpha/src/${file}`, `/alpha/src/${file}n`)
+      ).rejects.toThrow("A file path can be at most 256 characters.");
+      expect(storedFiles().get(`/alpha/src/${file}`)).toBe("x");
+      expect(refusals()[0].params).toEqual({
+        action: "rename",
+        limit: "path",
+      });
+    });
+
+    it("renames the open workspace whatever its name's length", async () => {
+      // A workspace's name is not part of any path sync carries: a file 250
+      // code points from the root stays 250 under a 20-character name
+      const file = `${"n".repeat(243)}.rs`;
+      await PgExplorer.createWorkspace("alpha", {
+        files: [
+          ["/alpha/src/lib.rs", ""],
+          [`/alpha/src/${file}`, "x"],
+        ],
+      });
+      const renamed = "r".repeat(20);
+
+      await PgExplorer.renameWorkspace(renamed);
+      expect(storedFiles().get(`/${renamed}/src/${file}`)).toBe("x");
+      expect(refusals()).toEqual([]);
+    });
+
+    it("renames in a project over another limit", async () => {
+      await PgExplorer.createWorkspace("alpha", { files: many("alpha", 1) });
+      await PgExplorer.replaceWorkspaceFiles(
+        "alpha",
+        Object.fromEntries(
+          Array.from({ length: 60 }, (_, i) => [`src/f${i}.rs`, "x"])
+        )
+      );
+      await PgExplorer.switchWorkspace("alpha");
+
+      await PgExplorer.renameItem("/alpha/src/f1.rs", "/alpha/src/g1.rs");
+      expect(storedFiles().has("/alpha/src/g1.rs")).toBe(true);
+    });
+  });
+
+  describe("importing", () => {
+    it("creates no workspace from a folder of 64 files", async () => {
+      await expect(
+        PgExplorer.createWorkspace("big", { files: many("big", 64) })
+      ).rejects.toThrow(
+        "This project has 64 files. A project can have at most 50."
+      );
+      expect(PgExplorer.allWorkspaceNames).not.toContain("big");
+      expect([...storedFiles().keys()].some((k) => k.startsWith("/big/"))).toBe(
+        false
+      );
+      expect(refusals()[0].params).toEqual({
+        action: "import",
+        limit: "count",
+      });
+    });
+
+    it("names a large file the way the import dialog shows it", async () => {
+      await expect(
+        PgExplorer.createWorkspace("github-x", {
+          files: [
+            ["src/lib.rs", "x"],
+            ["src/data.rs", "a".repeat(143_360)],
+          ],
+        })
+      ).rejects.toThrow("src/data.rs is 140 KB. A file can be at most 128 KB.");
+    });
+
+    it("measures the project size of an import", async () => {
+      const imported = Array.from(
+        { length: 6 },
+        (_, i) => [`src/f${i}.rs`, "a".repeat(100_000)] as [string, string]
+      );
+      await expect(
+        PgExplorer.createWorkspace("big", { files: imported })
+      ).rejects.toThrow(
+        "This project is 586 KB. A project can be at most 512 KB."
+      );
+      expect(refusals()[0].params).toEqual({
+        action: "import",
+        limit: "project",
+      });
+    });
+
+    it("refuses a temporary project over a limit and keeps it temporary", async () => {
+      const temporary = Array.from(
+        { length: 51 },
+        (_, i) => [`/src/f${i}.rs`, "x"] as [string, string]
+      );
+      await PgExplorer.init({ files: temporary });
+
+      await expect(
+        PgExplorer.createWorkspace("kept", { fromTemporary: true })
+      ).rejects.toThrow("This project has 51 files.");
+      expect(PgExplorer.isTemporary).toBe(true);
+    });
+  });
+
+  describe("every bundled template and tutorial", () => {
+    // `client-v2/`
+    const root = nodePath.join(__dirname, "../../..");
+
+    /** Every file under `dir`, relative to it, `.raw` dropped */
+    const read = (dir: string, prefix = ""): Array<[string, string]> =>
+      readdirSync(dir).flatMap((name) => {
+        const full = nodePath.join(dir, name);
+        const rel = prefix + name;
+        if (statSync(full).isDirectory()) return read(full, `${rel}/`);
+        return [[rel.replace(/\.raw$/, ""), readFileSync(full, "utf8")]];
+      });
+
+    /** Directories holding a template's or a tutorial's starting files */
+    const sources = () => {
+      const found: Array<[string, string]> = [];
+      for (const base of ["src/frameworks", "src/tutorials"]) {
+        for (const name of readdirSync(nodePath.join(root, base))) {
+          const filesDir = nodePath.join(root, base, name, "files");
+          if (existsSync(filesDir)) found.push([`${base}/${name}`, filesDir]);
+        }
+      }
+      // Markdown tutorials ship from `public/`, which `yarn generate-fast`
+      // copies out of `client/public`
+      const pub = nodePath.join(root, "public/tutorials");
+      for (const name of readdirSync(pub)) {
+        const filesDir = nodePath.join(pub, name, "files");
+        if (existsSync(filesDir))
+          found.push([`public/tutorials/${name}`, filesDir]);
+      }
+      return found;
+    };
+
+    it("creates a workspace from each without a refusal", async () => {
+      const all = sources();
+      expect(all.length).toBeGreaterThan(10);
+      for (const [i, [source, dir]] of all.entries()) {
+        const workspaceFiles = read(dir)
+          .filter(([p]) => p !== "index.ts")
+          .map(([p, content]): [string, string] => [`/w${i}/${p}`, content]);
+        await expect(
+          PgExplorer.createWorkspace(`w${i}`, { files: workspaceFiles }),
+          source
+        ).resolves.toBeUndefined();
+      }
+      expect(refusals()).toEqual([]);
+    });
+  });
+
+  describe("writes that are not refused", () => {
+    it("saves the editor's content over the size limit", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", "x"]],
+      });
+      const big = "a".repeat(150_000);
+
+      PgExplorer.saveFileToState("src/lib.rs", big);
+      expect(PgExplorer.files["/alpha/src/lib.rs"].content).toBe(big);
+    });
+
+    it("writes a restored file over the size limit", async () => {
+      await PgExplorer.createWorkspace("alpha", {
+        files: [["/alpha/src/lib.rs", "x"]],
+      });
+      const big = "a".repeat(150_000);
+
+      await PgExplorer.replaceWorkspaceFiles("alpha", { "src/lib.rs": big });
+      expect(storedFiles().get("/alpha/src/lib.rs")).toBe(big);
+      expect(refusals()).toEqual([]);
+    });
+  });
+});
+
+/**
+ * lightning-fs saves its folder tree 500 ms after the last write, so a page
+ * load inside that window loses whatever changed the tree: a file or folder
+ * created, renamed or deleted, and a workspace file written for the first
+ * time (a new project, or after sync replaced the files). Each of those is
+ * followed by a flush; a write that only changes a file's content is not,
+ * since the tree already holds the file.
+ *
+ * `writeWorkspaceFile` remembers which paths it flushed for the whole module;
+ * `createWorkspace` in `beforeEach` empties that through its create event.
+ */
+describe("writes that change the folder tree", () => {
+  beforeEach(async () => {
+    await reset();
+    await PgExplorer.createWorkspace("alpha", {
+      files: files("alpha"),
+      defaultOpenFile: "/alpha/src/lib.rs",
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The filesystem calls made from here on, in order, as `<method> <path>` */
+  const recordFs = () => {
+    const calls: string[] = [];
+    const fs = PgExplorer.fs as unknown as Record<
+      string,
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    for (const method of [
+      "writeFile",
+      "createDir",
+      "rename",
+      "removeFile",
+      "removeDir",
+      "flush",
+    ]) {
+      const original = fs[method].bind(fs);
+      vi.spyOn(fs, method).mockImplementation(async (...args: unknown[]) => {
+        calls.push(args.length ? `${method} ${args[0]}` : method);
+        return original(...args);
+      });
+    }
+    return calls;
+  };
+
+  /** The call right after the last one that starts with `call` */
+  const after = (calls: string[], call: string) => {
+    const index = calls.findLastIndex((c) => c.startsWith(call));
+    expect(index).not.toBe(-1);
+    return calls[index + 1];
+  };
+
+  it("flushes after creating a file", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.createItem("/alpha/src/new.rs", "fn main() {}");
+
+    expect(after(calls, "writeFile /alpha/src/new.rs")).toBe("flush");
+  });
+
+  it("flushes after creating a folder", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.createItem("/alpha/src/nested/");
+
+    expect(after(calls, "createDir /alpha/src/nested/")).toBe("flush");
+  });
+
+  it("does not flush when it only replaces a file's content", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.createItem("/alpha/src/lib.rs", "changed", {
+      override: true,
+    });
+
+    expect(after(calls, "writeFile /alpha/src/lib.rs")).not.toBe("flush");
+  });
+
+  it("flushes after renaming a file", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.renameItem("/alpha/src/lib.rs", "/alpha/src/renamed.rs");
+
+    expect(after(calls, "rename /alpha/src/lib.rs")).toBe("flush");
+  });
+
+  it("flushes after deleting a file", async () => {
+    await PgExplorer.createItem("/alpha/src/gone.rs", "");
+    const calls = recordFs();
+
+    await PgExplorer.deleteItem("/alpha/src/gone.rs");
+
+    expect(after(calls, "removeFile /alpha/src/gone.rs")).toBe("flush");
+  });
+
+  it("flushes after the metadata a new workspace writes", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.createWorkspace("beta", {
+      files: files("beta"),
+      defaultOpenFile: "/beta/src/lib.rs",
+    });
+
+    expect(after(calls, "writeFile /beta/.workspace/metadata.json")).toBe(
+      "flush"
+    );
+  });
+
+  it("flushes the metadata again once sync replaced the files without it", async () => {
+    await PgExplorer.saveMeta();
+    // A snapshot from another device that has none of the files the metadata
+    // lists, so nothing is kept and the next save makes the file anew
+    await PgExplorer.replaceWorkspaceFiles("alpha", {
+      "src/other.rs": "from elsewhere",
+    });
+    const calls = recordFs();
+
+    await PgExplorer.saveMeta();
+
+    expect(after(calls, "writeFile /alpha/.workspace/metadata.json")).toBe(
+      "flush"
+    );
+  });
+
+  it("does not flush the metadata again once it has", async () => {
+    await PgExplorer.saveMeta();
+    const calls = recordFs();
+
+    await PgExplorer.saveMeta();
+
+    expect(calls).toEqual(["writeFile /alpha/.workspace/metadata.json"]);
+  });
+
+  it("flushes after deleting a folder", async () => {
+    // With a file in it: the in-memory store knows a folder by what is in it
+    await PgExplorer.createItem("/alpha/src/nested/a.rs", "");
+    const calls = recordFs();
+
+    await PgExplorer.deleteItem("/alpha/src/nested/");
+
+    expect(after(calls, "removeDir /alpha/src/nested/")).toBe("flush");
+  });
+
+  describe("when saving the tree fails", () => {
+    beforeEach(() => {
+      clearFailures();
+      vi.spyOn(PgExplorer.fs, "flush").mockRejectedValue(new Error("quota"));
+    });
+
+    // The change is on disk by then: failing the operation would leave the
+    // explorer showing what the store no longer holds
+    it("still creates the file, and reports the failure", async () => {
+      await PgExplorer.createItem("/alpha/src/new.rs", "");
+
+      expect(PgExplorer.getFile("/alpha/src/new.rs")).toBeDefined();
+      expect(getFailures().map((f) => f.what)).toContain(
+        "save the folder tree after a create"
+      );
+    });
+
+    it("still renames the file, and reports the failure", async () => {
+      await PgExplorer.renameItem("/alpha/src/lib.rs", "/alpha/src/renamed.rs");
+
+      expect(PgExplorer.getFile("/alpha/src/renamed.rs")).toBeDefined();
+      expect(PgExplorer.getFile("/alpha/src/lib.rs")).toBeNull();
+      expect(getFailures().map((f) => f.what)).toContain(
+        "save the folder tree after a rename"
+      );
+    });
+
+    it("still deletes the file, and reports the failure", async () => {
+      await PgExplorer.createItem("/alpha/src/gone.rs", "");
+      clearFailures();
+
+      await PgExplorer.deleteItem("/alpha/src/gone.rs");
+
+      expect(PgExplorer.getFile("/alpha/src/gone.rs")).toBeNull();
+      expect(getFailures().map((f) => f.what)).toContain(
+        "save the folder tree after a delete"
+      );
+    });
+  });
+
+  describe("a workspace whose folder is gone", () => {
+    /** Rejects writes and new folders under `root`, as lightning-fs does once it is deleted */
+    const goneUnder = (root: string) => {
+      const fs = PgExplorer.fs as unknown as Record<
+        string,
+        (...args: unknown[]) => Promise<unknown>
+      >;
+      const createDir = vi.fn();
+      for (const method of ["writeFile", "createDir"]) {
+        const original = fs[method].bind(fs);
+        vi.spyOn(fs, method).mockImplementation(async (...args: unknown[]) => {
+          if (method === "createDir") createDir(args[0]);
+          if (String(args[0]).startsWith(root)) {
+            throw Object.assign(new Error(`ENOENT: ${args[0]}`), {
+              code: "ENOENT",
+            });
+          }
+          return original(...args);
+        });
+      }
+      return { createDir };
+    };
+
+    it("gets no metadata, and its folder is not made again", async () => {
+      const { createDir } = goneUnder("/alpha/");
+
+      await expect(PgExplorer.saveMeta()).resolves.toBeUndefined();
+      expect(createDir).not.toHaveBeenCalledWith("/alpha/");
+    });
+
+    it("can still be left for another one", async () => {
+      await PgExplorer.createWorkspace("beta", { files: files("beta") });
+      goneUnder("/beta/");
+
+      await PgExplorer.switchWorkspace("alpha");
+
+      expect(PgExplorer.currentWorkspaceName).toBe("alpha");
+    });
+  });
+});
+
+describe("renaming an item", () => {
+  beforeEach(reset);
+
+  // The editor's autosave flushes on this event, so a pending edit is written
+  // at the old path and moved with the file; announced after the move, the
+  // save found its path gone and dropped the edit
+  it("announces the rename before anything moves", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const order: string[] = [];
+    const rename = vi.spyOn(PgExplorer.fs, "rename");
+    rename.mockImplementation(async () => {
+      order.push("fs.rename");
+    });
+    const willRename = PgExplorer.onWillRenameItem((path) => {
+      order.push(`will ${path}`);
+      expect(PgExplorer.getFile(path)).not.toBeNull();
+    });
+
+    await PgExplorer.renameItem("src/lib.rs", "src/main.rs");
+    willRename.dispose();
+    rename.mockRestore();
+
+    expect(order).toEqual([
+      `will ${PgExplorer.convertToFullPath("src/lib.rs")}`,
+      "fs.rename",
+    ]);
+  });
+
+  it("carries a write made on the announcement to the new name", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "declare_id!();"],
+        ["/alpha/client/client.ts", "before"],
+      ],
+    });
+    const before = PgExplorer.convertToFullPath("client/client.ts");
+    // What the autosave does: state at once, the disk write started and not
+    // awaited, so only the fs's call order puts it ahead of the rename
+    const willRename = PgExplorer.onWillRenameItem(() => {
+      PgExplorer.saveFileToState(before, "edited");
+      void PgExplorer.fs.writeFile(before, "edited");
+    });
+
+    await PgExplorer.renameItem("client", "web");
+    willRename.dispose();
+
+    const moved = PgExplorer.convertToFullPath("web/client.ts");
+    expect(PgExplorer.getFile(moved)?.content).toBe("edited");
+    expect(await PgExplorer.fs.readToString(moved)).toBe("edited");
+  });
+
+  it("announces nothing for a rename it refuses", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "a"],
+        ["/alpha/src/b.rs", "b"],
+      ],
+    });
+    const announced = vi.fn();
+    const willRename = PgExplorer.onWillRenameItem(announced);
+
+    await expect(
+      PgExplorer.renameItem("src/lib.rs", "src/b.rs")
+    ).rejects.toThrow(PgExplorer.errors.ALREADY_EXISTS);
+    willRename.dispose();
+
+    expect(announced).not.toHaveBeenCalled();
+  });
+});
+
+describe("deleting a file that has no tab", () => {
+  beforeEach(reset);
+
+  // A delete closes only the tabs of what it deletes; a path with no tab
+  // has nothing to close
+  it("leaves the open tabs and the selected tab as they were", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "declare_id!();"],
+        ["/alpha/client/client.ts", "client"],
+        ["/alpha/tests/anchor.test.ts", "test"],
+      ],
+    });
+    const lib = PgExplorer.convertToFullPath("src/lib.rs");
+    const client = PgExplorer.convertToFullPath("client/client.ts");
+    PgExplorer.setTabs([lib, client]);
+    PgExplorer.openFile(lib);
+
+    await PgExplorer.deleteItem("tests/anchor.test.ts");
+
+    expect(PgExplorer.tabs).toEqual([lib, client]);
+    expect(PgExplorer.currentFilePath).toBe(lib);
+  });
+
+  it("closes only the tabs of a folder's files when the folder goes", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "declare_id!();"],
+        ["/alpha/client/a.ts", "a"],
+        ["/alpha/client/b.ts", "b"],
+        ["/alpha/tests/anchor.test.ts", "test"],
+      ],
+    });
+    const lib = PgExplorer.convertToFullPath("src/lib.rs");
+    const a = PgExplorer.convertToFullPath("client/a.ts");
+    const test = PgExplorer.convertToFullPath("tests/anchor.test.ts");
+    PgExplorer.setTabs([lib, a, test]);
+    PgExplorer.openFile(lib);
+
+    await PgExplorer.deleteItem("client");
+
+    expect(PgExplorer.tabs).toEqual([lib, test]);
+    expect(PgExplorer.currentFilePath).toBe(lib);
+  });
 });

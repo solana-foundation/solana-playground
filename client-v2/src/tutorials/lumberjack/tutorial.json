@@ -1,0 +1,538 @@
+{
+  "$schema": "../tutorial.schema.json",
+  "version": 1,
+  "name": "Lumberjack",
+  "description": "Keep a player's state on chain and refill energy over time",
+  "authors": [
+    {
+      "name": "Jonas Hahn",
+      "link": "https://twitter.com/solplay_jonas"
+    }
+  ],
+  "level": "Intermediate",
+  "framework": "Anchor",
+  "languages": ["Rust", "TypeScript"],
+  "categories": ["Gaming"],
+  "thumbnail": "/tutorials/lumberjack/thumbnail.jpg",
+  "minutes": 15,
+  "intro": {
+    "promise": "You'll build a small game on chain: each player gets an account with wood and energy, chopping a tree spends energy, and the energy comes back over time.",
+    "log": "Program log: You chopped a tree. 1 wood, 4 energy left.",
+    "files": {
+      "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n\n    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        update_energy(player)?;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }\n}\n\nfn update_energy(player: &mut PlayerData) -> Result<()> {\n    let now = Clock::get()?.unix_timestamp;\n    let refills = (now - player.last_login) / TIME_TO_REFILL_ENERGY;\n    if refills > 0 {\n        player.energy = (player.energy + refills as u64).min(MAX_ENERGY);\n        player.last_login += refills * TIME_TO_REFILL_ENERGY;\n    }\n    if player.energy == MAX_ENERGY {\n        player.last_login = now;\n    }\n    Ok(())\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct ChopTree<'info> {\n    #[account(\n        mut,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+      "client/client.ts": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);\n\n// Create the account once. On later runs it's already there\nlet player = await pg.program.account.playerData.fetchNullable(playerPda);\nif (!player) {\n  const txHash = await pg.program.methods\n    .initPlayer()\n    .accounts({ player: playerPda })\n    .rpc();\n  console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n  player = await pg.program.account.playerData.fetch(playerPda);\n}\nconsole.log(`Wood: ${player.wood}, energy: ${player.energy}`);"
+    }
+  },
+  "steps": [
+    {
+      "id": "player",
+      "title": "Player account",
+      "short": "Player",
+      "objective": "Keep each player's wood and energy in an account",
+      "learned": "Keeping state in an account",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": ""
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+      },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"lumberjack\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"init_player\",\"discriminator\":[114,27,219,144,50,15,228,66],\"accounts\":[{\"name\":\"player\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[112,108,97,121,101,114]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[]}],\"accounts\":[{\"name\":\"PlayerData\",\"discriminator\":[197,65,216,202,43,139,147,128]}],\"types\":[{\"name\":\"PlayerData\",\"type\":{\"kind\":\"struct\",\"fields\":[{\"name\":\"wood\",\"type\":\"u64\"},{\"name\":\"energy\",\"type\":\"u64\"},{\"name\":\"last_login\",\"type\":\"i64\"}]}}]}",
+      "beats": [
+        {
+          "kind": "write",
+          "id": "s1.boil",
+          "text": "Same opening as Hello Anchor: the import and the program's id. Under them, the game's two rules: 5 energy at most, and one back every 30 seconds.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;"
+          }
+        },
+        {
+          "kind": "write",
+          "id": "s1.data",
+          "text": "A program keeps nothing between calls, so a player's wood and energy live in an account. This is its shape. `#[account]` makes it account data, and `InitSpace` counts the bytes it needs.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          }
+        },
+        {
+          "kind": "write",
+          "id": "s1.accounts",
+          "text": "And `InitPlayer`, what creating a player needs. `init` makes the account at an address worked out from seeds, here `\"player\"` and your wallet's key, so every wallet gets one player. More on that address when your client looks for it.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          }
+        },
+        {
+          "kind": "write",
+          "id": "s1.init",
+          "text": "And `init_player` fills the new account in: full energy, and the time from the cluster's clock, so the program can tell later how long you've been away.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s1.build",
+          "act": "build",
+          "say": "That's the first part of the game. Let's compile it.",
+          "title": "Build lib.rs",
+          "context": "Compiles lib.rs on Playground's build server",
+          "button": "Build"
+        }
+      ],
+      "planned": "This one's on purpose. Everyone who creates their first account meets this error, so let's meet it now.",
+      "failsWith": "requires a non-optional system_program field to exist in the account validation struct",
+      "onFail": [
+        {
+          "kind": "say",
+          "id": "f1.explain",
+          "text": "`init` on line 23 creates the player account. On Solana only the System Program creates accounts, so Anchor calls it for you, and it has to be in the instruction's list of accounts. `InitPlayer` doesn't have it yet.",
+          "quote": {
+            "file": "src/lib.rs",
+            "line": 23,
+            "mark": "init",
+            "tone": "error"
+          }
+        },
+        {
+          "kind": "ask",
+          "id": "f1.q",
+          "kicker": "Fix it",
+          "question": "So what does `InitPlayer` need?",
+          "options": [
+            "More SOL in your wallet",
+            "The System Program, as `system_program`",
+            "`mut` on the `player` account"
+          ],
+          "code": false,
+          "answer": 1,
+          "right": "Exactly. With `system_program` in the list, `init` can ask it to create the account. I've added it under `signer`.",
+          "why": [
+            "Your wallet gets its SOL at the deploy, and this error comes from the build, before anything is sent.",
+            null,
+            "`init` already makes `player` writable. The build is asking for the program that creates accounts."
+          ],
+          "hint": "Read the error again: it names the field that's missing.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "    pub system_program: Program<'info, System>,",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          },
+          "key": "pub system_program: Program<'info, System>,",
+          "typed": "That's the field. Now `init` can ask the System Program to create the account."
+        },
+        {
+          "kind": "act",
+          "id": "f1.build",
+          "act": "build",
+          "say": "Build again. This time it should pass.",
+          "title": "Build lib.rs",
+          "context": "Same build, now with system_program",
+          "button": "Build"
+        }
+      ],
+      "goal": {
+        "kind": "build",
+        "instructions": ["init_player"]
+      },
+      "win": {
+        "id": "s1.win",
+        "headline": "Your program can make players",
+        "line": "The build wrote its IDL: one instruction, `init_player`, and the shape of `PlayerData`."
+      },
+      "explain": "This step writes the account that holds a player's wood and energy, and `init_player`, which creates it. I write the pieces and explain them. The first build fails on purpose, on the error everyone meets with their first account, and you pick the fix."
+    },
+    {
+      "id": "create",
+      "title": "Deploy & create",
+      "short": "Create",
+      "objective": "Deploy, find your player's address and create it on devnet",
+      "learned": "Finding an account at a PDA from a client",
+      "file": "client/client.ts",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+        "client/client.ts": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);\n\n// Create the account once. On later runs it's already there\nlet player = await pg.program.account.playerData.fetchNullable(playerPda);\nif (!player) {\n  const txHash = await pg.program.methods\n    .initPlayer()\n    .accounts({ player: playerPda })\n    .rpc();\n  console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n  player = await pg.program.account.playerData.fetch(playerPda);\n}\nconsole.log(`Wood: ${player.wood}, energy: ${player.energy}`);"
+      },
+      "beats": [
+        {
+          "kind": "act",
+          "id": "s2.airdrop",
+          "act": "airdrop",
+          "say": "A deploy pays in devnet SOL. Get some for your wallet first.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
+          "id": "s2.deploy",
+          "act": "deploy",
+          "say": "Your program is built. Deploy it to devnet, and a client can call it.",
+          "title": "Deploy to devnet",
+          "context": "From your Playground wallet · free devnet SOL",
+          "button": "Deploy"
+        },
+        {
+          "kind": "say",
+          "id": "s2.pda",
+          "text": "Now the client. To create your player and read it back, it needs the account's address, and nothing wrote that address down anywhere. That's what a PDA is for: an address derived from seeds and the program id."
+        },
+        {
+          "kind": "ask",
+          "id": "s2.q1",
+          "kicker": "Question",
+          "question": "So how does your client get your player's address?",
+          "options": [
+            "It asks the program for it with a call",
+            "It works it out from the same seeds and the program id",
+            "It saves it when the player is created, and reads it back later"
+          ],
+          "code": false,
+          "answer": 1,
+          "right": "Yes. The same seeds and the same program always give the same address, so any client finds your player and nobody stores it. I've written the line that works it out.",
+          "why": [
+            "That would be a transaction and a fee just to learn an address. A PDA is worked out on your side, without calling anything.",
+            null,
+            "Then it only lives where you saved it: on another device, or for anyone else, your player would be lost. A PDA needs no storing."
+          ],
+          "hint": "Think about what made the address in `InitPlayer`, and what your client already knows.",
+          "skipped": "No problem. The client works the address out from the same seeds, `\"player\"` and your wallet's key. I've written that line.",
+          "writes": {
+            "file": "client/client.ts",
+            "block": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);",
+            "ref": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);"
+          },
+          "key": "[Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],",
+          "typed": "That's the line: `\"player\"` and your wallet's key, the same seeds as `InitPlayer`. I've written the call around it."
+        },
+        {
+          "kind": "write",
+          "id": "s2.client",
+          "text": "The rest you know from Hello Anchor: the client reads your player at that address, and creates the account if it isn't there yet.",
+          "writes": {
+            "file": "client/client.ts",
+            "block": "// Create the account once. On later runs it's already there\nlet player = await pg.program.account.playerData.fetchNullable(playerPda);\nif (!player) {\n  const txHash = await pg.program.methods\n    .initPlayer()\n    .accounts({ player: playerPda })\n    .rpc();\n  console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n  player = await pg.program.account.playerData.fetch(playerPda);\n}\nconsole.log(`Wood: ${player.wood}, energy: ${player.energy}`);",
+            "ref": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);\n\n// Create the account once. On later runs it's already there\nlet player = await pg.program.account.playerData.fetchNullable(playerPda);\nif (!player) {\n  const txHash = await pg.program.methods\n    .initPlayer()\n    .accounts({ player: playerPda })\n    .rpc();\n  console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n  player = await pg.program.account.playerData.fetch(playerPda);\n}\nconsole.log(`Wood: ${player.wood}, energy: ${player.energy}`);"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s2.run",
+          "act": "run",
+          "say": "Run it, and your player is created on devnet.",
+          "title": "Run client.ts",
+          "context": "Calls init_player · rent and fee from your wallet",
+          "button": "Run",
+          "account": {
+            "kind": "player",
+            "name": "player",
+            "energy": "energy",
+            "wood": "wood",
+            "max": 5
+          }
+        }
+      ],
+      "goal": {
+        "kind": "call",
+        "instruction": "init_player",
+        "creates": "player"
+      },
+      "win": {
+        "id": "s2.win",
+        "headline": "Your player is on devnet",
+        "line": "That's your account, read back from devnet: 5 energy, 0 wood. The client found it from the seeds alone.",
+        "callPanelLine": "You called `init_player` from the Call panel, which Playground built from the IDL. Your player is on devnet.",
+        "existsLine": "Your player was already on devnet: this wallet ran this step before. Anchor's `init` creates an account only once, so `init_player` can't make it again. Your player keeps its wood and energy, and the next step works on it.",
+        "extra": "openTest"
+      },
+      "explain": "This step puts the program on devnet, then a client works out your player's address from the seeds and creates the account. Your wallet pays the deploy, the rent and the fee, all in free devnet SOL."
+    },
+    {
+      "id": "chop",
+      "title": "Chop",
+      "short": "Chop",
+      "objective": "Spend energy for wood, and refuse when it runs out",
+      "learned": "Returning a custom error from an instruction",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+        "client/client.ts": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);\n\n// Create the account once. On later runs it's already there\nlet player = await pg.program.account.playerData.fetchNullable(playerPda);\nif (!player) {\n  const txHash = await pg.program.methods\n    .initPlayer()\n    .accounts({ player: playerPda })\n    .rpc();\n  console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n  player = await pg.program.account.playerData.fetch(playerPda);\n}\nconsole.log(`Wood: ${player.wood}, energy: ${player.energy}`);"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n\n    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct ChopTree<'info> {\n    #[account(\n        mut,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+        "client/client.ts": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);\n\n// Create the account once. On later runs it's already there\nlet player = await pg.program.account.playerData.fetchNullable(playerPda);\nif (!player) {\n  const txHash = await pg.program.methods\n    .initPlayer()\n    .accounts({ player: playerPda })\n    .rpc();\n  console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n  player = await pg.program.account.playerData.fetch(playerPda);\n}\nconsole.log(`Wood: ${player.wood}, energy: ${player.energy}`);"
+      },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"lumberjack\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"chop_tree\",\"discriminator\":[120,56,196,91,213,182,36,28],\"accounts\":[{\"name\":\"player\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[112,108,97,121,101,114]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"signer\":true}],\"args\":[]},{\"name\":\"init_player\",\"discriminator\":[114,27,219,144,50,15,228,66],\"accounts\":[{\"name\":\"player\",\"writable\":true,\"pda\":{\"seeds\":[{\"kind\":\"const\",\"value\":[112,108,97,121,101,114]},{\"kind\":\"account\",\"path\":\"signer\"}]}},{\"name\":\"signer\",\"writable\":true,\"signer\":true},{\"name\":\"system_program\",\"address\":\"11111111111111111111111111111111\"}],\"args\":[]}],\"accounts\":[{\"name\":\"PlayerData\",\"discriminator\":[197,65,216,202,43,139,147,128]}],\"errors\":[{\"code\":6000,\"name\":\"NotEnoughEnergy\",\"msg\":\"Not enough energy\"}],\"types\":[{\"name\":\"PlayerData\",\"type\":{\"kind\":\"struct\",\"fields\":[{\"name\":\"wood\",\"type\":\"u64\"},{\"name\":\"energy\",\"type\":\"u64\"},{\"name\":\"last_login\",\"type\":\"i64\"}]}}]}",
+      "beats": [
+        {
+          "kind": "write",
+          "id": "s3.err",
+          "text": "First, a way to say no. A custom error has a name and a message, so a client can tell \"out of energy\" from anything else and show a refill timer.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          }
+        },
+        {
+          "kind": "say",
+          "id": "s3.what",
+          "text": "`chop_tree` spends one energy for one wood. Before it does, it has to check there's energy to spend, and refuse if there isn't."
+        },
+        {
+          "kind": "ask",
+          "id": "s3.q3",
+          "kicker": "Question",
+          "question": "What should `chop_tree` do when the energy is 0?",
+          "options": [
+            "if player.energy == 0 { return err!(ErrorCode::NotEnoughEnergy); }",
+            "if player.energy == 0 { return Ok(()); }",
+            "if player.energy == 0 { panic!(\"Not enough energy\"); }"
+          ],
+          "code": true,
+          "answer": 0,
+          "right": "Right. `err!` stops the instruction and returns your error, so nothing changes and the client knows why. I've written `chop_tree` around it.",
+          "why": [
+            null,
+            "Then the chop \"works\": the player pays the fee, gets no wood, and the client can't tell why.",
+            "The transaction fails, but with a generic error. The client can't tell it from a bug, so it can't offer a refill timer."
+          ],
+          "hint": "The client should be able to tell this case from any other, by its name.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n\n    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          },
+          "key": "return err!(ErrorCode::NotEnoughEnergy);",
+          "typed": "That's the line. `err!` returns your error, and I've written the rest of `chop_tree` around it."
+        },
+        {
+          "kind": "write",
+          "id": "s3.accounts",
+          "text": "And its accounts: the same player address from the same seeds, marked `mut` because chopping changes it.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[derive(Accounts)]\npub struct ChopTree<'info> {\n    #[account(\n        mut,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    pub signer: Signer<'info>,\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n\n    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct ChopTree<'info> {\n    #[account(\n        mut,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s3.airdrop",
+          "act": "airdrop",
+          "say": "Putting `chop_tree` on devnet is an upgrade, and it pays in devnet SOL. Top the wallet up if it runs short.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
+          "id": "s3.ship",
+          "act": "buildDeploy",
+          "say": "Devnet still runs the program without `chop_tree`. Build and deploy: it keeps its address.",
+          "title": "Build and deploy",
+          "context": "Upgrades {program} in place · from your wallet",
+          "button": "Build and deploy"
+        },
+        {
+          "kind": "act",
+          "id": "s3.chop",
+          "act": "call",
+          "say": "Now chop. Keep going until the energy runs out.",
+          "title": "Chop a tree",
+          "context": "Sends chop_tree · fee from your wallet",
+          "button": "Chop",
+          "call": {
+            "instruction": "chop_tree"
+          },
+          "repeat": {
+            "label": "Chop until out of energy"
+          },
+          "record": "Chopped",
+          "account": {
+            "kind": "player",
+            "name": "player",
+            "energy": "energy",
+            "wood": "wood",
+            "max": 5
+          }
+        }
+      ],
+      "goal": {
+        "kind": "refused",
+        "instruction": "chop_tree",
+        "error": {
+          "name": "NotEnoughEnergy",
+          "code": 6000
+        }
+      },
+      "win": {
+        "id": "s3.win",
+        "headline": "Out of energy, and the program said so",
+        "line": "Five chops, five wood, then `NotEnoughEnergy` came back from devnet as error 6000. A client turns that into a refill timer.",
+        "callPanelLine": "You chopped from the Call panel until the energy ran out, and `NotEnoughEnergy` came back as error 6000."
+      },
+      "explain": "This step adds `chop_tree`: one energy for one wood, and a custom error when the energy runs out. Then you chop on devnet until it does."
+    },
+    {
+      "id": "refill",
+      "title": "Refill",
+      "short": "Refill",
+      "objective": "Refill energy over time, with no transaction to do it",
+      "learned": "Working with time in a program",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n\n    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct ChopTree<'info> {\n    #[account(\n        mut,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+        "client/client.ts": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);\n\n// Create the account once. On later runs it's already there\nlet player = await pg.program.account.playerData.fetchNullable(playerPda);\nif (!player) {\n  const txHash = await pg.program.methods\n    .initPlayer()\n    .accounts({ player: playerPda })\n    .rpc();\n  console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n  player = await pg.program.account.playerData.fetch(playerPda);\n}\nconsole.log(`Wood: ${player.wood}, energy: ${player.energy}`);"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n\n    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        update_energy(player)?;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }\n}\n\nfn update_energy(player: &mut PlayerData) -> Result<()> {\n    let now = Clock::get()?.unix_timestamp;\n    let refills = (now - player.last_login) / TIME_TO_REFILL_ENERGY;\n    if refills > 0 {\n        player.energy = (player.energy + refills as u64).min(MAX_ENERGY);\n        player.last_login += refills * TIME_TO_REFILL_ENERGY;\n    }\n    if player.energy == MAX_ENERGY {\n        player.last_login = now;\n    }\n    Ok(())\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct ChopTree<'info> {\n    #[account(\n        mut,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}",
+        "client/client.ts": "// Your player's address: the same seeds as InitPlayer, so nobody has to store it\nconst [playerPda] = web3.PublicKey.findProgramAddressSync(\n  [Buffer.from(\"player\"), pg.wallet.publicKey.toBuffer()],\n  pg.program.programId\n);\n\n// Create the account once. On later runs it's already there\nlet player = await pg.program.account.playerData.fetchNullable(playerPda);\nif (!player) {\n  const txHash = await pg.program.methods\n    .initPlayer()\n    .accounts({ player: playerPda })\n    .rpc();\n  console.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n  player = await pg.program.account.playerData.fetch(playerPda);\n}\nconsole.log(`Wood: ${player.wood}, energy: ${player.energy}`);"
+      },
+      "beats": [
+        {
+          "kind": "say",
+          "id": "s4.why",
+          "text": "Your energy is at 0, and nothing in the program gives it back. A program only runs when someone calls it, so nothing on devnet can top it up every 30 seconds."
+        },
+        {
+          "kind": "ask",
+          "id": "s4.q4",
+          "kicker": "Question",
+          "question": "So when should the energy come back?",
+          "options": [
+            "Every 30 seconds, by itself on devnet",
+            "On the next chop, from the time since `last_login`",
+            "When the client sends a refill every 30 seconds"
+          ],
+          "code": false,
+          "answer": 1,
+          "right": "Yes. On every chop the program counts the 30 second blocks since `last_login` and adds that much energy. Nothing runs in between. I've written `update_energy` for it.",
+          "why": [
+            "A program never runs on its own: it only runs inside a transaction someone sends.",
+            null,
+            "That works, but every refill would be a transaction with a fee, sent forever, even while nobody plays."
+          ],
+          "hint": "Nothing happens on chain unless someone sends a transaction. Which one is coming anyway?",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "fn update_energy(player: &mut PlayerData) -> Result<()> {\n    let now = Clock::get()?.unix_timestamp;\n    let refills = (now - player.last_login) / TIME_TO_REFILL_ENERGY;\n    if refills > 0 {\n        player.energy = (player.energy + refills as u64).min(MAX_ENERGY);\n        player.last_login += refills * TIME_TO_REFILL_ENERGY;\n    }\n    if player.energy == MAX_ENERGY {\n        player.last_login = now;\n    }\n    Ok(())\n}",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n\n    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }\n}\n\nfn update_energy(player: &mut PlayerData) -> Result<()> {\n    let now = Clock::get()?.unix_timestamp;\n    let refills = (now - player.last_login) / TIME_TO_REFILL_ENERGY;\n    if refills > 0 {\n        player.energy = (player.energy + refills as u64).min(MAX_ENERGY);\n        player.last_login += refills * TIME_TO_REFILL_ENERGY;\n    }\n    if player.energy == MAX_ENERGY {\n        player.last_login = now;\n    }\n    Ok(())\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct ChopTree<'info> {\n    #[account(\n        mut,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          },
+          "key": "fn update_energy(player: &mut PlayerData) -> Result<()> {",
+          "typed": "That's the function. I've filled in the rest: it counts the 30 second blocks since `last_login`."
+        },
+        {
+          "kind": "write",
+          "id": "s4.wire",
+          "text": "And `chop_tree` calls it first, so every chop starts from the energy you have now.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "        update_energy(player)?;",
+            "ref": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\nconst MAX_ENERGY: u64 = 5;\nconst TIME_TO_REFILL_ENERGY: i64 = 30;\n\n#[error_code]\npub enum ErrorCode {\n    #[msg(\"Not enough energy\")]\n    NotEnoughEnergy,\n}\n\n#[program]\nmod lumberjack {\n    use super::*;\n\n    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        player.energy = MAX_ENERGY;\n        player.last_login = Clock::get()?.unix_timestamp;\n        Ok(())\n    }\n\n    pub fn chop_tree(ctx: Context<ChopTree>) -> Result<()> {\n        let player = &mut ctx.accounts.player;\n        update_energy(player)?;\n        if player.energy == 0 {\n            return err!(ErrorCode::NotEnoughEnergy);\n        }\n        player.energy -= 1;\n        player.wood += 1;\n        msg!(\"You chopped a tree. {} wood, {} energy left.\", player.wood, player.energy);\n        Ok(())\n    }\n}\n\nfn update_energy(player: &mut PlayerData) -> Result<()> {\n    let now = Clock::get()?.unix_timestamp;\n    let refills = (now - player.last_login) / TIME_TO_REFILL_ENERGY;\n    if refills > 0 {\n        player.energy = (player.energy + refills as u64).min(MAX_ENERGY);\n        player.last_login += refills * TIME_TO_REFILL_ENERGY;\n    }\n    if player.energy == MAX_ENERGY {\n        player.last_login = now;\n    }\n    Ok(())\n}\n\n#[derive(Accounts)]\npub struct InitPlayer<'info> {\n    #[account(\n        init,\n        payer = signer,\n        space = 8 + PlayerData::INIT_SPACE,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    #[account(mut)]\n    pub signer: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct ChopTree<'info> {\n    #[account(\n        mut,\n        seeds = [b\"player\", signer.key().as_ref()],\n        bump,\n    )]\n    pub player: Account<'info, PlayerData>,\n    pub signer: Signer<'info>,\n}\n\n#[account]\n#[derive(InitSpace)]\npub struct PlayerData {\n    pub wood: u64,\n    pub energy: u64,\n    pub last_login: i64,\n}"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s4.airdrop",
+          "act": "airdrop",
+          "say": "The energy refill goes to devnet as an upgrade, paid in devnet SOL. Top the wallet up if it runs short.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
+          "id": "s4.ship",
+          "act": "buildDeploy",
+          "say": "Build and deploy the refill. Your player keeps its wood: the account doesn't change, only the program.",
+          "title": "Build and deploy",
+          "context": "Upgrades {program} in place · from your wallet",
+          "button": "Build and deploy"
+        },
+        {
+          "kind": "act",
+          "id": "s4.chop",
+          "act": "call",
+          "say": "Chop again. Time has passed since you made your player.",
+          "title": "Chop a tree",
+          "context": "Sends chop_tree · the energy is worked out first",
+          "button": "Chop",
+          "call": {
+            "instruction": "chop_tree"
+          },
+          "account": {
+            "kind": "player",
+            "name": "player",
+            "energy": "energy",
+            "wood": "wood",
+            "max": 5,
+            "refill": {
+              "seconds": 30,
+              "from": "lastLogin"
+            }
+          }
+        }
+      ],
+      "goal": {
+        "kind": "call",
+        "instruction": "chop_tree",
+        "log": "You chopped a tree"
+      },
+      "win": {
+        "id": "s4.win",
+        "headline": "Energy comes back on its own",
+        "line": "Nothing ran while you were away: the chop counted the time since `last_login` and added the energy. The timer on your player is the client doing the same math, with no transaction.",
+        "callPanelLine": "You chopped from the Call panel, and the energy that came back while you were away was there."
+      },
+      "explain": "This step makes energy refill over time. The program counts the time since `last_login` on every chop, so nothing has to run in between."
+    }
+  ],
+  "finish": {
+    "headline": "You built an energy system on chain",
+    "line": "Your player's wood is on devnet, and its energy comes back every 30 seconds with no transaction to do it.",
+    "learned": [
+      "Keeping state in an account",
+      "Finding an account at a PDA from a client",
+      "Returning a custom error from an instruction",
+      "Working with time in a program"
+    ],
+    "chips": [
+      {
+        "label": "What should I build next?",
+        "answer": "Zero Copy is a good next one: it makes an account bigger than a program's memory and reads it without copying it.",
+        "follow": "nextTutorial"
+      }
+    ],
+    "next": "zero-copy"
+  },
+  "docs": [
+    {
+      "title": "Program Derived Addresses (PDAs)",
+      "url": "https://solana.com/docs/core/pda",
+      "file": "pdas.md"
+    },
+    {
+      "title": "Custom Errors",
+      "url": "https://www.anchor-lang.com/docs/features/errors",
+      "file": "custom-errors.md"
+    },
+    {
+      "title": "Sysvar Accounts",
+      "url": "https://solana.com/docs/core/accounts/account-types#sysvar-accounts",
+      "file": "sysvar-accounts.md"
+    }
+  ]
+}

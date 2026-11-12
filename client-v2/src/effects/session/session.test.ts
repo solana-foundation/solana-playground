@@ -456,13 +456,69 @@ describe("the session effect", () => {
       }));
     });
 
+    it("keeps the open project when the sign-in started on the Deploy stage", async () => {
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signInFor("deploy")([]);
+      await settle();
+
+      // The funding card deploys this project once the sign-in settles
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
     it("keeps the open project when the sign-in started in the assistant panel", async () => {
       const effect = await signedOutAfterLoad();
 
-      await PgSession.signInWith({ from: "assistant" });
+      await PgSession.signInFor("assistant")([]);
       await settle();
 
       // The composer still holds a prompt written for this project
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
+    it("keeps the open project when the sign-in started in the share prompt", async () => {
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signInFor("share")([]);
+      await settle();
+
+      // The share dialog posts the open project's files; the editor stays on it
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
+    it("keeps the open project when the share prompt claims a sign-in from the header", async () => {
+      const effect = await signedOutAfterLoad();
+
+      const signingIn = PgSession.signIn();
+      PgSession.claimPendingSignIn("share");
+      await signingIn;
+      await settle();
+
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
+    it("keeps the tutorial open when the sign-in started on its build card", async () => {
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signInFor("tutorial")([]);
+      await settle();
+
+      // The lesson stays on its step, where the card now offers Build
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
+    it("keeps the open project when signing in again after the session ended", async () => {
+      const effect = await signedOutAfterLoad();
+      vi.spyOn(PgSession, "isResuming", "get").mockReturnValue(true);
+
+      await PgSession.signIn();
+      await settle();
+
       expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
       effect.dispose();
     });
@@ -483,7 +539,7 @@ describe("the session effect", () => {
       );
       const effect = await signedOutAfterLoad();
 
-      await PgSession.signInWith({ from: "assistant" });
+      await PgSession.signInFor("assistant")([]);
       await settle();
 
       // Nothing to keep, so a panel sign-in must not skip the switch outright

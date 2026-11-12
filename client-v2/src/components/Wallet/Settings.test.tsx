@@ -8,13 +8,17 @@ import {
   resetLogger,
 } from "@/shared/lib/logger";
 
-import { PgCommand, PgView, PgWallet } from "../../utils";
+import { toggleWallet } from "../../commands/connect/connect-wallet";
+import { PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
+import type { Faucet } from "./hooks";
 import Settings from "./Settings";
 
+vi.mock("../../commands/connect/connect-wallet", () => ({
+  toggleWallet: vi.fn(),
+}));
 // The utils barrel needs build-time globals the unit runner does not define.
 vi.mock("../../utils", () => ({
-  PgCommand: { connect: { execute: vi.fn() } },
   PgView: {
     ids: { WALLET_RENAME_INPUT: "wallet-rename-input" },
     setModal: vi.fn(),
@@ -36,7 +40,7 @@ vi.mock("../../utils", () => ({
 vi.mock("../../hooks", () => ({ useCopy: () => [false, vi.fn()] }));
 const airdropHook = vi.hoisted(() => ({
   airdrop: vi.fn(),
-  airdropCondition: false,
+  faucet: "none" as Faucet,
 }));
 vi.mock("./hooks", () => ({
   useAirdrop: () => airdropHook,
@@ -58,7 +62,11 @@ vi.mock("../Icons", () => {
     Trash: Icon,
   };
 });
-vi.mock("../Img", () => ({ default: () => null }));
+vi.mock("../Img", () => ({
+  default: ({ className }: { className?: string }) => (
+    <i data-testid="wallet-icon" className={className} />
+  ),
+}));
 vi.mock("./Modals/Add", () => ({ Add: () => null }));
 
 const knownSignIn = vi.hoisted(() => new Error("popup blocked"));
@@ -88,7 +96,7 @@ afterEach(() => {
   vi.clearAllMocks();
   resetLogger();
   told.length = 0;
-  airdropHook.airdropCondition = false;
+  airdropHook.faucet = "none";
   PgWallet.standardWallets.length = 0;
   PgWallet.accounts.length = 0;
 });
@@ -181,7 +189,7 @@ describe("wallet Settings menu", () => {
   // say so rather than leave an unhandled rejection
   it("tells the user when Airdrop fails", async () => {
     const failure = new Error("The terminal is not open.");
-    airdropHook.airdropCondition = true;
+    airdropHook.faucet = "available";
     airdropHook.airdrop.mockRejectedValueOnce(failure);
     render(<Host />);
     await openMenu();
@@ -207,7 +215,7 @@ describe("wallet Settings menu", () => {
         icon: "",
         connected,
       } as never);
-      vi.mocked(PgCommand.connect.execute).mockRejectedValueOnce(failure);
+      vi.mocked(toggleWallet).mockRejectedValueOnce(failure);
       render(<Host />);
       await openMenu();
 
@@ -218,6 +226,61 @@ describe("wallet Settings menu", () => {
       );
     }
   );
+
+  it("says the network has no faucet where Airdrop would be", async () => {
+    airdropHook.faucet = "none";
+    render(<Host />);
+    await openMenu();
+
+    const line = screen.getByRole("menuitem", {
+      name: "This network has no faucet.",
+    });
+    expect(line.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByRole("menuitem", { name: /Airdrop/ })).toBeNull();
+  });
+
+  it("shows neither Airdrop nor the no-faucet line before the cluster is known", async () => {
+    airdropHook.faucet = "unknown";
+    render(<Host />);
+    await openMenu();
+
+    expect(screen.queryByRole("menuitem", { name: /Airdrop/ })).toBeNull();
+    expect(screen.queryByText("This network has no faucet.")).toBeNull();
+  });
+
+  it.each([
+    ["Phantom", "Connect Phantom Wallet"],
+    ["Coinbase Wallet", "Connect Coinbase Wallet"],
+  ])("names a wallet extension %s once, as a wallet", async (name, label) => {
+    PgWallet.standardWallets.push({
+      name,
+      icon: "",
+      connected: false,
+    } as never);
+    render(<Host />);
+    await openMenu();
+
+    expect(screen.getByRole("menuitem", { name: label })).toBeTruthy();
+  });
+
+  it("draws every wallet extension's icon at one size", async () => {
+    for (const name of ["Phantom", "Solflare", "SquadsX"]) {
+      PgWallet.standardWallets.push({
+        name,
+        icon: "",
+        connected: false,
+      } as never);
+    }
+    render(<Host />);
+    await openMenu();
+
+    const icons = screen.getAllByTestId("wallet-icon");
+    expect(icons).toHaveLength(3);
+    for (const icon of icons) {
+      expect(icon.classList).toContain("size-4");
+      expect(icon.classList).toContain("shrink-0");
+    }
+  });
 
   it("says so when the imported file is not a keypair", async () => {
     vi.mocked(PgWallet.import).mockRejectedValueOnce(new KeypairFileError());
@@ -294,7 +357,7 @@ describe("wallet Settings menu", () => {
   // `PgSession.signInState` holds a known failure and the account row shows
   // it: logged as a failed click, never toasted a second time
   it("leaves a cancelled or blocked sign-in to the account row", async () => {
-    airdropHook.airdropCondition = true;
+    airdropHook.faucet = "available";
     airdropHook.airdrop.mockRejectedValueOnce(knownSignIn);
     render(<Host />);
     await openMenu();

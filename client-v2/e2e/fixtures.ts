@@ -7,6 +7,10 @@ import { requireFor } from "../src/test-utils/require-for";
 /** For a step that waits on the explorer, sync or a reload */
 export const LONG = { timeout: 60_000 };
 
+/** Devnet's JSON-RPC and websocket endpoints, as a route matches them whole */
+export const DEVNET_RPC = /^https:\/\/api\.devnet\.solana\.com\/?$/;
+export const DEVNET_WS = /^wss:\/\/api\.devnet\.solana\.com\/?$/;
+
 /** Home, which a start with no project shows in place of the work */
 export const home = (page: Page) =>
   page.getByRole("heading", { name: "Where should we begin?" });
@@ -15,24 +19,51 @@ export const home = (page: Page) =>
 export const homeRegion = (page: Page) =>
   page.getByRole("region", { name: "Home" });
 
+/** The New project page, which covers Home or the work while it shows */
+export const newProjectPage = (page: Page) =>
+  page.getByRole("region", { name: "New project" });
+
 /**
- * Makes a project from Home's New project tile, through the same Start from
- * scratch the New project dialog holds (`features/new-project`).
+ * Makes a project from Home's New project tile, through Start from scratch on
+ * the New project page it opens (`features/new-project`).
  *
- * Scoped to Home's region: the navigation has a "New project" item of the
- * same name.
+ * The tile is scoped to Home's region: the navigation has a "New project"
+ * item of the same name.
  */
+// eslint-disable-next-line layers/curry-order, max-params -- 15 call sites in other specs pass `(page, name, LONG)`; they move to `startProjectWith(timeout)(page, name)` together
 export const startProject = async (page: Page, name: string, timeout = {}) => {
   await expect(home(page)).toBeVisible(timeout);
-  const region = homeRegion(page);
-  await region.getByRole("button", { name: /^New project/ }).click();
-  await region.getByLabel("Project name").fill(name);
-  await region.getByRole("button", { name: /^Start/ }).click();
+  await homeRegion(page)
+    .getByRole("button", { name: /^New project/ })
+    .click();
+  const created = newProjectPage(page);
+  await created.getByLabel("Project name").fill(name);
+  await created.getByRole("button", { name: /^Start/ }).click();
+  await expect(created).toBeHidden(timeout);
   await expect(home(page)).toBeHidden(timeout);
 };
 
 /** The editor head's Files toggle (client-v2-editor-head) */
 export const filesToggle = (page: Page) => page.locator("#editor-head-files");
+
+/**
+ * The editor holding the focus it takes when it mounts and opens the current
+ * file. Monaco is a lazy chunk, and on a loaded runner it arrives well past
+ * an assertion's 20 s (30 s seen on CI): the wait is the page load's,
+ * as for the About page's Start.
+ */
+export const editorTookFocus = (page: Page) =>
+  expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused(LONG);
+
+/**
+ * A reload, then the app up again: every lazy chunk is fetched anew, so the
+ * app's boot, not the step a test waits for after the reload, spends that
+ * step's timeout
+ */
+export const reloadAndBoot = async (page: Page) => {
+  await page.reload();
+  await editorTookFocus(page);
+};
 
 /**
  * The About page's Start, which begins a tutorial. The page draws it only once
@@ -56,6 +87,7 @@ export const startTutorialFromAbout = async (page: Page) => {
  * `indexedDB`: the explorer's on-disk layout is an internal detail, and the
  * default framework files are bundled, so this needs no network.
  */
+// eslint-disable-next-line layers/curry-order -- 60 call sites in other specs call `seedWorkspace(page)` or `(page, name)`
 export const seedWorkspace = async (page: Page, name = "e2e-project") => {
   await page.goto("/");
   await startProject(page, name);
@@ -112,7 +144,11 @@ export const HELP_TAIL = "Run test(s)";
 export const runInTerminal = async (page: Page, command: string) => {
   await expect(page.locator(".xterm-rows").first()).toHaveText(/\$\s*$/);
   const input = page.getByLabel("Terminal input").first();
-  await input.click();
+  // Focused, not clicked: xterm sizes its helper textarea only while the
+  // terminal has the focus, and a console that opened on its own (a wallet's
+  // setup, a run) keeps the focus where it was, so the textarea is 0 x 0 and
+  // never reads as visible for a click
+  await input.focus();
   await expect(input).toBeFocused();
   await page.keyboard.type(command);
   await page.keyboard.press("Enter");
@@ -146,9 +182,10 @@ export const leaveEditor = async (page: Page) => {
 };
 
 /**
- * Starts every page of a fresh profile on the public devnet, the cluster the
- * specs stub and name, whatever default `REACT_APP_DEVNET_RPC_URL` gives the
- * build. A profile that already holds settings keeps them.
+ * Starts every page of a fresh profile on Devnet, the cluster the specs stub
+ * and name. The dev server runs with the platform RPC URLs blanked
+ * (`playwright.config.mts`), so Devnet is the public endpoint. A profile that
+ * already holds settings keeps them.
  */
 const startOnPublicDevnet = (context: BrowserContext) =>
   context.addInitScript(() => {
@@ -159,6 +196,16 @@ const startOnPublicDevnet = (context: BrowserContext) =>
     );
   });
 
+/**
+ * Lets the page read and write the clipboard. Chromium needs the permissions;
+ * Firefox rejects their names ("Unknown permission: clipboard-read") and
+ * allows the async clipboard without them.
+ */
+export const grantClipboard = async (context: BrowserContext) => {
+  if (context.browser()?.browserType().name() !== "chromium") return;
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+};
+
 export const test = base.extend<{ seededPage: Page }>({
   context: async ({ context }, use) => {
     await startOnPublicDevnet(context);
@@ -166,11 +213,17 @@ export const test = base.extend<{ seededPage: Page }>({
   },
   // `E2E_CPU_THROTTLE=<n>` slows the test's page `n` times, to show a race
   // that only the runner hits (`docs/testing.md`, "Parallel runs")
-  page: async ({ page }, use) => {
+  page: async ({ page, browserName }, use) => {
     const rate = Number(process.env.E2E_CPU_THROTTLE ?? 1);
     if (!(Number.isFinite(rate) && rate >= 1)) {
       throw new Error(
         `E2E_CPU_THROTTLE must be a number of 1 or more, got "${process.env.E2E_CPU_THROTTLE}".`
+      );
+    }
+    // The throttle goes through CDP, which only Chromium speaks
+    if (rate > 1 && browserName !== "chromium") {
+      throw new Error(
+        `E2E_CPU_THROTTLE works on Chromium only; run it with --project=chromium, not ${browserName}.`
       );
     }
     if (rate > 1) {
@@ -187,9 +240,7 @@ export const test = base.extend<{ seededPage: Page }>({
     // machine that lands after a test has already put the focus somewhere
     // else -- a right-clicked file -- and takes it away. Hand the page over
     // once the editor holds the focus, so it has nothing left to take.
-    await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused(
-      LONG
-    );
+    await editorTookFocus(page);
     await use(page);
   },
 });
@@ -225,6 +276,15 @@ export const json = (r: Route, body: unknown) =>
     body: JSON.stringify(body),
   });
 
+/** The chat-completions stream `/api/agent` answers with: `text`, then stop */
+export const streamed = (text: string) =>
+  [
+    { choices: [{ index: 0, delta: { role: "assistant", content: text } }] },
+    { choices: [{ index: 0, delta: {}, finish_reason: "stop" }] },
+  ]
+    .map((c) => `data: ${JSON.stringify(c)}\n\n`)
+    .join("") + "data: [DONE]\n\n";
+
 /**
  * What `GET /api/ai/status` answers, whatever the dev server is configured
  * with: the hosted model's id (a string, or `null` for one with no name), or
@@ -253,15 +313,31 @@ export const stubAiStatus = (
   );
 
 /** The user the session stubs sign in as */
-export const TEST_USER = { id: "u1", name: "Tester", image: null, login: "t" };
+export const TEST_USER = {
+  id: "u1",
+  name: "Tester",
+  // eslint-disable-next-line unicorn/no-null -- the session endpoint answers `image: null` for an account without one
+  image: null,
+  login: "t",
+};
 
 /**
  * What the browser reads as its session: `TEST_USER`, or nobody for `null`.
  * The default backend answers only a signed-in user, so a test that sends to
  * it signs in first; its turns go to the test's own `/api/agent` stub.
  */
+// eslint-disable-next-line layers/curry-order -- 15 call sites in other specs call `stubSession(page)` or `(page, null)`
 export const stubSession = (page: Page, user: unknown = TEST_USER) =>
   page.route("**/api/auth/get-session", (r) => json(r, { user }));
+
+/** What the browser reads as its session when nobody is signed in */
+export const stubSignedOut = (page: Page) =>
+  page.route("**/api/auth/get-session", (r) =>
+    json(r, {
+      // eslint-disable-next-line unicorn/no-null -- the session endpoint answers `user: null` for nobody
+      user: null,
+    })
+  );
 
 /**
  * An account that is signed in and holds what it accepts, for a test that is
@@ -288,7 +364,7 @@ export const stubSignedIn = async (context: BrowserContext) => {
     updatedAt: string;
     snapshot: { files: Record<string, string> };
   };
-  const refuse = (r: Route, status: number, body: unknown) =>
+  const refuseWith = (status: number) => (r: Route, body: unknown) =>
     r.fulfill({
       status,
       contentType: "application/json",
@@ -313,13 +389,17 @@ export const stubSignedIn = async (context: BrowserContext) => {
         !body.name ||
         !["project", "tutorial"].includes(body.kind)
       ) {
-        return refuse(r, 400, { error: "id, name and kind required" });
+        return refuseWith(400)(r, { error: "id, name and kind required" });
       }
       // A patch is made against a stored row: without one it is the
       // conflict the real endpoint answers, not a project of the changed
       // files alone
       if (!body.files && !rows.has(body.id)) {
-        return refuse(r, 409, { conflict: true, updatedAt: null });
+        return refuseWith(409)(r, {
+          conflict: true,
+          // eslint-disable-next-line unicorn/no-null -- the endpoint's conflict answer carries `updatedAt: null` for a missing row
+          updatedAt: null,
+        });
       }
       const updatedAt = new Date().toISOString();
       rows.set(body.id, {
@@ -336,7 +416,7 @@ export const stubSignedIn = async (context: BrowserContext) => {
       return json(r, { deleted: true });
     }
     if (req.method() !== "GET") {
-      return refuse(r, 405, { error: "Method not allowed" });
+      return refuseWith(405)(r, { error: "Method not allowed" });
     }
     if (!id) {
       const projects = Array.from(rows.values(), (row) => ({
@@ -350,7 +430,7 @@ export const stubSignedIn = async (context: BrowserContext) => {
     const row = rows.get(id);
     return row
       ? json(r, { project: row })
-      : refuse(r, 404, { error: "Not found" });
+      : refuseWith(404)(r, { error: "Not found" });
   });
 };
 
@@ -428,7 +508,7 @@ export const workspaceIdOf = (page: Page, name: string) =>
       }
       db.close();
     }
-    return null;
+    return undefined;
   }, name);
 
 /**
@@ -443,11 +523,11 @@ export const makeLocalProject = async (page: Page, name: string) => {
   await page.goto("/");
   await startProject(page, name, LONG);
 
-  let id: string | null = null;
+  const seen: { id?: string } = {};
   await expect
-    .poll(async () => (id = await workspaceIdOf(page, name)), LONG)
+    .poll(async () => (seen.id = await workspaceIdOf(page, name)), LONG)
     .toBeTruthy();
-  const workspaceId = requireFor("the new project's workspace id")(id);
+  const workspaceId = requireFor(`the workspace id of ${name}`)(seen.id);
   expect(isUuid(workspaceId)).toBe(true);
   return workspaceId;
 };
@@ -476,7 +556,7 @@ export const projectMenu = async (page: Page, name: string) => {
   return menu;
 };
 
-/** Opens the gallery through the navigation's New project item */
+/** Opens the New project page through the navigation's New project item */
 export const openGallery = async (page: Page) => {
   await page
     .locator('[data-slot="sidebar"]')
@@ -485,12 +565,12 @@ export const openGallery = async (page: Page) => {
 };
 
 /**
- * Starts another project from the gallery, opened from the navigation, while
+ * Starts another project from the New project page, opened from the navigation, while
  * a project is open; a fresh profile starts from Home instead (`startProject`)
  */
 export const startAnotherProject = async (page: Page, name: string) => {
   await openGallery(page);
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await expect(gallery).toBeVisible(LONG);
   await gallery.getByLabel("Project name").fill(name);
   await gallery.getByRole("button", { name: /^Start/ }).click();
@@ -529,3 +609,48 @@ export const stubPrograms = async (page: Page) => {
     r.fulfill({ status: 200, contentType: "text/plain", body: LIB_RS })
   );
 };
+
+/**
+ * Whether any value in the page's IndexedDB holds `needle` as text: a file
+ * the app wrote has reached the store, so a reload reads it. Values are
+ * tried whole, as `workspaceIdOf` does, since files are kept by inode.
+ */
+export const isStored = (page: Page, needle: string) =>
+  page.evaluate(async (text) => {
+    const dbs: Array<{ name?: string }> = await (
+      indexedDB as unknown as {
+        databases: () => Promise<Array<{ name?: string }>>;
+      }
+    ).databases();
+    for (const { name: dbName } of dbs) {
+      if (!dbName) continue;
+      const db: IDBDatabase = await new Promise((resolve, reject) => {
+        const request = indexedDB.open(dbName);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      for (const store of Array.from(db.objectStoreNames)) {
+        const values: unknown[] = await new Promise((resolve) => {
+          const request = db
+            .transaction(store, "readonly")
+            .objectStore(store)
+            .getAll();
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => resolve([]);
+        });
+        for (const value of values) {
+          let decoded = "";
+          if (typeof value === "string") decoded = value;
+          else if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+            decoded = new TextDecoder().decode(value as ArrayBuffer);
+          }
+          if (decoded.includes(text)) {
+            db.close();
+            return true;
+          }
+        }
+      }
+      db.close();
+    }
+    return false;
+  }, needle);

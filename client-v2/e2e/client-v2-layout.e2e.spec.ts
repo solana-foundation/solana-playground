@@ -4,23 +4,30 @@ import { requireFor } from "../src/test-utils/require-for";
 import {
   consoleTrigger,
   currentProject,
+  editorTookFocus,
   expect,
   filesToggle,
   HELP_TAIL,
   home,
-  homeRegion,
   json,
   leaveEditor,
-  openFiles,
+  newProjectPage,
   projectRow,
   runInTerminal,
   seedWorkspace,
-  startTutorialFromAbout,
   stubSignedIn,
   test,
 } from "./fixtures";
-import { lineOf, linesOn } from "./telemetry";
-import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
+import { lineOf, linesOn, linesRead } from "./telemetry";
+import {
+  DESK,
+  openPhoneMenu,
+  openPhonePreview,
+  PHONE,
+  TABLET,
+  waitForPhonePage,
+  WIDE_DESK,
+} from "./viewports";
 
 /**
  * The one event line with this name: waits for it, then a moment more, so a
@@ -30,27 +37,12 @@ import { DESK, PHONE, TABLET, WIDE_DESK } from "./viewports";
 const onlyLineOf = async (page: Page, lines: string[], name: string) => {
   await expect.poll(() => lineOf(lines, name)).toBeTruthy();
   await page.waitForTimeout(300);
+  await linesRead(lines);
   const all = lines.filter((line) =>
     line.startsWith(`[telemetry:event] ${name} `)
   );
   expect(all).toHaveLength(1);
   return all[0];
-};
-
-/**
- * Starts Hello Anchor's first lesson from Home's tutorial card, on a profile
- * with no project, which opens on Home
- */
-const startTutorial = async (page: Page) => {
-  await expect(home(page)).toBeVisible({ timeout: 20_000 });
-  await homeRegion(page)
-    .getByRole("button", { name: "Open Hello Anchor" })
-    .click();
-  // `exact`: Connect a model's dialog has a "Start" of its own
-  await startTutorialFromAbout(page);
-  // The lesson's switch is in the tree; open it whatever the saved layout
-  await openFiles(page);
-  await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 
 const assistantPanel = (page: Page) => page.locator("#assistant[data-panel]");
@@ -112,7 +104,7 @@ const seedThenResize = async (
 ) => {
   await page.setViewportSize(DESK);
   await seedWorkspace(page);
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await editorTookFocus(page);
   await page.setViewportSize(size);
 };
 
@@ -242,6 +234,7 @@ test("a restored width the library would fold opens the assistant, and changes n
   ).toBeVisible();
   await expect.poll(() => widthOf(page)).toBeGreaterThan(270);
   await page.waitForTimeout(300);
+  await linesRead(lines);
   expect(lineOf(lines, "layout_panel_toggled")).toBeUndefined();
   expect(await savedLayout(page)).toBe(saved);
 });
@@ -307,6 +300,55 @@ test("client-v2-layout: Folding the console", async ({ seededPage: page }) => {
 
   await consoleHandle(page).click();
   await expect(page.locator(".xterm-rows")).toContainText("echo-marker");
+});
+
+// The terminal was a grid item as wide as its own content, so when the stage
+// narrowed after it mounted (as it does while the layout settles on load) it
+// overhung the console and shrank one scrollbar per throttled fit, 15 fits on
+// a load here. On the runner a `help` sent in that window once printed with
+// the view left at the top of the buffer (HOO-2370); that xterm step is not
+// reproduced, so this guards the overhang, the condition it ran in
+test("the terminal never overhangs the console while it opens and runs a command", async ({
+  page,
+}) => {
+  // How far the terminal reaches past the console, every frame from the load
+  await page.addInitScript(() => {
+    const w = window as unknown as { overhang: number; samples: number };
+    w.overhang = 0;
+    w.samples = 0;
+    const sample = () => {
+      const terminal = document.querySelector(".xterm");
+      const well = document.querySelector(
+        '[data-slot="console-drawer-content"]'
+      );
+      if (terminal && well) {
+        w.samples++;
+        w.overhang = Math.max(
+          w.overhang,
+          terminal.getBoundingClientRect().width -
+            well.getBoundingClientRect().width
+        );
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await seedWorkspace(page);
+
+  // Typed and sent while the drawer is still opening: no wait for it
+  await consoleHandle(page).click();
+  await page.getByLabel("Terminal input").first().focus();
+  await page.keyboard.type("help");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".xterm-rows")).toContainText(HELP_TAIL);
+
+  const { overhang, samples } = await page.evaluate(() => {
+    const w = window as unknown as { overhang: number; samples: number };
+    return { overhang: w.overhang, samples: w.samples };
+  });
+  // A renamed selector would measure nothing and pass
+  expect(samples).toBeGreaterThan(0);
+  expect(overhang).toBeLessThanOrEqual(0);
 });
 
 // React's StrictMode runs an effect twice in dev; opening the terminal on
@@ -420,26 +462,6 @@ test("client-v2-layout: The files column keeps its tree", async ({
   }
 });
 
-test("client-v2-layout: A lesson's column keeps its tab", async ({ page }) => {
-  // Opening a tutorial boots the dev server's tutorial chunk and imports it
-  test.setTimeout(120_000);
-  await page.goto("/");
-  await startTutorial(page);
-
-  const filesTab = page.getByRole("radio", { name: "Files" });
-  await filesTab.click();
-  await expect(filesTab).toHaveAttribute("aria-checked", "true");
-
-  await filesToggle(page).click();
-  await expect(filesPanel(page)).toHaveCount(0);
-  await filesToggle(page).click();
-
-  await expect(page.getByRole("radio", { name: "Files" })).toHaveAttribute(
-    "aria-checked",
-    "true"
-  );
-});
-
 test("client-v2-layout: Folding the navigation", async ({
   seededPage: page,
 }) => {
@@ -472,16 +494,50 @@ test("client-v2-layout: Folding the navigation", async ({
   ).toBeVisible();
 });
 
+test("the trimmed logo heads the folded navigation and expands it", async ({
+  seededPage: page,
+}) => {
+  const header = nav(page).locator("[data-sidebar=header]");
+  const homeRow = nav(page).getByRole("button", { name: "Home", exact: true });
+  await expect(header).toHaveJSProperty("offsetHeight", 44);
+  const openTop = await homeRow.evaluate((e) => e.getBoundingClientRect().top);
+  await page.keyboard.press("ControlOrMeta+b");
+  const expand = nav(page).getByRole("button", { name: "Expand navigation" });
+  await expect(expand).toBeVisible();
+  // One head height, so the first row does not move as the nav folds
+  await expect(header).toHaveJSProperty("offsetHeight", 44);
+  expect(await homeRow.evaluate((e) => e.getBoundingClientRect().top)).toBe(
+    openTop
+  );
+  // Pointed at, the mark gives way to the fold glyph
+  const opacity = (selector: string) =>
+    expand
+      .locator(selector)
+      .first()
+      .evaluate((e) => getComputedStyle(e).opacity);
+  await expect.poll(() => opacity("span")).toBe("1");
+  await expand.hover();
+  await expect.poll(() => opacity("span")).toBe("0");
+  await expect.poll(() => opacity(":scope > svg")).toBe("1");
+  await expand.click();
+  await expect(
+    nav(page).getByRole("button", { name: "Collapse navigation" })
+  ).toBeVisible();
+});
+
 test.describe("on a phone", () => {
   test.use({ viewport: PHONE });
 
   // The seed runs on a desktop-sized page, as the fixture waits on the tree
   // a phone keeps in a closed Sheet; the window is narrowed afterwards
-  const seedThenNarrow = (page: Page) => seedThenResize(page, PHONE);
+  const seedThenNarrow = async (page: Page) => {
+    await seedThenResize(page, PHONE);
+    await waitForPhonePage(page, "Work");
+  };
 
   test("the account is a page of its own on a phone", async ({ page }) => {
     await seedThenNarrow(page);
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     // A tap: the page opens over the row, and the release lands on its foot
     await page.getByRole("button", { name: "Account, signed out" }).click();
     const accountMenu = page.getByRole("menu", { name: "Account" });
@@ -489,7 +545,7 @@ test.describe("on a phone", () => {
     // Once its opening animation has settled
     await expect
       .poll(() => accountMenu.boundingBox())
-      .toEqual({ x: 0, y: 0, width: 390, height: 844 });
+      .toEqual({ x: 0, y: 0, width: PHONE.width, height: PHONE.height });
     await expect(
       accountMenu.getByRole("menuitem", { name: "Sign in with GitHub" })
     ).toBeInViewport();
@@ -528,17 +584,15 @@ test.describe("on a phone", () => {
     ).toBeVisible();
     await expect(files).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Preview the build" }).click();
+    await openPhonePreview(page);
     await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
     await expect(consoleHandle(page)).toBeInViewport();
     await page.getByRole("button", { name: "Back to the code" }).click();
     await expect(page.locator(".monaco-editor")).toBeInViewport();
 
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
-    const menu = page.getByRole("region", { name: "Navigation" });
-    await expect(menu).toBeInViewport();
+    await openPhoneMenu(page);
     await page.getByRole("button", { name: "Close the menu" }).click();
-    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
+    await waitForPhonePage(page, "Work");
     await page.getByRole("radio", { name: "Chat" }).click();
     // The composer is there and takes typing with nothing connected
     const composer = page.getByRole("textbox", {
@@ -596,6 +650,7 @@ test.describe("on a phone", () => {
     await page.getByRole("button", { name: "Preview the build" }).click();
     await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
     await page.waitForTimeout(400);
+    await linesRead(lines);
     const shown = lines.filter((line) =>
       line.startsWith("[telemetry:event] layout_page_shown ")
     );
@@ -651,7 +706,7 @@ test.describe("on a phone", () => {
 
   test("client-v2-layout: Settings on a phone", async ({ page }) => {
     await seedThenNarrow(page);
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     await page
       .getByRole("region", { name: "Navigation" })
       .getByRole("button", { name: /^Change cluster/ })
@@ -660,9 +715,13 @@ test.describe("on a phone", () => {
     const settings = page.getByRole("region", { name: "Settings" });
     const network = settings.getByRole("radiogroup", { name: "Network" });
     await expect(network.getByRole("radio", { checked: true })).toBeFocused();
-    await network.getByRole("radio", { name: "Localnet" }).click();
+    // Mainnet's requests are refused, so CI never reaches it
+    await page.route("https://api.mainnet-beta.solana.com/**", (route) =>
+      route.abort("connectionrefused")
+    );
+    await network.getByRole("radio", { name: "Mainnet" }).click();
     await expect(
-      network.getByRole("radio", { name: "Localnet" })
+      network.getByRole("radio", { name: "Mainnet" })
     ).toHaveAttribute("aria-checked", "true");
     await network.getByRole("radio", { name: "Devnet", exact: true }).click();
     await expect(
@@ -676,7 +735,7 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await seedThenNarrow(page);
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     await page
       .getByRole("region", { name: "Navigation" })
       .getByRole("button", { name: /^Change cluster/ })
@@ -691,8 +750,57 @@ test.describe("on a phone", () => {
     ).toBeFocused();
   });
 
-  // The gallery is a dialog over the menu page; the project it starts opens
-  // on Work, not behind the menu that started it
+  // A swipe made while the editor loads stays. Opening its file must not
+  // focus the editor while it is swiped out of the window, and its tab row
+  // must scroll only itself: either would scroll the pager back to the work
+  // page. The touch stays down until the editor is in, so the pager has not
+  // settled when the editor mounts.
+  test("a swipe made while the editor loads stays on the preview", async ({
+    page,
+    browserName,
+  }) => {
+    test.fixme(
+      browserName === "firefox",
+      "Firefox defines no TouchEvent in a context without hasTouch, which this describe leaves off"
+    );
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    // The editor's chunk (webpack's name for it), held so it mounts under the
+    // swipe; a name that stopped matching would hold nothing and pass for the
+    // wrong reason
+    let heldChunk = false;
+    await page.route(/src_components_Editor_Monaco_index_ts/, async (route) => {
+      heldChunk = true;
+      await held;
+      await route.continue();
+    });
+    // Not `seedThenNarrow`: it waits for the editor's focus, which the held
+    // chunk never gives
+    await page.setViewportSize(DESK);
+    await seedWorkspace(page);
+    await page.setViewportSize(PHONE);
+    const pager = page.getByTestId("phone-pager");
+    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
+    await pager.evaluate((el) => {
+      el.dispatchEvent(new TouchEvent("touchstart"));
+      el.scrollTo({ left: el.clientWidth * 2, behavior: "instant" });
+    });
+    const preview = page.getByRole("region", { name: "Preview" });
+    await expect(preview).toBeInViewport({ ratio: 1 });
+
+    await expect.poll(() => heldChunk).toBe(true);
+    release();
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      "use anchor_lang"
+    );
+    await pager.evaluate((el) => el.dispatchEvent(new TouchEvent("touchend")));
+
+    await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
+    await expect(preview).toBeInViewport({ ratio: 1 });
+  });
+
+  // New project is a page in the content; the project it starts opens on
+  // Work, not behind the menu that started it
   test("client-v2-layout: A project started from the phone's menu", async ({
     page,
   }) => {
@@ -700,12 +808,12 @@ test.describe("on a phone", () => {
     await seedWorkspace(page);
     for (const width of [393, 740]) {
       await page.setViewportSize({ width, height: 852 });
-      await page.getByRole("button", { name: "Menu", exact: true }).click();
+      await openPhoneMenu(page);
       await page
         .getByRole("region", { name: "Navigation" })
         .getByRole("button", { name: "New project", exact: true })
         .click();
-      const gallery = page.getByRole("dialog");
+      const gallery = newProjectPage(page);
       await gallery.getByLabel("Project name").fill(`from-the-menu-${width}`);
       await gallery.getByRole("button", { name: /^Start/ }).click();
 
@@ -740,6 +848,7 @@ test.describe("on a phone", () => {
       .toContain("via: swipe");
     // Settled once: the stage this page sets does not send a second move
     await page.waitForTimeout(400);
+    await linesRead(lines);
     const shown = lines.filter((line) =>
       line.startsWith("[telemetry:event] layout_page_shown ")
     );
@@ -819,11 +928,11 @@ test("client-v2-layout: The navigation on a narrow window", async ({
   await seedWorkspace(page);
   // The editor focuses itself when it opens the first file; landing after
   // the menu opened, it would bring Work back
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await editorTookFocus(page);
   const navigation = page.getByRole("region", { name: "Navigation" });
   for (const width of [720, 740, 767]) {
     await page.setViewportSize({ width, height: 812 });
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await openPhoneMenu(page);
     for (const name of ["Home", "New project", "Tutorials", "Programs"]) {
       await expect(
         navigation.getByRole("button", { name, exact: true })
@@ -840,8 +949,9 @@ test("client-v2-layout: The navigation on a narrow window", async ({
   await navigation
     .getByRole("button", { name: "Tutorials", exact: true })
     .click();
+  // A phone folds the field to its glass
   await expect(
-    page.getByRole("searchbox", { name: "Search tutorials" })
+    page.getByRole("button", { name: "Search tutorials" })
   ).toBeVisible();
 });
 
@@ -849,7 +959,7 @@ test("client-v2-layout: The navigation on a narrow window", async ({
 // the navigation handed over, and the settings show over Work
 test("⌘, opens the settings from the phone's menu page", async ({ page }) => {
   await seedThenResize(page, { width: 740, height: 812 });
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await expect(
     page.getByRole("region", { name: "Navigation" })
   ).toBeInViewport();
@@ -892,11 +1002,18 @@ test.describe("on an iPhone", () => {
 
   test("client-v2-layout: The editor's keyboard button on an iPhone", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "An iPhone user agent on Gecko takes theme.ts's non-Firefox path, whose for-of over document.fonts.keys() throws on Gecko; a real iPhone runs WebKit"
+    );
     // A project is started from the desktop's Home, as "on a phone" does
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
+    await editorTookFocus(page);
     await page.setViewportSize(PHONE);
+    await waitForPhonePage(page, "Work");
     const lines = page.locator(".monaco-editor .view-lines");
     await expect(lines).toContainText("use anchor_lang");
     // A tap on the code does not always raise the keyboard on an iPhone, so
@@ -1233,7 +1350,7 @@ test("client-v2-layout: Everything the header did", async ({
 
   // A second project, so there is one to switch back to
   await nav(page).getByRole("button", { name: "New project" }).click();
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await expect(gallery).toBeVisible();
   await gallery.getByLabel("Project name").fill("second");
   await gallery.getByRole("button", { name: /^Start/ }).click();
@@ -1320,7 +1437,7 @@ test("client-v2-layout: Programs from the navigation", async ({
     page.getByRole("button", { name: /^Open / }).first()
   ).toBeVisible();
   await expect(item).toHaveAttribute("data-active", "true");
-  await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
+  await expect(page.locator("[data-new-project]")).toHaveCount(0);
   expect(await onlyLineOf(page, lines, "catalog_shown")).toContain("via: nav");
 });
 
@@ -1480,15 +1597,17 @@ test("client-v2-layout: Hiding the assistant from the stage bar", async ({
   await page.setViewportSize(WIDE_DESK);
   const before = await widthOf(page);
   const stageBar = page.locator('[data-slot="stage-bar"]');
-  await expect(stageBar).not.toContainText("e2e-project");
+  // The bar names the project whether the assistant shows or not: the
+  // assistant's head names the model, not the project
+  await expect(stageBar).toContainText("e2e-project");
   await page.getByRole("button", { name: "Hide the assistant" }).click();
   await expect.poll(() => widthOf(page)).toBe(0);
-  // The project's name moves into the stage bar while the assistant is hidden
   await expect(stageBar).toContainText("e2e-project");
   await page.getByRole("button", { name: "Expand assistant" }).click();
   await expect
     .poll(async () => Math.abs((await widthOf(page)) - before))
     .toBeLessThanOrEqual(2);
+  await expect(stageBar).toContainText("e2e-project");
 });
 
 test("client-v2-layout: A layout saved before the column bars", async ({
@@ -1680,7 +1799,7 @@ test("client-v2-layout: A cluster that is down", async ({
     .getByRole("menu", { name: "Account" })
     .getByRole("menuitem")
     .first();
-  await expect(first).toContainText("devnet is not responding");
+  await expect(first).toContainText("Devnet is not responding");
   await first.click();
   const network = page
     .getByRole("region", { name: "Settings" })
@@ -1812,7 +1931,7 @@ test("the wallet asks about the validator when localnet does not answer", async 
   // and the open dialog hides the page from role queries: the account's
   // label is read once it is closed, never in a race with it
   await createWallet(page);
-  const howTo = page.getByRole("dialog", { name: "Connect to localnet" });
+  const howTo = page.getByRole("dialog", { name: "Connect to Localnet" });
   await expect(howTo).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
   await expect(howTo).toBeHidden();
@@ -1901,17 +2020,13 @@ const sectionList = (page: Page) =>
 const SECTIONS = [
   "Network",
   "Assistant",
-  "Project",
-  "Block Explorer",
-  "Build",
-  "Connection",
   "Editor",
-  "Notification",
-  "Server",
-  "Test UI",
-  "UI",
+  "Build",
   "Wallet",
-  "Experimental",
+  "Appearance",
+  "Keyboard shortcuts",
+  "Project",
+  "Advanced",
 ];
 
 test.describe("the settings page", () => {
@@ -1925,10 +2040,13 @@ test.describe("the settings page", () => {
     await expect(list.getByRole("button")).toHaveText(SECTIONS);
 
     // Each setting's control carries its own name: two of one name ("Endpoint"
-    // twice, once) cannot be told apart by a screen reader or a test
-    const names = await settingsPage(page)
-      .locator('[role="combobox"], [role="checkbox"]')
-      .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
+    // twice, once) cannot be told apart by a screen reader or a test.
+    // Not `evaluateAll`: over these controls it crashes Playwright 1.65's Firefox 159 content process
+    const names = await settingsPage(page).evaluate((root) =>
+      Array.from(
+        root.querySelectorAll('[role="combobox"], [role="switch"]')
+      ).map((el) => el.getAttribute("aria-label"))
+    );
     expect(names.length).toBeGreaterThan(5);
     expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);
 
@@ -1940,7 +2058,7 @@ test.describe("the settings page", () => {
     await expect(editor).toHaveAttribute("aria-current", "true");
 
     // The last section cannot scroll to the top, and still takes the mark
-    const last = list.getByRole("button", { name: "Experimental" });
+    const last = list.getByRole("button", { name: "Advanced" });
     await last.click();
     await expect(last).toHaveAttribute("aria-current", "true");
   });
@@ -1996,6 +2114,17 @@ test.describe("the settings page", () => {
     await expect
       .poll(() => lines.filter((l) => l.includes("settings_closed")).at(-1))
       .toContain("via: back");
+
+    // The Deploy stage's own Change counts as the stage, not the status row
+    await page.locator("#flow-stage-tab-deploy").click();
+    await page
+      .locator("#flow-stage-panel-deploy")
+      .getByRole("button", { name: "Change", exact: true })
+      .click({ timeout: 15_000 });
+    await expect(settingsPage(page)).toBeVisible();
+    await expect
+      .poll(() => lines.filter((l) => l.includes("settings_opened")).at(-1))
+      .toContain("from: stage");
   });
 
   test("client-v2-layout: A menu open at ⌘, closes as the settings open", async ({
@@ -2088,13 +2217,12 @@ test.describe("the settings page at 1440 by 900", () => {
         return hit === el && !!settingsRegion?.contains(middle);
       });
 
+    // Light as a user who picked it before it left the select (HOO-2695)
     for (const theme of ["Dark", "Light"]) {
       if (theme === "Light") {
-        const row = settingsPage(page)
-          .locator("span", { hasText: /^Theme$/ })
-          .locator("xpath=../..");
-        await row.getByRole("combobox").click();
-        await page.getByRole("option", { name: "Light", exact: true }).click();
+        await page.evaluate(() => localStorage.setItem("theme", "Light"));
+        await page.reload();
+        await page.locator("[data-settings-trigger]").first().click();
         await expect
           .poll(() =>
             page.evaluate(() =>
@@ -2105,7 +2233,7 @@ test.describe("the settings page at 1440 by 900", () => {
       }
       await expect(page.locator("#flow-stage-tab-interact")).toBeHidden();
       await expect(page.locator(".monaco-editor").first()).toBeHidden();
-      // Picking the theme scrolled the page down to the UI section
+      // Keep the heading in view whatever the page scrolled to
       await heading.scrollIntoViewIfNeeded();
       expect(await onTop(), theme).toBe(true);
     }
@@ -2114,7 +2242,7 @@ test.describe("the settings page at 1440 by 900", () => {
 
 test("client-v2-layout: The settings page on a phone", async ({ page }) => {
   await seedThenResize(page, PHONE);
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await page
     .getByRole("region", { name: "Navigation" })
     .getByRole("button", { name: /^Change cluster/ })

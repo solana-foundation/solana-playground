@@ -31,8 +31,42 @@ const { model, explorer } = vi.hoisted(() => {
 vi.mock("monaco-editor", () => ({
   editor: { getModels: () => [model] },
 }));
-vi.mock("../../../../utils", () => ({ PgExplorer: explorer }));
-vi.mock("../../../flow/lessons", () => ({ PgLesson: {} }));
+
+const mocks = vi.hoisted(() => ({
+  cluster: "devnet" as string | undefined,
+  deployState: "ready",
+  execute: vi.fn(),
+  wallet: undefined as undefined | { isPg?: boolean },
+}));
+
+vi.mock("../../../../utils", () => ({
+  PgBlockExplorer: {},
+  PgCommand: { deploy: { execute: mocks.execute } },
+  PgConnection: {
+    get cluster() {
+      return mocks.cluster;
+    },
+  },
+  PgExplorer: explorer,
+  PgGlobal: {
+    get deployState() {
+      return mocks.deployState;
+    },
+  },
+  PgProgramInfo: {},
+  PgWallet: {
+    get current() {
+      return mocks.wallet;
+    },
+  },
+}));
+vi.mock("../../../../commands/deploy/estimate", () => ({
+  estimateDeployCostWithin: async () => 1_420_000_000,
+}));
+vi.mock("./build-output", () => ({
+  PgBuildOutput: {},
+  stripKnownNoise: (s: string) => s,
+}));
 
 import { realBridge } from "./playground-bridge";
 
@@ -100,5 +134,58 @@ describe("realBridge", () => {
 
       expect(model.text).toBe("one typed");
     });
+  });
+});
+
+describe("realBridge.quoteDeploy", () => {
+  beforeEach(() => {
+    mocks.cluster = "devnet";
+    mocks.wallet = undefined;
+  });
+
+  it.each([
+    {
+      label: "no wallet yet, so the Playground wallet will be made and pay",
+      wallet: undefined,
+      expected: true,
+    },
+    { label: "the Playground wallet", wallet: { isPg: true }, expected: true },
+    { label: "a connected wallet", wallet: { isPg: false }, expected: false },
+  ])("says the Playground wallet pays with $label", async (row) => {
+    mocks.wallet = row.wallet;
+    expect((await realBridge.quoteDeploy()).playground).toBe(row.expected);
+  });
+
+  it.each([
+    ["devnet", "devnet"],
+    ["mainnet-beta", "mainnet"],
+    [undefined, undefined],
+  ])("names %s as %s", async (cluster, network) => {
+    mocks.cluster = cluster;
+    expect(await realBridge.quoteDeploy()).toEqual({
+      network,
+      cost: 1_420_000_000,
+      playground: true,
+    });
+  });
+});
+
+describe("realBridge.deploy", () => {
+  beforeEach(() => {
+    mocks.deployState = "ready";
+    mocks.execute.mockReset();
+  });
+
+  it("refuses while another deploy runs, without pausing it", async () => {
+    mocks.deployState = "loading";
+
+    await expect(realBridge.deploy()).rejects.toThrow("nothing was deployed");
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("calls a run that deployed nothing a failure", async () => {
+    mocks.execute.mockResolvedValue(undefined);
+
+    await expect(realBridge.deploy()).rejects.toThrow("nothing was deployed");
   });
 });

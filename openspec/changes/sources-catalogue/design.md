@@ -154,14 +154,13 @@ Alternative: extending `GET /api/mcp` to return skills. The gateway speaks MCP
 and nothing else; a skills list in its discovery answer would make every MCP
 client that reads it see a foreign field.
 
-### The selection stays in `PgAssistant`, in memory
+### The selection stays in `PgAssistant`
 
 `enabledSkillIds` already lives there; `setMcpServerEnabled` joins it as
 spiked: a gateway entry's choice is a set of ids kept apart from the
 gateway's list, which `loadMcpServers` replaces whole, and a user entry's
-choice is its `enabled` field, so the editor shows it. Nothing in the Sources
-tab persists today, and persisting one half would leave the tab half
-remembered.
+choice is its `enabled` field, so the editor shows it. The change `assistant-tool-config`
+stores it across a reload.
 
 ### `supportsTools` on the provider profile
 

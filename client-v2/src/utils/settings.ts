@@ -1,9 +1,14 @@
 import type { JSX } from "react";
 
 import {
+  dropBrokenSettingsFor,
   fromStoredEndpoints,
+  parseStoredSettings,
   toStoredEndpoints,
 } from "../settings/stored-endpoint";
+// The module, not the slice's entry: the entry pulls in React and Sentry, and
+// this file loads before everything else
+import { createLogger } from "../shared/lib/logger/logger";
 import { declareDecorator, updatable } from "./decorators";
 import type {
   Arrayable,
@@ -12,6 +17,8 @@ import type {
   RequiredKey,
   UnionToTuple,
 } from "./types";
+
+const log = createLogger("settings:storage");
 
 export type Settings = ConvertAll<UnionToTuple<InternalSetting>> & {
   // TODO: Store this in `PgProgramInfo` and remove
@@ -139,8 +146,24 @@ const storage = {
   read() {
     const stateStr = localStorage.getItem(this.KEY);
     if (!stateStr) return defaultState;
-    // Endpoints are stored as the option picked, not its address
-    return fromStoredEndpoints(JSON.parse(stateStr), defaultState) as Settings;
+
+    const stored = parseStoredSettings(stateStr);
+    if (stored instanceof Error) {
+      // A broken entry must not stop the app from starting: load the
+      // defaults, Devnet included, and the next settings write replaces it.
+      // Never the value itself: a custom endpoint may carry an API token.
+      log.error(stored, {
+        report: true,
+        context: { key: this.KEY, length: stateStr.length },
+      });
+      return defaultState;
+    }
+
+    // Endpoints are stored as the option picked, not its address; resolved
+    // first, since an option is an object where the default is a string
+    return dropBrokenSettingsFor(defaultState)(
+      fromStoredEndpoints(stored, defaultState)
+    ) as Settings;
   },
 
   /** Serialize the data and write to storage. */

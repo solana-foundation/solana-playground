@@ -78,6 +78,29 @@ describe("BaseApprovalCard", () => {
     expect(screen.getByText("Compiles the program")).toBeTruthy();
   });
 
+  it("a command asked as a question is titled with it", () => {
+    const asked: ApprovalItem = {
+      id: "card-3",
+      createdAt: CREATED,
+      kind: "approval",
+      status: "pending",
+      request: {
+        type: "command",
+        name: "deploy",
+        effect: "Sends a transaction to devnet",
+        question: "Deploy hello_anchor to devnet? It costs about 1.42 SOL.",
+      },
+    };
+    render(<BaseApprovalCard item={asked} onAnswer={vi.fn()} />);
+
+    expect(
+      screen.getByText(
+        "Deploy hello_anchor to devnet? It costs about 1.42 SOL."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText("wants to run deploy")).toBeNull();
+  });
+
   it("a command's lines are phrasing content inside the pre", () => {
     const { container } = render(
       <BaseApprovalCard item={commandCard("pending")} onAnswer={vi.fn()} />
@@ -119,6 +142,24 @@ describe("BaseApprovalCard", () => {
       <BaseApprovalCard item={commandCard("unanswered")} onAnswer={vi.fn()} />
     );
     expect(screen.getByText("Not answered")).toBeTruthy();
+  });
+
+  it("a card whose tool failed says Failed and why, not Applied", () => {
+    const item: ApprovalItem = {
+      id: "card-4",
+      createdAt: CREATED,
+      kind: "approval",
+      status: "failed",
+      outcome: "not written: A project can have at most 50 files.",
+      request: { type: "patch", path: "src/f60.rs", before: null, after: "x" },
+    };
+    render(<BaseApprovalCard item={item} onAnswer={vi.fn()} />);
+    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(
+      screen.getByText("not written: A project can have at most 50 files.")
+    ).toBeTruthy();
+    expect(screen.queryByText("Applied")).toBeNull();
+    expect(screen.queryByRole("button", { name: ANSWERS })).toBeNull();
   });
 
   it("a declined command says so", () => {

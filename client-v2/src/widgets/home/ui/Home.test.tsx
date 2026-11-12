@@ -57,10 +57,6 @@ const accountList = vi.hoisted(() => ({
   onDidChange: vi.fn(),
 }));
 vi.mock("@/features/persistence", () => ({ PgAccountList: accountList }));
-// Home only hands Start from scratch on; its own tests cover it
-vi.mock("@/features/new-project", () => ({
-  StartFromScratch: () => <div data-testid="scratch" />,
-}));
 
 import Home from "./Home";
 
@@ -78,6 +74,13 @@ const LISTING = Array.from({ length: 34 }, (_, i) => ({
 
 beforeEach(() => {
   utils.PgTutorial.all = [
+    {
+      name: "Hello Seahorse",
+      description: "d",
+      level: "Beginner",
+      framework: "Seahorse",
+      thumbnail: "/s.png",
+    },
     {
       name: "Hello Anchor",
       description: "d",
@@ -159,12 +162,22 @@ it("opens the Tutorials page from the tile and from All", async () => {
   expect(utils.PgView.setModal).not.toHaveBeenCalled();
 });
 
-it("reports New project and unfolds the scratch options", async () => {
+it("offers only the start's tutorials, leaving the others out", async () => {
   const { home } = draw();
+  await home.findByText("34 real programs");
+  expect(home.getByRole("button", { name: "Open Hello Anchor" })).toBeTruthy();
+  expect(
+    home.queryByRole("button", { name: "Open Hello Seahorse" })
+  ).toBeNull();
+  expect(home.getByText("1 guided paths")).toBeTruthy();
+});
+
+it("reports New project and opens its page", async () => {
+  const { home, onOpenPage } = draw();
   await home.findByText("34 real programs");
   fireEvent.click(home.getByRole("button", { name: "New project" }));
   expect(events("home_tile_opened")).toEqual([{ tile: "new-project" }]);
-  expect(home.getByTestId("scratch")).toBeTruthy();
+  expect(onOpenPage).toHaveBeenCalledWith("new-project");
 });
 
 it("opens a tutorial and reports it", async () => {

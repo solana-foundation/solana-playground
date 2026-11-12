@@ -46,7 +46,10 @@ vi.mock("mocha/browser-entry", () => {
 });
 vi.mock("../connection", () => ({ PgConnection: { current: {} } }));
 vi.mock("../wallet", () => ({ PgWallet: { current: null } }));
-vi.mock("../program-info", () => ({ PgProgramInfo: {} }));
+// No program is open: no IDL to read, so no `anchor.workspace` and no `pg.program`
+vi.mock("../program-info", () => ({
+  PgProgramInfo: { callableIdl: () => undefined, readIdl: () => undefined },
+}));
 vi.mock("../program-interaction", () => ({ PgProgramInteraction: {} }));
 
 /** `_getGlobals` for a test run, as `execute` calls it */

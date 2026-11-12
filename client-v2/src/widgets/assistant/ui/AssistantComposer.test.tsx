@@ -43,7 +43,7 @@ vi.mock("../../../effects/chat-thread/push-thread", () => ({
   pushThread: vi.fn(() => Promise.resolve()),
 }));
 
-// What the chips read: the workspace, the bridge and the lesson. The real ones
+// What the chips read: the workspace and the bridge. The real ones
 // reach the utils barrel, which needs the build's globals
 const { noEvent } = vi.hoisted(() => ({
   noEvent: () => ({ dispose: () => {} }),
@@ -62,7 +62,12 @@ vi.mock("../../../utils/explorer/explorer", () => ({
   },
 }));
 vi.mock("../../../utils/program-info", () => ({
-  PgProgramInfo: { idl: null },
+  PgProgramInfo: {
+    // eslint-disable-next-line unicorn/no-null -- the real `idl` and `callableIdl` answer `null` without an IDL
+    idl: null,
+    // eslint-disable-next-line unicorn/no-null -- same
+    callableIdl: () => null,
+  },
 }));
 // The bridge's context from the real store, over a fixed project
 const FILES = ["src/lib.rs", "tests/anchor.test.ts", "secret/other.rs"];
@@ -88,10 +93,6 @@ vi.mock(
 );
 vi.mock("../../../views/sidebar/assistant/bridge/build-output", () => ({
   PgBuildOutput: { latest: null },
-}));
-vi.mock("../../../views/flow/lessons", () => ({
-  INITIAL_LESSON_STATE: { path: null, record: [] },
-  PgLesson: { onDidChange: () => ({ dispose: () => {} }) },
 }));
 
 let events: ReturnType<typeof memoryTelemetry>;
@@ -218,6 +219,22 @@ describe("AssistantComposer, context chips", () => {
     expect(screen.queryByText("other.rs")).toBeNull();
   });
 
+  // HOO-2694: the chip is not a default; it shows while the program has a
+  // callable IDL, whose summary the bridge sends (a refused IDL sends only its
+  // name and the reason, and shows no chip)
+  it("names the idl only while the program has a callable IDL", async () => {
+    const { PgProgramInfo } = await import("../../../utils/program-info");
+    const { unmount } = render(<Harness />);
+    expect(screen.queryByText("idl")).toBeNull();
+    unmount();
+
+    vi.spyOn(PgProgramInfo, "callableIdl").mockReturnValue(
+      {} as ReturnType<typeof PgProgramInfo.callableIdl>
+    );
+    render(<Harness />);
+    expect(screen.getByText("idl")).toBeTruthy();
+  });
+
   it("keeps a removed file out until it is added back, and reports it", async () => {
     const send = vi.fn(() => Promise.resolve());
     vi.spyOn(
@@ -286,39 +303,11 @@ describe("AssistantComposer, the + menu", () => {
     expect(openSources).toHaveBeenCalledTimes(1);
   });
 
-  it("offers Connection and key… once connected, and opens Connect from +", async () => {
-    render(<Harness />);
-    const user = await openMenu(/Add context/);
-    await user.click(
-      screen.getByRole("menuitem", { name: /Connection and key…/ })
-    );
-    expect(openConnect).toHaveBeenCalledWith("add", undefined);
-  });
-
-  it("offers Connect a model… with nothing connected", async () => {
+  it("leaves Connect to the model button and More, not +", async () => {
     PgAssistant.disconnect();
     render(<Harness />);
     await openMenu(/Add context/);
-    expect(
-      screen.getByRole("menuitem", { name: /Connect a model…/ })
-    ).toBeTruthy();
-  });
-});
-
-describe("AssistantComposer, chip order", () => {
-  it("names the files in tab order, then the added ones", async () => {
-    render(<Harness />);
-    const user = await openMenu(/Add context/);
-    await openAddFile(user);
-    await pickFile(user, "tests/anchor.test.ts");
-    // Each chip is its tooltip's trigger, which takes over its data-slot
-    const chips = Array.from(
-      document.querySelectorAll('[data-slot="composer-context"] > *')
-    ).map(
-      // The short label; the chip also carries its spoken name for a reader
-      (chip) => chip.querySelector('[aria-hidden="true"]')?.textContent
-    );
-    expect(chips).toEqual(["lib.rs", "anchor.test.ts"]);
+    expect(screen.queryByRole("menuitem", { name: /Connect/ })).toBeNull();
   });
 });
 
@@ -706,9 +695,8 @@ describe("AssistantComposer, the off row", () => {
 
   it("offers sign-in or a key to a signed-out user, and signs in from the assistant", async () => {
     backend = { state: "present", model: "m" };
-    const signIn = vi
-      .spyOn(PgSession, "signInWith")
-      .mockResolvedValue(undefined);
+    const signIn = vi.fn().mockResolvedValue(undefined);
+    const signInFor = vi.spyOn(PgSession, "signInFor").mockReturnValue(signIn);
     render(<Harness />);
     expect((await shownRow()).textContent).toContain(
       "Sign in with GitHub to use the hosted model, or add a key of your own."
@@ -717,7 +705,8 @@ describe("AssistantComposer, the off row", () => {
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Sign in with GitHub" }));
-    expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+    expect(signInFor).toHaveBeenCalledWith("assistant");
+    expect(signIn).toHaveBeenCalledWith([]);
     expect(tracked()).toEqual([
       ["assistant_ai_off_shown", { reason: "signed-out" }],
     ]);
@@ -725,7 +714,9 @@ describe("AssistantComposer, the off row", () => {
 
   it("says a failed sign-in in the row", async () => {
     backend = { state: "present", model: "m" };
-    vi.spyOn(PgSession, "signInWith").mockRejectedValue(new Error("boom"));
+    vi.spyOn(PgSession, "signInFor").mockReturnValue(
+      vi.fn().mockRejectedValue(new Error("boom"))
+    );
     render(<Harness />);
     await shownRow();
     await userEvent

@@ -38,7 +38,10 @@ export const DeleteWorkspace: FC<
       }}
     >
       <div className="flex flex-col gap-2 text-control font-read text-muted-foreground">
-        <p>Its files and its program keypair are deleted from this browser.</p>
+        <p>
+          Its files, its program keypair and its assistant chat are deleted from
+          this browser.
+        </p>
         {/* Progress lives in `.workspace/tutorial-storage.json`, inside the
             directory about to be removed */}
         {isLesson && <p>Your progress in this tutorial is lost.</p>}

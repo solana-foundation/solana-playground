@@ -11,6 +11,7 @@ import {
   describeHolders,
   queuePort,
 } from "./scripts/e2e-queue.mjs";
+import { CHROMIUM, FIREFOX } from "./scripts/e2e-projects.mjs";
 import { fullSuiteRefusal } from "./scripts/e2e-scope.mjs";
 
 // `craco start` binds `PORT`, so the same variable picks the server the run
@@ -109,6 +110,18 @@ const takeQueueSlot = () => {
 const port = queued ? takeQueueSlot() : ownPort ?? 3000;
 const origin = `http://localhost:${port}`;
 
+// A plain local run stays on Chromium and its memory budget. Playwright 1.62 has no
+// `TestProject.default`, so `firefox` exists only when a `--project` can pick it.
+const ALL_PROJECTS_ENV = "E2E_ALL_PROJECTS";
+// Workers get no `--project` in their argv; the runner's answer reaches them through the environment.
+if (process.argv.some((arg) => arg.split("=", 1)[0] === "--project")) {
+  process.env[ALL_PROJECTS_ENV] = "1";
+}
+const shouldIncludeAllProjects = process.env[ALL_PROJECTS_ENV] === "1";
+
+/** Specs about a Firefox-only failure, which the `chromium` project leaves out */
+const FIREFOX_ONLY_SPECS = /-firefox\.e2e\.spec\.ts$/;
+
 /** A saved layout with every column but the console open */
 const TREE_OPEN_LAYOUT = JSON.stringify({
   v: 2,
@@ -198,11 +211,14 @@ export default defineConfig({
         ["json", { outputFile: "test-results/report.json" }],
       ]
     : "line",
-  // Under the `e2e` shard job's `timeout-minutes` (client-v2.yml), so
+  // Under the `e2e` shard job's `timeout-minutes` (reusable-client-v2.yml), so
   // Playwright itself ends a hung shard and still prints its summary; a
   // GitHub cancel keeps the traces but not the line saying which test was
-  // running.
-  globalTimeout: process.env.CI ? 15 * 60_000 : 0,
+  // running. 25 minutes, not 15: on run 42259738085 (2026-11-06, seven
+  // shards) the slowest shard's `Browser tests` step took 14.7 minutes, so
+  // 15 would end a healthy shard. Lower it when the shards are measured well
+  // under 15 again.
+  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every page starts as a visitor who left the file tree open: a first
@@ -228,9 +244,21 @@ export default defineConfig({
     // Watch the flow at human speed: SLOWMO=600 yarn test-e2e --headed
     launchOptions: { slowMo: Number(process.env.SLOWMO ?? 0) },
   },
+  projects: [
+    {
+      name: CHROMIUM,
+      use: { browserName: CHROMIUM },
+      testIgnore: FIREFOX_ONLY_SPECS,
+    },
+    ...(shouldIncludeAllProjects
+      ? [{ name: FIREFOX, use: { browserName: FIREFOX } }]
+      : []),
+  ],
   webServer: {
-    // `dev` runs `generate-fast`: still syncs public/, but skips
-    // `generate-crates`, which shells out to cargo and dominates the runtime
+    // `dev` runs `generate-fast`, then `generate-dev-crates`, which skips on
+    // the stubs and on CI finds the restored crates current by key. A machine's
+    // first local run generates them for about ten minutes, longer than the
+    // local timeout below: run `yarn generate-dev-crates` once first
     command: "yarn dev",
     url: origin,
     // Only this worktree's own dev server is reused. Any other server on the
@@ -249,6 +277,20 @@ export default defineConfig({
     // early".
     stdout: "pipe",
     stderr: "pipe",
-    env: { BROWSER: "none", PORT: String(port) },
+    // Blank, not unset: dotenv keeps a variable already set, so the platform
+    // RPC URLs from `.env` stay out and Mainnet, Devnet and Testnet fall back
+    // to the public endpoints the specs stub.
+    // `TUTORIAL_TEST_DOCS`: a tutorial that lists no doc pages of its own gets
+    // the test pages (`scripts/generate-tutorials.mjs`), so the doc tests
+    // still run should Hello Anchor's list go. Hello Anchor lists its own
+    // today, and the tests run on those
+    env: {
+      BROWSER: "none",
+      PORT: String(port),
+      REACT_APP_DEVNET_RPC_URL: "",
+      REACT_APP_MAINNET_RPC_URL: "",
+      REACT_APP_TESTNET_RPC_URL: "",
+      TUTORIAL_TEST_DOCS: "1",
+    },
   },
 });

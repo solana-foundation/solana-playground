@@ -182,8 +182,6 @@ export type SidebarPageParam<N extends string> = {
   icon: string;
   /** Title of the page, defaults to `name` */
   title?: string;
-  /** Keybind for the page */
-  keybind?: string;
   /** Route to navigate to */
   route?: RoutePath;
   /** Handle the page logic */
@@ -440,14 +438,11 @@ class _PgView {
   }
 
   /**
-   * Set secondary main view progress bar percentage.
+   * Set the progress bar along the Flow console's strip
+   * (`views/flow/console/ConsoleDrawer`), which the deploy and sugar
+   * commands report to. The name is the classic layout's secondary view's.
    *
    * Progress bar will be hidden if `progress` is set to 0.
-   *
-   * @deprecated Nothing listens since the classic layout went: Flow draws no
-   * secondary view. Kept so the deploy and sugar commands, runtime modules
-   * this change does not touch, still compile; a progress display for Flow
-   * would listen here.
    *
    * @param progress progress percentage in 0-100
    */

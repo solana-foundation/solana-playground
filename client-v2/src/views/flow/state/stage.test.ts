@@ -16,15 +16,23 @@ vi.mock("../../../utils", () => ({
       onDidStart: vi.fn(() => ({ dispose: vi.fn() })),
       onDidFinish: vi.fn(() => ({ dispose: vi.fn() })),
     },
+    airdrop: {
+      onDidStart: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidEnd: vi.fn(() => ({ dispose: vi.fn() })),
+    },
   },
   PgExplorer: {
+    currentWorkspaceName: "proj",
+    files: {},
+    getCurrentSrcPath: vi.fn(() => "/proj/src/"),
     onDidSwitchWorkspace: vi.fn(() => ({ dispose: vi.fn() })),
     onDidInit: vi.fn(() => ({ dispose: vi.fn() })),
+    onDidSaveFile: vi.fn(() => ({ dispose: vi.fn() })),
     onDidCreateItem: vi.fn(() => ({ dispose: vi.fn() })),
     onDidDeleteItem: vi.fn(() => ({ dispose: vi.fn() })),
     onDidRenameItem: vi.fn(() => ({ dispose: vi.fn() })),
+    onDidReloadFiles: vi.fn(() => ({ dispose: vi.fn() })),
     isInitialized: true,
-    files: {},
     getRelativePath: (path: string) => path.replace(/^\/ws\//, ""),
   },
   PgFramework: {
@@ -49,6 +57,7 @@ import {
   countErrors,
   INITIAL_FLOW_STATE,
   PgFlow,
+  programSourceIn,
   STAGES,
   stagesOf,
 } from "./stage";
@@ -76,7 +85,9 @@ describe("PgFlow.reduce", () => {
       buildFailure: null,
       deployBeforeRun: null,
       stopped: null,
+      airdrops: 0,
       hasProgram: true,
+      sourceChanged: false,
     });
   });
 
@@ -167,6 +178,24 @@ describe("PgFlow.reduce", () => {
     expect(s.stage).toBe("write");
   });
 
+  it("deploy-refused leaves a deployed program as it was, not failed", () => {
+    const deployed = PgFlow.reduce(
+      PgFlow.reduce(INITIAL_FLOW_STATE, {
+        type: "deploy-start",
+        from: "command",
+      }),
+      { type: "deploy-finish", ok: true, from: "command" }
+    );
+    const s = PgFlow.reduce(
+      PgFlow.reduce(deployed, { type: "deploy-start", from: "command" }),
+      {
+        type: "deploy-refused",
+      }
+    );
+    expect(s.deploy).toBe("done");
+    expect(s.stopped).toBeNull();
+  });
+
   it("deploy-finish ok marks deploy done and interact active", () => {
     const built = PgFlow.reduce(INITIAL_FLOW_STATE, {
       type: "build-finish",
@@ -174,7 +203,11 @@ describe("PgFlow.reduce", () => {
       errorCount: 0,
       ms: 1,
     });
-    const s = PgFlow.reduce(built, { type: "deploy-finish", ok: true });
+    const s = PgFlow.reduce(built, {
+      type: "deploy-finish",
+      ok: true,
+      from: "command",
+    });
     expect(s.deploy).toBe("done");
     expect(s.interact).toBe("active");
     expect(s.stage).toBe("deploy");
@@ -208,6 +241,51 @@ describe("PgFlow.reduce", () => {
     expect(next.hasProgram).toBe(false);
     expect(next.stage).toBe("write");
     expect(next.build).toBe("upcoming");
+  });
+});
+
+describe("PgFlow.reduce, an airdrop", () => {
+  it("marks the airdrop running from its start to its finish", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "airdrop-start",
+    });
+    expect(running.airdrops).toBe(1);
+    expect(PgFlow.reduce(running, { type: "airdrop-finish" }).airdrops).toBe(0);
+  });
+
+  it("stays running until the last of two overlapping airdrops finishes", () => {
+    // The wallet's button and a typed `airdrop` each start a run of their own
+    const start = { type: "airdrop-start" } as const;
+    const two = PgFlow.reduce(PgFlow.reduce(INITIAL_FLOW_STATE, start), start);
+    const one = PgFlow.reduce(two, { type: "airdrop-finish" });
+    expect(one.airdrops).toBe(1);
+    expect(PgFlow.reduce(one, { type: "airdrop-finish" }).airdrops).toBe(0);
+  });
+
+  it("never counts below none: a finish with no start changes nothing", () => {
+    expect(PgFlow.reduce(INITIAL_FLOW_STATE, { type: "airdrop-finish" })).toBe(
+      INITIAL_FLOW_STATE
+    );
+  });
+
+  it("leaves the stages as they were", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "airdrop-start",
+    });
+    expect(running.stage).toBe(INITIAL_FLOW_STATE.stage);
+    expect(running.build).toBe(INITIAL_FLOW_STATE.build);
+    expect(running.deploy).toBe(INITIAL_FLOW_STATE.deploy);
+    expect(running.interact).toBe(INITIAL_FLOW_STATE.interact);
+    expect(running.stopped).toBe(INITIAL_FLOW_STATE.stopped);
+  });
+
+  it("keeps running across a project switch: the wallet is not the project's", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "airdrop-start",
+    });
+    expect(PgFlow.reduce(running, { type: "workspace-change" }).airdrops).toBe(
+      1
+    );
   });
 });
 
@@ -250,7 +328,10 @@ describe("PgFlow.reduce, a stopped run", () => {
   });
 
   it("a stopped deploy goes back to what Deploy showed before it", () => {
-    const deploying = PgFlow.reduce(builtOnce(), { type: "deploy-start" });
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "command",
+    });
     expect(deploying.deploy).toBe("running");
 
     const s = PgFlow.reduce(deploying, { type: "deploy-stop" });
@@ -260,9 +341,50 @@ describe("PgFlow.reduce, a stopped run", () => {
     expect(s.stopped).toBe("deploy");
   });
 
+  it("a tutorial's deploy leaves the stage where it is, however it ends", () => {
+    const writing = PgFlow.reduce(builtOnce(), {
+      type: "set-stage",
+      stage: "write",
+    });
+    const deploying = PgFlow.reduce(writing, {
+      type: "deploy-start",
+      from: "tutorial",
+    });
+    expect(deploying.stage).toBe("write");
+    expect(deploying.deploy).toBe("running");
+
+    for (const ok of [true, false]) {
+      const s = PgFlow.reduce(deploying, {
+        type: "deploy-finish",
+        ok,
+        from: "tutorial",
+      });
+      expect(s.stage).toBe("write");
+      expect(s.deploy).toBe(ok ? "done" : "failed");
+    }
+  });
+
+  it("a stop during a tutorial's deploy goes back to what Deploy showed", () => {
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "tutorial",
+    });
+
+    const s = PgFlow.reduce(deploying, { type: "deploy-stop" });
+
+    expect(s.deploy).toBe("active");
+    expect(s.stopped).toBe("deploy");
+  });
+
   it("a second Deploy click keeps what Deploy showed before the run", () => {
-    const deploying = PgFlow.reduce(builtOnce(), { type: "deploy-start" });
-    const pausedClick = PgFlow.reduce(deploying, { type: "deploy-start" });
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "command",
+    });
+    const pausedClick = PgFlow.reduce(deploying, {
+      type: "deploy-start",
+      from: "command",
+    });
 
     const s = PgFlow.reduce(pausedClick, { type: "deploy-stop" });
 
@@ -304,7 +426,10 @@ describe("PgFlow.reduce, a stopped run", () => {
   });
 
   it("a stop of the build a deploy runs first reads as the build's", () => {
-    const deploying = PgFlow.reduce(builtOnce(), { type: "deploy-start" });
+    const deploying = PgFlow.reduce(builtOnce(), {
+      type: "deploy-start",
+      from: "command",
+    });
     const building = PgFlow.reduce(deploying, { type: "build-start", at: 9 });
     const buildStopped = PgFlow.reduce(building, { type: "build-stop" });
 
@@ -331,7 +456,9 @@ describe("PgFlow.reduce, a stopped run", () => {
     expect(
       PgFlow.reduce(stopped, { type: "build-start", at: 10 }).stopped
     ).toBeNull();
-    expect(PgFlow.reduce(stopped, { type: "deploy-start" }).stopped).toBeNull();
+    expect(
+      PgFlow.reduce(stopped, { type: "deploy-start", from: "command" }).stopped
+    ).toBeNull();
   });
 });
 
@@ -359,6 +486,28 @@ error: could not compile \`hello\` due to previous error`;
 });
 
 describe("PgFlow.init wiring", () => {
+  it("follows the airdrop command from its start to its end", async () => {
+    const { PgCommand } = await import("../../../utils");
+    const listen = (mock: Mock) => {
+      const box: { cb?: () => void } = {};
+      mock.mockImplementationOnce((cb: () => void) => {
+        box.cb = cb;
+        return { dispose: vi.fn() };
+      });
+      return box;
+    };
+    const start = listen(vi.mocked(PgCommand.airdrop.onDidStart));
+    // `onDidEnd`, which a run that printed only its help sends too
+    const finish = listen(vi.mocked(PgCommand.airdrop.onDidEnd));
+
+    const sub = PgFlow.init();
+    requireFor("the airdrop start listener PgFlow.init subscribed")(start.cb)();
+    expect(PgFlow.state.airdrops).toBe(1);
+    requireFor("the airdrop end listener PgFlow.init subscribed")(finish.cb)();
+    expect(PgFlow.state.airdrops).toBe(0);
+    sub.dispose();
+  });
+
   it("maps a stopped build or deploy to a stop, not a failure", async () => {
     const { PgCommand, PgExplorer, PgGlobal } = await import("../../../utils");
     PgGlobal.deployState = "ready";
@@ -782,6 +931,72 @@ describe("PgFlow.reduce, restoring a workspace after a reload", () => {
     expect(s.buildSettled).toBe("done");
   });
 
+  it("marks Deploy done when the cluster answers after the verdict", () => {
+    const built = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "restore",
+      built: false,
+      deployed: false,
+    });
+    const s = PgFlow.reduce(built, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(s.deploy).toBe("done");
+    expect(s.interact).toBe("active");
+  });
+
+  it("keeps a failed deploy of this session over the cluster's answer", () => {
+    const failed = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "deploy-finish",
+      ok: false,
+      from: "command",
+    });
+    const s = PgFlow.reduce(failed, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(s.deploy).toBe("failed");
+    // The program is on the cluster all the same
+    expect(s.interact).toBe("active");
+  });
+
+  it("leaves a deploy in flight running", () => {
+    const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "deploy-start",
+      from: "command",
+    });
+    const s = PgFlow.reduce(running, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(s.deploy).toBe("running");
+  });
+
+  it("keeps Deploy offered after a build when only the verdict comes", () => {
+    const built = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "build-finish",
+      failed: false,
+      errorCount: 0,
+      ms: 1,
+    });
+    const s = PgFlow.reduce(built, { type: "restore", built: false });
+    expect(s.deploy).toBe("active");
+  });
+
+  it("hands back the same state when nothing moves", () => {
+    const s = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "restore",
+      built: false,
+      deployed: true,
+    });
+    expect(
+      PgFlow.reduce(s, { type: "restore", built: false, deployed: true })
+    ).toBe(s);
+  });
+
   it("does not overwrite a build that is running right now", () => {
     const running = PgFlow.reduce(INITIAL_FLOW_STATE, {
       type: "build-start",
@@ -806,6 +1021,7 @@ describe("PgFlow.init, seeding a reloaded page", () => {
     );
     const buildOutputModule = await mockedBuildOutput();
     let workspaceChange: (() => void) | undefined;
+    let programInfoChange: (() => void) | undefined;
     let onChainChange: (() => void) | undefined;
 
     vi.mocked(PgCommand.build.onDidStart).mockReturnValue({
@@ -827,6 +1043,10 @@ describe("PgFlow.init, seeding a reloaded page", () => {
       workspaceChange = cb;
       return { dispose: vi.fn() };
     });
+    vi.mocked(PgProgramInfo.onDidChange).mockImplementation((cb) => {
+      programInfoChange = () => cb(PgProgramInfo);
+      return { dispose: vi.fn() };
+    });
     vi.mocked(PgProgramInfo.onDidChangeOnChain).mockImplementation((cb) => {
       onChainChange = () => cb(PgProgramInfo.onChain);
       return { dispose: vi.fn() };
@@ -837,33 +1057,120 @@ describe("PgFlow.init, seeding a reloaded page", () => {
       sub,
       reset: () =>
         requireFor("the workspace change listener")(workspaceChange)(),
-      onChainArrived: () =>
-        requireFor("the on-chain change listener")(onChainChange)(),
+      /** Any field of the program info changed, the file read among them */
+      programInfoChanged: () =>
+        requireFor("the program info change listener")(programInfoChange)(),
+      /** The cluster answered for this program */
+      onChainArrived: () => {
+        requireFor("the on-chain change listener")(onChainChange)();
+        // `onChain` is a field of the program info: its change fires both
+        requireFor("the program info change listener")(programInfoChange)();
+      },
     };
   };
 
+  /** The mocked program info, where the real class has getters */
+  const programInfo = async () =>
+    (
+      (await import("../../../utils")) as unknown as {
+        PgProgramInfo: {
+          lastBuildFailed: boolean | null | undefined;
+          onChain: { deployed: boolean } | null | undefined;
+        };
+      }
+    ).PgProgramInfo;
+
+  afterEach(async () => {
+    const info = await programInfo();
+    info.lastBuildFailed = undefined;
+    info.onChain = undefined;
+  });
+
   it("reads Deploy and Interact back from the on-chain program", async () => {
-    // `onChain` is a getter on the real class, a plain field on the mock
-    const { PgProgramInfo } = (await import("../../../utils")) as unknown as {
-      PgProgramInfo: {
-        lastBuildFailed: boolean | null;
-        onChain: { deployed: boolean } | null;
-      };
-    };
+    const info = await programInfo();
     const wiring = await initWithCapturedCallbacks();
     wiring.reset();
 
     // The workspace built cleanly and its program is live on the cluster.
-    PgProgramInfo.lastBuildFailed = false;
-    PgProgramInfo.onChain = { deployed: true };
+    info.lastBuildFailed = false;
+    info.onChain = { deployed: true };
     wiring.onChainArrived();
 
     expect(PgFlow.state.build).toBe("done");
     expect(PgFlow.state.deploy).toBe("done");
     expect(PgFlow.state.interact).toBe("active");
+    wiring.sub.dispose();
+  });
 
-    PgProgramInfo.lastBuildFailed = null;
-    PgProgramInfo.onChain = null;
+  /**
+   * The verdict is in `program-info.json`; the on-chain check waits on the
+   * cluster, which may be slow or not answer at all. Deploy is offered from
+   * the stored verdict alone.
+   */
+  it("offers Deploy from the stored build verdict before the cluster answers", async () => {
+    const info = await programInfo();
+    const wiring = await initWithCapturedCallbacks();
+    wiring.reset();
+
+    info.lastBuildFailed = false;
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.build).toBe("done");
+    expect(PgFlow.state.deploy).toBe("active");
+
+    // The cluster answers later: the program is already there
+    info.onChain = { deployed: true };
+    wiring.onChainArrived();
+
+    expect(PgFlow.state.deploy).toBe("done");
+    expect(PgFlow.state.interact).toBe("active");
+    wiring.sub.dispose();
+  });
+
+  it("offers Deploy when the cluster answers before the verdict is read", async () => {
+    const info = await programInfo();
+    const wiring = await initWithCapturedCallbacks();
+    wiring.reset();
+
+    info.onChain = { deployed: false };
+    wiring.onChainArrived();
+    expect(PgFlow.state.build).toBe("upcoming");
+
+    info.lastBuildFailed = false;
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.build).toBe("done");
+    expect(PgFlow.state.deploy).toBe("active");
+    wiring.sub.dispose();
+  });
+
+  it("reads nothing into program info that has not loaded yet", async () => {
+    const wiring = await initWithCapturedCallbacks();
+    wiring.reset();
+
+    // The getters answer `undefined` before the first read of the file
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.build).toBe("upcoming");
+    expect(PgFlow.state.deploy).toBe("upcoming");
+    wiring.sub.dispose();
+  });
+
+  /**
+   * `onChain` keeps the previous program's answer until the new fetch
+   * resolves. The next project's verdict, read meanwhile, must not take it.
+   */
+  it("does not give a switched-to project the last one's deployment", async () => {
+    const info = await programInfo();
+    const wiring = await initWithCapturedCallbacks();
+    info.onChain = { deployed: true };
+    wiring.reset();
+
+    info.lastBuildFailed = false;
+    wiring.programInfoChanged();
+
+    expect(PgFlow.state.deploy).toBe("active");
+    expect(PgFlow.state.interact).toBe("upcoming");
     wiring.sub.dispose();
   });
 });
@@ -903,7 +1210,10 @@ describe("a project with no program", () => {
     const built = PgFlow.reduce(noProgram(), { type: "build-start", at: 1 });
     expect(built.stage).toBe("write");
     expect(built.build).toBe("running");
-    const deployed = PgFlow.reduce(noProgram(), { type: "deploy-start" });
+    const deployed = PgFlow.reduce(noProgram(), {
+      type: "deploy-start",
+      from: "command",
+    });
     expect(deployed.stage).toBe("write");
   });
 
@@ -915,8 +1225,8 @@ describe("a project with no program", () => {
   it("keeps a hidden stage hidden when a build or a deploy finishes", () => {
     const finishes: FlowEvent[] = [
       { type: "build-finish", failed: true, errorCount: 1, ms: 1 },
-      { type: "deploy-finish", ok: true },
-      { type: "deploy-finish", ok: false },
+      { type: "deploy-finish", ok: true, from: "command" },
+      { type: "deploy-finish", ok: false, from: "command" },
     ];
     for (const ev of finishes) {
       expect(PgFlow.reduce(noProgram(), ev).stage).toBe("write");
@@ -962,7 +1272,7 @@ describe("PgFlow.init, reading whether the project has a program", () => {
     };
     explorer = utils.PgExplorer;
     hasProgram = utils.PgFramework.hasProgram;
-    vi.mocked(utils.PgProgramInfo.onDidChangeOnChain).mockReturnValue({
+    vi.mocked(utils.PgProgramInfo.onDidChange).mockReturnValue({
       dispose: vi.fn(),
     });
     EVENTS.forEach((name) => {
@@ -1032,5 +1342,370 @@ describe("PgFlow.init, reading whether the project has a program", () => {
 
     expect(() => fired.onDidDeleteItem()).not.toThrow();
     expect(PgFlow.state.hasProgram).toBe(false);
+  });
+});
+
+describe("PgFlow, a deploy run outside the deploy command", () => {
+  it("reads running, then done or failed, as the command's own would", () => {
+    PgFlow.deployStarted();
+    expect(PgFlow.state.deploy).toBe("running");
+    PgFlow.deployFinished(true);
+    expect(PgFlow.state.deploy).toBe("done");
+    PgFlow.deployStarted();
+    PgFlow.deployFinished(false);
+    expect(PgFlow.state.deploy).toBe("failed");
+  });
+
+  it("routes the command's deploy to the Deploy stage, as before", () => {
+    const s = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "deploy-start",
+      from: "command",
+    });
+    expect(s.stage).toBe("deploy");
+  });
+
+  it("leaves the stage where it is: a tutorial's editor stays on screen", () => {
+    PgFlow.setStage("write");
+    PgFlow.deployStarted();
+    expect(PgFlow.state.stage).toBe("write");
+    PgFlow.deployFinished(true);
+    expect(PgFlow.state.stage).toBe("write");
+  });
+});
+
+describe("programSourceIn", () => {
+  const source = programSourceIn("/proj/src/");
+  const LIB = { content: "fn a() {}" };
+
+  it("holds the text of what a build sends, and nothing else", () => {
+    const base = source({ "/proj/src/lib.rs": LIB });
+
+    // A generated workspace file, a client script, an empty file, a folder
+    expect(
+      source({
+        "/proj/src/lib.rs": LIB,
+        "/proj/.workspace/program-info.json": { content: "{}" },
+        "/proj/client/client.ts": { content: "x" },
+        "/proj/src/empty.rs": { content: "" },
+        "/proj/src/folder/": {},
+      })
+    ).toBe(base);
+    expect(
+      source({ "/proj/src/lib.rs": LIB, "/proj/src/more.rs": { content: "x" } })
+    ).not.toBe(base);
+  });
+
+  // A build's start writes it into the open file, autosaved after the baseline
+  it.each([
+    ['declare_id!("1111")', 'declare_id!("9f3kQ")'],
+    ["declare_id('1111')", "declare_id('9f3kQ')"],
+  ])("does not hear the program id in %s", (before, after) => {
+    expect(source({ "/proj/src/lib.rs": { content: `a\n${before}\nb` } })).toBe(
+      source({ "/proj/src/lib.rs": { content: `a\n${after}\nb` } })
+    );
+  });
+
+  it("hears an edit beside the program id", () => {
+    expect(
+      source({ "/proj/src/lib.rs": { content: 'declare_id!("1")\na' } })
+    ).not.toBe(
+      source({ "/proj/src/lib.rs": { content: 'declare_id!("1")\nb' } })
+    );
+  });
+
+  it("does not hear a rename", () => {
+    expect(source({ "/proj/src/a.rs": { content: "x" } })).toBe(
+      source({ "/proj/src/b.rs": { content: "x" } })
+    );
+  });
+
+  // Joined naively, ["ab", "c"] and ["a", "bc"] would read as the same source
+  it("keeps files apart", () => {
+    expect(
+      source({
+        "/proj/src/1": { content: "ab" },
+        "/proj/src/2": { content: "c" },
+      })
+    ).not.toBe(
+      source({
+        "/proj/src/1": { content: "a" },
+        "/proj/src/2": { content: "bc" },
+      })
+    );
+  });
+});
+
+describe("PgFlow source tracking", () => {
+  const LIB = "/proj/src/lib.rs";
+  let workspaces = 0;
+
+  const wire = async () => {
+    const utils = await import("../../../utils");
+    const { PgCommand } = utils;
+    const PgExplorer = utils.PgExplorer as unknown as {
+      currentWorkspaceName: string;
+      files: Record<string, { content?: string }>;
+      onDidSaveFile: Mock;
+      onDidCreateItem: Mock;
+      onDidDeleteItem: Mock;
+      onDidRenameItem: Mock;
+      onDidReloadFiles: Mock;
+      onDidSwitchWorkspace: Mock;
+    };
+    const output = await mockedBuildOutput();
+    const box = <T>(mock: Mock) => {
+      const b: { cb?: T } = {};
+      mock.mockImplementationOnce((cb: T) => {
+        b.cb = cb;
+        return { dispose: vi.fn() };
+      });
+      return b;
+    };
+    const start = box<() => void>(vi.mocked(PgCommand.build.onDidStart));
+    const report = box<
+      (o: { failed: boolean; at: number; stderr: string }) => void
+    >(output.PgBuildOutput.onDidChange);
+    const finish = box<(r: { err: unknown }) => void>(
+      vi.mocked(PgCommand.build.onDidFinish)
+    );
+    const save = box<() => void>(PgExplorer.onDidSaveFile);
+    const swap = box<() => void>(PgExplorer.onDidSwitchWorkspace);
+    const treeEvents = {
+      create: box<() => void>(PgExplorer.onDidCreateItem),
+      delete: box<() => void>(PgExplorer.onDidDeleteItem),
+      rename: box<() => void>(PgExplorer.onDidRenameItem),
+      reload: box<() => void>(PgExplorer.onDidReloadFiles),
+    };
+
+    // The baseline is static, and follows its workspace by name
+    PgExplorer.currentWorkspaceName = `proj-${++workspaces}`;
+    PgExplorer.files = { [LIB]: { content: "v1" } };
+    const sub = PgFlow.init();
+    const need = requireFor("a listener PgFlow.init subscribed");
+    // Back to the initial state: `PgFlow` is one store across these tests
+    need(swap.cb)();
+    return {
+      PgExplorer,
+      sub,
+      buildStarts: () => need(start.cb)(),
+      buildReports: () =>
+        need(report.cb)({ failed: false, at: Date.now(), stderr: "" }),
+      buildFails: () =>
+        need(report.cb)({ failed: true, at: Date.now(), stderr: "" }),
+      olderReportReplays: () =>
+        need(report.cb)({ failed: false, at: 0, stderr: "" }),
+      edit: (content: string) => {
+        PgExplorer.files[LIB].content = content;
+        need(save.cb)();
+      },
+      stop: () => need(finish.cb)({ err: new StoppedError("Stopped.") }),
+      unreached: () => need(finish.cb)({ err: new Error("Failed to fetch") }),
+      fire: (event: keyof typeof treeEvents) => need(treeEvents[event].cb)(),
+      switchWorkspace: () => need(swap.cb)(),
+    };
+  };
+
+  it("hears an edit after a successful build, and its undo", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    expect(PgFlow.state.sourceChanged).toBe(false);
+
+    w.edit("v2");
+    expect(PgFlow.state.sourceChanged).toBe(true);
+
+    w.edit("v1");
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  it("says nothing before any build", async () => {
+    const w = await wire();
+    w.edit("v2");
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  // The build was given the text as it stood when it started
+  it("counts an edit made during the build", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.edit("v2");
+    w.buildReports();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it("settles on a rebuild", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.edit("v2");
+
+    w.buildStarts();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.buildReports();
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  // The binary on hand is still the old one
+  it.each([
+    ["failed", (w: Awaited<ReturnType<typeof wire>>) => w.buildFails()],
+    ["stopped", (w: Awaited<ReturnType<typeof wire>>) => w.stop()],
+    ["unreached", (w: Awaited<ReturnType<typeof wire>>) => w.unreached()],
+  ])("keeps the last success's baseline through a %s build", async (_, end) => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.edit("v2");
+
+    w.buildStarts();
+    end(w);
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.edit("v1");
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  // A remount subscribes again, with the report and the state still on screen
+  it("keeps the baseline through a remount of the layout", async () => {
+    const first = await wire();
+    first.buildStarts();
+    first.buildReports();
+    first.edit("v2");
+    const { currentWorkspaceName, files } = first.PgExplorer;
+    first.sub.dispose();
+
+    const second = await wire();
+    second.PgExplorer.currentWorkspaceName = currentWorkspaceName;
+    second.PgExplorer.files = files;
+    second.fire("reload");
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    second.sub.dispose();
+  });
+
+  // Subscribing mid-build replays the last run's report, not this run's
+  it("keeps the baseline when a remount replays an older report", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.edit("v2");
+
+    w.buildStarts();
+    w.olderReportReplays();
+    w.stop();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  // A replayed older report must not adopt a run that never reported
+  it("does not take an unreached run's text from a later report", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.edit("v2");
+    w.buildStarts();
+    w.unreached();
+    w.buildReports();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it.each<{
+    what: string;
+    event: "create" | "reload";
+    files: Record<string, { content?: string }>;
+  }>([
+    {
+      what: "creating a file",
+      event: "create",
+      files: {
+        [LIB]: { content: "v1" },
+        "/proj/src/new.rs": { content: "x" },
+      },
+    },
+    {
+      what: "another tab's edit",
+      event: "reload",
+      files: { [LIB]: { content: "theirs" } },
+    },
+  ])("hears $what", async ({ event, files }) => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.files = files;
+    w.fire(event);
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it("hears a deleted file", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.files = {};
+    w.fire("delete");
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  it("does not hear a rename through its event", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.files = { "/proj/src/renamed.rs": { content: "v1" } };
+    w.fire("rename");
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
+  });
+
+  // Sync re-opens the workspace after a merge, which resets the flow
+  it("keeps hearing the change through a re-open of the same project", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.files[LIB].content = "merged";
+    w.switchWorkspace();
+    expect(PgFlow.state.sourceChanged).toBe(true);
+    w.sub.dispose();
+  });
+
+  // A temporary project's build is kept under no name, which is also the name
+  // of no project at all: deleting the last saved one must not read a source
+  it("reads no source once no project is open after a temporary project's build", async () => {
+    const w = await wire();
+    const explorer = w.PgExplorer as unknown as {
+      currentWorkspaceName: string | undefined;
+      isTemporary: boolean;
+      getCurrentSrcPath: Mock;
+    };
+    explorer.currentWorkspaceName = undefined;
+    explorer.isTemporary = true;
+    w.buildStarts();
+    w.buildReports();
+
+    explorer.isTemporary = false;
+    explorer.getCurrentSrcPath.mockImplementation(() => {
+      throw new Error("Current workspace not found");
+    });
+    try {
+      expect(() => w.fire("delete")).not.toThrow();
+      expect(PgFlow.state.sourceChanged).toBe(false);
+    } finally {
+      explorer.getCurrentSrcPath.mockImplementation(() => "/proj/src/");
+      w.sub.dispose();
+    }
+  });
+
+  it("forgets the baseline in another project", async () => {
+    const w = await wire();
+    w.buildStarts();
+    w.buildReports();
+    w.PgExplorer.currentWorkspaceName = "other";
+    w.PgExplorer.files = { "/other/src/lib.rs": { content: "else" } };
+    w.switchWorkspace();
+    expect(PgFlow.state.sourceChanged).toBe(false);
+    w.sub.dispose();
   });
 });

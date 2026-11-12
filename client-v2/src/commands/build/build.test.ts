@@ -7,6 +7,8 @@ const utils = vi.hoisted(() => ({
   PgExplorer: {
     getFileContent: vi.fn<(path: string) => string | undefined>(),
     files: {} as Record<string, { content: string }>,
+    currentWorkspaceId: "id-a" as string | undefined,
+    currentWorkspaceName: "a" as string | undefined,
     getCurrentSrcPath: () => "/p/src/",
     getRelativePath: (path: string) => path.slice("/p/".length),
     PATHS: { ROOT_DIR_PATH: "/" },
@@ -16,7 +18,11 @@ const utils = vi.hoisted(() => ({
   PgGlobal: { update: vi.fn() },
   PgProgramInfo: { update: vi.fn(), getPkStr: () => "Pk11111111111111" },
   PgServer: { build: vi.fn() },
-  PgTerminal: { println: vi.fn(), info: (text: string) => text },
+  PgTerminal: {
+    println: vi.fn(),
+    info: (text: string) => text,
+    warning: (text: string) => text,
+  },
   PgSettings: { build: { flags: {} } },
 }));
 vi.mock("../../utils", () => utils);
@@ -42,6 +48,8 @@ describe("commands/build/build", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     utils.PgExplorer.files = {};
+    utils.PgExplorer.currentWorkspaceId = "id-a";
+    utils.PgExplorer.currentWorkspaceName = "a";
   });
 
   it.each([
@@ -71,6 +79,58 @@ describe("commands/build/build", () => {
     // No source files in the stub, so the build stops at its own check
     await expect(run()).rejects.toThrow("Couldn't find any Rust files.");
     expect(utils.PgGlobal.update).toHaveBeenCalledWith({ buildLoading: true });
+  });
+
+  // Spec 13's variants are for the terminal's own lines, not the compiler's
+  it("prints the compiler's output with no variant", async () => {
+    utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
+    utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    utils.PgServer.build.mockResolvedValue({
+      stderr: "Compiling probe v0.1.0",
+      idl: undefined,
+      uuid: undefined,
+    });
+
+    await run();
+
+    const output = utils.PgTerminal.println.mock.calls.at(-1)?.[0];
+    expect(output).toContain("Compiling probe");
+    expect(output).not.toContain("\x1b");
+  });
+
+  // Spec client-v2-idl-build-guide: "A build without an IDL keeps the IDL the browser holds"
+  describe("idl", () => {
+    beforeEach(() => {
+      utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
+      utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    it("keeps the held IDL when the build returns none", async () => {
+      // eslint-disable-next-line unicorn/no-null -- the build response carries `null` for no IDL
+      utils.PgServer.build.mockResolvedValue({ stderr: "", idl: null });
+
+      await run();
+
+      expect(utils.PgProgramInfo.update).toHaveBeenCalledTimes(1);
+      expect(utils.PgProgramInfo.update.mock.calls[0][0]).not.toHaveProperty(
+        "idl"
+      );
+    });
+
+    it("replaces the held IDL with the one the build returns", async () => {
+      const idl = {
+        address: "",
+        metadata: { name: "b", version: "0.1.0", spec: "0.1.0" },
+        instructions: [],
+      };
+      utils.PgServer.build.mockResolvedValue({ stderr: "", idl });
+
+      await run();
+
+      expect(utils.PgProgramInfo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ idl })
+      );
+    });
   });
 
   describe("stopped", () => {
@@ -128,6 +188,64 @@ describe("commands/build/build", () => {
 
       expect(isStopped(err)).toBe(false);
       expect((err as Error).message).toBe("Server request failed");
+      expect(utils.PgProgramInfo.update).toHaveBeenCalledWith({
+        lastBuildFailed: true,
+      });
+    });
+  });
+
+  describe("another project opened during the build", () => {
+    beforeEach(() => {
+      utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
+      utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    it.each([
+      // eslint-disable-next-line unicorn/no-null -- the build response carries `null` for no IDL
+      ["a reply", async () => ({ stderr: "Finished release", idl: null })],
+      [
+        "a failed compile",
+        // eslint-disable-next-line unicorn/no-null -- the build response carries `null` for no IDL
+        async () => ({ stderr: "error: could not compile `solpg`", idl: null }),
+      ],
+      [
+        "a failure",
+        async () => {
+          throw new Error("Server request failed");
+        },
+      ],
+    ])(
+      "leaves that project's info alone on %s, and says its result was dropped",
+      async (_, answer) => {
+        utils.PgServer.build.mockImplementation(async () => {
+          utils.PgExplorer.currentWorkspaceId = "id-b";
+          utils.PgExplorer.currentWorkspaceName = "b";
+          return answer();
+        });
+
+        await run().catch(() => undefined);
+
+        expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+        expect(PgBuildOutput.set).not.toHaveBeenCalled();
+        // Deploy's guard cannot see this verdict, so the user must hear of it
+        expect(utils.PgTerminal.println).toHaveBeenCalledWith(
+          expect.stringContaining('The result of building "a" was dropped')
+        );
+      }
+    );
+
+    it("keeps the result of a project renamed during its build", async () => {
+      utils.PgServer.build.mockImplementation(async () => {
+        utils.PgExplorer.currentWorkspaceName = "renamed";
+        return { stderr: "", uuid: "u", idl: undefined };
+      });
+
+      await run();
+
+      expect(utils.PgProgramInfo.update).toHaveBeenCalledWith(
+        expect.objectContaining({ uuid: "u" })
+      );
+      expect(PgBuildOutput.set).toHaveBeenCalledWith("", "renamed");
     });
   });
 });

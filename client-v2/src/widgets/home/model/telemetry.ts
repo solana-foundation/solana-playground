@@ -3,16 +3,16 @@ import { createTracker } from "@/shared/lib/telemetry";
 
 import type { ExampleRun } from "./example";
 
+/** Home's three tiles, each opening its page: New project, Tutorials or Programs */
 export type HomeTile = "new-project" | "tutorials" | "programs";
-/** The tiles that open the Tutorials or Programs page; New project unfolds instead */
-export type PageTile = Exclude<HomeTile, "new-project">;
 export type HomeQuickstart = "example" | "continue" | "new" | "tutorial";
 /** Which kind of "Pick up where you left off" row was opened; `current` went back to the work */
 export type HomeRecentKind = "project" | "tutorial" | "current";
 /**
  * How Home came to show: the start, the navigation's Home, no project left
- * open on `/` (a delete, here, in another tab or by sync), or a way back to
- * `/` with no project open
+ * open on `/` (a delete, here, in another tab or by sync), or a way back by
+ * history: to `/` with no project open, or to Home's own path, over the work
+ * or not
  */
 export type HomeVia = "start" | "nav" | "last-deleted" | "back";
 /**

@@ -1,10 +1,16 @@
-import { cva } from "class-variance-authority";
+import { ChevronDownIcon } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
 import { useRef, useState } from "react";
 
 import type { ModelProvider } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 import { cn } from "@/shared/lib/utils";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
@@ -16,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
+import { Spinner } from "@/shared/ui/spinner";
+import { Tag } from "@/shared/ui/tag";
 
 import Link from "../../../../components/Link";
 import {
@@ -47,18 +55,12 @@ const CAPABILITIES = [
   },
   {
     tag: "WRITES",
-    text: "proposes patches as a diff — applied only when you click Apply",
+    text: "proposes patches as a diff, applied only when you click Apply",
   },
   { tag: "RUNS", text: "build and deploy, each behind an explicit approval" },
   {
     tag: "KNOWS",
     text: "this project's roadmap, decisions and current status",
-  },
-  {
-    tag: "KNOWS",
-    text:
-      "where you are in a lesson — the step, its objective and whether it " +
-      "is proven yet",
   },
 ];
 
@@ -68,20 +70,17 @@ const DEFAULT_PROVIDER = PROVIDERS.find((p) => p.id === "default")!;
 /** Everything behind the accordion: each of these needs a key of your own */
 const ALTERNATIVES = PROVIDERS.filter((p) => p.id !== "default");
 
-/** The prototype's field label: small, grey, in sentence case, untracked */
-const FIELD_LABEL = "text-[0.7rem] font-normal text-muted-foreground";
+/** A field's label: the theme's caption, in sentence case, untracked */
+const FIELD_LABEL = "text-caption font-medium text-foreground";
 
-/** The form's small grey print, by what it does there */
-const smallPrint = cva("text-[0.7rem] text-[var(--text-secondary)]", {
-  variants: {
-    role: {
-      label: "block pb-[0.4375rem]",
-      note: "pt-[0.875rem] leading-[1.6]",
-      capability: "flex gap-[0.5625rem] leading-[1.55]",
-      footnote: "mt-auto pt-5 text-center",
-    },
-  },
-});
+/** Grey print on the theme's caption size: hints, helpers, the toggle */
+const CAPTION = "text-caption text-muted-foreground";
+
+/** A text toggle that brightens on hover; a phone's touch target is 44 */
+const TEXT_TOGGLE = cn(
+  CAPTION,
+  "flex min-h-8 w-fit cursor-pointer items-center gap-1 border-none bg-transparent p-0 font-normal hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring max-md:min-h-11"
+);
 
 /**
  * The backend, and maybe its model, base URL and effort, Connect a model opens
@@ -171,7 +170,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   /**
    * Opened on the backend already connected: its own key and choices. Not for
    * a preset, which says what to start from; one naming the connected backend
-   * comes from Enter key, after the provider refused that very key.
+   * comes from Change key, after the provider refused that very key.
    */
   const onCurrent = !preset && current?.id === startId ? current : null;
 
@@ -261,7 +260,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
 
   const signIn = () => {
     setSignInError(null);
-    PgSession.signInWith({ from: "assistant" }).catch((error: unknown) => {
+    PgSession.signInFor("assistant")([]).catch((error: unknown) => {
       if (isSignInFailure(error)) {
         // Not reported: a blocked popup or a cancelled sign-in is expected,
         // and its message says what to do
@@ -288,100 +287,76 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
       }
     : { text: actionText, ready, connect };
 
-  // Nothing selectable is on screen while the default is ruled out, so the
+  // The default is not drawn once the deployment has ruled it out, so the
   // alternatives stay open and the toggle that could hide them goes away
-  const forcedOpen = !!fallenBack;
+  const forcedOpen = defaultBackend === "absent";
   const showAlternatives = expanded || forcedOpen;
   /** Kept visible while collapsed, so the picked backend is never hidden */
   const selectedAlternative = ALTERNATIVES.find((p) => p.id === provider.id);
   /** Nothing reads as chosen while the default is still unconfirmed */
   const selectedBar = pending && provider.id === "default" ? null : provider.id;
 
-  const defaultDescription = (p: ProviderInfo) => {
-    if (pending) return "Checking this deployment for a default backend…";
-    if (defaultBackend !== "present") {
-      return (
-        "Not configured on this deployment — pick a backend below and supply " +
-        "your own key."
-      );
-    }
-    return signedIn
+  /** The default's one line: its own, or what it takes to use it */
+  const defaultDescription = (p: ProviderInfo) =>
+    signedIn || pending
       ? p.description
       : "Sign in with GitHub to use it, or bring your own key below.";
+
+  /** The tag beside a backend's name: what using it takes */
+  const providerTag = (p: ProviderInfo) => {
+    if (p.id === "default" && pending) {
+      return (
+        <Tag variant="neutral">
+          <Spinner />
+          Checking…
+        </Tag>
+      );
+    }
+    if (needsSignInFor(p)) return <Tag variant="warning">sign-in needed</Tag>;
+    if (!p.needsKey && !isUnavailable(p)) {
+      return <Tag variant="success">no key needed</Tag>;
+    }
+    return undefined;
   };
 
-  /**
-   * @param compact drop the description, so the open list stays short enough
-   * to keep the toggle and the connect button above the fold
-   */
-  const providerBar = (p: ProviderInfo, compact = false) => (
+  /** One backend: a row of one height, whichever is picked */
+  const providerBar = (p: ProviderInfo) => (
     <label
       key={p.id}
       onPointerDown={() => (pointerPick.current = true)}
-      className={cn(
-        "relative flex cursor-pointer items-start gap-2 rounded-xl border border-border has-focus-visible:ring-2 has-focus-visible:ring-ring px-2.5 py-2 transition-colors hover:bg-accent has-data-checked:border-primary has-data-disabled:cursor-not-allowed has-data-disabled:opacity-45 has-data-disabled:hover:bg-transparent"
-      )}
+      className="flex min-h-14 cursor-pointer items-center gap-3 rounded-xl border border-border px-3 py-2.5 transition-colors hover:bg-surface-hover has-focus-visible:ring-2 has-focus-visible:ring-ring has-data-checked:border-primary has-data-checked:bg-primary/6 has-data-disabled:cursor-default has-data-disabled:hover:bg-transparent"
     >
-      {/* The card is the choice, as the prototype draws it; the circle
-          stays for the keyboard and the screen reader */}
-      <RadioGroupItem
-        value={p.id}
-        disabled={isUnavailable(p)}
-        // Unseen, over the whole card: a press anywhere on it is a press on
-        // the radio itself (`sr-only` would lose to the item's own `relative`
-        // and `size-4`)
-        className="absolute inset-0 size-full rounded-xl border-0 opacity-0"
-      />
-      <span className="flex min-w-0 flex-col">
-        <span
-          className={cn(
-            "flex items-center gap-2 text-sm",
-            selectedBar === p.id ? "text-primary" : "text-foreground"
-          )}
-        >
+      <RadioGroupItem value={p.id} disabled={isUnavailable(p)} />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="flex flex-wrap items-center gap-2 text-control text-foreground">
           {p.name}
-          {needsSignInFor(p) && (
-            <span className="text-[0.7rem] text-warning">sign-in needed</span>
-          )}
-          {!p.needsKey && !isUnavailable(p) && !needsSignInFor(p) && (
-            <span className="text-[0.7rem] text-success">no key needed</span>
-          )}
+          {providerTag(p)}
         </span>
-        {!compact && (
-          <span className="pt-[0.1875rem] text-xs leading-normal text-muted-foreground">
-            {p.id === "default" ? defaultDescription(p) : p.description}
-          </span>
-        )}
+        <span className={CAPTION}>
+          {p.id === "default" ? defaultDescription(p) : p.description}
+        </span>
       </span>
     </label>
   );
 
-  const form = (
-    <div className="flex flex-col">
-      <div className="flex flex-col gap-2.5 pb-5">
-        <h3 className="text-[0.8125rem] leading-normal font-medium text-[var(--text-primary)]">
-          {current
-            ? "Switch backend"
-            : "An assistant that can see your project"}
-        </h3>
-        {!current && (
-          <div className="text-[0.75rem] leading-[1.65] text-[var(--text-secondary)]">
-            It reads the tab you are looking at and the last build error,
-            explains what went wrong against your actual code, and proposes
-            patches you apply yourself.
-          </div>
-        )}
-        {!current && defaultBackend === "present" && (
-          <div className="text-[0.75rem] leading-[1.65] text-[var(--text-secondary)]">
-            Out of the box it runs on this deployment's own backend, with the
-            capabilities listed below. Bring your own key to run it on something
-            else.
-          </div>
-        )}
-      </div>
+  const keyHelpId = "assistant-api-key-help";
 
-      <div className={cn(smallPrint({ role: "label" }))}>Backend</div>
-      <div className="flex flex-col gap-1.5 pb-4">
+  const form = (
+    <div className="flex flex-col gap-5">
+      {!current && (
+        <p className={CAPTION}>
+          The assistant reads your project and proposes fixes you apply. Pick
+          what it runs on.
+        </p>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <div className={FIELD_LABEL}>Backend</div>
+        {defaultBackend === "absent" && (
+          <p className={CAPTION}>
+            No built-in model on this deployment. Use your own key.
+          </p>
+        )}
         <RadioGroup
           aria-label="Backend"
           value={selectedBar ?? ""}
@@ -393,46 +368,52 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
             if (!found) throw new Error(`Unknown provider: ${id}`);
             pickProvider(found);
             // A click is the end of browsing: fold the list back to the two
-            // bars. The arrow keys are still browsing.
-            if (pointerPick.current) setExpanded(false);
+            // bars. An arrow is still browsing, so the list stays open.
+            setExpanded(!pointerPick.current);
             pointerPick.current = false;
           }}
           // A press on the checked bar changes nothing, so no pick clears the
-          // flag; the next key must not fold on its behalf
-          onKeyDown={() => (pointerPick.current = false)}
-          className="gap-1.5"
+          // flag; the next key must not fold on its behalf. An arrow opens a
+          // folded list: folded, the default is the only bar and the arrow
+          // has nowhere to go.
+          onKeyDown={(e) => {
+            pointerPick.current = false;
+            if (e.key.startsWith("Arrow")) setExpanded(true);
+          }}
+          className="gap-2"
         >
-          {providerBar(DEFAULT_PROVIDER)}
-          {showAlternatives
-            ? ALTERNATIVES.map((p) => providerBar(p, p.id !== provider.id))
-            : selectedAlternative && providerBar(selectedAlternative)}
+          {/* One list in one order, folded or not, so a bar that stays keeps
+              its node and its focus across a fold */}
+          {[DEFAULT_PROVIDER, ...ALTERNATIVES]
+            .filter((p) =>
+              p.id === DEFAULT_PROVIDER.id
+                ? defaultBackend !== "absent"
+                : showAlternatives || p.id === selectedAlternative?.id
+            )
+            .map(providerBar)}
         </RadioGroup>
         {!forcedOpen && (
           <button
             type="button"
-            className={cn(
-              smallPrint(),
-              "flex cursor-pointer items-center gap-1.5 self-start border-none bg-transparent py-0.5 hover:text-[var(--text-primary)] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            )}
+            className={TEXT_TOGGLE}
             aria-expanded={showAlternatives}
             onClick={() => setExpanded(!showAlternatives)}
           >
             {showAlternatives ? "Hide other backends" : "Bring your own key"}
-            <span
+            <ChevronDownIcon
+              aria-hidden="true"
               className={cn(
-                "inline-block leading-none transition-transform duration-150 ease-linear",
+                "size-3.5 transition-transform duration-150 motion-reduce:transition-none",
                 showAlternatives && "rotate-180"
               )}
-            >
-              ▾
-            </span>
+            />
           </button>
         )}
       </div>
 
       {provider.endpoint && endpoint && (
-        <>
-          <Field className="mb-3">
+        <div className="flex flex-col gap-4">
+          <Field>
             <FieldLabel htmlFor="assistant-base-url" className={FIELD_LABEL}>
               Base URL
             </FieldLabel>
@@ -444,9 +425,11 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               }
               placeholder={provider.endpoint.baseUrl}
               autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
             />
           </Field>
-          <Field className="mb-3">
+          <Field>
             <FieldLabel htmlFor="assistant-model" className={FIELD_LABEL}>
               Model
             </FieldLabel>
@@ -460,7 +443,6 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
                     : ""
                 }
                 onValueChange={(m) => setEndpoint({ ...endpoint, model: m })}
-                className="pb-[0.4375rem]"
               >
                 {provider.endpoint.models.map((m) => (
                   <SegmentedItem key={m} value={m} className="font-mono">
@@ -477,14 +459,17 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               }
               placeholder={provider.endpoint.model}
               autoComplete="off"
+              autoCapitalize="off"
+              spellCheck={false}
             />
           </Field>
-        </>
+        </div>
       )}
 
       {provider.modelSettings && activeSettings && (
-        <>
-          <Field className="mb-3">
+        // Side by side on a desk, where both fit; stacked on a phone
+        <div className="grid gap-4 md:grid-cols-2 md:gap-3">
+          <Field>
             <FieldLabel
               htmlFor="assistant-model-select"
               className={FIELD_LABEL}
@@ -514,7 +499,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
             </Select>
           </Field>
 
-          <Field className="mb-3">
+          <Field>
             <FieldLabel
               htmlFor="assistant-effort-select"
               className={FIELD_LABEL}
@@ -543,64 +528,68 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               </SelectContent>
             </Select>
           </Field>
-        </>
+        </div>
       )}
 
       {provider.needsKey && (
-        <>
-          <Field className="mb-3">
+        <Field>
+          <div className="flex items-baseline justify-between gap-3">
             <FieldLabel htmlFor="assistant-api-key" className={FIELD_LABEL}>
               API key{provider.keyOptional ? " (optional)" : ""}
             </FieldLabel>
-            <Input
-              id="assistant-api-key"
-              value={key}
-              onChange={(ev) => setKey(ev.target.value)}
-              placeholder={provider.keyPlaceholder}
-              type="password"
-              autoComplete="off"
-            />
-          </Field>
-        </>
+            {provider.keyUrl && (
+              <Link href={provider.keyUrl} className="text-caption">
+                Get a key
+              </Link>
+            )}
+          </div>
+          <Input
+            id="assistant-api-key"
+            value={key}
+            onChange={(ev) => setKey(ev.target.value)}
+            placeholder={provider.keyPlaceholder}
+            type="password"
+            autoComplete="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            aria-describedby={keyHelpId}
+          />
+          <p id={keyHelpId} className={CAPTION}>
+            Stays in this tab&apos;s memory until you reload or delete it. Sent
+            only to {provider.endpoint ? "the endpoint above" : provider.name},
+            never to our server.
+          </p>
+        </Field>
       )}
 
       {/* Gone once the sign-in is no longer what the action does */}
       {needsSignIn && signInError && (
-        <div
-          role="alert"
-          className="pt-2 text-[0.7rem] leading-[1.6] text-error"
-        >
+        <p role="alert" className="text-caption text-error">
           {signInError}
-        </div>
-      )}
-
-      {provider.needsKey && (
-        <div className={cn(smallPrint({ role: "note" }))}>
-          Kept in this tab&apos;s memory only, until you reload or close it or
-          press Delete my key. Sent only to{" "}
-          {provider.endpoint ? "the endpoint above" : provider.name}, never to
-          our server.
-        </div>
+        </p>
       )}
 
       {!current && (
-        <div className="flex flex-col gap-2 pt-5">
-          {CAPABILITIES.map(({ tag, text }, i) => (
-            <div key={text} className={cn(smallPrint({ role: "capability" }))}>
-              {/* One tag per run of rows sharing it, so it reads as a group */}
-              <span className="w-[3.25rem] shrink-0 tracking-[0.06em] text-primary">
-                {tag === CAPABILITIES[i - 1]?.tag ? "" : tag}
-              </span>
-              <span>{text}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {provider.keyUrl && (
-        <div className={cn(smallPrint({ role: "footnote" }))}>
-          No key? <Link href={provider.keyUrl}>Create one</Link>
-        </div>
+        // Trust detail for whoever wants it, closed so it does not compete
+        // with the form
+        <Collapsible>
+          <CollapsibleHeading
+            className={cn(TEXT_TOGGLE, "data-[state=open]:text-foreground")}
+          >
+            What the assistant can access
+            <CollapsibleChevron className="size-3.5" />
+          </CollapsibleHeading>
+          <CollapsibleContent>
+            <dl className="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-1.5 pt-2 text-caption">
+              {CAPABILITIES.map(({ tag, text }) => (
+                <div key={tag} className="contents">
+                  <dt className="font-mono text-subtle">{tag}</dt>
+                  <dd className="m-0 text-muted-foreground">{text}</dd>
+                </div>
+              ))}
+            </dl>
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 # client-v2-stages Specification
 
 ## Purpose
+
 What the Deploy and Interact stages show and offer, in each state.
 
 ## Requirements

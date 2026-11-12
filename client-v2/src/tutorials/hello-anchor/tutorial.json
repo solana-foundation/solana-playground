@@ -1,0 +1,440 @@
+{
+  "$schema": "../tutorial.schema.json",
+  "version": 1,
+  "name": "Hello Anchor",
+  "description": "Hello world program with Anchor framework.",
+  "authors": [
+    {
+      "name": "acheron",
+      "link": "https://twitter.com/acheroncrypto"
+    }
+  ],
+  "level": "Beginner",
+  "framework": "Anchor",
+  "languages": ["Rust", "TypeScript"],
+  "thumbnail": "/tutorials/hello-anchor/thumbnail.jpg",
+  "minutes": 10,
+  "intro": {
+    "promise": "You'll write a small Solana program, put it live on devnet and call it with your name.",
+    "log": "Program log: Hello, your name!",
+    "files": {
+      "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>, name: String) -> Result<()> {\n        msg!(\"Hello, {}!\", name);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n",
+      "client/client.ts": "// Call the hello instruction\nconst txHash = await pg.program.methods.hello().rpc();\nconsole.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n"
+    }
+  },
+  "steps": [
+    {
+      "id": "write-program",
+      "title": "Program",
+      "short": "Program",
+      "objective": "Define the hello instruction and log a message",
+      "learned": "Declaring a program and its instructions",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": ""
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n"
+      },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"hello_anchor\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"hello\",\"discriminator\":[149,118,59,220,196,127,161,179],\"accounts\":[],\"args\":[]}]}",
+      "beats": [
+        {
+          "kind": "write",
+          "id": "s1.boil",
+          "text": "Every Anchor program opens with the same two lines: the import and the program's id. They're routine, so I've written them.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");"
+          }
+        },
+        {
+          "kind": "say",
+          "id": "s1.what",
+          "text": "A program does its work in instructions: functions inside a module marked `#[program]`. Yours is `hello`. I'll put the module under those two lines, and you pick its one line of code. A program on Solana has no terminal: the only place it can write is the program log, which comes back with every transaction."
+        },
+        {
+          "kind": "ask",
+          "id": "s1.q1",
+          "kicker": "Question",
+          "question": "Which line writes to the program log?",
+          "options": [
+            "println!(\"Hello, World!\");",
+            "msg!(\"Hello, World!\");",
+            "console.log(\"Hello, World!\");"
+          ],
+          "code": true,
+          "answer": 1,
+          "right": "Yes. `msg!` writes to the program log. I've put `hello` in the `#[program]` module, under the two lines.",
+          "why": [
+            "`println!` prints to a terminal, and a program on Solana has none. On chain, a program talks through `msg!`.",
+            null,
+            "That's TypeScript, and you'll use it in the client in step 3. Inside a Rust program the log line comes from `msg!`."
+          ],
+          "hint": "Think about where each line would print. A program on Solana runs on a validator, with no terminal and no console.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}"
+          },
+          "typed": "That's the line. `msg!` writes to the program log. I've put `hello` and the `#[program]` module around it."
+        },
+        {
+          "kind": "act",
+          "id": "s1.build",
+          "act": "build",
+          "say": "That's a whole program. Let's compile it.",
+          "title": "Build lib.rs",
+          "context": "Compiles lib.rs on Playground's build server",
+          "button": "Build"
+        }
+      ],
+      "failsWith": "could not find `__client_accounts_hello`",
+      "planned": "This one's on purpose. Every Anchor developer meets this error once, so let's meet it now.",
+      "onFail": [
+        {
+          "kind": "say",
+          "id": "f1.explain",
+          "text": "The compiler points at line 5, `#[program]`, but the cause is line 9: `Context<Hello>` asks for the accounts `hello` works with, described by a type called `Hello`. That type doesn't exist yet, so `#[program]` can't find the code Anchor generates from it. `hello` reads no accounts, so the type can be empty. The fix goes at the bottom of lib.rs.",
+          "quote": {
+            "file": "src/lib.rs",
+            "line": 9,
+            "mark": "Hello",
+            "tone": "error"
+          }
+        },
+        {
+          "kind": "ask",
+          "id": "f1.q2",
+          "kicker": "Fix it",
+          "question": "So what does `Context<Hello>` need?",
+          "options": [
+            "A `Hello` account on devnet",
+            "An import of `Hello` from Anchor",
+            "A struct `Hello` with `#[derive(Accounts)]`"
+          ],
+          "code": false,
+          "answer": 2,
+          "right": "Exactly. `#[derive(Accounts)]` tells Anchor which accounts an instruction expects. I've added an empty one at the bottom.",
+          "why": [
+            "`Hello` does describe accounts, but it's a type in your code. The compiler needs it before anything reaches devnet.",
+            "`Hello` isn't part of Anchor. It's yours to declare: the list of accounts `hello` reads.",
+            null
+          ],
+          "hint": "The compiler wants a type in your own code that lists accounts.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[derive(Accounts)]\npub struct Hello {}"
+          },
+          "key": "struct Hello {}",
+          "typed": "That's the line that fixes it: `#[derive(Accounts)]` tells Anchor the struct under it lists accounts. I've put the empty `Hello` under it."
+        },
+        {
+          "kind": "act",
+          "id": "f1.build",
+          "act": "build",
+          "say": "Build again. This time it should pass.",
+          "title": "Build lib.rs",
+          "context": "Same build, now with the `Hello` struct",
+          "button": "Build"
+        }
+      ],
+      "goal": {
+        "kind": "build",
+        "instructions": ["hello"]
+      },
+      "win": {
+        "id": "s1.win",
+        "headline": "Your program compiles",
+        "line": "The build also made its IDL: one instruction, `hello`. That's what clients will call."
+      },
+      "explain": "This step writes the smallest Anchor program there is: one instruction, `hello`, that writes a line to the program log. I explain a piece, you pick the right line, and I write it in. Then the build checks it."
+    },
+    {
+      "id": "deploy",
+      "title": "Build & Deploy",
+      "short": "Deploy",
+      "objective": "Deploy the program to devnet",
+      "learned": "Deploying with free devnet SOL",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n"
+      },
+      "beats": [
+        {
+          "kind": "say",
+          "id": "s2.why",
+          "text": "Right now your program is only a build: Playground compiled it, but nobody can call it yet. Deploying uploads it to devnet, Solana's public test network, where anyone can call it. It costs devnet SOL, test money with no value. You get it from the devnet faucet with one button before the deploy, and if the faucet is busy, at faucet.solana.com. Before you press Deploy, a guess."
+        },
+        {
+          "kind": "ask",
+          "id": "s2.q2",
+          "kicker": "Question",
+          "question": "What does a deploy give your program, so clients can find it?",
+          "options": [
+            "An address: its program id",
+            "A URL where it runs",
+            "A copy of lib.rs on devnet"
+          ],
+          "code": false,
+          "answer": 0,
+          "right": "Yes. Every program lives at an address, its program id. Watch for it when the deploy lands.",
+          "why": [
+            null,
+            "A program isn't a web server, so there's no URL. Clients find it by its address and send it transactions.",
+            "Devnet keeps the compiled program, not your source. What clients need from it is its address."
+          ],
+          "hint": "Clients don't browse to a program. They send transactions to it. To what?",
+          "skipped": "No problem. A deploy gives your program an address, its program id. Watch for it."
+        },
+        {
+          "kind": "act",
+          "id": "s2.airdrop",
+          "act": "airdrop",
+          "say": "A deploy pays in devnet SOL. Get some for your wallet first.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
+          "id": "s2.deploy",
+          "act": "deploy",
+          "say": "Press Deploy and watch for the program id.",
+          "title": "Deploy to devnet",
+          "context": "From your Playground wallet · free devnet SOL",
+          "button": "Deploy"
+        }
+      ],
+      "goal": {
+        "kind": "deploy"
+      },
+      "win": {
+        "id": "s2.win",
+        "headline": "Your program is live on devnet",
+        "line": "Its IDL also gave you the Call panel: a form for every instruction. You'll use it in a moment.",
+        "extra": "openTest"
+      },
+      "explain": "Deploying puts your built program on devnet, Solana's public test network, at an address of its own: the program id. It's paid from your Playground wallet in free devnet SOL. Press Deploy and wait for the id."
+    },
+    {
+      "id": "call-client",
+      "title": "Client",
+      "short": "Client",
+      "objective": "Call the instruction from the TypeScript client",
+      "learned": "Calling a program from TypeScript",
+      "file": "client/client.ts",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n",
+        "client/client.ts": "// Call the hello instruction\nconst txHash = await pg.program.methods.hello().rpc();\nconsole.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n"
+      },
+      "beats": [
+        {
+          "kind": "write",
+          "id": "s3.file",
+          "text": "A client is code outside your program that sends it transactions, like the app your users will open. I've made `client/client.ts` for it.",
+          "writes": {
+            "create": "client/client.ts"
+          }
+        },
+        {
+          "kind": "say",
+          "id": "s3.pg",
+          "text": "In Playground, `pg.program` already knows your program from its IDL: `pg.program.methods` has one method per instruction. Calling one only builds the call; something still has to send it. Your line goes at the top of client.ts."
+        },
+        {
+          "kind": "ask",
+          "id": "s3.q3",
+          "kicker": "Question",
+          "question": "Which line sends `hello` to devnet?",
+          "options": [
+            "await pg.program.hello().rpc()",
+            "await pg.program.methods.hello()",
+            "await pg.program.methods.hello().rpc()"
+          ],
+          "code": true,
+          "answer": 2,
+          "right": "Right. `.methods.hello()` builds the call and `.rpc()` sends it, then hands back the transaction's signature. I've added a line that prints it.",
+          "why": [
+            "Close. Instructions live under `.methods`, not on `pg.program` itself.",
+            "That builds the call but never sends it. `.rpc()` does the sending.",
+            null
+          ],
+          "hint": "Instructions live under `.methods`, and something has to send the call.",
+          "writes": {
+            "file": "client/client.ts",
+            "block": "// Call the hello instruction\nconst txHash = await pg.program.methods.hello().rpc();\nconsole.log(`Use 'solana confirm -v ${txHash}' to see the logs`);"
+          },
+          "typed": "That's the line. `.methods.hello()` builds the call and `.rpc()` sends it. I've added the comment above it and a line under it that prints the signature."
+        },
+        {
+          "kind": "act",
+          "id": "s3.run",
+          "act": "run",
+          "say": "Run it and watch what comes back.",
+          "title": "Run client.ts",
+          "context": "Sends one transaction to devnet · fee from your wallet",
+          "button": "Run"
+        }
+      ],
+      "goal": {
+        "kind": "call",
+        "instruction": "hello",
+        "log": "Hello, World!"
+      },
+      "win": {
+        "id": "s3.win",
+        "headline": "Your program answered from devnet",
+        "line": "That `Hello, World!` is the `msg!` line from lib.rs, coming back in the transaction's logs. The Call panel makes the same call without code.",
+        "callPanelLine": "You called `hello` from the Call panel, which Playground built from the IDL. In code, the same call is one line.",
+        "extra": "openTest"
+      },
+      "explain": "A client is code outside the program that sends it transactions. Here it's one line of TypeScript in `client.ts`. You can also call `hello` from the Call panel, no code needed."
+    },
+    {
+      "id": "greet-by-name",
+      "title": "Name argument",
+      "short": "Name",
+      "objective": "Give hello a name argument and log it",
+      "learned": "Passing arguments to an instruction",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>) -> Result<()> {\n        msg!(\"Hello, World!\");\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n",
+        "client/client.ts": "// Call the hello instruction\nconst txHash = await pg.program.methods.hello().rpc();\nconsole.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod hello_anchor {\n    use super::*;\n\n    pub fn hello(_ctx: Context<Hello>, name: String) -> Result<()> {\n        msg!(\"Hello, {}!\", name);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Hello {}\n",
+        "client/client.ts": "// Call the hello instruction\nconst txHash = await pg.program.methods.hello().rpc();\nconsole.log(`Use 'solana confirm -v ${txHash}' to see the logs`);\n"
+      },
+      "idl": "{\"address\":\"11111111111111111111111111111111\",\"metadata\":{\"name\":\"hello_anchor\",\"version\":\"0.1.0\",\"spec\":\"0.1.0\"},\"instructions\":[{\"name\":\"hello\",\"discriminator\":[149,118,59,220,196,127,161,179],\"accounts\":[],\"args\":[{\"name\":\"name\",\"type\":\"string\"}]}]}",
+      "beats": [
+        {
+          "kind": "say",
+          "id": "s4.why",
+          "text": "`hello` greets everyone the same way. Let's make it greet you. Anchor hands every instruction its `Context` first; anything the caller sends, like a name, is a plain argument. I'll change `hello`'s first line, line 9."
+        },
+        {
+          "kind": "ask",
+          "id": "s4.q4",
+          "kicker": "Question",
+          "question": "Where does `name` go?",
+          "options": [
+            "struct Hello { name: String }",
+            "fn hello(_ctx: Context<Hello>, name: String)",
+            "fn hello(name: String, _ctx: Context<Hello>)"
+          ],
+          "code": true,
+          "answer": 1,
+          "right": "Yes. The `Context` comes first, then your own arguments. I've also put `name` in the log line: `msg!` fills `{}` with it.",
+          "why": [
+            "`Hello` lists the accounts `hello` reads, not values the caller sends. A name is plain data, so it's an argument.",
+            null,
+            "Close, but Anchor expects the `Context` first. Your own arguments follow it."
+          ],
+          "hint": "A name is plain data the caller sends, not an account. Then think about the order Anchor expects.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "    pub fn hello(_ctx: Context<Hello>, name: String) -> Result<()> {\n        msg!(\"Hello, {}!\", name);"
+          },
+          "key": "fn hello(_ctx: Context<Hello>, name: String) -> Result<()> {",
+          "typed": "That's it: the `Context` first, then your own arguments. I've put `name` in the log line too: `msg!` fills `{}` with it."
+        },
+        {
+          "kind": "act",
+          "id": "s4.airdrop",
+          "act": "airdrop",
+          "say": "Your upgrade pays in devnet SOL too. Top the wallet up if it runs short.",
+          "title": "Get devnet SOL",
+          "context": "From the devnet faucet · free test SOL",
+          "button": "Request airdrop"
+        },
+        {
+          "kind": "act",
+          "id": "s4.ship",
+          "act": "buildDeploy",
+          "say": "Devnet still runs the old `hello`. Build and deploy again: the program keeps its address.",
+          "title": "Build and deploy",
+          "context": "Upgrades {program} in place · from your wallet",
+          "button": "Build and deploy"
+        },
+        {
+          "kind": "act",
+          "id": "s4.call",
+          "act": "call",
+          "say": "Now call it with your name. Here, or in the Call panel, where `name` just showed up.",
+          "title": "Call hello",
+          "context": "Sends hello with your name · fee from your wallet",
+          "button": "Call hello",
+          "call": {
+            "instruction": "hello",
+            "args": ["name"]
+          }
+        }
+      ],
+      "goal": {
+        "kind": "call",
+        "instruction": "hello",
+        "args": ["name"],
+        "log": "Hello, .+!"
+      },
+      "win": {
+        "id": "s4.win",
+        "headline": "hello knows your name",
+        "line": "You changed an instruction, shipped the new version and called it with an argument."
+      },
+      "explain": "Instructions can take arguments after their `Context`. This step adds a `name` to `hello`, ships the new version and calls it with your name."
+    }
+  ],
+  "finish": {
+    "headline": "You built and called your first Solana program",
+    "line": "Your greeting came back from devnet in a transaction your wallet signed.",
+    "learned": [
+      "Declaring a program and its instructions",
+      "Deploying with free devnet SOL",
+      "Calling a program from TypeScript",
+      "Passing arguments to an instruction"
+    ],
+    "chips": [
+      {
+        "label": "Change what hello says",
+        "answer": "Sure. What should `hello` say?"
+      },
+      {
+        "label": "What should I build next?",
+        "answer": "Lumberjack is a good next one: it keeps a player's wood and energy in an account on chain and changes them, so you meet accounts for real.",
+        "follow": "nextTutorial"
+      },
+      {
+        "label": "What is devnet SOL?",
+        "answer": "Devnet is Solana's public test network. Its SOL is free and worth nothing, so you can deploy and call as much as you like. You get it from the devnet faucet with one button; if the faucet is busy, get some yourself at faucet.solana.com."
+      }
+    ],
+    "next": "lumberjack"
+  },
+  "docs": [
+    {
+      "title": "Program Structure",
+      "url": "https://www.anchor-lang.com/docs/basics/program-structure",
+      "file": "program-structure.md"
+    },
+    {
+      "title": "IDL",
+      "url": "https://www.anchor-lang.com/docs/basics/idl",
+      "file": "idl.md"
+    },
+    {
+      "title": "Programs",
+      "url": "https://solana.com/docs/core/programs",
+      "file": "programs.md"
+    },
+    {
+      "title": "Transactions",
+      "url": "https://solana.com/docs/core/transactions",
+      "file": "transactions.md"
+    }
+  ]
+}

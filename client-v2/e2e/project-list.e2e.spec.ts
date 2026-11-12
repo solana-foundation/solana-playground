@@ -8,11 +8,10 @@ import {
   projectRow,
   seedWorkspace,
   startAnotherProject,
-  startTutorialFromAbout,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
-import { PHONE } from "./viewports";
+import { DESK, openPhoneMenu, PHONE } from "./viewports";
 
 /**
  * The navigation's project list (HOO-2069), one test per scenario of the
@@ -33,6 +32,10 @@ const projectNames = (page: Page) =>
     .locator('[data-sidebar="menu-button"]')
     .allInnerTexts();
 
+// Scoped by CSS: counting under `getByRole("group", { name })` crashes Playwright 1.65's Firefox 159 (Juggler) content process
+const pins = (page: Page) =>
+  page.locator('[data-sidebar="group"]').getByTitle("Pinned");
+
 test("client-v2-layout: Pinning a project", async ({ page }) => {
   test.setTimeout(120_000);
   await twoProjects(page);
@@ -43,9 +46,7 @@ test("client-v2-layout: Pinning a project", async ({ page }) => {
   await page.reload();
 
   await expect.poll(() => projectNames(page), LONG).toEqual(["beta", "alpha"]);
-  await expect(
-    page.getByRole("group", { name: "Projects" }).getByTitle("Pinned")
-  ).toHaveCount(1);
+  await expect(pins(page)).toHaveCount(1);
   await expect(
     (await projectMenu(page, "beta")).getByRole("menuitem", { name: "Unpin" })
   ).toBeVisible();
@@ -82,10 +83,77 @@ test("client-v2-layout: Renaming in place", async ({ page }) => {
   // The pin is kept by id, through the rename and a reload
   await page.reload();
   await expect.poll(() => projectNames(page), LONG).toEqual(["gamma", "beta"]);
-  await expect(
-    page.getByRole("group", { name: "Projects" }).getByTitle("Pinned")
-  ).toHaveCount(1);
+  await expect(pins(page)).toHaveCount(1);
 });
+
+/** Long enough to truncate in the desk sidebar and the phone menu page alike */
+const LONG_NAME = "github-drift-labs-protocol-v2-programs-drift";
+
+/** Where a pinned row's name, pin and "⋮" sit, in page pixels */
+const pinnedRowGeometry = (page: Page, name: string) =>
+  projectRow(page, name).evaluate((button) => {
+    // The name truncates in its own span, beside the pin in one line
+    const label = button.querySelector(":scope > span > span");
+    const item = button.parentElement;
+    const pin = item?.querySelector('[title="Pinned"]');
+    const actions = item?.querySelector('[data-sidebar="menu-action"]');
+    if (!item || !label || !pin || !actions) {
+      throw new Error("the row has no name, pin or actions");
+    }
+    const middle = (rect: DOMRect) => rect.top + rect.height / 2;
+    const row = button.getBoundingClientRect();
+    const nameBox = label.getBoundingClientRect();
+    const pinBox = pin.getBoundingClientRect();
+    const actionsBox = actions.getBoundingClientRect();
+    return {
+      isTruncated: label.scrollWidth > label.clientWidth,
+      nameOverPin: nameBox.right - pinBox.left,
+      nameOverActions: nameBox.right - actionsBox.left,
+      actionsOffMiddle: Math.abs(middle(actionsBox) - middle(row)),
+    };
+  });
+
+for (const [layout, viewport] of [
+  ["desk", DESK],
+  ["phone", PHONE],
+] as const) {
+  // HOO-2500: the pin is drawn over the row, so a pinned row's name must
+  // truncate before it and before the "⋮"
+  test(`keeps a pinned project's long name clear of its pin (${layout})`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await seedWorkspace(page, LONG_NAME);
+    await startAnotherProject(page, "beta");
+    const menu = await projectMenu(page, LONG_NAME);
+    await menu.getByRole("menuitem", { name: "Pin" }).click();
+    await expect(menu).toBeHidden();
+
+    await page.setViewportSize(viewport);
+    if (layout === "phone") {
+      await openPhoneMenu(page);
+    }
+    // The pin is hidden while its row is hovered or holds focus, and the
+    // menu hands focus back to the row's "⋮": park both elsewhere
+    await page.mouse.move(viewport.width - 1, viewport.height - 1);
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur()
+    );
+    const pin = projectRow(page, LONG_NAME).locator("..").getByTitle("Pinned");
+    await expect(pin).toBeVisible();
+
+    const geometry = await pinnedRowGeometry(page, LONG_NAME);
+    // A name that fits would clear the pin whatever the padding
+    expect(geometry.isTruncated).toBe(true);
+    expect(geometry.nameOverPin).toBeLessThanOrEqual(0);
+    expect(geometry.nameOverActions).toBeLessThanOrEqual(0);
+    if (layout === "phone") {
+      // The pin sits in the name's line, not centred on the row: only the
+      // "⋮" is drawn over the row
+      expect(geometry.actionsOffMiddle).toBeLessThanOrEqual(1);
+    }
+  });
+}
 
 test("renames the open project in place", async ({ page }) => {
   test.setTimeout(120_000);
@@ -107,7 +175,7 @@ test("the list is on a phone's menu page", async ({ page }) => {
   await twoProjects(page);
   await page.setViewportSize(PHONE);
 
-  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await openPhoneMenu(page);
   await expect(projectRow(page, "alpha")).toBeVisible();
   await projectRow(page, "alpha").click();
 
@@ -208,8 +276,14 @@ test("client-v2-layout: A lesson's menu", async ({ seededPage: page }) => {
     .click();
   await page.getByRole("button", { name: "Open Hello Anchor" }).click();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/, LONG);
-  // A lesson is a workspace only once it is started
-  await startTutorialFromAbout(page);
+  // Opening a tutorial with a definition creates its workspace: it has no
+  // About page to Start from. Hello Anchor opens in the tutorial frame,
+  // which folds the navigation to its rail; ⌘B opens it over the chat
+  // (tutorial-workspace)
+  await expect(
+    page.getByRole("complementary", { name: "Tutorial chat" })
+  ).toBeVisible(LONG);
+  await page.keyboard.press("ControlOrMeta+b");
 
   // A started lesson is a row among the projects, as the prototype lists it
   const projects = page.getByRole("group", { name: "Projects" });
@@ -237,3 +311,34 @@ test("client-v2-layout: Pinning by key", async ({ seededPage: page }) => {
     .toContain("action: pin");
   expect(lineOf(lines, "nav_project_action")).toContain("via: key");
 });
+
+for (const [layout, viewport] of [
+  ["desk", DESK],
+  ["phone", PHONE],
+] as const) {
+  // HOO-2546: the "⋮" sits on the row's middle at both row heights. The pin
+  // is no longer measured: it moved into the name's line, on its baseline
+  // beside the sync marker (design sync 4.21)
+  test(`centres a project row's menu (${layout})`, async ({ page }) => {
+    await seedWorkspace(page, "alpha");
+    await startAnotherProject(page, "beta");
+
+    await page.setViewportSize(viewport);
+    if (layout === "phone") {
+      await openPhoneMenu(page);
+    }
+
+    const offMiddle = await projectRow(page, "alpha").evaluate((button) => {
+      const middle = (element: Element | null | undefined) => {
+        if (!element) throw new Error("the row lacks its menu");
+        const box = element.getBoundingClientRect();
+        return box.top + box.height / 2;
+      };
+      const menu = button.parentElement?.querySelector(
+        '[data-sidebar="menu-action"]'
+      );
+      return Math.abs(middle(menu) - middle(button));
+    });
+    expect(offMiddle).toBeLessThanOrEqual(1);
+  });
+}

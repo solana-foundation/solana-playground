@@ -4,8 +4,12 @@ export const SETTINGS_TRIGGER_ATTR = "data-settings-trigger";
 /** Which control the settings page puts focus on when it opens */
 export type SettingsFocus = "page" | "network";
 
-/** What opened the settings: the status row's network indicator, the rail's network dot, the account menu or ⌘, */
-export type SettingsEntry = "cluster" | "rail" | "menu" | "key";
+/**
+ * What opened the settings: the status row's network indicator, the rail's
+ * network dot, the account menu, ⌘, or a stage's own network action (the
+ * Deploy stage's Change, the stage notice)
+ */
+export type SettingsEntry = "cluster" | "rail" | "menu" | "key" | "stage";
 
 /**
  * What closed the settings: "Back to app", Escape, ⌘, or a project imported

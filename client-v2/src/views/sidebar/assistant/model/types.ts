@@ -118,18 +118,13 @@ export const PROVIDERS: ProviderInfo[] = [
   {
     id: "default",
     name: "Default",
-    description:
-      "The agentic backend this playground is deployed with — what you talk " +
-      "to unless you pick something else. Its model and key live server-side, " +
-      "so there is nothing to enter.",
+    description: "Runs on this playground, nothing to enter",
     needsKey: false,
   },
   {
     id: "anthropic",
     name: "Anthropic",
-    description:
-      "Claude with adaptive thinking, called straight from the browser. " +
-      "Sonnet costs half of Opus per token; effort is the other cost lever.",
+    description: "Claude Opus or Sonnet, from your browser",
     needsKey: true,
     keyUrl: "https://console.anthropic.com/",
     keyPlaceholder: "sk-ant-…",
@@ -146,9 +141,7 @@ export const PROVIDERS: ProviderInfo[] = [
   {
     id: "openai",
     name: "OpenAI-compatible",
-    description:
-      "Any endpoint that speaks the chat-completions protocol: OpenAI itself, " +
-      "a local proxy, LiteLLM. Point it at your base URL and model.",
+    description: "Any chat-completions endpoint or proxy",
     needsKey: true,
     keyOptional: true,
     keyUrl: "https://platform.openai.com/api-keys",
@@ -158,9 +151,7 @@ export const PROVIDERS: ProviderInfo[] = [
   {
     id: "gemini",
     name: "Gemini",
-    description:
-      "Google's models through their OpenAI-compatible endpoint — the AI " +
-      "Studio free tier is enough for a full walkthrough.",
+    description: "Google's models, free tier is enough",
     needsKey: true,
     keyUrl: "https://aistudio.google.com/apikey",
     keyPlaceholder: "AIza…",
@@ -176,9 +167,7 @@ export const PROVIDERS: ProviderInfo[] = [
   {
     id: "openrouter",
     name: "OpenRouter",
-    description:
-      "One key for many models, including free ones — pick any model id " +
-      "that supports tool calling.",
+    description: "One key for many models, some of them free",
     needsKey: true,
     keyUrl: "https://openrouter.ai/keys",
     keyPlaceholder: "sk-or-…",

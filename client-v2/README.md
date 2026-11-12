@@ -150,8 +150,8 @@ Both profiles start the same services:
 | `wasm`              | Builds the real `wasm/*/pkg` packages (`wasm/build.sh`); the client image copies them in. Never stubs. |
 | `postgres`          | Conversation and project sync, on host port `PG_POSTGRES_PORT` (5432).       |
 | `migrate`           | Runs dbmate over `db/migrations` once Postgres is healthy, then exits.       |
-| `server-standalone` | The Rust build server on `http://localhost:8080` (`PG_PORT`), without MongoDB, which only its share routes use. |
-| `client-v2` / `client-v2-prod` | The client on `http://localhost:3000` (`PG_CLIENT_V2_PORT`), started once `wasm` and `migrate` have exited 0. |
+| `server-standalone` | The Rust build server on `http://localhost:8080` (`PG_PORT`). |
+| `client-v2` / `client-v2-prod` | The client on `http://127.0.0.1:3000` (`PG_CLIENT_V2_PORT`), started once `wasm` and `migrate` have exited 0. |
 
 `client-v2-prod` runs `yarn build:bundle`, refuses to serve a bundle that
 `node scripts/wasm-stubs.mjs check-build build` rejects, and then serves
@@ -161,7 +161,10 @@ dev server, through the same dispatcher (`scripts/api-route.mjs`).
 
 The compose file sets `DATABASE_URL` (the compose Postgres), `SYNC_ENABLED`,
 `AUTH_BASE_URL` and `REACT_APP_SERVER_URL` itself; those values win over
-`.env`. Everything else, such as the GitHub OAuth app, `AUTH_SECRET` and the
+`.env`. Open the app on the origin `AUTH_BASE_URL` names,
+`http://127.0.0.1:3000` by default: the API refuses sync writes from any other
+origin, `http://localhost:3000` included. To use another origin, set
+`AUTH_BASE_URL` in the shell that runs `docker compose`. Everything else, such as the GitHub OAuth app, `AUTH_SECRET` and the
 model keys, comes from `client-v2/.env` when it exists (names in
 `.env.example`). The file reaches the containers through `env_file`; it is
 kept out of the image.

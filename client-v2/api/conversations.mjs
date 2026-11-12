@@ -4,7 +4,7 @@
  * Deliberately plain ESM using raw Node request/response APIs, like the rest
  * of `api/` -- see `api/health.mjs` for why.
  */
-import { validate as isUuid } from "uuid";
+import { validate, version } from "uuid";
 
 import {
   warnAboutMissingObservabilityIds,
@@ -26,6 +26,9 @@ import {
 import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
 
 const log = createServerLogger("api:conversations");
+
+/** The same check as `isUuid` in `src/shared/lib/ids.ts`, which plain Node cannot load. */
+const isUuid = (value) => validate(value) && version(value) <= 5;
 
 /**
  * The caps on one batch. Shared with the client, which splits a thread so no

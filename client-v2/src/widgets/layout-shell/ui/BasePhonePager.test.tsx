@@ -68,6 +68,7 @@ const Harness = (choice: Choice) => {
     stageNode,
     consoleNode,
     consoleOpen: choice.consoleOpen ?? false,
+    onConsoleClose: choice.onConsoleClose ?? vi.fn(),
     home: choice.home,
     cover: choice.cover,
   };
@@ -183,6 +184,56 @@ it("reports a swipe after the last one's report, with no input in between", () =
   fireEvent.scroll(pager);
   vi.advanceTimersByTime(SWIPE_SETTLE_MS);
   expect(onSwipe).toHaveBeenLastCalledWith("work");
+});
+
+// Choosing Chat while the pager scrolled back to Work let the snap carry it
+// on to Preview, reported as a swipe: Work went inert under the composer
+// being typed in (HOO-2585)
+it("keeps its move its own through a click on a control in a page", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "menu", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  rerender(pagerElement({ page: "work", onSwipe }));
+  fireEvent.pointerDown(screen.getByRole("radio", { name: "Chat" }));
+  pager.scrollLeft = 780;
+  fireEvent.scroll(pager);
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).not.toHaveBeenCalled();
+  expect(pager.scrollLeft).toBe(390);
+});
+
+it("keeps its move its own through a tap, which moves no page", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "menu", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  rerender(pagerElement({ page: "work", onSwipe }));
+  fireEvent.touchStart(pager, { touches: [{ clientX: 200, clientY: 300 }] });
+  fireEvent.touchEnd(pager, {
+    changedTouches: [{ clientX: 202, clientY: 301 }],
+  });
+  pager.scrollLeft = 780;
+  fireEvent.scroll(pager);
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).not.toHaveBeenCalled();
+  expect(pager.scrollLeft).toBe(390);
+});
+
+it("hands its move to the user at a drag, and reports the swipe", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "menu", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  rerender(pagerElement({ page: "work", onSwipe }));
+  fireEvent.touchStart(pager, { touches: [{ clientX: 300, clientY: 300 }] });
+  pager.scrollLeft = 780;
+  fireEvent.scroll(pager);
+  fireEvent.touchEnd(pager, {
+    changedTouches: [{ clientX: 40, clientY: 300 }],
+  });
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).toHaveBeenCalledWith("preview");
 });
 
 it("hands its move to the user at a wheel, and reports the swipe", () => {
@@ -348,6 +399,36 @@ it("keeps the console on the preview page", () => {
   ).toBeTruthy();
 });
 
+it("raises the console's sheet only while the preview is the page", () => {
+  const onConsoleClose = vi.fn();
+  const { rerender } = renderPager({
+    page: "preview",
+    consoleOpen: true,
+    onConsoleClose,
+  });
+  const sheet = () =>
+    requireFor("the console's sheet")(
+      document.querySelector("[data-slot='console-sheet']")
+    );
+  const scrim = () =>
+    document.querySelector("[data-slot='console-sheet-scrim']");
+  expect(sheet().getAttribute("data-state")).toBe("open");
+  expect(scrim()).not.toBeNull();
+
+  // A run or a funding prompt moves to Work with the console still open: the
+  // sheet is fixed, so it would cover Work, and the preview under it is inert
+  rerender(pagerElement({ page: "work", consoleOpen: true, onConsoleClose }));
+  expect(sheet().getAttribute("data-state")).toBe("closed");
+  expect(scrim()).toBeNull();
+  fireEvent.keyDown(document, { key: "Escape" });
+  expect(onConsoleClose).not.toHaveBeenCalled();
+
+  rerender(
+    pagerElement({ page: "preview", consoleOpen: true, onConsoleClose })
+  );
+  expect(sheet().getAttribute("data-state")).toBe("open");
+});
+
 it("leaves the menu page's head to the navigation, which draws its own close", () => {
   renderPager({ page: "menu" });
   const menu = screen.getByRole("region", { name: "Navigation" });
@@ -435,6 +516,15 @@ describe("with a page over the work", () => {
       within(work).getByText("assistant slot").closest(".hidden")
     ).not.toBeNull();
     expect(screen.getByTestId("stage-probe")).toBeTruthy();
+  });
+
+  it("draws no name and no rule for a page with its own large title", () => {
+    renderPager({ cover, title: "" });
+    const bar = within(
+      screen.getByRole("region", { name: "Work" })
+    ).getByTestId("phone-bar");
+    expect(bar.className).not.toContain("border-b");
+    expect(within(bar).getByRole("button", { name: "Menu" })).toBeTruthy();
   });
 
   it("stands in Home's place", () => {

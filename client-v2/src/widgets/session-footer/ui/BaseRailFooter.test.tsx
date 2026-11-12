@@ -44,6 +44,7 @@ const view = (fields: Partial<AccountView>): AccountView => ({
   cluster: fields.cluster ?? { name: "devnet", down: false },
   sending: fields.sending ?? false,
   online: fields.online ?? true,
+  canFund: fields.canFund ?? false,
 });
 
 const MENU = (
@@ -96,4 +97,12 @@ it("shows a send in flight on Account, with the labelled spinner", () => {
       .getByRole("button", { name: "Account, signed out" })
       .getAttribute("aria-busy")
   ).toBe("true");
+});
+
+it("draws a signed out account as a plain user glyph, with no circle around it", () => {
+  draw({ account: view({}) });
+  const glyph = screen
+    .getByRole("button", { name: "Account, signed out" })
+    .querySelector("svg");
+  expect(glyph?.getAttribute("data-glyph")).toBe("user");
 });

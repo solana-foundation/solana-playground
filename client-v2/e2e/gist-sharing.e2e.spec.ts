@@ -1,7 +1,9 @@
 import type { Page, Request } from "@playwright/test";
 
 import {
+  currentProject,
   expect,
+  grantClipboard,
   json,
   LONG,
   projectMenu,
@@ -472,32 +474,40 @@ test("gist-sharing: Too large is caught before sending", async ({ page }) => {
   test.setTimeout(120_000);
   await stubAuth(page, { signedIn: true });
   const requests = await stubGists(page);
-  // A repository whose one source file is over 4 MB, imported as the project
-  await page.route("https://api.github.com/repos/alice/big/git/trees/**", (r) =>
-    json(r, {
-      truncated: false,
-      tree: [{ path: "index.ts", type: "blob", sha: "index.ts" }],
-    })
-  );
-  await page.route("https://raw.githubusercontent.com/alice/big/**", (r) =>
-    r.fulfill({ body: "//" + "x".repeat(4 * 1024 * 1024 + 1024) })
-  );
-  await seedWorkspace(page);
-  await page.locator("[data-settings-trigger]").first().click();
-  await page
-    .getByRole("region", { name: "Settings" })
-    .getByRole("button", { name: "From GitHub" })
-    .click();
-  const importer = page.getByRole("dialog");
-  await importer
-    .getByPlaceholder("https://github.com/... or https://gist.github.com/...")
-    .fill("https://github.com/alice/big");
-  await importer.locator('button[type="submit"]').click();
-  await expect(page.getByRole("dialog")).toHaveCount(0, LONG);
-  // An import closes Settings once the project is open
-  await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
+  // The explorer refuses to import or create a project past the sync limits
+  // (512 KB), far under a gist's 4 MB, so the project comes the one way a
+  // project over them reaches the browser: restored from the account. 33
+  // files of 128 KB, in lines of 64 bytes the editor tokenizes quickly
+  const big = "big";
+  const files: Record<string, string> = { "src/lib.rs": "// lib\n" };
+  for (let i = 1; i <= 33; i++) {
+    files[`src/f${i}.rs`] = `${"a".repeat(63)}\n`.repeat(2048);
+  }
+  const row = {
+    id: "7c1d0e5c-4444-4444-8444-444444444444",
+    name: big,
+    kind: "project",
+    updatedAt: new Date(Date.UTC(2026, 9, 1)).toISOString(),
+  };
+  await page.route("**/api/sync", (r) => json(r, { enabled: true, db: "ok" }));
+  await page.route("**/api/conversations*", (r) => json(r, { items: [] }));
+  await page.route("**/api/projects*", (r) => {
+    if (r.request().method() !== "GET") return json(r, {});
+    return new URL(r.request().url()).searchParams.get("id")
+      ? json(r, {
+          project: {
+            id: row.id,
+            name: row.name,
+            kind: row.kind,
+            updatedAt: row.updatedAt,
+            snapshot: { files },
+          },
+        })
+      : json(r, { projects: [row] });
+  });
+  await page.goto("/");
+  await expect(currentProject(page)).toContainText(big, LONG);
 
-  const big = "github-alice/big/";
   const menu = await projectMenu(page, big);
   await menu.getByRole("menuitem", { name: `Share ${big}` }).click();
   await dialog(page)
@@ -556,7 +566,7 @@ test("gist-sharing: Sharing a public gist", async ({ page }) => {
 });
 
 test("gist-sharing: Copying the Playground link", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await grantClipboard(context);
   await stubAuth(page, { signedIn: true });
   await stubGists(page, [201, { url: GIST_URL, id: "abc123" }]);
   await seedWorkspace(page);
@@ -613,7 +623,7 @@ test("gist-sharing: Another project's row", async ({ page }) => {
 });
 
 test("gist-sharing: A copy is counted", async ({ page, context }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await grantClipboard(context);
   const lines = linesOn(page);
   await stubAuth(page, { signedIn: true });
   await stubGists(page, [201, { url: GIST_URL, id: "abc123" }]);

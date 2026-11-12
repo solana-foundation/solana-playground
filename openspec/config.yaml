@@ -26,6 +26,9 @@ context: |
   builds or alters one proposes its events (what the user does there and
   how it can fail) even when the request does not mention analytics, and
   asks the user to confirm or trim them.
+  The legacy roots (commands/, views/, components/, routes/, utils/) are
+  measured too: code there that a funnel step names emits through the
+  owning slice's tracker.
 
 rules:
   proposal:
@@ -34,6 +37,8 @@ rules:
     - A change that adds or changes a slice under features/ or widgets/ lists
       the telemetry events it adds, renames or removes under What Changes, or
       says it changes none
+    - A change that touches a funnel step's code says under What Changes
+      which funnel events it keeps, adds or changes
   specs:
     - Requirements describe behaviour a test, a reviewer or a lint can check
     - Element ids, aria-labels and test ids are part of a UI requirement
@@ -60,6 +65,11 @@ operations:
       - A slice the task touches emits the events its spec describes; when
         the spec describes none and the slice has user actions, stop and
         propose events before writing code
+      - Before changing code at a location the funnel table in
+        openspec/specs/client-v2-funnels/spec.md names (or the funnel-events
+        delta until it is archived), read the step's events and keep them
+        firing; a task that removes or renames one updates the table in the
+        same change
   archive:
     guidance:
       - Run only when a human asked for it in this session

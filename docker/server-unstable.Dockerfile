@@ -31,5 +31,5 @@ COPY --chown=${USER}:${USER} templates templates
 RUN --mount=type=cache,target=/home/${USER}/target,uid=1001,gid=1001,sharing=locked \
     --mount=type=cache,target=/home/${USER}/.cargo/registry,uid=1001,gid=1001 \
     rm -rf target/release/.fingerprint/solpg-server-* \
-    && cargo build --release --features unstable \
+    && cargo build --release --locked --features unstable \
     && install -m 700 target/release/solpg-server solpg-server

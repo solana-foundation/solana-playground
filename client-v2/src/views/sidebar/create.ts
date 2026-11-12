@@ -15,7 +15,7 @@ export const createSidebarPage = <N extends string>(
   if (!/^(?:[a-z][a-z\d+.-]*:|\/)/i.test(page.icon)) {
     page.icon = "/icons/sidebar/" + page.icon;
   }
-  page.title ??= page.keybind ? `${page.name} (${page.keybind})` : page.name;
+  page.title ??= page.name;
   page.importComponent ??= () => {
     return import(`./${PgCommon.toKebabFromTitle(page.name)}/Component`);
   };

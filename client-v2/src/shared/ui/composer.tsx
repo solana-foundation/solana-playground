@@ -39,7 +39,7 @@ function Composer({
           if (!busy && !empty) onSubmit?.(e);
         }}
         className={cn(
-          "group/composer @container/composer flex w-full min-w-0 flex-col rounded-2xl border border-border bg-surface-panel shadow-composer transition-[border-color,box-shadow] duration-150 hover:border-muted-foreground/20 focus-within:border-primary/45 focus-within:ring-3 focus-within:ring-primary/12",
+          "group/composer @container/composer flex w-full min-w-0 flex-col rounded-2xl border border-border bg-surface-panel shadow-composer transition-[border-color,box-shadow] duration-150 hover:border-muted-foreground/20 focus-within:border-ring focus-within:ring-3 focus-within:ring-primary/12",
           className
         )}
         {...props}
@@ -54,7 +54,7 @@ function ComposerBanner({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="composer-banner"
       className={cn(
-        "flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs text-muted-foreground max-md:text-control max-md:font-read",
+        "flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs font-read text-muted-foreground max-md:text-control",
         className
       )}
       {...props}
@@ -62,7 +62,8 @@ function ComposerBanner({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-/* The files and selections it will read */
+/* The files and selections it will read. The chips start on the input's
+   text edge (18 px), so the box has one left line */
 function ComposerContextList({
   className,
   ...props
@@ -70,7 +71,7 @@ function ComposerContextList({
   return (
     <div
       data-slot="composer-context"
-      className={cn("flex flex-wrap gap-1.5 px-3 pt-3", className)}
+      className={cn("flex flex-wrap gap-1.5 px-[1.125rem] pt-3", className)}
       {...props}
     />
   );
@@ -94,6 +95,7 @@ function ComposerInput({
   onKeyDown,
   onInput,
   value,
+  placeholder,
   ...props
 }: React.ComponentProps<"textarea">) {
   const { setEmpty } = React.useContext(ComposerContext);
@@ -110,11 +112,13 @@ function ComposerInput({
     [setEmpty]
   );
   // A controlled value can change without an input event (a prompt the
-  // product puts in, a send that clears it), so emptiness follows it too.
+  // product puts in, a send that clears it), so emptiness follows it too. An
+  // empty field is as tall as its placeholder, which can change as well: a
+  // shorter one must not keep the height a longer one wrapped to.
   React.useLayoutEffect(() => {
     if (value === undefined || !ref.current) return;
     grow(ref.current);
-  }, [value, grow]);
+  }, [value, placeholder, grow]);
   // The height follows the width too. An input measured in a narrow column
   // (a panel that mounts it while still folded, then opens) wraps its
   // placeholder per character and would keep that height once the column
@@ -136,6 +140,7 @@ function ComposerInput({
     <textarea
       ref={ref}
       value={value}
+      placeholder={placeholder}
       data-slot="composer-input"
       rows={1}
       aria-label="Message"
@@ -152,7 +157,7 @@ function ComposerInput({
         }
       }}
       className={cn(
-        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-[350] text-foreground outline-none placeholder:text-subtle max-md:min-h-12 max-md:text-body max-md:font-read",
+        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-read text-foreground outline-none placeholder:text-subtle max-md:min-h-12 max-md:text-body",
         className
       )}
       {...props}
@@ -160,11 +165,17 @@ function ComposerInput({
   );
 }
 
+/* The +, the model, effort and Send. 8 px in, so a ghost button's icon (10 px
+   in its own padding) lands on the input's 18 px text edge; the +'s icon,
+   centred in its 32 px button, sits at 16 (24 in the 48 px phone button) */
 function ComposerToolbar({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="composer-toolbar"
-      className={cn("flex items-center gap-1.5 px-3 pt-1.5 pb-2.5", className)}
+      className={cn(
+        "flex items-center gap-1.5 pt-1.5 pr-3 pb-2.5 pl-2",
+        className
+      )}
       {...props}
     />
   );
@@ -178,7 +189,7 @@ function ComposerAdd({ className, ...props }: React.ComponentProps<"button">) {
       data-slot="composer-add"
       aria-label="Add context"
       className={cn(
-        "grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:size-12",
+        "-mr-1 grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:size-12",
         className
       )}
       {...props}
@@ -189,7 +200,9 @@ function ComposerAdd({ className, ...props }: React.ComponentProps<"button">) {
 }
 
 /* The model you are talking to, named in the box and never hidden in settings.
-   On a phone it is as tall as + and Send beside it, a thumb's target. */
+   On a phone it is as tall as + and Send beside it, a thumb's target. Its
+   name sits 16 px from the + glyph (the + gives back 4 px of the row's gap,
+   the left padding is 6), so the two read as one control group. */
 function ComposerModel({
   className,
   ...props
@@ -199,7 +212,7 @@ function ComposerModel({
       type="button"
       data-slot="composer-model"
       className={cn(
-        "inline-flex h-8 max-md:h-12 items-center gap-1.5 rounded-lg px-2.5 text-xs font-act text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5",
+        "inline-flex h-8 max-md:h-12 items-center gap-1.5 rounded-lg pr-2.5 pl-1.5 text-xs font-act text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5",
         className
       )}
       {...props}

@@ -13,6 +13,7 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary-edge: var(--primary-edge);
+  --color-primary-ink: var(--primary-ink);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -51,6 +52,9 @@
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
   --color-warning-ink: var(--warning-ink);
+  --color-success-ink: var(--success-ink);
+  --color-info-ink: var(--info-ink);
+  --color-error-ink: var(--error-ink);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
   --color-error: var(--error);
@@ -117,6 +121,9 @@
   --ease-standard: var(--ease-standard-value);
   --ease-menu: var(--ease-menu-value);
   --animate-rise: rise var(--duration-slow) var(--ease-out-value) both;
+  /* A new turn's arrival under reduced motion: the rise's fade without its
+     lift (the tutorial prototype's pg-fade at f7d42bf2e) */
+  --animate-fade: fade 240ms var(--ease-out-value) both;
   --animate-pop: pop 440ms var(--ease-pop-value) both;
   --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
   --animate-caret: caret 1.1s step-end infinite;
@@ -154,6 +161,11 @@
     }
   }
 
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
   @keyframes rise {
     from {
       opacity: 0;
@@ -217,23 +229,12 @@
   --text-code: 0.8125rem;
   --text-code--line-height: 1.6;
 
-  /* The phone's weights, lighter than the usual 400/500: light text on a
-   * dark ground blooms at the phone's 16px base */
+  /* One set of weights for every screen, lighter than the usual 400/500:
+   * light text on a dark ground blooms */
   --font-weight-read: 320;
   --font-weight-label: 380;
   --font-weight-headline: 400;
   --font-weight-act: 440;
-}
-
-/* From the md breakpoint up the prototype sets body text at 400 and labels
- * and titles at 500, so reading and acting text step up there. */
-@layer theme {
-  @media (width >= 48rem) {
-    :root {
-      --font-weight-read: 400;
-      --font-weight-act: 500;
-    }
-  }
 }
 
 /* The brand's fill and its type, where a class is clearer than a value */

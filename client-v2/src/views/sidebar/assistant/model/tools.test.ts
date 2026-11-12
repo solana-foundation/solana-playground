@@ -1,8 +1,10 @@
+import { NetworkRefusedError } from "@/commands/deploy/network-refused";
 import { requireFor } from "@/test-utils/require-for";
 
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
 import { PgPatchUndo } from "../patch-undo";
-import { PgAssistant } from "../store";
+import { type AssistantMode, PgAssistant } from "../store";
+import { READING_TOOLS } from "./reading-tools";
 import { createTools, notInContext } from "./tools";
 
 vi.mock("./skill-tools", () => ({ createSkillTools: () => [] }));
@@ -87,6 +89,39 @@ describe("write_file", () => {
       [expect.objectContaining({ path: "src/a.rs" }), "Wrote src/a.rs"],
       [expect.objectContaining({ path: "src/b.rs" }), "Wrote src/b.rs"],
     ]);
+  });
+
+  it("marks the card failed with the explorer's reason when the write is refused", async () => {
+    const b = bridge("old");
+    vi.mocked(b.applyPatch).mockRejectedValue(
+      new Error("A file can be at most 128 KB.")
+    );
+    const pending = writeFile(b).run({ path: "src/lib.rs", content: "new" });
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), true);
+
+    expect(await pending).toBe(
+      "Could not write src/lib.rs: A file can be at most 128 KB."
+    );
+    expect(PgAssistant.items[0]).toMatchObject({
+      status: "failed",
+      outcome: "not written: A file can be at most 128 KB.",
+    });
+  });
+  it("never reports a write that happened as not written", async () => {
+    const b = bridge("old");
+    vi.spyOn(PgPatchUndo, "wrote").mockImplementation(() => {
+      throw new Error("undo store full");
+    });
+    const pending = writeFile(b).run({ path: "src/lib.rs", content: "new" });
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), true);
+
+    const said = await Promise.resolve(pending).catch((e: Error) => e.message);
+    expect(b.applyPatch).toHaveBeenCalled();
+    expect(said).not.toMatch(/Could not write/);
+    expect(PgAssistant.items[0]).not.toMatchObject({ status: "failed" });
+    vi.restoreAllMocks();
   });
 
   it("leaves an applied patch undoable, and a failed or rejected one not", async () => {
@@ -213,6 +248,338 @@ describe("read_file", () => {
   it("offers no tool that lists the project", () => {
     expect(createTools(contextBridge).map((tool) => tool.name)).not.toContain(
       "list_files"
+    );
+  });
+});
+
+describe("build and deploy", () => {
+  const commandBridge = (
+    over: Partial<Record<"build" | "deploy", () => Promise<unknown>>>,
+    buildError: string | null = null
+  ): PlaygroundBridge =>
+    ({
+      build: over.build ?? vi.fn(async () => {}),
+      deploy: over.deploy ?? vi.fn(async () => null),
+      quoteDeploy: vi.fn(async () => ({
+        network: "devnet",
+        cost: null,
+        playground: false,
+      })),
+      getProjectContext: () => ({ buildError, cluster: "devnet" }),
+    } as unknown as PlaygroundBridge);
+
+  /** Runs a command tool, allows its card, and returns the card it left */
+  const allowed = async (b: PlaygroundBridge, name: "build" | "deploy") => {
+    const pending = createTools(b)
+      .find((tool) => tool.name === name)!
+      .run({});
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), true);
+    const result = await pending;
+    return { result, card: PgAssistant.items[0] };
+  };
+
+  it("marks a build with compile errors failed", async () => {
+    const { result, card } = await allowed(
+      commandBridge({}, "error[E0425]: cannot find value"),
+      "build"
+    );
+    expect(result).toContain("The build failed");
+    expect(card).toMatchObject({ status: "failed", outcome: "build failed" });
+  });
+
+  it("marks a build that could not run failed with the reason", async () => {
+    const { card } = await allowed(
+      commandBridge({
+        build: vi.fn(async () => {
+          throw new Error("build server unreachable");
+        }),
+      }),
+      "build"
+    );
+    expect(card).toMatchObject({
+      status: "failed",
+      outcome: "build could not run: build server unreachable",
+    });
+  });
+
+  it("leaves a successful build applied", async () => {
+    const { card } = await allowed(commandBridge({}), "build");
+    expect(card).toMatchObject({
+      status: "allowed",
+      outcome: "build succeeded",
+    });
+  });
+
+  it("marks a failed deploy failed with the reason", async () => {
+    const { result, card } = await allowed(
+      commandBridge({
+        deploy: vi.fn(async () => {
+          throw new Error("insufficient funds");
+        }),
+      }),
+      "deploy"
+    );
+    expect(result).toBe("The deployment failed: insufficient funds");
+    expect(card).toMatchObject({
+      status: "failed",
+      outcome: "deploy failed: insufficient funds",
+    });
+  });
+});
+
+describe("build and deploy approvals", () => {
+  type Quote = Awaited<ReturnType<PlaygroundBridge["quoteDeploy"]>>;
+  const PRICED: Quote = {
+    network: "devnet",
+    cost: 1_420_000_000,
+    playground: true,
+  };
+  const CONNECTED_WALLET: Quote = {
+    network: "devnet",
+    cost: 1_420_000_000,
+    playground: false,
+  };
+  const NO_NETWORK: Quote = {
+    network: undefined,
+    cost: 1_420_000_000,
+    playground: true,
+  };
+  const NO_COST: Quote = {
+    network: "devnet",
+    // eslint-disable-next-line unicorn/no-null -- `quoteDeploy().cost` is `number | null`, null meaning no estimate
+    cost: null,
+    playground: true,
+  };
+  const NO_NETWORK_NO_COST: Quote = {
+    network: undefined,
+    // eslint-disable-next-line unicorn/no-null -- `quoteDeploy().cost` is `number | null`, null meaning no estimate
+    cost: null,
+    playground: true,
+  };
+
+  /** A bridge whose deploy quote is the one given */
+  const commandBridge = (quote: Quote): PlaygroundBridge =>
+    ({
+      getProjectContext: () => ({
+        workspaceName: "hello_anchor",
+        cluster: "https://api.devnet.solana.com",
+        // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
+        buildError: null,
+      }),
+      quoteDeploy: async () => quote,
+      build: vi.fn(async () => {}),
+      // eslint-disable-next-line unicorn/no-null -- `deploy()` answers `null` without a program id
+      deploy: vi.fn(async () => null),
+    } as unknown as PlaygroundBridge);
+
+  /** The question on the approval card a tool opened */
+  const askedWith = async (tool: "build" | "deploy", b: PlaygroundBridge) => {
+    const found = createTools(b).find((t) => t.name === tool);
+    if (!found) throw new Error(`createTools has no tool named ${tool}`);
+    const run = found.run({});
+    await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
+    const card = PgAssistant.items[0];
+    PgAssistant.resolveApproval(card.id, false);
+    await run;
+    return card.kind === "approval" && card.request.type === "command"
+      ? card.request.question
+      : undefined;
+  };
+
+  it("asks whether to deploy the program to the network, naming the cost", async () => {
+    expect(await askedWith("deploy", commandBridge(PRICED))).toBe(
+      "Deploy hello_anchor to devnet? It costs about 1.42 devnet SOL from your Playground wallet."
+    );
+  });
+
+  it("names a connected wallet as the payer when it is not the Playground's", async () => {
+    expect(await askedWith("deploy", commandBridge(CONNECTED_WALLET))).toBe(
+      "Deploy hello_anchor to devnet? It costs about 1.42 devnet SOL from your wallet."
+    );
+  });
+
+  it("names no network in the cost while the cluster is unknown", async () => {
+    expect(await askedWith("deploy", commandBridge(NO_NETWORK))).toBe(
+      "Deploy hello_anchor to the network? It costs about 1.42 SOL from your Playground wallet."
+    );
+  });
+
+  it("leaves the cost out when it cannot be estimated", async () => {
+    expect(await askedWith("deploy", commandBridge(NO_COST))).toBe(
+      "Deploy hello_anchor to devnet?"
+    );
+  });
+
+  it("names the network and leaves the cost out when neither is known", async () => {
+    expect(await askedWith("deploy", commandBridge(NO_NETWORK_NO_COST))).toBe(
+      "Deploy hello_anchor to the network?"
+    );
+  });
+
+  it("deploys nothing when the network changed while the approval waited", async () => {
+    let cluster = "https://api.devnet.solana.com";
+    const deploy = vi.fn(async () => {});
+    const b = {
+      getProjectContext: () => ({
+        workspaceName: "hello_anchor",
+        cluster,
+        // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
+        buildError: null,
+      }),
+      quoteDeploy: async () => PRICED,
+      deploy,
+    } as unknown as PlaygroundBridge;
+    const found = createTools(b).find((t) => t.name === "deploy");
+    if (!found) throw new Error("createTools has no tool named deploy");
+    const run = found.run({});
+    await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
+    cluster = "https://api.mainnet-beta.solana.com";
+    PgAssistant.resolveApproval(PgAssistant.items[0].id, true);
+
+    expect(await run).toContain("nothing was deployed");
+    expect(deploy).not.toHaveBeenCalled();
+    expect(PgAssistant.items[0]).toMatchObject({
+      status: "failed",
+      outcome: "not deployed: network changed",
+    });
+  });
+
+  it("asks whether to build the program", async () => {
+    expect(await askedWith("build", commandBridge(NO_COST))).toBe(
+      "Build hello_anchor?"
+    );
+  });
+});
+
+describe("a mode", () => {
+  const hint = {
+    name: "hint",
+    description: "Post the live question's hint",
+    schema: {
+      type: "object" as const,
+      properties: {},
+      additionalProperties: false as const,
+    },
+    run: () => "Posted.",
+  };
+  const tutorial: AssistantMode = {
+    name: "tutorial",
+    context: () => "Tutorial: Hello Anchor",
+    tools: [hint],
+    allows: (name) => name === "read_file",
+    refusal: "The lesson builds; offer a change instead.",
+  };
+  const names = (tools: { name: string }[]) => tools.map((t) => t.name);
+
+  it("leaves the tools as they are without one", () => {
+    // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+    expect(names(createTools(bridge("old"), null))).toEqual([
+      "read_file",
+      "get_build_error",
+      "write_file",
+      "build",
+      "deploy",
+    ]);
+  });
+
+  it("refuses a write-file call in tutorial mode, with no approval card", async () => {
+    const write = createTools(bridge("old"), tutorial).find(
+      (tool) => tool.name === "write_file"
+    );
+    const result = await write?.run({ path: "src/lib.rs", content: "new" });
+
+    expect(result).toBe(
+      "write_file is not available in this tutorial. The lesson builds; offer a change instead."
+    );
+    expect(PgAssistant.items).toHaveLength(0);
+    expect(PgAssistant.status).toBe("idle");
+  });
+
+  it("runs what it allows, and adds its own tools", async () => {
+    const tools = createTools(bridge("fn main() {}"), tutorial);
+    expect(names(tools)).toContain("hint");
+    const read = tools.find((tool) => tool.name === "read_file");
+    expect(await read?.run({ path: "src/lib.rs" })).toBe("fn main() {}");
+  });
+
+  it("is read by the next createTools, and clearing one leaves the latest other in force", () => {
+    const set = PgAssistant.setMode(tutorial);
+    expect(names(createTools(bridge("old")))).toContain("hint");
+    const other = PgAssistant.setMode({
+      name: "other",
+      context: () => "",
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      set.dispose();
+      expect(PgAssistant.mode?.name).toBe("other");
+    } finally {
+      other.dispose();
+    }
+    expect(PgAssistant.mode).toBeNull();
+  });
+
+  it("keeps an earlier mode when a later one clears first", () => {
+    const first = PgAssistant.setMode(tutorial);
+    const second = PgAssistant.setMode({
+      name: "other",
+      context: () => "",
+      tools: [],
+      allows: () => true,
+      refusal: "",
+    });
+    try {
+      second.dispose();
+      expect(PgAssistant.mode).toBe(tutorial);
+    } finally {
+      first.dispose();
+    }
+    expect(PgAssistant.mode).toBeNull();
+  });
+});
+
+describe("READING_TOOLS", () => {
+  it("names only tools the assistant has", async () => {
+    const { createSkillTools } = await vi.importActual<
+      typeof import("./skill-tools")
+    >("./skill-tools");
+    const real = new Set(
+      // eslint-disable-next-line unicorn/no-null -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+      createTools(bridge(null), null)
+        .concat(createSkillTools())
+        .map((tool) => tool.name)
+    );
+    for (const name of READING_TOOLS) expect(real).toContain(name);
+  });
+});
+
+describe("deploy", () => {
+  it("says a deploy the network refused did not start, rather than failed", async () => {
+    const tool = requireFor("the deploy tool")(
+      createTools({
+        getProjectContext: () => ({ cluster: "devnet" }),
+        quoteDeploy: async () => ({
+          network: "devnet",
+          cost: 1_420_000_000,
+          playground: true,
+        }),
+        deploy: async () => {
+          throw new NetworkRefusedError(
+            "Devnet is not responding. Deploy waits for the network."
+          );
+        },
+      } as unknown as PlaygroundBridge).find((t) => t.name === "deploy")
+    );
+
+    const pending = tool.run({});
+    await Promise.resolve();
+    PgAssistant.resolveApproval(latestCard(), true);
+
+    expect(await pending).toBe(
+      "The deploy did not start, and nothing was sent: Devnet is not responding. Deploy waits for the network."
     );
   });
 });

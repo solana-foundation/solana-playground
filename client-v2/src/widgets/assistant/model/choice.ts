@@ -1,4 +1,8 @@
-import { displayModelName } from "../../../views/sidebar/assistant/model/labels";
+import {
+  displayModelName,
+  HOSTED_FALLBACK_NAME,
+  hostedModelName,
+} from "../../../views/sidebar/assistant/model/labels";
 import {
   type Effort,
   PROVIDERS,
@@ -48,14 +52,8 @@ const effortOn = (
   ladder: readonly Effort[] | undefined
 ): EffortChoice | null => (ladder?.includes(value) ? { value, ladder } : null);
 
-const DEFAULT_LABEL = "Default model";
-
-const defaultLabel = (backend: DefaultBackend) => {
-  if (backend.state === "present" && backend.model !== null) {
-    return displayModelName(backend.model);
-  }
-  return DEFAULT_LABEL;
-};
+const defaultLabel = (backend: DefaultBackend) =>
+  hostedModelName((backend.state === "present" && backend.model) || undefined);
 
 /** What the model button shows for the current connection, or for the default about to be used */
 export const modelShown = (
@@ -96,7 +94,7 @@ export const modelShown = (
     kind: "keyed",
     provider: connection.id,
     model: endpoint?.model ?? null,
-    label: endpoint ? displayModelName(endpoint.model) : DEFAULT_LABEL,
+    label: endpoint ? displayModelName(endpoint.model) : HOSTED_FALLBACK_NAME,
     effort: null,
   };
 };

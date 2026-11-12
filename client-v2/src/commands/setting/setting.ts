@@ -1,11 +1,32 @@
-import { PgCommon, PgSettings, PgTerminal } from "../../utils";
+import {
+  PgCommon,
+  PgConnection,
+  PgSettings,
+  PgTerminal,
+  TonedLineError,
+} from "../../utils";
 import { createArgs, createCmd, createSubcmd } from "../create";
+
+/** Read-only and outside `PgSettings`: the env owns the read-buffer RPCs, so nothing is stored */
+const READ_BUFFER_ENDPOINT_ID = "connection.readBufferEndpoint";
+
+/** The RPC a deploy reads program buffers through, from the same rule the deploy uses */
+const getReadBufferEndpoint = () =>
+  PgConnection.getReadBufferConnection(PgConnection.current).rpcEndpoint;
+
+/** Every setting ID, the read-only one in its sorted place among the connection keys */
+const getSettingIds = () => {
+  const ids = PgSettings.all.map((s) => s.id);
+  const next = ids.findIndex((id) => id > READ_BUFFER_ENDPOINT_ID);
+  ids.splice(next === -1 ? ids.length : next, 0, READ_BUFFER_ENDPOINT_ID);
+  return ids;
+};
 
 /** Common setting ID argument */
 const idArg = {
   name: "id",
   description: "Setting ID",
-  values: () => PgSettings.all.map((s) => s.id),
+  values: getSettingIds,
 } as const;
 
 export const setting = createCmd({
@@ -17,6 +38,11 @@ export const setting = createCmd({
       description: "Get setting value",
       args: createArgs([idArg]),
       handle: (input) => {
+        if (input.args.id === READ_BUFFER_ENDPOINT_ID) {
+          PgTerminal.println(getReadBufferEndpoint());
+          return;
+        }
+
         const value = getSetting(input.args.id).getValue();
         PgTerminal.println(value);
       },
@@ -32,6 +58,9 @@ export const setting = createCmd({
           description: "Value to set",
           values: (token, tokens) => {
             const id = getSettingIdFromTokens(tokens);
+            // Any value passes, so `handle` refuses it with its own line
+            if (id === READ_BUFFER_ENDPOINT_ID) return token ? [token] : [];
+
             const selected = getSetting(id);
 
             // If `values` field is not specified, default to boolean
@@ -61,6 +90,8 @@ export const setting = createCmd({
           },
           parse: (token, tokens) => {
             const id = getSettingIdFromTokens(tokens);
+            if (id === READ_BUFFER_ENDPOINT_ID) return token;
+
             const selected = getSetting(id);
             const value = token;
             const namedValue = PgCommon.callIfNeeded(selected.values)?.find(
@@ -78,7 +109,16 @@ export const setting = createCmd({
           },
         },
       ]),
-      handle: (input) => getSetting(input.args.id).setValue(input.args.value),
+      handle: (input) => {
+        if (input.args.id === READ_BUFFER_ENDPOINT_ID) {
+          throw new TonedLineError(
+            "error",
+            `\`${READ_BUFFER_ENDPOINT_ID}\` comes from the environment and can't be set here.`
+          );
+        }
+
+        getSetting(input.args.id).setValue(input.args.value);
+      },
     }),
   ],
 });

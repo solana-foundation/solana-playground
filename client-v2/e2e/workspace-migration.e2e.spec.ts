@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, startTutorialFromAbout, test } from "./fixtures";
+import { expect, LONG, newProjectPage, test } from "./fixtures";
 import {
   currentProject,
   home,
@@ -122,7 +122,7 @@ const readConfig = (page: Page) =>
 const addWorkspace = async (page: Page, name: string) => {
   await openGallery(page);
 
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await expect(gallery).toBeVisible();
   await gallery.getByLabel("Project name").fill(name);
   await gallery.getByRole("button", { name: /^Start/ }).click();
@@ -248,9 +248,11 @@ test("every project in a migrated config still opens", async ({ page }) => {
  * Start the Hello Anchor tutorial, creating its workspace.
  *
  * A tutorial workspace is named after the tutorial, and `PgTutorial.start()`
- * is what calls `PgExplorer.createWorkspace()` -- opening the card alone only
- * reaches upstream's About screen. An empty profile opens it from Home; a
- * profile with a project, through the gallery the navigation opens.
+ * is what calls `PgExplorer.createWorkspace()`. Hello Anchor has a
+ * definition, so opening its card creates its workspace, with no About page, and lands
+ * on its first page once the workspace exists. An empty profile opens it
+ * from Home; a profile with a project, through the New project page the
+ * navigation opens.
  */
 const startTutorial = async (page: Page, from: "home" | "navigation") => {
   if (from === "home") {
@@ -259,9 +261,7 @@ const startTutorial = async (page: Page, from: "home" | "navigation") => {
       .getByRole("button", { name: "Open Hello Anchor" })
       .click();
   } else {
-    const gallery = page.getByRole("dialog", {
-      name: "What do you want to build?",
-    });
+    const gallery = newProjectPage(page);
     await openGallery(page);
     await expect(gallery).toBeVisible();
 
@@ -269,10 +269,7 @@ const startTutorial = async (page: Page, from: "home" | "navigation") => {
     await gallery.getByRole("button", { name: "Open Hello Anchor" }).click();
   }
 
-  // `exact` keeps the locator off any other name holding "Start", such as
-  // Connect a model's own Start while that dialog is open
-  await startTutorialFromAbout(page);
-  await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
+  await expect(page).toHaveURL(/\/tutorials\/hello-anchor\/1$/, LONG);
 };
 
 test("a migrated tutorial gets a derived id, not a random one", async ({

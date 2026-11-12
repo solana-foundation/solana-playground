@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -125,7 +125,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const setup = () => {
+const mount = (inSheet: boolean) => {
   const setWide = vi.fn();
   const onHide = vi.fn();
   // The app's one `TooltipProvider` sits in `App`
@@ -133,7 +133,7 @@ const setup = () => {
     <TooltipProvider>
       <FakeConnect />
       <Assistant
-        widen={{ wide: false, setWide, canWiden: true }}
+        widen={{ wide: false, setWide, canWiden: !inSheet, inSheet }}
         onHide={onHide}
         openConnect={turn.openConnect}
       />
@@ -141,6 +141,11 @@ const setup = () => {
   );
   return { setWide, onHide, user: userEvent.setup() };
 };
+
+/** The assistant in the wide frame's column at the left */
+const setup = () => mount(false);
+/** The assistant as the right Sheet (under Home, or 768 to 1023 px) */
+const setupInSheet = () => mount(true);
 
 const openSources = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(screen.getByRole("button", { name: "More" }));
@@ -153,6 +158,19 @@ describe("Assistant", () => {
     expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
     expect(screen.getByText("thread")).toBeTruthy();
     expect(screen.getByText("composer")).toBeTruthy();
+  });
+
+  it("points Collapse right in the Sheet and left in the column", () => {
+    const collapseIcon = () =>
+      screen
+        .getByRole("button", { name: "Collapse assistant" })
+        .querySelector("svg")
+        ?.getAttribute("class");
+    setupInSheet();
+    expect(collapseIcon()).toContain("lucide-panel-right-close");
+    cleanup();
+    setup();
+    expect(collapseIcon()).toContain("lucide-panel-left-close");
   });
 
   it("says Off in the head where the deployment serves no model", () => {

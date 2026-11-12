@@ -8,10 +8,8 @@ export const seahorse = createFramework({
   docs: {
     url: "https://www.seahorse.dev/using-seahorse/accounts",
   },
-  githubExample: {
-    name: "Transfer SOL",
-    url: "https://github.com/solana-developers/program-examples/tree/main/basics/transfer-sol/seahorse",
-  },
+  // No example: program-examples dropped its Seahorse ports, and an Anchor
+  // one under the Seahorse name misled
   getIsCurrent: (files) => {
     for (const [path, content] of files) {
       if (!path.endsWith(".py")) continue;

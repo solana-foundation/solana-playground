@@ -28,11 +28,15 @@ import {
   PgView,
   resolveTextMateTheme,
 } from "../../../utils";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { SpinnerWithBg } from "../../Loading";
+import { createAutosave } from "./autosave";
 import { editorBuffersOf } from "./editor-buffers";
 import { initLanguages } from "./languages";
 import { createMountOpen } from "./mount-open";
 import { leavesFocusElsewhere } from "./open-focus";
+import { rewritePythonProgramId, rewriteRustProgramId } from "./program-id";
+import { revealAtThird } from "./reveal-line";
 
 const log = createLogger("editor:monaco");
 
@@ -138,8 +142,31 @@ const Monaco = () => {
           editorStyles.default.searchMatch.bg,
         "editorGutter.background": editorStyles.gutter.bg,
         "editorLineNumber.foreground": editorStyles.gutter.color,
+        "editorLineNumber.activeForeground": editorStyles.gutter.activeColor,
         "editorError.foreground": theme.colors.state.error.color,
         "editorWarning.foreground": theme.colors.state.warning.color,
+        "editorUnicodeHighlight.border": theme.colors.state.warning.color,
+
+        // Monaco's own defaults are gold and brown brackets, an orange find
+        // match and a yellow line round it, which no token reaches
+        "editorBracketHighlight.foreground1":
+          theme.colors.default.textSecondary,
+        "editorBracketHighlight.foreground2":
+          theme.highlight.integer.color ?? theme.colors.default.textSecondary,
+        "editorBracketHighlight.foreground3":
+          theme.highlight.typeName.color ?? theme.colors.default.textSecondary,
+        "editorBracketHighlight.unexpectedBracket.foreground":
+          theme.colors.state.error.color,
+        "editor.findMatchBackground": editorStyles.default.selection.bg,
+        "editor.findMatchHighlightBackground":
+          editorStyles.default.searchMatch.bg,
+        "editor.rangeHighlightBackground": PgTheme.alpha(
+          theme.colors.default.textSecondary,
+          "low"
+        ),
+        "editorOverviewRuler.findMatchForeground":
+          theme.colors.default.textSecondary,
+        "minimap.findMatchHighlight": theme.colors.default.textSecondary,
 
         ////////////////////////////// Dropdown //////////////////////////////
         "dropdown.background": editorStyles.tooltip.bg,
@@ -316,6 +343,17 @@ const Monaco = () => {
     }
   }, [editor, keybinding]);
 
+  // Refuse typing while a caller asks, as the tutorial's intro card does
+  // for its preview of the finished program
+  useEffect(() => {
+    if (!editor) return;
+
+    const apply = () => editor.updateOptions({ readOnly: PgEditor.readOnly });
+    apply();
+    document.addEventListener(PgEditor.events.READ_ONLY, apply);
+    return () => document.removeEventListener(PgEditor.events.READ_ONLY, apply);
+  }, [editor]);
+
   // Set other settings
   useEffect(() => {
     if (!editor) return;
@@ -326,6 +364,59 @@ const Monaco = () => {
       }),
     ];
     return () => disposables.forEach(({ dispose }) => dispose());
+  }, [editor]);
+
+  // Spec 04: Explain selection and Fix selection in the context menu, which
+  // a long press opens on a phone. `precondition` also hides them with no
+  // selection, since Monaco makes it the menu item's `when`
+  useEffect(() => {
+    if (!editor) return;
+
+    const askFor = (verb: "Explain" | "Fix") => () => {
+      const model = editor.getModel();
+      const selection = editor.getSelection();
+      const path = PgExplorer.currentFilePath;
+      if (!model || !selection || selection.isEmpty() || !path) return;
+      PgAssistant.requestPrompt(
+        selectionPrompt(verb, {
+          path: PgExplorer.getRelativePath(path),
+          from: selection.startLineNumber,
+          to: selection.endLineNumber,
+          language: model.getLanguageId(),
+          text: model.getValueInRange(selection),
+        })
+      );
+    };
+
+    const disposables = [
+      editor.addAction({
+        id: "assistant.explain-selection",
+        label: "Explain selection",
+        contextMenuGroupId: "0_assistant",
+        contextMenuOrder: 1,
+        precondition: "editorHasSelection",
+        run: askFor("Explain"),
+      }),
+      editor.addAction({
+        id: "assistant.fix-selection",
+        label: "Fix selection",
+        contextMenuGroupId: "0_assistant",
+        contextMenuOrder: 2,
+        precondition: "editorHasSelection",
+        run: askFor("Fix"),
+      }),
+    ];
+    // Unmounting disposes the editor first (the effect above), which takes
+    // its actions with it; disposing them again throws inside Monaco
+    let isEditorDisposed = false;
+    const watch = editor.onDidDispose(() => {
+      isEditorDisposed = true;
+    });
+    return () => {
+      if (isEditorDisposed) return;
+      watch.dispose();
+      disposables.forEach(({ dispose }) => dispose());
+    };
   }, [editor]);
 
   // Set editor state
@@ -411,10 +502,10 @@ const Monaco = () => {
 
       // An open the user did not start -- a late mount's, sync re-opening
       // the workspace -- leaves focus in a field they are typing in; the
-      // file opens, focus stays. So does any open while the editor is off the
-      // screen, since focus would scroll it back. One started from the
-      // explorer's tree (creating a file) still ends in the editor; see
-      // `leavesFocusElsewhere`.
+      // file opens, focus stays, as it does in an open dialog or popover. So
+      // does any open while the editor is off the screen, since focus would
+      // scroll it back. One started from the explorer's tree (creating a file)
+      // still ends in the editor; see `leavesFocusElsewhere`.
       const open = isMountOpen ? "mount" : "later";
       if (
         leavesFocusElsewhere({
@@ -432,6 +523,8 @@ const Monaco = () => {
 
       // Save position data
       positionDataIntervalId = setInterval(() => {
+        // Disposed by a workspace re-read before the next open clears this
+        if (model.isDisposed()) return;
         const selection = editor.getSelection();
         if (!selection) return;
 
@@ -481,40 +574,62 @@ const Monaco = () => {
   useEffect(() => {
     if (!editor) return;
 
-    let timeoutId: NodeJS.Timeout;
+    const save = async (path: string, content: string) => {
+      // A file deleted inside the delay has its model disposed, which flushes
+      // its edit here: writing it would bring the file back
+      if (!PgExplorer.getFile(path)) return;
 
-    const { dispose } = editor.onDidChangeModelContent(() => {
-      timeoutId && clearTimeout(timeoutId);
-      timeoutId = setTimeout(async () => {
-        if (!PgExplorer.currentFilePath) return;
-
-        const args: [string, string] = [
-          PgExplorer.currentFilePath,
-          editor.getValue(),
-        ];
-
+      try {
         // Save to state
-        PgExplorer.saveFileToState(...args);
+        PgExplorer.saveFileToState(path, content);
 
         // Saving to state is enough if it's a temporary project
         if (PgExplorer.isTemporary) return;
 
         // Save to `indexedDB`
-        try {
-          await PgExplorer.fs.writeFile(...args);
-        } catch (e: any) {
-          // The edit is lost on reload, so the team must hear of it
-          log.error(e, {
-            report: true,
-            context: { path: PgExplorer.currentFilePath },
-          });
-        }
-      }, 500);
+        await PgExplorer.fs.writeFile(path, content);
+      } catch (error) {
+        // Nothing awaits a save, the one made as the editor unmounts least of
+        // all, so this is the only place a lost edit can be heard
+        log.error(error, { report: true, context: { path } });
+      }
+    };
+    const autosave = createAutosave({
+      delay: 500,
+      save: (path, content) => void save(path, content),
     });
 
+    // The pending save reads its model's buffer when it runs, so it runs
+    // before that model goes: opening a JS/TS file disposes the others, and
+    // unmounting the editor disposes every model
+    let watched: monaco.editor.ITextModel | undefined;
+    let modelWillDispose: monaco.IDisposable | undefined;
+    const content = editor.onDidChangeModelContent(() => {
+      const path = PgExplorer.currentFilePath;
+      const model = editor.getModel();
+      if (!path || !model) return;
+
+      if (model !== watched) {
+        modelWillDispose?.dispose();
+        modelWillDispose = model.onWillDispose(autosave.flush);
+        watched = model;
+      }
+      autosave.schedule(() => model.getValue(), path);
+    });
+
+    // A rename of the edited file, or of a folder above it, moves the pending
+    // save's path away, so the edit is saved before it, where the rename picks
+    // it up. Only the write's start is ordered: the fs runs it before the
+    // rename because it runs operations in call order
+    const willRename = PgExplorer.onWillRenameItem(() => autosave.flush());
+
     return () => {
-      clearTimeout(timeoutId);
-      dispose();
+      // Unmounting disposes the models first, which has flushed already; this
+      // covers a model that outlives the editor
+      autosave.flush();
+      modelWillDispose?.dispose();
+      content.dispose();
+      willRename.dispose();
     };
   }, [editor]);
 
@@ -526,9 +641,23 @@ const Monaco = () => {
       if (!editor.hasTextFocus()) editor.focus();
     };
 
+    // A line asked for by name, as the tutorial's feed does: only when it is
+    // in the file this editor shows
+    const handleRevealLine = (e: Event) => {
+      const { path, line } =
+        (e as CustomEvent<{ path: string; line: number }>).detail ?? {};
+      if (editor.getModel()?.uri.path !== path) return;
+      revealAtThird(editor, line);
+    };
+
     document.addEventListener(PgEditor.events.FOCUS, handleFocus);
+    document.addEventListener(PgEditor.events.REVEAL_LINE, handleRevealLine);
     return () => {
       document.removeEventListener(PgEditor.events.FOCUS, handleFocus);
+      document.removeEventListener(
+        PgEditor.events.REVEAL_LINE,
+        handleRevealLine
+      );
     };
   }, [editor]);
 
@@ -805,21 +934,11 @@ const Monaco = () => {
   useEffect(() => {
     if (!editor) return;
 
-    const getProgramIdStartAndEndIndex = (
-      content: string,
-      isPython: boolean
-    ) => {
-      const findText = isPython ? "declare_id" : "declare_id!";
-      const findTextIndex = content.indexOf(findText);
-      if (!content || !findTextIndex || findTextIndex === -1) return;
-      const quoteStartIndex = findTextIndex + findText.length + 1;
-      const quoteChar = content[quoteStartIndex];
-      const quoteEndIndex = content.indexOf(quoteChar, quoteStartIndex + 1);
-
-      return [quoteStartIndex, quoteEndIndex];
-    };
-
     const updateId = async () => {
+      // The tutorial's intro preview: a file nobody writes to until Start.
+      // An act's lock does not stop it: a build needs the id written
+      if (PgEditor.isReadOnlyFor("preview")) return;
+
       const programPkStr = PgProgramInfo.getPkStr();
       if (!programPkStr) return;
 
@@ -829,26 +948,15 @@ const Monaco = () => {
       const isPython = currentLang?.name === "Python";
       if (!isRust && !isPython) return;
 
-      const editorContent = editor.getValue();
-      const indices = getProgramIdStartAndEndIndex(editorContent, isPython);
-      if (!indices) return;
-      const [quoteStartIndex, quoteEndIndex] = indices;
-
       const model = editor.getModel();
       if (!model) return;
-
-      const startPos = model.getPositionAt(quoteStartIndex + 1);
-      const endPos = model.getPositionAt(quoteEndIndex);
-      const range = monaco.Range.fromPositions(startPos, endPos);
 
       // Reported: a program id left unwritten builds the old id, and the
       // deploy that then fails has no other clue
       try {
-        if (!editor.executeEdits(null, [{ range, text: programPkStr }])) {
-          log.error(new Error("The editor refused the program id edit"), {
-            report: true,
-          });
-        }
+        (isPython ? rewritePythonProgramId : rewriteRustProgramId)(
+          programPkStr
+        )(model);
       } catch (error) {
         log.error(error, { report: true, context: { edit: "program id" } });
       }
@@ -871,6 +979,26 @@ const Monaco = () => {
       />
     </SpinnerWithBg>
   );
+};
+
+/** A selection the editor menu sends, with the file and lines it came from */
+interface SelectionAsk {
+  path: string;
+  from: number;
+  to: number;
+  language: string;
+  text: string;
+}
+
+/** What Explain selection and Fix selection send to the assistant (Spec 04) */
+const selectionPrompt = (verb: "Explain" | "Fix", ask: SelectionAsk) => {
+  const lines =
+    ask.from === ask.to ? `line ${ask.from}` : `lines ${ask.from} to ${ask.to}`;
+  const what =
+    verb === "Explain"
+      ? `Explain ${lines} of ${ask.path} in plain words:`
+      : `Fix ${lines} of ${ask.path}:`;
+  return [what, "```" + ask.language, ask.text, "```"].join("\n");
 };
 
 export default Monaco;

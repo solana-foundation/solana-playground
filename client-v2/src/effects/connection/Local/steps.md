@@ -1,4 +1,4 @@
-**1. Install Solana toolchain(<OS_NAME>):**
+**1. Install Solana toolchain (<OS_NAME>):**
 
 <OS_INSTALLATION>
 

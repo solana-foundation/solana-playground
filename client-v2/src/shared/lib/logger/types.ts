@@ -19,6 +19,12 @@ export interface LogEntry {
 
 export interface LogProvider {
   log(entry: LogEntry): void;
+  /**
+   * `false` keeps the reports made before the first `initLogger` from being
+   * delivered to this provider again once it starts. The summary of reports
+   * dropped past the buffer is never printed before, so it still arrives
+   */
+  replay?: boolean;
 }
 
 export interface LogOptions {

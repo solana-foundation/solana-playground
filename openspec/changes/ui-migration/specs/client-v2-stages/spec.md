@@ -15,7 +15,9 @@ The Build stage SHALL show each compiler error as a diagnostic
 (`data-slot="diagnostic"`) with its error code, a plain explanation and the
 source lines around it, the faulty line marked (`data-fault`) with the
 compiler's label, and SHALL offer Explain and Fix on it, each sending the
-error to the assistant. The stage keeps `flow-stage-panel-build`.
+error to the assistant. Every diagnostic's Explain and Fix SHALL be the same
+outline buttons: no card's action stands out as the screen's brand action.
+The stage keeps `flow-stage-panel-build`.
 
 #### Scenario: A failed build marks the faulty line
 
@@ -39,7 +41,7 @@ project without `src/lib.rs` builds as before.
   presses Build
 - **THEN** no request reaches the build server, the terminal and the Build
   stage say "lib.rs is empty. Write a program, or ask the assistant for one."
-- **AND** Deploy then warns "Your last build failed" and asks before it
+- **AND** Deploy then warns "The last build failed" and asks before it
   uploads the earlier binary
 
 ### Requirement: A slow build says so
@@ -115,3 +117,36 @@ whether the stage's content is shorter or taller than the screen.
 - **WHEN** the Interact stage of a project that has never been deployed is
   shown on a 390 px wide screen
 - **THEN** the Go to Deploy button sits at the foot of the stage
+
+### Requirement: A stage whose code did not load says so in its panel
+
+Build, Deploy and Interact load their code on demand. When that code does not
+arrive, the stage's own panel SHALL show the failure while the tabs and the
+editor stay up, and SHALL say the user's code is unchanged. Online the title
+SHALL read "<Stage> couldn't load" with Try again and Reload page; offline it
+SHALL read "<Stage> needs a connection" with Try again alone, since a reload
+offline would lose the app. Online, a Try again that fails too SHALL point the
+user to Reload page. A stage that failed offline SHALL load again by itself when the
+network returns. A failure with a network SHALL be reported to production
+monitoring once per stage per page load; a failure offline, a retry the
+returning network started, and a repeat SHALL only be logged.
+
+#### Scenario: The code does not arrive with a network (manual)
+
+- **WHEN** the user opens Deploy online and its code fails to load
+- **THEN** the panel reads "Deploy couldn't load" with Try again and Reload
+  page, and the failure is reported once
+
+#### Scenario: Try again fails too (manual)
+
+- **WHEN** the user, online, presses Try again and the load fails again
+- **THEN** the panel tells the user to reload the page, and nothing more is
+  reported
+
+#### Scenario: Offline, then the network returns (manual)
+
+- **WHEN** the user opens Build offline and its code fails to load
+- **THEN** the panel reads "Build needs a connection" with Try again only, and
+  nothing is reported
+- **WHEN** the network returns
+- **THEN** the stage loads again without a press

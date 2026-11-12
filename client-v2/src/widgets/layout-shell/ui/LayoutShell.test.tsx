@@ -223,7 +223,10 @@ const theme = {
 const shellTree = (
   home?: LayoutShellProps["home"],
   work: { keepWork?: boolean; stage?: ReactNode } = {},
-  cover?: LayoutShellProps["cover"]
+  // eslint-disable-next-line layers/curry-order -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  cover?: LayoutShellProps["cover"],
+  // eslint-disable-next-line layers/curry-order -- tutorial flow v2 predates this rule; cleanup tracked from SF#94
+  tutorial?: LayoutShellProps["tutorial"]
 ) => (
   <ThemeProvider theme={theme}>
     <TooltipProvider>
@@ -282,6 +285,7 @@ const shellTree = (
         home={home}
         keepWork={work.keepWork}
         cover={cover}
+        tutorial={tutorial}
       />
     </TooltipProvider>
   </ThemeProvider>
@@ -483,6 +487,19 @@ it("should go back to the saved navigation on a wide screen", () => {
     screen.getByRole("button", { name: "Collapse navigation" })
   ).toBeTruthy();
   expect(toggled()).toEqual([]);
+});
+
+it("should leave the saved layout alone on Ctrl+R and Cmd+E in a tutorial's frame, which holds the files column open", () => {
+  render(
+    shellTree(undefined, {}, undefined, {
+      chat: <section>chat</section>,
+      nav: { fold: "rail", onOpenChange: vi.fn(), onClose: vi.fn() },
+    })
+  );
+  press({ key: "r", ctrlKey: true });
+  press({ key: "e", metaKey: true });
+  expect(toggled()).toEqual([]);
+  expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
 });
 
 it("should toggle the assistant by Ctrl+R", () => {
@@ -838,14 +855,14 @@ it("should open the console once when a deploy fails, not for one already failed
   // The reducer is the only way to set a deploy's status without a deploy
   const dispatch = (ev: Parameters<typeof PgFlow.reduce>[1]) =>
     PgFlow["_dispatch"](ev);
-  dispatch({ type: "deploy-start" });
-  dispatch({ type: "deploy-finish", ok: false });
+  dispatch({ type: "deploy-start", from: "command" });
+  dispatch({ type: "deploy-finish", ok: false, from: "command" });
   shell();
   expect(toggled()).toEqual([]);
 
   act(() => dispatch({ type: "workspace-change" }));
-  act(() => dispatch({ type: "deploy-start" }));
-  act(() => dispatch({ type: "deploy-finish", ok: false }));
+  act(() => dispatch({ type: "deploy-start", from: "command" }));
+  act(() => dispatch({ type: "deploy-finish", ok: false, from: "command" }));
   expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
 });
 
@@ -853,8 +870,8 @@ it("should not reopen the console for a change that leaves a deploy failed", () 
   const dispatch = (ev: Parameters<typeof PgFlow.reduce>[1]) =>
     PgFlow["_dispatch"](ev);
   shell();
-  act(() => dispatch({ type: "deploy-start" }));
-  act(() => dispatch({ type: "deploy-finish", ok: false }));
+  act(() => dispatch({ type: "deploy-start", from: "command" }));
+  act(() => dispatch({ type: "deploy-finish", ok: false, from: "command" }));
   press({ key: "j", ctrlKey: true });
   expect(consoleButton().getAttribute("aria-expanded")).toBe("false");
   act(() => dispatch({ type: "set-stage", stage: "build" }));
@@ -1049,13 +1066,12 @@ describe("on a phone", () => {
   /** The outlet's box, which carries the page's sizing classes */
   const boxOf = (el: Element) =>
     requireFor("the outlet's box")(el.closest("div[class*='flex']"));
+  /** The sheet the console rises in; its `data-state` says open or folded */
   const consoleBox = () =>
-    requireFor("the console's box")(
-      consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']") ??
-        // Open beside no stage, the outlet's box is `flex-1`, as is the node
-        // inside it: the box is the node's parent
-        consoleButton().closest("[class~='flex-1']")?.parentElement
+    requireFor("the console's sheet")(
+      consoleButton().closest("[data-slot='console-sheet']")
     );
+  const isSheetOpen = () => consoleBox().getAttribute("data-state") === "open";
 
   it("hands the navigation the menu page, whose toggle brings the work back", () => {
     phoneShell();
@@ -1240,18 +1256,19 @@ describe("on a phone", () => {
 
   it("opens the console on a deploy, for the visit and unsaved", () => {
     phoneShell();
-    expect(consoleBox().classList.contains("h-2/5")).toBe(false);
-    expect((consoleBox() as HTMLElement).style.height).toBe("28px");
+    expect(isSheetOpen()).toBe(false);
     act(() => PgFlow.setStage("build"));
     act(() => deploy.starts.forEach((cb) => cb(null)));
-    expect(consoleBox().classList.contains("h-2/5")).toBe(true);
+    expect(isSheetOpen()).toBe(true);
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
   });
 
   it("opens the console on a request, for the visit and unsaved", () => {
     phoneShell();
+    // "Show full log" sits on the stage, which the preview shows
+    fireEvent.click(button("Preview the build"));
     act(() => requestConsole());
-    expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+    expect(isSheetOpen()).toBe(true);
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
   });
 
@@ -1378,22 +1395,27 @@ describe("on a phone", () => {
     ).not.toBeNull();
   });
 
-  it("folds the console to its bar and opens it to a share of the page", () => {
+  it("folds the console to its bar and opens it as a sheet the scrim and Escape close", () => {
     phoneShell();
-    expect((consoleBox() as HTMLElement).style.height).toBe("28px");
-    expect(consoleBox().classList.contains("overflow-hidden")).toBe(true);
-    fireEvent.click(consoleButton());
-    act(() => PgFlow.setStage("build"));
-    expect(consoleBox().classList.contains("h-2/5")).toBe(true);
-    expect((consoleBox() as HTMLElement).style.height).toBe("");
-  });
-
-  it("gives the open console the whole preview when no stage shows there", () => {
-    PgFlow["_dispatch"]({ type: "program", has: false });
-    phoneShell();
+    // The bar is the preview's foot
     fireEvent.click(button("Preview the build"));
-    expect(consoleBox().classList.contains("flex-1")).toBe(true);
-    expect(consoleBox().classList.contains("h-2/5")).toBe(false);
+    const barSlot = () => consoleBox().parentElement as HTMLElement;
+    expect(barSlot().style.height).toBe("44px");
+    expect(isSheetOpen()).toBe(false);
+    fireEvent.click(consoleButton());
+    expect(isSheetOpen()).toBe(true);
+    expect(consoleBox().classList.contains("fixed")).toBe(true);
+    // The slot keeps the bar's height, so the stage does not move
+    expect(barSlot().style.height).toBe("44px");
+    fireEvent.click(
+      requireFor("the scrim")(
+        document.querySelector("[data-slot='console-sheet-scrim']")
+      )
+    );
+    expect(isSheetOpen()).toBe(false);
+    fireEvent.click(consoleButton());
+    fireEvent.keyDown(consoleButton(), { key: "Escape" });
+    expect(isSheetOpen()).toBe(false);
   });
 
   it("brings Work into view when Ctrl+R switches the view from the preview", () => {
@@ -1518,18 +1540,71 @@ describe("on a phone", () => {
   });
 });
 
+describe("a tutorial below the frame's width", () => {
+  const tutorialPhone: LayoutShellProps["tutorial"] = {
+    chat: <section>chat column</section>,
+    nav: { fold: "rail", onOpenChange: vi.fn(), onClose: vi.fn() },
+    phone: {
+      head: <header>tutorial head</header>,
+      chat: <p>chat body</p>,
+      space: "chat",
+      onSpace: vi.fn(),
+    },
+  };
+  const inTutorial = () =>
+    render(shellTree(undefined, {}, undefined, tutorialPhone));
+
+  it.each([
+    ["phone", 390],
+    ["compact", 900],
+  ])("draws the tutorial's phone layout, not the pager (%s)", (_, at) => {
+    resizeTo(at);
+    inTutorial();
+    expect(screen.getByTestId("tutorial-phone")).toBeTruthy();
+    expect(screen.queryByTestId("phone-pager")).toBeNull();
+    expect(screen.getByText("chat body")).toBeTruthy();
+    expect(screen.queryByText("chat column")).toBeNull();
+  });
+
+  it("keeps the frame on a wide window", () => {
+    inTutorial();
+    expect(screen.queryByTestId("tutorial-phone")).toBeNull();
+    expect(screen.getByText("chat column")).toBeTruthy();
+  });
+
+  it("keeps the stage's node across a rotation over the frame's width", () => {
+    resizeTo(390);
+    inTutorial();
+    const stageNode = () =>
+      requireFor("the stage's node")(screen.getByText("stage").parentElement);
+    const before = stageNode();
+    expect(screen.getByRole("region", { name: "Code" }).contains(before)).toBe(
+      true
+    );
+    act(() => resizeTo(1440));
+    expect(screen.queryByTestId("tutorial-phone")).toBeNull();
+    expect(stageNode()).toBe(before);
+    act(() => resizeTo(390));
+    expect(screen.getByTestId("tutorial-phone")).toBeTruthy();
+    expect(stageNode()).toBe(before);
+  });
+});
+
 describe("the stage bar", () => {
-  it("hides the assistant from its toggle and names the project", () => {
+  it("hides the assistant from its toggle and names the project either way", () => {
     explorer.name = "Counter";
     shell();
-    expect(screen.queryByText("Counter")).toBeNull();
+    const bar = () => slot<HTMLElement>("stage-bar");
+    // The assistant's head names the model, not the project, so the bar
+    // keeps the name while the assistant shows
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
     expect(toggled()).toEqual([
       { panel: "assistant", open: false, via: "button" },
     ]);
-    expect(screen.getByText("Counter")).toBeTruthy();
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
-    expect(screen.queryByText("Counter")).toBeNull();
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
   });
 
   it("opens the assistant Sheet from the bar between 768 and 1023 px", () => {
@@ -1556,7 +1631,7 @@ describe("the stage bar", () => {
     expect(screen.getByText("Counter v2")).toBeTruthy();
   });
 
-  it("names the project between 768 and 1023 px while the assistant's Sheet is closed", () => {
+  it("names the project between 768 and 1023 px, the assistant's Sheet open or closed", () => {
     explorer.name = "Counter";
     resizeTo(900);
     shell();
@@ -1565,8 +1640,7 @@ describe("the stage bar", () => {
     fireEvent.click(
       within(bar()).getByRole("button", { name: "Expand assistant" })
     );
-    // Open, the Sheet's head names it
-    expect(within(bar()).queryByText("Counter")).toBeNull();
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
   });
 
   it("leaves one Expand assistant between 768 and 1023 px", () => {
@@ -1677,6 +1751,21 @@ describe("with Home", () => {
     );
     shell(home);
     act(() => PgView.showFiles());
+    expect(toggled()).toEqual([]);
+  });
+
+  it("leaves ⌘R and ⌘J to the browser under Home", () => {
+    shell(home);
+    for (const key of ["r", "j"]) {
+      const ev = new KeyboardEvent("keydown", {
+        key,
+        metaKey: true,
+        cancelable: true,
+      });
+      document.dispatchEvent(ev);
+      // A reload, the downloads list: the shell does nothing with them here
+      expect(ev.defaultPrevented).toBe(false);
+    }
     expect(toggled()).toEqual([]);
   });
 

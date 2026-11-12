@@ -42,8 +42,6 @@ vi.mock("./AssistantComposer", async () => {
         effort={undefined}
         focusRequest={turn.focusRequest}
         onSources={onSources}
-        onConnect={() => turn.openConnect("add")}
-        connectLabel="Connect a model…"
         addable={[]}
         focusPicked={focusPicked}
       />
@@ -102,7 +100,12 @@ describe("Assistant's turn", () => {
     render(
       <TooltipProvider>
         <Assistant
-          widen={{ wide: false, setWide: vi.fn(), canWiden: true }}
+          widen={{
+            wide: false,
+            setWide: vi.fn(),
+            canWiden: true,
+            inSheet: false,
+          }}
           onHide={vi.fn()}
           openConnect={vi.fn()}
         />
@@ -133,7 +136,12 @@ describe("Assistant's turn", () => {
     render(
       <TooltipProvider>
         <Assistant
-          widen={{ wide: false, setWide: vi.fn(), canWiden: true }}
+          widen={{
+            wide: false,
+            setWide: vi.fn(),
+            canWiden: true,
+            inSheet: false,
+          }}
           onHide={vi.fn()}
           openConnect={openConnect}
         />
@@ -150,7 +158,12 @@ describe("Assistant's turn", () => {
     render(
       <TooltipProvider>
         <Assistant
-          widen={{ wide: false, setWide: vi.fn(), canWiden: true }}
+          widen={{
+            wide: false,
+            setWide: vi.fn(),
+            canWiden: true,
+            inSheet: false,
+          }}
           onHide={vi.fn()}
           openConnect={vi.fn()}
         />

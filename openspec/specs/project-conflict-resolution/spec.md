@@ -19,8 +19,8 @@ version". A divergent conflict that names no files SHALL keep only those two.
 
 - **WHEN** this device and the other device changed the same line of
   `src/lib.rs` and the project reconciles
-- **THEN** the banner names `src/lib.rs` and shows the buttons "Resolve…",
-  "Keep this version" and "Take the other version"
+- **THEN** the banner names `src/lib.rs` and shows the buttons "Keep this
+  version", "Take the other version" and "Resolve…", in that order
 
 ### Requirement: The view shows only what is left to decide
 
@@ -280,8 +280,8 @@ phone layout.
 
 ### Requirement: The banner's answers sit under its question
 
-The sync banner SHALL show its message first and its buttons ("Resolve…" when
-offered, and the answers) in a row under it (`data-slot="callout-actions"`),
+The sync banner SHALL show its message first and its buttons (the answers,
+then "Resolve…" when offered) in a row under it (`data-slot="callout-actions"`),
 never beside it. Below 768 px the buttons SHALL be 44 px tall and wrap in that
 row. They are filled in the warning's tone, with no edge of their own, and the
 first is the answer the banner expects.
@@ -290,5 +290,5 @@ first is the answer the banner expects.
 
 - **WHEN** a divergent conflict that names its files shows the banner on a
   390 px wide screen
-- **THEN** "Resolve…", "Keep this version" and "Take the other version" sit
+- **THEN** "Keep this version", "Take the other version" and "Resolve…" sit
   under the message, wrapping in a row, each 44 px tall

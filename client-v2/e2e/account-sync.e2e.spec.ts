@@ -17,7 +17,6 @@ import {
   projectMenu,
   projectRow,
   settled,
-  startTutorialFromAbout,
   workspaceIdOf,
 } from "./fixtures";
 
@@ -234,7 +233,9 @@ test("reloading a project the account already has writes nothing", async ({
   await page.waitForTimeout(8000);
 
   expect(writes).toEqual([]);
-  await expect(page.getByText("changed on another device")).toHaveCount(0);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Changed on another device" })
+  ).toHaveCount(0);
 });
 
 /**
@@ -312,10 +313,9 @@ test("the other device's change arrives without asking", async ({ page }) => {
   await expect.poll(() => threadIdIsUuid(page), LONG).toBe(true);
 
   // Nothing to decide: this browser has no work of its own to weigh
-  await expect(page.getByText("changed on another device")).toHaveCount(
-    0,
-    LONG
-  );
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Changed on another device" })
+  ).toHaveCount(0, LONG);
 
   // The file tree is rendered from the explorer's *in-memory* state, so the
   // new file appearing in it is the proof that the workspace was re-read --
@@ -409,7 +409,9 @@ test("the other device's rename arrives, and the next edit keeps it", async ({
   writes.length = 0;
   await page.reload();
   await reopened(page, localId, "Renamed elsewhere");
-  await expect(page.getByText("changed on another device")).toHaveCount(0);
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Changed on another device" })
+  ).toHaveCount(0);
 
   // An edit here goes up under the new name, not the old one
   const editor = page.locator(".monaco-editor .view-lines");
@@ -428,7 +430,7 @@ test("client-v2-layout: A rename reaches the account", async ({ page }) => {
   const alphaId = await makeLocalProject(page, "Alpha");
   // A second project, so Alpha is not the open one
   await openGallery(page);
-  const gallery = page.locator("[data-gallery-modal]");
+  const gallery = page.locator("[data-new-project]");
   await gallery.getByLabel("Project name").fill("Beta");
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden(LONG);
@@ -569,7 +571,9 @@ test("the other device can change it twice without ever asking", async ({
   await expect.poll(() => writes.length, LONG).toBeGreaterThanOrEqual(1);
   await settled(page, writes);
 
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
 
   /** The other device edits, and this one picks it up on the next load */
   const roundTrip = async (marker: string) => {
@@ -684,7 +688,9 @@ test("a divergent project asks about the overlap, and keeping this version uploa
 
   await page.reload();
 
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
   await expect(banner).toBeVisible(LONG);
   // Named: the question is about this file, not the whole project
   await expect(banner).toContainText("src/lib.rs");
@@ -788,7 +794,9 @@ test("a divergent project can take the other version instead", async ({
 
   await page.reload();
 
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
   await expect(banner).toBeVisible(LONG);
 
   await page.getByRole("button", { name: "Take the other version" }).click();
@@ -835,7 +843,8 @@ test("a started tutorial hands over its keypair and progress", async ({
   await homeRegion(page)
     .getByRole("button", { name: "Open Hello Anchor" })
     .click();
-  await startTutorialFromAbout(page);
+  // Opening it creates its workspace: a tutorial with a definition has no
+  // About page to Start from
   // The thread id is the conversation's own, not the workspace's: a project
   // may hold several. What matters here is that opening the lesson opened a
   // conversation at all.
@@ -907,6 +916,10 @@ test("typing folded into the other device's copy still merges with its next chan
   // upload
   let beforeNextWrite: (() => void) | null = null;
   const writes: unknown[] = [];
+  // `src/lib.rs` as the account held it after each write it accepted
+  const accepted: string[] = [];
+  // The next write the account accepts is the merge's own upload
+  let isMerging = false;
 
   await page.route("**/api/auth/get-session", (r) =>
     json(r, { user: { id: "u1", name: "T", image: null, login: "t" } })
@@ -926,13 +939,23 @@ test("typing folded into the other device's copy still merges with its next chan
       beforeNextWrite?.();
       beforeNextWrite = null;
       if (row.snapshot && body.baseUpdatedAt !== row.updatedAt) {
+        isMerging = true;
         return r.fulfill({
           status: 409,
           contentType: "application/json",
           body: JSON.stringify({ conflict: true, updatedAt: row.updatedAt }),
         });
       }
+      // Held past autosave's half second. The merge writes the store, then
+      // uploads, and only then brings the editor up to the merged copy: an
+      // autosave timer left by the fold before it fires in that window and
+      // writes the pre-merge buffer back (HOO-2821).
+      if (isMerging) {
+        isMerging = false;
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      }
       row = { snapshot: applyWrite(row.snapshot, body), updatedAt: stamp() };
+      accepted.push(row.snapshot.files["src/lib.rs"]);
       return json(r, { updatedAt: row.updatedAt });
     }
     const id = new URL(r.request().url()).searchParams.get("id");
@@ -976,7 +999,9 @@ test("typing folded into the other device's copy still merges with its next chan
   holdRead = null;
 
   // Whichever comes first: the typing uploaded, or the question
-  const banner = page.getByText("changed on another device");
+  const banner = page
+    .getByRole("alert")
+    .filter({ hasText: "Changed on another device" });
   await expect
     .poll(
       async () =>
@@ -987,6 +1012,13 @@ test("typing folded into the other device's copy still merges with its next chan
     )
     .toBe(true);
   await expect(banner).toHaveCount(0);
+  // No later write takes the other device's line out, even for a moment
+  await settled(page, writes);
+  const mergedAt = accepted.findIndex((lib) => lib.includes("// A2"));
+  expect(mergedAt).toBeGreaterThan(-1);
+  expect(
+    accepted.slice(mergedAt).filter((lib) => !lib.includes("// A2"))
+  ).toEqual([]);
   const merged = requireFor("the row's snapshot")(row.snapshot).files[
     "src/lib.rs"
   ];

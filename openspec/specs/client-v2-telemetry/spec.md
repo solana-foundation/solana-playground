@@ -1,6 +1,7 @@
 # client-v2-telemetry Specification
 
 ## Purpose
+
 How a slice of `client-v2` declares and emits product events, which names and
 parameters are allowed, and when an event leaves the browser, so that every
 feature and widget can be measured the same way.

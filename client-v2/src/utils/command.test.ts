@@ -101,6 +101,54 @@ describe("PgCommandManager.execute", () => {
   });
 });
 
+describe("PgCommandManager.onDidEnd", () => {
+  const ends = () => {
+    let count = 0;
+    const sub = PgCommandManager.onDidEnd("probe", () => count++);
+    return { count: () => count, dispose: () => sub.dispose() };
+  };
+
+  it("ends a run that only printed its help, which finishes nothing", async () => {
+    vi.spyOn(PgTerminal, "println").mockResolvedValue(undefined as never);
+    const handle = vi.fn();
+    PgCommandManager.all = {
+      probe: {
+        name: "probe",
+        description: "",
+        args: [{ name: "amount", optional: true, parse: Number }],
+        options: [],
+        handle,
+      },
+    } as never;
+    const { seen, dispose: stopFinishes } = finishes();
+    const { count, dispose } = ends();
+
+    await PgCommandManager.execute(["probe", "--help"]);
+
+    dispose();
+    stopFinishes();
+    expect(handle).not.toHaveBeenCalled();
+    expect(seen).toEqual([]);
+    expect(count()).toBe(1);
+  });
+
+  it("ends a run once, however it finished", async () => {
+    install({
+      handle: async () => {
+        throw new Error("boom");
+      },
+    });
+    const { count, dispose } = ends();
+
+    await expect(PgCommandManager.execute(["probe"])).rejects.toThrow("boom");
+    install({ handle: async () => 1 });
+    await PgCommandManager.execute(["probe"]);
+
+    dispose();
+    expect(count()).toBe(2);
+  });
+});
+
 describe("PgCommandManager.stop", () => {
   /** A handler that waits until its run is stopped, then throws as build does */
   const untilStopped = ({ signal }: { signal: AbortSignal }) =>
@@ -189,7 +237,10 @@ describe("PgCommandManager.stop", () => {
     await Promise.resolve();
     expect(PgCommandManager.stop()).toBe(false);
     expect(println).toHaveBeenCalledWith(
-      "^C\nThis step can't be stopped. Wait for it to finish."
+      `^C\n${PgTerminal.warning(
+        "This step can't be stopped. Wait for it to finish."
+      )}`,
+      { noColor: true }
     );
 
     finish();
@@ -207,7 +258,10 @@ describe("PgCommandManager.stop", () => {
     await Promise.resolve();
     expect(PgCommandManager.stop()).toBe(false);
     expect(println).toHaveBeenCalledWith(
-      "^C\n`probe` can't be stopped. Wait for it to finish."
+      `^C\n${PgTerminal.warning(
+        "`probe` can't be stopped. Wait for it to finish."
+      )}`,
+      { noColor: true }
     );
 
     finish();

@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { expect, json, LONG, test } from "./fixtures";
-import { PHONE } from "./viewports";
+import { openPhonePreview, PHONE } from "./viewports";
 
 const OWNER = "alice";
 const REPO = "ts-client";
@@ -149,7 +149,7 @@ test("project-without-program: An IDL and a fixture are kept", async ({
     "tests/fixtures/a.json": "{}",
     "tsconfig.json": "{}",
   });
-  await importRepository(page);
+  await importRepository(page, "");
 
   await expect(item(page, "client/idl/x.json")).toHaveCount(1, LONG);
   await expect(item(page, "client/src/index.ts")).toHaveCount(1);
@@ -263,7 +263,7 @@ test("project-without-program: The preview of a project with no program on a pho
   await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
 
   await page.setViewportSize(PHONE);
-  await page.getByRole("button", { name: "Preview the build" }).click();
+  await openPhonePreview(page);
 
   // In the viewport, not only present: the pager used to bounce back to Code
   // while both stayed in the DOM, visible to a count

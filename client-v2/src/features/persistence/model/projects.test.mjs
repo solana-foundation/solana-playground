@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { before, beforeEach, describe, it } from "node:test";
+import pg from "pg";
 
 import {
   appendMessages,
@@ -8,6 +9,7 @@ import {
   ThreadDeleted,
 } from "./conversations.mjs";
 import { query, transaction } from "./db.mjs";
+import { NO_FILES_REASON } from "./project-write.mjs";
 import {
   deleteProject,
   getProject,
@@ -117,6 +119,102 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
     });
   });
 
+  it("refuses a patch that removes every file, and changes nothing", async () => {
+    // Once a row holds no files, every other device reads it as no snapshot
+    // and can neither adopt it nor merge with it
+    const first = await put({ files });
+    const result = await put({
+      changed: {},
+      removed: Object.keys(files),
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.deepEqual(result, { refused: NO_FILES_REASON });
+    const after = await getProject(userId, "p1");
+    assert.deepEqual(after.snapshot, { files });
+    assert.equal(after.updatedAt, first.updatedAt);
+  });
+
+  it("refuses a patch that leaves only a .workspace/ row sync does not carry", async () => {
+    const first = await put({ files });
+    // Stored before the route refused such paths
+    await query(
+      `insert into project_files (user_id, project_id, path, content)
+       values ($1, 'p1', '.workspace/metadata.json', '{}')`,
+      [userId]
+    );
+    const result = await put({
+      changed: {},
+      removed: Object.keys(files),
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.deepEqual(result, { refused: NO_FILES_REASON });
+    const after = await getProject(userId, "p1");
+    assert.equal(after.snapshot.files["src/lib.rs"], files["src/lib.rs"]);
+    assert.equal(after.updatedAt, first.updatedAt);
+  });
+
+  it("takes a patch that only removes a file, keeping the rest", async () => {
+    // The common delete-one-file push, which reaches the emptiness check
+    const first = await put({
+      files: {
+        "src/lib.rs": "fn main() {}",
+        "Cargo.toml": "[package]",
+        "old.rs": "gone soon",
+      },
+    });
+    const result = await put({
+      changed: {},
+      removed: ["old.rs", "never-there.rs"],
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, { files });
+  });
+
+  it("answers a stale emptying patch with the conflict, not the refusal", async () => {
+    // The conflict carries the token the client retries with; the refusal
+    // carries none
+    await put({ files });
+    const result = await put({
+      changed: {},
+      removed: Object.keys(files),
+      baseUpdatedAt: "2000-01-01T00:00:00.000Z",
+    });
+    assert.equal(result.conflict, true);
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, { files });
+  });
+
+  it("takes a patch that removes every file and adds another", async () => {
+    const first = await put({ files });
+    const result = await put({
+      changed: { "src/main.rs": "fn main() {}" },
+      removed: Object.keys(files),
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, {
+      files: { "src/main.rs": "fn main() {}" },
+    });
+  });
+
+  it("refuses an empty patch against a row that has no files", async () => {
+    // The parent row a chat turn creates holds no files; a patch adding
+    // nothing to it would bump its token over an empty project
+    await query(
+      `insert into projects (id, user_id, name, kind) values ('p1', $1, 'one', 'project')`,
+      [userId]
+    );
+    const { updatedAt } = await getProject(userId, "p1");
+    const result = await put({
+      changed: {},
+      removed: [],
+      baseUpdatedAt: updatedAt,
+    });
+    assert.deepEqual(result, { refused: NO_FILES_REASON });
+    assert.equal((await getProject(userId, "p1")).updatedAt, updatedAt);
+  });
+
   it("leaves the rows a patch does not name unwritten", async () => {
     // The point of the table: an edit to one file costs one row
     const first = await put({ files });
@@ -131,7 +229,7 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
     assert.notEqual(after["src/lib.rs"], versionsBefore["src/lib.rs"]);
   });
 
-  it("creates a template-sized project in two statements, not one per file", async () => {
+  it("creates a template-sized project in five statements, not one per file", async () => {
     // Counted through the real database: a regression to per-file inserts
     // would still pass every other case here, just slowly
     const statements = [];
@@ -140,7 +238,7 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
       return query(text, params);
     };
     const many = Object.fromEntries(
-      Array.from({ length: 200 }, (_, i) => [`src/file${i}.rs`, `// ${i}`])
+      Array.from({ length: 50 }, (_, i) => [`src/file${i}.rs`, `// ${i}`])
     );
 
     const created = await writeProject(counting, userId, {
@@ -149,10 +247,12 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
       kind: "project",
       files: many,
     });
-    assert.equal(statements.length, 2);
+    // The insert, the upsert, the measure, and the account cap's lock and
+    // count
+    assert.equal(statements.length, 5);
     assert.equal(
       Object.keys((await getProject(userId, "p1")).snapshot.files).length,
-      200
+      50
     );
 
     statements.length = 0;
@@ -164,7 +264,496 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
       removed: ["src/file8.rs"],
       baseUpdatedAt: created.updatedAt,
     });
-    assert.ok(statements.length <= 3);
+    assert.ok(statements.length <= 4);
+  });
+
+  describe("limits", () => {
+    /** `count` small user files, `src/f0.rs` onward */
+    const many = (count, content = "x") =>
+      Object.fromEntries(
+        Array.from({ length: count }, (_, i) => [`src/f${i}.rs`, content])
+      );
+
+    /** Rows and `updated_at`, to show a refused write changed nothing */
+    const stored = async () => {
+      const { rows } = await query(
+        `select p.updated_at,
+                (select jsonb_object_agg(path, content) from project_files f
+                  where f.user_id = p.user_id and f.project_id = p.id) as files
+           from projects p where p.user_id = $1 and p.id = 'p1'`,
+        [userId]
+      );
+      return rows[0];
+    };
+
+    it("refuses a patch that adds the 51st file, and changes nothing", async () => {
+      const first = await put({ files: many(50) });
+      const earlier = await stored();
+
+      const result = await put({
+        changed: { "src/extra.rs": "x" },
+        removed: [],
+        baseUpdatedAt: first.updatedAt,
+      });
+
+      assert.deepEqual(result, {
+        limit: { reason: "too-many-files", limit: 50, count: 51 },
+      });
+      assert.deepEqual(await stored(), earlier);
+    });
+
+    it("leaves the generated workspace files out of the count", async () => {
+      const withGenerated = many(50);
+      withGenerated[".tutorial.json"] = "{}";
+      withGenerated[".workspace/tutorial-storage.json"] = "{}";
+      withGenerated[".workspace/program-info.json"] = "{}";
+      assert.ok((await put({ files: withGenerated })).updatedAt);
+    });
+
+    it("refuses a small patch whose project it makes too large", async () => {
+      // 500,000 bytes stored; the patch grows one file from 1,000 to 30,000
+      const nearLimit = many(5, "a".repeat(99_800));
+      nearLimit["src/small.rs"] = "a".repeat(1_000);
+      const first = await put({ files: nearLimit });
+      const earlier = await stored();
+
+      const result = await put({
+        changed: { "src/small.rs": "a".repeat(30_000) },
+        removed: [],
+        baseUpdatedAt: first.updatedAt,
+      });
+
+      assert.deepEqual(result, {
+        limit: { reason: "project-too-large", limit: 524_288, size: 529_000 },
+      });
+      assert.deepEqual(await stored(), earlier);
+    });
+
+    it("refuses a create over the size limit and leaves no row", async () => {
+      const result = await put({ files: many(6, "a".repeat(100_000)) });
+      assert.equal(result.limit.reason, "project-too-large");
+      assert.equal(await getProject(userId, "p1"), null);
+    });
+
+    it("takes a project at the size limit", async () => {
+      const atLimit = many(4, "a".repeat(131_072));
+      assert.ok((await put({ files: atLimit })).updatedAt);
+    });
+
+    it("leaves a stored .workspace/ row sync does not carry out of the measure", async () => {
+      const { updatedAt } = await put({ files: many(50) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         values ($1, 'p1', '.workspace/metadata.json', $2)`,
+        [userId, "a".repeat(600_000)]
+      );
+      const result = await put({
+        changed: { "src/f0.rs": "y" },
+        removed: [],
+        baseUpdatedAt: updatedAt,
+      });
+      assert.ok(result.updatedAt);
+    });
+
+    it("lets a patch bring a project over a limit back under it", async () => {
+      // Stored before the limits: 60 files
+      const { updatedAt } = await put({ files: many(10) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         select $1, 'p1', 'old/' || g, '' from generate_series(1, 50) g`,
+        [userId]
+      );
+      const removed = Array.from({ length: 10 }, (_, i) => `old/${i + 1}`);
+      const result = await put({
+        changed: {},
+        removed,
+        baseUpdatedAt: updatedAt,
+      });
+      assert.ok(result.updatedAt);
+    });
+
+    it("answers a missed swap on a project stored over a limit as a conflict", async () => {
+      // Stored before the limits: 60 files
+      await put({ files: many(10) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         select $1, 'p1', 'old/' || g, '' from generate_series(1, 50) g`,
+        [userId]
+      );
+      const earlier = await stored();
+
+      // The other device's token is behind: a version question it merges,
+      // not a 413 it can only show
+      const result = await put({
+        changed: { "src/f0.rs": "y" },
+        removed: [],
+        baseUpdatedAt: "2000-01-01T00:00:00.000Z",
+      });
+
+      assert.equal(result.conflict, true);
+      assert.equal(result.limit, undefined);
+      assert.deepEqual(await stored(), earlier);
+    });
+
+    /** Store one row as if written before the limits, then patch another file */
+    const patchBeside = async (path, content) => {
+      const { updatedAt } = await put({ files: many(2) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         values ($1, 'p1', $2, $3)`,
+        [userId, path, content]
+      );
+      const earlier = await stored();
+      const result = await put({
+        changed: { "src/f0.rs": "y" },
+        removed: [],
+        baseUpdatedAt: updatedAt,
+      });
+      return { result, earlier };
+    };
+
+    it("refuses a patch to a project that stores a file over the file limit", async () => {
+      const { result, earlier } = await patchBeside(
+        "src/big.rs",
+        "a".repeat(200_000)
+      );
+      assert.deepEqual(result, {
+        limit: {
+          reason: "file-too-large",
+          limit: 131_072,
+          paths: ["src/big.rs"],
+          sizes: { "src/big.rs": 200_000 },
+        },
+      });
+      assert.deepEqual(await stored(), earlier);
+    });
+
+    it("refuses a patch to a project that stores a path over the path limit", async () => {
+      const long = `src/${"a".repeat(253)}`;
+      const { result, earlier } = await patchBeside(long, "x");
+      assert.deepEqual(result, {
+        limit: { reason: "path-too-long", limit: 256, paths: [long] },
+      });
+      assert.deepEqual(await stored(), earlier);
+    });
+
+    it("measures a stored path in code points, as the client does", async () => {
+      // 256 code points in 508 bytes: at the path limit, not over it
+      const { result } = await patchBeside(`src/${"é".repeat(252)}`, "x");
+      assert.ok(result.updatedAt);
+    });
+
+    it("measures a stored file in UTF-8 bytes, as the client does", async () => {
+      // 65,537 code points in 131,074 bytes: over the file limit
+      const { result } = await patchBeside("src/wide.rs", "é".repeat(65_537));
+      assert.equal(result.limit?.reason, "file-too-large");
+      assert.deepEqual(result.limit.sizes, { "src/wide.rs": 131_074 });
+    });
+
+    it("refuses a write that skipped the route's check with a file over the limit", async () => {
+      const result = await put({
+        files: { "src/lib.rs": "a".repeat(131_073) },
+      });
+      assert.equal(result.limit?.reason, "file-too-large");
+      assert.equal(await getProject(userId, "p1"), null);
+    });
+
+    it("takes a shrink of a stored file only once it is under the file limit", async () => {
+      const { updatedAt } = await put({ files: many(2) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         values ($1, 'p1', 'src/big.rs', $2)`,
+        [userId, "a".repeat(200_000)]
+      );
+      const earlier = await stored();
+
+      const still = await put({
+        changed: { "src/big.rs": "a".repeat(150_000) },
+        removed: [],
+        baseUpdatedAt: updatedAt,
+      });
+      assert.equal(still.limit?.reason, "file-too-large");
+      assert.deepEqual(await stored(), earlier);
+
+      const under = await put({
+        changed: { "src/big.rs": "a".repeat(131_072) },
+        removed: [],
+        baseUpdatedAt: updatedAt,
+      });
+      assert.ok(under.updatedAt);
+    });
+
+    it("takes a shrink of a stored project only once it is under the size limit", async () => {
+      // 550,000 bytes stored before the limits
+      const { updatedAt } = await put({ files: many(1) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         select $1, 'p1', 'old/' || g, repeat('a', 110000)
+           from generate_series(1, 5) g`,
+        [userId]
+      );
+      const earlier = await stored();
+
+      const still = await put({
+        changed: { "old/1": "a".repeat(90_000) },
+        removed: [],
+        baseUpdatedAt: updatedAt,
+      });
+      assert.deepEqual(still, {
+        limit: { reason: "project-too-large", limit: 524_288, size: 530_001 },
+      });
+      assert.deepEqual(await stored(), earlier);
+
+      const under = await put({
+        changed: { "old/1": "a".repeat(1_000) },
+        removed: [],
+        baseUpdatedAt: updatedAt,
+      });
+      assert.ok(under.updatedAt);
+    });
+
+    it("lets a patch remove a stored file over the file limit", async () => {
+      const { updatedAt } = await put({ files: many(2) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         values ($1, 'p1', 'src/big.rs', $2)`,
+        [userId, "a".repeat(200_000)]
+      );
+      const result = await put({
+        changed: {},
+        removed: ["src/big.rs"],
+        baseUpdatedAt: updatedAt,
+      });
+      assert.ok(result.updatedAt);
+    });
+  });
+
+  describe("account cap", () => {
+    /** Create project `p<n>` (or tutorial `tut:t<n>`) with one file */
+    const create = (n, kind) => {
+      const of = kind ?? "project";
+      return saveProject(userId, {
+        id: of === "tutorial" ? `tut:t${n}` : `p${n}`,
+        name: `${of} ${n}`,
+        kind: of,
+        files: { "src/lib.rs": `// ${n}` },
+      });
+    };
+
+    /** Create `count` projects of `kind`, numbered from 1, one at a time */
+    const fill = async (count, kind) => {
+      const made = [];
+      for (let n = 1; n <= count; n++) {
+        const result = await create(n, kind);
+        assert.ok(result.updatedAt, JSON.stringify(result));
+        made.push(result);
+      }
+      return made;
+    };
+
+    const liveIds = async () => (await listProjects(userId)).map((p) => p.id);
+
+    it("takes the tenth project and refuses the eleventh, writing nothing", async () => {
+      await fill(10);
+
+      const result = await create(11);
+
+      assert.deepEqual(result, {
+        limit: {
+          reason: "too-many-projects",
+          kind: "project",
+          limit: 10,
+          count: 11,
+        },
+      });
+      const { rows } = await query(
+        `select (select count(*)::int from projects
+                  where user_id = $1 and id = 'p11') as projects,
+                (select count(*)::int from project_files
+                  where user_id = $1 and project_id = 'p11') as files`,
+        [userId]
+      );
+      assert.deepEqual(rows[0], { projects: 0, files: 0 });
+    });
+
+    it("keeps taking edits to the projects it holds at the cap", async () => {
+      const [first] = await fill(10);
+      const result = await saveProject(userId, {
+        id: "p1",
+        name: "project 1",
+        kind: "project",
+        changed: { "src/lib.rs": "// edited", "src/new.rs": "// added" },
+        removed: [],
+        baseUpdatedAt: first.updatedAt,
+      });
+      assert.ok(result.updatedAt, JSON.stringify(result));
+    });
+
+    it("keeps taking edits to an account already over the cap", async () => {
+      // Stored past the cap, as a lowered figure would leave it
+      await fill(10);
+      await query(
+        `insert into projects (id, user_id, name, kind) values ('p11', $1, 'p11', 'project')`,
+        [userId]
+      );
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         values ($1, 'p11', 'src/lib.rs', 'x')`,
+        [userId]
+      );
+      const [row] = (await listProjects(userId)).filter((p) => p.id === "p11");
+      const result = await saveProject(userId, {
+        id: "p11",
+        name: "p11",
+        kind: "project",
+        changed: { "src/lib.rs": "y" },
+        removed: [],
+        baseUpdatedAt: row.updatedAt,
+      });
+      assert.ok(result.updatedAt, JSON.stringify(result));
+    });
+
+    it("frees a place when a project is deleted", async () => {
+      await fill(10);
+      await deleteProject(userId, "p3");
+
+      const result = await create(11);
+
+      assert.ok(result.updatedAt, JSON.stringify(result));
+      assert.equal((await liveIds()).length, 10);
+    });
+
+    it("does not count a row with no files, and counts it once filled", async () => {
+      await fill(10);
+      // The parent a chat turn makes
+      await query(
+        `insert into projects (id, user_id, name, kind) values ('p11', $1, 'p11', 'project')`,
+        [userId]
+      );
+
+      // Adopted by a create, and rolled back: the row keeps its name, empty
+      const created = await create(11);
+      assert.equal(created.limit?.reason, "too-many-projects");
+      const adopted = await getProject(userId, "p11");
+      assert.equal(adopted.name, "p11");
+      assert.ok(adopted.snapshot === null);
+
+      // Or reached by a swap with the empty row's token
+      const [row] = (await listProjects(userId)).filter((p) => p.id === "p11");
+      const swapped = await saveProject(userId, {
+        id: "p11",
+        name: "p11",
+        kind: "project",
+        files: { "src/lib.rs": "// 11" },
+        baseUpdatedAt: row.updatedAt,
+      });
+      assert.equal(swapped.limit?.reason, "too-many-projects");
+      assert.ok((await getProject(userId, "p11")).snapshot === null);
+    });
+
+    it("counts tutorials apart, at their own figure", async () => {
+      await fill(10);
+      assert.ok((await create(1, "tutorial")).updatedAt);
+
+      await query("delete from projects where user_id = $1", [userId]);
+      await fill(32, "tutorial");
+      assert.deepEqual((await create(33, "tutorial")).limit, {
+        reason: "too-many-projects",
+        kind: "tutorial",
+        limit: 32,
+        count: 33,
+      });
+      assert.ok((await create(1)).updatedAt);
+    });
+
+    it("counts a tutorial started again after its delete", async () => {
+      await fill(32, "tutorial");
+      await deleteProject(userId, "tut:t1");
+      await create(33, "tutorial");
+
+      const restarted = await create(1, "tutorial");
+
+      assert.equal(restarted.limit?.reason, "too-many-projects");
+      // Rolled back: the tombstone stands, so other devices still see the
+      // delete
+      const { rows } = await query(
+        `select deleted_at is not null as deleted,
+                (select count(*)::int from project_files
+                  where user_id = $1 and project_id = 'tut:t1') as files
+           from projects where user_id = $1 and id = 'tut:t1'`,
+        [userId]
+      );
+      assert.deepEqual(rows[0], { deleted: true, files: 0 });
+    });
+
+    it("counts each account apart", async () => {
+      const otherUser = "test-user-projects-cap-2";
+      await query(
+        `insert into "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+         values ($1, 'Test', 'projects-cap-2@example.com', false, now(), now())
+         on conflict (id) do nothing`,
+        [otherUser]
+      );
+      await query("delete from projects where user_id = $1", [otherUser]);
+      try {
+        for (let n = 1; n <= 10; n++) {
+          await saveProject(otherUser, {
+            id: `p${n}`,
+            name: `project ${n}`,
+            kind: "project",
+            files: { "src/lib.rs": `// ${n}` },
+          });
+        }
+
+        assert.ok((await create(1)).updatedAt);
+      } finally {
+        await query("delete from projects where user_id = $1", [otherUser]);
+      }
+    });
+
+    it("lets exactly one of two creates racing at nine through", async () => {
+      await fill(9);
+      // A holds its transaction open after its writes, the lock taken; B
+      // must wait for A's commit and then count A's project
+      let release;
+      const gate = new Promise((resolve) => (release = resolve));
+      let aWritten;
+      const written = new Promise((resolve) => (aWritten = resolve));
+
+      const a = transaction(async (q) => {
+        const result = await writeProject(q, userId, {
+          id: "p10",
+          name: "project 10",
+          kind: "project",
+          files: { "src/lib.rs": "// 10" },
+        });
+        aWritten();
+        await gate;
+        return result;
+      });
+      await written;
+
+      const b = create(11);
+
+      // Polled rather than slept: B is ready once Postgres reports it
+      // waiting on the advisory lock. Without the lock it never waits, the
+      // poll runs out, and both creates pass.
+      for (let i = 0; i < 100; i++) {
+        const { rows } = await query(
+          `select 1 from pg_stat_activity
+            where datname = current_database()
+              and wait_event_type = 'Lock' and wait_event = 'advisory'`
+        );
+        if (rows.length) break;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      release();
+      const results = await Promise.all([a, b]);
+      assert.ok(results[0].updatedAt, JSON.stringify(results[0]));
+      assert.equal(results[1].limit?.reason, "too-many-projects");
+      assert.equal((await liveIds()).length, 10);
+    });
   });
 
   it("replaces the file set on a full swap, deleting what it omits", async () => {
@@ -386,6 +975,179 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
     assert.equal(await getThread(userId, mine), null);
     assert.ok(await getThread(userId, neighbour));
     assert.ok(await getThread(otherUser, theirs));
+  });
+
+  describe("erasing a deleted project's history", () => {
+    // The tombstone hides a thread from every read; the content under it
+    // must go too, or a deleted project's chat outlives the delete in the
+    // account. Read straight from the tables: no API returns a tombstoned
+    // thread, so only the rows can show what is left.
+    const otherUser = "test-user-projects-2";
+
+    /** What the database still holds of one thread */
+    const left = async (threadId) => {
+      const { rows } = await query(
+        `select c.title, c.deleted_at is not null as deleted,
+                (select count(*)::int from messages m
+                  where m.conversation_id = c.id) as messages
+           from conversations c where c.id = $1`,
+        [threadId]
+      );
+      return rows[0];
+    };
+
+    const sayFor = (userOf, projectId) => (threadId, n) =>
+      appendMessages(userOf, { threadId, projectId, title: `chat ${n}` }, [
+        {
+          id: `22222222-0000-4000-8000-0000000002${n}`,
+          kind: "user",
+          createdAt: new Date(1000).toISOString(),
+          text: "hi",
+        },
+      ]);
+
+    before(async () => {
+      await query(
+        `insert into "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+         values ($1, 'Test', 'projects-2@example.com', false, now(), now())
+         on conflict (id) do nothing`,
+        [otherUser]
+      );
+    });
+
+    beforeEach(async () => {
+      await query("delete from conversations where user_id = $1", [otherUser]);
+      await query("delete from projects where user_id = $1", [otherUser]);
+    });
+
+    it("deletes its messages and title, keeping the tombstone", async () => {
+      const mine = "22222222-0000-4000-8000-000000000021";
+      await sayFor(userId, "p1")(mine, 21);
+
+      await deleteProject(userId, "p1");
+
+      assert.deepEqual(await left(mine), {
+        // eslint-disable-next-line unicorn/no-null -- a Postgres row: a deleted chat's title is cleared to NULL
+        title: null,
+        deleted: true,
+        messages: 0,
+      });
+    });
+
+    it("leaves another project's history whole", async () => {
+      const neighbour = "22222222-0000-4000-8000-000000000022";
+      await sayFor(userId, "p1")("22222222-0000-4000-8000-000000000023", 23);
+      await sayFor(userId, "p2")(neighbour, 22);
+
+      await deleteProject(userId, "p1");
+
+      assert.deepEqual(await left(neighbour), {
+        title: "chat 22",
+        deleted: false,
+        messages: 1,
+      });
+    });
+
+    it("leaves another account's history under the same id whole", async () => {
+      // A tutorial's id is the same string in every account that started it
+      const theirs = "22222222-0000-4000-8000-000000000024";
+      await sayFor(userId, "tut:x")("22222222-0000-4000-8000-000000000025", 25);
+      await sayFor(otherUser, "tut:x")(theirs, 24);
+
+      await deleteProject(userId, "tut:x");
+
+      assert.deepEqual(await left(theirs), {
+        title: "chat 24",
+        deleted: false,
+        messages: 1,
+      });
+    });
+
+    it("also erases a thread tombstoned before this delete", async () => {
+      // A tutorial restarted after a delete leaves the old run's thread
+      // tombstoned under a live project id; the next delete takes it too
+      const earlier = "22222222-0000-4000-8000-000000000026";
+      await sayFor(userId, "p1")(earlier, 26);
+      await query("update conversations set deleted_at = now() where id = $1", [
+        earlier,
+      ]);
+
+      await deleteProject(userId, "p1");
+
+      assert.deepEqual(await left(earlier), {
+        // eslint-disable-next-line unicorn/no-null -- a Postgres row: a deleted chat's title is cleared to NULL
+        title: null,
+        deleted: true,
+        messages: 0,
+      });
+    });
+
+    it("erases a push that was in flight when the delete came", async () => {
+      // A push that has found its thread live and is still writing when the
+      // delete runs must either finish before the erase or be refused; its
+      // messages must never land under the tombstone afterwards. The push is
+      // held mid-write by an open transaction that inserted the same message
+      // id first, so the delete runs while the push is past its checks.
+      const threadId = "22222222-0000-4000-8000-000000000027";
+      const held = {
+        id: "22222222-0000-4000-8000-000000000327",
+        kind: "user",
+        createdAt: new Date(2000).toISOString(),
+        text: "in flight",
+      };
+      await sayFor(userId, "p1")(threadId, 27);
+      let push;
+      let deletion;
+
+      // Its own connection, outside the pool: the pool holds three, and the
+      // push and the delete take two of them while this one must keep
+      // polling and keep its transaction open
+      const side = new pg.Client({ connectionString: DB });
+      await side.connect();
+      try {
+        /** Sessions of this database waiting on a lock */
+        const waiting = async () => {
+          const { rows } = await side.query(
+            `select count(*)::int as n from pg_stat_activity
+              where datname = current_database() and wait_event_type = 'Lock'`
+          );
+          return rows[0].n;
+        };
+        const until = async (done) => {
+          for (let i = 0; i < 100 && !(await done()); i++) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+        };
+
+        // Holds the push mid-write: it inserts the push's message id first,
+        // so the push waits on this row until the rollback below
+        await side.query("begin");
+        await side.query(
+          `insert into messages (id, conversation_id, kind, payload, created_at)
+           values ($1, $2, 'user', '{}', now())`,
+          [held.id, threadId]
+        );
+
+        push = appendMessages(userId, { threadId, projectId: "p1" }, [
+          held,
+        ]).catch((e) => e);
+        await until(async () => (await waiting()) >= 1);
+
+        let deleted = false;
+        deletion = deleteProject(userId, "p1").then(() => (deleted = true));
+        await until(async () => deleted || (await waiting()) >= 2);
+      } finally {
+        await side.query("rollback");
+        await side.end();
+      }
+      const pushed = await push;
+      await deletion;
+
+      if (pushed instanceof Error) {
+        assert.ok(pushed instanceof ThreadDeleted, pushed.message);
+      }
+      assert.equal((await left(threadId)).messages, 0);
+    });
   });
 
   it("tombstones rather than deleting, and drops the files", async () => {
