@@ -1031,6 +1031,20 @@ it("should leave Cmd+E to a dialog it lands in", () => {
   node.remove();
 });
 
+it("should still fold the files column by Cmd+E from a dialog that holds the tree", () => {
+  savedFilesOpen();
+  onUserAgent(MAC);
+  shell();
+  const { node } = keyEater("");
+  node.setAttribute("role", "dialog");
+  const tree = document.createElement("ul");
+  tree.setAttribute("role", "tree");
+  node.append(tree);
+  fireEvent.keyDown(tree, { key: "e", metaKey: true });
+  expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
+  node.remove();
+});
+
 it("should fold the files column when Control is held with Cmd in a text field on a Mac", () => {
   savedFilesOpen();
   // The Meta makes it the shortcut, not the caret movement

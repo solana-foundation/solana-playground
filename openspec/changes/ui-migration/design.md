@@ -425,9 +425,9 @@ folding to a strip and a rail. See "Frame chrome (5.25)".)
   files column, Ctrl+R the assistant, Ctrl+J the console. The files toggle
   keeps "Collapse project panel" / "Expand project panel" and the rail's "New
   file"; its hint reads ⌘E. Below 768 ⌘E opens and closes the pager's Files
-  Sheet. The shell's ⌘E is heard in the capture phase, so it folds the
-  column from the editor too, ahead of Monaco's own ⌘E (find with
-  selection), as the tutorial's ⌘E does (HOO-2828).
+  Sheet. On macOS Monaco keeps ⌘E (find with selection)
+  while the editor has focus, so the shell's ⌘E works outside the editor
+  there; on Windows and Linux Ctrl+E folds the column from the editor too.
   _Rejected:_ ⌘B staying on the files column, leaving the navigation to its
   button alone.
 - **Width.** From `LAYOUT_BREAKPOINTS.compact` (1024) every column is in
