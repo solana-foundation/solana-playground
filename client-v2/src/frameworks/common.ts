@@ -176,10 +176,10 @@ const getLeadingImportsEnd = (content: string) => {
     if (!keyword.test(content)) return end;
     // A dynamic `import (`, `import /* c */ (` or `import // c` with `(` on
     // the next line is not a statement, and ends the run
-    if (content[skipSpaceAndComments(content, keyword.lastIndex)] === "(") {
-      return end;
-    }
-    statementRest.lastIndex = keyword.lastIndex;
+    const afterKeyword = skipSpaceAndComments(content, keyword.lastIndex);
+    if (content[afterKeyword] === "(") return end;
+    // From past those comments, so a quote in one is not the module's
+    statementRest.lastIndex = afterKeyword;
     if (!statementRest.test(content)) return end;
     index = end = statementRest.lastIndex;
   }
@@ -187,7 +187,7 @@ const getLeadingImportsEnd = (content: string) => {
 
 /**
  * Skip the whitespace and closed comments that start at the given index. A
- * loop, not a regex over `(?:\s|//…|/*…*\/)*`: with something after it that
+ * loop, not a regex over `(?:\s|//...|/*...*\/)*`: with something after it that
  * can fail, as the `(` of a dynamic import, those overlapping alternatives
  * backtrack exponentially on a run of `//` (CodeQL `js/redos`).
  *

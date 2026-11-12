@@ -170,6 +170,15 @@ describe("addAfterImports", () => {
       'import {\n  a,\n  b,\n} from "a";\nrun();\n',
       'import {\n  a,\n  b,\n} from "a";\nX\nrun();\n',
     ],
+    // Quotes in a comment after `import` are not the module's
+    [
+      'import // see ("docs")\n a from "a";\nrun();\n',
+      'import // see ("docs")\n a from "a";\nX\nrun();\n',
+    ],
+    [
+      'import /* "x" */ a from "a";\nrun();\n',
+      'import /* "x" */ a from "a";\nX\nrun();\n',
+    ],
     // An unclosed `/*` ends the scan; the imports before it still count
     ['import a from "a";\n/* open', 'import a from "a";\nX\n/* open'],
     // A `(` inside a comment is not a dynamic import's (the old lookahead
