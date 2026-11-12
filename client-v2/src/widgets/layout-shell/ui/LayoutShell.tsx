@@ -488,7 +488,7 @@ const LayoutShell = ({
         if (mac && ev.ctrlKey && !ev.metaKey && isEditable(ev.target)) {
           return false;
         }
-        const target = ev.target instanceof Element ? ev.target : null;
+        const target = ev.target instanceof Element ? ev.target : undefined;
         if (!mac && target?.closest(".xterm")) return false;
         const dialog = target?.closest("[role='dialog'], [role='alertdialog']");
         if (dialog && !dialog.querySelector("[role='tree']")) return false;

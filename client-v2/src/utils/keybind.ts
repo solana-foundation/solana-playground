@@ -245,12 +245,13 @@ if (import.meta.vitest) {
         });
         afterEach(() => field.remove());
 
-        const pressIn = (key: string, mods: Partial<KeyboardEventInit>) => {
+        /** Cmd plus `key` (Meta, read as Ctrl), in the field */
+        const pressIn = (key: string) => {
           const ev = new KeyboardEvent("keydown", {
             key,
+            metaKey: true,
             cancelable: true,
             bubbles: true,
-            ...mods,
           });
           field.dispatchEvent(ev);
           return ev;
@@ -258,7 +259,7 @@ if (import.meta.vitest) {
 
         it("misses a key a field stops, without capture", () => {
           bind("Ctrl+E");
-          pressIn("e", { metaKey: true });
+          pressIn("e");
           expect(handle).not.toHaveBeenCalled();
           expect(fieldHeard).toHaveBeenCalledTimes(1);
         });
@@ -268,7 +269,7 @@ if (import.meta.vitest) {
             handle,
             opts: { capture: true },
           }).dispose;
-          const ev = pressIn("e", { metaKey: true });
+          const ev = pressIn("e");
           expect(handle).toHaveBeenCalledTimes(1);
           expect(ev.defaultPrevented).toBe(true);
           expect(fieldHeard).not.toHaveBeenCalled();
@@ -279,7 +280,7 @@ if (import.meta.vitest) {
             handle: () => false,
             opts: { capture: true },
           }).dispose;
-          const ev = pressIn("e", { metaKey: true });
+          const ev = pressIn("e");
           expect(ev.defaultPrevented).toBe(false);
           expect(fieldHeard).toHaveBeenCalledTimes(1);
         });
@@ -289,7 +290,7 @@ if (import.meta.vitest) {
             handle,
             opts: { capture: true, noPreventDefault: true },
           }).dispose;
-          const ev = pressIn("e", { metaKey: true });
+          const ev = pressIn("e");
           expect(handle).toHaveBeenCalledTimes(1);
           expect(ev.defaultPrevented).toBe(false);
           expect(fieldHeard).not.toHaveBeenCalled();
@@ -304,7 +305,7 @@ if (import.meta.vitest) {
               handle: () => false,
               opts: { capture: true },
             }).dispose;
-            pressIn("e", { metaKey: true });
+            pressIn("e");
             expect(fieldHeard).toHaveBeenCalledTimes(1);
           } finally {
             window.removeEventListener("keydown", other, { capture: true });
@@ -317,7 +318,7 @@ if (import.meta.vitest) {
             { keybind: "Ctrl+E", handle: { handle, opts: { capture: true } } },
             { keybind: "Ctrl+J", handle: other },
           ]).dispose;
-          pressIn("j", { metaKey: true });
+          pressIn("j");
           expect(other).not.toHaveBeenCalled();
           press("j", { metaKey: true });
           expect(other).toHaveBeenCalledTimes(1);
@@ -328,7 +329,7 @@ if (import.meta.vitest) {
             handle,
             opts: { capture: true },
           }).dispose();
-          pressIn("e", { metaKey: true });
+          pressIn("e");
           expect(handle).not.toHaveBeenCalled();
         });
       });
