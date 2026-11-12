@@ -16,18 +16,20 @@ const RESULTS: Record<string, unknown> = {
   getBalance: { context: { slot: 1 }, value: 0 },
 };
 
+// The slot moves on every read: a cluster whose slot stands still between
+// two reads a second apart is down (`PgConnection.getIsClusterDown`), and the
+// cluster's indicator then opens its "not responding" panel instead of
+// Settings, for any click that lands after the second read. One counter for
+// the file, so a test that stubs again never repeats a slot the first stub
+// gave. A test of a down custom RPC routes its own frozen `getSlot` over this.
+let slot = 0;
+
 /**
  * Answers every JSON-RPC call to `*.rpc.test` and the spec's `rpc.example.com`,
  * and records the hosts asked
  */
 const stubRpcs = async (page: Page) => {
   const asked: string[] = [];
-  // The slot moves on every read: a cluster whose slot stands still between
-  // two reads a second apart is down (`PgConnection.getIsClusterDown`), and
-  // the cluster's indicator then opens its "not responding" panel instead of
-  // Settings. A run slow enough to click after that second read (Firefox on
-  // CI) never reached Settings.
-  let slot = 0;
   const result = (method: string | undefined) => {
     if (method === "getSlot") return (slot += 1);
     // JSON-RPC answers an unknown call with a null result, not none

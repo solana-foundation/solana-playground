@@ -394,7 +394,7 @@ test("client-v2-layout: Folding the project panel", async ({
   // Hidden: the column is out of the layout and takes no width
   await expect(files).toHaveCount(0);
   // The fold is kept over a reload
-  await page.reload();
+  await reloadAndBoot(page);
   await expect(files).toHaveCount(0);
   await filesToggle(page).click();
   await expect(files).toHaveJSProperty("offsetWidth", 240);
@@ -1912,7 +1912,7 @@ test("the wallet names the endpoint that does not answer", async ({
   seededPage: page,
 }) => {
   await refuseCluster(page);
-  await page.reload();
+  await reloadAndBoot(page);
   await connectWallet(page);
 
   await page.locator("#tabs").getByRole("button", { name: "Wallet" }).click();
