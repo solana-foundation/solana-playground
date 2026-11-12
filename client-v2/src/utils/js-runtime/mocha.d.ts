@@ -20,6 +20,6 @@ declare module "mocha/browser-entry" {
     cleanReferencesAfterRun: boolean;
     reporter: string;
   }): void;
-  /** Runs the suites `setup` collected; `fn` gets how many tests failed */
-  export function run(fn?: (failures: number) => void): unknown;
+  /** Runs the suites `setup` collected; `onEnd` gets how many tests failed */
+  export function run(onEnd: (failures: number) => void): unknown;
 }

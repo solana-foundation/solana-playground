@@ -14,7 +14,7 @@ export const MODULES_FILE = path.join(
 // webpack names a module by its path from client-v2, so `./src/` is ours and a package sits under any `node_modules/`
 const TEST_ONLY = [
   /^\.\/src\/test-utils\//,
-  /\/node_modules\/(vitest|@vitest\/[^/]+)\//,
+  /\/node_modules\/(vitest|@vitest\/[^/]+|fake-indexeddb)\//,
 ];
 
 /**
@@ -41,7 +41,7 @@ export const slimModules = (modules) =>
     return [name, ...slimModules(nested)];
   });
 
-/** The module names under `src/test-utils/` or from `vitest` or `@vitest/*`, sorted and without repeats */
+/** The module names under `src/test-utils/` or from `vitest`, `@vitest/*` or `fake-indexeddb`, sorted and without repeats */
 export const offendingModules = (names) =>
   [
     ...new Set(names.filter((name) => TEST_ONLY.some((p) => p.test(name)))),

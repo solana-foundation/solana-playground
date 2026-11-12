@@ -31,7 +31,7 @@ export const anchor = createCmd({
   name: "anchor",
   description: "Anchor CLI",
   needsConnection: true,
-  preChecks: checkPgWallet,
+  preChecks: [checkPgWallet],
   handle: async (input) => {
     if (!isIdlWrite(input.raw)) {
       const { runAnchor } = await PgPackage.import("anchor-cli", {

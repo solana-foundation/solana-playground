@@ -64,7 +64,7 @@ export interface DeployPort {
    * Makes the Playground wallet in this browser and returns its address: the
    * airdrop card's press when there is none yet (HOO-2677)
    */
-  createWallet(): string;
+  createWallet(): Promise<string>;
   /** Read twice, before and after the build, so it answers live */
   program(): ProgramState;
   /**
@@ -380,7 +380,7 @@ if (import.meta.vitest) {
       const port: DeployPort = {
         refusal: () => null,
         wallet: () => WALLET,
-        createWallet: vi.fn(() => WALLET),
+        createWallet: vi.fn(async () => WALLET),
         program: () => ({
           id,
           keypair: fake.keypair ?? true,

@@ -2,8 +2,11 @@ import type { PgWeb3 } from "../web3";
 
 /** Wallet state */
 export interface WalletState {
-  /** Wallet connection state */
-  state: "setup" | "disconnected" | "pg" | "sol";
+  /**
+   * Wallet connection state. `unavailable`: a wallet may be stored but could
+   * not be read; it is never saved, so the stored wallet stays as it was.
+   */
+  state: "setup" | "disconnected" | "pg" | "sol" | "unavailable";
   /** All accounts */
   accounts: WalletAccount[];
   /** Current wallet index */
@@ -16,23 +19,29 @@ export interface WalletState {
   standardName: string | null;
 }
 
-/** Playground wallet accounts (with keypair) */
+/** Playground wallet accounts, addressed by their public key */
 export interface WalletAccount {
+  /** Name of the account */
+  name: string;
+  /** Base58 public key of the account, which names its key in the provider */
+  publicKey: string;
   /**
-   * ed25519 keypair of the account.
+   * ed25519 keypair of the account, held only where the page keeps the keys
+   * (the `local` signer provider).
    *
    * First 32 bytes are the private key, last 32 bytes are the public key.
    */
-  kp: number[];
-  /** Name of the account */
-  name: string;
+  kp?: number[];
 }
+
+/** The connection states a stored wallet can have: `unavailable` is never saved */
+export type SavedWalletState = Exclude<WalletState["state"], "unavailable">;
 
 /** Serialized wallet that's used in storage */
 export type SerializedWalletState = Pick<
   WalletState,
-  "state" | "accounts" | "currentIndex" | "standardName"
->;
+  "accounts" | "currentIndex" | "standardName"
+> & { state: SavedWalletState };
 
 /** Legacy or versioned transaction */
 export type AnyTransaction = PgWeb3.Transaction | PgWeb3.VersionedTransaction;
@@ -44,10 +53,10 @@ export type AnyTransaction = PgWeb3.Transaction | PgWeb3.VersionedTransaction;
  * **NOTE:** If this is a Standard Wallet, it should always have its `publicKey`
  * field defined (non-nullable).
  */
-export type Wallet = PgWallet | StandardWallet<true>;
+export type Wallet = PlaygroundWallet | StandardWallet<true>;
 
 /** Playground Wallet props */
-type PgWallet = {
+export type PlaygroundWallet = {
   /** The wallet is Playground Wallet */
   isPg: true;
   /** Keypair of the Playground Wallet account */

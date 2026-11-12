@@ -4,11 +4,11 @@ use anchor_lang::prelude::Pubkey;
 use anchor_syn::idl::types::Idl;
 use anyhow::anyhow;
 use solana_client_wasm::WasmClient;
-use solana_playground_utils_wasm::js::{PgProgramInfo, PgSettings, PgWallet};
-use solana_sdk::{
-    commitment_config::{CommitmentConfig, CommitmentLevel},
-    signature::Keypair,
+use solana_playground_utils_wasm::{
+    js::{PgProgramInfo, PgSettings},
+    wallet::{wallet_signer, WalletSigner},
 };
+use solana_sdk::commitment_config::{CommitmentConfig, CommitmentLevel};
 
 use crate::cli::CliResult;
 
@@ -27,8 +27,10 @@ pub fn get_client() -> WasmClient {
     )
 }
 
-pub fn get_keypair() -> Keypair {
-    Keypair::from_bytes(&PgWallet::keypair_bytes()).unwrap()
+/// The built-in wallet: it signs at send through the app where the key is off
+/// the page, else with the key bytes
+pub fn get_keypair() -> WalletSigner {
+    wallet_signer()
 }
 
 pub fn get_idl() -> CliResult<Idl> {

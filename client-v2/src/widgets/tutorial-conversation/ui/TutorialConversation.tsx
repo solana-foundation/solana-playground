@@ -405,15 +405,20 @@ const runner = announceDeploys(
 );
 
 /**
- * "Create wallet" on an act that found none: the Playground wallet, made in
- * this browser as the Setup modal makes it (`PgWallet.add` makes it the
- * current wallet too), or, when one was made and then disconnected,
- * connected again as `connect` does; then the act runs again.
+ * "Create wallet" on an act that found none: the Playground wallet, made as
+ * Deploy makes it (`PgWallet.addFirst`, whose key the signer provider makes
+ * and which becomes the current wallet), or, when one was made and then
+ * disconnected, connected again as `connect` does; then the act runs again.
  */
-const createWallet = (beatId: string) => {
-  if (!PgWallet.accounts.length) PgWallet.add();
-  else if (PgWallet.state !== "pg" && PgWallet.state !== "sol") {
-    PgWallet.state = "pg";
+const createWallet = async (beatId: string) => {
+  try {
+    if (!PgWallet.accounts.length) await PgWallet.addFirst();
+    else if (PgWallet.state === "setup" || PgWallet.state === "disconnected") {
+      PgWallet.state = "pg";
+    }
+  } catch (error) {
+    reportButtonFailure("create wallet")(error);
+    return;
   }
   PgConversation.act(beatId);
 };

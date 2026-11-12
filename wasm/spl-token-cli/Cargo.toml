@@ -24,7 +24,7 @@ solana-cli-config-wasm = { path = "../utils/solana-cli-config" }
 solana-cli-output-wasm = { path = "../utils/solana-cli-output" }
 solana-client-wasm = { path = "../solana-client" }
 solana-extra-wasm = { path = "../utils/solana-extra" }
-solana-playground-utils-wasm = { path = "../utils/solana-playground-utils" }
+solana-playground-utils-wasm = { path = "../utils/solana-playground-utils", features = ["wallet"] }
 solana-remote-wallet = { version = "*", default-features = false }
 solana-sdk = "*"
 strum = "0.24"

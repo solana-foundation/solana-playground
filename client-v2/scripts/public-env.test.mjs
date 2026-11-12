@@ -59,6 +59,8 @@ test("reads every REACT_APP_* name client-env.ts reads", () => {
     "REACT_APP_TESTNET_SEND_TX_PER_SECOND",
     "REACT_APP_VERCEL_ENV",
     "REACT_APP_VERCEL_GIT_COMMIT_SHA",
+    "REACT_APP_WALLET_APP_ORIGIN",
+    "REACT_APP_WALLET_KEY_ORIGIN",
   ]);
 });
 

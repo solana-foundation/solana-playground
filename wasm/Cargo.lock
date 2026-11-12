@@ -3208,7 +3208,11 @@ dependencies = [
 name = "solana-playground-utils-wasm"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
+ "solana-client-wasm",
+ "solana-sdk",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

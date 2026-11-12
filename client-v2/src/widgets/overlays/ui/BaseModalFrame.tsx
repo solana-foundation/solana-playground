@@ -43,8 +43,12 @@ export type OpenFocus = "field" | "dialog" | "cancel";
  */
 export type SubmitVariant = "default" | "outline" | "destructive" | "brand";
 
-/** Whether the submit can be pressed, and why not */
-export type SubmitStatus = "ready" | "disabled" | "busy";
+/**
+ * Whether the submit can be pressed, and why not: `busy` while it runs,
+ * `held` while another part of the dialog works (Cancel waits with it, as
+ * closing would drop that work), `disabled` otherwise
+ */
+export type SubmitStatus = "ready" | "disabled" | "held" | "busy";
 
 export type BaseModalFrameProps = {
   /** The heading; `hidden` keeps it as the dialog's name only */
@@ -261,7 +265,7 @@ export const BaseModalFrame = ({
                 type="button"
                 variant="ghost"
                 className={FOOTER_BUTTON}
-                disabled={submit.status === "busy"}
+                disabled={submit.status === "busy" || submit.status === "held"}
                 onClick={submit.onCancel}
               >
                 Cancel

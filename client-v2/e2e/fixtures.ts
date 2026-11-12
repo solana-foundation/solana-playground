@@ -1,5 +1,8 @@
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
+import { Keypair } from "@solana/web3.js";
+import fs from "fs";
+import path from "path";
 
 import { isUuid } from "../src/shared/lib/ids";
 import { requireFor } from "../src/test-utils/require-for";
@@ -78,6 +81,18 @@ export const startTutorialFromAbout = async (page: Page) => {
   await expect(start).toBeVisible(LONG);
   await start.click();
 };
+
+/**
+ * Puts `wallet` in `localStorage['wallet']` as an earlier version left it, on
+ * the first load only, so a reload finds what the wallet's migration wrote
+ * rather than a fresh seed.
+ */
+export const seedLocalWalletFor = (page: Page) => (wallet: unknown) =>
+  page.addInitScript((text) => {
+    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
+    sessionStorage.setItem("e2e-wallet-seeded", "1");
+    localStorage.setItem("wallet", text);
+  }, JSON.stringify(wallet));
 
 /**
  * A browser with one project already created.
@@ -265,7 +280,7 @@ export const applyWrite = (
   const files: Record<string, string> = {};
   if (body.files) Object.assign(files, body.files);
   else Object.assign(files, held?.files, body.changed);
-  for (const path of body.removed ?? []) delete files[path];
+  for (const removed of body.removed ?? []) delete files[removed];
   return { files };
 };
 
@@ -656,3 +671,219 @@ export const isStored = (page: Page, needle: string) =>
     }
     return false;
   }, needle);
+
+/**
+ * Starts the test's pages on Playnet, the in-browser cluster, so a script
+ * can send transactions with no network. Set on every load, after the
+ * fixture's devnet default.
+ */
+export const startOnPlaynet = (page: Page) =>
+  page.addInitScript(() => {
+    localStorage.setItem(
+      "settings",
+      JSON.stringify({ connection: { endpoint: { option: "playnet" } } })
+    );
+  });
+
+/**
+ * Waits until Playnet answers: it replaces the page's `fetch` once its WASM
+ * has loaded (`PgPlaynetRpc.overrideConnection`).
+ */
+export const playnetReady = (page: Page) =>
+  page.waitForFunction(
+    () => !String(window.fetch).includes("[native code]"),
+    undefined,
+    LONG
+  );
+
+/** A browser with one Native project, whose test is the hello world one */
+export const seedNativeWorkspace = async (page: Page) => {
+  await page.goto("/");
+  await expect(home(page)).toBeVisible();
+  await homeRegion(page)
+    .getByRole("button", { name: /^New project/ })
+    .click();
+  // Start from scratch is on the New project page, not in Home's region
+  const created = newProjectPage(page);
+  await created.getByRole("radio", { name: /Native/ }).click();
+  await created.getByLabel("Project name").fill("e2e-native");
+  await created.getByRole("button", { name: /^Start/ }).click();
+  await expect(created).toBeHidden();
+  await expect(home(page)).toBeHidden();
+  await expect(page.locator("#root-dir")).toBeVisible();
+};
+
+/** Opens the terminal drawer, if it is closed */
+export const openTerminal = async (page: Page) => {
+  // The console drawer's own toggle: the editor head has a "Terminal" button too
+  const drawer = page.locator('[data-slot="console-drawer-trigger"]');
+  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+    await drawer.click();
+  }
+};
+
+/**
+ * Opens `folder/file` from the tree, then replaces its text with `code`.
+ *
+ * A paste, not typing: the editor closes brackets as they are typed. Then a
+ * wait for the editor's autosave (500 ms after the last change,
+ * `Monaco.tsx`), since `run` and `test` read the saved file.
+ */
+export const replaceFile =
+  (context: BrowserContext) =>
+  (page: Page) =>
+  (folder: string) =>
+  (file: string) =>
+  async (code: string) => {
+    await page.getByRole("button", { name: folder, exact: true }).click();
+    await page.getByRole("button", { name: file, exact: true }).click();
+    const lines = page.locator(".monaco-editor .view-lines");
+    await expect(lines).not.toBeEmpty(LONG);
+    await page.locator(".monaco-editor textarea.inputarea").focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await grantClipboard(context);
+    await page.evaluate((text) => navigator.clipboard.writeText(text), code);
+    await page.keyboard.press("ControlOrMeta+V");
+    const last = code.trim().split("\n").at(-1) ?? "";
+    await expect(lines).toContainText(last.trim());
+    await page.waitForTimeout(1000);
+  };
+
+/** The terminal's rows in view */
+export const terminalRows = (page: Page) => page.locator(".xterm-rows").first();
+
+/**
+ * Playnet's own hello world program (`wasm/playnet/src/test_programs`): it
+ * logs and succeeds, and changes no account. It stands in for a built program
+ * so a test can send instructions to a deployed program offline; it is not
+ * the Native template's program, which counts greetings.
+ */
+const helloWorldElf = () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "../../wasm/playnet/src/test_programs/hello_world.rs"),
+    "utf8"
+  );
+  // From the array, not the first bracket: that is the `&[u8]` of its type
+  const body = source.slice(source.indexOf("= &["), source.lastIndexOf("]"));
+  return Buffer.from(body.match(/\d+/g)?.map(Number) ?? []);
+};
+
+/**
+ * Builds and deploys the hello world program to Playnet from the terminal,
+ * with the build server answered here: CI has none. The build hands the
+ * project its program id and, when given, an IDL.
+ *
+ * @param idl the IDL the build answers with
+ */
+export const deployHelloWorldWith =
+  (idl: object | undefined) => async (page: Page) => {
+    const uuid = "e2e-hello-world";
+    await page.route("**/build", (route) =>
+      // eslint-disable-next-line unicorn/no-null -- the build server's wire shape
+      json(route, {
+        // `improveOutput` says "Build successful." on this line of cargo's
+        stderr: "    Finished release [optimized] target(s) in 1.00s\n",
+        uuid,
+        idl: idl ?? null,
+      })
+    );
+    await page.route(`**/deploy/${uuid}`, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/octet-stream",
+        body: helloWorldElf(),
+      })
+    );
+    const rows = terminalRows(page);
+    // `airdrop` refuses until the session has loaded
+    await expect(
+      page
+        .locator('[data-slot="setup-list-item"][data-status="done"]')
+        .filter({ hasText: "Sign in with GitHub" })
+    ).toBeVisible(LONG);
+    await runInTerminal(page, "airdrop 5");
+    await expect(rows).toContainText("Airdrop successful", LONG);
+    await runInTerminal(page, "build");
+    await expect(rows).toContainText("Build successful.", LONG);
+    await runInTerminal(page, "deploy");
+    await expect(rows).toContainText("Deployment successful.", LONG);
+  };
+
+/**
+ * A seeded built-in wallet and a Native project on Playnet, with the terminal
+ * open; returns the wallet's keypair and writers for the client and the test
+ */
+export const seedPlaynetProject = async (
+  context: BrowserContext,
+  page: Page
+) => {
+  const keypair = Keypair.generate();
+  // `airdrop`, which `deployHelloWorldWith` runs, is for a signed-in account
+  await stubSignedIn(context);
+  await seedLocalWalletFor(page)({
+    state: "pg",
+    accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
+    currentIndex: 0,
+  });
+  await startOnPlaynet(page);
+  await seedNativeWorkspace(page);
+  await playnetReady(page);
+  await openTerminal(page);
+  return {
+    keypair,
+    address: keypair.publicKey.toBase58(),
+    writeClient: (code: string) =>
+      replaceFile(context)(page)("client")("client.ts")(code),
+    writeTest: (code: string) =>
+      replaceFile(context)(page)("tests")("native.test.ts")(code),
+  };
+};
+
+/**
+ * An Anchor IDL for the hello world program, which ignores the instruction
+ * data; the greeting account it names is created in the same transaction
+ */
+export const HELLO_ANCHOR_IDL = {
+  version: "0.1.0",
+  name: "hello_anchor",
+  instructions: [
+    {
+      name: "greet",
+      accounts: [
+        { name: "greeting", isMut: true, isSigner: false },
+        { name: "payer", isMut: true, isSigner: true },
+      ],
+      args: [],
+    },
+  ],
+};
+
+/**
+ * Test code that creates a greeting account owned by the program in the
+ * same transaction as Anchor's `greet`, with `payer` among the signers
+ */
+export const greetWithAnchor = (sign: "signers" | "sendAndConfirm") =>
+  [
+    'describe("Anchor", () => {',
+    '  it("greets", async () => {',
+    "    anchor.setProvider(anchor.AnchorProvider.env());",
+    "    const program = anchor.workspace.HelloAnchor;",
+    "    const payer = anchor.getProvider().wallet.payer;",
+    "    const greeting = web3.Keypair.generate();",
+    "    const lamports = await pg.connection.getMinimumBalanceForRentExemption(4);",
+    "    const create = web3.SystemProgram.createAccount({",
+    "      fromPubkey: payer.publicKey, newAccountPubkey: greeting.publicKey,",
+    "      lamports, space: 4, programId: pg.PROGRAM_ID,",
+    "    });",
+    "    const greet = program.methods.greet()",
+    "      .accounts({ greeting: greeting.publicKey, payer: payer.publicKey })",
+    "      .preInstructions([create]);",
+    sign === "signers"
+      ? "    await greet.signers([greeting, payer]).rpc();"
+      : "    await web3.sendAndConfirmTransaction(pg.connection, await greet.transaction(), [payer, greeting]);",
+    "    const info = await pg.connection.getAccountInfo(greeting.publicKey);",
+    '    console.log("same program:", program.programId.equals(pg.PROGRAM_ID), pg.program.programId.equals(pg.PROGRAM_ID));',
+    '    console.log("landed:", info.owner.equals(pg.PROGRAM_ID));',
+    "  });",
+    "});",
+  ].join("\n");
