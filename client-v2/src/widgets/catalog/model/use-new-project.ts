@@ -28,7 +28,7 @@ export interface NewProjectState {
   /** Start from scratch's failure: a toast once the page was left */
   onStartFailed: (message: string) => void;
   /** An Open or Start runs: Import from GitHub waits */
-  importHeld: boolean;
+  isImportHeld: boolean;
   /** Import from GitHub reports its own run here, so the rest waits on it */
   onImporting: (importing: boolean) => void;
   /** Import from GitHub's failure: a toast once the page was left */
@@ -139,7 +139,7 @@ export const useNewProject = (
     onStartFailed: (message) => {
       if (!open.current) toastStartFailed(message);
     },
-    importHeld: busy || starting,
+    isImportHeld: busy || starting,
     onImporting: setImporting,
     // Import sits under Start, so only a left page hides its failure too
     onImportFailed: (message) => {

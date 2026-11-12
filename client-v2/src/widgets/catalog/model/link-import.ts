@@ -83,6 +83,9 @@ const failed = ({
   return fail("unexpected", error.message || IMPORT_FALLBACK);
 };
 
+/** The import running or last run; never rejects, so the next one chains */
+let imports: Promise<unknown> = Promise.resolve();
+
 /** Which import takes the link: a gist page is on a GitHub host too */
 const sourceOf = (url: string): LinkSource | undefined => {
   if (parseGistUrl(url)) return "gist";
@@ -111,12 +114,23 @@ export const importLink = async (link: string): Promise<LinkImport> => {
     };
   }
 
-  try {
-    if (source === "gist") await importGist(url, "new-project");
-    else await PgGithub.import(url);
-  } catch (error) {
-    if (error instanceof ImportCancelledError) return { outcome: "cancelled" };
-    return failed({ url, source, error });
-  }
-  return { outcome: "imported", source };
+  // One import at a time across the app, not per mount of New project: a
+  // page left and opened again mid-import would otherwise start a second one,
+  // and two imports of the same new repository both pass the
+  // existing-project check, so the later create throws. Queued, the later
+  // one finds the project the first made and opens it.
+  const run = imports.then(async (): Promise<LinkImport> => {
+    try {
+      if (source === "gist") await importGist(url, "new-project");
+      else await PgGithub.import(url);
+    } catch (error) {
+      if (error instanceof ImportCancelledError) {
+        return { outcome: "cancelled" };
+      }
+      return failed({ url, source, error });
+    }
+    return { outcome: "imported", source };
+  });
+  imports = run;
+  return run;
 };

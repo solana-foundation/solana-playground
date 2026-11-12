@@ -21,7 +21,7 @@ const NewProject = ({ project }: { project: NewProjectState }) => (
         />
         <ImportFromUrl
           importLink={importLink}
-          held={project.importHeld}
+          held={project.isImportHeld}
           onRunning={project.onImporting}
           onImported={project.closePage}
           onFailed={project.onImportFailed}

@@ -91,6 +91,29 @@ describe("importLink routes the link", () => {
     expect(mockGithubImport).not.toHaveBeenCalled();
   });
 
+  it("runs one import at a time, the later after the earlier ends", async () => {
+    let finish = () => {};
+    mockGithubImport.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (finish = resolve))
+    );
+    const first = importLink(REPO);
+    const second = importLink(REPO);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mockGithubImport).toHaveBeenCalledTimes(1);
+
+    finish();
+    await expect(first).resolves.toEqual({
+      outcome: "imported",
+      source: "github",
+    });
+    await expect(second).resolves.toEqual({
+      outcome: "imported",
+      source: "github",
+    });
+    expect(mockGithubImport).toHaveBeenCalledTimes(2);
+  });
+
   it("refuses a link that is neither, before any import", async () => {
     await expect(importLink("https://gitlab.com/acme/escrow")).resolves.toEqual(
       {

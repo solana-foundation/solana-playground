@@ -34,9 +34,9 @@ const BaseImportFromUrl = ({
   held = false,
   autoFocus,
 }: BaseImportFromUrlProps) => {
-  const importing = status.state === "importing";
+  const isImporting = status.state === "importing";
   const error = status.state === "failed" ? status.error : undefined;
-  const usable = !importing && !held && url.trim() !== "";
+  const canImport = !isImporting && !held && url.trim() !== "";
   const errorId = useId();
   const urlId = useId();
 
@@ -63,21 +63,21 @@ const BaseImportFromUrl = ({
             className="min-w-0 md:flex-1 max-md:h-12 max-md:px-3.5 max-md:text-body"
             value={url}
             placeholder="Paste a GitHub repo or gist link"
-            disabled={importing}
+            disabled={isImporting}
             onChange={(e) => onUrl(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && usable) onImport();
+              if (e.key === "Enter" && canImport) onImport();
             }}
           />
           <Button
             type="button"
             variant="outline"
             className="h-8 px-3.5 max-md:h-12 max-md:text-control"
-            disabled={!usable}
-            aria-busy={importing || undefined}
+            disabled={!canImport}
+            aria-busy={isImporting || undefined}
             onClick={onImport}
           >
-            {importing ? (
+            {isImporting ? (
               <>
                 <Spinner aria-hidden="true" role={undefined} />
                 Importing…
