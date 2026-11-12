@@ -458,11 +458,7 @@ const landedResult = async (
       return mismatched(result);
     }
     if (result.reason === undefined) {
-      const exists = existingOf(
-        result.log.split("\n"),
-        result.refused,
-        input.creates
-      );
+      const exists = existingOf(sent, result.refused, input.creates);
       if (exists) return { ...result, exists };
     }
     return result;
@@ -879,7 +875,12 @@ if (import.meta.vitest) {
         });
         port.decode = () => ({
           calls: [
-            { instruction: "initPlayer", args: {}, accounts: [], wrote: [] },
+            {
+              instruction: "initPlayer",
+              args: {},
+              accounts: [{ name: "Player", address: "Player1" }],
+              wrote: [{ name: "player", address: "Player1" }],
+            },
           ],
         });
         expect(await runWith(port, "call")).toMatchObject({
