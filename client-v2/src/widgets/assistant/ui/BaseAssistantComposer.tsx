@@ -17,7 +17,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -27,7 +26,7 @@ import { LogoPlay } from "@/shared/ui/logo";
 import { MenuItemText, MenuNote } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
-import { KEY_HINT, usePickedMenu } from "./use-picked-menu";
+import { usePickedMenu } from "./use-picked-menu";
 
 /** One thing the assistant reads each turn, named in the composer */
 export interface ComposerContextChip {
@@ -115,7 +114,7 @@ export function BaseAssistantComposer({
   const reasonId = useId();
   // During a turn Send is Stop, which nothing blocks
   const blocked = busy ? null : sendBlocked;
-  const add = usePickedMenu(focusPicked, { s: onSources });
+  const add = usePickedMenu(focusPicked);
   useEffect(() => {
     if (focusRequest === 0) return;
     form.current?.querySelector("textarea")?.focus();
@@ -202,7 +201,6 @@ export function BaseAssistantComposer({
               align="start"
               side="top"
               className="w-auto min-w-48"
-              onKeyDown={add.onKeyDown}
               onCloseAutoFocus={add.onCloseAutoFocus}
             >
               <DropdownMenuSub>
@@ -212,7 +210,7 @@ export function BaseAssistantComposer({
                 <DropdownMenuSubContent
                   className="max-h-80 overflow-y-auto"
                   // A letter typed here is the list's typeahead; it must not
-                  // reach the + menu's S through the portal
+                  // reach the + menu's own through the portal
                   onKeyDown={(e) => e.stopPropagation()}
                 >
                   {addable.length === 0 ? (
@@ -231,9 +229,6 @@ export function BaseAssistantComposer({
               </DropdownMenuSub>
               <DropdownMenuItem onSelect={() => add.pick(onSources)}>
                 <MenuItemText>Sources and tools</MenuItemText>
-                <DropdownMenuShortcut className={KEY_HINT}>
-                  S
-                </DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

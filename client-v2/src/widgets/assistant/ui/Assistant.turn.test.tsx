@@ -242,7 +242,7 @@ describe("Assistant's turn", () => {
     renderPanel();
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Add context" }));
-    await user.keyboard("s");
+    await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
 
     expect(screen.getByText("sources")).toBeTruthy();
     const back = screen.getByRole("button", { name: "Back" });

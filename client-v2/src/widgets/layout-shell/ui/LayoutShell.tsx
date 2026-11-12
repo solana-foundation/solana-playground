@@ -467,39 +467,39 @@ const LayoutShell = ({
     [viewport, state.open.console]
   );
   // `PgKeybind` reads Meta as Ctrl, so this is ⌘E on a Mac. Monaco binds ⌘E
-  // (find with selection) while it has focus; this one wins only outside it.
-  // On macOS a text field keeps Control+E, which Cocoa's text bindings make
-  // "end of line" (the assistant's composer): a Control without a Meta in an
-  // editable target is left to the field, unprevented. ⌘E has no native
-  // meaning in one, so it still folds the column. On Windows and Linux Ctrl is
-  // the primary modifier and means nothing in a field, so the key works
-  // everywhere there, Monaco included.
+  // (find with selection) while it has focus and stops the key, so this one
+  // listens in the capture phase and wins in the editor too, the same way
+  // the tutorial's ⌘E in `TutorialWorkspace` does.
+  // A key it declines (returns `false`) goes on to the field it landed in:
+  // - on macOS a text field keeps Control+E, which Cocoa's text bindings make
+  //   "end of line" (the assistant's composer), so a Control without a Meta
+  //   in an editable target is the field's; ⌘E has no native meaning there;
+  // - off a Mac, Ctrl+E in the terminal is the shell's end of line;
+  // - a dialog keeps its keys, except the phone's Files Sheet, which the key
+  //   opens and closes.
   // On a phone the key toggles the pager's own Files Sheet.
   useKeybind(
     FILES_KEY,
     {
       handle: (ev) => {
-        // Before `preventDefault`: under Home or a page the key is not the shell's
+        // Under Home or a page the key is not the shell's.
         // The frame has no column: ⌘E there is the workspace's tree
-        if (isCovered(screenNow.current) || tutorialNow.current) return;
-        if (
-          PgCommon.getOS() === "MacOS" &&
-          ev.ctrlKey &&
-          !ev.metaKey &&
-          isEditable(ev.target)
-        ) {
-          return;
+        if (isCovered(screenNow.current) || tutorialNow.current) return false;
+        const isMac = PgCommon.getOS() === "MacOS";
+        if (isMac && ev.ctrlKey && !ev.metaKey && isEditable(ev.target)) {
+          return false;
         }
-        // `PgKeybind` prevents the default itself unless told not to, which
-        // would also swallow the keys left to a field above
-        ev.preventDefault();
+        const target = ev.target instanceof Element ? ev.target : undefined;
+        if (!isMac && target?.closest(".xterm")) return false;
+        const dialog = target?.closest("[role='dialog'], [role='alertdialog']");
+        if (dialog && !dialog.matches("[data-files-sheet]")) return false;
         if (phone) {
           setPhoneFiles(!filesNow.current, "key");
           return;
         }
         setOpen("files", { open: !state.open.files, via: "key" });
       },
-      opts: { noPreventDefault: true },
+      opts: { capture: true },
     },
     [state.open.files, phone]
   );
