@@ -1,3 +1,4 @@
+import { orb } from "../block-explorers/orb";
 import { solanaExplorer } from "../block-explorers/solana-explorer";
 import { solscan } from "../block-explorers/solscan";
 import {
@@ -41,6 +42,39 @@ describe("block explorers", () => {
     expect(solscan.getAddressUrl(ID, "mainnet-beta")).toBe(
       `https://solscan.io/address/${ID}`
     );
+  });
+
+  it("open Orb on the network they are given", () => {
+    // Orb's scheme, checked on orbmarkets.io on 13 Nov 2026: mainnet takes no
+    // parameter; devnet and testnet take `?cluster=`
+    expect(orb.getAddressUrl(ID, "mainnet-beta")).toBe(
+      `https://orbmarkets.io/address/${ID}`
+    );
+    expect(orb.getTxUrl("sig", "mainnet-beta")).toBe(
+      "https://orbmarkets.io/tx/sig"
+    );
+    expect(orb.getAddressUrl(ID, "devnet")).toBe(
+      `https://orbmarkets.io/address/${ID}?cluster=devnet`
+    );
+    expect(orb.getTxUrl("sig", "devnet")).toBe(
+      "https://orbmarkets.io/tx/sig?cluster=devnet"
+    );
+    expect(orb.getTxUrl("sig", "testnet")).toBe(
+      "https://orbmarkets.io/tx/sig?cluster=testnet"
+    );
+    // Given no network, the selected one (testnet here)
+    expect(orb.getAddressUrl(ID)).toBe(
+      `https://orbmarkets.io/address/${ID}?cluster=testnet`
+    );
+  });
+
+  it("say Orb cannot open a local validator or a custom RPC", () => {
+    expect(orb.opens("mainnet-beta")).toBe(true);
+    expect(orb.opens("devnet")).toBe(true);
+    expect(orb.opens("testnet")).toBe(true);
+    expect(orb.opens("localnet")).toBe(false);
+    expect(orb.opens("playnet")).toBe(false);
+    expect(orb.opens(null)).toBe(false);
   });
 
   it("say which networks they can open", () => {
