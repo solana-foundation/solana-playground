@@ -8,7 +8,7 @@ import {
   sandboxKeypairWith,
   type SignThroughPage,
 } from "../../wallet/sandbox-signer-provider";
-import { patchConfirmTransaction } from "./confirm";
+import { patchConfirmTransactionWith } from "./confirm";
 import {
   countUnsent,
   patchWeb3,
@@ -362,7 +362,7 @@ describe("sandbox web3.js patch", () => {
 
 describe("sandbox confirmTransaction", () => {
   beforeAll(() => {
-    patchConfirmTransaction(web3);
+    patchConfirmTransactionWith(vi.fn())(web3);
   });
 
   it("polls the signature status until it reaches the commitment", async () => {

@@ -12,7 +12,7 @@ import { pgSignerFromFileWith, reasonMessage, showBigInts } from "../kit";
 import { PgJsRuntimePackage } from "../package";
 import type { OutputLevel } from "../protocol";
 import type { RunMessage, SandboxChannel } from "./channel";
-import { patchConfirmTransaction } from "./confirm";
+import { patchConfirmTransactionWith } from "./confirm";
 import { metaplexFor } from "./metaplex";
 import { countUnsent, patchWeb3 } from "./placeholders";
 
@@ -415,8 +415,12 @@ export const runWith = (channel: SandboxChannel) => async (run: RunMessage) => {
   }
 };
 
-/** Patches the sandbox's web3.js once, before any project code runs */
-export const prepareWeb3 = () => {
+/**
+ * Patches the sandbox's web3.js once, before any project code runs
+ *
+ * @param warn prints a warning in the project's terminal
+ */
+export const prepareWeb3 = (warn: (text: string) => void) => {
   patchWeb3(web3);
-  patchConfirmTransaction(web3);
+  patchConfirmTransactionWith(warn)(web3);
 };

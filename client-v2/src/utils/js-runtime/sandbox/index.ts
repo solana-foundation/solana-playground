@@ -3,7 +3,7 @@
 // `globalThis.fetch` it finds when it loads.
 import "./global-fetch";
 
-import { awaitPortFrom, channelFor } from "./channel";
+import { awaitPortFrom, channelFor, type SandboxChannel } from "./channel";
 import { bridgeRpcThrough } from "./fetch-bridge";
 import { prepareWeb3, runWith } from "./runtime";
 
@@ -17,10 +17,13 @@ if (window.origin !== "null") {
   );
 }
 
-prepareWeb3();
+// web3.js is patched before the page's port arrives. The patch prints only
+// while project code runs, which is after the port has come
+let channel: SandboxChannel | undefined;
+prepareWeb3((text) => channel?.post({ type: "output", level: "warn", text }));
 
 awaitPortFrom(window.parent)(window).then((port) => {
-  const channel = channelFor(port);
+  channel = channelFor(port);
   bridgeRpcThrough(channel.rpc);
   channel.onRun(runWith(channel));
 });
