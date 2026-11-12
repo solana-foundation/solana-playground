@@ -6,10 +6,10 @@ describes and emits its spec's events with memory-provider tests.
 
 ## 1. Build
 
-- [ ] 1.1 Create the `program-build` slice with the `build` prefix, emit
+- [x] 1.1 Create the `program-build` slice with the `build` prefix, emit
   `build_started`, `build_succeeded` and `build_failed` around
   `commands/build`, and verify with memory-provider tests for each
-  `framework` and `reason` (ticket to file)
+  `framework` and `reason` (done as `funnel-events` 5.1, HOO-2598)
 - [ ] 1.2 Keep the previous IDL when a build fails: the `build` command writes
   `result.idl` into `PgProgramInfo` even after a compile error, so a failed
   build erases the saved IDL; verify with a test of a successful build

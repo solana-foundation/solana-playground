@@ -89,8 +89,9 @@ uploaded one); without one there is no Download IDL.
 ### Requirement: Build telemetry
 
 The build SHALL emit `build_started { framework }` when a build is sent,
-`build_succeeded { framework, has_idl }` when the server returns a binary, and
-`build_failed { framework, reason }` when it does not. `framework` is
+`build_succeeded { framework, has_idl }` when the compiler reports no error,
+and `build_failed { framework, reason }` when it does not; the `build` command
+sends all three (`funnel-events`, "Build events"), once per build. `framework` is
 `anchor`, `native` or `seahorse`; `has_idl` is a boolean; `reason` is
 `compile`, `server` or `network`.
 
@@ -104,7 +105,8 @@ The build SHALL emit `build_started { framework }` when a build is sent,
 
 Every control on the Build screen that performs an action SHALL emit its own
 event when used, separate from the outcome events: Build, and Build again on
-Build succeeded, emit `build_started`, Download IDL `build_idl_downloaded` and
+Build succeeded, run the `build` command, whose `build_started` is their
+event (the controls send no second one), Download IDL `build_idl_downloaded` and
 Fix with assistant `build_fix_requested`, the last two with no parameters.
 Continue to Deploy only switches the stage. A control without its event fails
 review.
