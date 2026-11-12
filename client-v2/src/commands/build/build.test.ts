@@ -22,7 +22,11 @@ const utils = vi.hoisted(() => ({
   },
   PgPackage: { import: vi.fn() },
   PgGlobal: { update: vi.fn() },
-  PgProgramInfo: { update: vi.fn(), getPkStr: () => "Pk11111111111111" },
+  PgProgramInfo: {
+    update: vi.fn(),
+    getPkStr: () => "Pk11111111111111",
+    uuid: "u-a" as string | undefined,
+  },
   PgServer: { build: vi.fn() },
   PgTerminal: {
     println: vi.fn(),
@@ -65,6 +69,7 @@ describe("commands/build/build", () => {
     utils.PgExplorer.files = {};
     utils.PgExplorer.currentWorkspaceId = "id-a";
     utils.PgExplorer.currentWorkspaceName = "a";
+    utils.PgProgramInfo.uuid = "u-a";
     resetTelemetry();
     tracked = memoryProvider();
     initTelemetry({ providers: [tracked] });
@@ -297,6 +302,37 @@ describe("commands/build/build", () => {
     beforeEach(() => {
       utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
       utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    // Seahorse loads its compiler before the request goes out: a project
+    // opened meanwhile must not lend its identity to this build's audit row
+    it("sends the project the build started in", async () => {
+      utils.PgExplorer.getFileContent.mockReturnValue(undefined);
+      utils.PgExplorer.files = {
+        "/p/src/fizz.py": { content: "from seahorse.prelude import *" },
+      };
+      utils.PgPackage.import.mockImplementation(async () => {
+        utils.PgExplorer.currentWorkspaceId = "id-b";
+        utils.PgExplorer.currentWorkspaceName = "b";
+        utils.PgProgramInfo.uuid = "u-b";
+        return {
+          compileSeahorse: () => ["/src/lib.rs", "# [program] mod fizz {}"],
+        };
+      });
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "",
+        uuid: "u",
+      });
+
+      await run();
+
+      expect(utils.PgServer.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project: { id: "id-a", name: "a" },
+          uuid: "u-a",
+        }),
+        expect.anything()
+      );
     });
 
     it.each([
