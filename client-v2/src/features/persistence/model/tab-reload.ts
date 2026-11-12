@@ -321,7 +321,13 @@ const carryRename = async (from: string, to: string) => {
 };
 
 const reloadOnce = async (reopen: boolean): Promise<ReloadResult> => {
-  if (PgExplorer.isTemporary) return "skipped";
+  // A temporary project -- a shared link -- has nothing on disk to reload.
+  // The project list beside it still follows another tab's create, rename or
+  // delete, or it names projects that are gone. Deferred, like the stored
+  // workspace's case below, when the list could not be read.
+  if (PgExplorer.isTemporary) {
+    return (await PgExplorer.refreshWorkspaces()) ? "skipped" : "deferred";
+  }
 
   // The list first: a neighbour may have created, deleted or renamed a
   // workspace, and a re-open below saves this tab's list over the store's.

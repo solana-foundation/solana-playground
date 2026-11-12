@@ -26,6 +26,11 @@ const log = createLogger("tutorial-conversation:progress");
  */
 export interface ConversationProgress extends ConversationSave {
   version: 1;
+  /**
+   * 2 once the cursor counts Hello Anchor's `s4.client` beat; a save without
+   * it is older and `parseProgress` moves its cursor (`isBeforeRealignedBeat`)
+   */
+  format?: 2;
   passed: string[];
   finishedAt: number | null;
   /** When Start was pressed, in ms, or null before it */
@@ -238,6 +243,15 @@ interface Resolved {
 export interface Wrote {
   file: string;
   lines: number[];
+  /**
+   * Each written line's text as it landed, in the order of `lines`: the card
+   * draws these, so the learner's later edits to the file leave the card as
+   * the write made it, and finds the block by them when lines above it move. Absent for a created file (no lines), in a save from
+   * before the text was kept, and where the saved text did not pair with
+   * `lines` (`parseWrote` drops it); the card then reads those lines from
+   * the file.
+   */
+  text?: string[];
   created?: true;
   /** The learner's own lines kept the block from its place: it went to the
    * end of the file, and its card offers to restart the step */
@@ -272,13 +286,23 @@ export type RunRecord =
       answeredAt?: number;
       /** When "Show me the fix" wrote the step's target; it works once */
       fixedAt?: number;
+      /**
+       * A failed build: when "I'll fix it myself" closed its card. For an
+       * unplanned failure the act's Build again card follows (HOO-2806)
+       */
+      selfFixAt?: number;
     };
 
 /**
- * Why a build failed: the code, a server that never answered, or a server
- * that builds only for a signed-in GitHub user (HOO-2422)
+ * Why a build failed: the code, a server that never answered, a server
+ * that builds only for a signed-in GitHub user (HOO-2422), or the learner's
+ * Stop (HOO-2822)
  */
-export type BuildFailure = "compiler" | "unreachable" | "signed_out";
+export type BuildFailure =
+  | "compiler"
+  | "unreachable"
+  | "signed_out"
+  | "stopped";
 
 /** A build whose server never answered: nothing to explain, only Try again */
 export const isUnreachable = (r: RunResult): boolean =>
@@ -297,6 +321,13 @@ export const isSignedOut = (r: RunResult): boolean =>
  */
 export const isUnconfirmed = (r: RunResult): boolean =>
   (r.act === "run" || r.act === "call") && !r.ok && r.reason === "unconfirmed";
+
+/**
+ * An act the learner stopped (HOO-2822): nothing failed, so nothing to
+ * explain; the act's own "again" card follows at once
+ */
+export const isStoppedRun = (r: RunResult): boolean =>
+  !r.ok && "reason" in r && r.reason === "stopped";
 
 /** A failed run or call the program could not match (HOO-2688) */
 export const isMismatch = (r: RunResult): boolean =>
@@ -395,7 +426,8 @@ export type RunResult =
       /**
        * `compiler`: the server answered and the build failed, or the server
        * refused the request; `unreachable`: no answer reached the browser;
-       * `signed_out`: the server builds only for a signed-in user
+       * `signed_out`: the server builds only for a signed-in user;
+       * `stopped`: the learner stopped it, and `log` is the stop's line
        */
       reason: BuildFailure;
       error: BuildError | null;
@@ -432,11 +464,25 @@ export type RunResult =
       madeWallet?: true;
     }
   | {
-      /** A deploy's failures, and an airdrop's, which share its cards */
+      /**
+       * A deploy's failures, and an airdrop's, which share its cards. A
+       * deploy refused before any SOL is locked, from the program's on-chain
+       * state, is
+       * `immutable` (it can no longer be upgraded) or `not_authority`
+       * (another wallet holds its upgrade authority): running it again as it
+       * is cannot fix either (HOO-2806). `stopped`: the learner stopped
+       * the act (HOO-2822); today only its build stage can be stopped, and
+       * an airdrop never is
+       */
       act: "airdrop" | "deploy" | "buildDeploy";
       ok: false;
       seconds: number;
-      reason: "failed" | "no_wallet";
+      reason:
+        | "failed"
+        | "no_wallet"
+        | "immutable"
+        | "not_authority"
+        | "stopped";
       message: string;
     }
   | {
@@ -494,10 +540,12 @@ export type RunResult =
       log: string;
       /**
        * Why nothing reached the chain: no wallet, or the run sent no
-       * transaction. Absent for a run that sent and failed, or that could not
-       * run at all.
+       * transaction. `stopped`: it ended with a stop (HOO-2822), whatever
+       * it sent before, which no run or call can do today, since neither
+       * runs through a stoppable command. Absent for a run that sent and
+       * failed, or that could not run at all.
        */
-      reason?: "no_wallet" | "no_transaction";
+      reason?: "no_wallet" | "no_transaction" | "stopped";
       /**
        * The call did not match the program on chain: the IDL has no such
        * instruction, or the program refused it as one it does not know or
@@ -551,6 +599,7 @@ export const freshProgress = (
   restartedAt: number | null = null
 ): ConversationProgress => ({
   version: 1,
+  format: 2,
   passed: [],
   finishedAt: null,
   startedAt: null,
@@ -593,6 +642,22 @@ const ACT_KINDS: Record<Act, true> = {
 const ACTS = Object.keys(ACT_KINDS) as readonly Act[];
 const SKIP_VIAS: readonly SkipVia[] = ["button", "call_panel", "elsewhere"];
 
+/**
+ * Hello Anchor's "greet-by-name" step gained a beat, `s4.client`, at index 2.
+ * A cursor is the index of the next beat, so a save made before it, past the
+ * second beat, points one beat early: the airdrop card would show as the live
+ * one instead of the deploy. Only a save without `format` is that old, and
+ * `parseProgress` stamps `format: 2` on what it returns, so the move runs
+ * once. The learner skips only the client rewrite, and the call card sends
+ * its own arguments.
+ */
+const isBeforeRealignedBeat = (cursor: Cursor, format: unknown) =>
+  format === undefined &&
+  cursor.kind === "step" &&
+  cursor.stepId === "greet-by-name" &&
+  !cursor.fail &&
+  cursor.beat >= 2;
+
 const parseCursor = (v: unknown): Cursor | null => {
   if (!isRecord(v)) return null;
   if (v.kind === "intro" || v.kind === "finished") return { kind: v.kind };
@@ -613,13 +678,42 @@ const parseCursor = (v: unknown): Cursor | null => {
   return null;
 };
 
+/**
+ * A block's landing as saved: `Wrote`. A flag that is not `true` and text
+ * that is not a list of strings read as absent rather than failing the
+ * landing; text drawn from the file is the fallback for the latter.
+ */
+const wroteSchema = z.object({
+  file: z.string(),
+  lines: z.array(z.number().int()),
+  text: z.array(z.string()).optional().catch(undefined),
+  created: z.literal(true).optional().catch(undefined),
+  appended: z.literal(true).optional().catch(undefined),
+});
+
 const parseWrote = (v: unknown): Wrote | null => {
-  if (!isRecord(v) || typeof v.file !== "string" || !isIndexes(v.lines)) {
-    return null;
+  const parsed = wroteSchema.safeParse(v);
+  if (!parsed.success) return null;
+  const { file, lines, text, created, appended } = parsed.data;
+  const wrote: Wrote = { file, lines };
+  // Text that is not a list of strings, or does not pair with the lines, is
+  // dropped: the card then reads the file, as for a save from before text
+  // was kept
+  if (text && text.length === lines.length) wrote.text = text;
+  else if (isRecord(v) && v.text !== undefined) {
+    log.debug(
+      "a saved block's text is unusable, so its card reads the file and keeps its lines",
+      {
+        context: {
+          file,
+          lines: lines.length,
+          text: text ? text.length : "not a list of strings",
+        },
+      }
+    );
   }
-  const wrote: Wrote = { file: v.file, lines: v.lines };
-  if (v.created === true) wrote.created = true;
-  if (v.appended === true) wrote.appended = true;
+  if (created) wrote.created = true;
+  if (appended) wrote.appended = true;
   return wrote;
 };
 
@@ -764,7 +858,8 @@ const parseResult = (v: unknown): RunResult | null => {
     v.act === "build" &&
     !v.ok &&
     v.reason !== "unreachable" &&
-    v.reason !== "signed_out"
+    v.reason !== "signed_out" &&
+    v.reason !== "stopped"
   ) {
     return { ...v, reason: "compiler" } as unknown as RunResult;
   }
@@ -881,46 +976,74 @@ const withoutPaths = (
   return out;
 };
 
+/** A time in ms; zod's number is finite, as `isMs` asks */
+const msSchema = z.number();
+
+/** One of a failed run's moments: kept when it reads as a time, else dropped alone */
+const momentSchema = msSchema.optional().catch(undefined);
+
+/**
+ * A saved run record's envelope: its status and times, and for a failed run
+ * the planned mark and the explain's and the fix's moments, each dropped
+ * alone when it does not read as one. The result inside is `parseResult`'s.
+ */
+const runRecordSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("started"), at: msSchema }),
+  z.object({ status: z.literal("interrupted"), at: msSchema }),
+  z.object({
+    status: z.literal("ok"),
+    at: msSchema,
+    took: msSchema,
+    result: z.unknown(),
+  }),
+  z.object({
+    status: z.literal("refused"),
+    at: msSchema,
+    took: msSchema,
+    result: z.unknown(),
+  }),
+  z.object({
+    status: z.literal("failed"),
+    at: msSchema,
+    took: msSchema,
+    result: z.unknown(),
+    planned: z.literal(true).optional().catch(undefined),
+    explainedAt: momentSchema,
+    answeredAt: momentSchema,
+    fixedAt: momentSchema,
+    selfFixAt: momentSchema,
+  }),
+]);
+
 /** A run saved as `started` comes back `interrupted`: nothing resumes */
 const parseRun = (v: unknown): RunRecord | null => {
-  if (!isRecord(v) || !isMs(v.at)) return null;
-  const at = v.at;
-  switch (v.status) {
-    case "started":
-    case "interrupted":
-      return { status: "interrupted", at };
-    case "ok": {
-      const result = parseResult(v.result);
-      return result && isMs(v.took)
-        ? { status: "ok", at, took: v.took, result }
-        : null;
-    }
-    case "refused": {
-      // Only a failed call that carries its refusal or an existing account
-      // was ever recorded refused
-      const result = parseResult(v.result);
-      return result &&
-        isMs(v.took) &&
-        !result.ok &&
-        (result.act === "run" || result.act === "call") &&
-        (result.refused || existsOf(result))
-        ? { status: "refused", at, took: v.took, result }
-        : null;
-    }
-    case "failed": {
-      const result = parseResult(v.result);
-      if (!result || !isMs(v.took)) return null;
-      const run: RunRecord = { status: "failed", at, took: v.took, result };
-      if (v.planned === true) run.planned = true;
-      // The explain's moments, each kept only when it reads as a time
-      if (isMs(v.explainedAt)) run.explainedAt = v.explainedAt;
-      if (isMs(v.answeredAt)) run.answeredAt = v.answeredAt;
-      if (isMs(v.fixedAt)) run.fixedAt = v.fixedAt;
-      return run;
-    }
-    default:
-      return null;
+  const parsed = runRecordSchema.safeParse(v);
+  if (!parsed.success) return null;
+  const record = parsed.data;
+  if (record.status === "started" || record.status === "interrupted") {
+    return { status: "interrupted", at: record.at };
   }
+  const result = parseResult(record.result);
+  if (!result) return null;
+  const { at, took } = record;
+  if (record.status === "ok") return { status: "ok", at, took, result };
+  if (record.status === "refused") {
+    // Only a failed call that carries its refusal or an existing account
+    // was ever recorded refused
+    return !result.ok &&
+      (result.act === "run" || result.act === "call") &&
+      (result.refused || existsOf(result))
+      ? { status: "refused", at, took, result }
+      : null;
+  }
+  const run: RunRecord = { status: "failed", at, took, result };
+  if (record.planned) run.planned = true;
+  // The explain's and the fix's moments, each kept only when it reads as a time
+  if (record.explainedAt !== undefined) run.explainedAt = record.explainedAt;
+  if (record.answeredAt !== undefined) run.answeredAt = record.answeredAt;
+  if (record.fixedAt !== undefined) run.fixedAt = record.fixedAt;
+  if (record.selfFixAt !== undefined) run.selfFixAt = record.selfFixAt;
+  return run;
 };
 
 /** An act's runs, the unreadable ones dropped; none left drops the act */
@@ -1039,8 +1162,13 @@ export const parseProgress = (
 ): ConversationProgress | null => {
   if (!isRecord(saved) || saved.version !== 1) return null;
   if (!isStrings(saved.passed) || !isMsOrNull(saved.finishedAt)) return null;
-  const cursor = parseCursor(saved.cursor);
-  if (!cursor) return null;
+  const parsed = parseCursor(saved.cursor);
+  if (!parsed) return null;
+  const realigned = isBeforeRealignedBeat(parsed, saved.format);
+  const cursor: Cursor =
+    realigned && parsed.kind === "step"
+      ? { ...parsed, beat: parsed.beat + 1 }
+      : parsed;
   if (!isMsOrNull(saved.startedAt)) return null;
   // One rule for the save's timestamps: a malformed one fails the save
   if (!isMsOrNull(saved.restartedAt)) return null;
@@ -1050,6 +1178,7 @@ export const parseProgress = (
   if (saved.deployed !== undefined && !deployed) onDrop("deployed");
   return {
     version: 1,
+    format: 2,
     passed: Array.from(new Set(saved.passed)),
     finishedAt: saved.finishedAt,
     startedAt: saved.startedAt,
@@ -1079,6 +1208,42 @@ if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/progress", () => {
+    it("moves a cursor saved before s4.client one beat on", () => {
+      const save = (beat: number, format?: 2) => {
+        const progress = JSON.parse(
+          JSON.stringify(
+            Object.assign(freshProgress(), {
+              cursor: {
+                kind: "step",
+                stepId: "greet-by-name",
+                beat,
+                fail: false,
+              },
+            })
+          )
+        );
+        if (format === undefined) delete progress.format;
+        return progress;
+      };
+      const at = (v: unknown) => parseProgress(v)?.cursor;
+      expect(at(save(3))).toEqual({
+        kind: "step",
+        stepId: "greet-by-name",
+        beat: 4,
+        fail: false,
+      });
+      expect(at(save(2))).toMatchObject({ beat: 3 });
+      expect(at(save(1))).toMatchObject({ beat: 1 });
+      // A save of this build, at the same beat, is left alone
+      expect(at(save(3, 2))).toMatchObject({ beat: 3 });
+      expect(at(save(2, 2))).toMatchObject({ beat: 2 });
+      // Loading the migrated save again moves nothing
+      const once = parseProgress(save(3));
+      expect(parseProgress(JSON.parse(JSON.stringify(once)))?.cursor).toEqual(
+        once?.cursor
+      );
+    });
+
     it("drops a landed airdrop whose balance or amount does not read as lamports", () => {
       const saved = (balance: unknown, airdropped: unknown) =>
         JSON.parse(
@@ -1210,6 +1375,7 @@ if (import.meta.vitest) {
       } = {}
     ) => ({
       version: 1 as const,
+      format: 2 as const,
       passed: opts.passed ?? ["write-program"],
       finishedAt: opts.finishedAt ?? null,
       startedAt: 1000,
@@ -1299,6 +1465,130 @@ if (import.meta.vitest) {
 
     it("parses a midway save to itself", () => {
       expect(reload(midway())).toEqual(midway());
+    });
+
+    it("keeps a block's written text across a reload, and reads a save without it as before", () => {
+      const text = ["use anchor_lang::prelude::*;", "", 'declare_id!("1");'];
+      const withText = midway({
+        beats: {
+          "s1.boil": {
+            kind: "written",
+            at: 1100,
+            wrote: { file: "src/lib.rs", lines: [1, 2, 3], text },
+          },
+        },
+      });
+      expect(reload(withText)?.beats["s1.boil"]).toEqual(
+        withText.beats["s1.boil"]
+      );
+      // A resolved question's block keeps its text too
+      const q1 = {
+        kind: "picked",
+        at: 1300,
+        openedAt: 1250,
+        option: 1,
+        attempts: 1,
+        wrong: [],
+        wrote: { file: "src/lib.rs", lines: [5], text: ["fn hi() {}"] },
+      };
+      expect(
+        reload(midway({ beats: { "s1.q1": q1 } }))?.beats["s1.q1"]
+      ).toEqual(q1);
+      // A save from before the text was kept: no text, the card reads the file
+      expect(reload(midway())?.beats["s1.boil"]).toEqual({
+        kind: "written",
+        at: 1100,
+        wrote: { file: "src/lib.rs", lines: [1, 2, 3] },
+      });
+    });
+
+    it("drops text it cannot pair with the lines, and keeps the block", () => {
+      const landed = (text: unknown) =>
+        reload(
+          midway({
+            beats: {
+              "s1.boil": {
+                kind: "written",
+                at: 1100,
+                wrote: { file: "src/lib.rs", lines: [1, 2], text },
+              },
+            },
+          })
+        )?.beats["s1.boil"];
+      const block = {
+        kind: "written",
+        at: 1100,
+        wrote: { file: "src/lib.rs", lines: [1, 2] },
+      };
+      expect(landed(["only one"])).toEqual(block);
+      expect(landed([1, 2])).toEqual(block);
+      expect(landed("a\nb")).toEqual(block);
+    });
+
+    describe("a block's dropped text", () => {
+      // Loaded here, so the bundle carries no test logger
+      let logger: typeof import("@/shared/lib/logger");
+      import.meta.vitest?.beforeAll(async () => {
+        logger = await import("@/shared/lib/logger");
+      });
+
+      it("is logged once per block, and nothing for text that pairs or none", () => {
+        const logged = logger.memoryProvider();
+        logger.initLogger({ providers: [logged] });
+        try {
+          const landed = (wrote: Record<string, unknown>) =>
+            reload(
+              midway({
+                beats: { "s1.boil": { kind: "written", at: 1100, wrote } },
+              })
+            );
+          landed({ file: "src/lib.rs", lines: [1, 2], text: ["only one"] });
+          landed({ file: "src/lib.rs", lines: [1, 2], text: "a\nb" });
+          landed({ file: "src/lib.rs", lines: [1, 2], text: ["a", 2] });
+          landed({ file: "src/lib.rs", lines: [1, 2] });
+          landed({ file: "src/lib.rs", lines: [1, 2], text: ["a", "b"] });
+          expect(
+            logged.entries
+              .filter((e) => e.message?.includes("text is unusable"))
+              .map((e) => e.context)
+          ).toEqual([
+            { file: "src/lib.rs", lines: 2, text: 1 },
+            { file: "src/lib.rs", lines: 2, text: "not a list of strings" },
+            { file: "src/lib.rs", lines: 2, text: "not a list of strings" },
+          ]);
+        } finally {
+          logger.resetLogger();
+        }
+      });
+    });
+
+    it("keeps a created file's landing across a reload, and reads a malformed flag as absent", () => {
+      const landed = (wrote: Record<string, unknown>) =>
+        reload(
+          midway({
+            beats: { "s3.file": { kind: "written", at: 3000, wrote } },
+          })
+        )?.beats["s3.file"];
+      expect(
+        landed({ file: "client/client.ts", lines: [], created: true })
+      ).toEqual({
+        kind: "written",
+        at: 3000,
+        wrote: { file: "client/client.ts", lines: [], created: true },
+      });
+      // A flag that is not `true` costs only itself, never the landing
+      expect(
+        landed({
+          file: "src/lib.rs",
+          lines: [1],
+          created: "yes",
+          appended: 1,
+        })
+      ).toEqual({
+        kind: "written",
+        at: 3000,
+        wrote: { file: "src/lib.rs", lines: [1] },
+      });
     });
 
     it("keeps a landed airdrop across a reload, so its card is not live again", () => {
@@ -1401,6 +1691,57 @@ if (import.meta.vitest) {
       expect(isUnreachable(refused)).toBe(false);
     });
 
+    it("keeps an act the learner stopped stopped on load, never a compiler failure", () => {
+      const build: RunResult = {
+        act: "build",
+        ok: false,
+        seconds: 0,
+        reason: "stopped",
+        error: null,
+        log: "Stopped.",
+      };
+      const deploy: RunResult = {
+        act: "deploy",
+        ok: false,
+        seconds: 1,
+        reason: "stopped",
+        message: "Stopped.",
+      };
+      const run: RunResult = {
+        act: "run",
+        ok: false,
+        seconds: 1,
+        reason: "stopped",
+        message: "Stopped.",
+        log: "",
+      };
+      const saved = midway({
+        runs: {
+          "s1.build": [{ status: "failed", at: 3, took: 0, result: build }],
+          "s2.deploy": [{ status: "failed", at: 4, took: 1, result: deploy }],
+          "s3.run": [{ status: "failed", at: 5, took: 1, result: run }],
+        },
+      });
+      const runs = reload(saved)?.runs;
+      expect(
+        ["s1.build", "s2.deploy", "s3.run"].map((id) => {
+          const last = runs?.[id]?.at(-1);
+          return last && "result" in last ? last.result : null;
+        })
+      ).toEqual([build, deploy, run]);
+      expect([build, deploy, run].every(isStoppedRun)).toBe(true);
+      expect(
+        isStoppedRun({
+          act: "build",
+          ok: false,
+          seconds: 0,
+          reason: "compiler",
+          error: null,
+          log: "Stopped.",
+        })
+      ).toBe(false);
+    });
+
     it("reloads an explained failure's moments, and drops one that is not a time", () => {
       const result: RunResult = {
         act: "build",
@@ -1418,6 +1759,7 @@ if (import.meta.vitest) {
         explainedAt: 4,
         answeredAt: 5,
         fixedAt: 6,
+        selfFixAt: 7,
       };
       const broken = {
         status: "failed",
@@ -1426,6 +1768,8 @@ if (import.meta.vitest) {
         result,
         explainedAt: 8,
         answeredAt: "soon",
+        selfFixAt: "later",
+        planned: "yes",
       };
       const saved = midway({ runs: { "s1.build": [kept, broken] } });
       expect(reload(saved)?.runs["s1.build"]).toEqual([

@@ -11,8 +11,9 @@ export type Captured =
 
 /**
  * Send errors `PgTx.send` answers by sending again with a fresh blockhash:
- * the refusal is the first try of a transaction that may land on the retry,
- * not the program's answer
+ * the refusal is a try of a transaction that may land on the retry, not the
+ * program's answer. After its last resend `PgTx.send` throws the answer, so
+ * the run gets it as its error, not as a captured refusal
  */
 const RETRIED = [
   "Blockhash not found",
@@ -25,6 +26,10 @@ export const isRetriedSend = (c: Captured): boolean =>
 
 /** Thrown into a run that starts while another one is capturing */
 export const CAPTURE_BUSY = "Another run is sending. Wait for it to finish.";
+
+/** Whether a failure is that refusal, by its message */
+export const isCaptureBusy = (message: string): boolean =>
+  message === CAPTURE_BUSY;
 
 /** Whether a capture is in flight: the hook is on the shared prototype */
 let capturing = false;

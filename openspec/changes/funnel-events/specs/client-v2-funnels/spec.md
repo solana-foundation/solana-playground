@@ -26,16 +26,16 @@ SHALL be declared by a tracker under `features/`, `widgets/` or `entities/`.
 | Arrive on the catalog | `catalog_shown` | `catalogPage` in `widgets/catalog/model/catalog-page.ts` | widgets/catalog |
 | Get a project: new | `new_project_started` | `StartFromScratch` in `features/new-project/ui/StartFromScratch.tsx` | features/new-project |
 | Get a project: from the catalog | `catalog_item_opened` | `useCardOpen` in `widgets/catalog/model/use-card-open.ts` | widgets/catalog |
-| Get a project: import | `project_imported` | `ImportGithub` and its `Example` in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx`; `ImportFs` in `Modals/ImportFs.tsx`; `ImportTemporary` in `Modals/ImportTemporary.tsx` | pending (funnel-events) |
-| Get a project: view a GitHub link | `project_viewed` | `github` (`/github/<owner>/<repo>…`) in `routes/github/github.tsx` | pending (funnel-events) |
+| Get a project: import | `project_imported` | `ImportGithub` and its `Example` in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx`; `ImportFs` in `Modals/ImportFs.tsx`; `ImportTemporary` in `Modals/ImportTemporary.tsx` | features/project-files |
+| Get a project: view a GitHub link | `project_viewed` | `trackView` in `features/project-files/model/view.ts`, around `PgGithub.getFiles` in `github` (`/github/<owner>/<repo>…`, `routes/github/github.tsx`) | features/project-files |
 | Sign in | `auth_signed_in` | `PgSession._signIn` in `features/auth/model/session.ts` | features/auth |
 | Build | `build_started`, `build_succeeded` | `build` in `commands/build/build.ts` | pending (wbdi-flow) |
-| Fund the wallet | `fund_sent` | `FundDialog` in `features/fund-wallet/ui/FundDialog.tsx` | features/fund-wallet |
+| Fund the wallet | `fund_sent`, `fund_airdropped` | `FundDialog` in `features/fund-wallet/ui/FundDialog.tsx`; `airdrop` in `commands/airdrop/airdrop.ts` | features/fund-wallet |
 | Deploy | `deploy_started`, `deploy_succeeded` | `deploy` (its `preChecks` and `handle`) in `commands/deploy/deploy.ts`; `PgStageDeploy.start` in `features/deploy/model/stage-deploy.ts` | features/deploy |
-| Use: run tests or a client script | `run_finished` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | pending (funnel-events) |
+| Use: run tests or a client script | `run_finished` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | features/run |
 | Use: send an instruction | `interact_sent` | `runCall` in `views/flow/stages/run-call.ts` | pending (wbdi-flow) |
-| Export the project | `project_exported` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `Project` in `widgets/settings-page/ui/SettingsPage.tsx` | pending (funnel-events) |
-| Follow a tutorial | `tutorial_started`, `tutorial_finished` | `PgTutorial` in `utils/tutorial/tutorial.ts` | pending (tutorial-flow-v2) |
+| Export the project | `project_exported` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `ExportProject` in `widgets/settings-page/ui/ExportProject.tsx` | features/project-files |
+| Follow a tutorial | `tutorial_started`, `tutorial_finished` | `PgTutorial` in `utils/tutorial/tutorial.ts`; markdown tutorials opened by `PgTutorial.open` are not counted (HOO-2751, 10 Nov 2026) | pending (tutorial-flow-v2) |
 | Ask the assistant | `assistant_turn_sent`, `assistant_turn_answered` | `useTurn` in `widgets/assistant/model/use-turn.ts` | pending (assistant-usage-events) |
 
 #### Scenario: A listed event is renamed (manual)

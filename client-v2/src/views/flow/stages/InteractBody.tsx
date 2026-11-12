@@ -28,7 +28,7 @@ export interface InteractBodyProps {
   cluster: string | null;
   /**
    * The network, as said inside a sentence, whose SOL the fee payer lacks
-   * for one fee; every card's Test waits for it and says so
+   * for one fee; every card's Send waits for it and says so
    */
   solNeededOn?: string;
 }

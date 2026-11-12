@@ -310,12 +310,12 @@ A result that passed its goal because the account already exists SHALL show a pa
 
 ### Requirement: The step's pass says it passed on an existing account
 
-`tutorial_step_passed` SHALL carry `reason` with the value `"exists"` when the step passed because the account its goal creates already exists, and SHALL carry no `reason` on any other pass. Its other parameters (`tutorial`, `step`, `via`, `seconds`) are unchanged. A reload SHALL keep the reason with the step's pass.
+`tutorial_step_passed` SHALL carry `reason` with the value `"exists"` when the step passed because the account its goal creates already exists, and SHALL carry no `reason` on any other pass. Its other parameters (`tutorial`, `step_index`, `via`, `seconds`) are unchanged. A reload SHALL keep the reason with the step's pass.
 
 #### Scenario: The event on an existing account (manual)
 
 - **WHEN** Lumberjack's step 2 passes from the Call panel on an existing player
-- **THEN** `tutorial_step_passed` fires once with `step` 2, `via` `call_panel` and `reason` `exists`
+- **THEN** `tutorial_step_passed` fires once with `step_index` 2, `via` `call_panel` and `reason` `exists`
 
 ### Requirement: A one-time call on an existing account moves the lesson on
 

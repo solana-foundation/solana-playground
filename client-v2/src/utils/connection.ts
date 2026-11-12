@@ -4,7 +4,7 @@ import {
   fetchClusterByGenesisHash,
   getConnectionFor,
   getKnownCluster,
-  getReadBufferConnectionFor,
+  getNativeConnectionFor,
   PgSelectedConnection,
 } from "@/entities/cluster";
 import { recheckWhileBad } from "@/shared/lib/backoff-recheck";
@@ -194,12 +194,24 @@ const mirrorToStore = () =>
 @initable({ onDidInit: mirrorToStore })
 class _PgConnection {
   /**
-   * The connection program buffer accounts are read through: the read-buffer
-   * RPC the env configures for `connection`'s cluster, else `connection`
-   * itself. Sends and every other read stay on `connection`.
+   * The connection program buffer accounts are read through: the native RPC
+   * the env configures for `connection`'s cluster, else `connection` itself.
+   * Sends and every other read stay on `connection`.
    */
   static getReadBufferConnection(connection: PgWeb3.Connection) {
-    return getReadBufferConnectionFor(getClusterOf(connection))(connection);
+    return getNativeConnectionFor(getClusterOf(connection))(connection);
+  }
+
+  /**
+   * The connection an airdrop is requested and confirmed through: the native
+   * RPC the env configures for `connection`'s cluster, whose faucet answers
+   * where a platform RPC refuses, else `connection` itself (localnet, a
+   * custom endpoint on no known cluster). The same RPC as
+   * `getReadBufferConnection` today; a name per purpose, so a guard on buffer
+   * reads cannot change where airdrops go.
+   */
+  static getAirdropConnection(connection: PgWeb3.Connection) {
+    return getNativeConnectionFor(getClusterOf(connection))(connection);
   }
 
   /**

@@ -95,7 +95,13 @@ if (import.meta.vitest) {
       HTMLCanvasElement.prototype.getContext =
         (() => ({})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
       document.queryCommandSupported = () => false;
-      live = await import("monaco-editor");
+      // The core API alone: `editor.main` (what `monaco-editor` resolves to)
+      // also loads every language and editor contribution, seconds of work
+      // that these tests never use and that a busy machine stretched past the
+      // hook's timeout during `yarn run check`
+      live = (await import(
+        "monaco-editor/esm/vs/editor/editor.api.js"
+      )) as unknown as typeof monaco;
     });
 
     afterEach(() => {

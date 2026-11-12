@@ -90,9 +90,9 @@ it("measures a pick in the row and runs the network's and the AI's action", asyn
   expect(onOpenNetwork).toHaveBeenCalledOnce();
   expect(eventsNamed("status_indicator_picked")).toEqual([
     // No model is grey (`idle`), which is measured as ready
-    { indicator: "ai", state: "ready", from: "row" },
-    { indicator: "network", state: "ready", from: "row" },
-    { indicator: "rust", state: "working", from: "row" },
+    { indicator: "ai", state: "ready", via: "row" },
+    { indicator: "network", state: "ready", via: "row" },
+    { indicator: "rust", state: "working", via: "row" },
   ]);
 });
 
@@ -109,7 +109,7 @@ it("measures a pick on the rail", async () => {
     screen.getByRole("button", { name: "Cluster: devnet" })
   );
   expect(eventsNamed("status_indicator_picked")).toEqual([
-    { indicator: "network", state: "ready", from: "rail" },
+    { indicator: "network", state: "ready", via: "rail" },
   ]);
 });
 
@@ -131,7 +131,7 @@ it("measures the sheet opening and a row's action", async () => {
   expect(onConnectAi).toHaveBeenCalledOnce();
   expect(eventsNamed("status_sheet_opened")).toEqual([{ worst: "working" }]);
   expect(eventsNamed("status_indicator_picked")).toEqual([
-    { indicator: "ai", state: "ready", from: "sheet" },
+    { indicator: "ai", state: "ready", via: "sheet" },
   ]);
 });
 
@@ -168,7 +168,7 @@ it("asks the cluster and the hosted model again on Try again, and measures what 
   expect(recheck).toHaveBeenCalledOnce();
   await vi.waitFor(() =>
     expect(eventsNamed("status_retried")).toEqual([
-      { indicator: "network", from: "row", answered: false },
+      { indicator: "network", via: "row", answered: false },
     ])
   );
   await userEvent.keyboard("{Escape}");
@@ -182,8 +182,8 @@ it("asks the cluster and the hosted model again on Try again, and measures what 
   expect(onRetryAi).toHaveBeenCalledOnce();
   await vi.waitFor(() =>
     expect(eventsNamed("status_retried")).toEqual([
-      { indicator: "network", from: "row", answered: false },
-      { indicator: "ai", from: "row", answered: true },
+      { indicator: "network", via: "row", answered: false },
+      { indicator: "ai", via: "row", answered: true },
     ])
   );
   recheck.mockReset();

@@ -123,7 +123,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     await renderOpen();
 
     expect(events("fund_dialog_opened")).toEqual([
-      expect.objectContaining({ params: { from: "account-menu" } }),
+      expect.objectContaining({ params: { via: "account-menu" } }),
     ]);
   });
 

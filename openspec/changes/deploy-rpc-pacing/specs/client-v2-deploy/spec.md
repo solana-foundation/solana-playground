@@ -68,8 +68,9 @@ deploy typed in the terminal SHALL keep its question.
 Every read of a deploy's buffer account SHALL go through the cluster's read-buffer RPC when the env sets one:
 `REACT_APP_DEVNET_READ_BUFFER_RPC_URL`, `REACT_APP_TESTNET_READ_BUFFER_RPC_URL` or
 `REACT_APP_MAINNET_READ_BUFFER_RPC_URL`. This covers deploys typed in the terminal, started from the Deploy stage,
-and run by a tutorial. Sends and every other read SHALL stay on the selected RPC. An unset or empty value SHALL read
-the buffer through the selected RPC.
+and run by a tutorial. Sends and every other read SHALL stay on the selected RPC, apart from a deploy's airdrop,
+which goes through the cluster's native RPC as `client-v2-wallet-funding` requires. An unset or empty value SHALL
+read the buffer through the selected RPC.
 
 #### Scenario: A platform RPC that lags on fresh buffers (manual)
 

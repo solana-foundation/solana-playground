@@ -266,7 +266,7 @@ export function BaseAssistantComposer({
           </span>
         )}
       </Composer>
-      <p className="px-1 text-center text-xs text-subtle">
+      <p className="px-1 text-center text-xs font-read text-subtle">
         Nothing is written to your project without your click
       </p>
     </div>

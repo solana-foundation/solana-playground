@@ -1,9 +1,17 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 
 import { PgSession } from "@/features/auth";
 import { report, toReplayMessagesWith } from "@/features/persistence";
 import type { AiTurnError, ModelProvider } from "@/shared/lib/ai";
 import { isNetworkFailure } from "@/shared/lib/ai";
+import type { Draft } from "@/shared/lib/draft";
+import { createDraft } from "@/shared/lib/draft";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
@@ -277,9 +285,11 @@ export interface Turn {
   phase: TurnPhase;
   /** `phase` is not idle: a turn runs, waits on an approval or on a busy model, or unwinds */
   busy: boolean;
-  /** What is in the composer */
-  input: string;
-  setInput(value: string): void;
+  /**
+   * What is in the composer. A store, not a string, so typing re-renders only
+   * the composer that subscribes to it (`useDraft`)
+   */
+  draft: Draft;
   /** Open Connect a model, on `preset`'s backend when given */
   openConnect: ConnectOpener;
   /**
@@ -387,38 +397,53 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   // A session ending or starting changes whether the default can take a turn
   useEffect(() => PgSession.onDidChange(render).dispose, []);
 
+  // What the composer holds lives in a store (`Draft`), so a keystroke
+  // re-renders only the composer. It starts as the chat's saved draft, and
+  // follows the chat's slot: see the effects below
   const slot = draftSlot(draftKey);
-  const [draft, setDraft] = useState(() => ({
-    slot,
-    input: draftOf(draftKey),
-  }));
-  // Typed here while the session was still being read: it is the account's
-  // the read found, and stays on screen rather than blanking mid-typing
-  const isCarried =
-    draftKey !== undefined &&
-    slot !== undefined &&
-    draft.slot === earlySlot(draftKey) &&
-    slot !== draft.slot;
-  if (isCarried) {
-    if (draft.input) drafts.set(slot, draft.input);
-    drafts.delete(earlySlot(draftKey));
-    setDraft({ slot, input: draft.input });
-  }
-  // Another chat or another account: it shows that one's draft
-  const input =
-    draft.slot === slot || isCarried ? draft.input : draftOf(draftKey);
-  // Through a ref: `onDidRequestPrompt` subscribes once and keeps the first
-  // render's `setInput`
+  const [draft] = useState(() => {
+    const created = createDraft();
+    created.set(draftOf(draftKey));
+    return created;
+  });
+  // Through a ref: the subscription below subscribes once and keeps the first
+  // render's key
   const key = useRef(draftKey);
   key.current = draftKey;
-  const setInput = (value: string) => {
-    const at = draftSlot(key.current);
-    if (at !== undefined) {
-      if (value) drafts.set(at, value);
-      else drafts.delete(at);
+  // Keep what is typed for the next hook with the same key (a chat that
+  // unmounts and comes back, a tutorial across Back to tutorials)
+  useEffect(
+    () =>
+      draft.subscribe(() => {
+        const at = draftSlot(key.current);
+        if (at === undefined) return;
+        const text = draft.get();
+        if (text) drafts.set(at, text);
+        else drafts.delete(at);
+      }),
+    [draft]
+  );
+  // Another chat or another account shows that one's draft. Text typed while
+  // the session was still being read is the account's the read found: it stays
+  // on screen rather than blanking mid-typing. Before paint, so the composer
+  // never shows the last chat's words
+  const shownSlot = useRef(slot);
+  useLayoutEffect(() => {
+    const was = shownSlot.current;
+    shownSlot.current = slot;
+    if (was === slot) return;
+    const isCarried =
+      draftKey !== undefined &&
+      slot !== undefined &&
+      was === earlySlot(draftKey);
+    if (isCarried) {
+      const text = draft.get();
+      if (text) drafts.set(slot, text);
+      drafts.delete(earlySlot(draftKey));
+      return;
     }
-    setDraft({ slot: at, input: value });
-  };
+    draft.set(draftOf(draftKey));
+  }, [draft, draftKey, slot]);
   const [focusRequest, focus] = useReducer((n: number) => n + 1, 0);
   // A prompt that arrived with no backend waits in the composer. Saying so is
   // the panel's job, not the conversation's: a notice item would outlive the
@@ -599,7 +624,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
     if (current && restored.has(current)) {
       const backend = resolveSendBackend();
       if (backend.kind === "ask") {
-        setInput(text);
+        draft.set(text);
         openConnect(backend.via, backend.preset);
         return "connecting";
       }
@@ -610,7 +635,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
     if (!current && !PgAssistant.connection) {
       const backend = resolveSendBackend();
       if (backend.kind === "ask") {
-        setInput(text);
+        draft.set(text);
         openConnect(backend.via, backend.preset);
         return "connecting";
       }
@@ -631,7 +656,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
     if (!current) {
       // Nothing to send to: the prompt stays where the user can send it once
       // a backend is connected
-      setInput(text);
+      draft.set(text);
       openConnect("send");
       return "connecting";
     }
@@ -674,7 +699,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
     PgAssistant.addUserMessage(trimmed);
     // Cleared only once the message is in: a store that throws leaves the
     // typed text where the user can send it again
-    setInput("");
+    draft.set("");
     await runTurn({ text: trimmed, attempt: 0 });
     return "sent";
   };
@@ -942,7 +967,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
   useEffect(() => {
     /** A prompt the user did not type gets one look before it costs a turn */
     const place = (text: string) => {
-      setInput(text);
+      draft.set(text);
       focus();
     };
     /**
@@ -980,7 +1005,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
         if (!PgAssistant.connection) {
           const backend = resolveSendBackend();
           if (backend.kind === "ask") {
-            setInput(request.text);
+            draft.set(request.text);
             setPromptWaiting(true);
             openConnect(backend.via, backend.preset);
             return;
@@ -1039,8 +1064,7 @@ export const useTurn = ({ open, draftKey }: TurnOptions): Turn => {
     tryNow,
     phase,
     busy,
-    input,
-    setInput,
+    draft,
     openConnect,
     addKey,
     promptWaiting,

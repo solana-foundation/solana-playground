@@ -1,4 +1,4 @@
-name: Server release
+name: "Server: release"
 
 # Makes a deployed version of the server live, or rolls back. cicd.yml only parks versions. See docs/server-release.md.
 on:

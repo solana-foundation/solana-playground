@@ -9,7 +9,7 @@ import { READING_TOOLS } from "@/views/sidebar/assistant/model/reading-tools";
 import type { AssistantMode } from "@/views/sidebar/assistant/store";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
-import { BEGIN_INVITATION, describeTutorial, TOOLS } from "./context";
+import { describeNow, describeTutorial, TOOLS } from "./context";
 
 const log = createLogger("tutorial-conversation:mode");
 
@@ -25,6 +25,9 @@ const NO_PARAMS = {
   additionalProperties: false as const,
 };
 
+/** The context and the state now, outside a tutorial */
+const NOT_IN_A_TUTORIAL = "The learner is not in a tutorial right now.";
+
 /** The open question's beat id, or null */
 const openQuestion = (): string | null => {
   const live = PgConversation.view()?.live;
@@ -33,7 +36,8 @@ const openQuestion = (): string | null => {
 
 /**
  * The tutorial's mode for the live assistant (`PgAssistant.setMode`): the
- * lesson's context (`describeTutorial`), the read-only tools, and four
+ * lesson's context (`describeTutorial`), where the lesson stands now, sent
+ * after the history (`describeNow`), the read-only tools, and four
  * tools of its own: the menu; the question's Hint, and its Skip, which
  * resolves it and has the lesson write its block, as the buttons do; and a
  * one-line change the learner applies or keeps. The assistant itself writes
@@ -54,9 +58,18 @@ export const tutorialMode = ({
     "In a tutorial you cannot change files, build, deploy or send " +
     "transactions: the lesson does those. Tell the learner which button or " +
     `step does it, or offer a change with ${TOOLS.propose}.`,
+  now: () => {
+    const { context, engine } = PgConversation.state;
+    if (!context) return NOT_IN_A_TUTORIAL;
+    return describeNow({
+      definition: context.definition,
+      progress: engine.progress,
+      live: PgConversation.view()?.live ?? null,
+    });
+  },
   context: () => {
     const { context, engine } = PgConversation.state;
-    if (!context) return "The learner is not in a tutorial right now.";
+    if (!context) return NOT_IN_A_TUTORIAL;
     // The pages of the tutorial the context names, not of the route's
     // current one: the two differ while a navigation settles
     const tutorial = PgTutorial.all.find(
@@ -90,9 +103,9 @@ export const tutorialMode = ({
       run: () => {
         PgAssistant.addToolCall("opened the menu");
         openMenu();
-        return PgConversation.view()?.live?.kind === "intro"
-          ? `The menu is open. They have not started: end your reply with "${BEGIN_INVITATION}"`
-          : "The menu is open.";
+        // No state here: a tool's result stays in the history, and the
+        // context says what to write before Start (HOO-2823)
+        return "The menu is open.";
       },
     },
     {

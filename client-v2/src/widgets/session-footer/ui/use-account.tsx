@@ -175,7 +175,7 @@ export const useAccount = ({
   const onMenuOpenChange = (open: boolean) => {
     menuOpen.current = open;
     if (open) {
-      sessionTelemetry.track("session_account_menu_opened", { from });
+      sessionTelemetry.track("session_account_menu_opened", { via: from });
       return;
     }
     // A sign-out under way is counted when it ends, not as a cancel; it

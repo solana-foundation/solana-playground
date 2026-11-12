@@ -150,7 +150,7 @@ export function BaseAssistantHead({
       {off && (
         <span
           id="assistant-status"
-          className="inline-flex shrink-0 items-center gap-1.5 pr-1 text-caption text-muted-foreground"
+          className="inline-flex shrink-0 items-center gap-1.5 pr-1 text-caption font-label text-muted-foreground"
         >
           <StatusDot variant={OFF_STATUS[off].dot} />
           {OFF_STATUS[off].word}
