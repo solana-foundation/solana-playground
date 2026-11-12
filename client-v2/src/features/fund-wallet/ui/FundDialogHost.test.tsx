@@ -68,7 +68,7 @@ describe("features/fund-wallet/ui/FundDialogHost", () => {
     await act(async () => openFundDialog("deploy-card"));
 
     expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(opened()).toEqual([{ from: "deploy-card" }]);
+    expect(opened()).toEqual([{ via: "deploy-card" }]);
   });
 
   it("counts each opening with the entry that asked", async () => {
@@ -81,8 +81,8 @@ describe("features/fund-wallet/ui/FundDialogHost", () => {
     await act(async () => openFundDialog("tutorial-card"));
 
     expect(opened()).toEqual([
-      { from: "deploy-card" },
-      { from: "tutorial-card" },
+      { via: "deploy-card" },
+      { via: "tutorial-card" },
     ]);
   });
 
@@ -92,7 +92,7 @@ describe("features/fund-wallet/ui/FundDialogHost", () => {
     await act(async () => openFundDialog("deploy-card"));
     await act(async () => openFundDialog("faucet-toast"));
 
-    expect(opened()).toEqual([{ from: "deploy-card" }]);
+    expect(opened()).toEqual([{ via: "deploy-card" }]);
   });
 
   it("says why and stays closed with no Playground wallet, then opens once there is one", async () => {
@@ -109,7 +109,7 @@ describe("features/fund-wallet/ui/FundDialogHost", () => {
     utils.PgWallet.accounts = accounts;
     await act(async () => openFundDialog("wallet-chip"));
     expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(opened()).toEqual([{ from: "wallet-chip" }]);
+    expect(opened()).toEqual([{ via: "wallet-chip" }]);
   });
 
   it("does nothing when asked with no host", () => {

@@ -406,7 +406,12 @@ it("busies Try again while it asks", async () => {
   await userEvent.click(
     within(panel).getByRole("button", { name: "Try again" })
   );
-  expect(await within(panel).findByText("Trying…")).toBeTruthy();
+  // By role and name: the busy label is in the DOM, hidden, before the click
+  expect(
+    (
+      await within(panel).findByRole("button", { name: "Trying…" })
+    ).getAttribute("aria-busy")
+  ).toBe("true");
   answer();
   expect(
     await within(panel).findByRole("button", { name: "Try again" })

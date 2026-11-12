@@ -1,4 +1,4 @@
-name: Checks
+name: "Upstream: reusable checks"
 
 # Reusable workflow shared by ci.yml (PR and master-push validation) and
 # cicd.yml (master deploy gate). Holds the format, clippy, and build steps

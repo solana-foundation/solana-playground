@@ -25,6 +25,7 @@ import {
 } from "@/shared/ui/collapsible";
 import { CopyButton } from "@/shared/ui/copy-button";
 
+import BaseStoppedCard from "./BaseStoppedCard";
 import FaucetSteps from "./FaucetSteps";
 import { formatSeconds, Prose, READ } from "./Prose";
 import WalletAddress from "./WalletAddress";
@@ -53,9 +54,18 @@ export interface BaseDeployResultCardProps {
   onShowLog: () => void;
   /** Make the Playground wallet, then run the deploy again */
   onCreateWallet: () => Promise<unknown> | void;
+  /**
+   * A new program keypair for the workspace, then the deploy again, which
+   * builds for it and ships to a fresh address: the way on from a program
+   * that cannot be upgraded from here
+   */
+  onNewProgramId: () => void;
   /** Open the Fund dialog from the short-wallet card; no button without it */
   onFund?: () => void;
 }
+
+/** The way on from a program this wallet cannot upgrade (HOO-2806) */
+export const NEW_PROGRAM_ID = "Deploy under a new program id";
 
 /** Lamports as SOL, to four places at most */
 const sol = (lamports: number) =>
@@ -113,13 +123,15 @@ const FailedCard = ({
  * card says how short the wallet is (and, after an airdrop, that the faucet
  * is at its limit), gives its address to copy and the faucet;
  * the feed's Try again act card under it runs the deploy again. No wallet
- * offers to make one. Once the step moves on, a failure folds to its head.
+ * offers to make one. A program this wallet cannot upgrade, immutable or
+ * another wallet's, offers "Deploy under a new program id" (HOO-2806). Once the step moves on, a failure folds to its head.
  */
 const BaseDeployResultCard = ({
   result,
   open,
   onShowLog,
   onCreateWallet,
+  onNewProgramId,
   onFund,
 }: BaseDeployResultCardProps) => {
   if (result.ok) return <LandedCard result={result} onShowLog={onShowLog} />;
@@ -192,6 +204,32 @@ const BaseDeployResultCard = ({
           </div>
         </FailedCard>
       );
+    case "immutable":
+      return (
+        <FailedCard title="Not upgradable" open={open}>
+          <p className={READ}>
+            This program can no longer be upgraded, so the new code can&apos;t
+            go to its address. Deploy it under a new program id: it builds again
+            and ships to a fresh address.
+          </p>
+          <div className="flex max-sm:flex-col max-sm:items-stretch">
+            <Button onClick={onNewProgramId}>{NEW_PROGRAM_ID}</Button>
+          </div>
+        </FailedCard>
+      );
+    case "not_authority":
+      return (
+        <FailedCard title="Not your program" open={open}>
+          <p className={READ}>
+            {`${result.message} Switch to the wallet that deployed it and press Try again, or deploy it under a new program id.`}
+          </p>
+          <div className="flex max-sm:flex-col max-sm:items-stretch">
+            <Button variant="secondary" onClick={onNewProgramId}>
+              {NEW_PROGRAM_ID}
+            </Button>
+          </div>
+        </FailedCard>
+      );
     case "failed":
       return (
         <FailedCard
@@ -203,6 +241,9 @@ const BaseDeployResultCard = ({
           </p>
         </FailedCard>
       );
+    // The learner's Stop: nothing failed (HOO-2822)
+    case "stopped":
+      return <BaseStoppedCard act={result.act} />;
     default: {
       // A reason `RunResult` adds must get its own card here
       const unknown: never = result;

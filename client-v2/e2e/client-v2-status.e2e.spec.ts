@@ -21,6 +21,7 @@ import {
   stubSession,
   test,
 } from "./fixtures";
+import { hasSavedText } from "./saved-files";
 import { lineOf, linesOn } from "./telemetry";
 import { DESK, PHONE, TABLET, waitForPhonePage, WIDE_DESK } from "./viewports";
 
@@ -42,7 +43,10 @@ const OFFLINE_LINE =
 
 /**
  * Devnet answers `getSlot` with one slot that never moves: down by
- * `PgConnection.getIsClusterDown`, which reads the slot twice a second apart
+ * `PgConnection.getIsClusterDown`, which reads the slot twice a second apart.
+ * `getAccountInfo` answers "no account" at once: the Deploy stage restores a
+ * reload's build only after `PgProgramInfo.onChain` reads the program
+ * account, and the real devnet can take longer than the test waits
  */
 const stallDevnet = (page: Page) =>
   page.route("https://api.devnet.solana.com/**", async (route) => {
@@ -50,9 +54,28 @@ const stallDevnet = (page: Page) =>
       id?: unknown;
       method?: string;
     } | null;
-    if (body?.method !== "getSlot") return route.continue();
-    return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
+    if (body?.method === "getSlot") {
+      return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
+    }
+    if (body?.method === "getAccountInfo") {
+      return json(route, {
+        jsonrpc: "2.0",
+        // eslint-disable-next-line unicorn/no-null -- the RPC's own "no account"
+        result: { context: { slot: 123 }, value: null },
+        id: body.id,
+      });
+    }
+    return route.continue();
   });
+
+/**
+ * Whether the build's verdict is on disk: a file in lightning-fs's IndexedDB
+ * store holds `"lastBuildFailed":false`. `PgProgramInfo` writes
+ * `program-info.json` a moment after Build reports success, and a reload
+ * before that write reads the project as never built.
+ */
+const buildIsSaved = (page: Page) =>
+  hasSavedText(page, '"lastBuildFailed":false');
 
 /**
  * On top of `stallDevnet`: every other devnet call is left unanswered, so the
@@ -104,7 +127,7 @@ test.describe("on a 1440 px window", () => {
     await expect
       .poll(() => lineOf(lines, "status_indicator_picked"))
       // No model is grey (`idle`), which is measured as ready
-      .toContain("{indicator: ai, state: ready, from: row}");
+      .toContain("{indicator: ai, state: ready, via: row}");
   });
 
   test("client-v2-status: A cluster that stops answering", async ({
@@ -135,7 +158,7 @@ test.describe("on a 1440 px window", () => {
     await panel.getByRole("button", { name: "Change network" }).click();
     await expect
       .poll(() => lineOf(lines, "settings_opened"))
-      .toContain("{from: cluster}");
+      .toContain("{via: cluster}");
     const networks = page
       .getByRole("region", { name: "Settings" })
       .getByRole("radiogroup", { name: "Network" });
@@ -175,13 +198,13 @@ test.describe("on a 1440 px window", () => {
     ).toBeVisible();
     await expect
       .poll(() => lineOf(lines, "status_retried"))
-      .toContain("{indicator: ai, from: row, answered: false}");
+      .toContain("{indicator: ai, via: row, answered: false}");
     failing = false;
     await panel.getByRole("button", { name: "Try again" }).click();
     await expect(ai(page)).toHaveText("AI · Off");
     await expect
       .poll(() => lines.join("\n"))
-      .toContain("{indicator: ai, from: row, answered: true}");
+      .toContain("{indicator: ai, via: row, answered: true}");
   });
 
   test("client-v2-status: Going offline and back", async ({
@@ -324,6 +347,7 @@ test.describe("on a 1440 px window", () => {
     await expect(
       build.getByRole("heading", { name: "Build succeeded" })
     ).toBeVisible({ timeout: 60_000 });
+    await expect.poll(() => buildIsSaved(page), { timeout: 10_000 }).toBe(true);
 
     await stallDevnet(page);
     await holdDevnetCalls(page);
@@ -426,7 +450,7 @@ test("client-v2-status: The rail's dots", async ({ page }) => {
   await rail.getByRole("button", { name: /^Cluster: devnet/ }).click();
   await expect
     .poll(() => lineOf(lines, "settings_opened"))
-    .toContain("{from: rail}");
+    .toContain("{via: rail}");
 });
 
 /**

@@ -2,6 +2,7 @@ import { InfoIcon } from "lucide-react";
 import { FC, useState } from "react";
 
 import { importGist, isGistUrl } from "@/features/gist";
+import { trackImport } from "@/features/project-files";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
@@ -42,7 +43,9 @@ export const ImportGithub = () => {
         onSubmit: guard(async () => {
           try {
             await PgCommon.transition(
-              isGistUrl(url) ? importGist(url, "dialog") : PgGithub.import(url)
+              isGistUrl(url)
+                ? importGist(url, "dialog")
+                : trackImport(() => PgGithub.import(url), "github")
             );
             return IMPORTED;
           } catch (e) {
@@ -170,7 +173,7 @@ const Example: FC<ExampleProps> = ({ name, icon, circleImage, example }) => {
           variant="outline"
           onClick={async () => {
             try {
-              await PgGithub.import(example.url);
+              await trackImport(() => PgGithub.import(example.url), "github");
             } catch (e) {
               // Closing the program selection is a choice, not a failure
               if (e instanceof ImportCancelledError) return;

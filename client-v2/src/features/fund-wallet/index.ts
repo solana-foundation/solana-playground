@@ -1,7 +1,7 @@
 export { onDidRequestFundDialog, openFundDialog } from "./model/open";
 export { fundFor } from "./model/receiver";
 export { fundTelemetry } from "./model/telemetry";
-export type { FundFrom } from "./model/telemetry";
+export type { AirdropVia, FundCluster, FundFrom } from "./model/telemetry";
 export { default as FundDialog } from "./ui/FundDialog";
 export type { FundDialogProps } from "./ui/FundDialog";
 export { default as FundDialogHost } from "./ui/FundDialogHost";

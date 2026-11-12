@@ -179,6 +179,7 @@ const Lesson = ({ world }: { world: World }) => {
             showLog: vi.fn(),
             createWallet: vi.fn(),
             fundFor: vi.fn(() => vi.fn()),
+            newProgramId: vi.fn(),
             signIn: vi.fn(),
           }}
         />

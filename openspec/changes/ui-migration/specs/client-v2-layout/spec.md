@@ -303,7 +303,7 @@ the product. A cluster that does not answer SHALL turn the dot red, add
 first in the account menu that opens the settings on the cluster. The menu
 SHALL have no "Proposal" group.
 
-The footer SHALL send `session_account_menu_opened` with `from` (`footer` or
+The footer SHALL send `session_account_menu_opened` with `via` (`footer` or
 `rail`) each time the account menu opens, and `session_account_item_picked`
 with `item` (`sign-in`, `cancel-sign-in`, `github-profile`, `sign-out`,
 `settings`, `docs`, `cluster-down`, `connect-wallet`, `wallet`,
@@ -499,7 +499,7 @@ the page.
 
 ### Requirement: The settings page is measured
 
-The product SHALL send `settings_opened` with where it was opened from
+The product SHALL send `settings_opened` with `via`, where it was opened from
 (`cluster` for the status row's network indicator, `rail` for the rail's
 network dot, `menu` for the account menu, `key` for ⌘, and `stage` for a
 stage's own network action: the Deploy stage's Change and the stage notice), `settings_closed` with how it was

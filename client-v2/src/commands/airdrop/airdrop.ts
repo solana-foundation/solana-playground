@@ -1,5 +1,11 @@
+import {
+  faucetClosedLineFor,
+  isFaucetClosed,
+  isFaucetCluster,
+} from "@/shared/lib/faucet";
+
 import { checkSignedIn } from "../../features/auth";
-import { isFaucetCluster } from "../../shared/lib/faucet";
+import { fundTelemetry } from "../../features/fund-wallet";
 import {
   PgCommon,
   PgConnection,
@@ -11,8 +17,10 @@ import {
 import { askAgain } from "../../utils/ask-again";
 import { checkWallet } from "../checks";
 import { createArgs, createCmd } from "../create";
+import { forgetFaucetClosed, rememberFaucetClosed } from "./closed-faucet";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
 import {
+  AirdropClosedError,
   AirdropRefusedError,
   isRateLimited,
   isUnreachableFailure,
@@ -21,6 +29,7 @@ import {
   refusedNote,
 } from "./report";
 import { isAirdropSignInGated } from "./sign-in-gate";
+import { getAirdropVia } from "./via";
 
 /**
  * Command pre-check: a public faucet asks for a sign-in, a local one does not.
@@ -51,6 +60,9 @@ export const airdrop = createCmd({
   ]),
   preChecks: [checkWallet, checkSignedInWhereGated],
   handle: async (input) => {
+    // Read before the first await: another caller's `withAirdropVia` can
+    // name a newer caller while this run waits on the faucet
+    const via = getAirdropVia();
     let cluster = PgConnection.cluster;
     let isStale = PgConnection.clusterIsStale;
     // A read that failed will not finish by waiting; it is tried once more,
@@ -82,8 +94,35 @@ export const airdrop = createCmd({
     const amount = input.args.amount ?? defaultAmount;
     PgTerminal.println(PgTerminal.info(`Airdropping ${amount} SOL...`));
 
-    const connection = PgConnection.current;
-    const walletPk = PgWallet.current!.publicKey;
+    // The cluster's native RPC: a platform RPC can refuse an airdrop. The
+    // balances are read there too, so the one RPC that confirmed the airdrop
+    // also says whether it arrived, however far the platform RPC lags
+    const connection = PgConnection.getAirdropConnection(PgConnection.current);
+    // `checkWallet` ran first, so a wallet is there unless it went since
+    const wallet = PgWallet.current;
+    if (!wallet) throw new Error("No wallet to airdrop to");
+    const walletPk = wallet.publicKey;
+
+    // A closed faucet will not send SOL if asked again at once: one line to
+    // the web faucet in place of the RPC's JSON, and the automatic airdrop and
+    // the deploy's top-up stop asking this RPC for the session. This command
+    // still asks it, since the faucet may reopen. Only the request itself is
+    // read so: a 410 from a balance read says nothing about the faucet
+    const closedLine = faucetClosedLineFor(cluster)(walletPk.toBase58());
+    const requestAirdrop = async () => {
+      try {
+        return await connection.requestAirdrop(
+          walletPk,
+          PgWeb3.solToLamports(amount)
+        );
+      } catch (error) {
+        if (error instanceof Error && isFaucetClosed(error.message)) {
+          rememberFaucetClosed(connection.rpcEndpoint);
+          throw new AirdropClosedError(closedLine, { cause: error });
+        }
+        throw error;
+      }
+    };
 
     // No answer here is the end of the road: the web faucet keeps a limit of
     // its own and asks nothing of this RPC. Point to it on any refusal, then
@@ -111,10 +150,7 @@ export const airdrop = createCmd({
       // multiple requests, even after considerable amount of time has passed.
       // Retry until it returns a different hash to mitigate.
       while (1) {
-        const txHash = await connection.requestAirdrop(
-          walletPk,
-          PgWeb3.solToLamports(amount)
-        );
+        const txHash = await requestAirdrop();
         if (txHash !== cachedTxHash) {
           cachedTxHash = txHash;
           break;
@@ -124,7 +160,7 @@ export const airdrop = createCmd({
       }
 
       // Allow enough time for balance to update by waiting for confirmation
-      const txResult = await PgTx.confirm(cachedTxHash);
+      const txResult = await PgTx.confirm(cachedTxHash, { connection });
       if (txResult?.err) {
         throw new Error(`Airdrop transaction failed: ${txResult.err}`);
       }
@@ -145,6 +181,9 @@ export const airdrop = createCmd({
       received = afterBalance - beforeBalance;
     } catch (thrown) {
       const error = thrown instanceof BalanceReadError ? thrown.cause : thrown;
+      // A closed RPC faucet: its line already points to the web faucet. A
+      // refusal all the same, so the chip and the menu show the way round
+      if (error instanceof AirdropClosedError) throw error;
       // Nothing answered: the web faucet is no way round for a user offline
       if (isUnreachableFailure(error)) throw new NetworkUnreachableError(error);
       // A balance read the RPC answered with an error says nothing of the
@@ -169,6 +208,11 @@ export const airdrop = createCmd({
 
     // What arrived, not what was asked: the RPC may grant less
     PgTerminal.println(PgTerminal.success(receivedLine(amount, received)));
+    // `cluster` is one of the five names even on a custom endpoint, which
+    // `readCluster` resolves from its genesis hash, so it is `FundCluster`
+    // as it is
+    fundTelemetry.track("fund_airdropped", { via, cluster });
+    forgetFaucetClosed(connection.rpcEndpoint);
   },
 });
 

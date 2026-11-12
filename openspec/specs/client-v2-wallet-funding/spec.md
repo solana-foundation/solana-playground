@@ -158,7 +158,7 @@ Playground wallet's balance updates on its own.
 ### Requirement: Funding is measured
 
 The `features/fund-wallet` slice SHALL emit, with prefix `fund`:
-`fund_dialog_opened` `{ from: "account-menu" | "wallet-chip" | "deploy-card" | "tutorial-card" | "faucet-toast" }` (the control that opened it) when the dialog opens;
+`fund_dialog_opened` `{ via: "account-menu" | "wallet-chip" | "deploy-card" | "tutorial-card" | "faucet-toast" }` (the control that opened it) when the dialog opens;
 `fund_wallet_connected` `{ wallet: string, as: "payer" | "current" }` (the wallet's name; `payer` when it
 connects in the dialog, `current` when the wallet chip makes it the current wallet);
 `fund_wallet_connect_started` `{ wallet: string }` when the wallet chip asks a wallet to connect;
@@ -220,14 +220,14 @@ found short is the one the dialog funds (the current Playground wallet, or
 the first account when an extension is current); otherwise it leaves the
 button out. A request while the dialog is open SHALL change nothing.
 
-`fund_dialog_opened` SHALL carry `from: "deploy-card"`, `"tutorial-card"` or
+`fund_dialog_opened` SHALL carry `via: "deploy-card"`, `"tutorial-card"` or
 `"faucet-toast"` when opened from these, beside the existing
 `"account-menu"` and `"wallet-chip"`.
 
 #### Scenario: The Deploy stage's card opens the dialog (manual)
 
 - **WHEN** a deploy stops for too little SOL and the user presses "Send from your wallet" on the "Not enough SOL" card
-- **THEN** the Fund dialog opens and `fund_dialog_opened` is emitted once with `from: "deploy-card"`
+- **THEN** the Fund dialog opens and `fund_dialog_opened` is emitted once with `via: "deploy-card"`
 
 #### Scenario: The card offers it with no faucet (manual)
 
@@ -237,7 +237,7 @@ button out. A request while the dialog is open SHALL change nothing.
 #### Scenario: A tutorial card opens the dialog (manual)
 
 - **WHEN** the tutorial's "Not enough devnet SOL" card of a deploy or of a run shows and the user presses "Send from your wallet"
-- **THEN** the Fund dialog opens and `fund_dialog_opened` is emitted once with `from: "tutorial-card"`
+- **THEN** the Fund dialog opens and `fund_dialog_opened` is emitted once with `via: "tutorial-card"`
 
 #### Scenario: Another wallet was short (manual)
 
@@ -247,7 +247,7 @@ button out. A request while the dialog is open SHALL change nothing.
 #### Scenario: The faucet-refused toast opens the dialog (manual)
 
 - **WHEN** the wallet menu's airdrop hits the faucet's limit and the user presses "Send from your wallet" in the toast
-- **THEN** the Fund dialog opens with `from: "faucet-toast"` and stays open after the toast is gone
+- **THEN** the Fund dialog opens with `via: "faucet-toast"` and stays open after the toast is gone
 
 #### Scenario: No wallet installed (manual)
 
@@ -355,3 +355,73 @@ is the user's own.
 
 - **WHEN** Phantom is current and the user presses "Disconnect Phantom"
 - **THEN** the Playground wallet is current again and the chip shows its address
+
+### Requirement: Airdrops go through the cluster's native RPC
+
+Every Playground airdrop (the `airdrop` command, the wallet menu's Airdrop, the automatic airdrop, a deploy's top-up
+and a tutorial's funding) SHALL request SOL from the cluster's native RPC, the URL
+`REACT_APP_DEVNET_READ_BUFFER_RPC_URL`, `REACT_APP_TESTNET_READ_BUFFER_RPC_URL` or
+`REACT_APP_MAINNET_READ_BUFFER_RPC_URL` sets, and SHALL confirm the airdrop's signature on that same RPC. An unset or
+empty value, or an endpoint on no cluster the env configures, SHALL use the selected RPC.
+
+#### Scenario: Devnet with a platform RPC (manual)
+
+- **WHEN** devnet is selected through a platform RPC, `REACT_APP_DEVNET_READ_BUFFER_RPC_URL` is
+  `https://api.devnet.solana.com`, and the person runs `airdrop 1` or picks Airdrop in the wallet menu
+- **THEN** the `requestAirdrop` request goes to `api.devnet.solana.com`, not to the platform RPC
+
+#### Scenario: Localnet (manual)
+
+- **WHEN** Localnet is selected and the person runs `airdrop 1`
+- **THEN** the `requestAirdrop` request goes to the local validator
+
+### Requirement: An airdrop's balance is read where the airdrop is measured
+
+The `airdrop` command SHALL read the wallet's balance before and after the airdrop on the RPC that took the airdrop,
+and SHALL report what arrived from those two reads. A tutorial's funding check, which decides whether a deploy is
+funded, SHALL read the balance on the selected RPC.
+
+#### Scenario: The terminal reports what arrived (manual)
+
+- **WHEN** `airdrop 1` lands on devnet through the native RPC while the platform RPC lags a slot behind
+- **THEN** the terminal prints the amount received, read from the native RPC
+
+### Requirement: A closed RPC faucet points to the web faucet
+
+When an airdrop's RPC refuses it as closed (HTTP or JSON-RPC 410, "The RPC faucet is closed on this cluster"), the
+`airdrop` command SHALL end with one line, in place of the RPC's answer, that links
+`https://faucet.solana.com/?walletAddress=<wallet>&cluster=<cluster>`. The wallet menu's Airdrop, the Interact
+stage's airdrop and the automatic airdrop SHALL show that line through the command. A deploy's funding card and a
+tutorial's "Not enough devnet SOL" card SHALL say "The devnet RPC faucet is closed.", then show the web faucet's steps with "Open the web faucet". A closed RPC faucet is a refusal as every other: the terminal prints the one
+line and no steps, and the wallet chip and the wallet menu show the way to the web faucet without reporting it as a failure.
+
+#### Scenario: `airdrop 1` on devnet while the faucet is closed (manual)
+
+- **WHEN** devnet's RPC faucet is closed and the person runs `airdrop 1`
+- **THEN** the terminal prints "Airdropping 1 SOL..." and then
+  "The devnet RPC faucet is closed. Request test SOL at https://faucet.solana.com/?walletAddress=<wallet>&cluster=devnet",
+  and no JSON
+
+#### Scenario: A tutorial airdrop on a closed faucet (manual)
+
+- **WHEN** a tutorial's airdrop card is pressed and devnet's RPC faucet is closed
+- **THEN** the "Not enough devnet SOL" card says the devnet RPC faucet is closed and links the web faucet
+
+### Requirement: A closed RPC faucet is not asked again unasked
+
+After the `airdrop` command finds an airdrop RPC closed, the automatic airdrop and the editor's deploy top-up (the
+`deploy` command and the Deploy stage) SHALL NOT request an airdrop from that RPC again in the same session: the
+automatic airdrop SHALL print the faucet line once, and a deploy SHALL stop at its funding card, or end a typed
+deploy, with that line. The `airdrop` command SHALL still request one, and an airdrop that lands SHALL clear the
+answer. The answer SHALL live in memory only, and an RPC that never answered closed (localnet, a custom endpoint that
+airdrops through itself) SHALL be asked as before. A tutorial's funding SHALL ask the faucet each time.
+
+#### Scenario: The automatic airdrop after a closed answer (manual)
+
+- **WHEN** `airdrop 1` found devnet's RPC faucet closed and the wallet's balance then changes below the airdrop amount
+- **THEN** the terminal prints the faucet line once, and no `requestAirdrop` request is sent
+
+#### Scenario: The command asks again (manual)
+
+- **WHEN** `airdrop 1` found devnet's RPC faucet closed and the person runs `airdrop 1` again
+- **THEN** a `requestAirdrop` request is sent

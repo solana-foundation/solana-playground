@@ -6,10 +6,11 @@ import type {
   Quote,
   TutorialDefinition,
 } from "@/entities/tutorial";
-import type { RunResult, Turn } from "@/features/tutorial-conversation";
+import type { RunResult, Turn, Wrote } from "@/features/tutorial-conversation";
 import { shortKey } from "@/shared/lib/short-key";
 import { Button } from "@/shared/ui/button";
 
+import { linesNow } from "../model/lines-now";
 import BaseActCard from "./BaseActCard";
 import BaseApplyCard from "./BaseApplyCard";
 import BaseDeployResultCard, { isDeployResult } from "./BaseDeployResultCard";
@@ -66,13 +67,15 @@ export interface TurnHandlers {
   keep: (id: string) => void;
   /** Open the terminal, where a run printed its lines */
   showLog: () => void;
-  /** Make the Playground wallet a deploy found missing, then run it again */
+  /** Make or reconnect the Playground wallet an act found missing, then run the act again */
   createWallet: (beatId: string) => Promise<unknown> | void;
   /**
    * "Send from your wallet" on a "Not enough devnet SOL" card, for the short
    * wallet's address: `undefined` when the Fund dialog would fund another one
    */
   fundFor: (address: string) => (() => void) | undefined;
+  /** A new program id for a program this wallet cannot upgrade, then deploy again */
+  newProgramId: (beatId: string) => void;
   /** Sign in with GitHub, for a build the server refused for sign-in */
   signIn: () => Promise<unknown>;
 }
@@ -161,6 +164,25 @@ const fundWith =
       : undefined;
 
 const linesOf = (content: string | null) => content?.split("\n") ?? [];
+
+/**
+ * A block's lines, first to last: the text saved when it landed (a lesson's
+ * block, the learner's own words in a typed answer included, or the line an
+ * applied proposal wrote), else, for a landing without text (an older save,
+ * or text that did not pair with its lines), those lines as the file holds
+ * them now, the learner's edits included
+ */
+const previewOf = (
+  read: (file: string) => string | null,
+  wrote: Wrote
+): string[] => {
+  const { text } = wrote;
+  const content = text ? [] : linesOf(read(wrote.file));
+  return wrote.lines
+    .map((line, i) => ({ line, code: text ? text[i] : content[line - 1] }))
+    .sort((a, b) => a.line - b.line)
+    .map(({ code }) => code ?? "");
+};
 
 /**
  * What a question's record calls it, so the records down the thread say
@@ -262,17 +284,18 @@ const TurnView = ({
       return <BaseYouPill text={turn.text} code={turn.code} />;
     case "wrote": {
       const wrote = turn.wrote;
-      const content = wrote ? linesOf(read(wrote.file)) : [];
-      const preview = wrote
-        ? [...wrote.lines]
-            .sort((a, b) => a - b)
-            .map((line) => content[line - 1] ?? "")
-        : [];
+      // The range and Show follow the block to where it is now
+      const now = wrote
+        ? {
+            ...wrote,
+            lines: linesNow(wrote, read(wrote.file) ?? undefined),
+          }
+        : null;
       return (
         <BaseWroteCard
-          wrote={wrote}
+          wrote={now}
           failed={turn.failed}
-          preview={preview}
+          preview={wrote ? previewOf(read, wrote) : []}
           onShow={on.showLine}
           onReset={
             turn.step !== null && !passed.includes(turn.step)
@@ -345,6 +368,7 @@ const TurnView = ({
                 ? on.fundFor(turn.result.address)
                 : undefined
             }
+            onNewProgramId={() => on.newProgramId(turn.beatId)}
           />
         );
       }
@@ -363,6 +387,7 @@ const TurnView = ({
           signedIn={signedIn}
           onSignIn={on.signIn}
           onFund={fundWith(on.fundFor)(turn.result)}
+          onCreateWallet={() => on.createWallet(turn.beatId)}
         />
       );
     case "win": {

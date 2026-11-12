@@ -134,8 +134,7 @@ const TutorialChat = ({
             send,
             stop: turn.stop,
             busy: turn.busy,
-            input: turn.input,
-            setInput: turn.setInput,
+            draft: turn.draft,
           }}
         />
       </div>
@@ -320,7 +319,7 @@ const FlowFrame = () => {
       // closed first, and its trigger stands in for the item focus was on
       closeOpenLayers()
         .then((trigger) => {
-          settingsTelemetry.track("settings_opened", { from });
+          settingsTelemetry.track("settings_opened", { via: from });
           setSettings({
             open: true,
             focus,

@@ -3,7 +3,7 @@
 ## 1. Wallet chip and faucet copy
 
 - [x] 1.1 Add `BaseWalletChip` and `WalletChip` to `features/fund-wallet`, the `wallet` slot on `BaseConsoleDrawer`,
-  and the four `fund_airdrop_*` / `fund_web_faucet_opened` events with `fund_dialog_opened`'s `from`; verify with
+  and the four `fund_airdrop_*` / `fund_web_faucet_opened` events with `fund_dialog_opened`'s `via`; verify with
   `yarn test-unit src/features/fund-wallet src/views/flow/console` (ticket to file)
 - [x] 1.2 Rewrite the tutorial's "Not enough devnet SOL" cards around `webFaucetSteps` and "Open the web faucet";
   verify with `yarn test-unit src/widgets/tutorial-conversation` (ticket to file)

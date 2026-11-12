@@ -46,6 +46,7 @@ const card = (
     onShowLog: () => void;
     onCreateWallet: () => void;
     onFund: () => void;
+    onNewProgramId: () => void;
   }> = {}
 ) =>
   render(
@@ -56,11 +57,48 @@ const card = (
         onShowLog={over.onShowLog ?? vi.fn()}
         onCreateWallet={over.onCreateWallet ?? vi.fn()}
         onFund={over.onFund}
+        onNewProgramId={over.onNewProgramId ?? vi.fn()}
       />
     </TooltipProvider>
   );
 
 describe("BaseDeployResultCard", () => {
+  // HOO-2806: these were "Deploy failed" with only Try again, which cannot
+  // fix either
+  it.each([
+    {
+      reason: "immutable" as const,
+      title: "Not upgradable",
+      line: /can no longer be upgraded/,
+    },
+    {
+      reason: "not_authority" as const,
+      title: "Not your program",
+      line: /Switch to the wallet that deployed it/,
+    },
+  ])(
+    "the $reason refusal says so and offers a new program id",
+    async ({ reason, title, line }) => {
+      const onNewProgramId = vi.fn();
+      card(
+        {
+          act: "deploy",
+          ok: false,
+          seconds: 1,
+          reason,
+          message: "This program's upgrade authority is Other1…111111.",
+        },
+        { onNewProgramId }
+      );
+      expect(screen.getByText(title)).toBeTruthy();
+      expect(screen.getByText(line)).toBeTruthy();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Deploy under a new program id" })
+      );
+      expect(onNewProgramId).toHaveBeenCalledTimes(1);
+    }
+  );
+
   it("is one row, Deployed to devnet, with what it did behind its chevron", async () => {
     const onShowLog = vi.fn();
     const { container } = card(landed(false, 1_250_000_000), { onShowLog });
@@ -228,6 +266,35 @@ describe("BaseDeployResultCard", () => {
         "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The faucet did not send SOL."
       )
     ).toBeTruthy();
+  });
+
+  it("tells an airdrop the closed RPC faucet refused to use the web faucet", () => {
+    card({
+      act: "airdrop",
+      ok: false,
+      seconds: 1,
+      reason: "no_funds",
+      message:
+        '410 Gone: {"jsonrpc":"2.0","error":{"code": 410, "message":"The RPC faucet is closed on this cluster. Request test SOL at https://faucet.solana.com"}, "id": "1"}',
+      balance: 0,
+      cost: 2_806_300_000,
+      address: WALLET,
+    });
+    expect(
+      screen.getByText(
+        "Your wallet has 0 SOL, and this deploy needs about 2.81 SOL. The devnet RPC faucet is closed."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("list", { name: "Get devnet SOL from the web faucet" })
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: /Open the web faucet/ })
+        .getAttribute("href")
+    ).toBe(
+      `https://faucet.solana.com/?walletAddress=${WALLET}&amount=5&cluster=devnet`
+    );
   });
 
   it("reads the faucet's own limit message as a rate limit", () => {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
+  isAirdropClosed,
   isAirdropRefused,
   isNetworkUnreachable,
   refusalOf,
@@ -53,7 +54,7 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
   useWallet();
   useRenderOnChange(PgConnection.onDidChangeCluster);
   const balance = useBalance() ?? undefined;
-  const { airdrop, faucet } = useAirdrop();
+  const { airdrop, faucet } = useAirdrop("wallet");
   const [state, setState] = useState<AirdropState>("idle");
   const [received, setReceived] = useState<number | undefined>();
   const [refusal, setRefusal] = useState<AirdropRefusal>("limit");
@@ -177,7 +178,7 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
     from.current = balance;
     setReceived(undefined);
     setState("asking");
-    fundTelemetry.track("fund_airdrop_requested", { from: "wallet-chip" });
+    fundTelemetry.track("fund_airdrop_requested", { via: "wallet-chip" });
     try {
       await airdrop();
       fundTelemetry.track("fund_airdrop_received", { via: "faucet" });
@@ -185,13 +186,16 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
     } catch (error) {
       if (isAirdropRefused(error)) {
         // The popover says it, with the way round; no toast on top. A
-        // refusal other than the limit is still logged, by the reporter
+        // refusal other than the limit is still logged, by the reporter; a
+        // closed faucet is expected, and its line says so
         const cause = refusalOf(error);
         markFailureShown(error);
         fundTelemetry.track("fund_airdrop_refused", {
           reason: cause === "limit" ? "rate-limited" : "failed",
         });
-        if (cause === "other") reportButtonFailure("airdrop")(error);
+        if (cause === "other" && !isAirdropClosed(error)) {
+          reportButtonFailure("airdrop")(error);
+        }
         setRefusal(cause);
         setState("refused");
         return;
@@ -245,7 +249,7 @@ const WalletChip = ({ isSignedOut, isSignInFailure }: WalletChipProps) => {
         onOpenFaucet={() => {
           from.current = balance;
           fundTelemetry.track("fund_web_faucet_opened", {
-            from: "wallet-chip",
+            via: "wallet-chip",
           });
           setState("away");
         }}

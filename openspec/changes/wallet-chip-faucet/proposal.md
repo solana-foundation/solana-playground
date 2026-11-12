@@ -17,7 +17,7 @@ Feedback from Sergey and Natalia on 10 Nov, the day before launch:
 - **Tutorial card copy.** "Not enough devnet SOL" drops "try again in a minute, or top the wallet up yourself". It lists the web faucet in three steps, and its link reads "Open the web faucet" and asks for 5 SOL, on the deploy's card and on the run's card alike.
 - **Deploy stage and automatic airdrop.** The Deploy stage's "Not enough SOL" card lists the same three steps once the faucet refused, and its link reads "Open the web faucet" and asks for 5 SOL. The automatic airdrop's terminal note links the web faucet with the amount filled in too.
 - **Wallet menu feedback.** Airdrop from the wallet window's menu toasts its outcome: "Airdrop received.", or, at the faucet's limit, "The faucet is at its limit." with a link to the prefilled web faucet.
-- **Telemetry.** `features/fund-wallet` adds `fund_airdrop_requested`, `fund_airdrop_received`, `fund_airdrop_refused` and `fund_web_faucet_opened`, and `fund_dialog_opened` gains `from: "wallet-chip"`. No funnel step's code changes: the airdrop command and the deploy are untouched, so their events keep firing.
+- **Telemetry.** `features/fund-wallet` adds `fund_airdrop_requested`, `fund_airdrop_received`, `fund_airdrop_refused` and `fund_web_faucet_opened`, and `fund_dialog_opened` gains `via: "wallet-chip"`. No funnel step's code changes: the airdrop command and the deploy are untouched, so their events keep firing.
 
 ## Capabilities
 

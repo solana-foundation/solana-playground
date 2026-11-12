@@ -1,3 +1,5 @@
+import { isFaucetClosed } from "./faucet";
+
 /** The faucet's 429, or its own words for the limit */
 const FAUCET_LIMIT = /\b429\b|too many requests|rate limit|airdrop limit/i;
 
@@ -36,6 +38,8 @@ export const refusalHeadline = (refusal: AirdropRefusal) =>
  */
 export const airdropCause = (message: string) => {
   if (message === NETWORK_UNREACHABLE) return NETWORK_UNREACHABLE;
+  // Asking the RPC again will not help until it reopens; the web faucet will
+  if (isFaucetClosed(message)) return "The devnet RPC faucet is closed.";
   return isFaucetLimit(message)
     ? "The devnet faucet is at its limit."
     : `${refusalHeadline("other")}.`;
@@ -59,6 +63,12 @@ if (import.meta.vitest) {
       ["fetch failed", "The faucet did not send SOL."],
     ])("names the cause of %j", (message, cause) => {
       expect(airdropCause(message)).toBe(cause);
+    });
+
+    it("names a closed RPC faucet as such, not as a failure", () => {
+      expect(airdropCause("410 Gone: faucet is closed")).toBe(
+        "The devnet RPC faucet is closed."
+      );
     });
 
     it("names an unreachable network as such, not as a faucet failure", () => {

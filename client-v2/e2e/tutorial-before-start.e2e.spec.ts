@@ -118,8 +118,10 @@ test("tutorial-conversation: The menu before Start", async ({ page }) => {
     LONG
   );
   expect(sent[0]).toContain("press Start step 1 or type start");
-  // The tool's own result asks for it too, on the request that follows it
-  expect(sent[1]).toContain("The menu is open. They have not started");
+  // The request after the tool asks for it again through the context: the
+  // tool's result stays in the history, so it carries no state (HOO-2823)
+  expect(sent[1]).toContain('"content":"The menu is open."');
+  expect(sent[1]).toContain("press Start step 1 or type start");
 });
 
 test("no stage, before or after Hello Anchor's Start, under the frame's width", async ({

@@ -67,7 +67,8 @@ const FundingAction = ({ p }: { p: BaseNotEnoughSolProps }) => {
     return <CalloutAction onClick={p.onAirdrop}>Request airdrop</CalloutAction>;
   }
   // The faucet refused the airdrop the user asked for: trying again asks it
-  // again, even with automatic airdrop off
+  // again, even with automatic airdrop off, unless it answered closed this
+  // session, when the deploy shows the web faucet's line without asking
   if (p.reason === "airdrop_failed") {
     return <CalloutAction onClick={p.onAirdrop}>Try again</CalloutAction>;
   }

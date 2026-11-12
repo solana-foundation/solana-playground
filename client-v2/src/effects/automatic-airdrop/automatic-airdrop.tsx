@@ -1,6 +1,16 @@
+import {
+  getAirdropEndpoint,
+  isFaucetKnownClosed,
+} from "../../commands/airdrop/closed-faucet";
 import { isAirdropSignInGated } from "../../commands/airdrop/sign-in-gate";
+import { withAirdropVia } from "../../commands/airdrop/via";
 import { PgSession } from "../../features/auth";
-import { faucetLink, isFaucetCluster } from "../../shared/lib/faucet";
+import {
+  faucetClosedLineFor,
+  faucetLink,
+  isFaucetClosed,
+  isFaucetCluster,
+} from "../../shared/lib/faucet";
 import { createLogger } from "../../shared/lib/logger";
 import {
   Cluster,
@@ -43,9 +53,28 @@ export const automaticAirdrop = () => {
       // Only airdrop if the balance is less than the airdrop amount
       if (initialBalance >= airdropAmount) return;
 
+      const address = PgWallet.current?.publicKey.toBase58();
+      const disable = `To disable, run \`${PgCommand.setting.name} set wallet.automaticAirdrop false\`.`;
+
+      // The faucet answered closed this session: asking it again would only
+      // fail again, so point to the web faucet once and stop
+      if (isFaucetKnownClosed(getAirdropEndpoint())) {
+        log.info("faucet closed, automatic airdrop off for this cluster", {
+          context: { cluster },
+        });
+        errorCache.add(cluster);
+        PgTerminal.println(
+          PgTerminal.error(faucetClosedLineFor(cluster)(address))
+        );
+        PgTerminal.println(
+          `Note: This was an automatic airdrop request. ${disable}`
+        );
+        return;
+      }
+
       // Execute the `airdrop` command (handles the default amount)
       try {
-        await PgCommand.airdrop.execute();
+        await withAirdropVia(() => PgCommand.airdrop.execute(), "automatic");
       } catch (e) {
         // Under Home no terminal is mounted to run the command in. That says
         // nothing about the cluster: the next balance change tries again
@@ -53,25 +82,32 @@ export const automaticAirdrop = () => {
           log.info("no terminal mounted, airdrop deferred");
           return;
         }
+        // The airdrop's line for a closed faucet already links the web
+        // faucet, with the wallet's address: the log names the reason instead.
+        // Read from the error, not the endpoint, which may have changed since
+        const hasLinkedFaucet = e instanceof Error && isFaucetClosed(e.message);
         // Off for this cluster until a reload; the terminal said why
         log.warn("automatic airdrop failed, off for this cluster", {
-          context: { cluster, error: String(e) },
+          context: {
+            cluster,
+            error: hasLinkedFaucet ? "faucet closed" : String(e),
+          },
         });
         errorCache.add(cluster);
         PgTerminal.println(
           [
             "Note: This was an automatic airdrop request.",
-            ...(isFaucetCluster(cluster)
+            ...(isFaucetCluster(cluster) && !hasLinkedFaucet
               ? [
                   // The web faucet filled in, the amount too, so the user only confirms
                   `Visit ${faucetLink({
-                    walletAddress: PgWallet.current?.publicKey.toBase58(),
+                    walletAddress: address,
                     amount: airdropAmount,
                     cluster,
                   })} to obtain SOL.`,
                 ]
               : []),
-            `To disable, run \`${PgCommand.setting.name} set wallet.automaticAirdrop false\`.`,
+            disable,
           ].join(" ")
         );
       }

@@ -1,4 +1,4 @@
-name: client-v2 live links
+name: "Client v2: live links"
 
 # The `@live-links` browser specs: the GitHub links the import dialog and the
 # build server's tip offer (`LINKS` in the spec), requested from github.com. Kept

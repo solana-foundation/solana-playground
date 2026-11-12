@@ -85,9 +85,11 @@ export const useFeedbackForm = ({
       if (!shown.current) onFailedClosed();
       return;
     }
-    feedbackTelemetry.track("feedback_sent", {
-      rating: draft.rating ?? "none",
-    });
+    // No star sends no `rating`: GA4 registers the name as a number
+    feedbackTelemetry.track(
+      "feedback_sent",
+      draft.rating === undefined ? {} : { rating: draft.rating }
+    );
     shown.current = false;
     setState({ open: false, send: "idle", draft: EMPTY_DRAFT });
     onSent();

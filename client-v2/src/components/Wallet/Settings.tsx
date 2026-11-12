@@ -19,6 +19,7 @@ import { MenuItemText } from "@/shared/ui/menu-extras";
 
 import { NO_FAUCET } from "../../commands/airdrop/no-faucet";
 import {
+  isAirdropClosed,
   isAirdropRefused,
   isNetworkUnreachable,
   refusalOf,
@@ -83,7 +84,7 @@ interface SettingsProps {
 const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
   showRename,
 }) => {
-  const { airdrop, faucet } = useAirdrop();
+  const { airdrop, faucet } = useAirdrop("wallet");
   const { darken, lighten } = useDarken();
 
   const wallet = PgWallet.current!;
@@ -148,7 +149,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                       const refusal = refusalOf(error);
                       markFailureShown(error);
                       // Logged, not toasted twice; the limit is expected
-                      if (refusal === "other") {
+                      if (refusal === "other" && !isAirdropClosed(error)) {
                         reportButtonFailure("airdrop")(error);
                       }
                       PgView.setToast(FaucetRefusedToast, {

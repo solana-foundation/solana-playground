@@ -105,7 +105,9 @@ describe("features/fund-wallet/ui/BaseFundDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Connect Phantom" }));
 
-    expect(screen.getByText("Waiting for Phantom…")).toBeTruthy();
+    // By role and name: the busy label is in the DOM, hidden, before the click
+    const busy = screen.getByRole("button", { name: "Waiting for Phantom…" });
+    expect(busy.getAttribute("aria-busy")).toBe("true");
   });
 
   it("says no wallet was found, and shows no amount field", () => {

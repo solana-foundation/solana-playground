@@ -165,11 +165,16 @@ export const projectSync = (): Disposable => {
       // its mark is clean, so reconcile's cheap path skips it, and the
       // editor's pushes are only ever for the open project. Flagged, the
       // next pass sees the name differ and uploads it -- and that pass is
-      // asked for now.
+      // asked for now, unless a link's view is open (below).
       const { id } = renamed;
       void PgSyncMark.markDirty(id)
         .catch((e) => report("mark dirty", e))
-        .then(() => refresh("rename"));
+        .then(() => {
+          // Beside a repository, gist or docs link nothing is listed in memory, so
+          // a pass now would take every account project for a new one; the
+          // mark carries the name to the pass after the link is left
+          if (!PgExplorer.isTemporary) refresh("rename");
+        });
     }),
     // Flushed, not scheduled: the debounce belongs to the workspace being
     // left, and `pushCurrent` reads whichever one is current when it runs. A

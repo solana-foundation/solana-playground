@@ -13,6 +13,7 @@ const rpc = vi.hoisted(() => ({
   requestAirdrop: vi.fn(),
   confirm: vi.fn(),
   commitment: "confirmed",
+  rpcEndpoint: "https://api.devnet.solana.com",
 }));
 
 // Only what `airdrop.handle` reads before it asks the RPC for SOL
@@ -20,6 +21,8 @@ vi.mock("../../utils", () => ({
   PgCommon: { sleep: vi.fn(async () => {}) },
   PgConnection: {
     current: rpc,
+    // The cluster's native RPC: the mocked RPC stands for it too
+    getAirdropConnection: (selected: unknown) => selected,
     // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is `null` before the cluster is read
     cluster: null,
     getAirdropAmountOn: vi.fn(),

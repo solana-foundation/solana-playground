@@ -70,7 +70,7 @@ not finish stays with the account row, as before.
 ### Requirement: Funding is measured
 
 The `features/fund-wallet` slice SHALL emit, with prefix `fund`:
-`fund_dialog_opened` `{ from: "account-menu" | "wallet-chip" }` (the control that opened it) when the dialog opens;
+`fund_dialog_opened` `{ via: "account-menu" | "wallet-chip" }` (the control that opened it) when the dialog opens;
 `fund_wallet_connected` `{ wallet: string, as: "payer" | "current" }` (the wallet's name; `payer` when it
 connects in the dialog, `current` when the wallet chip makes it the current wallet);
 `fund_wallet_connect_started` `{ wallet: string }` when the wallet chip asks a wallet to connect;
@@ -79,13 +79,13 @@ when that connect does not happen (`rejected` is the user's no); `fund_wallet_di
 when the chip disconnects the current wallet; `fund_sent` `{ cluster: "mainnet-beta" | "devnet" | "testnet" | "localnet" | "playnet" }` (the Playground's cluster) when a
 transfer is confirmed; and
 `fund_failed` `{ stage: "connect" | "send", reason: "rejected" | "network" | "unconfirmed" | "unknown" }` when connecting or sending fails. The wallet chip SHALL emit
-`fund_airdrop_requested` `{ from: "wallet-chip" }` when its popover asks the
+`fund_airdrop_requested` `{ via: "wallet-chip" }` when its popover asks the
 faucet; `fund_airdrop_received` `{ via: "faucet" | "web-faucet" }` when the
 chip's own ask lands (`faucet`) or the balance rises after the web faucet was
 opened from it (`web-faucet`); `fund_airdrop_refused`
 `{ reason: "rate-limited" | "failed" }` when the ask comes back without SOL
 for the faucet's limit or for anything else, a sign-in the user did not
-finish excepted; and `fund_web_faucet_opened` `{ from: "wallet-chip" }` when
+finish excepted; and `fund_web_faucet_opened` `{ via: "wallet-chip" }` when
 the web faucet opens from the popover. `session_account_item_picked`
 SHALL carry `item: "fund-wallet"` when the menu item is picked. No event
 carries an address or an amount.

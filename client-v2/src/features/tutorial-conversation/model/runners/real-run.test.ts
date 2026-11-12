@@ -12,8 +12,19 @@ const interaction = vi.hoisted(() => ({
   test: vi.fn(async () => undefined),
 }));
 
+const finished = vi.hoisted(() => ({
+  cb: undefined as undefined | ((r: unknown) => void),
+}));
 vi.mock("../../../../utils", () => ({
-  PgCommand: { run: { execute: vi.fn() } },
+  PgCommand: {
+    run: {
+      execute: vi.fn(),
+      onDidFinish: (cb: (r: unknown) => void) => {
+        finished.cb = cb;
+        return { dispose: () => {} };
+      },
+    },
+  },
   PgConnection: {
     cluster: "devnet",
     current: { rpcEndpoint: "https://api.devnet.solana.com" },
@@ -48,8 +59,9 @@ vi.mock("./capture", () => ({
   },
 }));
 
+import { PgCommand } from "../../../../utils";
 import type { FundingChain } from "./fund";
-import { realRunPort } from "./real-run";
+import { realClientRunWatch, realRunPort } from "./real-run";
 
 const port = realRunPort({} as FundingChain, 1);
 // `refusal` first, as `runOrCall` asks it: it captures the target `send` checks
@@ -77,5 +89,30 @@ describe("realRunPort's call act", () => {
     const { error } = await call("plant_tree");
     expect(String(error)).toContain("has no `plant_tree`");
     expect(interaction.test).not.toHaveBeenCalled();
+  });
+});
+
+// HOO-2806 review: `run` reports a script that threw as a result, not a
+// throw, so a run whose transaction landed before the throw passed its step
+describe("a client.ts that threw", () => {
+  it("is the run act's error", async () => {
+    vi.mocked(PgCommand.run.execute).mockResolvedValueOnce({
+      ok: false,
+      error: "x is undefined",
+    } as never);
+    expect(port.refusal()).toBeNull();
+    const { error } = await port.send("run", { beatId: "s3.run" } as never);
+    expect(String(error)).toContain("x is undefined");
+  });
+
+  it("is the error of a run outside the card", () => {
+    const seen: unknown[] = [];
+    realClientRunWatch({} as FundingChain, 1).onDidFinish((r) => seen.push(r));
+    finished.cb?.({ ok: { ok: false, error: "x is undefined" } });
+    finished.cb?.({ ok: { ok: true } });
+    expect(String((seen[0] as { err: unknown }).err)).toContain(
+      "x is undefined"
+    );
+    expect(seen[1]).toEqual({});
   });
 });

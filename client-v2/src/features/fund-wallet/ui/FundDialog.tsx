@@ -121,7 +121,7 @@ const FundDialog = ({
   useEffect(() => {
     attempt.current++;
     if (!open) return;
-    fundTelemetry.track("fund_dialog_opened", { from });
+    fundTelemetry.track("fund_dialog_opened", { via: from });
     setFailure(unconfirmedFailure());
     setAmount(DEFAULT_AMOUNT);
     setPayerName(undefined);

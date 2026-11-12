@@ -158,6 +158,31 @@ test("client-v2-routes: An example's Open shows its program", async ({
   await expect(page).toHaveURL(PROGRAM_ROUTE);
 });
 
+// The Flow view's left panel hid the warning with the project picker, so a
+// project opened from a link could not be kept (HOO-2793)
+test("github-import: A temporary project's Import keeps it", async ({
+  page,
+}) => {
+  await stubExamples(page);
+  await page.goto(PROGRAM_ROUTE);
+  const warning = page.getByText(/This is a temporary project/);
+  await expect(warning).toBeVisible(LONG);
+
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder("project name...").fill("hello-kept");
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(warning).toHaveCount(0);
+  // Kept: the picker, now in the warning's place, names the project, and
+  // the column still hides it
+  const picker = page.locator('[aria-label="Project"]');
+  await expect(picker).toHaveCount(1);
+  await expect(picker).toHaveText("hello-kept");
+  await expect(picker).toBeHidden();
+});
+
 // A failed route's error stayed in the main view over the next route's
 test("client-v2-routes: A folder with no program says so, then gets out of the way", async ({
   page,

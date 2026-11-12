@@ -3,6 +3,8 @@ import { faucetLink, offeredAmount, webFaucetSteps } from "@/shared/lib/faucet";
 import type { AirdropRefusal } from "@/shared/lib/faucet-limit";
 import { NETWORK_UNREACHABLE } from "@/shared/lib/faucet-limit";
 
+import { TerminalLineError } from "../../utils/terminal/line-error";
+
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
 /**
@@ -53,10 +55,28 @@ export class AirdropRefusedError extends Error {
   }
 }
 
-/** Whether the `airdrop` command threw for a refusal ({@link AirdropRefusedError}) */
+/**
+ * The RPC's faucet answered that it is closed: asking again will not help
+ * until it reopens. Its message is the whole line the terminal prints, with
+ * the web faucet filled in, so it is a `TerminalLineError`; the chip and the
+ * menu take it for a refusal and show the way round.
+ */
+export class AirdropClosedError extends TerminalLineError {
+  override readonly name = "AirdropClosedError";
+}
+
+/** Whether the `airdrop` command threw because the RPC's faucet is closed */
+export const isAirdropClosed = (error: unknown): error is AirdropClosedError =>
+  error instanceof AirdropClosedError;
+
+/**
+ * Whether the `airdrop` command threw for a refusal ({@link AirdropRefusedError}
+ * or a closed faucet)
+ */
 export const isAirdropRefused = (
   error: unknown
-): error is AirdropRefusedError => error instanceof AirdropRefusedError;
+): error is AirdropRefusedError | AirdropClosedError =>
+  error instanceof AirdropRefusedError || error instanceof AirdropClosedError;
 
 /** The cause of a refusal, as the wallet chip and the wallet menu name it */
 export const refusalOf = (error: unknown): AirdropRefusal =>

@@ -82,6 +82,7 @@
   font-family: var(--font-text);
   margin: 0;
   font-size: 1rem;
+  font-weight: var(--font-weight-read);
 }
 
 .pg-markdown .octicon {
@@ -138,7 +139,7 @@
 
 .pg-markdown b,
 .pg-markdown strong {
-  font-weight: 500;
+  font-weight: var(--font-weight-act);
 }
 
 .pg-markdown dfn {
@@ -150,7 +151,7 @@
   margin: 0.67em 0;
   padding-bottom: 0.3em;
   font-size: 2em;
-  font-weight: 500;
+  font-weight: var(--font-weight-headline);
 }
 
 .pg-markdown mark {
@@ -337,7 +338,7 @@
 .pg-markdown h6 {
   margin-top: 24px;
   margin-bottom: 16px;
-  font-weight: 500;
+  font-weight: var(--font-weight-headline);
   line-height: 1.25;
 }
 
@@ -345,28 +346,28 @@
   border-bottom: 1px solid var(--color-border-muted);
   padding-bottom: 0.3em;
   font-size: 1.5em;
-  font-weight: 500;
+  font-weight: var(--font-weight-headline);
 }
 
 .pg-markdown h3 {
   font-size: 1.25em;
-  font-weight: 500;
+  font-weight: var(--font-weight-headline);
 }
 
 .pg-markdown h4 {
   font-size: 1em;
-  font-weight: 500;
+  font-weight: var(--font-weight-headline);
 }
 
 .pg-markdown h5 {
   font-size: 0.875em;
-  font-weight: 500;
+  font-weight: var(--font-weight-headline);
 }
 
 .pg-markdown h6 {
   color: var(--color-fg-muted);
   font-size: 0.85em;
-  font-weight: 500;
+  font-weight: var(--font-weight-headline);
 }
 
 .pg-markdown p {
@@ -737,7 +738,7 @@
   padding: 0;
   font-size: 1em;
   font-style: italic;
-  font-weight: 500;
+  font-weight: var(--font-weight-label);
 }
 
 .pg-markdown dl dd {
@@ -746,7 +747,7 @@
 }
 
 .pg-markdown table th {
-  font-weight: 500;
+  font-weight: var(--font-weight-label);
 }
 
 .pg-markdown table th,
@@ -961,7 +962,7 @@
 .pg-markdown .csv-data th {
   background: var(--color-canvas-subtle);
   border-top: 0;
-  font-weight: 500;
+  font-weight: var(--font-weight-label);
 }
 
 .pg-markdown .footnotes {

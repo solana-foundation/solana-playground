@@ -12,6 +12,7 @@ import { fakeBuildServer } from "./fake-build-server";
 import type { FakeDevnet } from "./fake-devnet";
 import { fakeDevnet } from "./fake-devnet";
 import { expect, LONG, test } from "./fixtures";
+import { hasSavedText } from "./saved-files";
 
 /**
  * Hello Anchor from the intro card to the finish card on the desktop, with
@@ -102,14 +103,19 @@ const start = async (page: Page) => {
     .click(LONG);
 };
 
-/** Step 1 through the planned failure, fixed by the learner's own pick */
-const passStepOne = async (page: Page) => {
+/** Step 1 up to the fix's Build card: the planned failure, the learner's own pick */
+const reachFixBuild = async (page: Page) => {
   await answer(page, beat("s1.q1", "ask"));
   await act(page, "s1.build").click(LONG);
   await expect(feed(page).getByText("Build failed").last()).toBeVisible(LONG);
   await expect(feed(page).getByText("E0432 · line 5").last()).toBeVisible();
   await feed(page).getByRole("button", { name: "I'll fix it myself" }).click();
   await answer(page, beat("f1.q2", "ask"));
+};
+
+/** Step 1 through the planned failure, fixed by the learner's own pick */
+const passStepOne = async (page: Page) => {
+  await reachFixBuild(page);
   await act(page, "f1.build").click(LONG);
   await won(page, "write-program");
   await spent(page, "s1.build", "f1.build");
@@ -282,6 +288,76 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await expect(feed(page).getByText(/· 2nd try/)).toBeVisible(LONG);
   });
 
+  test("tutorial-conversation: The learner edits the written lines", async ({
+    page,
+  }) => {
+    test.skip(isLive, "needs no build or devnet");
+    test.setTimeout(120_000);
+    const EDIT = 'import "not-a-real-package";';
+    const LESSON = "use anchor_lang::prelude::*;";
+    const card = () =>
+      feed(page).getByRole("button", {
+        name: /^Show lines 1 to 3 in .*lib\.rs$/,
+      });
+    await start(page);
+    await expect(card()).toContainText(LESSON, LONG);
+    // The learner replaces the file the block landed in
+    await card().click();
+    await page.locator(".monaco-editor .view-lines").first().click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.type(EDIT);
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      EDIT
+    );
+    // Once the editor's autosave has stored the edit, the file holds it
+    await expect
+      .poll(() => hasSavedText(page, EDIT), { timeout: 10_000 })
+      .toBe(true);
+    await expect(card()).toContainText(LESSON);
+    await expect(card()).not.toContainText(EDIT);
+    // After a reload, once the editor holds the edit again, the card still
+    // shows the lesson's lines: it reads its save, not the file
+    await page.reload();
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      EDIT,
+      LONG
+    );
+    await expect(card()).toContainText(LESSON);
+    await expect(card()).not.toContainText(EDIT);
+  });
+
+  test("tutorial-conversation: The learner adds lines above the written lines", async ({
+    page,
+  }) => {
+    test.skip(isLive, "needs no build or devnet");
+    test.setTimeout(120_000);
+    const MINE = "// mine";
+    const card = (range: string) =>
+      feed(page).getByRole("button", {
+        name: new RegExp(`^Show lines ${range} in .*lib\\.rs$`),
+      });
+    await start(page);
+    await answer(page, beat("s1.q1", "ask"));
+    await expect(card("5 to 13")).toBeVisible(LONG);
+    // A quiet moment: the question is answered and Build waits, so an edit
+    // that answers nothing posts no turn
+    await expect(act(page, "s1.build")).toBeVisible(LONG);
+    // Two lines typed at the top of the file the block landed in
+    await card("5 to 13").click();
+    await page.locator(".monaco-editor .view-lines").first().click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.type(`${MINE}\n${MINE}\n`);
+    await expect
+      .poll(() => hasSavedText(page, `${MINE}\n${MINE}\nuse anchor_lang`), {
+        timeout: 10_000,
+      })
+      .toBe(true);
+    // The card names the block where it is now
+    await expect(card("7 to 15")).toBeVisible();
+    await expect(card("5 to 13")).toHaveCount(0);
+  });
+
   test("tutorial-conversation: The planned failure", async ({ page }) => {
     test.skip(isLive, "steers the fakes");
     test.setTimeout(120_000);
@@ -392,6 +468,82 @@ test.describe("tutorial: Hello Anchor on a stubbed build server and devnet", () 
     await feed(page).getByRole("button", { name: "Check again" }).click();
     await won(page, "greet-by-name");
     expect(sends()).toBe(sent);
+  });
+
+  // HOO-2755 reported no Build control after a pause or reload; it did not
+  // reproduce, and these three hold the path while the state behind the
+  // report is still to be found. Each ends in a build that runs from the
+  // restored card: a button that renders but no longer dispatches fails too
+  /** Exactly one live Build button in the feed, and it can be pressed */
+  const oneBuildButton = async (page: Page, id: string) => {
+    await expect(act(page, id)).toBeVisible(LONG);
+    await expect(
+      feed(page).getByRole("button", { name: "Build", exact: true })
+    ).toHaveCount(1);
+    await expect(act(page, id)).toBeEnabled();
+  };
+
+  test("keeps the Build button after a reload at a Build card", async ({
+    page,
+  }) => {
+    test.skip(isLive, "steers the fakes");
+    test.setTimeout(120_000);
+    await start(page);
+    await answer(page, beat("s1.q1", "ask"));
+    await expect(act(page, "s1.build")).toBeVisible(LONG);
+    await page.reload();
+    await oneBuildButton(page, "s1.build");
+    await act(page, "s1.build").click(LONG);
+    await expect(feed(page).getByText("Build failed").last()).toBeVisible(LONG);
+  });
+
+  test("leaves the card interrupted after a reload during a build, and builds again", async ({
+    page,
+  }) => {
+    test.skip(isLive, "steers the fakes");
+    test.setTimeout(120_000);
+    await start(page);
+    await answer(page, beat("s1.q1", "ask"));
+    // Hold the build so the reload lands mid-run; the held request proves
+    // the run started, which is what the store saves before the fetch
+    const BUILD = "**/build";
+    let held = 0;
+    const hold = () => {
+      held += 1;
+      return new Promise<void>(() => {});
+    };
+    await page.route(BUILD, hold);
+    await act(page, "s1.build").click(LONG);
+    await expect.poll(() => held, LONG).toBe(1);
+    // The running card shows its stage, not a button
+    await expect(
+      feed(page).getByRole("button", { name: "Build", exact: true })
+    ).toHaveCount(0);
+    // The started run is written to the save after the dispatch that drew
+    // the stage; a short wait lets that write land before the reload
+    await page.waitForTimeout(1500);
+    await page.unroute(BUILD, hold);
+    await page.reload();
+    await expect(
+      feed(page).getByText("Interrupted by a reload").last()
+    ).toBeVisible(LONG);
+    await oneBuildButton(page, "s1.build");
+    await act(page, "s1.build").click(LONG);
+    await expect(feed(page).getByText("Build failed").last()).toBeVisible(LONG);
+  });
+
+  test("keeps the Build button after a reload at the fix's Build", async ({
+    page,
+  }) => {
+    test.skip(isLive, "steers the fakes");
+    test.setTimeout(120_000);
+    await start(page);
+    await reachFixBuild(page);
+    await expect(act(page, "f1.build")).toBeVisible(LONG);
+    await page.reload();
+    await oneBuildButton(page, "f1.build");
+    await act(page, "f1.build").click(LONG);
+    await won(page, "write-program");
   });
 
   // The Call panel is on the branch (HOO-2358, #357); the scenario below is

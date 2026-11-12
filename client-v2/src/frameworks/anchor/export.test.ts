@@ -1,64 +1,255 @@
-// The exported Anchor workspace's manifests; mocks the utils barrel and the
-// dependency helpers, which reach the network.
-import { describe, expect, it, vi } from "vitest";
+// A file of its own, with the boot-time global and the wasm packages stubbed
+// as `../round-trip.test.ts` does: the exporter imports the `utils` barrel.
+//
+// The exported project's guide is `export.md`: `anchor test` and
+// `anchor run client` must run on what the tutorial's last step leaves
+// (HOO-2749).
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getIdlBuildFeature } from "./idl-build-feature";
+import { PgCommon, PgLanguage, TupleFiles } from "../../utils";
+import { convertFromPlayground as convertSeahorse } from "../seahorse/export";
+import { convertFromPlayground } from "./export";
 
-vi.mock("../../utils", () => ({
-  PgCommon: {
-    joinPaths: (...paths: string[]) => paths.join("/"),
-    toKebabFromSnake: (name: string) => name.replaceAll("_", "-"),
-    toSnakeCase: (name: string) => name,
-    toPascalFromSnake: (name: string) => name,
-  },
-  PgExplorer: {
-    PATHS: {
-      SRC_DIRNAME: "src",
-      CLIENT_DIRNAME: "client",
-      TESTS_DIRNAME: "tests",
+vi.hoisted(() => {
+  vi.stubGlobal("GLOBAL_SETTINGS", { default: {} });
+  vi.stubGlobal("PACKAGES", {
+    // The globals that `addImports` reads, among them `assert`, which the
+    // placeholder test must not call
+    global: {
+      assert: { default: "assert" },
+      "@coral-xyz/anchor": { as: "anchor" },
     },
-    currentWorkspaceName: "spl_program",
-  },
-  PgProgramInfo: { pk: undefined, kp: undefined },
-}));
-vi.mock("../common", () => ({
-  addAfter: (content: string) => content,
-  addImports: (content: string) => content,
-  IMPORT_STATEMENT_REGEX: /import/,
-  getRustDependencies: async () => "[dependencies]",
-  getJSDependencies: async () => '"dependencies": {}',
-  fetchServerCargoLock: async () => SERVER_LOCK,
-}));
+    importable: [],
+  });
+  vi.stubGlobal("CRATES", { importable: [] });
+});
 
-const SERVER_LOCK = 'version = 4\n\n[[package]]\nname = "solpg"\n';
+vi.mock("../../utils/package", () => ({ PgPackage: {} }));
 
-const { convertFromPlayground } = await import("./export");
+const LIB = [
+  "src/lib.rs",
+  "use anchor_lang::prelude::*;\n\n#[program]\nmod hello_anchor {\n    use super::*;\n}\n",
+] as const;
 
-describe("frameworks/anchor/export", () => {
-  it("writes the idl-build feature and resolver 2 into the manifests", async () => {
-    const files: [string, string][] = [
-      [
-        "src/lib.rs",
-        "use anchor_spl::token::Token;\n#[program]\npub mod spl_program {}",
-      ],
-    ];
+const CLIENT = [
+  "client/client.ts",
+  'const txHash = await pg.program.methods.hello("Anchor").rpc();\nconsole.log(txHash);\n',
+] as const;
 
-    const exported = new Map(await convertFromPlayground(files));
+const TEST = [
+  "tests/anchor.test.ts",
+  'describe("hello_anchor", () => {\n  it("runs", async () => {\n    await pg.program.methods.hello("Anchor").rpc();\n  });\n});\n',
+] as const;
 
-    const feature = getIdlBuildFeature(files);
-    expect(feature).toContain('"anchor-spl/idl-build"');
-    expect(exported.get("programs/spl-program/Cargo.toml")).toContain(feature);
-    expect(exported.get("Cargo.toml")).toMatch(/^resolver = "2"$/m);
+/** The placeholder test as `anchor test` finds it */
+const PLACEHOLDER = `import * as anchor from "@coral-xyz/anchor";
+import { expect } from "chai";
+import type { HelloAnchor } from "../target/types/hello_anchor";
+
+describe("hello_anchor", () => {
+  // Configure the client to use the local cluster
+  anchor.setProvider(anchor.AnchorProvider.env());
+
+  const program = anchor.workspace.HelloAnchor as anchor.Program<HelloAnchor>;
+  
+  it("is deployed", async () => {
+    const info = await program.provider.connection.getAccountInfo(
+      program.programId
+    );
+    expect(
+      info,
+      \`program \${program.programId} is not deployed on \${program.provider.connection.rpcEndpoint}; run anchor deploy\`
+    ).to.not.equal(null);
+    expect(info?.executable).to.equal(true);
+  });
+});
+`;
+
+const exported = async (...files: (readonly [string, string])[]) => {
+  const result = await convertFromPlayground(
+    files.map(([p, c]) => [p, c]),
+    undefined
+  );
+  return new Map(result as TupleFiles);
+};
+
+describe("convertFromPlayground", () => {
+  beforeEach(() => {
+    // Set at boot by `globals/`, which this test does not load
+    PgLanguage.all = [];
+    vi.spyOn(PgCommon, "fetchJSON").mockResolvedValue({});
+    // The crates' features and the build server's lock, which the exports fetch
+    vi.spyOn(PgCommon, "fetchText").mockImplementation(async (path) =>
+      path.endsWith("features.json") ? "{}" : "# server lock\n"
+    );
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("adds a placeholder test to a project that has none", async () => {
+    const files = await exported(LIB, CLIENT);
+
+    expect(files.get("tests/hello-anchor.ts")).toBe(PLACEHOLDER);
   });
 
-  // Without it, `anchor idl build` resolves newer transitive crates than the server, which fail to compile
-  it("ships the build server's lock beside the workspace manifest", async () => {
-    const exported = new Map(
-      await convertFromPlayground([
-        ["src/lib.rs", "#[program]\npub mod spl_program {}"],
-      ])
+  it("adds the placeholder test to a project with only a tests README", async () => {
+    const files = await exported(LIB, ["tests/README.md", "# Tests\n"]);
+
+    expect(files.get("tests/hello-anchor.ts")).toBe(PLACEHOLDER);
+  });
+
+  it("adds the placeholder test to a Seahorse project that has none", async () => {
+    vi.spyOn(PgCommon, "fetchText").mockImplementation(async (path) =>
+      path.endsWith("features.json") ? "{}" : ""
+    );
+    const result = await convertSeahorse(
+      [["src/foo.py", "from seahorse.prelude import *\n"]],
+      undefined
     );
 
-    expect(exported.get("Cargo.lock")).toBe(SERVER_LOCK);
+    const test = new Map(result as TupleFiles).get("tests/foo.ts");
+    expect(test).toContain('describe("foo", () => {');
+    expect(test).toContain('import type { Foo } from "../target/types/foo";');
+  });
+
+  it("keeps the tests a project has", async () => {
+    const files = await exported(LIB, CLIENT, TEST);
+
+    expect(files.has("tests/anchor.ts")).toBe(true);
+    expect(files.has("tests/hello-anchor.ts")).toBe(false);
+  });
+
+  it("wraps the await of a client in an async function", async () => {
+    const files = await exported(LIB, CLIENT);
+
+    const client = files.get("client/client.ts") ?? "";
+    expect(client).toContain(
+      "const program = anchor.workspace.HelloAnchor as anchor.Program<HelloAnchor>;"
+    );
+    expect(client).toContain(
+      '(async () => {\nconst txHash = await program.methods.hello("Anchor").rpc();\nconsole.log(txHash);\n})().catch((err) => {\n  console.error(err);\n  process.exitCode = 1;\n});'
+    );
+    expect(client.indexOf("const program")).toBeLessThan(
+      client.indexOf("(async")
+    );
+  });
+
+  it("starts the wrapper after the imports, not at a comment that says import", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      `import { BN } from "bn.js";
+
+// We don't import the IDL here
+const name = "Anchor";
+await pg.program.methods.hello(name).rpc();
+`,
+    ]);
+
+    const client = files.get("client/client.ts") ?? "";
+    expect(client).toContain(
+      '\n\n(async () => {\n// We don\'t import the IDL here\nconst name = "Anchor";\nawait program.methods.hello(name).rpc();\n})()'
+    );
+    expect(client.indexOf('import { BN } from "bn.js";')).toBeLessThan(
+      client.indexOf("const program")
+    );
+  });
+
+  it.each([
+    ['import{BN} from "bn.js";'],
+    ['import*as bn from "bn.js";'],
+    ['import"dotenv/config";'],
+  ])("keeps the compact import %s outside the wrapper", async (statement) => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      `${statement}\nawait pg.program.methods.hello("Anchor").rpc();\n`,
+    ]);
+
+    const client = files.get("client/client.ts") ?? "";
+    expect(client.indexOf(statement)).toBeGreaterThanOrEqual(0);
+    expect(client.indexOf(statement)).toBeLessThan(
+      client.indexOf("(async () => {")
+    );
+  });
+
+  it("leaves a client without await as it is", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      "console.log(1);\n",
+    ]);
+
+    expect(files.get("client/client.ts")).not.toContain("(async");
+  });
+
+  it("leaves a client with a top-level export unwrapped", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'export const name = "Anchor";\nawait pg.program.methods.hello(name).rpc();\n',
+    ]);
+
+    expect(files.get("client/client.ts")).not.toContain("(async");
+  });
+
+  it("leaves a client that starts with export{} unwrapped", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'export{};\nawait pg.program.methods.hello("Anchor").rpc();\n',
+    ]);
+
+    expect(files.get("client/client.ts")).not.toContain("(async");
+  });
+
+  it("keeps a comment on the last import's line beside the import", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'import { BN } from "bn.js"; // big numbers\nconsole.log(BN);\n',
+    ]);
+
+    const client = files.get("client/client.ts") ?? "";
+    expect(client).toContain('import { BN } from "bn.js"; // big numbers\n');
+    expect(client).toContain(
+      "anchor.Program<HelloAnchor>;\n\nconsole.log(BN);"
+    );
+  });
+
+  it("keeps the code that follows the last import on the same line", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'import { BN } from "bn.js";console.log(BN);\n',
+    ]);
+
+    expect(files.get("client/client.ts")).toContain(
+      "anchor.Program<HelloAnchor>;\n\nconsole.log(BN);"
+    );
+  });
+
+  it("adds no blank line after imports that end in CRLF", async () => {
+    const files = await exported(LIB, [
+      "client/client.ts",
+      'import { BN } from "bn.js";\r\nconsole.log(BN);\r\n',
+    ]);
+
+    expect(files.get("client/client.ts")).toContain(
+      "anchor.Program<HelloAnchor>;\n\nconsole.log(BN);"
+    );
+  });
+
+  it("leaves the await of a test alone", async () => {
+    const files = await exported(LIB, TEST);
+
+    expect(files.get("tests/anchor.ts")).not.toContain("(async () => {");
+  });
+
+  it("lists ts-node, which anchor run client needs, as a dev dependency", async () => {
+    const files = await exported(LIB, CLIENT);
+
+    const manifest = JSON.parse(files.get("package.json") ?? "{}");
+    expect(manifest.devDependencies["ts-node"]).toBeDefined();
+    expect(manifest.devDependencies["ts-mocha"]).toBeDefined();
+  });
+
+  it("gives the client the Node types for process and console", async () => {
+    const files = await exported(LIB, CLIENT);
+
+    const tsconfig = JSON.parse(files.get("tsconfig.json") ?? "{}");
+    expect(tsconfig.compilerOptions.types).toContain("node");
   });
 });
