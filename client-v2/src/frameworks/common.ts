@@ -1,19 +1,93 @@
+import { z } from "zod";
+
+import { createLogger } from "../shared/lib/logger";
 import {
   JsRuntimePackageName,
   MergeUnion,
   PgCommon,
+  PgExplorer,
   PgLanguage,
+  PgProgramInfo,
   PgView,
+  PgWeb3,
   TupleFiles,
   ValueOf,
 } from "../utils";
 import { SelectProgram } from "./SelectProgram";
 
+const log = createLogger("frameworks:export");
+
+/** The project an export converts: its name, its program keypair and id */
+export interface ExportedProject {
+  name: string | undefined;
+  /** The program keypair, absent when the project has none */
+  kp: PgWeb3.Keypair | undefined;
+  /** The program id, absent when the project has none */
+  pk: PgWeb3.PublicKey | undefined;
+}
+
+/** What an export reads of a saved project's `.workspace/program-info.json` */
+const SavedProgramInfo = z.object({
+  kp: z.array(z.number().int()).length(64).nullish(),
+  customPk: z.string().nullish(),
+});
+
+/**
+ * Read the project an export converts. The open one's program is the one in
+ * memory, whose file may not be written yet; another project's is its saved
+ * program info. The Projects menu exports any project, and the open one's
+ * keypair in another's zip would give it the open one's program id.
+ *
+ * @param name the project; the open one when not given
+ * @returns its name, program keypair and program id, each absent when it has none
+ */
+export const readExportedProject = async (
+  name: string | undefined
+): Promise<ExportedProject> => {
+  if (!name || name === PgExplorer.currentWorkspaceName) {
+    return {
+      name: name ?? PgExplorer.currentWorkspaceName,
+      kp: PgProgramInfo.kp ?? undefined,
+      pk: PgProgramInfo.pk ?? undefined,
+    };
+  }
+
+  const path = PgCommon.joinPaths(
+    PgExplorer.PATHS.ROOT_DIR_PATH,
+    name,
+    PgExplorer.PATHS.WORKSPACE_DIRNAME,
+    "program-info.json"
+  );
+  try {
+    const saved = SavedProgramInfo.parse(await PgExplorer.fs.readToJSON(path));
+    const kp = saved.kp
+      ? PgWeb3.Keypair.fromSecretKey(Uint8Array.from(saved.kp))
+      : undefined;
+    const pk = saved.customPk
+      ? new PgWeb3.PublicKey(saved.customPk)
+      : kp?.publicKey;
+    return { name, kp, pk };
+  } catch (e) {
+    // The export goes without a program id rather than with a wrong one. A
+    // project never built has no program info, the ordinary case; any other
+    // failure says why, naming the kind of failure but no part of the file,
+    // which holds the program's secret key
+    const error = e as { code?: string; message?: string } | undefined;
+    const isMissing =
+      error?.code === "ENOENT" || !!error?.message?.includes("ENOENT");
+    if (!isMissing) {
+      log.warn(
+        `Exporting "${name}" without its program id: its program info is ${
+          e instanceof z.ZodError ? "malformed" : "unreadable"
+        }`
+      );
+    }
+    return { name, kp: undefined, pk: undefined };
+  }
+};
+
 /** Map of dependency name -> version */
 type Dependencies = { [dependencyName: string]: string };
-
-/** Import statement regular expression with multi-line support */
-export const IMPORT_STATEMENT_REGEX = /import(.|\n)*?["|'].*["|'](;?)/;
 
 /**
  * Add the given content after the regular expression.
@@ -41,6 +115,89 @@ export const addAfter = (
     content.slice(afterStartIndex);
 
   return content;
+};
+
+/**
+ * Wrap everything after the leading imports in an async function that is
+ * called right away whenever the word `await` appears, because top-level
+ * `await` is not available in a CommonJS module.
+ *
+ * An `await` inside a comment or a string also triggers the wrap, which is
+ * harmless. A client with a top-level `export` (`export const`, `export {}`,
+ * `export *`) is left as it is: inside the function the `export` would not
+ * compile. A line inside a template literal or a block comment that starts
+ * with `export` also leaves the client unwrapped.
+ *
+ * @param content JS/TS code
+ * @returns the content with the wrapped code
+ */
+export const wrapTopLevelAwait = (content: string) => {
+  if (!/\bawait\b/.test(content) || /^export\b/m.test(content)) {
+    return content;
+  }
+
+  const bodyStartIndex = getLeadingImportsEnd(content);
+  // An import after another statement is still the module's: inside the
+  // function it would not compile, so it joins the leading ones
+  const { imports, rest } = takeImports(content.slice(bodyStartIndex));
+  const head = [content.slice(0, bodyStartIndex), ...imports]
+    .filter(Boolean)
+    .join("\n");
+
+  // The body is not re-indented: indenting lines inside a multi-line template
+  // literal would change its text
+  const body = rest.trim();
+
+  return (
+    head +
+    `\n\n(async () => {\n${body}\n})().catch((err) => {\n  console.error(err);\n  process.exitCode = 1;\n});\n`
+  );
+};
+
+/**
+ * Get the index where the run of import statements at the top of the file
+ * ends, where comments and blank lines may sit between the statements.
+ * Searching the whole file would find the word "import" in a comment of the
+ * code below the imports.
+ *
+ * @param content JS/TS code
+ * @returns the index after the last leading import, `0` if there is none
+ */
+const getLeadingImportsEnd = (content: string) => {
+  const skipped = /(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*/y;
+  // `import{BN}`, `import*as x` and `import"x"` need no space after the keyword;
+  // lookaheads keep `important` and a dynamic `import(`, `import (`,
+  // `import /* c */ (` or `import // c` with `(` on the next line out
+  const importStatement =
+    /import(?=[\s{*"'])(?!(?:\s|\/\/[^\n]*|\/\*[\s\S]*?\*\/)*\()[\s\S]*?["'][^"'\n]*["'];?/y;
+  let end = 0;
+  let index = 0;
+  while (true) {
+    skipped.lastIndex = index;
+    index += skipped.exec(content)?.[0].length ?? 0;
+    importStatement.lastIndex = index;
+    if (!importStatement.exec(content)) return end;
+    index = end = importStatement.lastIndex;
+  }
+};
+
+/**
+ * Add the given code on the lines after the leading imports.
+ *
+ * @param content JS/TS code
+ * @param newContent code to add
+ * @returns the content with the code added
+ */
+export const addAfterImports = (content: string, newContent: string) => {
+  const end = getLeadingImportsEnd(content);
+  if (!end) return newContent + "\n" + content;
+
+  // A comment on the last import's line stays beside that import
+  const comment = /^[ \t]*\/\/[^\r\n]*/.exec(content.slice(end))?.[0] ?? "";
+  const head = end + comment.length;
+  // Skip the line break that ends the last import, when there is one
+  const rest = content.slice(head).replace(/^\r?\n/, "");
+  return content.slice(0, head) + "\n" + newContent + "\n" + rest;
 };
 
 /**
@@ -171,10 +328,12 @@ export const getJSDependencies = async (files: TupleFiles) => {
     "@types/bn.js": "^5.1.1",
     "@types/chai": "^4.3.5",
     "@types/mocha": "^10.0.1",
+    "@types/node": "^20.0.0",
     chai: "^4.3.8",
     mocha: "^10.2.0",
     prettier: "^3.0.2",
     "ts-mocha": "^10.0.0",
+    "ts-node": "^10.9.1",
     typescript: "^5.2.2",
   };
 
@@ -226,6 +385,88 @@ export const addImports = (content: string) => {
 };
 
 /**
+ * The given code with the text of its comments and strings blanked: each
+ * character but a line break becomes a space, and a string keeps its quotes.
+ * The length and the line breaks stay, so a match found in the result sits at
+ * the same place in the code. Comments and strings are read together, so
+ * "http://" in a string is not taken for a comment.
+ *
+ * @param content JS/TS code
+ * @returns the code with only its own tokens readable
+ */
+const maskCommentsAndStrings = (content: string) =>
+  content.replace(
+    /("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`)|\/\/[^\n]*|\/\*[\s\S]*?\*\//g,
+    (match, string?: string) =>
+      string
+        ? string[0] +
+          string.slice(1, -1).replace(/[^\n]/g, " ") +
+          string[string.length - 1]
+        : match.replace(/[^\n]/g, " ")
+  );
+
+/**
+ * An import statement where a statement starts: at a line's start or after a
+ * `;`, and not a dynamic `import (`. Group 1 is the statement, its `;` included. Read on
+ * `maskCommentsAndStrings`'s result, where a string's text is blank
+ */
+const IMPORT_STATEMENT =
+  /(?:^|;)[ \t\uFEFF]*(import(?![\w$(])(?!\s*\()[^"'`;]*?["'][^"'\n]*["'][ \t]*;?)/gm;
+
+/**
+ * Take the import statements out of the given code, comments and strings
+ * aside. A static import is only valid at a module's top, so each one found
+ * is the module's own, wherever it stands.
+ *
+ * @param content JS/TS code
+ * @returns the imports in their order, and the code without them
+ */
+const takeImports = (content: string) => {
+  const masked = maskCommentsAndStrings(content);
+  const ranges = Array.from(masked.matchAll(IMPORT_STATEMENT), (m) => {
+    // `matchAll` sets `index` on every match; the type does not say so
+    const start = (m.index ?? 0) + m[0].length - m[1].length;
+    return [start, start + m[1].length] as const;
+  });
+  const imports = ranges.map(([start, end]) => content.slice(start, end));
+  let rest = content;
+  for (const [start, end] of ranges.slice().reverse()) {
+    rest = rest.slice(0, start) + rest.slice(end);
+  }
+  return { imports, rest };
+};
+
+/**
+ * Names the import statements of the given code bind: `web3` for
+ * `import * as web3 from "x"`, `import web3 from "x"` and `import{web3}from"x"`,
+ * `b` for `import { a as b } from "x"`. A name the code already binds must not
+ * be imported again, which would not compile.
+ *
+ * @param content JS/TS code
+ * @returns the bound names
+ */
+export const getImportedNames = (content: string) => {
+  const names = new Set<string>();
+  // An import in a comment or a string binds nothing (`maskCommentsAndStrings`)
+  const code = maskCommentsAndStrings(content);
+  // A statement starts a line or follows a `;`, after any whitespace (`\s`
+  // includes a byte order mark)
+  const statement =
+    /(?:^|;)\s*import(?![\w$(])(?!\s*\()([^"'`;]*?)\bfrom\s*["'][^"'\n]*["']/gm;
+  for (const [, clause] of code.matchAll(statement)) {
+    for (const part of clause.replace(/[{}]/g, ",").split(",")) {
+      const name = part
+        .trim()
+        .split(/\s+as\s+|\*\s*as\s+/)
+        .pop()
+        ?.trim();
+      if (name && /^[\w$]+$/.test(name) && name !== "type") names.add(name);
+    }
+  }
+  return names;
+};
+
+/**
  * Get global packages that are used in the given content.
  *
  * @param content JS/TS code
@@ -233,12 +474,16 @@ export const addImports = (content: string) => {
  */
 const getGlobalPackages = (content: string) => {
   const packages: Record<string, ValueOf<typeof PACKAGES["global"]>> = {};
+  const imported = getImportedNames(content);
   for (const [_packageName, importStyle] of PgCommon.entries(PACKAGES.global)) {
     if (PACKAGES_MAP[_packageName] === null) continue;
     const packageName = PACKAGES_MAP[_packageName] ?? _packageName;
 
     const style = importStyle as Partial<MergeUnion<typeof importStyle>>;
     const name = style.as ?? style.named ?? style.default;
+    // `web3.` also matches inside "@solana/web3.js", so a client that binds
+    // the name itself would get it twice
+    if (name !== undefined && imported.has(name)) continue;
 
     const accessors = [name + ".", name + "("];
     for (const accessor of accessors) {

@@ -39,12 +39,12 @@ type GistEvents = {
    * The share dialog started an export: the user pressed create, or the
    * export resumed after a sign-in or a grant of gist access. `files` counts
    * the gist's files: the manifest, the title and empty files (listed only
-   * in the manifest) left out. `source` says where the dialog was opened.
+   * in the manifest) left out. `via` says where the dialog was opened.
    */
   gist_export_started: {
     files: number;
     visibility: GistVisibility;
-    source: GistShareSource;
+    via: GistShareSource;
   };
   /** The dialog asked the user to allow gists on GitHub */
   gist_export_scope_requested: NoParams;
@@ -66,21 +66,21 @@ type GistEvents = {
    */
   gist_link_copied: { copied: GistCopiedLink };
   /** An import from the dialog, or a gist link, started reading a gist. */
-  gist_import_started: { from: GistImportSource };
+  gist_import_started: { via: GistImportSource };
   /**
    * The gist's files are read and laid out, before a project is created or a
    * view opened; `layout` says whether Playground's manifest placed them or
    * their kind did.
    */
   gist_import_succeeded: {
-    from: GistImportSource;
+    via: GistImportSource;
     layout: "manifest" | "loose";
   };
   /**
    * The import stopped; the user saw the message for `reason`.
    * `request-failed` also counts a fault of ours, which is reported as well.
    */
-  gist_import_failed: { from: GistImportSource; reason: GistImportFailure };
+  gist_import_failed: { via: GistImportSource; reason: GistImportFailure };
 };
 
 export const gistTelemetry = createTracker<GistEvents>();

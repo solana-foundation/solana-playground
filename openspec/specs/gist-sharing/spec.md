@@ -387,7 +387,7 @@ The `gist` slice SHALL send these events under the prefix `gist`:
 
 - `gist_export_started` when the user presses Create secret gist or Create
   public gist, or the export resumes after sign-in, with `files` (count of
-  exported files), `visibility` (`secret` | `public`) and `source` (`header`
+  exported files), `visibility` (`secret` | `public`) and `via` (`header`
   | `project_menu`, where the dialog was opened)
 - `gist_export_scope_requested` when the dialog asks for gist access
 - `gist_export_succeeded` with `files` and `visibility` when the gist is made
@@ -405,7 +405,7 @@ id or URL, or a GitHub login.
 
 - **WHEN** a user opens Share from the header and shares a three-file project
   as a secret gist
-- **THEN** `gist_export_started` is sent with `files: 3`, `visibility: "secret"`, `source: "header"`, and `gist_export_succeeded` with `files: 3`,
+- **THEN** `gist_export_started` is sent with `files: 3`, `visibility: "secret"`, `via: "header"`, and `gist_export_succeeded` with `files: 3`,
   `visibility: "secret"`
 
 #### Scenario: A failure is counted by reason
@@ -503,7 +503,7 @@ The `features/gist` slice SHALL send, under the prefix `gist`:
 `gist_import_started` when an import or a link starts reading a gist;
 `gist_import_succeeded` when its files are read and laid out, before a
 project is created or a view opened; `gist_import_failed`
-when it stops. Each carries `from`: `dialog` or `link`. `gist_import_succeeded`
+when it stops. Each carries `via`: `dialog` or `link`. `gist_import_succeeded`
 carries `layout`: `manifest` or `loose`. `gist_import_failed` carries
 `reason`: `not-found`, `rate-limited`, `too-large`, `invalid`, `no-program`
 or `request-failed`.
@@ -511,7 +511,7 @@ or `request-failed`.
 #### Scenario: A failed import is counted with its reason
 
 - **WHEN** an import from the dialog fails because the gist does not exist
-- **THEN** `gist_import_failed` is sent with `from: dialog` and `reason: not-found`
+- **THEN** `gist_import_failed` is sent with `via: dialog` and `reason: not-found`
 
 ### Requirement: A gist with no program opens as a TypeScript project
 

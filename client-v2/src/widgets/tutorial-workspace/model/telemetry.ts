@@ -46,5 +46,15 @@ type TutorialWorkspaceEvents = {
   tutorial_workspace_terminal_opened: { reason: TerminalReason };
 };
 
-export const tutorialWorkspaceTelemetry =
-  createTracker<TutorialWorkspaceEvents>();
+/**
+ * Free text, opted in: no type lists the values, so the owner decides
+ * whether to keep it (HOO-2752)
+ */
+type TutorialWorkspaceFreeText = {
+  doc: "a Markdown file name in a tutorial's `docs/` folder, read from the tutorial at run time";
+};
+
+export const tutorialWorkspaceTelemetry = createTracker<
+  TutorialWorkspaceEvents,
+  TutorialWorkspaceFreeText
+>();

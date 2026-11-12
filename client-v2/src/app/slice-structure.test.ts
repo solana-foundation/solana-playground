@@ -245,7 +245,22 @@ const isUntracked = (row: FunnelRow) =>
 
 it("should find the funnel table", () => {
   expect(funnelRows().length).toBeGreaterThanOrEqual(15);
+  expect(funnelRows()).toContainEqual(
+    expect.objectContaining({
+      events: ["auth_signed_in"],
+      source: "features/auth",
+    })
+  );
+  expect(declaredEvents()).toContain("auth_signed_in");
 });
+
+it.each(funnelRows().map((row) => [row.step, row] as const))(
+  "should name the funnel step %s's events in backticks",
+  (_, row) => {
+    if (isUntracked(row)) return;
+    expect(row.events.length).toBeGreaterThan(0);
+  }
+);
 
 it.each(funnelRows().map((row) => [row.step, row] as const))(
   "should declare every event the funnel step %s names",

@@ -115,6 +115,7 @@ vi.mock("../../utils", () => ({
       return env.cluster;
     },
     getReadBufferConnection: <T>(connection: T) => env.readBuffer ?? connection,
+    getAirdropConnection: <T>(connection: T) => connection,
   },
   PgGlobal: {
     get deployState() {
@@ -342,12 +343,16 @@ describe("commands/deploy", () => {
           opts: {
             onMissing: (count: number) => void;
             onRateLimit: (retryAfter: number) => void;
+            onRefusal: (message: string) => void;
           }
         ]
       ) => {
         const opts = args[2];
         opts.onMissing(2);
         opts.onRateLimit(3);
+        opts.onRefusal(
+          "Transaction simulation failed: Insufficient funds for fee"
+        );
         env.controller.abort();
         throw new Error("the segment was aborted");
       }
@@ -361,6 +366,10 @@ describe("commands/deploy", () => {
     );
     expect(PgTerminal.println).toHaveBeenCalledWith(
       expect.stringMatching(/^warning: Warning: Reached rate-limits/),
+      { noColor: true }
+    );
+    expect(PgTerminal.println).toHaveBeenCalledWith(
+      "warning: Warning: The cluster refused a buffer write (Transaction simulation failed: Insufficient funds for fee), sending it again...",
       { noColor: true }
     );
   });

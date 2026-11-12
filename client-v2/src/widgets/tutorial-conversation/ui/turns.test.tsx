@@ -15,6 +15,7 @@ import type {
   Proposal,
   RunResult,
   Turn,
+  Wrote,
 } from "@/features/tutorial-conversation";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
@@ -400,7 +401,13 @@ describe("BaseResultCard", () => {
       open = false,
       onRecheck = vi.fn(),
       exists,
-    }: { open?: boolean; onRecheck?: () => void; exists?: string } = {}
+      onCreateWallet = vi.fn(),
+    }: {
+      open?: boolean;
+      onRecheck?: () => void;
+      exists?: string;
+      onCreateWallet?: () => void;
+    } = {}
   ) =>
     render(
       // The app's root provides the tooltip Copy signature carries
@@ -417,9 +424,32 @@ describe("BaseResultCard", () => {
           onRecheck={onRecheck}
           signedIn={false}
           onSignIn={vi.fn()}
+          onCreateWallet={onCreateWallet}
         />
       </TooltipProvider>
     );
+
+  // HOO-2806: a run or call that found no wallet said so with no button
+  it("offers Create wallet on a run with no wallet while it is live", async () => {
+    const onCreateWallet = vi.fn();
+    const noWallet: RunResult = {
+      act: "run",
+      ok: false,
+      seconds: 0,
+      reason: "no_wallet",
+      message: "Create a Playground wallet or connect one, then try again.",
+      log: "",
+    };
+    const { unmount } = txCard(noWallet, { open: true, onCreateWallet });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Create wallet" })
+    );
+    expect(onCreateWallet).toHaveBeenCalledTimes(1);
+    unmount();
+
+    txCard(noWallet, { open: false, onCreateWallet });
+    expect(screen.queryByRole("button", { name: "Create wallet" })).toBeNull();
+  });
 
   it("reads as a pass for a call refused because the player already exists", () => {
     const { container } = txCard(
@@ -552,6 +582,27 @@ describe("BaseResultCard", () => {
     expect(screen.getByText(/Program log: Instruction: Hello/)).toBeTruthy();
   });
 
+  it("tells a run the closed RPC faucet left short to use the web faucet", () => {
+    txCard({
+      act: "run",
+      ok: false,
+      seconds: 1,
+      reason: "no_funds",
+      message:
+        '410 Gone: {"jsonrpc":"2.0","error":{"code": 410, "message":"The RPC faucet is closed on this cluster. Request test SOL at https://faucet.solana.com"}, "id": "1"}',
+      log: "",
+      funding: { balance: 0, cost: 500_000_000, address: "Wa11et" },
+    });
+    expect(
+      screen.getByText(
+        "Your wallet has 0 SOL, and this run needs about 0.5 SOL. The devnet RPC faucet is closed: get SOL from the web faucet, or top the wallet up yourself."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /Open faucet/ }).getAttribute("href")
+    ).toBe("https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet");
+  });
+
   it("heads a run the faucet left short, and one with no wallet, by their reason", () => {
     const { unmount } = txCard({
       act: "run",
@@ -641,6 +692,7 @@ describe("BaseResultCard", () => {
         onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
+        onCreateWallet={vi.fn()}
       />
     );
     expect(screen.getByText("Build successful")).toBeTruthy();
@@ -669,6 +721,7 @@ describe("BaseResultCard", () => {
         onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
+        onCreateWallet={vi.fn()}
       />
     );
     const { unmount } = render(deployed(1_250_000_000));
@@ -695,6 +748,7 @@ describe("BaseResultCard", () => {
         onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
+        onCreateWallet={vi.fn()}
       />
     );
     expect(screen.getByText("Build failed")).toBeTruthy();
@@ -734,6 +788,7 @@ describe("BaseResultCard", () => {
         onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
+        onCreateWallet={vi.fn()}
       />
     );
     expect(screen.getByText("Build server unreachable")).toBeTruthy();
@@ -770,6 +825,7 @@ describe("BaseResultCard", () => {
           onRecheck={vi.fn()}
           signedIn={signedIn}
           onSignIn={on.signIn}
+          onCreateWallet={vi.fn()}
         />
       );
       return on;
@@ -825,6 +881,7 @@ describe("BaseResultCard", () => {
         onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
+        onCreateWallet={vi.fn()}
       />
     );
     expect(screen.getByText(/Invalid path/)).toBeTruthy();
@@ -864,6 +921,7 @@ describe("BaseResultCard", () => {
         onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
+        onCreateWallet={vi.fn()}
       />
     );
     expect(screen.getByText(/exit status: 1/)).toBeTruthy();
@@ -888,6 +946,7 @@ describe("BaseResultCard", () => {
         onRecheck={vi.fn()}
         signedIn={false}
         onSignIn={vi.fn()}
+        onCreateWallet={vi.fn()}
       />
     );
     expect(screen.getByText("E0412 on line 9")).toBeTruthy();
@@ -995,6 +1054,7 @@ describe("TurnView", () => {
     revealError: vi.fn(),
     showLog: vi.fn(),
     createWallet: vi.fn(),
+    newProgramId: vi.fn(),
     signIn: vi.fn(),
   });
   const draw = (turn: Turn, live: boolean, handlers = on()) =>
@@ -1012,6 +1072,112 @@ describe("TurnView", () => {
         />
       </TooltipProvider>
     );
+
+  describe("a wrote card", () => {
+    const wroteTurn = (wrote: Wrote): Turn => ({
+      id: "wrote:s3.client",
+      kind: "wrote",
+      step: null,
+      at: 1,
+      whole: true,
+      beatId: "s3.client",
+      wrote,
+      failed: false,
+    });
+    const drawWith = (turn: Turn, file: string, handlers: TurnHandlers) =>
+      render(
+        <TurnView
+          turn={turn}
+          definition={definition}
+          live={false}
+          running={false}
+          passed={[]}
+          read={() => file}
+          nextTutorial={null}
+          on={handlers}
+        />
+      );
+    const BLOCK = ["fn hello() {", '    msg!("Hi");', "}"];
+
+    it("names and shows the block where it is now, once lines were added above it", async () => {
+      const handlers = on();
+      drawWith(
+        wroteTurn({ file: "src/lib.rs", lines: [3, 4, 5], text: BLOCK }),
+        ["use x;", "use y;", "use z;", ""].concat(BLOCK).join("\n"),
+        handlers
+      );
+      const card = screen.getByRole("button", {
+        name: "Show lines 5 to 7 in src/lib.rs",
+      });
+      // The numbers beside the code are the block's lines now, the code its own
+      expect(card.textContent).toContain('    msg!("Hi");');
+      expect(card.textContent).toContain("567");
+      await userEvent.click(card);
+      expect(handlers.showLine).toHaveBeenCalledWith("src/lib.rs", 5);
+    });
+
+    it("names and shows the saved lines once the block was edited", async () => {
+      const handlers = on();
+      // Lines added above, and the block's middle line changed: no place
+      // holds the block as written, so the card keeps the saved lines
+      drawWith(
+        wroteTurn({ file: "src/lib.rs", lines: [3, 4, 5], text: BLOCK }),
+        [
+          "use x;",
+          "use y;",
+          "use z;",
+          "",
+          "fn hello() {",
+          "    mine();",
+          "}",
+        ].join("\n"),
+        handlers
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "Show lines 3 to 5 in src/lib.rs" })
+      );
+      expect(handlers.showLine).toHaveBeenCalledWith("src/lib.rs", 3);
+    });
+
+    const edited = 'import "not-a-real-package";\n// const a = 1;\n// a();';
+
+    it("shows the lines the lesson wrote, whatever the file holds now", () => {
+      drawWith(
+        wroteTurn({
+          file: "client/client.ts",
+          lines: [1, 2],
+          text: ['console.log("My address:", pg.wallet.publicKey);', ""],
+        }),
+        edited,
+        on()
+      );
+      expect(
+        screen.getByText('console.log("My address:", pg.wallet.publicKey);')
+      ).toBeTruthy();
+      expect(screen.queryByText('import "not-a-real-package";')).toBeNull();
+    });
+
+    it("shows the written text in line order when the lines are not", () => {
+      drawWith(
+        wroteTurn({ file: "a.ts", lines: [2, 1], text: ["second", "first"] }),
+        edited,
+        on()
+      );
+      const rows = screen
+        .getAllByText(/^(first|second)$/)
+        .map((el) => el.textContent);
+      expect(rows).toEqual(["first", "second"]);
+    });
+
+    it("reads a save without text from the file, as before", () => {
+      drawWith(
+        wroteTurn({ file: "client/client.ts", lines: [1, 2] }),
+        edited,
+        on()
+      );
+      expect(screen.getByText('import "not-a-real-package";')).toBeTruthy();
+    });
+  });
 
   it("names the program step 4 upgrades in its act card, or says your program before there is one", () => {
     const ship = actOf("s4.ship");
@@ -1614,6 +1780,7 @@ describe("TurnView's last win", () => {
           revealError: vi.fn(),
           showLog: vi.fn(),
           createWallet: vi.fn(),
+          newProgramId: vi.fn(),
           signIn: vi.fn(),
         }}
       />
@@ -1730,6 +1897,7 @@ describe("TurnView's chip answer", () => {
     revealError: vi.fn(),
     showLog: vi.fn(),
     createWallet: vi.fn(),
+    newProgramId: vi.fn(),
     signIn: vi.fn(),
   });
   const reply = (follow: Follow | null): Turn => ({

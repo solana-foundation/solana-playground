@@ -1,6 +1,6 @@
 # Tasks
 
-The team implements these on `scope/users-work-2`, except 1.1 and group 5,
+The team implements these on `scope/interface-3` (`scope/users-work-2` and `scope/interface-2` have landed in `master`), except 1.1 and group 5,
 which go to foundation `master` in one PR. Every task is HOO-2411 unless it
 names another ticket or says "ticket to file", and each is one PR. Task 1.1
 goes first; the others depend on it and may run at the same time, except 4.2, which
@@ -27,27 +27,29 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
 
 ## 2. Project files
 
-- [ ] 2.1 Add `features/project-files` with prefix `project` and the
-      error-to-reason mapping, `GithubImportError` in `utils/github.ts` and
-      a named empty-conversion error in `utils/framework.ts`. Satisfies
+- [x] 2.1 Add `features/project-files` with prefix `project` and the
+      error-to-reason mapping, with `GithubImportError` and `ConversionError`
+      in the dependency-free `utils/import-error.ts` (thrown from
+      `utils/github.ts` and `utils/framework.ts`). Satisfies
       `client-v2-project-files`, "The slice declares the project events" and
-      "Import failures carry an enumerated reason": declare, describe and
-      emit, with memory-provider tests, one per reason (depends on 1.1)
-- [ ] 2.2 Send the import events from `ImportGithub` and `Example`
+      "Import failures carry an enumerated reason": declare and describe the
+      events, one mapping test per reason and a reason assertion at each
+      throw site; sending, and the memory-provider tests, are 2.2 to 2.4
+- [x] 2.2 Send the import events from `ImportGithub` and `Example`
       (`ImportGithub.tsx`), `ImportFs` (`ImportFs.tsx`) and `ImportTemporary`
       (`ImportTemporary.tsx`). Satisfies "A GitHub import is counted", "A
       file import is counted" and "A temporary project's import is
       counted": declare, describe and emit, with memory-provider tests,
       including nothing sent for a closed program choice; clear the import
       row's mark (depends on 2.1)
-- [ ] 2.3 Send `project_viewed` and `project_view_failed` from the
+- [x] 2.3 Send `project_viewed` and `project_view_failed` from the
       `github` route (`routes/github/github.tsx`). Satisfies "A project
       opened from a GitHub link is counted": declare, describe and emit,
       with memory-provider tests; clear the GitHub link row's mark (depends
       on 2.1)
-- [ ] 2.4 Send the export events from `convertAndExport` and
-      `exportWithoutChanges` (`ExportWorkspace.tsx`) and from `Project`
-      (`widgets/settings-page/ui/SettingsPage.tsx`). Satisfies "An export is
+- [x] 2.4 Send the export events from `convertAndExport` and
+      `exportWithoutChanges` (`ExportWorkspace.tsx`) and from `ExportProject`
+      (`widgets/settings-page/ui/ExportProject.tsx`). Satisfies "An export is
       counted with where it started" and "The settings page's export is
       counted": declare, describe and emit, with memory-provider tests,
       including the conversion fallback; clear the export row's mark
@@ -55,7 +57,7 @@ its rows' `pending (funnel-events)` mark in the funnel table with the slice.
 
 ## 3. Run
 
-- [ ] 3.1 Add `features/run` with prefix `run`; make `PgJsRuntime.execute`
+- [x] 3.1 Add `features/run` with prefix `run`; make `PgJsRuntime.execute`
       (`utils/js-runtime/js-runtime.ts`) report whether a file failed and
       throw a named error when another run is in progress; send the events
       from `processCommon` (`commands/run-and-test/run-and-test.ts`).
@@ -108,6 +110,14 @@ emits its events with memory-provider tests, one per branch.
       Satisfies `client-v2-assistant-usage`, "An approved patch is reported
       once it is written": tests for a write, a limit refusal, another
       failure and a denial (depends on 1.1)
+
+## 6. Fund
+
+- [x] 6.1 Send `fund_airdropped {via, cluster}` from the `airdrop` command
+      (`commands/airdrop/airdrop.ts`) once the balance rises, with `via` set
+      by each caller through `withAirdropVia` (`commands/airdrop/via.ts`).
+      Satisfies `client-v2-wallet-funding`, "A faucet airdrop is counted"
+      (HOO-2751; depends on 1.1)
 
 ## Workflow follow-up
 

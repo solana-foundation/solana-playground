@@ -31,16 +31,16 @@ source outside its declaration, where a `track` call names it.
 | Arrive on the catalog | `catalog_shown` | none: a view | `catalogPage` in `widgets/catalog/model/catalog-page.ts` | widgets/catalog |
 | Get a project: new | `new_project_started` | `new_project_start_failed` | `StartFromScratch` in `features/new-project/ui/StartFromScratch.tsx` | features/new-project |
 | Get a project: from the catalog | `catalog_item_opened` | `catalog_open_failed` | `useCardOpen` in `widgets/catalog/model/use-card-open.ts` | widgets/catalog |
-| Get a project: import | `project_imported` | `project_import_failed` | `ImportGithub` and its `Example` in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx`; `ImportFs` in `Modals/ImportFs.tsx`; `ImportTemporary` in `Modals/ImportTemporary.tsx` | pending (funnel-events) |
-| Get a project: view a GitHub link | `project_viewed` | `project_view_failed` | `github` (`/github/<owner>/<repo>…`) in `routes/github/github.tsx` | pending (funnel-events) |
+| Get a project: import | `project_imported` | `project_import_failed` | `ImportGithub` and its `Example` in `views/sidebar/explorer/Component/Modals/ImportGithub.tsx`; `ImportFs` in `Modals/ImportFs.tsx`; `ImportTemporary` in `Modals/ImportTemporary.tsx` | features/project-files |
+| Get a project: view a GitHub link | `project_viewed` | `project_view_failed` | `trackView` in `features/project-files/model/view.ts`, around `PgGithub.getFiles` in `github` (`/github/<owner>/<repo>…`, `routes/github/github.tsx`) | features/project-files |
 | Sign in | `auth_signed_in` | `auth_sign_in_failed` | `PgSession._signIn` in `features/auth/model/session.ts` | features/auth |
 | Build | `build_started`, `build_succeeded` | `build_failed` | `build` in `commands/build/build.ts` | features/program-build |
-| Fund the wallet | `fund_sent` | `fund_failed` | `FundDialog` in `features/fund-wallet/ui/FundDialog.tsx` | features/fund-wallet |
+| Fund the wallet | `fund_sent`, `fund_airdropped` | `fund_failed` | `FundDialog` in `features/fund-wallet/ui/FundDialog.tsx`; `airdrop` in `commands/airdrop/airdrop.ts` | features/fund-wallet |
 | Deploy | `deploy_started`, `deploy_succeeded` | `deploy_failed` | `deploy` (its `preChecks` and `handle`) in `commands/deploy/deploy.ts`; `PgStageDeploy.start` in `features/deploy/model/stage-deploy.ts` | features/deploy |
-| Use: run tests or a client script | `run_finished` | `run_errored` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | pending (funnel-events) |
+| Use: run tests or a client script | `run_finished` | `run_errored` | `processCommon` in `commands/run-and-test/run-and-test.ts`; `PgJsRuntime.execute` in `utils/js-runtime/js-runtime.ts` | features/run |
 | Use: send an instruction | `interact_sent`, `interact_succeeded` | `interact_failed`, `interact_cancelled` (the user said no in the wallet) | `runCall` in `views/flow/stages/run-call.ts` | features/program-interact |
-| Export the project | `project_exported` | `project_export_failed` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `Project` in `widgets/settings-page/ui/SettingsPage.tsx` | pending (funnel-events) |
-| Follow a tutorial | `tutorial_started`, `tutorial_finished` | `tutorial_definition_rejected`, `tutorial_action_run` (its outcome other than ok) | `open`, `reducer` and `store` in `features/tutorial-conversation/model/`; `load` in `entities/tutorial/model/definition/load.ts` | entities/tutorial |
+| Export the project | `project_exported` | `project_export_failed` | `ExportWorkspace` in `Modals/ExportWorkspace.tsx`; `ExportProject` in `widgets/settings-page/ui/ExportProject.tsx` | features/project-files |
+| Follow a tutorial | `tutorial_started`, `tutorial_finished` | `tutorial_definition_rejected`, `tutorial_action_run` (its outcome other than ok) | `open`, `reducer` and `store` in `features/tutorial-conversation/model/`; `load` in `entities/tutorial/model/definition/load.ts`; markdown tutorials opened by `PgTutorial.open` are not counted (HOO-2751, 10 Nov 2026) | entities/tutorial |
 | Ask the assistant | `assistant_turn_sent`, `assistant_turn_answered` | `assistant_turn_failed` | `useTurn` in `widgets/assistant/model/use-turn.ts` | widgets/assistant |
 | Assistant: apply a change | `assistant_patch_written` | `assistant_patch_write_failed` | the `write_file` tool in `views/sidebar/assistant/model/tools.ts` | widgets/assistant |
 

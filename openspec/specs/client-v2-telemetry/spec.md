@@ -113,6 +113,58 @@ user input.
 - **WHEN** a parameter's type is an object or array
 - **THEN** `yarn test-types` fails
 
+### Requirement: Event parameters have one name, one type and a bounded value
+
+GA4 registers a custom dimension or metric by parameter name across all
+events, so a parameter name SHALL carry one meaning and one type (`string`,
+`number` or `boolean`) in every tracker, and SHALL be snake_case. A string
+parameter SHALL be a union of string literals unless its slice opts into it
+as free text at `createTracker`, naming the parameter and why its values
+cannot be listed. Each slice's parameters are checked where its tracker is
+declared, by the type guard `createTracker` applies, so `yarn test-types`
+fails a bad map. One cross-slice check, `src/app/telemetry-parameters.test.ts`,
+reads every tracker and fails a name that two events type differently, since
+no slice alone sees the other's events; a name that still carries two types
+is recorded there as a known conflict until it is renamed. The parameter
+that says what the user pressed, or where an action started, SHALL be named
+`via`; no tracker SHALL declare a parameter named `from` or `source`, which
+the cross-slice check also enforces, since each slice alone would accept a
+synonym of its own.
+
+The scenarios on the cross-slice check are marked `(manual)`: the unit test
+holds them, not a Playwright test (the repository marks such scenarios
+inconsistently).
+
+#### Scenario: A parameter is not snake_case (manual)
+
+- **WHEN** an event declares a parameter such as `signedIn`
+- **THEN** `yarn test-types` fails at the slice's `createTracker` call and names the parameter
+
+#### Scenario: A parameter is free text the slice did not opt into (manual)
+
+- **WHEN** an event declares a parameter typed as a wide `string`, and its slice's tracker does not opt into that name with a reason
+- **THEN** `yarn test-types` fails at the slice's `createTracker` call and names the parameter
+
+#### Scenario: An opt-in names no free-text parameter (manual)
+
+- **WHEN** a slice opts into free text for a name none of its events types as a wide `string`
+- **THEN** `yarn test-types` fails at the slice's `createTracker` call
+
+#### Scenario: One name has two types (manual)
+
+- **WHEN** two events declare the same parameter name with different types, and the name is not a known conflict
+- **THEN** the cross-slice parameter test fails and names the parameter
+
+#### Scenario: A known conflict is fixed (manual)
+
+- **WHEN** a name listed as a known conflict no longer has two types
+- **THEN** the cross-slice parameter test fails until its entry is removed
+
+#### Scenario: A trigger gets a synonym (manual)
+
+- **WHEN** an event declares a parameter named `from` or `source`
+- **THEN** the cross-slice parameter test fails and names the synonym
+
 ### Requirement: A widget attributes events without props
 
 An event tracked through `useTracker` SHALL carry the name of the nearest

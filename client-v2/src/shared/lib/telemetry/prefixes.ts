@@ -1,4 +1,8 @@
-/** Slice name to the prefix its event names start with; a prefix is never reused */
+/**
+ * Slice name to the prefix its event names start with; a prefix is never reused
+ * by another slice. A slice may declare more than one tracker under its prefix
+ * (`views/sidebar/assistant/model/telemetry.ts` sends `assistant_key_deleted`).
+ */
 export const EVENT_PREFIXES = {
   agent: "agent",
   auth: "auth",
@@ -25,6 +29,8 @@ export const EVENT_PREFIXES = {
   "program-interact": "interact",
   "program-keypair": "keypair",
   "project-export": "export",
+  "project-files": "project",
+  run: "run",
   "session-footer": "session",
   "settings-page": "settings",
   "setup-list": "setup",

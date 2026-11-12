@@ -101,7 +101,7 @@ function ConsoleDrawerBar({
 
 /* How the last run went, in words beside the dot */
 function ConsoleDrawerStatus({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="console-drawer-status" className={cn("flex min-w-0 items-center gap-1.5 truncate", className)} {...props} />
+  return <div data-slot="console-drawer-status" className={cn("flex min-w-0 items-center gap-1.5 truncate font-read", className)} {...props} />
 }
 
 /* The right-hand end: the shortcut, Clear. Clear hides while it is closed */

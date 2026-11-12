@@ -90,7 +90,7 @@ describe("features/cli-deploy/ui/DownloadProgram", () => {
     expect(sent.events).toEqual([
       expect.objectContaining({
         name: "cli_binary_downloaded",
-        params: { from: "build-stage" },
+        params: { via: "build-stage" },
       }),
     ]);
   });
@@ -122,7 +122,7 @@ describe("features/cli-deploy/ui/DownloadProgram", () => {
     expect(sent.events).toEqual([
       expect.objectContaining({
         name: "cli_binary_download_failed",
-        params: { from: "guide", reason: "not-built" },
+        params: { via: "guide", reason: "not-built" },
       }),
     ]);
   });
@@ -146,7 +146,7 @@ describe("features/cli-deploy/ui/DownloadProgram", () => {
     expect(sent.events).toEqual([
       expect.objectContaining({
         name: "cli_binary_download_failed",
-        params: { from: "build-stage", reason: "server" },
+        params: { via: "build-stage", reason: "server" },
       }),
     ]);
   });
@@ -164,7 +164,7 @@ describe("features/cli-deploy/ui/DownloadProgram", () => {
     expect(sent.events).toEqual([
       expect.objectContaining({
         name: "cli_binary_download_failed",
-        params: { from: "guide", reason: "no-build" },
+        params: { via: "guide", reason: "no-build" },
       }),
     ]);
   });
@@ -177,7 +177,7 @@ describe("features/cli-deploy/ui/DownloadProgram", () => {
     expect(saved).toEqual([]);
     expect(mocks.setToast).toHaveBeenCalled();
     expect(sent.events[0].params).toEqual({
-      from: "build-stage",
+      via: "build-stage",
       reason: "server",
     });
   });

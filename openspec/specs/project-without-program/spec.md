@@ -15,8 +15,28 @@ folder of one, in which no supported framework finds a program, which holds
 TypeScript or JavaScript files (`ts`, `tsx`, `js`, `jsx`) and no Rust or
 Python file. It SHALL be imported as a project with no program. A
 repository in which a framework finds a program SHALL be imported as before
-this change, and one that holds Rust or Python no framework recognises SHALL
-be refused as before, never imported without its program.
+this change. Files no framework recognises, whose program source is all Rust
+under `src/`, with no Python and no `Cargo.toml` or `Xargo.toml` at the root
+(the layout Export writes for a Rust project), SHALL be
+imported as they are, with their paths below the imported folder unchanged,
+whether they come from the zip Settings › Import reads, a dropped folder or a
+GitHub repository, so an exported project returns as it left. Any other repository that holds
+Rust or Python no framework recognises SHALL be refused as before, never
+imported without its program.
+
+#### Scenario: A Playground project whose program has no framework marker yet (manual)
+
+- **WHEN** the user imports the zip Export wrote for a project holding
+  `src/lib.rs` with only `// Import anchor`, and `client/client.ts`
+- **THEN** a project is created holding the same files
+
+#### Scenario: A plain Rust crate (manual)
+
+- **WHEN** the user imports a repository with `Cargo.toml` and
+  `src/main.rs`, which no framework recognises
+- **THEN** the import fails with "This doesn't look like a Solana
+  program. Playground opens Anchor, native Rust and Seahorse programs.",
+  and nothing is imported
 
 #### Scenario: A client and its tests
 
@@ -34,8 +54,8 @@ be refused as before, never imported without its program.
 
 #### Scenario: A program no framework recognises
 
-- **WHEN** the user imports a repository with `onchain/src/lib.rs`, which
-  no framework recognises, and `client.ts`
+- **WHEN** the user imports a repository with `onchain/src/lib.rs` (not
+  under a leading `src/`), which no framework recognises, and `client.ts`
 - **THEN** the import fails with "This doesn't look like a Solana
   program. Playground opens Anchor, native Rust and Seahorse programs.",
   and nothing is imported

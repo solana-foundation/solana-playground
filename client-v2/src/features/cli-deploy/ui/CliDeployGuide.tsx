@@ -54,7 +54,7 @@ const CliDeployGuide = (p: CliDeployGuideProps) => {
   }
 
   useEffect(() => {
-    if (from) cliDeployTelemetry.track("cli_guide_opened", { from });
+    if (from) cliDeployTelemetry.track("cli_guide_opened", { via: from });
   }, [from]);
 
   return (

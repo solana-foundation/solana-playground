@@ -120,14 +120,14 @@ SHALL stay in the page above the foot.
 The slice SHALL send these events, none carrying an address, key or file
 content:
 
-- `cli_binary_downloaded` `{ from: "build-stage" | "guide" }`: a binary was
+- `cli_binary_downloaded` `{ via: "build-stage" | "guide" }`: a binary was
   fetched and handed to the browser to save;
-- `cli_binary_download_failed` `{ from: "build-stage" | "guide", reason: "no-build" | "not-built" | "server" | "save" }`: no binary was saved;
+- `cli_binary_download_failed` `{ via: "build-stage" | "guide", reason: "no-build" | "not-built" | "server" | "save" }`: no binary was saved;
   `no-build` with no build id in the browser, `not-built` when the server no
   longer holds the build, `save` when the browser refused the file;
 - `cli_idl_downloaded` `{}`: the guide's "Download IDL" handed the IDL to
   the browser to save;
-- `cli_guide_opened` `{ from: "mainnet-blocked" | "deploy-stage" }`: the guide opened,
+- `cli_guide_opened` `{ via: "mainnet-blocked" | "deploy-stage" }`: the guide opened,
   `mainnet-blocked` from the Deploy stage's pill on Mainnet, `deploy-stage`
   from its "Deploy with the CLI" button;
 - `cli_command_copied` `{ tool: "solana" | "anchor", cluster: "mainnet" | "devnet" | "testnet", step: "deploy" | "idl" }`: a command's copy button was pressed,
@@ -137,7 +137,7 @@ content:
 
 - **WHEN** the user opens the guide from the Deploy stage, downloads the
   binary and copies the Solana CLI devnet command
-- **THEN** `cli_guide_opened` `{from: "deploy-stage"}`,
-  `cli_binary_downloaded` `{from: "guide"}` and `cli_command_copied`
+- **THEN** `cli_guide_opened` `{via: "deploy-stage"}`,
+  `cli_binary_downloaded` `{via: "guide"}` and `cli_command_copied`
   `{tool: "solana", cluster: "devnet", step: "deploy"}` are sent in that
   order

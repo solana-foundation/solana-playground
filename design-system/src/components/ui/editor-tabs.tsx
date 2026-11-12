@@ -34,7 +34,7 @@ function EditorTab({
         data-active={active || undefined}
         data-menu-open={menuOpen || undefined}
         className={cn(
-          "group/editor-tab relative flex shrink-0 items-center gap-1 border-r border-border pr-1.5 pl-3 text-[0.8125rem] text-muted-foreground transition-colors hover:text-foreground",
+          "group/editor-tab relative flex shrink-0 items-center gap-1 border-r border-border pr-1.5 pl-3 text-[0.8125rem] font-label text-muted-foreground transition-colors hover:text-foreground",
           "data-active:bg-surface data-active:text-foreground",
           "data-menu-open:ring-1 data-menu-open:ring-muted-foreground/40 data-menu-open:ring-inset",
           className

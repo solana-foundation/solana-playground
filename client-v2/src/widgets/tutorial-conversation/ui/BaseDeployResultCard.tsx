@@ -11,7 +11,11 @@ import { useEffect, useState } from "react";
 
 import type { RunResult } from "@/features/tutorial-conversation";
 import { devnetExplorerUrl } from "@/shared/lib/devnet-explorer";
-import { DEVNET_FAUCET_SOL, faucetUrlWith } from "@/shared/lib/faucet";
+import {
+  DEVNET_FAUCET_SOL,
+  faucetUrlWith,
+  isFaucetClosed,
+} from "@/shared/lib/faucet";
 import { isFaucetLimit } from "@/shared/lib/faucet-limit";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { shortKey } from "@/shared/lib/short-key";
@@ -25,6 +29,7 @@ import {
 } from "@/shared/ui/collapsible";
 import { CopyButton } from "@/shared/ui/copy-button";
 
+import BaseStoppedCard from "./BaseStoppedCard";
 import { formatSeconds, Prose, READ } from "./Prose";
 import WalletAddress from "./WalletAddress";
 
@@ -52,7 +57,16 @@ export interface BaseDeployResultCardProps {
   onShowLog: () => void;
   /** Make the Playground wallet, then run the deploy again */
   onCreateWallet: () => Promise<unknown> | void;
+  /**
+   * A new program keypair for the workspace, then the deploy again, which
+   * builds for it and ships to a fresh address: the way on from a program
+   * that cannot be upgraded from here
+   */
+  onNewProgramId: () => void;
 }
+
+/** The way on from a program this wallet cannot upgrade (HOO-2806) */
+export const NEW_PROGRAM_ID = "Deploy under a new program id";
 
 /** Lamports as SOL, to four places at most */
 const sol = (lamports: number) =>
@@ -62,11 +76,20 @@ const sol = (lamports: number) =>
 const aboutSol = (lamports: number) =>
   String(Math.round((lamports / 1e9) * 100) / 100);
 
+/**
+ * Why the faucet sent nothing when devnet's RPC faucet is closed (HOO-2824):
+ * asking it again will not help, the web faucet behind "Open faucet" will
+ */
+export const FAUCET_CLOSED_WHY =
+  "The devnet RPC faucet is closed: get SOL from the web faucet, or top the wallet up yourself.";
+
 /** Why the airdrop failed, in words true to the cause (Design alignment, 7 Nov) */
-const airdropWhy = (message: string) =>
-  isFaucetLimit(message)
+const airdropWhy = (message: string) => {
+  if (isFaucetClosed(message)) return FAUCET_CLOSED_WHY;
+  return isFaucetLimit(message)
     ? "The devnet faucet is at its limit for now: try again in a minute, or top the wallet up yourself."
     : "The airdrop didn't go through: try again in a minute, or top the wallet up yourself.";
+};
 
 /** The red head every failed deploy shares, 48 tall while it waits on the learner */
 const FailedHead = ({ title, open }: { title: string; open: boolean }) => (
@@ -116,13 +139,15 @@ const FailedCard = ({
  * card says how short the wallet is (and, after an airdrop, that the faucet
  * is at its limit), gives its address to copy and the faucet;
  * the feed's Try again act card under it runs the deploy again. No wallet
- * offers to make one. Once the step moves on, a failure folds to its head.
+ * offers to make one. A program this wallet cannot upgrade, immutable or
+ * another wallet's, offers "Deploy under a new program id" (HOO-2806). Once the step moves on, a failure folds to its head.
  */
 const BaseDeployResultCard = ({
   result,
   open,
   onShowLog,
   onCreateWallet,
+  onNewProgramId,
 }: BaseDeployResultCardProps) => {
   if (result.ok) return <LandedCard result={result} onShowLog={onShowLog} />;
   switch (result.reason) {
@@ -190,6 +215,32 @@ const BaseDeployResultCard = ({
           </div>
         </FailedCard>
       );
+    case "immutable":
+      return (
+        <FailedCard title="Not upgradable" open={open}>
+          <p className={READ}>
+            This program can no longer be upgraded, so the new code can&apos;t
+            go to its address. Deploy it under a new program id: it builds again
+            and ships to a fresh address.
+          </p>
+          <div className="flex max-sm:flex-col max-sm:items-stretch">
+            <Button onClick={onNewProgramId}>{NEW_PROGRAM_ID}</Button>
+          </div>
+        </FailedCard>
+      );
+    case "not_authority":
+      return (
+        <FailedCard title="Not your program" open={open}>
+          <p className={READ}>
+            {`${result.message} Switch to the wallet that deployed it and press Try again, or deploy it under a new program id.`}
+          </p>
+          <div className="flex max-sm:flex-col max-sm:items-stretch">
+            <Button variant="secondary" onClick={onNewProgramId}>
+              {NEW_PROGRAM_ID}
+            </Button>
+          </div>
+        </FailedCard>
+      );
     case "failed":
       return (
         <FailedCard
@@ -201,6 +252,9 @@ const BaseDeployResultCard = ({
           </p>
         </FailedCard>
       );
+    // The learner's Stop: nothing failed (HOO-2822)
+    case "stopped":
+      return <BaseStoppedCard act={result.act} />;
     default: {
       // A reason `RunResult` adds must get its own card here
       const unknown: never = result;

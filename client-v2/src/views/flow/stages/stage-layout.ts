@@ -9,8 +9,15 @@
  * follows the content.
  */
 
-/** The stage's scroll container: the stage router gives it the full height */
-export const STAGE_FRAME = "flex h-full flex-col overflow-y-auto";
+/**
+ * The stage's scroll container: the stage router gives it the full height. Its
+ * scrollbar gutter is kept whether or not the stage overflows, so content
+ * that grows past the frame (a deploy's progress, say) does not move the
+ * centred stage sideways when the scrollbar appears; on both edges, because a
+ * gutter on one side would set the centred stage off centre (HOO-2795).
+ */
+export const STAGE_FRAME =
+  "flex h-full flex-col overflow-y-auto [scrollbar-gutter:stable_both-edges]";
 
 /**
  * The stage itself, on `StageEmpty`, wider than its own 36rem: a diagnostic's
