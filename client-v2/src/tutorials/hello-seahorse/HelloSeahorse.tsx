@@ -31,11 +31,7 @@ const HelloSeahorse = () => (
           }
         },
       },
-      {
-        content: require("./pages/4.md"),
-        title: "Test UI",
-        onMount: () => (PgView.sidebar.name = "Test"),
-      },
+      { content: require("./pages/4.md"), title: "Test UI" },
     ]}
     // Initial files to have at the beginning of the tutorial
     files={[["src/hello.py", require("./files/hello.py")]]}

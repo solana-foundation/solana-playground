@@ -53,8 +53,10 @@ client-v2/.cache/
 # Synced from docs/assistant-context.md by client-v2/scripts/sync-assistant-context.mjs
 client-v2/src/views/sidebar/assistant/content/assistant-context.md
 
-# Mirrored from the client/public submodule by `make update-static`
-client-v2/public/
+# Written into client-v2/public by the `generate` scripts
+client-v2/public/crates/
+client-v2/public/packages/
+client-v2/public/tutorials/*/content.json
 
 # Claude Code worktrees
 .claude/worktrees/

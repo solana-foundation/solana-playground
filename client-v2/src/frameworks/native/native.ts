@@ -1,9 +1,11 @@
 import { createFramework } from "../create";
+import icon from "./icon.svg";
 
 export const native = createFramework({
   name: "Native",
   description: "Solana programs without a framework.",
   language: "Rust",
+  icon,
   docs: {
     url: "https://solana.com/docs/intro/quick-start",
     name: "Solana",

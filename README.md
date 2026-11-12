@@ -79,19 +79,16 @@ All services run as `linux/amd64` containers (Solana/Agave does not ship Linux A
 # Copy and customize environment variables
 cp .env.example .env
 
-# Full stack — development (watch mode, but without volumes to mount local src directory into running container)
-docker compose --profile dev up --build
+# client-v2, server, and Postgres: development server
+docker compose --profile v2 up --build
 
-# Full stack — production (static build)
-docker compose --profile prod up --build
+# client-v2, server, and Postgres: production bundle
+docker compose --profile v2-prod up --build
 
-# Client only
-docker compose up client-standalone --build
+# client-v2 only
+docker compose --profile client-v2-standalone up --build
 
-# Server, reading the root .env
-docker compose --profile dev up server --build
-
-# Server, without a .env
+# Server only
 docker compose up server-standalone --build
 
 # Client:  http://localhost:3000

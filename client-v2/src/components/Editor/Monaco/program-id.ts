@@ -102,7 +102,8 @@ if (import.meta.vitest) {
       live = (await import(
         "monaco-editor/esm/vs/editor/editor.api.js"
       )) as unknown as typeof monaco;
-    });
+      // A cutoff for a stuck import, not a wait: a cold transform under the whole suite outlasts the default
+    }, 60_000);
 
     afterEach(() => {
       made.splice(0).forEach((thing) => thing.dispose());

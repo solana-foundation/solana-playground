@@ -123,13 +123,10 @@ jobs:
       SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       # The head commit, not the merge commit `pull_request` checks out by
-      # default: the preview shows the branch as pushed. Submodule with full
-      # history, as in client-v2.yml: update-static dates tutorials from it.
+      # default: the preview shows the branch as pushed.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          submodules: true
-          fetch-depth: 0
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
@@ -310,7 +307,7 @@ jobs:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
     steps:
-      # Sparse: only the scripts, not the submodule. The runner's own Node
+      # Sparse: only the scripts. The runner's own Node
       # runs preview-name.mjs.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

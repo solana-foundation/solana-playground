@@ -54,7 +54,7 @@ export const definitionTutorials = (others: TutorialData[]): TutorialData[] => {
 /**
  * Every tutorial the page lists: the conversation ones first, then `others`
  * without those a definition replaces. A definition named like an upstream
- * tutorial (Zero Copy, Markdown in `client/public`) is the one card of that
+ * tutorial (Zero Copy, Markdown in `public/tutorials`) is the one card of that
  * slug; listing both would show the tutorial twice.
  */
 export const listTutorials = (others: TutorialData[]): TutorialData[] => {
@@ -92,7 +92,10 @@ if (import.meta.vitest) {
       ]);
       expect(hello?.pageCount).toBe(4);
       expect(hello?.level).toBe("Beginner");
-      expect(hello?.thumbnail).toBe("/tutorials/hello-anchor/thumbnail.jpg");
+      // The file next to tutorial.json, bundled, not the bare "thumbnail.jpg"
+      expect(hello?.thumbnail).toMatch(
+        /\/src\/tutorials\/hello-anchor\/thumbnail\.jpg$/
+      );
     });
 
     it("carries Hello Anchor's four doc pages with their Markdown", () => {

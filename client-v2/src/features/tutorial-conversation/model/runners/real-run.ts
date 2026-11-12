@@ -191,7 +191,7 @@ const sendCall = async (
   if (!idlIx) throw new NoSuchInstructionError(call.instruction);
   // Loaded here, not at the top: its storage reads `sessionStorage` on
   // import, which throws where the browser refuses storage and would take
-  // the whole app down with it, as the Test panel's lazy load never did
+  // the whole app down with it
   const { PgProgramInteraction } = await import(
     "../../../../utils/program-interaction"
   );

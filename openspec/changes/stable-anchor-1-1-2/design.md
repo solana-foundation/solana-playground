@@ -124,7 +124,7 @@ starter and writes `idl.json`. Linux is unverified: task 2.2 stays open for whet
   `yarn generate` and opens the starter in the editor. The Anchor prelude resolves; `Pubkey::find_` needed
   `solana-program` as a direct dependency (task 1.5).
 - [Tutorials fail on 1.1.2] → task 1.4 builds each against the new server and the PR lists the outcomes. Fixes land
-  in the assets repository; developers bump the submodule and run `update-static`.
+  in the assets repository and reach `client-v2/public/` through the sync-upstream skill's assets step.
 - [Lesson steps checked against the IDL cannot pass without a build IDL] → accepted in this change; offering the
   guide on such a step waits for the build backend that returns an IDL again (tasks 2.7 and 2.8).
 - [The guide's IDL is the 0.30+ format, which `@coral-xyz/anchor` 0.29 does not read] → the change

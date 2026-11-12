@@ -37,6 +37,11 @@ as soon as the Root Directory points at `client-v2`.
      `api/agent.mjs`, `api/mcp.mjs`, `api/projects.mjs` and
      `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
+   - `SITE_URL`, optional: the origin the share card's `og:url` and
+     `og:image` name. Unset, the build takes Vercel's
+     `VERCEL_PROJECT_PRODUCTION_URL`, which Vercel sets on every build
+     (`resolveSiteUrl` in `scripts/brand-head.mjs`); set it only when the card
+     must name another domain.
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
    - `SENTRY_AUTH_TOKEN`: a production build fails without it
      (`scripts/upload-sourcemaps.mjs`). A local `vercel build` pulls a

@@ -5,7 +5,9 @@
 */build
 server/mongodb
 # Generated in the image; a local copy would make the crate generators skip
-client-v2/public
+client-v2/public/crates
+client-v2/public/packages
+client-v2/public/tutorials/*/content.json
 client-v2/.cache
 # The wasm image supplies these; a local stub copied first would survive the merge
 wasm/*/pkg

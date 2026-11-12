@@ -9,12 +9,7 @@ import {
   generateProgramAddressFromSeeds,
   generateValue,
 } from "./generator";
-import {
-  getMintAccounts,
-  getOrInitPythAccounts,
-  getPrograms,
-  getTokenAccounts,
-} from "./generators";
+import { getMintAccounts, getPrograms, getTokenAccounts } from "./generators";
 import { getIdlType, IdlInstruction } from "./idl-types";
 import { createGeneratableInstruction, fillRandom } from "./instruction";
 import { getAnchorProgram } from "./program";
@@ -119,9 +114,6 @@ export class PgProgramInteraction {
 
   /** {@link getMintAccounts} */
   static getMintAccounts = getMintAccounts;
-
-  /** {@link getOrInitPythAccounts} */
-  static getOrInitPythAccounts = getOrInitPythAccounts;
 
   /** {@link fillRandom} */
   static fillRandom = fillRandom;

@@ -3,14 +3,18 @@ import fs from "node:fs/promises";
 import { test } from "node:test";
 
 import {
-  BRAND_HEAD,
-  brandHead,
+  brandHeadFor,
+  brandTagsFor,
   DESCRIPTION,
   IMAGE_ALT,
-  SITE_URL,
+  resolveSiteUrl,
 } from "./brand-head.mjs";
 
-/** Upstream's `client/public/index.html` head, as mirrored */
+const SITE_URL = "https://example.test";
+const brandHead = brandHeadFor(SITE_URL);
+const BRAND_HEAD = brandTagsFor(SITE_URL);
+
+/** Upstream's `public/index.html` head */
 const UPSTREAM = `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -166,7 +170,7 @@ test("the head carries the share card, each tag once", () => {
   );
 });
 
-test("every card URL is absolute, on the production base", () => {
+test("every card URL is absolute, on the site URL", () => {
   const html = brandHead(UPSTREAM);
 
   assert.match(SITE_URL, /^https:\/\/[^/]+$/);
@@ -253,8 +257,8 @@ test("every brand tag is well formed, its values escaped", () => {
   }
 });
 
-test("the share image is a 1200x630 PNG in static/", async () => {
-  const png = await fs.readFile(new URL("../static/og.png", import.meta.url));
+test("the share image is a 1200x630 PNG in public/", async () => {
+  const png = await fs.readFile(new URL("../public/og.png", import.meta.url));
 
   assert.equal(png.subarray(1, 4).toString("latin1"), "PNG");
   assert.equal(png.readUInt32BE(16), 1200);
@@ -262,3 +266,36 @@ test("the share image is a 1200x630 PNG in static/", async () => {
   // Unfurlers skip large images (X caps them at 5 MB); stay well under
   assert.ok(png.length < 1_000_000, `${png.length} bytes`);
 });
+
+for (const [title, env, expected] of [
+  [
+    "SITE_URL wins over Vercel's domain",
+    { SITE_URL: "https://a.test", VERCEL_PROJECT_PRODUCTION_URL: "b.test" },
+    "https://a.test",
+  ],
+  [
+    "an empty SITE_URL gives way to Vercel's domain, over https",
+    { SITE_URL: "", VERCEL_PROJECT_PRODUCTION_URL: "b.vercel.app" },
+    "https://b.vercel.app",
+  ],
+  ["neither gives the local dev server", {}, "http://localhost:3000"],
+  [
+    "a trailing slash is dropped",
+    { SITE_URL: "https://a.test/" },
+    "https://a.test",
+  ],
+]) {
+  test(`resolveSiteUrl: ${title}`, () => {
+    assert.equal(resolveSiteUrl(env), expected);
+  });
+}
+
+for (const [title, value] of [
+  ["a host without a scheme", "example.test"],
+  ["a URL with a path", "https://a.test/app"],
+  ["a scheme other than http(s)", "ftp://a.test"],
+]) {
+  test(`resolveSiteUrl refuses ${title}, naming SITE_URL`, () => {
+    assert.throws(() => resolveSiteUrl({ SITE_URL: value }), /SITE_URL/);
+  });
+}

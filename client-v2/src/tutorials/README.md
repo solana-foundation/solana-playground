@@ -20,12 +20,7 @@ Table of contents:
 
 ## How to add a tutorial
 
-First, fork the playground repositories:
-
-- [solana-playground](https://github.com/solana-playground/solana-playground)
-- [assets](https://github.com/solana-playground/assets)
-
-and [run locally](https://github.com/solana-playground/solana-playground/blob/master/README.md#run-locally).
+First, fork this repository and [run locally](../../README.md#setup).
 
 Next, follow the steps for your desired tutorial type:
 
@@ -46,7 +41,7 @@ Make sure you've done the initial setup mentioned in [How to add a tutorial](#ho
 
 1. Create a tutorial directory based on the tutorial template
 
-   Copy the template directory at [`client/public/tutorials/__template`](https://github.com/solana-playground/assets/tree/master/tutorials/__template) and rename the directory to your tutorial's kebab-case name e.g. if your tutorial name is "Cool Tutorial" rename the directory you copied to "cool-tutorial".
+   Copy upstream's template directory, `tutorials/__template` in the [assets repository](https://github.com/solana-playground/assets/tree/7fa9f326867f48f7e3abf47494d9a1849beff01f/tutorials/__template), to `client-v2/public/tutorials/` and rename the directory to your tutorial's kebab-case name e.g. if your tutorial name is "Cool Tutorial" rename the directory you copied to "cool-tutorial". The template is not kept in `public/`: [`scripts/assets-import.txt`](../../scripts/assets-import.txt) leaves upstream's tutorials out.
 
 2. Adjust the template files as necessary:
 
@@ -56,7 +51,11 @@ Make sure you've done the initial setup mentioned in [How to add a tutorial](#ho
    - `pages`: All of your tutorial pages starting from `1.md`
    - `files`: Initial files to create when the tutorial first starts
 
-3. [Send pull requests](#send-pull-requests)
+3. Enable the tutorial
+
+   Add an entry for the directory name to [`markdown-tutorials.json`](markdown-tutorials.json), with `added` set to the Unix time in seconds when the tutorial is added: `"cool-tutorial": { "added": 1735689600 }`. The app shows only the tutorials listed there, and the build reads `added` as the tutorial's `unixTimestamp`. A listed name without its directory or `data.json` fails the build. An upstream sync imports the whole directory of a listed tutorial, so no line in `scripts/assets-import.txt` is needed.
+
+4. [Send pull requests](#send-pull-requests)
 
 ## Custom tutorials
 
@@ -96,7 +95,9 @@ Make sure you've done the initial setup mentioned in [How to add a tutorial](#ho
 
 ## Storing assets
 
-Tutorial assets can be added to the [assets repository](https://github.com/solana-playground/assets) by creating a pull request.
+Tutorial assets live in `client-v2/public/tutorials/<tutorial-name>/` and are added in the same pull request as the tutorial. A conversation tutorial keeps its thumbnail next to its `tutorial.json` instead (`"thumbnail": "thumbnail.jpg"`), and the build bundles it. A custom tutorial's asset that comes from upstream's assets repository also needs its path in [`scripts/assets-import.txt`](../../scripts/assets-import.txt), or an upstream sync leaves it out.
+
+Run `node scripts/optimise-image.mjs <file>...` from `client-v2/` on every image you add; `yarn test-api` fails on an image in `public/` or `src/tutorials/` that the script would still change.
 
 > **Warning**
 >
@@ -122,25 +123,4 @@ The assets can be included in the Markdown files with the following syntax:
 
 ## Send pull requests
 
-After you've finished preparing your tutorial, the last step is to send pull requests to the playground repositories.
-
-### Steps
-
-1. Send a pull request to the [assets repository](https://github.com/solana-playground/assets)
-
-2. After the first PR gets merged, send a PR to the [main repository](https://github.com/solana-playground/solana-playground)
-
-   Update submodules by running (in the main repository):
-
-   ```sh
-   git submodule update --remote
-   ```
-
-   `client-v2/public` is tracked files rather than a submodule, so mirror the
-   new assets into it (from `client-v2`):
-
-   ```sh
-   make update-static
-   ```
-
-   Finally, commit the changes and make a PR.
+After you've finished preparing your tutorial, the last step is to send a pull request with the tutorial, its assets, and its `markdown-tutorials.json` entry to this repository.

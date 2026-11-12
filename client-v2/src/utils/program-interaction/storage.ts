@@ -115,8 +115,21 @@ const getAllInstructions = (): SavedInstructions => {
     saveAllInstructions(defaultValue);
     return defaultValue;
   }
-  return JSON.parse(value);
+  return JSON.parse(value, (_key, saved) =>
+    isRetiredGenerator(saved) ? { type: "Custom", value: "" } : saved
+  );
 };
+
+/** Generator types an older session may have saved that no generator handles */
+const RETIRED_GENERATOR_TYPES = ["Pyth"];
+
+/** Whether a parsed value is a generator of a type in {@link RETIRED_GENERATOR_TYPES} */
+const isRetiredGenerator = (value: unknown) =>
+  typeof value === "object" &&
+  value !== null &&
+  RETIRED_GENERATOR_TYPES.includes(
+    (value as { type?: unknown }).type as string
+  );
 
 /**
  * Save all instructions to the {@link storage}.
@@ -126,3 +139,49 @@ const getAllInstructions = (): SavedInstructions => {
 const saveAllInstructions = (ixs: SavedInstructions) => {
   storage.setItem(STORAGE_KEY, JSON.stringify(ixs));
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect, afterEach } = import.meta.vitest;
+
+  describe("utils/program-interaction/storage", () => {
+    afterEach(() => storage.removeItem(STORAGE_KEY));
+
+    it("reads a retired generator, nested in a seed too, as an empty custom value", () => {
+      const pyth = { type: "Pyth", name: "Crypto.SOL/USD" };
+      const fromSeed = {
+        type: "From seed",
+        seeds: [{ type: "publicKey", generator: pyth }],
+        programId: { generator: { type: "Current program" } },
+      };
+      storage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          ix: {
+            programId: { generator: { type: "Current program" } },
+            accounts: [
+              { name: "price", isMut: false, isSigner: false, generator: pyth },
+              {
+                name: "pda",
+                isMut: false,
+                isSigner: false,
+                generator: fromSeed,
+              },
+            ],
+            args: [],
+          },
+        })
+      );
+
+      const accounts = getInstruction({ name: "ix" } as IdlInstruction)?.values
+        .accounts;
+
+      const empty = { type: "Custom", value: "" };
+      expect(accounts?.[0].generator).toEqual(empty);
+      expect(accounts?.[1].generator).toEqual({
+        type: "From seed",
+        seeds: [{ type: "publicKey", generator: empty }],
+        programId: { generator: { type: "Current program" } },
+      });
+    });
+  });
+}

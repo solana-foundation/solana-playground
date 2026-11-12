@@ -1,0 +1,27 @@
+/* The glyphs @fontsource/jetbrains-mono's subsets lack (arrows, box drawing, Powerline), cut from upstream's fonts/JetBrainsMono.woff2 at assets 7fa9f326; fetched only when one of these code points shows */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./jetbrains-mono-symbols.woff2") format("woff2");
+  unicode-range: U+02D8-02D9, U+02DB, U+0302, U+0306-0307, U+030A-030C, U+030F,
+    U+0312, U+031B, U+0325-0328, U+0336-0338, U+0AEA, U+2070, U+2074-207A,
+    U+207C, U+2080-2089, U+2102, U+210D, U+2115, U+2119-211A, U+211D, U+2124,
+    U+212E, U+2140, U+218A-218B, U+2190, U+2192, U+2194-2199, U+219D-219E,
+    U+21A0, U+21A2-21A3, U+21A5-21A7, U+21A9-21AA, U+21AD, U+21BE, U+21C9,
+    U+21D0-21D4, U+21DB, U+21DE-21DF, U+21E5, U+21E7-21E8, U+21EA, U+2200-220C,
+    U+220E-2211, U+2213, U+2218-221A, U+221E, U+2223-2225, U+2227-222B,
+    U+2234-2239, U+223C, U+223E, U+2243, U+2245, U+2247-2249, U+224B, U+224D,
+    U+2254, U+2257, U+225F-2265, U+226A-2273, U+227A-227C, U+2282-2289,
+    U+228E-2299, U+229B-22A5, U+22B4, U+22B8, U+22BB-22BD, U+22C2-22C4, U+22C6,
+    U+22C8-22CA, U+22CE, U+22D0, U+22E2, U+22EE-22F1, U+2302-2305, U+2308-230B,
+    U+2318, U+231C-231F, U+2324-2326, U+2328, U+232B, U+2336-237A, U+2389-238B,
+    U+2395, U+239B-23AD, U+23CE, U+23FB-23FE, U+2400-2421, U+2423-2424,
+    U+2500-25A1, U+25AA-25AB, U+25B2-25CC, U+25CE-25CF, U+25D4-25D5, U+25E6-25EB,
+    U+25EF, U+25F6, U+266D, U+266F, U+2687, U+26A0-26A1, U+2713, U+2715, U+2717,
+    U+2736, U+276E-2771, U+2794, U+279C-279E, U+27C5-27C6, U+27DC, U+27E6-27EB,
+    U+27F5-27F7, U+2916, U+294A, U+2987-2988, U+2A00, U+2A05-2A06, U+2B58,
+    U+E0A0-E0A2, U+E0B0-E0B3, U+FE62, U+FF5B, U+FF5D, U+16910, U+1D538-1D539,
+    U+1D53B-1D53E, U+1D540-1D544, U+1D546, U+1D54A-1D550, U+1D552-1D56B;
+}

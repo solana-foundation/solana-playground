@@ -1,9 +1,9 @@
+import { WalletIcon } from "lucide-react";
 import { SetStateAction, useCallback } from "react";
 import { createPortal } from "react-dom";
 
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { isEditable } from "@/shared/lib/is-editable";
-import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { useEditorHeadHost } from "@/widgets/layout-shell";
 
@@ -15,7 +15,6 @@ import {
 } from "../../hooks";
 import { PgExplorer, PgView, PgWallet } from "../../utils";
 import Dnd from "../Dnd";
-import Img from "../Img";
 import { BaseEditorTabs } from "./BaseEditorTabs";
 import Tab from "./Tab";
 
@@ -83,28 +82,15 @@ const Wallet = () => {
   if (!wallet) return null;
 
   return (
-    <div
-      className={cn(
-        "flex items-center",
-        // The picture is greyed at rest and full strength on hover, light
-        // or dark
-        "[&>button_img]:mr-1.5 [&>button_img]:invert-50",
-        "[&>button:hover_img]:invert-0 dark:[&>button:hover_img]:invert-100"
-      )}
-    >
+    <div className="flex items-center">
       <Button
         onClick={() => (PgWallet.show = !PgWallet.show)}
         variant="ghost"
         size="sm"
         className="rounded-r-none bg-background"
       >
-        {/* The picture is 400 px, and the design system's Button sizes only
-            an `svg` */}
-        <Img
-          src="/icons/sidebar/wallet.png"
-          alt="Wallet"
-          className="size-3.5"
-        />
+        {/* Greyed at rest, full strength while the button is hovered */}
+        <WalletIcon className="mr-1.5 size-3.5 text-muted-foreground group-hover/button:text-foreground" />
         Wallet
       </Button>
     </div>

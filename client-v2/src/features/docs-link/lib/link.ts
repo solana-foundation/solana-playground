@@ -332,10 +332,10 @@ if (import.meta.vitest) {
     });
 
     it("stops inflating a stream that grows past the cap", () => {
-      // 50 MB of one byte deflates to about 50 KB; only the cap stops it
+      // 50 times the cap of one byte deflates to about 5 KB; only the cap stops it
       const bomb = encodeDocsLink({
         name: "a.ts",
-        code: "a".repeat(50 * 1024 * 1024),
+        code: "a".repeat(50 * MAX_DOCS_LINK_BYTES),
       });
       const decoded = decodeDocsLink(bomb);
       expect(decoded.ok || decoded.reason).toBe("size");

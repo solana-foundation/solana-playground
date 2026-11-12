@@ -3,3 +3,9 @@ declare module "*.jpg" {
   const url: string;
   export default url;
 }
+
+declare module "*.png" {
+  /** URL of the bundled asset, as `react-scripts` resolves it */
+  const url: string;
+  export default url;
+}
