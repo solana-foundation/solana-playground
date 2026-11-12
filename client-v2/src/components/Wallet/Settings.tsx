@@ -137,6 +137,13 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
           {faucet === "available" && (
             <DropdownMenuItem
               onSelect={() => {
+                // What the request is for, taken now: a network switched while
+                // it waits must not move the refusal's faucet link there
+                const asked = {
+                  walletAddress: wallet.publicKey.toBase58(),
+                  amount: PgConnection.getAirdropAmount() ?? undefined,
+                  cluster: PgConnection.cluster ?? undefined,
+                };
                 airdrop().then(
                   // Said here too: under Home no terminal shows what it printed
                   () =>
@@ -155,13 +162,8 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
                       PgView.setToast(FaucetRefusedToast, {
                         componentProps: {
                           refusal,
-                          address: wallet.publicKey.toBase58(),
-                          href: faucetLink({
-                            walletAddress: wallet.publicKey.toBase58(),
-                            amount:
-                              PgConnection.getAirdropAmount() ?? undefined,
-                            cluster: PgConnection.cluster ?? undefined,
-                          }),
+                          address: asked.walletAddress,
+                          href: faucetLink(asked),
                         },
                         options: { name: "airdrop-refused", duration: 15000 },
                       });

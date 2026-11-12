@@ -11,7 +11,7 @@ import {
 import { AirdropRefusedError } from "../../commands/airdrop/report";
 import { toggleWallet } from "../../commands/connect/connect-wallet";
 import { FaucetRefusedToast } from "../../features/fund-wallet";
-import { PgView, PgWallet } from "../../utils";
+import { PgConnection, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import type { Faucet } from "./hooks";
 import Settings from "./Settings";
@@ -234,6 +234,34 @@ describe("wallet Settings menu", () => {
       for (const t of told) expect(t.shown).toBe(true);
     }
   );
+
+  it("builds the refusal's faucet link from the network the airdrop was asked on", async () => {
+    let refuse: (error: unknown) => void = () => {};
+    airdropHook.faucet = "available";
+    airdropHook.airdrop.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          refuse = reject;
+        })
+    );
+    render(<Host />);
+    await openMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Airdrop/ }));
+
+    // The network is switched while the request waits
+    const asked = PgConnection.cluster;
+    (PgConnection as { cluster: string }).cluster = "testnet";
+    try {
+      refuse(new AirdropRefusedError(new Error("429 Too Many Requests")));
+      await waitFor(() => expect(PgView.setToast).toHaveBeenCalled());
+      const [, props] = vi.mocked(PgView.setToast).mock.calls[0];
+      expect(props?.componentProps).toMatchObject({
+        href: "https://faucet.solana.com/?walletAddress=address&amount=5&cluster=devnet",
+      });
+    } finally {
+      (PgConnection as { cluster: string | null }).cluster = asked;
+    }
+  });
 
   it.each([
     [false, "connect Phantom"],
