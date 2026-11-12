@@ -40,17 +40,18 @@ list; changing the stage tabs; keyboard handling; the phone.
    `LeftPanel` (the Explorer mounts once: in the column while docked and
    shown, else in the dropdown while it is open). Clicks inside the
    Explorer's portalled context menu and dialogs do not count as outside.
-4. **Width gate.** The code area (the work column's stage width including a
+4. **Width gate** (Lead, 12 Nov). The code area (the work column's stage width including a
    docked tree) is measured with a ResizeObserver; below 1100 px the pin
    hides and a docked tree shows as the dropdown, as in the tutorial.
-   Files while docked and shown undocks; otherwise it toggles the dropdown.
+   Narrower, the dropdown shows no pin. Files while docked and shown
+   undocks; otherwise it toggles the dropdown. An unpinned tree stays a
+   dropdown until pinned again.
 5. **The row.** `BaseEditorHead` gains `actions` (Share), an `assistant`
    toggle drawn only while the assistant is hidden ("Expand assistant",
    same name as before so the e2e path holds), and ⋯ ("More options" with
    Solana documentation). The stage bar stays for Home and covers only.
-6. **Head label.** `headLabel` takes the project name: `{kind: "plain",
-   text: name}` when a project is open, else "Assistant". The model part and
-   its truncation leave the head.
+6. **Head label.** As Almaz's commit does it: the project name as a plain
+   label when a project is open, else the model label as before.
 
 ## Risks / Trade-offs
 

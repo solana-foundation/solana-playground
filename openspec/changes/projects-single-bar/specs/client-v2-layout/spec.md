@@ -20,3 +20,15 @@ editor head while the assistant is shown, wide or as the Sheet below
 
 - **WHEN** a user opens Home
 - **THEN** the bar over the page reads "Home"
+
+### Requirement: The stage tabs row meets the assistant's head
+
+From 768 px wide, an open project's stage tabs (Write, Build, Deploy,
+Interact) SHALL sit in a 44 px row at the top of the work column with a
+1 px line under it, so its line meets the assistant's head's line.
+
+#### Scenario: The lines meet
+
+- **WHEN** a user opens a project on a 1440 px wide window
+- **THEN** the stage tabs row is 44 px tall and its bottom line is level
+  with the assistant head's bottom line

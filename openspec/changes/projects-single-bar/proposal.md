@@ -21,8 +21,13 @@ Slack thread of 12 Nov (16:43–17:24); HOO-2827 carries it out before the
   assistant" button hides it.
 - **The project names the chat.** The assistant's head reads the open
   project's name instead of "Assistant · {model} · hosted"; the model's name
-  stays in the composer's model button. With no project open it reads
-  "Assistant".
+  stays in the composer's model button. With no project open it names the
+  model as before.
+- **The stage tabs row** is 44 px with its own line, meeting the
+  assistant's head.
+- **Built on Almaz's commit** 6f4c97f3b (`almaz/project-one-bar`), which
+  carries the one bar, the chat toggle and the chat head; this change adds
+  the tree and the specs.
 - **The tutorial's tree shell for the project tree.** The project tree
   docks beside the editor by default (the column, as now) with the
   tutorial's unpin at its top; Files in the row undocks it, and from then on
@@ -47,11 +52,10 @@ None.
 
 - `client-v2-editor-head`: the head becomes the project's only bar; Files
   docks and undocks the tree; the tree starts docked.
-- `assistant-model-name`: the head names the project, not the model; a long
-  model name truncates in the composer only.
+- `assistant-model-name`: the head names the project while one is open.
 - `assistant-ai-gate`: the off status sits after the head's title.
 - `client-v2-layout`: a project draws no stage bar; the chat's reopen lives
-  in the editor head.
+  in the editor head; the stage tabs row is 44 px.
 
 ## Impact
 

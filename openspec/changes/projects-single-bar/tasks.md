@@ -1,16 +1,16 @@
 # Tasks
 
-All tasks: HOO-2827, one PR. Order: 1 and 2 run in any order; 3 needs 1;
+All tasks: HOO-2827, one PR. 1.x and 2.1 are done by Almaz's commit 6f4c97f3b (`almaz/project-one-bar`). Order: 1 and 2 run in any order; 3 needs 1;
 4 needs 1–3.
 
 ## 1. One row (plan: [plans/1-one-row.md](plans/1-one-row.md))
 
-- [ ] 1.1 `BaseEditorHead` takes `actions`, `assistant` (drawn only while hidden, "Expand assistant") and the ⋯ "More options" menu with "Solana documentation"; unit tests
-- [ ] 1.2 `LayoutShell` / `BaseLayoutShell` draw no stage bar over a project's work column; Home and covers keep `BaseStageBar`; Flow's Share goes to the head; unit tests updated
+- [x] 1.1 `BaseEditorHead` takes `actions`, `assistant` (drawn only while hidden, "Expand assistant") and the ⋯ "More options" menu with "Solana documentation"; unit tests
+- [x] 1.2 `LayoutShell` / `BaseLayoutShell` draw no stage bar over a project's work column; Home and covers keep `BaseStageBar`; Flow's Share goes to the head; unit tests updated
 
 ## 2. The chat head names the project (plan: [plans/1-one-row.md](plans/1-one-row.md), Task 2)
 
-- [ ] 2.1 `headLabel` takes the project name ("Assistant" without one); the model part leaves the head; `Assistant` passes `useProjectName()`; unit tests
+- [x] 2.1 `headLabel` takes the project name ("Assistant" without one); the model part leaves the head; `Assistant` passes `useProjectName()`; unit tests
 
 ## 3. The tree docks like the tutorial's (plan: [plans/1-one-row.md](plans/1-one-row.md), Task 3)
 

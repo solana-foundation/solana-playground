@@ -10,9 +10,9 @@ hold the editor's tab row (`#tabs`), with the wallet button at its end. Its
 right end SHALL hold, in this order: "Files" (`#editor-head-files`, a
 folder) and "Terminal" (`#editor-head-terminal`, `>_`), each an 18 px icon
 in a 32 px button with an 8 px radius, carrying `aria-pressed` and taking
-the hover fill as its pressed state; then the project's Share button; then
-"More options" (⋯) whose menu holds "Solana documentation"; and, only while
-the assistant is hidden, "Expand assistant". "Files" reads
+the hover fill as its pressed state; then the project's Share button; then,
+only while the assistant is hidden, "Expand assistant"; then "More options"
+(⋯) whose menu holds "Solana documentation". "Files" reads
 `aria-pressed="true"` while the tree is shown, docked or as the dropdown.
 The head's position and the toggles' positions SHALL NOT change when the
 files column opens or closes.
@@ -28,8 +28,8 @@ files column opens or closes.
 
 - **WHEN** a user clicks "Collapse assistant" in the assistant's head, then
   "Expand assistant" in `#editor-head`
-- **THEN** the assistant hides and "Expand assistant" appears at the head's
-  end, then the assistant shows again and the head has no "Expand
+- **THEN** the assistant hides and "Expand assistant" appears in the head
+  before "More options", then the assistant shows again and the head has no "Expand
   assistant"
 
 #### Scenario: Nothing in the head moves
@@ -55,8 +55,9 @@ beside the editor» at its top right. "Files" in the head SHALL undock a
 docked, shown tree, and otherwise open or close the dropdown. «Dock beside
 the editor» SHALL dock the tree and close the dropdown; "Undock the files"
 SHALL undock it. The pin SHALL show only while the code area is wider than
-1100 px; narrower, a docked tree SHALL not take a column and "Files" opens
-it as the dropdown. The tree SHALL keep its open folders, selection and
+1100 px; narrower, a docked tree SHALL not take a column, "Files" opens it
+as the dropdown, and the dropdown shows no pin. An undocked tree SHALL stay
+undocked, at any width, until the pin docks it again. The tree SHALL keep its open folders, selection and
 scroll across every change. ⌘E and the empty editor's "Show files" SHALL do
 what "Files" does. In a lesson the column SHALL keep its Steps / Files
 switch at its top, and "Files" in the head SHALL open and close that same
