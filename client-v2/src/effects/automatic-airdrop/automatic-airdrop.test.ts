@@ -113,7 +113,7 @@ describe("automaticAirdrop", () => {
 
     expect(println).toHaveBeenCalledWith(
       expect.stringContaining(
-        "Visit https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet to obtain SOL."
+        "Visit https://faucet.solana.com/?walletAddress=Wa11et&amount=5&cluster=devnet to obtain SOL."
       )
     );
   });

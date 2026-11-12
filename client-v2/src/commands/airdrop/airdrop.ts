@@ -1,4 +1,8 @@
-import { faucetClosedLineFor, isFaucetClosed } from "@/shared/lib/faucet";
+import {
+  faucetClosedLineFor,
+  isFaucetClosed,
+  isFaucetCluster,
+} from "@/shared/lib/faucet";
 
 import { checkSignedIn } from "../../features/auth";
 import { fundTelemetry } from "../../features/fund-wallet";
@@ -11,12 +15,19 @@ import {
   PgWeb3,
 } from "../../utils";
 import { askAgain } from "../../utils/ask-again";
-import { TerminalLineError } from "../../utils/terminal/line-error";
 import { checkWallet } from "../checks";
 import { createArgs, createCmd } from "../create";
 import { forgetFaucetClosed, rememberFaucetClosed } from "./closed-faucet";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
-import { isRateLimited, rateLimitNote, receivedLine } from "./report";
+import {
+  AirdropClosedError,
+  AirdropRefusedError,
+  isRateLimited,
+  isUnreachableFailure,
+  NetworkUnreachableError,
+  receivedLine,
+  refusedNote,
+} from "./report";
 import { isAirdropSignInGated } from "./sign-in-gate";
 import { getAirdropVia } from "./via";
 
@@ -107,19 +118,31 @@ export const airdrop = createCmd({
       } catch (error) {
         if (error instanceof Error && isFaucetClosed(error.message)) {
           rememberFaucetClosed(connection.rpcEndpoint);
-          throw new TerminalLineError(closedLine, { cause: error });
+          throw new AirdropClosedError(closedLine, { cause: error });
         }
         throw error;
       }
     };
 
-    // A rate limit on any of the RPC's answers is not the end of the road:
-    // the web faucet keeps a limit of its own. Point to it, then fail as before
+    // No answer here is the end of the road: the web faucet keeps a limit of
+    // its own and asks nothing of this RPC. Point to it on any refusal, then
+    // fail as before, with the same message, marked as a refusal so the wallet
+    // chip and the wallet menu show the same steps
+    let received: number;
+    // A balance read that fails says nothing about the faucet: the RPC did not
+    // answer, or answered with an error of its own. It is never a refusal
+    const readBalance = async () => {
+      try {
+        return await connection.getBalance(walletPk, "processed");
+      } catch (error) {
+        throw new BalanceReadError(error);
+      }
+    };
     try {
       // Airdrop tx is sometimes successful even when the balance hasn't changed.
       // Check the balance before and after instead of only confirming the tx
       // to mitigate.
-      const beforeBalance = await connection.getBalance(walletPk, "processed");
+      const beforeBalance = await readBalance();
 
       // Request an airdrop from the RPC.
       //
@@ -147,7 +170,7 @@ export const airdrop = createCmd({
       const MAX_RETRIES = 3;
       let afterBalance = beforeBalance;
       for (let i = 0; i < MAX_RETRIES; i++) {
-        afterBalance = await connection.getBalance(walletPk, "processed");
+        afterBalance = await readBalance();
         if (afterBalance !== beforeBalance) break;
         if (i === MAX_RETRIES - 1) throw new Error("Balance did not change");
 
@@ -155,30 +178,49 @@ export const airdrop = createCmd({
         await PgCommon.sleep(confirmations * PgWeb3.DEFAULT_MS_PER_SLOT);
       }
 
-      // What arrived, not what was asked: the RPC may grant less
-      PgTerminal.println(
-        PgTerminal.success(receivedLine(amount, afterBalance - beforeBalance))
-      );
-      // `cluster` is one of the five names even on a custom endpoint, which
-      // `readCluster` resolves from its genesis hash, so it is `FundCluster`
-      // as it is
-      fundTelemetry.track("fund_airdropped", { via, cluster });
-      forgetFaucetClosed(connection.rpcEndpoint);
-    } catch (error) {
-      if (isRateLimited(error)) {
-        PgTerminal.println(
-          PgTerminal.info(
-            rateLimitNote({
-              walletAddress: walletPk.toBase58(),
-              amount,
-              cluster,
-            })
-          )
-        );
+      received = afterBalance - beforeBalance;
+    } catch (thrown) {
+      const error = thrown instanceof BalanceReadError ? thrown.cause : thrown;
+      // A closed RPC faucet: its line already points to the web faucet. A
+      // refusal all the same, so the chip and the menu show the way round
+      if (error instanceof AirdropClosedError) throw error;
+      // Nothing answered: the web faucet is no way round for a user offline
+      if (isUnreachableFailure(error)) throw new NetworkUnreachableError(error);
+      // A balance read the RPC answered with an error says nothing of the
+      // faucet, unless the answer is its limit
+      if (thrown instanceof BalanceReadError && !isRateLimited(error)) {
+        throw error;
       }
-      throw error;
+      // A local validator has no web faucet to point to; its own error says
+      // what went wrong
+      if (!isFaucetCluster(cluster)) throw error;
+      PgTerminal.println(
+        PgTerminal.info(
+          refusedNote(error, {
+            walletAddress: walletPk.toBase58(),
+            amount,
+            cluster,
+          })
+        )
+      );
+      throw new AirdropRefusedError(error);
     }
+
+    // What arrived, not what was asked: the RPC may grant less
+    PgTerminal.println(PgTerminal.success(receivedLine(amount, received)));
+    // `cluster` is one of the five names even on a custom endpoint, which
+    // `readCluster` resolves from its genesis hash, so it is `FundCluster`
+    // as it is
+    fundTelemetry.track("fund_airdropped", { via, cluster });
+    forgetFaucetClosed(connection.rpcEndpoint);
   },
 });
+
+/** A balance read that failed, told apart from the faucet's own answers */
+class BalanceReadError extends Error {
+  constructor(override readonly cause: unknown) {
+    super("Could not read the wallet balance");
+  }
+}
 
 let cachedTxHash: string;
