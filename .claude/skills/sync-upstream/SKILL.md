@@ -68,12 +68,15 @@ Upstream's assets live in `https://github.com/solana-playground/assets.git`, whi
 commit it came from in `client-v2/scripts/assets-commit.txt`. The part is the import list,
 `client-v2/scripts/assets-import.txt`: one asset path a line, a trailing `/` for a folder, `#` for a comment. A
 tutorial folder that `client-v2/src/tutorials/markdown-tutorials.json` lists is imported whole without a line
-there, so enabling a Markdown tutorial is one edit. Upstream's `fonts/`, `icons/`, and `frameworks/` are left
-out: client-v2 takes its code fonts from npm packages, its icons from `lucide-react`, and its framework logos
-from `client-v2/src/frameworks/<name>/`, so a change upstream makes there is reported as not imported.
+there, so enabling a Markdown tutorial is one edit. Upstream's `fonts/`, `icons/`, `frameworks/`, and `pyth/`
+are left out: client-v2 takes its code fonts from npm packages, its icons from `lucide-react`, and its
+framework logos from `client-v2/src/frameworks/<name>/`, and it has no Pyth generator, so a change upstream
+makes there is reported as not imported.
 
-On the polish branch, run `S assets <worktree>`, after `yarn install` in its `client-v2/` (the command loads svgo
-and sharp from there). It reads `<old>` from `assets-commit.txt` and `<new>` from the
+On the polish branch, first run `yarn setup` in the worktree's `client-v2/`. The command loads svgo and sharp
+from that folder's `node_modules`, a fresh worktree has none, and `yarn install` alone refuses to run until
+`yarn setup` has built the wasm packages. `assets` stops with this instruction when the packages are missing.
+Then run `S assets <worktree>`. It reads `<old>` from `assets-commit.txt` and `<new>` from the
 `client/public` gitlink of the upstream tip that the last upstream sync subject on the worktree's `HEAD` names
 (a third argument, an upstream commit, replaces that tip for a dry run), and stops when they are equal. It
 clones the assets repository into `<worktree git dir>/sync-upstream/assets`, or fetches it there, and goes
