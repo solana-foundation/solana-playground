@@ -86,8 +86,8 @@ without git data of the checkout.
 - **The list's order is the build's order.** The old code took `readdirSync` order, which is alphabetical on macOS
   but not guaranteed on Linux. The list starts alphabetical, so the order is unchanged on macOS.
 - **Keep `scripts/assets-commit.txt` as a record.** It names the upstream commit the copy came from, which an
-  upstream sync reads to find the asset changes since then. No test reads it, since no submodule entry is left to
-  compare with.
+  upstream sync reads to find the asset changes since then. No test compares it with the fork's `client/public`
+  gitlink: that pin stays where it is until HOO-2686, while the record moves with each sync.
 - **Ignore only what the `generate` scripts write** (`crates`, `packages`, and each tutorial's `content.json`), in
   `.gitignore` and `.dockerignore` alike, so the Docker image gets the tracked files and still generates the crates
   itself.
@@ -107,5 +107,6 @@ without git data of the checkout.
   `http://localhost:3000`, which a link preview cannot load; setting `SITE_URL` on the project restores it.
 - [An edit to `public/index.html` does not reach a running `yarn dev`] → the page is read when webpack starts;
   restart the dev server.
-- [`client/` no longer builds without its submodule] → it is not deployed, CI runs only Prettier on it, and
-  HOO-2686 deletes it.
+- [Removing the submodule would break the server deploy] → `client/` is not deployed, but on a release tag
+  `cicd.yml` builds it through `reusable-checks.yml` before `deploy_server`, from the `client/public` submodule. So
+  the submodule and `.gitmodules` stay, and HOO-2686 removes them with `client/` and that job.

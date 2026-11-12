@@ -42,8 +42,9 @@ fork's assets are edited where they are served.
   version of each.
 - `client-v2/static/`, `scripts/update-static.mjs`, `scripts/static-overlay.mjs`, their tests, and
   `scripts/assets-commit.test.mjs` are removed.
-- The `client/public` submodule and `.gitmodules` are removed. The upstream `client/` no longer builds; it is not
-  deployed and goes with HOO-2686.
+- The `client/public` submodule and `.gitmodules` stay, pinned at the assets commit `scripts/assets-commit.txt`
+  starts from: the App Engine deploy gate (`cicd.yml` through `reusable-checks.yml`'s `build` job) builds the
+  upstream `client/` from them. HOO-2686 removes them with `client/` and that job. client-v2 no longer reads them.
 - CI, `preview.yml`, and the client-v2 Docker image check out or copy the repository without the submodule and
   without full history.
 - `compose.yaml` drops the upstream client's services and the `dev`, `prod`, and `client-standalone` profiles, with
@@ -77,8 +78,7 @@ None.
 
 - Code: `client-v2/public/`, `client-v2/scripts/` (`assets-import.txt` among them), `client-v2/package.json`
   (`generate`, `generate-fast`), `client-v2/craco.config.js`, `client-v2/src/tutorials/markdown-tutorials.json`,
-  `.claude/skills/sync-upstream/`, `client-v2/Dockerfile`, `.dockerignore`, `.gitignore`, `.gitmodules`,
-  `compose.yaml`, `.env.example`, `client-v2/.env.example` (`SITE_URL`), `reusable-client-v2.yml`, `preview.yml`,
+  `.claude/skills/sync-upstream/`, `client-v2/Dockerfile`, `.dockerignore`, `.gitignore`, `compose.yaml`, `.env.example`, `client-v2/.env.example` (`SITE_URL`), `reusable-client-v2.yml`, `preview.yml`,
   and the docs that described the mirror.
 - A Vercel build names its production domain in the card only while `VERCEL_PROJECT_PRODUCTION_URL` reaches the
   build; `SITE_URL` overrides it.

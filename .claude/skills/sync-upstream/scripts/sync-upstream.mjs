@@ -43,7 +43,6 @@ export const GUARDS = [
   "compose.yaml ^x-client:",
   "compose.yaml ^  client(-prod|-standalone)?:",
   "client-v2/scripts/update-static.mjs",
-  '.gitmodules ^\\[submodule "client/public"\\]',
   "server/src/routes/share.rs",
 ];
 
