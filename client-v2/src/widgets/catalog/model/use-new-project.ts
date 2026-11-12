@@ -4,7 +4,11 @@ import { startTutorials } from "@/entities/tutorial";
 import { PgTutorial } from "@/utils";
 
 import type { BaseNewProjectProps } from "../ui/BaseNewProject";
-import { toastOpenFailed, toastStartFailed } from "../ui/open-failed-toast";
+import {
+  toastImportFailed,
+  toastOpenFailed,
+  toastStartFailed,
+} from "../ui/open-failed-toast";
 import { catalogPage } from "./catalog-page";
 import { importProgram, isImportCancel } from "./program-open";
 import type { CatalogPage } from "./telemetry";
@@ -17,12 +21,18 @@ import { useTutorialList } from "./use-tutorial-list";
 export interface NewProjectState {
   /** Everything `BaseNewProject` takes but Start from scratch */
   view: Omit<BaseNewProjectProps, "scratch">;
-  /** An Open runs: Start from scratch waits too */
+  /** An Open or an import runs: Start from scratch waits */
   busy: boolean;
   /** Start from scratch reports its own run here, so the cards wait on it */
   onStarting: (starting: boolean) => void;
   /** Start from scratch's failure: a toast once the page was left */
   onStartFailed: (message: string) => void;
+  /** An Open or Start runs: Import from GitHub waits */
+  isImportHeld: boolean;
+  /** Import from GitHub reports its own run here, so the rest waits on it */
+  onImporting: (importing: boolean) => void;
+  /** Import from GitHub's failure: a toast once the page was left */
+  onImportFailed: (message: string) => void;
   /** Closes the page */
   closePage: () => void;
 }
@@ -31,7 +41,8 @@ export interface NewProjectState {
  * New project's state, held by its page. Whatever opens or starts from here
  * closes the page (`close`), if this visit still shows it. A failure stays where it happened, or comes up
  * as a toast where nothing shows it: the page was left, or the failing card's
- * list is not the one shown. One Open or Start at a time across both lists.
+ * list is not the one shown. One Open, Start or import at a time across the
+ * page.
  */
 export const useNewProject = (
   close: () => void,
@@ -41,6 +52,7 @@ export const useNewProject = (
   const [tab, setTab] = useState<CatalogPage>(initialTab);
   const [query, setQuery] = useState("");
   const [starting, setStarting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   // Whether the page still shows: once it is left, no card is left
   // to show a failure
@@ -85,7 +97,7 @@ export const useNewProject = (
     startTutorials(PgTutorial.all)
   );
   const programs = useProgramList(query, programOpen.cardOpen);
-  const held = busy || starting;
+  const held = busy || starting || importing;
   // Each list refuses its own second Open; this refuses the other's while
   // one runs, and any while Start runs
   const unlessHeld =
@@ -121,11 +133,17 @@ export const useNewProject = (
         ),
       },
     },
-    busy,
+    busy: busy || importing,
     onStarting: setStarting,
     // Start sits above both lists, so only a left page hides its failure
     onStartFailed: (message) => {
       if (!open.current) toastStartFailed(message);
+    },
+    isImportHeld: busy || starting,
+    onImporting: setImporting,
+    // Import sits under Start, so only a left page hides its failure too
+    onImportFailed: (message) => {
+      if (!open.current) toastImportFailed(message);
     },
     closePage: closeIfOpen,
   };
