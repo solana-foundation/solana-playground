@@ -103,6 +103,65 @@ const nextBackoff = (previous: number) =>
     MAX_FAILED_WRITE_BACKOFF_MS
   );
 
+/**
+ * How long a buffer write may wait for an answer before it counts as refused. A send is at most 1 + `PgTx`'s
+ * `MAX_FRESH_BLOCKHASH_SENDS` `sendRawTransaction` calls with their blockhash fetches and a slot's sleep between the
+ * later ones, each under a second on an RPC that answers; 20 s passes a slow one, and the line comes at least 10 s
+ * after the `SLOW_RUN_MS` notice.
+ */
+const WRITE_ANSWER_TIMEOUT_MS = 20_000;
+
+/** A buffer write that got no answer within {@link WRITE_ANSWER_TIMEOUT_MS} */
+class UnansweredWriteError extends Error {}
+
+/**
+ * `send`, or a rejection with {@link UnansweredWriteError} once `ms` pass, or with the stop's reason once
+ * `abortController` aborts. The request is not aborted: `PgTx.send` goes on, fresh-blockhash resends included. A write
+ * that lands late is found by a later buffer read, and may already have been sent again (a second fee), so its late
+ * outcome goes to the debug log only.
+ */
+const awaitAnswerWith =
+  (ms: number) =>
+  (abortController: AbortController | undefined) =>
+  <T>(send: Promise<T>) =>
+    new Promise<T>((resolve, reject) => {
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        reject(new UnansweredWriteError(`No answer in ${ms / 1000} s`));
+      }, ms);
+      const signal = abortController?.signal;
+      const onAbort = () => {
+        clearTimeout(timer);
+        reject(signal?.reason);
+      };
+      if (signal?.aborted) onAbort();
+      signal?.addEventListener("abort", onAbort, { once: true });
+      send
+        .then(
+          (value) => {
+            if (timedOut) {
+              log.debug("A buffer write answered after its time limit", {
+                context: { ms },
+              });
+            }
+            resolve(value);
+          },
+          (e: unknown) => {
+            if (timedOut) {
+              log.debug("A buffer write failed after its time limit", {
+                context: { ms, error: toError(e).message },
+              });
+            }
+            reject(e);
+          }
+        )
+        .finally(() => {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+        });
+    });
+
 /** Rounds in a row in which no missing chunk lands before `loadBuffer` gives up, so a refusing RPC cannot hang a deploy */
 const MAX_STALLED_ROUNDS = 5;
 
@@ -111,10 +170,37 @@ const MAX_BUFFER_READS = 30;
 
 const BUFFER_READ_INTERVAL_MS = 1000;
 
+/** How Chrome, Safari and Firefox word a fetch they could not make */
+const FETCH_FAILURE = /Failed to fetch|Load failed|NetworkError/i;
+
 /** A fetch the browser failed, which is how it reports a 429 sent without CORS headers */
 const isFetchFailure = (e: unknown) =>
-  e instanceof TypeError &&
-  /Failed to fetch|Load failed|NetworkError/i.test(e.message);
+  e instanceof TypeError && FETCH_FAILURE.test(e.message);
+
+/** The longest message a refused-write line carries: an RPC's error page can put a whole body on one line */
+const MAX_REFUSAL_MESSAGE_LENGTH = 200;
+
+/**
+ * The cluster's own words for a refused send, on one line: web3.js keeps them in a `SendTransactionError`'s
+ * `transactionMessage`, and adds the simulation's logs to its `message`
+ */
+const clusterMessageOf = (e: unknown) => {
+  // Each browser words a fetch it could not make its own way, and web3.js keeps that wording only as text when the
+  // blockhash fetch fails ("failed to get recent blockhash: TypeError: Load failed"); the line names it the same in all
+  if (isFetchFailure(e) || FETCH_FAILURE.test(toError(e).message)) {
+    return "Failed to fetch";
+  }
+  const message = (e as { transactionMessage?: unknown } | null)
+    ?.transactionMessage;
+  const words =
+    typeof message === "string" && message.trim()
+      ? message
+      : toError(e).message;
+  const line = words.trim().split("\n")[0];
+  return line.length > MAX_REFUSAL_MESSAGE_LENGTH
+    ? `${line.slice(0, MAX_REFUSAL_MESSAGE_LENGTH)}…`
+    : line;
+};
 
 /** The host of an RPC URL, for logs and errors: its path or query may carry an API key */
 const hostOf = (url: string) => /^[a-z]+:\/\/([^/?#]+)/i.exec(url)?.[1] ?? url;
@@ -187,6 +273,12 @@ export class BpfLoaderUpgradeable {
       onMissing?: (missingCount: number) => void;
       /** `reason` names the provider and its message, as in `Helius: Too many requests` */
       onRateLimit?: (retryAfter: number, reason: string) => void;
+      /**
+       * A write the cluster refused for a reason other than a rate limit, with the cluster's message: called for the
+       * first such write of each round. Its refused chunks are sent again in the next round, unless the load is
+       * stopped or gives up after rounds that land nothing. A round that reports a refusal skips `onRateLimit`.
+       */
+      onRefusal?: (message: string) => void;
     } & SendOption
   ) {
     const programBytes = Buffer.from(bytes);
@@ -236,12 +328,15 @@ export class BpfLoaderUpgradeable {
       let successCount = 0;
       let lastTxHash: string | undefined;
       let rateLimitReason: string | undefined;
+      // A write with no answer ends the round, so a cluster that stopped answering costs one wait a round, not one a chunk
+      let hasUnansweredWrite = false;
+      let hasReportedRefusal = false;
       await Promise.all(
-        new Array(loadConcurrency).fill(null).map(async () => {
+        Array.from({ length: loadConcurrency }, async () => {
           let backoff = 0;
           while (1) {
             if (opts?.abortController?.signal.aborted) return;
-            if (rateLimitReason) break;
+            if (rateLimitReason || hasUnansweredWrite) break;
 
             const offset = missingIndices[i] * WRITE_CHUNK_SIZE;
             i++;
@@ -258,13 +353,19 @@ export class BpfLoaderUpgradeable {
 
             await pause(pace.turnIn());
             if (opts?.abortController?.signal.aborted) return;
+            // Another worker's write may have gone unanswered during the wait for this turn
+            if (hasUnansweredWrite) break;
 
             try {
-              lastTxHash = await PgTx.send(ix, {
-                wallet,
-                computeUnitLimit,
-                connection: writeConnection,
-              });
+              lastTxHash = await awaitAnswerWith(WRITE_ANSWER_TIMEOUT_MS)(
+                opts?.abortController
+              )(
+                PgTx.send(ix, {
+                  wallet,
+                  computeUnitLimit,
+                  connection: writeConnection,
+                })
+              );
               backoff = 0;
               pace.recordWrite();
               successCount++;
@@ -272,6 +373,8 @@ export class BpfLoaderUpgradeable {
               const current = total - missingIndices.length + successCount;
               opts?.onWrite?.(current, total);
             } catch (e: unknown) {
+              // A send that fails after a stop is not sent again, so it is neither counted nor reported
+              if (opts?.abortController?.signal.aborted) return;
               refusedCount++;
               const error = toError(e);
               firstRefusal ??= error;
@@ -288,10 +391,19 @@ export class BpfLoaderUpgradeable {
                 break;
               }
               lastRefusal = { error, words: `last refusal: ${error.message}` };
+              if (!hasReportedRefusal) {
+                hasReportedRefusal = true;
+                opts?.onRefusal?.(clusterMessageOf(e));
+              }
 
               // The browser hides a 429 without CORS headers behind a failed fetch, so slow down as for one
               if (isFetchFailure(e)) pace.recordRateLimit();
               else pace.recordFailure();
+              // No backoff: the round ends here, `loadUntilWritten` reads the buffer and `MAX_STALLED_ROUNDS` counts the round
+              if (e instanceof UnansweredWriteError) {
+                hasUnansweredWrite = true;
+                break;
+              }
               // The chunk is written again in the next round; the pause keeps
               // a failing RPC from being sent to at once
               backoff = nextBackoff(backoff);
@@ -305,7 +417,15 @@ export class BpfLoaderUpgradeable {
       if (rateLimitReason) {
         // TODO: Make use of the `Retry-After` response header
         const retryAfter = 10; // this is what `Retry-After` returns currently
-        opts?.onRateLimit?.(retryAfter, rateLimitReason);
+        // One line a round, printed as it happens: a round whose refusal is already in the terminal waits without a
+        // second one, and the rate limit goes to the log
+        if (hasReportedRefusal) {
+          log.warn("Rate-limited after a refused write; waiting", {
+            context: { reason: rateLimitReason, retryAfter },
+          });
+        } else {
+          opts?.onRateLimit?.(retryAfter, rateLimitReason);
+        }
         await pause(retryAfter * 1000);
         if (opts?.abortController?.signal.aborted) return;
       }
@@ -322,7 +442,7 @@ export class BpfLoaderUpgradeable {
     };
 
     const txCount = Math.ceil(programBytes.length / WRITE_CHUNK_SIZE);
-    const indices = new Array(txCount).fill(null).map((_, i) => i);
+    const indices = Array.from({ length: txCount }, (_, i) => i);
 
     const readBufferHost = hostOf(bufferConnection.rpcEndpoint);
     /**

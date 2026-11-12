@@ -1,3 +1,5 @@
+import { reportUnhandled } from "@/shared/lib/logger";
+
 import { PgCommon } from "../common";
 import { PgAutocomplete } from "./autocomplete";
 import { PgHistory } from "./history";
@@ -362,7 +364,10 @@ export class PgShell {
           if (isIncompleteInput(this._tty.input)) {
             this._handleCursorInsert("\n");
           } else {
-            this.handleReadComplete();
+            // Nothing waits on a typed command: `PgTerm.process` has printed
+            // its failure's line, and the failure is reported here rather
+            // than left as an unhandled rejection
+            this.handleReadComplete().catch(reportUnhandled);
           }
           break;
 

@@ -1,6 +1,7 @@
 import { PgFramework } from "./framework";
 import type { ImportProgress } from "./github";
-import { filterRepoFiles, ImportCancelledError, PgGithub } from "./github";
+import { filterRepoFiles, PgGithub } from "./github";
+import { ImportCancelledError } from "./import-error";
 
 // `./explorer` boots lightning-fs on import, which needs a real IndexedDB.
 vi.mock("./explorer", () => ({ PgExplorer: {} }));
@@ -206,7 +207,10 @@ describe("PgGithub.getFiles", () => {
 
     await expect(
       PgGithub.getFiles("https://github.com/solana-labs/example")
-    ).rejects.toThrow(/hourly request limit/);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/hourly request limit/),
+      reason: "rate-limited",
+    });
   });
 
   it("explains that the repository was not found", async () => {
@@ -214,7 +218,10 @@ describe("PgGithub.getFiles", () => {
 
     await expect(
       PgGithub.getFiles("https://github.com/solana-labs/example")
-    ).rejects.toThrow(/was not found on GitHub/);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/was not found on GitHub/),
+      reason: "not-found",
+    });
   });
 
   it("refuses to import a partially listed repository", async () => {
@@ -222,7 +229,10 @@ describe("PgGithub.getFiles", () => {
 
     await expect(
       PgGithub.getFiles("https://github.com/solana-labs/example")
-    ).rejects.toThrow(/too large to import/);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/too large to import/),
+      reason: "too-large",
+    });
   });
 
   it("reports a path that holds no program code", async () => {
@@ -232,7 +242,34 @@ describe("PgGithub.getFiles", () => {
       PgGithub.getFiles(
         "https://github.com/solana-labs/example/tree/master/docs"
       )
-    ).rejects.toThrow("No program code found in docs in solana-labs/example.");
+    ).rejects.toMatchObject({
+      message: "No program code found in docs in solana-labs/example.",
+      reason: "no-source",
+    });
+  });
+
+  it("reports a request that got no answer as a network failure", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new TypeError("Failed to fetch")
+    );
+
+    await expect(
+      PgGithub.getFiles("https://github.com/solana-labs/example")
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/did not answer/),
+      reason: "network",
+    });
+  });
+
+  it.each([
+    ["a refusal that is not the hourly limit", { status: 403, body: "" }],
+    ["a server error", { status: 500, body: "" }],
+  ])("reports %s as other", async (_, response) => {
+    mockFetch(() => response);
+
+    await expect(
+      PgGithub.getFiles("https://github.com/solana-labs/example")
+    ).rejects.toMatchObject({ reason: "other" });
   });
 
   it("asks which program to import before downloading anything", async () => {

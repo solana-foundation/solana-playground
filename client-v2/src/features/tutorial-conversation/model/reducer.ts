@@ -4,6 +4,7 @@ import type { Idl } from "@coral-xyz/anchor";
 import type {
   Act,
   ActBeat,
+  ActionWord,
   Ask,
   Beat,
   Block,
@@ -43,10 +44,10 @@ import {
   hintOf,
   isMismatch,
   isSignedOut,
+  isStoppedRun,
   isUnconfirmed,
   isUnreachable,
 } from "./progress";
-import type { Word } from "./route";
 import { shippedIdl, shippedIdlAt } from "./shipped-idl";
 
 /**
@@ -181,9 +182,15 @@ export type Action =
    * A typed action word (task 3.6): the action it names, and its pill when
    * that action changed something; a word the engine refuses is dropped
    */
-  | { type: "word"; word: Word; text: string; then: WordAction; at: number }
+  | {
+      type: "word";
+      word: ActionWord;
+      text: string;
+      then: WordAction;
+      at: number;
+    }
   /** An action word typed while a question is open: refused, not run */
-  | { type: "refuseWord"; word: Word; text: string; at: number }
+  | { type: "refuseWord"; word: ActionWord; text: string; at: number }
   /** A finish chip pressed, by its index in the definition's `finish.chips` */
   | { type: "chip"; index: number; at: number }
   /** The assistant proposed one line's change; it waits for Apply or Keep */
@@ -232,8 +239,8 @@ export type Effect =
   | {
       kind: "event";
       name: "tutorial_step_reset";
-      /** `step` is 1-based */
-      params: { tutorial: string; step: number };
+      /** `step_index` is 1-based */
+      params: { tutorial: string; step_index: number };
     }
   | {
       kind: "event";
@@ -257,7 +264,7 @@ export type Effect =
       params: {
         tutorial: string;
         /** 1-based */
-        step: number;
+        step_index: number;
         via: PassedVia;
         seconds: number;
         /** Only when the account the goal creates already existed */
@@ -272,16 +279,16 @@ export type Effect =
   | {
       kind: "event";
       name: "tutorial_question_asked";
-      /** `step` as `stepNumber` gives it: 1-based, 0 before Start, the last after the finish */
-      params: { tutorial: string; step: number; source: "typed" | "chip" };
+      /** `step_index` as `stepNumber` gives it: 1-based, 0 before Start, the last after the finish */
+      params: { tutorial: string; step_index: number; via: "typed" | "chip" };
     }
   | {
       kind: "event";
       name: "tutorial_word_sent";
       params: {
         tutorial: string;
-        step: number;
-        word: string;
+        step_index: number;
+        word: ActionWord;
         refused: boolean;
       };
     }
@@ -346,14 +353,17 @@ const unconfirmedOf = (runs: RunRecord[] | undefined): UnreadTx[] | null => {
     : null;
 };
 
-/** A run's outcome as `tutorial_action_run` names it */
+/**
+ * A run's outcome as `tutorial_action_run` names it. An act the learner
+ * stopped (HOO-2822) is `failed`: the spec's outcomes name no stop
+ */
 const outcomeOf = (result: RunResult): ActionRunParams["outcome"] => {
   if (result.ok) return "ok";
   if (
     (result.act === "airdrop" ||
       result.act === "deploy" ||
       result.act === "buildDeploy") &&
-    result.reason !== "failed"
+    (result.reason === "no_funds" || result.reason === "no_wallet")
   ) {
     return result.reason;
   }
@@ -378,7 +388,7 @@ const actionRunOf = (
   name: "tutorial_action_run",
   params: {
     tutorial: run.slug,
-    step: run.step,
+    step_index: run.step,
     action,
     outcome,
     // Two devices' clocks can disagree; a run never takes negative time
@@ -548,6 +558,36 @@ export const panelInput = (
     ...(creates && sameIdlName(creates.instruction, call.instruction)
       ? { creates }
       : {}),
+  };
+};
+
+/**
+ * The input a run of the client file started outside its card is judged with
+ * (HOO-2806), as the run act's would be: the live step's call or refused
+ * goal, while it
+ * has not passed and no act runs, with the step it is for. Undefined on any
+ * other step, which no client run can pass.
+ */
+export const clientRunInput = (
+  definition: TutorialDefinition,
+  p: ConversationProgress
+): { stepId: string; input: RunInput } | undefined => {
+  if (running(p)) return undefined;
+  const step = stepAt(definition, p.cursor);
+  if (!step || passed(p, step)) return undefined;
+  const { goal } = step;
+  if (goal.kind !== "call" && goal.kind !== "refused") return undefined;
+  const creates = createsOf(goal);
+  return {
+    stepId: step.id,
+    input: {
+      beatId: "client-run",
+      ...(p.deployed ? { idl: p.deployed.idl } : {}),
+      ...(goal.kind === "call" && goal.log !== undefined
+        ? { log: goal.log }
+        : {}),
+      ...(creates ? { creates } : {}),
+    },
   };
 };
 
@@ -830,7 +870,7 @@ const passStep = (
       name: "tutorial_step_passed",
       params: {
         tutorial: ctx.slug,
-        step: ctx.definition.steps.indexOf(step) + 1,
+        step_index: ctx.definition.steps.indexOf(step) + 1,
         via,
         // Two devices' clocks can disagree; a pass never takes negative time
         seconds: Math.max(0, Math.round((at - from) / 1000)),
@@ -886,7 +926,7 @@ const wordSent = (
   name: "tutorial_word_sent",
   params: {
     tutorial: ctx.slug,
-    step: stepNumber(ctx.definition, cursor),
+    step_index: stepNumber(ctx.definition, cursor),
     word: action.word,
     refused: action.type === "refuseWord",
   },
@@ -1459,14 +1499,15 @@ const reduceAction = (
       if (passed(p, found.step)) return same(state);
       if (!run.planned || p.cursor.fail) {
         // Asked once: the card closes on the press. A server that never
-        // answered, one that asks for a sign-in, or a devnet that has not
-        // read the transaction back yet has nothing to explain; its card
-        // offers the way on instead
+        // answered, one that asks for a sign-in, a devnet that has not
+        // read the transaction back yet, or an act the learner stopped has
+        // nothing to explain; its card offers the way on instead
         if (
           run.explainedAt !== undefined ||
           isUnreachable(run.result) ||
           isSignedOut(run.result) ||
-          isUnconfirmed(run.result)
+          isUnconfirmed(run.result) ||
+          isStoppedRun(run.result)
         ) {
           return same(state);
         }
@@ -1561,7 +1602,23 @@ const reduceAction = (
             : "landing",
       };
       if (!run.planned || p.cursor.fail) {
-        return { state, effects: [focus] };
+        // A build's card closes, and for an unplanned failure its Build
+        // again card follows (HOO-2806): without it the learner fixed the
+        // code with no Build to press
+        if (
+          run.result.act !== "build" ||
+          run.selfFixAt !== undefined ||
+          run.explainedAt !== undefined
+        ) {
+          return { state, effects: [focus] };
+        }
+        return {
+          state: withLastRun(state, action.beatId, {
+            ...run,
+            selfFixAt: action.at,
+          }),
+          effects: [focus],
+        };
       }
       // The fix question still follows; the explanation before it is skipped
       const flowed = flow(
@@ -1649,7 +1706,7 @@ const reduceAction = (
           name: "tutorial_step_reset",
           params: {
             tutorial: ctx.slug,
-            step: definition.steps.findIndex((s) => s.id === step.id) + 1,
+            step_index: definition.steps.findIndex((s) => s.id === step.id) + 1,
           },
         },
         ...flowed.effects,
@@ -1708,8 +1765,8 @@ const reduceAction = (
             name: "tutorial_question_asked",
             params: {
               tutorial: ctx.slug,
-              step: stepNumber(definition, p.cursor),
-              source: "chip",
+              step_index: stepNumber(definition, p.cursor),
+              via: "chip",
             },
           },
         ]
@@ -1778,8 +1835,8 @@ const reduceAction = (
             name: "tutorial_question_asked",
             params: {
               tutorial: ctx.slug,
-              step: stepNumber(definition, action.cursor),
-              source: "typed",
+              step_index: stepNumber(definition, action.cursor),
+              via: "typed",
             },
           },
         ],
@@ -2604,7 +2661,7 @@ if (import.meta.vitest) {
           name: "tutorial_action_run",
           params: {
             tutorial: expect.any(String),
-            step: 1,
+            step_index: 1,
             action: "call_panel",
             outcome: "failed",
             seconds: 2,
@@ -3176,7 +3233,7 @@ if (import.meta.vitest) {
             name: "tutorial_action_run",
             params: {
               tutorial: "hello-anchor",
-              step: 1,
+              step_index: 1,
               action: "build",
               outcome: "failed",
               seconds: 1,
@@ -3187,7 +3244,7 @@ if (import.meta.vitest) {
             name: "tutorial_action_run",
             params: {
               tutorial: "hello-anchor",
-              step: 1,
+              step_index: 1,
               action: "build",
               outcome: "ok",
               seconds: 2,
@@ -3262,7 +3319,7 @@ if (import.meta.vitest) {
           name: "tutorial_action_run",
           params: {
             tutorial: "hello-anchor",
-            step: 2,
+            step_index: 2,
             action: "airdrop",
             outcome: "ok",
             seconds: 0,
@@ -3326,7 +3383,7 @@ if (import.meta.vitest) {
             name: "tutorial_action_run",
             params: {
               tutorial: "hello-anchor",
-              step: 2,
+              step_index: 2,
               action: "deploy",
               outcome: "interrupted",
               seconds: 0,
@@ -3366,7 +3423,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "hello-anchor",
-              step: 1,
+              step_index: 1,
               via: "chat",
               seconds: 8,
             },
@@ -3376,7 +3433,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "hello-anchor",
-              step: 2,
+              step_index: 2,
               via: "call_panel",
               seconds: 3,
             },
@@ -3386,7 +3443,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "hello-anchor",
-              step: 3,
+              step_index: 3,
               via: "client",
               seconds: 7,
             },
@@ -3537,7 +3594,7 @@ if (import.meta.vitest) {
               params: expect.objectContaining({
                 action: "deploy",
                 outcome: "ok",
-                step: 2,
+                step_index: 2,
               }),
             })
           );
@@ -3837,7 +3894,8 @@ if (import.meta.vitest) {
         expect(flowed.state.progress.cursor).toEqual({
           kind: "step",
           stepId: "greet-by-name",
-          beat: 5,
+          // Past s4.call, the step's sixth beat (s4.client writes the client first)
+          beat: 6,
           fail: false,
         });
         expect(
@@ -3892,7 +3950,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "hello-anchor",
-              step: 4,
+              step_index: 4,
               via: "chat",
               seconds: 7,
             },
@@ -4081,6 +4139,43 @@ if (import.meta.vitest) {
           at: 8000,
         });
         expect(r.state).toBe(stopped);
+        expect(r.effects).toEqual([]);
+      });
+
+      it("a build the learner stopped is no planned failure, has nothing to explain, and is measured as failed", () => {
+        const stoppedBuild: RunResult = {
+          act: "build",
+          ok: false,
+          seconds: 0,
+          reason: "stopped",
+          error: null,
+          log: "Stopped.",
+        };
+        const { state: ended, effects } = play([
+          start,
+          rightPick,
+          build(7000),
+          { type: "ended", beatId: "s1.build", result: stoppedBuild, at: 7100 },
+        ]);
+        expect(ended.progress.runs["s1.build"]).toEqual([
+          { status: "failed", at: 7000, took: 100, result: stoppedBuild },
+        ]);
+        // The spec's outcomes name no stop: a stop counts as failed
+        expect(effects).toContainEqual(
+          expect.objectContaining({
+            name: "tutorial_action_run",
+            params: expect.objectContaining({
+              action: "build",
+              outcome: "failed",
+            }),
+          })
+        );
+        const r = reduce(ctx(), ended, {
+          type: "explain",
+          beatId: "s1.build",
+          at: 8000,
+        });
+        expect(r.state).toBe(ended);
         expect(r.effects).toEqual([]);
       });
 
@@ -4539,7 +4634,7 @@ if (import.meta.vitest) {
           {
             kind: "event",
             name: "tutorial_question_asked",
-            params: { tutorial: "hello-anchor", step: 4, source: "chip" },
+            params: { tutorial: "hello-anchor", step_index: 4, via: "chip" },
           },
         ]);
         expect(
@@ -4582,7 +4677,7 @@ if (import.meta.vitest) {
         expect(r.effects[1]).toEqual({
           kind: "event",
           name: "tutorial_step_reset",
-          params: { tutorial: "hello-anchor", step: 1 },
+          params: { tutorial: "hello-anchor", step_index: 1 },
         });
         // Its first beat, the boilerplate's write, comes round again
         expect(r.effects).toContainEqual(
@@ -4665,7 +4760,7 @@ if (import.meta.vitest) {
           name: "tutorial_word_sent",
           params: {
             tutorial: "hello-anchor",
-            step: 0,
+            step_index: 0,
             word: "start",
             refused: false,
           },
@@ -4708,7 +4803,7 @@ if (import.meta.vitest) {
             name: "tutorial_word_sent",
             params: {
               tutorial: "hello-anchor",
-              step: 1,
+              step_index: 1,
               word: "build",
               refused: true,
             },
@@ -4728,7 +4823,7 @@ if (import.meta.vitest) {
           {
             kind: "event",
             name: "tutorial_question_asked",
-            params: { tutorial: "hello-anchor", step: 1, source: "typed" },
+            params: { tutorial: "hello-anchor", step_index: 1, via: "typed" },
           },
         ]);
       });
@@ -4744,7 +4839,7 @@ if (import.meta.vitest) {
           {
             kind: "event",
             name: "tutorial_question_asked",
-            params: { tutorial: "hello-anchor", step: 0, source: "typed" },
+            params: { tutorial: "hello-anchor", step_index: 0, via: "typed" },
           },
         ]);
       });
@@ -5051,7 +5146,12 @@ if (import.meta.vitest) {
         expect(effects).toContainEqual({
           kind: "event",
           name: "tutorial_step_passed",
-          params: { tutorial: "refusals", step: 1, via: "chat", seconds: 2 },
+          params: {
+            tutorial: "refusals",
+            step_index: 1,
+            via: "chat",
+            seconds: 2,
+          },
         });
       });
 
@@ -5114,7 +5214,7 @@ if (import.meta.vitest) {
             name: "tutorial_step_passed",
             params: {
               tutorial: "refusals",
-              step: 5,
+              step_index: 5,
               via: "chat",
               seconds: 2,
               reason: "exists",

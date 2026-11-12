@@ -3,8 +3,8 @@ import { createTracker } from "@/shared/lib/telemetry";
 import type { AccountItem, AccountSurface } from "./account";
 
 type SessionEvents = {
-  /** The account menu opened; `from` is the control that opened it. */
-  session_account_menu_opened: { from: AccountSurface };
+  /** The account menu opened; `via` is the control that opened it. */
+  session_account_menu_opened: { via: AccountSurface };
   /**
    * A user picked an item of the account menu, or the row's Cancel while
    * signing in; the feedback entries are counted by `features/feedback`.

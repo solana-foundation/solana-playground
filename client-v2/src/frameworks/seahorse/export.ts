@@ -5,7 +5,10 @@ import { addAfter } from "../common";
 /**
  * {@link Framework.importFromPlayground}
  */
-export const convertFromPlayground = async (files: TupleFiles) => {
+export const convertFromPlayground = async (
+  files: TupleFiles,
+  name: string | undefined
+) => {
   // Seahorse program name comes from the file name
   const programName = files
     .find(([path]) => /^src.*\.py$/.test(path))?.[0]
@@ -22,11 +25,11 @@ export const convertFromPlayground = async (files: TupleFiles) => {
     `use anchor_lang::prelude::*;\n#[program] mod ${programName} {}`,
   ]);
 
-  const anchorFiles = await convertToAnchor(files);
+  const anchorFiles = await convertToAnchor(files, name);
   const frameworkFiles = anchorFiles.map((file) => {
     // programs/<program-name>/src/**/*.py -> programs_py/<program-name>.py
-    file[0] = file[0].replace(/programs\/.*\/src\/(.*\.py)/, (_, name) => {
-      return PgCommon.joinPaths("programs_py", name);
+    file[0] = file[0].replace(/programs\/.*\/src\/(.*\.py)/, (_, fileName) => {
+      return PgCommon.joinPaths("programs_py", fileName);
     });
 
     // Update manifest dependencies

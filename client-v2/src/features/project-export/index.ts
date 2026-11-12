@@ -7,7 +7,7 @@ export {
   isDownloadFailure,
   readProjectKind,
 } from "./model/export";
-export type { ProjectKind } from "./model/export";
+export type { ConvertedExport, ProjectKind } from "./model/export";
 export { projectExportTelemetry } from "./model/telemetry";
 export type {
   ConvertedProfile,
