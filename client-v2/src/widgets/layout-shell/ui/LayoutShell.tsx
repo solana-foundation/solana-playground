@@ -241,30 +241,30 @@ const LayoutShell = ({
   // so a resize that stays on one side renders nothing
   const [canDock, setCanDock] = useState(true);
   const canDockNow = useRef(true);
-  const onCodeWidth = (width: number) => {
+  const handleCodeWidth = (width: number) => {
     const next = canDockAt(width);
     if (canDockNow.current === next) return;
     canDockNow.current = next;
     setCanDock(next);
   };
-  const dockedShown = state.open.files && canDock;
+  const isDockedShown = state.open.files && canDock;
   // The dropdown is the visit's, never saved
-  const [treeOpen, setTreeOpenState] = useState(false);
+  const [isTreeOpen, setTreeOpenState] = useState(false);
   // Mirrors for ⌘E's handler, which is renewed only with the saved flag
-  const treeNow = useRef(false);
-  const dockedShownNow = useRef(dockedShown);
-  dockedShownNow.current = dockedShown;
+  const isTreeOpenNow = useRef(false);
+  const isDockedShownNow = useRef(isDockedShown);
+  isDockedShownNow.current = isDockedShown;
   /** Opens the dropdown, measured by what opened it */
   const openTree = (via: "button" | "key") => {
-    if (treeNow.current) return;
-    treeNow.current = true;
+    if (isTreeOpenNow.current) return;
+    isTreeOpenNow.current = true;
     setTreeOpenState(true);
     layoutTelemetry.track("layout_files_dropdown_opened", { via });
   };
   /** Closes the dropdown; a close is not measured */
   const closeTree = () => {
-    if (!treeNow.current) return;
-    treeNow.current = false;
+    if (!isTreeOpenNow.current) return;
+    isTreeOpenNow.current = false;
     setTreeOpenState(false);
   };
   /** Docks the tree beside the editor; saved, and the dropdown closes */
@@ -279,8 +279,8 @@ const LayoutShell = ({
   };
   /** "Files" and ⌘E: undock a docked, shown tree, else open or close the dropdown */
   const toggleFiles = (via: "button" | "key") => {
-    if (dockedShownNow.current) undockTree(via);
-    else if (treeNow.current) closeTree();
+    if (isDockedShownNow.current) undockTree(via);
+    else if (isTreeOpenNow.current) closeTree();
     else openTree(via);
   };
 
@@ -307,15 +307,15 @@ const LayoutShell = ({
   // A docked tree that can show again takes the dropdown's place, and the
   // dropdown goes with the head: off the work screen and on a phone, where the
   // head is not drawn. Nobody closed it, so nothing is reported
-  const treeHasNoPlace = dockedShown || phone || screen.kind !== "work";
+  const hasNoTreePlace = isDockedShown || phone || screen.kind !== "work";
   // What the head draws: the dropdown's open and its body read this one value,
   // so they agree in the render before the effect below closes the dropdown
-  const treeShown = treeOpen && !treeHasNoPlace;
+  const isTreeShown = isTreeOpen && !hasNoTreePlace;
   useEffect(() => {
-    if (treeHasNoPlace) closeTree();
+    if (hasNoTreePlace) closeTree();
     // `closeTree` reads only a ref and a stable setter
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [treeHasNoPlace]);
+  }, [hasNoTreePlace]);
 
   useEffect(() => {
     layoutTelemetry.track("layout_viewport", { viewport });
@@ -447,7 +447,7 @@ const LayoutShell = ({
     const sub = PgView.onDidRequestFiles(() => {
       if (isCovered(screenNow.current)) return;
       if (phone) setPhoneFiles(true, "button");
-      else if (!dockedShownNow.current) openTree("button");
+      else if (!isDockedShownNow.current) openTree("button");
     });
     return () => sub.dispose();
     // `setPhoneFiles` and `openTree` read only refs and stable setters
@@ -692,11 +692,11 @@ const LayoutShell = ({
       }}
       // The column is the tree docked and shown; a drag that folds it undocks
       filesState={{
-        open: dockedShown,
+        open: isDockedShown,
         onOpenChange: (open) => setOpen("files", { open, via: "drag" }),
       }}
       onUndockFiles={() => undockTree("button")}
-      onCodeWidth={onCodeWidth}
+      onCodeWidth={handleCodeWidth}
       consoleState={{
         open: state.open.console,
         onOpenChange: (open) => setOpen("console", { open, via: "drag" }),
@@ -775,16 +775,16 @@ const LayoutShell = ({
       workHead={
         <BaseEditorHead
           files={{
-            open: dockedShown || treeShown,
+            open: isDockedShown || isTreeShown,
             onToggle: () => toggleFiles("button"),
           }}
           tree={{
-            open: treeShown,
+            open: isTreeShown,
             canDock,
             onClose: closeTree,
             onDock: () => dockTree("button"),
             // The tree mounts once: here only while the column does not hold it
-            body: treeShown
+            body: isTreeShown
               ? files({
                   collapsed: false,
                   toggle: closeTree,
