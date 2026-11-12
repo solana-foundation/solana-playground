@@ -1,7 +1,9 @@
+import { BLOCK_EXPLORERS } from "../block-explorers";
 import { orb } from "../block-explorers/orb";
 import { solanaExplorer } from "../block-explorers/solana-explorer";
 import { solscan } from "../block-explorers/solscan";
 import {
+  DEFAULT_BLOCK_EXPLORER,
   findBlockExplorer,
   PgBlockExplorer,
   resolveBlockExplorer,
@@ -68,6 +70,31 @@ describe("block explorers", () => {
     );
   });
 
+  it("are Solana Explorer, Solscan and Orb, Solana Explorer by default", () => {
+    expect(BLOCK_EXPLORERS.map((be) => be.name).sort()).toEqual([
+      "Orb",
+      "Solana Explorer",
+      "Solscan",
+    ]);
+    expect(DEFAULT_BLOCK_EXPLORER).toBe("Solana Explorer");
+  });
+
+  it("open a program's IDL with the network after the path", () => {
+    expect(solanaExplorer.getIdlUrl(ID, "devnet")).toBe(
+      `https://explorer.solana.com/address/${ID}/idl?cluster=devnet`
+    );
+    expect(solanaExplorer.getIdlUrl(ID, "mainnet-beta")).toBe(
+      `https://explorer.solana.com/address/${ID}/idl`
+    );
+    // Orb names its IDL tab `anchor-idl`
+    expect(orb.getIdlUrl(ID, "devnet")).toBe(
+      `https://orbmarkets.io/address/${ID}/anchor-idl?cluster=devnet`
+    );
+    expect(orb.getIdlUrl(ID, "mainnet-beta")).toBe(
+      `https://orbmarkets.io/address/${ID}/anchor-idl`
+    );
+  });
+
   it("say Orb cannot open a local validator or a custom RPC", () => {
     expect(orb.opens("mainnet-beta")).toBe(true);
     expect(orb.opens("devnet")).toBe(true);
@@ -75,6 +102,8 @@ describe("block explorers", () => {
     expect(orb.opens("localnet")).toBe(false);
     expect(orb.opens("playnet")).toBe(false);
     expect(orb.opens(null)).toBe(false);
+    // `null` is a network with no cluster, not the selected one
+    expect(orb.getTxUrl("sig", null)).toBe("https://orbmarkets.io/tx/sig");
   });
 
   it("say which networks they can open", () => {

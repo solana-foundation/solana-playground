@@ -15,8 +15,11 @@ HOO-2759 adds it.
   parameter, devnet and testnet take `?cluster=devnet` / `?cluster=testnet`.
   Checked on the live site, 13 Nov 2026.
 - Orb has no page for a local validator or a custom RPC URL, so on those it
-  reports that it cannot open the network, as Solscan does on localnet, and
-  the places that link an address show it without a link.
+  reports that it cannot open the network, as Solscan does on localnet; the
+  fund dialog and the Deploy stage, which ask, then show no Orb link.
+- Each explorer gains `getIdlUrl`. The settings page's "Program IDL" link
+  appended `/idl` after the whole address URL, so off mainnet it landed after
+  `?cluster=` and on Orb it named a tab Orb does not have (`anchor-idl`).
 - The tutorial's Explorer links are unchanged: `tutorial-runs` pins them to
   Solana Explorer on devnet, whatever the setting names.
 - Telemetry: none added, renamed or removed.
