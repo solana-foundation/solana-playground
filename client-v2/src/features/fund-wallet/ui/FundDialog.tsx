@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useRenderOnChange } from "@/hooks";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
-import { PgConnection, PgView, PgWallet, PgWeb3 } from "@/utils";
+import {
+  PgBlockExplorer,
+  PgConnection,
+  PgView,
+  PgWallet,
+  PgWeb3,
+} from "@/utils";
 import type { StandardWallet } from "@/utils/wallet/types";
 
 import type { FailureReason } from "../model/fund";
@@ -11,9 +18,9 @@ import {
   DEFAULT_AMOUNT,
   formatSol,
   parseAmount,
-  receiverOf,
 } from "../model/fund";
-import type { FundCluster } from "../model/telemetry";
+import { currentReceiver } from "../model/receiver";
+import type { FundCluster, FundFrom } from "../model/telemetry";
 import { fundTelemetry } from "../model/telemetry";
 import { sendFunds, TransferNotConfirmedError } from "../model/transfer";
 import type { FundFailure, FundPayer } from "./BaseFundDialog";
@@ -24,30 +31,9 @@ const log = createLogger("fund-wallet:dialog");
 export interface FundDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The control that opened it, for `fund_dialog_opened` */
+  from?: FundFrom;
 }
-
-/** The receiver `deploy` pays from, read from `PgWallet` */
-const currentReceiver = () => {
-  const current = PgWallet.current;
-  const first = PgWallet.accounts[0];
-  return receiverOf({
-    // Only a Playground wallet can receive; an extension's key is absent while
-    // it disconnects, before `PgWallet` hands back to the Playground wallet
-    current: current?.isPg
-      ? {
-          isPg: true,
-          name: current.name,
-          address: current.publicKey.toBase58(),
-        }
-      : undefined,
-    firstAccount: first
-      ? {
-          name: first.name,
-          address: PgWallet.create(first).publicKey.toBase58(),
-        }
-      : undefined,
-  });
-};
 
 /**
  * The wallet the user picked in this dialog, once connected. Never one picked
@@ -92,7 +78,11 @@ const logFailure =
  * through its own `connect()` so `PgWallet.state` never changes, and the
  * transfer through `PgTx` on the Playground's cluster.
  */
-const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
+const FundDialog = ({
+  open,
+  onOpenChange,
+  from = "account-menu",
+}: FundDialogProps) => {
   useRenderOnChange(PgWallet.onDidChangeStandardWallets);
   useRenderOnChange(PgWallet.onDidChangeCurrent);
   // The balance, the check and the note follow a cluster change
@@ -100,6 +90,7 @@ const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
   const [payerName, setPayerName] = useState<string | undefined>();
   const [balance, setBalance] = useState<FundPayer["balance"]>("loading");
   const [amount, setAmount] = useState(DEFAULT_AMOUNT);
+  const isPhone = useViewport() === "phone";
   const [failure, setFailure] = useState<FundFailure | undefined>();
   // Each opening is one attempt; a send that settles after the dialog closed
   // or reopened must not close or mark the dialog the user sees now
@@ -130,11 +121,11 @@ const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
   useEffect(() => {
     attempt.current++;
     if (!open) return;
-    fundTelemetry.track("fund_dialog_opened", { via: "account-menu" });
+    fundTelemetry.track("fund_dialog_opened", { via: from });
     setFailure(unconfirmedFailure());
     setAmount(DEFAULT_AMOUNT);
     setPayerName(undefined);
-  }, [open]);
+  }, [open, from]);
 
   // The wallet switching its account emits `connect` (and `disconnect` when it
   // drops); `publicKey` is live, so the address and balance follow a re-render
@@ -196,7 +187,7 @@ const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
       setFailure(failureOf("connect", reason)(name, error));
       return;
     }
-    fundTelemetry.track("fund_wallet_connected", { wallet: name });
+    fundTelemetry.track("fund_wallet_connected", { wallet: name, as: "payer" });
     setPayerName(name);
   };
 
@@ -256,8 +247,22 @@ const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
   };
 
   const payerView: FundPayer | undefined = payer?.publicKey
-    ? { name: payer.name, address: payer.publicKey.toBase58(), balance }
+    ? {
+        name: payer.name,
+        icon: payer.icon,
+        address: payer.publicKey.toBase58(),
+        balance,
+      }
     : undefined;
+
+  // An explorer with no page for this cluster (Solscan on a local validator,
+  // say) would open mainnet's, so the address then stays text
+  const explorer = PgBlockExplorer.current;
+  const linkCluster = PgConnection.cluster;
+  const addressUrl = (address: string) =>
+    explorer.opens(linkCluster)
+      ? explorer.getAddressUrl(address, linkCluster)
+      : undefined;
 
   return (
     <BaseFundDialog
@@ -272,6 +277,8 @@ const FundDialog = ({ open, onOpenChange }: FundDialogProps) => {
       onConnect={connect}
       onSend={send}
       failure={failure}
+      addressUrl={addressUrl}
+      isPhone={isPhone}
     />
   );
 };
