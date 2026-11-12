@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import {
   consoleTrigger,
   expect,
@@ -60,16 +61,10 @@ const firstVisit = async (page: Page) => {
   await expect(page.locator(".monaco-editor")).toBeVisible(LONG);
 };
 
-const boxOf = async (page: Page, selector: string) => {
-  const box = await page.locator(selector).boundingBox();
-  if (!box) throw new Error(`${selector} has no box`);
-  return box;
-};
-
-const requireBox = <T>(box: T | null): T => {
-  if (!box) throw new Error("no bounding box");
-  return box;
-};
+const boxOf = async (page: Page, selector: string) =>
+  requireFor(`${selector}'s bounding box`)(
+    await page.locator(selector).boundingBox()
+  );
 
 /** What brings the tree back after a step that opened a file */
 type Reopen = (page: Page) => Promise<void>;
@@ -241,7 +236,12 @@ test.describe("at 1440", () => {
     // Polled: the sheet zooms in from its anchor as it opens
     const bar = await boxOf(page, "#editor-head");
     await expect
-      .poll(async () => requireBox(await dropdown.boundingBox()).y)
+      .poll(
+        async () =>
+          requireFor("the dropdown's bounding box")(
+            await dropdown.boundingBox()
+          ).y
+      )
       .toBeGreaterThanOrEqual(bar.y + bar.height - 1);
 
     // A file that is not open yet, so the tab has to move. Picking it
