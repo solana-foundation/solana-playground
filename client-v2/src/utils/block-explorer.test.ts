@@ -71,10 +71,11 @@ describe("block explorers", () => {
   });
 
   it("are Solana Explorer, Solscan and Orb, Solana Explorer by default", () => {
-    expect(BLOCK_EXPLORERS.map((be) => be.name).sort()).toEqual([
-      "Orb",
+    // The designed order: the default first, Solscan, then Orb (HOO-2759)
+    expect(BLOCK_EXPLORERS.map((be) => be.name)).toEqual([
       "Solana Explorer",
       "Solscan",
+      "Orb",
     ]);
     expect(DEFAULT_BLOCK_EXPLORER).toBe("Solana Explorer");
   });
