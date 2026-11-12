@@ -1003,7 +1003,12 @@ test.describe("on an iPhone", () => {
 
   test("client-v2-layout: The editor's keyboard button on an iPhone", async ({
     page,
+    browserName,
   }) => {
+    test.fixme(
+      browserName === "firefox",
+      "Gecko under Playwright reports navigator.maxTouchPoints 0 despite hasTouch, so Monaco's isIOS is false and it draws no keyboard button; a real iPhone runs WebKit"
+    );
     // A project is started from the desktop's Home, as "on a phone" does
     await page.setViewportSize(DESK);
     await seedWorkspace(page);
