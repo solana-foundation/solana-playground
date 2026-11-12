@@ -16,7 +16,7 @@
 - Signed-out body exactly `{ "error": "Sign in with GitHub to build.", "reason": "signed-out" }`, status `401`.
 - Other site origin `403`; sign-in unconfigured or session unreadable `503`; audit insert failure `503`, no upstream call.
 - Server: `PG_API_KEY` env, header `x-api-key`, constant-time compare, `401` on mismatch, share routes untouched, key never printed.
-- Route env: `PG_BUILD_SERVER_URL` (default `https://playground-server-dot-analytics-324114.de.r.appspot.com`), `PG_BUILD_SERVER_API_KEY`.
+- Route env: `PG_BUILD_SERVER_URL` (required; no default), `PG_BUILD_SERVER_API_KEY`.
 - Body cap 1 MiB (`1024 * 1024`), the server's own `PAYLOAD_LIMIT` default.
 - `project.id` and `project.name` capped at 200 characters each.
 - `maxDuration` 300 for `api/build-server.mjs`. No other `vercel.json` change except the rewrite.
