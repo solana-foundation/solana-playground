@@ -12,8 +12,8 @@ import { INITIAL_FLOW_STATE, PgFlow, STAGES, stagesOf } from "../state/stage";
 import Stepper from "./Stepper";
 
 /**
- * The dev-loop stepper: in the frame, a full-width row of stage tabs under the
- * stage bar, across the files column and the stage (`LayoutShell`'s
+ * The dev-loop stepper: in the frame, a full-width row of stage tabs at the
+ * top of the work, across the files column and the stage (`LayoutShell`'s
  * `stageTabs`, design.md "Frame chrome (5.25)"); on a phone, across the
  * preview page's bar, without Write, which is the code's own page there. It
  * owns the Ctrl+1..4 stage keys; Flow does not mount it before a tutorial's
@@ -56,12 +56,11 @@ const StageBar: FC = () => {
         // the work area (the wallet, z-index 30), which the full-width row
         // reaches
         "isolate flex min-w-0 shrink-0 items-center justify-center gap-2 bg-transparent font-sans",
-        // In the frame, a 54 px row: the 34 px stepper keeps 8 px from the bar
-        // above and 12 px from the editor tabs below, and a client project's
-        // badge and Run sit on its centre line. No line under it, so the
-        // larger gap and the tabs' own ground set them apart. On a phone,
-        // across the preview page's bar
-        row ? "h-[3.375rem] px-2 pt-2 pb-3" : "flex-1"
+        // In the frame, the work's top row: 44 px like the assistant's head,
+        // so their lines meet, the 34 px stepper centred in it, and a client
+        // project's badge and Run on its centre line. On a phone, across the
+        // preview page's bar
+        row ? "h-11 border-b border-border px-2" : "flex-1"
       )}
     >
       <Stepper

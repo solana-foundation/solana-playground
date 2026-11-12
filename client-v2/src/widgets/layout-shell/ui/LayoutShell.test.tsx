@@ -1591,28 +1591,39 @@ describe("a tutorial below the frame's width", () => {
 });
 
 describe("the stage bar", () => {
-  it("hides the assistant from its toggle and names the project either way", () => {
+  it("is not drawn over an open project: the editor head is the one bar", () => {
     explorer.name = "Counter";
     shell();
-    const bar = () => slot<HTMLElement>("stage-bar");
-    // The assistant's head names the model, not the project, so the bar
-    // keeps the name while the assistant shows
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
-    expect(toggled()).toEqual([
-      { panel: "assistant", open: false, via: "button" },
-    ]);
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
+    expect(document.querySelector('[data-slot="stage-bar"]')).toBeNull();
+    expect(screen.queryByText("Counter")).toBeNull();
   });
 
-  it("opens the assistant Sheet from the bar between 768 and 1023 px", () => {
+  it("offers the assistant in the editor head only while it is folded", () => {
+    shell();
+    const head = () => slot<HTMLElement>("editor-head");
+    expect(
+      within(head()).queryByRole("button", { name: /assistant/i })
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Collapse assistant" }));
+    fireEvent.click(
+      within(head()).getByRole("button", { name: "Expand assistant" })
+    );
+    expect(toggled()).toEqual([
+      { panel: "assistant", open: false, via: "button" },
+      { panel: "assistant", open: true, via: "button" },
+    ]);
+    expect(
+      within(head()).queryByRole("button", { name: /assistant/i })
+    ).toBeNull();
+  });
+
+  it("opens the assistant Sheet from the editor head between 768 and 1023 px", () => {
     resizeTo(900);
     shell();
-    const bar = slot<HTMLElement>("stage-bar");
     fireEvent.click(
-      within(bar).getByRole("button", { name: "Expand assistant" })
+      within(slot<HTMLElement>("editor-head")).getByRole("button", {
+        name: "Expand assistant",
+      })
     );
     expect(toggled()).toEqual([
       { panel: "assistant", open: true, via: "button" },
@@ -1620,27 +1631,6 @@ describe("the stage bar", () => {
     expect(
       document.querySelector('[data-slot="sheet-content"]')
     ).not.toBeNull();
-  });
-
-  it("names the project again after a rename", () => {
-    explorer.name = "Counter";
-    shell();
-    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
-    explorer.name = "Counter v2";
-    act(() => explorer.renames.forEach((cb) => cb()));
-    expect(screen.getByText("Counter v2")).toBeTruthy();
-  });
-
-  it("names the project between 768 and 1023 px, the assistant's Sheet open or closed", () => {
-    explorer.name = "Counter";
-    resizeTo(900);
-    shell();
-    const bar = () => slot<HTMLElement>("stage-bar");
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
-    fireEvent.click(
-      within(bar()).getByRole("button", { name: "Expand assistant" })
-    );
-    expect(within(bar()).getByText("Counter")).toBeTruthy();
   });
 
   it("leaves one Expand assistant between 768 and 1023 px", () => {
@@ -1692,7 +1682,7 @@ describe("layout_assistant_widened", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Widen the assistant" })
     );
-    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
+    fireEvent.click(screen.getByRole("button", { name: "Collapse assistant" }));
     expect(widened()).toEqual([{ wide: true }]);
   });
 

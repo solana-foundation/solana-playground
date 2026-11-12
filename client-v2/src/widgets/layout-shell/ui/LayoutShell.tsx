@@ -34,7 +34,7 @@ import { useLayoutState } from "../model/use-layout-state";
 import BaseEditorHead from "./BaseEditorHead";
 import type { AssistantWide, TutorialFrameSlot } from "./BaseLayoutShell";
 import BaseLayoutShell from "./BaseLayoutShell";
-import BaseStageBar from "./BaseStageBar";
+import BaseStageBar, { BaseBarControls } from "./BaseStageBar";
 
 /** The console as the stage sees it (`LayoutShellProps.stage`) */
 export interface StageConsole {
@@ -604,13 +604,6 @@ const LayoutShell = ({
       ? () => onShare(shareName)
       : undefined;
 
-  // The bar names the project whether the assistant shows or not: the
-  // assistant's head names the model, so a toggle that took the name away
-  // left the work unnamed. Under Home it names Home, as the phone's bar does
-  const barTitle = homeShown
-    ? homeTitle
-    : PgExplorer.currentWorkspaceName ?? null;
-
   return (
     <BaseLayoutShell
       viewport={viewport}
@@ -690,19 +683,21 @@ const LayoutShell = ({
         onShare: phoneShare,
         onConsoleClose: (via) => setPhoneConsoleOpen(false, via),
       }}
+      // Under Home the bar names Home and opens its Sheet; in an open project
+      // the editor head is the one bar and takes the bar's icons
       stageBar={
-        <BaseStageBar
-          title={barTitle}
-          // The panel's toggle on a wide window; below it, and at every width
-          // under Home, what opens the Sheet
-          assistant={{
-            open: assistantShown,
-            onToggle: () => setAssistant(!assistantShown, "button"),
-          }}
-          // Under Home Ctrl+R does nothing, so the hint names no key
-          assistantKey={homeShown ? null : "Ctrl+R"}
-          actions={homeShown ? undefined : stageBarActions}
-        />
+        homeShown && (
+          <BaseStageBar
+            title={homeTitle}
+            // At every width under Home, what opens the Sheet
+            assistant={{
+              open: assistantShown,
+              onToggle: () => setAssistant(!assistantShown, "button"),
+            }}
+            // Under Home Ctrl+R does nothing, so the hint names no key
+            assistantKey={null}
+          />
+        )
       }
       stageTabs={stageTabs}
       workHead={
@@ -721,6 +716,21 @@ const LayoutShell = ({
           hostRef={editorHeadHost}
           filesKey={keyLabel(FILES_KEY, PgCommon.getOS())}
           terminalKey={keyLabel(CONSOLE_KEY, PgCommon.getOS())}
+          controls={
+            <BaseBarControls
+              // The assistant's head has its own Collapse, so the row offers
+              // the assistant only while it is folded, as the way back
+              assistant={
+                assistantShown
+                  ? null
+                  : {
+                      open: false,
+                      onToggle: () => setAssistant(true, "button"),
+                    }
+              }
+              actions={stageBarActions}
+            />
+          }
         />
       }
       stage={stage({

@@ -22,6 +22,11 @@ export interface BaseEditorHeadProps {
   filesKey: string;
   /** The console's key as the user presses it (`keyLabel(CONSOLE_KEY, os)`) */
   terminalKey: string;
+  /**
+   * The bar's icons (`BaseBarControls`) after the toggles: in an open project
+   * the head is the work's one bar, so Share and More live here
+   */
+  controls?: ReactNode;
 }
 
 /**
@@ -71,6 +76,7 @@ const BaseEditorHead = ({
   hostRef,
   filesKey,
   terminalKey,
+  controls,
 }: BaseEditorHeadProps) => (
   // 1 px on the right: the 32 px toggles hold their 18 px icon 7 px in, so
   // the last icon ends 8 px from the edge, under the stepper's right edge
@@ -105,6 +111,7 @@ const BaseEditorHead = ({
       >
         <Terminal aria-hidden="true" />
       </HeadToggle>
+      {controls}
     </div>
   </div>
 );

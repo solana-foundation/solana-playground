@@ -105,72 +105,76 @@ const AssistantToggle = ({
 };
 
 /**
- * The 44 px bar over the files column and the stage (design.md, "Frame chrome
- * (5.25)"): the project's name, cut short when narrow, then one row
- * of icons, as Claude's corner: the page's actions (Share), the assistant's
- * toggle and More, which holds the documentation. The files toggle lives in
- * the editor head (`BaseEditorHead`), beside the terminal's. The assistant's
- * toggle is named apart from the head's "Collapse assistant", so
- * each name stays one button.
+ * The bar's icons, as Claude's corner: the page's actions (Share), the
+ * assistant's toggle and More, which holds the documentation. In an open
+ * project they close the editor head's row (`BaseEditorHead`), so the work
+ * has one bar, not two
  */
-const BaseStageBar = ({
-  title,
+export const BaseBarControls = ({
   assistant,
   assistantKey = "Ctrl+R",
   actions,
-}: BaseStageBarProps) => {
-  return (
-    <div
-      data-slot="stage-bar"
-      className="flex h-11 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3"
+}: Omit<BaseStageBarProps, "title">) => (
+  <div className="flex items-center gap-1">
+    {actions}
+    {assistant && (
+      <AssistantToggle assistant={assistant} assistantKey={assistantKey} />
+    )}
+    {/* What is rarely needed waits behind More, as in Claude's corner */}
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className={cn(BAR_CONTROL, "size-8")}
+              // Apart from the assistant head's "More", so each name
+              // stays one button
+              aria-label="More options"
+            >
+              <Ellipsis aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>More</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="w-auto min-w-48">
+        <DropdownMenuItem asChild>
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Documentation"
+          >
+            <CircleHelp aria-hidden="true" />
+            <MenuItemText>Solana documentation</MenuItemText>
+          </a>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  </div>
+);
+
+/**
+ * The 44 px bar over the stage (design.md, "Frame chrome (5.25)") under Home
+ * and over a page: their name, cut short when narrow, then the bar's icons
+ * (`BaseBarControls`). The assistant's toggle is named apart from the head's
+ * "Collapse assistant", so each name stays one button.
+ */
+const BaseStageBar = ({ title, ...controls }: BaseStageBarProps) => (
+  <div
+    data-slot="stage-bar"
+    className="flex h-11 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3"
+  >
+    <span
+      className="min-w-0 flex-1 truncate text-sm font-headline text-muted-foreground"
+      title={title ?? undefined}
     >
-      <span
-        className="min-w-0 flex-1 truncate text-sm font-headline text-muted-foreground"
-        title={title ?? undefined}
-      >
-        {title}
-      </span>
-      <div className="flex items-center gap-1">
-        {actions}
-        {assistant && (
-          <AssistantToggle assistant={assistant} assistantKey={assistantKey} />
-        )}
-        {/* What is rarely needed waits behind More, as in Claude's corner */}
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className={cn(BAR_CONTROL, "size-8")}
-                  // Apart from the assistant head's "More", so each name
-                  // stays one button
-                  aria-label="More options"
-                >
-                  <Ellipsis aria-hidden="true" />
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>More</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent align="end" className="w-auto min-w-48">
-            <DropdownMenuItem asChild>
-              <a
-                href={DOCS_URL}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Documentation"
-              >
-                <CircleHelp aria-hidden="true" />
-                <MenuItemText>Solana documentation</MenuItemText>
-              </a>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-  );
-};
+      {title}
+    </span>
+    <BaseBarControls {...controls} />
+  </div>
+);
 
 export default BaseStageBar;
