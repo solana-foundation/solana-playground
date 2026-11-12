@@ -13,6 +13,7 @@ import {
   leaveEditor,
   newProjectPage,
   projectRow,
+  reloadAndBoot,
   runInTerminal,
   seedWorkspace,
   stubSignedIn,
@@ -2221,7 +2222,9 @@ test.describe("the settings page at 1440 by 900", () => {
     for (const theme of ["Dark", "Light"]) {
       if (theme === "Light") {
         await page.evaluate(() => localStorage.setItem("theme", "Light"));
-        await page.reload();
+        // A click while the app boots again hangs in Firefox on a loaded
+        // runner: the page takes it only once its main thread is free
+        await reloadAndBoot(page);
         await page.locator("[data-settings-trigger]").first().click();
         await expect
           .poll(() =>
