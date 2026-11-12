@@ -152,7 +152,7 @@ export interface Exists {
   instruction: string;
   /** The account's IDL name, as the goal's `creates` gives it */
   account: string;
-  /** Absent when the System Program's log line named none */
+  /** Where it is; always named now, absent only in a run kept before that */
   address?: string;
 }
 
