@@ -6,6 +6,7 @@ import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { isEditable } from "@/shared/lib/is-editable";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { canDockAt } from "@/shared/lib/tree-dock";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import type { StageStatus } from "@/views/flow/state/stage";
@@ -13,6 +14,7 @@ import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { useCreateItem } from "@/views/sidebar/explorer/Component/useCreateItem";
 
+import { selectActiveFile } from "../model/active-file";
 import { onDidRequestConsole } from "../model/console-request";
 import { editorHeadHost } from "../model/editor-head-host";
 import { CONSOLE_KEY, FILES_KEY, keyLabel } from "../model/keys";
@@ -822,12 +824,19 @@ const LayoutShell = ({
               ? undefined
               : PgExplorer.currentWorkspaceName ?? undefined
           }
-          onNewFile={async () => {
+          onNewFile={() => {
             PgView.showFiles();
             // A folded column mounts on the request; the tree is drawn a
             // moment after (`NoFileOpen` waits the same)
-            await PgCommon.sleep(100);
-            await createItem();
+            void PgCommon.sleep(100)
+              .then(() => {
+                // `createItem` starts beside the tree's selected row, which
+                // can be a folder picked since; the new file goes beside
+                // the active file
+                selectActiveFile();
+                return createItem();
+              })
+              .catch(reportButtonFailure("start a new file"));
           }}
           controls={
             <BaseBarControls

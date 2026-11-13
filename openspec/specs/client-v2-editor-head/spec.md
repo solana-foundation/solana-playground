@@ -69,7 +69,8 @@ its top right), or as a dropdown under the head (`aria-label="Files"`)
 holding the same tree, with «Dock beside the editor» at its top right.
 Neither has a "New file" button of its own: the head's + SHALL show the
 tree as "Show files" does and start a new file's name field in it, in the
-active file's folder. "Files" in the head SHALL undock a
+active file's folder. The phone, which draws no head, SHALL keep
+"+ New file" at the foot of its Files sheet. "Files" in the head SHALL undock a
 docked, shown tree, and otherwise open or close the dropdown. «Dock beside
 the editor» SHALL dock the tree and close the dropdown; "Undock the files"
 SHALL undock it. The pin SHALL show only while the code area is wider than

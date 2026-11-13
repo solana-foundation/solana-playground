@@ -1,10 +1,13 @@
 import type { FC } from "react";
 import { useLayoutEffect, useRef } from "react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 
 import { PgExplorer } from "../../../utils";
 import Explorer from "../../sidebar/explorer/Component";
+import { useCreateItem } from "../../sidebar/explorer/Component/useCreateItem";
+import { BOTTOM_BAR_HEIGHT } from "../tokens";
 import { keepColumn, keptColumn } from "./kept-column";
 
 interface LeftPanelProps {
@@ -63,6 +66,9 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
     // Defensive: the frame unmounts a hidden column rather than passing
     // `collapsed`, but a `collapsed` column draws no body either
   }, [collapsed]);
+  // The same upstream hook `ExplorerButtons.tsx` calls for its own hidden
+  // "New file" icon button (`NewItemButton` -> `useCreateItem`)
+  const { createItem } = useCreateItem();
 
   // Hidden, the column takes no width: no landmark either, since an empty,
   // unnamed <aside> is still listed by a screen reader
@@ -92,6 +98,21 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
           <Explorer />
         </div>
       </div>
+      {/* The phone's sheet keeps its footer button: the phone draws no editor
+          head, whose + starts a new file everywhere else. A sibling of the
+          body, not inside it, so it never scrolls away */}
+      {sheet && (
+        <button
+          type="button"
+          className="flex w-full shrink-0 cursor-pointer items-center border-t border-border bg-transparent px-3 text-left font-[inherit] text-[var(--text-secondary)] hover:bg-surface-base hover:text-[var(--text-primary)] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary"
+          style={{ height: BOTTOM_BAR_HEIGHT }}
+          onClick={() => {
+            createItem().catch(reportButtonFailure("start a new file"));
+          }}
+        >
+          + New file
+        </button>
+      )}
     </aside>
   );
 };
@@ -103,7 +124,8 @@ export default LeftPanel;
  * (`src`, `client`, `tests` -- no workspace picker, no icon toolbar, no
  * per-section action buttons or labels): the stage bar's stepper already
  * owns Build/Deploy/Run/Test, and the editor head's + already owns
- * "new file". A temporary project keeps one more row above the tree:
+ * "new file" (the phone's sheet, with no head, keeps the footer button
+ * above). A temporary project keeps one more row above the tree:
  * Workspaces's warning, whose Import is the only way to keep the project.
  *
  * Every rule here is structural (`nth-child`), anchored either on

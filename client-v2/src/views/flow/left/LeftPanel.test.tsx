@@ -30,6 +30,11 @@ vi.mock("../../sidebar/explorer/Component", async () => {
   };
 });
 
+const createItem = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+vi.mock("../../sidebar/explorer/Component/useCreateItem", () => ({
+  useCreateItem: () => ({ createItem }),
+}));
+
 import { requireFor } from "../../../test-utils/require-for";
 import { forgetColumn } from "./kept-column";
 import LeftPanel from "./LeftPanel";
@@ -65,6 +70,14 @@ describe("LeftPanel in the flush frame", () => {
     expect(document.getElementById("root-dir")).not.toBeNull();
     expect(screen.queryByRole("button", { name: /new file/i })).toBeNull();
     expect(given.treeMounts).toBe(1);
+  });
+
+  // The phone draws no editor head, so its sheet keeps the footer
+  it("keeps New file at the foot of the phone's sheet", () => {
+    createItem.mockClear();
+    render(<LeftPanel collapsed={false} sheet />);
+    fireEvent.click(screen.getByRole("button", { name: "+ New file" }));
+    expect(createItem).toHaveBeenCalledTimes(1);
   });
 
   // The editor head names the column and hides it (DES-205)

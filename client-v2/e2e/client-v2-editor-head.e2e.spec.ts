@@ -180,6 +180,25 @@ test.describe("at 1440", () => {
     ).toHaveCount(0);
   });
 
+  test("client-v2-editor-head: The project's name moves to the head", async ({
+    page,
+  }) => {
+    await firstVisit(page);
+    // The assistant's head names it, so the editor head does not
+    await expect(head(page)).not.toContainText("head-project");
+    await page.getByRole("button", { name: "Collapse assistant" }).click();
+    const name = head(page).getByText("head-project", { exact: true });
+    await expect(name).toBeVisible();
+    // Left of the tabs
+    const tabs = await boxOf(page, "#editor-head #tabs");
+    const named = requireFor("the name's bounding box")(
+      await name.boundingBox()
+    );
+    expect(named.x + named.width).toBeLessThanOrEqual(tabs.x + 1);
+    await head(page).getByRole("button", { name: "Expand assistant" }).click();
+    await expect(name).toHaveCount(0);
+  });
+
   test("client-v2-editor-head: The chat comes back from the head", async ({
     page,
   }) => {
