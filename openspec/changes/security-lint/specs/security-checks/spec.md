@@ -27,8 +27,9 @@ reason.
 ### Requirement: client-v2 lint rejects insecure browser APIs
 
 `yarn lint` SHALL fail on a file under `client-v2/src`, `client-v2/api` or `client-v2/e2e` that posts a message to
-the `*` target origin, sets `document.domain`, or names an `http:` URL other than a loopback address or an XML
-namespace in a string literal.
+the `*` target origin, sets `document.domain`, or names an `http:` URL in a string literal, other than a loopback
+address and sdl's default exceptions for the `schemas.microsoft.com` and `schemas.openxmlformats.org` hosts and the
+XHTML and SVG namespaces.
 
 #### Scenario: postMessage to any origin (manual)
 
@@ -44,7 +45,8 @@ namespace in a string literal.
 
 `yarn lint` SHALL fail on a string literal, template literal or JSX text that names `api.devnet.solana.com`,
 `api.testnet.solana.com` or `api.mainnet-beta.solana.com` in a file under `client-v2/src`, `client-v2/api`,
-`client-v2/scripts` or `client-v2/e2e`, other than the module that defines `Endpoint`.
+`client-v2/scripts` or `client-v2/e2e`, other than the module that defines `Endpoint`. A sanctioned case passes only
+with an `eslint-disable-next-line` comment naming the rule and the reason.
 
 #### Scenario: A cluster address in a test file (manual)
 

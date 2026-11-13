@@ -22,10 +22,10 @@ ESLint 8.40 through `react-scripts`.
 - A `security.yml` workflow runs zizmor over `.github/` and hadolint over `client-v2/Dockerfile` and
   `docker/server-unstable.Dockerfile` on every PR and on pushes to `master`. A finding fails the run, and each tool
   uploads SARIF to Code scanning.
-- client-v2 lint fails on a literal `api.devnet`, `api.testnet` or `api.mainnet-beta.solana.com` address outside the
-  module that defines `Endpoint`, which moves to `entities/cluster/model/endpoint.ts` so e2e can import it. A test
-  that needs some RPC takes one from `src/test-utils/endpoints.mjs`, whose hosts are on the `.test` TLD and never
-  resolve.
+- client-v2 lint fails on a literal `api.devnet.solana.com`, `api.testnet.solana.com` or
+  `api.mainnet-beta.solana.com` address outside the module that defines `Endpoint`, which moves to
+  `entities/cluster/model/endpoint.ts` so e2e can import it. A test that needs some RPC takes one from
+  `src/test-utils/endpoints.mjs`, whose hosts are on the `.test` TLD and never resolve.
 - CodeQL default setup runs the `extended` query suite and no longer analyses Python.
 - Telemetry: no slice under `features/` or `widgets/` changes, so no event is added, renamed or removed. No funnel
   step's code changes.

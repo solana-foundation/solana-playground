@@ -91,6 +91,9 @@ if (import.meta.vitest) {
       ["see NOTE: x", "see NOTE: x"],
       ["1A: x", "1A: x"],
       ["AB(x): y", "AB(x): y"],
+      ["ABC(x): y", "ABC(x): y"],
+      // A `)` found for an earlier label is found again past it
+      ["AB (x) y\rCD (z): w", "AB (x) y\r**CD (z):** w"],
     ])("emphasises the labels of %j", (description, expected) => {
       expect(emphasiseLabels(description)).toBe(expected);
     });

@@ -507,16 +507,24 @@ if (import.meta.vitest) {
           `AnchorError ${TAIL} Error Message: x.\nmore`,
           { name: "Late", code: 6001, message: null },
         ],
+        // The code's tail must start right after `Error Code: `
+        ["AnchorError Error Code: a b. Error Number: 1.", null],
       ])("reads %j", (line, expected) => {
         expect(anchorErrorOf(line)).toEqual(expected);
       });
 
-      it(
-        "parses a long line of AnchorError repeats in linear time",
-        { timeout: 1000 },
-        () => {
-          expect(anchorErrorOf("AnchorError ".repeat(30_000))).toBeNull();
-        }
+      it.each([
+        ["AnchorError repeats", "AnchorError ".repeat(30_000)],
+        [
+          "Error Code: repeats",
+          `AnchorError ${"Error Code: x".repeat(20_000)}`,
+        ],
+      ])(
+        "parses a long line of %s in linear time",
+        (_, line) => {
+          expect(anchorErrorOf(line)).toBeNull();
+        },
+        1000
       );
     });
 

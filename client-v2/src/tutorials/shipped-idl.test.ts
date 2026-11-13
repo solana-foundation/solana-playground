@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { readIdl } from "@/entities/idl";
 import type { TutorialDefinition } from "@/entities/tutorial";
 
-/** A `pub fn`'s name, its generics and the `(` that opens its parameters */
+/** A `pub fn`'s name, its generics and the `(` that opens its parameters; mirrors `PUB_FN` in features/tutorial-conversation/model/program-source.ts */
 // eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s*`, `<[^>]*>` and `\(` start with disjoint characters
 const PUB_FN = /pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g;
 
@@ -33,7 +33,7 @@ const PLAIN = new Set(
 const plain = (type: string) =>
   PLAIN.has(type.toLowerCase()) ? type.toLowerCase() : "*";
 
-/** The body of the `#[program]` module, braces matched */
+/** The body of the `#[program]` module, braces matched; mirrors `programModule` in features/tutorial-conversation/model/program-source.ts */
 const programModule = (source: string): string => {
   const at = source.indexOf("#[program]");
   const open = at === -1 ? -1 : source.indexOf("{", at);

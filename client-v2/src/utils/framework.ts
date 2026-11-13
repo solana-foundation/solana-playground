@@ -1166,7 +1166,7 @@ if (import.meta.vitest) {
         "scans a long path of src/ segments in linear time",
         { timeout: 1000 },
         () => {
-          expect(hasTargetUnderSrc("src/".repeat(50_000))).toBe(false);
+          expect(hasTargetUnderSrc("src/".repeat(200_000))).toBe(false);
         }
       );
     });

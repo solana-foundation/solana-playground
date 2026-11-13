@@ -134,6 +134,15 @@ const PROBES = [
     ERROR,
   ],
   [
+    "fails a cluster's address in the ids module, whose uuid selectors are off",
+    {
+      file: "src/shared/lib/ids.ts",
+      code: exportingUrl(DEVNET),
+      rule: "no-restricted-syntax",
+    },
+    ERROR,
+  ],
+  [
     "fails a cluster's address in JSX text",
     {
       file: "src/utils/probe.tsx",
