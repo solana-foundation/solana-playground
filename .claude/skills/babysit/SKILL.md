@@ -1,19 +1,22 @@
 ---
 name: babysit
 description: >
-  Keeps the open PR of the current branch mergeable: every CI check passes, Greptile is at 5/5 with no unresolved
-  thread, and every item under the body's `## Checklist` is ticked with evidence or struck as not applicable. One
-  pass per run; `/loop /babysit` repeats passes until all three hold. Use for /babysit, "babysit the PR", "watch
+  Keeps the open PR of the current branch on solana-foundation/solana-playground mergeable: no merge conflict,
+  every CI check passes, Greptile is at 5/5 with no unresolved thread, and every item under the body's
+  `## Checklist` is ticked with evidence or struck as not applicable. One pass per run; `/loop /babysit` repeats
+  passes until all four hold. Use for /babysit, "babysit the PR", "watch
   the PR until it is green", "keep the checklist true", "tick the PR checklist", "CI is red on my PR, fix it",
   and after every push, greploop run, or CI result on an open PR. Not for a merge-readiness code review, which
   is /sx:review-pr.
-argument-hint: "[pr-number]"
+argument-hint: "[pr-number | owner/repo#pr-number]"
 ---
 
 # Babysit
 
-A PR is done when all three hold:
+A PR is done when all four hold:
 
+- GitHub reports no merge conflict: `mergeable` is `MERGEABLE`. No `pull_request` workflow runs while a
+  conflict exists, so green checks on a conflicted head say nothing about the merge.
 - Every check of `gh pr checks` is in bucket `pass` or `skipping`.
 - Greptile's latest score is 5/5 and no review thread is unresolved. Greptile reviews only PRs into `master` on
   the foundation repository (`greptile.json`); for any other PR this condition holds by default.
@@ -36,20 +39,29 @@ author. The skill works from that body and never from a structure of its own:
 - A body that does not follow the template (a section missing or renamed) is reported and the pass stops:
   ticking items against a different structure would hide the gap.
 
+## Repository
+
+`<repo>` is `solana-foundation/solana-playground`, where PRs open from `hoodieshq:<branch>`. The argument may
+name another repository as `owner/repo#<n>`. Every GitHub command names `<repo>` explicitly: `--repo <repo>` on
+`gh pr` and `gh run`, `repos/<repo>/...` in `gh api`, and the same in each command `/greploop` runs. The local
+`gh` default and the `origin` remote point at hoodieshq, where the PR, its runs, and its threads do not exist.
+
 ## 1. Find the PR
 
 Run in the branch the PR is open from. With an argument, use that PR number.
 
 ```sh
-gh pr view --json number,url,headRefName,headRefOid,baseRefName,body
+gh pr list --repo <repo> --head <branch> --state open --json number
+gh pr view <n> --repo <repo> --json number,url,headRefName,headRefOid,baseRefName,mergeable,body
 ```
 
-PRs open on `solana-foundation/solana-playground` from `hoodieshq:<branch>`. When `gh pr view` finds none, run
-`gh pr list --repo solana-foundation/solana-playground --head <branch> --json number,url` and pass
-`--repo solana-foundation/solana-playground` to every later `gh pr` call. No PR at all: stop and say so.
+No open PR: stop and say so.
 
 The local head must equal `headRefOid`. A different head means unpushed commits or a stale checkout: report
 it and stop, since the checks would describe other code.
+
+`mergeable` of `CONFLICTING` blocks the pass: report it and stop. `UNKNOWN` means GitHub is still computing it;
+treat it as pending.
 
 ## 2. Sync the body file
 
@@ -58,30 +70,35 @@ branch (`tutorial-flow-2.pr.md`), so find the file whose `## TLDR` matches the r
 
 - No such file: write the remote body into `.github/<slug>.pr.md`, where `<slug>` is the branch name with `/`
   replaced by `-`.
+- Either way, the file chosen here is `<body-file>` for the rest of the pass.
 - File differs from the remote body: someone edited the PR on GitHub. Take the remote body, keep the local
   file's checklist edits only where the remote left those lines unchanged, and name each conflict in the report.
 
 ## 3. Checks
 
 ```sh
-gh pr checks <n> --json name,workflow,bucket,state,link
+gh pr checks <n> --repo <repo> --json name,workflow,bucket,state,link
 ```
 
 - `pending`: in loop mode, end the pass and let the wakeup in step 7 return. Outside loop mode, run
-  `gh pr checks <n> --watch --fail-fast` with `run_in_background` and continue this pass when it exits.
-- `fail` or `cancel`: read the log (`gh run view <run-id> --log-failed`; the run id is in `link`). A check
+  `gh pr checks <n> --repo <repo> --watch --fail-fast` with `run_in_background` and continue this pass when it exits.
+- `fail` or `cancel`: read the log (`gh run view <run-id> --repo <repo> --log-failed`; the run id is in `link`). A check
   outside GitHub Actions (Vercel, CodeQL, Greptile) has no run: open its `link` or `description` instead.
   Find the cause before touching code. A flake (network, runner, timeout with no code path involved) gets
-  `gh run rerun <run-id> --failed` once; a second failure of the same job is not a flake.
+  `gh run rerun <run-id> --repo <repo> --failed` once; a second failure of the same job is not a flake.
 - A real failure: fix it locally, run the local command that matches the failing job (the `client-v2/` scripts
   in the root `CLAUDE.md`), then **ask before each commit and push**. The commit message is one
   conventional-commit line with no trailer. Never force-push without `--force-with-lease`.
+
+A push in this pass, from a CI fix or from `/greploop`, makes every result read so far describe the old head.
+After it, go back to step 1 and read everything again: the head, `mergeable`, and the checks of the new head.
 
 ## 4. Greptile
 
 Read the score and the unresolved threads as `/greploop` steps B and F do, trusting only its bot logins. When
 the score is below 5/5 or a thread is unresolved, run `/greploop` on the PR. It runs before the checklist
-walk, because its fixes move the head and invalidate evidence.
+walk, because its fixes move the head and invalidate evidence. `/greploop` waits for Greptile only; when it
+pushed, restart from step 1 as step 3 says.
 
 `/greploop` commits and pushes on its own. Under `/babysit`, its commit-and-push step follows the same rule as a
 CI fix: show the diff and ask first. Its `@greptile review` comment, thread replies, and thread resolutions run
@@ -89,7 +106,7 @@ without asking.
 
 ## 5. Walk the checklist
 
-Read the filled template sections and the changed files first: `gh pr diff <n> --name-only`. GitHub computes
+Read the filled template sections and the changed files first: `gh pr diff <n> --repo <repo> --name-only`. GitHub computes
 that list against the PR's real base; a local `git diff` against `origin` would use hoodieshq's `master`, not
 the foundation's. An item is not applicable only when both agree: the diff does not touch
 what the item governs, and no filled section claims it does.
@@ -114,7 +131,7 @@ A push after an item was ticked invalidates evidence that depended on the old he
 When the local file changed in this pass, apply it:
 
 ```sh
-gh pr edit <n> --body-file .github/<slug>.pr.md
+gh pr edit <n> --repo <repo> --body-file <body-file>
 ```
 
 Invoking `/babysit` authorises this command and the `/greploop` GitHub writes named in step 4. Every commit and
@@ -126,6 +143,7 @@ Report in a few lines:
 
 ```text
 PR #<n> at <short-sha>
+  Merge:     mergeable | conflicting | unknown
   Checks:    <pass>/<total> pass, <pending> pending, <failed> failed (<names>)
   Greptile:  <score>/5, <unresolved> unresolved | not reviewed (base is not foundation master)
   Checklist: <ticked> ticked, <struck> struck, <open> open
@@ -135,7 +153,7 @@ PR #<n> at <short-sha>
 
 Then, in loop mode (`/loop /babysit`):
 
-- Done (all three conditions at the top hold): stop the loop with `ScheduleWakeup` `stop: true`.
-- Blocked on the user (a push to approve, an item only the user can do): stop the loop and say what is needed.
+- Done (all four conditions at the top hold): stop the loop with `ScheduleWakeup` `stop: true`.
+- Blocked on the user (a merge conflict, a push to approve, an item only the user can do): stop the loop and say what is needed.
 - Checks pending: schedule the next pass with `noop: true` when nothing changed. Pick the delay from the
   longest pending job, not a fixed short interval.
