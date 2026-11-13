@@ -208,15 +208,14 @@ export const grantClipboard = async (context: BrowserContext) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 };
 
-// The fixture callback is not named `use`: react-hooks 5 reads a call to `use` as React's hook
 export const test = base.extend<{ seededPage: Page }>({
-  context: async ({ context }, provide) => {
+  context: async ({ context }, use) => {
     await startOnPublicDevnet(context);
-    await provide(context);
+    await use(context);
   },
   // `E2E_CPU_THROTTLE=<n>` slows the test's page `n` times, to show a race
   // that only the runner hits (`docs/testing.md`, "Parallel runs")
-  page: async ({ page, browserName }, provide) => {
+  page: async ({ page, browserName }, use) => {
     const rate = Number(process.env.E2E_CPU_THROTTLE ?? 1);
     if (!(Number.isFinite(rate) && rate >= 1)) {
       throw new Error(
@@ -233,9 +232,9 @@ export const test = base.extend<{ seededPage: Page }>({
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("Emulation.setCPUThrottlingRate", { rate });
     }
-    await provide(page);
+    await use(page);
   },
-  seededPage: async ({ page }, provide) => {
+  seededPage: async ({ page }, use) => {
     await seedWorkspace(page);
     // The tree shows before the editor: Monaco is a lazy chunk, and when it
     // mounts it opens the current file and focuses itself, unless the user
@@ -244,7 +243,7 @@ export const test = base.extend<{ seededPage: Page }>({
     // else -- a right-clicked file -- and takes it away. Hand the page over
     // once the editor holds the focus, so it has nothing left to take.
     await editorTookFocus(page);
-    await provide(page);
+    await use(page);
   },
 });
 

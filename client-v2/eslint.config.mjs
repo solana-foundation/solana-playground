@@ -322,6 +322,8 @@ const project = [
   {
     files: ["e2e/**"],
     rules: {
+      // e2e holds no React components, and Playwright's fixture callback is named `use`
+      "react-hooks/rules-of-hooks": "off",
       "no-restricted-imports": [
         "error",
         { paths: [UUID_PATH], patterns: [UUID_PATTERN] },
