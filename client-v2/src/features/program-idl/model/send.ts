@@ -46,7 +46,10 @@ const PLANNING_LIFETIME = {
 export interface IdlSendDeps {
   connection: {
     rpcEndpoint: string;
-    sendRawTransaction(raw: Uint8Array): Promise<string>;
+    sendRawTransaction(
+      raw: Uint8Array,
+      preflight: { preflightCommitment: "confirmed" }
+    ): Promise<string>;
     confirmTransaction(
       strategy: {
         signature: string;
@@ -218,8 +221,10 @@ export const sendPlanWith =
         next += stage.length;
         await Promise.all(
           batch.map(async (tx) => {
+            // Simulated at the commitment the stage before was confirmed at: at the connection's own, `finalized` would not see what that stage created
             const signature = await connection.sendRawTransaction(
-              tx.serialize()
+              tx.serialize(),
+              { preflightCommitment: "confirmed" }
             );
             const { value } = await connection.confirmTransaction(
               {

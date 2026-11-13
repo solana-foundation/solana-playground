@@ -2,6 +2,8 @@
 
 ## Purpose
 
+**Area:** the terminal's `anchor idl` command (client-v2 UI)
+
 How the terminal's `anchor idl` command publishes, reads, and manages a program's IDL as Anchor 1.1.2's CLI does, which
 of that CLI's IDL commands the Playground does not support, where the Playground differs from that CLI, and which
 events the command sends.

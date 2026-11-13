@@ -191,21 +191,32 @@ export const walletOf = (keypair: Keypair) => {
   };
 };
 
-/** Confirms every transaction and records the order of the sends and confirmations */
+/** Confirms every transaction and records the order of the sends and confirmations, and the commitment each used */
 export const connectionOf = () => {
   const sent: Uint8Array[] = [];
   const steps: string[] = [];
+  const commitments: string[] = [];
   return {
     rpcEndpoint: Endpoint.DEVNET as string, // one of the Playground's own, so the events name `devnet`
     sent,
     steps,
-    sendRawTransaction: async (raw: Uint8Array) => {
+    /** `send:<preflight commitment>` and `confirm:<commitment>`, in order */
+    commitments,
+    sendRawTransaction: async (
+      raw: Uint8Array,
+      preflight: { preflightCommitment: string }
+    ) => {
       sent.push(raw);
       steps.push("send");
+      commitments.push(`send:${preflight.preflightCommitment}`);
       return `signature-${sent.length}`;
     },
-    confirmTransaction: async (): Promise<{ value: { err: unknown } }> => {
+    confirmTransaction: async (
+      _strategy: unknown,
+      commitment: string
+    ): Promise<{ value: { err: unknown } }> => {
       steps.push("confirm");
+      commitments.push(`confirm:${commitment}`);
       return { value: { err: undefined } };
     },
   };

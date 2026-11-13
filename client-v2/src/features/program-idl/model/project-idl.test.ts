@@ -433,6 +433,20 @@ describe("features/program-idl/model/project-idl", () => {
     expect(setup.connection.steps.slice(-2)).toEqual(["send", "confirm"]);
   });
 
+  // The connection's own commitment may be `finalized`, where a later stage's simulation would not see the buffer an earlier stage created
+  it("simulates every transaction of a staged upload at the commitment each stage is confirmed at", async () => {
+    const setup = await arrange();
+    setup.source = projectIdl(idlWith(noise(2500)));
+    setup.accounts.set(await idlAddress(), earlierIdl({ mutable: true }));
+
+    await run(setup);
+
+    expect(setup.connection.sent.length).toBeGreaterThan(1);
+    expect(new Set(setup.connection.commitments)).toEqual(
+      new Set(["send:confirmed", "confirm:confirmed"])
+    );
+  });
+
   it("writes the wallet's own account, with no program data account, for a wallet that is not the upgrade authority", async () => {
     const setup = await arrange();
     setup.accounts = await deployedBy(OTHER_WALLET);
