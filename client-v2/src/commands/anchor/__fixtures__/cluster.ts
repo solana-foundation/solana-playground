@@ -28,14 +28,6 @@ import { join } from "path";
 /** Written by `regenerate.sh` beside it; `__dirname`, which Playwright's CommonJS and vitest both define */
 const PROGRAM_METADATA_SO = join(__dirname, "program-metadata.so");
 
-/** Written by `regenerate-legacy-idl.sh` beside it: Anchor's own test program with `#[program(legacy_idl)]` */
-const LEGACY_IDL_SO = join(__dirname, "anchor-legacy-idl.so");
-
-/** The `declare_id!` of {@link LEGACY_IDL_SO}, which Anchor's entrypoint requires the program to run at */
-export const LEGACY_IDL_PROGRAM = address(
-  "BDGVEEyvkqzGJDP3pvA9LeLsPanrPP9pykctEAHpK96z"
-);
-
 /** The JSON-RPC wire's empty value, where an RPC answers `null` */
 // eslint-disable-next-line unicorn/no-null -- the JSON-RPC wire format
 const WIRE_NULL = null;
@@ -47,14 +39,13 @@ class RpcError extends Error {
   }
 }
 
-/** A cluster that runs the Program Metadata program and {@link LEGACY_IDL_PROGRAM}, and answers the JSON-RPC methods the `anchor` subcommands call */
+/** A cluster that runs the Program Metadata program, and answers the JSON-RPC methods the `anchor` subcommands call */
 export const clusterOf = () => {
   const svm = new LiteSVM();
   svm.addProgram(
     PROGRAM_METADATA_PROGRAM_ADDRESS,
     readFileSync(PROGRAM_METADATA_SO)
   );
-  svm.addProgram(LEGACY_IDL_PROGRAM, readFileSync(LEGACY_IDL_SO));
 
   /** The wire bytes of every `sendTransaction` request, accepted or not */
   const sent: Uint8Array[] = [];
@@ -208,7 +199,6 @@ export const clusterOf = () => {
     svm,
     sent,
     deploy,
-    setAccount,
     respond,
     dropSendAt: (index: number) => {
       dropSendAt = index;

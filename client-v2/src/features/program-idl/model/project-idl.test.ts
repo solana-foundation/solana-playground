@@ -1,7 +1,5 @@
 // @vitest-environment node
 // Signing a web3.js transaction fails under jsdom, whose `Uint8Array` is another realm's
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { address, none, unwrapOption } from "@solana/kit";
 import { VersionedTransaction } from "@solana/web3.js";
 import {
@@ -96,17 +94,6 @@ const UNMAPPABLE_IDL = {
     },
   ],
 };
-
-/** A file of the entity's `anchor-cli` fixtures, which Anchor 1.1.2 uploads */
-const anchorFixture = (name: string) =>
-  readFileSync(
-    join(
-      __dirname,
-      "../../../entities/idl/model/anchor-cli/__fixtures__",
-      name
-    ),
-    "utf8"
-  );
 
 /** Text that zlib cannot shrink much, the same on every run */
 const noise = (length: number) => {
@@ -420,25 +407,6 @@ describe("features/program-idl/model/project-idl", () => {
           })
         );
       expect(written).toEqual([content]);
-    }
-  );
-
-  it.each(["current.json", "current-full.json"])(
-    "uploads the Anchor 1.1.2 fixture %s from a file",
-    async (name) => {
-      const setup = await arrange();
-      setup.source = fileIdl(`idl/${name}`, anchorFixture(name));
-
-      const result = await run(setup);
-
-      expect(result).toEqual({
-        metadata: await idlAddress(),
-        action: "created",
-      });
-      expect(tracked.events.map(({ name: event }) => event)).toEqual([
-        "idl_upload_started",
-        "idl_uploaded",
-      ]);
     }
   );
 

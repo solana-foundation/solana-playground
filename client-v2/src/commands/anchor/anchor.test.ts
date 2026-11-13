@@ -117,8 +117,6 @@ const slice = vi.hoisted(() => ({
   setBufferAuthority: vi.fn(),
   writeMetadataFromBufferWith: vi.fn(),
   writeBuffer: vi.fn(),
-  closeLegacyIdlAccountWith: vi.fn(),
-  legacyClose: vi.fn(),
   fetchPublishedIdl: vi.fn(),
   trackUnsupportedIdlCommand: vi.fn(),
 }));
@@ -131,14 +129,7 @@ const SENDING_ENTRIES = [
   [slice.createIdlBufferWith, slice.createBuffer],
   [slice.setBufferAuthorityWith, slice.setBufferAuthority],
   [slice.writeMetadataFromBufferWith, slice.writeBuffer],
-  [slice.closeLegacyIdlAccountWith, slice.legacyClose],
 ] as const;
-
-const ports = vi.hoisted(() => ({
-  convertIdl: vi.fn(),
-  convertIdlToLegacy: vi.fn(),
-  idlTypeScript: vi.fn(),
-}));
 
 const applyFile = vi.hoisted(() => vi.fn());
 
@@ -158,23 +149,9 @@ vi.mock("@/features/program-idl", async () => {
     createIdlBufferWith: slice.createIdlBufferWith,
     setBufferAuthorityWith: slice.setBufferAuthorityWith,
     writeMetadataFromBufferWith: slice.writeMetadataFromBufferWith,
-    closeLegacyIdlAccountWith: slice.closeLegacyIdlAccountWith,
     fetchPublishedIdl: slice.fetchPublishedIdl,
     trackRefusedIdlSendFor: actual.trackRefusedIdlSendFor,
     trackUnsupportedIdlCommand: slice.trackUnsupportedIdlCommand,
-  };
-});
-
-vi.mock("@/entities/idl", async () => {
-  const actual = await vi.importActual<typeof import("@/entities/idl")>(
-    "@/entities/idl"
-  );
-  return {
-    programName: actual.programName,
-    isIdlV1: actual.isIdlV1,
-    convertIdl: ports.convertIdl,
-    convertIdlToLegacy: ports.convertIdlToLegacy,
-    idlTypeScript: ports.idlTypeScript,
   };
 });
 
@@ -285,11 +262,6 @@ describe("commands/anchor", () => {
     slice.createBuffer.mockResolvedValue({ buffer: BUFFER });
     slice.fetchPublishedIdl.mockReset();
     slice.trackUnsupportedIdlCommand.mockReset();
-    ports.convertIdl.mockReset().mockResolvedValue("CURRENT\n");
-    ports.convertIdlToLegacy.mockReset().mockResolvedValue("LEGACY\n");
-    ports.idlTypeScript
-      .mockReset()
-      .mockResolvedValue("export type Counter = {};\n\n");
     applyFile.mockReset();
   });
 
@@ -572,11 +544,6 @@ describe("commands/anchor", () => {
       endpoint: CUSTOM_MAINNET,
       events: refusedCommand("write-buffer", "custom"),
     },
-    {
-      line: `anchor legacy-idl close ${GIVEN_PROGRAM}`,
-      endpoint: Endpoint.MAINNET_BETA,
-      events: refusedCommand("legacy-close", "mainnet-beta"),
-    },
   ])(
     "refuses `$line` on mainnet-beta, read from $endpoint, and records the attempt with nothing sent",
     async ({ line, endpoint, events }) => {
@@ -839,99 +806,61 @@ describe("commands/anchor", () => {
     ]);
   });
 
-  it.each([
-    {
-      line: "anchor idl convert idl/legacy.json",
-      port: ports.convertIdl,
-      args: [undefined, PROJECT_FILES.get("idl/legacy.json")],
-      lines: [["CURRENT", { noColor: true }]],
-      files: [],
-    },
-    {
-      line: `anchor idl convert idl/legacy.json --program-id ${GIVEN_PROGRAM} -o idl/converted.json`,
-      port: ports.convertIdl,
-      args: [GIVEN_PROGRAM, PROJECT_FILES.get("idl/legacy.json")],
-      lines: [],
-      files: [["idl/converted.json", "CURRENT"]],
-    },
-    {
-      line: `anchor idl convert idl/counter.json --to-legacy -p ${GIVEN_PROGRAM}`,
-      port: ports.convertIdlToLegacy,
-      args: [GIVEN_PROGRAM, PROJECT_FILES.get("idl/counter.json")],
-      lines: [["LEGACY", { noColor: true }]],
-      files: [],
-    },
-    {
-      line: "anchor idl type idl/counter.json",
-      port: ports.idlTypeScript,
-      args: [PROJECT_FILES.get("idl/counter.json")],
-      lines: [["export type Counter = {};\n", { noColor: true }]],
-      files: [],
-    },
-    {
-      line: "anchor idl type idl/counter.json --out types/counter.ts",
-      port: ports.idlTypeScript,
-      args: [PROJECT_FILES.get("idl/counter.json")],
-      lines: [],
-      files: [["types/counter.ts", "export type Counter = {};\n"]],
-    },
-  ])(
-    "runs `$line` on the project file with no wallet, and prints or writes what Anchor does",
-    async ({ line, port, args, lines, files }) => {
-      env.wallet = undefined;
-
-      await run(line);
-
-      expect(port).toHaveBeenCalledWith(...args);
-      expect(printed()).toEqual(lines);
-      expect(applyFile.mock.calls).toEqual(files);
-      expect(PgTerminal.get).not.toHaveBeenCalled();
-    }
-  );
-
-  it.each([
-    { line: "anchor idl convert idl/none.json", port: ports.convertIdl },
-    { line: "anchor idl type idl/none.json", port: ports.idlTypeScript },
-  ])(
-    "ends `$line` with one line that names the file the project does not hold",
-    async ({ line, port }) => {
-      const result = run(line);
-
-      await expect(result).rejects.toBeInstanceOf(TerminalLineError);
-      await expect(result).rejects.toThrow(
-        "The project has no file at idl/none.json."
-      );
-      expect(port).not.toHaveBeenCalled();
-    }
-  );
-
   // The explorer reads a name without an extension as a folder
   it("refuses an `--out` name without an extension, and writes nothing", async () => {
-    const result = run("anchor idl type idl/counter.json --out types");
+    slice.fetchPublishedIdl.mockResolvedValue('{"address":"published"}');
+
+    const result = run(`anchor idl fetch ${GIVEN_PROGRAM} --out idl`);
 
     await expect(result).rejects.toBeInstanceOf(TerminalLineError);
     await expect(result).rejects.toThrow(
-      "`--out` takes a file name with an extension, and types has none."
+      "`--out` takes a file name with an extension, and idl has none."
     );
     expect(applyFile).not.toHaveBeenCalled();
   });
 
   it.each([
-    { name: "build", line: "anchor idl build -p counter --no-docs" },
+    {
+      name: "build",
+      command: "anchor idl build",
+      line: "anchor idl build -p counter --no-docs",
+    },
     {
       name: "fetch-historical",
+      command: "anchor idl fetch-historical",
       line: `anchor idl fetch-historical ${GIVEN_PROGRAM} --slot 5`,
+    },
+    {
+      name: "convert",
+      command: "anchor idl convert",
+      line: `anchor idl convert idl/counter.json --to-legacy -p ${GIVEN_PROGRAM}`,
+    },
+    {
+      name: "type",
+      command: "anchor idl type",
+      line: "anchor idl type idl/counter.json --out types/counter.ts",
+    },
+    // The group alone, which a group without a handler would answer with its usage
+    {
+      name: "legacy-idl",
+      command: "anchor legacy-idl",
+      line: "anchor legacy-idl",
+    },
+    {
+      name: "legacy-idl",
+      command: "anchor legacy-idl",
+      line: `anchor legacy-idl close ${GIVEN_PROGRAM} --idl-address ${BUFFER}`,
     },
   ] as const)(
     "ends `$line` with the not-supported line and its one event, with no wallet question and nothing sent",
-    async ({ name, line }) => {
+    async ({ name, command, line }) => {
       env.wallet = undefined;
 
       const result = run(line);
 
       await expect(result).rejects.toBeInstanceOf(TerminalLineError);
       await expect(result).rejects.toThrow(
-        `The Playground terminal does not support \`anchor idl ${name}\` yet. Run it with Anchor's CLI on your own machine.`
+        `The Playground terminal does not support \`${command}\` yet. Run it with Anchor's CLI on your own machine.`
       );
       expect(slice.trackUnsupportedIdlCommand.mock.calls).toEqual([
         [name, CONNECTION.rpcEndpoint],
@@ -1067,32 +996,5 @@ describe("commands/anchor", () => {
       "write-buffer",
     ]);
     expect(PgTerminal.get).not.toHaveBeenCalled();
-  });
-
-  it("lists `fetch` and `close` for `anchor legacy-idl --help`, with no wallet question", async () => {
-    env.wallet = undefined;
-
-    await run("anchor legacy-idl --help");
-
-    const [[help]] = printed();
-    expect(help).toContain("Usage: anchor legacy-idl <COMMAND>");
-    const listed: string[] = help.match(/^\t\S+/gm) ?? [];
-    expect(listed.map((name) => name.trim()).sort()).toEqual([
-      "close",
-      "fetch",
-    ]);
-    expect(PgTerminal.get).not.toHaveBeenCalled();
-  });
-
-  it("answers `anchor legacy-idl authority`, a subcommand the terminal leaves out, with the usage of `anchor legacy-idl`, no wallet question, and nothing sent", async () => {
-    env.wallet = undefined;
-
-    await run(`anchor legacy-idl authority ${GIVEN_PROGRAM}`);
-
-    const [[usage]] = printed();
-    expect(usage).toContain("Usage: anchor legacy-idl <COMMAND>");
-    expect(PgTerminal.get).not.toHaveBeenCalled();
-    expect(PgConnection.getCluster).not.toHaveBeenCalled();
-    expectNoAttempt();
   });
 });

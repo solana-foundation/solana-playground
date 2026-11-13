@@ -1,18 +1,11 @@
 import { isAddress } from "@solana/kit";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
+import { isIdlV1 } from "@/entities/idl";
 import {
-  convertIdl,
-  convertIdlToLegacy,
-  idlTypeScript,
-  isIdlV1,
-} from "@/entities/idl";
-import {
-  closeLegacyIdlAccountWith,
   closeMetadataAccountWith,
   createIdlBufferWith,
   DEFAULT_PRIORITY_FEE,
-  fetchLegacyIdl,
   fetchPublishedIdl,
   IDL_SEED,
   IdlCommandRefusedError,
@@ -125,12 +118,6 @@ const programIdArg = {
   parse: parseAddress,
 } as const;
 
-const pathArg = {
-  name: "path",
-  description: "Path to the IDL file",
-  optional: true, // The handler requires it, after the line's `--help` is read: see `requireArg`
-} as const;
-
 const filepathOption = {
   name: "filepath",
   short: "f",
@@ -184,35 +171,18 @@ const asksForHelp = (raw: string) =>
   raw.split(" ").some((token) => token === "--help" || token === "-h");
 
 /**
- * Runs the handler of the `anchor <group>` subcommand `name`, or for a line `raw`
+ * Runs the handler of the `anchor idl` subcommand `name`, or for a line `raw`
  * that asks for help in any position prints that subcommand's usage and does
  * nothing else. The terminal's parser reads `--help` only right after the name.
  */
-const runUnlessHelpIn =
-  (group: "idl" | "legacy-idl") =>
+const runUnlessHelpFor =
   (name: string, raw: string) =>
   async <Result>(run: () => Promise<Result>) => {
     if (!asksForHelp(raw)) return run();
     // Run as the one line the parser prints a usage for, so that a subcommand has one usage
-    await PgCommandManager.execute(["anchor", group, name, "--help"]);
+    await PgCommandManager.execute(["anchor", "idl", name, "--help"]);
     return undefined;
   };
-
-const runUnlessHelpFor = runUnlessHelpIn("idl");
-
-/** Anchor 1.1.2's warning before every `legacy-idl` subcommand, from `handle_legacy_idl_command` */
-const LEGACY_IDL_WARNING =
-  "You are using a deprecated legacy IDL command. These commands interact with the old on-chain IDL instruction protocol and will be removed in a future Anchor release. Please migrate to Program Metadata-based IDL management (`anchor idl`).";
-
-const runLegacyUnlessHelpFor =
-  (name: string, raw: string) =>
-  <Result>(run: () => Promise<Result>) =>
-    runUnlessHelpIn("legacy-idl")(name, raw)(async () => {
-      await PgTerminal.println(
-        `${PgTerminal.warning("warning:")} ${LEGACY_IDL_WARNING}`
-      );
-      return run();
-    });
 
 /** Anchor's test for a local validator, which `init` and `upgrade` skip */
 const isLocalnet = (rpcEndpoint: string) =>
@@ -375,15 +345,6 @@ const uploadIdl = async ({
   });
 };
 
-/** The text of a project file; throws a {@link TerminalLineError} that names a path the project does not hold */
-const getProjectFile = (path: string) => {
-  const text = PgExplorer.getFileContent(path);
-  if (text === undefined) {
-    throw new TerminalLineError(`The project has no file at ${path}.`);
-  }
-  return text;
-};
-
 /** Prints `text` as it is, or with `--out` creates or replaces that file of the project */
 const printOrWrite = async (out: string | undefined, text: string) => {
   if (out === undefined) {
@@ -400,24 +361,29 @@ const printOrWrite = async (out: string | undefined, text: string) => {
   await applyFile(out, text);
 };
 
-/** What Anchor hands to `println!`: the entity returns the printed text, which ends with the newline `println!` adds */
-const withoutPrintedNewline = (printed: string) => printed.replace(/\n$/, "");
+/**
+ * A subcommand of Anchor's under `parent` that the terminal names and does not
+ * run. It declares no argument or subcommand, so every line under it, `--help`
+ * included, ends the same way.
+ */
+const unsupportedSubcmdFor =
+  (parent: "anchor" | "anchor idl") =>
+  (
+    name: Parameters<typeof trackUnsupportedIdlCommand>[0],
+    description: string
+  ) =>
+    createSubcmd({
+      name,
+      description: `${description} (not supported yet)`,
+      handle: () => {
+        trackUnsupportedIdlCommand(name, PgConnection.current.rpcEndpoint);
+        throw new TerminalLineError(
+          `The Playground terminal does not support \`${parent} ${name}\` yet. Run it with Anchor's CLI on your own machine.`
+        );
+      },
+    });
 
-/** A subcommand of Anchor's that the terminal names and does not run; it declares no argument, so every line ends the same way */
-const unsupportedSubcmd = (
-  name: Parameters<typeof trackUnsupportedIdlCommand>[0],
-  description: string
-) =>
-  createSubcmd({
-    name,
-    description: `${description} (not supported yet)`,
-    handle: () => {
-      trackUnsupportedIdlCommand(name, PgConnection.current.rpcEndpoint);
-      throw new TerminalLineError(
-        `The Playground terminal does not support \`anchor idl ${name}\` yet. Run it with Anchor's CLI on your own machine.`
-      );
-    },
-  });
+const unsupportedIdlSubcmd = unsupportedSubcmdFor("anchor idl");
 
 export const anchor = createCmd({
   name: "anchor",
@@ -498,7 +464,7 @@ export const anchor = createCmd({
             ),
         }),
 
-        unsupportedSubcmd(
+        unsupportedIdlSubcmd(
           "build",
           "Generates the IDL for the program using the compilation method"
         ),
@@ -546,67 +512,17 @@ export const anchor = createCmd({
             }),
         }),
 
-        unsupportedSubcmd(
+        unsupportedIdlSubcmd(
           "fetch-historical",
           "Fetches historical IDL versions for the given program from a cluster"
         ),
 
-        createSubcmd({
-          name: "convert",
-          description:
-            "Convert legacy IDLs (pre Anchor 0.30) to the new IDL spec",
-          args: createArgs([pathArg]),
-          options: createOptions([
-            outOption,
-            {
-              name: "program-id",
-              short: "p",
-              description:
-                "Program id of the converted IDL (default: the one the IDL holds)",
-              takeValue: true,
-              parse: parseAddress,
-            },
-            {
-              name: "to-legacy",
-              description:
-                "Convert a current-spec IDL back to the legacy (pre Anchor v0.30) format",
-            },
-          ]),
-          handle: (input) =>
-            runUnlessHelpFor(
-              "convert",
-              input.raw
-            )(async () => {
-              const text = getProjectFile(requireArg("path", input.args.path));
-              const convert = input.options["to-legacy"]
-                ? convertIdlToLegacy
-                : convertIdl;
-              const printed = await convert(input.options["program-id"], text);
-              await printOrWrite(
-                input.options.out,
-                withoutPrintedNewline(printed)
-              );
-            }),
-        }),
+        unsupportedIdlSubcmd(
+          "convert",
+          "Convert legacy IDLs (pre Anchor 0.30) to the new IDL spec"
+        ),
 
-        createSubcmd({
-          name: "type",
-          description: "Generate TypeScript type for the IDL",
-          args: createArgs([pathArg]),
-          options: createOptions([outOption]),
-          handle: (input) =>
-            runUnlessHelpFor(
-              "type",
-              input.raw
-            )(async () => {
-              const text = getProjectFile(requireArg("path", input.args.path));
-              const printed = await idlTypeScript(text);
-              await printOrWrite(
-                input.options.out,
-                withoutPrintedNewline(printed)
-              );
-            }),
-        }),
+        unsupportedIdlSubcmd("type", "Generate TypeScript type for the IDL"),
 
         createSubcmd({
           name: "close",
@@ -757,82 +673,10 @@ export const anchor = createCmd({
       ],
     }),
 
-    // Anchor 1.1.2's other seven are left out, so they are no subcommand here: reading an older program's IDL and recovering its rent are what remain useful
-    createSubcmd({
-      name: "legacy-idl",
-      description: "[DEPRECATED] Manage legacy on-chain IDL accounts",
-      subcommands: [
-        createSubcmd({
-          name: "fetch",
-          description:
-            "[DEPRECATED] Fetch the IDL from a legacy on-chain IdlAccount",
-          args: createArgs([
-            {
-              name: "address",
-              description:
-                "A program ID, or the address of an IDL account or buffer",
-              optional: true, // The handler requires it, after the line's `--help` is read: see `requireArg`
-              parse: parseAddress,
-            },
-          ]),
-          options: createOptions([outOption]),
-          handle: (input) =>
-            runLegacyUnlessHelpFor(
-              "fetch",
-              input.raw
-            )(async () => {
-              const target = requireArg("address", input.args.address);
-              const json = await withRefusalLine(() =>
-                fetchLegacyIdl({ target, connection: PgConnection.current })
-              );
-              const { out } = input.options;
-              await printOrWrite(out, json);
-              // Anchor 1.1.2's line after it writes the file
-              if (out !== undefined) {
-                await PgTerminal.println(`Wrote IDL to ${out}`);
-              }
-            }),
-        }),
-
-        createSubcmd({
-          name: "close",
-          description:
-            "[DEPRECATED] Close the legacy IDL account and recover rent",
-          args: createArgs([programIdArg]),
-          options: createOptions([
-            {
-              name: "idl-address",
-              description:
-                "The IDL account to close (default: the IDL account derived from the program ID)",
-              takeValue: true,
-              parse: parseAddress,
-            },
-            priorityFeeOption,
-          ]),
-          handle: (input) =>
-            runLegacyUnlessHelpFor(
-              "close",
-              input.raw
-            )(async () => {
-              const programId = requireArg("program_id", input.args.program_id);
-              await runSenderFor("legacy-close")(
-                async ({ connection, wallet }) => {
-                  const { closed } = await closeLegacyIdlAccountWith(
-                    getPriorityFee(input.options)
-                  )({
-                    programId,
-                    idlAddress: input.options["idl-address"],
-                    connection,
-                    wallet,
-                  });
-                  await PgTerminal.println(
-                    `${PgTerminal.success("Idl account closed:")} ${closed}`
-                  );
-                }
-              );
-            }),
-        }),
-      ],
-    }),
+    // Anchor's group, declared without its subcommands so that every `anchor legacy-idl` line gets the not-supported line
+    unsupportedSubcmdFor("anchor")(
+      "legacy-idl",
+      "[DEPRECATED] Manage legacy on-chain IDL accounts"
+    ),
   ],
 });

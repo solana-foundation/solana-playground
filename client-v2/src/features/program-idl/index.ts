@@ -9,7 +9,6 @@ export {
   trackUnsupportedIdlCommand,
   writeMetadataFromBufferWith,
 } from "./model/commands";
-export { closeLegacyIdlAccountWith, fetchLegacyIdl } from "./model/legacy";
 export {
   uploadNonCanonicalProjectIdlWith,
   uploadProjectIdl,

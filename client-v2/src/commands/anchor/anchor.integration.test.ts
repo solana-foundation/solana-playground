@@ -1,17 +1,6 @@
 // The command, the program-idl slice and the Program Metadata client run as they are;
 // `fetch` reaches LiteSVM, which runs the Program Metadata program, and the wallet is a test keypair.
-import {
-  addEncoderSizePrefix,
-  type Address,
-  address,
-  createAddressWithSeed,
-  getAddressEncoder,
-  getBytesEncoder,
-  getProgramDerivedAddress,
-  getStructEncoder,
-  getU32Encoder,
-  lamports,
-} from "@solana/kit";
+import { type Address, address, lamports } from "@solana/kit";
 import type {
   Keypair,
   TransactionConfirmationStrategy,
@@ -24,7 +13,6 @@ import {
   getBufferDecoder,
   PROGRAM_METADATA_PROGRAM_ADDRESS,
 } from "@solana-program/program-metadata";
-import { deflate } from "pako";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -51,7 +39,7 @@ import {
 import { PgExplorer } from "../../utils";
 import { PgCommandManager } from "../../utils/command";
 import { PgTerminal } from "../../utils/terminal";
-import { clusterOf, LEGACY_IDL_PROGRAM } from "./__fixtures__/cluster";
+import { clusterOf } from "./__fixtures__/cluster";
 import { anchor } from "./anchor";
 
 const AUTHORITY = keypairOf(1);
@@ -189,16 +177,6 @@ describe("commands/anchor on a cluster", () => {
     return text;
   };
   const fetchIdl = () => printedBy(`anchor idl fetch ${PROGRAM}`);
-  /** Every line the terminal printed for `line` */
-  const linesBy = async (line: string) => {
-    vi.mocked(PgTerminal.println).mockClear();
-    await run(line);
-    return printed().map(([text]) => text);
-  };
-  // Anchor 1.1.2 prints its deprecation warning before every `legacy-idl` subcommand
-  const DEPRECATION = expect.stringMatching(
-    /^.*warning:.* You are using a deprecated legacy IDL command\. .*\(`anchor idl`\)\.$/
-  );
 
   /** The number of `sendTransaction` requests the cluster received */
   const sends = () => cluster.sent.length;
@@ -444,154 +422,6 @@ describe("commands/anchor on a cluster", () => {
         params: { target: "metadata", cluster: "devnet", reason: "rejected" },
       },
     ]);
-  });
-
-  describe("legacy-idl on a program with an Anchor IDL account", () => {
-    /** An Anchor 0.29 IDL, its keys out of order so that the printed order is the one `serde_json::Value` gives */
-    const LEGACY_IDL = {
-      version: "0.1.0",
-      name: "counter",
-      instructions: [{ name: "increment", args: [], accounts: [] }],
-    };
-    /** What Anchor 1.1.2 prints for {@link LEGACY_IDL}: every object's keys sorted, two-space indent */
-    const PRINTED = `{
-  "instructions": [
-    {
-      "accounts": [],
-      "args": [],
-      "name": "increment"
-    }
-  ],
-  "name": "counter",
-  "version": "0.1.0"
-}`;
-
-    let idlAccount: Address;
-
-    /** Writes the Anchor IDL account as `anchor idl init` of Anchor 0.29 leaves it: discriminator, authority, length, zlib data, then free space */
-    const writeLegacyIdl = (at: Address, authority: Keypair) => {
-      cluster.setAccount(at, {
-        owner: LEGACY_IDL_PROGRAM,
-        executable: false,
-        data: getStructEncoder([
-          ["discriminator", getBytesEncoder()],
-          ["authority", getAddressEncoder()],
-          ["idl", addEncoderSizePrefix(getBytesEncoder(), getU32Encoder())],
-          ["free", getBytesEncoder()],
-        ]).encode({
-          // SHA-256 of `internal:IdlAccount`, first 8 bytes
-          discriminator: Uint8Array.from([24, 70, 98, 191, 58, 144, 123, 158]),
-          authority: address(authority.publicKey.toBase58()),
-          idl: deflate(JSON.stringify(LEGACY_IDL)),
-          free: new Uint8Array(64),
-        }),
-      });
-    };
-
-    beforeEach(async () => {
-      const [base] = await getProgramDerivedAddress({
-        programAddress: LEGACY_IDL_PROGRAM,
-        seeds: [],
-      });
-      idlAccount = await createAddressWithSeed({
-        baseAddress: base,
-        programAddress: LEGACY_IDL_PROGRAM,
-        seed: "anchor:idl",
-      });
-      writeLegacyIdl(idlAccount, AUTHORITY);
-    });
-
-    it.each([
-      {
-        label: "a program id, from the account derived from it",
-        target: () => LEGACY_IDL_PROGRAM,
-      },
-      // Any address that is no program takes this branch, an IDL buffer's included
-      { label: "the account's own address", target: () => idlAccount },
-    ])(
-      "prints the IDL with `fetch` of $label, as Anchor 1.1.2 prints it, with no wallet question",
-      async ({ target }) => {
-        env.wallet = undefined;
-
-        expect(await linesBy(`anchor legacy-idl fetch ${target()}`)).toEqual([
-          DEPRECATION,
-          PRINTED,
-        ]);
-        expect(tracked.events).toEqual([
-          command("idl_command_started", "legacy-fetch"),
-          command("idl_command_succeeded", "legacy-fetch"),
-        ]);
-      }
-    );
-
-    it("closes the account `--idl-address` names, such as a buffer, and leaves the program's own", async () => {
-      connect(AUTHORITY);
-      const buffer = address(NEW_AUTHORITY);
-      writeLegacyIdl(buffer, AUTHORITY);
-
-      await run(
-        `anchor legacy-idl close ${LEGACY_IDL_PROGRAM} --idl-address ${buffer}`
-      );
-
-      expect(cluster.svm.getAccount(buffer).exists).toBe(false);
-      expect(cluster.svm.getAccount(idlAccount).exists).toBe(true);
-    });
-
-    it("closes the account with `close` through the program's IDL instruction, returns its rent, and a second `close` and `fetch` then find no legacy IDL", async () => {
-      connect(AUTHORITY);
-      const wallet = address(AUTHORITY.publicKey.toBase58());
-      const before = cluster.svm.getBalance(wallet) ?? 0n;
-      const account = cluster.svm.getAccount(idlAccount);
-      const rent = account.exists ? account.lamports : 0n;
-
-      expect(
-        await linesBy(
-          `anchor legacy-idl close ${LEGACY_IDL_PROGRAM} --priority-fee 0`
-        )
-      ).toEqual([
-        DEPRECATION,
-        `${PgTerminal.success("Idl account closed:")} ${idlAccount}`,
-      ]);
-
-      expect(cluster.svm.getAccount(idlAccount).exists).toBe(false);
-      expect(cluster.svm.getBalance(wallet)).toBe(before + rent - 5000n);
-      await expect(
-        run(`anchor legacy-idl close ${LEGACY_IDL_PROGRAM}`)
-      ).rejects.toThrow(
-        `Program ${LEGACY_IDL_PROGRAM} has no legacy IDL on the selected network.`
-      );
-      await expect(
-        run(`anchor legacy-idl fetch ${LEGACY_IDL_PROGRAM}`)
-      ).rejects.toThrow(
-        `Program ${LEGACY_IDL_PROGRAM} has no legacy IDL on the selected network.`
-      );
-      const notFound = (cmd: string) => ({
-        name: "idl_command_failed",
-        params: { command: cmd, cluster: "devnet", reason: "not_found" },
-      });
-      expect(tracked.events).toEqual([
-        command("idl_command_started", "legacy-close"),
-        command("idl_command_succeeded", "legacy-close"),
-        command("idl_command_started", "legacy-close"),
-        notFound("legacy-close"),
-        command("idl_command_started", "legacy-fetch"),
-        notFound("legacy-fetch"),
-      ]);
-    });
-
-    it("refuses `close` by a wallet that is not the account's authority with one line naming it, and sends nothing", async () => {
-      const wallet = connect(OTHER);
-
-      await expect(
-        run(`anchor legacy-idl close ${LEGACY_IDL_PROGRAM}`)
-      ).rejects.toThrow(
-        `The legacy IDL account's authority is ${AUTHORITY.publicKey.toBase58()}. Connect that wallet to close it.`
-      );
-
-      expect(wallet.signAllTransactions).not.toHaveBeenCalled();
-      expect(sends()).toBe(0);
-      expect(cluster.svm.getAccount(idlAccount).exists).toBe(true);
-    });
   });
 
   describe("after an upload the RPC failed once its first transaction landed", () => {

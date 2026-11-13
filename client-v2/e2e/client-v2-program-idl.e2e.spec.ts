@@ -7,7 +7,7 @@ import {
 } from "@solana-program/program-metadata";
 
 import { clusterOf } from "../src/commands/anchor/__fixtures__/cluster";
-import { expect, LONG, runInTerminal, test } from "./fixtures";
+import { expect, LONG, test } from "./fixtures";
 import {
   BASE58,
   type Cluster,
@@ -171,33 +171,5 @@ test.describe("client-v2-program-idl", () => {
     );
     // The IDL outgrows the rows in view, so its end stands for it
     await runUntil(text.slice(-60))(page, `anchor idl fetch ${PROGRAM}`);
-  });
-
-  test("client-v2-program-idl: Help lists two legacy subcommands", async ({
-    seededPage: page,
-  }) => {
-    const line = "anchor legacy-idl --help";
-    await runInTerminal(page, line);
-
-    /** What the line printed, up to the prompt after it */
-    const printed = async () => {
-      const text = (await terminalOf(page).textContent()) ?? "";
-      return text.slice(text.lastIndexOf(line) + line.length);
-    };
-    await expect.poll(printed, LONG).toMatch(/Commands:[\s\S]*\$\s*$/);
-    const help = await printed();
-    const commands = help.slice(help.indexOf("Commands:"));
-    expect(commands).toMatch(/\bclose\b[\s\S]*\bfetch\b/);
-    for (const name of [
-      "init",
-      "upgrade",
-      "authority",
-      "write-buffer",
-      "set-buffer",
-      "set-authority",
-      "erase-authority",
-    ]) {
-      expect(commands).not.toContain(name);
-    }
   });
 });

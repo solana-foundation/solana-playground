@@ -111,7 +111,7 @@ interface IdlBufferWrite extends IdlSendDeps {
 }
 
 /** Sends the events of `command` around `run`: the start before its checks, then how it ended */
-export const trackCommandFor =
+const trackCommandFor =
   (command: IdlCommand) =>
   <Input extends Pick<IdlFetch, "connection">, Result>(
     run: (input: Input) => Promise<Result>

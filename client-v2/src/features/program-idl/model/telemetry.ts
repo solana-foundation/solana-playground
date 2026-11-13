@@ -14,25 +14,24 @@ type IdlUploadTarget = "metadata";
 /** The cluster of the endpoint a subcommand acts on; `custom` for an endpoint that is not one of the Playground's own */
 type IdlCluster = Cluster | "custom";
 
-/**
- * The subcommands that act on a cluster and are not an upload: those of
- * `anchor idl` by name, and those of `anchor legacy-idl` by name after
- * `legacy-`, since both groups have a `fetch` and a `close`
- */
+/** The subcommands of `anchor idl` that act on a cluster and are not an upload */
 export type IdlCommand =
   | "fetch"
   | "close"
   | "create-buffer"
   | "set-buffer-authority"
-  | "write-buffer"
-  | "legacy-fetch"
-  | "legacy-close";
+  | "write-buffer";
 
-/** The subcommands the terminal names and does not run */
-export type UnsupportedIdlCommand = "build" | "fetch-historical";
+/** The subcommands of `anchor idl`, and the `anchor legacy-idl` group, that the terminal names and does not run */
+export type UnsupportedIdlCommand =
+  | "build"
+  | "fetch-historical"
+  | "convert"
+  | "type"
+  | "legacy-idl";
 
 /** What sends a transaction, as its events name it: the upload of `init` and `upgrade`, or an {@link IdlCommand} that sends */
-export type IdlSend = "upload" | Exclude<IdlCommand, "fetch" | "legacy-fetch">;
+export type IdlSend = "upload" | Exclude<IdlCommand, "fetch">;
 
 /** Why a caller ended a send before its entry ran: it refuses mainnet-beta, and `rpc` is an endpoint whose network it could not read or that changed */
 export type IdlSendRefusal = "mainnet" | "rpc";

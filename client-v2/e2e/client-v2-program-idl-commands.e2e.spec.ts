@@ -1,30 +1,13 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import {
-  addEncoderSizePrefix,
-  type Address,
-  address,
-  createAddressWithSeed,
-  getAddressEncoder,
-  getBytesEncoder,
-  getProgramDerivedAddress,
-  getStructEncoder,
-  getU32Encoder,
-  lamports,
-} from "@solana/kit";
+import { type Address, address, lamports } from "@solana/kit";
 import type { Keypair } from "@solana/web3.js";
 import {
   AccountDiscriminator,
   findCanonicalPda,
   getBufferDecoder,
 } from "@solana-program/program-metadata";
-import { deflate } from "pako";
 
-import {
-  clusterOf,
-  LEGACY_IDL_PROGRAM,
-} from "../src/commands/anchor/__fixtures__/cluster";
+import { clusterOf } from "../src/commands/anchor/__fixtures__/cluster";
 import { expect, json, LONG, test } from "./fixtures";
 import {
   BASE58,
@@ -67,39 +50,23 @@ const AUTHORITY_ADDRESS = address(AUTHORITY.publicKey.toBase58());
 /** The IDL the project's build gives it */
 const PROJECT_IDL = idlText("0.1.0", ["The project's IDL"]);
 
-/** What Anchor 1.1.2 prints and writes, kept beside the converter's tests by `regenerate.sh` */
-const ANCHOR_CLI_FIXTURES = join(
-  __dirname,
-  "../src/entities/idl/model/anchor-cli/__fixtures__"
-);
-const anchorCliFixture = (name: string) =>
-  readFileSync(join(ANCHOR_CLI_FIXTURES, name), "utf8").trimEnd();
-/** The program id `regenerate.sh` converts with */
-const CONVERTED_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-
 const WALLET_QUESTION = "No wallet is connected";
 
 /** Runs `line` until the terminal prints the refusal of an IDL write on mainnet-beta */
 const refusedOnMainnet = runUntil("Writing an IDL to mainnet is not available");
 
-/** An Anchor 0.29 IDL, its keys out of order so that the printed order is the one `serde_json::Value` gives */
+/** An Anchor 0.29 IDL */
 const LEGACY_IDL = {
   version: "0.1.0",
   name: "counter",
   instructions: [{ name: "increment", args: [], accounts: [] }],
 };
-/** What Anchor 1.1.2 prints for {@link LEGACY_IDL}: every object's keys sorted, two-space indent */
-const LEGACY_IDL_PRINTED = `{
-  "instructions": [
-    {
-      "accounts": [],
-      "args": [],
-      "name": "increment"
-    }
-  ],
-  "name": "counter",
-  "version": "0.1.0"
-}`;
+
+/** The `idl_command_failed` lines among the slice's telemetry lines, in the order they were sent */
+const failuresIn = (lines: string[]) =>
+  lines.filter((line) =>
+    line.startsWith("[telemetry:event] idl_command_failed ")
+  );
 
 const canonicalOf = async (program: Address) => {
   const [pda] = await findCanonicalPda({ program, seed: "idl" });
@@ -689,39 +656,6 @@ test.describe("client-v2-program-idl", () => {
     });
   });
 
-  test("client-v2-program-idl: A legacy IDL is converted", async ({
-    seededPage: page,
-  }) => {
-    await openOnDevnet(page, connectedWallet(AUTHORITY));
-    const path = await writeFileWith(anchorCliFixture("legacy.json"))(
-      page,
-      "legacy.json"
-    );
-
-    const printed = await printedBy(
-      page,
-      `anchor idl convert ${path} --program-id ${CONVERTED_PROGRAM_ID}`
-    );
-
-    expect(JSON.parse(printed).address).toBe(CONVERTED_PROGRAM_ID);
-    expect(printed).toBe(anchorCliFixture("legacy.convert-program-id.json"));
-  });
-
-  test("client-v2-program-idl: A type from an IDL file", async ({
-    seededPage: page,
-  }) => {
-    await openOnDevnet(page, connectedWallet(AUTHORITY));
-    const path = await writeFileWith(anchorCliFixture("current-full.json"))(
-      page,
-      "current-full.json"
-    );
-
-    const printed = await printedBy(page, `anchor idl type ${path}`);
-
-    // The terminal cannot show trailing whitespace, which Anchor's type ends with
-    expect(printed.trimEnd()).toBe(anchorCliFixture("current-full.type.txt"));
-  });
-
   test("client-v2-program-idl: anchor idl build", async ({
     seededPage: page,
   }) => {
@@ -736,101 +670,58 @@ test.describe("client-v2-program-idl", () => {
     expect(cluster.sent).toEqual([]);
   });
 
-  test("client-v2-program-idl: A legacy write is not supported", async ({
+  test("client-v2-program-idl: anchor idl convert and type", async ({
     seededPage: page,
   }) => {
     await openOnDevnet(page, disconnectedWallet(AUTHORITY));
+    const lines = linesOn(page);
 
-    const printed = await printedBy(page, `anchor legacy-idl init ${PROGRAM}`);
+    const convert = await printedBy(
+      page,
+      "anchor idl convert idl/counter.json"
+    );
+    const type = await printedBy(page, "anchor idl type idl/counter.json");
 
-    expect(printed).toContain("Usage: anchor legacy-idl <COMMAND>");
-    expect(printed).not.toContain(WALLET_QUESTION);
+    expect(convert).toContain(
+      "The Playground terminal does not support `anchor idl convert` yet."
+    );
+    expect(type).toContain(
+      "The Playground terminal does not support `anchor idl type` yet."
+    );
+    expect(`${convert}\n${type}`).not.toContain(WALLET_QUESTION);
+    await expect
+      .poll(() => failuresIn(lines), LONG)
+      .toEqual([
+        expect.stringContaining(
+          "{command: convert, cluster: devnet, reason: unsupported}"
+        ),
+        expect.stringContaining(
+          "{command: type, cluster: devnet, reason: unsupported}"
+        ),
+      ]);
+    await linesRead(lines);
+    expect(lineOf(lines, "idl_command_started")).toBeUndefined();
     expect(cluster.sent).toEqual([]);
   });
 
-  test.describe("legacy-idl on a program with an Anchor IDL account", () => {
-    let idlAccount: Address;
-
-    /** Writes the Anchor IDL account as `anchor idl init` of Anchor 0.29 leaves it: discriminator, authority, length, zlib data, then free space */
-    test.beforeEach(async () => {
-      const [base] = await getProgramDerivedAddress({
-        programAddress: LEGACY_IDL_PROGRAM,
-        seeds: [],
-      });
-      idlAccount = await createAddressWithSeed({
-        baseAddress: base,
-        programAddress: LEGACY_IDL_PROGRAM,
-        seed: "anchor:idl",
-      });
-      cluster.setAccount(idlAccount, {
-        owner: LEGACY_IDL_PROGRAM,
-        executable: false,
-        data: getStructEncoder([
-          ["discriminator", getBytesEncoder()],
-          ["authority", getAddressEncoder()],
-          ["idl", addEncoderSizePrefix(getBytesEncoder(), getU32Encoder())],
-          ["free", getBytesEncoder()],
-        ]).encode({
-          // SHA-256 of `internal:IdlAccount`, first 8 bytes
-          discriminator: Uint8Array.from([24, 70, 98, 191, 58, 144, 123, 158]),
-          authority: AUTHORITY_ADDRESS,
-          idl: deflate(JSON.stringify(LEGACY_IDL)),
-          free: new Uint8Array(64),
-        }),
-      });
-    });
-
-    test("client-v2-program-idl: An older program's IDL", async ({
-      seededPage: page,
-    }) => {
-      await openOnDevnet(page, disconnectedWallet(AUTHORITY));
-
-      const printed = await printedBy(
-        page,
-        `anchor legacy-idl fetch ${LEGACY_IDL_PROGRAM}`
-      );
-
-      expect(printed.endsWith(`\n${LEGACY_IDL_PRINTED}`)).toBe(true);
-      expect(printed).not.toContain(WALLET_QUESTION);
-    });
-
-    test("client-v2-program-idl: Close an older program's IDL", async ({
-      seededPage: page,
-    }) => {
-      await openOnDevnet(page, connectedWallet(AUTHORITY));
-      const rent = lamportsAt(idlAccount);
-      const before = balanceOf(AUTHORITY_ADDRESS);
-
-      await runUntil(`Idl account closed: ${idlAccount}`)(
-        page,
-        `anchor legacy-idl close ${LEGACY_IDL_PROGRAM}`
-      );
-
-      expect(cluster.svm.getAccount(idlAccount).exists).toBe(false);
-      expect(balanceOf(AUTHORITY_ADDRESS)).toBe(before + rent - lastFee());
-    });
-
-    test("client-v2-program-idl: A legacy close by another wallet", async ({
-      seededPage: page,
-    }) => {
-      await openOnDevnet(page, connectedWallet(OTHER));
-
-      await runUntil(
-        `The legacy IDL account's authority is ${AUTHORITY_ADDRESS}.`
-      )(page, `anchor legacy-idl close ${LEGACY_IDL_PROGRAM}`);
-
-      expect(cluster.sent).toEqual([]);
-    });
-  });
-
-  test("client-v2-program-idl: A program without an Anchor IDL account", async ({
+  test("client-v2-program-idl: anchor legacy-idl", async ({
     seededPage: page,
   }) => {
     await openOnDevnet(page, disconnectedWallet(AUTHORITY));
+    const lines = linesOn(page);
 
-    await runUntil(
-      `Program ${PROGRAM} has no legacy IDL on the selected network.`
-    )(page, `anchor legacy-idl fetch ${PROGRAM}`);
+    const printed = await printedBy(page, `anchor legacy-idl fetch ${PROGRAM}`);
+
+    expect(printed).toContain(
+      "The Playground terminal does not support `anchor legacy-idl` yet."
+    );
+    expect(printed).not.toContain(WALLET_QUESTION);
+    await expect
+      .poll(() => lineOf(lines, "idl_command_failed"), LONG)
+      .toContain("{command: legacy-idl, cluster: devnet, reason: unsupported}");
+    await linesRead(lines);
+    expect(lineOf(lines, "idl_command_started")).toBeUndefined();
+    expect(cluster.sent).toEqual([]);
   });
 
   test("client-v2-program-idl: A successful upload is tracked", async ({
