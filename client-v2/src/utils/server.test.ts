@@ -1,7 +1,7 @@
 import { PgServer, PgServerError } from "./server";
 
 const settings = {
-  server: { endpoint: "http://server.test" },
+  server: { endpoint: "https://server.test" },
   experimental: { unstable: false },
 };
 
@@ -37,7 +37,7 @@ describe("PgServer routes", () => {
     respond({ stderr: "", uuid: "u", idl: null });
     await PgServer.build({ files: [] });
 
-    expect(requestedUrl()).toBe("http://server.test/build");
+    expect(requestedUrl()).toBe("https://server.test/build");
     expect(requestInit().method).toBe("POST");
   });
 
@@ -45,7 +45,7 @@ describe("PgServer routes", () => {
     respond(null);
     const bytes = await PgServer.deploy("abc");
 
-    expect(requestedUrl()).toBe("http://server.test/deploy/abc");
+    expect(requestedUrl()).toBe("https://server.test/deploy/abc");
     expect(Array.from(bytes)).toEqual([1, 2, 3]);
   });
 
@@ -104,13 +104,13 @@ describe("the unstable switch", () => {
   it("prefixes build with /unstable", async () => {
     respond({ stderr: "", uuid: null, idl: null });
     await PgServer.build({ files: [] });
-    expect(requestedUrl()).toBe("http://server.test/unstable/build");
+    expect(requestedUrl()).toBe("https://server.test/unstable/build");
   });
 
   it("prefixes deploy with /unstable", async () => {
     respond(null);
     await PgServer.deploy("abc");
-    expect(requestedUrl()).toBe("http://server.test/unstable/deploy/abc");
+    expect(requestedUrl()).toBe("https://server.test/unstable/deploy/abc");
   });
 });
 
@@ -128,7 +128,7 @@ describe("PgServer failures", () => {
     expect(error.status).toBe(500);
     expect(error.body).toBe("Program is not built");
     expect(error.message).toBe(
-      "Server request failed (http://server.test/deploy/gone): Program is not built"
+      "Server request failed (https://server.test/deploy/gone): Program is not built"
     );
   });
 

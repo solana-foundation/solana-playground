@@ -22,6 +22,10 @@ ESLint 8.40 through `react-scripts`.
 - A `security.yml` workflow runs zizmor over `.github/` and hadolint over `client-v2/Dockerfile` and
   `docker/server-unstable.Dockerfile` on every PR and on pushes to `master`. A finding fails the run, and each tool
   uploads SARIF to Code scanning.
+- client-v2 lint fails on a literal `api.devnet`, `api.testnet` or `api.mainnet-beta.solana.com` address outside the
+  module that defines `Endpoint`, which moves to `entities/cluster/model/endpoint.ts` so e2e can import it. A test
+  that needs some RPC takes one from `src/test-utils/endpoints.mjs`, whose hosts are on the `.test` TLD and never
+  resolve.
 - CodeQL default setup runs the `extended` query suite and no longer analyses Python.
 - Telemetry: no slice under `features/` or `widgets/` changes, so no event is added, renamed or removed. No funnel
   step's code changes.
@@ -47,9 +51,10 @@ problems, in the development overlay, so dropping the lint overlay leaves it tru
   `client-v2/eslint.config.mjs`, `client-v2/eslint-layers.js`, `client-v2/eslint-plugin-layers/index.js`,
   `client-v2/craco.config.js`, `client-v2/scripts/lib/untyped-eslint.mjs`, `client-v2/scripts/lint-changed.mjs`,
   `client-v2/scripts/ds-add.mjs`, `client-v2/scripts/eslint-layers.test.mjs`, `client-v2/CLAUDE.md` where it names
-  `eslintConfig`. Fixes in source files for findings the new rules raise as errors.
-- **CI:** a new `.github/workflows/security.yml`. Fixes to existing workflows and to the two Dockerfiles for zizmor and
-  hadolint findings.
+  `eslintConfig`. Fixes in source files for findings the new rules raise as errors. A new
+  `client-v2/src/test-utils/endpoints.mjs` and `client-v2/src/entities/cluster/model/endpoint.ts`.
+- **CI:** a new `.github/workflows/security.yml`, and `client-v2/CLAUDE.md`'s "Green" definition, which names it.
+  Fixes to existing workflows and to the two Dockerfiles for zizmor and hadolint findings.
 - **Repository settings:** the CodeQL default setup configuration, changed by a maintainer with `gh api`.
 - **Out of scope:** secret scanning (HOO-2868); Semgrep (its registry rulesets duplicate the tools here or target
   libraries client-v2 does not use, and the Semgrep Rules License forbids copying them into a public repository);

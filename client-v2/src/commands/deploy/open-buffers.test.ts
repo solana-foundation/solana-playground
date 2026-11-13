@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
+
 import { PgFs } from "../../utils/explorer/fs";
 import type { OpenBuffer } from "./open-buffers";
 import {
@@ -13,7 +15,7 @@ const bufferOf =
   (address: string): OpenBuffer => ({
     address,
     authority,
-    endpoint: "https://api.devnet.solana.com",
+    endpoint: TEST_ENDPOINT.DEVNET,
     cluster: "devnet",
     at: "2026-11-06T17:00:00.000Z",
   });

@@ -111,6 +111,7 @@ export class PgSyncBase {
       const before = source[path];
       const hash = base[path];
       if (before === undefined || hash === undefined) continue;
+      // eslint-disable-next-line security/detect-possible-timing-attacks -- compares content hashes, not a secret
       if ((await sha256(before)) !== hash) continue;
       held[path] = { hash, content: before };
       added = true;

@@ -292,6 +292,7 @@ export const getRustDependencies = async (files: TupleFiles) => {
       const dependencyName = PgCommon.toKebabFromSnake(crateName);
       if (
         !dependencies[dependencyName] &&
+        // eslint-disable-next-line security/detect-non-literal-regexp -- a crate name from CRATES, `\w` characters only
         new RegExp(`${crateName}::`, "gm").test(content)
       ) {
         dependencies[dependencyName] = getRequirement(dependencyName);
@@ -363,6 +364,7 @@ export const fetchJSDependencyMap = async (files: TupleFiles) => {
     for (const packageName of PACKAGES.importable) {
       if (
         !dependencies[packageName] &&
+        // eslint-disable-next-line security/detect-non-literal-regexp -- a package name from PACKAGES
         new RegExp(`("|')${packageName}("|')`, "gm").test(content)
       ) {
         dependencies[packageName] = getVersion(packageName);

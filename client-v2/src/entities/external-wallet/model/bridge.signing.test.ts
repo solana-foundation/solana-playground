@@ -7,6 +7,8 @@ import * as ed25519 from "@noble/ed25519";
 import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
+
 import type { StandardWallet } from "../../../utils/wallet/types";
 import type { SigningCluster } from "./bridge";
 
@@ -37,12 +39,12 @@ describe("entities/external-wallet/model/bridge", () => {
   const DEVNET: SigningCluster = {
     id: "solana:devnet",
     label: "devnet",
-    url: "https://api.devnet.solana.com",
+    url: TEST_ENDPOINT.DEVNET,
   };
   const MAINNET: SigningCluster = {
     id: "solana:mainnet",
     label: "mainnet-beta",
-    url: "https://api.mainnet-beta.solana.com",
+    url: TEST_ENDPOINT.MAINNET_BETA,
   };
 
   /** A connected bridged wallet over a fake built from `opts`, signing for `signingCluster` */

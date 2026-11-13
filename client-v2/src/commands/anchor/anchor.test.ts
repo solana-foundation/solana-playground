@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { UnknownClusterError } from "@/entities/cluster";
+import { Endpoint, UnknownClusterError } from "@/entities/cluster";
 
 import {
   PgConnection,
@@ -132,7 +132,7 @@ describe("anchor", () => {
   it("refuses an IDL write when the endpoint changed while the CLI loaded", async () => {
     vi.mocked(PgConnection.getCluster).mockResolvedValue("devnet");
     vi.mocked(PgPackage.import).mockImplementationOnce(async () => {
-      PgSettings.connection.endpoint = "https://api.mainnet-beta.solana.com";
+      PgSettings.connection.endpoint = Endpoint.MAINNET_BETA;
       return { runAnchor } as never;
     });
 

@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // `batchChanges` and `executeInOrder` are replaced by the callback itself, so
 // calling the effect's return value runs one pass.
 const unmounted = vi.hoisted(() => new Error("The terminal is not open."));
+const { DEVNET_RPC } = await vi.hoisted(async () => ({
+  DEVNET_RPC: (await import("@/test-utils/endpoints.mjs")).TEST_ENDPOINT.DEVNET,
+}));
 vi.mock("../../utils", () => ({
   PgCommand: {
     airdrop: { execute: vi.fn() },
@@ -15,7 +18,7 @@ vi.mock("../../utils", () => ({
   },
   PgConnection: {
     cluster: "devnet",
-    current: { rpcEndpoint: "https://api.devnet.solana.com" },
+    current: { rpcEndpoint: DEVNET_RPC },
     getAirdropAmount: () => 5,
     getAirdropConnection: <T>(connection: T) => connection,
   },
@@ -132,7 +135,6 @@ describe("automaticAirdrop", () => {
   // The cache of clusters whose airdrop failed lives for the module, and the
   // tests above leave devnet in it: these load the effect afresh
   describe("once the faucet answered closed", () => {
-    const DEVNET_RPC = "https://api.devnet.solana.com";
     const LINE =
       "The devnet RPC faucet is closed. Request test SOL at https://faucet.solana.com/?walletAddress=Wa11et&cluster=devnet";
     let fresh: {

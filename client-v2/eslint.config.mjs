@@ -3,12 +3,15 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import sdl from "@microsoft/eslint-plugin-sdl";
 import confusingBrowserGlobals from "confusing-browser-globals";
 import importPlugin from "eslint-plugin-import";
 import jest from "eslint-plugin-jest";
 import jsxA11y from "eslint-plugin-jsx-a11y";
+import noUnsanitized from "eslint-plugin-no-unsanitized";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
+import security from "eslint-plugin-security";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
 import unicorn from "eslint-plugin-unicorn";
 import globals from "globals";
@@ -30,6 +33,8 @@ const UUID_REGEX_MESSAGE =
   "Check an id with isUuid() from src/shared/lib/ids instead of a copied UUID regex.";
 const REPORT_BUTTON_FAILURE_MESSAGE =
   'reportButtonFailure takes what did not happen first: .catch(reportButtonFailure("<action>")). Passed bare, it returns a handler nobody calls and the failure is swallowed.';
+const CLUSTER_URL_MESSAGE =
+  "Take a cluster's address from Endpoint (src/entities/cluster), or, in a test that needs some RPC, from TEST_ENDPOINT in src/test-utils/endpoints.mjs, whose hosts never resolve.";
 
 const RANDOM_UUID_SELECTORS = [
   {
@@ -51,6 +56,17 @@ const REPORT_BUTTON_FAILURE_SELECTOR = {
     "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
   message: REPORT_BUTTON_FAILURE_MESSAGE,
 };
+const CLUSTER_URL = String.raw`/api\.(devnet|testnet|mainnet-beta)\.solana\.com/`;
+const CLUSTER_URL_SELECTORS = [
+  { selector: `Literal[value=${CLUSTER_URL}]`, message: CLUSTER_URL_MESSAGE },
+  {
+    selector: `TemplateElement[value.raw=${CLUSTER_URL}]`,
+    message: CLUSTER_URL_MESSAGE,
+  },
+  { selector: `JSXText[value=${CLUSTER_URL}]`, message: CLUSTER_URL_MESSAGE },
+];
+/** The one module that spells the clusters' addresses */
+const ENDPOINT_MODULE = "src/entities/cluster/model/endpoint.ts";
 
 const UUID_PATH = { name: "uuid", message: UUID_MESSAGE };
 const CN_PATH = { name: "cn", message: CN_MESSAGE };
@@ -316,6 +332,18 @@ const project = [
         "error",
         ...RANDOM_UUID_SELECTORS,
         REPORT_BUTTON_FAILURE_SELECTOR,
+        ...CLUSTER_URL_SELECTORS,
+      ],
+    },
+  },
+  {
+    files: ["api/**", "scripts/**"],
+    // `WithStatement` is react-app's selector, kept; error in place of react-app's warn changes nothing: a module cannot hold `with`
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        "WithStatement",
+        ...CLUSTER_URL_SELECTORS,
       ],
     },
   },
@@ -332,6 +360,7 @@ const project = [
         "error",
         ...RANDOM_UUID_SELECTORS,
         UUID_REGEX_SELECTOR,
+        ...CLUSTER_URL_SELECTORS,
       ],
     },
   },
@@ -347,6 +376,18 @@ const project = [
           patterns: [UUID_PATTERN],
         },
       ],
+      "no-restricted-syntax": [
+        "error",
+        ...RANDOM_UUID_SELECTORS,
+        UUID_REGEX_SELECTOR,
+        REPORT_BUTTON_FAILURE_SELECTOR,
+        ...CLUSTER_URL_SELECTORS,
+      ],
+    },
+  },
+  {
+    files: [ENDPOINT_MODULE],
+    rules: {
       "no-restricted-syntax": [
         "error",
         ...RANDOM_UUID_SELECTORS,
@@ -549,14 +590,69 @@ const project = [
   },
 ];
 
+// sdl's own localhost default is unanchored (`http://localhost.evil.test` passes), so only its XML namespaces stay
+const INSECURE_URL_EXCEPTIONS = [
+  ...sdl.rules["no-insecure-url"].defaultExceptions
+    .map(({ source }) => source)
+    .filter((source) => !source.includes("localhost")),
+  String.raw`^(http|ws)://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?([/?#]|$)`,
+];
+
+/** Security rules; sdl's are named one by one, since its recommended pulls in every framework config of sdl's */
+const securityChecks = [
+  {
+    files: ["src/**", "api/**", "e2e/**"],
+    plugins: { "no-unsanitized": noUnsanitized, "@microsoft/sdl": sdl },
+    rules: {
+      "no-unsanitized/method": "error",
+      "no-unsanitized/property": "error",
+      "@microsoft/sdl/no-postmessage-star-origin": "error",
+      "@microsoft/sdl/no-document-domain": "error",
+      "@microsoft/sdl/no-document-write": "error",
+      "@microsoft/sdl/no-insecure-url": [
+        "error",
+        { exceptions: INSECURE_URL_EXCEPTIONS },
+      ],
+    },
+  },
+  {
+    // A test importing its own module, and the factories that import their folder's modules by name
+    files: [
+      "{src,api,e2e}/**/*.test.mjs",
+      "src/frameworks/create.ts",
+      "src/themes/create.ts",
+      "src/tutorials/create.tsx",
+      "src/views/main/secondary/create.ts",
+      "src/views/sidebar/create.ts",
+    ],
+    rules: {
+      "no-unsanitized/method": ["error", {}, { import: { properties: [] } }],
+    },
+  },
+  {
+    // Not scripts/: build tooling reads paths and spawns processes by design
+    files: ["src/**", "api/**"],
+    plugins: security.configs.recommended.plugins,
+    rules: {
+      ...security.configs.recommended.rules,
+      // Reports nearly every computed member access
+      "security/detect-object-injection": "off",
+    },
+  },
+];
+
 const config = [
   // ESLint 9 lints `.cjs` by default; `yarn lint` never did
   { ignores: ["**/*.cjs"] },
-  // ESLint 9 reports unused disable directives by default; ESLint 8 did not
-  { linterOptions: { reportUnusedDisableDirectives: "off" } },
+  {
+    linterOptions: {
+      reportUnusedDisableDirectives: "off", // ESLint 8's default; TODO(HOO-2892): "warn", once the disables that suppress nothing are removed
+    },
+  },
   ...reactApp,
   ...layers,
   ...project,
+  ...securityChecks,
 ];
 
 export default config;

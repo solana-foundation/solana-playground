@@ -348,6 +348,7 @@ if (import.meta.vitest) {
       };
       const fromOf = (from: string) => fromOfEncoded(encodeURIComponent(from));
       expect(fromOfEncoded("javascript%3Aalert(1)")).toBeUndefined();
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
       expect(fromOf("http://solana.com/docs")).toBeUndefined();
       expect(fromOf("https://evil.example/docs")).toBeUndefined();
       expect(fromOf("https://notsolana.com/docs")).toBeUndefined();
@@ -372,6 +373,7 @@ if (import.meta.vitest) {
       expect(backToDocsHref(undefined, "https://notsolana.com/docs")).toBe(
         DOCS_HOME
       );
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
       expect(backToDocsHref(undefined, "http://solana.com/docs")).toBe(
         DOCS_HOME
       );

@@ -97,14 +97,17 @@ const PREFERRED_CLIENTS = [
  * statement)
  */
 const hasDeclarationFor = (name: string) => (content: string) =>
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^(export\\s+)?(const|let|var|function|class)\\s+${name}\\b`,
     "m"
   ).test(content) ||
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^(export\\s+)?(const|let|var)\\s*[{[](?:[^}\\]=]*?[,:])?\\s*${name}\\b(?!\\s*:)[^}\\]=]*[}\\]]\\s*=`,
     "m"
   ).test(content) ||
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^\\s*import\\s+[^;'"]*?\\b${name}\\b[^;'"]*?\\s+from\\s+["']`,
     "m"
@@ -115,6 +118,7 @@ const hasDeclarationFor = (name: string) => (content: string) =>
  * property (`a.pg`) or part of a longer one (`mypg`)
  */
 const isGlobalUsedFor = (name: string) => (content: string) =>
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(`(^|[^\\w$.])${name}\\b`, "m").test(content);
 
 /**
@@ -611,8 +615,6 @@ if (import.meta.vitest) {
       ts = await import("typescript");
     });
 
-    const DEVNET = "https://api.devnet.solana.com";
-
     /** Every package the files import, at version 1.0.0 */
     const importedPackages = async (files: TupleFiles) => {
       const names = new Set<string>();
@@ -635,8 +637,9 @@ if (import.meta.vitest) {
         .filter(Boolean)
         .join("") + content;
 
-    const profileAs =
-      toNodeProjectWith(importedPackages)(importGlobals)(DEVNET);
+    const profileAs = toNodeProjectWith(importedPackages)(importGlobals)(
+      Endpoint.DEVNET
+    );
 
     const profileOf = profileAs("My Project");
 
@@ -846,7 +849,9 @@ console.log(await pg.connection.getSlot());
         await exportOf([["client/a.ts", CLIENT]]),
         "playground.ts"
       );
-      expect(shimText).toContain(`process.env.SOLANA_RPC_URL || "${DEVNET}"`);
+      expect(shimText).toContain(
+        `process.env.SOLANA_RPC_URL || "${Endpoint.DEVNET}"`
+      );
       expect(shimText).toContain(
         `process.env.SOLANA_KEYPAIR || "${DEFAULT_KEYPAIR_PATH}"`
       );
@@ -864,7 +869,7 @@ console.log(await pg.connection.getSlot());
         "README.md"
       );
       expect(text).toContain("SOLANA_RPC_URL");
-      expect(text).toContain(DEVNET);
+      expect(text).toContain(Endpoint.DEVNET);
       expect(text).toContain("SOLANA_KEYPAIR");
       expect(text).toContain(DEFAULT_KEYPAIR_PATH);
     });
@@ -968,6 +973,7 @@ console.log(await pg.connection.getSlot());
       },
       {
         cluster: "playnet",
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
         endpoint: "http://playnet",
         expected: Endpoint.DEVNET,
       },

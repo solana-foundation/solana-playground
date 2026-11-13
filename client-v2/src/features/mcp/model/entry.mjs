@@ -71,6 +71,7 @@ const readProtection = (value, where) => {
         `${Object.keys(PROTECTION_PROVIDERS).join(", ")}.`
     );
   }
+  // eslint-disable-next-line security/detect-possible-timing-attacks -- compares with undefined, not with a secret
   if (secret === undefined) return undefined;
   if (typeof secret !== "string" || !secret.trim()) {
     fail(`${where}.secret is empty — fill it or remove "protection".`);

@@ -355,8 +355,10 @@ const getSearchBarProps = (
           if (!value) return true;
 
           const lowerCaseValue = value.toLowerCase();
-          if (lowerCaseName.includes(lowerCaseValue)) return true;
-          return new RegExp(lowerCaseName).test(lowerCaseValue);
+          return (
+            lowerCaseName.includes(lowerCaseValue) ||
+            lowerCaseValue.includes(lowerCaseName)
+          );
         };
 
         // Named

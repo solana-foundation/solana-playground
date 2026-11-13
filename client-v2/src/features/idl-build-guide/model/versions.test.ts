@@ -7,10 +7,12 @@ import { ANCHOR_VERSION, SOLANA_VERSION } from "./versions";
 
 const SERVER = path.join(__dirname, "../../../../../server");
 
+// eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
 const read = (rel: string) => fs.readFileSync(path.join(SERVER, rel), "utf8");
 
 /** The version of `name` in a Cargo.lock; throws when the lock has none */
 const lockedVersion = (lock: string, name: string) => {
+  // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
   const match = new RegExp(
     `\\[\\[package\\]\\]\\nname = "${name}"\\nversion = "([^"]+)"`
   ).exec(lock);

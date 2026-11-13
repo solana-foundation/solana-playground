@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 import { readIdl } from "@/entities/idl";
 import type { TutorialDefinition } from "@/entities/tutorial";
 
+/** A `pub fn`'s name, its generics and the `(` that opens its parameters */
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s*`, `<[^>]*>` and `\(` start with disjoint characters
+const PUB_FN = /pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g;
+
 /**
  * A step's `idl` is generated from its target program (`yarn tutorial:idl`),
  * and nothing else regenerates it: a program edited without it would ship an
@@ -65,7 +69,7 @@ const params = (list: string): string[] => {
 const shapeOfSource = (source: string): Shape => {
   const body = programModule(source);
   const shape: Shape = {};
-  for (const fn of body.matchAll(/pub fn (\w+)\s*(?:<[^>]*>)?\s*\(/g)) {
+  for (const fn of body.matchAll(PUB_FN)) {
     // The parameter list runs to the parenthesis that closes it
     const start = (fn.index ?? 0) + fn[0].length;
     let depth = 1;
@@ -105,6 +109,7 @@ const tutorials = readdirSync(__dirname, { withFileTypes: true })
   .filter((e) => e.isDirectory() && !e.name.startsWith("__"))
   .map((e) => join(__dirname, e.name, "tutorial.json"))
   .filter(existsSync)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   .map((path) => JSON.parse(readFileSync(path, "utf8")) as TutorialDefinition)
   .filter((d) => d.framework === "Anchor");
 

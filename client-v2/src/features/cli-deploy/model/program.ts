@@ -56,7 +56,7 @@ if (import.meta.vitest) {
 
   describe("features/cli-deploy/model/program", () => {
     it("asks for a rebuild only on the server's 'not built' answer", () => {
-      const url = "http://server.test/deploy/u";
+      const url = "https://server.test/deploy/u";
       expect(
         downloadFailure(
           new PgServerError({ url, status: 500, body: "Program is not built" })

@@ -67,11 +67,11 @@ describe("BaseNetworkChoice with a platform devnet", () => {
       "Testnet",
       "Localnet",
       "Surfpool",
-      "api.devnet.solana.com",
+      new URL(Endpoint.DEVNET).host,
     ]);
     expect(
       screen
-        .getByRole("radio", { name: "api.devnet.solana.com" })
+        .getByRole("radio", { name: new URL(Endpoint.DEVNET).host })
         .getAttribute("aria-checked")
     ).toBe("true");
   });

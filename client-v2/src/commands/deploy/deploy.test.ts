@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
 
 import { PgTerminal } from "../../utils";
 import { isStopped } from "../../utils/stopped";
@@ -115,7 +116,7 @@ vi.mock("../../utils", () => ({
           if (key.toBase58() !== "Buf1111") return env.balance;
           return switched ? 0 : env.bufferBalance();
         },
-        rpcEndpoint: "https://api.devnet.solana.com",
+        rpcEndpoint: TEST_ENDPOINT.DEVNET,
         getMinimumBalanceForRentExemption: async () => 2_000_000_000,
         getAccountInfo: async () => {
           if (env.accountReadFails) throw new Error("fetch failed");
@@ -707,7 +708,7 @@ describe("commands/deploy", () => {
       expect(openBuffers.record).toHaveBeenCalledWith({
         address: "Buf1111",
         authority: "Pg1111",
-        endpoint: "https://api.devnet.solana.com",
+        endpoint: TEST_ENDPOINT.DEVNET,
         cluster: "devnet",
         at: expect.any(String),
       });

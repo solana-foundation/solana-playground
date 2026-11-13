@@ -683,6 +683,7 @@ if (import.meta.vitest) {
       it.each([
         "https://my.rpc.test/?api-key=s3cr3t",
         "http://localhost:8899",
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a LAN validator over http is the case under test
         "http://10.0.0.5:8080",
       ])("keeps the valid custom address %s", (url) => {
         const stored = { connection: { endpoint: { option: "custom", url } } };
@@ -869,7 +870,7 @@ if (import.meta.vitest) {
       it("keeps a custom address byte for byte, token and all", () => {
         const custom = "https://my.rpc.test/v1/?token=s3cr3t&x=%20y";
         const stored = toStoredEndpoints(
-          state(custom, "http://10.0.0.5:8080"),
+          state(custom, "https://10.0.0.5:8080"),
           options
         );
 
@@ -878,11 +879,11 @@ if (import.meta.vitest) {
           url: custom,
         });
         expect(
-          roundTrip(state(custom, "http://10.0.0.5:8080")).connection.endpoint
+          roundTrip(state(custom, "https://10.0.0.5:8080")).connection.endpoint
         ).toBe(custom);
         expect(
-          roundTrip(state(custom, "http://10.0.0.5:8080")).server.endpoint
-        ).toBe("http://10.0.0.5:8080");
+          roundTrip(state(custom, "https://10.0.0.5:8080")).server.endpoint
+        ).toBe("https://10.0.0.5:8080");
       });
 
       it("reads an address of ours stored as a plain string as its key's address", () => {

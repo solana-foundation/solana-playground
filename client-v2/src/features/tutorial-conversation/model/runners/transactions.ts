@@ -1,5 +1,6 @@
 /* eslint-disable layers/curry-order, max-params, unicorn/no-null -- tutorial flow v2 predates these rules; cleanup tracked from SF#94 */
 import { sameIdlName } from "@/shared/lib/idl-name";
+import { LINE_BREAK } from "@/shared/lib/line-break";
 import { createLogger } from "@/shared/lib/logger";
 import { isProgramLog } from "@/shared/lib/program-log";
 
@@ -112,9 +113,11 @@ const logger = createLogger("tutorial-conversation:transactions");
 
 /** Anchor logs the instruction's name first, in the program's own frame */
 const INSTRUCTION = /^Program log: Instruction: (\w+)/;
-/** `AnchorError thrown in ...` or `AnchorError occurred.` */
-const ANCHOR_ERROR =
-  /AnchorError.*Error Code: (\w+)\. Error Number: (\d+)\.(?: Error Message: (.*?)\.?$)?/;
+const ANCHOR_ERROR = "AnchorError";
+const ERROR_CODE = "Error Code: ";
+const ERROR_MESSAGE = " Error Message: ";
+/** What follows `Error Code: `, read in place with the sticky flag */
+const ERROR_CODE_TAIL = /(\w+)\. Error Number: (\d+)\./y;
 const CUSTOM_ERROR = /custom program error: 0x([0-9a-f]+)/i;
 const INVOKE = /^Program (\w+) invoke \[\d+\]$/;
 const EXIT = /^Program (\w+) (success|failed)/;
@@ -151,6 +154,7 @@ export const programLines = (log: string[], programId: string): string[] => {
 const matcher = (pattern: string | undefined): ((line: string) => boolean) => {
   if (pattern === undefined) return () => true;
   try {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- a shipped tutorial's pattern, which `yarn tutorial:check` compiles
     const re = new RegExp(pattern, "i");
     return (line) => re.test(line);
   } catch (e) {
@@ -185,9 +189,40 @@ export const pickLine = (
 /** The error an Anchor program logged, with its message when it gave one */
 const anchorError = (log: string[]) => {
   for (const line of log) {
-    const m = ANCHOR_ERROR.exec(line);
-    if (m) {
-      return { name: m[1], code: Number(m[2]), message: m[3] ?? null };
+    const error = anchorErrorOf(line);
+    if (error) return error;
+  }
+  return null;
+};
+
+/**
+ * What `/AnchorError.*Error Code: (\w+)\. Error Number: (\d+)\.(?: Error
+ * Message: (.*?)\.?$)?/` would read, found with `lastIndexOf`, since the
+ * regex backtracks quadratically on a long line. The last `Error Code: `
+ * whose tail parses wins, as the greedy `.*` chooses.
+ */
+const anchorErrorOf = (line: string) => {
+  const segments = line.split(LINE_BREAK);
+  for (const [i, segment] of segments.entries()) {
+    const start = segment.indexOf(ANCHOR_ERROR);
+    if (start === -1) continue;
+    const from = start + ANCHOR_ERROR.length;
+    for (
+      let at = segment.lastIndexOf(ERROR_CODE);
+      at >= from;
+      at = segment.lastIndexOf(ERROR_CODE, at - 1)
+    ) {
+      ERROR_CODE_TAIL.lastIndex = at + ERROR_CODE.length;
+      const tail = ERROR_CODE_TAIL.exec(segment);
+      if (!tail) continue;
+      const rest = segment.slice(ERROR_CODE_TAIL.lastIndex);
+      // The message runs to the end of the input, so only the last segment has one
+      const hasMessage =
+        i === segments.length - 1 && rest.startsWith(ERROR_MESSAGE);
+      const message = hasMessage
+        ? rest.slice(ERROR_MESSAGE.length).replace(/\.$/, "")
+        : null;
+      return { name: tail[1], code: Number(tail[2]), message };
     }
   }
   return null;
@@ -449,6 +484,42 @@ if (import.meta.vitest) {
   const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/transactions", () => {
+    describe("anchorErrorOf", () => {
+      const TAIL = "Error Code: Late. Error Number: 6001.";
+      it.each([
+        [
+          "Program log: AnchorError occurred. Error Code: Low. Error Number: 6000. Error Message: Too low.",
+          { name: "Low", code: 6000, message: "Too low" },
+        ],
+        [
+          "AnchorError occurred. Error Code: Low. Error Number: 6000.",
+          { name: "Low", code: 6000, message: null },
+        ],
+        // The last code whose tail parses, as a greedy `.*` picked it
+        [
+          `AnchorError ${TAIL} Error Code: Bad. ${TAIL}`,
+          { name: "Late", code: 6001, message: null },
+        ],
+        [`${TAIL} AnchorError`, null],
+        // A line break ends the search, and a message must reach the end
+        [`AnchorError\n${TAIL}`, null],
+        [
+          `AnchorError ${TAIL} Error Message: x.\nmore`,
+          { name: "Late", code: 6001, message: null },
+        ],
+      ])("reads %j", (line, expected) => {
+        expect(anchorErrorOf(line)).toEqual(expected);
+      });
+
+      it(
+        "parses a long line of AnchorError repeats in linear time",
+        { timeout: 1000 },
+        () => {
+          expect(anchorErrorOf("AnchorError ".repeat(30_000))).toBeNull();
+        }
+      );
+    });
+
     describe("accountsWritten", () => {
       it("names what a call wrote to as the IDL does, past the payer and read-only accounts", () => {
         expect(

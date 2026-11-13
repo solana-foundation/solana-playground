@@ -184,6 +184,7 @@ const onVisibleStage = (state: FlowState): FlowState =>
     ? state
     : { ...state, stage: "write" };
 
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `[`, `E` and `]` delimit the optional code
 const ERROR_HEADER = /^error(?:\[E\d+\])?: (.+)$/;
 // rustc's own summary lines are not a diagnostic of their own - matches
 // `parseBuildReport`'s `SUMMARY` in `stages/build-report.ts` so the stepper

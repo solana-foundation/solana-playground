@@ -73,7 +73,7 @@ const fakeFetch = async (url: string, init?: RequestInit) => {
   }
 
   if (init?.method === "DELETE") {
-    const id = new URL(url, "http://x").searchParams.get("id");
+    const id = new URL(url, "https://x").searchParams.get("id");
     if (id === null) throw new Error("Expected an id in the DELETE url");
     const existing = server.get(id);
     if (existing) {
@@ -170,7 +170,7 @@ const fakeFetch = async (url: string, init?: RequestInit) => {
     return { ok: true, json: async () => ({ updatedAt: stored.updatedAt }) };
   }
 
-  const id = new URL(url, "http://x").searchParams.get("id");
+  const id = new URL(url, "https://x").searchParams.get("id");
   const live = [...server.values()].filter((p) => !p.deleted);
   if (id) {
     const project = server.get(id);

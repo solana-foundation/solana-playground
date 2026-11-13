@@ -75,6 +75,7 @@ Object.defineProperty(globalThis, "fetch", {
 // covers `.rs`, `.py`, `.toml`, `.raw` and `.d.ts`, which no test loads; one
 // that did would reach Node as JavaScript and fail with a SyntaxError.
 createRequire(import.meta.url).extensions[".md"] = (module, filename) => {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   module.exports = readFileSync(filename, "utf8");
 };
 

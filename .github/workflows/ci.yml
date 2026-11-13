@@ -16,6 +16,6 @@ permissions:
 
 jobs:
   checks:
-    uses: ./.github/workflows/reusable-checks.yml
+    uses: ./.github/workflows/reusable-checks.yml # zizmor: ignore[self-repository] act rejects the $/ form, and both resolve to this commit
     with:
       build: false

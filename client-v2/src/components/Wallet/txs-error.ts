@@ -48,11 +48,16 @@ export const describeTxsError = (
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
 
   describe("components/Wallet/txs-error", () => {
-    const devnet = "https://api.devnet.solana.com";
+    let devnet: string;
     const local = "http://localhost:8899";
+
+    beforeAll(async () => {
+      devnet = (await import("@/test-utils/endpoints.mjs")).TEST_ENDPOINT
+        .DEVNET;
+    });
 
     it("names a local endpoint that does not answer, and the validator", () => {
       expect(
@@ -71,7 +76,7 @@ if (import.meta.vitest) {
           endpoint: devnet,
           cluster: "devnet",
         })
-      ).toBe("Can't reach the RPC endpoint at https://api.devnet.solana.com.");
+      ).toBe(`Can't reach the RPC endpoint at ${devnet}.`);
     });
 
     it("keeps the words of an endpoint that answered with an error", () => {

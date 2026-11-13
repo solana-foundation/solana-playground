@@ -1,4 +1,6 @@
 # Build context: ./server. `server-image` is the stock server/Dockerfile image, given by compose `additional_contexts`
+# A build context compose names, not a registry image, so it carries no tag
+# hadolint ignore=DL3006
 FROM server-image
 
 ARG USER=solpg
@@ -7,8 +9,13 @@ ARG DOCKER_SHA256="995d1ef289677f74fd58d8d2c35727b6a4ee389c69db8638a3e42d0487aa5
 ARG BUILDX_VERSION="0.37.2"
 ARG BUILDX_SHA256="982ca20490b45ed1ec8d99795974d3d874a358f75938c9c237305010e6b7e548"
 
-# The sandbox runs `docker exec` with a cleared env, whose default search path has /usr/bin
+# For hadolint DL4006; `curl -f` and `sha256sum -c` already fail the chain on their own
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+# root has uid 0 in every image
+# hadolint ignore=DL3066
 USER root
+# The sandbox runs `docker exec` with a cleared env, whose default search path has /usr/bin
 RUN curl -sSfL -o /tmp/docker.tgz "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" \
     && echo "${DOCKER_SHA256}  /tmp/docker.tgz" | sha256sum -c - \
     && tar -xzf /tmp/docker.tgz -C /usr/bin --strip-components=1 docker/docker \
@@ -18,6 +25,8 @@ RUN mkdir -p /usr/libexec/docker/cli-plugins \
     && echo "${BUILDX_SHA256}  /usr/libexec/docker/cli-plugins/docker-buildx" | sha256sum -c - \
     && chmod 755 /usr/libexec/docker/cli-plugins/docker-buildx
 USER ${USER}
+# The stock image's WORKDIR, stated so the relative COPY destinations do not depend on it
+WORKDIR /home/${USER}
 
 # Start-up runs `docker build` on images/Dockerfile.* with this directory as the context
 COPY --chown=${USER}:${USER} .dockerignore Cargo.* rust-toolchain.toml ./

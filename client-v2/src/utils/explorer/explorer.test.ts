@@ -1418,10 +1418,13 @@ describe("writes past a project limit", () => {
 
     /** Every file under `dir`, relative to it, `.raw` dropped */
     const read = (dir: string, prefix = ""): Array<[string, string]> =>
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
       readdirSync(dir).flatMap((name) => {
         const full = nodePath.join(dir, name);
         const rel = prefix + name;
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
         if (statSync(full).isDirectory()) return read(full, `${rel}/`);
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
         return [[rel.replace(/\.raw$/, ""), readFileSync(full, "utf8")]];
       });
 
@@ -1429,8 +1432,10 @@ describe("writes past a project limit", () => {
     const sources = () => {
       const found: Array<[string, string]> = [];
       for (const base of ["src/frameworks", "src/tutorials"]) {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
         for (const name of readdirSync(nodePath.join(root, base))) {
           const filesDir = nodePath.join(root, base, name, "files");
+          // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
           if (existsSync(filesDir)) found.push([`${base}/${name}`, filesDir]);
         }
       }
@@ -1439,6 +1444,7 @@ describe("writes past a project limit", () => {
       const pub = nodePath.join(root, "public/tutorials");
       for (const name of readdirSync(pub)) {
         const filesDir = nodePath.join(pub, name, "files");
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
         if (existsSync(filesDir))
           found.push([`public/tutorials/${name}`, filesDir]);
       }

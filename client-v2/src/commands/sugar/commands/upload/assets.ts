@@ -94,6 +94,7 @@ export const getAssetPairs = async (): Promise<GetAssetPairsResult> => {
       );
     }
 
+    // eslint-disable-next-line security/detect-non-literal-regexp -- `i` is `collection` or an integer, checked above
     const imgRegex = new RegExp(`^${i}\\.(jpg|jpeg|gif|png)$`, "i");
     const imgFileNames = fileNames.filter((f) => imgRegex.test(f));
 
@@ -110,6 +111,7 @@ export const getAssetPairs = async (): Promise<GetAssetPairsResult> => {
 
     // Need a similar check for animation as above, this one checking if there is
     // animation on specific index
+    // eslint-disable-next-line security/detect-non-literal-regexp -- `i` is `collection` or an integer, checked above
     const animationRegex = new RegExp(`^${i}\\.(mp3|mp4|mov|webm|glb)$`, "i");
 
     const animationfileNames = fileNames.filter((f) => animationRegex.test(f));
