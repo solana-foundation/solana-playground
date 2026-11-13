@@ -100,6 +100,11 @@ carries an address or an amount.
 - **WHEN** the chip's ask fails with the faucet's 429
 - **THEN** `fund_airdrop_requested` and then `fund_airdrop_refused` with `reason: "rate-limited"` are emitted once each
 
+#### Scenario: A transfer on Mainnet is counted as mainnet (manual)
+
+- **WHEN** a transfer is confirmed on Mainnet
+- **THEN** `fund_sent` is emitted once with `cluster: "mainnet"`, not `"mainnet-beta"`
+
 #### Scenario: A declined signature is counted (manual)
 
 - **WHEN** the user rejects the transfer in the wallet
