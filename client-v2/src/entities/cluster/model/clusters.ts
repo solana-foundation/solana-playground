@@ -1,24 +1,13 @@
-// Imports nothing but `client-env`: `settings/stored-endpoint.ts`, which loads before everything else, reads this file
+// Imports nothing but `client-env` and `endpoint`: `settings/stored-endpoint.ts`, which loads before everything else, reads this file
 import {
   NATIVE_RPC_URLS,
   PLATFORM_RPC_URLS,
   SEND_TX_PER_SECOND,
 } from "@/shared/config/client-env";
 
-/** A cluster's public RPC endpoint */
-export enum Endpoint {
-  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a name the client matches to run Playnet in the browser, never requested
-  PLAYNET = "http://playnet",
-  LOCALNET = "http://localhost:8899",
-  /**
-   * `surfpool start`'s RPC. Its port is Localnet's; the host tells the two
-   * offered networks apart, and both resolve to the `localnet` cluster.
-   */
-  SURFPOOL = "http://127.0.0.1:8899",
-  DEVNET = "https://api.devnet.solana.com",
-  TESTNET = "https://api.testnet.solana.com",
-  MAINNET_BETA = "https://api.mainnet-beta.solana.com",
-}
+import { Endpoint } from "./endpoint";
+
+export { Endpoint };
 
 /** Solana public clusters, "localnet" or "playnet" */
 export type Cluster =

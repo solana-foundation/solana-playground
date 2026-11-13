@@ -33,6 +33,8 @@ const UUID_REGEX_MESSAGE =
   "Check an id with isUuid() from src/shared/lib/ids instead of a copied UUID regex.";
 const REPORT_BUTTON_FAILURE_MESSAGE =
   'reportButtonFailure takes what did not happen first: .catch(reportButtonFailure("<action>")). Passed bare, it returns a handler nobody calls and the failure is swallowed.';
+const CLUSTER_URL_MESSAGE =
+  "Take a cluster's address from Endpoint (src/entities/cluster), or, in a test that needs some RPC, from TEST_ENDPOINT in src/test-utils/endpoints.mjs, whose hosts never resolve.";
 
 const RANDOM_UUID_SELECTORS = [
   {
@@ -54,6 +56,16 @@ const REPORT_BUTTON_FAILURE_SELECTOR = {
     "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
   message: REPORT_BUTTON_FAILURE_MESSAGE,
 };
+const CLUSTER_URL = String.raw`/api\.(devnet|testnet|mainnet-beta)\.solana\.com/`;
+const CLUSTER_URL_SELECTORS = [
+  { selector: `Literal[value=${CLUSTER_URL}]`, message: CLUSTER_URL_MESSAGE },
+  {
+    selector: `TemplateElement[value.raw=${CLUSTER_URL}]`,
+    message: CLUSTER_URL_MESSAGE,
+  },
+];
+/** The one module that spells the clusters' addresses */
+const ENDPOINT_MODULE = "src/entities/cluster/model/endpoint.ts";
 
 const UUID_PATH = { name: "uuid", message: UUID_MESSAGE };
 const CN_PATH = { name: "cn", message: CN_MESSAGE };
@@ -319,6 +331,18 @@ const project = [
         "error",
         ...RANDOM_UUID_SELECTORS,
         REPORT_BUTTON_FAILURE_SELECTOR,
+        ...CLUSTER_URL_SELECTORS,
+      ],
+    },
+  },
+  {
+    files: ["api/**", "scripts/**"],
+    // `WithStatement` is react-app's selector, which this object would drop; modules cannot hold a `with`, so error is moot
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        "WithStatement",
+        ...CLUSTER_URL_SELECTORS,
       ],
     },
   },
@@ -335,6 +359,7 @@ const project = [
         "error",
         ...RANDOM_UUID_SELECTORS,
         UUID_REGEX_SELECTOR,
+        ...CLUSTER_URL_SELECTORS,
       ],
     },
   },
@@ -350,6 +375,18 @@ const project = [
           patterns: [UUID_PATTERN],
         },
       ],
+      "no-restricted-syntax": [
+        "error",
+        ...RANDOM_UUID_SELECTORS,
+        UUID_REGEX_SELECTOR,
+        REPORT_BUTTON_FAILURE_SELECTOR,
+        ...CLUSTER_URL_SELECTORS,
+      ],
+    },
+  },
+  {
+    files: [ENDPOINT_MODULE],
+    rules: {
       "no-restricted-syntax": [
         "error",
         ...RANDOM_UUID_SELECTORS,

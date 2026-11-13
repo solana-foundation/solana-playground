@@ -3,12 +3,22 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import {
+  LOOPBACK_URL,
+  NOT_LOOPBACK_URL,
+} from "../src/test-utils/endpoints.mjs";
 import { untypedEslintAt } from "./lib/untyped-eslint.mjs";
 
 const cwd = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
 const ERROR = 2;
 const WARNING = 1;
+
+/** A module that exports `url` */
+const exportingUrl = (url) => `export const url = ${JSON.stringify(url)};\n`;
+
+// eslint-disable-next-line no-restricted-syntax -- the address the cluster-URL rule must refuse
+const DEVNET = "https://api.devnet.solana.com";
 
 /** The severity `rule` reports `code` with, linted as if it lived at `file`; undefined when it reports nothing */
 const severityOf = async ({ file, code, rule }) => {
@@ -55,7 +65,7 @@ const PROBES = [
     "security-checks: A loopback URL",
     {
       file: "src/utils/probe.ts",
-      code: 'export const url = "http://localhost:3000";\n',
+      code: exportingUrl(LOOPBACK_URL.LOCALHOST),
       rule: "@microsoft/sdl/no-insecure-url",
     },
     undefined,
@@ -64,7 +74,7 @@ const PROBES = [
     "a host that only starts with localhost is not loopback",
     {
       file: "src/utils/probe.ts",
-      code: 'export const url = "http://localhost.evil.test";\n',
+      code: exportingUrl(NOT_LOOPBACK_URL.HOST_STARTING_WITH_LOCALHOST),
       rule: "@microsoft/sdl/no-insecure-url",
     },
     ERROR,
@@ -73,7 +83,7 @@ const PROBES = [
     "0.0.0.0 is not loopback",
     {
       file: "src/utils/probe.ts",
-      code: 'export const url = "http://0.0.0.0:8899";\n',
+      code: exportingUrl(NOT_LOOPBACK_URL.UNSPECIFIED_ADDRESS),
       rule: "@microsoft/sdl/no-insecure-url",
     },
     ERROR,
@@ -82,10 +92,46 @@ const PROBES = [
     "e2e/ is checked for insecure URLs",
     {
       file: "e2e/probe.ts",
-      code: 'export const url = "http://example.test";\n',
+      code: exportingUrl(NOT_LOOPBACK_URL.REMOTE),
       rule: "@microsoft/sdl/no-insecure-url",
     },
     ERROR,
+  ],
+  [
+    "a cluster's address spelled in src/ is refused",
+    {
+      file: "src/utils/probe.ts",
+      code: exportingUrl(DEVNET),
+      rule: "no-restricted-syntax",
+    },
+    ERROR,
+  ],
+  [
+    "a cluster's address in a template literal in e2e/ is refused",
+    {
+      file: "e2e/probe.ts",
+      code: `export const url = \`${DEVNET}/\${"rpc"}\`;\n`,
+      rule: "no-restricted-syntax",
+    },
+    ERROR,
+  ],
+  [
+    "a cluster's address spelled in scripts/ is refused",
+    {
+      file: "scripts/probe.mjs",
+      code: exportingUrl(DEVNET),
+      rule: "no-restricted-syntax",
+    },
+    ERROR,
+  ],
+  [
+    "the Endpoint module may spell a cluster's address",
+    {
+      file: "src/entities/cluster/model/endpoint.ts",
+      code: exportingUrl(DEVNET),
+      rule: "no-restricted-syntax",
+    },
+    undefined,
   ],
   [
     "import() of a computed specifier outside the factories is checked",

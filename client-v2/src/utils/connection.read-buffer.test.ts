@@ -2,9 +2,14 @@
 // needs the build's globals
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("./settings", () => ({
+import { Endpoint } from "@/entities/cluster/model/endpoint";
+
+vi.mock("./settings", async () => ({
   PgSettings: {
-    connection: { endpoint: "https://api.devnet.solana.com" },
+    connection: {
+      endpoint: (await import("@/entities/cluster/model/endpoint")).Endpoint
+        .DEVNET,
+    },
     onDidChangeConnectionEndpoint: () => ({ dispose: () => undefined }),
     onDidChangeConnectionCommitment: () => ({ dispose: () => undefined }),
   },
@@ -21,7 +26,6 @@ vi.mock("./playnet", () => ({
 }));
 
 const READ_BUFFER = "https://read-buffer.test/";
-const DEVNET = "https://api.devnet.solana.com";
 
 /** `PgConnection` with the read-buffer variables as `env` sets them */
 const pgConnectionWith = async (env: Record<string, string | undefined>) => {
@@ -44,12 +48,12 @@ describe("utils/connection", () => {
     {
       cluster: "devnet",
       variable: "REACT_APP_DEVNET_READ_BUFFER_RPC_URL",
-      endpoint: DEVNET,
+      endpoint: Endpoint.DEVNET,
     },
     {
       cluster: "mainnet-beta",
       variable: "REACT_APP_MAINNET_READ_BUFFER_RPC_URL",
-      endpoint: "https://api.mainnet-beta.solana.com",
+      endpoint: Endpoint.MAINNET_BETA,
     },
   ])(
     "reads $cluster buffers through its read-buffer RPC, at the selected commitment",
@@ -69,12 +73,12 @@ describe("utils/connection", () => {
     {
       label: "the cluster has no read-buffer RPC",
       env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: READ_BUFFER },
-      endpoint: "https://api.testnet.solana.com",
+      endpoint: Endpoint.TESTNET,
     },
     {
       label: "the cluster's read-buffer RPC is empty",
       env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: "" },
-      endpoint: DEVNET,
+      endpoint: Endpoint.DEVNET,
     },
     {
       label: "the endpoint is Playnet",
@@ -159,13 +163,13 @@ describe("utils/connection", () => {
   it.each([
     {
       variable: "REACT_APP_DEVNET_SEND_TX_PER_SECOND",
-      endpoint: DEVNET,
+      endpoint: Endpoint.DEVNET,
       value: "5",
       perSecond: 5,
     },
     {
       variable: "REACT_APP_MAINNET_SEND_TX_PER_SECOND",
-      endpoint: "https://api.mainnet-beta.solana.com",
+      endpoint: Endpoint.MAINNET_BETA,
       value: "0.5",
       perSecond: 0.5,
     },
@@ -186,9 +190,9 @@ describe("utils/connection", () => {
     {
       label: "the cluster's send cap is unset",
       value: "5",
-      endpoint: "https://api.testnet.solana.com",
+      endpoint: Endpoint.TESTNET,
     },
-    { label: "the send cap is 0", value: "0", endpoint: DEVNET },
+    { label: "the send cap is 0", value: "0", endpoint: Endpoint.DEVNET },
   ])("caps sends at 4 per second when $label", async ({ value, endpoint }) => {
     const { PgConnection, connectionTo } = await pgConnectionWith({
       REACT_APP_DEVNET_SEND_TX_PER_SECOND: value,
@@ -230,12 +234,12 @@ describe("utils/connection: getAirdropConnection", () => {
   it("airdrops on the platform RPC's cluster through its native RPC, at the selected commitment", async () => {
     const { PgConnection, connectionTo } = await pgConnectionWith({
       REACT_APP_DEVNET_RPC_URL: PLATFORM,
-      REACT_APP_DEVNET_READ_BUFFER_RPC_URL: DEVNET,
+      REACT_APP_DEVNET_READ_BUFFER_RPC_URL: Endpoint.DEVNET,
     });
 
     const airdrop = PgConnection.getAirdropConnection(connectionTo(PLATFORM));
 
-    expect(airdrop.rpcEndpoint).toBe(DEVNET);
+    expect(airdrop.rpcEndpoint).toBe(Endpoint.DEVNET);
     expect(airdrop.commitment).toBe("finalized");
   });
 
@@ -247,12 +251,12 @@ describe("utils/connection: getAirdropConnection", () => {
     },
     {
       label: "the endpoint is Localnet",
-      env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: DEVNET },
+      env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: Endpoint.DEVNET },
       endpoint: "http://localhost:8899",
     },
     {
       label: "a custom endpoint is not the selected one",
-      env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: DEVNET },
+      env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: Endpoint.DEVNET },
       endpoint: "https://custom.test",
     },
   ])(

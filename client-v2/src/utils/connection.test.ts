@@ -1,6 +1,8 @@
 import { Connection } from "@solana/web3.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { Endpoint } from "@/entities/cluster";
+
 import { PgConnection } from "./connection";
 import { PgSettings } from "./settings";
 
@@ -35,9 +37,9 @@ describe("PgConnection.getCluster", () => {
   });
 
   it("reads the public devnet URL as devnet, not localnet", async () => {
-    await expect(
-      PgConnection.getCluster("https://api.devnet.solana.com")
-    ).resolves.toBe("devnet");
+    await expect(PgConnection.getCluster(Endpoint.DEVNET)).resolves.toBe(
+      "devnet"
+    );
   });
 
   // A remote host that only spells "localhost" must not open the local

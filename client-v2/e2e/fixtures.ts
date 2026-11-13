@@ -1,15 +1,20 @@
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { isUuid } from "../src/shared/lib/ids";
 import { requireFor } from "../src/test-utils/require-for";
 
 /** For a step that waits on the explorer, sync or a reload */
 export const LONG = { timeout: 60_000 };
 
+/** `url`, with or without a trailing slash, matched whole */
+const wholeUrl = (url: string) =>
+  new RegExp(`^${url.replaceAll(".", "\\.")}/?$`);
+
 /** Devnet's JSON-RPC and websocket endpoints, as a route matches them whole */
-export const DEVNET_RPC = /^https:\/\/api\.devnet\.solana\.com\/?$/;
-export const DEVNET_WS = /^wss:\/\/api\.devnet\.solana\.com\/?$/;
+export const DEVNET_RPC = wholeUrl(Endpoint.DEVNET);
+export const DEVNET_WS = wholeUrl(Endpoint.DEVNET.replace(/^https:/, "wss:"));
 
 /** Home, which a start with no project shows in place of the work */
 export const home = (page: Page) =>

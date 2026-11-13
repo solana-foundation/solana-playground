@@ -1,5 +1,6 @@
 import type { Page, Route } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { expect, reloadAndBoot, test } from "./fixtures";
 
 /**
@@ -171,8 +172,7 @@ test("client-v2-custom-rpcs: A value that is not an https URL is refused", async
   seededPage: page,
 }) => {
   const settings = await openSettings(page);
-  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
-  for (const value of ["devnet", "http://api.devnet.solana.com"]) {
+  for (const value of ["devnet", Endpoint.DEVNET.replace("https:", "http:")]) {
     await addRpc(page, { name: "", url: value });
     await expect(
       settings.getByText(

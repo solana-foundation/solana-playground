@@ -16,7 +16,7 @@ Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1.
   current releases with the rules, levels and files in design.md, Decision 4; fix or disable with a reason every new
   error; clear every new warning, fixed or disabled with a reason, so `--max-warnings` is unchanged. Verify: each scenario under the first three requirements of
   `specs/security-checks/spec.md` gives the stated result on a scratch file, and `yarn run check` passes. Depends on
-  1.1. Ticket to file.
+  1.1. HOO-2892.
 
 ## 2. Workflow and Dockerfile scanners
 
@@ -24,7 +24,7 @@ Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1.
   pinned to a commit SHA; fix or suppress inline with a reason every finding of the first run, and list the count per
   rule in the PR. Run the workflow with act as `client-v2/docs/local-ci-with-act.md` describes before the push.
   Verify: the zizmor and hadolint scenarios in `specs/security-checks/spec.md` give the stated result on a throwaway
-  branch, and the run on `master` after the merge shows both tools in Code scanning. Ticket to file.
+  branch, and the run on `master` after the merge shows both tools in Code scanning. HOO-2892.
 
 ## 3. CodeQL
 

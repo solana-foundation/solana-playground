@@ -4,6 +4,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
 import { requireFor } from "@/test-utils/require-for";
 
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
@@ -434,7 +435,7 @@ describe("build and deploy approvals", () => {
     ({
       getProjectContext: () => ({
         workspaceName: "hello_anchor",
-        cluster: "https://api.devnet.solana.com",
+        cluster: TEST_ENDPOINT.DEVNET,
         // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
         buildError: null,
       }),
@@ -489,7 +490,7 @@ describe("build and deploy approvals", () => {
   });
 
   it("deploys nothing when the network changed while the approval waited", async () => {
-    let cluster = "https://api.devnet.solana.com";
+    let cluster: string = TEST_ENDPOINT.DEVNET;
     const deploy = vi.fn(async () => {});
     const b = {
       getProjectContext: () => ({
@@ -505,7 +506,7 @@ describe("build and deploy approvals", () => {
     if (!found) throw new Error("createTools has no tool named deploy");
     const run = found.run({});
     await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
-    cluster = "https://api.mainnet-beta.solana.com";
+    cluster = TEST_ENDPOINT.MAINNET_BETA;
     PgAssistant.resolveApproval(PgAssistant.items[0].id, true);
 
     expect(await run).toContain("nothing was deployed");

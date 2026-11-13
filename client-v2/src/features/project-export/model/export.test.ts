@@ -1,6 +1,7 @@
 // `@types/mocha` also declares a global `it`, without `each`
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { Endpoint } from "@/entities/cluster";
 import {
   initTelemetry,
   memoryProvider,
@@ -90,7 +91,7 @@ describe("features/project-export/model/export", () => {
 
   describe("exportedEndpoint", () => {
     it("names the cluster's public endpoint, not the URL Playground uses", () => {
-      expect(exportedEndpoint()).toBe("https://api.devnet.solana.com");
+      expect(exportedEndpoint()).toBe(Endpoint.DEVNET);
     });
   });
 
@@ -127,7 +128,7 @@ describe("features/project-export/model/export", () => {
       ];
       const text = files.map(([, content]) => content).join("\n");
       expect(text).not.toContain("api-key=secret");
-      expect(text).toContain("https://api.devnet.solana.com");
+      expect(text).toContain(Endpoint.DEVNET);
     });
 
     it("converts a project with a program with its framework", async () => {

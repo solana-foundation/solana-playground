@@ -7,6 +7,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { TEST_ENDPOINT } from "../src/test-utils/endpoints.mjs";
 import { esbuildMinifyOptions } from "./esbuild-minify.mjs";
 import {
   assertPublicEnv,
@@ -30,7 +31,7 @@ const PRODUCTION_LIKE = {
   REACT_APP_SERVER_URL: "https://api.solpg.io",
   REACT_APP_DEVNET_RPC_URL: "https://acme-q1w2e3-fast-devnet.helius-rpc.com",
   REACT_APP_MAINNET_RPC_URL: "https://acme-r4t5y6-fast-mainnet.helius-rpc.com",
-  REACT_APP_TESTNET_RPC_URL: "https://api.testnet.solana.com",
+  REACT_APP_TESTNET_RPC_URL: TEST_ENDPOINT.TESTNET,
   REACT_APP_SENTRY_DSN:
     "https://0123456789abcdef0123456789abcdef@o123456.ingest.us.sentry.io/4507",
   REACT_APP_GA_MEASUREMENT_ID: "G-ABC123XYZ9",
