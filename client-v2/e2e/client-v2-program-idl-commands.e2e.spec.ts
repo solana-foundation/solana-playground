@@ -763,7 +763,8 @@ test.describe("client-v2-program-idl", () => {
     await openFor(MAINNET)(page, connectedWallet(AUTHORITY));
     const lines = linesOn(page);
 
-    await refusedOnMainnet(page, "anchor idl init");
+    // With a program id: the seeded project has none, which ends the command before the network refusal
+    await refusedOnMainnet(page, `anchor idl init ${PROGRAM}`);
 
     await expect
       .poll(() => lineOf(lines, "idl_upload_failed"), LONG)

@@ -396,9 +396,9 @@ export class PgCommandManager {
 
       // As clap answers it: only directly after the command's name, and nothing runs
       const [, flag, ...rest] = tokens;
-      const asksForVersion =
+      const isVersionLine =
         rest.length === 0 && (flag === "--version" || flag === "-V");
-      if (topCmd.version !== undefined && asksForVersion) {
+      if (topCmd.version !== undefined && isVersionLine) {
         await PgTerminal.println(topCmd.version);
         return;
       }

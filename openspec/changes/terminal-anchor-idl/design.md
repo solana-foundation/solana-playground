@@ -149,7 +149,8 @@ Alternatives:
 as `deploy` does, since the authority can be an external wallet), then #131's mainnet refusal and network hold, then
 the slice. `fetch` asks for a wallet only with `--non-canonical`. `build`, `fetch-historical`, `convert`, and `type` throw a
 `TerminalLineError` with the not-supported line, with no wallet check. `needsConnection` stays on `anchor`, which
-keeps the offline line of `client-v2-terminal`. #131's `isIdlWrite` becomes the six handlers themselves, so no list
+keeps the offline line of `client-v2-terminal` for every line except `anchor --version` and `anchor -V`, which
+`PgCommandManager.execute` answers before the offline check. #131's `isIdlWrite` becomes the six handlers themselves, so no list
 of names can fall out of date.
 
 A file argument is read from and written to the project through the explorer. Without `--filepath` the command passes

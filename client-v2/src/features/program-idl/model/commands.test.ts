@@ -54,10 +54,10 @@ import {
 } from "./__fixtures__/chain";
 import {
   closeMetadataAccountWith,
-  createIdlBufferWith,
   fetchPublishedIdl,
   setBufferAuthorityWith,
   trackUnsupportedIdlCommand,
+  uploadIdlBufferWith,
   writeMetadataFromBufferWith,
 } from "./commands";
 
@@ -302,7 +302,7 @@ describe("features/program-idl/model/commands", () => {
       label: "an Anchor 0.29 IDL",
       change: () => undefined,
       run: ({ connection, wallet }: Setup) =>
-        createIdlBufferWith(FEE)({
+        uploadIdlBufferWith(FEE)({
           source: {
             kind: "project",
             idl: { name: "counter", version: "0.1.0", instructions: [] },
@@ -546,7 +546,7 @@ describe("features/program-idl/model/commands", () => {
       const setup = await arrange();
       stubRpc(setup.accounts);
 
-      const { buffer } = await createIdlBufferWith(FEE)({
+      const { buffer } = await uploadIdlBufferWith(FEE)({
         source,
         connection: setup.connection,
         wallet: setup.wallet,

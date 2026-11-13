@@ -95,7 +95,8 @@ buffer and return its rent to the wallet, under the authority rule it applies to
 
 A failed send that leaves a buffer at an address of its own (an `upgrade` or `init` over an existing IDL too large
 for one transaction, or `create-buffer`) SHALL be followed by one line naming the SOL it holds and its address,
-saying that no terminal command closes it. When a send's transactions expire before every one is confirmed, the
+saying that running the same command again works but does not reuse that buffer, whose SOL stays until it is
+closed outside the Playground. When a send's transactions expire before every one is confirmed, the
 failure SHALL be printed as one line saying so and telling the user to run the same command again, followed by the
 line for any buffer the send left. A transaction that is confirmed with an error is that error, never an expiry.
 

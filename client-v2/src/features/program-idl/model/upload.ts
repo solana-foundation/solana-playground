@@ -346,7 +346,7 @@ const canFitOneTransactionWith =
  * client builds, with `buffer` as the buffer it creates when the IDL does not
  * fit in one transaction, so that a failure can name that buffer.
  */
-const getUpdatePlanWith =
+const fetchUpdatePlanWith =
   (buffer: TransactionSigner) =>
   async (
     client: ClientWithGetMinimumBalance & ClientWithTransactionPlanning,
@@ -403,7 +403,7 @@ const uploadIdlFor =
             // An immutable account goes to the client's own plan, which refuses it
             const write =
               slot.kind === "metadata" && slot.account.data.mutable
-                ? await getUpdatePlanWith(buffer)(client, {
+                ? await fetchUpdatePlanWith(buffer)(client, {
                     ...input,
                     metadata: slot.account,
                   })

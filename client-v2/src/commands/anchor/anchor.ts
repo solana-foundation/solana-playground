@@ -4,7 +4,6 @@ import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { isIdlV1 } from "@/entities/idl";
 import {
   closeMetadataAccountWith,
-  createIdlBufferWith,
   DEFAULT_PRIORITY_FEE,
   fetchPublishedIdl,
   IDL_SEED,
@@ -16,6 +15,7 @@ import {
   trackRefusedIdlSendFor,
   trackUnsupportedIdlCommand,
   UnfinishedIdlUploadError,
+  uploadIdlBufferWith,
   uploadNonCanonicalProjectIdlWith,
   uploadProjectIdlWith,
   writeMetadataFromBufferWith,
@@ -71,7 +71,7 @@ const toFailureLine = (error: unknown) =>
     : processErrorLine(error);
 
 /** The failure's line, then the line saying what the buffer it left holds and what to run next */
-const toUnfinishedUploadLine =
+const toUnfinishedUploadLineFor =
   (name: string) => (error: UnfinishedIdlUploadError) => {
     const { kind, address, lamports } = error.leftover;
     const sol = Number(lamports) / LAMPORTS_PER_SOL;
@@ -79,7 +79,7 @@ const toUnfinishedUploadLine =
     const next =
       kind === "metadata"
         ? `An unfinished upload holds ${sol} SOL at ${address}. Run the same \`anchor idl ${name}\` again to finish it.`
-        : `A buffer the failed send created holds ${sol} SOL at ${address}, and no terminal command closes it. Run the same \`anchor idl ${name}\` again.`;
+        : `A buffer the failed send created holds ${sol} SOL at ${address}. Running the same \`anchor idl ${name}\` again works but does not reuse this buffer, whose SOL stays until it is closed outside the Playground.`;
     return new TerminalLineError(`${toFailureLine(error.cause)}\n${next}`, {
       cause: error,
     });
@@ -93,14 +93,11 @@ const withUnfinishedLineFor =
       return await run();
     } catch (error) {
       if (error instanceof UnfinishedIdlUploadError) {
-        throw toUnfinishedUploadLine(name)(error);
+        throw toUnfinishedUploadLineFor(name)(error);
       }
       throw error;
     }
   };
-
-/** Stands for the program id of an upload that the slice refuses before it reads the id */
-const UNREAD_PROGRAM_ID = "";
 
 const parseAddress = (token: string) => {
   if (isAddress(token)) return token;
@@ -168,7 +165,7 @@ const requireArg = requireWith("Argument");
 const requireOption = requireWith("Option");
 
 /** Whether a line asks for a usage as clap reads it: `--help` or `-h` as a token, in any position */
-const asksForHelp = (raw: string) =>
+const isHelpLine = (raw: string) =>
   raw.split(" ").some((token) => token === "--help" || token === "-h");
 
 /**
@@ -179,7 +176,7 @@ const asksForHelp = (raw: string) =>
 const runUnlessHelpFor =
   (name: string, raw: string) =>
   async <Result>(run: () => Promise<Result>) => {
-    if (!asksForHelp(raw)) return run();
+    if (!isHelpLine(raw)) return run();
     // Run as the one line the parser prints a usage for, so that a subcommand has one usage
     await PgCommandManager.execute(["anchor", "idl", name, "--help"]);
     return undefined;
@@ -281,10 +278,11 @@ const parseFileIdl = (text: string): unknown => {
 
 /**
  * The program `init` and `upgrade` write for without a `PROGRAM_ID`: the
- * `address` of the IDL file, as in Anchor, or the project's program id.
- * Throws a {@link TerminalLineError} when there is neither.
+ * `address` of the IDL file, as in Anchor, or the project's program id;
+ * `undefined` for a file the slice refuses before it needs one. Throws a
+ * {@link TerminalLineError} when there is neither.
  */
-const getDefaultProgramId = (source: IdlSource) => {
+const getDefaultProgramId = (source: IdlSource): string | undefined => {
   if (source.kind === "project") {
     const projectId = PgProgramInfo.getPkStr();
     if (projectId) return projectId;
@@ -295,7 +293,7 @@ const getDefaultProgramId = (source: IdlSource) => {
 
   const idl = source.text === undefined ? undefined : parseFileIdl(source.text);
   // A missing file, text that is not JSON, and an IDL in another format are the slice's refusals, which it makes before it reads the program id
-  if (!isIdlV1(idl)) return UNREAD_PROGRAM_ID;
+  if (!isIdlV1(idl)) return undefined;
   const { address } = idl;
   if (address !== undefined && isAddress(address)) return address;
   throw new TerminalLineError(
@@ -329,9 +327,11 @@ const uploadIdl = async ({
     return;
   }
 
+  // Before the wallet question and the network refusal, which records an attempt: a missing program id sends no event
+  const source = getIdlSource(filepath);
+  const program = programId ?? getDefaultProgramId(source);
+
   await runSenderFor("upload")(async ({ connection, wallet }) => {
-    const source = getIdlSource(filepath);
-    const program = programId ?? getDefaultProgramId(source);
     const { metadata } = await withUnfinishedLineFor(command)(() =>
       uploadWith(priorityFee)({
         source,
@@ -578,7 +578,7 @@ export const anchor = createCmd({
               runSenderFor("create-buffer")(async ({ connection, wallet }) => {
                 const { buffer } = await withUnfinishedLineFor("create-buffer")(
                   () =>
-                    createIdlBufferWith(getPriorityFee(input.options))({
+                    uploadIdlBufferWith(getPriorityFee(input.options))({
                       source: getIdlSource(input.options.filepath),
                       connection,
                       wallet,

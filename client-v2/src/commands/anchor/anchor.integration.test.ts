@@ -573,7 +573,7 @@ describe("commands/anchor on a cluster", () => {
     );
   });
 
-  it("names the SOL and address of the buffer an `upgrade` created when a send after it fails, and that no terminal command closes it", async () => {
+  it("names the SOL and address of the buffer an `upgrade` created when a send after it fails, and that a rerun does not reuse it", async () => {
     connect(AUTHORITY);
     await run("anchor idl init --filepath idl/counter.json");
     // The first transaction of the upgrade creates its buffer; the RPC drops the second
@@ -586,7 +586,7 @@ describe("commands/anchor on a cluster", () => {
     expect(failure).toBeInstanceOf(Error);
     const last = (failure as Error).message.split("\n").at(-1) ?? "";
     const [, sol, buffer] =
-      /^A buffer the failed send created holds ([\d.]+) SOL at (\w+), and no terminal command closes it\. Run the same `anchor idl upgrade` again\.$/.exec(
+      /^A buffer the failed send created holds ([\d.]+) SOL at (\w+)\. Running the same `anchor idl upgrade` again works but does not reuse this buffer, whose SOL stays until it is closed outside the Playground\.$/.exec(
         last
       ) ?? [];
     const account = cluster.svm.getAccount(address(buffer));

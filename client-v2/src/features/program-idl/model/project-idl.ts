@@ -20,8 +20,8 @@ const log = createLogger("program-idl:project-idl");
 /** What an upload takes from its caller */
 export interface ProjectIdlUpload {
   source: IdlSource;
-  /** Base58; not read when there is no IDL to upload */
-  programId: string;
+  /** Base58; `undefined` only beside a source {@link toUploadJson} refuses, whose program id the caller could not read */
+  programId: string | undefined;
   /** Its `rpcEndpoint` also names the events' `cluster` */
   connection: IdlSendDeps["connection"];
   wallet: IdlSendDeps["wallet"];
@@ -45,6 +45,9 @@ const trackUploadFor =
     try {
       // Checked before the program id is read: a caller whose IDL file is missing may have no program id
       const json = toUploadJson(source);
+      if (programId === undefined) {
+        throw new Error("An IDL the slice accepts came with no program id");
+      }
       result = await uploadWith(priorityFee)(
         { connection, wallet },
         { program: programId, json }

@@ -112,8 +112,8 @@ const slice = vi.hoisted(() => ({
   uploadNonCanonical: vi.fn(),
   closeMetadataAccountWith: vi.fn(),
   close: vi.fn(),
-  createIdlBufferWith: vi.fn(),
-  createBuffer: vi.fn(),
+  uploadIdlBufferWith: vi.fn(),
+  uploadBuffer: vi.fn(),
   setBufferAuthorityWith: vi.fn(),
   setBufferAuthority: vi.fn(),
   writeMetadataFromBufferWith: vi.fn(),
@@ -127,7 +127,7 @@ const SENDING_ENTRIES = [
   [slice.uploadProjectIdlWith, slice.upload],
   [slice.uploadNonCanonicalProjectIdlWith, slice.uploadNonCanonical],
   [slice.closeMetadataAccountWith, slice.close],
-  [slice.createIdlBufferWith, slice.createBuffer],
+  [slice.uploadIdlBufferWith, slice.uploadBuffer],
   [slice.setBufferAuthorityWith, slice.setBufferAuthority],
   [slice.writeMetadataFromBufferWith, slice.writeBuffer],
 ] as const;
@@ -147,7 +147,7 @@ vi.mock("@/features/program-idl", async () => {
     uploadProjectIdlWith: slice.uploadProjectIdlWith,
     uploadNonCanonicalProjectIdlWith: slice.uploadNonCanonicalProjectIdlWith,
     closeMetadataAccountWith: slice.closeMetadataAccountWith,
-    createIdlBufferWith: slice.createIdlBufferWith,
+    uploadIdlBufferWith: slice.uploadIdlBufferWith,
     setBufferAuthorityWith: slice.setBufferAuthorityWith,
     writeMetadataFromBufferWith: slice.writeMetadataFromBufferWith,
     fetchPublishedIdl: slice.fetchPublishedIdl,
@@ -260,7 +260,7 @@ describe("commands/anchor", () => {
       metadata: METADATA,
       action: "created",
     });
-    slice.createBuffer.mockResolvedValue({ buffer: BUFFER });
+    slice.uploadBuffer.mockResolvedValue({ buffer: BUFFER });
     slice.fetchPublishedIdl.mockReset();
     slice.trackUnsupportedIdlCommand.mockReset();
     applyFile.mockReset();
@@ -396,8 +396,8 @@ describe("commands/anchor", () => {
     },
     {
       line: "anchor idl create-buffer",
-      entryWith: slice.createIdlBufferWith,
-      entry: slice.createBuffer,
+      entryWith: slice.uploadIdlBufferWith,
+      entry: slice.uploadBuffer,
       fee: DEFAULT_PRIORITY_FEE,
       input: {
         source: { kind: "project", idl: PROJECT_IDL },
@@ -410,8 +410,8 @@ describe("commands/anchor", () => {
     },
     {
       line: "anchor idl create-buffer -f idl/counter.json --priority-fee 7",
-      entryWith: slice.createIdlBufferWith,
-      entry: slice.createBuffer,
+      entryWith: slice.uploadIdlBufferWith,
+      entry: slice.uploadBuffer,
       fee: 7n,
       input: {
         source: { kind: "file", filepath: "idl/counter.json", text: FILE_TEXT },
@@ -703,8 +703,11 @@ describe("commands/anchor", () => {
     }
   );
 
+  // On mainnet, so the program id is shown to be read before the network refusal, which records an attempt
   it("ends with one line, and starts no upload, when no program ID is given and the project has none", async () => {
     env.programId = undefined;
+    env.connection = { rpcEndpoint: Endpoint.MAINNET };
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet");
 
     const result = run("anchor idl init");
 

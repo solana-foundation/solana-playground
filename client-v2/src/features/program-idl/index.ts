@@ -2,11 +2,11 @@ export { programIdlTelemetry, trackRefusedIdlSendFor } from "./model/telemetry";
 export type { IdlSend } from "./model/telemetry";
 export {
   closeMetadataAccountWith,
-  createIdlBufferWith,
   fetchProgramMetadataIdl,
   fetchPublishedIdl,
   setBufferAuthorityWith,
   trackUnsupportedIdlCommand,
+  uploadIdlBufferWith,
   writeMetadataFromBufferWith,
 } from "./model/commands";
 export {

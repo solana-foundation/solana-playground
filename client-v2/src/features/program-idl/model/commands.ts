@@ -270,7 +270,7 @@ export const closeMetadataAccountWith = (priorityFee: bigint) =>
  * buffer's address. Throws an {@link IdlCommandRefusedError} while nothing was
  * sent, then an {@link UnfinishedIdlUploadError} naming the buffer when the send created it and failed.
  */
-export const createIdlBufferWith = (priorityFee: bigint) =>
+export const uploadIdlBufferWith = (priorityFee: bigint) =>
   trackCommandFor("create-buffer")(
     async ({ source, connection, wallet }: IdlBufferCreation) => {
       // Packed as an upload packs it, so `anchor idl write-buffer` can name the same compression and encoding

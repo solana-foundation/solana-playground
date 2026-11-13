@@ -103,7 +103,7 @@ All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.m
   `idl_command_*`. Verify: `anchor.test.ts` covers help and an unsupported name; the integration test on LiteSVM
   fetches by program id and by account address, closes an Anchor IDL account of a program that dispatches the
   legacy IDL instructions, and refuses a close by another wallet. Depends on 4.4. Superseded by 4.8.
-- [ ] 4.8 Make `anchor idl convert`, `anchor idl type`, and `anchor legacy-idl` print the not-supported line, as
+- [x] 4.8 Make `anchor idl convert`, `anchor idl type`, and `anchor legacy-idl` print the not-supported line, as
   [design.md](design.md), "`convert`, `type`, and `legacy-idl` are not supported", decides, and delete what only they
   used: `client-v2/src/entities/idl/model/anchor-cli` with its fixtures, `features/program-idl/model/legacy.ts`, the
   legacy IDL program fixture, their tests, and the `legacy-fetch` and `legacy-close` event values. Verify: no file
