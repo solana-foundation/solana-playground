@@ -56,7 +56,7 @@ x-client-v2: &client-v2
     # The browser runs on the host, so it reaches the client and the build server through their published ports
     # The API accepts writes only from this origin (the local GitHub OAuth app calls back on 127.0.0.1); the shell's AUTH_BASE_URL overrides it
     AUTH_BASE_URL: ${AUTH_BASE_URL:-http://127.0.0.1:${PG_CLIENT_V2_PORT:-3000}}
-    REACT_APP_SERVER_URL: http://localhost:${PG_PORT:-8080}
+    REACT_APP_SERVER_URL: ${REACT_APP_SERVER_URL:-http://localhost:${PG_PORT:-8080}} # the shell names another build server; this value wins over env_file
     # The dev server listens on 3000 inside; hot reload must dial the published port
     WDS_SOCKET_PORT: ${PG_CLIENT_V2_PORT:-3000}
   ports:
@@ -180,6 +180,7 @@ services:
     environment:
       <<: *client-v2-environment
       REACT_APP_SERVER_UNSTABLE: "true"
+      REACT_APP_SERVER_URL: http://localhost:${PG_PORT:-8080} # only the compose server has the /unstable routes
     tty: true
     stdin_open: true
     profiles:

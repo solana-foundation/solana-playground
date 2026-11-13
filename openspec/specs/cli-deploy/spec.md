@@ -63,7 +63,7 @@ block has a copy button. Without a program id the commands SHALL carry
 `<program-id>`; without an IDL the step SHALL say there is no IDL to upload
 and show no command.
 Opened from the Deploy stage on Mainnet it SHALL open on Mainnet; otherwise on the
-current cluster when that is mainnet-beta, devnet or testnet, else on Devnet.
+current cluster when that is mainnet, devnet or testnet, else on Devnet.
 The Solana CLI's deploy command SHALL take `--url testnet` on Testnet.
 
 #### Scenario: Solana CLI on devnet
@@ -97,7 +97,7 @@ The Solana CLI's deploy command SHALL take `--url testnet` on Testnet.
 ### Requirement: The Deploy stage opens the guide
 
 The Deploy stage SHALL show an outlined button "Deploy with the CLI", on every
-cluster but mainnet-beta (where the stage's pill opens the guide), which opens
+cluster but mainnet (where the stage's pill opens the guide), which opens
 the guide on the current cluster. It SHALL sit in one row
 of outlined buttons with "Upload IDL" (and "Show full log" after a failed
 deploy), in the deploy pill's height and shape. On a desk the row SHALL follow

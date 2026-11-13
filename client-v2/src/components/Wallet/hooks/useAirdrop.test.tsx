@@ -66,7 +66,7 @@ describe("useAirdrop", () => {
 
   it("has none on mainnet", () => {
     // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` and `getAirdropAmount()` are `null` before the cluster is read or where there is no faucet
-    expect(faucetOn("mainnet-beta", null)).toBe("none");
+    expect(faucetOn("mainnet", null)).toBe("none");
   });
 
   it("airdrops on localnet without opening the sign-in", async () => {

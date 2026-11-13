@@ -223,7 +223,7 @@ Rust state (toolchains, cargo registry, and target dir) lives in `client-v2/.cac
 
 wasm-pack needs a `wasm-bindgen` binary at the exact version a package's lockfile resolves. The version is declared once per root: `[workspace.dependencies]` in `wasm/Cargo.toml` for the workspace members, `wasm/rust-analyzer/Cargo.toml` for `rust-analyzer`, which the workspace excludes. The lockfiles follow the pins; `cargo metadata --locked` fails in a root where they do not.
 
-Without a matching binary on `PATH`, wasm-pack downloads a prebuilt release, and when that fails it runs `cargo install --force wasm-bindgen-cli` without `--locked`. Unlocked, Cargo 1.75 resolves [`time 0.3.55`](https://crates.io/crates/time/0.3.55), which needs Rust 1.88, and stops with ``feature `edition2024` is required``. The log never says why the download failed: wasm-pack reports that with `log::warn!`, which `env_logger::init()` drops unless `RUST_LOG` is set. Why the download fails on Vercel is unknown; a `>>> wasm-bindgen <version>: prebuilt` line in a Vercel log shows the script's own download works there.
+Without a matching binary on `PATH`, wasm-pack downloads a prebuilt release, and when that fails it runs `cargo install --force wasm-bindgen-cli` without `--locked`. Unlocked, Cargo resolves the newest release of every dependency, whether or not the toolchain of `wasm/rust-toolchain.toml` builds it: under Rust 1.75 that was [`time 0.3.55`](https://crates.io/crates/time/0.3.55), which needs Rust 1.88, and the install stopped with ``feature `edition2024` is required``. The log never says why the download failed: wasm-pack reports that with `log::warn!`, which `env_logger::init()` drops unless `RUST_LOG` is set. Why the download fails on Vercel is unknown; a `>>> wasm-bindgen <version>: prebuilt` line in a Vercel log shows the script's own download works there.
 
 So `scripts/vercel-install.sh` installs each version itself, into `.cache/rust/wasm-bindgen/<version>/`, and runs `wasm/build.sh` one package at a time with that package's version first on `PATH`. Sources, in order:
 
@@ -232,6 +232,8 @@ So `scripts/vercel-install.sh` installs each version itself, into `.cache/rust/w
 | `>>> wasm-bindgen <version>: cached` | A binary an earlier local build left in place |
 | `>>> wasm-bindgen <version>: prebuilt` | The [release](https://github.com/rustwasm/wasm-bindgen/releases) tarball for `x86_64-unknown-linux-musl`, or `x86_64-apple-darwin` on macOS as wasm-pack chooses; arm64 runs it under Rosetta when installed |
 | `>>> wasm-bindgen <version>: cargo install --locked` | `cargo install wasm-bindgen-cli --locked`, from the crate's own lockfile, when the tarball cannot be fetched or does not run |
+
+`cargo install` runs on the toolchain of the package that resolves the version (`package_toolchain`): `wasm/rust-analyzer/rust-toolchain.toml` for `rust-analyzer`, `wasm/rust-toolchain.toml` for the workspace members. A later Rust refuses to compile `wasm-bindgen` below 0.2.88 (``older versions of the `wasm-bindgen` crate are incompatible with current versions of Rust``), so the workspace's toolchain cannot compile the version `wasm/rust-analyzer/Cargo.toml` pins.
 
 The version comes from the lockfile, the file wasm-pack reads, after `cargo metadata --locked` has accepted it, so a bump without `cargo update` stops the build before wasm-pack asks for a version the script did not install. To bump: change the two manifests, then `cargo update -p wasm-bindgen` in `wasm/` and in `wasm/rust-analyzer/`.
 

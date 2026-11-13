@@ -219,7 +219,7 @@ counts.
 3. **The proposal is reviewed as a PR before code.** A small change may
    share the PR with its code; a change that needs agreement lands as a
    docs-only PR first. The `spec:validate` script must pass; CI runs it.
-4. **`/opsx:apply` implements, one task per PR.** It reads `tasks.md`,
+4. **`/opsx:apply` implements.** It reads `tasks.md`,
    works a task, ticks it. Tick a task only in the PR that lands it, and
    name the task in the PR description. The ordinary PR checklist (section
    "Before a PR") still applies to every task. An umbrella is a change many

@@ -646,7 +646,7 @@ impl VoteState {
             // where `s` >= `last_voted_slot`
             if self
                 .last_voted_slot()
-                .map_or(false, |last_voted_slot| vote_slots[i] <= last_voted_slot)
+                .is_some_and(|last_voted_slot| vote_slots[i] <= last_voted_slot)
             {
                 i += 1;
                 continue;
@@ -753,10 +753,8 @@ impl VoteState {
         }
 
         match (new_root, self.root_slot) {
-            (Some(new_root), Some(current_root)) => {
-                if new_root < current_root {
-                    return Err(VoteError::RootRollBack);
-                }
+            (Some(new_root), Some(current_root)) if new_root < current_root => {
+                return Err(VoteError::RootRollBack);
             }
             (None, Some(_)) => {
                 return Err(VoteError::RootRollBack);
@@ -931,7 +929,7 @@ impl VoteState {
         // Ignore votes for slots earlier than we already have votes for
         if self
             .last_voted_slot()
-            .map_or(false, |last_voted_slot| next_vote_slot <= last_voted_slot)
+            .is_some_and(|last_voted_slot| next_vote_slot <= last_voted_slot)
         {
             return;
         }

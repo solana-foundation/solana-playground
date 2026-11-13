@@ -96,7 +96,7 @@ export type AiInput =
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-/** A cluster's name as the network chips show it: "Mainnet" for `mainnet-beta` */
+/** A cluster's name as the network chips show it: "Mainnet" for `mainnet` */
 export const shownClusterName = (name: string) => capitalize(clusterName(name));
 
 const NETWORK_ACTION: StatusAction = {
@@ -422,17 +422,17 @@ if (import.meta.vitest) {
         ]);
       });
 
-      // HOO-2488: the chips' name, never "Mainnet-beta"; the settings
+      // HOO-2488: the chips' name, never the raw moniker; the settings
       // trigger's names keep the moniker its lookups use
-      it("shows mainnet-beta as Mainnet", () => {
+      it("shows mainnet as Mainnet", () => {
         const n = networkIndicator(
-          { name: "mainnet-beta", isConnected: true, slotStalled: false },
+          { name: "mainnet", isConnected: true, slotStalled: false },
           true
         );
         expect([n.words, n.tip, n.label]).toEqual([
           "Mainnet",
           "Mainnet · Ready",
-          "Change cluster, currently mainnet-beta",
+          "Change cluster, currently mainnet",
         ]);
       });
 

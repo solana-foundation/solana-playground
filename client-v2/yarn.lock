@@ -5295,9 +5295,6 @@
   optionalDependencies:
     "@react-native-async-storage/async-storage" "^1.17.7"
 
-"@solana-playground/anchor-cli@../wasm/anchor-cli/pkg":
-  version "0.29.0"
-
 "@solana-playground/playnet@../wasm/pkgs/playnet":
   version "0.1.0"
 
@@ -5319,6 +5316,18 @@
 "@solana-playground/sugar-cli@../wasm/sugar-cli/pkg":
   version "1.1.0-alpha"
 
+"@solana-program/program-metadata@0.11.0":
+  version "0.11.0"
+  resolved "https://registry.yarnpkg.com/@solana-program/program-metadata/-/program-metadata-0.11.0.tgz#5a66f53e184874c7df4595ed2c3558a3554e3669"
+  integrity sha512-0iK5yRqGP+IeJPrSBceB4sGNPD/sUiG8vj9C3qLZJO7jCx/1p0aFvEwrekwa3bTrhQGB1NCmq2UrlUMg/G2NPQ==
+  dependencies:
+    "@solana-program/system" "^0.16.0"
+    commander "^13.0.0"
+    pako "^2.1.0"
+    picocolors "^1.1.1"
+    smol-toml "^1.6.1"
+    yaml "^2.7.0"
+
 "@solana-program/record@^0.6.0":
   version "0.6.0"
   resolved "https://registry.yarnpkg.com/@solana-program/record/-/record-0.6.0.tgz#2d6abe202a77a98382869c15a42ad96a7cab984e"
@@ -5331,6 +5340,11 @@
   resolved "https://registry.yarnpkg.com/@solana-program/system/-/system-0.16.0.tgz#e98ca5c07fbf3500c94f681f2edd45d5910eba96"
   integrity sha512-/RG6q2E2vG/XpdOt8Jj/kbQktPlL5JyJuNGAeN9wDcxKDKQtrGTJpDrJgQUxiEy23fsPNXQbLN8XeCtYoMof3Q==
 
+"@solana-program/system@^0.14.0":
+  version "0.14.1"
+  resolved "https://registry.yarnpkg.com/@solana-program/system/-/system-0.14.1.tgz#9c035233cc55b4ca6e57bd8a1d0dd66043af4135"
+  integrity sha512-K6ZiIrAKoJAfcwfUdsoFvfSAxeRJaRrV7BPFTJvUVRS4m3zszN+nLcdaNMMe2F1/zTriZqC+xh+Kgw6ziGUqpQ==
+
 "@solana-program/token-2022@0.20.0":
   version "0.20.0"
   resolved "https://registry.yarnpkg.com/@solana-program/token-2022/-/token-2022-0.20.0.tgz#732159be130e0fbcd67a323eab16e38774e645b5"
@@ -5339,6 +5353,13 @@
     "@solana-program/record" "^0.6.0"
     "@solana-program/system" "^0.16.0"
     "@solana-program/zk-elgamal-proof" "^0.5.0"
+
+"@solana-program/token@^0.16.0":
+  version "0.16.1"
+  resolved "https://registry.yarnpkg.com/@solana-program/token/-/token-0.16.1.tgz#25be257eea197b1ce7db8b0e2764840096399c3b"
+  integrity sha512-X9dsvbh+VDq4SuCfvxn95P1DCvtBYHJOBiVmgBJMfW8l/lp8uSwEhy9IurpcdltnGi5kNIkCm4sk4YOXKAMiCw==
+  dependencies:
+    "@solana-program/system" "^0.14.0"
 
 "@solana-program/zk-elgamal-proof@^0.5.0":
   version "0.5.0"
@@ -5789,7 +5810,7 @@
     "@wallet-standard/ui-features" "^1.0.3"
     "@wallet-standard/ui-registry" "^1.1.1"
 
-"@solana/kit@8.6.0", "@solana/kit@^8.2.0":
+"@solana/kit@8.6.0", "@solana/kit@^8.0.0", "@solana/kit@^8.2.0":
   version "8.6.0"
   resolved "https://registry.yarnpkg.com/@solana/kit/-/kit-8.6.0.tgz#c74eb021b1b982beffeb960a220f231f468b5e3d"
   integrity sha512-UaigU+LiTzkU237FxfiJhxufvEfb1J02djJOnGpSz1GAjZtbZ8oc4EkQ1bS4sHewSRyR9RUk6yhBb5bLHG0w4w==
@@ -9119,13 +9140,6 @@ brace-expansion@^5.0.12:
   dependencies:
     balanced-match "^4.0.2"
 
-brace-expansion@^5.0.8:
-  version "5.0.13"
-  resolved "https://registry.yarnpkg.com/brace-expansion/-/brace-expansion-5.0.13.tgz#e2d4497370f7e385e6f96b57bd7ff11d77d85851"
-  integrity sha512-Vh3dmFbc4wZeox7M9I/0L9GfFd83Su4+yCck/OF9Gi/P/dAHn0RT7X4K9R7gMNMhDck3DvhR6QXsnQdjjgwNvQ==
-  dependencies:
-    balanced-match "^4.0.2"
-
 braces@^3.0.3, braces@~3.0.2:
   version "3.0.3"
   resolved "https://registry.yarnpkg.com/braces/-/braces-3.0.3.tgz#490332f40919452272d55a8480adc0c441358789"
@@ -9722,7 +9736,7 @@ commander@^12.1.0:
   version "12.1.0"
   resolved "https://registry.yarnpkg.com/commander/-/commander-12.1.0.tgz#01423b36f501259fdaac4d0e4d60c96c991585d3"
 
-commander@^13.1.0:
+commander@^13.0.0, commander@^13.1.0:
   version "13.1.0"
   resolved "https://registry.yarnpkg.com/commander/-/commander-13.1.0.tgz#776167db68c78f38dcce1f9b8d7b8b9a488abf46"
 
@@ -14906,6 +14920,52 @@ linkify-it@^6.1.0:
   dependencies:
     uc.micro "^3.0.0"
 
+litesvm-darwin-arm64@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-darwin-arm64/-/litesvm-darwin-arm64-1.6.2.tgz#43f200e330010493f9727725b377b9cdb5148191"
+  integrity sha512-J3JKQaLdK2nQcdrDg8GB3xis8VlrFG2MJwUTTzdRgrvo291RrAdEo8qoO3zzC/BU5jgwsvBCgX4LD2zqdAjOyw==
+
+litesvm-darwin-x64@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-darwin-x64/-/litesvm-darwin-x64-1.6.2.tgz#382fbb60c2f5ce7d18aaf9c69c83a6bc03243363"
+  integrity sha512-zdAw4c7KnOcysHkUVrPBH2+x+4+7ViYYD8hWYYqZ7OOT4HFFsAV5iIhjul+bl5fMU9qae55lvD1RF4fK1rCgbg==
+
+litesvm-linux-arm64-gnu@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-linux-arm64-gnu/-/litesvm-linux-arm64-gnu-1.6.2.tgz#1fa742e310ea410661e1c884436d19d7ddd83778"
+  integrity sha512-vMWOPszLOyT3oQxAdANSzSUpJ1uEdTUArI+zruXSW1/nrXn/3zagOBrDxjZhQi0QqK9wT6QN32DfDTfB4xjS/A==
+
+litesvm-linux-arm64-musl@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-linux-arm64-musl/-/litesvm-linux-arm64-musl-1.6.2.tgz#243edc0dda7a1333432d9b4ea85255eea7826e44"
+  integrity sha512-Xw3KPkJEQ90LSOWP2xCGdOO4Y/dRdXJWGTgI8jNObGs0x/Apu0TOXuec/XZUNCvEba4aRwM/Wo3nS6llq5uAng==
+
+litesvm-linux-x64-gnu@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-linux-x64-gnu/-/litesvm-linux-x64-gnu-1.6.2.tgz#b491908430e09878031cc40c2ea60ec8c8279b2d"
+  integrity sha512-6kTBeCnGnAGqPH0ifxix/VGiVVCKBH9zrcx5D2zzZ9ZZkqJEQZiQxGxR36WccYYTWxOxN76M7YDtI9tuMhgw5g==
+
+litesvm-linux-x64-musl@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-linux-x64-musl/-/litesvm-linux-x64-musl-1.6.2.tgz#7910b741212188df7a2788ea7a75670facf82fc9"
+  integrity sha512-55R3umCLBkX2f+9J55yHAgY5n1zpgzJH/njLnrXFYzTrwv836qR4FsTjIPuxX4QqvnBleJpF2h4wrc+/5R5S+Q==
+
+litesvm@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm/-/litesvm-1.6.2.tgz#fbb87fe31428a97d26615b9bf9ef3cb7aeba9d8e"
+  integrity sha512-eh6yZg35NiL7CCCBgaLCXvLm+zFF5QaZnAo6ovbbTQDY63wJSzYLc2KqOwowO7d3pNQkJti8toXYL12H0Qyu7A==
+  dependencies:
+    "@solana-program/system" "^0.14.0"
+    "@solana-program/token" "^0.16.0"
+    "@solana/kit" "^8.0.0"
+  optionalDependencies:
+    litesvm-darwin-arm64 "1.6.2"
+    litesvm-darwin-x64 "1.6.2"
+    litesvm-linux-arm64-gnu "1.6.2"
+    litesvm-linux-arm64-musl "1.6.2"
+    litesvm-linux-x64-gnu "1.6.2"
+    litesvm-linux-x64-musl "1.6.2"
+
 loader-utils@^2.0.0, loader-utils@^2.0.2:
   version "2.0.4"
   resolved "https://registry.yarnpkg.com/loader-utils/-/loader-utils-2.0.4.tgz#8b5cb38b5c34a9a018ee1fc0e6a066d1dfcc528c"
@@ -15810,20 +15870,13 @@ minimalistic-crypto-utils@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/minimalistic-crypto-utils/-/minimalistic-crypto-utils-1.0.1.tgz#f6c00c1c0b082246e5c4d99dfb8c7c083b2b582a"
 
-minimatch@^10.0.1, minimatch@^11.0.1, minimatch@^11.0.5:
+minimatch@^10.0.1, minimatch@^10.2.2, minimatch@^11.0.1, minimatch@^11.0.5:
   version "11.0.5"
   resolved "https://registry.yarnpkg.com/minimatch/-/minimatch-11.0.5.tgz#29589e94fc4d84193b2a31b082b0ec67b5ea1d42"
   integrity sha512-snPlVppFcYWfLLFQGhDxUyBcHNtMlWmn3jtj7pEaO+DP8pqL0IvAzXhMYmn1z9ASNtgmwLBdFxSf4tMUB0OTKA==
   dependencies:
     "@isaacs/nonrecursive-glob-match" "^1.1.0"
     brace-expansion "^5.0.12"
-
-minimatch@^10.2.2:
-  version "10.2.6"
-  resolved "https://registry.yarnpkg.com/minimatch/-/minimatch-10.2.6.tgz#fd956bbe0b77241e9f15ac5dccb1c638060968ef"
-  integrity sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==
-  dependencies:
-    brace-expansion "^5.0.8"
 
 minimatch@^3.0.4, minimatch@^3.0.5, minimatch@^3.1.1, minimatch@^3.1.2, minimatch@^3.1.5:
   version "3.1.5"
@@ -18917,7 +18970,7 @@ smart-buffer@^4.2.0:
   resolved "https://registry.yarnpkg.com/smart-buffer/-/smart-buffer-4.2.0.tgz#6e1d71fa4f18c05f7d0ff216dd16a481d0e8d9ae"
   integrity sha512-94hK0Hh8rPqQl2xXc3HsaBoOXKV20MToPkcXvwbISWLEs+64sBq5kFgn2kJDHb1Pry9yrP0dxrCI9RRci7RXKg==
 
-smol-toml@1.9.1:
+smol-toml@1.9.1, smol-toml@^1.6.1:
   version "1.9.1"
   resolved "https://registry.yarnpkg.com/smol-toml/-/smol-toml-1.9.1.tgz#1262834a084c3ce2985900450956a580f95cf243"
   integrity sha512-j7WyPdf0CJoutMzMoPLF/bVXHtKZIT9Rb4eGeEbWw8X2t5oirjPgpL+OpaENZrILYaXqYwnVH+qgUwVbl+pUJQ==
@@ -21088,7 +21141,7 @@ yaml@^1.10.0, yaml@^1.10.2, yaml@^1.7.2:
   resolved "https://registry.yarnpkg.com/yaml/-/yaml-1.10.3.tgz#76e407ed95c42684fb8e14641e5de62fe65bbcb3"
   integrity sha512-vIYeF1u3CjlhAFekPPAk2h/Kv4T3mAkMox5OymRiJQB0spDP10LHvt+K7G9Ny6NuuMAb25/6n1qyUjAcGNf/AA==
 
-yaml@^2.8.3:
+yaml@^2.7.0, yaml@^2.8.3:
   version "2.9.1"
   resolved "https://registry.yarnpkg.com/yaml/-/yaml-2.9.1.tgz#c16233fb31944e705cfefaff38795587f57588ce"
   integrity sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==

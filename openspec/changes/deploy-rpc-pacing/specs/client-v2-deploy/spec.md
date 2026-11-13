@@ -18,7 +18,7 @@ pace by 1 write per second.
 
 ### Requirement: The send cap is 4 per cluster unless the env sets one
 
-The pace SHALL never rise above the cluster's send cap, in writes per second. Devnet, testnet and mainnet-beta SHALL
+The pace SHALL never rise above the cluster's send cap, in writes per second. Devnet, testnet and mainnet SHALL
 each have a send cap of 4, which a positive `REACT_APP_DEVNET_SEND_TX_PER_SECOND`,
 `REACT_APP_TESTNET_SEND_TX_PER_SECOND` or `REACT_APP_MAINNET_SEND_TX_PER_SECOND` SHALL replace. A value that is unset,
 not a number, or not above 0 SHALL leave the cap at 4; no value turns the cap off. The cap SHALL apply to every RPC

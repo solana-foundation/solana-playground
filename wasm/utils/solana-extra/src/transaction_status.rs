@@ -671,18 +671,13 @@ pub enum TransactionConfirmationStatus {
     Finalized,
 }
 
-#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TransactionDetails {
+    #[default]
     Full,
     Signatures,
     None,
-}
-
-impl Default for TransactionDetails {
-    fn default() -> Self {
-        Self::Full
-    }
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

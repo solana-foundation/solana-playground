@@ -17,6 +17,7 @@ export {
   clusterName,
   CLUSTERS,
   clustersFor,
+  currentMonikerOf,
   Endpoint,
   findClusterWith,
   isCluster,

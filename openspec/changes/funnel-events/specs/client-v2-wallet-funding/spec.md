@@ -5,7 +5,7 @@
 ### Requirement: A faucet airdrop is counted
 
 The `airdrop` command (`commands/airdrop/airdrop.ts`) SHALL emit
-`fund_airdropped` `{ via: "terminal" | "wallet" | "stage" | "deploy" | "automatic", cluster: "mainnet-beta" | "devnet" | "testnet" | "localnet" | "playnet" }`
+`fund_airdropped` `{ via: "terminal" | "wallet" | "stage" | "deploy" | "automatic", cluster: "mainnet" | "devnet" | "testnet" | "localnet" | "playnet" }`
 through the `features/fund-wallet` tracker once the airdrop has arrived in the
 Playground wallet, after its balance check succeeds; a failed airdrop SHALL
 emit nothing. `via` SHALL be the caller that wrapped the run with

@@ -25,7 +25,7 @@ const NETWORKS: ReadonlyArray<Chip> = OFFERED.map(
     label: name,
     endpoint: value,
     foot:
-      cluster === "mainnet-beta"
+      cluster === "mainnet"
         ? { line: NO_DEPLOYS, isRealSol: true }
         : { line: "Deploys with free devnet SOL", isRealSol: false },
   })

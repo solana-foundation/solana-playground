@@ -17,6 +17,10 @@ const isV1 = (
   typeof v.metadata.spec === "string" &&
   Array.isArray(v.instructions);
 
+/** An IDL in the Anchor 0.30+ format, whether or not {@link readIdl} can map it to the 0.29 shape */
+export const isIdlV1 = (raw: unknown): raw is IdlV1 =>
+  isObject(raw) && isV1(raw);
+
 const isV029 = (v: Record<string, unknown>) =>
   typeof v.name === "string" &&
   typeof v.version === "string" &&

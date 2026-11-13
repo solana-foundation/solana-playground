@@ -741,8 +741,8 @@ if (import.meta.vitest) {
         expect(
           PgCustomRpcs.check(
             {
-              name: offered("mainnet-beta").name,
-              url: offered("mainnet-beta").value,
+              name: offered("mainnet").name,
+              url: offered("mainnet").value,
             },
             undefined
           )
@@ -881,7 +881,7 @@ if (import.meta.vitest) {
 
       it.each([
         ["the offered Devnet", () => offered("devnet").value],
-        ["the offered Mainnet", () => offered("mainnet-beta").value],
+        ["the offered Mainnet", () => offered("mainnet").value],
         ["the offered Testnet", () => offered("testnet").value],
         ["Localnet", () => "http://localhost:8899"],
         ["Surfpool", () => "http://127.0.0.1:8899"],
@@ -896,11 +896,11 @@ if (import.meta.vitest) {
 
     it("saves a chip's address under a name of its own, and the public Devnet beside Devnet", () => {
       expect(add("My Devnet", offered("devnet").value).ok).toBe(true);
-      expect(add("", offered("mainnet-beta").value).ok).toBe(true);
+      expect(add("", offered("mainnet").value).ok).toBe(true);
       expect(add("Public Devnet", Endpoint.DEVNET).ok).toBe(true);
       expect(PgCustomRpcs.list().map((r) => r.name)).toEqual([
         "My Devnet",
-        hostOf(offered("mainnet-beta").value),
+        hostOf(offered("mainnet").value),
         "Public Devnet",
       ]);
     });

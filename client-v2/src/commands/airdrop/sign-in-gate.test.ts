@@ -7,7 +7,7 @@ describe("isAirdropSignInGated", () => {
     expect(isAirdropSignInGated(cluster)).toBe(false);
   });
 
-  it.each(["devnet", "testnet", "mainnet-beta"])(
+  it.each(["devnet", "testnet", "mainnet"])(
     "keeps the gate on %s",
     (cluster) => {
       expect(isAirdropSignInGated(cluster)).toBe(true);

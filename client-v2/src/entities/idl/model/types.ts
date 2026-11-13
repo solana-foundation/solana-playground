@@ -15,6 +15,10 @@ export interface IdlV1 {
     version: string;
     spec: string;
     description?: string;
+    repository?: string;
+    dependencies?: { name: string; version: string }[];
+    contact?: string;
+    deployments?: IdlV1Deployments;
   };
   docs?: string[];
   instructions: IdlV1Instruction[];
@@ -22,7 +26,20 @@ export interface IdlV1 {
   events?: IdlV1Discriminated[];
   errors?: { code: number; name: string; msg?: string }[];
   types?: IdlV1TypeDef[];
-  constants?: { name: string; type: IdlV1Type; value: string }[];
+  constants?: {
+    name: string;
+    docs?: string[];
+    type: IdlV1Type;
+    value: string;
+  }[];
+}
+
+/** A cluster without a deployment is `null`: Anchor writes all four keys */
+export interface IdlV1Deployments {
+  mainnet: string | null;
+  testnet: string | null;
+  devnet: string | null;
+  localnet: string | null;
 }
 
 export interface IdlV1Instruction {
@@ -77,11 +94,17 @@ export type IdlV1GenericArg =
   | { kind: "type"; type: IdlV1Type }
   | { kind: "const"; value: string };
 
+export type IdlV1Repr =
+  | { kind: "rust"; packed?: boolean; align?: number }
+  | { kind: "c"; packed?: boolean; align?: number }
+  | { kind: "transparent" };
+
 export interface IdlV1TypeDef {
   name: string;
   docs?: string[];
-  serialization?: string;
-  repr?: unknown;
+  /** Absent for Borsh; a custom serialization is `{ custom: <name> }` */
+  serialization?: string | { custom: string };
+  repr?: IdlV1Repr;
   generics?: IdlV1Generic[];
   type: IdlV1TypeDefTy;
 }

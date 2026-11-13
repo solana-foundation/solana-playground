@@ -135,7 +135,7 @@ describe("features/fund-wallet/ui/BaseWalletChip", () => {
   });
 
   it("offers no faucet on a network without one, and tags mainnet", () => {
-    renderChip({ cluster: "mainnet-beta", hasFaucet: false, balance: 2 });
+    renderChip({ cluster: "mainnet", hasFaucet: false, balance: 2 });
     open();
     expect(screen.getByText("Mainnet")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Get / })).toBeNull();

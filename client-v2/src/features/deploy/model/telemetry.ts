@@ -3,7 +3,7 @@ import { createTracker } from "@/shared/lib/telemetry";
 
 /** The network a deploy went to, as `PgConnection.cluster` names it */
 export type DeployCluster =
-  | "mainnet-beta"
+  | "mainnet"
   | "devnet"
   | "testnet"
   | "localnet"

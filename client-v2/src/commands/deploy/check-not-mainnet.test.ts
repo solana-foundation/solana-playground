@@ -36,7 +36,7 @@ describe("checkNotMainnet", () => {
     "reads no network while a deploy is %s",
     async (state) => {
       PgGlobal.deployState = state;
-      vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
+      vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet");
 
       await expect(checkNotMainnet()).resolves.toBeUndefined();
       expect(PgConnection.getCluster).not.toHaveBeenCalled();
@@ -45,8 +45,8 @@ describe("checkNotMainnet", () => {
 
   // The cached cluster says devnet: the guard reads the endpoint itself, as
   // a network switch or a custom RPC with mainnet's genesis would need
-  it("refuses when the endpoint resolves to mainnet-beta", async () => {
-    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
+  it("refuses when the endpoint resolves to mainnet", async () => {
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet");
 
     const check = checkNotMainnet();
 
