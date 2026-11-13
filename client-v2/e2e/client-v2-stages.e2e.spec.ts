@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { Keypair } from "@solana/web3.js";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { requireFor } from "../src/test-utils/require-for";
 import {
   expect,
@@ -62,7 +63,7 @@ const DEPLOYED_ACCOUNT = {
  * account does not exist); every other call goes to the cluster as usual
  */
 const stubProgramAccount = (page: Page, account: object | null) =>
-  page.route("https://api.devnet.solana.com/**", async (route) => {
+  page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
@@ -360,7 +361,7 @@ test.describe("client-v2-stages: Interact", () => {
     const released = new Promise<void>((resolve) => (release = resolve));
     const held: string[] = [];
     let slot = 0;
-    await page.route("https://api.devnet.solana.com/**", async (route) => {
+    await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
       const body = (route.request().postDataJSON() ?? {}) as {
         id?: unknown;
         method?: string;

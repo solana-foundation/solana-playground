@@ -139,6 +139,7 @@ if (import.meta.vitest) {
         expect(finish?.next ?? undefined).toBe(after && slugOf(after));
         const chip = finish?.chips.find((c) => c.follow === "nextTutorial");
         if (after) {
+          // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
           expect(chip?.answer).toMatch(new RegExp(`^${after} is a good next`));
         } else {
           expect(chip).toBeUndefined();

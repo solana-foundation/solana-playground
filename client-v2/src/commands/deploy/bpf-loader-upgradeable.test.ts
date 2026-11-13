@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
+
 import { PgTx } from "../../utils";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
 
@@ -19,7 +21,7 @@ const connectionTo = (rpcEndpoint: string) => ({
   })(),
 });
 
-const selected = connectionTo("https://api.devnet.solana.com");
+const selected = connectionTo(TEST_ENDPOINT.DEVNET);
 
 vi.mock("../../utils", () => {
   const pk = { toBase58: () => "pk" };
@@ -89,7 +91,7 @@ beforeEach(() => {
 });
 
 describe("BpfLoaderUpgradeable", () => {
-  const theDeploys = connectionTo("https://api.testnet.solana.com");
+  const theDeploys = connectionTo(TEST_ENDPOINT.TESTNET);
 
   it.each([
     [

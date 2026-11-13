@@ -8,12 +8,14 @@ import { airdrop } from "./airdrop";
 import { COULD_NOT_READ_NETWORK, NO_FAUCET } from "./no-faucet";
 import { isAirdropRefused, isNetworkUnreachable } from "./report";
 
-const rpc = vi.hoisted(() => ({
+const rpc = await vi.hoisted(async () => ({
   getBalance: vi.fn(),
   requestAirdrop: vi.fn(),
   confirm: vi.fn(),
   commitment: "confirmed",
-  rpcEndpoint: "https://api.devnet.solana.com",
+  rpcEndpoint: (
+    await import("@/test-utils/endpoints.mjs")
+  ).TEST_ENDPOINT.DEVNET,
 }));
 
 // Only what `airdrop.handle` reads before it asks the RPC for SOL

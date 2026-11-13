@@ -378,7 +378,7 @@ test.describe("Connect a model", () => {
       await dialog.locator("#assistant-api-key").fill("sk-fake-key");
       await dialog
         .locator("#assistant-base-url")
-        .fill("http://mock-llm.test/v1");
+        .fill("https://mock-llm.test/v1");
       await dialog.locator("#assistant-model").fill("mock-model");
       await expect(connect).toBeInViewport({ ratio: 1 });
 

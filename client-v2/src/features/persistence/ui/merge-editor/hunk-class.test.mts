@@ -12,6 +12,7 @@ const LOOKS: LineLook[] = ["conflict", "changed", "resolved", "dismissed"];
 
 /** `index.css`'s rule for a class: what it applies, as one string */
 const applied = (css: string, className: string) => {
+  // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
   const rule = new RegExp(`\\.${className}\\s*\\{\\s*@apply\\s+([^;]+);`);
   return css.match(rule)?.[1].replace(/\s+/g, " ").trim();
 };

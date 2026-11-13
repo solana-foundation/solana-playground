@@ -6,6 +6,7 @@ import {
   VersionedTransaction,
 } from "@solana/web3.js";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { HELLO_NAME, HELLO_WORLD } from "./fake-build-server";
 
 /**
@@ -49,8 +50,8 @@ const bs58 = {
   },
 };
 
-const RPC = "https://api.devnet.solana.com";
-const WS = "wss://api.devnet.solana.com";
+const RPC: string = Endpoint.DEVNET;
+const WS = RPC.replace(/^https:/, "wss:");
 const LOADER = "BPFLoaderUpgradeab1e11111111111111111111111";
 const SYSTEM = SystemProgram.programId.toBase58();
 const LAMPORTS_PER_SOL = 1_000_000_000;

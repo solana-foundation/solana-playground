@@ -13,6 +13,7 @@ import { SOURCES_CATALOGUE } from "../../config/sources.mjs";
 const KINDS = /** @type {const} */ (["mcp", "skill"]);
 
 /** `${NAME}` or `${NAME:-default}`; an empty variable counts as unset, as `server-env.mjs` reads it */
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `:-` opens the default and `[^}]` stops at its close
 const PLACEHOLDER = /\$\{([A-Za-z0-9_]+)(?::-([^}]*))?\}/g;
 
 /**

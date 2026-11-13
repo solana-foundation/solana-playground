@@ -532,7 +532,7 @@ reason.
   into a `scope/*` branch or `new-face-polish-2` merges without a human
   approval once it has no conflict, no human has requested changes, CI is
   green and the line names the PR's current head with 0 critical open.
-  Green means every check the `ci.yml` and `client-v2.yml`
+  Green means every check the `ci.yml`, `client-v2.yml` and `security.yml`
   workflows report on that head passed, except `ci.yml`'s `checks / Build`,
   which is always skipped because `ci.yml` passes `build: false`; any other
   skipped check, and any pending, cancelled or missing one, is not green. A

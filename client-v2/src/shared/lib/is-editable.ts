@@ -15,6 +15,7 @@ if (import.meta.vitest) {
   describe("shared/lib/is-editable", () => {
     const make = (html: string) => {
       const host = document.createElement("div");
+      // eslint-disable-next-line no-unsanitized/property -- the test's own markup literals, never user input
       host.innerHTML = html;
       return host.firstElementChild as Element;
     };

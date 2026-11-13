@@ -45,7 +45,7 @@ vi.mock("@/utils", () => {
     ConversionError,
     PgGithub: {
       isValidUrl: (url: string) =>
-        /^(https:\/\/?)?(www\.)?github\.com\/.+?\/.+/.test(url),
+        /^(?:https:\/\/|https:\/)?(?:www\.)?github\.com\/.+?\/.+/.test(url),
       import: mockGithubImport,
       parseUrl: (url: string) => {
         const [owner = "", repo = ""] = url.split("github.com/")[1].split("/");

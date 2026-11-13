@@ -1,23 +1,13 @@
-// Imports nothing but `client-env`: `settings/stored-endpoint.ts`, which loads before everything else, reads this file
+// Imports nothing but `client-env` and `endpoint`: `settings/stored-endpoint.ts`, which loads before everything else, reads this file
 import {
   NATIVE_RPC_URLS,
   PLATFORM_RPC_URLS,
   SEND_TX_PER_SECOND,
 } from "@/shared/config/client-env";
 
-/** A cluster's public RPC endpoint */
-export enum Endpoint {
-  PLAYNET = "http://playnet",
-  LOCALNET = "http://localhost:8899",
-  /**
-   * `surfpool start`'s RPC. Its port is Localnet's; the host tells the two
-   * offered networks apart, and both resolve to the `localnet` cluster.
-   */
-  SURFPOOL = "http://127.0.0.1:8899",
-  DEVNET = "https://api.devnet.solana.com",
-  TESTNET = "https://api.testnet.solana.com",
-  MAINNET_BETA = "https://api.mainnet-beta.solana.com",
-}
+import { Endpoint } from "./endpoint";
+
+export { Endpoint };
 
 /** Solana public clusters, "localnet" or "playnet" */
 export type Cluster =
@@ -227,6 +217,17 @@ if (import.meta.vitest) {
         ["localnet", Endpoint.LOCALNET],
         ["surfpool", Endpoint.SURFPOOL],
       ]);
+    });
+
+    it.each([
+      // eslint-disable-next-line no-restricted-syntax -- the value under test
+      [Endpoint.DEVNET, "https://api.devnet.solana.com"],
+      // eslint-disable-next-line no-restricted-syntax -- the value under test
+      [Endpoint.TESTNET, "https://api.testnet.solana.com"],
+      // eslint-disable-next-line no-restricted-syntax -- the value under test
+      [Endpoint.MAINNET_BETA, "https://api.mainnet-beta.solana.com"],
+    ])("holds the public RPC %s", (endpoint, url) => {
+      expect(endpoint).toBe(url);
     });
 
     it("treats an empty string as unset", () => {

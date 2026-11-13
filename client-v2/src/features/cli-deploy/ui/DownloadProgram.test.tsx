@@ -106,7 +106,7 @@ describe("features/cli-deploy/ui/DownloadProgram", () => {
   it("asks for a rebuild when the server lost the build", async () => {
     mocks.deploy.mockRejectedValue(
       new PgServerError({
-        url: "http://s/deploy/u",
+        url: "https://s/deploy/u",
         status: 500,
         body: "Program is not built",
       })
@@ -130,7 +130,7 @@ describe("features/cli-deploy/ui/DownloadProgram", () => {
   it("reports any other failure and asks for no rebuild", async () => {
     mocks.deploy.mockRejectedValue(
       new PgServerError({
-        url: "http://s/deploy/u",
+        url: "https://s/deploy/u",
         status: 502,
         body: "Bad gateway",
       })
@@ -185,7 +185,7 @@ describe("features/cli-deploy/ui/DownloadProgram", () => {
   it("clears the rebuild line once a later press succeeds", async () => {
     mocks.deploy.mockRejectedValueOnce(
       new PgServerError({
-        url: "http://s/deploy/u",
+        url: "https://s/deploy/u",
         status: 500,
         body: "Program is not built",
       })

@@ -103,7 +103,7 @@ export class PgGithub {
    * @returns whether the URL is a GitHub URL
    */
   static isValidUrl(url: string) {
-    return /^(https:\/\/?)?(www\.)?github\.com\/.+?\/.+/.test(url);
+    return /^(?:https:\/\/|https:\/)?(?:www\.)?github\.com\/.+?\/.+/.test(url);
   }
 
   /**
@@ -117,7 +117,10 @@ export class PgGithub {
    * @returns the route path
    */
   static routePath(url: string) {
-    const path = url.replace(/^(https:\/\/?)?(www\.)?github\.com\//, "");
+    const path = url.replace(
+      /^(?:https:\/\/|https:\/)?(?:www\.)?github\.com\//,
+      ""
+    );
     return `${GITHUB_ROUTE}/${path.replace(/\/+$/, "")}`;
   }
 
@@ -130,6 +133,7 @@ export class PgGithub {
   static parseUrl(url: string) {
     // https://github.com/solana-labs/solana-program-library/tree/master/token/program
     const regex =
+      // eslint-disable-next-line security/detect-unsafe-regex -- linear: no group repeats and the trailing `[\w-/.]*` always matches
       /(https:\/\/)?(github\.com\/)([\w-]+)\/([\w-]+)(\/)?((tree|blob)\/([\w-.]+))?(\/)?([\w-/.]*)/;
     const res = regex.exec(url);
     if (!res) throw new Error("Invalid program url");

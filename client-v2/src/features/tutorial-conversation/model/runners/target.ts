@@ -48,14 +48,20 @@ export const targetGuardFor =
   };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
 
   describe("features/tutorial-conversation/model/runners/target", () => {
-    const DEVNET: Target = {
-      workspace: "hello_anchor",
-      endpoint: "https://api.devnet.solana.com",
-      cluster: "devnet",
-    };
+    let TEST_ENDPOINT: typeof import("@/test-utils/endpoints.mjs").TEST_ENDPOINT;
+    let DEVNET: Target;
+
+    beforeAll(async () => {
+      ({ TEST_ENDPOINT } = await import("@/test-utils/endpoints.mjs"));
+      DEVNET = {
+        workspace: "hello_anchor",
+        endpoint: TEST_ENDPOINT.DEVNET,
+        cluster: "devnet",
+      };
+    });
     const guardOver = (state: { now: Target }) =>
       targetGuardFor("the deploy")(() => state.now);
 
@@ -89,7 +95,7 @@ if (import.meta.vitest) {
       guard.capture();
       state.now = {
         workspace: DEVNET.workspace,
-        endpoint: "https://api.mainnet-beta.solana.com",
+        endpoint: TEST_ENDPOINT.MAINNET_BETA,
         cluster: "mainnet-beta",
       };
       expect(() => guard.ensure()).toThrow("changed during the deploy");

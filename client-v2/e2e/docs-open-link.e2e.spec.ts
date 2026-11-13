@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { deflateRaw } from "pako";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { DEVNET_WS, expect, json, LONG, test } from "./fixtures";
 
 /**
@@ -49,7 +50,7 @@ const QUICKSTART = [
 
 /** The cluster answers `getBalance` with `lamports`; anything else goes on */
 const stubBalance = (lamports: () => number, page: Page) =>
-  page.route("https://api.devnet.solana.com/**", async (route) => {
+  page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
@@ -83,7 +84,7 @@ const DEVNET_ANSWERS: Record<string, unknown> = {
  * JSON-RPC "method not found". The websocket is accepted and stays silent.
  */
 const stubDevnet = async (page: Page) => {
-  await page.route("https://api.devnet.solana.com/**", async (route) => {
+  await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;

@@ -3,6 +3,7 @@ import type {
   BuildFramework,
 } from "@/features/program-build";
 import { buildTelemetry } from "@/features/program-build";
+import { escapeRegExp } from "@/shared/lib/escape-reg-exp";
 
 import {
   PgCommon,
@@ -195,6 +196,7 @@ const getBuildFiles = () => {
   const updateIdRust = (content: string) => {
     let updated = false;
     let insideBlockComment = false;
+    // eslint-disable-next-line security/detect-unsafe-regex -- linear: `::` ends each `\w+` repetition and `\w` matches no `:`
     const rustDeclareIdRegex = /^(([\w]+::)*)declare_id!\("(\w*)"\)/;
     const newContent = content
       .split("\n")
@@ -380,7 +382,11 @@ const improveOutput = (output: string) => {
 
   // Remove uuid from folders
   const uuid = PgProgramInfo.uuid;
-  if (uuid) output = output.replace(new RegExp(`${uuid}\\/?`, "gm"), "");
+  if (uuid) {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- the server's uuid is escaped
+    const folder = new RegExp(`${escapeRegExp(uuid)}\\/?`, "gm");
+    output = output.replace(folder, "");
+  }
 
   // Remove `rustc` error line
   let startIndex = output.indexOf("For more");

@@ -21,9 +21,10 @@ jobs:
       version_tag: ${{ steps.tag.outputs.version_tag }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - id: tag
         name: Compute App Engine version tag
@@ -56,7 +57,7 @@ jobs:
   checks:
     needs: resolve_version
     if: needs.resolve_version.outputs.version_tag != ''
-    uses: ./.github/workflows/reusable-checks.yml
+    uses: ./.github/workflows/reusable-checks.yml # zizmor: ignore[self-repository] act rejects the $/ form, and both resolve to this commit
 
   deploy_server:
     name: Deploy Playground Server
@@ -70,10 +71,12 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
 
       - name: Sign in to GCP
-        uses: ./.github/actions/gcp-auth
+        uses: ./.github/actions/gcp-auth # zizmor: ignore[self-repository] act rejects the $/ form, and both resolve to this commit
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.SERVICE_ACCOUNT }}
@@ -82,11 +85,13 @@ jobs:
 
       - name: Deploy to App Engine with specific version (no promote)
         working-directory: server
+        env:
+          VERSION_TAG: ${{ needs.resolve_version.outputs.version_tag }}
         run: |
           # Rust release build alone is ~6m; full image build runs ~10.5m, past
           # the 600s Cloud Build default. Raise the cap so the image can be pushed.
           gcloud config set app/cloud_build_timeout 1800
           gcloud app deploy app.yaml \
-            --version=${{ needs.resolve_version.outputs.version_tag }} \
+            --version="$VERSION_TAG" \
             --no-promote \
             --quiet

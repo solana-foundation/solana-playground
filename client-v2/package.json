@@ -94,6 +94,7 @@
   "devDependencies": {
     "@craco/craco": "^6.4.3",
     "@fission-ai/openspec": "1.14.0",
+    "@microsoft/eslint-plugin-sdl": "1.1.0",
     "@playwright/test": "^1.65.0",
     "@sentry/cli": "^2",
     "@tailwindcss/postcss": "^4.3.3",
@@ -119,8 +120,10 @@
     "eslint-plugin-jest": "28.14.0",
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-layers": "link:./eslint-plugin-layers",
+    "eslint-plugin-no-unsanitized": "4.1.5",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "5.2.0",
+    "eslint-plugin-security": "4.2.1",
     "eslint-plugin-simple-import-sort": "14.0.0",
     "eslint-plugin-unicorn": "47.0.0",
     "express": "^5.2.1",
