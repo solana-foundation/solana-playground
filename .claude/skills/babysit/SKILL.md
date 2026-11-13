@@ -30,6 +30,8 @@ A PR is done when all four hold:
 
 A failing or skipped `Vercel` check does not count against the second condition: "Before a PR" says a red or
 skipped Vercel preview does not hold the merge. The report lists the check as expected, never as a failure to fix.
+A job whose `if:` runs it only on a push (`smoke` in `client-v2.yml`) skips on every PR by design and does not
+count against the second condition either.
 
 ## The PR template
 
@@ -141,7 +143,7 @@ The skipping, fail, and flake bullets apply to checks of the `Upstream: checks` 
 - `pending`: in loop mode, end the pass and let the wakeup in step 7 return. Outside loop mode, run
   `gh pr checks <n> --repo <repo> --watch` with `run_in_background`. When it exits, run the `--json` command
   again and continue from its result. With no check to watch, end the pass as pending.
-- `skipping`: the report names every skipped check other than `checks / Build` and `Vercel`.
+- `skipping`: the report names every skipped check other than `checks / Build`, `Vercel`, and push-only jobs.
 - `fail` or `cancel`: read the log (`gh run view <run-id> --repo <repo> --log-failed`; the run id is in `link`). A
   check outside GitHub Actions (Vercel, CodeQL, Greptile) has no run: read its `description` or open its `link`
   instead. A cancelled run has no failed-step log: read `gh run view <run-id> --repo <repo> --json jobs` for the
