@@ -17,9 +17,9 @@ import {
   incompressible,
   openTerminal,
   PROGRAM,
-  runUntil,
-  selectNetworkAndWallet,
-  serveOn,
+  runAndWaitFor,
+  selectNetworkAndWalletFor,
+  serveFor,
   terminalOf,
   writeFileWith,
 } from "./program-idl";
@@ -27,16 +27,16 @@ import { lineOf, linesOn } from "./telemetry";
 
 // The browser path of `anchor idl` on a custom RPC that LiteSVM answers in Playwright's process; what each subcommand computes is `anchor.integration.test.ts`'s
 
-const serveFrom = serveOn(CUSTOM_RPC);
+const serveCustomRpcFor = serveFor(CUSTOM_RPC);
 
 /** Selects {@link CUSTOM_RPC} and a Playground wallet that holds `wallet`, then reloads onto both */
-const selectRpcAndWallet = (wallet: Keypair) => (page: Page) =>
-  selectNetworkAndWallet(CUSTOM_RPC)(page, connectedWallet(wallet));
+const selectRpcAndWalletFor = (wallet: Keypair) => (page: Page) =>
+  selectNetworkAndWalletFor(CUSTOM_RPC)(page, connectedWallet(wallet));
 
 test.describe("client-v2-program-idl", () => {
   let cluster: Cluster;
   let metadata: string;
-  // Set before any hook runs, so a setup that fails before `serveFrom` reports its own error here
+  // Set before any hook runs, so a setup that fails before `serveCustomRpcFor` reports its own error here
   let unanswered = new Set<string>();
 
   test.beforeEach(async ({ seededPage: page }) => {
@@ -48,8 +48,8 @@ test.describe("client-v2-program-idl", () => {
     );
     await cluster.deploy(PROGRAM, wallet.publicKey.toBase58());
     [metadata] = await findCanonicalPda({ program: PROGRAM, seed: "idl" });
-    unanswered = await serveFrom(cluster)(page);
-    await selectRpcAndWallet(wallet)(page);
+    unanswered = await serveCustomRpcFor(cluster)(page);
+    await selectRpcAndWalletFor(wallet)(page);
     await openTerminal(page);
   });
 
@@ -64,12 +64,11 @@ test.describe("client-v2-program-idl", () => {
     const text = idlText("0.1.0", []);
     const path = await writeFileWith(text)(page, "counter.json");
 
-    await runUntil(`IDL initialized. Program Metadata account: ${metadata}`)(
-      page,
-      `anchor idl init --filepath ${path}`
-    );
+    await runAndWaitFor(
+      `IDL initialized. Program Metadata account: ${metadata}`
+    )(page, `anchor idl init --filepath ${path}`);
 
-    await runUntil(text)(page, `anchor idl fetch ${PROGRAM}`);
+    await runAndWaitFor(text)(page, `anchor idl fetch ${PROGRAM}`);
   });
 
   test("client-v2-program-idl: An upload through a custom RPC is tracked", async ({
@@ -81,7 +80,7 @@ test.describe("client-v2-program-idl", () => {
       "counter.json"
     );
 
-    await runUntil("IDL initialized.")(
+    await runAndWaitFor("IDL initialized.")(
       page,
       `anchor idl init --filepath ${path}`
     );
@@ -103,17 +102,17 @@ test.describe("client-v2-program-idl", () => {
     );
     const second = idlText("0.2.0", ["Counts"]);
     const secondPath = await writeFileWith(second)(page, "counter-v2.json");
-    await runUntil("IDL initialized.")(
+    await runAndWaitFor("IDL initialized.")(
       page,
       `anchor idl init --filepath ${first}`
     );
 
-    await runUntil(`IDL upgraded. Program Metadata account: ${metadata}`)(
+    await runAndWaitFor(`IDL upgraded. Program Metadata account: ${metadata}`)(
       page,
       `anchor idl upgrade --filepath ${secondPath}`
     );
 
-    await runUntil(second)(page, `anchor idl fetch ${PROGRAM}`);
+    await runAndWaitFor(second)(page, `anchor idl fetch ${PROGRAM}`);
   });
 
   test("client-v2-program-idl: Publish through a buffer", async ({
@@ -121,7 +120,7 @@ test.describe("client-v2-program-idl", () => {
   }) => {
     const text = idlText("0.1.0", []);
     const path = await writeFileWith(text)(page, "counter.json");
-    await runUntil("Buffer created successfully.")(
+    await runAndWaitFor("Buffer created successfully.")(
       page,
       `anchor idl create-buffer --filepath ${path}`
     );
@@ -131,19 +130,19 @@ test.describe("client-v2-program-idl", () => {
     const [, buffer] =
       created.exec((await terminalOf(page).textContent()) ?? "") ?? [];
 
-    await runUntil("Metadata written successfully using buffer.")(
+    await runAndWaitFor("Metadata written successfully using buffer.")(
       page,
       `anchor idl write-buffer ${PROGRAM} --buffer ${buffer} --close-buffer`
     );
 
-    await runUntil(text)(page, `anchor idl fetch ${PROGRAM}`);
+    await runAndWaitFor(text)(page, `anchor idl fetch ${PROGRAM}`);
     expect(cluster.svm.getAccount(address(buffer)).exists).toBe(false);
   });
 
   test("client-v2-program-idl: A program without a published IDL", async ({
     seededPage: page,
   }) => {
-    await runUntil(
+    await runAndWaitFor(
       `Program ${PROGRAM} has no published IDL on the selected network.`
     )(page, `anchor idl fetch ${PROGRAM}`);
   });
@@ -155,12 +154,12 @@ test.describe("client-v2-program-idl", () => {
     const path = await writeFileWith(text)(page, "large.json");
     // The first transaction turns the canonical account into a buffer; the RPC drops the second
     cluster.dropSendAt(1);
-    await runUntil("Run the same `anchor idl init` again to finish it.")(
+    await runAndWaitFor("Run the same `anchor idl init` again to finish it.")(
       page,
       `anchor idl init --filepath ${path}`
     );
 
-    await runUntil("IDL initialized.")(
+    await runAndWaitFor("IDL initialized.")(
       page,
       `anchor idl init --filepath ${path}`
     );
@@ -170,6 +169,6 @@ test.describe("client-v2-program-idl", () => {
       AccountDiscriminator.Metadata
     );
     // The IDL outgrows the rows in view, so its end stands for it
-    await runUntil(text.slice(-60))(page, `anchor idl fetch ${PROGRAM}`);
+    await runAndWaitFor(text.slice(-60))(page, `anchor idl fetch ${PROGRAM}`);
   });
 });

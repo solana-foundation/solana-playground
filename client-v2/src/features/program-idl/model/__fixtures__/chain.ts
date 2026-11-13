@@ -125,7 +125,7 @@ export const bufferOf = (
 /** The last valid block height of every blockhash the stub RPC hands out */
 const LAST_VALID_BLOCK_HEIGHT = 100;
 
-const answerAt =
+const answerWith =
   (blockHeight: number) =>
   (
     accounts: Map<string, StubAccount>,
@@ -163,19 +163,19 @@ const answerAt =
   };
 
 /** Answers the RPC's requests from `accounts`, read at each request so a case may change them, at the block height `blockHeight` */
-const stubRpcAt =
+const stubRpcWith =
   (blockHeight: number) => (accounts: Map<string, StubAccount>) =>
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
       const { id, method, params } = JSON.parse(String(init?.body));
-      const result = answerAt(blockHeight)(accounts, { method, params });
+      const result = answerWith(blockHeight)(accounts, { method, params });
       return new Response(JSON.stringify({ jsonrpc: "2.0", id, result }));
     });
 
 /** Under the last valid block height, so a failed send is not read as an expired one */
-export const stubRpc = stubRpcAt(1);
+export const stubRpc = stubRpcWith(1);
 
 /** Past the last valid block height, so a failed send is read as an expired one unless something says the transaction itself failed */
-export const stubExpiredRpc = stubRpcAt(LAST_VALID_BLOCK_HEIGHT + 1);
+export const stubExpiredRpc = stubRpcWith(LAST_VALID_BLOCK_HEIGHT + 1);
 
 /** Signs with `keypair`, leaving a v0 transaction unsigned as a wallet that tests `version` for truthiness does */
 export const walletOf = (keypair: Keypair) => {

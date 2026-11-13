@@ -132,7 +132,7 @@ const uiAnswerFor = (network: Network) => (cluster: Cluster) => {
  * subscriptions web3.js confirms through. Returns the methods neither the
  * UI's answers nor the cluster had an answer for.
  */
-export const serveOn =
+export const serveFor =
   (network: Network) => (cluster: Cluster) => async (page: Page) => {
     const uiAnswer = uiAnswerFor(network)(cluster);
     const unanswered = new Set<string>();
@@ -211,7 +211,7 @@ export const disconnectedWallet = (keypair: Keypair): StoredWallet => ({
 });
 
 /** Selects `network` and the Playground wallet `wallet`, then reloads onto both */
-export const selectNetworkAndWallet =
+export const selectNetworkAndWalletFor =
   (network: Network) => async (page: Page, wallet: StoredWallet) => {
     await page.evaluate(
       ({ endpoint, state, kp }) => {
@@ -268,7 +268,7 @@ export const openTerminal = async (page: Page) => {
 };
 
 /** Runs `line` and waits for the terminal to print `printed` */
-export const runUntil =
+export const runAndWaitFor =
   (printed: string) => async (page: Page, line: string) => {
     await runInTerminal(page, line);
     await expect(terminalOf(page)).toContainText(printed, LONG);
@@ -311,7 +311,7 @@ const copyLog = async (page: Page) => {
 };
 
 /** What `line` printed in `log`, from the line after it to the prompt that follows; empty while the log does not hold both */
-const printedIn = (line: string) => (log: string) => {
+const getPrintedFor = (line: string) => (log: string) => {
   // The prompt before it, since the output may quote the line itself
   const typed = `$ ${line}\n`;
   const at = log.lastIndexOf(typed);
@@ -329,7 +329,10 @@ export const printedBy = async (page: Page, line: string) => {
   let printed = "";
   // Copy takes the log a moment after the console opens, so an early click copies an older log
   await expect
-    .poll(async () => (printed = printedIn(line)(await copyLog(page))), LONG)
+    .poll(
+      async () => (printed = getPrintedFor(line)(await copyLog(page))),
+      LONG
+    )
     .not.toBe("");
   return printed;
 };

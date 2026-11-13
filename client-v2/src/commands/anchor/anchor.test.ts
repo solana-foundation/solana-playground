@@ -806,6 +806,26 @@ describe("commands/anchor", () => {
     ]);
   });
 
+  it("refuses to write the `--out` file when another project was opened during the fetch, and writes nothing", async () => {
+    const openProject = vi
+      .spyOn(PgExplorer, "currentWorkspaceId", "get")
+      .mockReturnValue("first-project");
+    slice.fetchPublishedIdl.mockImplementation(async () => {
+      openProject.mockReturnValue("second-project");
+      return '{"address":"published"}';
+    });
+
+    const result = run(
+      `anchor idl fetch ${GIVEN_PROGRAM} --out idl/fetched.json`
+    );
+
+    await expect(result).rejects.toBeInstanceOf(TerminalLineError);
+    await expect(result).rejects.toThrow(
+      "Another project was opened while the IDL was fetched, so nothing was written to idl/fetched.json."
+    );
+    expect(applyFile).not.toHaveBeenCalled();
+  });
+
   // The explorer reads a name without an extension as a folder
   it("refuses an `--out` name without an extension, and writes nothing", async () => {
     slice.fetchPublishedIdl.mockResolvedValue('{"address":"published"}');

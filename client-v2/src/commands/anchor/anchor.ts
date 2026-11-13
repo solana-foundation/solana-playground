@@ -345,21 +345,33 @@ const uploadIdl = async ({
   });
 };
 
-/** Prints `text` as it is, or with `--out` creates or replaces that file of the project */
-const printOrWrite = async (out: string | undefined, text: string) => {
-  if (out === undefined) {
-    await PgTerminal.println(text, { noColor: true });
-    return;
-  }
-  // A name without an extension is a folder to the explorer, which would create the folder and drop the text
-  if (!PgExplorer.getItemTypeFromPath(out).file) {
-    throw new TerminalLineError(
-      `\`--out\` takes a file name with an extension, and ${out} has none.`
-    );
-  }
-  // `applyFile` also updates an open editor's copy, which would otherwise show the replaced text and save it back
-  await applyFile(out, text);
-};
+/**
+ * Prints `text` as it is, or with `--out` creates or replaces that file of the
+ * project `projectId`, the one open when the command started. Throws a
+ * {@link TerminalLineError} when another project is open by the time it writes.
+ */
+const printOrWriteFor =
+  (projectId: string | undefined) =>
+  async (out: string | undefined, text: string) => {
+    if (out === undefined) {
+      await PgTerminal.println(text, { noColor: true });
+      return;
+    }
+    // A name without an extension is a folder to the explorer, which would create the folder and drop the text
+    if (!PgExplorer.getItemTypeFromPath(out).file) {
+      throw new TerminalLineError(
+        `\`--out\` takes a file name with an extension, and ${out} has none.`
+      );
+    }
+    // `out` resolves against the open project, so a write after a switch would replace a file of the other project
+    if (PgExplorer.currentWorkspaceId !== projectId) {
+      throw new TerminalLineError(
+        `Another project was opened while the IDL was fetched, so nothing was written to ${out}.`
+      );
+    }
+    // `applyFile` also updates an open editor's copy, which would otherwise show the replaced text and save it back
+    await applyFile(out, text);
+  };
 
 /**
  * A subcommand of Anchor's under `parent` that the terminal names and does not
@@ -487,6 +499,9 @@ export const anchor = createCmd({
               input.raw
             )(async () => {
               const programId = requireArg("program_id", input.args.program_id);
+              const printOrWrite = printOrWriteFor(
+                PgExplorer.currentWorkspaceId
+              );
               // The non-canonical account is the connected wallet's own, so only that read needs a wallet
               const authority = input.options["non-canonical"]
                 ? (await requireWallet()).publicKey.toBase58()

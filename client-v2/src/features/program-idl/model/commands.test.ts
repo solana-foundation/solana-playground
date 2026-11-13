@@ -133,17 +133,25 @@ const setBufferAuthority = ({ connection, wallet }: Setup) =>
     wallet,
   });
 
-const writeBufferAnd =
-  (closeBuffer: boolean) =>
-  ({ connection, wallet }: Setup) =>
-    writeMetadataFromBufferWith(FEE)({
-      programId: PROGRAM,
-      buffer: BUFFER,
-      seed: "idl",
-      closeBuffer,
-      connection,
-      wallet,
-    });
+const writeBufferAndClose = ({ connection, wallet }: Setup) =>
+  writeMetadataFromBufferWith(FEE)({
+    programId: PROGRAM,
+    buffer: BUFFER,
+    seed: "idl",
+    closeBuffer: true,
+    connection,
+    wallet,
+  });
+
+const writeBufferAndKeep = ({ connection, wallet }: Setup) =>
+  writeMetadataFromBufferWith(FEE)({
+    programId: PROGRAM,
+    buffer: BUFFER,
+    seed: "idl",
+    closeBuffer: false,
+    connection,
+    wallet,
+  });
 
 const started = (command: string) => ({
   name: "idl_command_started",
@@ -357,7 +365,7 @@ describe("features/program-idl/model/commands", () => {
         setup.accounts = await deployedBy(OTHER_WALLET);
         setup.accounts.set(BUFFER, bufferOf(WALLET_ADDRESS, new Uint8Array()));
       },
-      run: writeBufferAnd(true),
+      run: writeBufferAndClose,
       line: `The program's upgrade authority is ${OTHER_WALLET}. Connect that wallet to write the metadata account.`,
       sent: 0,
     },
@@ -368,7 +376,7 @@ describe("features/program-idl/model/commands", () => {
       change: (setup: Setup) => {
         setup.accounts.delete(BUFFER);
       },
-      run: writeBufferAnd(true),
+      run: writeBufferAndClose,
       line: `No Program Metadata buffer exists at ${BUFFER} on the selected network.`,
       sent: 0,
     },
@@ -606,7 +614,7 @@ describe("features/program-idl/model/commands", () => {
     {
       label: "replaces the account that exists and closes the buffer",
       change: () => undefined,
-      closeBuffer: true,
+      write: writeBufferAndClose,
       // The instruction that states the encoding, compression, and format, and the one that names the buffer as its third account
       describes: SET_DATA_DISCRIMINATOR,
       decoder: getSetDataInstructionDataDecoder(),
@@ -618,7 +626,7 @@ describe("features/program-idl/model/commands", () => {
       change: async (setup: Setup) => {
         setup.accounts.delete(await canonicalAddress("idl"));
       },
-      closeBuffer: false,
+      write: writeBufferAndKeep,
       describes: INITIALIZE_DISCRIMINATOR,
       decoder: getInitializeInstructionDataDecoder(),
       copies: WRITE_DISCRIMINATOR,
@@ -626,12 +634,12 @@ describe("features/program-idl/model/commands", () => {
     },
   ])(
     "$label from the buffer's data, stored as zlib and UTF-8 with no format, and reports the start, then the success",
-    async ({ change, closeBuffer, describes, decoder, copies, closed }) => {
+    async ({ change, write, describes, decoder, copies, closed }) => {
       const setup = await arrange();
       await change(setup);
       stubRpc(setup.accounts);
 
-      await writeBufferAnd(closeBuffer)(setup);
+      await write(setup);
 
       expect(tracked.events).toEqual([
         started("write-buffer"),

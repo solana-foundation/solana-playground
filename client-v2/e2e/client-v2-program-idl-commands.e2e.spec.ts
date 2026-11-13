@@ -27,9 +27,9 @@ import {
   printedBy,
   PROGRAM,
   recordClipboardWrites,
-  runUntil,
-  selectNetworkAndWallet,
-  serveOn,
+  runAndWaitFor,
+  selectNetworkAndWalletFor,
+  serveFor,
   type StoredWallet,
   terminalOf,
   writeFileWith,
@@ -53,7 +53,9 @@ const PROJECT_IDL = idlText("0.1.0", ["The project's IDL"]);
 const WALLET_QUESTION = "No wallet is connected";
 
 /** Runs `line` until the terminal prints the refusal of an IDL write on mainnet-beta */
-const refusedOnMainnet = runUntil("Writing an IDL to mainnet is not available");
+const refusedOnMainnet = runAndWaitFor(
+  "Writing an IDL to mainnet is not available"
+);
 
 /** An Anchor 0.29 IDL */
 const LEGACY_IDL = {
@@ -132,10 +134,11 @@ const buildWithIdl = async (page: Page, idl: string) => {
 };
 
 /** A project whose program id is `keypair`'s and whose latest IDL is `idl` */
-const projectWith = (idl: string) => async (page: Page, keypair: Keypair) => {
-  await importProgramKeypair(page, keypair);
-  await buildWithIdl(page, idl);
-};
+const buildProjectWith =
+  (idl: string) => async (page: Page, keypair: Keypair) => {
+    await importProgramKeypair(page, keypair);
+    await buildWithIdl(page, idl);
+  };
 
 /** The address a `create-buffer` line printed, which ends where the prompt after it begins */
 const createdBuffer = async (page: Page) => {
@@ -162,22 +165,22 @@ const commandsIn = (usage: string) => {
 test.describe("client-v2-program-idl", () => {
   let cluster: Cluster;
   let metadata: Address;
-  // Set before any hook runs, so a setup that fails before `serveOn` reports its own error here
+  // Set before any hook runs, so a setup that fails before `serveFor` reports its own error here
   let unanswered = new Set<string>();
 
   /** Serves `network` from the test's cluster, selects it and `wallet`, and opens the terminal */
-  const openOn =
+  const openFor =
     (network: Network) => async (page: Page, wallet: StoredWallet) => {
-      unanswered = await serveOn(network)(cluster)(page);
+      unanswered = await serveFor(network)(cluster)(page);
       await recordClipboardWrites(page);
-      await selectNetworkAndWallet(network)(page, wallet);
+      await selectNetworkAndWalletFor(network)(page, wallet);
       await openTerminal(page);
     };
-  const openOnDevnet = openOn(DEVNET);
+  const openOnDevnet = openFor(DEVNET);
 
   /** Connects `wallet` in place of the one connected, on Devnet; the cluster keeps its state across the reload */
   const switchWallet = async (page: Page, wallet: StoredWallet) => {
-    await selectNetworkAndWallet(DEVNET)(page, wallet);
+    await selectNetworkAndWalletFor(DEVNET)(page, wallet);
     await openTerminal(page);
   };
 
@@ -197,7 +200,7 @@ test.describe("client-v2-program-idl", () => {
   /** Publishes `text` from a project file with `anchor idl init`, as the connected upgrade authority */
   const publish = async (page: Page, text: string) => {
     const path = await writeFileWith(text)(page, "counter.json");
-    await runUntil("IDL initialized.")(
+    await runAndWaitFor("IDL initialized.")(
       page,
       `anchor idl init --filepath ${path}`
     );
@@ -272,7 +275,7 @@ test.describe("client-v2-program-idl", () => {
   }) => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
 
-    await runUntil("Unexpected option: `--provider.cluster`")(
+    await runAndWaitFor("Unexpected option: `--provider.cluster`")(
       page,
       `anchor idl fetch ${PROGRAM} --provider.cluster devnet`
     );
@@ -287,7 +290,7 @@ test.describe("client-v2-program-idl", () => {
     const text = idlText("0.1.0", []);
     await publish(page, text);
 
-    await runUntil("Metadata content saved to")(
+    await runAndWaitFor("Metadata content saved to")(
       page,
       `anchor idl fetch ${PROGRAM} --out idl/fetched.json`
     );
@@ -308,14 +311,13 @@ test.describe("client-v2-program-idl", () => {
     seededPage: page,
   }) => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
-    await projectWith(PROJECT_IDL)(page, keypairOf(2));
+    await buildProjectWith(PROJECT_IDL)(page, keypairOf(2));
 
-    await runUntil(`IDL initialized. Program Metadata account: ${metadata}`)(
-      page,
-      "anchor idl init"
-    );
+    await runAndWaitFor(
+      `IDL initialized. Program Metadata account: ${metadata}`
+    )(page, "anchor idl init");
 
-    await runUntil(PROJECT_IDL)(page, `anchor idl fetch ${PROGRAM}`);
+    await runAndWaitFor(PROJECT_IDL)(page, `anchor idl fetch ${PROGRAM}`);
   });
 
   test("client-v2-program-idl: A failed upload names the rent it leaves", async ({
@@ -330,7 +332,7 @@ test.describe("client-v2-program-idl", () => {
     // The first transaction turns the canonical account into a buffer; the RPC drops the second
     cluster.dropSendAt(1);
 
-    await runUntil("Run the same `anchor idl init` again to finish it.")(
+    await runAndWaitFor("Run the same `anchor idl init` again to finish it.")(
       page,
       `anchor idl init --filepath ${path}`
     );
@@ -355,7 +357,7 @@ test.describe("client-v2-program-idl", () => {
       await openOnDevnet(page, connectedWallet(AUTHORITY));
       const path = await writeFileWith(text)(page, "large.json");
       cluster.dropSendAt(1);
-      await runUntil("Run the same `anchor idl init` again to finish it.")(
+      await runAndWaitFor("Run the same `anchor idl init` again to finish it.")(
         page,
         `anchor idl init --filepath ${path}`
       );
@@ -380,7 +382,7 @@ test.describe("client-v2-program-idl", () => {
       const rent = lamportsAt(metadata);
       const before = balanceOf(AUTHORITY_ADDRESS);
 
-      await runUntil("Metadata account closed successfully.")(
+      await runAndWaitFor("Metadata account closed successfully.")(
         page,
         `anchor idl close ${PROGRAM}`
       );
@@ -395,9 +397,9 @@ test.describe("client-v2-program-idl", () => {
   }) => {
     await cluster.deploy(SECOND, AUTHORITY.publicKey.toBase58());
     await openOnDevnet(page, connectedWallet(AUTHORITY));
-    await projectWith(PROJECT_IDL)(page, keypairOf(2));
+    await buildProjectWith(PROJECT_IDL)(page, keypairOf(2));
 
-    await runUntil("IDL initialized.")(page, `anchor idl init ${SECOND}`);
+    await runAndWaitFor("IDL initialized.")(page, `anchor idl init ${SECOND}`);
 
     const written = cluster.svm.getAccount(await canonicalOf(SECOND));
     expect(written.exists && written.data[0]).toBe(
@@ -419,7 +421,7 @@ test.describe("client-v2-program-idl", () => {
     await importProgramKeypair(page, keypairOf(2));
     await openTerminal(page);
 
-    await runUntil("IDL initialized.")(
+    await runAndWaitFor("IDL initialized.")(
       page,
       `anchor idl init --filepath ${path}`
     );
@@ -437,7 +439,7 @@ test.describe("client-v2-program-idl", () => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
     const lines = linesOn(page);
 
-    await runUntil(
+    await runAndWaitFor(
       "The project has no program ID. Build the program first, or pass a program ID."
     )(page, "anchor idl init");
 
@@ -452,12 +454,12 @@ test.describe("client-v2-program-idl", () => {
     await openOnDevnet(page, connectedWallet(OTHER));
     await buildWithIdl(page, PROJECT_IDL);
 
-    await runUntil("IDL initialized.")(
+    await runAndWaitFor("IDL initialized.")(
       page,
       `anchor idl init --non-canonical ${PROGRAM}`
     );
 
-    await runUntil(PROJECT_IDL)(
+    await runAndWaitFor(PROJECT_IDL)(
       page,
       `anchor idl fetch ${PROGRAM} --non-canonical`
     );
@@ -469,7 +471,7 @@ test.describe("client-v2-program-idl", () => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
     await buildWithIdl(page, PROJECT_IDL);
 
-    await runUntil("Run the command without `--non-canonical`.")(
+    await runAndWaitFor("Run the command without `--non-canonical`.")(
       page,
       `anchor idl init --non-canonical ${PROGRAM}`
     );
@@ -480,9 +482,9 @@ test.describe("client-v2-program-idl", () => {
   test("client-v2-program-idl: Init on Localnet", async ({
     seededPage: page,
   }) => {
-    await openOn(LOCALNET)(page, connectedWallet(AUTHORITY));
+    await openFor(LOCALNET)(page, connectedWallet(AUTHORITY));
 
-    await runUntil("Skipping IDL initialization on localnet")(
+    await runAndWaitFor("Skipping IDL initialization on localnet")(
       page,
       "anchor idl init"
     );
@@ -497,7 +499,7 @@ test.describe("client-v2-program-idl", () => {
     await importProgramKeypair(page, keypairOf(2));
     await openTerminal(page);
 
-    await runUntil("The project has no IDL to upload.")(
+    await runAndWaitFor("The project has no IDL to upload.")(
       page,
       "anchor idl init"
     );
@@ -510,7 +512,7 @@ test.describe("client-v2-program-idl", () => {
   }) => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
 
-    await runUntil("The project has no IDL file at idl/none.json.")(
+    await runAndWaitFor("The project has no IDL file at idl/none.json.")(
       page,
       "anchor idl init --filepath idl/none.json"
     );
@@ -524,7 +526,7 @@ test.describe("client-v2-program-idl", () => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
     await buildWithIdl(page, JSON.stringify(LEGACY_IDL));
 
-    await runUntil("The project's IDL is not in the Anchor 0.30+ format.")(
+    await runAndWaitFor("The project's IDL is not in the Anchor 0.30+ format.")(
       page,
       "anchor idl init"
     );
@@ -536,12 +538,11 @@ test.describe("client-v2-program-idl", () => {
     seededPage: page,
   }) => {
     await openOnDevnet(page, connectedWallet(OTHER));
-    await projectWith(PROJECT_IDL)(page, keypairOf(2));
+    await buildProjectWith(PROJECT_IDL)(page, keypairOf(2));
 
-    await runUntil(`The program's upgrade authority is ${AUTHORITY_ADDRESS}.`)(
-      page,
-      "anchor idl upgrade"
-    );
+    await runAndWaitFor(
+      `The program's upgrade authority is ${AUTHORITY_ADDRESS}.`
+    )(page, "anchor idl upgrade");
 
     expect(cluster.sent).toEqual([]);
   });
@@ -550,9 +551,9 @@ test.describe("client-v2-program-idl", () => {
     seededPage: page,
   }) => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
-    await projectWith(PROJECT_IDL)(page, UNDEPLOYED);
+    await buildProjectWith(PROJECT_IDL)(page, UNDEPLOYED);
 
-    await runUntil(
+    await runAndWaitFor(
       `Program ${UNDEPLOYED.publicKey.toBase58()} is not deployed on the selected network.`
     )(page, "anchor idl init");
 
@@ -565,7 +566,7 @@ test.describe("client-v2-program-idl", () => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
     const text = idlText("0.1.0", []);
     await publish(page, text);
-    await runUntil("Disconnected.")(page, "connect");
+    await runAndWaitFor("Disconnected.")(page, "connect");
 
     const printed = await printedBy(page, `anchor idl fetch ${PROGRAM}`);
 
@@ -581,13 +582,13 @@ test.describe("client-v2-program-idl", () => {
     const rent = lamportsAt(metadata);
     const before = balanceOf(AUTHORITY_ADDRESS);
 
-    await runUntil("Metadata account closed successfully.")(
+    await runAndWaitFor("Metadata account closed successfully.")(
       page,
       `anchor idl close ${PROGRAM}`
     );
 
     expect(balanceOf(AUTHORITY_ADDRESS)).toBe(before + rent - lastFee());
-    await runUntil(
+    await runAndWaitFor(
       `Program ${PROGRAM} has no published IDL on the selected network.`
     )(page, `anchor idl fetch ${PROGRAM}`);
   });
@@ -600,10 +601,9 @@ test.describe("client-v2-program-idl", () => {
     await switchWallet(page, connectedWallet(OTHER));
     const sent = cluster.sent.length;
 
-    await runUntil(`The program's upgrade authority is ${AUTHORITY_ADDRESS}.`)(
-      page,
-      `anchor idl close ${PROGRAM}`
-    );
+    await runAndWaitFor(
+      `The program's upgrade authority is ${AUTHORITY_ADDRESS}.`
+    )(page, `anchor idl close ${PROGRAM}`);
 
     expect(cluster.sent).toHaveLength(sent);
     expect(cluster.svm.getAccount(metadata).exists).toBe(true);
@@ -615,7 +615,7 @@ test.describe("client-v2-program-idl", () => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
     await buildWithIdl(page, PROJECT_IDL);
 
-    await runUntil("Buffer created successfully.")(
+    await runAndWaitFor("Buffer created successfully.")(
       page,
       "anchor idl create-buffer"
     );
@@ -637,13 +637,13 @@ test.describe("client-v2-program-idl", () => {
       page,
       "counter.json"
     );
-    await runUntil("Buffer created successfully.")(
+    await runAndWaitFor("Buffer created successfully.")(
       page,
       `anchor idl create-buffer --filepath ${path}`
     );
     const buffer = await createdBuffer(page);
 
-    await runUntil("Buffer authority set successfully.")(
+    await runAndWaitFor("Buffer authority set successfully.")(
       page,
       `anchor idl set-buffer-authority ${buffer} --new-authority ${NEW_AUTHORITY}`
     );
@@ -728,10 +728,10 @@ test.describe("client-v2-program-idl", () => {
     seededPage: page,
   }) => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
-    await projectWith(PROJECT_IDL)(page, keypairOf(2));
+    await buildProjectWith(PROJECT_IDL)(page, keypairOf(2));
     const lines = linesOn(page);
 
-    await runUntil("IDL initialized.")(page, "anchor idl init");
+    await runAndWaitFor("IDL initialized.")(page, "anchor idl init");
 
     await expect
       .poll(() => lineOf(lines, "idl_uploaded"), LONG)
@@ -747,7 +747,7 @@ test.describe("client-v2-program-idl", () => {
   test("client-v2-program-idl: A mainnet refusal is tracked", async ({
     seededPage: page,
   }) => {
-    await openOn(MAINNET)(page, connectedWallet(AUTHORITY));
+    await openFor(MAINNET)(page, connectedWallet(AUTHORITY));
     const lines = linesOn(page);
 
     await refusedOnMainnet(page, "anchor idl init");
@@ -768,13 +768,12 @@ test.describe("client-v2-program-idl", () => {
     seededPage: page,
   }) => {
     await openOnDevnet(page, connectedWallet(OTHER));
-    await projectWith(PROJECT_IDL)(page, keypairOf(2));
+    await buildProjectWith(PROJECT_IDL)(page, keypairOf(2));
     const lines = linesOn(page);
 
-    await runUntil(`The program's upgrade authority is ${AUTHORITY_ADDRESS}.`)(
-      page,
-      "anchor idl init"
-    );
+    await runAndWaitFor(
+      `The program's upgrade authority is ${AUTHORITY_ADDRESS}.`
+    )(page, "anchor idl init");
 
     await expect
       .poll(() => lineOf(lines, "idl_upload_failed"), LONG)
@@ -789,7 +788,7 @@ test.describe("client-v2-program-idl", () => {
     await publish(page, text);
     const lines = linesOn(page);
 
-    await runUntil(text)(page, `anchor idl fetch ${PROGRAM}`);
+    await runAndWaitFor(text)(page, `anchor idl fetch ${PROGRAM}`);
 
     await expect
       .poll(() => lineOf(lines, "idl_command_succeeded"), LONG)
@@ -805,7 +804,7 @@ test.describe("client-v2-program-idl", () => {
   test("client-v2-program-idl: A close refused on mainnet is tracked", async ({
     seededPage: page,
   }) => {
-    await openOn(MAINNET)(page, connectedWallet(AUTHORITY));
+    await openFor(MAINNET)(page, connectedWallet(AUTHORITY));
     const lines = linesOn(page);
 
     await refusedOnMainnet(page, `anchor idl close ${PROGRAM}`);
@@ -828,7 +827,7 @@ test.describe("client-v2-program-idl", () => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
     const lines = linesOn(page);
 
-    await runUntil(
+    await runAndWaitFor(
       `Program ${PROGRAM} has no published IDL on the selected network.`
     )(page, `anchor idl fetch ${PROGRAM}`);
 
@@ -843,7 +842,7 @@ test.describe("client-v2-program-idl", () => {
     await openOnDevnet(page, connectedWallet(AUTHORITY));
     const lines = linesOn(page);
 
-    await runUntil("does not support `anchor idl fetch-historical`")(
+    await runAndWaitFor("does not support `anchor idl fetch-historical`")(
       page,
       `anchor idl fetch-historical ${PROGRAM}`
     );
