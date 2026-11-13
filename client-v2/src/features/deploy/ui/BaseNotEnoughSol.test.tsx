@@ -128,7 +128,7 @@ describe("BaseNotEnoughSol", () => {
   });
 
   it("offers no web faucet on a network it does not serve", () => {
-    renderCard({ cluster: "mainnet-beta", reason: "no_faucet" });
+    renderCard({ cluster: "mainnet", reason: "no_faucet" });
 
     expect(screen.getByText("Not enough mainnet SOL")).toBeTruthy();
     expect(

@@ -71,7 +71,7 @@ export const getNativeConnectionFor =
 const CLUSTER_BY_GENESIS_HASH = new Map<string, Cluster>([
   [GENESIS_HASHES.devnet, "devnet"],
   [GENESIS_HASHES.testnet, "testnet"],
-  [GENESIS_HASHES["mainnet-beta"], "mainnet-beta"],
+  [GENESIS_HASHES.mainnet, "mainnet"],
 ]);
 
 /**
@@ -135,11 +135,11 @@ if (import.meta.vitest) {
           .spyOn(Connection.prototype, "getGenesisHash")
           .mockImplementationOnce(answer);
 
-      it("reads mainnet's genesis hash as mainnet-beta", async () => {
+      it("reads mainnet's genesis hash as mainnet", async () => {
         answering(async () => "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
         await expect(
           fetchClusterByGenesisHash("https://genesis-mainnet.test")
-        ).resolves.toBe("mainnet-beta");
+        ).resolves.toBe("mainnet");
       });
 
       it("throws UnknownClusterError for a genesis no cluster names", async () => {

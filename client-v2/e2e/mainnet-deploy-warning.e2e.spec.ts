@@ -63,7 +63,7 @@ const openDeploy = async (page: Page) => {
 test("mainnet-deploy-warning: Deploy stage on mainnet", async ({
   seededPage: page,
 }) => {
-  await reloadOn(page, "mainnet-beta");
+  await reloadOn(page, "mainnet");
   await build(page);
   const panel = await openDeploy(page);
 
@@ -84,7 +84,7 @@ test("mainnet-deploy-warning: Deploy stage on mainnet", async ({
 test("mainnet-deploy-warning: Terminal deploy on mainnet", async ({
   seededPage: page,
 }) => {
-  await reloadOn(page, "mainnet-beta");
+  await reloadOn(page, "mainnet");
   const drawer = consoleTrigger(page);
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();

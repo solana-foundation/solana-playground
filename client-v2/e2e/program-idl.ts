@@ -49,10 +49,10 @@ export const DEVNET: Network = {
 };
 
 export const MAINNET: Network = {
-  endpoint: { option: "mainnet-beta" },
+  endpoint: { option: "mainnet" },
   rpc: /^https:\/\/api\.mainnet-beta\.solana\.com\/?$/,
   ws: /^wss:\/\/api\.mainnet-beta\.solana\.com\/?$/,
-  genesisHash: GENESIS_HASHES["mainnet-beta"],
+  genesisHash: GENESIS_HASHES.mainnet,
 };
 
 /** web3.js opens Localnet's subscriptions on the port after its RPC's */

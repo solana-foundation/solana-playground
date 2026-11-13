@@ -53,7 +53,7 @@ const PROJECT_IDL = idlText("0.1.0", ["The project's IDL"]);
 
 const WALLET_QUESTION = "No wallet is connected";
 
-/** Runs `line` until the terminal prints the refusal of an IDL write on mainnet-beta */
+/** Runs `line` until the terminal prints the refusal of an IDL write on mainnet */
 const refusedOnMainnet = runAndWaitFor(
   "Writing an IDL to mainnet is not available"
 );
@@ -767,9 +767,9 @@ test.describe("client-v2-program-idl", () => {
 
     await expect
       .poll(() => lineOf(lines, "idl_upload_failed"), LONG)
-      .toContain("{target: metadata, cluster: mainnet-beta, reason: mainnet}");
+      .toContain("{target: metadata, cluster: mainnet, reason: mainnet}");
     expect(lineOf(lines, "idl_upload_started")).toContain(
-      "{target: metadata, cluster: mainnet-beta}"
+      "{target: metadata, cluster: mainnet}"
     );
     expect(
       lines.indexOf(lineOf(lines, "idl_upload_started") ?? "")
@@ -824,9 +824,9 @@ test.describe("client-v2-program-idl", () => {
 
     await expect
       .poll(() => lineOf(lines, "idl_command_failed"), LONG)
-      .toContain("{command: close, cluster: mainnet-beta, reason: mainnet}");
+      .toContain("{command: close, cluster: mainnet, reason: mainnet}");
     expect(lineOf(lines, "idl_command_started")).toContain(
-      "{command: close, cluster: mainnet-beta}"
+      "{command: close, cluster: mainnet}"
     );
     expect(
       lines.indexOf(lineOf(lines, "idl_command_started") ?? "")

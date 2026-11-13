@@ -48,7 +48,7 @@ const log = createLogger("commands:anchor");
 
 const refuseIdlWriteOnMainnet = refuseMainnetWith(IDL_REFUSAL);
 
-/** Whether {@link refuseIdlWriteOnMainnet} refused mainnet-beta, and not an endpoint whose network it could not read */
+/** Whether {@link refuseIdlWriteOnMainnet} refused mainnet, and not an endpoint whose network it could not read */
 const isMainnetRefusal = (error: unknown) =>
   error instanceof TerminalLineError && error.message === MAINNET_IDL_BLOCKED;
 
@@ -220,7 +220,7 @@ interface Sender {
 }
 
 /**
- * Refuses a send to mainnet-beta, to an endpoint that does not say its
+ * Refuses a send to mainnet, to an endpoint that does not say its
  * network, and after the endpoint changed, and records the attempt, which no
  * entry of the slice runs to record. Throws a {@link TerminalLineError}.
  */

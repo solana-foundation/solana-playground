@@ -51,7 +51,7 @@ describe("utils/connection", () => {
       endpoint: Endpoint.DEVNET,
     },
     {
-      cluster: "mainnet-beta",
+      cluster: "mainnet",
       variable: "REACT_APP_MAINNET_READ_BUFFER_RPC_URL",
       endpoint: Endpoint.MAINNET_BETA,
     },

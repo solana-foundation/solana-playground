@@ -51,7 +51,7 @@ export const DEFAULT_KEYPAIR_PATH = "~/.config/solana/id.json";
 const PUBLIC_ENDPOINTS: Record<string, string> = {
   devnet: Endpoint.DEVNET,
   testnet: Endpoint.TESTNET,
-  "mainnet-beta": Endpoint.MAINNET_BETA,
+  mainnet: Endpoint.MAINNET_BETA,
 };
 
 /**
@@ -957,7 +957,7 @@ console.log(await pg.connection.getSlot());
         expected: Endpoint.DEVNET,
       },
       {
-        cluster: "mainnet-beta",
+        cluster: "mainnet",
         endpoint: "https://rpc.example/key",
         expected: Endpoint.MAINNET_BETA,
       },

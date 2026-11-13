@@ -54,7 +54,7 @@ const WALLET = {
     txs.map(() => ({ serialize: () => new Uint8Array() })),
 };
 const CONNECTION = { rpcEndpoint: Endpoint.DEVNET as string };
-/** A custom RPC that serves mainnet-beta: none of the Playground's own endpoints, so the events name it `custom` */
+/** A custom RPC that serves mainnet: none of the Playground's own endpoints, so the events name it `custom` */
 const CUSTOM_MAINNET = "https://mainnet.custom-rpc.test";
 
 /** An Anchor 0.30+ IDL */
@@ -518,7 +518,7 @@ describe("commands/anchor", () => {
     {
       line: "anchor idl init",
       endpoint: Endpoint.MAINNET_BETA,
-      events: refusedUpload("mainnet-beta", "mainnet"),
+      events: refusedUpload("mainnet", "mainnet"),
     },
     {
       line: "anchor idl upgrade",
@@ -528,7 +528,7 @@ describe("commands/anchor", () => {
     {
       line: `anchor idl close ${GIVEN_PROGRAM}`,
       endpoint: Endpoint.MAINNET_BETA,
-      events: refusedCommand("close", "mainnet-beta"),
+      events: refusedCommand("close", "mainnet"),
     },
     {
       line: "anchor idl create-buffer",
@@ -538,7 +538,7 @@ describe("commands/anchor", () => {
     {
       line: `anchor idl set-buffer-authority ${BUFFER} --new-authority ${NEW_AUTHORITY}`,
       endpoint: Endpoint.MAINNET_BETA,
-      events: refusedCommand("set-buffer-authority", "mainnet-beta"),
+      events: refusedCommand("set-buffer-authority", "mainnet"),
     },
     {
       line: `anchor idl write-buffer ${GIVEN_PROGRAM} --buffer ${BUFFER}`,
@@ -546,10 +546,10 @@ describe("commands/anchor", () => {
       events: refusedCommand("write-buffer", "custom"),
     },
   ])(
-    "refuses `$line` on mainnet-beta, read from $endpoint, and records the attempt with nothing sent",
+    "refuses `$line` on mainnet, read from $endpoint, and records the attempt with nothing sent",
     async ({ line, endpoint, events }) => {
       env.connection = { rpcEndpoint: endpoint };
-      vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
+      vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet");
 
       const result = run(line);
 
@@ -761,10 +761,10 @@ describe("commands/anchor", () => {
     expect(slice.close).toHaveBeenCalled();
   });
 
-  it("prints the published IDL as it is for `fetch` on mainnet-beta, with no wallet question", async () => {
+  it("prints the published IDL as it is for `fetch` on mainnet, with no wallet question", async () => {
     env.wallet = undefined;
     env.connection = { rpcEndpoint: "https://api.mainnet-beta.solana.com" };
-    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet-beta");
+    vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet");
     slice.fetchPublishedIdl.mockResolvedValue('{"address":"published"}');
 
     await run(`anchor idl fetch ${GIVEN_PROGRAM}`);

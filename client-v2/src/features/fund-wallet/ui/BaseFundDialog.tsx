@@ -363,7 +363,7 @@ const BaseFundDialog = ({
           </>
         )}
 
-        {payer && cluster === "mainnet-beta" && (
+        {payer && cluster === "mainnet" && (
           <Callout variant="warning">
             <CalloutTitle>Mainnet uses real SOL</CalloutTitle>
             <CalloutDescription>

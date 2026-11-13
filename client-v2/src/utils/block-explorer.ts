@@ -133,7 +133,7 @@ class _PgBlockExplorer {
       b.url + "/address/" + programId + "/idl" + b.getClusterParam(cluster);
 
     const opens = (cluster: Cluster | null) =>
-      cluster === "mainnet-beta" || b.getClusterParam(cluster) !== "";
+      cluster === "mainnet" || b.getClusterParam(cluster) !== "";
     return Object.assign(b, { opens }) as BlockExplorer;
   }
 }

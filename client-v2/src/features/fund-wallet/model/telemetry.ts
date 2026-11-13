@@ -4,7 +4,7 @@ import type { FailureReason } from "./fund";
 
 /** The Playground's cluster, as `PgConnection.cluster` names it */
 export type FundCluster =
-  | "mainnet-beta"
+  | "mainnet"
   | "devnet"
   | "testnet"
   | "localnet"

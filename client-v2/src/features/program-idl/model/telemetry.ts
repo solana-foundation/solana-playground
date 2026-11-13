@@ -33,7 +33,7 @@ export type UnsupportedIdlCommand =
 /** What sends a transaction, as its events name it: the upload of `init` and `upgrade`, or an {@link IdlCommand} that sends */
 export type IdlSend = "upload" | Exclude<IdlCommand, "fetch">;
 
-/** Why a caller ended a send before its entry ran: it refuses mainnet-beta, and `rpc` is an endpoint whose network it could not read or that changed */
+/** Why a caller ended a send before its entry ran: it refuses mainnet, and `rpc` is an endpoint whose network it could not read or that changed */
 export type IdlSendRefusal = "mainnet" | "rpc";
 
 /**

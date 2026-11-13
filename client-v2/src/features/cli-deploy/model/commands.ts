@@ -11,7 +11,7 @@ export const cliClusterOf = (
   cluster: string | undefined
 ): CliCluster | undefined => {
   if (cluster === "devnet") return "devnet";
-  if (cluster === "mainnet-beta") return "mainnet";
+  if (cluster === "mainnet") return "mainnet";
   if (cluster === "testnet") return "testnet";
   return undefined;
 };
@@ -213,9 +213,9 @@ if (import.meta.vitest) {
       expect(lines.every((l) => l.includes(" <program-id> "))).toBe(true);
     });
 
-    it("maps only devnet and mainnet-beta to a guide cluster", () => {
+    it("maps only devnet and mainnet to a guide cluster", () => {
       expect(cliClusterOf("devnet")).toBe("devnet");
-      expect(cliClusterOf("mainnet-beta")).toBe("mainnet");
+      expect(cliClusterOf("mainnet")).toBe("mainnet");
       expect(cliClusterOf("localnet")).toBeUndefined();
       expect(cliClusterOf(undefined)).toBeUndefined();
     });

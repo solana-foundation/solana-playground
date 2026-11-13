@@ -125,8 +125,8 @@ if (import.meta.vitest) {
       expect(stageNotice("cluster-down", "testnet", "interact")?.text).toBe(
         "Testnet is not responding. Try again, or change the network."
       );
-      // HOO-2488: the chips' name, never the raw `mainnet-beta`
-      expect(stageNotice("cluster-down", "mainnet-beta", "deploy")?.text).toBe(
+      // HOO-2488: the chips' name, never the raw moniker
+      expect(stageNotice("cluster-down", "mainnet", "deploy")?.text).toBe(
         "Mainnet is not responding. Try again, or change the network."
       );
       expect(stageNotice("cluster-down", "devnet", "write")).toBeUndefined();

@@ -43,7 +43,7 @@ describe("entities/external-wallet/model/bridge", () => {
   };
   const MAINNET: SigningCluster = {
     id: "solana:mainnet",
-    label: "mainnet-beta",
+    label: "mainnet",
     url: TEST_ENDPOINT.MAINNET_BETA,
   };
 

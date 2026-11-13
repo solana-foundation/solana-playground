@@ -14,7 +14,7 @@ const buildNetworks = (urls: {
   networksOf(
     clustersFor({
       devnet: { rpcUrl: urls.devnet },
-      "mainnet-beta": { rpcUrl: urls.mainnet },
+      mainnet: { rpcUrl: urls.mainnet },
       testnet: { rpcUrl: urls.testnet },
     })
   );
@@ -26,10 +26,10 @@ const offered = (urls: {
   testnet: string;
 }) => [
   {
-    key: "mainnet-beta",
+    key: "mainnet",
     name: "Mainnet",
     value: urls.mainnet,
-    cluster: "mainnet-beta",
+    cluster: "mainnet",
   },
   { key: "devnet", name: "Devnet", value: urls.devnet, cluster: "devnet" },
   { key: "testnet", name: "Testnet", value: urls.testnet, cluster: "testnet" },
@@ -99,7 +99,7 @@ describe("buildNetworks", () => {
 describe("clusterName", () => {
   it.each([
     ["devnet", "Devnet"],
-    ["mainnet-beta", "Mainnet"],
+    ["mainnet", "Mainnet"],
     ["testnet", "Testnet"],
     ["localnet", "Localnet"],
     ["playnet", "Playnet"],

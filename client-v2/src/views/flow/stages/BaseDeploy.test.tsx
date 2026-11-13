@@ -38,7 +38,7 @@ const recordFor =
     at: Date.UTC(2026, 9, 15),
   });
 const record = recordFor("devnet");
-const mainnetRecord = recordFor("mainnet-beta")("m1", "msig");
+const mainnetRecord = recordFor("mainnet")("m1", "msig");
 
 const IDLE_RUN: DeployRunState = {
   // eslint-disable-next-line unicorn/no-null -- `DeployRunState.step` is `null` while no deploy runs
@@ -176,7 +176,7 @@ describe("BaseDeploy", () => {
         {...props({
           built,
           history,
-          cluster: "mainnet-beta",
+          cluster: "mainnet",
           onOpenCliGuide,
         })}
         onDeploy={onDeploy}
@@ -208,7 +208,7 @@ describe("BaseDeploy", () => {
         {...props({
           built: true,
           history: [],
-          cluster: "mainnet-beta",
+          cluster: "mainnet",
         })}
         onChangeNetwork={onChangeNetwork}
       />
@@ -228,7 +228,7 @@ describe("BaseDeploy", () => {
         {...props({
           built: true,
           history: [record("a", "5sig")],
-          cluster: "mainnet-beta",
+          cluster: "mainnet",
         })}
       />
     );
