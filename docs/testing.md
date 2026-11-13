@@ -1197,9 +1197,11 @@ backend and supply your own key."}`.
 
 Signed out:
 
-- [ ] Send a message in the assistant panel (or open More, then Connect a model): Connect a model opens, its Default
-      backend carries the tag "sign-in needed" and the description "Sign in with GitHub to use it, or bring your own
-      key below.", and its button reads **Sign in with GitHub**, not **Start**. The prompt stays in the composer.
+- [ ] The composer's top row reads "Sign in to use the assistant", with **Sign in with GitHub** and **Add an API key**.
+      Send is dimmed, its tooltip reads "Sign in to send", and Enter sends nothing: the prompt stays in the composer.
+- [ ] Open More, then Connect a model: its Default backend carries the tag "sign-in needed" and the description "Sign
+      in with GitHub to use it, or bring your own key below.", and its button reads **Sign in with GitHub**, not
+      **Start**.
 - [ ] In the browser console, a turn from the page itself is refused:
 
   ```js
@@ -1213,9 +1215,9 @@ Signed out:
 Signed in with GitHub. This half needs a real GitHub OAuth app whose callback is `AUTH_BASE_URL`; placeholder
 `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` values cover only the signed-out half.
 
-- [ ] After a reload, wait until `/api/auth/get-session` has answered in the network tab: until then the panel shows the
-      signed-out state. Then a send connects the default, and in Connect a model Default carries "no key needed" and the
-      button reads **Start**.
+- [ ] After a reload, wait until `/api/auth/get-session` has answered in the network tab: until then the composer shows no
+      top row either way. Then no sign-in row appears, a send connects the default, and in Connect a model Default
+      carries "no key needed" and the button reads **Start**.
 - [ ] The same console request passes the gate: the body has no `reason`. With a placeholder key the status is still
       `401`, from the upstream, and the body reads `Upstream 401: …`.
 - [ ] Copy the `better-auth.session_token` cookie from the browser's devtools into G-2's request as
