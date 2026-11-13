@@ -1,9 +1,7 @@
-import { createRequire } from "node:module";
 import { ESLint } from "eslint";
+import tseslint from "typescript-eslint";
 
-const { rules } = createRequire(import.meta.url)(
-  "@typescript-eslint/eslint-plugin"
-);
+const { rules } = tseslint.plugin;
 
 const TYPED_RULES_OFF = Object.fromEntries(
   Object.entries(rules)
@@ -12,15 +10,15 @@ const TYPED_RULES_OFF = Object.fromEntries(
 );
 
 /**
- * ESLint with `package.json` `eslintConfig`, minus type information, for
- * tests of import rules: typed parsing refuses a probe path outside
- * `tsconfig.json` and builds the whole program for a real file.
+ * ESLint with `eslint.config.mjs`, minus type information, for tests of
+ * import rules: typed parsing refuses a probe path outside `tsconfig.json`
+ * and builds the whole program for a real file.
  */
 export const untypedEslintAt = (cwd) =>
   new ESLint({
     cwd,
     overrideConfig: {
-      parserOptions: { project: null },
+      languageOptions: { parserOptions: { project: null } },
       rules: TYPED_RULES_OFF,
     },
   });
