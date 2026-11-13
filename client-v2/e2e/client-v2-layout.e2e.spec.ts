@@ -419,9 +419,10 @@ test("client-v2-layout: Folding the project panel", async ({
 test("client-v2-layout: The files column keeps its tree", async ({
   seededPage: page,
 }) => {
-  // Short enough that the tree, with its folders open, scrolls; wide enough
-  // to dock it
-  await page.setViewportSize({ width: 1920, height: 280 });
+  // Short enough that the tree, with its folders open, scrolls (the column
+  // has no footer since New file moved to the editor head); wide enough to
+  // dock it
+  await page.setViewportSize({ width: 1920, height: 220 });
   const files = filesPanel(page);
   const body = page.locator("#flow-left-tabpanel");
   const folder = (path: string) =>
@@ -443,11 +444,13 @@ test("client-v2-layout: The files column keeps its tree", async ({
   for (const path of opened) await folder(path).click();
   for (const path of opened) await expect(folder(path)).toHaveClass(/\bopen\b/);
 
+  // Partway, not to the end: the end moves by a scrollbar's height as the
+  // tree's widest row comes and goes, and the restore is clamped to it
   const scrolled = await body.evaluate((el) => {
-    el.scrollTop = el.scrollHeight;
+    el.scrollTop = 16;
     return el.scrollTop;
   });
-  expect(scrolled).toBeGreaterThan(0);
+  expect(scrolled).toBe(16);
   /** The folders and the selection as they were, wherever the tree shows */
   const keptTree = async () => {
     for (const path of opened) {
