@@ -1,6 +1,9 @@
 # build-server-access Specification
 
 ## Purpose
+
+**Area:** Build-server access (client-v2 API)
+
 Who may reach the Solana Foundation's build server, through which route, and
 what is recorded about each build, so that the server is not open to anyone
 who reads its URL.

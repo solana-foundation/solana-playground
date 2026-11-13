@@ -248,11 +248,13 @@ You can fix this in 3 different ways:
   }
 
   const authority = PgProgramInfo.onChain.authority;
-  if (authority && !authority.equals(PgWallet.current!.publicKey)) {
+  if (!authority) return;
+  const address = PgWallet.current!.publicKey;
+  if (!authority.equals(address)) {
     throw new Error(`You don't have the authority to upgrade this program.
 Program ID: ${PgProgramInfo.pk}
 Program authority: ${authority}
-Your address: ${PgWallet.current!.publicKey}`);
+Your address: ${address}`);
   }
 }
 
