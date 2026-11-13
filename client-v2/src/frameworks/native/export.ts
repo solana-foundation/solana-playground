@@ -160,6 +160,7 @@ const keepBody = (content: string) => content;
  */
 const unusedName = (content: string, name: string) => {
   const isUsed = (candidate: string) =>
+    // eslint-disable-next-line security/detect-non-literal-regexp -- `candidate` is the import's identifier with `_` prefixes
     new RegExp(`(?<![\\w$.])${candidate}(?![\\w$])`).test(content);
   let candidate = name;
   while (isUsed(candidate)) candidate = "_" + candidate;

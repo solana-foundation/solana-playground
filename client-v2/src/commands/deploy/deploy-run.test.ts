@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
+import { TEST_ENDPOINT } from "@/test-utils/endpoints.mjs";
 
 import { PgSession } from "../../features/auth";
 import { PgCommand, PgProgramInfo, PgTerminal } from "../../utils";
@@ -17,8 +18,8 @@ import { DeployCancelledError, DeployFundingError, PgDeployRun } from "./run";
 
 const WALLET = "Wa11et1111111111111111111111111111111111111";
 /** The RPC airdrops go to; hoisted, as the `../../utils` mock reads it */
-const { DEVNET_RPC } = vi.hoisted(() => ({
-  DEVNET_RPC: "https://api.devnet.solana.com",
+const { DEVNET_RPC } = await vi.hoisted(async () => ({
+  DEVNET_RPC: (await import("@/test-utils/endpoints.mjs")).TEST_ENDPOINT.DEVNET,
 }));
 const balance = vi.fn(async () => 10_000_000_000);
 const waitForInput = vi.fn(async () => true);
@@ -252,7 +253,7 @@ describe("deploy run", () => {
       getMinimumBalanceForRentExemption:
         start.getMinimumBalanceForRentExemption,
       getAccountInfo: start.getAccountInfo,
-      rpcEndpoint: "https://api.testnet.solana.com",
+      rpcEndpoint: TEST_ENDPOINT.TESTNET,
     };
     balance.mockImplementationOnce(async () => {
       Object.assign(PgConnection, { current: switched });

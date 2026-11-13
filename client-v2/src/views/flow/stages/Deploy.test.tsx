@@ -62,7 +62,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 // The real barrels pull in the whole playground; the stage reads only these
-vi.mock("../../../utils", () => ({
+vi.mock("../../../utils", async () => ({
   PgCommand: { deploy: { execute: mocks.execute } },
   PgConnection: { cluster: "devnet", onDidChangeCluster: "cluster" },
   PgExplorer: {
@@ -79,7 +79,10 @@ vi.mock("../../../utils", () => ({
   },
   PgProgramInfo: { update: mocks.update },
   PgSettings: {
-    connection: { endpoint: "https://api.devnet.solana.com" },
+    connection: {
+      endpoint: (await import("@/entities/cluster/model/endpoint")).Endpoint
+        .DEVNET,
+    },
     wallet: {
       get automaticAirdrop() {
         return mocks.automaticAirdrop;

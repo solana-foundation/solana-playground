@@ -1,5 +1,6 @@
 import type { BrowserContext, Page } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import {
   expect,
   json,
@@ -46,7 +47,7 @@ const stubNoDefaultBackend = async (context: BrowserContext) => {
  */
 const answeringDevnet = (context: BrowserContext) => {
   let slot = 1_000;
-  return context.route("https://api.devnet.solana.com/**", (route) => {
+  return context.route(`${Endpoint.DEVNET}/**`, (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;

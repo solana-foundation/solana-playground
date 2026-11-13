@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { Endpoint } from "@/entities/cluster";
 import {
   initTelemetry,
   memoryProvider,
@@ -246,7 +247,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
     );
 
     expect(idlLines()).toEqual([
-      `${PMP} <program-id> hello_anchor.json --rpc https://api.devnet.solana.com`,
+      `${PMP} <program-id> hello_anchor.json --rpc ${Endpoint.DEVNET}`,
     ]);
     expect(
       screen.getByText(/Put the program id the deploy printed/)
@@ -310,7 +311,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
     );
 
     expect(idlLines()).toEqual([
-      `${PMP} ${PROGRAM_ID} hello_anchor.json --rpc https://api.mainnet-beta.solana.com`,
+      `${PMP} ${PROGRAM_ID} hello_anchor.json --rpc ${Endpoint.MAINNET_BETA}`,
     ]);
   });
 
@@ -323,7 +324,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
     pick("Anchor");
 
     expect(idlLines()).toEqual([
-      `${PMP} ${PROGRAM_ID} hello_anchor.json --rpc https://api.devnet.solana.com`,
+      `${PMP} ${PROGRAM_ID} hello_anchor.json --rpc ${Endpoint.DEVNET}`,
       `anchor idl init -f hello_anchor.json ${PROGRAM_ID} --provider.cluster devnet`,
     ]);
   });
@@ -341,7 +342,7 @@ describe("features/cli-deploy/ui/CliDeployGuide", () => {
     });
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      `${PMP} ${PROGRAM_ID} hello_anchor.json --rpc https://api.devnet.solana.com`
+      `${PMP} ${PROGRAM_ID} hello_anchor.json --rpc ${Endpoint.DEVNET}`
     );
     expect(sent.events[1].params).toEqual({
       tool: "solana",

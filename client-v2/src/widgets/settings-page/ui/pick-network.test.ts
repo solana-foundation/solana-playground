@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The real `@/utils` needs the app's build-time globals; the pick only reads
 // the hold, writes the endpoint and shows a toast
-const { state } = vi.hoisted(() => ({
+const { state } = await vi.hoisted(async () => ({
   state: {
     deployState: "ready" as string,
     isIdlWriting: false,
-    endpoint: "https://api.devnet.solana.com",
+    endpoint: (
+      await import("@/entities/cluster/model/endpoint")
+    ).Endpoint.DEVNET as string,
     toasts: [] as (string | undefined)[],
   },
 }));
@@ -36,22 +38,21 @@ vi.mock("@/utils", () => ({
   },
 }));
 
-import { pickNetwork } from "./pick-network";
+import { Endpoint } from "@/entities/cluster";
 
-const DEVNET = "https://api.devnet.solana.com";
-const MAINNET = "https://api.mainnet-beta.solana.com";
+import { pickNetwork } from "./pick-network";
 
 describe("pickNetwork", () => {
   beforeEach(() => {
     state.deployState = "ready";
     state.isIdlWriting = false;
-    state.endpoint = DEVNET;
+    state.endpoint = Endpoint.DEVNET;
     state.toasts = [];
   });
 
   it("moves the network when nothing holds it", () => {
-    expect(pickNetwork(MAINNET)).toBe(true);
-    expect(state.endpoint).toBe(MAINNET);
+    expect(pickNetwork(Endpoint.MAINNET_BETA)).toBe(true);
+    expect(state.endpoint).toBe(Endpoint.MAINNET_BETA);
     expect(state.toasts).toEqual([]);
   });
 
@@ -60,8 +61,8 @@ describe("pickNetwork", () => {
   it("keeps the network while an anchor idl write runs", () => {
     state.isIdlWriting = true;
 
-    expect(pickNetwork(MAINNET)).toBe(false);
-    expect(state.endpoint).toBe(DEVNET);
+    expect(pickNetwork(Endpoint.MAINNET_BETA)).toBe(false);
+    expect(state.endpoint).toBe(Endpoint.DEVNET);
     expect(state.toasts).toEqual(["network-held-by-idl"]);
   });
 
@@ -70,8 +71,8 @@ describe("pickNetwork", () => {
     (deployState) => {
       state.deployState = deployState;
 
-      expect(pickNetwork(MAINNET)).toBe(false);
-      expect(state.endpoint).toBe(DEVNET);
+      expect(pickNetwork(Endpoint.MAINNET_BETA)).toBe(false);
+      expect(state.endpoint).toBe(Endpoint.DEVNET);
       expect(state.toasts).toEqual(["network-held-by-deploy"]);
     }
   );

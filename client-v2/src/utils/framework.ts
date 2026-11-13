@@ -1,3 +1,5 @@
+import { LINE_BREAK } from "@/shared/lib/line-break";
+
 import { PgCommon } from "./common";
 import { PgExplorer, TupleFiles } from "./explorer";
 import { PgWorkspace } from "./explorer/workspace";
@@ -157,7 +159,30 @@ const isNoProgramFile = (path: string) =>
  */
 const isSkippedImportPath = (path: string) =>
   /(^|\/)(\.[^/.][^/]*|\.\.|node_modules)(\/|$)/.test(path) ||
-  (/(^|\/)target(\/|$)/.test(path) && !/(^|\/)src\/(.+\/)?target\//.test(path));
+  (/(^|\/)target(\/|$)/.test(path) && !hasTargetUnderSrc(path));
+
+/**
+ * Whether `path` matches what `/(^|\/)src\/(.+\/)?target\//` would, scanned
+ * with `indexOf`, since the regex backtracks quadratically on a long path
+ */
+const hasTargetUnderSrc = (path: string) =>
+  path.split(LINE_BREAK).some((chunk, i) => {
+    let earliest: number | undefined;
+    for (
+      let at = chunk.indexOf("src/");
+      at !== -1;
+      at = chunk.indexOf("src/", at + 1)
+    ) {
+      // `^` is the path's start only, so a later chunk needs the `/`
+      const isSegment = at === 0 ? i === 0 : chunk[at - 1] === "/";
+      if (!isSegment) continue;
+      if (chunk.startsWith("target/", at + 4)) return true;
+      earliest ??= at;
+    }
+    return (
+      earliest !== undefined && chunk.indexOf("/target/", earliest + 5) !== -1
+    );
+  });
 
 /** A file dropped into Import › From files: the drop zone adds its `path` */
 export type ImportedFile = Pick<File, "name" | "text" | "arrayBuffer"> & {
@@ -175,6 +200,7 @@ const TEST_FILE_REGEX = /\.(test|spec)\.[jt]sx?$/;
 const NO_PROGRAM_FOLDER = { CLIENT: "client", TESTS: "tests" } as const;
 
 /** A path in one of `NO_PROGRAM_FOLDER`'s folders */
+// eslint-disable-next-line security/detect-non-literal-regexp -- built from NO_PROGRAM_FOLDER's constants
 const IN_NO_PROGRAM_FOLDER_REGEX = new RegExp(
   `^(${Object.values(NO_PROGRAM_FOLDER).join("|")})/`
 );
@@ -183,6 +209,7 @@ const IN_NO_PROGRAM_FOLDER_REGEX = new RegExp(
  * A leading folder `toNoProgramLayoutWith` drops, since it puts the file back
  * under `client/` or `tests/` itself; `test/` is read as `tests/`
  */
+// eslint-disable-next-line security/detect-non-literal-regexp -- built from NO_PROGRAM_FOLDER's constants
 const LEADING_FOLDER_REGEX = new RegExp(
   `^(${Object.values(NO_PROGRAM_FOLDER).join("|")}|test)/`
 );
@@ -490,6 +517,7 @@ export class PgFramework {
     const read = await PgFramework.readImportFiles(files);
     const folders = new Set(
       files.map(
+        // eslint-disable-next-line security/detect-unsafe-regex -- linear: anchored, and `[^/]` stops at the separator
         ({ path, name }) => /^(?:\.?\/)?([^/]+)\//.exec(path ?? name)?.[1]
       )
     );
@@ -1117,6 +1145,30 @@ if (import.meta.vitest) {
       ])("%s -> %s", (path, expected) => {
         expect(PgFramework.hasRunnableTypeScript([path])).toBe(expected);
       });
+    });
+
+    describe("isSkippedImportPath", () => {
+      it.each([
+        ["target/deploy/p.so", true],
+        ["src/target/mod.rs", false],
+        ["programs/p/src/a/target/b.rs", false],
+        // `.+` before the `/` needs a character
+        ["src//target/b.rs", true],
+        // `^` is the path's start, not a line's
+        ["x\nsrc/target/b.rs", true],
+        // `src` must start a segment
+        ["mysrc/target/x.rs", true],
+      ])("%j -> %s", (path, expected) => {
+        expect(isSkippedImportPath(path)).toBe(expected);
+      });
+
+      it(
+        "scans a long path of src/ segments in linear time",
+        { timeout: 1000 },
+        () => {
+          expect(hasTargetUnderSrc("src/".repeat(50_000))).toBe(false);
+        }
+      );
     });
 
     describe("PgFramework.readImportFiles", () => {

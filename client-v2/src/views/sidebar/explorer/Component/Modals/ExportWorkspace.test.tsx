@@ -34,7 +34,8 @@ vi.mock("../../../../../utils", () => utils);
 // The slice's flow and its conversion event are tested in the slice; the
 // export's outcome events are `project-files`'s, sent by the dialog and read
 // here from the memory provider
-const slice = vi.hoisted(() => {
+const slice = await vi.hoisted(async () => {
+  const { TEST_ENDPOINT } = await import("@/test-utils/endpoints.mjs");
   class DownloadError extends Error {
     constructor(readonly profile: ExportProfile, message: string) {
       super(message);
@@ -45,7 +46,7 @@ const slice = vi.hoisted(() => {
     KEYPAIR_VARIABLE: "SOLANA_KEYPAIR",
     RPC_URL_VARIABLE: "SOLANA_RPC_URL",
     // The mapping is the slice's and tested there
-    exportedEndpoint: () => "https://api.devnet.solana.com",
+    exportedEndpoint: () => TEST_ENDPOINT.DEVNET,
     DownloadError,
     exportAsIs: vi.fn(),
     exportConverted: vi.fn(),
@@ -245,7 +246,7 @@ it("asks to make a project with no program a Node project", async () => {
   expect(await screen.findByText("Make it a Node project?")).toBeTruthy();
   expect(screen.queryByText("Convert the project layout?")).toBeNull();
   expect(screen.getByText("package.json")).toBeTruthy();
-  expect(screen.getByText("https://api.devnet.solana.com")).toBeTruthy();
+  expect(screen.getByText(slice.exportedEndpoint())).toBeTruthy();
   expect(screen.getByText(slice.DEFAULT_KEYPAIR_PATH)).toBeTruthy();
   expect(screen.getByText(slice.RPC_URL_VARIABLE)).toBeTruthy();
   expect(slice.readProjectKind).toHaveBeenCalledWith("beta");

@@ -479,7 +479,8 @@ if (import.meta.vitest) {
     describe("checkRpcUrl", () => {
       it.each([
         "devnet",
-        "http://api.devnet.solana.com",
+        Endpoint.DEVNET.replace("https:", "http:"),
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
         "ftp://rpc.test",
         "",
         "https://",
@@ -567,7 +568,7 @@ if (import.meta.vitest) {
       });
 
       it.each([
-        "https://api.devnet.solana.com/",
+        `${Endpoint.DEVNET}/`,
         "http://localhost:8899/",
         "https://r.test/solana-mainnet-endpoint/?cluster=devnet",
         // One short of the token floor, and long words with no digit
@@ -621,7 +622,7 @@ if (import.meta.vitest) {
     });
 
     it("refuses a URL that fails the rule, and saves nothing", () => {
-      expect(add("", "http://api.devnet.solana.com")).toEqual({
+      expect(add("", Endpoint.DEVNET.replace("https:", "http:"))).toEqual({
         ok: false,
         reason: "format",
       });
@@ -830,7 +831,7 @@ if (import.meta.vitest) {
 
       it.each([
         { name: "Surfpool", chip: "http://127.0.0.1:8899" },
-        { name: "the public Testnet", chip: "https://api.testnet.solana.com" },
+        { name: "the public Testnet", chip: Endpoint.TESTNET },
       ])(
         "moves a profile on $name's address, re-spelled, onto its chip",
         ({ chip }) => {
@@ -884,6 +885,7 @@ if (import.meta.vitest) {
         ["the offered Testnet", () => offered("testnet").value],
         ["Localnet", () => "http://localhost:8899"],
         ["Surfpool", () => "http://127.0.0.1:8899"],
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
         ["Playnet", () => "http://playnet"],
         ["a value that is not an RPC", () => "devnet"],
       ])("leaves %s out", (_, endpoint) => {
@@ -895,9 +897,7 @@ if (import.meta.vitest) {
     it("saves a chip's address under a name of its own, and the public Devnet beside Devnet", () => {
       expect(add("My Devnet", offered("devnet").value).ok).toBe(true);
       expect(add("", offered("mainnet-beta").value).ok).toBe(true);
-      expect(add("Public Devnet", "https://api.devnet.solana.com").ok).toBe(
-        true
-      );
+      expect(add("Public Devnet", Endpoint.DEVNET).ok).toBe(true);
       expect(PgCustomRpcs.list().map((r) => r.name)).toEqual([
         "My Devnet",
         hostOf(offered("mainnet-beta").value),

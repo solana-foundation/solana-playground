@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 // The agent feature's other public entry: Playwright compiles `index.ts` as
 // CommonJS, and the telemetry it re-exports holds `import.meta.vitest` blocks
 import {
@@ -54,7 +55,7 @@ const OFFLINE_LINE =
 const stallDevnet = async (page: Page) => {
   let slot = 123;
   let isMoving = false;
-  await page.route("https://api.devnet.solana.com/**", async (route) => {
+  await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
@@ -93,7 +94,7 @@ const buildIsSaved = (page: Page) =>
  * the restored build verdict wait on it (HOO-2744).
  */
 const holdDevnetCalls = (page: Page) =>
-  page.route("https://api.devnet.solana.com/**", async (route) => {
+  page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       method?: string;
     } | null;

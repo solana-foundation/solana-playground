@@ -58,6 +58,7 @@ export const receiverOf = ({
 };
 
 /** Digits, an optional point and up to any decimals; no sign, comma or exponent */
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `.` separates the two digit runs
 const DECIMAL = /^(\d+)(?:\.(\d+))?$/;
 
 /** SOL in, lamports out, counted on the digits so `0.1` is not `0.1000000000000000055` */

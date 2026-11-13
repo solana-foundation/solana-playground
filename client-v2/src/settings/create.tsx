@@ -42,6 +42,7 @@ export const createSetting = <
   // Custom value
   try {
     if (setting.custom) {
+      // eslint-disable-next-line security/detect-non-literal-require -- webpack resolves the setting's name against this folder at build time
       const mod = require(`./${PgCommon.toKebabFromTitle(
         setting.name
       )}/Custom`);

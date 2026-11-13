@@ -10,17 +10,23 @@ const LAYERS = ["features", "widgets"];
 const slices = () =>
   LAYERS.flatMap((layer) => {
     const root = join(SRC, layer);
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     if (!existsSync(root)) return [];
-    return readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => join(layer, entry.name))
-      .filter((slice) => existsSync(join(SRC, slice, "index.ts")));
+    return (
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+      readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => join(layer, entry.name))
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
+        .filter((slice) => existsSync(join(SRC, slice, "index.ts")))
+    );
   });
 
 /** The event maps passed to `createTracker<...>()` in `file`, `undefined` for one that is not a type literal */
 const eventMaps = (file: string) => {
   const source = ts.createSourceFile(
     file,
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     readFileSync(file, "utf8"),
     ts.ScriptTarget.Latest,
     true
@@ -77,6 +83,7 @@ const SENTRY_IMPORTER = join("shared", "lib", "reporter", "sentry.ts");
 
 /** Every file under `dir`, as a path relative to `SRC` */
 const filesUnder = (dir: string): string[] =>
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isDirectory()
       ? filesUnder(join(dir, entry.name))
@@ -89,6 +96,7 @@ const sentryImporters = () =>
     .filter((file) => /\.(tsx?|mjs)$/.test(file) && !/\.test\./.test(file))
     .filter((file) =>
       /from\s+["']@sentry\/react["']|import\(\s*["']@sentry\/react["']/.test(
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
         readFileSync(join(SRC, file), "utf8")
       )
     );
@@ -104,6 +112,7 @@ it("should find the slices it checks", () => {
 it.each(slices())(
   "should have %s declare its events in model/telemetry.ts",
   (slice) => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     expect(existsSync(join(SRC, slice, "model", "telemetry.ts"))).toBe(true);
   }
 );
@@ -112,6 +121,7 @@ it.each(slices())(
   "should have %s describe every event with a doc comment",
   (slice) => {
     const file = join(SRC, slice, "model", "telemetry.ts");
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     if (!existsSync(file)) return;
 
     expect(undocumentedEvents(file)).toEqual([]);
@@ -167,6 +177,7 @@ const isInSourceTests = (node: ts.Node) =>
 const sentLiterals = (file: string): string[] => {
   const source = ts.createSourceFile(
     file,
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     readFileSync(file, "utf8"),
     ts.ScriptTarget.Latest,
     true
@@ -211,8 +222,10 @@ const namesIn = (cell: string) =>
 
 /** The rows of the funnel table, whose header starts `| Step | Events | Failure events |` */
 const funnelRows = (): FunnelRow[] => {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   const file = FUNNEL_SPECS.find((path) => existsSync(path));
   if (!file) return [];
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   const lines = readFileSync(file, "utf8").split("\n");
   const header = lines.findIndex((line) =>
     /^\| Step \| Events \| Failure events \|/.test(line)

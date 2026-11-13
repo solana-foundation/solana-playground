@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { requireFor } from "../src/test-utils/require-for";
 import {
   consoleTrigger,
@@ -747,7 +748,7 @@ test.describe("on a phone", () => {
     const network = settings.getByRole("radiogroup", { name: "Network" });
     await expect(network.getByRole("radio", { checked: true })).toBeFocused();
     // Mainnet's requests are refused, so CI never reaches it
-    await page.route("https://api.mainnet-beta.solana.com/**", (route) =>
+    await page.route(`${Endpoint.MAINNET_BETA}/**`, (route) =>
       route.abort("connectionrefused")
     );
     await network.getByRole("radio", { name: "Mainnet" }).click();
@@ -1853,7 +1854,7 @@ test("client-v2-layout: A cluster that is down", async ({
   // A cluster is down when its slot does not move between two reads a second
   // apart (`PgConnection.getIsClusterDown`), so every `getSlot` answers the
   // same slot; anything else goes to the cluster as usual
-  await page.route("https://api.devnet.solana.com/**", async (route) => {
+  await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
@@ -1881,7 +1882,7 @@ test("client-v2-layout: A cluster that is down", async ({
 });
 
 /** Every HTTP request to the cluster fails the way a stopped validator does */
-const refuseCluster = (page: Page, url = "https://api.devnet.solana.com") =>
+const refuseCluster = (page: Page, url: string = Endpoint.DEVNET) =>
   page.route(`${url}/**`, (route) => route.abort("connectionrefused"));
 
 /** Reloads on the endpoint picked in Settings, by its option name */
@@ -1941,7 +1942,7 @@ test("a stalled cluster that moves again is not down", async ({
 }) => {
   let moving = false;
   let slot = 123;
-  await page.route("https://api.devnet.solana.com/**", async (route) => {
+  await page.route(`${Endpoint.DEVNET}/**`, async (route) => {
     const body = route.request().postDataJSON() as {
       id?: unknown;
       method?: string;
@@ -1989,9 +1990,7 @@ test("the wallet names the endpoint that does not answer", async ({
 
   await page.locator("#tabs").getByRole("button", { name: "Wallet" }).click();
   await expect(
-    page.getByText(
-      "Can't reach the RPC endpoint at https://api.devnet.solana.com."
-    )
+    page.getByText(`Can't reach the RPC endpoint at ${Endpoint.DEVNET}.`)
   ).toBeVisible({ timeout: 15_000 });
 });
 
