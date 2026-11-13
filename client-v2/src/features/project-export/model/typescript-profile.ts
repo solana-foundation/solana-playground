@@ -968,6 +968,7 @@ console.log(await pg.connection.getSlot());
       },
       {
         cluster: "playnet",
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
         endpoint: "http://playnet",
         expected: Endpoint.DEVNET,
       },

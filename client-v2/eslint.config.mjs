@@ -3,12 +3,15 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import sdl from "@microsoft/eslint-plugin-sdl";
 import confusingBrowserGlobals from "confusing-browser-globals";
 import importPlugin from "eslint-plugin-import";
 import jest from "eslint-plugin-jest";
 import jsxA11y from "eslint-plugin-jsx-a11y";
+import noUnsanitized from "eslint-plugin-no-unsanitized";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
+import security from "eslint-plugin-security";
 import simpleImportSort from "eslint-plugin-simple-import-sort";
 import unicorn from "eslint-plugin-unicorn";
 import globals from "globals";
@@ -549,6 +552,42 @@ const project = [
   },
 ];
 
+// `exceptions` replaces sdl's defaults (XML namespaces among them), so they are kept beside the loopback hosts
+const INSECURE_URL_EXCEPTIONS = [
+  ...sdl.rules["no-insecure-url"].defaultExceptions.map(({ source }) => source),
+  String.raw`^(http|ws)://(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)([:/]|$)`,
+];
+
+/** Security rules; sdl's are named one by one, since its `recommended` also turns on its React and Node configs */
+const securityChecks = [
+  {
+    files: ["src/**", "api/**", "e2e/**"],
+    plugins: { "no-unsanitized": noUnsanitized, "@microsoft/sdl": sdl },
+    rules: {
+      // Not import(): its computed specifiers name this package's modules, a webpack context or a test's own module
+      "no-unsanitized/method": ["error", {}, { import: { properties: [] } }],
+      "no-unsanitized/property": "error",
+      "@microsoft/sdl/no-postmessage-star-origin": "error",
+      "@microsoft/sdl/no-document-domain": "error",
+      "@microsoft/sdl/no-document-write": "error",
+      "@microsoft/sdl/no-insecure-url": [
+        "error",
+        { exceptions: INSECURE_URL_EXCEPTIONS },
+      ],
+    },
+  },
+  {
+    // Not scripts/: build tooling reads paths and spawns processes by design
+    files: ["src/**", "api/**"],
+    plugins: security.configs.recommended.plugins,
+    rules: {
+      ...security.configs.recommended.rules,
+      // Reports nearly every computed member access
+      "security/detect-object-injection": "off",
+    },
+  },
+];
+
 const config = [
   // ESLint 9 lints `.cjs` by default; `yarn lint` never did
   { ignores: ["**/*.cjs"] },
@@ -557,6 +596,7 @@ const config = [
   ...reactApp,
   ...layers,
   ...project,
+  ...securityChecks,
 ];
 
 export default config;

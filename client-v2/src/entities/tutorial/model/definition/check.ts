@@ -1661,6 +1661,7 @@ if (import.meta.vitest) {
     it("refuses a doc address that is not https", () => {
       const d = minimal();
       d.docs = [
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
         { title: "IDL", url: "http://anchor-lang.com", file: "idl.md" },
       ];
       expect(lines(d)).toEqual([

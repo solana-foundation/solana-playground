@@ -253,7 +253,7 @@ export class PgCommon {
       .get("content-type")
       ?.toLowerCase()
       .startsWith("text/html");
-    if (isHtml && !/\.html?$/i.test(new URL(url, "http://x").pathname)) {
+    if (isHtml && !/\.html?$/i.test(new URL(url, "https://x").pathname)) {
       throw new FileMissingError(
         `Request failed (${response.status}, the app shell): ${url}`
       );

@@ -12,6 +12,7 @@ vi.mock("./settings", () => ({
 // Playnet pulls in the WASM packages; only its URL check is read here
 vi.mock("./playnet", () => ({
   OverridableConnection: class {},
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
   PgPlaynet: { isUrlPlaynet: (url: string) => url === "http://playnet" },
 }));
 
@@ -77,16 +78,16 @@ describe("PgConnection.clusterIsStale", () => {
       .spyOn(PgConnection, "getCluster")
       .mockRejectedValueOnce(new Error("did not match any cluster"));
 
-    PgSettings.connection.endpoint = "http://unreadable";
+    PgSettings.connection.endpoint = "https://unreadable";
     await expect(PgConnection.readCluster()).rejects.toThrow("did not match");
     expect(PgConnection.clusterIsStale).toBe(true);
     expect(PgConnection.hasClusterReadFailed).toBe(true);
 
     // Another endpoint is not the failed one: it is loading, not unreadable
-    PgSettings.connection.endpoint = "http://other";
+    PgSettings.connection.endpoint = "https://other";
     expect(PgConnection.hasClusterReadFailed).toBe(false);
 
-    PgSettings.connection.endpoint = "http://unreadable";
+    PgSettings.connection.endpoint = "https://unreadable";
     getCluster.mockResolvedValueOnce("devnet");
     await PgConnection.readCluster();
     expect(PgConnection.hasClusterReadFailed).toBe(false);
@@ -105,24 +106,24 @@ describe("PgConnection.clusterIsStale", () => {
       const getCluster = vi
         .spyOn(PgConnection, "getCluster")
         .mockImplementation((endpoint) =>
-          endpoint === "http://slow"
+          endpoint === "https://slow"
             ? new Promise((resolve, reject) => {
-                answers.set("http://slow", { resolve, reject });
+                answers.set("https://slow", { resolve, reject });
               })
             : Promise.resolve("devnet")
         );
 
-      PgSettings.connection.endpoint = "http://slow";
+      PgSettings.connection.endpoint = "https://slow";
       const older = PgConnection.readCluster();
-      PgSettings.connection.endpoint = "http://fast";
+      PgSettings.connection.endpoint = "https://fast";
       await expect(PgConnection.readCluster()).resolves.toBe("devnet");
 
-      const slow = answers.get("http://slow");
+      const slow = answers.get("https://slow");
       if (ending === "fails") slow?.reject(new Error("timed out"));
       else slow?.resolve("devnet");
 
       await expect(older).resolves.toBe("devnet");
-      expect(getCluster).toHaveBeenLastCalledWith("http://fast");
+      expect(getCluster).toHaveBeenLastCalledWith("https://fast");
       expect(PgConnection.clusterIsStale).toBe(false);
       getCluster.mockRestore();
     }

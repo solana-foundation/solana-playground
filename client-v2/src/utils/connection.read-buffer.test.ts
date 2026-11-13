@@ -12,6 +12,7 @@ vi.mock("./settings", () => ({
 
 vi.mock("./playnet", () => ({
   PgPlaynet: {
+    // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
     isUrlPlaynet: (url: string) => url === "http://playnet",
     onDidInit: () => ({ dispose: () => undefined }),
     init: () => undefined,
@@ -78,6 +79,7 @@ describe("utils/connection", () => {
     {
       label: "the endpoint is Playnet",
       env: { REACT_APP_DEVNET_READ_BUFFER_RPC_URL: READ_BUFFER },
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
       endpoint: "http://playnet",
     },
     {
@@ -199,6 +201,7 @@ describe("utils/connection", () => {
     {
       label: "the endpoint is Playnet",
       value: "5",
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
       endpoint: "http://playnet",
     },
     {

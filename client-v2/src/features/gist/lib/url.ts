@@ -144,6 +144,7 @@ if (import.meta.vitest) {
         { owner: "alice", id: "0123abcd" },
       ],
       [" https://gist.github.com/0123abcd ", { id: "0123abcd" }],
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
       ["http://gist.github.com/0123ABCD", { id: "0123ABCD" }],
       [
         "https://gist.githubusercontent.com/alice/0123abcd/raw/beef",
@@ -163,6 +164,7 @@ if (import.meta.vitest) {
       "",
       "https://evil.com/gist.github.com/alice/0123abcd",
       "https://gist.github.com.evil.com/alice/0123abcd",
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
       "ftp://gist.github.com/alice/0123abcd",
       "https://gist.github.com/alice/0123abcd/9f8e7d/extra",
       "https://gist.github.com/alice/0123abcd/revisions",

@@ -479,7 +479,9 @@ if (import.meta.vitest) {
     describe("checkRpcUrl", () => {
       it.each([
         "devnet",
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
         "http://api.devnet.solana.com",
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
         "ftp://rpc.test",
         "",
         "https://",
@@ -621,6 +623,7 @@ if (import.meta.vitest) {
     });
 
     it("refuses a URL that fails the rule, and saves nothing", () => {
+      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- the insecure scheme is the input under test
       expect(add("", "http://api.devnet.solana.com")).toEqual({
         ok: false,
         reason: "format",
@@ -884,6 +887,7 @@ if (import.meta.vitest) {
         ["the offered Testnet", () => offered("testnet").value],
         ["Localnet", () => "http://localhost:8899"],
         ["Surfpool", () => "http://127.0.0.1:8899"],
+        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
         ["Playnet", () => "http://playnet"],
         ["a value that is not an RPC", () => "devnet"],
       ])("leaves %s out", (_, endpoint) => {
