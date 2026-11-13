@@ -42,8 +42,7 @@ Beta" or carry "(Platform)". While Mainnet is picked, the line "Not available
 for deploys", led by an amber status dot, SHALL show under the chips and
 describe the group; Devnet shows
 no line, nor do Testnet, Localnet and Surfpool. An endpoint no chip names (a
-custom URL not saved, Playnet) SHALL leave no chip checked and keep its
-address.
+custom URL not saved) SHALL leave no chip checked and keep its address.
 
 #### Scenario: Mainnet picked in Settings
 
