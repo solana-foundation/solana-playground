@@ -96,12 +96,14 @@ class BundleModulesPlugin {
   }
 }
 
-/** CRA's in-build type check and lint, by plugin class name */
+/** CRA's in-build type check, by plugin class name */
 const BUILD_ONLY_CHECKS = [
   "ForkTsCheckerWebpackPlugin",
   "ForkTsCheckerWarningWebpackPlugin",
-  "ESLintWebpackPlugin",
 ];
+
+/** CRA's lint, dropped in every mode: its ESLint 8 cannot read `eslint.config.mjs` */
+const LINT_PLUGIN = "ESLintWebpackPlugin";
 
 /**
  * Each tracker: whether this build carries it, and the files that hold its
@@ -190,8 +192,13 @@ module.exports = {
       // inlines every REACT_APP_* it found into the bundle
       if (env === "production") assertPublicEnv(process.env);
 
-      // `test-types` and `lint` run in CI and in `check`; in a production
-      // build these plugins only add memory under Vercel's 8 GB limit
+      // The edit hook, `lint-changed.mjs` and `check` report lint problems
+      webpackConfig.plugins = webpackConfig.plugins.filter(
+        (plugin) => plugin.constructor.name !== LINT_PLUGIN
+      );
+
+      // `test-types` runs in CI and in `check`; in a production build these
+      // plugins only add memory under Vercel's 8 GB limit
       if (env === "production") {
         webpackConfig.plugins = webpackConfig.plugins.filter(
           (plugin) => !BUILD_ONLY_CHECKS.includes(plugin.constructor.name)

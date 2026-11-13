@@ -1,7 +1,6 @@
 /**
  * Local ESLint rules for `src/`'s layers, loaded through the `link:`
- * dependency in `package.json`: eslintrc loads a rule only from a plugin
- * package. See client-v2/CLAUDE.md, Layers.
+ * dependency in `package.json`. See client-v2/CLAUDE.md, Layers.
  */
 
 const fs = require("fs");
@@ -103,7 +102,7 @@ const aliasAcrossModules = {
   create(context) {
     const { src } = context.options[0];
     assertSrc(src);
-    const filename = context.getFilename();
+    const filename = context.filename;
     if (!CHECKED_FILE.test(filename)) return {};
     const from = moduleOf(src, filename);
     if (!from) return {};
@@ -115,7 +114,7 @@ const aliasAcrossModules = {
       const to = moduleOf(src, target);
       if (!to || to === from) return;
       const alias = `@/${path.relative(src, target).split(path.sep).join("/")}`;
-      const delimiter = context.getSourceCode().getText(node)[0];
+      const delimiter = context.sourceCode.getText(node)[0];
       context.report({
         node,
         messageId: "alias",
@@ -179,7 +178,7 @@ const noTestSpread = {
     },
   },
   create(context) {
-    const filename = context.getFilename();
+    const filename = context.filename;
     const isTestFile = TEST_FILE.test(filename) || filename.startsWith(E2E_DIR);
 
     return {
@@ -191,8 +190,8 @@ const noTestSpread = {
         ) {
           return;
         }
-        const inBlock = context
-          .getAncestors()
+        const inBlock = context.sourceCode
+          .getAncestors(node)
           .some(
             (ancestor) =>
               isInSourceGuard(ancestor) &&
@@ -264,7 +263,7 @@ const curryOrder = {
     },
   },
   create(context) {
-    if (context.getFilename().startsWith(API_DIR)) return {};
+    if (context.filename.startsWith(API_DIR)) return {};
     const isExempt = (fn) => {
       const { parent } = fn;
       const isCallArgument =
@@ -314,8 +313,8 @@ module.exports = {
     "alias-across-modules": aliasAcrossModules,
     "curry-order": curryOrder,
     "no-test-spread": noTestSpread,
-    // `boundaries/dependencies` under a second id: eslintrc gives a rule id one
-    // severity, and `eslint-layers.js` needs the recorded exception at "warn"
+    // `boundaries/dependencies` under a second id: a rule id has one severity
+    // per file, and `eslint-layers.js` needs the recorded exception at "warn"
     "recorded-exception": require("eslint-plugin-boundaries").rules
       .dependencies,
   },

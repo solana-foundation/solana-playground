@@ -135,7 +135,7 @@ it("should show a thrown string as the message", async () => {
     buttonProps: {
       text: "Rename",
       onSubmit: () => {
-        // eslint-disable-next-line @typescript-eslint/no-throw-literal -- legacy dialog bodies throw strings; the frame must still show them
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- legacy dialog bodies throw strings; the frame must still show them
         throw "nope";
       },
     },
