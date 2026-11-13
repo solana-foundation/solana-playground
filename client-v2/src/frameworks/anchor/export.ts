@@ -25,7 +25,7 @@ export const convertFromPlayground = async (
   if (!libContent) throw new Error("lib.rs not found");
 
   const programName =
-    // eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s+` cannot match the `m` of `mod` that follows it
+    // eslint-disable-next-line security/detect-unsafe-regex -- linear: each \s+ is followed by a class it cannot match
     /(pub\s+)?mod\s+(\w+)/m.exec(libContent)?.[2] ??
     PgCommon.toSnakeCase(project.name ?? "program");
   const packageName = PgCommon.toKebabFromSnake(programName);

@@ -71,7 +71,7 @@ holds.
 | Source | Rules | Level | Files |
 | --- | --- | --- | --- |
 | `eslint-plugin-no-unsanitized` | `method`, `property` | error | `src`, `api`, `e2e` |
-| `@microsoft/eslint-plugin-sdl` | `no-postmessage-star-origin`, `no-document-domain`, `no-document-write`, `no-insecure-url` (loopback hosts, and sdl's defaults for the `schemas.microsoft.com` and `schemas.openxmlformats.org` hosts and the XHTML and SVG namespaces, excepted) | error | `src`, `api`, `e2e` |
+| `@microsoft/eslint-plugin-sdl` | `no-postmessage-star-origin`, `no-document-domain`, `no-document-write`, `no-insecure-url` (sdl's blocklist, `http:`, `ws:`, `ftp:` and `telnet:`; excepted are an `http:` or `ws:` loopback address and sdl's default exceptions except its unanchored `localhost` one) | error | `src`, `api`, `e2e` |
 | `eslint-plugin-security` | `recommended`, without `detect-object-injection` | warn | `src`, `api` |
 
 `sdl` rules are enabled one by one, not through its `recommended` config, which pulls in all of its framework configs
@@ -88,14 +88,14 @@ would also hide a later line that is not a probe.
 ### 5. A separate `security.yml`
 
 The scanners run in `.github/workflows/security.yml`, not in `ci.yml`, so `security-events: write` is granted to
-that workflow alone. Triggers are `ci.yml`'s, `pull_request` and `push` to `master`, plus `workflow_dispatch`.
+that workflow alone. Triggers match `ci.yml`: `pull_request`, `push` to `master` and `workflow_dispatch`.
 
 - zizmor runs through `zizmorcore/zizmor-action`, hadolint through `hadolint/hadolint-action`, each pinned to a
   commit SHA.
-- The tool's exit status fails the job on every run. The SARIF upload (`github/codeql-action/upload-sarif`) runs on
-  every event except a `pull_request` from a fork, whose token cannot write: `push`, `workflow_dispatch`, and a
-  `pull_request` whose head repository is this repository. A PR from a fork therefore shows findings in the job log
-  only.
+- The tool's exit status fails the job on every run. The SARIF upload runs on every event except a `pull_request`
+  from a fork, whose token cannot write: `push`, `workflow_dispatch`, and a `pull_request` whose head repository is
+  this repository. zizmor uploads through `zizmor-action` itself, hadolint through
+  `github/codeql-action/upload-sarif`. A PR from a fork therefore shows findings in the job log only.
 - hadolint reads `client-v2/Dockerfile` and `docker/server-unstable.Dockerfile` by path, with `failure-threshold:
   warning`.
 

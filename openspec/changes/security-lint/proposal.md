@@ -20,8 +20,8 @@ ESLint 8.40 through `react-scripts`.
 - client-v2 lints with `eslint-plugin-security`, `eslint-plugin-no-unsanitized` and `@microsoft/eslint-plugin-sdl`,
   each at its current release.
 - A `security.yml` workflow runs zizmor over `.github/` and hadolint over `client-v2/Dockerfile` and
-  `docker/server-unstable.Dockerfile` on every PR and on pushes to `master`. A finding fails the run, and each tool
-  uploads SARIF to Code scanning.
+  `docker/server-unstable.Dockerfile` on every PR, on pushes to `master` and on a manual run. A finding fails the
+  run, and each tool uploads SARIF to Code scanning, except in the run of a PR from a fork, whose token cannot write.
 - client-v2 lint fails on a literal `api.devnet.solana.com`, `api.testnet.solana.com` or
   `api.mainnet-beta.solana.com` address outside the module that defines `Endpoint`, which moves to
   `entities/cluster/model/endpoint.ts` so e2e can import it. A test that needs some RPC takes one from

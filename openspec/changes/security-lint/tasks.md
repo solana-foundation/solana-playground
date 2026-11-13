@@ -21,8 +21,8 @@ Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1 a
 - [x] 1.3 Fail the lint on a literal cluster RPC address outside the `Endpoint` module, as the requirement "client-v2
   lint rejects literal cluster RPC addresses" states: move `Endpoint` to `entities/cluster/model/endpoint.ts`, take
   test RPCs from `src/test-utils/endpoints.mjs` on the `.test` TLD, and replace every literal under `src`, `api`,
-  `scripts` and `e2e` or disable the rule on its line with a reason. Verify: the cluster-address rows of `scripts/eslint-security.test.mjs` pass, and `yarn lint`
-  reports no error. Depends on 1.2. HOO-2892.
+  `scripts` and `e2e` or disable the rule on its line with a reason. Verify: the cluster-address rows of
+  `scripts/eslint-security.test.mjs` pass, and `yarn lint` reports no error. Depends on 1.2. HOO-2892.
 
 ## 2. Workflow and Dockerfile scanners
 
@@ -30,7 +30,7 @@ Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1 a
   pinned to a commit SHA; fix or suppress inline with a reason every finding of the first run, and list the count per
   rule in the PR. Run the workflow with act as `client-v2/docs/local-ci-with-act.md` describes before the push.
   Verify: the zizmor and hadolint scenarios in `specs/security-checks/spec.md` fail and pass as stated, under act and
-  in the CI logs of this PR, whose fork branch skips the upload. HOO-2892.
+  in the CI logs of solana-foundation/solana-playground#167, whose fork branch skips the upload. HOO-2892.
 
 ## 3. CodeQL
 

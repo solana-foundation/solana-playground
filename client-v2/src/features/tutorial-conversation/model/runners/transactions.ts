@@ -514,14 +514,14 @@ if (import.meta.vitest) {
       });
 
       it.each([
-        ["AnchorError repeats", "AnchorError ".repeat(30_000)],
-        [
-          "Error Code: repeats",
-          `AnchorError ${"Error Code: x".repeat(20_000)}`,
-        ],
+        { label: "AnchorError repeats", line: "AnchorError ".repeat(30_000) },
+        {
+          label: "Error Code: repeats",
+          line: `AnchorError ${"Error Code: x".repeat(40_000)}`,
+        },
       ])(
-        "parses a long line of %s in linear time",
-        (_, line) => {
+        "parses a long line of $label in linear time",
+        ({ line }) => {
           expect(anchorErrorOf(line)).toBeNull();
         },
         1000
