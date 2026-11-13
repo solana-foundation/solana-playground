@@ -5340,6 +5340,11 @@
   resolved "https://registry.yarnpkg.com/@solana-program/system/-/system-0.16.0.tgz#e98ca5c07fbf3500c94f681f2edd45d5910eba96"
   integrity sha512-/RG6q2E2vG/XpdOt8Jj/kbQktPlL5JyJuNGAeN9wDcxKDKQtrGTJpDrJgQUxiEy23fsPNXQbLN8XeCtYoMof3Q==
 
+"@solana-program/system@^0.14.0":
+  version "0.14.1"
+  resolved "https://registry.yarnpkg.com/@solana-program/system/-/system-0.14.1.tgz#9c035233cc55b4ca6e57bd8a1d0dd66043af4135"
+  integrity sha512-K6ZiIrAKoJAfcwfUdsoFvfSAxeRJaRrV7BPFTJvUVRS4m3zszN+nLcdaNMMe2F1/zTriZqC+xh+Kgw6ziGUqpQ==
+
 "@solana-program/token-2022@0.20.0":
   version "0.20.0"
   resolved "https://registry.yarnpkg.com/@solana-program/token-2022/-/token-2022-0.20.0.tgz#732159be130e0fbcd67a323eab16e38774e645b5"
@@ -5348,6 +5353,13 @@
     "@solana-program/record" "^0.6.0"
     "@solana-program/system" "^0.16.0"
     "@solana-program/zk-elgamal-proof" "^0.5.0"
+
+"@solana-program/token@^0.16.0":
+  version "0.16.1"
+  resolved "https://registry.yarnpkg.com/@solana-program/token/-/token-0.16.1.tgz#25be257eea197b1ce7db8b0e2764840096399c3b"
+  integrity sha512-X9dsvbh+VDq4SuCfvxn95P1DCvtBYHJOBiVmgBJMfW8l/lp8uSwEhy9IurpcdltnGi5kNIkCm4sk4YOXKAMiCw==
+  dependencies:
+    "@solana-program/system" "^0.14.0"
 
 "@solana-program/zk-elgamal-proof@^0.5.0":
   version "0.5.0"
@@ -5798,7 +5810,7 @@
     "@wallet-standard/ui-features" "^1.0.3"
     "@wallet-standard/ui-registry" "^1.1.1"
 
-"@solana/kit@8.6.0", "@solana/kit@^8.2.0":
+"@solana/kit@8.6.0", "@solana/kit@^8.0.0", "@solana/kit@^8.2.0":
   version "8.6.0"
   resolved "https://registry.yarnpkg.com/@solana/kit/-/kit-8.6.0.tgz#c74eb021b1b982beffeb960a220f231f468b5e3d"
   integrity sha512-UaigU+LiTzkU237FxfiJhxufvEfb1J02djJOnGpSz1GAjZtbZ8oc4EkQ1bS4sHewSRyR9RUk6yhBb5bLHG0w4w==
@@ -14914,6 +14926,52 @@ linkify-it@^6.1.0:
   integrity sha512-wJ/TwpSDTLepCrQoYWYIExIKg5Zchex2Nn5yk2mFnB+6PtdkHtyLx742md9csRjjOnGkKIS/RrbY7l8D6gT9Vw==
   dependencies:
     uc.micro "^3.0.0"
+
+litesvm-darwin-arm64@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-darwin-arm64/-/litesvm-darwin-arm64-1.6.2.tgz#43f200e330010493f9727725b377b9cdb5148191"
+  integrity sha512-J3JKQaLdK2nQcdrDg8GB3xis8VlrFG2MJwUTTzdRgrvo291RrAdEo8qoO3zzC/BU5jgwsvBCgX4LD2zqdAjOyw==
+
+litesvm-darwin-x64@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-darwin-x64/-/litesvm-darwin-x64-1.6.2.tgz#382fbb60c2f5ce7d18aaf9c69c83a6bc03243363"
+  integrity sha512-zdAw4c7KnOcysHkUVrPBH2+x+4+7ViYYD8hWYYqZ7OOT4HFFsAV5iIhjul+bl5fMU9qae55lvD1RF4fK1rCgbg==
+
+litesvm-linux-arm64-gnu@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-linux-arm64-gnu/-/litesvm-linux-arm64-gnu-1.6.2.tgz#1fa742e310ea410661e1c884436d19d7ddd83778"
+  integrity sha512-vMWOPszLOyT3oQxAdANSzSUpJ1uEdTUArI+zruXSW1/nrXn/3zagOBrDxjZhQi0QqK9wT6QN32DfDTfB4xjS/A==
+
+litesvm-linux-arm64-musl@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-linux-arm64-musl/-/litesvm-linux-arm64-musl-1.6.2.tgz#243edc0dda7a1333432d9b4ea85255eea7826e44"
+  integrity sha512-Xw3KPkJEQ90LSOWP2xCGdOO4Y/dRdXJWGTgI8jNObGs0x/Apu0TOXuec/XZUNCvEba4aRwM/Wo3nS6llq5uAng==
+
+litesvm-linux-x64-gnu@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-linux-x64-gnu/-/litesvm-linux-x64-gnu-1.6.2.tgz#b491908430e09878031cc40c2ea60ec8c8279b2d"
+  integrity sha512-6kTBeCnGnAGqPH0ifxix/VGiVVCKBH9zrcx5D2zzZ9ZZkqJEQZiQxGxR36WccYYTWxOxN76M7YDtI9tuMhgw5g==
+
+litesvm-linux-x64-musl@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm-linux-x64-musl/-/litesvm-linux-x64-musl-1.6.2.tgz#7910b741212188df7a2788ea7a75670facf82fc9"
+  integrity sha512-55R3umCLBkX2f+9J55yHAgY5n1zpgzJH/njLnrXFYzTrwv836qR4FsTjIPuxX4QqvnBleJpF2h4wrc+/5R5S+Q==
+
+litesvm@1.6.2:
+  version "1.6.2"
+  resolved "https://registry.yarnpkg.com/litesvm/-/litesvm-1.6.2.tgz#fbb87fe31428a97d26615b9bf9ef3cb7aeba9d8e"
+  integrity sha512-eh6yZg35NiL7CCCBgaLCXvLm+zFF5QaZnAo6ovbbTQDY63wJSzYLc2KqOwowO7d3pNQkJti8toXYL12H0Qyu7A==
+  dependencies:
+    "@solana-program/system" "^0.14.0"
+    "@solana-program/token" "^0.16.0"
+    "@solana/kit" "^8.0.0"
+  optionalDependencies:
+    litesvm-darwin-arm64 "1.6.2"
+    litesvm-darwin-x64 "1.6.2"
+    litesvm-linux-arm64-gnu "1.6.2"
+    litesvm-linux-arm64-musl "1.6.2"
+    litesvm-linux-x64-gnu "1.6.2"
+    litesvm-linux-x64-musl "1.6.2"
 
 loader-utils@^2.0.0, loader-utils@^2.0.2:
   version "2.0.4"

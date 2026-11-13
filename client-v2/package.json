@@ -129,6 +129,7 @@
     "express": "^5.2.1",
     "globals": "17.14.0",
     "jsdom": "^29.1.1",
+    "litesvm": "1.6.2",
     "markdownlint-cli2": "0.24.0",
     "monaco-editor-webpack-plugin": "^7.0.1",
     "postcss": "^8.5.16",
