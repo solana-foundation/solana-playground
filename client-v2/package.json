@@ -109,14 +109,22 @@
     "@types/react-dom": "^19.2.0",
     "@types/styled-components": "^5.1.36",
     "circular-dependency-plugin": "^5.2.2",
+    "confusing-browser-globals": "1.0.11",
     "csstype": "^3.1.2",
     "esbuild": "0.25.9",
+    "eslint": "9.39.5",
     "eslint-import-resolver-typescript": "^3.10.1",
     "eslint-plugin-boundaries": "7.3.0",
+    "eslint-plugin-import": "2.32.0",
+    "eslint-plugin-jest": "28.14.0",
+    "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-layers": "link:./eslint-plugin-layers",
+    "eslint-plugin-react": "7.37.5",
+    "eslint-plugin-react-hooks": "5.2.0",
     "eslint-plugin-simple-import-sort": "14.0.0",
     "eslint-plugin-unicorn": "47.0.0",
     "express": "^5.2.1",
+    "globals": "17.14.0",
     "jsdom": "^29.1.1",
     "markdownlint-cli2": "0.24.0",
     "monaco-editor-webpack-plugin": "^7.0.1",
@@ -127,6 +135,7 @@
     "shadcn": "^4.21.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.20.5",
+    "typescript-eslint": "8.72.2",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
   },
@@ -162,7 +171,10 @@
     "**/google-gax/rimraf/glob": "^14.0.3",
     "**/@ts-morph/common/minimatch": "^11.0.1",
     "**/http-proxy-agent/@tootallnate/once": "^2.0.1",
-    "**/micromark-extension-math/katex": "0.18.10"
+    "**/micromark-extension-math/katex": "0.18.10",
+    "internal-slot": "^1.1.0",
+    "has-symbols": "^1.1.0",
+    "function-bind": "^1.1.2"
   },
   "engines": {
     "node": "22.x"
@@ -185,8 +197,8 @@
     "check-md": "markdownlint-cli2",
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
-    "lint": "eslint --max-warnings 2229 --ext .js,.ts,.tsx,.mjs,.mts src api e2e scripts eslint-plugin-layers",
-    "lint:layers": "eslint --quiet --ext .ts,.tsx,.mjs,.mts src/app src/widgets src/features src/entities src/shared api",
+    "lint": "eslint --max-warnings 2216 src api e2e scripts eslint-plugin-layers",
+    "lint:layers": "eslint --quiet src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
     "tutorial:check": "tsx scripts/tutorial-check.ts",
@@ -216,474 +228,6 @@
     "test-build": "node --test \"scripts/*.build-test.mjs\"",
     "bundle:info": "node scripts/wasm-stubs.mjs check-build build && node scripts/bundle-info.mjs",
     "db-dump": "./scripts/db-dump.sh"
-  },
-  "eslintConfig": {
-    "extends": [
-      "react-app",
-      "./eslint-layers.js"
-    ],
-    "overrides": [
-      {
-        "files": [
-          "src/**",
-          "e2e/**"
-        ],
-        "rules": {
-          "no-restricted-syntax": [
-            "error",
-            {
-              "selector": "MemberExpression[property.name='randomUUID']",
-              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
-            },
-            {
-              "selector": "VariableDeclarator > ObjectPattern > Property[key.name='randomUUID']",
-              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
-            },
-            {
-              "selector": "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
-              "message": "reportButtonFailure takes what did not happen first: .catch(reportButtonFailure(\"<action>\")). Passed bare, it returns a handler nobody calls and the failure is swallowed."
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "e2e/**"
-        ],
-        "rules": {
-          "no-restricted-imports": [
-            "error",
-            {
-              "paths": [
-                {
-                  "name": "uuid",
-                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
-                }
-              ],
-              "patterns": [
-                {
-                  "group": [
-                    "uuid/*"
-                  ],
-                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
-                }
-              ]
-            }
-          ],
-          "no-restricted-syntax": [
-            "error",
-            {
-              "selector": "MemberExpression[property.name='randomUUID']",
-              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
-            },
-            {
-              "selector": "VariableDeclarator > ObjectPattern > Property[key.name='randomUUID']",
-              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
-            },
-            {
-              "selector": "Literal[regex.pattern=/\\{8\\}\\\\?-/]",
-              "message": "Check an id with isUuid() from src/shared/lib/ids instead of a copied UUID regex."
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/{app,features,shared,entities,widgets}/**"
-        ],
-        "rules": {
-          "no-empty": [
-            "error",
-            {
-              "allowEmptyCatch": false
-            }
-          ],
-          "no-nested-ternary": "error",
-          "no-restricted-imports": [
-            "error",
-            {
-              "paths": [
-                {
-                  "name": "uuid",
-                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
-                },
-                {
-                  "name": "cn",
-                  "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
-                },
-                {
-                  "name": "styled-components",
-                  "message": "Style with Tailwind over the design-system tokens; styled-components is leaving (HOO-2077). Only the wallet, the layout shell and the theme provider keep it until they move."
-                }
-              ],
-              "patterns": [
-                {
-                  "group": [
-                    "uuid/*"
-                  ],
-                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
-                }
-              ]
-            }
-          ],
-          "no-restricted-syntax": [
-            "error",
-            {
-              "selector": "MemberExpression[property.name='randomUUID']",
-              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
-            },
-            {
-              "selector": "VariableDeclarator > ObjectPattern > Property[key.name='randomUUID']",
-              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
-            },
-            {
-              "selector": "Literal[regex.pattern=/\\{8\\}\\\\?-/]",
-              "message": "Check an id with isUuid() from src/shared/lib/ids instead of a copied UUID regex."
-            },
-            {
-              "selector": "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
-              "message": "reportButtonFailure takes what did not happen first: .catch(reportButtonFailure(\"<action>\")). Passed bare, it returns a handler nobody calls and the failure is swallowed."
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/widgets/layout-shell/**"
-        ],
-        "rules": {
-          "no-restricted-imports": [
-            "error",
-            {
-              "paths": [
-                {
-                  "name": "uuid",
-                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
-                },
-                {
-                  "name": "cn",
-                  "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
-                }
-              ],
-              "patterns": [
-                {
-                  "group": [
-                    "uuid/*"
-                  ],
-                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/**"
-        ],
-        "excludedFiles": [
-          "src/{app,features,shared,entities,widgets}/**",
-          "src/components/Wallet/**",
-          "src/providers/theme/**",
-          "src/types/declarations.d.ts"
-        ],
-        "rules": {
-          "no-restricted-imports": [
-            "error",
-            {
-              "paths": [
-                {
-                  "name": "styled-components",
-                  "message": "Style with Tailwind over the design-system tokens; styled-components is leaving (HOO-2077). Only the wallet, the layout shell and the theme provider keep it until they move."
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "api/**"
-        ],
-        "rules": {
-          "no-console": "error"
-        }
-      },
-      {
-        "files": [
-          "src/shared/lib/logger/providers/**"
-        ],
-        "excludedFiles": [
-          "src/shared/lib/logger/providers/sentry.ts",
-          "src/shared/lib/logger/providers/sentry.test.ts"
-        ],
-        "rules": {
-          "no-restricted-imports": [
-            "error",
-            {
-              "paths": [
-                {
-                  "name": "uuid",
-                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
-                },
-                {
-                  "name": "cn",
-                  "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
-                },
-                {
-                  "name": "styled-components",
-                  "message": "Style with Tailwind over the design-system tokens; styled-components is leaving (HOO-2077). Only the wallet, the layout shell and the theme provider keep it until they move."
-                }
-              ],
-              "patterns": [
-                {
-                  "group": [
-                    "uuid/*"
-                  ],
-                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
-                },
-                {
-                  "group": [
-                    "@sentry/*"
-                  ],
-                  "message": "The browser logger reaches Sentry only through providers/sentry.ts; the server logger is handed the SDK by with-observability.mjs. See the client-v2-logging spec."
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/shared/lib/ids.ts",
-          "src/shared/lib/ids.test.mts"
-        ],
-        "rules": {
-          "no-restricted-imports": "off",
-          "no-restricted-syntax": "off"
-        }
-      },
-      {
-        "files": [
-          "src/shared/lib/utils.ts"
-        ],
-        "rules": {
-          "no-restricted-imports": "off"
-        }
-      },
-      {
-        "files": [
-          "**/*.test.ts",
-          "**/*.test.tsx",
-          "**/*.test.mts",
-          "**/*.test.mjs",
-          "e2e/**"
-        ],
-        "rules": {
-          "import/first": "off"
-        }
-      },
-      {
-        "files": [
-          "**/*.mts"
-        ],
-        "parser": "@typescript-eslint/parser",
-        "plugins": [
-          "@typescript-eslint"
-        ],
-        "rules": {
-          "default-case": "off",
-          "no-dupe-class-members": "off",
-          "no-undef": "off",
-          "no-array-constructor": "off",
-          "no-redeclare": "off",
-          "@typescript-eslint/no-redeclare": "warn",
-          "no-use-before-define": "off",
-          "@typescript-eslint/no-use-before-define": [
-            "warn",
-            {
-              "functions": false,
-              "classes": false,
-              "variables": false,
-              "typedefs": false
-            }
-          ],
-          "no-unused-expressions": "off",
-          "@typescript-eslint/no-unused-expressions": [
-            "error",
-            {
-              "allowShortCircuit": true,
-              "allowTernary": true,
-              "allowTaggedTemplates": true
-            }
-          ],
-          "no-unused-vars": "off",
-          "@typescript-eslint/no-unused-vars": [
-            "error",
-            {
-              "args": "after-used",
-              "ignoreRestSiblings": true
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/**",
-          "api/**",
-          "e2e/**"
-        ],
-        "plugins": [
-          "@typescript-eslint",
-          "unicorn"
-        ],
-        "rules": {
-          "@typescript-eslint/no-non-null-assertion": "warn",
-          "layers/curry-order": "warn",
-          "layers/no-test-spread": "warn",
-          "unicorn/no-null": [
-            "warn",
-            {
-              "checkStrictEquality": false
-            }
-          ],
-          "max-params": [
-            "warn",
-            2
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/**",
-          "api/**",
-          "e2e/**",
-          "scripts/**",
-          "eslint-plugin-layers/**"
-        ],
-        "plugins": [
-          "simple-import-sort"
-        ],
-        "rules": {
-          "no-shadow": "error",
-          "no-unused-vars": [
-            "error",
-            {
-              "args": "after-used",
-              "ignoreRestSiblings": true
-            }
-          ],
-          "simple-import-sort/imports": [
-            "error",
-            {
-              "groups": [
-                [
-                  "^\\u0000"
-                ],
-                [
-                  "^node:",
-                  "^@?\\w"
-                ],
-                [
-                  "^@/"
-                ],
-                [
-                  "^\\."
-                ]
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/**/*.{ts,tsx,mts}",
-          "api/**/*.{ts,tsx,mts}",
-          "e2e/**/*.{ts,tsx,mts}"
-        ],
-        "rules": {
-          "no-shadow": "off",
-          "@typescript-eslint/no-shadow": "error",
-          "no-unused-vars": "off",
-          "@typescript-eslint/no-unused-vars": [
-            "error",
-            {
-              "args": "after-used",
-              "ignoreRestSiblings": true
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/**",
-          "e2e/**"
-        ],
-        "rules": {
-          "no-console": "error",
-          "prefer-promise-reject-errors": "warn"
-        }
-      },
-      {
-        "files": [
-          "src/shared/lib/logger/providers/console.ts",
-          "src/shared/lib/logger/providers/server-console.mjs"
-        ],
-        "rules": {
-          "no-console": "off"
-        }
-      },
-      {
-        "files": [
-          "api/**"
-        ],
-        "rules": {
-          "max-params": "off"
-        }
-      },
-      {
-        "files": [
-          "scripts/**",
-          "eslint-plugin-layers/**"
-        ],
-        "env": {
-          "es2022": true
-        }
-      },
-      {
-        "files": [
-          "src/**/*.{test,spec}.*"
-        ],
-        "plugins": [
-          "jest"
-        ],
-        "rules": {
-          "jest/valid-title": [
-            "warn",
-            {
-              "mustNotMatch": {
-                "describe": "\\b([Uu][Nn][Ii][Tt]|[Ii][Nn][Tt][Ee][Gg][Rr][Aa][Tt][Ii][Oo][Nn]|[Ee]2[Ee])\\b"
-              }
-            }
-          ]
-        }
-      },
-      {
-        "files": [
-          "src/**/*.{ts,tsx}"
-        ],
-        "excludedFiles": [
-          "**/*.raw.d.ts"
-        ],
-        "parserOptions": {
-          "project": true
-        },
-        "rules": {
-          "no-throw-literal": "off",
-          "@typescript-eslint/no-throw-literal": "warn"
-        }
-      }
-    ]
   },
   "browserslist": [
     "chrome >= 111",
