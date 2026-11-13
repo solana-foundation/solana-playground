@@ -45,6 +45,7 @@ export const leavesFocusElsewhere = ({
   // keeps it there. A dialog's submit disables its button while it runs, so
   // both read Rename's open of the renamed file as one with nothing focused,
   // not as one "in a dialog" in Firefox alone
+  // eslint-disable-next-line unicorn/no-null -- reads as `document.activeElement` with nothing focused, which is null
   const active = focused?.matches(":disabled") ? null : focused;
   // Focus scrolls the editor into view: on a phone, a swipe away from the
   // code before the file opened would be pulled back to it
