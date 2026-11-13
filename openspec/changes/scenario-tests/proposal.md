@@ -11,11 +11,12 @@ plan", lives only in `client-v2/CLAUDE.md`, so no spec states it and no requirem
 
 ## What Changes
 
-- A new capability `scenario-tests` owns the rule that every scenario is a test or is marked `(manual)`,
-  and the three test levels: unit (an in-source block, one module, cites no scenario), integration (a vitest or
-  `node --test` file, several layers or slices, no browser), and end-to-end (Playwright under `e2e/`, a real browser
-  or a real environment). A scenario is checked at the integration or the end-to-end level; the author picks between
-  them by these criteria, and review checks the choice.
+- A new capability `scenario-tests` owns the rule that every scenario is a test or is marked `(manual)`, and the
+  levels a scenario is checked at: integration (a vitest or `node --test` file, several layers or slices, no
+  browser) and end-to-end (Playwright under `e2e/`, a real browser or a real environment). The author picks between
+  them by these criteria, and review checks the choice. A unit test, as `client-v2-unit-tests` defines it, cites no
+  scenario. The checker takes a test's level from its file's path, so a single-module test that keeps a `*.test.ts`
+  file and cites a scenario is reported at the integration level.
 - A scenario's clauses are GIVEN (optional), WHEN, THEN, and AND, and each one is a titled step in its test: a
   `test.step` per clause in Playwright, nested `describe` and `it` titles in vitest. A clause reworded in the spec
   is a mismatch until the test is updated.
@@ -28,9 +29,10 @@ plan", lives only in `client-v2/CLAUDE.md`, so no spec states it and no requirem
 - `spec:coverage` reads the vitest files `vitest.config.ts` collects and the `node --test` files `yarn test-api`
   runs, as well as `e2e/`, and reports per scenario: its tests, their level, missing clauses, and scenarios more than
   one test cites. A flat `it` or `test` titled with a scenario cites it with every clause missing, and a `(manual)`
-  scenario a test cites is a conflict.
+  scenario a test cites is a conflict. A test skipped under a condition the checker cannot evaluate counts as
+  covering its scenario; only an unconditional skip does not.
 - Each capability under `openspec/specs/` gets a generated, committed `tests.md`: one row per clause naming the test
-  file, test title, and level, "missing" for a clause the test has no step for, or "manual". CI and `yarn run check`
+  file, test title, and level, "missing" for a clause the test has no step for, "manual", or "none". CI and `yarn run check`
   fail when a committed `tests.md` differs from the generator's output.
 - A committed list of strict capabilities: CI fails on an uncovered scenario, a missing clause, or an assertion
   clause whose first word is on a closed list of non-verbs in a listed capability, and on a PR that drops a
@@ -62,20 +64,22 @@ spec.
 
 ### Modified Capabilities
 
-None. `client-v2-unit-tests` keeps its requirements: a unit test stays in its module's in-source block and cites no
-scenario.
+None by delta. `client-v2-unit-tests` keeps its requirements, and a unit test cites no scenario.
+
+The pilots edit two capabilities directly in `openspec/specs/`, for clause wording and `(manual)` marks only, with no
+change of behaviour: `client-v2-custom-rpcs` (task 5.1) and `client-v2-build-server-endpoint` (task 5.3). A delta
+would put the rewritten scenarios under the name-only exemption until archive (design.md, decisions 10 and 12).
 
 ## Impact
 
 - Code: `client-v2/scripts/spec-coverage.mjs` and its tests, a `tests.md` generator under `client-v2/scripts/`,
-  `client-v2/package.json` scripts, the `jest/valid-title` rule in `client-v2/eslint.config.mjs`, the `checks` job of
+  the strict list `client-v2/scripts/spec-coverage-strict.txt`, `client-v2/package.json` scripts, the `jest/valid-title` rule in `client-v2/eslint.config.mjs`, the `checks` job of
   `.github/workflows/reusable-client-v2.yml`, the tests of
   `client-v2-custom-rpcs` in `client-v2/e2e/client-v2-custom-rpcs.e2e.spec.ts`, the assertion clauses of
   `openspec/specs/client-v2-custom-rpcs/spec.md`; for `client-v2-build-server-endpoint`, a new
   `client-v2/src/settings/server/build-server-endpoint.test.ts`, `client-v2/scripts/server-url-gate.test.mjs`, the
-  scenario comments in
-  `src/settings/server/default-endpoint.ts`, `src/settings/server/server.test.ts`, and
-  `src/settings/stored-endpoint.ts`, and `openspec/specs/client-v2-build-server-endpoint/spec.md`;
+  scenario comments in `client-v2/src/settings/server/default-endpoint.ts`,
+  `client-v2/src/settings/server/server.test.ts`, and `client-v2/src/settings/stored-endpoint.ts`, and `openspec/specs/client-v2-build-server-endpoint/spec.md`;
   `client-v2/CLAUDE.md`, and `openspec/config.yaml`.
 - Generated files: one `openspec/specs/<capability>/tests.md` per capability.
 - Order: this proposal lands as a docs-only PR first; the checker, the generator, the gate, and the pilots follow in

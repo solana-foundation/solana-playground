@@ -2,8 +2,8 @@
 
 ## Context
 
-See [proposal.md](proposal.md), "Why". The facts below were read at `de036c4a6`, and the flat scenario tests and the
-first words of THEN clauses again at `a13ae71a1`.
+See [proposal.md](proposal.md), "Why". The facts below were read at `de036c4a6`, and checked again at the head of the
+pull request that adds this change.
 
 - `client-v2/scripts/spec-coverage.mjs` reads scenarios from `openspec/specs/` and from active changes, reads test
   titles from `e2e/` with a regular expression (`TEST_TITLE`, the first double-quoted argument of `test(` or
@@ -23,7 +23,14 @@ first words of THEN clauses again at `a13ae71a1`.
   already title a flat `it` or `test` with `<capability>: <scenario>`, with no clause `describe`. The last cites "A
   preview build without the variable" and "A CI build", which `client-v2-build-server-endpoint` marks `(manual)`.
 - `vitest.config.ts` collects `src/**/*.{spec,test}.{js,jsx,ts,tsx,mts}` and `src/**/__tests__/**` (`include`), and
-  `client-v2/AGENTS.md` requires `<name>.test.mts` for a module the Playwright suite imports.
+  `client-v2/AGENTS.md` requires `<name>.test.mts` for a module the Playwright suite imports. It also sets
+  `mockReset: true`, which clears every mock's recorded calls before each test.
+- Some tests skip themselves under a condition known only at run time: `e2e/assistant-code-stream.e2e.spec.ts`
+  (`test.fixme(browserName === "firefox", …)`), `e2e/two-tabs.e2e.spec.ts` (`test.fixme(!!process.env.CI, …)`), and
+  the database cases of `node --test` files such as `api/projects.test.mjs` (`{ skip: !DB && "DATABASE_URL not set" }`).
+- A unit test that calls `vi.mock` or renders React keeps a `*.test.ts` file (`client-v2/AGENTS.md`, "Tests: a
+  module's unit tests live in the module"; `openspec/specs/client-v2-unit-tests/spec.md`), so a file under `src/` is
+  not always an integration test by its kind.
 - Most THEN clauses in `openspec/specs/` start with a subject. The most common first word is "the", then a backtick,
   then "it", "no", "a", and "its".
 
@@ -67,6 +74,10 @@ Where the step runs is the test author's choice:
 | `beforeEach` | The action runs once per `it`: a slow action multiplies, a side effect repeats        | The action is fast and each `it` needs a fresh result            |
 | `beforeAll`  | The `it`s share one result: an `it` that changes it breaks the next; a failed action fails every `it` | The action is slow (a render and a wait, a build) and every `it` only reads |
 
+A THEN that asserts on a mock needs `beforeEach`, or a `beforeAll` that copies the spy's calls into a local
+variable before the tests run: `mockReset: true` in `client-v2/vitest.config.ts` clears the calls a `beforeAll`
+recorded before the first `it` reads them, so "calls X" fails and "sends no request" passes whatever the action did.
+
 The same shape applies to `node --test` files, whose `describe`, `it`, `before`, and `beforeEach` come from
 `node:test`.
 
@@ -79,7 +90,7 @@ counting it would show a scenario with a passing test as uncovered. Context name
 
 A scenario's test is `test("<capability>: <scenario>")` with a `test.step` per clause. A GIVEN is either a
 `test.step` in the body or a `test.describe("GIVEN ...")` around the test whose `beforeEach` or `beforeAll` runs the
-precondition. Both forms count.
+precondition; a `test.describe.serial("GIVEN ...")` counts as the same form. Both forms count.
 
 Why: where a precondition runs is the test author's choice, as in decision 1. A precondition shared by several scenarios (a seeded
 project, a signed-in session) belongs in a hook, and a `test.step` inside a hook is not inside the test's body, so
@@ -99,10 +110,22 @@ Alternative: run each suite with a listing reporter (`vitest list`, `playwright 
 list mode does not report `test.step` titles, the listing needs the real wasm packages and a configured environment,
 and the freshness check (decision 7) must run in the `checks` job without a build.
 
-A title counts when it is a string literal or a template literal without a substitution. A skipped call does not
-count: `.skip`, `.fixme`, and `.todo` on `test`, `it`, and `describe`, `test.describe.skip` included. Neither does a
-test whose body calls `test.skip(` or `test.fixme(`, whatever the arguments: Playwright skips it at run time, often
-behind a condition the checker cannot evaluate, so the checker treats it as skipped.
+A title counts when it is a string literal or a template literal without a substitution. An unconditional skip
+does not count:
+
+- `.skip`, `.fixme`, and `.todo` on `test`, `it`, and `describe`, `test.describe.skip` and `test.describe.fixme`
+  included;
+- a test whose body calls `test.skip()` or `test.fixme()` with no condition;
+- a `node:test` call whose options hold `skip` or `todo` as the literal `true` or a string.
+
+A conditional skip counts as covering the scenario: an in-body `test.skip(<condition>, …)` or
+`test.fixme(<condition>, …)`, a `node:test` `skip` or `todo` option holding any other expression, and vitest's
+`skipIf` and `runIf`.
+
+Why: the checker reads source text and cannot evaluate a condition such as `browserName === "firefox"` or `!DB`. A
+conditionally skipped test runs in some environment, and counting it as skipped would report
+`assistant-code-stream: A code block keeps its height while a line streams past its width` as uncovered, though CI
+runs it on Chromium. The cost, a test whose condition holds in CI, is in Risks.
 
 ### 4. Sources and levels follow the file's path
 
@@ -114,6 +137,10 @@ behind a condition the checker cannot evaluate, so the checker treats it as skip
 
 The checker reads `include` from `vitest.config.ts` instead of keeping a list of its own, so a test file vitest runs,
 such as a `<name>.test.mts` that `client-v2/AGENTS.md` requires, is never invisible to the checker.
+
+A test's level comes from its file's path, not from the kind of test. A single-module test that calls `vi.mock` or
+renders React keeps a `*.test.ts` file under `client-v2-unit-tests` and cites no scenario; if it cites one, the
+checker reports it at the integration level, and review judges whether the level fits the scenario.
 
 In-source blocks are never read: `includeSource` is not a source, so a scenario title in a unit block leaves the
 scenario uncovered.
@@ -194,15 +221,19 @@ missing file on the base is an empty list, so the PR that adds the file passes. 
 list in the PR that deletes its `spec.md`, because a retired capability has no scenarios to gate and a listed name
 with no spec fails the run.
 
-### 10. Active changes: added scenarios are reported, modified ones are matched by name
+### 10. Active changes: added scenarios are reported, modified ones are matched by name, removed ones are not gated
 
 The gate reads `openspec/specs/` only. A scenario that exists only in an active change's delta is reported. A
 scenario of a requirement listed under `## MODIFIED Requirements` in any active change's delta for that capability is
-gated by its name only: its test must exist, its clauses are not compared. When the change is archived, the clauses
-of `openspec/specs/` are compared again, and archiving needs every task ticked, so the test is updated by then.
+gated by its name only: its test must exist, its clauses are not compared. A scenario of `openspec/specs/` that an
+active change's delta removes, under `## REMOVED Requirements`, is reported and not gated, so the task that removes
+the behaviour can remove its test while other tasks keep the change open. When the change is archived, the
+clauses of `openspec/specs/` are compared again, and archiving needs every task ticked, so the test is updated by
+then.
 
-Both exemptions belong to the strict list only. `--strict` keeps the meaning decision 8 gives it, so it fails on an
-uncovered scenario that only an active change adds, as on any other.
+These exemptions belong to the strict list only. `--strict` keeps the meaning decision 8 gives it, so it fails on an
+uncovered scenario that only an active change adds, as on any other, and on a scenario a delta removes whose test is
+already gone. `--strict` is a whole-tree check for a developer who asks for it; CI does not pass it.
 
 ### 11. Order of pull requests
 
@@ -220,9 +251,9 @@ sends no request". GIVEN, WHEN, and an AND after either keep their subject: "WHE
 AND follows is the one decision 1 nests it under.
 
 Why: the clause is the test's step title verbatim, and an assertion's subject is the system under test, which the
-scenario's title and its WHEN already name, so a subject-first THEN repeats it in every failure name. The rule is new
-with this change: `client-v2/CLAUDE.md` ("A test title says what the code does") accepts "should" or a verb, and the
-scenario format, and sets nothing for a clause's first word (Context).
+scenario's title and its WHEN already name, so a subject-first THEN repeats it in every failure name. No rule in
+`client-v2/CLAUDE.md` sets it: "A test title says what the code does" accepts "should" or a verb, and the scenario
+format, and sets nothing for a clause's first word (Context).
 
 In a strict capability the checker fails an assertion clause whose first word after the keyword is on the closed
 list the spec requirement "An assertion clause starts with a verb" names. Outside the strict list the report counts
@@ -235,6 +266,11 @@ start THEN clauses with (Context), and none of them is a verb, so the list never
 Scope: new scenarios follow the rule through the `rules.specs` line of `openspec/config.yaml` (task 1.1). An existing
 capability is rewritten when it joins the strict list (tasks 5.1 and 5.3 for the pilots), and its tests' step
 titles follow the rewritten clauses. Other existing specs keep their wording; the checker reports their clauses only.
+
+The pilots edit `openspec/specs/client-v2-custom-rpcs/spec.md` and
+`openspec/specs/client-v2-build-server-endpoint/spec.md` directly, for clause wording and `(manual)` marks only,
+with no change of behaviour. A `## MODIFIED Requirements` delta would put every rewritten scenario under decision
+10's name-only exemption until archive, so the pilot would not prove the clause-by-clause gate it exists to prove.
 
 There are two pilots, and no active change edits either, so the gate is proven without touching other changes.
 `client-v2-custom-rpcs` (task 5.1) proves the Playwright steps; `client-v2-build-server-endpoint` (task 5.3) proves
@@ -256,10 +292,17 @@ in-source unit block cites no scenario.
   `client-v2-unit-tests: <scenario>`, becomes a `describe` title that `jest/valid-title` warns on, and the warning
   raises the total `--max-warnings` caps] → Task 2.3 narrows the rule's disallowed words to `describe` titles that
   start with neither a clause keyword nor `<capability>: `.
-- [A strict capability's test quarantined with `test.fixme`, as a call or inside its body, is uncovered, so every PR
-  fails until it is fixed] → Intended: the gate makes the quarantine visible. The PR that quarantines it either fixes
-  the test or marks the scenario `(manual)` in the spec, and review sees both. The checker does not read
-  `e2e/known-skips.txt`; a quarantine reaches the gate only through `.skip` or `.fixme` in the source.
+- [A strict capability's test quarantined with an unconditional `.fixme` or `test.fixme()` is uncovered, so every
+  PR fails until it is fixed] → Intended: the gate makes the quarantine visible. The PR that quarantines it either
+  fixes the test or marks the scenario `(manual)` in the spec, and review sees both. The checker does not read
+  `e2e/known-skips.txt`; a quarantine reaches the gate only through a skip in the source.
+- [A test whose skip condition holds in CI counts as covered, though CI never runs it] → Accepted, because the
+  checker cannot evaluate a condition (decision 3). The case Context names is `e2e/two-tabs.e2e.spec.ts`
+  (`test.fixme(!!process.env.CI, …)`), which runs on a laptop only. TODO (ticket to file): settle the runner timing
+  in `two-tabs.e2e.spec.ts` so its scenario runs in CI. The other conditional skips are counted as intended:
+  `e2e/assistant-code-stream.e2e.spec.ts` (`test.fixme(browserName === "firefox", …)`) runs on Chromium in CI, and
+  the database cases of `node --test` files (`{ skip: !DB && "DATABASE_URL not set" }`) skip only on a machine
+  without `DATABASE_URL`, which the `checks` job sets, so they run there.
 - [Two parallel PRs that retitle tests of one capability both change its `tests.md` and conflict] → The file is
   generated: the second PR rebases and runs `yarn spec:tests`.
 - [A scenario's clause wording is copied into a test title, so a long clause makes a long test name] → Accepted: the
