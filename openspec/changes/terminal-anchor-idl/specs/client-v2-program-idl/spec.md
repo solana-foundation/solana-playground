@@ -89,7 +89,7 @@ buffer and return its rent to the wallet, under the authority rule it applies to
 - **WHEN** `anchor idl init` sends its first transaction and a later one fails
 - **THEN** the terminal prints the failure, then a line naming the SOL held at the canonical address and saying that
   running `anchor idl init` again finishes the upload
-- **AND** the memory provider records `idl_upload_failed` with `reason: "rpc"`
+- **AND** the memory provider records `idl_upload_failed` with `reason: "unfinished"`
 
 #### Scenario: Running init again finishes the upload
 
@@ -413,8 +413,9 @@ signature, or the IDL.
 `idl_upload_failed` SHALL carry one `reason`: `not_found` when there is no IDL to upload, `invalid` when the IDL is
 not in the Anchor 0.30+ format, `not_deployed` when the program is not on the cluster, `authority` when the program
 has no upgrade authority or the wallet is not it, `rejected` when the wallet declines the approval, `mainnet` when
-the command is refused because the endpoint is mainnet-beta, and `rpc` for any other failure, an endpoint that does
-not say which network it serves included.
+the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send leaves a buffer the
+terminal names, `send_failed` for any other failure after the first transaction was sent, and `rpc` for any other
+failure before it, an endpoint that does not say which network it serves included.
 
 #### Scenario: A wrong wallet is tracked (manual)
 
@@ -447,8 +448,10 @@ For `fetch`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer
 `idl_command_failed` SHALL carry one `reason`: `not_found` when the IDL, file, or account the subcommand needs does
 not exist, `invalid` when the IDL is not in the Anchor 0.30+ format, `not_deployed` when the program is not on the
 cluster, `authority` when the connected wallet may not act on the account, `rejected` when the wallet declines the
-approval, `mainnet` when the command is refused because the endpoint is mainnet-beta, `rpc` for any other failure,
-and `unsupported` for `build` and `fetch-historical`, which send this event alone, with their name as `command`.
+approval, `mainnet` when the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send
+leaves a buffer the terminal names, `send_failed` for any other failure after the first transaction was sent, `rpc`
+for any other failure before it, and `unsupported` for `build` and `fetch-historical`, which send this event alone,
+with their name as `command`.
 
 #### Scenario: A close refused on mainnet is tracked (manual)
 

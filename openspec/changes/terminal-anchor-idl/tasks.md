@@ -40,6 +40,9 @@ All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.m
   target and call the slice's entry; its requirement "IDL telemetry" names this change's event requirements instead
   of describing the upload events again. Verify: `yarn spec:validate` passes, and no requirement name in
   `wbdi-flow`'s `client-v2-program-idl` delta equals one in this change's. Depends on 1.1.
+- [ ] 2.4 Move the `wasm/` workspace to Rust 1.95.0 ([design.md](design.md), "The `wasm/` workspace builds on Rust
+  1.95.0, the server's toolchain"). Verify: the format and clippy commands of `reusable-checks.yml` pass, and the
+  `@real-wasm` specs of `client-v2/e2e/wasm-clis.e2e.spec.ts` pass in the PR's CI on packages built with 1.95.0.
 
 ## 3. Integration
 
@@ -83,7 +86,11 @@ All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.m
   the refusal of `--provider.cluster`, and the unknown-subcommand error of a removed name. Depends on 4.2 and 4.3.
 - [x] 4.5 Update the `wbdi-flow` change with `/opsx:update`: its task 3.2 reads the Program Metadata account through
   the slice's `fetch`, and its deploy delta names the requirement "Anchor IDL writes to mainnet are refused" of
-  `mainnet-deploy-warning` for the `anchor idl` refusal, with no list of subcommands of its own. Verify:
+  `mainnet-deploy-warning` for the `anchor idl` refusal, with no list of subcommands of its own. Its deploy delta also
+  drops "The mainnet guard sends the user to their own machine", "Mainnet guard telemetry", and the events
+  `deploy_mainnet_warned` and `deploy_scripts_exported`, and its tasks 2.3 and 2.4 drop the guard dialog: the
+  requirements "Deploys to mainnet are refused" and "The Deploy stage points mainnet to the user's machine" of
+  `mainnet-deploy-warning` (#131) refuse a mainnet deploy and point it to the user's machine instead. Verify:
   `yarn spec:validate` passes. Depends on 4.2.
 - [x] 4.6 Implement "An unfinished upload is finished or closed, never read as an IDL": `init` and `upgrade` finish
   an upload over a buffer left at the canonical address, `fetch` and the upload check the account's discriminator

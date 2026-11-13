@@ -58,6 +58,9 @@ cluster. Ticket: to file.
 
 ### Modified Capabilities
 
+- `client-v2-terminal`: every command receives its arguments split at spaces, a run of spaces separating as one, so
+  `anchor idl init <PROGRAM_ID>  --filepath idl.json` with two spaces runs as it does with one.
+
 - `client-v2-build`: the real wasm packages are the ones `WASM_PACKAGES` names, without `anchor-cli`; the
   requirements stop stating a count.
 - `mainnet-deploy-warning`: the refusal of `anchor idl` writes on mainnet covers the six subcommands that send a
@@ -84,4 +87,4 @@ cluster. Ticket: to file.
   IDL (`wbdi-flow` task 3.2), which reuses this change's read; an implementation of `anchor idl build` and
   `anchor idl fetch-historical`; programs built before Anchor 1.1.2, and seven of the nine subcommands of Anchor 1.1.2's
   deprecated `anchor legacy-idl` group (its `fetch` and `close` are in scope); every other group of Anchor's CLI, which the terminal has never offered; removing
-  `client/` or the `build` job of `reusable-checks.yml`; the Rust version of the `wasm/` workspace.
+  `client/` or the `build` job of `reusable-checks.yml`.

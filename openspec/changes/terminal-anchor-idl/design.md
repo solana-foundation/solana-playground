@@ -41,7 +41,6 @@ See [proposal.md](proposal.md), "Why", for the motivation.
 - An implementation of `anchor idl build` and `anchor idl fetch-historical`.
 - A check that the IDL's `address` equals the program id. The 0.29 command had none, and the two differ
   legitimately after the program keypair is replaced.
-- Moving `wasm/` to another Rust version.
 
 ## Decisions
 
@@ -189,6 +188,15 @@ and the wasm paragraph of `CLAUDE.md`. `client/` is not edited.
 removes `client/`. The commit that deletes `wasm/anchor-cli` must not come before this one: a tagged push would run
 the `build` job on a `client/` that cannot install, and `deploy_server` needs `checks`. Every `uses:` line of
 `cicd.yml` is pinned by commit SHA in the same edit, as `.github/actions/gcp-auth/action.yml` pins its actions.
+
+### The `wasm/` workspace builds on Rust 1.95.0, the server's toolchain
+
+`wasm/rust-toolchain.toml` and `wasm/Dockerfile` move from Rust 1.75.0 to 1.95.0, the toolchain the server builds
+with, in commit `56122e55e`. The upstream crates under `wasm/` take the edits the new compiler and clippy require,
+and `num-derive` moves to 0.4. `rust-analyzer` keeps its own `wasm/rust-analyzer/rust-toolchain.toml`: Rust 1.95
+refuses to compile the `wasm-bindgen` below 0.2.88 that it pins, so `vercel-install.sh` installs each package's
+`wasm-bindgen` with that package's toolchain (`package_toolchain`). An upstream sync that touches these crates
+conflicts with the edits and keeps them.
 
 ## Risks / Trade-offs
 
