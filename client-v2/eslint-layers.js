@@ -84,9 +84,9 @@ module.exports = [
   {
     plugins: { boundaries, layers },
     settings: {
-      // Both read paths from here, not from the working directory, so an
-      // editor running ESLint from the repository root still places files in
-      // their layers instead of passing everything
+      // Both read `process.cwd()` unless set: the git hooks run `lint-changed.mjs`
+      // from the repository root with ESLint's cwd in client-v2, and files must
+      // still land in their layers instead of passing everything
       "boundaries/root-path": __dirname,
       // Relative paths and `@/` (tsconfig `paths`) both resolve to files, which
       // is what places an import in a layer; one that resolves to nothing is

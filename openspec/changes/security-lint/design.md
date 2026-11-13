@@ -12,8 +12,8 @@ See [proposal.md](proposal.md), "Why". Facts that shape the approach:
   range and ships both `recommended` and `recommended-legacy`.
 - `eslint-plugin-boundaries` declares `eslint: >=6.0.0`. `eslint-plugin-unicorn` 47.0.0 predates flat config.
 - Four scripts drive ESLint through its Node API or CLI flags: `scripts/lib/untyped-eslint.mjs` (`overrideConfig` in
-  eslintrc shape), `scripts/lint-changed.mjs`, `scripts/ds-add.mjs` (relies on `--quiet` limiting `--fix` to errors)
-  and `scripts/eslint-layers.test.mjs`. The `lint` and `lint:layers` scripts pass `--ext`, which ESLint 9 removed.
+  eslintrc shape), `scripts/lint-changed.mjs` (`new ESLint({ cwd })` only, which ESLint 9 keeps), `scripts/ds-add.mjs`
+  (relies on `--quiet` limiting `--fix` to errors) and `scripts/eslint-layers.test.mjs`. The `lint` and `lint:layers` scripts pass `--ext`, which ESLint 9 removed.
 - `eslint-plugin-layers` calls `context.getFilename()` and `context.getSourceCode()`. ESLint 9 deprecates both and
   ESLint 10 removes them.
 - `craco.config.js` drops CRA's `ESLintWebpackPlugin` in production only (`BUILD_ONLY_CHECKS`), so the development

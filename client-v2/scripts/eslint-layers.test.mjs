@@ -212,10 +212,10 @@ const ALLOWED = [
   },
 ];
 
-// An editor may run ESLint from a process in the repository root. The plugin
-// and the resolver read `process.cwd()`, not ESLint's `cwd`, so the test
-// moves the process there
-describe("eslint-layers.js run from the repository root", () => {
+// The git hooks run `lint-changed.mjs` from the repository root with ESLint's
+// cwd in client-v2; the plugin and the resolver read `process.cwd()`, so the
+// test moves the process there
+describe("eslint-layers.js linted from a process in the repository root", () => {
   it("still places files in their layers", async () => {
     const root = path.dirname(cwd);
     const before = process.cwd();

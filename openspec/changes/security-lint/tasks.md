@@ -6,7 +6,8 @@ Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1.
 
 - [x] 1.1 Move client-v2 to ESLint 9 with `eslint.config.mjs` and no rule change (design.md, Decisions 1 to 3):
   rebuild `react-app` from its plugins, port `eslintConfig` and `eslint-layers.js`, drop `--ext`, port
-  `untyped-eslint.mjs`, `lint-changed.mjs`, `ds-add.mjs` and `eslint-layers.test.mjs`, switch `eslint-plugin-layers`
+  `untyped-eslint.mjs`, `ds-add.mjs` and `eslint-layers.test.mjs` (`lint-changed.mjs` builds `new ESLint({ cwd })`,
+  which ESLint 9 keeps, and needs no change), switch `eslint-plugin-layers`
   to `context.filename` and `context.sourceCode`, drop `ESLintWebpackPlugin` in development, and update
   `client-v2/CLAUDE.md` where it names `eslintConfig`. Verify: the before-and-after JSON comparison in the PR shows
   the same errors and an equal or lower warning total; `yarn run check`, `yarn test-api` and `yarn lint:layers` pass;
