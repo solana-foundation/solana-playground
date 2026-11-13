@@ -9,13 +9,13 @@ ARG DOCKER_SHA256="995d1ef289677f74fd58d8d2c35727b6a4ee389c69db8638a3e42d0487aa5
 ARG BUILDX_VERSION="0.37.2"
 ARG BUILDX_SHA256="982ca20490b45ed1ec8d99795974d3d874a358f75938c9c237305010e6b7e548"
 
-# pipefail: a failed download must fail its checksum line, not pass through the pipe
+# For hadolint DL4006; `curl -f` and `sha256sum -c` already fail the chain on their own
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# The sandbox runs `docker exec` with a cleared env, whose default search path has /usr/bin
 # root has uid 0 in every image
 # hadolint ignore=DL3066
 USER root
+# The sandbox runs `docker exec` with a cleared env, whose default search path has /usr/bin
 RUN curl -sSfL -o /tmp/docker.tgz "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz" \
     && echo "${DOCKER_SHA256}  /tmp/docker.tgz" | sha256sum -c - \
     && tar -xzf /tmp/docker.tgz -C /usr/bin --strip-components=1 docker/docker \

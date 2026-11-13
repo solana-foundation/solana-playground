@@ -1,8 +1,8 @@
 name: Security
 
-# zizmor over the workflows and actions, hadolint over the fork's two Dockerfiles. A separate workflow, so
-# `security-events: write` reaches these jobs alone. A pull_request run from a fork gets a read-only token: there the
-# tool's exit status fails the job and the findings stay in the log; Code scanning shows the state of `master`.
+# zizmor over the workflows and actions, hadolint over the fork's two Dockerfiles. A pull request from a fork gets a
+# read-only token, so its findings stay in the job log; a push and a same-repository pull request upload them to Code
+# scanning. The tool's exit status fails the job either way.
 on:
   push:
     branches: ["master"]

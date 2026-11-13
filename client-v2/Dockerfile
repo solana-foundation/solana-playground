@@ -37,8 +37,7 @@ ENV ASSETS_DIR=/opt/assets
 RUN git clone --quiet --no-checkout "$(git config -f .gitmodules submodule.client/public.url)" "$ASSETS_DIR" \
     && git -C "$ASSETS_DIR" checkout --quiet --detach "$(cat client-v2/scripts/assets-commit.txt)"
 
-# Install dependencies, then bake the assets in, so the container does not need the network to start.
-# `yarn start`/`yarn build` re-run update-static.mjs and it is idempotent.
+# The assets are baked in so the container starts without the network; `yarn start` re-runs the idempotent update-static.mjs
 WORKDIR /home/${USER}/client-v2
 RUN yarn install --frozen-lockfile \
     && yarn cache clean \

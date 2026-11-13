@@ -77,6 +77,8 @@ holds.
 `sdl` rules are enabled one by one, not through its `recommended` config, which also enables its React and Node
 configs and would repeat rules Decision 1 already sets. `sdl/no-inner-html` is left off because `no-unsanitized`
 covers the same sinks. `detect-object-injection` reports nearly every computed member access and is off.
+`no-unsanitized/method` skips `import()` only in `**/*.test.mjs` and the `create.ts`/`create.tsx` factories, which
+import their own folder's modules by name.
 `scripts/` is excluded from `security/*`: it is build tooling that reads paths and spawns processes by design.
 `--max-warnings` rises by exactly the number of new warnings. Errors the new rules raise are fixed in the same PR,
 or disabled on the line with the reason.

@@ -107,6 +107,7 @@ export const handleRoute = (
         case "function":
           return main();
         case "object":
+          // eslint-disable-next-line no-unsanitized/method -- webpack resolves the name against the files of views/main/primary at build time
           const { default: Main } = await import(
             "../views/main/primary/" + main.name
           );

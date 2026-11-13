@@ -552,20 +552,21 @@ const project = [
   },
 ];
 
-// `exceptions` replaces sdl's defaults (XML namespaces among them), so they are kept beside the loopback hosts
+// sdl's own localhost default is unanchored (`http://localhost.evil.test` passes), so only its XML namespaces stay
 const INSECURE_URL_EXCEPTIONS = [
-  ...sdl.rules["no-insecure-url"].defaultExceptions.map(({ source }) => source),
-  String.raw`^(http|ws)://(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)([:/]|$)`,
+  ...sdl.rules["no-insecure-url"].defaultExceptions
+    .map(({ source }) => source)
+    .filter((source) => !source.includes("localhost")),
+  String.raw`^(http|ws)://(localhost|127\.0\.0\.1|\[::1\])([:/]|$)`,
 ];
 
-/** Security rules; sdl's are named one by one, since its `recommended` also turns on its React and Node configs */
+/** Security rules; sdl's are named one by one, since its `recommended` pulls in every framework config (Angular, Electron, Node, React) */
 const securityChecks = [
   {
     files: ["src/**", "api/**", "e2e/**"],
     plugins: { "no-unsanitized": noUnsanitized, "@microsoft/sdl": sdl },
     rules: {
-      // Not import(): its computed specifiers name this package's modules, a webpack context or a test's own module
-      "no-unsanitized/method": ["error", {}, { import: { properties: [] } }],
+      "no-unsanitized/method": "error",
       "no-unsanitized/property": "error",
       "@microsoft/sdl/no-postmessage-star-origin": "error",
       "@microsoft/sdl/no-document-domain": "error",
@@ -574,6 +575,20 @@ const securityChecks = [
         "error",
         { exceptions: INSECURE_URL_EXCEPTIONS },
       ],
+    },
+  },
+  {
+    // A test importing its own module, and the factories that import their folder's modules by name
+    files: [
+      "{src,api,e2e}/**/*.test.mjs",
+      "src/frameworks/create.ts",
+      "src/themes/create.ts",
+      "src/tutorials/create.tsx",
+      "src/views/main/secondary/create.ts",
+      "src/views/sidebar/create.ts",
+    ],
+    rules: {
+      "no-unsanitized/method": ["error", {}, { import: { properties: [] } }],
     },
   },
   {

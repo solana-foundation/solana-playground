@@ -161,8 +161,7 @@ if (import.meta.vitest) {
     it("builds a new connection on every call with a fetch of its own", () => {
       const build = buildConnectionWith(fetch);
 
-      // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
-      expect(build("http://playnet")).not.toBe(build("http://playnet"));
+      expect(build("https://rpc.test")).not.toBe(build("https://rpc.test"));
     });
   });
 }
