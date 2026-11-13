@@ -58,14 +58,13 @@ cluster. Ticket: to file.
 
 ### Modified Capabilities
 
-- `client-v2-terminal`: every command receives its arguments split at spaces, a run of spaces separating as one, so
-  `anchor idl init <PROGRAM_ID>  --filepath idl.json` with two spaces runs as it does with one.
-
 - `client-v2-build`: the real wasm packages are the ones `WASM_PACKAGES` names, without `anchor-cli`; the
   requirements stop stating a count.
 - `mainnet-deploy-warning`: the refusal of `anchor idl` writes on mainnet covers the six subcommands that send a
   transaction: `init`, `upgrade`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer`. This modifies
   the requirement #131 added to `master` (`e1af2dfc2`).
+- `client-v2-terminal`: every command receives its arguments split at spaces, a run of spaces separating as one, so
+  `anchor idl init <PROGRAM_ID>  --filepath idl.json` with two spaces runs as it does with one.
 
 ## Impact
 

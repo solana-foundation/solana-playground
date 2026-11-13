@@ -15,13 +15,13 @@ CLI, and which events the command sends.
 `build`, and `fetch-historical`. A name that CLI does not have is no subcommand: the terminal SHALL print the usage
 of `anchor idl` and send nothing. `authority`, `set-authority`, `erase-authority`, and `set-buffer` are such names.
 
-#### Scenario: Help lists the subcommands (manual)
+#### Scenario: Help lists the subcommands
 
 - **WHEN** the user runs `anchor idl --help`
 - **THEN** the terminal lists the eleven subcommands and none of `authority`, `set-authority`, `erase-authority`,
   and `set-buffer`
 
-#### Scenario: A name Anchor 1.1.2 removed (manual)
+#### Scenario: A name Anchor 1.1.2 removed
 
 - **WHEN** no wallet is connected and the user runs `anchor idl set-authority`
 - **THEN** the terminal prints the usage of `anchor idl`, asks no wallet question, and sends no transaction
@@ -33,7 +33,7 @@ Every subcommand SHALL act on the cluster selected in Settings and SHALL sign wi
 name a file of the project. A subcommand that sends a transaction SHALL accept Anchor's `--priority-fee`, a price in
 micro-lamports per compute unit, and SHALL ask the wallet for one approval that covers every transaction.
 
-#### Scenario: A cluster option is refused (manual)
+#### Scenario: A cluster option is refused
 
 - **WHEN** the user runs `anchor idl fetch <PROGRAM_ID> --provider.cluster devnet`
 - **THEN** the terminal prints its unknown-option error and sends no transaction
@@ -43,7 +43,7 @@ micro-lamports per compute unit, and SHALL ask the wallet for one approval that 
 - **WHEN** an external wallet is connected and an upload needs more than one transaction
 - **THEN** the wallet asks for one approval that covers every transaction
 
-#### Scenario: An output option writes a project file (manual)
+#### Scenario: An output option writes a project file
 
 - **WHEN** the user runs `anchor idl fetch <PROGRAM_ID> --out idl/fetched.json` for a program with a published IDL
 - **THEN** the project holds `idl/fetched.json` with that IDL
@@ -55,7 +55,7 @@ of a program on the selected cluster, creating the account or replacing the IDL 
 `--filepath` names, or without that option the latest IDL uploaded to the project. On success the command SHALL
 print Anchor's line, `IDL initialized.` or `IDL upgraded.`, and the account's address.
 
-#### Scenario: A first upload on Devnet (manual)
+#### Scenario: A first upload
 
 - **WHEN** the latest IDL uploaded to the project is in the Anchor 0.30+ format, the connected wallet is the upgrade
   authority of the program deployed on Devnet, and the user runs `anchor idl init`
@@ -87,10 +87,11 @@ buffer and return its rent to the wallet, under the authority rule it applies to
 
 A failed send that leaves a buffer at an address of its own (an `upgrade` or `init` over an existing IDL too large
 for one transaction, or `create-buffer`) SHALL be followed by one line naming the SOL it holds and its address,
-saying that no terminal command closes it. A send whose transactions expire before every one is confirmed SHALL end
-with one line saying so and telling the user to run the same command again.
+saying that no terminal command closes it. When a send's transactions expire before every one is confirmed, the
+failure SHALL be printed as one line saying so and telling the user to run the same command again, followed by the
+line for any buffer the send left. A transaction that is confirmed with an error is that error, never an expiry.
 
-#### Scenario: A failed upload names the rent it leaves (manual)
+#### Scenario: A failed upload names the rent it leaves
 
 - **WHEN** `anchor idl init` sends its first transaction and a later one fails
 - **THEN** the terminal prints the failure, then a line naming the SOL held at the canonical address and saying that
@@ -104,14 +105,14 @@ with one line saying so and telling the user to run the same command again.
 - **THEN** the terminal prints `IDL initialized.`, the address holds a metadata account with the IDL, and
   `anchor idl fetch <PROGRAM_ID>` prints it
 
-#### Scenario: Fetch does not print a buffer (manual)
+#### Scenario: Fetch does not print a buffer
 
 - **WHEN** a buffer of an unfinished upload sits at the canonical address and the user runs
   `anchor idl fetch <PROGRAM_ID>`
 - **THEN** the terminal prints the line that the program has no published IDL, then a line saying an upload to it is
   unfinished, and no buffer bytes
 
-#### Scenario: Close recovers the rent of an unfinished upload (manual)
+#### Scenario: Close recovers the rent of an unfinished upload
 
 - **WHEN** a buffer of an unfinished upload sits at the canonical address and the upgrade authority runs
   `anchor idl close <PROGRAM_ID>`
@@ -125,19 +126,19 @@ names, as in Anchor, or the project's program id when no file is given. Without 
 when the project has no program id, the command SHALL end with one terminal line saying so and SHALL send no
 transaction and no event.
 
-#### Scenario: A program id argument (manual)
+#### Scenario: A program id argument
 
 - **WHEN** the user runs `anchor idl init <PROGRAM_ID>` with the id of a program whose upgrade authority is the
   connected wallet
 - **THEN** the IDL is written for that program, not for the project's program id
 
-#### Scenario: The address of an IDL file (manual)
+#### Scenario: The address of an IDL file
 
 - **WHEN** the user runs `anchor idl init --filepath idl/other.json` without a program id, and the file's `address`
   is a program whose upgrade authority is the connected wallet
 - **THEN** the IDL is written for the program at that `address`, not for the project's program id
 
-#### Scenario: No program id to write for (manual)
+#### Scenario: No program id to write for
 
 - **WHEN** the project has no program id (it was never built, and none was set) and the user runs `anchor idl init`
   without an argument and without `--filepath`
@@ -152,14 +153,14 @@ seed `idl`, and the connected wallet, for a wallet that is not the program's upg
 authority it SHALL end with one terminal line saying to run the command without `--non-canonical`, and SHALL send
 nothing: the client Anchor runs sends a transaction the program rejects in that case.
 
-#### Scenario: A wallet that is not the authority publishes its own IDL (manual)
+#### Scenario: A wallet that is not the authority publishes its own IDL
 
 - **WHEN** the connected wallet is not the program's upgrade authority and the user runs
   `anchor idl init --non-canonical <PROGRAM_ID>`
 - **THEN** the terminal prints `IDL initialized.`
 - **AND** `anchor idl fetch <PROGRAM_ID> --non-canonical` with the same wallet prints that IDL
 
-#### Scenario: The upgrade authority asks for a non-canonical account (manual)
+#### Scenario: The upgrade authority asks for a non-canonical account
 
 - **WHEN** the connected wallet is the program's upgrade authority and the user runs
   `anchor idl init --non-canonical <PROGRAM_ID>`
@@ -172,7 +173,7 @@ On an endpoint whose URL contains `localhost` or `127.0.0.1`, `anchor idl init` 
 Anchor's line, `Skipping IDL initialization on localnet` or `Skipping IDL upgrade on localnet`, and SHALL send no
 transaction and no event.
 
-#### Scenario: Init on Localnet (manual)
+#### Scenario: Init on Localnet
 
 - **WHEN** the selected cluster is Localnet and the user runs `anchor idl init`
 - **THEN** the terminal prints `Skipping IDL initialization on localnet`, and no transaction is sent
@@ -185,27 +186,27 @@ cluster, the program has no upgrade authority, or the connected wallet is not th
 which, and for a wrong wallet SHALL name the authority. With `--non-canonical` the two authority conditions SHALL
 NOT apply.
 
-#### Scenario: No IDL in the project (manual)
+#### Scenario: No IDL in the project
 
 - **WHEN** no IDL was uploaded to the project and the user runs `anchor idl init` without `--filepath`
 - **THEN** the terminal prints one line saying the project has no IDL, and no transaction is sent
 
-#### Scenario: A missing IDL file (manual)
+#### Scenario: A missing IDL file
 
 - **WHEN** the project holds no `idl/none.json` and the user runs `anchor idl init --filepath idl/none.json`
 - **THEN** the terminal prints one line naming that path, and no transaction is sent
 
-#### Scenario: An Anchor 0.29 IDL (manual)
+#### Scenario: An Anchor 0.29 IDL
 
 - **WHEN** the latest IDL uploaded to the project is in the Anchor 0.29 format and the user runs `anchor idl init`
 - **THEN** the terminal prints one line saying the IDL is not in the Anchor 0.30+ format, and no transaction is sent
 
-#### Scenario: A wallet that is not the authority (manual)
+#### Scenario: A wallet that is not the authority
 
 - **WHEN** the connected wallet is not the program's upgrade authority and the user runs `anchor idl upgrade`
 - **THEN** the terminal prints one line naming the upgrade authority, and no transaction is sent
 
-#### Scenario: A program that is not deployed (manual)
+#### Scenario: A program that is not deployed
 
 - **WHEN** the program id has no program on the selected cluster and the user runs `anchor idl init`
 - **THEN** the terminal prints one line saying the program is not deployed there, and no transaction is sent
@@ -218,7 +219,7 @@ client Anchor runs, `Metadata content saved to` and the path. With `--non-canoni
 the connected wallet instead. It SHALL send no transaction, SHALL need a wallet only with
 `--non-canonical`, and SHALL end with one terminal line when the program has no such account.
 
-#### Scenario: Fetch after an upload (manual)
+#### Scenario: Fetch after an upload
 
 - **WHEN** `anchor idl init` succeeded for a program on Devnet, no wallet is connected, and the user runs
   `anchor idl fetch <PROGRAM_ID>`
@@ -238,7 +239,7 @@ for the seed `--seed` names, send the account's rent to the connected wallet, an
 when the connected wallet is not the program's upgrade authority, as the client Anchor runs requires, or when the
 account does not exist.
 
-#### Scenario: Close returns the rent (manual)
+#### Scenario: Close returns the rent
 
 - **WHEN** the connected wallet is the upgrade authority of a program with a published IDL on Devnet and the user
   runs `anchor idl close <PROGRAM_ID>`
@@ -246,7 +247,7 @@ account does not exist.
   account's rent less the fee
 - **AND** `anchor idl fetch <PROGRAM_ID>` says the program has no published IDL
 
-#### Scenario: Close by another wallet (manual)
+#### Scenario: Close by another wallet
 
 - **WHEN** the connected wallet is not the program's upgrade authority and the user runs
   `anchor idl close <PROGRAM_ID>`
@@ -258,7 +259,7 @@ account does not exist.
 `--filepath` names, or without that option the latest IDL uploaded to the project, with the connected wallet as the
 buffer's authority. It SHALL print Anchor's line, `Buffer created successfully.`, and the buffer's address.
 
-#### Scenario: A buffer from the project's IDL (manual)
+#### Scenario: A buffer from the project's IDL
 
 - **WHEN** an IDL was uploaded to the project and the user runs `anchor idl create-buffer` on Devnet
 - **THEN** the terminal prints `Buffer created successfully.` and an address
@@ -270,7 +271,7 @@ buffer's authority. It SHALL print Anchor's line, `Buffer created successfully.`
 and print Anchor's line, `Buffer authority set successfully.` Before any transaction it SHALL end with one terminal
 line and send nothing when the buffer does not exist or its authority is not the connected wallet.
 
-#### Scenario: A buffer gets a new authority (manual)
+#### Scenario: A buffer gets a new authority
 
 - **WHEN** the connected wallet is the authority of a buffer and the user runs
   `anchor idl set-buffer-authority <BUFFER> --new-authority <NEW_AUTHORITY>`
@@ -298,7 +299,7 @@ the current one, and with `--to-legacy` from the current format to the legacy on
 program id of the result, and `--out` SHALL write the result to that file. The result SHALL equal what Anchor
 1.1.2's CLI prints for the same file and options. The subcommand SHALL send no transaction and need no wallet.
 
-#### Scenario: A legacy IDL is converted (manual)
+#### Scenario: A legacy IDL is converted
 
 - **WHEN** the project holds `idl/legacy.json` in the legacy format and the user runs
   `anchor idl convert idl/legacy.json --program-id <PROGRAM_ID>`
@@ -310,7 +311,7 @@ program id of the result, and `--out` SHALL write the result to that file. The r
 `anchor idl type <PATH>` SHALL print the TypeScript type of the IDL in that file, as Anchor 1.1.2's CLI prints it,
 or with `--out` write it to that file. The subcommand SHALL send no transaction and need no wallet.
 
-#### Scenario: A type from an IDL file (manual)
+#### Scenario: A type from an IDL file
 
 - **WHEN** the project holds `idl/counter.json` in the current format and the user runs
   `anchor idl type idl/counter.json`
@@ -322,7 +323,7 @@ or with `--out` write it to that file. The subcommand SHALL send no transaction 
 Playground terminal does not support the subcommand yet. They SHALL send no transaction and SHALL NOT ask for a
 wallet.
 
-#### Scenario: anchor idl build (manual)
+#### Scenario: anchor idl build
 
 - **WHEN** no wallet is connected and the user runs `anchor idl build`
 - **THEN** the terminal prints the not-supported line, asks no wallet question, and sends no transaction
@@ -342,7 +343,7 @@ none.
 - **WHEN** the user runs `anchor legacy-idl --help`
 - **THEN** the terminal lists `fetch` and `close`, and none of the other seven
 
-#### Scenario: A legacy write is not supported (manual)
+#### Scenario: A legacy write is not supported
 
 - **WHEN** the user runs `anchor legacy-idl init <PROGRAM_ID>`
 - **THEN** the terminal prints the usage of `anchor legacy-idl`, asks no wallet question, and sends no transaction
@@ -354,13 +355,13 @@ derived from it; for any other address, that account, an IDL buffer included. It
 or with `--out` write it to that project file, send no transaction, need no wallet, and end with one terminal line
 when no such account exists.
 
-#### Scenario: An older program's IDL (manual)
+#### Scenario: An older program's IDL
 
 - **WHEN** a program has an Anchor IDL account on Devnet, no wallet is connected, and the user runs
   `anchor legacy-idl fetch <PROGRAM_ID>`
 - **THEN** the terminal prints that IDL's JSON and asks no wallet question
 
-#### Scenario: A program without an Anchor IDL account (manual)
+#### Scenario: A program without an Anchor IDL account
 
 - **WHEN** the program has no Anchor IDL account and the user runs `anchor legacy-idl fetch <PROGRAM_ID>`
 - **THEN** the terminal prints one line saying the program has no legacy IDL
@@ -372,14 +373,14 @@ names, through the program's own IDL instruction, send its rent to the connected
 Before any transaction it SHALL end with one terminal line and send nothing when the account does not exist or the
 connected wallet is not its authority. `--print-only` SHALL NOT be accepted.
 
-#### Scenario: Close an older program's IDL (manual)
+#### Scenario: Close an older program's IDL
 
 - **WHEN** the connected wallet is the authority of a program's Anchor IDL account on Devnet and the user runs
   `anchor legacy-idl close <PROGRAM_ID>`
 - **THEN** the terminal prints Anchor's line, the account no longer exists, and its rent less the fee returns to
   the wallet
 
-#### Scenario: Close by another wallet (manual)
+#### Scenario: A legacy close by another wallet
 
 - **WHEN** the connected wallet is not the Anchor IDL account's authority and the user runs
   `anchor legacy-idl close <PROGRAM_ID>`
@@ -394,7 +395,7 @@ is the endpoint's cluster, or `custom` for a custom RPC. A command refused on ma
 and then `idl_upload_failed`, so that attempts on mainnet can be counted. No event SHALL carry an address, a
 signature, or the IDL.
 
-#### Scenario: A successful upload is tracked (manual)
+#### Scenario: A successful upload is tracked
 
 - **WHEN** `anchor idl init` succeeds on Devnet
 - **THEN** the memory provider records `idl_upload_started` and then `idl_uploaded`, both with
@@ -407,7 +408,7 @@ signature, or the IDL.
 - **THEN** the memory provider records `idl_upload_started` and then `idl_uploaded`, both with
   `{ target: "metadata", cluster: "custom" }`, not `devnet`
 
-#### Scenario: A mainnet refusal is tracked (manual)
+#### Scenario: A mainnet refusal is tracked
 
 - **WHEN** the endpoint is mainnet-beta and the user runs `anchor idl init`
 - **THEN** the memory provider records `idl_upload_started` with `{ target: "metadata", cluster: "mainnet-beta" }`
@@ -420,10 +421,10 @@ signature, or the IDL.
 not JSON or the IDL is not in the Anchor 0.30+ format, `not_deployed` when the program is not on the cluster, `authority` when the program
 has no upgrade authority or the wallet is not it, `rejected` when the wallet declines the approval, `mainnet` when
 the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send leaves a buffer the
-terminal names, `send_failed` for any other failure after the first transaction was sent, and `rpc` for any other
+terminal names, `send_failed` for any other failure after the first transaction was submitted to the cluster, and `rpc` for any other
 failure before it, an endpoint that does not say which network it serves included.
 
-#### Scenario: A wrong wallet is tracked (manual)
+#### Scenario: A wrong wallet is tracked
 
 - **WHEN** the connected wallet is not the upgrade authority and the user runs `anchor idl init` on Devnet
 - **THEN** the memory provider records `idl_upload_failed` with
@@ -443,7 +444,7 @@ For `fetch`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer
 `cluster` is as in the upload events. A command refused on mainnet SHALL send `idl_command_started` and then
 `idl_command_failed`. No event SHALL carry an address, a signature, a path, or an IDL.
 
-#### Scenario: A fetch is tracked (manual)
+#### Scenario: A fetch is tracked
 
 - **WHEN** `anchor idl fetch <PROGRAM_ID>` prints an IDL on Devnet
 - **THEN** the memory provider records `idl_command_started` and then `idl_command_succeeded`, both with
@@ -456,23 +457,23 @@ not exist, `invalid` when the file is not JSON, the IDL is not in the Anchor 0.3
 not hold a complete IDL, or `write-buffer`'s `--buffer` names the program's metadata account, `not_deployed` when the program is not on the
 cluster, `authority` when the connected wallet may not act on the account, `rejected` when the wallet declines the
 approval, `mainnet` when the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send
-leaves a buffer the terminal names, `send_failed` for any other failure after the first transaction was sent, `rpc`
+leaves a buffer the terminal names, `send_failed` for any other failure after the first transaction was submitted to the cluster, `rpc`
 for any other failure before it, and `unsupported` for `build` and `fetch-historical`, which send this event alone,
 with their name as `command`.
 
-#### Scenario: A close refused on mainnet is tracked (manual)
+#### Scenario: A close refused on mainnet is tracked
 
 - **WHEN** the endpoint is mainnet-beta and the user runs `anchor idl close <PROGRAM_ID>`
 - **THEN** the memory provider records `idl_command_started` and then `idl_command_failed` with
   `{ command: "close", cluster: "mainnet-beta", reason: "mainnet" }`, and no transaction is sent
 
-#### Scenario: A fetch without a published IDL is tracked (manual)
+#### Scenario: A fetch without a published IDL is tracked
 
 - **WHEN** the program has no published IDL and the user runs `anchor idl fetch <PROGRAM_ID>` on Devnet
 - **THEN** the memory provider records `idl_command_failed` with
   `{ command: "fetch", cluster: "devnet", reason: "not_found" }`
 
-#### Scenario: An unsupported subcommand is tracked (manual)
+#### Scenario: An unsupported subcommand is tracked
 
 - **WHEN** the user runs `anchor idl fetch-historical <PROGRAM_ID>` on Devnet
 - **THEN** the memory provider records `idl_command_failed` with

@@ -203,8 +203,10 @@ conflicts with the edits and keeps them.
 - [The command work depends on #131] → #131 merged into `master` as `e1af2dfc2`, which this branch contains. The
   requirement the `mainnet-deploy-warning` delta modifies is in `openspec/specs/mainnet-deploy-warning/spec.md`, so
   `openspec archive` applies the delta.
-- [An upload outlives its blockhash] → Every transaction shares one blockhash. A large IDL on a slow RPC can expire it
-  midway. The command prints the failed transaction, and running it again starts a new write.
+- [An upload outlives its blockhash] → Every transaction shares one blockhash, read after planning, the last request
+  before the wallet's one approval. A large IDL on a slow RPC, or a slow approval, can still expire it midway: the
+  command prints that the transactions expired and to run it again, then the line for any buffer the send left, and
+  running it again finishes the upload over that buffer.
 - [An external wallet without `signAllTransactions`] → Not tested. The manual scenario "One approval from an
   external wallet" covers it before merge.
 - [The spike was written on an older base] → Its imports from `@solana/kit` and the 0.11.0 client are checked by
