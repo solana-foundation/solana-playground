@@ -224,7 +224,7 @@ conflicts with the edits and keeps them.
   `wbdi-flow` task 3.2 decides it for the Flow view's read.
 - [The Program Metadata program's rules were read at `main`] → The deployed program can differ. Task 3.1 runs
   `close` and the buffer subcommands on Devnet.
-- [The PR grows] → Section 4 of [tasks.md](tasks.md) about doubles the change. The tasks stay in one PR so that
+- [The PR grows] → Section 4 of [tasks.md](https://github.com/solana-foundation/solana-playground/blob/e8da5e547c73621f317d5bef87f2bfc1b7154202/openspec/changes/terminal-anchor-idl/tasks.md) about doubles the change. The tasks stay in one PR so that
   `master` never holds a terminal with fewer `anchor idl` subcommands than Anchor 1.1.2.
 - [Bundle size] → The Program Metadata client and Kit's planner are added, and the `anchor-cli` wasm module is
   removed. `yarn bundle:info` records the difference in task 2.2, and again in task 3.2 after section 4.
@@ -235,7 +235,7 @@ conflicts with the edits and keeps them.
 
 ## Migration Plan
 
-All tasks land in one PR, in the order of [tasks.md](tasks.md). Reverting the PR restores `wasm/anchor-cli` and the
+All tasks land in one PR, in the order of [tasks.md](https://github.com/solana-foundation/solana-playground/blob/e8da5e547c73621f317d5bef87f2bfc1b7154202/openspec/changes/terminal-anchor-idl/tasks.md). Reverting the PR restores `wasm/anchor-cli` and the
 previous command. IDLs already in legacy IDL accounts stay on chain and are not touched.
 
 ## Open Questions

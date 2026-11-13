@@ -250,18 +250,25 @@ from the site root.
 ### Requirement: Default paths build the real wasm packages
 
 With `USE_WASM_STUBS` unset, every path that builds, serves, or tests
-`client-v2` SHALL use the six real `wasm/<name>/pkg` packages compiled from
-Rust: `yarn setup`, `yarn build`, the compose `v2` and `v2-prod` profiles, and
+`client-v2` SHALL use the real `wasm/<name>/pkg` packages compiled from
+Rust, one for each name in `WASM_PACKAGES` (`client-v2/scripts/wasm-stubs.sh`):
+`yarn setup`, `yarn build`, the compose `v2` and `v2-prod` profiles, and
 the `client-v2.yml` workflow on pushes to `master` and on every pull request.
 That workflow SHALL fail when a job it requires was skipped, so a skipped wasm
-build cannot pass as success.
+build cannot pass as success. `anchor-cli` SHALL NOT be one of the packages.
 
 #### Scenario: Setting up a checkout (manual)
 
 - **WHEN** `yarn setup` runs in `client-v2/` with `USE_WASM_STUBS` unset
-- **THEN** it builds the six packages from `wasm/` and installs them, and no
-  `wasm/<name>/pkg/package.json` or installed copy carries the version
-  `0.0.0-stub`
+- **THEN** it builds every package `WASM_PACKAGES` names from `wasm/` and
+  installs them, and no `wasm/<name>/pkg/package.json` or installed copy
+  carries the version `0.0.0-stub`
+
+#### Scenario: No anchor-cli package (manual)
+
+- **WHEN** `yarn setup` has run in `client-v2/`
+- **THEN** no `wasm/anchor-cli` folder exists, and
+  `client-v2/node_modules/@solana-playground` holds no `anchor-cli`
 
 #### Scenario: A pull request into master (manual)
 
@@ -288,7 +295,7 @@ build cannot pass as success.
 A Vercel install SHALL refuse to run when `USE_WASM_STUBS=true` is set. The
 Vercel build, and the fast production deploy in `Makefile.vercel`, SHALL fail
 before deploying when the bundle or the installed packages carry a stub, or
-when the bundle lacks any of the six real packages.
+when the bundle lacks any of the real packages.
 
 #### Scenario: The variable set on a deployment (manual)
 
@@ -301,7 +308,7 @@ when the bundle lacks any of the six real packages.
 
 - **WHEN** `node scripts/wasm-stubs.mjs check-build build` runs on a build
   whose JavaScript carries the text `local dev stub`, or lacks the
-  wasm-bindgen module of any of the six packages
+  wasm-bindgen module of any package `WASM_PACKAGES` names
 - **THEN** it exits non-zero and names each stub file and each missing package
 
 #### Scenario: The fast production deploy on a stub (manual)
@@ -309,7 +316,7 @@ when the bundle lacks any of the six real packages.
 - **WHEN** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`
   runs with `USE_WASM_STUBS=true`, or with a `wasm/<name>/pkg/package.json`
   or `client-v2/node_modules/@solana-playground/<name>/package.json` whose
-  version is `0.0.0-stub`, for any of the six packages
+  version is `0.0.0-stub`, for any package `WASM_PACKAGES` names
 - **THEN** it exits non-zero before it pulls, builds, or deploys, naming the
   variable or the stub manifest
 
@@ -328,8 +335,8 @@ workflow set. Any other value SHALL mean the real packages.
 #### Scenario: Setting up on the stubs by name (manual)
 
 - **WHEN** `yarn setup:with-stubs` runs
-- **THEN** each of the six `wasm/<name>/pkg` folders holds a stub with the
-  version `0.0.0-stub`, and no Rust is compiled
+- **THEN** each `wasm/<name>/pkg` folder `WASM_PACKAGES` names holds a stub
+  with the version `0.0.0-stub`, and no Rust is compiled
 
 #### Scenario: The stub workflow (manual)
 
@@ -360,8 +367,8 @@ the command that runs on them by request.
 
 ### Requirement: The bundle size snapshot measures the real wasm packages
 
-`client-v2/bench/BUNDLE.md` SHALL be generated from a build on the six real
-wasm packages. `yarn bundle:info` SHALL refuse to write it from a build that
+`client-v2/bench/BUNDLE.md` SHALL be generated from a build on the real wasm
+packages. `yarn bundle:info` SHALL refuse to write it from a build that
 lacks any of them, and the snapshot test SHALL be skipped, not failed, when
 `USE_WASM_STUBS=true`.
 
