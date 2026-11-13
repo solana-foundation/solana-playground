@@ -114,6 +114,7 @@ const logger = createLogger("tutorial-conversation:transactions");
 const INSTRUCTION = /^Program log: Instruction: (\w+)/;
 /** `AnchorError thrown in ...` or `AnchorError occurred.` */
 const ANCHOR_ERROR =
+  // eslint-disable-next-line security/detect-unsafe-regex -- one program log line, which the runtime caps at 10 kB; worst case quadratic
   /AnchorError.*Error Code: (\w+)\. Error Number: (\d+)\.(?: Error Message: (.*?)\.?$)?/;
 const CUSTOM_ERROR = /custom program error: 0x([0-9a-f]+)/i;
 const INVOKE = /^Program (\w+) invoke \[\d+\]$/;
@@ -151,6 +152,7 @@ export const programLines = (log: string[], programId: string): string[] => {
 const matcher = (pattern: string | undefined): ((line: string) => boolean) => {
   if (pattern === undefined) return () => true;
   try {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- a shipped tutorial's pattern, which `yarn tutorial:check` compiles
     const re = new RegExp(pattern, "i");
     return (line) => re.test(line);
   } catch (e) {

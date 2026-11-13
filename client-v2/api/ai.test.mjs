@@ -297,12 +297,14 @@ describe("GET /api/ai/status", () => {
 describe("vercel.json routing of /api/ai/status", () => {
   /** A rewrite's `source` as Vercel matches it: `:name+` is one or more segments, the rest a regex */
   const matches = (source, path) =>
+    // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
     new RegExp(`^${source.replace(/:[A-Za-z]+\+/g, "[^/]+(?:/[^/]+)*")}$`).test(
       path
     );
 
   const firstRewrite = async (path) => {
     const config = JSON.parse(
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
       await readFile(new URL("../vercel.json", import.meta.url), "utf8")
     );
     return config.rewrites.find(({ source }) => matches(source, path));

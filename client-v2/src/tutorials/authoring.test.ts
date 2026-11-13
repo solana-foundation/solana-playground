@@ -26,6 +26,7 @@ const AUTHORING = readFileSync(join(__dirname, "AUTHORING.md"), "utf8");
 const blocks = (tag: string): unknown[] =>
   Array.from(
     AUTHORING.matchAll(
+      // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
       new RegExp("^```json " + tag + "\\n([\\s\\S]*?)^```$", "gm")
     )
   ).map((m) => JSON.parse(m[1]));
@@ -226,9 +227,11 @@ const definitions = (): [string, TutorialDefinition][] =>
   readdirSync(__dirname, { withFileTypes: true })
     .filter((d) => d.isDirectory())
     .map((d) => [d.name, join(__dirname, d.name, "tutorial.json")])
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
     .filter(([, file]) => existsSync(file))
     .map(([name, file]) => [
       name,
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
       JSON.parse(readFileSync(file, "utf8")) as TutorialDefinition,
     ]);
 

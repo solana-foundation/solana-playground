@@ -12,7 +12,7 @@ export type GistRef = {
 const HEX_REGEX = /^[0-9a-f]+$/i;
 
 /** GitHub logins: letters, digits and single dashes */
-const OWNER_REGEX = /^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i;
+const OWNER_REGEX = /^(?!-)[a-z\d-]+(?<!-)$/i;
 
 /** Where gist pages live */
 const PAGE_HOSTS = ["gist.github.com", "www.gist.github.com"];
@@ -121,6 +121,7 @@ if (import.meta.vitest) {
         { owner: "alice", id: "0123abcd", revision: "9f8e7d" },
       ],
       ["gist.github.com/alice/0123abcd", { owner: "alice", id: "0123abcd" }],
+      ["gist.github.com/a/0123abcd", { owner: "a", id: "0123abcd" }],
       ["https://gist.github.com/0123abcd", { id: "0123abcd" }],
       ["https://www.gist.github.com/0123abcd", { id: "0123abcd" }],
       [
@@ -169,6 +170,7 @@ if (import.meta.vitest) {
       "https://gist.github.com/alice/0123abcd/9f8e7d/extra",
       "https://gist.github.com/alice/0123abcd/revisions",
       "https://gist.github.com/-alice/0123abcd",
+      "https://gist.github.com/alice-/0123abcd",
       "https://gist.githubusercontent.com/alice/0123abcd/lib.rs",
       "https://gist.githubusercontent.com/-x/0123abcd/raw/lib.rs",
     ])("parseGistUrl(%s) is undefined", (input) => {

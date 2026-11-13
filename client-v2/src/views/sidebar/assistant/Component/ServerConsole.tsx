@@ -29,6 +29,7 @@ const ACTION =
 const LONG_DESCRIPTION = 220;
 
 /** A line that opens with an all-caps label, `IDENTIFIER:` or `ACCOUNT TYPES RETURNED (by entity.kind):` */
+// eslint-disable-next-line security/detect-unsafe-regex -- a line of the server console; worst case quadratic in that line
 const CAPS_LABEL = /^([A-Z][A-Z0-9 _-]*[A-Z0-9](?: \([^)\n]*\))?:)/gm;
 
 /** Tool descriptions are Markdown by convention; servers that write `LABEL:` headings get them in bold */

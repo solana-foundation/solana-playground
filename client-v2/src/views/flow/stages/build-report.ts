@@ -73,13 +73,16 @@ export const pickDiagnostic = (
   );
 };
 
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `[`, `E` and `]` delimit the optional code
 const HEADER = /^error(?:\[(E\d+)\])?: (.+)$/;
 // A top-level warning/note/help block. rustc emits these for lints and
 // linker notes that follow an error; they are not part of that error, so a
 // line like this must end the current diagnostic rather than feed its
 // excerpt. (Indented `= note: ...` lines under an error are unaffected -
 // they do not match `^`.)
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `[^\]]` stops at the bracket that closes it
 const OTHER_HEADER = /^(?:warning|note|help)(?:\[[^\]]+\])?: .+$/;
+// eslint-disable-next-line security/detect-unsafe-regex -- a line of compiler output; worst case quadratic in that line
 const LOCATION = /^\s*--> (?:\.\.?\/)*(.+?):(\d+):(\d+)\s*$/;
 // rustc's own summary lines ("could not compile ...", "aborting due to ...
 // previous error(s)") are not diagnostics of their own.

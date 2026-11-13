@@ -1264,6 +1264,7 @@ describe("a turn's failure", () => {
       answers: paused,
       reason: "paused",
       status: undefined,
+      // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
       message: new RegExp(
         `^The turn paused ${MAX_RESUMES + 1} times without finishing\\.$`
       ),
@@ -1289,6 +1290,7 @@ describe("a turn's failure", () => {
       ],
       reason: "capped",
       status: 429,
+      // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
       message: new RegExp(`^${REFUSAL_MESSAGES[DAILY_CAP_REASON]}$`),
     },
     {
@@ -1304,6 +1306,7 @@ describe("a turn's failure", () => {
       ],
       reason: "capped",
       status: 503,
+      // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
       message: new RegExp(`^${REFUSAL_MESSAGES[POOL_EXHAUSTED_REASON]}$`),
     },
     {

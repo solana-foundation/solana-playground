@@ -20,6 +20,7 @@ const hex = (r: number, g: number, b: number, a: number) =>
   `#${byte(r)}${byte(g)}${byte(b)}${a < 1 ? byte(a * 255) : ""}`;
 
 const RGB =
+  // eslint-disable-next-line security/detect-unsafe-regex -- linear: the digit, `.` and separator classes are disjoint
   /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/;
 /** A channel as the browser serialises it, out of gamut or in exponent form */
 const N = "(-?[\\d.]+(?:e[-+]?\\d+)?)";

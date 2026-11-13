@@ -379,6 +379,7 @@ export class PgJsRuntime {
    */
   private static async _getImports(code: string) {
     const importRegex =
+      // eslint-disable-next-line security/detect-unsafe-regex -- the user's own script, run in their own tab
       /import\s+(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["|'](.+)["|']/gm;
     let importMatch: RegExpExecArray | null;
 
@@ -398,6 +399,7 @@ export class PgJsRuntime {
           .map((statement) => statement.trim())
           .filter(Boolean)
           .map((statement) => {
+            // eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s+as\s+` starts with whitespace, which `\w` never matches
             const result = /(\w+)(\s+as\s+(\w+))?/.exec(statement)!;
             return { named: result[1], renamed: result[3] };
           });

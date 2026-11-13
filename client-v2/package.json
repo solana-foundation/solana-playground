@@ -200,7 +200,7 @@
     "check-md": "markdownlint-cli2",
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
-    "lint": "eslint --max-warnings 2311 src api e2e scripts eslint-plugin-layers",
+    "lint": "eslint --max-warnings 2216 src api e2e scripts eslint-plugin-layers",
     "lint:layers": "eslint --quiet src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",

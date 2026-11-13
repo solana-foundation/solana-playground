@@ -65,6 +65,7 @@ const params = (list: string): string[] => {
 const shapeOfSource = (source: string): Shape => {
   const body = programModule(source);
   const shape: Shape = {};
+  // eslint-disable-next-line security/detect-unsafe-regex -- reads the repository's shipped tutorials
   for (const fn of body.matchAll(/pub fn (\w+)\s*(?:<[^>]*>)?\s*\(/g)) {
     // The parameter list runs to the parenthesis that closes it
     const start = (fn.index ?? 0) + fn[0].length;
@@ -105,6 +106,7 @@ const tutorials = readdirSync(__dirname, { withFileTypes: true })
   .filter((e) => e.isDirectory() && !e.name.startsWith("__"))
   .map((e) => join(__dirname, e.name, "tutorial.json"))
   .filter(existsSync)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
   .map((path) => JSON.parse(readFileSync(path, "utf8")) as TutorialDefinition)
   .filter((d) => d.framework === "Anchor");
 

@@ -14,7 +14,7 @@ Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1.
   `yarn dev` starts and shows a type error in the overlay. HOO-2870.
 - [x] 1.2 Add `eslint-plugin-no-unsanitized`, `@microsoft/eslint-plugin-sdl` and `eslint-plugin-security` at their
   current releases with the rules, levels and files in design.md, Decision 4; fix or disable with a reason every new
-  error; raise `--max-warnings` by the new warning count. Verify: each scenario under the first three requirements of
+  error; clear every new warning, fixed or disabled with a reason, so `--max-warnings` is unchanged. Verify: each scenario under the first three requirements of
   `specs/security-checks/spec.md` gives the stated result on a scratch file, and `yarn run check` passes. Depends on
   1.1. Ticket to file.
 

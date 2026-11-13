@@ -21,7 +21,8 @@ export const programModule = (source: string): string => {
  */
 export const programInstructions = (source: string): string[] =>
   Array.from(
-    programModule(source).matchAll(/pub fn (\w+)\s*(?:<[^>]*>)?\s*\(/g),
+    // eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s*`, `<[^>]*>` and `\(` start with disjoint characters
+    programModule(source).matchAll(/pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g),
     (m) => m[1]
   );
 

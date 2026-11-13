@@ -9,6 +9,7 @@ export interface MarkdownSection {
 /** A fence opens or closes a code block, inside which a `#` is not a heading */
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
 /** An ATX heading: `## Title`, with or without closing hashes */
+// eslint-disable-next-line security/detect-unsafe-regex -- a line of a shipped doc page; worst case quadratic in that line
 const HEADING = /^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
 
 /**

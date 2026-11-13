@@ -157,6 +157,7 @@ const isNoProgramFile = (path: string) =>
  */
 const isSkippedImportPath = (path: string) =>
   /(^|\/)(\.[^/.][^/]*|\.\.|node_modules)(\/|$)/.test(path) ||
+  // eslint-disable-next-line security/detect-unsafe-regex -- a project file path; worst case quadratic in its length
   (/(^|\/)target(\/|$)/.test(path) && !/(^|\/)src\/(.+\/)?target\//.test(path));
 
 /** A file dropped into Import › From files: the drop zone adds its `path` */
@@ -175,6 +176,7 @@ const TEST_FILE_REGEX = /\.(test|spec)\.[jt]sx?$/;
 const NO_PROGRAM_FOLDER = { CLIENT: "client", TESTS: "tests" } as const;
 
 /** A path in one of `NO_PROGRAM_FOLDER`'s folders */
+// eslint-disable-next-line security/detect-non-literal-regexp -- built from NO_PROGRAM_FOLDER's constants
 const IN_NO_PROGRAM_FOLDER_REGEX = new RegExp(
   `^(${Object.values(NO_PROGRAM_FOLDER).join("|")})/`
 );
@@ -183,6 +185,7 @@ const IN_NO_PROGRAM_FOLDER_REGEX = new RegExp(
  * A leading folder `toNoProgramLayoutWith` drops, since it puts the file back
  * under `client/` or `tests/` itself; `test/` is read as `tests/`
  */
+// eslint-disable-next-line security/detect-non-literal-regexp -- built from NO_PROGRAM_FOLDER's constants
 const LEADING_FOLDER_REGEX = new RegExp(
   `^(${Object.values(NO_PROGRAM_FOLDER).join("|")}|test)/`
 );
@@ -490,6 +493,7 @@ export class PgFramework {
     const read = await PgFramework.readImportFiles(files);
     const folders = new Set(
       files.map(
+        // eslint-disable-next-line security/detect-unsafe-regex -- linear: anchored, and `[^/]` stops at the separator
         ({ path, name }) => /^(?:\.?\/)?([^/]+)\//.exec(path ?? name)?.[1]
       )
     );

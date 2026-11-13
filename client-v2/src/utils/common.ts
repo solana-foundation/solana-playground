@@ -741,6 +741,7 @@ export class PgCommon {
    * @returns whether the given string is parsable to a float
    */
   static isFloat(str: string) {
+    // eslint-disable-next-line security/detect-unsafe-regex -- linear: `[.,]` separates the two digit runs
     const floatRegex = /^-?\d+(?:[.,]\d*?)?$/;
     if (!floatRegex.test(str)) return false;
 
@@ -1335,7 +1336,8 @@ export class PgCommon {
    * @param value value to match
    * @returns the match result
    */
-  static matchAll(content: string, value: string | RegExp) {
+  static matchAll(content: string, value: RegExp) {
+    // eslint-disable-next-line security/detect-non-literal-regexp -- copies a RegExp the caller wrote, to add the g flag
     return [...content.matchAll(new RegExp(value, "g"))];
   }
 

@@ -97,14 +97,17 @@ const PREFERRED_CLIENTS = [
  * statement)
  */
 const hasDeclarationFor = (name: string) => (content: string) =>
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^(export\\s+)?(const|let|var|function|class)\\s+${name}\\b`,
     "m"
   ).test(content) ||
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^(export\\s+)?(const|let|var)\\s*[{[](?:[^}\\]=]*?[,:])?\\s*${name}\\b(?!\\s*:)[^}\\]=]*[}\\]]\\s*=`,
     "m"
   ).test(content) ||
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(
     `^\\s*import\\s+[^;'"]*?\\b${name}\\b[^;'"]*?\\s+from\\s+["']`,
     "m"
@@ -115,6 +118,7 @@ const hasDeclarationFor = (name: string) => (content: string) =>
  * property (`a.pg`) or part of a longer one (`mypg`)
  */
 const isGlobalUsedFor = (name: string) => (content: string) =>
+  // eslint-disable-next-line security/detect-non-literal-regexp -- `name` is a `\w+` identifier: a Playground global or one `importedNameOf` read
   new RegExp(`(^|[^\\w$.])${name}\\b`, "m").test(content);
 
 /**
