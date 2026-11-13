@@ -4,7 +4,10 @@ import { describe, expect, it } from "vitest";
 
 import { readIdl } from "@/entities/idl";
 import type { TutorialDefinition } from "@/entities/tutorial";
-import { PUB_FN } from "@/features/tutorial-conversation/model/program-source";
+
+/** A `pub fn`'s name, its generics and the `(` that opens its parameters */
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s*`, `<[^>]*>` and `\(` start with disjoint characters
+const PUB_FN = /pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g;
 
 /**
  * A step's `idl` is generated from its target program (`yarn tutorial:idl`),

@@ -16,7 +16,7 @@ export const programModule = (source: string): string => {
 
 /** A `pub fn`'s name, its generics and the `(` that opens its parameters */
 // eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s*`, `<[^>]*>` and `\(` start with disjoint characters
-export const PUB_FN = /pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g;
+const PUB_FN = /pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g;
 
 /**
  * The instructions a program's source defines: the `pub fn`s of its
