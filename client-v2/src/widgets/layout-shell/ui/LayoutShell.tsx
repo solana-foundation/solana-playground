@@ -10,6 +10,7 @@ import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
+import { useCreateItem } from "@/views/sidebar/explorer/Component/useCreateItem";
 
 import { onDidRequestConsole } from "../model/console-request";
 import { editorHeadHost } from "../model/editor-head-host";
@@ -183,6 +184,7 @@ const LayoutShell = ({
   const [page, setPage] = useState<PhonePage>("work");
   const [view, setView] = useState<WorkView>("code");
   const [filesOpen, setFilesOpen] = useState(false);
+  const { createItem } = useCreateItem();
   const [phoneConsole, setPhoneConsole] = useState(false);
   // Held in state, not read off `PgFlow.state`, so a stage change re-renders
   const [flowStage, setFlowStage] = useState(PgFlow.state.stage);
@@ -716,6 +718,18 @@ const LayoutShell = ({
           hostRef={editorHeadHost}
           filesKey={keyLabel(FILES_KEY, PgCommon.getOS())}
           terminalKey={keyLabel(CONSOLE_KEY, PgCommon.getOS())}
+          title={
+            assistantShown
+              ? undefined
+              : PgExplorer.currentWorkspaceName ?? undefined
+          }
+          onNewFile={async () => {
+            PgView.showFiles();
+            // A folded column mounts on the request; the tree is drawn a
+            // moment after (`NoFileOpen` waits the same)
+            await PgCommon.sleep(100);
+            await createItem();
+          }}
           controls={
             <BaseBarControls
               // The assistant's head has its own Collapse, so the row offers

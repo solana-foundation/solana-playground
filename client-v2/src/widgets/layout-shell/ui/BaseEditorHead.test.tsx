@@ -34,6 +34,8 @@ const draw = (props: BaseEditorHeadProps) =>
         hostRef={props.hostRef}
         filesKey={props.filesKey}
         terminalKey={props.terminalKey}
+        title={props.title}
+        onNewFile={props.onNewFile}
       />
     </TooltipProvider>
   );
@@ -129,4 +131,45 @@ it("names the keys in the toggles' hints", async () => {
   );
   await userEvent.hover(screen.getByRole("button", { name: "Files" }));
   expect((await screen.findAllByText("Files (⌘E)")).length).toBeGreaterThan(0);
+});
+
+const withTabs = (showTabs: boolean) => ({
+  files: closed(),
+  terminal: closed(),
+  showTabs,
+  hostRef: vi.fn(),
+  filesKey: "Ctrl+E",
+  terminalKey: "Ctrl+J",
+  onNewFile: vi.fn(),
+});
+
+it("calls onNewFile from the + after the tabs", async () => {
+  const props = withTabs(true);
+  draw(props);
+  await userEvent.click(screen.getByRole("button", { name: "New file" }));
+  expect(props.onNewFile).toHaveBeenCalledTimes(1);
+});
+
+it("draws no + while the tab row is hidden", () => {
+  draw(withTabs(false));
+  expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
+});
+
+it("names the project only when given a title", () => {
+  const { rerender } = draw(withTabs(true));
+  expect(headElement().textContent).not.toContain("anchor-demo");
+  rerender(
+    <TooltipProvider>
+      <BaseEditorHead
+        files={closed()}
+        terminal={closed()}
+        showTabs
+        hostRef={vi.fn()}
+        filesKey="Ctrl+E"
+        terminalKey="Ctrl+J"
+        title="anchor-demo"
+      />
+    </TooltipProvider>
+  );
+  expect(headElement().textContent).toContain("anchor-demo");
 });
