@@ -34,6 +34,8 @@ const draw = (props: BaseEditorHeadProps) =>
         hostRef={props.hostRef}
         filesKey={props.filesKey}
         terminalKey={props.terminalKey}
+        title={props.title}
+        onNewFile={props.onNewFile}
       />
     </TooltipProvider>
   );
@@ -151,6 +153,7 @@ describe("the tree's dropdown", () => {
           filesKey="⌘E"
           terminalKey="⌘J"
           tree={dropdown}
+          onNewFile={vi.fn()}
         />
         {/* Stands for a menu the tree opened, portalled out of it */}
         <div role="menu">
@@ -193,13 +196,55 @@ describe("the tree's dropdown", () => {
     expect(screen.queryByText("tree body")).toBeNull();
   });
 
-  it("stays open for a press in a menu it opened, or on Files, and closes for one elsewhere", async () => {
+  it("stays open for a press in a menu it opened, on Files or on New file, and closes for one elsewhere", async () => {
     const dropdown = tree({});
     drawWithTree(dropdown);
     await userEvent.click(screen.getByRole("button", { name: "Rename" }));
     await userEvent.click(screen.getByRole("button", { name: "Files" }));
+    await userEvent.click(screen.getByRole("button", { name: "New file" }));
     expect(dropdown.onClose).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Elsewhere" }));
     expect(dropdown.onClose).toHaveBeenCalledTimes(1);
   });
+});
+
+const withTabs = (showTabs: boolean) => ({
+  files: closed(),
+  terminal: closed(),
+  showTabs,
+  hostRef: vi.fn(),
+  filesKey: "Ctrl+E",
+  terminalKey: "Ctrl+J",
+  onNewFile: vi.fn(),
+});
+
+it("calls onNewFile from the + after the tabs", async () => {
+  const props = withTabs(true);
+  draw(props);
+  await userEvent.click(screen.getByRole("button", { name: "New file" }));
+  expect(props.onNewFile).toHaveBeenCalledTimes(1);
+});
+
+it("draws no + while the tab row is hidden", () => {
+  draw(withTabs(false));
+  expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
+});
+
+it("names the project only when given a title", () => {
+  const { rerender } = draw(withTabs(true));
+  expect(headElement().textContent).not.toContain("anchor-demo");
+  rerender(
+    <TooltipProvider>
+      <BaseEditorHead
+        files={closed()}
+        terminal={closed()}
+        showTabs
+        hostRef={vi.fn()}
+        filesKey="Ctrl+E"
+        terminalKey="Ctrl+J"
+        title="anchor-demo"
+      />
+    </TooltipProvider>
+  );
+  expect(headElement().textContent).toContain("anchor-demo");
 });

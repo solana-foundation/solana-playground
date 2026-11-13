@@ -13,9 +13,11 @@ while the user wants it.
 From 768 px wide the work area SHALL show, under the stage tabs, a 44 px
 head (`#editor-head`) that spans the files column and the stage whether the
 column is open or not, and it SHALL be the only bar over a project's work
-column: no stage bar is drawn there. On the Write stage its left part SHALL
-hold the editor's tab row (`#tabs`), with the wallet button at its end. Its
-right end SHALL hold, in this order: "Files" (`#editor-head-files`, a
+column: no stage bar is drawn there. While the assistant is hidden, the
+head SHALL start with the project's name, in the assistant head's type. On
+the Write stage its left part SHALL then hold the editor's tab row (`#tabs`),
+with the wallet button at its end, and right after the last tab "New file"
+(`#editor-head-new-file`, a +). Its right end SHALL hold, in this order: "Files" (`#editor-head-files`, a
 folder) and "Terminal" (`#editor-head-terminal`, `>_`), each an 18 px icon
 in a 32 px button with an 8 px radius, carrying `aria-pressed` and taking
 the hover fill as its pressed state; then the project's Share button; then,
@@ -46,6 +48,12 @@ files column opens or closes.
 - **THEN** the head's left edge, its width and the toggles' positions are
   what they were before the click
 
+#### Scenario: The project's name moves to the head
+
+- **WHEN** a user on a 1440 px wide window clicks "Collapse assistant"
+- **THEN** `#editor-head` starts with the project's name, left of `#tabs`;
+  "Expand assistant" takes the name out of the head again
+
 #### Scenario: The head on another stage
 
 - **WHEN** a user on a 1440 px wide window picks the Build stage
@@ -56,10 +64,12 @@ files column opens or closes.
 
 The project tree SHALL be shown in one of two ways, as in a tutorial:
 docked, as a column left of the stage under the head (240 px wide by
-default and resizable, a 1 px line on its right, "+ New file" at its foot,
-and "Undock the files" at its top right), or as a dropdown under the head
-(`aria-label="Files"`) holding the same tree and "+ New file", with «Dock
-beside the editor» at its top right. "Files" in the head SHALL undock a
+default and resizable, a 1 px line on its right, and "Undock the files" at
+its top right), or as a dropdown under the head (`aria-label="Files"`)
+holding the same tree, with «Dock beside the editor» at its top right.
+Neither has a "New file" button of its own: the head's + SHALL show the
+tree as "Show files" does and start a new file's name field in it, in the
+active file's folder. "Files" in the head SHALL undock a
 docked, shown tree, and otherwise open or close the dropdown. «Dock beside
 the editor» SHALL dock the tree and close the dropdown; "Undock the files"
 SHALL undock it. The pin SHALL show only while the code area is wider than
@@ -105,8 +115,8 @@ column.
 
 #### Scenario: File actions from the tree
 
-- **WHEN** a user opens the tree as the dropdown, clicks "+ New file",
-  types `y.rs` and presses Enter, opens the dropdown again, then renames and
+- **WHEN** a user with the tree undocked clicks the head's "New file",
+  which opens the dropdown with a name field, types `y.rs` and presses Enter, opens the dropdown again, then renames and
   deletes `y.rs` from its menu
 - **THEN** `y.rs` opens and the dropdown closes, as a pick does; the tree's
   menu, the rename dialog and the delete dialog keep the dropdown open,

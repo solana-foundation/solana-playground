@@ -68,7 +68,7 @@ const boxOf = async (page: Page, selector: string) =>
 
 /** Where the tree shows, and how a test reads that it still does */
 interface TreePlace {
-  /** Brings the tree back after "+ New file" opened the new file */
+  /** Brings the tree back after the head's "New file" opened the new file */
   reopen: (page: Page) => Promise<void>;
   /** The tree still shows where it did */
   stays: (page: Page) => Promise<void>;
@@ -110,13 +110,15 @@ const editorOpened = (page: Page, name: string) =>
   );
 
 /**
- * "+ New file", then a rename and a delete from the file's menu, in whatever
+ * The head's "New file", then a rename and a delete from the file's menu, in whatever
  * shows the tree; the menu and its dialogs portal out of the dropdown and
  * keep it open, and so does the open file's re-open under its new name or,
  * after the delete, of the next file, which nobody picked
  */
 const fileActionsWith = (place: TreePlace) => async (page: Page) => {
+  // The head's +: it shows the tree, wherever it shows, with the field in it
   await page.getByRole("button", { name: "New file" }).click();
+  await place.stays(page);
   const field = page.locator("#root-dir input");
   await expect(field).toBeFocused();
   await page.keyboard.type("y.rs");
@@ -326,8 +328,6 @@ test.describe("at 1440", () => {
     page,
   }) => {
     await firstVisit(page);
-    await openFiles(page);
-    await expect(filesDropdown(page)).toBeVisible();
     await fileActionsWith(throughDropdown)(page);
   });
 

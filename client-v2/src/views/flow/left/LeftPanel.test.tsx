@@ -29,9 +29,6 @@ vi.mock("../../sidebar/explorer/Component", async () => {
     },
   };
 });
-vi.mock("../../sidebar/explorer/Component/useCreateItem", () => ({
-  useCreateItem: () => ({ createItem: vi.fn() }),
-}));
 
 import { requireFor } from "../../../test-utils/require-for";
 import { forgetColumn } from "./kept-column";
@@ -62,10 +59,11 @@ describe("LeftPanel in the flush frame", () => {
     }
   );
 
-  it("shows the tree and its New file footer", () => {
+  // New file is the editor head's +, so the column has no footer
+  it("shows the tree with no New file footer", () => {
     draw(false);
     expect(document.getElementById("root-dir")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "+ New file" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /new file/i })).toBeNull();
     expect(given.treeMounts).toBe(1);
   });
 

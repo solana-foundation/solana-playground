@@ -50,7 +50,7 @@ test("client-v2-files: Show files with the tree undocked", async ({
   await expect(filesDropdown(page).locator("#root-dir")).toBeVisible();
 });
 
-/** Creates a file from the Files column's foot, in `src` or under a path in it */
+/** Creates a file from the editor head's +, in `src` or under a path in it */
 const newFile = async (page: Page, name: string) => {
   await page.getByRole("button", { name: "New file" }).click();
   const field = page.locator("#root-dir input");

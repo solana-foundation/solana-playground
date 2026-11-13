@@ -1,4 +1,4 @@
-import { Folder, Terminal } from "lucide-react";
+import { Folder, Plus, Terminal } from "lucide-react";
 import type { ReactNode, RefCallback } from "react";
 
 import {
@@ -56,6 +56,13 @@ export interface BaseEditorHeadProps {
    * the head is the work's one bar, so Share and More live here
    */
   controls?: ReactNode;
+  /**
+   * The open project's name, set while the assistant is folded: its head
+   * names the project, so with it away the work would be unnamed
+   */
+  title?: string;
+  /** New file, the + after the tabs; drawn with the tab row */
+  onNewFile?: () => void;
 }
 
 /**
@@ -113,6 +120,8 @@ const BaseEditorHead = ({
   filesKey,
   terminalKey,
   controls,
+  title,
+  onNewFile,
 }: BaseEditorHeadProps) => (
   <Popover
     open={tree?.open ?? false}
@@ -132,11 +141,39 @@ const BaseEditorHead = ({
       row fills the head: the head draws the fill and the bottom line, so the
       row's own height and line would stack a second one under it. `#tabs` is
       `PgView.ids.TABS`, the id `components/Tabs` gives the row */}
+        {title && (
+          // The assistant's head's type, so the name reads the same in either place
+          <span className="max-w-48 shrink-0 truncate pr-2 pl-3 font-headline text-sm text-foreground">
+            {title}
+          </span>
+        )}
+        {/* Sized by its tabs, so the + follows the last one; it shrinks and
+          scrolls once they outgrow the head */}
         <div
           ref={hostRef}
           hidden={!showTabs}
-          className="min-w-0 flex-1 self-stretch [&>#tabs]:h-full [&>#tabs]:border-b-0"
+          className="min-w-0 self-stretch [&>#tabs]:h-full [&>#tabs]:border-b-0"
         />
+        {showTabs && onNewFile && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                id="editor-head-new-file"
+                // It opens the tree too, so a press with the dropdown up
+                // keeps it up for the new file's field
+                {...{ [FILES_TOGGLE]: "" }}
+                variant="ghost"
+                size="icon-sm"
+                className="size-8 shrink-0 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground dark:hover:bg-accent [&_svg:not([class*='size-'])]:size-4.5"
+                aria-label="New file"
+                onClick={onNewFile}
+              >
+                <Plus aria-hidden="true" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>New file</TooltipContent>
+          </Tooltip>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <HeadToggle
             id="editor-head-files"
@@ -159,8 +196,8 @@ const BaseEditorHead = ({
         </div>
       </div>
     </PopoverAnchor>
-    {/* The tree keeps its own scroll and its "+ New file" at the foot, so the
-      sheet gives it a height and no padding of its own */}
+    {/* The tree keeps its own scroll, so the sheet gives it a height and no
+      padding of its own */}
     <PopoverContent
       side="bottom"
       align="start"
