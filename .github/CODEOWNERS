@@ -1,0 +1,4 @@
+# GitHub requests a review from these owners on a pull request into the branch that holds this file.
+/client-v2/ @nchigryay @ocatave @iamanikeev @rogaldh
+/server/ @rogaldh
+/wasm/ @rogaldh
