@@ -75,7 +75,7 @@ describe("LeftPanel in the flush frame", () => {
   // The phone draws no editor head, so its sheet keeps the footer
   it("keeps New file at the foot of the phone's sheet", () => {
     createItem.mockClear();
-    render(<LeftPanel collapsed={false} sheet />);
+    render(<LeftPanel collapsed={false} sheet hasProgram />);
     fireEvent.click(screen.getByRole("button", { name: "+ New file" }));
     expect(createItem).toHaveBeenCalledTimes(1);
   });
