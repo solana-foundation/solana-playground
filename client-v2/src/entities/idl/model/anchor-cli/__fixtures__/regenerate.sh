@@ -14,11 +14,12 @@ if [ "$("$ANCHOR" --version)" != "anchor-cli 1.1.2" ]; then
   exit 1
 fi
 
-"$ANCHOR" idl convert legacy.json > legacy.convert.json
-"$ANCHOR" idl convert legacy.json --program-id "$PROGRAM_ID" > legacy.convert-program-id.json
-"$ANCHOR" idl convert legacy-no-address.json --program-id "$PROGRAM_ID" > legacy-no-address.convert-program-id.json
-"$ANCHOR" idl convert current.json --to-legacy > current.convert-to-legacy.json
-"$ANCHOR" idl convert current-full.json --program-id "$PROGRAM_ID" > current-full.convert-program-id.json
+# The JSON outputs are stored on one line; the test lays them out again as the binary printed them
+"$ANCHOR" idl convert legacy.json | jq -c . > legacy.convert.json
+"$ANCHOR" idl convert legacy.json --program-id "$PROGRAM_ID" | jq -c . > legacy.convert-program-id.json
+"$ANCHOR" idl convert legacy-no-address.json --program-id "$PROGRAM_ID" | jq -c . > legacy-no-address.convert-program-id.json
+"$ANCHOR" idl convert current.json --to-legacy | jq -c . > current.convert-to-legacy.json
+"$ANCHOR" idl convert current-full.json --program-id "$PROGRAM_ID" | jq -c . > current-full.convert-program-id.json
 "$ANCHOR" idl type current-full.json > current-full.type.txt
 
 # Fails unless `anchor <arguments after the status>` exits with that status

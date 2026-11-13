@@ -132,6 +132,12 @@ if (import.meta.vitest) {
     const fixture = (name: string) =>
       readFileSync(join(__dirname, "__fixtures__", name), "utf8");
 
+    /** What the binary printed for `name`: a JSON output is stored on one line, and the binary prints it with two-space indents and a final newline */
+    const printedOf = (name: string) =>
+      name.endsWith(".json")
+        ? `${JSON.stringify(JSON.parse(fixture(name)), undefined, 2)}\n`
+        : fixture(name);
+
     /** One input of `rejected.json`, as the text of a file */
     const rejected = (group: string, name: string) =>
       JSON.stringify(JSON.parse(fixture("rejected.json"))[group][name]);
@@ -172,7 +178,7 @@ if (import.meta.vitest) {
     ])(
       "prints $expected as the Anchor 1.1.2 binary did",
       async ({ expected, print, input }) => {
-        expect(await print(fixture(input))).toBe(fixture(expected));
+        expect(await print(fixture(input))).toBe(printedOf(expected));
       }
     );
 
