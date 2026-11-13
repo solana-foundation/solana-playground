@@ -1,0 +1,439 @@
+{
+  "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+  "metadata": {
+    "name": "legacy_vault",
+    "version": "0.1.0",
+    "spec": "0.1.0"
+  },
+  "docs": [
+    "A vault program",
+    "written for Anchor 0.29"
+  ],
+  "instructions": [
+    {
+      "name": "initialize_vault",
+      "docs": [
+        "Creates the vault"
+      ],
+      "discriminator": [
+        48,
+        191,
+        163,
+        44,
+        71,
+        129,
+        63,
+        164
+      ],
+      "accounts": [
+        {
+          "name": "vault_state",
+          "docs": [
+            "The vault"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  34,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  34
+                ]
+              },
+              {
+                "kind": "const",
+                "value": [
+                  1,
+                  2,
+                  255
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "vault_id"
+              },
+              {
+                "kind": "account",
+                "path": "user_profile.owner_key",
+                "account": "UserProfile"
+              },
+              {
+                "kind": "account",
+                "path": "payer_account"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "token_program"
+            }
+          },
+          "relations": [
+            "user_profile",
+            "user_profile.owner_key"
+          ]
+        },
+        {
+          "name": "user_profile",
+          "optional": true
+        },
+        {
+          "name": "payer_account",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_accounts",
+          "accounts": [
+            {
+              "name": "source_ata",
+              "writable": true
+            },
+            {
+              "name": "inner_group",
+              "accounts": [
+                {
+                  "name": "mint2022"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "vault_id",
+          "type": "u64"
+        },
+        {
+          "name": "parse_http_header",
+          "docs": [
+            "An acronym in a name"
+          ],
+          "type": "bool"
+        },
+        {
+          "name": "padding_bytes",
+          "type": {
+            "array": [
+              "u8",
+              7
+            ]
+          }
+        },
+        {
+          "name": "settings",
+          "type": {
+            "defined": {
+              "name": "VaultSettings"
+            }
+          }
+        }
+      ],
+      "returns": {
+        "option": "pubkey"
+      }
+    },
+    {
+      "name": "close",
+      "discriminator": [
+        98,
+        165,
+        201,
+        177,
+        108,
+        65,
+        206,
+        96
+      ],
+      "accounts": [],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "VaultState",
+      "discriminator": [
+        228,
+        196,
+        82,
+        165,
+        98,
+        210,
+        235,
+        152
+      ]
+    },
+    {
+      "name": "UserProfile",
+      "discriminator": [
+        32,
+        37,
+        119,
+        205,
+        179,
+        180,
+        13,
+        194
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "VaultInitialized",
+      "discriminator": [
+        180,
+        43,
+        207,
+        2,
+        18,
+        71,
+        3,
+        75
+      ]
+    },
+    {
+      "name": "VaultClosed",
+      "discriminator": [
+        238,
+        129,
+        38,
+        228,
+        227,
+        118,
+        249,
+        215
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "The signer is not the owner"
+    },
+    {
+      "code": 6001,
+      "name": "VaultFull"
+    }
+  ],
+  "types": [
+    {
+      "name": "VaultSettings",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "fee_bps",
+            "type": "u16"
+          },
+          {
+            "name": "generic_value",
+            "type": {
+              "generic": "T"
+            }
+          },
+          {
+            "name": "buffer",
+            "type": {
+              "array": [
+                "u8",
+                {
+                  "generic": "N"
+                }
+              ]
+            }
+          },
+          {
+            "name": "wrapped",
+            "type": {
+              "defined": {
+                "name": "Wrapper",
+                "generics": [
+                  {
+                    "kind": "type",
+                    "type": "u64"
+                  },
+                  {
+                    "kind": "type",
+                    "type": {
+                      "generic": "T"
+                    }
+                  },
+                  {
+                    "kind": "const",
+                    "value": "8"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "maybe_amount",
+            "type": {
+              "option": "i128"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultStatus",
+      "docs": [
+        "What the vault is doing"
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Idle"
+          },
+          {
+            "name": "Locked",
+            "fields": [
+              {
+                "name": "until_slot",
+                "type": "u64"
+              }
+            ]
+          },
+          {
+            "name": "Draining",
+            "fields": [
+              "u64",
+              {
+                "defined": {
+                  "name": "Entry"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Empty",
+            "fields": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "Entry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "type": "f64"
+          },
+          {
+            "name": "memo",
+            "type": "string"
+          },
+          {
+            "name": "raw",
+            "type": "bytes"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Lamports",
+      "type": {
+        "kind": "type",
+        "alias": "u64"
+      }
+    },
+    {
+      "name": "VaultState",
+      "docs": [
+        "The vault's state"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_count",
+            "docs": [
+              "How many items"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "history",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Entry"
+                }
+              }
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "VaultStatus"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserProfile",
+      "type": {
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "VaultInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "item_count",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultClosed",
+      "type": {
+        "kind": "struct",
+        "fields": []
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "VAULT_SEED",
+      "type": "string",
+      "value": "\"vault\""
+    },
+    {
+      "name": "MAX_ITEMS",
+      "type": {
+        "defined": {
+          "name": "usize"
+        }
+      },
+      "value": "8"
+    }
+  ]
+}

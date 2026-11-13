@@ -1,35 +1,24 @@
 // @vitest-environment node
 // Signing a web3.js transaction fails under jsdom, whose `Uint8Array` is another realm's
-import {
-  address,
-  getAddressEncoder,
-  getBase64Decoder,
-  getOptionEncoder,
-  getStructEncoder,
-  getU32Encoder,
-  getU64Encoder,
-  none,
-  type ReadonlyUint8Array,
-  some,
-  unwrapOption,
-} from "@solana/kit";
-import { Keypair, VersionedTransaction } from "@solana/web3.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { address, none, unwrapOption } from "@solana/kit";
+import { VersionedTransaction } from "@solana/web3.js";
 import {
   Compression,
   DataSource,
   Encoding,
   findCanonicalPda,
+  findNonCanonicalPda,
   Format,
   getInitializeInstructionDataDecoder,
   getMetadataEncoder,
-  getProgramDataPda,
-  LOADER_V3_PROGRAM_ADDRESS,
+  INITIALIZE_DISCRIMINATOR,
   PROGRAM_METADATA_PROGRAM_ADDRESS,
   unpackDirectData,
 } from "@solana-program/program-metadata";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { Endpoint } from "@/entities/cluster";
 import {
   initLogger,
   memoryProvider as logMemoryProvider,
@@ -41,53 +30,23 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 
-import { uploadProjectIdl } from "./project-idl";
-
-interface StubAccount {
-  owner: string;
-  executable: boolean;
-  data: ReadonlyUint8Array;
-}
-
-const keypairOf = (seed: number) =>
-  Keypair.fromSeed(new Uint8Array(32).fill(seed));
-const WALLET = keypairOf(1);
-const PROGRAM = address(keypairOf(2).publicKey.toBase58());
-const OTHER_WALLET = keypairOf(3).publicKey.toBase58();
-
-/** The accounts of the deployed program whose upgrade authority is `authority`, or that has none */
-const deployedBy = async (authority: string | undefined) => {
-  const [programData] = await getProgramDataPda(PROGRAM);
-  return new Map<string, StubAccount>([
-    [
-      PROGRAM,
-      {
-        owner: LOADER_V3_PROGRAM_ADDRESS,
-        executable: true,
-        data: getStructEncoder([
-          ["discriminator", getU32Encoder()],
-          ["programData", getAddressEncoder()],
-        ]).encode({ discriminator: 2, programData }),
-      },
-    ],
-    [
-      programData,
-      {
-        owner: LOADER_V3_PROGRAM_ADDRESS,
-        executable: false,
-        data: getStructEncoder([
-          ["discriminator", getU32Encoder()],
-          ["slot", getU64Encoder()],
-          ["authority", getOptionEncoder(getAddressEncoder())],
-        ]).encode({
-          discriminator: 3,
-          slot: 0n,
-          authority: authority ? some(address(authority)) : none(),
-        }),
-      },
-    ],
-  ]);
-};
+import {
+  connectionOf,
+  deployedBy,
+  instructionsFor,
+  OTHER_WALLET,
+  pricesOf,
+  PROGRAM,
+  type StubAccount,
+  stubRpc,
+  WALLET,
+  walletOf,
+} from "./__fixtures__/chain";
+import {
+  uploadNonCanonicalProjectIdlWith,
+  uploadProjectIdl,
+  uploadProjectIdlWith,
+} from "./project-idl";
 
 const idlAddress = async () => {
   const [metadata] = await findCanonicalPda({ program: PROGRAM, seed: "idl" });
@@ -113,88 +72,40 @@ const earlierIdl = (): StubAccount => ({
   }),
 });
 
-const answer = (
-  accounts: Map<string, StubAccount>,
-  { method, params }: { method: string; params: unknown[] }
-) => {
-  if (method === "getAccountInfo") {
-    const account = accounts.get(String(params[0]));
-    return {
-      context: { slot: 1 },
-      value: account
-        ? {
-            data: [getBase64Decoder().decode(account.data), "base64"],
-            executable: account.executable,
-            lamports: 1,
-            owner: account.owner,
-            rentEpoch: 0,
-            space: account.data.length,
-          }
-        : // eslint-disable-next-line unicorn/no-null -- the RPC answers `null` for an address that holds no account
-          null,
-    };
-  }
-  if (method === "getLatestBlockhash") {
-    return {
-      context: { slot: 1 },
-      value: {
-        blockhash: "11111111111111111111111111111111",
-        lastValidBlockHeight: 100,
-      },
-    };
-  }
-  if (method === "getMinimumBalanceForRentExemption") return 890_880;
-  throw new Error(`The stub RPC has no answer for ${method}`);
-};
-
-/** Answers the RPC's requests from `accounts`, read at each request so a case may change them */
-const stubRpc = (accounts: Map<string, StubAccount>) =>
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-    const { id, method, params } = JSON.parse(String(init?.body));
-    const result = answer(accounts, { method, params });
-    return new Response(JSON.stringify({ jsonrpc: "2.0", id, result }));
-  });
-
-/** Signs with `keypair`, leaving a v0 transaction unsigned as a wallet that tests `version` for truthiness does */
-const walletOf = (keypair: Keypair) => {
-  const requests: VersionedTransaction[][] = [];
-  return {
-    publicKey: keypair.publicKey,
-    requests,
-    signAllTransactions: async (txs: VersionedTransaction[]) => {
-      requests.push(txs);
-      for (const tx of txs) if (tx.version) tx.sign([keypair]);
-      return txs;
-    },
-  };
-};
-
-/** Confirms every transaction and records the order of the sends and confirmations */
-const connectionOf = () => {
-  const sent: Uint8Array[] = [];
-  const steps: string[] = [];
-  return {
-    rpcEndpoint: Endpoint.DEVNET as string, // one of the Playground's own, so the events name `devnet`
-    sent,
-    steps,
-    sendRawTransaction: async (raw: Uint8Array) => {
-      sent.push(raw);
-      steps.push("send");
-      return `signature-${sent.length}`;
-    },
-    confirmTransaction: async (): Promise<{ value: { err: unknown } }> => {
-      steps.push("confirm");
-      return { value: { err: undefined } };
-    },
-  };
-};
-
 /** An Anchor 0.30+ IDL; a long `description` makes it larger than one transaction */
 const idlWith = (description: string) => ({
   address: PROGRAM,
   metadata: { name: "counter", version: "0.1.0", spec: "0.1.0", description },
   instructions: [],
 });
+
+/** The small IDL as a file holds it: indented and ended by a newline, so the text serialised again differs from it */
+const FILE_TEXT = `${JSON.stringify(idlWith("A counter"), undefined, 2)}\n`;
+
+/** An Anchor 0.30+ IDL the Playground cannot map to the 0.29 shape: an argument of an unbound generic type */
+const UNMAPPABLE_IDL = {
+  address: PROGRAM,
+  metadata: { name: "counter", version: "0.1.0", spec: "0.1.0" },
+  instructions: [
+    {
+      name: "set",
+      discriminator: [1, 2, 3, 4, 5, 6, 7, 8],
+      accounts: [],
+      args: [{ name: "value", type: { generic: "T" } }],
+    },
+  ],
+};
+
+/** A file of the entity's `anchor-cli` fixtures, which Anchor 1.1.2 uploads */
+const anchorFixture = (name: string) =>
+  readFileSync(
+    join(
+      __dirname,
+      "../../../entities/idl/model/anchor-cli/__fixtures__",
+      name
+    ),
+    "utf8"
+  );
 
 /** Text that zlib cannot shrink much, the same on every run */
 const noise = (length: number) => {
@@ -207,22 +118,43 @@ const noise = (length: number) => {
 
 interface Setup {
   idl: object | undefined;
+  filepath: string | undefined;
+  text: string | undefined;
   accounts: Map<string, StubAccount>;
   wallet: ReturnType<typeof walletOf>;
   connection: ReturnType<typeof connectionOf>;
+  upload: typeof uploadProjectIdl;
 }
 
-/** A small IDL, the program deployed by the wallet, no earlier IDL, and a wallet that approves */
+/** A small IDL the project holds, the program deployed by the wallet, no earlier IDL, a wallet that approves, and the canonical upload */
 const arrange = async (): Promise<Setup> => ({
   idl: idlWith("A counter"),
+  filepath: undefined,
+  text: undefined,
   accounts: await deployedBy(WALLET.publicKey.toBase58()),
   wallet: walletOf(WALLET),
   connection: connectionOf(),
+  upload: uploadProjectIdl,
 });
 
-const run = ({ idl, accounts, wallet, connection }: Setup) => {
+const run = ({
+  idl,
+  filepath,
+  text,
+  accounts,
+  wallet,
+  connection,
+  upload,
+}: Setup) => {
   stubRpc(accounts);
-  return uploadProjectIdl({ idl, programId: PROGRAM, connection, wallet });
+  return upload({
+    idl,
+    filepath,
+    text,
+    programId: PROGRAM,
+    connection,
+    wallet,
+  });
 };
 
 describe("features/program-idl/model/project-idl", () => {
@@ -250,6 +182,16 @@ describe("features/program-idl/model/project-idl", () => {
       sent: 0,
     },
     {
+      reason: "not_found",
+      label: "an IDL file the project does not hold, which the line names",
+      change: (setup: Setup) => {
+        setup.idl = undefined;
+        setup.filepath = "idl/none.json";
+      },
+      line: "The project has no IDL file at idl/none.json.",
+      sent: 0,
+    },
+    {
       reason: "invalid",
       label: "an Anchor 0.29 IDL",
       change: (setup: Setup) => {
@@ -259,10 +201,30 @@ describe("features/program-idl/model/project-idl", () => {
       sent: 0,
     },
     {
+      reason: "invalid",
+      label: "an Anchor 0.29 IDL in a file, which the line names",
+      change: (setup: Setup) => {
+        setup.idl = { name: "counter", version: "0.1.0", instructions: [] };
+        setup.filepath = "idl/legacy.json";
+      },
+      line: "The IDL in idl/legacy.json is not in the Anchor 0.30+ format.",
+      sent: 0,
+    },
+    {
       reason: "not_deployed",
       label: "a program id that holds no account",
       change: (setup: Setup) => {
         setup.accounts.clear();
+      },
+      line: `Program ${PROGRAM} is not deployed on the selected network.`,
+      sent: 0,
+    },
+    {
+      reason: "not_deployed",
+      label: "a non-canonical upload to a program id that holds no account",
+      change: (setup: Setup) => {
+        setup.accounts.clear();
+        setup.upload = uploadNonCanonicalProjectIdlWith(0n);
       },
       line: `Program ${PROGRAM} is not deployed on the selected network.`,
       sent: 0,
@@ -296,6 +258,15 @@ describe("features/program-idl/model/project-idl", () => {
         setup.accounts = await deployedBy(undefined);
       },
       line: "The program has no upgrade authority, so no wallet can upload its IDL.",
+      sent: 0,
+    },
+    {
+      reason: "authority",
+      label: "a non-canonical upload by the program's upgrade authority",
+      change: (setup: Setup) => {
+        setup.upload = uploadNonCanonicalProjectIdlWith(0n);
+      },
+      line: "The connected wallet is the program's upgrade authority, so its IDL goes to the canonical account. Run the command without `--non-canonical`.",
       sent: 0,
     },
     {
@@ -359,41 +330,94 @@ describe("features/program-idl/model/project-idl", () => {
     ]);
   });
 
-  it("uploads the JSON the project holds and reports the start, then the upload", async () => {
-    const setup = await arrange();
+  it.each([
+    {
+      label: "the IDL the project holds, serialised",
+      idl: idlWith("A counter"),
+      filepath: undefined,
+      text: undefined,
+      content: JSON.stringify(idlWith("A counter")),
+    },
+    {
+      label: "the text of an IDL file, byte for byte",
+      idl: idlWith("A counter"),
+      filepath: "idl/counter.json",
+      text: FILE_TEXT,
+      content: FILE_TEXT,
+    },
+    {
+      label:
+        "an Anchor 0.30+ IDL the project holds that the Playground cannot call",
+      idl: UNMAPPABLE_IDL,
+      filepath: undefined,
+      text: undefined,
+      content: JSON.stringify(UNMAPPABLE_IDL),
+    },
+  ])(
+    "uploads $label, and reports the start, then the upload",
+    async ({ idl, filepath, text, content }) => {
+      const setup = await arrange();
+      setup.idl = idl;
+      setup.filepath = filepath;
+      setup.text = text;
 
-    const result = await run(setup);
+      const result = await run(setup);
 
-    expect(result).toEqual({ metadata: await idlAddress(), action: "created" });
-    expect(tracked.events).toEqual([
-      {
-        name: "idl_upload_started",
-        params: { target: "metadata", cluster: "devnet" },
-      },
-      {
-        name: "idl_uploaded",
-        params: { target: "metadata", cluster: "devnet" },
-      },
-    ]);
-    const { message } = VersionedTransaction.deserialize(
-      setup.connection.sent[0]
-    );
-    const written = message.compiledInstructions
-      .filter(
-        ({ programIdIndex }) =>
-          message.staticAccountKeys[programIdIndex].toBase58() ===
-          PROGRAM_METADATA_PROGRAM_ADDRESS
-      )
-      .map(({ data }) => getInitializeInstructionDataDecoder().decode(data))
-      .map(({ data, compression, encoding }) =>
-        unpackDirectData({
-          data: unwrapOption(data, () => new Uint8Array()),
-          compression,
-          encoding,
-        })
+      expect(result).toEqual({
+        metadata: await idlAddress(),
+        action: "created",
+      });
+      expect(tracked.events).toEqual([
+        {
+          name: "idl_upload_started",
+          params: { target: "metadata", cluster: "devnet" },
+        },
+        {
+          name: "idl_uploaded",
+          params: { target: "metadata", cluster: "devnet" },
+        },
+      ]);
+      const { message } = VersionedTransaction.deserialize(
+        setup.connection.sent[0]
       );
-    expect(written).toEqual([JSON.stringify(setup.idl)]);
-  });
+      const written = message.compiledInstructions
+        .filter(
+          ({ programIdIndex }) =>
+            message.staticAccountKeys[programIdIndex].toBase58() ===
+            PROGRAM_METADATA_PROGRAM_ADDRESS
+        )
+        .map(({ data }) => getInitializeInstructionDataDecoder().decode(data))
+        .map(({ data, compression, encoding }) =>
+          unpackDirectData({
+            data: unwrapOption(data, () => new Uint8Array()),
+            compression,
+            encoding,
+          })
+        );
+      expect(written).toEqual([content]);
+    }
+  );
+
+  it.each(["current.json", "current-full.json"])(
+    "uploads the Anchor 1.1.2 fixture %s from a file",
+    async (name) => {
+      const setup = await arrange();
+      setup.text = anchorFixture(name);
+      setup.idl = JSON.parse(setup.text) as object;
+      setup.filepath = `idl/${name}`;
+
+      const result = await run(setup);
+
+      expect(result).toEqual({
+        metadata: await idlAddress(),
+        action: "created",
+      });
+      expect(tracked.events.map(({ name: event }) => event)).toEqual([
+        "idl_upload_started",
+        "idl_uploaded",
+      ]);
+    }
+  );
 
   it("replaces a large IDL with one approval, every transaction fully signed and sent in stage order", async () => {
     const setup = await arrange();
@@ -417,4 +441,73 @@ describe("features/program-idl/model/project-idl", () => {
     expect(setup.connection.steps.slice(0, 2)).toEqual(["send", "confirm"]);
     expect(setup.connection.steps.slice(-2)).toEqual(["send", "confirm"]);
   });
+
+  it("writes the wallet's own account, with no program data account, for a wallet that is not the upgrade authority", async () => {
+    const setup = await arrange();
+    setup.accounts = await deployedBy(OTHER_WALLET);
+    setup.upload = uploadNonCanonicalProjectIdlWith(0n);
+    const [own] = await findNonCanonicalPda({
+      program: PROGRAM,
+      authority: address(WALLET.publicKey.toBase58()),
+      seed: "idl",
+    });
+
+    const result = await run(setup);
+
+    expect(result).toEqual({ metadata: own, action: "created" });
+    expect(tracked.events).toEqual([
+      {
+        name: "idl_upload_started",
+        params: { target: "metadata", cluster: "devnet" },
+      },
+      {
+        name: "idl_uploaded",
+        params: { target: "metadata", cluster: "devnet" },
+      },
+    ]);
+    const [initialize] = instructionsFor(PROGRAM_METADATA_PROGRAM_ADDRESS)(
+      setup.connection.sent[0]
+    ).filter(({ data }) => data[0] === INITIALIZE_DISCRIMINATOR);
+    // The Program Metadata program's own address stands for an account an instruction leaves out
+    expect(initialize.accounts).toEqual([
+      own,
+      WALLET.publicKey.toBase58(),
+      PROGRAM,
+      PROGRAM_METADATA_PROGRAM_ADDRESS,
+      "11111111111111111111111111111111",
+    ]);
+  });
+
+  it.each([
+    {
+      label: "the given price",
+      upload: uploadProjectIdlWith(7n),
+      price: 7n,
+    },
+    {
+      label: "no price for a price of zero",
+      upload: uploadProjectIdlWith(0n),
+      price: undefined,
+    },
+    {
+      label:
+        "the default of the command-line client Anchor runs when no price is given",
+      upload: uploadProjectIdl,
+      price: 100_000n,
+    },
+  ])(
+    "sets $label in every transaction of an upload",
+    async ({ upload, price }) => {
+      const setup = await arrange();
+      setup.idl = idlWith(noise(2500));
+      setup.upload = upload;
+
+      await run(setup);
+
+      expect(setup.connection.sent.length).toBeGreaterThan(1);
+      expect(pricesOf(setup.connection.sent)).toEqual(
+        setup.connection.sent.map(() => price)
+      );
+    }
+  );
 });

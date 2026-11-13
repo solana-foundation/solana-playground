@@ -1,93 +1,420 @@
 import { isAddress } from "@solana/kit";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 import {
+  convertIdl,
+  convertIdlToLegacy,
+  idlTypeScript,
+  isIdlV1,
+} from "@/entities/idl";
+import {
+  closeLegacyIdlAccountWith,
+  closeMetadataAccountWith,
+  createIdlBufferWith,
+  DEFAULT_PRIORITY_FEE,
+  fetchLegacyIdl,
+  fetchPublishedIdl,
+  IDL_SEED,
+  type IdlSend,
   IdlUploadRefusedError,
-  uploadProjectIdl,
+  setBufferAuthorityWith,
+  trackRefusedIdlSendFor,
+  trackUnsupportedIdlCommand,
+  UnfinishedIdlUploadError,
+  uploadNonCanonicalProjectIdlWith,
+  uploadProjectIdlWith,
+  writeMetadataFromBufferWith,
 } from "@/features/program-idl";
+import { createLogger } from "@/shared/lib/logger";
 
 import {
+  PgCommandManager,
   PgConnection,
+  PgExplorer,
   PgGlobal,
   PgProgramInfo,
   PgTerminal,
   PgWallet,
   TerminalLineError,
 } from "../../utils";
+import { applyFile } from "../../utils/explorer/apply-file";
+import { processErrorLine } from "../../utils/terminal/line-error";
 import { checkWallet } from "../checks";
-import { createArgs, createCmd, createSubcmd } from "../create";
+import { createArgs, createCmd, createOptions, createSubcmd } from "../create";
 import { refuseMainnetWith } from "../deploy/check-not-mainnet";
-import { IDL_NETWORK_CHANGED, IDL_REFUSAL } from "../deploy/mainnet-block";
+import {
+  IDL_NETWORK_CHANGED,
+  IDL_REFUSAL,
+  MAINNET_IDL_BLOCKED,
+} from "../deploy/mainnet-block";
+
+const log = createLogger("commands:anchor");
 
 const refuseIdlWriteOnMainnet = refuseMainnetWith(IDL_REFUSAL);
 
-/** The `anchor idl` subcommands of Anchor's CLI that act on the legacy IDL account, which an Anchor 1.1.2 program does not serve */
-const UNSUPPORTED_IDL_SUBCOMMANDS = [
-  "authority",
-  "close",
-  "erase-authority",
-  "fetch",
-  "set-authority",
-  "set-buffer",
-  "write-buffer",
-] as const;
+/** Whether {@link refuseIdlWriteOnMainnet} refused mainnet-beta, and not an endpoint whose network it could not read */
+const isMainnetRefusal = (error: unknown) =>
+  error instanceof TerminalLineError && error.message === MAINNET_IDL_BLOCKED;
 
-const programIdArg = {
-  name: "program_id",
-  description: "Program to write the IDL for (default: the project's program)",
-  optional: true,
-  parse: (token: string) => {
-    if (isAddress(token)) return token;
-    throw new Error("Program ID must be a base58 address");
+/** What Anchor 1.1.2 prints for `init` and for `upgrade`, which run the same write */
+const UPLOAD_LINES = {
+  init: {
+    name: "init",
+    skipped: "Skipping IDL initialization on localnet",
+    done: "IDL initialized.",
+  },
+  upgrade: {
+    name: "upgrade",
+    skipped: "Skipping IDL upgrade on localnet",
+    done: "IDL upgraded.",
   },
 } as const;
 
+/** The failure's line, then the line saying what the buffer it left holds and how to finish the upload */
+const toUnfinishedUploadLine =
+  (name: string) => (error: UnfinishedIdlUploadError) => {
+    const sol = Number(error.buffer.lamports) / LAMPORTS_PER_SOL;
+    return new TerminalLineError(
+      `${processErrorLine(error)}\nAn unfinished upload holds ${sol} SOL at ${
+        error.buffer.address
+      }. Run the same \`anchor idl ${name}\` again to finish it.`,
+      { cause: error }
+    );
+  };
+
+/** Stands for the program id of an upload that the slice refuses before it reads the id */
+const UNREAD_PROGRAM_ID = "";
+
+/** Stands for the IDL of a file that holds no JSON object, which the slice refuses as an IDL in another format */
+const NOT_AN_IDL = Object.freeze({});
+
+const parseAddress = (token: string) => {
+  if (isAddress(token)) return token;
+  throw new Error("expected a base58 address");
+};
+
+const parsePriorityFee = (token: string) => {
+  if (/^\d+$/.test(token)) return BigInt(token);
+  throw new Error("expected a whole number of micro-lamports per compute unit");
+};
+
+const programIdArg = {
+  name: "program_id",
+  description: "The program ID",
+  optional: true, // The handler requires it, after the line's `--help` is read: see `requireArg`
+  parse: parseAddress,
+} as const;
+
+const pathArg = {
+  name: "path",
+  description: "Path to the IDL file",
+  optional: true, // The handler requires it, after the line's `--help` is read: see `requireArg`
+} as const;
+
+const filepathOption = {
+  name: "filepath",
+  short: "f",
+  description:
+    "IDL file of the project (default: the latest IDL uploaded to the project)",
+  takeValue: true,
+} as const;
+
+const outOption = {
+  name: "out",
+  short: "o",
+  description: "Output file of the project (the terminal if not specified)",
+  takeValue: true,
+} as const;
+
+const priorityFeeOption = {
+  name: "priority-fee",
+  description: "Priority fees in micro-lamports per compute unit",
+  takeValue: true,
+  parse: parsePriorityFee,
+} as const;
+
+const seedOption = {
+  name: "seed",
+  description: `The seed of the metadata account (default: "${IDL_SEED}")`,
+  takeValue: true,
+} as const;
+
+/** The price a subcommand that sends pays for each compute unit */
+const getPriorityFee = (options: { "priority-fee"?: bigint }) =>
+  options["priority-fee"] ?? DEFAULT_PRIORITY_FEE;
+
+/** The value of an argument or option Anchor requires, in the words of the terminal's parser for a missing argument */
+const requireWith =
+  (kind: "Argument" | "Option") =>
+  <Value>(name: string, value: Value | undefined) => {
+    if (value === undefined) {
+      throw new Error(`${kind} not specified: \`${name}\``);
+    }
+    return value;
+  };
+
+/** Required here, not by the terminal's parser, which refuses a missing argument before a handler can read the line's `--help` */
+const requireArg = requireWith("Argument");
+
+/** The terminal's parser knows no required option */
+const requireOption = requireWith("Option");
+
+/** Whether a line asks for a usage as clap reads it: `--help` or `-h` as a token, in any position */
+const asksForHelp = (raw: string) =>
+  raw.split(" ").some((token) => token === "--help" || token === "-h");
+
 /**
- * Writes the IDL the project holds to the canonical Program Metadata account
- * of `programId`, or of the project's program when `programId` is `undefined`.
- * Throws a {@link TerminalLineError} when it refuses before sending.
+ * Runs the handler of the `anchor <group>` subcommand `name`, or for a line `raw`
+ * that asks for help in any position prints that subcommand's usage and does
+ * nothing else. The terminal's parser reads `--help` only right after the name.
  */
-const writeIdl = async (programId: string | undefined) => {
+const runUnlessHelpIn =
+  (group: "idl" | "legacy-idl") =>
+  (name: string, raw: string) =>
+  async <Result>(run: () => Promise<Result>) => {
+    if (!asksForHelp(raw)) return run();
+    // Run as the one line the parser prints a usage for, so that a subcommand has one usage
+    await PgCommandManager.execute(["anchor", group, name, "--help"]);
+    return undefined;
+  };
+
+const runUnlessHelpFor = runUnlessHelpIn("idl");
+
+/** Anchor 1.1.2's warning before every `legacy-idl` subcommand, from `handle_legacy_idl_command` */
+const LEGACY_IDL_WARNING =
+  "You are using a deprecated legacy IDL command. These commands interact with the old on-chain IDL instruction protocol and will be removed in a future Anchor release. Please migrate to Program Metadata-based IDL management (`anchor idl`).";
+
+const runLegacyUnlessHelpFor =
+  (name: string, raw: string) =>
+  <Result>(run: () => Promise<Result>) =>
+    runUnlessHelpIn("legacy-idl")(name, raw)(async () => {
+      await PgTerminal.println(
+        `${PgTerminal.warning("warning:")} ${LEGACY_IDL_WARNING}`
+      );
+      return run();
+    });
+
+/** Anchor's test for a local validator, which `init` and `upgrade` skip */
+const isLocalnet = (rpcEndpoint: string) =>
+  rpcEndpoint.includes("localhost") || rpcEndpoint.includes("127.0.0.1");
+
+/** The connected wallet, after the wallet question when none is connected */
+const requireWallet = async () => {
+  await checkWallet();
   const wallet = PgWallet.current;
   if (!wallet) throw new Error("No wallet is connected.");
+  return wallet;
+};
 
-  // Settings' `pickNetwork` refuses a switch the user asks for while this is set, so the selected network stays the one the upload writes to
-  PgGlobal.isIdlWriting = true;
+/** Runs `run`, and turns a refusal of the slice into the line the terminal prints */
+const withRefusalLine = async <Result>(run: () => Promise<Result>) => {
   try {
-    const connection = PgConnection.current;
-    await refuseIdlWriteOnMainnet(connection.rpcEndpoint);
-    // The hold covers user switches only: after any other change the selected network is not the one that was read
-    if (PgConnection.current.rpcEndpoint !== connection.rpcEndpoint) {
-      throw new TerminalLineError(IDL_NETWORK_CHANGED);
-    }
-
-    const program = programId ?? PgProgramInfo.getPkStr();
-    if (!program) {
-      throw new TerminalLineError(
-        "The project has no program ID. Build the program first, or pass a program ID."
-      );
-    }
-
-    const { metadata, action } = await uploadProjectIdl({
-      idl: PgProgramInfo.idl ?? undefined,
-      programId: program,
-      connection,
-      wallet,
-    });
-    await PgTerminal.println(
-      `${PgTerminal.success(
-        `IDL ${action}.`
-      )} Program Metadata account: ${metadata}`
-    );
+    return await run();
   } catch (error) {
     // A refusal's message is the whole line; thrown as it is, the terminal prints it after "Process error:"
     if (error instanceof IdlUploadRefusedError) {
       throw new TerminalLineError(error.message, { cause: error });
     }
     throw error;
-  } finally {
-    PgGlobal.isIdlWriting = false;
   }
 };
+
+/** What a subcommand that sends runs on: the connection the network was read from, and the connected wallet */
+interface Sender {
+  connection: typeof PgConnection.current;
+  wallet: Awaited<ReturnType<typeof requireWallet>>;
+}
+
+/**
+ * Refuses a send to mainnet-beta, to an endpoint that does not say its
+ * network, and after the endpoint changed, and records the attempt, which no
+ * entry of the slice runs to record. Throws a {@link TerminalLineError}.
+ */
+const refuseNetworkFor = (send: IdlSend) => async (rpcEndpoint: string) => {
+  const trackRefused = trackRefusedIdlSendFor(send);
+  try {
+    await refuseIdlWriteOnMainnet(rpcEndpoint);
+  } catch (error) {
+    trackRefused(rpcEndpoint, isMainnetRefusal(error) ? "mainnet" : "rpc");
+    throw error;
+  }
+  // The hold covers user switches only: after any other change the selected network is not the one that was read
+  if (PgConnection.current.rpcEndpoint !== rpcEndpoint) {
+    trackRefused(rpcEndpoint, "rpc");
+    throw new TerminalLineError(IDL_NETWORK_CHANGED);
+  }
+};
+
+/**
+ * Runs the subcommand that sends `send`: asks for a wallet, holds the selected
+ * network, and refuses it as {@link refuseNetworkFor} does before `run` starts.
+ * Throws a {@link TerminalLineError} when it refuses, or when the slice does.
+ */
+const runSenderFor =
+  (send: IdlSend) =>
+  async <Result>(run: (sender: Sender) => Promise<Result>) => {
+    const wallet = await requireWallet();
+
+    // Settings' `pickNetwork` refuses a switch the user asks for while this is set, so the selected network stays the one the subcommand sends to
+    PgGlobal.isIdlWriting = true;
+    try {
+      const connection = PgConnection.current;
+      await refuseNetworkFor(send)(connection.rpcEndpoint);
+      return await withRefusalLine(() => run({ connection, wallet }));
+    } finally {
+      PgGlobal.isIdlWriting = false;
+    }
+  };
+
+/** The IDL in the text of a project file, as the slice takes it */
+const parseIdl = (text: string): object => {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (typeof parsed === "object" && parsed !== null) return parsed;
+  } catch (error) {
+    // The slice words the refusal; why the text does not parse is kept for whoever looks into it
+    log.debug("An IDL file is not JSON", {
+      context: { reason: String(error) },
+    });
+  }
+  return NOT_AN_IDL;
+};
+
+/** The IDL a subcommand acts on; `idl` is `undefined` when the project holds none, or holds no file at `filepath` */
+interface IdlSource {
+  idl: object | undefined;
+  /** The value of `--filepath`; `undefined` for the IDL the project holds */
+  filepath: string | undefined;
+  /** The text of the file at `filepath`, which the slice sends as it is; `undefined` for the IDL the project holds */
+  text: string | undefined;
+}
+
+const getIdlSource = (filepath: string | undefined): IdlSource => {
+  if (filepath === undefined) {
+    return { idl: PgProgramInfo.idl ?? undefined, filepath, text: undefined };
+  }
+  const text = PgExplorer.getFileContent(filepath);
+  const idl = text === undefined ? undefined : parseIdl(text);
+  return { idl, filepath, text };
+};
+
+/**
+ * The program `init` and `upgrade` write for without a `PROGRAM_ID`: the
+ * `address` of the IDL file, as in Anchor, or the project's program id.
+ * Throws a {@link TerminalLineError} when there is neither.
+ */
+const getDefaultProgramId = ({
+  idl,
+  filepath,
+}: Pick<IdlSource, "idl" | "filepath">) => {
+  if (filepath === undefined) {
+    const projectId = PgProgramInfo.getPkStr();
+    if (projectId) return projectId;
+    throw new TerminalLineError(
+      "The project has no program ID. Build the program first, or pass a program ID."
+    );
+  }
+
+  // A missing file and an IDL in another format are the slice's refusals, which it makes before it reads the program id
+  if (!isIdlV1(idl)) return UNREAD_PROGRAM_ID;
+  const { address } = idl;
+  if (address !== undefined && isAddress(address)) return address;
+  throw new TerminalLineError(
+    `The IDL in ${filepath} has no valid \`address\`. Pass a program ID.`
+  );
+};
+
+/** What `init` and `upgrade` take from their line */
+interface IdlUpload {
+  lines: typeof UPLOAD_LINES[keyof typeof UPLOAD_LINES];
+  /** The slice's entry for the canonical account, or with `--non-canonical` for the wallet's own */
+  uploadWith: typeof uploadProjectIdlWith;
+  programId: string | undefined;
+  filepath: string | undefined;
+  priorityFee: bigint;
+}
+
+const uploadIdl = async ({
+  lines,
+  uploadWith,
+  programId,
+  filepath,
+  priorityFee,
+}: IdlUpload) => {
+  // Anchor skips a local validator before it reads the IDL or the wallet
+  if (isLocalnet(PgConnection.current.rpcEndpoint)) {
+    await PgTerminal.println(lines.skipped);
+    return;
+  }
+
+  await runSenderFor("upload")(async ({ connection, wallet }) => {
+    const { idl, text } = getIdlSource(filepath);
+    const program = programId ?? getDefaultProgramId({ idl, filepath });
+    let metadata: string;
+    try {
+      ({ metadata } = await uploadWith(priorityFee)({
+        idl,
+        filepath,
+        text,
+        programId: program,
+        connection,
+        wallet,
+      }));
+    } catch (error) {
+      if (error instanceof UnfinishedIdlUploadError) {
+        throw toUnfinishedUploadLine(lines.name)(error);
+      }
+      throw error;
+    }
+    await PgTerminal.println(
+      `${PgTerminal.success(lines.done)} Program Metadata account: ${metadata}`
+    );
+  });
+};
+
+/** The text of a project file; throws a {@link TerminalLineError} that names a path the project does not hold */
+const getProjectFile = (path: string) => {
+  const text = PgExplorer.getFileContent(path);
+  if (text === undefined) {
+    throw new TerminalLineError(`The project has no file at ${path}.`);
+  }
+  return text;
+};
+
+/** Prints `text` as it is, or with `--out` creates or replaces that file of the project */
+const printOrWrite = async (out: string | undefined, text: string) => {
+  if (out === undefined) {
+    await PgTerminal.println(text, { noColor: true });
+    return;
+  }
+  // A name without an extension is a folder to the explorer, which would create the folder and drop the text
+  if (!PgExplorer.getItemTypeFromPath(out).file) {
+    throw new TerminalLineError(
+      `\`--out\` takes a file name with an extension, and ${out} has none.`
+    );
+  }
+  // `applyFile` also updates an open editor's copy, which would otherwise show the replaced text and save it back
+  await applyFile(out, text);
+};
+
+/** What Anchor hands to `println!`: the entity returns the printed text, which ends with the newline `println!` adds */
+const withoutPrintedNewline = (printed: string) => printed.replace(/\n$/, "");
+
+/** A subcommand of Anchor's that the terminal names and does not run; it declares no argument, so every line ends the same way */
+const unsupportedSubcmd = (
+  name: Parameters<typeof trackUnsupportedIdlCommand>[0],
+  description: string
+) =>
+  createSubcmd({
+    name,
+    description: `${description} (not supported yet)`,
+    handle: () => {
+      trackUnsupportedIdlCommand(name, PgConnection.current.rpcEndpoint);
+      throw new TerminalLineError(
+        `The Playground terminal does not support \`anchor idl ${name}\` yet. Run it with Anchor's CLI on your own machine.`
+      );
+    },
+  });
 
 export const anchor = createCmd({
   name: "anchor",
@@ -98,34 +425,404 @@ export const anchor = createCmd({
       name: "idl",
       description: "Commands for interacting with interface definitions",
       subcommands: [
-        // `init` and `upgrade` run the same write: each creates the account or replaces the IDL it holds
         createSubcmd({
           name: "init",
-          description:
-            "Write the project's IDL to the program's Program Metadata account",
-          args: createArgs([programIdArg]),
-          preChecks: checkWallet,
-          handle: (input) => writeIdl(input.args.program_id),
+          description: "Initializes a program's IDL account",
+          args: createArgs([
+            {
+              name: "program_id",
+              description:
+                "Program id to initialize IDL for (default: the address of the IDL file, or the project's program id)",
+              optional: true,
+              parse: parseAddress,
+            },
+          ]),
+          options: createOptions([
+            filepathOption,
+            priorityFeeOption,
+            {
+              name: "non-canonical",
+              description:
+                "Create non-canonical metadata account (third-party metadata)",
+            },
+          ]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "init",
+              input.raw
+            )(() =>
+              uploadIdl({
+                lines: UPLOAD_LINES.init,
+                uploadWith: input.options["non-canonical"]
+                  ? uploadNonCanonicalProjectIdlWith
+                  : uploadProjectIdlWith,
+                programId: input.args.program_id,
+                filepath: input.options.filepath,
+                priorityFee: getPriorityFee(input.options),
+              })
+            ),
         }),
+
         createSubcmd({
           name: "upgrade",
-          description:
-            "Replace the on-chain IDL with the project's; the same write as init",
-          args: createArgs([programIdArg]),
-          preChecks: checkWallet,
-          handle: (input) => writeIdl(input.args.program_id),
-        }),
-        ...UNSUPPORTED_IDL_SUBCOMMANDS.map((name) =>
-          createSubcmd({
-            name,
-            description: "Not supported in the Playground terminal",
-            handle: () => {
-              throw new TerminalLineError(
-                `\`anchor idl ${name}\` is not supported in the Playground terminal. Run Anchor's CLI on your own machine.`
-              );
+          description: "Upgrades the IDL to the new file",
+          args: createArgs([
+            {
+              name: "program_id",
+              description:
+                "Program id to upgrade IDL for (default: the address of the IDL file, or the project's program id)",
+              optional: true,
+              parse: parseAddress,
             },
-          })
+          ]),
+          options: createOptions([filepathOption, priorityFeeOption]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "upgrade",
+              input.raw
+            )(() =>
+              uploadIdl({
+                lines: UPLOAD_LINES.upgrade,
+                uploadWith: uploadProjectIdlWith,
+                programId: input.args.program_id,
+                filepath: input.options.filepath,
+                priorityFee: getPriorityFee(input.options),
+              })
+            ),
+        }),
+
+        unsupportedSubcmd(
+          "build",
+          "Generates the IDL for the program using the compilation method"
         ),
+
+        createSubcmd({
+          name: "fetch",
+          description: "Fetches an IDL for the given program from a cluster",
+          args: createArgs([programIdArg]),
+          options: createOptions([
+            outOption,
+            {
+              name: "non-canonical",
+              description:
+                "Fetch non-canonical metadata account (third-party metadata)",
+            },
+          ]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "fetch",
+              input.raw
+            )(async () => {
+              const programId = requireArg("program_id", input.args.program_id);
+              // The non-canonical account is the connected wallet's own, so only that read needs a wallet
+              const authority = input.options["non-canonical"]
+                ? (await requireWallet()).publicKey.toBase58()
+                : undefined;
+              const content = await withRefusalLine(() =>
+                fetchPublishedIdl({
+                  programId,
+                  authority,
+                  connection: PgConnection.current,
+                })
+              );
+
+              const { out } = input.options;
+              await printOrWrite(out, content);
+              // The line of the command-line client Anchor runs, which prints nothing else after it saves a file
+              if (out !== undefined) {
+                await PgTerminal.println(
+                  `${PgTerminal.success(
+                    "[Success] "
+                  )}Metadata content saved to ${PgTerminal.bold(out)}`
+                );
+              }
+            }),
+        }),
+
+        unsupportedSubcmd(
+          "fetch-historical",
+          "Fetches historical IDL versions for the given program from a cluster"
+        ),
+
+        createSubcmd({
+          name: "convert",
+          description:
+            "Convert legacy IDLs (pre Anchor 0.30) to the new IDL spec",
+          args: createArgs([pathArg]),
+          options: createOptions([
+            outOption,
+            {
+              name: "program-id",
+              short: "p",
+              description:
+                "Program id of the converted IDL (default: the one the IDL holds)",
+              takeValue: true,
+              parse: parseAddress,
+            },
+            {
+              name: "to-legacy",
+              description:
+                "Convert a current-spec IDL back to the legacy (pre Anchor v0.30) format",
+            },
+          ]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "convert",
+              input.raw
+            )(async () => {
+              const text = getProjectFile(requireArg("path", input.args.path));
+              const convert = input.options["to-legacy"]
+                ? convertIdlToLegacy
+                : convertIdl;
+              const printed = await convert(input.options["program-id"], text);
+              await printOrWrite(
+                input.options.out,
+                withoutPrintedNewline(printed)
+              );
+            }),
+        }),
+
+        createSubcmd({
+          name: "type",
+          description: "Generate TypeScript type for the IDL",
+          args: createArgs([pathArg]),
+          options: createOptions([outOption]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "type",
+              input.raw
+            )(async () => {
+              const text = getProjectFile(requireArg("path", input.args.path));
+              const printed = await idlTypeScript(text);
+              await printOrWrite(
+                input.options.out,
+                withoutPrintedNewline(printed)
+              );
+            }),
+        }),
+
+        createSubcmd({
+          name: "close",
+          description: "Close a metadata account and recover rent",
+          args: createArgs([programIdArg]),
+          options: createOptions([seedOption, priorityFeeOption]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "close",
+              input.raw
+            )(async () => {
+              const programId = requireArg("program_id", input.args.program_id);
+              await runSenderFor("close")(async ({ connection, wallet }) => {
+                await closeMetadataAccountWith(getPriorityFee(input.options))({
+                  programId,
+                  seed: input.options.seed ?? IDL_SEED,
+                  connection,
+                  wallet,
+                });
+                await PgTerminal.println(
+                  PgTerminal.success("Metadata account closed successfully.")
+                );
+              });
+            }),
+        }),
+
+        createSubcmd({
+          name: "create-buffer",
+          description: "Create a buffer account for metadata",
+          options: createOptions([filepathOption, priorityFeeOption]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "create-buffer",
+              input.raw
+            )(() =>
+              runSenderFor("create-buffer")(async ({ connection, wallet }) => {
+                const { idl, filepath, text } = getIdlSource(
+                  input.options.filepath
+                );
+                const { buffer } = await createIdlBufferWith(
+                  getPriorityFee(input.options)
+                )({ idl, filepath, text, connection, wallet });
+                await PgTerminal.println(
+                  `${PgTerminal.success(
+                    "Buffer created successfully."
+                  )} Buffer account: ${buffer}`
+                );
+              })
+            ),
+        }),
+
+        createSubcmd({
+          name: "set-buffer-authority",
+          description: "Set a new authority on a buffer account",
+          args: createArgs([
+            {
+              name: "buffer",
+              description: "The buffer account address",
+              optional: true, // The handler requires it, after the line's `--help` is read: see `requireArg`
+              parse: parseAddress,
+            },
+          ]),
+          options: createOptions([
+            {
+              name: "new-authority",
+              short: "n",
+              description: "The new authority",
+              takeValue: true,
+              parse: parseAddress,
+            },
+            priorityFeeOption,
+          ]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "set-buffer-authority",
+              input.raw
+            )(async () => {
+              const buffer = requireArg("buffer", input.args.buffer);
+              const newAuthority = requireOption(
+                "new-authority",
+                input.options["new-authority"]
+              );
+              await runSenderFor("set-buffer-authority")(
+                async ({ connection, wallet }) => {
+                  await setBufferAuthorityWith(getPriorityFee(input.options))({
+                    buffer,
+                    newAuthority,
+                    connection,
+                    wallet,
+                  });
+                  await PgTerminal.println(
+                    PgTerminal.success("Buffer authority set successfully.")
+                  );
+                }
+              );
+            }),
+        }),
+
+        createSubcmd({
+          name: "write-buffer",
+          description: "Write metadata using a buffer account",
+          args: createArgs([programIdArg]),
+          options: createOptions([
+            {
+              name: "buffer",
+              short: "b",
+              description: "The buffer account address",
+              takeValue: true,
+              parse: parseAddress,
+            },
+            seedOption,
+            {
+              name: "close-buffer",
+              description: "Close the buffer after writing",
+            },
+            priorityFeeOption,
+          ]),
+          handle: (input) =>
+            runUnlessHelpFor(
+              "write-buffer",
+              input.raw
+            )(async () => {
+              const programId = requireArg("program_id", input.args.program_id);
+              const buffer = requireOption("buffer", input.options.buffer);
+              await runSenderFor("write-buffer")(
+                async ({ connection, wallet }) => {
+                  await writeMetadataFromBufferWith(
+                    getPriorityFee(input.options)
+                  )({
+                    programId,
+                    buffer,
+                    seed: input.options.seed ?? IDL_SEED,
+                    closeBuffer: input.options["close-buffer"] === true,
+                    connection,
+                    wallet,
+                  });
+                  await PgTerminal.println(
+                    PgTerminal.success(
+                      "Metadata written successfully using buffer."
+                    )
+                  );
+                }
+              );
+            }),
+        }),
+      ],
+    }),
+
+    // Anchor 1.1.2's other seven are left out, so they are no subcommand here: reading an older program's IDL and recovering its rent are what remain useful
+    createSubcmd({
+      name: "legacy-idl",
+      description: "[DEPRECATED] Manage legacy on-chain IDL accounts",
+      subcommands: [
+        createSubcmd({
+          name: "fetch",
+          description:
+            "[DEPRECATED] Fetch the IDL from a legacy on-chain IdlAccount",
+          args: createArgs([
+            {
+              name: "address",
+              description:
+                "A program ID, or the address of an IDL account or buffer",
+              optional: true, // The handler requires it, after the line's `--help` is read: see `requireArg`
+              parse: parseAddress,
+            },
+          ]),
+          options: createOptions([outOption]),
+          handle: (input) =>
+            runLegacyUnlessHelpFor(
+              "fetch",
+              input.raw
+            )(async () => {
+              const target = requireArg("address", input.args.address);
+              const json = await withRefusalLine(() =>
+                fetchLegacyIdl({ target, connection: PgConnection.current })
+              );
+              const { out } = input.options;
+              await printOrWrite(out, json);
+              // Anchor 1.1.2's line after it writes the file
+              if (out !== undefined) {
+                await PgTerminal.println(`Wrote IDL to ${out}`);
+              }
+            }),
+        }),
+
+        createSubcmd({
+          name: "close",
+          description:
+            "[DEPRECATED] Close the legacy IDL account and recover rent",
+          args: createArgs([programIdArg]),
+          options: createOptions([
+            {
+              name: "idl-address",
+              description:
+                "The IDL account to close (default: the IDL account derived from the program ID)",
+              takeValue: true,
+              parse: parseAddress,
+            },
+            priorityFeeOption,
+          ]),
+          handle: (input) =>
+            runLegacyUnlessHelpFor(
+              "close",
+              input.raw
+            )(async () => {
+              const programId = requireArg("program_id", input.args.program_id);
+              await runSenderFor("legacy-close")(
+                async ({ connection, wallet }) => {
+                  const { closed } = await closeLegacyIdlAccountWith(
+                    getPriorityFee(input.options)
+                  )({
+                    programId,
+                    idlAddress: input.options["idl-address"],
+                    connection,
+                    wallet,
+                  });
+                  await PgTerminal.println(
+                    `${PgTerminal.success("Idl account closed:")} ${closed}`
+                  );
+                }
+              );
+            }),
+        }),
       ],
     }),
   ],

@@ -1,0 +1,255 @@
+/**
+ * Program IDL in camelCase format in order to be used in JS/TS.
+ *
+ * Note that this is only a type helper and is not the actual IDL. The original
+ * IDL can be found at `target/idl/token-registry_v2.json`.
+ */
+export type TokenRegistryV2 = {
+  "address": "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS",
+  "metadata": {
+    "name": "tokenRegistryV2",
+    "version": "1.2.0",
+    "spec": "0.1.0",
+    "description": "A registry of tokens",
+    "repository": "https://example.com/registry",
+    "dependencies": [
+      {
+        "name": "anchorLang",
+        "version": "1.1.2"
+      }
+    ],
+    "contact": "security@example.com",
+    "deployments": {
+      "mainnet": null,
+      "testnet": null,
+      "devnet": "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS",
+      "localnet": null
+    }
+  },
+  "instructions": [
+    {
+      "name": "registerToken",
+      "discriminator": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "accounts": [
+        {
+          "name": "registryState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "entryData.tokenMint"
+              },
+              {
+                "kind": "account",
+                "path": "Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS"
+              },
+              {
+                "kind": "account",
+                "path": "adminConfig.authorityKey",
+                "account": "adminConfig"
+              }
+            ]
+          },
+          "relations": [
+            "adminConfig"
+          ]
+        },
+        {
+          "name": "adminGroup",
+          "accounts": [
+            {
+              "name": "adminConfig",
+              "address": "11111111111111111111111111111111"
+            }
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "isHttpEnabled",
+          "type": "bool"
+        },
+        {
+          "name": "cafName",
+          "type": "u8"
+        },
+        {
+          "name": "entryData",
+          "type": {
+            "defined": {
+              "name": "registryTypesEntryData"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "registryState",
+      "discriminator": [
+        8,
+        7,
+        6,
+        5,
+        4,
+        3,
+        2,
+        1
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "notAdmin"
+    }
+  ],
+  "types": [
+    {
+      "name": "entryData",
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c",
+        "packed": true,
+        "align": 8
+      },
+      "generics": [
+        {
+          "kind": "type",
+          "name": "itemType"
+        },
+        {
+          "kind": "const",
+          "name": "len",
+          "type": "usize"
+        }
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tokenMint",
+            "type": "pubkey"
+          },
+          {
+            "name": "items",
+            "type": {
+              "array": [
+                {
+                  "generic": "itemType"
+                },
+                {
+                  "generic": "len"
+                }
+              ]
+            }
+          },
+          {
+            "name": "holder",
+            "type": {
+              "defined": {
+                "name": "genericHolder",
+                "generics": [
+                  {
+                    "kind": "type",
+                    "type": {
+                      "generic": "itemType"
+                    }
+                  },
+                  {
+                    "kind": "const",
+                    "value": "REGISTRY_SEED"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "packedPair",
+      "serialization": {
+        "custom": "my_format"
+      },
+      "repr": {
+        "kind": "transparent"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          "u8",
+          {
+            "option": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "marker",
+      "repr": {
+        "kind": "rust"
+      },
+      "type": {
+        "kind": "struct"
+      }
+    },
+    {
+      "name": "choice",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "none"
+          },
+          {
+            "name": "named",
+            "fields": [
+              {
+                "name": "innerValue",
+                "type": "u8"
+              }
+            ]
+          },
+          {
+            "name": "unnamed",
+            "fields": [
+              "u8",
+              "string"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "registrySeed",
+      "docs": [
+        "The registry's seed"
+      ],
+      "type": "string",
+      "value": "\"registry\""
+    }
+  ]
+};
+

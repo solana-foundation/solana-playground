@@ -1,132 +1,94 @@
 import {
+  type Account,
   type Address,
   address,
-  assertIsSingleTransactionPlan,
-  createClientWithGetMinimumBalanceFromRpc,
-  createNoopSigner,
   createSolanaRpc,
-  createTransactionMessage,
-  createTransactionPlanner,
   fetchEncodedAccount,
-  getTransactionEncoder,
-  type InstructionPlanInput,
+  type InstructionPlan,
   isSolanaError,
-  parseInstructionPlanInput,
-  partiallySignTransactionMessageWithSigners,
-  pipe,
-  setTransactionMessageFeePayerSigner,
-  setTransactionMessageLifetimeUsingBlockhash,
-  type SingleTransactionPlan,
+  type Lamports,
+  type MaybeAccount,
+  sequentialInstructionPlan,
   SOLANA_ERROR__ACCOUNTS__ACCOUNT_NOT_FOUND,
-  type TransactionPlan,
+  type TransactionSigner,
 } from "@solana/kit";
-import { VersionedTransaction } from "@solana/web3.js";
 import {
+  AccountDiscriminator,
   Compression,
+  decodeMetadata,
   Encoding,
-  fetchMaybeMetadata,
   findCanonicalPda,
+  findNonCanonicalPda,
   Format,
+  getCloseInstruction,
   getProgramAuthority,
   getWriteMetadataInstructionPlan,
+  type Metadata,
   packDirectData,
+  PROGRAM_METADATA_PROGRAM_ADDRESS,
 } from "@solana-program/program-metadata";
 
+import { isIdlV1 } from "@/entities/idl";
 import { createLogger } from "@/shared/lib/logger";
+
+import {
+  type AuthorityAct,
+  IdlUploadRefusedError,
+  NotProgramAuthorityError,
+  ProgramNotDeployedError,
+} from "./refusal";
+import { type IdlSendDeps, sendPlanWith } from "./send";
 
 const log = createLogger("program-idl:upload");
 
-/** The seed of the canonical Program Metadata account that holds a program's IDL */
-const IDL_SEED = "idl";
+/** The seed of the Program Metadata accounts that hold a program's IDL */
+export const IDL_SEED = "idl";
 
-/** What an upload needs from the Playground: a connection to read and send through, and a signer */
-export interface IdlUploadDeps {
-  connection: {
-    rpcEndpoint: string;
-    sendRawTransaction(raw: Uint8Array): Promise<string>;
-    confirmTransaction(
-      strategy: {
-        signature: string;
-        blockhash: string;
-        lastValidBlockHeight: number;
-      },
-      commitment: "confirmed"
-    ): Promise<{ value: { err: unknown } }>;
-  };
-  wallet: {
-    publicKey: { toBase58(): string };
-    signAllTransactions(
-      txs: VersionedTransaction[]
-    ): Promise<VersionedTransaction[]>;
-  };
-}
+/** What only the upgrade authority may do to a program's canonical IDL, for {@link NotProgramAuthorityError} */
+const UPLOAD: AuthorityAct = { verb: "upload", object: "IDL" };
+
+/** The RPC the Program Metadata client reads accounts through */
+export type IdlRpc = Parameters<typeof getProgramAuthority>[0];
 
 export interface IdlUploadResult {
-  /** The canonical Program Metadata account that holds the IDL */
+  /** The Program Metadata account that holds the IDL */
   metadata: Address;
   /** `replaced` when the account already held an IDL */
   action: "created" | "replaced";
 }
 
-/** Why an upload ended before any transaction was sent */
-export type IdlUploadRefusalReason =
-  | "not_found"
-  | "invalid"
-  | "not_deployed"
-  | "authority"
-  | "rejected";
-
-/**
- * An upload that ended before any transaction was sent, by a check of its own
- * or by the wallet. `message` is the whole line to show the user.
- */
-export class IdlUploadRefusedError extends Error {
-  override name = "IdlUploadRefusedError";
-
-  constructor(readonly reason: IdlUploadRefusalReason, message: string) {
-    super(message);
-  }
+/** The IDL a subcommand takes: the one the project holds, or the one in a file of the project */
+export interface IdlSource {
+  /** In either Anchor format; `undefined` when the project holds none, or holds no file at `filepath` */
+  idl: object | undefined;
+  /** The file the IDL was read from, which a refusal's line names; absent for the IDL the project holds */
+  filepath?: string;
+  /** The text of the file at `filepath`, which `idl` is parsed from; absent for the IDL the project holds */
+  text?: string;
 }
 
-/** The cluster holds no program at the program id: no account, an account that is not executable, or closed program data */
-class ProgramNotDeployedError extends IdlUploadRefusedError {
-  override name = "ProgramNotDeployedError";
-
-  constructor(program: string, cause: unknown) {
-    super(
-      "not_deployed",
-      `Program ${program} is not deployed on the selected network.`
-    );
-    this.cause = cause;
-  }
-}
-
-/** The wallet is not the program's upgrade authority; `authority` is `undefined` when the program has none */
-export class NotProgramAuthorityError extends IdlUploadRefusedError {
-  override name = "NotProgramAuthorityError";
-
-  constructor(readonly authority: string | undefined) {
-    super(
-      "authority",
-      authority
-        ? `The program's upgrade authority is ${authority}. Connect that wallet to upload the IDL.`
-        : "The program has no upgrade authority, so no wallet can upload its IDL."
+/** The JSON a subcommand sends, when the IDL is in the Anchor 0.30+ format: a file's text as it is, or the IDL the project holds, serialised */
+export const toUploadJson = ({ idl, filepath, text }: IdlSource) => {
+  if (!idl) {
+    throw new IdlUploadRefusedError(
+      "not_found",
+      filepath
+        ? `The project has no IDL file at ${filepath}.`
+        : "The project has no IDL to upload."
     );
   }
-}
-
-/** The wallet's `signAllTransactions` threw, which a declined approval does */
-class UploadNotApprovedError extends IdlUploadRefusedError {
-  override name = "UploadNotApprovedError";
-
-  constructor(cause: unknown) {
-    super(
-      "rejected",
-      "The wallet did not approve the IDL upload, so nothing was sent."
+  // Anchor uploads an IDL the Playground cannot map to the 0.29 shape, so the gate is the format alone
+  if (!isIdlV1(idl)) {
+    throw new IdlUploadRefusedError(
+      "invalid",
+      filepath
+        ? `The IDL in ${filepath} is not in the Anchor 0.30+ format.`
+        : "The project's IDL is not in the Anchor 0.30+ format."
     );
-    this.cause = cause;
   }
-}
+  // The command-line client Anchor 1.1.2 runs writes a file's text unchanged, so a file is not serialised again
+  return text ?? JSON.stringify(idl);
+};
 
 /** The canonical Program Metadata account holding `program`'s IDL */
 const idlMetadataAddress = async (program: Address) => {
@@ -134,11 +96,104 @@ const idlMetadataAddress = async (program: Address) => {
   return pda;
 };
 
+/** What a metadata account's address holds: the account, a buffer an upload left when it failed after its first transaction, or nothing */
+export type MetadataSlot =
+  | { kind: "metadata"; account: Account<Metadata> & { exists: true } }
+  | { kind: "buffer"; address: Address; lamports: Lamports }
+  | { kind: "empty"; address: Address };
+
+/** Reads the account at `at` by its discriminator, which `fetchMaybeMetadata` of the Program Metadata client does not check */
+export const fetchMetadataSlot = async (
+  rpc: IdlRpc,
+  at: Address
+): Promise<MetadataSlot> => {
+  const account = await fetchEncodedAccount(rpc, at);
+  if (
+    !account.exists ||
+    account.programAddress !== PROGRAM_METADATA_PROGRAM_ADDRESS
+  ) {
+    return { kind: "empty", address: at };
+  }
+  switch (account.data[0]) {
+    case AccountDiscriminator.Metadata:
+      return {
+        kind: "metadata",
+        account: { ...decodeMetadata(account), exists: true },
+      };
+    case AccountDiscriminator.Buffer:
+      return { kind: "buffer", address: at, lamports: account.lamports };
+    default:
+      return { kind: "empty", address: at };
+  }
+};
+
+/** The account a write plan of the Program Metadata client takes: a buffer is no metadata account yet, so the plan creates one */
+export const toMaybeMetadata = (slot: MetadataSlot): MaybeAccount<Metadata> =>
+  slot.kind === "metadata"
+    ? slot.account
+    : { exists: false, address: slot.address };
+
+/** Runs `write` after closing the buffer an unfinished upload left in `slot`, and as it is otherwise */
+export const closingLeftoverFor =
+  (
+    slot: MetadataSlot,
+    closer: {
+      authority: TransactionSigner;
+      program: Address;
+      programData: Address | undefined;
+    }
+  ) =>
+  (write: InstructionPlan): InstructionPlan => {
+    if (slot.kind !== "buffer") return write;
+    // Closed rather than written into: `initialize` takes a buffer's whole length as the IDL's, so a longer leftover would leave its tail in the IDL
+    return sequentialInstructionPlan([
+      getCloseInstruction({
+        account: slot.address,
+        authority: closer.authority,
+        program: closer.program,
+        programData: closer.programData,
+        destination: closer.authority.address,
+      }),
+      write,
+    ]);
+  };
+
+/**
+ * An upload failed after its first transaction and left a buffer at the
+ * metadata account's address, which holds `lamports`. `message` is the failure's.
+ */
+export class UnfinishedIdlUploadError extends Error {
+  override name = "UnfinishedIdlUploadError";
+
+  constructor(
+    readonly buffer: { address: Address; lamports: Lamports },
+    cause: unknown
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.cause = cause;
+  }
+}
+
+/** The failure of a send to `metadata`, as an {@link UnfinishedIdlUploadError} when it left a buffer there */
+const toUploadFailureFor =
+  (rpc: IdlRpc, metadata: Address) => async (failure: unknown) => {
+    let slot: MetadataSlot;
+    try {
+      slot = await fetchMetadataSlot(rpc, metadata);
+    } catch (error) {
+      // The send's failure is the one the user reads; the read after it is logged
+      log.warn("Could not read the metadata account after a failed upload", {
+        context: { error: String(error) },
+      });
+      return failure;
+    }
+    return slot.kind === "buffer"
+      ? new UnfinishedIdlUploadError(slot, failure)
+      : failure;
+  };
+
 /** The program's upgrade authority and program data account, read from the cluster */
-const fetchProgramAuthority = async (
-  rpc: Parameters<typeof getProgramAuthority>[0],
-  program: Address
-) => {
+export const fetchProgramAuthority = async (rpc: IdlRpc, program: Address) => {
   const account = await fetchEncodedAccount(rpc, program);
   // Read here because `getProgramAuthority` fails on a wallet or data account with an error that carries no code
   if (account.exists && !account.executable) {
@@ -157,205 +212,106 @@ const fetchProgramAuthority = async (
   }
 };
 
+/** Finds the account an upload writes, and the program data account that a canonical write names */
+type FetchUploadAccount = (
+  rpc: IdlRpc,
+  writer: { program: Address; wallet: Address }
+) => Promise<{ metadata: Address; programData: Address | undefined }>;
+
+/** The account derived from the program and the seed, which only the upgrade authority may write */
+const fetchCanonicalAccount: FetchUploadAccount = async (
+  rpc,
+  { program, wallet }
+) => {
+  const { authority, programData } = await fetchProgramAuthority(rpc, program);
+  if (authority !== wallet) {
+    throw new NotProgramAuthorityError(authority, UPLOAD);
+  }
+  return { metadata: await idlMetadataAddress(program), programData };
+};
+
+/** The account `--non-canonical` writes: the one derived from the program, the seed, and the wallet, for a wallet that is not the upgrade authority */
+const fetchNonCanonicalAccount: FetchUploadAccount = async (
+  rpc,
+  { program, wallet }
+) => {
+  const { authority } = await fetchProgramAuthority(rpc, program);
+  // Refused here because the command-line client Anchor 1.1.2 runs sends this case to the canonical address without the program data account, which the Program Metadata program rejects
+  if (authority === wallet) {
+    throw new IdlUploadRefusedError(
+      "authority",
+      "The connected wallet is the program's upgrade authority, so its IDL goes to the canonical account. Run the command without `--non-canonical`."
+    );
+  }
+  const [metadata] = await findNonCanonicalPda({
+    program,
+    authority: wallet,
+    seed: IDL_SEED,
+  });
+  return { metadata, programData: undefined };
+};
+
+const uploadIdlFor =
+  (fetchAccount: FetchUploadAccount) =>
+  (priorityFee: bigint) =>
+  async (
+    { connection, wallet }: IdlSendDeps,
+    idl: { program: string; json: string }
+  ): Promise<IdlUploadResult> => {
+    const rpc = createSolanaRpc(connection.rpcEndpoint);
+    const program = address(idl.program);
+    const account = await fetchAccount(rpc, {
+      program,
+      wallet: address(wallet.publicKey.toBase58()),
+    });
+    const slot = await fetchMetadataSlot(rpc, account.metadata);
+
+    try {
+      await sendPlanWith(priorityFee)(
+        { connection, wallet },
+        {
+          name: "IDL upload",
+          toPlan: async ({ signer, client }) => {
+            const write = await getWriteMetadataInstructionPlan(client, {
+              ...packDirectData({
+                content: idl.json,
+                compression: Compression.Zlib,
+                encoding: Encoding.Utf8,
+              }),
+              format: Format.Json,
+              payer: signer,
+              authority: signer,
+              program,
+              programData: account.programData,
+              seed: IDL_SEED,
+              metadata: toMaybeMetadata(slot),
+              closeBuffer: true,
+            });
+            return closingLeftoverFor(slot, {
+              authority: signer,
+              program,
+              programData: account.programData,
+            })(write);
+          },
+        }
+      );
+    } catch (error) {
+      if (error instanceof IdlUploadRefusedError) throw error;
+      throw await toUploadFailureFor(rpc, account.metadata)(error);
+    }
+
+    return {
+      metadata: account.metadata,
+      action: slot.kind === "metadata" ? "replaced" : "created",
+    };
+  };
+
 /**
  * Creates or replaces `idl.program`'s canonical IDL with `idl.json`, on one
  * wallet approval. Throws an {@link IdlUploadRefusedError} while nothing was
  * sent, then whatever sending or confirming a transaction throws.
  */
-export const uploadIdl = async (
-  { connection, wallet }: IdlUploadDeps,
-  idl: { program: string; json: string }
-): Promise<IdlUploadResult> => {
-  const rpc = createSolanaRpc(connection.rpcEndpoint);
-  const program = address(idl.program);
-  const walletAddress = address(wallet.publicKey.toBase58());
+export const uploadIdlWith = uploadIdlFor(fetchCanonicalAccount);
 
-  const { authority, programData } = await fetchProgramAuthority(rpc, program);
-  if (authority !== walletAddress) {
-    throw new NotProgramAuthorityError(authority);
-  }
-
-  const metadataAddress = await idlMetadataAddress(program);
-  const metadata = await fetchMaybeMetadata(rpc, metadataAddress);
-
-  // The plan needs the wallet's address only; the wallet signs afterwards, once
-  const signer = createNoopSigner(walletAddress);
-  const { value: lifetime } = await rpc.getLatestBlockhash().send();
-  const planner = createTransactionPlanner({
-    createTransactionMessage: () =>
-      pipe(
-        // Legacy: no lookup table is used, and a wallet that tests a transaction's `version` for truthiness leaves a v0 one unsigned
-        createTransactionMessage({ version: "legacy" }),
-        (m) => setTransactionMessageFeePayerSigner(signer, m),
-        (m) => setTransactionMessageLifetimeUsingBlockhash(lifetime, m)
-      ),
-  });
-  const planTransactions = (input: InstructionPlanInput) =>
-    planner(parseInstructionPlanInput(input));
-
-  const instructionPlan = await getWriteMetadataInstructionPlan(
-    {
-      getMinimumBalance:
-        createClientWithGetMinimumBalanceFromRpc(rpc).getMinimumBalance,
-      planTransactions,
-      // The client asks this to learn whether the IDL fits in one transaction
-      planTransaction: async (input: InstructionPlanInput) => {
-        const plan = await planTransactions(input);
-        assertIsSingleTransactionPlan(plan);
-        return plan.message;
-      },
-    },
-    {
-      ...packDirectData({
-        content: idl.json,
-        compression: Compression.Zlib,
-        encoding: Encoding.Utf8,
-      }),
-      format: Format.Json,
-      payer: signer,
-      authority: signer,
-      program,
-      programData,
-      seed: IDL_SEED,
-      metadata,
-      closeBuffer: true,
-    }
-  );
-  const stages = toStages(await planner(instructionPlan));
-
-  const encoder = getTransactionEncoder();
-  // A plan that replaces a large IDL creates a buffer account, whose keypair signs here
-  const toSign = await Promise.all(
-    stages.flat().map(async ({ message }) =>
-      VersionedTransaction.deserialize(
-        // Kit types the bytes read-only, and `deserialize` only reads them
-        encoder.encode(
-          await partiallySignTransactionMessageWithSigners(message)
-        ) as Uint8Array
-      )
-    )
-  );
-  log.info("Planned an IDL upload", {
-    context: { transactions: toSign.length, stages: stages.length },
-  });
-
-  let signed: VersionedTransaction[];
-  try {
-    signed = await wallet.signAllTransactions(toSign);
-  } catch (error) {
-    // The line shown to the user leaves the wallet's own words out
-    log.warn("The wallet did not sign the IDL upload", {
-      context: { error: String(error) },
-    });
-    throw new UploadNotApprovedError(error);
-  }
-
-  let next = 0;
-  for (const stage of stages) {
-    const batch = signed.slice(next, next + stage.length);
-    next += stage.length;
-    await Promise.all(
-      batch.map(async (tx) => {
-        const signature = await connection.sendRawTransaction(tx.serialize());
-        const { value } = await connection.confirmTransaction(
-          {
-            signature,
-            blockhash: lifetime.blockhash,
-            lastValidBlockHeight: Number(lifetime.lastValidBlockHeight),
-          },
-          "confirmed"
-        );
-        if (value.err) {
-          throw new Error(
-            `IDL upload transaction ${signature} failed: ${JSON.stringify(
-              value.err
-            )}`
-          );
-        }
-      })
-    );
-  }
-
-  return {
-    metadata: metadataAddress,
-    action: metadata.exists ? "replaced" : "created",
-  };
-};
-
-/**
- * Orders a transaction plan into stages: a stage's transactions may land in
- * any order, and a stage starts only after the one before it is confirmed.
- */
-const toStages = (plan: TransactionPlan): SingleTransactionPlan[][] => {
-  switch (plan.kind) {
-    case "single":
-      return [[plan]];
-    case "sequential":
-      return plan.plans.flatMap(toStages);
-    case "parallel": {
-      const children = plan.plans.map(toStages);
-      return children.every((stages) => stages.length === 1)
-        ? [children.flatMap(([stage]) => stage)]
-        : children.flat();
-    }
-  }
-};
-
-if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
-
-  describe("features/program-idl/model/upload", () => {
-    const A = "11111111111111111111111111111111";
-    const B = "SysvarRent111111111111111111111111111111111";
-    const C = "SysvarC1ock11111111111111111111111111111111";
-    const D = "BPFLoaderUpgradeab1e11111111111111111111111";
-
-    /** A one-transaction plan, told from the others by its fee payer */
-    const single = (payer: string): SingleTransactionPlan => ({
-      kind: "single",
-      planType: "transactionPlan",
-      message: setTransactionMessageFeePayerSigner(
-        createNoopSigner(address(payer)),
-        createTransactionMessage({ version: "legacy" })
-      ),
-    });
-
-    const parallel = (plans: TransactionPlan[]): TransactionPlan => ({
-      kind: "parallel",
-      planType: "transactionPlan",
-      plans,
-    });
-
-    const sequential = (plans: TransactionPlan[]): TransactionPlan => ({
-      kind: "sequential",
-      planType: "transactionPlan",
-      divisible: true,
-      plans,
-    });
-
-    it.each([
-      {
-        label:
-          "a sequential plan that holds a parallel one, the parallel one as one stage",
-        plan: sequential([
-          single(A),
-          parallel([single(B), single(C)]),
-          single(D),
-        ]),
-        stages: [[A], [B, C], [D]],
-      },
-      {
-        label:
-          "a parallel plan that holds a sequential one, one transaction at a time",
-        plan: parallel([sequential([single(A), single(B)]), single(C)]),
-        stages: [[A], [B], [C]],
-      },
-    ])("toStages orders $label", ({ plan, stages }) => {
-      expect(
-        toStages(plan).map((stage) =>
-          stage.map(({ message }) => message.feePayer.address)
-        )
-      ).toEqual(stages);
-    });
-  });
-}
+/** As {@link uploadIdlWith}, to the wallet's own account of `idl.program`; refuses the upgrade authority, whose IDL goes to the canonical account */
+export const uploadNonCanonicalIdlWith = uploadIdlFor(fetchNonCanonicalAccount);
