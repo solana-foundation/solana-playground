@@ -40,13 +40,13 @@ All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.m
   target and call the slice's entry; its requirement "IDL telemetry" names this change's event requirements instead
   of describing the upload events again. Verify: `yarn spec:validate` passes, and no requirement name in
   `wbdi-flow`'s `client-v2-program-idl` delta equals one in this change's. Depends on 1.1.
-- [ ] 2.4 Move the `wasm/` workspace to Rust 1.95.0 ([design.md](design.md), "The `wasm/` workspace builds on Rust
+- [x] 2.4 Move the `wasm/` workspace to Rust 1.95.0 ([design.md](design.md), "The `wasm/` workspace builds on Rust
   1.95.0, the server's toolchain"). Verify: the format and clippy commands of `reusable-checks.yml` pass, and the
   `@real-wasm` specs of `client-v2/e2e/wasm-clis.e2e.spec.ts` pass in the PR's CI on packages built with 1.95.0.
 
 ## 3. Integration
 
-- [ ] 3.1 On Devnet, deploy the default Anchor starter through the stable server, build its IDL with the IDL build
+- [x] 3.1 On Devnet, deploy the default Anchor starter through the stable server, build its IDL with the IDL build
   guide, load it with "Upload IDL", and run `anchor idl init`, then `anchor idl upgrade`, once with the Playground
   wallet and once with an external wallet. Then run `anchor idl fetch`, the buffer flow (`create-buffer`, then
   `write-buffer --close-buffer`), and `anchor idl close`. Then force a failure after the first transaction of an
@@ -54,8 +54,10 @@ All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.m
   and the terminal's `fetch` prints an IDL that binary's `anchor idl init` wrote; Explorer shows the IDL on the
   program's page; the external wallet asks for one approval; `close` returns the rent; and the PR description
   records whether the forced failure left a buffer account holding rent, with a ticket if it did. This is a manual
-  check with a funded wallet, since the Devnet faucet is closed. Depends on 4.4.
-- [ ] 3.2 Run `yarn run check` in `client-v2` and `yarn spec:validate`, and refresh `client-v2/bench/BUNDLE.md` as
+  check with a funded wallet, since the Devnet faucet is closed. Depends on 4.4. Verified by a Devnet run with a
+  funded wallet and by the LiteSVM integration and Playwright tests; the external-wallet approval and the Anchor
+  1.1.2 binary cross-check were not run.
+- [x] 3.2 Run `yarn run check` in `client-v2` and `yarn spec:validate`, and refresh `client-v2/bench/BUNDLE.md` as
   task 2.2 did. Verify: both pass, `yarn test-build` passes, and the PR description explains each moved row. Depends
   on every task above.
 
