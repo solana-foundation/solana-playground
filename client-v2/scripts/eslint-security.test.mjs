@@ -71,6 +71,33 @@ const PROBES = [
     undefined,
   ],
   [
+    "a loopback URL with a path after the port",
+    {
+      file: "src/utils/probe.ts",
+      code: exportingUrl(LOOPBACK_URL.LOCALHOST_WITH_PATH),
+      rule: "@microsoft/sdl/no-insecure-url",
+    },
+    undefined,
+  ],
+  [
+    "the IPv4 loopback address",
+    {
+      file: "src/utils/probe.ts",
+      code: exportingUrl(LOOPBACK_URL.IPV4),
+      rule: "@microsoft/sdl/no-insecure-url",
+    },
+    undefined,
+  ],
+  [
+    "localhost as userinfo before another host is not loopback",
+    {
+      file: "src/utils/probe.ts",
+      code: exportingUrl(NOT_LOOPBACK_URL.LOCALHOST_AS_USERINFO),
+      rule: "@microsoft/sdl/no-insecure-url",
+    },
+    ERROR,
+  ],
+  [
     "a host that only starts with localhost is not loopback",
     {
       file: "src/utils/probe.ts",

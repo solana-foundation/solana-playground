@@ -594,7 +594,7 @@ const INSECURE_URL_EXCEPTIONS = [
   ...sdl.rules["no-insecure-url"].defaultExceptions
     .map(({ source }) => source)
     .filter((source) => !source.includes("localhost")),
-  String.raw`^(http|ws)://(localhost|127\.0\.0\.1|\[::1\])([:/]|$)`,
+  String.raw`^(http|ws)://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?([/?#]|$)`,
 ];
 
 /** Security rules; sdl's are named one by one, since its `recommended` pulls in every framework config (Angular, Electron, Node, React) */
