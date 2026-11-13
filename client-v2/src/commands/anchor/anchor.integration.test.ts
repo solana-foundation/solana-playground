@@ -538,6 +538,7 @@ describe("commands/anchor on a cluster", () => {
       "The IDL upload expired before every transaction was confirmed. Run the same command again."
     );
     expect(lines.at(-1)).toMatch(
+      // eslint-disable-next-line security/detect-non-literal-regexp -- the only value in it is a base58 address, which holds no regex syntax
       new RegExp(
         `^An unfinished upload holds [\\d.]+ SOL at ${metadata}\\. Run the same \`anchor idl init\` again to finish it\\.$`
       )
@@ -567,6 +568,7 @@ describe("commands/anchor on a cluster", () => {
 
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message.split("\n").at(-1)).toMatch(
+      // eslint-disable-next-line security/detect-non-literal-regexp -- the only value in it is a base58 address, which holds no regex syntax
       new RegExp(
         `^An unfinished upload holds [\\d.]+ SOL at ${own}\\. Run the same \`anchor idl init --non-canonical\` again to finish it\\.$`
       )

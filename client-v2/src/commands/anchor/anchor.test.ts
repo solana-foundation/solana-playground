@@ -732,12 +732,12 @@ describe("commands/anchor", () => {
   it.each([
     {
       line: "anchor idl init",
-      endpoint: "http://localhost:8899",
+      endpoint: Endpoint.LOCALNET,
       output: "Skipping IDL initialization on localnet",
     },
     {
       line: "anchor idl upgrade",
-      endpoint: "http://127.0.0.1:8899",
+      endpoint: Endpoint.SURFPOOL,
       output: "Skipping IDL upgrade on localnet",
     },
   ])(
@@ -757,7 +757,7 @@ describe("commands/anchor", () => {
 
   // Anchor skips a local validator for `init` and `upgrade` only
   it("sends `close` on a local validator", async () => {
-    env.connection = { rpcEndpoint: "http://localhost:8899" };
+    env.connection = { rpcEndpoint: Endpoint.LOCALNET };
     vi.mocked(PgConnection.getCluster).mockResolvedValue("localnet");
 
     await run(`anchor idl close ${GIVEN_PROGRAM}`);
@@ -767,7 +767,7 @@ describe("commands/anchor", () => {
 
   it("prints the published IDL as it is for `fetch` on mainnet, with no wallet question", async () => {
     env.wallet = undefined;
-    env.connection = { rpcEndpoint: "https://api.mainnet-beta.solana.com" };
+    env.connection = { rpcEndpoint: Endpoint.MAINNET };
     vi.mocked(PgConnection.getCluster).mockResolvedValue("mainnet");
     slice.fetchPublishedIdl.mockResolvedValue('{"address":"published"}');
 
