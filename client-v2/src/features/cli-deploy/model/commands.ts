@@ -56,7 +56,7 @@ export const deployCommands = (p: {
  * not be the cluster step 3 deployed to.
  */
 const RPC_URL: Record<CliCluster, string> = {
-  mainnet: Endpoint.MAINNET_BETA,
+  mainnet: Endpoint.MAINNET,
   devnet: Endpoint.DEVNET,
   testnet: Endpoint.TESTNET,
 };
@@ -185,7 +185,7 @@ if (import.meta.vitest) {
           programId: id,
         })[0].lines
       ).toEqual([
-        `npx @solana-program/program-metadata@latest write idl ${id} hello.json --rpc ${Endpoint.MAINNET_BETA}`,
+        `npx @solana-program/program-metadata@latest write idl ${id} hello.json --rpc ${Endpoint.MAINNET}`,
       ]);
     });
 

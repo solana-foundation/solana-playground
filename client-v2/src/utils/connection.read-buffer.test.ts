@@ -53,7 +53,7 @@ describe("utils/connection", () => {
     {
       cluster: "mainnet",
       variable: "REACT_APP_MAINNET_READ_BUFFER_RPC_URL",
-      endpoint: Endpoint.MAINNET_BETA,
+      endpoint: Endpoint.MAINNET,
     },
   ])(
     "reads $cluster buffers through its read-buffer RPC, at the selected commitment",
@@ -169,7 +169,7 @@ describe("utils/connection", () => {
     },
     {
       variable: "REACT_APP_MAINNET_SEND_TX_PER_SECOND",
-      endpoint: Endpoint.MAINNET_BETA,
+      endpoint: Endpoint.MAINNET,
       value: "0.5",
       perSecond: 0.5,
     },

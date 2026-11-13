@@ -23,7 +23,7 @@ cluster. Ticket: to file.
 - The Playground differs from Anchor's CLI in four points. The cluster is the selected one and the wallet the
   connected one, so `--provider.cluster`, `--provider.wallet`, and `--commitment` are not accepted. A path names a
   file of the project. `--filepath` is optional: without it the command uses the latest IDL uploaded to the project,
-  because the stable build server returns none. A subcommand that sends a transaction is refused on Mainnet Beta
+  because the stable build server returns none. A subcommand that sends a transaction is refused on Mainnet
   (the refusal #131 adds for `anchor idl` writes).
 - `init` and `upgrade` send nothing when there is no IDL in the Anchor 0.30+ format to upload, or when the connected
   wallet is not the program's upgrade authority.

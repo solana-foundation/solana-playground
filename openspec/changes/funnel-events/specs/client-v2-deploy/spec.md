@@ -18,7 +18,7 @@ The `features/deploy` slice SHALL emit, with prefix `deploy`:
 - `deploy_backup_shown`, `deploy_backup_saved` and `deploy_backup_dismissed`
   for the backup line, with no parameters.
 
-`cluster` is `playnet`, `localnet`, `devnet`, `testnet` or `mainnet-beta`
+`cluster` is `playnet`, `localnet`, `devnet`, `testnet` or `mainnet`
 for an endpoint the Playground offers, and `custom` for any other endpoint,
 with nothing derived from its URL. `kind` is `first`, or `upgrade` when the
 program is already on the cluster. `via` is `stage`, `terminal` or

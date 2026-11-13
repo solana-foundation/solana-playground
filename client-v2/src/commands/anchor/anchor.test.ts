@@ -517,7 +517,7 @@ describe("commands/anchor", () => {
   it.each([
     {
       line: "anchor idl init",
-      endpoint: Endpoint.MAINNET_BETA,
+      endpoint: Endpoint.MAINNET,
       events: refusedUpload("mainnet", "mainnet"),
     },
     {
@@ -527,7 +527,7 @@ describe("commands/anchor", () => {
     },
     {
       line: `anchor idl close ${GIVEN_PROGRAM}`,
-      endpoint: Endpoint.MAINNET_BETA,
+      endpoint: Endpoint.MAINNET,
       events: refusedCommand("close", "mainnet"),
     },
     {
@@ -537,7 +537,7 @@ describe("commands/anchor", () => {
     },
     {
       line: `anchor idl set-buffer-authority ${BUFFER} --new-authority ${NEW_AUTHORITY}`,
-      endpoint: Endpoint.MAINNET_BETA,
+      endpoint: Endpoint.MAINNET,
       events: refusedCommand("set-buffer-authority", "mainnet"),
     },
     {
@@ -575,7 +575,7 @@ describe("commands/anchor", () => {
   // A custom RPC's network read can outlast a network change the hold does not cover
   it("refuses when the endpoint changed between the network read and the send, and records the attempt as rpc on the endpoint it read", async () => {
     vi.mocked(PgConnection.getCluster).mockImplementation(async () => {
-      env.connection = { rpcEndpoint: Endpoint.MAINNET_BETA };
+      env.connection = { rpcEndpoint: Endpoint.MAINNET };
       return "devnet";
     });
 

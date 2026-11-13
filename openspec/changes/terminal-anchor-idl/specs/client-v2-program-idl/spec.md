@@ -351,9 +351,9 @@ signature, or the IDL.
 
 #### Scenario: A mainnet refusal is tracked
 
-- **WHEN** the endpoint is mainnet-beta and the user runs `anchor idl init`
-- **THEN** the memory provider records `idl_upload_started` with `{ target: "metadata", cluster: "mainnet-beta" }`
-  and then `idl_upload_failed` with `{ target: "metadata", cluster: "mainnet-beta", reason: "mainnet" }`
+- **WHEN** the endpoint is mainnet and the user runs `anchor idl init`
+- **THEN** the memory provider records `idl_upload_started` with `{ target: "metadata", cluster: "mainnet" }`
+  and then `idl_upload_failed` with `{ target: "metadata", cluster: "mainnet", reason: "mainnet" }`
 - **AND** no transaction is sent
 
 ### Requirement: A failed upload names its reason
@@ -361,7 +361,7 @@ signature, or the IDL.
 `idl_upload_failed` SHALL carry one `reason`: `not_found` when there is no IDL to upload, `invalid` when the file is
 not JSON or the IDL is not in the Anchor 0.30+ format, `not_deployed` when the program is not on the cluster, `authority` when the program
 has no upgrade authority or the wallet is not it, `rejected` when the wallet declines the approval, `mainnet` when
-the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send leaves a buffer the
+the command is refused because the endpoint is mainnet, `unfinished` when a failed send leaves a buffer the
 terminal names, `send_failed` for any other failure after the first transaction was submitted to the cluster, and `rpc` for any other
 failure before it, an endpoint that does not say which network it serves included.
 
@@ -397,16 +397,16 @@ send, with prefix `idl`: `idl_command_started { command, cluster }` when the sub
 not exist, `invalid` when the file is not JSON, the IDL is not in the Anchor 0.30+ format, or `write-buffer`'s
 `--buffer` names the program's metadata account, `not_deployed` when the program is not on the
 cluster, `authority` when the connected wallet may not act on the account, `rejected` when the wallet declines the
-approval, `mainnet` when the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send
+approval, `mainnet` when the command is refused because the endpoint is mainnet, `unfinished` when a failed send
 leaves a buffer the terminal names, `send_failed` for any other failure after the first transaction was submitted to the cluster, `rpc`
 for any other failure before it, and `unsupported` for `build`, `fetch-historical`, `convert`, `type`, and
 `legacy-idl`, which send this event alone, with their name as `command`.
 
 #### Scenario: A close refused on mainnet is tracked
 
-- **WHEN** the endpoint is mainnet-beta and the user runs `anchor idl close <PROGRAM_ID>`
+- **WHEN** the endpoint is mainnet and the user runs `anchor idl close <PROGRAM_ID>`
 - **THEN** the memory provider records `idl_command_started` and then `idl_command_failed` with
-  `{ command: "close", cluster: "mainnet-beta", reason: "mainnet" }`, and no transaction is sent
+  `{ command: "close", cluster: "mainnet", reason: "mainnet" }`, and no transaction is sent
 
 #### Scenario: A fetch without a published IDL is tracked
 

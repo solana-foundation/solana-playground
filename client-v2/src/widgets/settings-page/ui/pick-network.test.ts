@@ -51,8 +51,8 @@ describe("pickNetwork", () => {
   });
 
   it("moves the network when nothing holds it", () => {
-    expect(pickNetwork(Endpoint.MAINNET_BETA)).toBe(true);
-    expect(state.endpoint).toBe(Endpoint.MAINNET_BETA);
+    expect(pickNetwork(Endpoint.MAINNET)).toBe(true);
+    expect(state.endpoint).toBe(Endpoint.MAINNET);
     expect(state.toasts).toEqual([]);
   });
 
@@ -61,7 +61,7 @@ describe("pickNetwork", () => {
   it("keeps the network while an anchor idl write runs", () => {
     state.isIdlWriting = true;
 
-    expect(pickNetwork(Endpoint.MAINNET_BETA)).toBe(false);
+    expect(pickNetwork(Endpoint.MAINNET)).toBe(false);
     expect(state.endpoint).toBe(Endpoint.DEVNET);
     expect(state.toasts).toEqual(["network-held-by-idl"]);
   });
@@ -71,7 +71,7 @@ describe("pickNetwork", () => {
     (deployState) => {
       state.deployState = deployState;
 
-      expect(pickNetwork(Endpoint.MAINNET_BETA)).toBe(false);
+      expect(pickNetwork(Endpoint.MAINNET)).toBe(false);
       expect(state.endpoint).toBe(Endpoint.DEVNET);
       expect(state.toasts).toEqual(["network-held-by-deploy"]);
     }

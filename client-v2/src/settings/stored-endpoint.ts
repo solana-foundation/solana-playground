@@ -351,7 +351,7 @@ if (import.meta.vitest) {
       SURFPOOL: CLUSTERS.surfpool.publicUrl,
       DEVNET: CLUSTERS.devnet.publicUrl,
       TESTNET: CLUSTERS.testnet.publicUrl,
-      MAINNET_BETA: CLUSTERS.mainnet.publicUrl,
+      MAINNET: CLUSTERS.mainnet.publicUrl,
     };
 
     /** Every endpoint of ours, the remote ones on the given URLs */
@@ -758,7 +758,7 @@ if (import.meta.vitest) {
         // on a platform RPC; its key would read back as the platform one
         for (const url of [
           Endpoint.DEVNET,
-          Endpoint.MAINNET_BETA,
+          Endpoint.MAINNET,
           Endpoint.TESTNET,
         ]) {
           expect(
@@ -783,9 +783,8 @@ if (import.meta.vitest) {
           roundTrip(state(Endpoint.DEVNET, LOCAL_ENDPOINT)).connection.endpoint
         ).toBe(Endpoint.DEVNET);
         expect(
-          roundTrip(state(Endpoint.MAINNET_BETA, LOCAL_ENDPOINT)).connection
-            .endpoint
-        ).toBe(Endpoint.MAINNET_BETA);
+          roundTrip(state(Endpoint.MAINNET, LOCAL_ENDPOINT)).connection.endpoint
+        ).toBe(Endpoint.MAINNET);
       });
 
       it("moves a profile that stored a public URL as a plain string to the offered network", () => {
@@ -861,16 +860,16 @@ if (import.meta.vitest) {
 
       it("offers the public URLs under the same keys when the env sets none", () => {
         const publicOnly = buildEndpointOptions(
-          networks({ devnet: Endpoint.DEVNET, mainnet: Endpoint.MAINNET_BETA })
+          networks({ devnet: Endpoint.DEVNET, mainnet: Endpoint.MAINNET })
         );
         expect(
-          roundTrip(state(Endpoint.MAINNET_BETA, LOCAL_ENDPOINT), publicOnly)
+          roundTrip(state(Endpoint.MAINNET, LOCAL_ENDPOINT), publicOnly)
             .connection.endpoint
-        ).toBe(Endpoint.MAINNET_BETA);
+        ).toBe(Endpoint.MAINNET);
         expect(
           at(
             toStoredEndpoints(
-              state(Endpoint.MAINNET_BETA, LOCAL_ENDPOINT),
+              state(Endpoint.MAINNET, LOCAL_ENDPOINT),
               publicOnly
             ),
             "connection.endpoint"

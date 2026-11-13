@@ -718,7 +718,7 @@ test.describe("on a phone", () => {
     const network = settings.getByRole("radiogroup", { name: "Network" });
     await expect(network.getByRole("radio", { checked: true })).toBeFocused();
     // Mainnet's requests are refused, so CI never reaches it
-    await page.route(`${Endpoint.MAINNET_BETA}/**`, (route) =>
+    await page.route(`${Endpoint.MAINNET}/**`, (route) =>
       route.abort("connectionrefused")
     );
     await network.getByRole("radio", { name: "Mainnet" }).click();

@@ -98,7 +98,7 @@ export const clustersFor = (
   env: Partial<Record<EnvCluster, ClusterEnv>>
 ): Clusters => ({
   mainnet: envInfoOf(
-    ["mainnet", "mainnet", "Mainnet", Endpoint.MAINNET_BETA, true],
+    ["mainnet", "mainnet", "Mainnet", Endpoint.MAINNET, true],
     env.mainnet ?? {}
   ),
   devnet: envInfoOf(
@@ -211,7 +211,7 @@ if (import.meta.vitest) {
 
     it("offers Mainnet, Devnet, Testnet, Localnet and Surfpool, the remote ones on the public URLs when nothing is configured", () => {
       expect(offered(clustersFor({}))).toEqual([
-        ["mainnet", Endpoint.MAINNET_BETA],
+        ["mainnet", Endpoint.MAINNET],
         ["devnet", Endpoint.DEVNET],
         ["testnet", Endpoint.TESTNET],
         ["localnet", Endpoint.LOCALNET],
@@ -225,7 +225,7 @@ if (import.meta.vitest) {
       // eslint-disable-next-line no-restricted-syntax -- the value under test
       [Endpoint.TESTNET, "https://api.testnet.solana.com"],
       // eslint-disable-next-line no-restricted-syntax -- the value under test
-      [Endpoint.MAINNET_BETA, "https://api.mainnet-beta.solana.com"],
+      [Endpoint.MAINNET, "https://api.mainnet-beta.solana.com"],
     ])("holds the public RPC %s", (endpoint, url) => {
       expect(endpoint).toBe(url);
     });
@@ -310,7 +310,7 @@ if (import.meta.vitest) {
         },
         {
           label: "a public URL with a trailing slash",
-          endpoint: `${Endpoint.MAINNET_BETA}/`,
+          endpoint: `${Endpoint.MAINNET}/`,
           cluster: "mainnet",
         },
         {

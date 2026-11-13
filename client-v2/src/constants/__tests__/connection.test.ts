@@ -51,7 +51,7 @@ describe("buildNetworks", () => {
   it("offers Mainnet, Devnet, Testnet, Localnet and Surfpool, the remote ones on the public URLs when nothing is configured", () => {
     expect(buildNetworks({})).toEqual(
       offered({
-        mainnet: Endpoint.MAINNET_BETA,
+        mainnet: Endpoint.MAINNET,
         devnet: Endpoint.DEVNET,
         testnet: Endpoint.TESTNET,
       })
@@ -65,7 +65,7 @@ describe("buildNetworks", () => {
         (n) => n.value
       )
     ).toEqual([
-      Endpoint.MAINNET_BETA,
+      Endpoint.MAINNET,
       Endpoint.DEVNET,
       Endpoint.TESTNET,
       Endpoint.LOCALNET,
@@ -152,7 +152,7 @@ describe("env wiring", () => {
     const mod = await import("../connection");
 
     expect(mod.NETWORKS.map((n: Network) => n.value)).toEqual([
-      Endpoint.MAINNET_BETA,
+      Endpoint.MAINNET,
       Endpoint.DEVNET,
       Endpoint.TESTNET,
       Endpoint.LOCALNET,

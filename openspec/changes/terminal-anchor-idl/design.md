@@ -56,7 +56,7 @@ each decided by the user:
 | A path names a file of the project | The browser has no local disk and no `Anchor.toml` |
 | `--filepath` is optional; without it, the latest IDL uploaded to the project | The stable build server returns no IDL, so the uploaded one is the project's IDL |
 | Without `PROGRAM_ID` and `--filepath`, the project's program id | The uploaded IDL's `address` can differ from the project's program id after the program keypair is replaced |
-| The six subcommands that send are refused on Mainnet Beta | The beta's rule from #131 |
+| The six subcommands that send are refused on Mainnet | The beta's rule from #131 |
 | `build`, `fetch-historical`, `convert`, and `type` print a not-supported line | `build` needs `cargo`, and no build server returns an IDL; `fetch-historical` replays transactions in Rust, with no JavaScript client; `convert` and `type` are Rust inside Anchor (see "`convert`, `type`, and `legacy-idl` are not supported") |
 | `anchor legacy-idl` prints a not-supported line | The Playground carries no program built before Anchor 0.30, and the group's code is Rust inside Anchor |
 
