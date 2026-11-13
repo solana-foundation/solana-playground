@@ -47,6 +47,7 @@ import {
   uploadProjectIdl,
   uploadProjectIdlWith,
 } from "./project-idl";
+import type { IdlSource } from "./upload";
 
 const idlAddress = async () => {
   const [metadata] = await findCanonicalPda({ program: PROGRAM, seed: "idl" });
@@ -116,10 +117,22 @@ const noise = (length: number) => {
   }).join("");
 };
 
+/** An Anchor 0.29 IDL */
+const LEGACY_IDL = { name: "counter", version: "0.1.0", instructions: [] };
+
+const projectIdl = (idl: object | undefined): IdlSource => ({
+  kind: "project",
+  idl,
+});
+
+const fileIdl = (filepath: string, text: string | undefined): IdlSource => ({
+  kind: "file",
+  filepath,
+  text,
+});
+
 interface Setup {
-  idl: object | undefined;
-  filepath: string | undefined;
-  text: string | undefined;
+  source: IdlSource;
   accounts: Map<string, StubAccount>;
   wallet: ReturnType<typeof walletOf>;
   connection: ReturnType<typeof connectionOf>;
@@ -128,33 +141,16 @@ interface Setup {
 
 /** A small IDL the project holds, the program deployed by the wallet, no earlier IDL, a wallet that approves, and the canonical upload */
 const arrange = async (): Promise<Setup> => ({
-  idl: idlWith("A counter"),
-  filepath: undefined,
-  text: undefined,
+  source: projectIdl(idlWith("A counter")),
   accounts: await deployedBy(WALLET.publicKey.toBase58()),
   wallet: walletOf(WALLET),
   connection: connectionOf(),
   upload: uploadProjectIdl,
 });
 
-const run = ({
-  idl,
-  filepath,
-  text,
-  accounts,
-  wallet,
-  connection,
-  upload,
-}: Setup) => {
+const run = ({ source, accounts, wallet, connection, upload }: Setup) => {
   stubRpc(accounts);
-  return upload({
-    idl,
-    filepath,
-    text,
-    programId: PROGRAM,
-    connection,
-    wallet,
-  });
+  return upload({ source, programId: PROGRAM, connection, wallet });
 };
 
 describe("features/program-idl/model/project-idl", () => {
@@ -176,7 +172,7 @@ describe("features/program-idl/model/project-idl", () => {
       reason: "not_found",
       label: "a project without an IDL",
       change: (setup: Setup) => {
-        setup.idl = undefined;
+        setup.source = projectIdl(undefined);
       },
       line: "The project has no IDL to upload.",
       sent: 0,
@@ -185,8 +181,7 @@ describe("features/program-idl/model/project-idl", () => {
       reason: "not_found",
       label: "an IDL file the project does not hold, which the line names",
       change: (setup: Setup) => {
-        setup.idl = undefined;
-        setup.filepath = "idl/none.json";
+        setup.source = fileIdl("idl/none.json", undefined);
       },
       line: "The project has no IDL file at idl/none.json.",
       sent: 0,
@@ -195,7 +190,7 @@ describe("features/program-idl/model/project-idl", () => {
       reason: "invalid",
       label: "an Anchor 0.29 IDL",
       change: (setup: Setup) => {
-        setup.idl = { name: "counter", version: "0.1.0", instructions: [] };
+        setup.source = projectIdl(LEGACY_IDL);
       },
       line: "The project's IDL is not in the Anchor 0.30+ format.",
       sent: 0,
@@ -204,10 +199,19 @@ describe("features/program-idl/model/project-idl", () => {
       reason: "invalid",
       label: "an Anchor 0.29 IDL in a file, which the line names",
       change: (setup: Setup) => {
-        setup.idl = { name: "counter", version: "0.1.0", instructions: [] };
-        setup.filepath = "idl/legacy.json";
+        setup.source = fileIdl("idl/legacy.json", JSON.stringify(LEGACY_IDL));
       },
       line: "The IDL in idl/legacy.json is not in the Anchor 0.30+ format.",
+      sent: 0,
+    },
+    {
+      reason: "invalid",
+      label:
+        "a file that is not JSON, which the line names with the parser's reason",
+      change: (setup: Setup) => {
+        setup.source = fileIdl("idl/broken.json", "{");
+      },
+      line: "idl/broken.json is not valid JSON: ",
       sent: 0,
     },
     {
@@ -281,6 +285,25 @@ describe("features/program-idl/model/project-idl", () => {
     },
     {
       reason: "rpc",
+      label: "a wallet that fails to sign for a reason other than the user's",
+      change: (setup: Setup) => {
+        setup.wallet.signAllTransactions = () =>
+          Promise.reject(new Error("Ledger device disconnected"));
+      },
+      line: "Ledger device disconnected",
+      sent: 0,
+    },
+    {
+      reason: "rpc",
+      label: "a wallet that returns fewer transactions than it was given",
+      change: (setup: Setup) => {
+        setup.wallet.signAllTransactions = async () => [];
+      },
+      line: "The wallet returned 0 of 1 signed transactions, so nothing was sent.",
+      sent: 0,
+    },
+    {
+      reason: "send_failed",
       label: "a transaction the cluster fails",
       change: (setup: Setup) => {
         setup.connection.confirmTransaction = async () => ({
@@ -311,7 +334,7 @@ describe("features/program-idl/model/project-idl", () => {
 
   it("names the cluster custom for an endpoint that is not one of the Playground's own", async () => {
     const setup = await arrange();
-    setup.idl = undefined;
+    setup.source = projectIdl(undefined);
     setup.connection.rpcEndpoint = "https://devnet.custom-rpc.test";
 
     await expect(run(setup)).rejects.toThrow(
@@ -333,33 +356,25 @@ describe("features/program-idl/model/project-idl", () => {
   it.each([
     {
       label: "the IDL the project holds, serialised",
-      idl: idlWith("A counter"),
-      filepath: undefined,
-      text: undefined,
+      source: projectIdl(idlWith("A counter")),
       content: JSON.stringify(idlWith("A counter")),
     },
     {
       label: "the text of an IDL file, byte for byte",
-      idl: idlWith("A counter"),
-      filepath: "idl/counter.json",
-      text: FILE_TEXT,
+      source: fileIdl("idl/counter.json", FILE_TEXT),
       content: FILE_TEXT,
     },
     {
       label:
         "an Anchor 0.30+ IDL the project holds that the Playground cannot call",
-      idl: UNMAPPABLE_IDL,
-      filepath: undefined,
-      text: undefined,
+      source: projectIdl(UNMAPPABLE_IDL),
       content: JSON.stringify(UNMAPPABLE_IDL),
     },
   ])(
     "uploads $label, and reports the start, then the upload",
-    async ({ idl, filepath, text, content }) => {
+    async ({ source, content }) => {
       const setup = await arrange();
-      setup.idl = idl;
-      setup.filepath = filepath;
-      setup.text = text;
+      setup.source = source;
 
       const result = await run(setup);
 
@@ -402,9 +417,7 @@ describe("features/program-idl/model/project-idl", () => {
     "uploads the Anchor 1.1.2 fixture %s from a file",
     async (name) => {
       const setup = await arrange();
-      setup.text = anchorFixture(name);
-      setup.idl = JSON.parse(setup.text) as object;
-      setup.filepath = `idl/${name}`;
+      setup.source = fileIdl(`idl/${name}`, anchorFixture(name));
 
       const result = await run(setup);
 
@@ -421,7 +434,7 @@ describe("features/program-idl/model/project-idl", () => {
 
   it("replaces a large IDL with one approval, every transaction fully signed and sent in stage order", async () => {
     const setup = await arrange();
-    setup.idl = idlWith(noise(2500));
+    setup.source = projectIdl(idlWith(noise(2500)));
     setup.accounts.set(await idlAddress(), earlierIdl());
 
     const result = await run(setup);
@@ -499,7 +512,7 @@ describe("features/program-idl/model/project-idl", () => {
     "sets $label in every transaction of an upload",
     async ({ upload, price }) => {
       const setup = await arrange();
-      setup.idl = idlWith(noise(2500));
+      setup.source = projectIdl(idlWith(noise(2500)));
       setup.upload = upload;
 
       await run(setup);

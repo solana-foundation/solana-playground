@@ -15,8 +15,10 @@ import {
   fetchLegacyIdl,
   fetchPublishedIdl,
   IDL_SEED,
+  IdlCommandRefusedError,
   type IdlSend,
-  IdlUploadRefusedError,
+  IdlSendExpiredError,
+  type IdlSource,
   setBufferAuthorityWith,
   trackRefusedIdlSendFor,
   trackUnsupportedIdlCommand,
@@ -70,23 +72,43 @@ const UPLOAD_LINES = {
   },
 } as const;
 
-/** The failure's line, then the line saying what the buffer it left holds and how to finish the upload */
+/** The line of a send's failure: an expiry's message is the whole line, any other failure's follows "Process error:" */
+const toFailureLine = (error: unknown) =>
+  error instanceof IdlSendExpiredError
+    ? error.message
+    : processErrorLine(error);
+
+/** The failure's line, then the line saying what the buffer it left holds and what to run next */
 const toUnfinishedUploadLine =
   (name: string) => (error: UnfinishedIdlUploadError) => {
-    const sol = Number(error.buffer.lamports) / LAMPORTS_PER_SOL;
-    return new TerminalLineError(
-      `${processErrorLine(error)}\nAn unfinished upload holds ${sol} SOL at ${
-        error.buffer.address
-      }. Run the same \`anchor idl ${name}\` again to finish it.`,
-      { cause: error }
-    );
+    const { kind, address, lamports } = error.leftover;
+    const sol = Number(lamports) / LAMPORTS_PER_SOL;
+    // Only a buffer at the metadata account's address is one that running the subcommand again, or `anchor idl close`, reaches
+    const next =
+      kind === "metadata"
+        ? `An unfinished upload holds ${sol} SOL at ${address}. Run the same \`anchor idl ${name}\` again to finish it.`
+        : `A buffer the failed send created holds ${sol} SOL at ${address}, and no terminal command closes it. Run the same \`anchor idl ${name}\` again.`;
+    return new TerminalLineError(`${toFailureLine(error.cause)}\n${next}`, {
+      cause: error,
+    });
+  };
+
+/** Runs `run`, and turns an unfinished upload of the subcommand `name` into the lines the terminal prints */
+const withUnfinishedLineFor =
+  (name: string) =>
+  async <Result>(run: () => Promise<Result>) => {
+    try {
+      return await run();
+    } catch (error) {
+      if (error instanceof UnfinishedIdlUploadError) {
+        throw toUnfinishedUploadLine(name)(error);
+      }
+      throw error;
+    }
   };
 
 /** Stands for the program id of an upload that the slice refuses before it reads the id */
 const UNREAD_PROGRAM_ID = "";
-
-/** Stands for the IDL of a file that holds no JSON object, which the slice refuses as an IDL in another format */
-const NOT_AN_IDL = Object.freeze({});
 
 const parseAddress = (token: string) => {
   if (isAddress(token)) return token;
@@ -206,13 +228,16 @@ const requireWallet = async () => {
   return wallet;
 };
 
-/** Runs `run`, and turns a refusal of the slice into the line the terminal prints */
+/** Runs `run`, and turns a refusal or an expired send of the slice into the line the terminal prints */
 const withRefusalLine = async <Result>(run: () => Promise<Result>) => {
   try {
     return await run();
   } catch (error) {
-    // A refusal's message is the whole line; thrown as it is, the terminal prints it after "Process error:"
-    if (error instanceof IdlUploadRefusedError) {
+    // Their message is the whole line; thrown as it is, the terminal prints it after "Process error:"
+    if (
+      error instanceof IdlCommandRefusedError ||
+      error instanceof IdlSendExpiredError
+    ) {
       throw new TerminalLineError(error.message, { cause: error });
     }
     throw error;
@@ -266,36 +291,23 @@ const runSenderFor =
     }
   };
 
-/** The IDL in the text of a project file, as the slice takes it */
-const parseIdl = (text: string): object => {
+/** The IDL the project holds, or with `--filepath` the text of that file */
+const getIdlSource = (filepath: string | undefined): IdlSource =>
+  filepath === undefined
+    ? { kind: "project", idl: PgProgramInfo.idl ?? undefined }
+    : { kind: "file", filepath, text: PgExplorer.getFileContent(filepath) };
+
+/** The IDL a file's text holds, read only for its `address`; `undefined` for text that is not JSON */
+const parseFileIdl = (text: string): unknown => {
   try {
-    const parsed: unknown = JSON.parse(text);
-    if (typeof parsed === "object" && parsed !== null) return parsed;
+    return JSON.parse(text);
   } catch (error) {
-    // The slice words the refusal; why the text does not parse is kept for whoever looks into it
+    // The slice refuses the text with the parser's reason, which it reads again
     log.debug("An IDL file is not JSON", {
       context: { reason: String(error) },
     });
+    return undefined;
   }
-  return NOT_AN_IDL;
-};
-
-/** The IDL a subcommand acts on; `idl` is `undefined` when the project holds none, or holds no file at `filepath` */
-interface IdlSource {
-  idl: object | undefined;
-  /** The value of `--filepath`; `undefined` for the IDL the project holds */
-  filepath: string | undefined;
-  /** The text of the file at `filepath`, which the slice sends as it is; `undefined` for the IDL the project holds */
-  text: string | undefined;
-}
-
-const getIdlSource = (filepath: string | undefined): IdlSource => {
-  if (filepath === undefined) {
-    return { idl: PgProgramInfo.idl ?? undefined, filepath, text: undefined };
-  }
-  const text = PgExplorer.getFileContent(filepath);
-  const idl = text === undefined ? undefined : parseIdl(text);
-  return { idl, filepath, text };
 };
 
 /**
@@ -303,11 +315,8 @@ const getIdlSource = (filepath: string | undefined): IdlSource => {
  * `address` of the IDL file, as in Anchor, or the project's program id.
  * Throws a {@link TerminalLineError} when there is neither.
  */
-const getDefaultProgramId = ({
-  idl,
-  filepath,
-}: Pick<IdlSource, "idl" | "filepath">) => {
-  if (filepath === undefined) {
+const getDefaultProgramId = (source: IdlSource) => {
+  if (source.kind === "project") {
     const projectId = PgProgramInfo.getPkStr();
     if (projectId) return projectId;
     throw new TerminalLineError(
@@ -315,12 +324,13 @@ const getDefaultProgramId = ({
     );
   }
 
-  // A missing file and an IDL in another format are the slice's refusals, which it makes before it reads the program id
+  const idl = source.text === undefined ? undefined : parseFileIdl(source.text);
+  // A missing file, text that is not JSON, and an IDL in another format are the slice's refusals, which it makes before it reads the program id
   if (!isIdlV1(idl)) return UNREAD_PROGRAM_ID;
   const { address } = idl;
   if (address !== undefined && isAddress(address)) return address;
   throw new TerminalLineError(
-    `The IDL in ${filepath} has no valid \`address\`. Pass a program ID.`
+    `The IDL in ${source.filepath} has no valid \`address\`. Pass a program ID.`
   );
 };
 
@@ -348,24 +358,16 @@ const uploadIdl = async ({
   }
 
   await runSenderFor("upload")(async ({ connection, wallet }) => {
-    const { idl, text } = getIdlSource(filepath);
-    const program = programId ?? getDefaultProgramId({ idl, filepath });
-    let metadata: string;
-    try {
-      ({ metadata } = await uploadWith(priorityFee)({
-        idl,
-        filepath,
-        text,
+    const source = getIdlSource(filepath);
+    const program = programId ?? getDefaultProgramId(source);
+    const { metadata } = await withUnfinishedLineFor(lines.name)(() =>
+      uploadWith(priorityFee)({
+        source,
         programId: program,
         connection,
         wallet,
-      }));
-    } catch (error) {
-      if (error instanceof UnfinishedIdlUploadError) {
-        throw toUnfinishedUploadLine(lines.name)(error);
-      }
-      throw error;
-    }
+      })
+    );
     await PgTerminal.println(
       `${PgTerminal.success(lines.done)} Program Metadata account: ${metadata}`
     );
@@ -636,12 +638,14 @@ export const anchor = createCmd({
               input.raw
             )(() =>
               runSenderFor("create-buffer")(async ({ connection, wallet }) => {
-                const { idl, filepath, text } = getIdlSource(
-                  input.options.filepath
+                const { buffer } = await withUnfinishedLineFor("create-buffer")(
+                  () =>
+                    createIdlBufferWith(getPriorityFee(input.options))({
+                      source: getIdlSource(input.options.filepath),
+                      connection,
+                      wallet,
+                    })
                 );
-                const { buffer } = await createIdlBufferWith(
-                  getPriorityFee(input.options)
-                )({ idl, filepath, text, connection, wallet });
                 await PgTerminal.println(
                   `${PgTerminal.success(
                     "Buffer created successfully."
@@ -726,16 +730,16 @@ export const anchor = createCmd({
               const buffer = requireOption("buffer", input.options.buffer);
               await runSenderFor("write-buffer")(
                 async ({ connection, wallet }) => {
-                  await writeMetadataFromBufferWith(
-                    getPriorityFee(input.options)
-                  )({
-                    programId,
-                    buffer,
-                    seed: input.options.seed ?? IDL_SEED,
-                    closeBuffer: input.options["close-buffer"] === true,
-                    connection,
-                    wallet,
-                  });
+                  await withUnfinishedLineFor("write-buffer")(() =>
+                    writeMetadataFromBufferWith(getPriorityFee(input.options))({
+                      programId,
+                      buffer,
+                      seed: input.options.seed ?? IDL_SEED,
+                      closeBuffer: input.options["close-buffer"] === true,
+                      connection,
+                      wallet,
+                    })
+                  );
                   await PgTerminal.println(
                     PgTerminal.success(
                       "Metadata written successfully using buffer."

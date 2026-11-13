@@ -1,5 +1,5 @@
 /** Why a subcommand ended before any transaction was sent */
-export type IdlUploadRefusalReason =
+export type IdlCommandRefusalReason =
   | "not_found"
   | "invalid"
   | "not_deployed"
@@ -7,20 +7,20 @@ export type IdlUploadRefusalReason =
   | "rejected";
 
 /**
- * An upload, or another subcommand of the slice, that ended before any
- * transaction was sent, by a check of its own or by the wallet. `message` is
- * the whole line to show the user.
+ * A subcommand of the slice that ended before any transaction was sent, by a
+ * check of its own or by the wallet. `message` is the whole line to show the
+ * user. Thrown only before a send's first transaction goes to the cluster.
  */
-export class IdlUploadRefusedError extends Error {
-  override name = "IdlUploadRefusedError";
+export class IdlCommandRefusedError extends Error {
+  override name = "IdlCommandRefusedError";
 
-  constructor(readonly reason: IdlUploadRefusalReason, message: string) {
+  constructor(readonly reason: IdlCommandRefusalReason, message: string) {
     super(message);
   }
 }
 
 /** The cluster holds no program at the program id: no account, an account that is not executable, or closed program data */
-export class ProgramNotDeployedError extends IdlUploadRefusedError {
+export class ProgramNotDeployedError extends IdlCommandRefusedError {
   override name = "ProgramNotDeployedError";
 
   constructor(program: string, cause: unknown) {
@@ -39,7 +39,7 @@ export interface AuthorityAct {
 }
 
 /** The wallet is not the program's upgrade authority; `authority` is `undefined` when the program has none */
-export class NotProgramAuthorityError extends IdlUploadRefusedError {
+export class NotProgramAuthorityError extends IdlCommandRefusedError {
   override name = "NotProgramAuthorityError";
 
   constructor(readonly authority: string | undefined, act: AuthorityAct) {

@@ -18,7 +18,7 @@ import {
 import { inflate } from "pako";
 
 import { trackCommandFor } from "./commands";
-import { IdlUploadRefusedError } from "./refusal";
+import { IdlCommandRefusedError } from "./refusal";
 import { type IdlSendDeps, sendPlanWith } from "./send";
 
 /**
@@ -57,6 +57,10 @@ const findLegacyIdlAddress = async (program: Address) => {
 
 type Rpc = ReturnType<typeof createSolanaRpc>;
 
+type LegacyIdlAccount = NonNullable<
+  Awaited<ReturnType<typeof fetchLegacyIdlAccountAt>>
+>;
+
 /** The owner, authority, and data of the Anchor IDL account at `at`; `undefined` when the address holds no account with its discriminator */
 const fetchLegacyIdlAccountAt = async (rpc: Rpc, at: Address) => {
   const account = await fetchEncodedAccount(rpc, at);
@@ -68,6 +72,7 @@ const fetchLegacyIdlAccountAt = async (rpc: Rpc, at: Address) => {
     return undefined;
   }
   return {
+    address: at,
     owner: account.programAddress,
     authority: getAddressDecoder().decode(
       account.data,
@@ -81,7 +86,7 @@ const fetchLegacyIdlAccountAt = async (rpc: Rpc, at: Address) => {
  * The Anchor IDL account `target` names, as `fetch_idl` of Anchor 1.1.2's CLI
  * resolves it: an executable account is a program, whose account is derived;
  * any other address, an IDL buffer's included, is read as the account itself.
- * Throws an {@link IdlUploadRefusedError} when there is none.
+ * Throws an {@link IdlCommandRefusedError} when there is none.
  */
 const fetchNamedLegacyIdlAccount = async (rpc: Rpc, target: Address) => {
   const named = await fetchEncodedAccount(rpc, target);
@@ -91,7 +96,7 @@ const fetchNamedLegacyIdlAccount = async (rpc: Rpc, target: Address) => {
     isProgram ? await findLegacyIdlAddress(target) : target
   );
   if (!account) {
-    throw new IdlUploadRefusedError(
+    throw new IdlCommandRefusedError(
       "not_found",
       isProgram
         ? `Program ${target} has no legacy IDL on the selected network.`
@@ -112,14 +117,42 @@ const sortKeys = (value: unknown): unknown => {
   );
 };
 
-/** The IDL in an Anchor IDL account's data, printed as `serde_json::to_string_pretty` prints it */
-const getLegacyIdlJson = (data: Uint8Array) => {
+/**
+ * The IDL in the data of the Anchor IDL account at `at`, printed as
+ * `serde_json::to_string_pretty` prints it. Throws an {@link IdlCommandRefusedError}
+ * for data that holds no complete IDL, such as an unfinished buffer's.
+ */
+const getLegacyIdlJson = ({ address: at, data }: LegacyIdlAccount) => {
+  const incomplete = (cause: unknown) => {
+    const error = new IdlCommandRefusedError(
+      "invalid",
+      `The legacy IDL account at ${at} does not hold a complete IDL.`
+    );
+    error.cause = cause;
+    return error;
+  };
   const length = getU32Decoder().decode(data, IDL_HEADER_LENGTH - 4);
-  const text = inflate(
-    data.subarray(IDL_HEADER_LENGTH, IDL_HEADER_LENGTH + length),
-    { to: "string" }
-  );
-  return JSON.stringify(sortKeys(JSON.parse(text)), undefined, 2);
+  // The stored length is the writer's claim, which an unfinished buffer makes before its data is written
+  if (IDL_HEADER_LENGTH + length > data.length) {
+    throw incomplete(
+      new Error(
+        `The account holds ${
+          data.length - IDL_HEADER_LENGTH
+        } bytes of a ${length}-byte IDL`
+      )
+    );
+  }
+  let idl: unknown;
+  try {
+    idl = JSON.parse(
+      inflate(data.subarray(IDL_HEADER_LENGTH, IDL_HEADER_LENGTH + length), {
+        to: "string",
+      })
+    );
+  } catch (error) {
+    throw incomplete(error);
+  }
+  return JSON.stringify(sortKeys(idl), undefined, 2);
 };
 
 /** What `anchor legacy-idl fetch` takes from its caller */
@@ -132,15 +165,16 @@ interface LegacyIdlFetch {
 
 /**
  * `anchor legacy-idl fetch`: the IDL of an Anchor IDL account, with the
- * subcommand's events. Throws an {@link IdlUploadRefusedError} when there is none.
+ * subcommand's events. Throws an {@link IdlCommandRefusedError} when there is none.
  */
 export const fetchLegacyIdl = trackCommandFor("legacy-fetch")(
   async ({ target, connection }: LegacyIdlFetch) => {
-    const { data } = await fetchNamedLegacyIdlAccount(
-      createSolanaRpc(connection.rpcEndpoint),
-      address(target)
+    return getLegacyIdlJson(
+      await fetchNamedLegacyIdlAccount(
+        createSolanaRpc(connection.rpcEndpoint),
+        address(target)
+      )
     );
-    return getLegacyIdlJson(data);
   }
 );
 
@@ -180,7 +214,7 @@ const getLegacyIdlCloseInstruction = (
 /**
  * `anchor legacy-idl close`: closes a program's Anchor IDL account through the
  * program's own IDL instruction and sends its rent to the wallet, with the
- * subcommand's events. Throws an {@link IdlUploadRefusedError} while nothing was sent.
+ * subcommand's events. Throws an {@link IdlCommandRefusedError} while nothing was sent.
  */
 export const closeLegacyIdlAccountWith = (priorityFee: bigint) =>
   trackCommandFor("legacy-close")(
@@ -193,7 +227,7 @@ export const closeLegacyIdlAccountWith = (priorityFee: bigint) =>
       const account = await fetchLegacyIdlAccountAt(rpc, at);
       // The program closes only an account it owns, so another owner's is no IDL account of it
       if (!account || account.owner !== program) {
-        throw new IdlUploadRefusedError(
+        throw new IdlCommandRefusedError(
           "not_found",
           idlAddress
             ? `No legacy IDL account of program ${programId} exists at ${idlAddress} on the selected network.`
@@ -201,13 +235,13 @@ export const closeLegacyIdlAccountWith = (priorityFee: bigint) =>
         );
       }
       if (account.authority === ERASED_AUTHORITY) {
-        throw new IdlUploadRefusedError(
+        throw new IdlCommandRefusedError(
           "authority",
           "The legacy IDL account has no authority, so no wallet can close it."
         );
       }
       if (account.authority !== address(wallet.publicKey.toBase58())) {
-        throw new IdlUploadRefusedError(
+        throw new IdlCommandRefusedError(
           "authority",
           `The legacy IDL account's authority is ${account.authority}. Connect that wallet to close it.`
         );

@@ -17,10 +17,18 @@ export {
 } from "./model/project-idl";
 export type { ProjectIdlUpload } from "./model/project-idl";
 export {
-  IdlUploadRefusedError,
+  IdlCommandRefusedError,
   NotProgramAuthorityError,
 } from "./model/refusal";
-export type { IdlUploadRefusalReason } from "./model/refusal";
-export { DEFAULT_PRIORITY_FEE } from "./model/send";
+export type { IdlCommandRefusalReason } from "./model/refusal";
+export {
+  DEFAULT_PRIORITY_FEE,
+  IdlSendExpiredError,
+  IdlSendFailedError,
+} from "./model/send";
 export { IDL_SEED, UnfinishedIdlUploadError } from "./model/upload";
-export type { IdlUploadResult } from "./model/upload";
+export type {
+  IdlSource,
+  IdlUploadResult,
+  UnfinishedUpload,
+} from "./model/upload";

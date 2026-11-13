@@ -82,6 +82,16 @@ const canonicalAddress = async (seed: string) => {
   return metadata;
 };
 
+/** The connected wallet's own account of the program, which `--non-canonical` reads */
+const ownAddress = async () => {
+  const [own] = await findNonCanonicalPda({
+    program: PROGRAM,
+    authority: address(WALLET_ADDRESS),
+    seed: "idl",
+  });
+  return own;
+};
+
 const programMetadataInstructions = instructionsFor(
   PROGRAM_METADATA_PROGRAM_ADDRESS
 );
@@ -191,6 +201,26 @@ describe("features/program-idl/model/commands", () => {
       sent: 0,
     },
     {
+      command: "fetch",
+      reason: "not_found",
+      label:
+        "the wallet's own account holding an unfinished upload, with no `anchor idl close` advice, which reaches only the canonical one",
+      change: async (setup: Setup) => {
+        setup.accounts.set(
+          await ownAddress(),
+          bufferOf(WALLET_ADDRESS, new Uint8Array(8))
+        );
+      },
+      run: ({ connection }: Setup) =>
+        fetchPublishedIdl({
+          programId: PROGRAM,
+          authority: WALLET_ADDRESS,
+          connection,
+        }),
+      line: /\nAn upload of its IDL is unfinished: run the same `anchor idl init --non-canonical` again to finish it\.$/,
+      sent: 0,
+    },
+    {
       command: "close",
       reason: "not_deployed",
       label: "a program id that holds no account",
@@ -242,7 +272,7 @@ describe("features/program-idl/model/commands", () => {
     },
     {
       command: "close",
-      reason: "rpc",
+      reason: "send_failed",
       label: "a transaction the cluster fails",
       change: (setup: Setup) => {
         setup.connection.confirmTransaction = async () => ({
@@ -260,7 +290,10 @@ describe("features/program-idl/model/commands", () => {
       change: () => undefined,
       run: ({ connection, wallet }: Setup) =>
         createIdlBufferWith(FEE)({
-          idl: { name: "counter", version: "0.1.0", instructions: [] },
+          source: {
+            kind: "project",
+            idl: { name: "counter", version: "0.1.0", instructions: [] },
+          },
           connection,
           wallet,
         }),
@@ -332,6 +365,29 @@ describe("features/program-idl/model/commands", () => {
       },
       run: writeBufferAnd(true),
       line: `No Program Metadata buffer exists at ${BUFFER} on the selected network.`,
+      sent: 0,
+    },
+    {
+      command: "write-buffer",
+      reason: "invalid",
+      label:
+        "the buffer an unfinished upload left at the canonical address, which the write would close before reading",
+      change: async (setup: Setup) => {
+        setup.accounts.set(
+          await canonicalAddress("idl"),
+          bufferOf(WALLET_ADDRESS, new Uint8Array(8))
+        );
+      },
+      run: async ({ connection, wallet }: Setup) =>
+        writeMetadataFromBufferWith(FEE)({
+          programId: PROGRAM,
+          buffer: await canonicalAddress("idl"),
+          seed: "idl",
+          closeBuffer: true,
+          connection,
+          wallet,
+        }),
+      line: "is the program's metadata account, which holds an unfinished upload, not a buffer to write from.\nAn upload of its IDL is unfinished",
       sent: 0,
     },
   ])(
@@ -441,26 +497,26 @@ describe("features/program-idl/model/commands", () => {
   it.each([
     {
       label: "the IDL the project holds, serialised",
-      filepath: undefined,
-      text: undefined,
+      source: { kind: "project", idl: IDL } as const,
       content: PUBLISHED,
     },
     {
       label: "the text of an IDL file, byte for byte",
-      filepath: "idl/counter.json",
-      text: FILE_TEXT,
+      source: {
+        kind: "file",
+        filepath: "idl/counter.json",
+        text: FILE_TEXT,
+      } as const,
       content: FILE_TEXT,
     },
   ])(
     "creates a buffer of the wallet's that holds $label, returns its address, and reports the start, then the success",
-    async ({ filepath, text, content }) => {
+    async ({ source, content }) => {
       const setup = await arrange();
       stubRpc(setup.accounts);
 
       const { buffer } = await createIdlBufferWith(FEE)({
-        idl: IDL,
-        filepath,
-        text,
+        source,
         connection: setup.connection,
         wallet: setup.wallet,
       });

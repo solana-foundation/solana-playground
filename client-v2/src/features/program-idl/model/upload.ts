@@ -2,8 +2,11 @@ import {
   type Account,
   type Address,
   address,
+  type ClientWithGetMinimumBalance,
+  type ClientWithTransactionPlanning,
   createSolanaRpc,
   fetchEncodedAccount,
+  generateKeyPairSigner,
   type InstructionPlan,
   isSolanaError,
   type Lamports,
@@ -22,6 +25,8 @@ import {
   Format,
   getCloseInstruction,
   getProgramAuthority,
+  getUpdateMetadataInstructionPlanUsingInstructionData,
+  getUpdateMetadataInstructionPlanUsingNewBuffer,
   getWriteMetadataInstructionPlan,
   type Metadata,
   packDirectData,
@@ -33,11 +38,11 @@ import { createLogger } from "@/shared/lib/logger";
 
 import {
   type AuthorityAct,
-  IdlUploadRefusedError,
+  IdlCommandRefusedError,
   NotProgramAuthorityError,
   ProgramNotDeployedError,
 } from "./refusal";
-import { type IdlSendDeps, sendPlanWith } from "./send";
+import { type IdlSendDeps, IdlSendFailedError, sendPlanWith } from "./send";
 
 const log = createLogger("program-idl:upload");
 
@@ -57,37 +62,69 @@ export interface IdlUploadResult {
   action: "created" | "replaced";
 }
 
-/** The IDL a subcommand takes: the one the project holds, or the one in a file of the project */
-export interface IdlSource {
-  /** In either Anchor format; `undefined` when the project holds none, or holds no file at `filepath` */
-  idl: object | undefined;
-  /** The file the IDL was read from, which a refusal's line names; absent for the IDL the project holds */
-  filepath?: string;
-  /** The text of the file at `filepath`, which `idl` is parsed from; absent for the IDL the project holds */
-  text?: string;
-}
+/** The IDL a subcommand takes: the one the project holds, or the text of a file of the project */
+export type IdlSource =
+  | {
+      kind: "project";
+      /** In either Anchor format; `undefined` when the project holds none */
+      idl: object | undefined;
+    }
+  | {
+      kind: "file";
+      /** The path a refusal's line names */
+      filepath: string;
+      /** `undefined` when the project holds no file at `filepath` */
+      text: string | undefined;
+    };
 
-/** The JSON a subcommand sends, when the IDL is in the Anchor 0.30+ format: a file's text as it is, or the IDL the project holds, serialised */
-export const toUploadJson = ({ idl, filepath, text }: IdlSource) => {
-  if (!idl) {
-    throw new IdlUploadRefusedError(
-      "not_found",
-      filepath
-        ? `The project has no IDL file at ${filepath}.`
-        : "The project has no IDL to upload."
+/** The IDL of a file's text; refuses text that is not JSON, naming the parser's reason */
+const parseIdlFile = (filepath: string, text: string): unknown => {
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    throw new IdlCommandRefusedError(
+      "invalid",
+      `${filepath} is not valid JSON: ${
+        error instanceof Error ? error.message : String(error)
+      }`
     );
   }
-  // Anchor uploads an IDL the Playground cannot map to the 0.29 shape, so the gate is the format alone
-  if (!isIdlV1(idl)) {
-    throw new IdlUploadRefusedError(
+};
+
+/** The JSON a subcommand sends, when the IDL is in the Anchor 0.30+ format: a file's text as it is, or the IDL the project holds, serialised */
+export const toUploadJson = (source: IdlSource) => {
+  if (source.kind === "project") {
+    if (!source.idl) {
+      throw new IdlCommandRefusedError(
+        "not_found",
+        "The project has no IDL to upload."
+      );
+    }
+    // Anchor uploads an IDL the Playground cannot map to the 0.29 shape, so the gate is the format alone
+    if (!isIdlV1(source.idl)) {
+      throw new IdlCommandRefusedError(
+        "invalid",
+        "The project's IDL is not in the Anchor 0.30+ format."
+      );
+    }
+    return JSON.stringify(source.idl);
+  }
+
+  const { filepath, text } = source;
+  if (text === undefined) {
+    throw new IdlCommandRefusedError(
+      "not_found",
+      `The project has no IDL file at ${filepath}.`
+    );
+  }
+  if (!isIdlV1(parseIdlFile(filepath, text))) {
+    throw new IdlCommandRefusedError(
       "invalid",
-      filepath
-        ? `The IDL in ${filepath} is not in the Anchor 0.30+ format.`
-        : "The project's IDL is not in the Anchor 0.30+ format."
+      `The IDL in ${filepath} is not in the Anchor 0.30+ format.`
     );
   }
   // The command-line client Anchor 1.1.2 runs writes a file's text unchanged, so a file is not serialised again
-  return text ?? JSON.stringify(idl);
+  return text;
 };
 
 /** The canonical Program Metadata account holding `program`'s IDL */
@@ -159,37 +196,70 @@ export const closingLeftoverFor =
   };
 
 /**
- * An upload failed after its first transaction and left a buffer at the
- * metadata account's address, which holds `lamports`. `message` is the failure's.
+ * The buffer a failed send left: at the metadata account's address (`metadata`),
+ * which the same upload run again finishes and `anchor idl close` closes, or a
+ * buffer account of its own (`buffer`), which no subcommand closes.
  */
+export interface UnfinishedUpload {
+  kind: "metadata" | "buffer";
+  address: Address;
+  lamports: Lamports;
+}
+
+/** A send failed after its first transaction and left a buffer that holds rent; `message` and `cause` are the failure's */
 export class UnfinishedIdlUploadError extends Error {
   override name = "UnfinishedIdlUploadError";
 
-  constructor(
-    readonly buffer: { address: Address; lamports: Lamports },
-    cause: unknown
-  ) {
+  constructor(readonly leftover: UnfinishedUpload, cause: unknown) {
     super(cause instanceof Error ? cause.message : String(cause));
     this.cause = cause;
   }
 }
 
-/** The failure of a send to `metadata`, as an {@link UnfinishedIdlUploadError} when it left a buffer there */
-const toUploadFailureFor =
-  (rpc: IdlRpc, metadata: Address) => async (failure: unknown) => {
-    let slot: MetadataSlot;
+/** Reads where a failed send may have left a buffer; `undefined` when it left none there */
+type FetchLeftover = (rpc: IdlRpc) => Promise<UnfinishedUpload | undefined>;
+
+/** The buffer an upload that failed after its first transaction left at the metadata account's address `at` */
+export const fetchLeftoverAtMetadataFor =
+  (at: Address): FetchLeftover =>
+  async (rpc) => {
+    const slot = await fetchMetadataSlot(rpc, at);
+    return slot.kind === "buffer"
+      ? { kind: "metadata", address: at, lamports: slot.lamports }
+      : undefined;
+  };
+
+/** The buffer account of its own at `at`, which a send created before it failed */
+export const fetchLeftoverBufferFor =
+  (at: Address): FetchLeftover =>
+  async (rpc) => {
+    const account = await fetchEncodedAccount(rpc, at);
+    const isBuffer =
+      account.exists &&
+      account.programAddress === PROGRAM_METADATA_PROGRAM_ADDRESS &&
+      account.data[0] === AccountDiscriminator.Buffer;
+    return isBuffer
+      ? { kind: "buffer", address: at, lamports: account.lamports }
+      : undefined;
+  };
+
+/** The failure of a send, as an {@link UnfinishedIdlUploadError} when one of `leftovers` finds a buffer it left */
+export const toSendFailureFor =
+  (rpc: IdlRpc, leftovers: FetchLeftover[]) => async (failure: unknown) => {
+    // Nothing was sent before an `IdlSendFailedError`, so nothing can be left
+    if (!(failure instanceof IdlSendFailedError)) return failure;
     try {
-      slot = await fetchMetadataSlot(rpc, metadata);
+      for (const fetchLeftover of leftovers) {
+        const leftover = await fetchLeftover(rpc);
+        if (leftover) return new UnfinishedIdlUploadError(leftover, failure);
+      }
     } catch (error) {
       // The send's failure is the one the user reads; the read after it is logged
-      log.warn("Could not read the metadata account after a failed upload", {
+      log.warn("Could not read the accounts a failed send may have left", {
         context: { error: String(error) },
       });
-      return failure;
     }
-    return slot.kind === "buffer"
-      ? new UnfinishedIdlUploadError(slot, failure)
-      : failure;
+    return failure;
   };
 
 /** The program's upgrade authority and program data account, read from the cluster */
@@ -238,7 +308,7 @@ const fetchNonCanonicalAccount: FetchUploadAccount = async (
   const { authority } = await fetchProgramAuthority(rpc, program);
   // Refused here because the command-line client Anchor 1.1.2 runs sends this case to the canonical address without the program data account, which the Program Metadata program rejects
   if (authority === wallet) {
-    throw new IdlUploadRefusedError(
+    throw new IdlCommandRefusedError(
       "authority",
       "The connected wallet is the program's upgrade authority, so its IDL goes to the canonical account. Run the command without `--non-canonical`."
     );
@@ -250,6 +320,48 @@ const fetchNonCanonicalAccount: FetchUploadAccount = async (
   });
   return { metadata, programData: undefined };
 };
+
+/** What an update plan of the Program Metadata client takes */
+type UpdateInput = Parameters<
+  typeof getUpdateMetadataInstructionPlanUsingInstructionData
+>[1];
+
+/** Whether `plan` fits in one transaction, as the Program Metadata client tests it */
+const fitsOneTransactionWith =
+  (client: ClientWithTransactionPlanning) => async (plan: InstructionPlan) => {
+    try {
+      await client.planTransaction(plan);
+      return true;
+    } catch (error) {
+      // The planner throws for a plan that does not fit, which is an answer, not a failure
+      log.debug("The IDL does not fit in one transaction", {
+        context: { reason: String(error) },
+      });
+      return false;
+    }
+  };
+
+/**
+ * The update plan `getUpdateMetadataInstructionPlan` of the Program Metadata
+ * client builds, with `buffer` as the buffer it creates when the IDL does not
+ * fit in one transaction, so that a failure can name that buffer.
+ */
+const getUpdatePlanWith =
+  (buffer: TransactionSigner) =>
+  async (
+    client: ClientWithGetMinimumBalance & ClientWithTransactionPlanning,
+    input: UpdateInput & { closeBuffer: boolean }
+  ) => {
+    const direct = await getUpdateMetadataInstructionPlanUsingInstructionData(
+      client,
+      input
+    );
+    if (await fitsOneTransactionWith(client)(direct)) return direct;
+    return getUpdateMetadataInstructionPlanUsingNewBuffer(client, {
+      ...input,
+      buffer,
+    });
+  };
 
 const uploadIdlFor =
   (fetchAccount: FetchUploadAccount) =>
@@ -265,6 +377,8 @@ const uploadIdlFor =
       wallet: address(wallet.publicKey.toBase58()),
     });
     const slot = await fetchMetadataSlot(rpc, account.metadata);
+    // Made here, not by the Program Metadata client, so that a failure can name the buffer an update leaves
+    const buffer = await generateKeyPairSigner();
 
     try {
       await sendPlanWith(priorityFee)(
@@ -272,7 +386,7 @@ const uploadIdlFor =
         {
           name: "IDL upload",
           toPlan: async ({ signer, client }) => {
-            const write = await getWriteMetadataInstructionPlan(client, {
+            const input = {
               ...packDirectData({
                 content: idl.json,
                 compression: Compression.Zlib,
@@ -284,9 +398,19 @@ const uploadIdlFor =
               program,
               programData: account.programData,
               seed: IDL_SEED,
-              metadata: toMaybeMetadata(slot),
               closeBuffer: true,
-            });
+            };
+            // An immutable account goes to the client's own plan, which refuses it
+            const write =
+              slot.kind === "metadata" && slot.account.data.mutable
+                ? await getUpdatePlanWith(buffer)(client, {
+                    ...input,
+                    metadata: slot.account,
+                  })
+                : await getWriteMetadataInstructionPlan(client, {
+                    ...input,
+                    metadata: toMaybeMetadata(slot),
+                  });
             return closingLeftoverFor(slot, {
               authority: signer,
               program,
@@ -296,8 +420,10 @@ const uploadIdlFor =
         }
       );
     } catch (error) {
-      if (error instanceof IdlUploadRefusedError) throw error;
-      throw await toUploadFailureFor(rpc, account.metadata)(error);
+      throw await toSendFailureFor(rpc, [
+        fetchLeftoverAtMetadataFor(account.metadata),
+        fetchLeftoverBufferFor(buffer.address),
+      ])(error);
     }
 
     return {
@@ -308,8 +434,8 @@ const uploadIdlFor =
 
 /**
  * Creates or replaces `idl.program`'s canonical IDL with `idl.json`, on one
- * wallet approval. Throws an {@link IdlUploadRefusedError} while nothing was
- * sent, then whatever sending or confirming a transaction throws.
+ * wallet approval. Throws an {@link IdlCommandRefusedError} while nothing was
+ * sent, then an {@link UnfinishedIdlUploadError} when the failed send left a buffer, or an {@link IdlSendFailedError}.
  */
 export const uploadIdlWith = uploadIdlFor(fetchCanonicalAccount);
 

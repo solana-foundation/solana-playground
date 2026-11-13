@@ -1,7 +1,12 @@
 import { type Cluster, CLUSTERS, findClusterWith } from "@/entities/cluster";
 import { createTracker } from "@/shared/lib/telemetry";
 
-import type { IdlUploadRefusalReason } from "./refusal";
+import {
+  type IdlCommandRefusalReason,
+  IdlCommandRefusedError,
+} from "./refusal";
+import { IdlSendFailedError } from "./send";
+import { UnfinishedIdlUploadError } from "./upload";
 
 /** Where an upload writes the IDL: a Program Metadata account of the program */
 type IdlUploadTarget = "metadata";
@@ -32,33 +37,49 @@ export type IdlSend = "upload" | Exclude<IdlCommand, "fetch" | "legacy-fetch">;
 /** Why a caller ended a send before its entry ran: it refuses mainnet-beta, and `rpc` is an endpoint whose network it could not read or that changed */
 export type IdlSendRefusal = "mainnet" | "rpc";
 
-/** Why an upload or an {@link IdlCommand} failed: a refusal's reason, a caller's `mainnet`, or `rpc` for every other failure */
-type IdlFailureReason = IdlUploadRefusalReason | IdlSendRefusal;
+/**
+ * Why a send failed once its first transaction went to the cluster: `unfinished`
+ * when it left a buffer the terminal names ({@link UnfinishedIdlUploadError}),
+ * `send_failed` when it left none or none could be read ({@link IdlSendFailedError}).
+ */
+type IdlSendFailure = "unfinished" | "send_failed";
+
+/** Why an upload or an {@link IdlCommand} failed: a refusal's reason, a caller's `mainnet`, a failure after the first send, or `rpc` for every other failure before it */
+type IdlFailureReason =
+  | IdlCommandRefusalReason
+  | IdlSendRefusal
+  | IdlSendFailure;
+
+/** The `reason` of the failure event for what an entry of the slice threw */
+export const getFailureReason = (error: unknown): IdlFailureReason => {
+  if (error instanceof IdlCommandRefusedError) return error.reason;
+  if (error instanceof UnfinishedIdlUploadError) return "unfinished";
+  if (error instanceof IdlSendFailedError) return "send_failed";
+  return "rpc";
+};
 
 type ProgramIdlEvents = {
-  /** An upload started, before any of its checks ran; or its caller refused it, see {@link trackRefusedIdlSendFor}. */
+  /** The slice's upload entry ran, before any of its checks; or its caller refused the upload, see {@link trackRefusedIdlSendFor}. A caller's exit before either, such as a declined wallet question, sends nothing. */
   idl_upload_started: { target: IdlUploadTarget; cluster: IdlCluster };
   /** Every transaction of an upload was confirmed on `cluster`. */
   idl_uploaded: { target: IdlUploadTarget; cluster: IdlCluster };
   /**
-   * An upload ended without the IDL on chain; `mainnet` is a caller's refusal
-   * of mainnet-beta, and `rpc` every failure no other reason names. No
-   * address, signature or IDL is sent.
+   * An upload ended without the IDL on chain, for the {@link IdlFailureReason}
+   * {@link getFailureReason} reads. No address, signature or IDL is sent.
    */
   idl_upload_failed: {
     target: IdlUploadTarget;
     cluster: IdlCluster;
     reason: IdlFailureReason;
   };
-  /** An {@link IdlCommand} started, before any of its checks ran; or its caller refused it, see {@link trackRefusedIdlSendFor}. */
+  /** The slice's entry of an {@link IdlCommand} ran, before any of its checks; or its caller refused it, see {@link trackRefusedIdlSendFor}. A caller's exit before either sends nothing. */
   idl_command_started: { command: IdlCommand; cluster: IdlCluster };
   /** An {@link IdlCommand} ended with its IDL read, or with every transaction it sent confirmed on `cluster`. */
   idl_command_succeeded: { command: IdlCommand; cluster: IdlCluster };
   /**
-   * An {@link IdlCommand} ended any other way, `mainnet` being a caller's
-   * refusal of mainnet-beta and `rpc` every failure no other reason names; or
-   * an {@link UnsupportedIdlCommand} was run, which sends this event alone. No
-   * address, signature, path or IDL is sent.
+   * An {@link IdlCommand} ended any other way, for the {@link IdlFailureReason}
+   * {@link getFailureReason} reads; or an {@link UnsupportedIdlCommand} was run,
+   * which sends this event alone. No address, signature, path or IDL is sent.
    */
   idl_command_failed:
     | {

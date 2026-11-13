@@ -612,12 +612,16 @@ describe("commands/anchor on a cluster", () => {
       return account.exists ? account.lamports : 0n;
     };
 
-    it("prints the failure, then the SOL the buffer holds and that `init` again finishes it, records rpc, and leaves the canonical account a buffer", () => {
+    it("prints the failure, then the SOL the buffer holds and that `init` again finishes it, records unfinished, and leaves the canonical account a buffer", () => {
       expect(tracked.events).toEqual([
         upload("idl_upload_started"),
         {
           name: "idl_upload_failed",
-          params: { target: "metadata", cluster: "devnet", reason: "rpc" },
+          params: {
+            target: "metadata",
+            cluster: "devnet",
+            reason: "unfinished",
+          },
         },
       ]);
       const sol = Number(heldAtMetadata()) / 1e9;
@@ -656,6 +660,17 @@ describe("commands/anchor on a cluster", () => {
       expect(await fetchIdl()).toBe(fileText("idl/counter.json"));
     });
 
+    it("finishes the upload with `create-buffer` and `write-buffer --buffer`, which `fetch` then prints", async () => {
+      connect(AUTHORITY);
+      await run("anchor idl create-buffer --filepath idl/counter.json");
+      const [[created]] = printed();
+      const [, buffer] = /Buffer account: (\w+)$/.exec(created) ?? [];
+
+      await run(`anchor idl write-buffer ${PROGRAM} --buffer ${buffer}`);
+
+      expect(await fetchIdl()).toBe(fileText("idl/counter.json"));
+    });
+
     it("ends `fetch` with the no-published-IDL line and the unfinished-upload line, and prints no buffer bytes", async () => {
       await expect(run(`anchor idl fetch ${PROGRAM}`)).rejects.toThrow(
         `Program ${PROGRAM} has no published IDL on the selected network.\nAn upload of its IDL is unfinished`
@@ -675,6 +690,59 @@ describe("commands/anchor on a cluster", () => {
       expect(printed()).toEqual([
         [PgTerminal.success("Metadata account closed successfully.")],
       ]);
+    });
+  });
+
+  it("ends an upload whose blockhash expired after its first transaction with the expiry line and the unfinished-upload line, and `init` again finishes it", async () => {
+    connect(AUTHORITY);
+    cluster.expireAt(1);
+
+    const failure = await run(
+      "anchor idl init --filepath idl/large.json"
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    const lines = (failure as Error).message.split("\n");
+    expect(lines[0]).toBe(
+      "The IDL upload expired before every transaction was confirmed. Run the same command again."
+    );
+    expect(lines.at(-1)).toMatch(
+      new RegExp(
+        `^An unfinished upload holds [\\d.]+ SOL at ${metadata}\\. Run the same \`anchor idl init\` again to finish it\\.$`
+      )
+    );
+    expect(tracked.events.at(-1)).toEqual({
+      name: "idl_upload_failed",
+      params: { target: "metadata", cluster: "devnet", reason: "unfinished" },
+    });
+
+    await run("anchor idl init --filepath idl/large.json");
+
+    expect(await fetchIdl()).toBe(fileText("idl/large.json"));
+  });
+
+  it("names the SOL and address of the buffer an `upgrade` created when a send after it fails, and that no terminal command closes it", async () => {
+    connect(AUTHORITY);
+    await run("anchor idl init --filepath idl/counter.json");
+    // The first transaction of the upgrade creates its buffer; the RPC drops the second
+    cluster.dropSendAt(sends() + 1);
+
+    const failure = await run(
+      "anchor idl upgrade --filepath idl/large.json"
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    const last = (failure as Error).message.split("\n").at(-1) ?? "";
+    const [, sol, buffer] =
+      /^A buffer the failed send created holds ([\d.]+) SOL at (\w+), and no terminal command closes it\. Run the same `anchor idl upgrade` again\.$/.exec(
+        last
+      ) ?? [];
+    const account = cluster.svm.getAccount(address(buffer));
+    expect(account.exists && account.data[0]).toBe(AccountDiscriminator.Buffer);
+    expect(account.exists && Number(account.lamports) / 1e9).toBe(Number(sol));
+    expect(tracked.events.at(-1)).toEqual({
+      name: "idl_upload_failed",
+      params: { target: "metadata", cluster: "devnet", reason: "unfinished" },
     });
   });
 });

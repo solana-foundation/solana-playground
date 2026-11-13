@@ -152,6 +152,8 @@ const answer = (
       },
     };
   }
+  // Under `lastValidBlockHeight`, so a failed send is not read as an expired one
+  if (method === "getBlockHeight") return 1;
   if (method === "getMinimumBalanceForRentExemption") return 890_880;
   throw new Error(`The stub RPC has no answer for ${method}`);
 };

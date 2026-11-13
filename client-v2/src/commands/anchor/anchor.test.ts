@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Endpoint } from "@/entities/cluster";
 import {
   DEFAULT_PRIORITY_FEE,
-  IdlUploadRefusedError,
+  IdlCommandRefusedError,
 } from "@/features/program-idl";
 import {
   connectionOf,
@@ -117,6 +117,8 @@ const slice = vi.hoisted(() => ({
   setBufferAuthority: vi.fn(),
   writeMetadataFromBufferWith: vi.fn(),
   writeBuffer: vi.fn(),
+  closeLegacyIdlAccountWith: vi.fn(),
+  legacyClose: vi.fn(),
   fetchPublishedIdl: vi.fn(),
   trackUnsupportedIdlCommand: vi.fn(),
 }));
@@ -129,6 +131,7 @@ const SENDING_ENTRIES = [
   [slice.createIdlBufferWith, slice.createBuffer],
   [slice.setBufferAuthorityWith, slice.setBufferAuthority],
   [slice.writeMetadataFromBufferWith, slice.writeBuffer],
+  [slice.closeLegacyIdlAccountWith, slice.legacyClose],
 ] as const;
 
 const ports = vi.hoisted(() => ({
@@ -146,14 +149,16 @@ vi.mock("@/features/program-idl", async () => {
   return {
     DEFAULT_PRIORITY_FEE: actual.DEFAULT_PRIORITY_FEE,
     IDL_SEED: actual.IDL_SEED,
-    IdlUploadRefusedError: actual.IdlUploadRefusedError,
+    IdlCommandRefusedError: actual.IdlCommandRefusedError,
     UnfinishedIdlUploadError: actual.UnfinishedIdlUploadError,
+    IdlSendExpiredError: actual.IdlSendExpiredError,
     uploadProjectIdlWith: slice.uploadProjectIdlWith,
     uploadNonCanonicalProjectIdlWith: slice.uploadNonCanonicalProjectIdlWith,
     closeMetadataAccountWith: slice.closeMetadataAccountWith,
     createIdlBufferWith: slice.createIdlBufferWith,
     setBufferAuthorityWith: slice.setBufferAuthorityWith,
     writeMetadataFromBufferWith: slice.writeMetadataFromBufferWith,
+    closeLegacyIdlAccountWith: slice.closeLegacyIdlAccountWith,
     fetchPublishedIdl: slice.fetchPublishedIdl,
     trackRefusedIdlSendFor: actual.trackRefusedIdlSendFor,
     trackUnsupportedIdlCommand: slice.trackUnsupportedIdlCommand,
@@ -302,9 +307,7 @@ describe("commands/anchor", () => {
       entry: slice.upload,
       fee: DEFAULT_PRIORITY_FEE,
       input: {
-        idl: PROJECT_IDL,
-        filepath: undefined,
-        text: undefined,
+        source: { kind: "project", idl: PROJECT_IDL },
         programId: PROJECT_PROGRAM,
         connection: CONNECTION,
         wallet: WALLET,
@@ -319,9 +322,7 @@ describe("commands/anchor", () => {
       entry: slice.upload,
       fee: DEFAULT_PRIORITY_FEE,
       input: {
-        idl: PROJECT_IDL,
-        filepath: undefined,
-        text: undefined,
+        source: { kind: "project", idl: PROJECT_IDL },
         programId: GIVEN_PROGRAM,
         connection: CONNECTION,
         wallet: WALLET,
@@ -336,9 +337,7 @@ describe("commands/anchor", () => {
       entry: slice.upload,
       fee: 7n,
       input: {
-        idl: FILE_IDL,
-        filepath: "idl/counter.json",
-        text: FILE_TEXT,
+        source: { kind: "file", filepath: "idl/counter.json", text: FILE_TEXT },
         programId: FILE_PROGRAM,
         connection: CONNECTION,
         wallet: WALLET,
@@ -353,9 +352,11 @@ describe("commands/anchor", () => {
       entry: slice.upload,
       fee: DEFAULT_PRIORITY_FEE,
       input: {
-        idl: UNMAPPABLE_IDL,
-        filepath: "idl/unmappable.json",
-        text: UNMAPPABLE_TEXT,
+        source: {
+          kind: "file",
+          filepath: "idl/unmappable.json",
+          text: UNMAPPABLE_TEXT,
+        },
         programId: FILE_PROGRAM,
         connection: CONNECTION,
         wallet: WALLET,
@@ -370,9 +371,7 @@ describe("commands/anchor", () => {
       entry: slice.upload,
       fee: 7n,
       input: {
-        idl: FILE_IDL,
-        filepath: "idl/counter.json",
-        text: FILE_TEXT,
+        source: { kind: "file", filepath: "idl/counter.json", text: FILE_TEXT },
         programId: GIVEN_PROGRAM,
         connection: CONNECTION,
         wallet: WALLET,
@@ -387,9 +386,7 @@ describe("commands/anchor", () => {
       entry: slice.uploadNonCanonical,
       fee: DEFAULT_PRIORITY_FEE,
       input: {
-        idl: PROJECT_IDL,
-        filepath: undefined,
-        text: undefined,
+        source: { kind: "project", idl: PROJECT_IDL },
         programId: GIVEN_PROGRAM,
         connection: CONNECTION,
         wallet: WALLET,
@@ -430,9 +427,7 @@ describe("commands/anchor", () => {
       entry: slice.createBuffer,
       fee: DEFAULT_PRIORITY_FEE,
       input: {
-        idl: PROJECT_IDL,
-        filepath: undefined,
-        text: undefined,
+        source: { kind: "project", idl: PROJECT_IDL },
         connection: CONNECTION,
         wallet: WALLET,
       },
@@ -446,9 +441,7 @@ describe("commands/anchor", () => {
       entry: slice.createBuffer,
       fee: 7n,
       input: {
-        idl: FILE_IDL,
-        filepath: "idl/counter.json",
-        text: FILE_TEXT,
+        source: { kind: "file", filepath: "idl/counter.json", text: FILE_TEXT },
         connection: CONNECTION,
         wallet: WALLET,
       },
@@ -579,6 +572,11 @@ describe("commands/anchor", () => {
       endpoint: CUSTOM_MAINNET,
       events: refusedCommand("write-buffer", "custom"),
     },
+    {
+      line: `anchor legacy-idl close ${GIVEN_PROGRAM}`,
+      endpoint: Endpoint.MAINNET_BETA,
+      events: refusedCommand("legacy-close", "mainnet-beta"),
+    },
   ])(
     "refuses `$line` on mainnet-beta, read from $endpoint, and records the attempt with nothing sent",
     async ({ line, endpoint, events }) => {
@@ -621,24 +619,35 @@ describe("commands/anchor", () => {
     expectNothingSent();
   });
 
-  it("holds the network from the network read until a failed send ends, then releases it", async () => {
-    const held: boolean[] = [];
-    vi.mocked(PgConnection.getCluster).mockImplementation(async () => {
-      held.push(PgGlobal.isIdlWriting);
-      return "devnet";
-    });
-    slice.close.mockImplementation(async () => {
-      held.push(PgGlobal.isIdlWriting);
-      throw new Error("blockhash not found");
-    });
+  it.each([
+    {
+      label: "a failed send",
+      send: async () => {
+        throw new Error("blockhash not found");
+      },
+    },
+    { label: "a successful send", send: async () => undefined },
+  ])(
+    "holds the network from the network read until $label ends, then releases it",
+    async ({ send }) => {
+      const held: boolean[] = [];
+      vi.mocked(PgConnection.getCluster).mockImplementation(async () => {
+        held.push(PgGlobal.isIdlWriting);
+        return "devnet";
+      });
+      slice.close.mockImplementation(async () => {
+        held.push(PgGlobal.isIdlWriting);
+        return send();
+      });
 
-    await expect(run(`anchor idl close ${GIVEN_PROGRAM}`)).rejects.toThrow(
-      "blockhash not found"
-    );
+      await run(`anchor idl close ${GIVEN_PROGRAM}`).catch(
+        (error: unknown) => error
+      );
 
-    expect(held).toEqual([true, true]);
-    expect(PgGlobal.isIdlWriting).toBe(false);
-  });
+      expect(held).toEqual([true, true]);
+      expect(PgGlobal.isIdlWriting).toBe(false);
+    }
+  );
 
   it.each([
     `anchor idl close ${GIVEN_PROGRAM}`,
@@ -670,7 +679,7 @@ describe("commands/anchor", () => {
   ])(
     "prints the slice's refusal of `$line` as its own line, without Process error:",
     async ({ line, entry, message }) => {
-      entry.mockRejectedValue(new IdlUploadRefusedError("not_found", message));
+      entry.mockRejectedValue(new IdlCommandRefusedError("not_found", message));
 
       const result = run(line);
 
@@ -697,7 +706,7 @@ describe("commands/anchor", () => {
       label: "a file that holds no JSON",
       idl: PROJECT_IDL,
       line: "anchor idl upgrade --filepath idl/broken.json",
-      message: "The IDL in idl/broken.json is not in the Anchor 0.30+ format.",
+      message: "idl/broken.json is not valid JSON: ",
     },
     {
       label: "an Anchor 0.29 IDL file without a program id",

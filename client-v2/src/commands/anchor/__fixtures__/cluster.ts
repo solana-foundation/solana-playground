@@ -60,6 +60,11 @@ export const clusterOf = () => {
   const sent: Uint8Array[] = [];
   /** `sendTransaction` answers an RPC error to the request at this index, 0-based, without running it */
   let dropSendAt: number | undefined;
+  /** At the request of this index, 0-based, the block height passes every lifetime issued so far and LiteSVM drops their blockhash */
+  let expireAt: number | undefined;
+  let blockHeight = 1;
+  /** Blocks a blockhash stays valid for, as `getLatestBlockhash` answers on a real cluster */
+  const LIFETIME_BLOCKS = 150;
 
   /** Sets an account as LiteSVM holds it, rent-exempt for its size */
   const setAccount = (
@@ -128,6 +133,10 @@ export const clusterOf = () => {
     if (index === dropSendAt) {
       throw new RpcError(-32005, "Node is behind");
     }
+    if (index === expireAt) {
+      svm.expireBlockhash();
+      blockHeight += LIFETIME_BLOCKS + 1;
+    }
     const tx = getTransactionDecoder().decode(raw);
     const result = svm.sendTransaction(tx);
     if (result instanceof FailedTransactionMetadata) {
@@ -148,12 +157,12 @@ export const clusterOf = () => {
           context,
           value: {
             blockhash: svm.latestBlockhash(),
-            lastValidBlockHeight: 100,
+            lastValidBlockHeight: blockHeight + LIFETIME_BLOCKS,
           },
         };
-      // web3.js polls it while it waits for a confirmation; under `lastValidBlockHeight`, so no blockhash expires
+      // web3.js polls it while it waits for a confirmation; it passes a lifetime only through `expireAt`
       case "getBlockHeight":
-        return 1;
+        return blockHeight;
       case "getMinimumBalanceForRentExemption":
         return Number(
           svm.minimumBalanceForRentExemption(BigInt(Number(params[0])))
@@ -203,6 +212,9 @@ export const clusterOf = () => {
     respond,
     dropSendAt: (index: number) => {
       dropSendAt = index;
+    },
+    expireAt: (index: number) => {
+      expireAt = index;
     },
   };
 };

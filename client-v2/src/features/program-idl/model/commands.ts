@@ -28,32 +28,40 @@ import { createLogger } from "@/shared/lib/logger";
 
 import {
   type AuthorityAct,
-  IdlUploadRefusedError,
+  IdlCommandRefusedError,
   NotProgramAuthorityError,
 } from "./refusal";
 import { type IdlSendDeps, sendPlanWith } from "./send";
 import {
   getEventCluster,
+  getFailureReason,
   type IdlCommand,
   programIdlTelemetry,
   type UnsupportedIdlCommand,
 } from "./telemetry";
 import {
   closingLeftoverFor,
+  fetchLeftoverAtMetadataFor,
+  fetchLeftoverBufferFor,
   fetchMetadataSlot,
   fetchProgramAuthority,
   IDL_SEED,
   type IdlRpc,
   type IdlSource,
   toMaybeMetadata,
+  toSendFailureFor,
   toUploadJson,
 } from "./upload";
 
 const log = createLogger("program-idl:commands");
 
-/** The line `fetch` adds when the account's address holds the buffer of an upload that failed after its first transaction */
+/** The line `fetch` adds when the canonical account's address holds the buffer of an upload that failed after its first transaction */
 const UNFINISHED_UPLOAD =
   "An upload of its IDL is unfinished: run the same `anchor idl init` or `anchor idl upgrade` again to finish it, or `anchor idl close` to recover its rent.";
+
+/** As {@link UNFINISHED_UPLOAD}, for the wallet's own account, which `anchor idl close` cannot reach */
+const UNFINISHED_NON_CANONICAL_UPLOAD =
+  "An upload of its IDL is unfinished: run the same `anchor idl init --non-canonical` again to finish it.";
 
 /** What only the upgrade authority may do to a program's canonical metadata account, for {@link NotProgramAuthorityError} */
 const CLOSE: AuthorityAct = { verb: "close", object: "metadata account" };
@@ -78,7 +86,9 @@ interface IdlClose extends IdlSendDeps {
 }
 
 /** What `anchor idl create-buffer` takes from its caller */
-interface IdlBufferCreation extends IdlSendDeps, IdlSource {}
+interface IdlBufferCreation extends IdlSendDeps {
+  source: IdlSource;
+}
 
 /** What `anchor idl set-buffer-authority` takes from its caller */
 interface IdlBufferHandover extends IdlSendDeps {
@@ -113,14 +123,15 @@ export const trackCommandFor =
     try {
       result = await run(input);
     } catch (error) {
-      const refused = error instanceof IdlUploadRefusedError;
       programIdlTelemetry.track("idl_command_failed", {
         command,
         cluster,
-        reason: refused ? error.reason : "rpc",
+        reason: getFailureReason(error),
       });
       // A refusal is an answer the user reads as a line; any other failure is logged for whoever looks into it
-      if (!refused) log.error(error, { context: { command, cluster } });
+      if (!(error instanceof IdlCommandRefusedError)) {
+        log.error(error, { context: { command, cluster } });
+      }
       throw error;
     }
     programIdlTelemetry.track("idl_command_succeeded", { command, cluster });
@@ -175,7 +186,7 @@ const fetchBufferAccount = async (rpc: IdlRpc, buffer: Address) => {
     account.programAddress !== PROGRAM_METADATA_PROGRAM_ADDRESS ||
     account.data[0] !== AccountDiscriminator.Buffer
   ) {
-    throw new IdlUploadRefusedError(
+    throw new IdlCommandRefusedError(
       "not_found",
       `No Program Metadata buffer exists at ${buffer} on the selected network.`
     );
@@ -185,7 +196,7 @@ const fetchBufferAccount = async (rpc: IdlRpc, buffer: Address) => {
 
 /**
  * `anchor idl fetch`: the published IDL of a program, as the account holds it,
- * with the subcommand's events. Throws an {@link IdlUploadRefusedError} when the program has none.
+ * with the subcommand's events. Throws an {@link IdlCommandRefusedError} when the program has none.
  */
 export const fetchPublishedIdl = trackCommandFor("fetch")(
   async ({ programId, authority, connection }: IdlFetch): Promise<string> => {
@@ -199,17 +210,20 @@ export const fetchPublishedIdl = trackCommandFor("fetch")(
     const none = authority
       ? `Program ${programId} has no IDL published by ${authority} on the selected network.`
       : `Program ${programId} has no published IDL on the selected network.`;
-    throw new IdlUploadRefusedError(
-      "not_found",
-      slot.kind === "buffer" ? `${none}\n${UNFINISHED_UPLOAD}` : none
-    );
+    if (slot.kind !== "buffer") {
+      throw new IdlCommandRefusedError("not_found", none);
+    }
+    const unfinished = authority
+      ? UNFINISHED_NON_CANONICAL_UPLOAD
+      : UNFINISHED_UPLOAD;
+    throw new IdlCommandRefusedError("not_found", `${none}\n${unfinished}`);
   }
 );
 
 /**
  * `anchor idl close`: closes a program's canonical metadata account and sends
  * its rent to the wallet, with the subcommand's events. Throws an
- * {@link IdlUploadRefusedError} while nothing was sent.
+ * {@link IdlCommandRefusedError} while nothing was sent.
  */
 export const closeMetadataAccountWith = (priorityFee: bigint) =>
   trackCommandFor("close")(
@@ -227,7 +241,7 @@ export const closeMetadataAccountWith = (priorityFee: bigint) =>
       const [metadata] = await findCanonicalPda({ program, seed });
       const account = await fetchEncodedAccount(rpc, metadata);
       if (!account.exists) {
-        throw new IdlUploadRefusedError(
+        throw new IdlCommandRefusedError(
           "not_found",
           `Program ${programId} has no metadata account for the seed "${seed}" on the selected network.`
         );
@@ -253,32 +267,39 @@ export const closeMetadataAccountWith = (priorityFee: bigint) =>
 /**
  * `anchor idl create-buffer`: stores the IDL in a buffer account of its own,
  * whose authority is the wallet, with the subcommand's events. Returns the
- * buffer's address. Throws an {@link IdlUploadRefusedError} while nothing was sent.
+ * buffer's address. Throws an {@link IdlCommandRefusedError} while nothing was
+ * sent, then an {@link UnfinishedIdlUploadError} naming the buffer when the send created it and failed.
  */
 export const createIdlBufferWith = (priorityFee: bigint) =>
   trackCommandFor("create-buffer")(
-    async ({ idl, filepath, text, connection, wallet }: IdlBufferCreation) => {
+    async ({ source, connection, wallet }: IdlBufferCreation) => {
       // Packed as an upload packs it, so `anchor idl write-buffer` can name the same compression and encoding
       const { data } = packDirectData({
-        content: toUploadJson({ idl, filepath, text }),
+        content: toUploadJson(source),
         compression: Compression.Zlib,
         encoding: Encoding.Utf8,
       });
       const buffer = await generateKeyPairSigner();
 
-      await sendPlanWith(priorityFee)(
-        { connection, wallet },
-        {
-          name: "IDL buffer creation",
-          toPlan: ({ signer, client }) =>
-            getCreateBufferInstructionPlan(client, {
-              newBuffer: buffer,
-              authority: signer,
-              payer: signer,
-              data,
-            }),
-        }
-      );
+      try {
+        await sendPlanWith(priorityFee)(
+          { connection, wallet },
+          {
+            name: "IDL buffer creation",
+            toPlan: ({ signer, client }) =>
+              getCreateBufferInstructionPlan(client, {
+                newBuffer: buffer,
+                authority: signer,
+                payer: signer,
+                data,
+              }),
+          }
+        );
+      } catch (error) {
+        throw await toSendFailureFor(createSolanaRpc(connection.rpcEndpoint), [
+          fetchLeftoverBufferFor(buffer.address),
+        ])(error);
+      }
       return { buffer: buffer.address };
     }
   );
@@ -286,7 +307,7 @@ export const createIdlBufferWith = (priorityFee: bigint) =>
 /**
  * `anchor idl set-buffer-authority`: hands a buffer the wallet owns to
  * `newAuthority`, with the subcommand's events. Throws an
- * {@link IdlUploadRefusedError} while nothing was sent.
+ * {@link IdlCommandRefusedError} while nothing was sent.
  */
 export const setBufferAuthorityWith = (priorityFee: bigint) =>
   trackCommandFor("set-buffer-authority")(
@@ -297,7 +318,7 @@ export const setBufferAuthorityWith = (priorityFee: bigint) =>
       );
       const authority = unwrapOption(account.data.authority) ?? undefined;
       if (authority !== address(wallet.publicKey.toBase58())) {
-        throw new IdlUploadRefusedError(
+        throw new IdlCommandRefusedError(
           "authority",
           authority
             ? `The buffer's authority is ${authority}. Connect that wallet to set a new authority.`
@@ -324,7 +345,7 @@ export const setBufferAuthorityWith = (priorityFee: bigint) =>
 /**
  * `anchor idl write-buffer`: creates or replaces a program's canonical
  * metadata account from a buffer's data, with the subcommand's events. Throws an
- * {@link IdlUploadRefusedError} while nothing was sent.
+ * {@link IdlCommandRefusedError} while nothing was sent, then as {@link uploadIdlWith} does.
  */
 export const writeMetadataFromBufferWith = (priorityFee: bigint) =>
   trackCommandFor("write-buffer")(
@@ -347,35 +368,48 @@ export const writeMetadataFromBufferWith = (priorityFee: bigint) =>
       }
       const source = await fetchBufferAccount(rpc, address(buffer));
       const [metadataAddress] = await findCanonicalPda({ program, seed });
+      // The write closes that leftover before it reads the buffer, so it would read a closed account
+      if (source.address === metadataAddress) {
+        throw new IdlCommandRefusedError(
+          "invalid",
+          `${buffer} is the program's metadata account, which holds an unfinished upload, not a buffer to write from.\n${UNFINISHED_UPLOAD}`
+        );
+      }
       const slot = await fetchMetadataSlot(rpc, metadataAddress);
 
-      await sendPlanWith(priorityFee)(
-        { connection, wallet },
-        {
-          name: "IDL buffer write",
-          toPlan: async ({ signer, client }) =>
-            closingLeftoverFor(slot, {
-              authority: signer,
-              program,
-              programData,
-            })(
-              await getWriteMetadataInstructionPlan(client, {
-                // What the command-line client stores when Anchor names a buffer and no file: its default compression and encoding, and no format
-                compression: Compression.Zlib,
-                encoding: Encoding.Utf8,
-                format: Format.None,
-                dataSource: DataSource.Direct,
-                buffer: source,
-                closeBuffer,
-                payer: signer,
+      try {
+        await sendPlanWith(priorityFee)(
+          { connection, wallet },
+          {
+            name: "IDL buffer write",
+            toPlan: async ({ signer, client }) =>
+              closingLeftoverFor(slot, {
                 authority: signer,
                 program,
                 programData,
-                seed,
-                metadata: toMaybeMetadata(slot),
-              })
-            ),
-        }
-      );
+              })(
+                await getWriteMetadataInstructionPlan(client, {
+                  // What the command-line client stores when Anchor names a buffer and no file: its default compression and encoding, and no format
+                  compression: Compression.Zlib,
+                  encoding: Encoding.Utf8,
+                  format: Format.None,
+                  dataSource: DataSource.Direct,
+                  buffer: source,
+                  closeBuffer,
+                  payer: signer,
+                  authority: signer,
+                  program,
+                  programData,
+                  seed,
+                  metadata: toMaybeMetadata(slot),
+                })
+              ),
+          }
+        );
+      } catch (error) {
+        throw await toSendFailureFor(rpc, [
+          fetchLeftoverAtMetadataFor(metadataAddress),
+        ])(error);
+      }
     }
   );
