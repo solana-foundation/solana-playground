@@ -7,7 +7,7 @@ members = [
     "sugar-cli",
     "utils/*",
 ]
-exclude = ["playnet", "rust-analyzer"]
+exclude = ["rust-analyzer"]
 resolver = "2"
 
 [workspace.dependencies]

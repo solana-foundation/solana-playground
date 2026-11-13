@@ -9,8 +9,8 @@ import { Endpoint } from "./endpoint";
 
 export { Endpoint };
 
-/** Solana public clusters, "localnet" or "playnet" */
-export type Cluster = "devnet" | "testnet" | "mainnet" | "localnet" | "playnet";
+/** Solana public clusters or "localnet" */
+export type Cluster = "devnet" | "testnet" | "mainnet" | "localnet";
 
 /**
  * What a connection endpoint of ours is stored under: its cluster, or
@@ -56,7 +56,7 @@ const perSecondOf = (value: string | undefined) => {
   return Number.isFinite(perSecond) && perSecond > 0 ? perSecond : undefined;
 };
 
-/** One of our endpoints with no send cap: Localnet, Surfpool and Playnet run on the person's machine or in the browser */
+/** One of our endpoints with no send cap: Localnet and Surfpool run on the person's machine */
 const infoOf = (
   [key, cluster, name, publicUrl, isOffered]: readonly [
     ClusterKey,
@@ -92,7 +92,7 @@ const envInfoOf = (
  * Every endpoint of ours on what `env` sets, in the order Settings offers the
  * chips: Mainnet, Devnet, Testnet, Localnet, Surfpool. The public RPCs
  * rate-limit a shared app, so they are only the fallback of a platform one,
- * never offered beside it. Playnet is not offered; code paths set it.
+ * never offered beside it.
  */
 export const clustersFor = (
   env: Partial<Record<EnvCluster, ClusterEnv>>
@@ -115,10 +115,6 @@ export const clustersFor = (
   ),
   surfpool: infoOf(
     ["surfpool", "localnet", "Surfpool", Endpoint.SURFPOOL, true],
-    {}
-  ),
-  playnet: infoOf(
-    ["playnet", "playnet", "Playnet", Endpoint.PLAYNET, false],
     {}
   ),
 });
@@ -145,7 +141,6 @@ const MONIKERS: ReadonlySet<string> = new Set<Cluster>([
   "testnet",
   "mainnet",
   "localnet",
-  "playnet",
 ]);
 
 /** Whether `value` is one of our clusters' monikers; `surfpool` is a key, not a cluster */
@@ -269,7 +264,6 @@ if (import.meta.vitest) {
       ["mainnet", "Mainnet"],
       ["testnet", "Testnet"],
       ["localnet", "Localnet"],
-      ["playnet", "Playnet"],
       ["unknown", "unknown"],
       ["Surfpool", "Surfpool"],
     ])("names %s as %s", (cluster, name) => {

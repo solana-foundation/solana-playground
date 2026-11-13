@@ -68,7 +68,7 @@ export const checkedChipKey = (
  * The network card's rows: the chips, the offered networks, then each saved
  * custom RPC under its name; then `children` (the saved RPCs' list); then
  * the card's foot, how a deploy works on the checked network. An endpoint no
- * chip lists (Playnet, or a URL not saved yet) leaves none checked and no
+ * chip lists (a URL not saved yet) leaves none checked and no
  * foot. Render it directly inside BaseSettingsCard: the rows are a fragment,
  * so the card's divide-y draws the hairlines between them.
  *

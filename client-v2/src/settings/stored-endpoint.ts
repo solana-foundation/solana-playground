@@ -72,10 +72,6 @@ export const buildEndpointOptions = (
           url: c.url,
         }))
       ),
-      // Not offered, still keyed: code paths set Playnet
-      ...Object.values(clusters)
-        .filter((c) => !c.isOffered)
-        .map((c) => ({ key: c.key, url: c.url })),
     ],
     "server.endpoint": [
       // The env's server under both keys a profile may hold: `configured`, and
@@ -346,7 +342,6 @@ if (import.meta.vitest) {
 
     /** Each endpoint's public URL, which no env changes */
     const Endpoint = {
-      PLAYNET: CLUSTERS.playnet.publicUrl,
       LOCALNET: CLUSTERS.localnet.publicUrl,
       SURFPOOL: CLUSTERS.surfpool.publicUrl,
       DEVNET: CLUSTERS.devnet.publicUrl,
@@ -845,12 +840,11 @@ if (import.meta.vitest) {
         ).toEqual({ option: "localnet" });
       });
 
-      it("keeps Testnet, Localnet, Surfpool and Playnet on their own addresses", () => {
+      it("keeps Testnet, Localnet and Surfpool on their own addresses", () => {
         for (const url of [
           Endpoint.TESTNET,
           Endpoint.LOCALNET,
           Endpoint.SURFPOOL,
-          Endpoint.PLAYNET,
         ]) {
           expect(
             roundTrip(state(url, LOCAL_ENDPOINT)).connection.endpoint

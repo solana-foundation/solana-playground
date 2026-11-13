@@ -4,7 +4,6 @@ import { PgTerminal } from "./terminal";
 
 /** Mapped import results */
 interface ImportResult {
-  playnet: typeof import("@solana-playground/playnet");
   rustfmt: typeof import("@solana-playground/rustfmt");
   "seahorse-compile": typeof import("@solana-playground/seahorse-compile");
   "solana-cli": typeof import("@solana-playground/solana-cli");
@@ -53,8 +52,6 @@ If the problem continues, consider filing a bug report in ${PgTerminal.underline
    */
   private static async _import(name: PackageName) {
     switch (name) {
-      case "playnet":
-        return await import("@solana-playground/playnet");
       case "rustfmt":
         return await import("@solana-playground/rustfmt");
       case "seahorse-compile":

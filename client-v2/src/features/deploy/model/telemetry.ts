@@ -2,12 +2,7 @@ import type { NoParams } from "@/shared/lib/telemetry";
 import { createTracker } from "@/shared/lib/telemetry";
 
 /** The network a deploy went to, as `PgConnection.cluster` names it */
-export type DeployCluster =
-  | "mainnet"
-  | "devnet"
-  | "testnet"
-  | "localnet"
-  | "playnet";
+export type DeployCluster = "mainnet" | "devnet" | "testnet" | "localnet";
 
 /** The step a deploy stopped at; `checks` is before anything was sent */
 export type DeployFailedStep =

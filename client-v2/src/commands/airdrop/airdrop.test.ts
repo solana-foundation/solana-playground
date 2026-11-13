@@ -154,13 +154,10 @@ describe("airdrop", () => {
   });
 
   // The local faucet is the user's own validator (Localnet, Surfpool)
-  it.each(["localnet", "playnet"])(
-    "airdrops on %s without a sign-in",
-    async (cluster) => {
-      await expect(checkOn(cluster)).resolves.toBeUndefined();
-      expect(checkSignedIn).not.toHaveBeenCalled();
-    }
-  );
+  it("airdrops on localnet without a sign-in", async () => {
+    await expect(checkOn("localnet")).resolves.toBeUndefined();
+    expect(checkSignedIn).not.toHaveBeenCalled();
+  });
 
   it.each(["devnet", "testnet"])("asks to sign in on %s", async (cluster) => {
     await expect(checkOn(cluster)).rejects.toThrow("Sign in with GitHub");

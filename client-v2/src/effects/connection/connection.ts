@@ -15,7 +15,6 @@ export const connection = () => {
   return PgCommon.batchChanges(async () => {
     if (Object.values(cache).every((v) => v)) return;
     if (!PgWallet.current) return;
-    if (PgConnection.cluster === "playnet") return;
     if (PgConnection.isConnected && !PgConnection.isClusterDown) return;
 
     // Connection failed or the cluster is down. Another cluster has no

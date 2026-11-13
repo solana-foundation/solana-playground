@@ -2,8 +2,6 @@
 
 /** A cluster's public RPC endpoint */
 export enum Endpoint {
-  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a name the client matches to run Playnet in the browser, never requested
-  PLAYNET = "http://playnet",
   LOCALNET = "http://localhost:8899",
   /**
    * `surfpool start`'s RPC. Its port is Localnet's; the host tells the two

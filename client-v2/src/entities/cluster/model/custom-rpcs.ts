@@ -885,8 +885,6 @@ if (import.meta.vitest) {
         ["the offered Testnet", () => offered("testnet").value],
         ["Localnet", () => "http://localhost:8899"],
         ["Surfpool", () => "http://127.0.0.1:8899"],
-        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
-        ["Playnet", () => "http://playnet"],
         ["a value that is not an RPC", () => "devnet"],
       ])("leaves %s out", (_, endpoint) => {
         expect(PgCustomRpcs.adopt(endpoint())).toBeUndefined();

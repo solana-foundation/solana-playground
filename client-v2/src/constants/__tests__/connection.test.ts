@@ -102,7 +102,6 @@ describe("clusterName", () => {
     ["mainnet", "Mainnet"],
     ["testnet", "Testnet"],
     ["localnet", "Localnet"],
-    ["playnet", "Playnet"],
   ])("names %s as %s", (cluster, name) => {
     expect(clusterName(cluster)).toBe(name);
   });
