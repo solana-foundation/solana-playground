@@ -643,7 +643,11 @@ const FlowFrame = () => {
           // hidden, on the other stages
           showTabs={shownStage === "write"}
           files={({ collapsed, phone }) => (
-            <LeftPanel collapsed={collapsed} sheet={phone} />
+            <LeftPanel
+              collapsed={collapsed}
+              sheet={phone}
+              hasProgram={state.hasProgram}
+            />
           )}
           stage={({ console }) => (
             <TutorialWorkspace
