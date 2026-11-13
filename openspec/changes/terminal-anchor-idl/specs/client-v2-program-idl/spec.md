@@ -83,6 +83,12 @@ finish the upload: the address then holds a metadata account with the new IDL an
 approval; `anchor idl write-buffer` SHALL do the same. `anchor idl fetch` SHALL NOT print a buffer's content as an IDL: it SHALL print the line that the program
 has no published IDL, then one line saying an upload to it is unfinished. `anchor idl close` SHALL close such a
 buffer and return its rent to the wallet, under the authority rule it applies to a metadata account.
+`anchor idl write-buffer` SHALL refuse, before sending, a `--buffer` that is the program's metadata account.
+
+A failed send that leaves a buffer at an address of its own (an `upgrade` or `init` over an existing IDL too large
+for one transaction, or `create-buffer`) SHALL be followed by one line naming the SOL it holds and its address,
+saying that no terminal command closes it. A send whose transactions expire before every one is confirmed SHALL end
+with one line saying so and telling the user to run the same command again.
 
 #### Scenario: A failed upload names the rent it leaves (manual)
 
@@ -410,8 +416,8 @@ signature, or the IDL.
 
 ### Requirement: A failed upload names its reason
 
-`idl_upload_failed` SHALL carry one `reason`: `not_found` when there is no IDL to upload, `invalid` when the IDL is
-not in the Anchor 0.30+ format, `not_deployed` when the program is not on the cluster, `authority` when the program
+`idl_upload_failed` SHALL carry one `reason`: `not_found` when there is no IDL to upload, `invalid` when the file is
+not JSON or the IDL is not in the Anchor 0.30+ format, `not_deployed` when the program is not on the cluster, `authority` when the program
 has no upgrade authority or the wallet is not it, `rejected` when the wallet declines the approval, `mainnet` when
 the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send leaves a buffer the
 terminal names, `send_failed` for any other failure after the first transaction was sent, and `rpc` for any other
@@ -446,7 +452,8 @@ For `fetch`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer
 ### Requirement: A failed subcommand names its reason
 
 `idl_command_failed` SHALL carry one `reason`: `not_found` when the IDL, file, or account the subcommand needs does
-not exist, `invalid` when the IDL is not in the Anchor 0.30+ format, `not_deployed` when the program is not on the
+not exist, `invalid` when the file is not JSON, the IDL is not in the Anchor 0.30+ format, a legacy IDL account does
+not hold a complete IDL, or `write-buffer`'s `--buffer` names the program's metadata account, `not_deployed` when the program is not on the
 cluster, `authority` when the connected wallet may not act on the account, `rejected` when the wallet declines the
 approval, `mainnet` when the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send
 leaves a buffer the terminal names, `send_failed` for any other failure after the first transaction was sent, `rpc`
