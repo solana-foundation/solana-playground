@@ -63,7 +63,7 @@ describe("PgServer routes", () => {
         name: "hello",
       });
     } finally {
-      settings.server.endpoint = "http://server.test";
+      settings.server.endpoint = "https://server.test";
     }
   });
 
@@ -83,7 +83,7 @@ describe("PgServer routes", () => {
       await PgServer.build({ files: [] });
       expect(requestedUrl()).toBe("/api/build-server/build");
     } finally {
-      settings.server.endpoint = "http://server.test";
+      settings.server.endpoint = "https://server.test";
     }
   });
 
@@ -208,7 +208,7 @@ describe("a refusal", () => {
 
     expect(error.reason).toBeUndefined();
     expect(error.message).toBe(
-      "Server request failed (http://server.test/build): Invalid UUID"
+      "Server request failed (https://server.test/build): Invalid UUID"
     );
   });
 });
