@@ -1,3 +1,5 @@
+import { LINE_BREAK } from "@/shared/lib/line-break";
+
 import { PgCommon } from "./common";
 import { PgExplorer, TupleFiles } from "./explorer";
 import { PgWorkspace } from "./explorer/workspace";
@@ -157,8 +159,30 @@ const isNoProgramFile = (path: string) =>
  */
 const isSkippedImportPath = (path: string) =>
   /(^|\/)(\.[^/.][^/]*|\.\.|node_modules)(\/|$)/.test(path) ||
-  // eslint-disable-next-line security/detect-unsafe-regex -- a project file path; worst case quadratic in its length
-  (/(^|\/)target(\/|$)/.test(path) && !/(^|\/)src\/(.+\/)?target\//.test(path));
+  (/(^|\/)target(\/|$)/.test(path) && !hasTargetUnderSrc(path));
+
+/**
+ * Whether `path` matches `/(^|\/)src\/(.+\/)?target\//`, scanned with
+ * `indexOf`: the regex retried `.+` from every `/`, quadratic in the path
+ */
+const hasTargetUnderSrc = (path: string) =>
+  path.split(LINE_BREAK).some((chunk, i) => {
+    let earliest: number | undefined;
+    for (
+      let at = chunk.indexOf("src/");
+      at !== -1;
+      at = chunk.indexOf("src/", at + 1)
+    ) {
+      // `^` is the path's start only, so a later chunk needs the `/`
+      const isSegment = at === 0 ? i === 0 : chunk[at - 1] === "/";
+      if (!isSegment) continue;
+      if (chunk.startsWith("target/", at + 4)) return true;
+      earliest ??= at;
+    }
+    return (
+      earliest !== undefined && chunk.indexOf("/target/", earliest + 5) !== -1
+    );
+  });
 
 /** A file dropped into Import › From files: the drop zone adds its `path` */
 export type ImportedFile = Pick<File, "name" | "text" | "arrayBuffer"> & {
@@ -1120,6 +1144,22 @@ if (import.meta.vitest) {
         ["src/lib.rs", false],
       ])("%s -> %s", (path, expected) => {
         expect(PgFramework.hasRunnableTypeScript([path])).toBe(expected);
+      });
+    });
+
+    describe("isSkippedImportPath", () => {
+      it.each([
+        ["target/deploy/p.so", true],
+        ["src/target/mod.rs", false],
+        ["programs/p/src/a/target/b.rs", false],
+        // `.+` before the `/` needs a character
+        ["src//target/b.rs", true],
+        // `^` is the path's start, not a line's
+        ["x\nsrc/target/b.rs", true],
+        // Quadratic for the regex this scan replaced
+        [`src/${"a/".repeat(20_000)}target`, true],
+      ])("%j -> %s", (path, expected) => {
+        expect(isSkippedImportPath(path)).toBe(expected);
       });
     });
 

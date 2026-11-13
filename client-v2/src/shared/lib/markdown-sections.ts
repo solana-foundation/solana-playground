@@ -1,5 +1,7 @@
 import GithubSlugger from "github-slugger";
 
+import { LINE_BREAK } from "./line-break";
+
 /** A heading of a Markdown page, with the id the page gives it */
 export interface MarkdownSection {
   title: string;
@@ -8,9 +10,27 @@ export interface MarkdownSection {
 
 /** A fence opens or closes a code block, inside which a `#` is not a heading */
 const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
-/** An ATX heading: `## Title`, with or without closing hashes */
-// eslint-disable-next-line security/detect-unsafe-regex -- a line of a shipped doc page; worst case quadratic in that line
-const HEADING = /^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
+/** An ATX heading's opening hashes and the whitespace after them */
+const HEADING_OPEN = /^\s{0,3}(#{1,6})\s+/;
+
+/**
+ * An ATX heading, `## Title`, with or without closing hashes: what
+ * `/^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/` matched, scanned from the end
+ * instead, since that regex retried the closing hashes after every character
+ */
+const headingOf = (line: string) => {
+  const open = HEADING_OPEN.exec(line);
+  if (!open) return undefined;
+  const text = line.slice(open[0].length).trimEnd();
+  let end = text.length;
+  while (end > 0 && text[end - 1] === "#") end--;
+  let space = end;
+  while (space > 0 && /\s/.test(text[space - 1])) space--;
+  // Closing hashes count only after whitespace; otherwise they are the title's
+  const title = space < end ? text.slice(0, space) : text;
+  if (LINE_BREAK.test(title)) return undefined;
+  return { level: open[1].length, title };
+};
 
 /**
  * A heading's text as it renders: link syntax and `*` emphasis stripped
@@ -54,13 +74,13 @@ export const sectionsOf = (markdown: string): readonly MarkdownSection[] => {
       continue;
     }
     if (fence !== undefined) continue;
-    const heading = HEADING.exec(line);
+    const heading = headingOf(line);
     if (!heading) continue;
-    const title = headingText(heading[2]);
+    const title = headingText(heading.title);
     // `## ` alone renders an empty heading; it has no section to name
     if (title === "") continue;
     const id = slugger.slug(title);
-    if (heading[1].length > 1) sections.push({ title, id });
+    if (heading.level > 1) sections.push({ title, id });
   }
   return sections;
 };
@@ -114,6 +134,20 @@ if (import.meta.vitest) {
         { title: "Account Validation", id: "account-validation" },
         { title: "Example Program", id: "example-program-1" },
       ]);
+    });
+
+    it.each([
+      ["## Title ##", "Title"],
+      ["## Title#", "Title#"],
+      ["## ###", "###"],
+      ["## Title\t#  ", "Title"],
+    ])("reads %j as the heading %j", (line, title) => {
+      expect(sectionsOf(line).map((s) => s.title)).toEqual([title]);
+    });
+
+    it("reads a heading with a long run of inner spaces, quadratic for the regex it replaced", () => {
+      const line = `## a${" ".repeat(50_000)}b`;
+      expect(sectionsOf(line)).toHaveLength(1);
     });
 
     it("lists no section for a page with its title alone, and counts the title's slug", () => {

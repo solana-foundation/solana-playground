@@ -1,3 +1,5 @@
+import { LINE_BREAK } from "@/shared/lib/line-break";
+
 import { stripKnownNoise } from "../../sidebar/assistant/bridge/build-output";
 
 /** One rustc diagnostic, parsed out of the compiler's own text */
@@ -82,8 +84,38 @@ const HEADER = /^error(?:\[(E\d+)\])?: (.+)$/;
 // they do not match `^`.)
 // eslint-disable-next-line security/detect-unsafe-regex -- linear: `[^\]]` stops at the bracket that closes it
 const OTHER_HEADER = /^(?:warning|note|help)(?:\[[^\]]+\])?: .+$/;
-// eslint-disable-next-line security/detect-unsafe-regex -- a line of compiler output; worst case quadratic in that line
-const LOCATION = /^\s*--> (?:\.\.?\/)*(.+?):(\d+):(\d+)\s*$/;
+const LOCATION_ARROW = /^\s*--> /;
+const LOCATION_TAIL = /:(\d+):(\d+)$/;
+
+/** The length of the `./` or `../` at `start` of `path`, 0 for neither */
+const dotPrefixAt = (path: string, start: number) => {
+  if (path.startsWith("./", start)) return 2;
+  if (path.startsWith("../", start)) return 3;
+  return 0;
+};
+
+/**
+ * What `/^\s*--> (?:\.\.?\/)*(.+?):(\d+):(\d+)\s*$/` matched, read in parts:
+ * that regex retried its lazy path against the tail after every character
+ */
+const locationOf = (line: string) => {
+  const arrow = LOCATION_ARROW.exec(line);
+  if (!arrow) return undefined;
+  const text = line.slice(arrow[0].length).trimEnd();
+  const tail = LOCATION_TAIL.exec(text);
+  if (!tail) return undefined;
+  const full = text.slice(0, tail.index);
+  // Leading `./` and `../` go, as long as a path is left
+  let start = 0;
+  for (;;) {
+    const step = dotPrefixAt(full, start);
+    if (step === 0 || start + step >= full.length) break;
+    start += step;
+  }
+  const file = full.slice(start);
+  if (file === "" || LINE_BREAK.test(file)) return undefined;
+  return { file, line: Number(tail[1]), col: Number(tail[2]) };
+};
 // rustc's own summary lines ("could not compile ...", "aborting due to ...
 // previous error(s)") are not diagnostics of their own.
 const SUMMARY = /^(could not compile|aborting due to)/;
@@ -126,11 +158,11 @@ export const parseBuildReport = (stderr: string): BuildReport => {
       continue;
     }
     if (!current) continue;
-    const loc = line.match(LOCATION);
+    const loc = locationOf(line);
     if (loc && current.file === null) {
-      current.file = loc[1];
-      current.line = Number(loc[2]);
-      current.col = Number(loc[3]);
+      current.file = loc.file;
+      current.line = loc.line;
+      current.col = loc.col;
       continue;
     }
     if (/^\s*\d+ \|/.test(line) || /^\s*\|/.test(line)) excerpt.push(line);
@@ -144,6 +176,21 @@ if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("views/flow/stages/build-report", () => {
+    it.each([
+      [" --> src/lib.rs:5:1", { file: "src/lib.rs", line: 5, col: 1 }],
+      ["--> ../../src/a.rs:1:2  ", { file: "src/a.rs", line: 1, col: 2 }],
+      // A prefix stays when nothing else is left of the path
+      ["--> ./:1:2", { file: "./", line: 1, col: 2 }],
+      ["--> a:1:2:3", { file: "a:1", line: 2, col: 3 }],
+      ["--> :1:2", undefined],
+      ["--> a\rb:1:2", undefined],
+      // Quadratic for the regex this parse replaced
+      [`--> ${":1".repeat(20_000)}x`, undefined],
+      [`--> ${"../".repeat(20_000)}x`, undefined],
+    ])("reads the location of %j", (line, expected) => {
+      expect(locationOf(line)).toEqual(expected);
+    });
+
     it("picks the cause past Anchor's macro symptom, or the marked one", () => {
       const { diagnostics } =
         parseBuildReport(`error[E0432]: unresolved import \`crate\`

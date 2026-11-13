@@ -9,6 +9,7 @@ import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 
 import { PgConnection } from "../../../../utils";
 import { PgAssistant } from "../store";
+import { emphasiseLabels } from "./caps-label";
 
 interface ServerConsoleProps {
   server: McpServerEntry;
@@ -27,14 +28,6 @@ const ACTION =
 
 /** Descriptions past this many characters start collapsed */
 const LONG_DESCRIPTION = 220;
-
-/** A line that opens with an all-caps label, `IDENTIFIER:` or `ACCOUNT TYPES RETURNED (by entity.kind):` */
-// eslint-disable-next-line security/detect-unsafe-regex -- a line of the server console; worst case quadratic in that line
-const CAPS_LABEL = /^([A-Z][A-Z0-9 _-]*[A-Z0-9](?: \([^)\n]*\))?:)/gm;
-
-/** Tool descriptions are Markdown by convention; servers that write `LABEL:` headings get them in bold */
-const emphasiseLabels = (description: string) =>
-  description.replace(CAPS_LABEL, "**$1**");
 
 /** The Markdown a tool description renders to, spaced for the card's small type */
 const DESCRIPTION_MARKDOWN =
