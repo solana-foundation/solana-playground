@@ -291,6 +291,9 @@ test("gist-sharing: A hand-made gist of TypeScript behind a link", async ({
   await page.goto(`/gist/${ID}`);
 
   await expect(page.locator("#root-dir")).toContainText("client.ts", LONG);
-  await expect(page.locator("#flow-stage-tab-write")).toBeVisible();
-  await expect(page.locator("#flow-stage-tab-build")).toHaveCount(0);
+  // A project with no program: its row names it, with no stepper
+  await expect(page.locator("#flow-client-project")).toBeVisible();
+  await expect(
+    page.getByRole("tablist", { name: "Development loop" })
+  ).toHaveCount(0);
 });
