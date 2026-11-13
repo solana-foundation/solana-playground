@@ -196,9 +196,9 @@ export const closingLeftoverFor =
   };
 
 /**
- * The buffer a failed send left: at the metadata account's address (`metadata`),
- * which the same upload run again finishes and `anchor idl close` closes, or a
- * buffer account of its own (`buffer`), which no subcommand closes.
+ * The buffer a failed send left: at the metadata account's address (`metadata`), which the same upload run again
+ * finishes and `anchor idl close` closes at the canonical address only (not a `--non-canonical` one), or a buffer
+ * account of its own (`buffer`), which no subcommand closes.
  */
 export interface UnfinishedUpload {
   kind: "metadata" | "buffer";
@@ -246,7 +246,7 @@ export const fetchLeftoverBufferFor =
 /** The failure of a send, as an {@link UnfinishedIdlUploadError} when one of `leftovers` finds a buffer it left */
 export const toSendFailureFor =
   (rpc: IdlRpc, leftovers: FetchLeftover[]) => async (failure: unknown) => {
-    // Nothing was sent before an `IdlSendFailedError`, so nothing can be left
+    // Any other failure came before the first send, so it left nothing
     if (!(failure instanceof IdlSendFailedError)) return failure;
     try {
       for (const fetchLeftover of leftovers) {

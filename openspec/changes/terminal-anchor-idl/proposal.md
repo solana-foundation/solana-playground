@@ -40,6 +40,10 @@ cluster. Ticket: to file.
   `upgrade`, and `idl_command_started`, `idl_command_succeeded`, and `idl_command_failed` for the other subcommands.
   This change's requirements define their parameters, and the `wbdi-flow` change names the two upload requirements.
   No event is renamed or removed.
+- Mainnet's cluster key is `mainnet`, not `mainnet-beta`, so every event that carries the Playground's cluster
+  sends `cluster: "mainnet"` for Mainnet: `fund_sent`, `fund_airdropped`, and the `deploy_*` events. A dashboard sees
+  Mainnet as `mainnet-beta` in events sent before this change merges and as `mainnet` after; a query over both
+  periods filters on both values.
 - `client-v2` stops loading `@solana-playground/anchor-cli`, and `wasm/anchor-cli` is deleted. The real wasm packages
   go from six to five, and no wasm build compiles Anchor 0.29. For the user, a cold `yarn setup` and a cold Vercel
   build compile one package fewer.
@@ -63,6 +67,7 @@ cluster. Ticket: to file.
 - `mainnet-deploy-warning`: the refusal of `anchor idl` writes on mainnet covers the six subcommands that send a
   transaction: `init`, `upgrade`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer`. This modifies
   the requirement #131 added to `master` (`e1af2dfc2`).
+- `client-v2-wallet-funding`: "Funding is measured" lists `mainnet` as Mainnet's `fund_sent` cluster.
 - `client-v2-terminal`: every command receives its arguments split at spaces, a run of spaces separating as one, so
   `anchor idl init <PROGRAM_ID>  --filepath idl.json` with two spaces runs as it does with one.
 
