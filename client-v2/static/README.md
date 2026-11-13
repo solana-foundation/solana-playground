@@ -23,3 +23,12 @@ at these files and sets `theme-color`.
 `--background` (dark theme), the product's ground. Icon paths in it are
 relative to the manifest, like `start_url`. A new render replaces the file
 here under the same name.
+
+## robots.txt
+
+`robots.txt` replaces upstream's, which allows every crawler, and disallows
+the whole site, so crawlers do not visit any deployment. Vercel's previews
+already send `X-Robots-Tag: noindex`; this file covers production too. It
+keeps crawlers from fetching pages, not search engines from listing a URL
+linked from elsewhere: that would take a `noindex` header, which crawlers
+never see while this file blocks them.
