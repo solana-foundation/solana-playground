@@ -1,6 +1,7 @@
 import type { BrowserContext, Page, Route } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 
+// By path: Playwright's CommonJS compile cannot load the cluster entry, whose modules hold `import.meta` blocks
 import { Endpoint } from "../src/entities/cluster/model/endpoint";
 import { isUuid } from "../src/shared/lib/ids";
 import { requireFor } from "../src/test-utils/require-for";

@@ -445,7 +445,7 @@ export class PgTty {
         )
 
         // Match for warning
-        // eslint-disable-next-line security/detect-unsafe-regex -- linear: the optional digits end in whitespace before a literal
+        // eslint-disable-next-line security/detect-unsafe-regex -- bounded: terminal output; quadratic only in a long run of digits
         .replace(/(\d+\s)?warning(s|:)?/gim, (match) =>
           hl(match, PgTerminal.warning)
         )

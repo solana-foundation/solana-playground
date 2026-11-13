@@ -15,8 +15,8 @@ const HEADING_OPEN = /^\s{0,3}(#{1,6})\s+/;
 
 /**
  * An ATX heading, `## Title`, with or without closing hashes: what
- * `/^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/` matched, scanned from the end
- * instead, since that regex retried the closing hashes after every character
+ * `/^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/` would match, scanned from the
+ * end, since the regex backtracks quadratically on a long line
  */
 const headingOf = (line: string) => {
   const open = HEADING_OPEN.exec(line);
@@ -145,10 +145,18 @@ if (import.meta.vitest) {
       expect(sectionsOf(line).map((s) => s.title)).toEqual([title]);
     });
 
-    it("reads a heading with a long run of inner spaces, quadratic for the regex it replaced", () => {
-      const line = `## a${" ".repeat(50_000)}b`;
-      expect(sectionsOf(line)).toHaveLength(1);
+    it("lists no section for a heading cut by a carriage return", () => {
+      expect(sectionsOf("## a\rb")).toEqual([]);
     });
+
+    it(
+      "parses a heading with a long run of inner spaces in linear time",
+      { timeout: 1000 },
+      () => {
+        const line = `## a${" ".repeat(60_000)}b`;
+        expect(sectionsOf(line)).toHaveLength(1);
+      }
+    );
 
     it("lists no section for a page with its title alone, and counts the title's slug", () => {
       expect(sectionsOf("# Programs\n\nSome text.")).toEqual([]);

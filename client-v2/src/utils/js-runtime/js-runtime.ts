@@ -379,7 +379,7 @@ export class PgJsRuntime {
    */
   private static async _getImports(code: string) {
     const importRegex =
-      // eslint-disable-next-line security/detect-unsafe-regex -- the user's own script, run in their own tab
+      // eslint-disable-next-line security/detect-unsafe-regex -- the input is the user's script or an imported repository or gist; the worst case slows only the user's own tab
       /import\s+(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["|'](.+)["|']/gm;
     let importMatch: RegExpExecArray | null;
 

@@ -297,7 +297,7 @@ describe("GET /api/ai/status", () => {
 describe("vercel.json routing of /api/ai/status", () => {
   /** A rewrite's `source` as Vercel matches it: `:name+` is one or more segments, the rest a regex */
   const matches = (source, path) =>
-    // eslint-disable-next-line security/detect-non-literal-regexp -- a pattern this test builds from its own constants
+    // eslint-disable-next-line security/detect-non-literal-regexp -- a rewrite source from the repository's vercel.json
     new RegExp(`^${source.replace(/:[A-Za-z]+\+/g, "[^/]+(?:/[^/]+)*")}$`).test(
       path
     );

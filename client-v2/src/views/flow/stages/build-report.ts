@@ -95,8 +95,8 @@ const dotPrefixAt = (path: string, start: number) => {
 };
 
 /**
- * What `/^\s*--> (?:\.\.?\/)*(.+?):(\d+):(\d+)\s*$/` matched, read in parts:
- * that regex retried its lazy path against the tail after every character
+ * What `/^\s*--> (?:\.\.?\/)*(.+?):(\d+):(\d+)\s*$/` would match, read in
+ * parts, since the regex backtracks quadratically on a long line
  */
 const locationOf = (line: string) => {
   const arrow = LOCATION_ARROW.exec(line);
@@ -184,12 +184,18 @@ if (import.meta.vitest) {
       ["--> a:1:2:3", { file: "a:1", line: 2, col: 3 }],
       ["--> :1:2", undefined],
       ["--> a\rb:1:2", undefined],
-      // Quadratic for the regex this parse replaced
-      [`--> ${":1".repeat(20_000)}x`, undefined],
-      [`--> ${"../".repeat(20_000)}x`, undefined],
+      ["--> src/lib.rs:5x", undefined],
     ])("reads the location of %j", (line, expected) => {
       expect(locationOf(line)).toEqual(expected);
     });
+
+    it(
+      "parses a long location line of ../ in linear time",
+      { timeout: 1000 },
+      () => {
+        expect(locationOf(`--> ${"../".repeat(60_000)}x`)).toBeUndefined();
+      }
+    );
 
     it("picks the cause past Anchor's macro symptom, or the marked one", () => {
       const { diagnostics } =

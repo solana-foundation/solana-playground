@@ -162,8 +162,8 @@ const isSkippedImportPath = (path: string) =>
   (/(^|\/)target(\/|$)/.test(path) && !hasTargetUnderSrc(path));
 
 /**
- * Whether `path` matches `/(^|\/)src\/(.+\/)?target\//`, scanned with
- * `indexOf`: the regex retried `.+` from every `/`, quadratic in the path
+ * Whether `path` matches what `/(^|\/)src\/(.+\/)?target\//` would, scanned
+ * with `indexOf`, since the regex backtracks quadratically on a long path
  */
 const hasTargetUnderSrc = (path: string) =>
   path.split(LINE_BREAK).some((chunk, i) => {
@@ -1156,11 +1156,19 @@ if (import.meta.vitest) {
         ["src//target/b.rs", true],
         // `^` is the path's start, not a line's
         ["x\nsrc/target/b.rs", true],
-        // Quadratic for the regex this scan replaced
-        [`src/${"a/".repeat(20_000)}target`, true],
+        // `src` must start a segment
+        ["mysrc/target/x.rs", true],
       ])("%j -> %s", (path, expected) => {
         expect(isSkippedImportPath(path)).toBe(expected);
       });
+
+      it(
+        "scans a long path of src/ segments in linear time",
+        { timeout: 1000 },
+        () => {
+          expect(hasTargetUnderSrc("src/".repeat(50_000))).toBe(false);
+        }
+      );
     });
 
     describe("PgFramework.readImportFiles", () => {

@@ -27,8 +27,8 @@ reason.
 ### Requirement: client-v2 lint rejects insecure browser APIs
 
 `yarn lint` SHALL fail on a file under `client-v2/src`, `client-v2/api` or `client-v2/e2e` that posts a message to
-the `*` target origin, sets `document.domain`, or names an `http:` URL other than a loopback address in a string
-literal.
+the `*` target origin, sets `document.domain`, or names an `http:` URL other than a loopback address or an XML
+namespace in a string literal.
 
 #### Scenario: postMessage to any origin (manual)
 
@@ -39,6 +39,22 @@ literal.
 
 - **WHEN** a file under `client-v2/src` gains the literal `"http://localhost:3000"`
 - **THEN** `yarn lint` reports no error for that line
+
+### Requirement: client-v2 lint rejects literal cluster RPC addresses
+
+`yarn lint` SHALL fail on a string literal, template literal or JSX text that names `api.devnet.solana.com`,
+`api.testnet.solana.com` or `api.mainnet-beta.solana.com` in a file under `client-v2/src`, `client-v2/api`,
+`client-v2/scripts` or `client-v2/e2e`, other than the module that defines `Endpoint`.
+
+#### Scenario: A cluster address in a test file (manual)
+
+- **WHEN** a test file under `client-v2/src` gains the literal `"https://api.devnet.solana.com"`
+- **THEN** `yarn lint` exits non-zero and names `no-restricted-syntax` and the line
+
+#### Scenario: The Endpoint module (manual)
+
+- **WHEN** `yarn lint` runs over `client-v2/src/entities/cluster/model/endpoint.ts`
+- **THEN** it reports no `no-restricted-syntax` error for the addresses that module defines
 
 ### Requirement: client-v2 lint warns on Node security patterns
 

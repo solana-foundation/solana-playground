@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { readIdl } from "@/entities/idl";
 import type { TutorialDefinition } from "@/entities/tutorial";
+import { PUB_FN } from "@/features/tutorial-conversation/model/program-source";
 
 /**
  * A step's `idl` is generated from its target program (`yarn tutorial:idl`),
@@ -65,8 +66,7 @@ const params = (list: string): string[] => {
 const shapeOfSource = (source: string): Shape => {
   const body = programModule(source);
   const shape: Shape = {};
-  // eslint-disable-next-line security/detect-unsafe-regex -- reads the repository's shipped tutorials
-  for (const fn of body.matchAll(/pub fn (\w+)\s*(?:<[^>]*>)?\s*\(/g)) {
+  for (const fn of body.matchAll(PUB_FN)) {
     // The parameter list runs to the parenthesis that closes it
     const start = (fn.index ?? 0) + fn[0].length;
     let depth = 1;

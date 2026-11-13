@@ -63,6 +63,7 @@ const CLUSTER_URL_SELECTORS = [
     selector: `TemplateElement[value.raw=${CLUSTER_URL}]`,
     message: CLUSTER_URL_MESSAGE,
   },
+  { selector: `JSXText[value=${CLUSTER_URL}]`, message: CLUSTER_URL_MESSAGE },
 ];
 /** The one module that spells the clusters' addresses */
 const ENDPOINT_MODULE = "src/entities/cluster/model/endpoint.ts";
@@ -337,7 +338,7 @@ const project = [
   },
   {
     files: ["api/**", "scripts/**"],
-    // `WithStatement` is react-app's selector, which this object would drop; modules cannot hold a `with`, so error is moot
+    // `WithStatement` is react-app's selector, kept; error in place of react-app's warn changes nothing: a module cannot hold `with`
     rules: {
       "no-restricted-syntax": [
         "error",
@@ -597,7 +598,7 @@ const INSECURE_URL_EXCEPTIONS = [
   String.raw`^(http|ws)://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?([/?#]|$)`,
 ];
 
-/** Security rules; sdl's are named one by one, since its `recommended` pulls in every framework config (Angular, Electron, Node, React) */
+/** Security rules; sdl's are named one by one, since its recommended pulls in every framework config of sdl's */
 const securityChecks = [
   {
     files: ["src/**", "api/**", "e2e/**"],
@@ -643,8 +644,11 @@ const securityChecks = [
 const config = [
   // ESLint 9 lints `.cjs` by default; `yarn lint` never did
   { ignores: ["**/*.cjs"] },
-  // ESLint 9 reports unused disable directives by default; ESLint 8 did not
-  { linterOptions: { reportUnusedDisableDirectives: "off" } },
+  {
+    linterOptions: {
+      reportUnusedDisableDirectives: "off", // ESLint 8's default; TODO(HOO-2892): "warn", once the disables that suppress nothing are removed
+    },
+  },
   ...reactApp,
   ...layers,
   ...project,

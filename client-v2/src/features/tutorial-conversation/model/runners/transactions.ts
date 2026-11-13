@@ -197,9 +197,9 @@ const anchorError = (log: string[]) => {
 
 /**
  * What `/AnchorError.*Error Code: (\w+)\. Error Number: (\d+)\.(?: Error
- * Message: (.*?)\.?$)?/` read, found with `lastIndexOf` instead: its `.*`
- * retried the tail at every `Error Code: ` of a long line. The last
- * `Error Code: ` whose tail parses wins, as the greedy `.*` chose.
+ * Message: (.*?)\.?$)?/` would read, found with `lastIndexOf`, since the
+ * regex backtracks quadratically on a long line. The last `Error Code: `
+ * whose tail parses wins, as the greedy `.*` chooses.
  */
 const anchorErrorOf = (line: string) => {
   const segments = line.split(LINE_BREAK);
@@ -507,11 +507,17 @@ if (import.meta.vitest) {
           `AnchorError ${TAIL} Error Message: x.\nmore`,
           { name: "Late", code: 6001, message: null },
         ],
-        // Quadratic for the regex this scan replaced
-        [`AnchorError ${"Error Code: x".repeat(20_000)}`, null],
       ])("reads %j", (line, expected) => {
         expect(anchorErrorOf(line)).toEqual(expected);
       });
+
+      it(
+        "parses a long line of AnchorError repeats in linear time",
+        { timeout: 1000 },
+        () => {
+          expect(anchorErrorOf("AnchorError ".repeat(30_000))).toBeNull();
+        }
+      );
     });
 
     describe("accountsWritten", () => {

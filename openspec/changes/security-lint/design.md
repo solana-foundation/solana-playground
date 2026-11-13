@@ -71,17 +71,18 @@ holds.
 | Source | Rules | Level | Files |
 | --- | --- | --- | --- |
 | `eslint-plugin-no-unsanitized` | `method`, `property` | error | `src`, `api`, `e2e` |
-| `@microsoft/eslint-plugin-sdl` | `no-postmessage-star-origin`, `no-document-domain`, `no-document-write`, `no-insecure-url` (loopback hosts excepted) | error | `src`, `api`, `e2e` |
+| `@microsoft/eslint-plugin-sdl` | `no-postmessage-star-origin`, `no-document-domain`, `no-document-write`, `no-insecure-url` (loopback hosts and sdl's XML namespaces excepted) | error | `src`, `api`, `e2e` |
 | `eslint-plugin-security` | `recommended`, without `detect-object-injection` | warn | `src`, `api` |
 
-`sdl` rules are enabled one by one, not through its `recommended` config, which also enables its React and Node
-configs and would repeat rules Decision 1 already sets. `sdl/no-inner-html` is left off because `no-unsanitized`
+`sdl` rules are enabled one by one, not through its `recommended` config, which pulls in every framework config of
+sdl's and would repeat rules Decision 1 already sets. `sdl/no-inner-html` is left off because `no-unsanitized`
 covers the same sinks. `detect-object-injection` reports nearly every computed member access and is off.
-`no-unsanitized/method` skips `import()` only in `**/*.test.mjs` and the `create.ts`/`create.tsx` factories, which
-import their own folder's modules by name.
+`no-unsanitized/method` skips `import()` only in `**/*.test.mjs` and five of the `create.*` factories, listed in
+`eslint.config.mjs`, which import their own folder's modules by name.
 `scripts/` is excluded from `security/*`: it is build tooling that reads paths and spawns processes by design.
-`--max-warnings` rises by exactly the number of new warnings. Errors the new rules raise are fixed in the same PR,
-or disabled on the line with the reason.
+Every new warning is fixed or disabled on the line with a reason, and `--max-warnings` does not rise. Errors the
+new rules raise are fixed in the same PR, or disabled on the line with the reason. A fixture of probe values, such as
+`src/test-utils/endpoints.mjs`, disables the rule on each line that holds a probe, not over a block.
 
 ### 5. A separate `security.yml`
 

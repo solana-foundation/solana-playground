@@ -1,6 +1,6 @@
 # Tasks
 
-Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1.
+Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1 and 1.3 on 1.2.
 
 ## 1. ESLint
 
@@ -17,6 +17,11 @@ Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1.
   error; clear every new warning, fixed or disabled with a reason, so `--max-warnings` is unchanged. Verify: each scenario under the first three requirements of
   `specs/security-checks/spec.md` gives the stated result on a scratch file, and `yarn run check` passes. Depends on
   1.1. HOO-2892.
+- [x] 1.3 Fail the lint on a literal cluster RPC address outside the `Endpoint` module, as the requirement "client-v2
+  lint rejects literal cluster RPC addresses" states: move `Endpoint` to `entities/cluster/model/endpoint.ts`, take
+  test RPCs from `src/test-utils/endpoints.mjs` on the `.test` TLD, and replace every literal under `src`, `api`,
+  `scripts` and `e2e`. Verify: the cluster-address rows of `scripts/eslint-security.test.mjs` pass, and `yarn lint`
+  reports no error. Depends on 1.2. HOO-2892.
 
 ## 2. Workflow and Dockerfile scanners
 

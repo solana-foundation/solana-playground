@@ -14,12 +14,14 @@ export const LOOPBACK_URL = Object.freeze({
   IPV4: "http://127.0.0.1:8899",
 });
 
-/* eslint-disable @microsoft/sdl/no-insecure-url -- each one is a probe the rule must refuse */
-/** Plain-HTTP URLs that look loopback but reach another host, which the exception refuses */
+/** Plain-HTTP URLs the loopback exception must refuse */
 export const NOT_LOOPBACK_URL = Object.freeze({
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a probe the rule must refuse
   HOST_STARTING_WITH_LOCALHOST: "http://localhost.evil.test",
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a probe the rule must refuse
   LOCALHOST_AS_USERINFO: "http://localhost:3000@evil.example",
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a probe the rule must refuse
   UNSPECIFIED_ADDRESS: "http://0.0.0.0:8899",
+  // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- a probe the rule must refuse
   REMOTE: "http://example.test",
 });
-/* eslint-enable @microsoft/sdl/no-insecure-url */

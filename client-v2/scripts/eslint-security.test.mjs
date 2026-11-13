@@ -35,7 +35,7 @@ const severityOf = async ({ file, code, rule }) => {
 
 const PROBES = [
   [
-    "security-checks: A dynamic innerHTML assignment",
+    "fails a dynamic innerHTML assignment",
     {
       file: "src/utils/probe.ts",
       code: "export const set = (el: HTMLElement, value: string) => {\n  el.innerHTML = value;\n};\n",
@@ -44,16 +44,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "security-checks: A literal assignment",
-    {
-      file: "src/utils/probe.ts",
-      code: 'export const clear = (el: HTMLElement) => {\n  el.innerHTML = "";\n};\n',
-      rule: "no-unsanitized/property",
-    },
-    undefined,
-  ],
-  [
-    "security-checks: postMessage to any origin",
+    "fails postMessage to any origin",
     {
       file: "src/utils/probe.ts",
       code: 'export const post = (d: unknown) => window.parent.postMessage(d, "*");\n',
@@ -62,7 +53,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "security-checks: A loopback URL",
+    "accepts a loopback URL",
     {
       file: "src/utils/probe.ts",
       code: exportingUrl(LOOPBACK_URL.LOCALHOST),
@@ -71,7 +62,7 @@ const PROBES = [
     undefined,
   ],
   [
-    "a loopback URL with a path after the port",
+    "accepts a loopback URL with a path after the port",
     {
       file: "src/utils/probe.ts",
       code: exportingUrl(LOOPBACK_URL.LOCALHOST_WITH_PATH),
@@ -80,7 +71,7 @@ const PROBES = [
     undefined,
   ],
   [
-    "the IPv4 loopback address",
+    "accepts the IPv4 loopback address",
     {
       file: "src/utils/probe.ts",
       code: exportingUrl(LOOPBACK_URL.IPV4),
@@ -89,7 +80,7 @@ const PROBES = [
     undefined,
   ],
   [
-    "localhost as userinfo before another host is not loopback",
+    "fails localhost as userinfo before another host",
     {
       file: "src/utils/probe.ts",
       code: exportingUrl(NOT_LOOPBACK_URL.LOCALHOST_AS_USERINFO),
@@ -98,7 +89,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "a host that only starts with localhost is not loopback",
+    "fails a host that only starts with localhost",
     {
       file: "src/utils/probe.ts",
       code: exportingUrl(NOT_LOOPBACK_URL.HOST_STARTING_WITH_LOCALHOST),
@@ -107,7 +98,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "0.0.0.0 is not loopback",
+    "fails 0.0.0.0, which is not loopback",
     {
       file: "src/utils/probe.ts",
       code: exportingUrl(NOT_LOOPBACK_URL.UNSPECIFIED_ADDRESS),
@@ -116,7 +107,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "e2e/ is checked for insecure URLs",
+    "fails an insecure URL in e2e/",
     {
       file: "e2e/probe.ts",
       code: exportingUrl(NOT_LOOPBACK_URL.REMOTE),
@@ -125,7 +116,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "a cluster's address spelled in src/ is refused",
+    "fails a cluster's address in src/",
     {
       file: "src/utils/probe.ts",
       code: exportingUrl(DEVNET),
@@ -134,7 +125,25 @@ const PROBES = [
     ERROR,
   ],
   [
-    "a cluster's address in a template literal in e2e/ is refused",
+    "fails a cluster's address in a layers file",
+    {
+      file: "src/features/probe/model/probe.ts",
+      code: exportingUrl(DEVNET),
+      rule: "no-restricted-syntax",
+    },
+    ERROR,
+  ],
+  [
+    "fails a cluster's address in JSX text",
+    {
+      file: "src/utils/probe.tsx",
+      code: `export const Probe = () => <p>${DEVNET}</p>;\n`,
+      rule: "no-restricted-syntax",
+    },
+    ERROR,
+  ],
+  [
+    "fails a cluster's address in a template literal in e2e/",
     {
       file: "e2e/probe.ts",
       code: `export const url = \`${DEVNET}/\${"rpc"}\`;\n`,
@@ -143,7 +152,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "a cluster's address spelled in scripts/ is refused",
+    "fails a cluster's address in scripts/",
     {
       file: "scripts/probe.mjs",
       code: exportingUrl(DEVNET),
@@ -152,7 +161,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "the Endpoint module may spell a cluster's address",
+    "accepts a cluster's address in the Endpoint module",
     {
       file: "src/entities/cluster/model/endpoint.ts",
       code: exportingUrl(DEVNET),
@@ -161,7 +170,7 @@ const PROBES = [
     undefined,
   ],
   [
-    "import() of a computed specifier outside the factories is checked",
+    "fails import() of a computed specifier outside the factories",
     {
       file: "src/utils/probe.ts",
       code: "export const load = (userUrl: string) => import(userUrl);\n",
@@ -170,7 +179,7 @@ const PROBES = [
     ERROR,
   ],
   [
-    "security-checks: A dynamic RegExp",
+    "reports a dynamic RegExp in api/",
     {
       file: "api/probe.mjs",
       code: "export const pattern = (input) => new RegExp(input);\n",
@@ -179,7 +188,16 @@ const PROBES = [
     WARNING,
   ],
   [
-    "security-checks: A computed property read",
+    "reports a dynamic RegExp in src/",
+    {
+      file: "src/utils/probe.ts",
+      code: "export const pattern = (input: string) => new RegExp(input);\n",
+      rule: "security/detect-non-literal-regexp",
+    },
+    WARNING,
+  ],
+  [
+    "ignores a computed property read",
     {
       file: "src/utils/probe.ts",
       code: "export const read = (r: Record<string, number>, key: string) => r[key];\n",

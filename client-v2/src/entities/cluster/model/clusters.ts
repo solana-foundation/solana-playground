@@ -219,6 +219,17 @@ if (import.meta.vitest) {
       ]);
     });
 
+    it.each([
+      // eslint-disable-next-line no-restricted-syntax -- the value under test
+      [Endpoint.DEVNET, "https://api.devnet.solana.com"],
+      // eslint-disable-next-line no-restricted-syntax -- the value under test
+      [Endpoint.TESTNET, "https://api.testnet.solana.com"],
+      // eslint-disable-next-line no-restricted-syntax -- the value under test
+      [Endpoint.MAINNET_BETA, "https://api.mainnet-beta.solana.com"],
+    ])("holds the public RPC %s", (endpoint, url) => {
+      expect(endpoint).toBe(url);
+    });
+
     it("treats an empty string as unset", () => {
       const clusters = clustersFor({
         devnet: { rpcUrl: "", nativeRpcUrl: "" },

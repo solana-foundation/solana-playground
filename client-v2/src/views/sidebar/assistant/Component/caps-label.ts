@@ -67,8 +67,9 @@ const emphasisePieceLabels = (piece: string) => {
 
 /**
  * Tool descriptions are Markdown by convention; servers that write `LABEL:`
- * headings get them in bold. A scan, not `/^(...)/gm`, whose backtracking was
- * quadratic in a line an MCP server sends
+ * headings get them in bold, as
+ * `/^([A-Z][A-Z0-9 _-]*[A-Z0-9](?: \([^)\n]*\))?:)/gm` would find them. A
+ * scan, since the regex backtracks quadratically on a long line a server sends
  */
 export const emphasiseLabels = (description: string) =>
   description.split("\n").map(emphasisePieceLabels).join("\n");
@@ -87,13 +88,18 @@ if (import.meta.vitest) {
       ["A: x", "A: x"],
       ["AB (x) y", "AB (x) y"],
       ["AB- : x", "AB- : x"],
+      ["see NOTE: x", "see NOTE: x"],
+      ["1A: x", "1A: x"],
+      ["AB(x): y", "AB(x): y"],
     ])("emphasises the labels of %j", (description, expected) => {
       expect(emphasiseLabels(description)).toBe(expected);
     });
 
-    it.each([`${"AA (".repeat(20_000)}`, "A".repeat(50_000)])(
-      "leaves a long line with no label as it is, quadratic for the regex this scan replaced",
-      (description) => {
+    it(
+      "scans a long line of unclosed labels after carriage returns in linear time",
+      { timeout: 1000 },
+      () => {
+        const description = "AA (\r".repeat(300_000);
         expect(emphasiseLabels(description)).toBe(description);
       }
     );

@@ -14,17 +14,17 @@ export const programModule = (source: string): string => {
   return source.slice(open + 1);
 };
 
+/** A `pub fn`'s name, its generics and the `(` that opens its parameters */
+// eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s*`, `<[^>]*>` and `\(` start with disjoint characters
+export const PUB_FN = /pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g;
+
 /**
  * The instructions a program's source defines: the `pub fn`s of its
  * `#[program]` module. What a build goal checks when the build returned no
  * IDL (Anchor 1.1.2, HOO-2688): the learner's own code, never the lesson's.
  */
 export const programInstructions = (source: string): string[] =>
-  Array.from(
-    // eslint-disable-next-line security/detect-unsafe-regex -- linear: `\s*`, `<[^>]*>` and `\(` start with disjoint characters
-    programModule(source).matchAll(/pub fn (\w+)\s*(?:<[^>]*>\s*)?\(/g),
-    (m) => m[1]
-  );
+  Array.from(programModule(source).matchAll(PUB_FN), (m) => m[1]);
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -44,6 +44,12 @@ mod p {
 impl X { pub fn helper(&self) {} }
 `)
       ).toEqual(["hello", "grow"]);
+    });
+
+    it("lists a pub fn with whitespace between its generics and its parameters", () => {
+      expect(
+        programInstructions("#[program]\nmod p { pub fn grow<'a> (x: u8) {} }")
+      ).toEqual(["grow"]);
     });
 
     it("lists none for a source without a program module", () => {
