@@ -14,3 +14,6 @@ scripts/tutorial-idl/target
 
 # Generated:
 src/views/sidebar/assistant/content/assistant-context.md
+
+# IDLs given to and printed by the Anchor 1.1.2 binary: the inputs kept on one line, the outputs byte for byte:
+src/entities/idl/model/anchor-cli/__fixtures__/*.json

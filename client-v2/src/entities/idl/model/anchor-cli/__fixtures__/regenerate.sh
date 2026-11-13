@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Writes every `*.txt` of this folder from the Anchor 1.1.2 binary, and checks
-# that the binary rejects what the tests expect it to reject.
+# Writes every output of this folder (`*.convert*.json`, `*.type.txt`) from the
+# Anchor 1.1.2 binary, and checks that the binary rejects what the tests expect it to reject.
 # Usage: bash regenerate.sh   (ANCHOR=<path> for a binary outside avm)
 set -euo pipefail
 
@@ -14,11 +14,11 @@ if [ "$("$ANCHOR" --version)" != "anchor-cli 1.1.2" ]; then
   exit 1
 fi
 
-"$ANCHOR" idl convert legacy.json > legacy.convert.txt
-"$ANCHOR" idl convert legacy.json --program-id "$PROGRAM_ID" > legacy.convert-program-id.txt
-"$ANCHOR" idl convert legacy-no-address.json --program-id "$PROGRAM_ID" > legacy-no-address.convert-program-id.txt
-"$ANCHOR" idl convert current.json --to-legacy > current.convert-to-legacy.txt
-"$ANCHOR" idl convert current-full.json --program-id "$PROGRAM_ID" > current-full.convert-program-id.txt
+"$ANCHOR" idl convert legacy.json > legacy.convert.json
+"$ANCHOR" idl convert legacy.json --program-id "$PROGRAM_ID" > legacy.convert-program-id.json
+"$ANCHOR" idl convert legacy-no-address.json --program-id "$PROGRAM_ID" > legacy-no-address.convert-program-id.json
+"$ANCHOR" idl convert current.json --to-legacy > current.convert-to-legacy.json
+"$ANCHOR" idl convert current-full.json --program-id "$PROGRAM_ID" > current-full.convert-program-id.json
 "$ANCHOR" idl type current-full.json > current-full.type.txt
 
 # Fails unless `anchor <arguments after the status>` exits with that status

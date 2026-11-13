@@ -143,24 +143,24 @@ if (import.meta.vitest) {
       convertIdlToLegacy(undefined, text);
 
     it.each([
-      { expected: "legacy.convert.txt", print: convert, input: "legacy.json" },
+      { expected: "legacy.convert.json", print: convert, input: "legacy.json" },
       {
-        expected: "legacy.convert-program-id.txt",
+        expected: "legacy.convert-program-id.json",
         print: convertWithProgramId,
         input: "legacy.json",
       },
       {
-        expected: "legacy-no-address.convert-program-id.txt",
+        expected: "legacy-no-address.convert-program-id.json",
         print: convertWithProgramId,
         input: "legacy-no-address.json",
       },
       {
-        expected: "current-full.convert-program-id.txt",
+        expected: "current-full.convert-program-id.json",
         print: convertWithProgramId,
         input: "current-full.json",
       },
       {
-        expected: "current.convert-to-legacy.txt",
+        expected: "current.convert-to-legacy.json",
         print: convertToLegacy,
         input: "current.json",
       },
