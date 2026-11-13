@@ -12,6 +12,8 @@ FROM ${IMAGE} AS server-true
 FROM ${IMAGE} AS server-false
 
 ###################### Build and start development client ######################
+# A stage of this file, not an image, so it carries no tag
+# hadolint ignore=DL3006
 FROM server-${HAS_SERVER}
 
 ARG USER
@@ -23,6 +25,8 @@ WORKDIR /home/${USER}
 COPY . .
 
 # The WASM image has to be built before, which is handled by the compose file
+# The source is that local image, not a stage of this file
+# hadolint ignore=DL3022
 COPY --from=solana-playground-wasm /wasm wasm
 
 # A linked worktree's `.git` names a host path, and every git call below it fails, yarn's included
@@ -33,13 +37,12 @@ ENV ASSETS_DIR=/opt/assets
 RUN git clone --quiet --no-checkout "$(git config -f .gitmodules submodule.client/public.url)" "$ASSETS_DIR" \
     && git -C "$ASSETS_DIR" checkout --quiet --detach "$(cat client-v2/scripts/assets-commit.txt)"
 
-# Install dependencies
+# Install dependencies, then bake the assets in, so the container does not need the network to start.
+# `yarn start`/`yarn build` re-run update-static.mjs and it is idempotent.
 WORKDIR /home/${USER}/client-v2
-RUN yarn install --frozen-lockfile
-
-# Bake the assets in, so the container does not need the network to start.
-# `yarn start`/`yarn build` re-run this and it is idempotent.
-RUN node scripts/update-static.mjs
+RUN yarn install --frozen-lockfile \
+    && yarn cache clean \
+    && node scripts/update-static.mjs
 
 # pipefail: a failed rustup download must fail here, not later as a missing `rustup`
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]

@@ -20,7 +20,7 @@ Groups 1, 2 and 3 may run at the same time. Inside group 1, 1.2 depends on 1.1.
 
 ## 2. Workflow and Dockerfile scanners
 
-- [ ] 2.1 Add `.github/workflows/security.yml` with zizmor and hadolint as in design.md, Decision 5, every `uses:`
+- [x] 2.1 Add `.github/workflows/security.yml` with zizmor and hadolint as in design.md, Decision 5, every `uses:`
   pinned to a commit SHA; fix or suppress inline with a reason every finding of the first run, and list the count per
   rule in the PR. Run the workflow with act as `client-v2/docs/local-ci-with-act.md` describes before the push.
   Verify: the zizmor and hadolint scenarios in `specs/security-checks/spec.md` give the stated result on a throwaway

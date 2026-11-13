@@ -1,0 +1,78 @@
+name: Security
+
+# zizmor over the workflows and actions, hadolint over the fork's two Dockerfiles. A separate workflow, so
+# `security-events: write` reaches these jobs alone. A pull_request run from a fork gets a read-only token: there the
+# tool's exit status fails the job and the findings stay in the log; Code scanning shows the state of `master`.
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # SARIF output exits 0 on findings, so this step only reports; the next one fails the job
+      - name: Report to Code scanning
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          inputs: .github/workflows .github/actions
+
+      - name: Scan
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          inputs: .github/workflows .github/actions
+          advanced-security: false
+
+  hadolint:
+    name: hadolint
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      # The fork's own; the Dockerfiles under client/, server/ and wasm/ are upstream's
+      DOCKERFILES: client-v2/Dockerfile docker/server-unstable.Dockerfile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The action writes SARIF to the file only, so the last step prints the findings and fails the job
+      - name: Lint to SARIF
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: ${{ env.DOCKERFILES }}
+          format: sarif
+          output-file: hadolint.sarif
+          no-fail: true
+
+      - name: Upload SARIF
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint
+
+      - name: Lint
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
+        with:
+          dockerfile: ${{ env.DOCKERFILES }}
+          failure-threshold: warning
