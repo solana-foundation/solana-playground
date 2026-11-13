@@ -4,7 +4,9 @@ description: >
   Keeps the open PR of the current branch mergeable: every CI check passes, Greptile is at 5/5 with no unresolved
   thread, and every item under the body's `## Checklist` is ticked with evidence or struck as not applicable. One
   pass per run; `/loop /babysit` repeats passes until all three hold. Use for /babysit, "babysit the PR", "watch
-  the PR until it is green", "keep the checklist true".
+  the PR until it is green", "keep the checklist true", "tick the PR checklist", "CI is red on my PR, fix it",
+  and after every push, greploop run, or CI result on an open PR. Not for a merge-readiness code review, which
+  is /sx:review-pr.
 argument-hint: "[pr-number]"
 ---
 
@@ -16,6 +18,23 @@ A PR is done when all three hold:
 - Greptile's latest score is 5/5 and no review thread is unresolved. Greptile reviews only PRs into `master` on
   the foundation repository (`greptile.json`); for any other PR this condition holds by default.
 - No `- [ ]` item is left under `## Checklist` in the PR body.
+
+## The PR template
+
+The PR body is [`.github/pull_request_template.md`](../../../.github/pull_request_template.md) filled in by the
+author. The skill works from that body and never from a structure of its own:
+
+- The checklist is the template's `## Checklist`, item for item; the table in "5. Walk the checklist" says how
+  to mark it. Where the template's comment says to delete an item that does not apply, strike it instead: a
+  struck item shows the reviewer it was considered, a deleted one does not.
+- The filled sections are the author's statement of the PR's scope. Judge each item against them: what
+  `## TLDR` and `## Blast radius` say the PR changes, what `## Not in this PR` says it leaves out, and what
+  `## Evidence` already names.
+- A section the author filled stays as written. The skill edits only checklist states and the `## Evidence`
+  slot an item points at. A filled section that the head no longer matches (a bundle row that moved, a file
+  added outside the stated blast radius) is reported, not rewritten.
+- A body that does not follow the template (a section missing or renamed) is reported and the pass stops:
+  ticking items against a different structure would hide the gap.
 
 ## 1. Find the PR
 
@@ -34,10 +53,11 @@ it and stop, since the checks would describe other code.
 
 ## 2. Sync the body file
 
-The body lives in `.github/<slug>.pr.md`, where `<slug>` is the branch name with `/` replaced by `-`. The file
-stays untracked: never `git add` it.
+The body lives in an untracked `.github/*.pr.md` file; never `git add` it. File names do not always follow the
+branch (`tutorial-flow-2.pr.md`), so find the file whose `## TLDR` matches the remote body's before creating one.
 
-- File missing: write the remote body into it.
+- No such file: write the remote body into `.github/<slug>.pr.md`, where `<slug>` is the branch name with `/`
+  replaced by `-`.
 - File differs from the remote body: someone edited the PR on GitHub. Take the remote body, keep the local
   file's checklist edits only where the remote left those lines unchanged, and name each conflict in the report.
 
@@ -49,8 +69,9 @@ gh pr checks <n> --json name,workflow,bucket,state,link
 
 - `pending`: in loop mode, end the pass and let the wakeup in step 7 return. Outside loop mode, run
   `gh pr checks <n> --watch --fail-fast` with `run_in_background` and continue this pass when it exits.
-- `fail` or `cancel`: read the log (`gh run view <run-id> --log-failed`; the run id is in `link`). Find the cause
-  before touching code. A flake (network, runner, timeout with no code path involved) gets
+- `fail` or `cancel`: read the log (`gh run view <run-id> --log-failed`; the run id is in `link`). A check
+  outside GitHub Actions (Vercel, CodeQL, Greptile) has no run: open its `link` or `description` instead.
+  Find the cause before touching code. A flake (network, runner, timeout with no code path involved) gets
   `gh run rerun <run-id> --failed` once; a second failure of the same job is not a flake.
 - A real failure: fix it locally, run the local command that matches the failing job (the `client-v2/` scripts
   in the root `CLAUDE.md`), then **ask before each commit and push**. The commit message is one
@@ -58,7 +79,8 @@ gh pr checks <n> --json name,workflow,bucket,state,link
 
 ## 4. Greptile
 
-When the score is below 5/5 or a thread is unresolved, run `/greploop` on the PR. It runs before the checklist
+Read the score and the unresolved threads as `/greploop` steps B and F do, trusting only its bot logins. When
+the score is below 5/5 or a thread is unresolved, run `/greploop` on the PR. It runs before the checklist
 walk, because its fixes move the head and invalidate evidence.
 
 `/greploop` commits and pushes on its own. Under `/babysit`, its commit-and-push step follows the same rule as a
@@ -67,8 +89,10 @@ without asking.
 
 ## 5. Walk the checklist
 
-Read the changed files first: `git diff --name-only origin/<baseRefName>...HEAD`, after
-`git fetch origin <baseRefName>`.
+Read the filled template sections and the changed files first: `gh pr diff <n> --name-only`. GitHub computes
+that list against the PR's real base; a local `git diff` against `origin` would use hoodieshq's `master`, not
+the foundation's. An item is not applicable only when both agree: the diff does not touch
+what the item governs, and no filled section claims it does.
 
 Each item under `## Checklist` ends in exactly one of three states. Never reword, reorder, add, or delete an item.
 
