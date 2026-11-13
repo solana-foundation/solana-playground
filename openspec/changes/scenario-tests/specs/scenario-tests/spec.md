@@ -15,8 +15,10 @@ report, the generated `tests.md` of each capability, and the per-capability stri
 Every `#### Scenario:` in a spec under `openspec/specs/` or an active change SHALL be checked by a test titled
 `<capability>: <scenario name>`, where `<capability>` is the folder that holds the `spec.md`, or SHALL end its heading
 with `(manual)`. A skipped or unwritten test (`.skip`, `.fixme`, or `.todo` on `test`, `it`, or `describe`,
-`test.describe.skip` included) SHALL NOT count. A scenario
-under a `## REMOVED` heading of a delta SHALL owe no test.
+`test.describe.skip` included) SHALL NOT count, and neither SHALL a test whose body calls `test.skip(` or
+`test.fixme(`, whatever the arguments. A scenario under a `## REMOVED` heading of a delta SHALL owe no test. A
+scenario marked `(manual)` that a test cites SHALL be reported as a conflict, and in a strict capability
+`yarn spec:coverage` SHALL exit with an error on it.
 
 #### Scenario: A scenario with a browser test
 
@@ -34,10 +36,21 @@ under a `## REMOVED` heading of a delta SHALL owe no test.
 - **WHEN** the only test titled with a scenario is a `test.skip`
 - **THEN** lists the scenario as uncovered
 
+#### Scenario: A test that skips itself in its body
+
+- **WHEN** the only test titled with a scenario calls `test.skip(` with a condition inside its body
+- **THEN** lists the scenario as uncovered
+
 #### Scenario: A manual scenario
 
 - **WHEN** a scenario's heading ends with `(manual)`
 - **THEN** counts it as manual and asks for no test
+
+#### Scenario: A manual scenario a test cites
+
+- **GIVEN** a capability on the strict list
+- **WHEN** a test is titled with one of its scenarios whose heading ends with `(manual)`
+- **THEN** exits with an error, naming the scenario and the test as a conflict
 
 #### Scenario: A removed scenario
 
@@ -133,7 +146,8 @@ A vitest or `node --test` test that checks a scenario SHALL be a `describe` titl
 holding an optional `describe` titled with the GIVEN clause, then a `describe` titled with the WHEN clause, then one
 `it` per THEN and AND clause. An AND after a GIVEN or a WHEN SHALL be a `describe` nested in the one before it. Each
 precondition and action SHALL run in a hook of its `describe`. A clause step SHALL count only inside the `describe`
-of the GIVEN, WHEN, or AND clause before it.
+of the GIVEN, WHEN, or AND clause before it. A flat `it` or `test` titled `<capability>: <scenario name>` SHALL cite
+its scenario, and every clause of that scenario SHALL be missing for it, because it holds no clause step.
 
 #### Scenario: A vitest test with a nested WHEN
 
@@ -151,6 +165,11 @@ of the GIVEN, WHEN, or AND clause before it.
 - **GIVEN** a scenario whose WHEN clause is followed by an AND clause and then a THEN clause
 - **WHEN** a vitest test nests a `describe` titled with the AND inside the WHEN `describe`, with the THEN `it` in it
 - **THEN** lists no missing clause for the scenario
+
+#### Scenario: A flat test titled with the scenario
+
+- **WHEN** a `node --test` file holds a `test` titled with a scenario's capability and name and no clause step
+- **THEN** counts the scenario as tested and names every clause as missing for that test
 
 ### Requirement: Titles are string literals
 
@@ -221,7 +240,8 @@ SHALL report how many such clauses each capability holds.
 
 `yarn spec:coverage` SHALL report, per scenario, each test that cites it (file and title), the test's level, and the
 clauses each test is missing. It SHALL list every scenario that more than one test cites, as a candidate duplicate,
-and SHALL NOT fail on one. `yarn spec:coverage --strict` SHALL exit with an error when any scenario is uncovered.
+and SHALL NOT fail on one. `yarn spec:coverage --strict` SHALL exit with an error when any scenario is uncovered, a
+scenario only an active change adds included.
 
 #### Scenario: Two tests cite one scenario
 
@@ -237,15 +257,21 @@ and SHALL NOT fail on one. `yarn spec:coverage --strict` SHALL exit with an erro
 ### Requirement: Each capability has a generated tests.md
 
 Each capability with a `spec.md` under `openspec/specs/` SHALL have a committed `tests.md` beside it, generated from
-`openspec/specs/` only. It SHALL hold one row per clause per test: clause, test file, test title, and level. A manual
-scenario SHALL have one row reading "manual"; an uncovered one, one row reading "none". The generator SHALL delete a
-`tests.md` whose folder has no `spec.md`.
+`openspec/specs/` only. It SHALL hold one row per clause per test: clause, test file, test title, and level. A clause
+the test has no step for SHALL have a row naming that test's file and title, with "missing" in place of the level. A
+manual scenario SHALL have one row reading "manual"; an uncovered one, one row reading "none". The generator SHALL
+delete a `tests.md` whose folder has no `spec.md`.
 
 #### Scenario: A tested scenario's rows
 
 - **WHEN** the generator runs over a scenario with three clauses that one test checks
 - **THEN** writes three rows for it to the capability's `tests.md`, each naming the test file, the test title, and the
   level
+
+#### Scenario: A clause without a step in tests.md
+
+- **WHEN** the generator runs over a scenario with three clauses whose one test has a step for two of them
+- **THEN** writes three rows for it, the row of the clause without a step reading "missing" in place of the level
 
 #### Scenario: A manual scenario's row
 
@@ -333,12 +359,18 @@ Without a base branch it SHALL skip the comparison.
 
 For a strict capability, a scenario an active change adds SHALL be reported and SHALL NOT fail the run. A scenario
 that sits in a requirement an active change modifies SHALL be checked by its name only, not clause by clause, until
-the change is archived.
+the change is archived. Both exemptions SHALL apply to the strict list only: `yarn spec:coverage --strict` SHALL
+exit with an error on an uncovered scenario an active change adds, as on any uncovered scenario.
 
 #### Scenario: A proposal adds a scenario to a strict capability
 
 - **WHEN** an active change's delta adds a scenario to a strict capability and no test cites it
 - **THEN** reports the scenario as uncovered and exits without an error
+
+#### Scenario: A proposal adds a scenario, with the strict flag
+
+- **WHEN** `yarn spec:coverage --strict` runs and an active change's delta adds a scenario no test cites
+- **THEN** exits with an error, naming the scenario
 
 #### Scenario: A proposal rewords a scenario of a strict capability
 

@@ -1,8 +1,9 @@
 # Tasks
 
-This change's proposal lands first as a docs-only PR. After it, 1.1, 2.1, and 2.3 may run at the same time; 2.2
-follows 2.1; groups 3 and 4 follow 2.2 and may run at the same time; 5.1 follows 3.1 and 4.1; 5.2 and 5.3 follow
-4.2. Each task that
+This change's proposal lands first as a docs-only PR. After it, 1.1 and 2.1 may run at the same time; 2.3 follows
+1.1, because both rewrite the item "A test title says what the code does" in `client-v2/CLAUDE.md`; 2.2 follows 2.1;
+groups 3 and 4 follow 2.2 and may run at the same time; 5.1 follows 3.1 and 4.1; 5.2 and 5.3 follow 4.2. Each task
+that
 changes `client-v2/scripts/` titles its `node --test` cases with the `scenario-tests` scenarios it
 implements, in the clause shape of design.md, decision 1.
 
@@ -23,14 +24,16 @@ implements, in the clause shape of design.md, decision 1.
   config, not copied), and the `*.test.mjs` files `yarn test-api` runs with `ts.createSourceFile` into a tree of titled
   `test`, `test.describe`, `test.step`, `describe`, and `it` calls, replacing `TEST_TITLE` in
   `client-v2/scripts/spec-coverage.mjs`; count literal titles only, skip `.skip`, `.fixme`, and `.todo` on `test`,
-  `it`, and `describe`, `test.describe.skip` included, and assign each file its level by path (design.md, decisions 3
-  and 4);
+  `it`, and `describe`, `test.describe.skip` included, and a test whose body calls `test.skip(` or `test.fixme(`,
+  report a `(manual)` scenario a test cites as a conflict, and assign each file its level by path (design.md,
+  decisions 3, 4, and 6);
   verify with `node --test scripts/spec-coverage.test.mjs` covering the scenarios of "Every scenario is a test or is
   marked manual", "A scenario is checked at the integration or the end-to-end level", and "Titles are string literals"
   (ticket to file)
 - [ ] 2.2 Read each scenario's clauses (GIVEN included, wrapped lines joined), normalise them and the step titles,
   match them in order for the Playwright shape, and in order and by nesting for the `describe` shape (design.md,
-  decision 5), and report per scenario its tests,
+  decision 5), count a flat `it` or `test` titled with a scenario as citing it with every clause missing (decision
+  1), and report per scenario its tests,
   levels, missing clauses, and the candidate duplicates; point the script's docblock at the capability's spec instead
   of the rule's title; depends on 2.1; verify with `node --test scripts/spec-coverage.test.mjs` covering the
   scenarios of the four clause requirements and "The coverage report lists tests, levels, missing clauses, and
@@ -38,17 +41,20 @@ implements, in the clause shape of design.md, decision 1.
 - [ ] 2.3 Narrow `jest/valid-title`'s disallowed words ("unit", "integration", "e2e") in `client-v2/eslint.config.mjs`
   to `describe` titles that start with neither a clause keyword nor `<capability>: `, so a GIVEN, WHEN, or AND
   `describe` and a scenario `describe` such as `client-v2-unit-tests: <scenario>` may hold them; update the item "A
-  test title says what the code does" in `client-v2/CLAUDE.md` to the narrowed rule; the rule warns, so verify with
+  test title says what the code does" in `client-v2/CLAUDE.md` to the narrowed rule; depends on 1.1, which rewrites
+  the same item; the rule warns, so verify with
   `yarn eslint <file>` printing no `jest/valid-title` warning for `describe("WHEN ... integration ...")` and
   `describe("client-v2-unit-tests: ...")`, and printing one for `describe("integration ...")` (ticket to file)
 
 ## 3. Generated tests.md
 
 - [ ] 3.1 Add `yarn spec:tests` to write `openspec/specs/<capability>/tests.md` for every capability with a
-  `spec.md`, from `openspec/specs/` only, in the format of design.md, decision 7, and to delete a `tests.md` beside no
-  `spec.md`; `yarn spec:tests --check` writes nothing and fails naming each stale or missing file and the command;
-  commit the generated files and add the `--check` step to the `checks` job of
-  `.github/workflows/reusable-client-v2.yml` after "Scenario coverage"; add "run `yarn spec:tests` and commit the
+  `spec.md`, from `openspec/specs/` only, in the format of design.md, decision 7, a `missing` row for a clause the
+  test has no step for included, and to delete a `tests.md` beside no `spec.md`; `yarn spec:tests --check` writes
+  nothing and fails naming each stale or missing file and the command; commit the generated files, add the `--check` step to
+  the `checks` job of `.github/workflows/reusable-client-v2.yml` after "Scenario coverage", and add
+  `yarn spec:tests --check` to the `check` script of `client-v2/package.json` after `yarn spec:coverage`, so
+  `yarn run check` runs what the job runs; add "run `yarn spec:tests` and commit the
   result" to the archive procedure, in `operations.archive.guidance` of `openspec/config.yaml` and in step 5 of
   "Specs and changes" in `client-v2/CLAUDE.md`, since archiving changes `specs/`; depends on 2.2; verify with
   `node --test scripts/spec-tests.test.mjs` covering the scenarios of "Each capability has a generated tests.md" and
@@ -59,13 +65,15 @@ implements, in the clause shape of design.md, decision 1.
 - [ ] 4.1 Add `client-v2/scripts/spec-coverage-strict.txt` (one capability per line, `#` comments, no capability
   yet) and enforce it on every `yarn spec:coverage` run: an uncovered scenario or a missing clause in a listed
   capability, an assertion clause there whose first word is on the closed list of the spec requirement "An assertion
-  clause starts with a verb", or a listed name with no `spec.md`, exits with an error; off the list, the report counts
-  such clauses per capability; a scenario only an active change adds is reported; a scenario of a requirement an
-  active change modifies is matched by name only; `--strict` keeps failing on any uncovered scenario; replace the
+  clause starts with a verb", a `(manual)` scenario there that a test cites, or a listed name with no `spec.md`, exits
+  with an error; off the list, the report counts such clauses per capability; a scenario only an active change adds
+  is reported; a scenario of a requirement an active change modifies is matched by name only; `--strict` keeps
+  failing on any uncovered scenario, one only an active change adds included (design.md, decision 10); replace the
   "Report only" comment above the "Scenario coverage" step of `.github/workflows/reusable-client-v2.yml` with one
   that says the step fails on the strict list; depends on 2.2; verify with
   `node --test scripts/spec-coverage.test.mjs` covering the scenarios of "A listed capability gates its scenarios",
-  "An assertion clause starts with a verb", and "An active change does not gate its own scenarios" (ticket to file)
+  "An assertion clause starts with a verb", "An active change does not gate its own scenarios", and "A manual
+  scenario a test cites" (ticket to file)
 - [ ] 4.2 Add `--base <ref>`, reading the base branch's list with `git show` (a missing file is an empty list), fail
   on a dropped capability whose `spec.md` stays, and pass `--base origin/${{ github.base_ref }}` from the
   "Scenario coverage" step of the `checks` job on `pull_request` runs only; depends on 4.1; verify with
@@ -84,23 +92,25 @@ implements, in the clause shape of design.md, decision 1.
 - [ ] 5.2 Add `client-v2-custom-rpcs` to `client-v2/scripts/spec-coverage-strict.txt`; depends on 4.2 and 5.1;
   verify that the `checks` job passes, and that renaming one `client-v2-custom-rpcs` step locally makes
   `yarn spec:coverage` exit with an error (ticket to file)
-- [ ] 5.3 Pilot the vitest form on `client-v2-build-server-endpoint`, whose 6 scenarios are all `(manual)`:
-  rewrite every THEN clause, and every AND after a THEN, in `openspec/specs/client-v2-build-server-endpoint/spec.md`
-  to start with a verb; write each scenario a test can check at the integration level in
-  `src/settings/server/build-server-endpoint.test.ts`, as `describe(<scenario>) > describe("GIVEN ...")` /
-  `describe("WHEN ...") > it("THEN ...")` / `it("AND ...")` (design.md, decision 1), and drop its `(manual)` mark;
-  expected candidates are "A fresh checkout", "The variable is set", and "A stored choice without the variable",
+- [ ] 5.3 Pilot the vitest and node forms on `client-v2-build-server-endpoint`, whose 6 scenarios are all
+  `(manual)`: rewrite every THEN clause, and every AND after a THEN, in
+  `openspec/specs/client-v2-build-server-endpoint/spec.md` to start with a verb, without changing what it asserts;
+  a WHEN may be reworded to the condition the integration test reproduces, again without changing what the scenario
+  asserts (for "A fresh checkout": `REACT_APP_SERVER_URL` unset and an empty stored profile, in place of `yarn dev`
+  and a fresh profile); write "A fresh checkout", "The variable is set", and "A stored choice without the variable",
   which `src/settings/server/default-endpoint.ts`, `src/settings/server/server.test.ts`, and
-  `src/settings/stored-endpoint.ts` already cite in comments; "The sources are searched" (a search of the tracked
-  tree), "A preview build without the variable", and "A CI build" (build-time checks of `scripts/server-url-gate.mjs`
-  under `VERCEL_ENV`) are expected to stay `(manual)`, and the implementer makes the final call, noting that a
-  `node --test` case in `scripts/server-url-gate.test.mjs` also counts as integration (design.md, decision 4); remove
+  `src/settings/stored-endpoint.ts` cite in comments, in `src/settings/server/build-server-endpoint.test.ts` as
+  `describe(<scenario>) > describe("WHEN ...") > it("THEN ...")` (design.md, decision 1); convert the two flat
+  `test()` cases of `scripts/server-url-gate.test.mjs`, "A preview build without the variable" and "A CI build", to
+  the same shape with `node:test` (integration, design.md, decision 4); drop the `(manual)` mark of those five
+  scenarios, and keep it on "The sources are searched" (a search of the tracked tree); remove
   the scenario comments from the in-source blocks of `default-endpoint.ts` and `stored-endpoint.ts`, which are unit
   level and cite no scenario, keeping their tests, and the comment in `server.test.ts` once the new file checks that
   scenario; add `client-v2-build-server-endpoint` to `client-v2/scripts/spec-coverage-strict.txt` and regenerate
   `openspec/specs/client-v2-build-server-endpoint/tests.md`; depends on 2.2, 3.1, 4.1, and 4.2, and may run beside
-  5.1 and 5.2; verify with `yarn spec:coverage` reporting nothing for `client-v2-build-server-endpoint` and
-  `yarn test-unit src/settings/server/build-server-endpoint.test.ts` passing (ticket to file)
+  5.1 and 5.2; verify with `yarn spec:coverage` reporting nothing for `client-v2-build-server-endpoint`,
+  `yarn test-unit src/settings/server/build-server-endpoint.test.ts` passing, and
+  `node --test scripts/server-url-gate.test.mjs` passing (ticket to file)
 
 ## 6. Closing the change
 
