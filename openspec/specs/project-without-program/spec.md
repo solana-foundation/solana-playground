@@ -102,16 +102,20 @@ of a leading folder the placement drops, is not rewritten.
 ### Requirement: A project with no program shows only the Write stage
 
 A project SHALL count as having no program when its `src/` folder holds
-no Rust (`.rs`) or Python (`.py`) file. For such a project the dev-loop
-stepper SHALL show only the Write stage: the Build, Deploy and Interact
-tabs (`flow-stage-tab-build`, `flow-stage-tab-deploy`,
-`flow-stage-tab-interact`) SHALL not be rendered, and their keyboard
-shortcuts SHALL do nothing. The stepper row SHALL stay in place and SHALL
-carry the label "Client project" (`flow-client-project`). On a phone, where
-the stepper never shows Write, no stepper (`role="tablist"` named
-"Development loop") SHALL be rendered for such a project, and the label
-SHALL still show. The check SHALL follow the files, so the stages return as
-soon as a program file is added and leave when the last one is removed.
+no Rust (`.rs`) or Python (`.py`) file. Such a project SHALL offer only the
+Write stage: no dev-loop stepper (`role="tablist"` named "Development loop")
+SHALL be rendered for it at any width, since a stepper of one tab reads as
+broken, and the Build, Deploy and Interact keyboard shortcuts SHALL do
+nothing. The stepper's row SHALL stay in place and SHALL carry the label
+"Client project" (`flow-client-project`) and Run (`flow-run`). Above the phone
+breakpoint the row SHALL also name the cluster the project runs on
+(`flow-client-cluster`) and carry Add program (`flow-add-program`), which
+creates `src/lib.rs`, and Test (`flow-test`), which runs the `test` command;
+the file tree there SHALL draw no section actions of its own (no Run, Test or
+add-program button), the row owning them. On a phone the row SHALL keep the label and Run, and the Files sheet SHALL
+keep the tree's Run and Test, and its add-program button when the project has
+no `src` folder. The check SHALL follow the files, so the stages return as soon as a
+program file is added and leave when the last one is removed.
 
 On a phone, the "Preview the build" button SHALL bring such a project's
 Preview page (the region named "Preview") into view and keep it there while
@@ -135,9 +139,9 @@ left alone after that.
 
 - **WHEN** the user opens a project that holds only `client/` and
   `tests/` files
-- **THEN** the stepper shows the Write tab and no Build, Deploy or
-  Interact tab, the row shows the label "Client project", and Ctrl+2
-  leaves the Write stage shown
+- **THEN** no "Development loop" tablist is rendered, the row shows the
+  label "Client project", the cluster, Add program, Test and Run, the file
+  tree shows no Run or Test button, and Ctrl+2 leaves the Write stage shown
 
 #### Scenario: A project with no program on a phone
 
@@ -181,9 +185,9 @@ left alone after that.
 
 #### Scenario: A program is added
 
-- **WHEN** the user creates `src/lib.rs` in a project with no program
-- **THEN** the Build, Deploy and Interact tabs appear and the "Client
-  project" label goes
+- **WHEN** the user presses Add program in a project with no program
+- **THEN** `src/lib.rs` is created, the Write, Build, Deploy and Interact
+  tabs appear, and the "Client project" label and Run go
 
 #### Scenario: A project with a program
 

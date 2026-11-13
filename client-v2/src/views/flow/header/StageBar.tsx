@@ -1,12 +1,17 @@
+import { FlaskConical, Plus } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useState } from "react";
 
+import { clusterName } from "@/entities/cluster";
 import { PgClientRun, RunButton } from "@/features/docs-link";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Badge } from "@/shared/ui/badge";
 
-import { useKeybind } from "../../../hooks";
+import { useKeybind, useRenderOnChange } from "../../../hooks";
+import { PgCommand, PgCommon, PgConnection, PgExplorer } from "../../../utils";
 import type { FlowState } from "../state/stage";
 import { INITIAL_FLOW_STATE, PgFlow, STAGES, stagesOf } from "../state/stage";
 import Stepper from "./Stepper";
@@ -18,12 +23,20 @@ import Stepper from "./Stepper";
  * preview page's bar, without Write, which is the code's own page there. It
  * owns the Ctrl+1..4 stage keys; Flow does not mount it before a tutorial's
  * Start (`useStagesOffered`), so no stage can be reached then. A project with
- * no program offers only Write, so the other keys do nothing, and the row
- * labels it "Client project" and carries its Run; on a phone, where Write is
- * the code's own page, it has no stepper at all, only the label and Run. The
- * project list and the session footer live in the navigation (`AppNav`),
- * not here.
+ * no program offers only Write, so the other keys do nothing. Its row draws
+ * no stepper, since one lone Write tab read as broken: it labels the project
+ * "Client project" with the cluster it runs on, and carries Add program
+ * (which brings the stages back), Test and Run, the tree's own Run and Test
+ * being hidden (`LeftPanel`). On a phone, the bar keeps only the label and
+ * Run. The project list and the session footer live in the navigation
+ * (`AppNav`), not here.
  */
+/** Scaffolds `src/lib.rs`, as the tree's add-program button did */
+const addProgram = () =>
+  PgExplorer.createItem(
+    PgCommon.joinPaths(PgExplorer.PATHS.SRC_DIRNAME, "lib.rs")
+  );
+
 const StageBar: FC = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
   useEffect(() => PgFlow.onDidChange(setState).dispose, []);
@@ -48,6 +61,51 @@ const StageBar: FC = () => {
   );
 
   const row = useViewport() !== "phone";
+  // Unknown until the endpoint is read, and then the row names none
+  const current = useRenderOnChange(PgConnection.onDidChangeCluster);
+  const cluster = current ? clusterName(current) : undefined;
+
+  if (row && !state.hasProgram) {
+    return (
+      <div className="flex h-11 min-w-0 shrink-0 items-center gap-2 border-b border-border px-3 font-sans">
+        <Badge variant="outline" id="flow-client-project">
+          Client project
+        </Badge>
+        {cluster && (
+          <span
+            id="flow-client-cluster"
+            className="truncate text-sm text-muted-foreground"
+          >
+            {cluster}
+          </span>
+        )}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <AsyncButton
+            id="flow-add-program"
+            variant="ghost"
+            size="sm"
+            onClick={addProgram}
+            onError={reportButtonFailure("add a program")}
+          >
+            <Plus data-icon="inline-start" />
+            Add program
+          </AsyncButton>
+          <AsyncButton
+            id="flow-test"
+            variant="outline"
+            size="sm"
+            onClick={() => PgCommand.test.execute()}
+            onError={reportButtonFailure("run the tests")}
+          >
+            <FlaskConical data-icon="inline-start" />
+            Test
+          </AsyncButton>
+          <RunButton />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -57,9 +115,8 @@ const StageBar: FC = () => {
         // reaches
         "isolate flex min-w-0 shrink-0 items-center justify-center gap-2 bg-transparent font-sans",
         // In the frame, the work's top row: 44 px like the assistant's head,
-        // so their lines meet, the 34 px stepper centred in it, and a client
-        // project's badge and Run on its centre line. On a phone, across the
-        // preview page's bar
+        // so their lines meet, the 34 px stepper centred in it. On a phone,
+        // across the preview page's bar
         row ? "h-11 border-b border-border px-2" : "flex-1"
       )}
     >

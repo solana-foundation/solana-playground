@@ -35,7 +35,7 @@ import { forgetColumn } from "./kept-column";
 import LeftPanel from "./LeftPanel";
 
 const draw = (collapsed: boolean) =>
-  render(<LeftPanel collapsed={collapsed} />);
+  render(<LeftPanel collapsed={collapsed} hasProgram />);
 
 const body = () =>
   requireFor("the left panel body")(
@@ -95,7 +95,7 @@ describe("LeftPanel across an unmount", () => {
   });
 
   it("keeps nothing from the phone's sheet", () => {
-    const sheet = render(<LeftPanel collapsed={false} sheet />);
+    const sheet = render(<LeftPanel collapsed={false} sheet hasProgram />);
     body().scrollTop = 120;
     sheet.unmount();
 
@@ -107,8 +107,8 @@ describe("LeftPanel across an unmount", () => {
     const panel = draw(false);
     body().scrollTop = 120;
     fireEvent.scroll(body());
-    panel.rerender(<LeftPanel collapsed />);
-    panel.rerender(<LeftPanel collapsed={false} />);
+    panel.rerender(<LeftPanel collapsed hasProgram />);
+    panel.rerender(<LeftPanel collapsed={false} hasProgram />);
     expect(body().scrollTop).toBe(120);
   });
 
