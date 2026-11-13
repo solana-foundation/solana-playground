@@ -75,7 +75,7 @@ All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.m
 - [x] 4.3 Port `convert` (both directions) and `type` to `client-v2/src/entities/idl` from `convert_idl`,
   `convert_idl_to_legacy`, and `idl_ts` of Anchor at tag `v1.1.2`. Verify: tests compare the output with fixtures
   the Anchor 1.1.2 binary printed for a legacy IDL, a current IDL, and one with `--program-id`; the fixtures and the
-  command that made them are committed.
+  command that made them are committed. Superseded by 4.8.
 - [x] 4.4 Rewrite the `idl` subcommands of `client-v2/src/commands/anchor/anchor.ts` as
   [design.md](design.md), "The surface is Anchor 1.1.2's", describes: the eleven subcommands with Anchor's argument
   and option names and success lines, file arguments on project files, `--filepath` optional, the program id rule,
@@ -102,7 +102,13 @@ All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.m
   Anchor at tag `v1.1.2`; `close` goes through the send path of 4.1 and the mainnet refusal; the events are
   `idl_command_*`. Verify: `anchor.test.ts` covers help and an unsupported name; the integration test on LiteSVM
   fetches by program id and by account address, closes an Anchor IDL account of a program that dispatches the
-  legacy IDL instructions, and refuses a close by another wallet. Depends on 4.4.
+  legacy IDL instructions, and refuses a close by another wallet. Depends on 4.4. Superseded by 4.8.
+- [ ] 4.8 Make `anchor idl convert`, `anchor idl type`, and `anchor legacy-idl` print the not-supported line, as
+  [design.md](design.md), "`convert`, `type`, and `legacy-idl` are not supported", decides, and delete what only they
+  used: `client-v2/src/entities/idl/model/anchor-cli` with its fixtures, `features/program-idl/model/legacy.ts`, the
+  legacy IDL program fixture, their tests, and the `legacy-fetch` and `legacy-close` event values. Verify: no file
+  under `client-v2/src` or `client-v2/e2e` imports the deleted code; the scenarios "anchor idl convert and type" and
+  "anchor legacy-idl" pass as Playwright tests; `yarn run check` passes. Depends on 4.4.
 
 ## Workflow follow-up
 

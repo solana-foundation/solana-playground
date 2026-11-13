@@ -2,9 +2,9 @@
 
 ## Purpose
 
-How the terminal's `anchor idl` command publishes, reads, and manages a program's IDL as Anchor 1.1.2's CLI does, how
-`anchor legacy-idl` reads and closes the Anchor IDL account of an older program, where the Playground differs from that
-CLI, and which events the command sends.
+How the terminal's `anchor idl` command publishes, reads, and manages a program's IDL as Anchor 1.1.2's CLI does, which
+of that CLI's IDL commands the Playground does not support, where the Playground differs from that CLI, and which
+events the command sends.
 
 ## ADDED Requirements
 
@@ -292,99 +292,32 @@ upgrade authority.
 - **THEN** the terminal prints `Metadata written successfully using buffer.`
 - **AND** `anchor idl fetch <PROGRAM_ID>` prints the IDL the buffer held, and the buffer account no longer exists
 
-### Requirement: anchor idl convert converts an IDL file between formats
+### Requirement: anchor idl build, fetch-historical, convert, and type are not supported yet
 
-`anchor idl convert <PATH>` SHALL print the IDL of that file converted from the legacy format, before Anchor 0.30, to
-the current one, and with `--to-legacy` from the current format to the legacy one. `--program-id` SHALL set the
-program id of the result, and `--out` SHALL write the result to that file. The result SHALL equal what Anchor
-1.1.2's CLI prints for the same file and options. The subcommand SHALL send no transaction and need no wallet.
-
-#### Scenario: A legacy IDL is converted
-
-- **WHEN** the project holds `idl/legacy.json` in the legacy format and the user runs
-  `anchor idl convert idl/legacy.json --program-id <PROGRAM_ID>`
-- **THEN** the terminal prints the IDL in the current format with that program id as its `address`
-- **AND** the output equals what `anchor idl convert` of Anchor 1.1.2 prints for the same file and options
-
-### Requirement: anchor idl type prints an IDL's TypeScript type
-
-`anchor idl type <PATH>` SHALL print the TypeScript type of the IDL in that file, as Anchor 1.1.2's CLI prints it,
-or with `--out` write it to that file. The subcommand SHALL send no transaction and need no wallet.
-
-#### Scenario: A type from an IDL file
-
-- **WHEN** the project holds `idl/counter.json` in the current format and the user runs
-  `anchor idl type idl/counter.json`
-- **THEN** the terminal prints what `anchor idl type` of Anchor 1.1.2 prints for the same file
-
-### Requirement: anchor idl build and fetch-historical are not supported yet
-
-`anchor idl build` and `anchor idl fetch-historical` SHALL end on every cluster with one terminal line saying the
-Playground terminal does not support the subcommand yet. They SHALL send no transaction and SHALL NOT ask for a
-wallet.
+`anchor idl build`, `anchor idl fetch-historical`, `anchor idl convert`, and `anchor idl type` SHALL end on every
+cluster with one terminal line saying the Playground terminal does not support the subcommand yet. They SHALL send no
+transaction and SHALL NOT ask for a wallet.
 
 #### Scenario: anchor idl build
 
 - **WHEN** no wallet is connected and the user runs `anchor idl build`
 - **THEN** the terminal prints the not-supported line, asks no wallet question, and sends no transaction
 
-### Requirement: anchor legacy-idl offers fetch and close
+#### Scenario: anchor idl convert and type
 
-`anchor legacy-idl` SHALL offer `fetch` and `close` of Anchor 1.1.2's `legacy-idl`, with their arguments and
-options, under the rule "anchor idl takes its cluster, wallet, and files from the Playground". The other seven,
-`init`, `upgrade`, `authority`, `write-buffer`, `set-buffer`, `set-authority`, and `erase-authority`, are not
-supported: they are no subcommand, so help does not list them and the terminal prints the usage of
-`anchor legacy-idl` and sends nothing. Before `fetch` or `close` runs, the terminal SHALL print Anchor's line
-`warning: You are using a deprecated legacy IDL command.` with the rest of its text; a line that asks for help prints
-none.
+- **WHEN** the user runs `anchor idl convert idl/counter.json`, then `anchor idl type idl/counter.json`
+- **THEN** each prints the not-supported line, asks no wallet question, and sends no transaction
 
-#### Scenario: Help lists two legacy subcommands
+### Requirement: anchor legacy-idl is not supported yet
 
-- **WHEN** the user runs `anchor legacy-idl --help`
-- **THEN** the terminal lists `fetch` and `close`, and none of the other seven
+`anchor legacy-idl`, Anchor 1.1.2's deprecated group for the IDL account of programs built before Anchor 0.30, SHALL
+end with one terminal line saying the Playground terminal does not support it, whatever subcommand follows it. It
+SHALL send no transaction and SHALL NOT ask for a wallet.
 
-#### Scenario: A legacy write is not supported
+#### Scenario: anchor legacy-idl
 
-- **WHEN** the user runs `anchor legacy-idl init <PROGRAM_ID>`
-- **THEN** the terminal prints the usage of `anchor legacy-idl`, asks no wallet question, and sends no transaction
-
-### Requirement: anchor legacy-idl fetch prints the Anchor IDL account
-
-`anchor legacy-idl fetch <ADDRESS>` SHALL read the Anchor IDL account the address names: for a program, the account
-derived from it; for any other address, that account, an IDL buffer included. It SHALL print the decompressed IDL,
-or with `--out` write it to that project file, send no transaction, need no wallet, and end with one terminal line
-when no such account exists.
-
-#### Scenario: An older program's IDL
-
-- **WHEN** a program has an Anchor IDL account on Devnet, no wallet is connected, and the user runs
-  `anchor legacy-idl fetch <PROGRAM_ID>`
-- **THEN** the terminal prints that IDL's JSON and asks no wallet question
-
-#### Scenario: A program without an Anchor IDL account
-
-- **WHEN** the program has no Anchor IDL account and the user runs `anchor legacy-idl fetch <PROGRAM_ID>`
-- **THEN** the terminal prints one line saying the program has no legacy IDL
-
-### Requirement: anchor legacy-idl close closes the Anchor IDL account
-
-`anchor legacy-idl close <PROGRAM_ID>` SHALL close the program's Anchor IDL account, or the one `--idl-address`
-names, through the program's own IDL instruction, send its rent to the connected wallet, and print Anchor's line.
-Before any transaction it SHALL end with one terminal line and send nothing when the account does not exist or the
-connected wallet is not its authority. `--print-only` SHALL NOT be accepted.
-
-#### Scenario: Close an older program's IDL
-
-- **WHEN** the connected wallet is the authority of a program's Anchor IDL account on Devnet and the user runs
-  `anchor legacy-idl close <PROGRAM_ID>`
-- **THEN** the terminal prints Anchor's line, the account no longer exists, and its rent less the fee returns to
-  the wallet
-
-#### Scenario: A legacy close by another wallet
-
-- **WHEN** the connected wallet is not the Anchor IDL account's authority and the user runs
-  `anchor legacy-idl close <PROGRAM_ID>`
-- **THEN** the terminal prints one line naming the authority, and no transaction is sent
+- **WHEN** no wallet is connected and the user runs `anchor legacy-idl fetch <PROGRAM_ID>`
+- **THEN** the terminal prints the not-supported line, asks no wallet question, and sends no transaction
 
 ### Requirement: An IDL upload sends its events
 
@@ -437,8 +370,8 @@ failure before it, an endpoint that does not say which network it serves include
 
 ### Requirement: The other on-chain subcommands send their events
 
-For `fetch`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer`, and for `anchor legacy-idl`'s
-`fetch` and `close` as `legacy-fetch` and `legacy-close`, the `program-idl` slice SHALL send, with prefix `idl`: `idl_command_started { command, cluster }` when the subcommand starts, before its checks;
+For `fetch`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer`, the `program-idl` slice SHALL
+send, with prefix `idl`: `idl_command_started { command, cluster }` when the subcommand starts, before its checks;
 `idl_command_succeeded { command, cluster }` when it ends as its requirement says; and
 `idl_command_failed { command, cluster, reason }` when it ends any other way. `command` is the subcommand's name, and
 `cluster` is as in the upload events. A command refused on mainnet SHALL send `idl_command_started` and then
@@ -453,13 +386,13 @@ For `fetch`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer
 ### Requirement: A failed subcommand names its reason
 
 `idl_command_failed` SHALL carry one `reason`: `not_found` when the IDL, file, or account the subcommand needs does
-not exist, `invalid` when the file is not JSON, the IDL is not in the Anchor 0.30+ format, a legacy IDL account does
-not hold a complete IDL, or `write-buffer`'s `--buffer` names the program's metadata account, `not_deployed` when the program is not on the
+not exist, `invalid` when the file is not JSON, the IDL is not in the Anchor 0.30+ format, or `write-buffer`'s
+`--buffer` names the program's metadata account, `not_deployed` when the program is not on the
 cluster, `authority` when the connected wallet may not act on the account, `rejected` when the wallet declines the
 approval, `mainnet` when the command is refused because the endpoint is mainnet-beta, `unfinished` when a failed send
 leaves a buffer the terminal names, `send_failed` for any other failure after the first transaction was submitted to the cluster, `rpc`
-for any other failure before it, and `unsupported` for `build` and `fetch-historical`, which send this event alone,
-with their name as `command`.
+for any other failure before it, and `unsupported` for `build`, `fetch-historical`, `convert`, `type`, and
+`legacy-idl`, which send this event alone, with their name as `command`.
 
 #### Scenario: A close refused on mainnet is tracked
 

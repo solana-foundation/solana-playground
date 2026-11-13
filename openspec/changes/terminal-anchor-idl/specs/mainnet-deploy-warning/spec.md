@@ -9,9 +9,8 @@ while the endpoint it sends to is mainnet-beta, it SHALL refuse before any
 transaction, printing one terminal line that says writing an IDL to mainnet is
 not available in the beta and to run `anchor idl` from the user's own machine.
 `init`, `upgrade`, `close`, `create-buffer`, `set-buffer-authority`, and
-`write-buffer` are the `idl` subcommands that send a transaction, and
-`anchor legacy-idl close` is refused the same way; every other subcommand, and
-`-h` and `--help`, SHALL run on any network. The cluster SHALL
+`write-buffer` are the `idl` subcommands that send a transaction; every other
+subcommand, and `-h` and `--help`, SHALL run on any network. The cluster SHALL
 be read from the endpoint, a custom RPC by its genesis hash, with the check
 the `deploy` command uses; an endpoint that does not answer which network it
 serves SHALL be refused, and one whose genesis hash names no known cluster

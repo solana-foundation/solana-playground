@@ -36,9 +36,9 @@ See [proposal.md](proposal.md), "Why", for the motivation.
 
 **Non-Goals:**
 
-- Programs built before Anchor 1.1.2: the Playground does not carry them over. Of Anchor 1.1.2's deprecated
-  `anchor legacy-idl` group, only `fetch` and `close` are offered.
-- An implementation of `anchor idl build` and `anchor idl fetch-historical`.
+- Programs built before Anchor 1.1.2: the Playground does not carry them over, and Anchor 1.1.2's deprecated
+  `anchor legacy-idl` group is not supported.
+- An implementation of `anchor idl build`, `fetch-historical`, `convert`, and `type`.
 - A check that the IDL's `address` equals the program id. The 0.29 command had none, and the two differ
   legitimately after the program keypair is replaced.
 
@@ -57,7 +57,8 @@ each decided by the user:
 | `--filepath` is optional; without it, the latest IDL uploaded to the project | The stable build server returns no IDL, so the uploaded one is the project's IDL |
 | Without `PROGRAM_ID` and `--filepath`, the project's program id | The uploaded IDL's `address` can differ from the project's program id after the program keypair is replaced |
 | The six subcommands that send are refused on Mainnet Beta | The beta's rule from #131 |
-| `build` and `fetch-historical` print a not-supported line | `build` needs `cargo`, and no build server returns an IDL; `fetch-historical` replays transactions in Rust, with no JavaScript client |
+| `build`, `fetch-historical`, `convert`, and `type` print a not-supported line | `build` needs `cargo`, and no build server returns an IDL; `fetch-historical` replays transactions in Rust, with no JavaScript client; `convert` and `type` are Rust inside Anchor (see "`convert`, `type`, and `legacy-idl` are not supported") |
+| `anchor legacy-idl` prints a not-supported line | The Playground carries no program built before Anchor 0.30, and the group's code is Rust inside Anchor |
 
 Anchor's alias `b` for `build` is not offered. For a name that is no subcommand the terminal prints the usage of
 `anchor idl`, where Anchor prints an error.
@@ -69,14 +70,10 @@ Alternatives:
 
 - Keep the four names Anchor removed, re-implemented on Program Metadata. Refused by the user: their behaviour would
   be the Playground's invention, and Anchor's documentation would not describe it.
-- Offer all nine subcommands of `anchor legacy-idl`. Refused by the user: the Playground carries no program built
-  before Anchor 1.1.2 over, a program the stable server builds has no legacy IDL account, and Anchor marks the group
-  for removal. `fetch` and `close` are offered for convenience: a program that reaches the Playground with a legacy
-  IDL account, through an imported program keypair, shows two IDLs in Explorer after `anchor idl init`; `fetch`
-  shows the old one and `close` removes it, in the browser rather than on the user's machine. `authority` is not
-  offered, because `close` names the authority when it refuses; `set-authority` is not, because only the current
-  authority can sign it, and that key can run `close` itself. The other seven are left out of the command, so help
-  lists only what runs.
+- Offer `anchor legacy-idl fetch` and `close`. Refused by the user after they were built: the Playground carries no
+  program built before Anchor 1.1.2 over, a program the stable server builds has no legacy IDL account, Anchor marks
+  the group for removal, and the two subcommands needed a hand-written copy of Anchor's legacy account format and IDL
+  instruction.
 
 ### The upload writes the canonical Program Metadata account
 
@@ -130,22 +127,27 @@ calculation, not measurement, about 0.00002 SOL for each instruction at the defa
 `fetch` uses the client's `fetchMetadataContent`. The spike's `fetchProgramMetadataIdl` moves from its entity module
 into the slice for it, and `wbdi-flow` task 3.2 calls the same function for the Flow view.
 
-### `convert` and `type` are ports, checked against the binary
+### `convert`, `type`, and `legacy-idl` are not supported
 
-Both are pure transformations of an IDL file (`convert_idl`, `convert_idl_to_legacy`, and `idl_ts` in Anchor), so
-they live in `client-v2/src/entities/idl`, which holds `readIdl`, and send no event. Their tests compare the output
-with fixtures that the Anchor 1.1.2 binary printed for the same files and options; the fixtures and the command that
-made them are committed.
+The Playground's part of `anchor idl` is a thin layer over the Program Metadata program's JavaScript client, the
+client Anchor 1.1.2's CLI itself runs for the seven on-chain subcommands. `convert` and `type` (`convert_idl`,
+`convert_idl_to_legacy`, and `idl_ts`) and the legacy IDL account are Rust inside Anchor, with no JavaScript
+equivalent, so offering them means copying Anchor's code. They print the not-supported line that `build` and
+`fetch-historical` print, and send `idl_command_failed` with the reason `unsupported`.
 
-Alternative: a wasm build of Anchor's IDL crate. Refused: it would bring a wasm package back for two transformations
-and tie the client's build to an Anchor crate again.
+Alternatives:
+
+- TypeScript ports checked against fixtures the Anchor 1.1.2 binary printed. Built, then refused by the user: about
+  1,600 lines that copy Anchor's transformations and must follow every Anchor release by hand.
+- A wasm build of Anchor's IDL crate. Refused: `anchor-cli`, which holds `idl_ts` and `convert_idl_to_legacy`, does
+  not build for wasm, so the crate would be a hand-made fork, and it brings back a wasm package and its build time.
 
 ### The `anchor` command is a `createCmd` tree
 
 `anchor` has the subcommand `idl`, which has Anchor 1.1.2's eleven subcommands, declared with `createCmd`'s
 `subcommands` as `client-v2/src/commands/setting/setting.ts` does. The six that send run `checkWallet` (any wallet,
 as `deploy` does, since the authority can be an external wallet), then #131's mainnet refusal and network hold, then
-the slice. `fetch` asks for a wallet only with `--non-canonical`. `build` and `fetch-historical` throw a
+the slice. `fetch` asks for a wallet only with `--non-canonical`. `build`, `fetch-historical`, `convert`, and `type` throw a
 `TerminalLineError` with the not-supported line, with no wallet check. `needsConnection` stays on `anchor`, which
 keeps the offline line of `client-v2-terminal`. #131's `isIdlWrite` becomes the six handlers themselves, so no list
 of names can fall out of date.
@@ -221,8 +223,6 @@ conflicts with the edits and keeps them.
   `wbdi-flow` task 3.2 decides it for the Flow view's read.
 - [The Program Metadata program's rules were read at `main`] → The deployed program can differ. Task 3.1 runs
   `close` and the buffer subcommands on Devnet.
-- [The ports drift from Anchor] → `convert` and `type` are tested against fixtures the Anchor 1.1.2 binary printed.
-  A later Anchor version needs new fixtures and a decision of its own.
 - [The PR grows] → Section 4 of [tasks.md](tasks.md) about doubles the change. The tasks stay in one PR so that
   `master` never holds a terminal with fewer `anchor idl` subcommands than Anchor 1.1.2.
 - [Bundle size] → The Program Metadata client and Kit's planner are added, and the `anchor-cli` wasm module is
