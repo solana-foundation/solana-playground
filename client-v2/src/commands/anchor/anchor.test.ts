@@ -5,7 +5,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Endpoint } from "@/entities/cluster";
-import { ANCHOR_VERSION } from "@/features/idl-build-guide";
 import {
   DEFAULT_PRIORITY_FEE,
   IdlCommandRefusedError,
@@ -16,6 +15,7 @@ import {
   PROGRAM,
   stubRpc,
 } from "@/features/program-idl/model/__fixtures__/chain";
+import { ANCHOR_VERSION } from "@/shared/config/build-server";
 import {
   initLogger,
   memoryProvider as logMemoryProvider,

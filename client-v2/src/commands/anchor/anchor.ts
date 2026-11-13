@@ -2,7 +2,6 @@ import { isAddress } from "@solana/kit";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 import { isIdlV1 } from "@/entities/idl";
-import { ANCHOR_VERSION } from "@/features/idl-build-guide";
 import {
   closeMetadataAccountWith,
   createIdlBufferWith,
@@ -21,6 +20,7 @@ import {
   uploadProjectIdlWith,
   writeMetadataFromBufferWith,
 } from "@/features/program-idl";
+import { ANCHOR_VERSION } from "@/shared/config/build-server";
 import { createLogger } from "@/shared/lib/logger";
 
 import {

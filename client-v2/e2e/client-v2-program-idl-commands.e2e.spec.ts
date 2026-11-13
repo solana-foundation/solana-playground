@@ -8,7 +8,7 @@ import {
 } from "@solana-program/program-metadata";
 
 import { clusterOf } from "../src/commands/anchor/__fixtures__/cluster";
-import { ANCHOR_VERSION } from "../src/features/idl-build-guide/model/versions";
+import { ANCHOR_VERSION } from "../src/shared/config/build-server";
 import { expect, json, LONG, test } from "./fixtures";
 import {
   BASE58,

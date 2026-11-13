@@ -3,9 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { ANCHOR_VERSION, SOLANA_VERSION } from "./versions";
+import { ANCHOR_VERSION, SOLANA_VERSION } from "./build-server";
 
-const SERVER = path.join(__dirname, "../../../../../server");
+const SERVER = path.join(__dirname, "../../../../server");
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename -- reads the repository's own files
 const read = (rel: string) => fs.readFileSync(path.join(SERVER, rel), "utf8");
@@ -20,7 +20,7 @@ const lockedVersion = (lock: string, name: string) => {
   return match[1];
 };
 
-describe("features/idl-build-guide/model/versions", () => {
+describe("shared/config/build-server", () => {
   it.each(["anchor-lang", "anchor-spl"])(
     "matches the %s version the build server locks",
     (crate) => {
