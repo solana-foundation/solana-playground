@@ -3,6 +3,7 @@ import { Connection } from "@solana/web3.js";
 
 import type { Cluster } from "../model/clusters";
 import { CLUSTERS } from "../model/clusters";
+import { GENESIS_HASHES } from "../model/genesis-hashes";
 
 /** Bounds the cache, so custom endpoints cannot grow it without limit */
 export const MAX_CACHED_CONNECTIONS = 25;
@@ -68,9 +69,9 @@ export const getNativeConnectionFor =
   };
 
 const CLUSTER_BY_GENESIS_HASH = new Map<string, Cluster>([
-  ["EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG", "devnet"],
-  ["4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY", "testnet"],
-  ["5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d", "mainnet-beta"],
+  [GENESIS_HASHES.devnet, "devnet"],
+  [GENESIS_HASHES.testnet, "testnet"],
+  [GENESIS_HASHES["mainnet-beta"], "mainnet-beta"],
 ]);
 
 /**

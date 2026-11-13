@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { deflateRaw } from "pako";
 
 import { Endpoint } from "../src/entities/cluster/model/endpoint";
+import { GENESIS_HASHES } from "../src/entities/cluster/model/genesis-hashes";
 import { DEVNET_WS, expect, json, LONG, test } from "./fixtures";
 
 /**
@@ -73,7 +74,7 @@ const DEVNET_ANSWERS: Record<string, unknown> = {
       lastValidBlockHeight: 1000,
     },
   },
-  getGenesisHash: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG",
+  getGenesisHash: GENESIS_HASHES.devnet,
   getSlot: 1,
   getVersion: { "solana-core": "2.2.0", "feature-set": 0 },
 };

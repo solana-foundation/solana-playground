@@ -7,6 +7,7 @@ import {
 } from "@solana-program/program-metadata";
 
 import { clusterOf } from "../src/commands/anchor/__fixtures__/cluster";
+import { GENESIS_HASHES } from "../src/entities/cluster/model/genesis-hashes";
 import {
   consoleTrigger,
   expect,
@@ -23,9 +24,6 @@ import { lineOf, linesOn } from "./telemetry";
 /** Neither `localhost` nor `127.0.0.1`, which `init` and `upgrade` skip as Anchor does */
 const RPC = "https://litesvm.test/";
 const RPC_WS = /^wss:\/\/litesvm\.test\/?$/;
-
-/** Devnet's genesis hash: the RPC is a custom one that serves Devnet, as "An upload through a custom RPC is tracked" has it */
-const GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
 
 const PROGRAM = address(
   Keypair.fromSeed(new Uint8Array(32).fill(2)).publicKey.toBase58()
@@ -65,8 +63,9 @@ const uiAnswerFor = (cluster: Cluster) => {
   let slot = 0;
   return ({ method, params }: RpcCall): unknown => {
     switch (method) {
+      // The RPC is a custom one that serves Devnet, as "An upload through a custom RPC is tracked" has it
       case "getGenesisHash":
-        return GENESIS;
+        return GENESIS_HASHES.devnet;
       case "getVersion":
         return { "solana-core": "2.0.0", "feature-set": 0 };
       case "getSlot":

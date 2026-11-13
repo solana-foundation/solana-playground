@@ -1,6 +1,7 @@
 import type { Page, Route } from "@playwright/test";
 
 import { Endpoint } from "../src/entities/cluster/model/endpoint";
+import { GENESIS_HASHES } from "../src/entities/cluster/model/genesis-hashes";
 import { expect, reloadAndBoot, test } from "./fixtures";
 
 /**
@@ -8,11 +9,9 @@ import { expect, reloadAndBoot, test } from "./fixtures";
  * Settings, Network, picked as chips beside Devnet and Mainnet.
  */
 
-/** Devnet's genesis hash, so a stubbed RPC reads as devnet */
-const DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG";
-
 const RESULTS: Record<string, unknown> = {
-  getGenesisHash: DEVNET_GENESIS,
+  // Devnet's, so a stubbed RPC reads as devnet
+  getGenesisHash: GENESIS_HASHES.devnet,
   getVersion: { "solana-core": "2.0.0", "feature-set": 0 },
   getBalance: { context: { slot: 1 }, value: 0 },
 };
