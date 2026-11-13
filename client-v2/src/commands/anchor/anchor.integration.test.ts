@@ -20,6 +20,7 @@ import type {
 import {
   AccountDiscriminator,
   findCanonicalPda,
+  findNonCanonicalPda,
   getBufferDecoder,
   PROGRAM_METADATA_PROGRAM_ADDRESS,
 } from "@solana-program/program-metadata";
@@ -719,6 +720,27 @@ describe("commands/anchor on a cluster", () => {
     await run("anchor idl init --filepath idl/large.json");
 
     expect(await fetchIdl()).toBe(fileText("idl/large.json"));
+  });
+
+  it("tells a non-canonical upload that failed after its first transaction to run `anchor idl init --non-canonical` again", async () => {
+    connect(OTHER);
+    const [own] = await findNonCanonicalPda({
+      program: PROGRAM,
+      authority: address(OTHER.publicKey.toBase58()),
+      seed: "idl",
+    });
+    cluster.dropSendAt(1);
+
+    const failure = await run(
+      `anchor idl init ${PROGRAM} --non-canonical --filepath idl/large.json`
+    ).catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message.split("\n").at(-1)).toMatch(
+      new RegExp(
+        `^An unfinished upload holds [\\d.]+ SOL at ${own}\\. Run the same \`anchor idl init --non-canonical\` again to finish it\\.$`
+      )
+    );
   });
 
   it("names the SOL and address of the buffer an `upgrade` created when a send after it fails, and that no terminal command closes it", async () => {

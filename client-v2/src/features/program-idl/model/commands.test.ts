@@ -47,6 +47,7 @@ import {
   pricesOf,
   PROGRAM,
   type StubAccount,
+  stubExpiredRpc,
   stubRpc,
   WALLET,
   walletOf,
@@ -273,13 +274,17 @@ describe("features/program-idl/model/commands", () => {
     {
       command: "close",
       reason: "send_failed",
-      label: "a transaction the cluster fails",
+      label:
+        "a transaction the cluster fails, with its error and not the expiry line once the blockhash's last valid block height has passed",
       change: (setup: Setup) => {
         setup.connection.confirmTransaction = async () => ({
           value: { err: { InstructionError: [1, "Custom"] } },
         });
       },
-      run: close,
+      run: (setup: Setup) => {
+        stubExpiredRpc(setup.accounts);
+        return close(setup);
+      },
       line: 'IDL close transaction signature-1 failed: {"InstructionError":[1,"Custom"]}',
       sent: 1,
     },
@@ -388,6 +393,24 @@ describe("features/program-idl/model/commands", () => {
           wallet,
         }),
       line: "is the program's metadata account, which holds an unfinished upload, not a buffer to write from.\nAn upload of its IDL is unfinished",
+      sent: 0,
+    },
+    {
+      command: "write-buffer",
+      reason: "invalid",
+      label:
+        "the program's finished metadata account, which no buffer check would name",
+      change: () => undefined,
+      run: async ({ connection, wallet }: Setup) =>
+        writeMetadataFromBufferWith(FEE)({
+          programId: PROGRAM,
+          buffer: await canonicalAddress("idl"),
+          seed: "idl",
+          closeBuffer: true,
+          connection,
+          wallet,
+        }),
+      line: "is the address of the program's metadata account, not a buffer to write from.",
       sent: 0,
     },
   ])(

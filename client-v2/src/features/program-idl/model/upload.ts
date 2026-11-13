@@ -327,7 +327,7 @@ type UpdateInput = Parameters<
 >[1];
 
 /** Whether `plan` fits in one transaction, as the Program Metadata client tests it */
-const fitsOneTransactionWith =
+const canFitOneTransactionWith =
   (client: ClientWithTransactionPlanning) => async (plan: InstructionPlan) => {
     try {
       await client.planTransaction(plan);
@@ -356,7 +356,7 @@ const getUpdatePlanWith =
       client,
       input
     );
-    if (await fitsOneTransactionWith(client)(direct)) return direct;
+    if (await canFitOneTransactionWith(client)(direct)) return direct;
     return getUpdateMetadataInstructionPlanUsingNewBuffer(client, {
       ...input,
       buffer,

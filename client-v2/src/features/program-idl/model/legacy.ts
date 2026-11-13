@@ -261,3 +261,48 @@ export const closeLegacyIdlAccountWith = (priorityFee: bigint) =>
       return { closed: at };
     }
   );
+
+if (import.meta.vitest) {
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
+
+  describe("features/program-idl/model/legacy", () => {
+    const AT = address("SysvarRent111111111111111111111111111111111");
+    const IDL = { version: "0.1.0", name: "counter", instructions: [] };
+
+    let deflate: typeof import("pako").deflate;
+
+    beforeAll(async () => {
+      ({ deflate } = await import("pako"));
+    });
+
+    /** An Anchor IDL account whose header claims `length` bytes and whose data after the header is `idl` */
+    const accountOf = (length: number, idl: Uint8Array): LegacyIdlAccount => {
+      const data = new Uint8Array(IDL_HEADER_LENGTH + idl.length);
+      data.set(IDL_ACCOUNT_DISCRIMINATOR);
+      new DataView(data.buffer).setUint32(IDL_HEADER_LENGTH - 4, length, true);
+      data.set(idl, IDL_HEADER_LENGTH);
+      return { address: AT, owner: AT, authority: AT, data };
+    };
+
+    it.each([
+      {
+        // Without the length check, the complete stream before the claimed end would print as the IDL
+        label:
+          "a stored length past the data, though the data holds a whole IDL",
+        account: () => {
+          const idl = deflate(JSON.stringify(IDL));
+          return accountOf(idl.length + 1, idl);
+        },
+      },
+      {
+        // Without the catch, the line would be pako's own message
+        label: "bytes that do not inflate",
+        account: () => accountOf(4, Uint8Array.from([1, 2, 3, 4])),
+      },
+    ])("getLegacyIdlJson refuses $label as incomplete", ({ account }) => {
+      expect(() => getLegacyIdlJson(account())).toThrow(
+        `The legacy IDL account at ${AT} does not hold a complete IDL.`
+      );
+    });
+  });
+}

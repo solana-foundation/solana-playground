@@ -55,13 +55,13 @@ const idlAddress = async () => {
 };
 
 /** A canonical Program Metadata account that already holds two bytes of IDL */
-const earlierIdl = (): StubAccount => ({
+const earlierIdl = ({ mutable }: { mutable: boolean }): StubAccount => ({
   owner: PROGRAM_METADATA_PROGRAM_ADDRESS,
   executable: false,
   data: getMetadataEncoder().encode({
     program: PROGRAM,
     authority: none(),
-    mutable: true,
+    mutable,
     canonical: true,
     seed: "idl",
     encoding: Encoding.Utf8,
@@ -313,6 +313,16 @@ describe("features/program-idl/model/project-idl", () => {
       line: 'IDL upload transaction signature-1 failed: {"InstructionError":[1,"Custom"]}',
       sent: 1,
     },
+    {
+      reason: "rpc",
+      label:
+        "an immutable metadata account, which the Program Metadata client refuses before the wallet is asked",
+      change: async (setup: Setup) => {
+        setup.accounts.set(await idlAddress(), earlierIdl({ mutable: false }));
+      },
+      line: "Metadata account is immutable",
+      sent: 0,
+    },
   ])("reports $reason for $label", async ({ reason, change, line, sent }) => {
     const setup = await arrange();
     await change(setup);
@@ -435,7 +445,7 @@ describe("features/program-idl/model/project-idl", () => {
   it("replaces a large IDL with one approval, every transaction fully signed and sent in stage order", async () => {
     const setup = await arrange();
     setup.source = projectIdl(idlWith(noise(2500)));
-    setup.accounts.set(await idlAddress(), earlierIdl());
+    setup.accounts.set(await idlAddress(), earlierIdl({ mutable: true }));
 
     const result = await run(setup);
 

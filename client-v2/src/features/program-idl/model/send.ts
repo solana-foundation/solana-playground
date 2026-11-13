@@ -230,16 +230,19 @@ export const sendPlanWith =
               "confirmed"
             );
             if (value.err) {
-              throw new Error(
+              throw new IdlSendFailedError(
                 `${job.name} transaction ${signature} failed: ${JSON.stringify(
                   value.err
-                )}`
+                )}`,
+                value.err
               );
             }
           })
         );
       }
     } catch (error) {
+      // A transaction confirmed with an error failed on its own, and running the command again would fail the same way
+      if (error instanceof IdlSendFailedError) throw error;
       // One approval covers the whole plan, so an expired one is signed again only by running the command again
       if (await isPastBlockHeightFor(rpc)(lifetime.lastValidBlockHeight)) {
         throw new IdlSendExpiredError(job.name, error);

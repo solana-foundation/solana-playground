@@ -61,12 +61,10 @@ const isMainnetRefusal = (error: unknown) =>
 /** What Anchor 1.1.2 prints for `init` and for `upgrade`, which run the same write */
 const UPLOAD_LINES = {
   init: {
-    name: "init",
     skipped: "Skipping IDL initialization on localnet",
     done: "IDL initialized.",
   },
   upgrade: {
-    name: "upgrade",
     skipped: "Skipping IDL upgrade on localnet",
     done: "IDL upgraded.",
   },
@@ -83,7 +81,7 @@ const toUnfinishedUploadLine =
   (name: string) => (error: UnfinishedIdlUploadError) => {
     const { kind, address, lamports } = error.leftover;
     const sol = Number(lamports) / LAMPORTS_PER_SOL;
-    // Only a buffer at the metadata account's address is one that running the subcommand again, or `anchor idl close`, reaches
+    // Only a buffer at the metadata account's address is one that running the subcommand again reaches
     const next =
       kind === "metadata"
         ? `An unfinished upload holds ${sol} SOL at ${address}. Run the same \`anchor idl ${name}\` again to finish it.`
@@ -336,6 +334,8 @@ const getDefaultProgramId = (source: IdlSource) => {
 
 /** What `init` and `upgrade` take from their line */
 interface IdlUpload {
+  /** The subcommand and its flags as a failed upload's line tells the user to run them again */
+  command: "init" | "init --non-canonical" | "upgrade";
   lines: typeof UPLOAD_LINES[keyof typeof UPLOAD_LINES];
   /** The slice's entry for the canonical account, or with `--non-canonical` for the wallet's own */
   uploadWith: typeof uploadProjectIdlWith;
@@ -345,6 +345,7 @@ interface IdlUpload {
 }
 
 const uploadIdl = async ({
+  command,
   lines,
   uploadWith,
   programId,
@@ -360,7 +361,7 @@ const uploadIdl = async ({
   await runSenderFor("upload")(async ({ connection, wallet }) => {
     const source = getIdlSource(filepath);
     const program = programId ?? getDefaultProgramId(source);
-    const { metadata } = await withUnfinishedLineFor(lines.name)(() =>
+    const { metadata } = await withUnfinishedLineFor(command)(() =>
       uploadWith(priorityFee)({
         source,
         programId: program,
@@ -454,6 +455,9 @@ export const anchor = createCmd({
               input.raw
             )(() =>
               uploadIdl({
+                command: input.options["non-canonical"]
+                  ? "init --non-canonical"
+                  : "init",
                 lines: UPLOAD_LINES.init,
                 uploadWith: input.options["non-canonical"]
                   ? uploadNonCanonicalProjectIdlWith
@@ -484,6 +488,7 @@ export const anchor = createCmd({
               input.raw
             )(() =>
               uploadIdl({
+                command: "upgrade",
                 lines: UPLOAD_LINES.upgrade,
                 uploadWith: uploadProjectIdlWith,
                 programId: input.args.program_id,

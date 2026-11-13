@@ -366,16 +366,18 @@ export const writeMetadataFromBufferWith = (priorityFee: bigint) =>
       if (authority !== address(wallet.publicKey.toBase58())) {
         throw new NotProgramAuthorityError(authority, WRITE);
       }
-      const source = await fetchBufferAccount(rpc, address(buffer));
       const [metadataAddress] = await findCanonicalPda({ program, seed });
-      // The write closes that leftover before it reads the buffer, so it would read a closed account
-      if (source.address === metadataAddress) {
+      const slot = await fetchMetadataSlot(rpc, metadataAddress);
+      // Compared before the buffer is read, so the metadata account is named whatever it holds; the write would close a leftover there before reading it
+      if (address(buffer) === metadataAddress) {
         throw new IdlCommandRefusedError(
           "invalid",
-          `${buffer} is the program's metadata account, which holds an unfinished upload, not a buffer to write from.\n${UNFINISHED_UPLOAD}`
+          slot.kind === "buffer"
+            ? `${buffer} is the program's metadata account, which holds an unfinished upload, not a buffer to write from.\n${UNFINISHED_UPLOAD}`
+            : `${buffer} is the address of the program's metadata account, not a buffer to write from.`
         );
       }
-      const slot = await fetchMetadataSlot(rpc, metadataAddress);
+      const source = await fetchBufferAccount(rpc, address(buffer));
 
       try {
         await sendPlanWith(priorityFee)(

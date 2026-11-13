@@ -122,49 +122,60 @@ export const bufferOf = (
   }),
 });
 
-const answer = (
-  accounts: Map<string, StubAccount>,
-  { method, params }: { method: string; params: unknown[] }
-) => {
-  if (method === "getAccountInfo") {
-    const account = accounts.get(String(params[0]));
-    return {
-      context: { slot: 1 },
-      value: account
-        ? {
-            data: [getBase64Decoder().decode(account.data), "base64"],
-            executable: account.executable,
-            lamports: 1,
-            owner: account.owner,
-            rentEpoch: 0,
-            space: account.data.length,
-          }
-        : // eslint-disable-next-line unicorn/no-null -- the RPC answers `null` for an address that holds no account
-          null,
-    };
-  }
-  if (method === "getLatestBlockhash") {
-    return {
-      context: { slot: 1 },
-      value: {
-        blockhash: "11111111111111111111111111111111",
-        lastValidBlockHeight: 100,
-      },
-    };
-  }
-  // Under `lastValidBlockHeight`, so a failed send is not read as an expired one
-  if (method === "getBlockHeight") return 1;
-  if (method === "getMinimumBalanceForRentExemption") return 890_880;
-  throw new Error(`The stub RPC has no answer for ${method}`);
-};
+/** The last valid block height of every blockhash the stub RPC hands out */
+const LAST_VALID_BLOCK_HEIGHT = 100;
 
-/** Answers the RPC's requests from `accounts`, read at each request so a case may change them */
-export const stubRpc = (accounts: Map<string, StubAccount>) =>
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
-    const { id, method, params } = JSON.parse(String(init?.body));
-    const result = answer(accounts, { method, params });
-    return new Response(JSON.stringify({ jsonrpc: "2.0", id, result }));
-  });
+const answerAt =
+  (blockHeight: number) =>
+  (
+    accounts: Map<string, StubAccount>,
+    { method, params }: { method: string; params: unknown[] }
+  ) => {
+    if (method === "getAccountInfo") {
+      const account = accounts.get(String(params[0]));
+      return {
+        context: { slot: 1 },
+        value: account
+          ? {
+              data: [getBase64Decoder().decode(account.data), "base64"],
+              executable: account.executable,
+              lamports: 1,
+              owner: account.owner,
+              rentEpoch: 0,
+              space: account.data.length,
+            }
+          : // eslint-disable-next-line unicorn/no-null -- the RPC answers `null` for an address that holds no account
+            null,
+      };
+    }
+    if (method === "getLatestBlockhash") {
+      return {
+        context: { slot: 1 },
+        value: {
+          blockhash: "11111111111111111111111111111111",
+          lastValidBlockHeight: LAST_VALID_BLOCK_HEIGHT,
+        },
+      };
+    }
+    if (method === "getBlockHeight") return blockHeight;
+    if (method === "getMinimumBalanceForRentExemption") return 890_880;
+    throw new Error(`The stub RPC has no answer for ${method}`);
+  };
+
+/** Answers the RPC's requests from `accounts`, read at each request so a case may change them, at the block height `blockHeight` */
+const stubRpcAt =
+  (blockHeight: number) => (accounts: Map<string, StubAccount>) =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      const { id, method, params } = JSON.parse(String(init?.body));
+      const result = answerAt(blockHeight)(accounts, { method, params });
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id, result }));
+    });
+
+/** Under the last valid block height, so a failed send is not read as an expired one */
+export const stubRpc = stubRpcAt(1);
+
+/** Past the last valid block height, so a failed send is read as an expired one unless something says the transaction itself failed */
+export const stubExpiredRpc = stubRpcAt(LAST_VALID_BLOCK_HEIGHT + 1);
 
 /** Signs with `keypair`, leaving a v0 transaction unsigned as a wallet that tests `version` for truthiness does */
 export const walletOf = (keypair: Keypair) => {
