@@ -24,17 +24,20 @@ plan", lives only in `client-v2/CLAUDE.md`, so no spec states it and no requirem
   what the code does") asks for titles that start with a verb. GIVEN, WHEN, and an AND after them keep a subject.
   The rule applies to new scenarios, through the `config.yaml` line, and to strict capabilities: a capability's
   assertion clauses are rewritten when it joins the strict list. Other existing specs stay as they are.
-- `spec:coverage` reads vitest files under `src/` (`*.test.ts`, `*.test.tsx`, `*.spec.ts`) and the `node --test`
-  files `yarn test-api` runs, as well as `e2e/`, and
-  reports per scenario: its tests, their level, missing clauses, and scenarios more than one test cites.
+- `spec:coverage` reads the vitest files `vitest.config.ts` collects and the `node --test` files `yarn test-api`
+  runs, as well as `e2e/`, and reports per scenario: its tests, their level, missing clauses, and scenarios more than
+  one test cites.
 - Each capability under `openspec/specs/` gets a generated, committed `tests.md`: one row per clause naming the test
   file, test title, and level, or "manual". CI fails when a committed `tests.md` differs from the generator's output.
 - A committed list of strict capabilities: CI fails on an uncovered scenario, a missing clause, or an assertion
   clause whose first word is on a closed list of non-verbs in a listed capability, and on a PR that drops a
-  capability its base branch lists. The other capabilities stay report-only.
+  capability its base branch lists. The other capabilities stay report-only. `scenario-tests` joins the list when
+  the change is archived.
 - `client-v2/CLAUDE.md` points at the spec instead of restating the rule, and so do the two places that cite the
   rule by title. `openspec/config.yaml` gains a `rules.specs` line on the clause format and the verb-first assertion
-  clause, so every `/opsx:*` command writes new scenarios in it.
+  clause, so every `/opsx:*` command writes new scenarios in it, and its archive guidance runs `yarn spec:tests`.
+  `jest/valid-title` stops warning on "unit", "integration", or "e2e" in a clause `describe` or a scenario
+  `describe`.
 - Two pilots rewrite a capability's assertion clauses to start with a verb, convert its tests to clause steps, and
   put the capability on the strict list: `client-v2-custom-rpcs` for Playwright steps, and
   `client-v2-build-server-endpoint` for the vitest `describe` nesting, where scenarios marked `(manual)` gain an
@@ -61,7 +64,8 @@ scenario.
 ## Impact
 
 - Code: `client-v2/scripts/spec-coverage.mjs` and its tests, a `tests.md` generator under `client-v2/scripts/`,
-  `client-v2/package.json` scripts, the `checks` job of `.github/workflows/reusable-client-v2.yml`, the tests of
+  `client-v2/package.json` scripts, the `jest/valid-title` rule in `client-v2/eslint.config.mjs`, the `checks` job of
+  `.github/workflows/reusable-client-v2.yml`, the tests of
   `client-v2-custom-rpcs` in `client-v2/e2e/client-v2-custom-rpcs.e2e.spec.ts`, the assertion clauses of
   `openspec/specs/client-v2-custom-rpcs/spec.md`; for `client-v2-build-server-endpoint`, a new
   `client-v2/src/settings/server/build-server-endpoint.test.ts`, the scenario comments in

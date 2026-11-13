@@ -13,9 +13,12 @@ See [proposal.md](proposal.md), "Why". The facts below were read at `de036c4a6`.
 - `openspec validate --all --strict` (pinned CLI 1.14.0) passes with a `tests.md` beside a `spec.md` under
   `openspec/specs/`, and ignores a `#### Scenario:` heading inside it. `/opsx:archive` writes only `spec.md`;
   retiring a capability deletes only `spec.md`.
-- `jest/valid-title` rejects "unit", "integration", and "e2e" in a `describe` title in `src/**/*.{test,spec}.*`
-  (`client-v2/CLAUDE.md`, "What review keeps finding"). The same section asks for test titles that start with a
-  verb ("A test title says what the code does").
+- `jest/valid-title` warns on "unit", "integration", and "e2e" in a `describe` title in `src/**/*.{test,spec}.*`
+  (`"warn"` in `client-v2/eslint.config.mjs`; `client-v2/CLAUDE.md`, "What review keeps finding"). A warning does not
+  change the exit code of `yarn lint` until the total passes `--max-warnings`. The same section asks for test titles
+  that start with a verb ("A test title says what the code does").
+- `vitest.config.ts` collects `src/**/*.{spec,test}.{js,jsx,ts,tsx,mts}` and `src/**/__tests__/**` (`include`), and
+  `client-v2/AGENTS.md` requires `<name>.test.mts` for a module the Playwright suite imports.
 - Most THEN clauses in `openspec/specs/` start with a subject: about 514 with "the", followed by "it", "no", "a",
   "its", and a backtick.
 
@@ -50,7 +53,7 @@ nested `describe` carries the title, holds the hook that runs the step, and make
 `<capability>: <scenario> > WHEN ... > THEN ...`.
 
 Alternative: one `it` per scenario with the clauses as comments. Rejected: a comment is not part of the failure name,
-and the brief's "titled steps the checker can read" rules it out.
+and the checker reads titles, never comments, so the clauses would have nothing it can match.
 
 Where the step runs is the test author's choice:
 
@@ -68,7 +71,7 @@ A scenario's test is `test("<capability>: <scenario>")` with a `test.step` per c
 `test.step` in the body or a `test.describe("GIVEN ...")` around the test whose `beforeEach` or `beforeAll` runs the
 precondition. Both forms count.
 
-Why: the brief leaves where a precondition runs to the author. A precondition shared by several scenarios (a seeded
+Why: where a precondition runs is the test author's choice, as in decision 1. A precondition shared by several scenarios (a seeded
 project, a signed-in session) belongs in a hook, and a `test.step` inside a hook is not inside the test's body, so
 the enclosing `test.describe` carries the title instead. A `test.step` whose title starts with no clause keyword is
 ignored, so a test can keep its helper steps.
@@ -86,23 +89,26 @@ Alternative: run each suite with a listing reporter (`vitest list`, `playwright 
 list mode does not report `test.step` titles, the listing needs the real wasm packages and a configured environment,
 and the freshness check (decision 7) must run in the `checks` job without a build.
 
-A title counts when it is a string literal or a template literal without a substitution. `.skip`, `.fixme`, and
-`.todo` variants do not count.
+A title counts when it is a string literal or a template literal without a substitution. A skipped call does not
+count: `.skip`, `.fixme`, and `.todo` on `test`, `it`, and `describe`, `test.describe.skip` included.
 
 ### 4. Sources and levels follow the file's path
 
-| Source                                                              | Level       |
-| ------------------------------------------------------------------- | ----------- |
-| `client-v2/e2e/**/*.ts`                                             | end-to-end  |
-| `client-v2/src/**/*.test.ts`, `*.test.tsx`, `*.spec.ts`             | integration |
-| the `*.test.mjs` files the `test-api` script of `package.json` runs | integration |
+| Source                                                                | Level       |
+| --------------------------------------------------------------------- | ----------- |
+| `client-v2/e2e/**/*.ts`                                               | end-to-end  |
+| the files the `include` globs of `client-v2/vitest.config.ts` collect | integration |
+| the `*.test.mjs` files the `test-api` script of `package.json` runs   | integration |
 
-In-source blocks are never read: a module without a `.test.` or `.spec.` suffix is not a source, so a scenario title
-in a unit block leaves the scenario uncovered.
+The checker reads `include` from `vitest.config.ts` instead of keeping a list of its own, so a test file vitest runs,
+such as a `<name>.test.mts` that `client-v2/AGENTS.md` requires, is never invisible to the checker.
 
-The `node --test` row extends the brief, which names only `src/` and `e2e/`. Why: the checker and the generator of
-this change are `.mjs` scripts tested with `node --test` under `client-v2/scripts/`, so without that row this
-capability's own scenarios could never be covered, and neither could the scenarios of `api/` modules.
+In-source blocks are never read: `includeSource` is not a source, so a scenario title in a unit block leaves the
+scenario uncovered.
+
+Why a `node --test` row: the checker and the generator of this change are `.mjs` scripts tested with `node --test`
+under `client-v2/scripts/`, so without that row this capability's own scenarios could never be covered, and neither
+could the scenarios of `api/` modules.
 
 ### 5. A clause matches a step by normalised text, in order
 
@@ -112,8 +118,14 @@ the `**` around the keyword; backticks and every other character stay. The test'
 `describe`'s title before the steps nested in it), are matched against the scenario's clauses in order; a clause with
 no matching step at its place is missing.
 
-Why: an order check catches a THEN placed before its WHEN, which a set comparison would accept. Keeping backticks
-avoids a second rule for what counts as formatting.
+In the vitest and node shape the nesting of decision 1 is part of the match: a step counts only inside the
+`describe` of the GIVEN, WHEN, or AND clause before it. An `it("THEN ...")` beside the WHEN `describe`, instead of
+inside it, is missing, though it comes after the WHEN in source order. Playwright steps sit in one test body, so for
+them the order alone decides.
+
+Why: an order check catches a THEN placed before its WHEN, which a set comparison would accept. The nesting check
+catches a THEN whose action never ran for it: an `it` outside the WHEN `describe` runs without the WHEN's hook.
+Keeping backticks avoids a second rule for what counts as formatting.
 
 ### 6. Report shape
 
@@ -192,9 +204,9 @@ Why: the clause is the test title verbatim, and `client-v2/CLAUDE.md` ("A test t
 for a title that starts with a verb. An assertion's subject is the system under test, which the scenario's title
 and its WHEN already name.
 
-In a strict capability the checker fails an assertion clause whose first word after the keyword is one of: the, a,
-an, it, its, no, nothing, that, each, every, both, neither, one; or whose first character is a backtick. Outside the
-strict list the clause is reported. Review catches a non-verb the list misses.
+In a strict capability the checker fails an assertion clause whose first word after the keyword is on the closed
+list the spec requirement "An assertion clause starts with a verb" names. Outside the strict list the report counts
+such clauses per capability. Review catches a non-verb the list misses.
 
 Why a closed list: a verb cannot be detected without a language parser, and a parser would add a dependency and
 still misread words that are both a noun and a verb ("reports", "lists"). The listed words are the subjects specs
@@ -218,9 +230,10 @@ scenario moving from `(manual)` to tested, and the rule that an in-source unit b
 - [A capability that joins the strict list while an active change edits it gets subject-first clauses back when
   that change is archived] → The gate reads `openspec/specs/` only, so that archive PR fails until it rewrites those
   clauses; the failure names each clause.
-- [A GIVEN, WHEN, or AND clause containing "unit", "integration", or "e2e" becomes a `describe` title that
-  `jest/valid-title` rejects] → Task 2.3 narrows the rule's disallowed words to `describe` titles that start with no
-  clause keyword.
+- [A GIVEN, WHEN, or AND clause containing "unit", "integration", or "e2e", or a scenario `describe` such as
+  `client-v2-unit-tests: <scenario>`, becomes a `describe` title that `jest/valid-title` warns on, and the warning
+  raises the total `--max-warnings` caps] → Task 2.3 narrows the rule's disallowed words to `describe` titles that
+  start with neither a clause keyword nor `<capability>: `.
 - [A strict capability's test quarantined with `test.fixme`, or listed in `e2e/known-skips.txt`, is uncovered, so
   every PR fails until it is fixed] → Intended: the gate makes the quarantine visible. The PR that quarantines it
   either fixes the test or marks the scenario `(manual)` in the spec, and review sees both.

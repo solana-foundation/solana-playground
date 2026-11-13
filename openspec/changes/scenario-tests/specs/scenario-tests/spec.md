@@ -2,6 +2,9 @@
 
 ## Purpose
 
+**Area:** the spec coverage report, the generated `tests.md` of each capability, and the strict gate, which
+`yarn run check` and the `checks` job of `client-v2` run (CI).
+
 How each OpenSpec scenario of `client-v2` maps to a test, at which level, and clause by clause, and how the coverage
 report, the generated `tests.md` of each capability, and the per-capability strict gate check that mapping.
 
@@ -11,7 +14,8 @@ report, the generated `tests.md` of each capability, and the per-capability stri
 
 Every `#### Scenario:` in a spec under `openspec/specs/` or an active change SHALL be checked by a test titled
 `<capability>: <scenario name>`, where `<capability>` is the folder that holds the `spec.md`, or SHALL end its heading
-with `(manual)`. A skipped test (`test.skip`, `test.fixme`, `it.skip`, `describe.skip`) SHALL NOT count. A scenario
+with `(manual)`. A skipped or unwritten test (`.skip`, `.fixme`, or `.todo` on `test`, `it`, or `describe`,
+`test.describe.skip` included) SHALL NOT count. A scenario
 under a `## REMOVED` heading of a delta SHALL owe no test.
 
 #### Scenario: A scenario with a browser test
@@ -42,8 +46,8 @@ under a `## REMOVED` heading of a delta SHALL owe no test.
 
 ### Requirement: A scenario is checked at the integration or the end-to-end level
 
-A scenario SHALL be checked at the integration level, by a vitest file under `src/` (`*.test.ts`, `*.test.tsx`,
-`*.spec.ts`) or a `node --test` file `yarn test-api` runs, when layers or slices working together show the behaviour
+A scenario SHALL be checked at the integration level, by a vitest file the `include` globs of
+`client-v2/vitest.config.ts` collect or a `node --test` file `yarn test-api` runs, when layers or slices working together show the behaviour
 without a browser. It SHALL be checked at the end-to-end level, by Playwright under `e2e/`, when it needs a real
 browser with user clicks or an environment: a running validator, a connected wallet, or the real wasm CLIs. An
 in-source unit block SHALL NOT cite a scenario.
@@ -51,6 +55,13 @@ in-source unit block SHALL NOT cite a scenario.
 #### Scenario: A scenario checked by a vitest file
 
 - **GIVEN** a vitest file under `src/` whose `describe` is titled with the scenario's capability and name
+- **WHEN** `yarn spec:coverage` runs
+- **THEN** counts the scenario as tested at the integration level
+
+#### Scenario: A scenario checked by a `.test.mts` file
+
+- **GIVEN** a vitest file under `src/` named `<name>.test.mts` whose `describe` is titled with the scenario's capability
+  and name
 - **WHEN** `yarn spec:coverage` runs
 - **THEN** counts the scenario as tested at the integration level
 
@@ -121,7 +132,8 @@ title starts with no clause keyword SHALL be ignored.
 A vitest or `node --test` test that checks a scenario SHALL be a `describe` titled `<capability>: <scenario name>`
 holding an optional `describe` titled with the GIVEN clause, then a `describe` titled with the WHEN clause, then one
 `it` per THEN and AND clause. An AND after a GIVEN or a WHEN SHALL be a `describe` nested in the one before it. Each
-precondition and action SHALL run in a hook of its `describe`.
+precondition and action SHALL run in a hook of its `describe`. A clause step SHALL count only inside the `describe`
+of the GIVEN, WHEN, or AND clause before it.
 
 #### Scenario: A vitest test with a nested WHEN
 
@@ -172,8 +184,9 @@ match exactly. A clause reworded in the spec SHALL be missing until its step is 
 
 Every THEN clause, and every AND after a THEN, SHALL start with a verb after its keyword, because the clause is the
 test's title verbatim. A GIVEN, a WHEN, and an AND after either SHALL keep their subject. In a strict capability,
-`yarn spec:coverage` SHALL exit with an error on an assertion clause whose first word is the, a, an, it, its, no,
-nothing, that, each, every, both, neither, or one, or starts with a backtick; elsewhere it SHALL report how many each capability holds.
+`yarn spec:coverage` SHALL exit with an error on an assertion clause whose first word is on this closed list: the, a,
+an, it, its, no, nothing, that, each, every, both, neither, one; or whose first character is a backtick. Elsewhere it
+SHALL report how many such clauses each capability holds.
 
 #### Scenario: A THEN that starts with an article in a strict capability
 
