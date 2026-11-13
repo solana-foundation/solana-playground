@@ -8,6 +8,7 @@ import {
 } from "@solana-program/program-metadata";
 
 import { clusterOf } from "../src/commands/anchor/__fixtures__/cluster";
+import { ANCHOR_VERSION } from "../src/features/idl-build-guide/model/versions";
 import { expect, json, LONG, test } from "./fixtures";
 import {
   BASE58,
@@ -268,6 +269,18 @@ test.describe("client-v2-program-idl", () => {
     expect(printed).toContain("Usage: anchor idl <COMMAND>");
     expect(printed).not.toContain(WALLET_QUESTION);
     expect(cluster.sent).toEqual([]);
+  });
+
+  test("client-v2-program-idl: anchor --version", async ({
+    seededPage: page,
+  }) => {
+    await openOnDevnet(page, disconnectedWallet(AUTHORITY));
+
+    for (const flag of ["--version", "-V"]) {
+      expect(await printedBy(page, `anchor ${flag}`)).toContain(
+        `anchor-cli ${ANCHOR_VERSION}`
+      );
+    }
   });
 
   test("client-v2-program-idl: A cluster option is refused", async ({

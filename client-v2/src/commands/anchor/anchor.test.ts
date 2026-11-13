@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Endpoint } from "@/entities/cluster";
+import { ANCHOR_VERSION } from "@/features/idl-build-guide";
 import {
   DEFAULT_PRIORITY_FEE,
   IdlCommandRefusedError,
@@ -1017,4 +1018,15 @@ describe("commands/anchor", () => {
     ]);
     expect(PgTerminal.get).not.toHaveBeenCalled();
   });
+
+  it.each(["--version", "-V"])(
+    "prints the Anchor version of the build server for `anchor %s`, offline too",
+    async (flag) => {
+      vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+      await run(`anchor ${flag}`);
+
+      expect(printed()).toEqual([[`anchor-cli ${ANCHOR_VERSION}`]]);
+    }
+  );
 });

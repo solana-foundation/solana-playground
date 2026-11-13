@@ -2,6 +2,7 @@ import { isAddress } from "@solana/kit";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 
 import { isIdlV1 } from "@/entities/idl";
+import { ANCHOR_VERSION } from "@/features/idl-build-guide";
 import {
   closeMetadataAccountWith,
   createIdlBufferWith,
@@ -401,6 +402,7 @@ export const anchor = createCmd({
   name: "anchor",
   description: "Anchor CLI",
   needsConnection: true,
+  version: `anchor-cli ${ANCHOR_VERSION}`,
   subcommands: [
     createSubcmd({
       name: "idl",

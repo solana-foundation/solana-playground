@@ -14,6 +14,8 @@ events the command sends.
 `init`, `upgrade`, `fetch`, `close`, `create-buffer`, `set-buffer-authority`, `write-buffer`, `convert`, `type`,
 `build`, and `fetch-historical`. A name that CLI does not have is no subcommand: the terminal SHALL print the usage
 of `anchor idl` and send nothing. `authority`, `set-authority`, `erase-authority`, and `set-buffer` are such names.
+`anchor --version` and `anchor -V` SHALL print the version line of that CLI, with the Anchor version the build server
+compiles against, and SHALL need no connection.
 
 #### Scenario: Help lists the subcommands
 
@@ -25,6 +27,12 @@ of `anchor idl` and send nothing. `authority`, `set-authority`, `erase-authority
 
 - **WHEN** no wallet is connected and the user runs `anchor idl set-authority`
 - **THEN** the terminal prints the usage of `anchor idl`, asks no wallet question, and sends no transaction
+
+#### Scenario: anchor --version
+
+- **WHEN** the user runs `anchor --version` or `anchor -V`, online or offline
+- **THEN** the terminal prints `anchor-cli <VERSION>`, where `<VERSION>` is the Anchor version the build server
+  compiles against
 
 ### Requirement: anchor idl takes its cluster, wallet, and files from the Playground
 
