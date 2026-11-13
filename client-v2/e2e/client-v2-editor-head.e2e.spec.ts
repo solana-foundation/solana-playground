@@ -152,6 +152,33 @@ const fileActionsWith = (place: TreePlace) => async (page: Page) => {
   await place.stays(page);
 };
 
+/** The editor's active tab */
+const activeTab = (page: Page) =>
+  head(page).locator('#tabs [role="tab"][aria-selected="true"]');
+
+/**
+ * A file picked in the tree takes the active tab, whether it opens new, is
+ * open in another tab, or is the open one (HOO-2856)
+ */
+const tabFollowsTreeWith = (place: TreePlace) => async (page: Page) => {
+  const pick = async (path: string) => {
+    await page.locator(`#root-dir [data-path$="${path}"]`).click();
+  };
+  await expect(activeTab(page)).toHaveText("lib.rs");
+  await pick("/client/");
+  await pick("/client/client.ts");
+  await expect(activeTab(page)).toHaveText("client.ts");
+  await editorOpened(page, "client.ts");
+  await place.reopen(page);
+  await pick("/src/lib.rs");
+  await expect(activeTab(page)).toHaveText("lib.rs");
+  await editorOpened(page, "lib.rs");
+  await place.reopen(page);
+  await pick("/client/client.ts");
+  await expect(activeTab(page)).toHaveText("client.ts");
+  await editorOpened(page, "client.ts");
+};
+
 test.describe("at 1440", () => {
   test.use({ viewport: WIDE_DESK });
 
@@ -343,6 +370,14 @@ test.describe("at 1440", () => {
     await expect(dockPin(page)).toHaveCount(0);
   });
 
+  test("client-v2-editor-head: A file picked in the tree takes the tab", async ({
+    page,
+  }) => {
+    await firstVisit(page);
+    await openFiles(page);
+    await tabFollowsTreeWith(throughDropdown)(page);
+  });
+
   test("client-v2-editor-head: File actions from the tree", async ({
     page,
   }) => {
@@ -461,6 +496,14 @@ test.describe("at 1920", () => {
     await expect(filesPanel(page)).toHaveCount(0);
     await filesToggle(page).click();
     await expect(filesDropdown(page).locator("#root-dir")).toBeVisible();
+  });
+
+  test("client-v2-editor-head: A file picked in the docked tree takes the tab", async ({
+    page,
+  }) => {
+    await firstVisit(page);
+    await expect(filesPanel(page).locator("#root-dir")).toBeVisible();
+    await tabFollowsTreeWith(inColumn)(page);
   });
 
   test("client-v2-editor-head: File actions from the docked tree", async ({
