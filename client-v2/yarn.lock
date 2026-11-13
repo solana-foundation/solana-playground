@@ -9123,13 +9123,6 @@ brace-expansion@^2.0.1:
   dependencies:
     balanced-match "^1.0.0"
 
-brace-expansion@^2.0.2:
-  version "2.1.8"
-  resolved "https://registry.yarnpkg.com/brace-expansion/-/brace-expansion-2.1.8.tgz#b4cf1e18069418e97732d5f30b39bb321c41bd9b"
-  integrity sha512-BnlDzDYQoplTsZSvPi86CNzmbcb07X8ufR8fk1zivaiEJlXJkiq1MQyDCVmlWcsWbj6aWXqHnrwwevbrm/Saig==
-  dependencies:
-    balanced-match "^1.0.0"
-
 brace-expansion@^5.0.12:
   version "5.0.12"
   resolved "https://registry.yarnpkg.com/brace-expansion/-/brace-expansion-5.0.12.tgz#995fbb4750a77c4d16a7dc942ff2ca6ef8e675ec"
@@ -15867,7 +15860,7 @@ minimalistic-crypto-utils@^1.0.1:
   version "1.0.1"
   resolved "https://registry.yarnpkg.com/minimalistic-crypto-utils/-/minimalistic-crypto-utils-1.0.1.tgz#f6c00c1c0b082246e5c4d99dfb8c7c083b2b582a"
 
-minimatch@^10.0.1, minimatch@^10.2.2, minimatch@^11.0.1, minimatch@^11.0.5:
+minimatch@^10.0.1, minimatch@^10.2.2, minimatch@^11.0.1, minimatch@^11.0.5, minimatch@^9.0.5:
   version "11.0.5"
   resolved "https://registry.yarnpkg.com/minimatch/-/minimatch-11.0.5.tgz#29589e94fc4d84193b2a31b082b0ec67b5ea1d42"
   integrity sha512-snPlVppFcYWfLLFQGhDxUyBcHNtMlWmn3jtj7pEaO+DP8pqL0IvAzXhMYmn1z9ASNtgmwLBdFxSf4tMUB0OTKA==
@@ -15888,13 +15881,6 @@ minimatch@^5.0.1, minimatch@^5.1.6:
   integrity sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==
   dependencies:
     brace-expansion "^2.0.1"
-
-minimatch@^9.0.5:
-  version "9.0.9"
-  resolved "https://registry.yarnpkg.com/minimatch/-/minimatch-9.0.9.tgz#9b0cb9fcb78087f6fd7eababe2511c4d3d60574e"
-  integrity sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg==
-  dependencies:
-    brace-expansion "^2.0.2"
 
 minimist@^1.1.1, minimist@^1.2.0, minimist@^1.2.6:
   version "1.2.6"
