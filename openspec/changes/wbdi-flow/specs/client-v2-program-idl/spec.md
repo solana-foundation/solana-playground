@@ -107,18 +107,22 @@ in that account and SHALL need the program's upgrade authority.
 
 An IDL uploaded on one cluster SHALL NOT be shown as uploaded on another. The
 playground SHALL NOT upload an IDL to Mainnet Beta: an upload started there
-SHALL open the mainnet guard and send nothing, and the IDL upload script in
-the export publishes a mainnet IDL from the user's machine.
+SHALL send nothing and SHALL be recorded as the requirements "An IDL upload
+sends its events" and "A failed upload names its reason" of this capability
+describe for a command refused on mainnet. The IDL upload script in the
+export publishes a mainnet IDL from the user's machine.
 
 #### Scenario: Devnet upload is not on mainnet
 
 - **WHEN** the user uploads the IDL on Devnet and selects Mainnet Beta
 - **THEN** the playground shows no IDL for the program on Mainnet Beta
 
-#### Scenario: Mainnet upload opens the guard
+#### Scenario: Mainnet upload sends nothing
 
 - **WHEN** the user uploads the IDL with Mainnet Beta selected
-- **THEN** the mainnet guard dialog opens and no transaction is sent
+- **THEN** no transaction is sent
+- **AND** the memory provider records `idl_upload_started` and then
+  `idl_upload_failed` with the reason `mainnet`
 
 ### Requirement: IDL telemetry
 
@@ -143,8 +147,7 @@ to this capability.
 Every IDL control that performs an action SHALL emit its own event when
 used, separate from the outcome events: the source picker
 `idl_source_selected { source }`, Load IDL file `idl_file_picker_opened`,
-Paste IDL `idl_paste_opened`, Clear local IDL `idl_local_cleared`, the upload
-target choice `idl_target_selected { target }` and Upload
+Paste IDL `idl_paste_opened`, Clear local IDL `idl_local_cleared` and Upload
 `idl_upload_started`, whose parameters the requirement "An IDL upload sends
 its events" gives. Unlisted parameters are none.
 

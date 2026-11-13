@@ -1,7 +1,7 @@
 # Tasks
 
-All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.md), "Migration Plan"), in this order.
-Tasks 1.1 and 2.1 may run at the same time. Every task: ticket to file.
+All tasks land in one PR from `feat/terminal-anchor-1.1.2` ([design.md](design.md), "Migration Plan"), in the order
+1, 2, 4, 3. Tasks 1.1 and 2.1 may run at the same time, and so may 4.2 and 4.3. Every task: ticket to file.
 
 ## 1. IDL upload from the terminal
 
@@ -45,13 +45,57 @@ Tasks 1.1 and 2.1 may run at the same time. Every task: ticket to file.
 
 - [ ] 3.1 On Devnet, deploy the default Anchor starter through the stable server, build its IDL with the IDL build
   guide, load it with "Upload IDL", and run `anchor idl init`, then `anchor idl upgrade`, once with the Playground
-  wallet and once with an external wallet. Then force a failure after the first transaction of an upload. Verify:
-  the `program-metadata` command-line client at 0.5.1, the version Anchor 1.1.2 runs, reads back the JSON the
-  project holds; Explorer shows the IDL on the program's page; the external wallet asks for one approval; and the PR
-  description records whether the forced failure left a buffer account holding rent, with a ticket if it did. This
-  is a manual check with a funded wallet, since the Devnet faucet is closed. Depends on 1.2.
-- [ ] 3.2 Run `yarn run check` in `client-v2` and `yarn spec:validate`. Verify: both pass. Depends on every task
-  above.
+  wallet and once with an external wallet. Then run `anchor idl fetch`, the buffer flow (`create-buffer`, then
+  `write-buffer --close-buffer`), and `anchor idl close`. Then force a failure after the first transaction of an
+  upload. Verify: the Anchor 1.1.2 binary's `anchor idl fetch` prints the JSON the project holds after each write,
+  and the terminal's `fetch` prints an IDL that binary's `anchor idl init` wrote; Explorer shows the IDL on the
+  program's page; the external wallet asks for one approval; `close` returns the rent; and the PR description
+  records whether the forced failure left a buffer account holding rent, with a ticket if it did. This is a manual
+  check with a funded wallet, since the Devnet faucet is closed. Depends on 4.4.
+- [ ] 3.2 Run `yarn run check` in `client-v2` and `yarn spec:validate`, and refresh `client-v2/bench/BUNDLE.md` as
+  task 2.2 did. Verify: both pass, `yarn test-build` passes, and the PR description explains each moved row. Depends
+  on every task above.
+
+## 4. The `anchor idl` surface of Anchor 1.1.2
+
+- [x] 4.1 In `client-v2/src/features/program-idl`, extract the path that plans, asks the wallet once, and sends
+  stage by stage from `uploadIdl` into one function that takes an instruction plan
+  ([design.md](design.md), "One send path for every subcommand that sends"), and give it `--priority-fee`. Add the
+  non-canonical account to the upload, without the upgrade-authority check. Verify: the existing upload tests pass
+  unchanged in meaning; a test covers a non-canonical upload by a wallet that is not the authority, and one covers
+  the priority fee in every transaction of an upload.
+- [x] 4.2 Add `fetch`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer` to the slice, each with
+  the refusals of its requirement, and declare `idl_command_started`, `idl_command_succeeded`, and
+  `idl_command_failed` with doc comments in `model/telemetry.ts`. `fetch` moves `fetchProgramMetadataIdl` from the
+  HOO-2486 spike. Verify: unit tests with a fake connection and wallet assert, through the memory provider, the
+  event order of each subcommand and each `reason` of "A failed subcommand names its reason". Depends on 4.1.
+- [x] 4.3 Port `convert` (both directions) and `type` to `client-v2/src/entities/idl` from `convert_idl`,
+  `convert_idl_to_legacy`, and `idl_ts` of Anchor at tag `v1.1.2`. Verify: tests compare the output with fixtures
+  the Anchor 1.1.2 binary printed for a legacy IDL, a current IDL, and one with `--program-id`; the fixtures and the
+  command that made them are committed.
+- [x] 4.4 Rewrite the `idl` subcommands of `client-v2/src/commands/anchor/anchor.ts` as
+  [design.md](design.md), "The surface is Anchor 1.1.2's", describes: the eleven subcommands with Anchor's argument
+  and option names and success lines, file arguments on project files, `--filepath` optional, the program id rule,
+  the localnet skip, the mainnet refusal and network hold on the six that send, the not-supported line for `build`
+  and `fetch-historical`, and no subcommand for the four names Anchor removed. First check the facts
+  [design.md](design.md) lists under "Facts read, not tested" against the sources, and correct the spec where one
+  is wrong. Verify: `anchor.test.ts` covers every requirement of `client-v2-program-idl` that names a terminal line,
+  the refusal of `--provider.cluster`, and the unknown-subcommand error of a removed name. Depends on 4.2 and 4.3.
+- [x] 4.5 Update the `wbdi-flow` change with `/opsx:update`: its task 3.2 reads the Program Metadata account through
+  the slice's `fetch`, and its deploy delta names the requirement "Anchor IDL writes to mainnet are refused" of
+  `mainnet-deploy-warning` for the `anchor idl` refusal, with no list of subcommands of its own. Verify:
+  `yarn spec:validate` passes. Depends on 4.2.
+- [x] 4.6 Implement "An unfinished upload is finished or closed, never read as an IDL": `init` and `upgrade` finish
+  an upload over a buffer left at the canonical address, `fetch` and the upload check the account's discriminator
+  before reading it as metadata, `close` closes such a buffer, and a failed upload prints the rent it leaves.
+  Verify: in `client-v2/src/commands/anchor/anchor.integration.test.ts`, on LiteSVM, the two `it.fails` cases pass as
+  plain cases, the rent case asserts the new line, and a case closes a leftover buffer. Depends on 4.4.
+- [x] 4.7 Add `anchor legacy-idl` with `fetch` and `close`, as the `legacy-idl` requirements of
+  `client-v2-program-idl` describe, the account address, address resolution, IDL instruction, and lines read from
+  Anchor at tag `v1.1.2`; `close` goes through the send path of 4.1 and the mainnet refusal; the events are
+  `idl_command_*`. Verify: `anchor.test.ts` covers help and an unsupported name; the integration test on LiteSVM
+  fetches by program id and by account address, closes an Anchor IDL account of a program that dispatches the
+  legacy IDL instructions, and refuses a close by another wallet. Depends on 4.4.
 
 ## Workflow follow-up
 

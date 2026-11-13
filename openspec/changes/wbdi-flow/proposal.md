@@ -13,13 +13,17 @@ the existing ones included, so that later work keeps them and fills the gaps.
 ## What Changes
 
 The flow has two outputs and three destinations. A build turns the source into
-a program binary and an IDL. A deploy uploads both to one cluster. Interact
-calls the deployed program through an IDL.
+a program binary, and keeps the IDL when the build server returns one. When
+it returns none, the project keeps the IDL it holds, which is then the one
+the user uploaded to the project, if any. A deploy uploads both to one
+cluster. Interact calls the deployed program through an IDL.
 
 Functions client-v2 has, recorded so they are kept:
 
 - Build of an Anchor, Native or Seahorse project on the build server, returning
-  the binary for deploy and the IDL, both kept with the project.
+  the binary for deploy and, when the build server generates one, the IDL,
+  both kept with the project. A build that returns no IDL leaves the
+  project's IDL as it was.
 - Deploy and upgrade through the BPF Upgradeable Loader, with pause, resume,
   cancel, and closing the buffer after a cancel.
 - A choice of cluster: Playnet, Localnet, Devnet, Testnet, Mainnet Beta, and a
@@ -38,11 +42,19 @@ Functions to add:
   `terminal-anchor-idl` change adds for the terminal's `anchor idl init` and
   `anchor idl upgrade`.
 - **No mainnet deploy from the playground**: a deploy or IDL upload started
-  on Mainnet Beta, by the button, the terminal or the assistant and with any
-  wallet, sends nothing. A mainnet guard explains why and sends the user to
-  the local deploy scripts, to deploy from their own machine. The terminal's
-  `solana program` and `anchor idl` commands that write to chain refuse on
-  Mainnet Beta too, whatever `-u` flag they carry.
+  on Mainnet Beta, from the Deploy stage, the terminal or the assistant and
+  with any wallet, sends nothing. The user is told as two requirements of
+  `mainnet-deploy-warning` describe, and this change adds nothing to them:
+  "Deploys to mainnet are refused", where the `deploy` command prints one
+  terminal line, and "The Deploy stage points mainnet to the user's
+  machine", where the stage offers "Deploy from your machine" in place of a
+  deploy action. An IDL upload from the Deploy stage is recorded as the
+  terminal's is, with `idl_upload_started` and then `idl_upload_failed`. The
+  terminal's `solana program` commands that write to chain refuse on Mainnet
+  Beta too, whatever `-u` flag they carry. The `anchor idl` subcommands that
+  send a transaction refuse there as the requirement "Anchor IDL writes to
+  mainnet are refused" of `mainnet-deploy-warning` describes; that refusal
+  shipped in #131, and this change adds nothing to it.
 - **Local deploy scripts** in the export: one deploys the program binary, one
   uploads the IDL, both run with the user's own Solana CLI and keypair.
 - **Interact with any program**: the user enters a program id, the playground
@@ -53,7 +65,8 @@ Functions to add:
 - **Simulate before send** in Interact, on by default, with logs and the
   result shown for both.
 - **Modern IDL formats**: Anchor 0.30+ and Codama IDLs drive the Interact form.
-  These depend on the Anchor 0.29 to 1.1.2 migration.
+  The stable build server builds with Anchor 1.1.2, so the IDL of a project
+  built in the playground is in the Anchor 0.30+ format.
 - **Program id controls**: import, export and replace the program keypair from
   the UI, so the same program id can be deployed from the playground and from
   the user's machine.
@@ -72,14 +85,16 @@ its own event, so a user's path through the flow can be rebuilt. Events added
   `deploy_airdrop_requested`, `deploy_program_id_copied`,
   `deploy_keypair_exported`, `deploy_keypair_import_started`,
   `deploy_keypair_imported`,
-  `deploy_keypair_created`, `deploy_keypair_replace_warned`,
-  `deploy_mainnet_warned`, `deploy_scripts_exported`.
+  `deploy_keypair_created`, `deploy_keypair_replace_warned`. A deploy
+  refused on Mainnet Beta sends no `deploy_started` and no outcome event;
+  "Deploy from your machine" sends `cli_guide_opened`, an event of the
+  `cli-deploy` capability that this change leaves as it is.
 - IDL: `idl_loaded`, `idl_load_failed`, `idl_source_selected`,
-  `idl_file_picker_opened`, `idl_paste_opened`, `idl_local_cleared`,
-  `idl_target_selected`. An upload sends `idl_upload_started`,
-  `idl_uploaded`, and `idl_upload_failed`, which the `terminal-anchor-idl`
-  change adds with the requirements "An IDL upload sends its events" and "A
-  failed upload names its reason".
+  `idl_file_picker_opened`, `idl_paste_opened`, `idl_local_cleared`. An
+  upload sends `idl_upload_started`, `idl_uploaded`, and
+  `idl_upload_failed`, which the `terminal-anchor-idl` change adds with the
+  requirements "An IDL upload sends its events" and "A failed upload names
+  its reason".
 - Interact: `interact_simulated`, `interact_sent`, `interact_failed`,
   `interact_simulate_started`, `interact_send_started`,
   `interact_simulate_toggled`, `interact_mainnet_confirmed`,
@@ -98,8 +113,8 @@ settings slices, which own its events.
 - `client-v2-program-build`: what a build takes, what it produces, and where
   the binary and the IDL are kept.
 - `client-v2-program-deploy`: deploying and upgrading a program on a cluster,
-  who pays, the mainnet guard, the terminal's mainnet refusals, and the local
-  deploy scripts.
+  who pays, the rule that nothing is sent to Mainnet Beta, the terminal's
+  mainnet refusals, and the local deploy scripts.
 - `client-v2-program-idl`: the IDL formats the playground reads, where an IDL
   comes from, choosing between sources, and uploading an IDL on chain.
 - `client-v2-program-interact`: calling a deployed program's instructions,
@@ -116,14 +131,17 @@ overlap.
 - Code in client-v2 only: `commands/build`, `commands/deploy`,
   `utils/program-info.ts`, `utils/program-interaction`, `effects/fetch-idl`,
   `views/flow/stages`, `views/sidebar/test`, `frameworks/*/export.*`,
-  `commands/solana`, `commands/anchor`, and slices under `features/` for IDL
-  sources, IDL upload and the mainnet guard. The slices are new, except
-  `program-idl`: the `terminal-anchor-idl` change creates it with the IDL
-  upload, and this change extends it.
-- New dependencies: a client for the Program Metadata program, and Codama for
-  reading Codama IDLs. The user sees IDLs that other tools published.
-- Depends on the Anchor 0.29 to 1.1.2 migration for the Anchor 0.30+ IDL
-  format and for building projects newer than Anchor 0.29.
+  `commands/solana`, and slices under `features/` for IDL sources and IDL
+  upload. The slices are new, except `program-idl`: the
+  `terminal-anchor-idl` change creates it with the IDL upload, and this
+  change extends it.
+- New dependencies: Codama for reading Codama IDLs. The Program Metadata
+  client is `@solana-program/program-metadata` 0.11.0, which the
+  `terminal-anchor-idl` change adds. The user sees IDLs that other tools
+  published.
+- Depends on the `stable-anchor-1-1-2` change: the stable build server builds
+  with Anchor 1.1.2, so the IDL of a project built in the playground is in
+  the Anchor 0.30+ format.
 
 Out of scope:
 

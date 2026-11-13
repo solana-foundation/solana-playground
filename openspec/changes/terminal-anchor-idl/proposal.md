@@ -12,20 +12,34 @@ cluster. Ticket: to file.
 
 ## What Changes
 
-- `anchor idl init` and `anchor idl upgrade` are handled in TypeScript. Each writes the IDL the project holds to the
-  program's canonical Program Metadata account (seed `idl`) on the selected cluster, creating the account or
-  replacing an earlier IDL, with one wallet approval. Anchor 1.1.2's CLI writes the same account, and Explorer reads
-  it.
-- Nothing is sent when the project holds no IDL in the Anchor 0.30+ format, when the connected wallet is not the
-  program's upgrade authority, or on Mainnet Beta (the refusal #131 adds for `anchor idl` writes).
-- **BREAKING** `anchor idl authority`, `close`, `erase-authority`, `fetch`, `set-authority`, `set-buffer`, and
-  `write-buffer` end with one line saying the Playground terminal does not support them. They act on Anchor's legacy
-  IDL account, which an Anchor 1.1.2 program does not serve.
+- `anchor idl` is handled in TypeScript and offers the subcommands of Anchor 1.1.2's CLI, with their arguments and
+  options: `init`, `upgrade`, `fetch`, `close`, `create-buffer`, `set-buffer-authority`, `write-buffer`, `convert`,
+  `type`, `build`, and `fetch-historical`. Anchor 1.1.2 runs the Program Metadata command-line client for the seven
+  on-chain subcommands; the Playground calls the same program's JavaScript client.
+- `init` and `upgrade` write an IDL to the program's canonical Program Metadata account (seed `idl`) on the selected
+  cluster, creating the account or replacing an earlier IDL, with one wallet approval. Anchor 1.1.2's CLI writes the
+  same account, and Explorer reads it. `fetch` prints the account's IDL, `close` closes the account and returns its
+  rent, and the three buffer subcommands publish an IDL through a buffer account.
+- `convert` and `type` are TypeScript ports of Anchor's transformations, checked against the output of the Anchor
+  1.1.2 binary.
+- The Playground differs from Anchor's CLI in four points. The cluster is the selected one and the wallet the
+  connected one, so `--provider.cluster`, `--provider.wallet`, and `--commitment` are not accepted. A path names a
+  file of the project. `--filepath` is optional: without it the command uses the latest IDL uploaded to the project,
+  because the stable build server returns none. A subcommand that sends a transaction is refused on Mainnet Beta
+  (the refusal #131 adds for `anchor idl` writes).
+- `init` and `upgrade` send nothing when there is no IDL in the Anchor 0.30+ format to upload, or when the connected
+  wallet is not the program's upgrade authority.
+- **BREAKING** `anchor idl build` and `anchor idl fetch-historical` end with one line saying the Playground terminal
+  does not support them yet. A browser has no Rust compiler, the stable build server returns no IDL, and
+  `fetch-historical` has no JavaScript client.
+- **BREAKING** `anchor idl authority`, `erase-authority`, `set-authority`, and `set-buffer` end as unknown
+  subcommands. Anchor 1.1.2's `anchor idl` has none of them: they act on Anchor's legacy IDL account.
 - **BREAKING** An IDL in the Anchor 0.29 format is not uploaded.
-- A feature slice `program-idl` (event prefix `idl`) holds the upload, taken from the HOO-2486 spike. It adds three
-  events: `idl_upload_started`, `idl_uploaded`, and `idl_upload_failed`. This change's requirements "An IDL upload
-  sends its events" and "A failed upload names its reason" define their parameters, and the `wbdi-flow` change names
-  those requirements. No event is renamed or removed.
+- A feature slice `program-idl` (event prefix `idl`) holds the on-chain subcommands; its upload comes from the
+  HOO-2486 spike. It adds six events: `idl_upload_started`, `idl_uploaded`, and `idl_upload_failed` for `init` and
+  `upgrade`, and `idl_command_started`, `idl_command_succeeded`, and `idl_command_failed` for the other subcommands.
+  This change's requirements define their parameters, and the `wbdi-flow` change names the two upload requirements.
+  No event is renamed or removed.
 - `client-v2` stops loading `@solana-playground/anchor-cli`, and `wasm/anchor-cli` is deleted. The real wasm packages
   go from six to five, and no wasm build compiles Anchor 0.29. For the user, a cold `yarn setup` and a cold Vercel
   build compile one package fewer.
@@ -38,21 +52,22 @@ cluster. Ticket: to file.
 
 ### New Capabilities
 
-- `client-v2-program-idl`: how the project's IDL is published on chain from the terminal: which `anchor idl`
-  subcommands write it, where, when they refuse, and the events of an upload. The `wbdi-flow` change adds its own
-  requirements to the same capability.
+- `client-v2-program-idl`: how the terminal's `anchor idl` publishes, reads, and manages a program's IDL as Anchor
+  1.1.2's CLI does: its subcommands, where the Playground differs from that CLI, when a subcommand refuses, and the
+  events it sends. The `wbdi-flow` change adds its own requirements to the same capability.
 
 ### Modified Capabilities
 
 - `client-v2-build`: the real wasm packages are the ones `WASM_PACKAGES` names, without `anchor-cli`; the
   requirements stop stating a count.
-- `mainnet-deploy-warning`: the refusal of `anchor idl` writes on mainnet covers `init` and `upgrade`, the only
-  subcommands that send a transaction. This modifies the requirement #131 added to `master` (`e1af2dfc2`).
+- `mainnet-deploy-warning`: the refusal of `anchor idl` writes on mainnet covers the six subcommands that send a
+  transaction: `init`, `upgrade`, `close`, `create-buffer`, `set-buffer-authority`, and `write-buffer`. This modifies
+  the requirement #131 added to `master` (`e1af2dfc2`).
 
 ## Impact
 
-- **Code:** `client-v2/src/features/program-idl` (new), `client-v2/src/commands/anchor`,
-  `client-v2/src/utils/package.ts`, `client-v2/package.json`, `client-v2/scripts/wasm-stubs.sh`,
+- **Code:** `client-v2/src/features/program-idl` (new), `client-v2/src/entities/idl` (the `convert` and `type`
+  ports), `client-v2/src/commands/anchor`, `client-v2/src/utils/package.ts`, `client-v2/package.json`, `client-v2/scripts/wasm-stubs.sh`,
   `client-v2/scripts/wasm-stubs.mjs`, `client-v2/bench/BUNDLE.md`, `wasm/anchor-cli` (deleted), `wasm/Cargo.toml`,
   `wasm/Cargo.lock`, `wasm/build.sh`, `wasm/stub-packages.sh`, `.github/workflows/cicd.yml`,
   `.github/workflows/reusable-checks.yml` (the comment on its `build` input), `CLAUDE.md`, `docs/testing.md`.
@@ -65,7 +80,8 @@ cluster. Ticket: to file.
   #126 removes those services.
 - **Upstream sync:** a sync that changes `wasm/anchor-cli` upstream conflicts with the deletion; the folder stays
   deleted.
-- **Out of scope:** the Deploy stage's upload button (`wbdi-flow` task 3.5) and reading the on-chain IDL
-  (`wbdi-flow` task 3.2); a TypeScript `anchor idl fetch`; the legacy Anchor IDL account; non-canonical metadata
-  accounts; removing `client/` or the `build` job of `reusable-checks.yml`; the Rust version of the `wasm/`
-  workspace.
+- **Out of scope:** the Deploy stage's upload button (`wbdi-flow` task 3.5) and the Flow view's read of an on-chain
+  IDL (`wbdi-flow` task 3.2), which reuses this change's read; an implementation of `anchor idl build` and
+  `anchor idl fetch-historical`; programs built before Anchor 1.1.2, and seven of the nine subcommands of Anchor 1.1.2's
+  deprecated `anchor legacy-idl` group (its `fetch` and `close` are in scope); every other group of Anchor's CLI, which the terminal has never offered; removing
+  `client/` or the `build` job of `reusable-checks.yml`; the Rust version of the `wasm/` workspace.

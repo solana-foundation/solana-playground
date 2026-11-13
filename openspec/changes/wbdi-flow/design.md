@@ -11,7 +11,11 @@ at `dc22a4740`:
   binary and serves it to the deploy from `/deploy/{uuid}`.
   `utils/program-info.ts` keeps the IDL, the keypair and the uuid in
   `.workspace/program-info.json`, which project sync carries to other
-  devices. Anchor is pinned to 0.29.
+  devices. At that commit Anchor is pinned to 0.29; after the
+  `stable-anchor-1-1-2` change the stable build server builds with Anchor
+  1.1.2 and returns no IDL, and the `build` command then leaves the
+  project's IDL as it was, as the requirement "A build without an IDL keeps
+  the IDL the browser holds" of that change describes.
 - **Deploy**: `commands/deploy/` runs the BPF Upgradeable Loader steps in the
   browser. The playground wallet (`utils/wallet/wallet.ts`, a keypair in
   localStorage) pays and signs. An extension wallet first transfers the cost
@@ -52,18 +56,21 @@ execute by default, and confirms the first execute on mainnet.
 
 ### Two outputs, one cluster per upload
 
-A build produces a binary and an IDL from the same source. A deploy puts each
-on one cluster, in separate transactions: first the binary, then the IDL. The
-specs therefore track deploy and IDL state per cluster: a program on Devnet is
-not on Mainnet Beta until it is uploaded there. This mirrors how Solana itself
-works, and keeps the user from reading a Devnet IDL as proof of a mainnet
-program.
+A project has two outputs from the same source: the program binary, which a
+build produces, and the IDL, which the build keeps when the build server
+returns one and which the user uploads to the project otherwise. A deploy
+puts each on one cluster, in separate transactions: first the binary, then
+the IDL. The specs therefore track deploy and IDL state per cluster: a
+program on Devnet is not on Mainnet Beta until it is uploaded there. This
+mirrors how Solana itself works, and keeps the user from reading a Devnet IDL
+as proof of a mainnet program.
 
 ```mermaid
 flowchart LR
   src["Program source<br/>(Anchor, Native, Seahorse)"] --> build["Build<br/>(build server)"]
   build --> bin["Program binary"]
-  build --> idl["IDL<br/>(Anchor and Seahorse only)"]
+  build -- "Anchor and Seahorse,<br/>when the server returns one" --> idl["Project IDL"]
+  file["IDL the user uploads<br/>to the project"] --> idl
   bin --> deploy["Deploy or upgrade<br/>(BPF Upgradeable Loader)"]
   deploy --> cluster[("Selected cluster<br/>Playnet, Localnet, Devnet,<br/>Testnet, Mainnet Beta, custom")]
   idl --> upload["IDL upload"]
@@ -86,9 +93,10 @@ the Anchor IDL account: an upload calls `uploadProjectIdl` of the
 `program-idl` slice, and the design of the `terminal-anchor-idl` change
 gives the reason under "The upload writes the canonical Program Metadata
 account".
-Alternative considered: Anchor IDL account only, as `anchor idl init` does at
-0.29. Rejected: an IDL there is not what the Explorer reads first, so a user
-could publish and still see a stale IDL.
+Alternative considered: Anchor IDL account only, as the `anchor idl init` of
+Anchor 0.29's CLI does; the one of Anchor 1.1.2's CLI writes Program
+Metadata. Rejected: an IDL there is not what the Explorer reads first, so a
+user could publish and still see a stale IDL.
 
 ### A local IDL is a first-class source
 
@@ -118,52 +126,76 @@ The playground wallet is a keypair in localStorage. Funding it for a mainnet
 deploy means sending real SOL to a key any script on the page can read. The
 playground cannot make that safe, so it does not deploy to Mainnet Beta and
 sends the user to the alternative: the same program, with the same program
-id, deployed from the user's machine with the scripts in the export.
+id, deployed from the user's machine.
 
-The block sits in front of the deploy itself, not in front of one button, so
-the terminal `deploy` command and the assistant's tools reach it too. An
-extension wallet does not lift it, because a deploy with an extension still
-moves the cost into the playground wallet, which signs the loader
-transactions. IDL uploads are blocked the same way; the IDL upload script
-covers them. Sending an instruction from Interact stays allowed on Mainnet
-Beta: it calls a program, it does not deploy one.
+The refusal is the one the main spec `mainnet-deploy-warning` describes, and
+this change adds no dialog to it. The requirement "Deploys to mainnet are
+refused" puts the refusal in the `deploy` command itself, not in front of one
+button, so the terminal, the assistant's tools, and the explorer menu reach
+it too: the command prints one terminal line and sends nothing. The
+requirement "The Deploy stage points mainnet to the user's machine" gives
+the stage its line, no deploy action, and the pill "Deploy from your
+machine", which opens the dialog of that name with Mainnet picked. An
+extension wallet does not lift the refusal, because a deploy with an
+extension still moves the cost into the playground wallet, which signs the
+loader transactions.
+
+A refused deploy is not a deploy attempt, so it sends no `deploy_started`
+and no outcome event. The pill's press sends `cli_guide_opened`, which the
+requirement "CLI deploy events" of `cli-deploy` describes. An IDL upload
+from the Deploy stage follows the rule of the terminal's `anchor idl init`:
+nothing is sent, and the attempt is recorded with `idl_upload_started` and
+then `idl_upload_failed`, as the requirements "An IDL upload sends its
+events" and "A failed upload names its reason" of the `terminal-anchor-idl`
+change describe. The IDL upload script in the export publishes a mainnet IDL
+from the user's machine. Sending an instruction from Interact stays allowed
+on Mainnet Beta: it calls a program, it does not deploy one.
 
 The terminal is a second way in. The WASM `solana` CLI already lacks
 `program deploy` and `write-buffer` (commented out in
 `wasm/solana-cli/src/commands/program.rs`), but `program close` and
-`set-upgrade-authority` are live, and the WASM `anchor` CLI writes the Anchor
-IDL account with `idl init`, `upgrade` and the rest (`process_idl` in
-`wasm/anchor-cli/src/commands/idl.rs`). `solana` also takes `-u` on every
+`set-upgrade-authority` are live. `solana` also takes `-u` on every
 command, so the selected cluster is not the cluster a command reaches. The
-refusal therefore lives in the `commands/solana` and `commands/anchor`
-wrappers and checks the cluster each command resolves to. `close` and
+refusal therefore lives in the `commands/solana` wrapper and checks the
+cluster each command resolves to. `program close` and
 `set-upgrade-authority` deploy nothing, but on mainnet they destroy a program
 or hand it to another key with the browser key, so they are refused too.
+
+The `anchor` command is TypeScript in `commands/anchor`. It offers the
+`anchor idl` subcommands of Anchor 1.1.2's CLI, and the ones that send a
+transaction write to the Program Metadata program through the `program-idl`
+slice. Their refusal on Mainnet Beta shipped in #131 (`e1af2dfc2` on
+`master`), and the requirement "Anchor IDL writes to mainnet are refused" of
+`mainnet-deploy-warning` describes it. This change adds nothing to that
+refusal.
 
 ```mermaid
 sequenceDiagram
   actor User
-  participant Start as Deploy button, terminal or assistant
-  participant Guard as Mainnet guard (mainnet-guard)
+  participant Stage as Deploy stage
+  participant Command as deploy command
+  participant Dialog as Deploy from your machine
   participant Chain as Mainnet Beta
-  alt Program deploy
-    Start->>Guard: deploy on Mainnet Beta (deploy_started)
-  else IDL upload
-    Start->>Guard: IDL upload on Mainnet Beta (idl_upload_started)
-  end
-  Note over Guard,Chain: nothing is ever sent to Mainnet Beta
-  alt Download deploy scripts
-    User->>Guard: Download deploy scripts (mainnet-guard-scripts)
-    Guard-->>User: export with scripts (deploy_mainnet_warned: scripts)
-    User->>Chain: deploy from the user's machine with the Solana CLI
-  else Close
-    User->>Guard: Close
-    Guard-->>Start: nothing sent (deploy_mainnet_warned: close)
+  Note over Stage,Chain: the playground sends nothing to Mainnet Beta
+  alt Deploy stage
+    User->>Stage: Deploy from your machine
+    Stage->>Dialog: open with Mainnet picked (cli_guide_opened)
+    User->>Chain: deploy from the user's machine with the Solana CLI or Anchor
+  else Terminal, assistant or explorer menu
+    User->>Command: deploy
+    Command-->>User: one terminal line, no event
+  else IDL upload from the Deploy stage
+    User->>Stage: Upload
+    Stage-->>User: nothing sent (idl_upload_started, idl_upload_failed)
   end
 ```
 
 Alternatives considered:
 
+- A dialog on every deploy started on Mainnet Beta, offering Download deploy
+  scripts and Close. Dropped for the behaviour the main spec describes: on
+  Mainnet Beta the Deploy stage has no deploy action to open a dialog from,
+  and the `deploy` command's line says where to deploy from.
 - A disclaimer with an "I understand the risk" checkbox, shown on every
   mainnet deploy, with the acceptance recorded in a cookie. Rejected: a key
   stored in the browser is not made safe by a dialog, and a cookie proves
@@ -175,10 +207,13 @@ Alternatives considered:
 Mainnet deploys from the playground may be enabled in a later change, once
 the wallet interaction is secured: the user's own wallet signs every deploy
 and IDL transaction end to end, and no key that pays for or signs a mainnet
-transaction is stored in the browser. Until then the guard and the terminal
-refusals stay, and enabling mainnet means a change that replaces the
-requirements "The playground never deploys to Mainnet Beta" and "The
-terminal sends no program transaction to Mainnet Beta".
+transaction is stored in the browser. Until then the refusals stay, and
+enabling mainnet means a change that replaces the requirements "The
+playground never deploys to Mainnet Beta" and "The terminal sends no program
+transaction to Mainnet Beta", and the requirements of
+`mainnet-deploy-warning` that those two name: "Deploys to mainnet are
+refused", "The Deploy stage points mainnet to the user's machine", and
+"Anchor IDL writes to mainnet are refused".
 
 The Interact confirmation on the first mainnet send per session follows the
 Explorer's behaviour; it was chosen while writing this change, not requested. It is per
@@ -198,11 +233,12 @@ deploy the program and upload the IDL.
 ### Interact reads every format the playground reads
 
 The Explorer gives no Interact form to an Anchor IDL older than 0.30. The
-playground does, because its projects are built at Anchor 0.29 and the
-upstream form handles that format today. Codama and Anchor 0.30+ are added
-next to it. Automatic PDA derivation for 0.30+ seeds and for Codama
-`pdaValueNode`s needs the Anchor 0.29 to 1.1.2 migration for projects built in
-the playground; for a program read from the chain it does not.
+playground does, because programs deployed with older Anchor tooling have
+such an IDL on chain, and the upstream form handles that format. Codama and
+Anchor 0.30+ are added next to it. Automatic PDA derivation for 0.30+ seeds
+and for Codama `pdaValueNode`s covers a program read from the chain and a
+project built in the playground alike: the stable build server builds with
+Anchor 1.1.2, so the project's IDL is in the Anchor 0.30+ format.
 
 ### From seed stays
 
@@ -235,24 +271,34 @@ from the user's IDL.
 ## Risks / Trade-offs
 
 - [The Program Metadata program or its client changes format] → read and
-  write through one client package, pinned, so a format change is one bump.
-- [A path reaches Mainnet Beta around the guard] → the guard sits in front
-  of the deploy itself, the terminal wrappers check the resolved cluster, and
-  scenarios cover the button, the assistant, `anchor idl` and a `-u` flag.
+  write through one client package, `@solana-program/program-metadata`,
+  which the `terminal-anchor-idl` change pins at 0.11.0, so a format change
+  is one bump.
+- [A path reaches Mainnet Beta around the refusal] → the `deploy` command
+  refuses for every caller, the `commands/solana` wrapper checks the
+  resolved cluster, and scenarios cover the assistant, an extension wallet,
+  and a `-u` flag. The scenarios of "Deploys to mainnet are refused" and
+  "Anchor IDL writes to mainnet are refused" in `mainnet-deploy-warning`
+  cover the `deploy` command and `anchor idl`.
 - [A later WASM CLI build enables `solana program deploy`] → the "Solana
   program deploy is unavailable" scenario fails, so the change cannot land
   silently.
-- [A user who wants mainnet finds the playground less convenient] → the guard
-  offers the scripts in one click, and they keep the program id.
+- [A user who wants mainnet finds the playground less convenient] → the
+  Deploy stage opens the "Deploy from your machine" dialog with Mainnet
+  picked, and the scripts in the export keep the program id.
 - [Two on-chain IDLs disagree] → the source picker shows which one is in use,
   and the default is the one the Explorer reads first.
-- [The Anchor migration slips] → the 0.30+ and Codama tasks for projects built
-  in the playground wait for it; reading such IDLs from chain does not.
 - [Localnet needs a validator the playground does not start] → the Localnet
   scenario names `localhost:8899`; the export README says how to start
   `solana-test-validator`.
 
 ## Open Questions
 
-- The exact name and version of the Program Metadata client package, settled
-  by the IDL upload task.
+- Does the Flow view's read of an on-chain IDL follow a URL data source? A
+  Program Metadata account can name a URL as its data source, and the Program
+  Metadata client then requests that URL from the browser, so the host of the
+  URL learns the user's network address. The design of the
+  `terminal-anchor-idl` change accepts this under "Risks / Trade-offs" for
+  `anchor idl fetch`, which the user runs for a program they name. The Flow
+  view's read is automatic, for any program id, so task 3.2 decides whether
+  it follows a URL data source. `fetchProgramMetadataIdl` follows one.
