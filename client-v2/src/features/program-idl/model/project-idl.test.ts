@@ -161,7 +161,7 @@ describe("features/program-idl/model/project-idl", () => {
       change: (setup: Setup) => {
         setup.source = projectIdl(undefined);
       },
-      line: "The project has no IDL to upload.",
+      line: "The project has no IDL to upload. Build the IDL on your own machine and load it with Upload IDL, or pass a project file with `--filepath <path>`.",
       sent: 0,
     },
     {

@@ -662,7 +662,8 @@ describe("commands/anchor", () => {
       label: "a project that holds no IDL",
       idl: undefined,
       line: "anchor idl init",
-      message: "The project has no IDL to upload.",
+      message:
+        "The project has no IDL to upload. Build the IDL on your own machine and load it with Upload IDL, or pass a project file with `--filepath <path>`.",
     },
     {
       label: "a file the project does not hold, which the line names",

@@ -97,7 +97,7 @@ export const toUploadJson = (source: IdlSource) => {
     if (!source.idl) {
       throw new IdlCommandRefusedError(
         "not_found",
-        "The project has no IDL to upload."
+        "The project has no IDL to upload. Build the IDL on your own machine and load it with Upload IDL, or pass a project file with `--filepath <path>`."
       );
     }
     // Anchor uploads an IDL the Playground cannot map to the 0.29 shape, so the gate is the format alone
