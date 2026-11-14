@@ -25,8 +25,11 @@ follows 2.2, 3.1, 4.1, and 4.2. Each task that changes `client-v2/scripts/` titl
 - [ ] 2.1 Parse `e2e/`, the vitest files the `include` globs of `client-v2/vitest.config.ts` collect (read from the
   config, not copied), and the `*.test.mjs` files `yarn test-api` runs with `ts.createSourceFile` into a tree of titled
   `test`, `test.describe`, `test.step`, `describe`, and `it` calls, replacing `TEST_TITLE` in
-  `client-v2/scripts/spec-coverage.mjs`; read `test.describe.only`, `test.describe.parallel`, and
-  `test.describe.serial` as `test.describe`; count literal titles only; skip an unconditional skip (`.skip`, `.fixme`,
+  `client-v2/scripts/spec-coverage.mjs`; read a member call other than a skip form (`skip`, `fixme`, `todo`,
+  `skipIf`, `runIf`, and `test.step.skip`) as its base call, such as `test.only`, `describe.only`, `it.only`,
+  `describe.concurrent`, and `it.fails`; read a call whose callee is a call of `skipIf` or `runIf`, as in
+  `describe.skipIf(condition)("title", fn)`, as the base call of that member, conditionally skipped; count literal
+  titles only; skip an unconditional skip (`.skip`, `.fixme`,
   and `.todo` on `test`, `it`, and `describe`, `test.describe.skip` and `test.describe.fixme` included, an in-body
   `test.skip()` or `test.fixme()` with no argument as a statement of the body itself, an in-body `test.skip(true, …)`
   or `test.fixme(true, …)` with the literal `true`, and a `node:test` `skip` or `todo` option that is `true` or a
@@ -82,11 +85,12 @@ follows 2.2, 3.1, 4.1, and 4.2. Each task that changes `client-v2/scripts/` titl
 
 - [ ] 4.1 Add `client-v2/scripts/spec-coverage-strict.txt` (one capability per line, `#` comments, no capability
   yet) and enforce it on every `yarn spec:coverage` run: an uncovered scenario or a missing clause in a listed
-  capability, a clause step there that matches no clause, an assertion clause there whose first word breaks the rule
-  of the spec requirement "An assertion clause starts with a verb", a `(manual)` scenario there that a test cites, or
-  a listed name with no `spec.md`, exits
-  with an error; off the list, the report prints one count per capability of the assertion clauses that break that
-  rule, over `openspec/specs/` and the active changes; a scenario only an active change adds
+  capability, a clause step there that matches no clause, an assertion clause of `openspec/specs/` there whose first
+  word breaks the rule of the spec requirement "An assertion clause starts with a verb", a `(manual)` scenario there
+  that a test cites, or a listed name with no `spec.md`, exits
+  with an error; the report prints one count per capability of the assertion clauses that break that rule and do not
+  fail the run: every such clause of a capability off the list, in `openspec/specs/` and in active changes, and a
+  listed capability's clauses in an active change's delta; a scenario only an active change adds
   is reported; a scenario of a requirement an active change modifies is matched by name only; a scenario of a
   requirement an active change removes is reported and not gated; `--strict` keeps failing on any uncovered
   scenario, one an active change adds or removes included (design.md, decision 10); replace the
@@ -94,8 +98,9 @@ follows 2.2, 3.1, 4.1, and 4.2. Each task that changes `client-v2/scripts/` titl
   that says the step fails on the strict list; depends on 2.2; verify with
   `node --test scripts/spec-coverage.test.mjs` covering the scenarios of "A listed capability gates its scenarios",
   "An assertion clause starts with a verb", and "An active change does not gate its own scenarios", among them "A
-  proposal removes a scenario whose test is gone, with the strict flag", and the scenarios "A manual scenario a test
-  cites" and "A clause step that matches no clause in a strict capability" (ticket to file)
+  subject-first clause in an active change's delta for a strict capability" and "A proposal removes a scenario whose
+  test is gone, with the strict flag", and the scenarios "A manual scenario a test cites" and "A clause step that
+  matches no clause in a strict capability" (ticket to file)
 - [ ] 4.2 Add `--base <ref>`, reading the base branch's list with `git show` (a missing file is an empty list), fail
   on a dropped capability whose `spec.md` stays, and pass `--base origin/${{ github.base_ref }}` from the
   "Scenario coverage" step of the `checks` job on `pull_request` runs only; depends on 4.1; verify with
@@ -108,23 +113,27 @@ follows 2.2, 3.1, 4.1, and 4.2. Each task that changes `client-v2/scripts/` titl
   to start with a verb, without changing behaviour; where a clause breaks the spec requirement "An assertion clause
   holds no user action and no condition" or "A clause names the values its test uses", move the condition into a
   GIVEN, split the clause into a later WHEN and its THEN, or replace the placeholder or the example value with the
-  value the test uses, a cluster address moving to a test host (design.md, Risks); give each of its 20 tested
-  scenarios' tests nested `test.step`s, one
-  per clause, titled with the rewritten clauses (design.md, decisions 2 and 5; all 20 are end-to-end, in
-  `client-v2/e2e/client-v2-custom-rpcs.e2e.spec.ts`; no vitest file cites the capability), keeping the test titles;
+  value the test uses, a cluster address moving to a test host (design.md, Risks); give each tested scenario's test
+  nested `test.step`s, one per clause, titled with the rewritten clauses (design.md, decisions 2 and 5; at
+  `8c8d5460b` the capability has 20 tested scenarios, all end-to-end, in
+  `client-v2/e2e/client-v2-custom-rpcs.e2e.spec.ts`, and no vitest file cites it), keeping the test titles;
   add an assertion for a clause part that has none, and keep an assertion beyond the clauses in a step titled with no
   clause keyword; settle two details (design.md, decision 12): whether an RPC that is not picked gets a scenario of
   its own, since "Editing renames the chip" covers only a picked RPC once its condition is a GIVEN, and the THEN
-  after "Use anyway" in "Offline, nothing is sent", which names what its test asserts (the chip is checked);
+  after "Use anyway" in "Offline, nothing is sent", which names what its test asserts (the chip is checked); write a
+  scenario the task adds directly in `openspec/specs/client-v2-custom-rpcs/spec.md`, like the task's other edits, and
+  give it its test in this pull request or the `(manual)` mark, so 5.2 puts no capability with an uncovered scenario
+  on the strict list;
   and regenerate `openspec/specs/client-v2-custom-rpcs/tests.md`; depends on 3.1 and 4.1; verify with
   `yarn spec:coverage` reporting no uncovered scenario, no missing clause, no clause step that matches no clause, and
   no assertion clause that breaks the verb rule for
   `client-v2-custom-rpcs`, and with `yarn test-e2e e2e/client-v2-custom-rpcs.e2e.spec.ts` passing (ticket to file)
-- [ ] 5.2 Add `client-v2-custom-rpcs` to `client-v2/scripts/spec-coverage-strict.txt`; depends on 4.2 and 5.1;
+- [ ] 5.2 Add `client-v2-custom-rpcs` to `client-v2/scripts/spec-coverage-strict.txt`; depends on 4.2 and 5.1; 5.3
+  appends a line to the same file, so the later of the two pull requests rebases onto the other's line;
   verify that the `checks` job passes, and that renaming one `client-v2-custom-rpcs` step locally makes
   `yarn spec:coverage` exit with an error (ticket to file)
 - [ ] 5.3 Pilot the vitest and node forms on `client-v2-build-server-endpoint`, whose 6 scenarios are all
-  `(manual)`: rewrite every THEN clause, and every AND after a THEN, in
+  `(manual)` at `8c8d5460b`: rewrite every THEN clause, and every AND after a THEN, in
   `openspec/specs/client-v2-build-server-endpoint/spec.md` to start with a verb, without changing behaviour, and
   rewrite a clause that breaks "An assertion clause holds no user action and no condition" or "A clause names the
   values its test uses" as 5.1 does;
@@ -142,7 +151,8 @@ follows 2.2, 3.1, 4.1, and 4.2. Each task that changes `client-v2/scripts/` titl
   `build-server-endpoint.test.ts` checks that scenario; add `client-v2-build-server-endpoint` to
   `client-v2/scripts/spec-coverage-strict.txt` and regenerate
   `openspec/specs/client-v2-build-server-endpoint/tests.md`; depends on 2.2, 3.1, 4.1, and 4.2, and may run beside
-  5.1 and 5.2; verify with `yarn spec:coverage` reporting nothing for `client-v2-build-server-endpoint`,
+  5.1 and 5.2; 5.2 appends a line to the same strict list, so the later of the two pull requests rebases onto the
+  other's line; verify with `yarn spec:coverage` reporting nothing for `client-v2-build-server-endpoint`,
   `yarn test-unit src/settings/server/build-server-endpoint.test.ts` passing, and
   `node --test scripts/server-url-gate.test.mjs` passing (ticket to file)
 

@@ -21,10 +21,11 @@ with `(manual)`. An unconditionally skipped or unwritten test SHALL NOT count: `
 option is the literal `true` or a string. A conditionally skipped test SHALL count: an in-body
 `test.skip(<condition>, …)` or `test.fixme(<condition>, …)` with any other condition, a `test.skip()` or
 `test.fixme()` with no argument anywhere else in the body, such as inside an `if`, a `skip` or `todo` option holding
-any other expression, and vitest's `skipIf` and `runIf`. `test.describe.only`, `test.describe.parallel`, and
-`test.describe.serial` SHALL be read as `test.describe`. A scenario that only a `## REMOVED` section of a delta names
-SHALL owe no test from the delta. A scenario marked `(manual)` that a test cites SHALL be reported as a conflict, and
-in a strict capability `yarn spec:coverage` SHALL exit with an error on it.
+any other expression, and vitest's `skipIf` and `runIf`. A member call other than the skip forms this requirement
+names (`skip`, `fixme`, `todo`, `skipIf`, `runIf`) and `test.step.skip` SHALL be read as its base call: `test.only`,
+`describe.only`, `it.only`, `describe.concurrent`, and `it.fails` are examples. A scenario that only a `## REMOVED`
+section of a delta names SHALL owe no test from the delta. A scenario marked `(manual)` that a test cites SHALL be
+reported as a conflict, and in a strict capability `yarn spec:coverage` SHALL exit with an error on it.
 
 #### Scenario: A scenario with a browser test
 
@@ -135,7 +136,8 @@ the kind of test the file holds.
 
 #### Scenario: A scenario checked by a node test file
 
-- **GIVEN** a `*.test.mjs` file under `scripts/` whose `describe` is titled with the scenario's capability and name
+- **GIVEN** a node test file `scripts/server-url-gate.test.mjs` whose `describe` is titled with the scenario's
+  capability and name
 - **WHEN** `yarn spec:coverage` runs
 - **THEN** counts the scenario as tested at the integration level
 
@@ -158,8 +160,9 @@ the clause before it. A later WHEN after a THEN SHALL be followed by assertion c
 and an AND after either is a container clause. A THEN, and an AND after a THEN, is an assertion clause. Each clause
 SHALL be a step of the test, titled with the clause text: a container for a container clause, a leaf for an
 assertion clause. Every clause step SHALL be written in the test's own body, or in vitest and `node --test` in the
-scenario's `describe`: the checker SHALL NOT read a clause step inside a helper function the test calls. A
-`test.step.skip` SHALL NOT be a step of its clause.
+scenario's `describe`: the checker SHALL NOT read a clause step inside a helper function the test calls. The one
+exception is a Playwright GIVEN that a `test.describe` (or `test.describe.serial`) around the test carries, which
+sits outside the test's body. A `test.step.skip` SHALL NOT be a step of its clause.
 
 #### Scenario: A clause wrapped over two lines
 
@@ -188,12 +191,14 @@ scenario's `describe`: the checker SHALL NOT read a clause step inside a helper 
 The checker SHALL match a clause to its step by one rule in both runners. A container SHALL hold the step of every
 clause after it in the scenario. Reading the clauses in order, the checker SHALL keep a current container, which at
 the start is the test body in Playwright and the scenario's `describe` in vitest and `node --test`. The step of a
-container clause SHALL be a child of the current container and SHALL become the current container. The step of an
-assertion clause SHALL be a child of the current container, so a leaf is a child of the container of the WHEN before
-it, or of the AND after that WHEN. Inside one container, each clause SHALL take the first child with its text after
-the child the clause before it took there, so the container of a later WHEN is nested in the container of the WHEN
-before it, after that WHEN's leaves. A clause with no such child SHALL be missing. When a container clause is
-missing, the clauses under it SHALL NOT be compared and SHALL NOT be named in the report.
+container clause SHALL be a child of the current container and SHALL become the current container. The one exception
+is a Playwright GIVEN that an enclosing `test.describe` (or `test.describe.serial`) titled with the clause carries: it
+SHALL be matched there, and the current container SHALL stay the test body. The step of an assertion clause SHALL be
+a child of the current container, so a leaf is a child of the container of the WHEN before it, or of the AND after
+that WHEN. Inside one container, each clause SHALL take the first child with its text after the child the clause
+before it took there, so the container of a later WHEN is nested in the container of the WHEN before it, after that
+WHEN's leaves. A clause with no such child SHALL be missing. When a container clause is missing, the clauses under it
+SHALL NOT be compared and SHALL NOT be named in the report.
 
 #### Scenario: A THEN step beside its WHEN step
 
@@ -357,10 +362,12 @@ match exactly. A clause reworded in the spec SHALL be missing until its step is 
 Every THEN clause, and every AND after a THEN, SHALL start with a verb after its keyword, because the clause is the
 test's title verbatim. The first word after the keyword, with trailing `,.:;` removed, SHALL be lower-case letters
 only and end in "s" (shows, saves, sends), and SHALL NOT be one of: its, this, as, always, unless, across,
-afterwards, besides, sometimes, towards. A GIVEN, a WHEN, and an AND after either SHALL keep their subject. In a
-strict capability, `yarn spec:coverage` SHALL exit with an error on an assertion clause with any other first word.
-Off the strict list it SHALL report one count of such clauses per capability, over `openspec/specs/` and the active
-changes.
+afterwards, besides, sometimes, towards. A GIVEN, a WHEN, and an AND after either SHALL keep their subject. For a
+strict capability, `yarn spec:coverage` SHALL exit with an error on an assertion clause in `openspec/specs/` with any
+other first word. The error SHALL read `openspec/specs/` only. The report SHALL print one count per capability of
+the assertion clauses that break this rule and do not fail the run: every such clause of a capability off the strict
+list, in `openspec/specs/` and in the active changes, and, for a strict capability, the clauses in an active change's
+delta.
 
 #### Scenario: A THEN that starts with an article in a strict capability
 
@@ -391,6 +398,12 @@ changes.
 - **WHEN** a scenario of a capability off the strict list has a THEN clause that starts with "the"
 - **THEN** counts the clause in the capability's report line and exits without an error
 
+#### Scenario: A subject-first clause in an active change's delta for a strict capability
+
+- **GIVEN** a capability on the strict list
+- **WHEN** an active change's delta for it holds a scenario with a THEN clause that starts with "the"
+- **THEN** counts the clause in the capability's report line and exits without an error
+
 #### Scenario: A WHEN and its AND with a subject
 
 - **GIVEN** a capability on the strict list
@@ -419,8 +432,8 @@ value. Review SHALL hold this rule: the checker does not read it.
 #### Scenario: Review of a placeholder in a clause (manual)
 
 - **GIVEN** a capability on the strict list
-- **WHEN** a pull request adds to it a scenario with the clause `AND shows a toast "Removed {name}."` and a test that
-  removes an RPC named "Helius"
+- **WHEN** a pull request adds to it a scenario whose AND clause names the toast "Removed" with a placeholder in braces
+  in place of the RPC's name, and a test that removes an RPC named "Helius"
 - **THEN** gets a review that asks for `AND shows a toast "Removed Helius."`
 
 ### Requirement: The coverage report lists tests, levels, missing clauses, and duplicates
@@ -455,8 +468,9 @@ Each capability with a `spec.md` under `openspec/specs/` SHALL have a committed 
 `openspec/specs/` only. It SHALL hold one row per clause per test, container clauses included: clause, test file,
 test title, and level. A clause the test has no step for, a clause under a missing container included, SHALL have a
 row naming that test's file and title, with "missing" in place of the level. A manual scenario SHALL have one row
-reading "manual"; an uncovered one, one row reading "none". The generator SHALL delete a `tests.md` whose folder has
-no `spec.md`.
+reading "manual"; an uncovered one, one row reading "none". A manual scenario that a test cites SHALL have that one
+row reading "manual" and no row for the test: the conflict is the coverage report's finding. The generator SHALL
+delete a `tests.md` whose folder has no `spec.md`.
 
 #### Scenario: A tested scenario's rows
 
@@ -469,10 +483,23 @@ no `spec.md`.
 - **WHEN** the generator runs over a scenario with three clauses whose one test has a step for two of them
 - **THEN** writes three rows for it, the row of the clause without a step reading "missing" in place of the level
 
+#### Scenario: A clause under a missing container in tests.md
+
+- **GIVEN** a scenario whose clauses are `WHEN the page reloads`, a THEN, and an AND
+- **WHEN** the generator runs over it and its one test, which holds the leaves of the THEN and the AND in a container
+  titled `WHEN the page reloads twice`
+- **THEN** writes three rows for the scenario, each reading "missing" in place of the level
+
 #### Scenario: A manual scenario's row
 
 - **WHEN** the generator runs over a scenario marked `(manual)`
 - **THEN** writes one row for it to the capability's `tests.md`, reading "manual"
+
+#### Scenario: A manual scenario a test cites in tests.md
+
+- **WHEN** the generator runs over a scenario marked `(manual)` that one test cites
+- **THEN** writes one row for it, reading "manual"
+- **AND** writes no row that names the test
 
 #### Scenario: An uncovered scenario's row
 
@@ -567,9 +594,10 @@ Without a base branch it SHALL skip the comparison.
 
 For a strict capability, a scenario an active change adds SHALL be reported and SHALL NOT fail the run. A scenario
 that sits in a requirement an active change modifies SHALL be checked by its name only, not clause by clause, until
-the change is archived. A scenario of `openspec/specs/` whose requirement an active change removes SHALL be reported
-and SHALL NOT fail the run until the change is archived. These exemptions SHALL apply to the strict list only:
-`yarn spec:coverage --strict` SHALL exit with an error on any uncovered scenario, one an active change adds or
+the change is archived: neither a missing clause nor a clause step that matches no clause of the `openspec/specs/`
+copy SHALL fail the run for it. A scenario of `openspec/specs/` whose requirement an active change removes SHALL be
+reported and SHALL NOT fail the run until the change is archived. These exemptions SHALL apply to the strict list
+only: `yarn spec:coverage --strict` SHALL exit with an error on any uncovered scenario, one an active change adds or
 removes included.
 
 #### Scenario: A proposal adds a scenario to a strict capability

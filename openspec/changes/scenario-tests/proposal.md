@@ -86,8 +86,11 @@ The pilots edit two capabilities directly in `openspec/specs/`, with no change o
 (task 5.1) and `client-v2-build-server-endpoint` (task 5.3). The edits cover clause wording, `(manual)` marks, a
 condition moved into a GIVEN, a clause split into a later WHEN and its THEN, and a placeholder or an example value
 replaced by the value the test uses. Task 5.1 also decides whether a case that a moved condition leaves out of
-"Editing renames the chip" gets a scenario of its own. A delta would put the rewritten scenarios under the name-only
-exemption until archive (design.md, decisions 10 and 12).
+"Editing renames the chip" gets a scenario of its own. A scenario the pilot adds is written directly in
+`openspec/specs/client-v2-custom-rpcs/spec.md`, like the pilot's other edits, and gets its test in the same pull
+request or the `(manual)` mark, so task 5.2 does not put a capability with an uncovered scenario on the strict list.
+A delta would put the rewritten scenarios under the name-only exemption until archive (design.md, decisions 10 and
+12).
 
 ## Impact
 

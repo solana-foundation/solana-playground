@@ -2,8 +2,7 @@
 
 ## Context
 
-See [proposal.md](proposal.md), "Why". The facts below were read at `de036c4a6`, except where a fact names another
-commit.
+See [proposal.md](proposal.md), "Why". The facts in this section were read at `8c8d5460b`.
 
 - `client-v2/scripts/spec-coverage.mjs` reads scenarios from `openspec/specs/` and from active changes, reads test
   titles from `e2e/` with a regular expression (`TEST_TITLE`, the first double-quoted argument of `test(` or
@@ -11,7 +10,7 @@ commit.
   `.github/workflows/reusable-client-v2.yml` runs it without `--strict`.
 - The `checks` job checks out with `fetch-depth: 0`, so a pull request's base branch is available to `git show`.
 - Only `e2e/client-v2-layout.e2e.spec.ts` uses `test.step`. Its one step is titled with a variable, and no test
-  title in `e2e/`, `src/`, `api/`, or `scripts/` starts with a clause keyword (read at `8c8d5460b`).
+  title in `e2e/`, `src/`, `api/`, or `scripts/` starts with a clause keyword.
 - `openspec validate --all --strict` (pinned CLI 1.14.0) passes with a `tests.md` beside a `spec.md` under
   `openspec/specs/`, and ignores a `#### Scenario:` heading inside it. `/opsx:archive` writes only `spec.md`;
   retiring a capability deletes only `spec.md`.
@@ -26,7 +25,7 @@ commit.
 - `vitest.config.ts` names the files vitest collects in `include`, and `client-v2/AGENTS.md` requires
   `<name>.test.mts` for a module the Playwright suite imports, which `include` collects. The config also sets
   `mockReset: true`, which clears every mock's recorded calls before each test.
-- Some tests skip themselves under a condition known only at run time (read at `8c8d5460b`).
+- Some tests skip themselves under a condition known only at run time.
   `client-v2-layout: The editor's keyboard button on an iPhone` in `e2e/client-v2-layout.e2e.spec.ts` calls
   `test.fixme(browserName === "firefox", …)`; the `ui-migration` change's delta of `client-v2-layout` holds its
   scenario. The database cases of `node --test` files such as `api/projects.test.mjs` hold
@@ -39,8 +38,11 @@ commit.
   then "it", "no", "a", and "its".
 
 A spike applied this design to `client-v2-custom-rpcs`: the checker with the matching of decision 5 and the verb
-rule of decision 12, the rewritten spec, and the converted tests. The spike's branch is local and not part of the
-repository, so this document cites its numbers and no link. Each was measured at `8c8d5460b`.
+rule of decision 12, the rewritten spec, and the converted tests. The spike is uncommitted work on top of `8c8d5460b`
+in a local worktree, so this document cites its numbers and no link. The numbers that describe the spike's own files
+and runs cannot be re-derived from the repository: the counts of the converted test file, the 4 assertions the
+conversion added (decision 12), the two line counts of the report (decision 6), the "20 passed" of the test run, the
+two failure names (decision 2), and the three mutations that failed `yarn spec:coverage`.
 
 - The conversion of `client-v2/e2e/client-v2-custom-rpcs.e2e.spec.ts` covered 20 tests, with 60 clause steps and 2
   steps with no clause keyword, and the file grew from 465 to 615 lines.
@@ -119,8 +121,12 @@ a THEN, is a `test.step` inside the step of its WHEN. A GIVEN is either such a `
 `test.describe("GIVEN ...")` around the test whose `beforeEach` or `beforeAll` runs the precondition; a
 `test.describe.serial("GIVEN ...")` counts as the same form. Both forms count.
 
-Why nested steps: Playwright adds every enclosing step to a failure's name, so the name reads as the scenario's
-clauses, as vitest's does (decision 1). For a failed assertion in a nested step the spike's run printed:
+Why nested steps: Playwright adds the enclosing steps to a failure's name, so the name reads as the scenario's
+clauses, as vitest's does (decision 1). In Playwright 1.65.0, the version `client-v2/yarn.lock` locks for
+`@playwright/test`, `formatTestHeader` adds them only when every failed attempt of the test fails along one step
+path. CI retries a failed test once (`retries` in `client-v2/playwright.config.mts`), so a test whose retry fails in
+another step gets a name without steps. For a failed assertion in a nested step the spike's run, with no retry,
+printed:
 
 ```text
 client-v2-custom-rpcs: A local validator over plain HTTP is accepted › WHEN a person saves `http://localhost:8899` › THEN saves and picks it
@@ -142,10 +148,15 @@ precondition shared by several scenarios (a seeded project, a signed-in session)
 ### 3. Sources are parsed with the TypeScript compiler API
 
 The checker parses each source file with `ts.createSourceFile` (`typescript` is a dependency of `client-v2`) and
-walks the calls of `test`, `test.describe`, `test.step`, `describe`, and `it`, keeping their nesting.
-`test.describe.only`, `test.describe.parallel`, and `test.describe.serial` are read like `test.describe`. The checker
-imports `typescript`, so `yarn spec:coverage` runs only where the dependencies of `client-v2` are installed, which
-holds in the `checks` job.
+walks the calls of `test`, `test.describe`, `test.step`, `describe`, and `it`, keeping their nesting. A member call
+other than a skip form (`skip`, `fixme`, `todo`, `skipIf`, `runIf`, and `test.step.skip`) reads as its base call:
+`test.only`, `describe.only`, `it.only`, `describe.concurrent`, and `it.fails` are examples, and
+`test.describe.serial` reads as `test.describe`. A list of the members would lack the next one a runner adds, and the
+checker would then not count a test written with it. vitest's `skipIf` and `runIf` are curried: in
+`describe.skipIf(condition)("title", fn)` the callee is itself a call. A call whose callee is a call of `skipIf` or
+`runIf` reads as the base call of that member, `describe` in the example, and counts as conditionally skipped. The
+checker imports `typescript`, so `yarn spec:coverage` runs only where the dependencies of `client-v2` are installed,
+which holds in the `checks` job.
 
 Why: the regular expression `TEST_TITLE` reads one title per call and loses which `it` sits in which `describe`,
 which decision 1 depends on. It also reads only double-quoted titles, while Prettier writes a title that contains a
@@ -248,9 +259,10 @@ steps. So a test keeps its helper steps, and an assertion beyond the clauses sta
 needed this for a test that runs one scenario over two values in a loop, with a step titled with each value around
 the clause steps.
 
-The checker reads only the test's own body, and in vitest and `node --test` the scenario's `describe`. It does not
-follow calls, so a clause step written inside a helper function that the test calls is not seen. Every clause step
-is written in the test.
+The checker reads only the test's own body, and in vitest and `node --test` the scenario's `describe`. The one
+clause it reads outside them is a GIVEN that a `test.describe` around a Playwright test carries (decision 2). It does
+not follow calls, so a clause step written inside a helper function that the test calls is not seen. Every other
+clause step is written in the test.
 
 A `test.step`, a `describe`, or an `it` whose title starts with a clause keyword and that no clause of the cited
 scenario took is reported, an enclosing `test.describe` titled with a GIVEN included. In a strict capability
@@ -263,10 +275,12 @@ passes a test that still runs the step of a removed clause.
 ### 6. Report shape
 
 `yarn spec:coverage` prints, per scenario with a finding, the tests that cite it (file, title, level) and each test's
-findings: its missing clauses and its clause steps that match no clause (decision 5). It then prints, per capability
-off the strict list, one count of the assertion clauses that break the verb rule (decision 12); then the candidate
-duplicates (a scenario more than one test cites, at any level); then the totals line, extended with the integration
-and end-to-end counts. Duplicates never change the exit code.
+findings: its missing clauses and its clause steps that match no clause (decision 5). It then prints one count per
+capability of the assertion clauses that break the verb rule and do not fail the run (decision 12): every such clause
+of a capability off the strict list, in `openspec/specs/` and in active changes, and, for a strict capability, the
+clauses in an active change's delta. Then it prints the candidate duplicates (a scenario more than one test cites, at
+any level), and then the totals line, extended with the integration and end-to-end counts. Duplicates never change
+the exit code.
 
 Off the strict list the report is compact: a test with no clause step takes one line, and clauses are named only for
 a test that has at least one clause step. In a strict capability every missing clause is named, under decision 5's
@@ -304,9 +318,10 @@ The generator writes one row per clause per test, container clauses included. A 
 a row with that test's file and title and a Level reading `missing`. A clause under a missing container gets such a
 row too, though the coverage report names the container clause alone (decision 5), so the file lists every clause of
 the scenario. A manual scenario has one row whose Level reads `manual` and whose other cells are empty; an uncovered
-one, one row whose Level reads `none`. A `|` in a cell is escaped. Scenarios are `##` headings, never
-`#### Scenario:`, so no reader of spec headings mistakes the file for a spec. File paths are relative to the
-repository root.
+one, one row whose Level reads `none`. A manual scenario that a test cites keeps that one row and gets no row for the
+test: the conflict is the coverage report's finding (decision 6). A `|` in a cell is escaped. Scenarios are `##`
+headings, never `#### Scenario:`, so no reader of spec headings mistakes the file for a spec. File paths are relative
+to the repository root.
 
 Why every capability, not only strict ones: the file answers "which tests check this capability" for any reader, and
 generating it for some capabilities would add a second list to keep. Why the `checks` job: the check reads only
@@ -333,7 +348,8 @@ with no spec fails the run.
 
 The gate reads `openspec/specs/` only. A scenario that exists only in an active change's delta is reported. A
 scenario of a requirement listed under `## MODIFIED Requirements` in any active change's delta for that capability is
-gated by its name only: its test must exist, its clauses are not compared. A scenario of `openspec/specs/` that an
+gated by its name only: its test must exist, its clauses are not compared, and a clause step that matches no clause
+of the `openspec/specs/` copy is not an error. A scenario of `openspec/specs/` that an
 active change's delta removes, under `## REMOVED Requirements`, is reported and not gated, so the task that removes
 the behaviour can remove its test while other tasks keep the change open. When the change is archived, the
 clauses of `openspec/specs/` are compared again, and archiving needs every task ticked, so the test is updated by
@@ -365,9 +381,11 @@ format, and sets nothing for a clause's first word (Context).
 
 The checker holds the rule that the spec requirement "An assertion clause starts with a verb" states. The first word
 after the keyword, with trailing `,.:;` removed, is lower-case letters only and ends in "s" ("shows", "saves",
-"sends"), and is not on the requirement's deny list. In a strict capability the checker exits with an error on any
-other first word. Off the strict list the report prints one count per capability, over `openspec/specs/` and the
-active changes. Review catches a first word that passes the rule and is not a verb.
+"sends"), and is not on the requirement's deny list. For a strict capability the checker exits with an error on any
+other first word of a clause in `openspec/specs/`. The error reads `openspec/specs/` only, as the gate does (decision
+10). The report prints one count per capability of the clauses that break the rule and do not fail the run (decision
+6): every such clause of a capability off the strict list, and a strict capability's clauses in an active change's
+delta. Review catches a first word that passes the rule and is not a verb.
 
 Why a positive rule: a verb cannot be detected without a language parser, and a parser would add a dependency and
 still misread words that are both a noun and a verb ("reports", "lists"). An assertion clause states what the system
@@ -379,9 +397,10 @@ server carry …" in `assistant-tool-config`), which review catches.
 
 Alternative: a closed list of first words that are not verbs (the, a, an, it, its, no, nothing, that, each, every,
 both, neither, one, and a leading backtick). Rejected: over the same 977 clauses it rejected 879. The 98 it passed
-started with a quoted label (30), a capitalised word such as a proper noun (38), a number (2), or a lower-case word
-the list does not name, such as "step", "reading", "only", and "once" (28). A list of subjects grows with every
-subject a spec author picks.
+started with a quoted label (30), a capitalised word such as a proper noun (38), a number (2), a lower-case word the
+list does not name, such as "step", "reading", "only", and "once" (27), or bold emphasis (1:
+`THEN **Delete my key** is shown disabled` in `assistant-own-key`). A list of subjects grows with every subject a
+spec author picks.
 
 The deny list holds words that pass the form and are not verbs. Only `its` comes from the specs: at `8c8d5460b` it
 starts 26 of the 977 clauses, and 53 assertion clauses across `openspec/specs/` and the active changes outside
@@ -398,9 +417,12 @@ The pilots edit `openspec/specs/client-v2-custom-rpcs/spec.md` and
 of an assertion clause and the `(manual)` marks, a pilot may move a condition into a GIVEN, split a clause into a
 later WHEN and its THEN (decision 13), and replace a placeholder or an example value (decision 14). The conversion of
 the tests adds an assertion for a clause part that had none (the spike added 4), and keeps an assertion beyond the
-clauses in a step titled with no clause keyword (decision 5). A `## MODIFIED Requirements` delta would put every
-rewritten scenario under decision 10's name-only exemption until archive, so the pilots would not prove the
-clause-by-clause gate they exist to prove.
+clauses in a step titled with no clause keyword (decision 5). A pilot may also add a scenario for a case that a
+narrowed scenario leaves out. It writes that scenario directly in the capability's `spec.md` under `openspec/specs/`,
+like its other edits, and gives it a test in the same pull request or the `(manual)` mark, so the capability does not
+join the strict list with an uncovered scenario (task 5.2 for `client-v2-custom-rpcs`). A `## MODIFIED Requirements`
+delta would put every rewritten scenario under decision 10's name-only exemption until archive, so the pilots would
+not prove the clause-by-clause gate they exist to prove.
 
 Task 5.1 settles two details the spike left open. "Editing renames the chip" covers only a picked RPC once its
 condition is a GIVEN, so the task decides whether an RPC that is not picked gets a scenario of its own. The THEN
@@ -438,11 +460,18 @@ In a strict capability a clause holds no placeholder such as `{name}`, and its e
 types and asserts.
 
 Why: the step title is the clause verbatim, and a literal title cannot substitute a value. A title with another
-value than the test's describes a run that did not happen. In the spike six step titles of `client-v2-custom-rpcs`
-named a value the test did not use. Where a value is incidental to the requirement, the spec's example moves to the
-test's value: `http://api.devnet.solana.com` became `http://rpc.example.com`, and
-`"Already saved as {that RPC's name}."` became `"Already saved as Helius."`. Where the requirement depends on the
-value, the test's fixture moves to the spec's value.
+value than the test's describes a run that did not happen. At `8c8d5460b` six clauses of
+`openspec/specs/client-v2-custom-rpcs/spec.md` held a placeholder or named a value their test did not use. Where a
+value is incidental to the requirement, the spec's example moves to the test's value: "A URL that answers is saved"
+named `https://api.devnet.solana.com` while its test types `https://slow.rpc.test/`, and the clause took the test's
+address. A placeholder takes the test's value the same way: `"Already saved as {that RPC's name}."` became
+`"Already saved as Helius."`. Where the requirement depends on the value, the test's fixture moves to the spec's
+value.
+
+One clause moved together with its test. "A value that is not an https URL is refused" named
+`http://api.devnet.solana.com`, and its test typed the same address (`Endpoint.DEVNET.replace("https:", "http:")`).
+The spike moved both to `http://rpc.example.com`, because the step title would hold a cluster address: the case of
+the `CLUSTER_URL_SELECTORS` entry in Risks.
 
 Why review and not the checker: the checker compares titles, not the values a test types. The spec gives the rule a
 `(manual)` scenario.
