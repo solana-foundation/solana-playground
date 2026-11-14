@@ -1,6 +1,6 @@
 # Tasks
 
-Task 1.2 depends on 1.1, and 1.3 on 1.2; nothing runs in parallel.
+Each task depends on the one before it; nothing runs in parallel.
 
 ## 1. Browser tracing
 
@@ -23,16 +23,23 @@ Task 1.2 depends on 1.1, and 1.3 on 1.2; nothing runs in parallel.
   on a same-origin and a cross-origin fetch inside a sampled span, and asserts `traceLifecycle` and
   `beforeSendTransaction` on the client `reporter.init` builds; `public-env.test.mjs` accepts `0`, `0.25` and `1` and
   rejects `1.5`, `-1` and `abc`; `yarn run check` passes. Depends on 1.1. HOO-2905.
-- [ ] 1.3 Check the change on a preview before the merge: label the PR `preview`, set `SENTRY_PREVIEW_ENABLED=true`
+- [x] 1.3 Apply the review of `6f7fdb84e` as design.md, Decisions 2, 3 and 5, describe: `beforeSendSpan` scrubs
+  standalone spans (INP); `redact` masks a whole-URL string, IPv6 hosts and parentheses in paths; the browser parser
+  and `public-env.mjs` share one decimal pattern; the logger provider test asserts the exact integration list.
+  Verify: a standalone INP-shaped span with a token in `sentry.transaction` arrives redacted through the real client;
+  `redact` masks `https://[2001:db8::1]/v2/abc123def456ghi789` and `https://rpc.example.com/rpc(v1)/abc123def456ghi789`,
+  and keeps the `)` of `(see https://x.test/a)` outside the URL; the parser gives 1 with a warning for `"0x1"` and
+  `"1e-1"`; `yarn run check` passes. Depends on 1.2. HOO-2905.
+- [ ] 1.4 Check the change on a preview before the merge: label the PR `preview`, set `SENTRY_PREVIEW_ENABLED=true`
   for it with the rate unset, and walk the manual scenarios of both delta specs. Verify: the `pageload` transaction
   shows in Sentry with LCP and CLS, the Web Vitals dashboard of project `solana-playground` shows the preview's
   environment, the PR lists each scenario with its result, and the PR states the preview's transaction count after
   one day in Sentry's usage stats, with production's projected monthly volume against the quota. If the dashboard
   stays empty while the transaction is in Discover, stop and update this change for stream mode (design.md, Risks).
-  Depends on 1.2. HOO-2905.
+  Depends on 1.3. HOO-2905.
 
 ## Workflow follow-up
 
 - After the merge, watch Sentry's usage stats for a week; if production's volume runs past the quota, set
   `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` lower in Vercel and redeploy.
-- Archive the change in this PR once 1.3 is ticked (agreed 2026-11-14).
+- Archive the change in this PR once 1.4 is ticked (agreed 2026-11-14).

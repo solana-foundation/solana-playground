@@ -6,6 +6,7 @@ import {
   installGlobalHandlers,
   sentryProvider,
 } from "@/shared/lib/logger";
+import { SAMPLE_RATE } from "@/shared/lib/sample-rate.mjs";
 import {
   ga4Provider,
   initTelemetry,
@@ -52,15 +53,14 @@ const DEFAULT_TRACES_SAMPLE_RATE = 1;
 /**
  * The share of page loads and navigations to trace: {@link DEFAULT_TRACES_SAMPLE_RATE}
  * when unset or blank, and the same with a warning when the value is not a
- * number from 0 to 1.
+ * decimal from 0 to 1 as {@link SAMPLE_RATE}, the build check's pattern, reads one.
  */
 const parseTracesSampleRate = (value: string | undefined) => {
   const text = value?.trim() ?? "";
   if (text === "") return DEFAULT_TRACES_SAMPLE_RATE;
-  const rate = Number(text);
-  if (rate >= 0 && rate <= 1) return rate;
+  if (SAMPLE_RATE.test(text)) return Number(text);
   log.warn(
-    `REACT_APP_SENTRY_TRACES_SAMPLE_RATE is "${value}", not a number from 0 to 1; tracing every page load and navigation`
+    `REACT_APP_SENTRY_TRACES_SAMPLE_RATE is "${value}", not a decimal from 0 to 1; tracing every page load and navigation`
   );
   return DEFAULT_TRACES_SAMPLE_RATE;
 };
@@ -114,6 +114,8 @@ if (import.meta.vitest) {
       { value: "abc", rate: 1, warnings: 1 },
       { value: "1.5", rate: 1, warnings: 1 },
       { value: "-1", rate: 1, warnings: 1 },
+      { value: "0x1", rate: 1, warnings: 1 },
+      { value: "1e-1", rate: 1, warnings: 1 },
     ])(
       "parseTracesSampleRate reads $value as $rate with $warnings warnings",
       ({ value, rate, warnings }) => {

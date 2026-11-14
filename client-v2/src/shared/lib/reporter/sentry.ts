@@ -3,7 +3,13 @@ import * as Sentry from "@sentry/react";
 
 import type { Level } from "../logger/severity";
 import type { LogEntry } from "../logger/types";
-import { scrubBreadcrumb, scrubEvent, scrubTransaction } from "./scrub";
+import {
+  scrubBreadcrumb,
+  scrubEvent,
+  scrubSamplingContext,
+  scrubSpan,
+  scrubTransaction,
+} from "./scrub";
 import type { Feedback, Reporter, ReporterConfig } from "./types";
 
 const SEVERITY: Record<Level, Sentry.SeverityLevel> = {
@@ -20,6 +26,14 @@ const SEVERITY: Record<Level, Sentry.SeverityLevel> = {
  * user's own test output, so the logger's trail comes from `trail` instead
  */
 const LEFT_OUT = new Set(["GlobalHandlers", "Console"]);
+
+/** Redacts the span name each sampling context carries into an envelope header */
+const scrubSamplingContextIntegration = () => ({
+  name: "ScrubSamplingContext",
+  setup: (client: Sentry.BrowserClient) => {
+    client.on("createDsc", scrubSamplingContext);
+  },
+});
 
 /** What `init` passes `Sentry.init`, and the integration test passes it too */
 export const sentryOptions = ({
@@ -39,11 +53,14 @@ export const sentryOptions = ({
   integrations: (defaults) => [
     ...defaults.filter((integration) => !LEFT_OUT.has(integration.name)),
     Sentry.browserTracingIntegration(),
+    scrubSamplingContextIntegration(),
   ],
   // Neither the user's program output nor a secret key leaves the page
   beforeBreadcrumb: scrubBreadcrumb,
   beforeSend: scrubEvent,
   beforeSendTransaction: scrubTransaction,
+  // Static mode sends INP as a standalone span; only a `withStaticSpan` callback runs on it
+  beforeSendSpan: Sentry.withStaticSpan(scrubSpan),
 });
 
 const init = (config: ReporterConfig) => {

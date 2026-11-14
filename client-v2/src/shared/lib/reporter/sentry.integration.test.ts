@@ -3,7 +3,12 @@ import * as Sentry from "@sentry/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireFor } from "../../../test-utils/require-for";
-import { scrubBreadcrumb, scrubEvent, scrubTransaction } from "./scrub";
+import {
+  scrubBreadcrumb,
+  scrubEvent,
+  scrubSpan,
+  scrubTransaction,
+} from "./scrub";
 import { reporter, sentryOptions } from "./sentry";
 
 type Transport = NonNullable<
@@ -251,6 +256,7 @@ describe("reporter scrub", () => {
     expect(client?.getOptions().beforeSend).toBe(scrubEvent);
     expect(client?.getOptions().beforeBreadcrumb).toBe(scrubBreadcrumb);
     expect(client?.getOptions().beforeSendTransaction).toBe(scrubTransaction);
+    expect(client?.getOptions().beforeSendSpan).toBe(scrubSpan);
     expect(client?.getOptions().traceLifecycle).toBe("static");
     expect(client?.getIntegrationByName("Console")).toBeUndefined();
     expect(client?.getIntegrationByName("BrowserTracing")).toBeDefined();
@@ -297,6 +303,44 @@ describe("reporter scrub", () => {
         data: expect.objectContaining({ url: "/api/x?k=[redacted]" }),
       }),
     ]);
+    expect(JSON.stringify(envelopes)).not.toContain(KEY);
+  });
+
+  it("should send a standalone span, as INP is sent, with a secret key redacted in its attributes", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+    Sentry.init({
+      dsn: options.dsn,
+      tracesSampleRate: options.tracesSampleRate,
+      traceLifecycle: options.traceLifecycle,
+      beforeSendSpan: options.beforeSendSpan,
+      // The defaults filtered: `ScrubSamplingContext` among them scrubs the envelope header
+      integrations: options.integrations,
+      transport: recording,
+    });
+
+    // The options `_emitWebVitalSpan` in `@sentry/browser-utils` starts an INP span with in static mode
+    Sentry.startNewTrace(() =>
+      Sentry.startInactiveSpan({
+        name: `button#k-${KEY}`,
+        op: "ui.interaction.click",
+        attributes: {
+          "sentry.transaction": `/share?k=${KEY}`,
+          "browser.web_vital.inp.target": `button#k-${KEY}`,
+        },
+        experimental: { standalone: true },
+      }).end()
+    );
+    await Sentry.flush();
+
+    const spans = envelopes
+      .flatMap((envelope) => itemsOf(envelope))
+      .filter(([header]) => header.type === "span");
+    expect(spans).toHaveLength(1);
+    const sent = JSON.stringify(spans);
+    expect(sent).toContain("/share?k=[redacted]");
+    expect(sent).toContain("button#k-[redacted]");
     expect(JSON.stringify(envelopes)).not.toContain(KEY);
   });
 
