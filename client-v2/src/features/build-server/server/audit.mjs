@@ -1,0 +1,107 @@
+/**
+ * The build audit: one `build_audit` row per forwarded build (see its
+ * migration). Opened before the build server is called and closed when it
+ * answers, so a build that never ended still shows who started it.
+ *
+ * Every statement runs on a `query` the route passes in, the persistence
+ * slice's in production, as `features/agent`'s ledger does.
+ */
+import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
+
+const log = createServerLogger("build-server:audit");
+
+/**
+ * @typedef {(text: string, params?: unknown[]) => Promise<{ rows: any[] }>} Query
+ */
+
+/**
+ * The user's GitHub account id, which names them on the row when `login` is
+ * empty: sign-in stores a login only when it creates the user, so one created
+ * before the column or through the OAuth proxy on a preview has none.
+ */
+const GITHUB_ID = `select "accountId" from account
+                    where "userId" = $1 and "providerId" = 'github'
+                    order by "updatedAt" desc
+                    limit 1`;
+
+/**
+ * Open the row for a build. Throws when it cannot be written, and the route
+ * refuses the build then: an unrecorded build is the thing this prevents.
+ *
+ * @param {Query} query
+ * @returns {(build: {
+ *   userId: string;
+ *   project: { id?: string; name?: string };
+ *   unstable: boolean;
+ *   bytes: number;
+ * }) => Promise<number>} what opens a build's row and gives its id
+ */
+export const startAuditWith =
+  (query) =>
+  async ({ userId, project, unstable, bytes }) => {
+    const { rows } = await query(
+      `insert into build_audit
+       (user_id, login, github_id, project_id, project_name, unstable,
+        request_bytes)
+     values ($1, (select login from "user" where id = $1), (${GITHUB_ID}),
+             $2, $3, $4, $5)
+     returning id`,
+      [userId, project.id, project.name, unstable, bytes]
+    );
+    return Number(rows[0].id);
+  };
+
+/** How long a closing update may hold a finished build's answer back */
+export const FINISH_DEADLINE_MS = 5_000;
+
+/**
+ * Close the row with how the build ended. Never throws, and gives up after
+ * `deadlineMs`: the answer waits on it, and a stalled database must not hold
+ * a finished build until the function times out and the answer is lost. The
+ * row exists either way; one left open reads as a build that never ended.
+ * Production uses `finishAuditWith`, which has `FINISH_DEADLINE_MS` applied.
+ *
+ * @param {number} deadlineMs
+ * @returns {(query: Query) => (outcome: {
+ *   id: number;
+ *   programUuid?: string;
+ *   status: number;
+ *   durationMs: number;
+ * }) => Promise<void>} what closes a row; a `programUuid` absent keeps what
+ *   the row has
+ */
+export const finishAuditWithin =
+  (deadlineMs) =>
+  (query) =>
+  async ({ id, programUuid, status, durationMs }) => {
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timer;
+    const deadline = new Promise((_, reject) => {
+      timer = setTimeout(
+        () =>
+          reject(new Error(`build_audit update took over ${deadlineMs} ms`)),
+        deadlineMs
+      );
+    });
+    try {
+      await Promise.race([
+        query(
+          `update build_audit
+          set program_uuid = coalesce($2, program_uuid),
+              status = $3,
+              duration_ms = $4
+        where id = $1`,
+          // `pg` sends an undefined parameter as null
+          [id, programUuid, status, Math.max(0, Math.round(durationMs))]
+        ),
+        deadline,
+      ]);
+    } catch (e) {
+      log.error(e, { report: true, context: { op: "finishAudit", id } });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+/** `finishAuditWithin` with the production deadline */
+export const finishAuditWith = finishAuditWithin(FINISH_DEADLINE_MS);

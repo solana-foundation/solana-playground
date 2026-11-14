@@ -22,7 +22,11 @@ const utils = vi.hoisted(() => ({
   },
   PgPackage: { import: vi.fn() },
   PgGlobal: { update: vi.fn() },
-  PgProgramInfo: { update: vi.fn(), getPkStr: () => "Pk11111111111111" },
+  PgProgramInfo: {
+    update: vi.fn(),
+    getPkStr: () => "Pk11111111111111",
+    uuid: "u-a" as string | undefined,
+  },
   PgServer: { build: vi.fn() },
   PgTerminal: {
     println: vi.fn(),
@@ -42,6 +46,9 @@ const { PgBuildOutput } = await import(
   "../../views/sidebar/assistant/bridge/build-output"
 );
 const { isStopped } = await import("../../utils/stopped");
+const { clearBuildRefused, isBuildRefused, markBuildRefused } = await import(
+  "./refused-build"
+);
 const { initTelemetry, memoryProvider, resetTelemetry } = await import(
   "../../shared/lib/telemetry"
 );
@@ -62,6 +69,7 @@ describe("commands/build/build", () => {
     utils.PgExplorer.files = {};
     utils.PgExplorer.currentWorkspaceId = "id-a";
     utils.PgExplorer.currentWorkspaceName = "a";
+    utils.PgProgramInfo.uuid = "u-a";
     resetTelemetry();
     tracked = memoryProvider();
     initTelemetry({ providers: [tracked] });
@@ -221,12 +229,110 @@ describe("commands/build/build", () => {
         lastBuildFailed: true,
       });
     });
+    // A refusal for sign-in never reached the compiler: the saved verdict
+    // stays what it was, so a reload does not show a failed build
+    it("keeps the saved verdict when the build is refused for sign-in", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          reason: "signed-out",
+        })
+      );
+
+      const err = await run().catch((e: unknown) => e);
+
+      expect((err as Error).message).toBe("Sign in with GitHub to build.");
+      expect(utils.PgProgramInfo.update).not.toHaveBeenCalled();
+    });
+    // The kept verdict may be a pass for older code, so Deploy must know the
+    // current source never built
+    it("marks the project when sign-in refuses its build", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          reason: "signed-out",
+        })
+      );
+
+      await run().catch(() => undefined);
+
+      expect(isBuildRefused("id-a")).toBe(true);
+      expect(isBuildRefused("id-b")).toBe(false);
+    });
+
+    it("clears the mark once a build reaches the compiler", async () => {
+      markBuildRefused("id-a");
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "error: could not compile `p`",
+        uuid: "u",
+        idl: null,
+      });
+
+      await run();
+
+      expect(isBuildRefused("id-a")).toBe(false);
+    });
+
+    // A refusal in one project says nothing about another: building the open
+    // project must not let Deploy reuse the other's binary
+    it("keeps another project's mark when this one builds", async () => {
+      markBuildRefused("id-b");
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "",
+        uuid: "u",
+        idl: null,
+      });
+
+      await run();
+
+      expect(isBuildRefused("id-b")).toBe(true);
+      clearBuildRefused("id-b");
+    });
+
+    it("keeps another project's mark when this one fails to compile", async () => {
+      markBuildRefused("id-b");
+      utils.PgServer.build.mockRejectedValue(new Error("boom"));
+
+      await run().catch(() => undefined);
+
+      expect(isBuildRefused("id-b")).toBe(true);
+      clearBuildRefused("id-b");
+    });
   });
 
   describe("another project opened during the build", () => {
     beforeEach(() => {
       utils.PgExplorer.getFileContent.mockReturnValue(PROGRAM);
       utils.PgExplorer.files = { "/p/src/lib.rs": { content: PROGRAM } };
+    });
+
+    // Seahorse loads its compiler before the request goes out: a project
+    // opened meanwhile must not lend its identity to this build's audit row
+    it("sends the project the build started in", async () => {
+      utils.PgExplorer.getFileContent.mockReturnValue(undefined);
+      utils.PgExplorer.files = {
+        "/p/src/fizz.py": { content: "from seahorse.prelude import *" },
+      };
+      utils.PgPackage.import.mockImplementation(async () => {
+        utils.PgExplorer.currentWorkspaceId = "id-b";
+        utils.PgExplorer.currentWorkspaceName = "b";
+        utils.PgProgramInfo.uuid = "u-b";
+        return {
+          compileSeahorse: () => ["/src/lib.rs", "# [program] mod fizz {}"],
+        };
+      });
+      utils.PgServer.build.mockResolvedValue({
+        stderr: "",
+        uuid: "u",
+      });
+
+      await run();
+
+      expect(utils.PgServer.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          project: { id: "id-a", name: "a" },
+          uuid: "u-a",
+        }),
+        expect.anything()
+      );
     });
 
     it.each([
@@ -382,6 +488,24 @@ describe("commands/build/build", () => {
         ["build_started", { framework: "anchor" }],
         ["build_failed", { framework: "anchor", reason }],
       ]);
+    });
+
+    // The proxy answered 401: the build started, so it still ends in an outcome
+    it("counts a sign-in refusal as server", async () => {
+      utils.PgServer.build.mockRejectedValue(
+        Object.assign(new Error("Sign in with GitHub to build."), {
+          answered: true,
+          reason: "signed-out",
+        })
+      );
+
+      await run().catch(() => undefined);
+
+      expect(buildEvents()).toEqual([
+        ["build_started", { framework: "anchor" }],
+        ["build_failed", { framework: "anchor", reason: "server" }],
+      ]);
+      clearBuildRefused("id-a");
     });
   });
 });

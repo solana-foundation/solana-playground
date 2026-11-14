@@ -18,11 +18,13 @@ import {
   PgWeb3,
   TupleFiles,
 } from "../../utils";
+import { isSignInRefusalError } from "../../utils/sign-in-refusal";
 import { STOPPED, throwIfStopped } from "../../utils/stopped";
 import { isMacroSymptomText } from "../../views/flow/stages/build-report";
 import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 import { createCmd } from "../create";
 import { emptySourceError, isEmptyProgram, PROGRAM_FILE } from "./empty-source";
+import { clearBuildRefused, markBuildRefused } from "./refused-build";
 
 export const build = createCmd({
   name: "build",
@@ -58,9 +60,12 @@ export const build = createCmd({
 
     try {
       const files = getBuildFiles();
+      // Taken with the files: Seahorse awaits its compiler before the request
+      // goes out, and a project opened meanwhile must not lend its identity
+      const buildTarget = buildProgramFor(currentTarget());
       const framework = frameworkOf(files);
       buildTelemetry.track("build_started", { framework });
-      const result = await buildProgram(files, signal).catch((e: unknown) => {
+      const result = await buildTarget(files, signal).catch((e: unknown) => {
         // The aborted request fails; say it was stopped, not that it failed.
         // Only "Stopped.": the server may still finish, its reply is not kept.
         // A stop is no outcome, so it sends no event
@@ -69,8 +74,18 @@ export const build = createCmd({
           framework,
           reason: reasonOf(e),
         });
+        // A refusal for sign-in never reached the compiler, so the saved
+        // verdict stays: a reload would otherwise show a failed build. It may
+        // be a pass for older code, so Deploy is told this source never built
+        if (isSignInRefusalError(e)) {
+          if (isStillOpen()) markBuildRefused(workspace);
+          throw e;
+        }
         // Deploy's stale-build guard reads `lastBuildFailed`, so the previous binary is not shipped
-        if (isStillOpen()) PgProgramInfo.update({ lastBuildFailed: true });
+        if (isStillOpen()) {
+          clearBuildRefused(workspace);
+          PgProgramInfo.update({ lastBuildFailed: true });
+        }
         sayDroppedUnlessOpen();
         throw e;
       });
@@ -92,6 +107,7 @@ export const build = createCmd({
         });
       }
       if (isStillOpen()) {
+        clearBuildRefused(workspace);
         PgProgramInfo.update({
           uuid: result.uuid ?? undefined,
           lastBuildFailed: failed,
@@ -159,17 +175,22 @@ const reasonOf = (err: unknown): BuildFailedReason => {
 /**
  * Compile the current project.
  *
+ * @param target the project the build started in; the build runs with it applied
  * @param buildFiles the files `getBuildFiles` gathered
  * @param signal aborts the request to the build server
  * @returns the build response
  */
-const buildProgram = async (buildFiles: TupleFiles, signal: AbortSignal) => {
-  const pythonFiles = buildFiles.filter(
-    ([path]) => PgLanguage.getFromPath(path)?.name === "Python"
-  );
-  if (pythonFiles.length > 0) return await buildPython(pythonFiles, signal);
-  return await buildRust(buildFiles, signal);
-};
+const buildProgramFor =
+  (target: BuildTarget) =>
+  async (buildFiles: TupleFiles, signal: AbortSignal) => {
+    const pythonFiles = buildFiles.filter(
+      ([path]) => PgLanguage.getFromPath(path)?.name === "Python"
+    );
+    if (pythonFiles.length > 0) {
+      return await buildPythonFor(target)(pythonFiles, signal);
+    }
+    return await buildRustFor(target)(buildFiles, signal);
+  };
 
 /**
  * Get the files necessary for the build process.
@@ -293,57 +314,80 @@ const getBuildFiles = () => {
 /**
  * Convert Python files into Rust with seahorse-compile-wasm and run `_buildRust`.
  *
+ * @param target the project the build started in; the build runs with it applied
  * @param pythonFiles Python files in `src/`
  * @param signal aborts the request to the build server
  * @returns the build response
  */
-const buildPython = async (pythonFiles: TupleFiles, signal: AbortSignal) => {
-  const { compileSeahorse } = await PgPackage.import("seahorse-compile");
+const buildPythonFor =
+  (target: BuildTarget) =>
+  async (pythonFiles: TupleFiles, signal: AbortSignal) => {
+    const { compileSeahorse } = await PgPackage.import("seahorse-compile");
 
-  const rustFiles = pythonFiles.flatMap(([path, content]) => {
-    const seahorseProgramName =
-      PgExplorer.getItemNameFromPath(path).split(".py")[0];
-    const compiledContent = compileSeahorse(content, seahorseProgramName);
+    const rustFiles = pythonFiles.flatMap(([path, content]) => {
+      const seahorseProgramName =
+        PgExplorer.getItemNameFromPath(path).split(".py")[0];
+      const compiledContent = compileSeahorse(content, seahorseProgramName);
 
-    if (compiledContent.length === 0) {
-      throw new SeahorseCompileError();
-    }
+      if (compiledContent.length === 0) {
+        throw new SeahorseCompileError();
+      }
 
-    // Seahorse compile outputs a flattened array like [filepath, content, filepath, content]
-    const files: TupleFiles = [];
-    for (let i = 0; i < compiledContent.length; i += 2) {
-      const filePath = compiledContent[i];
-      let fileContent = compiledContent[i + 1];
-      // The build server detects #[program] to determine if Anchor
-      // Seahorse (without rustfmt) outputs # [program]
-      fileContent = fileContent.replace("# [program]", "#[program]");
-      files.push([filePath, fileContent]);
-    }
+      // Seahorse compile outputs a flattened array like [filepath, content, filepath, content]
+      const files: TupleFiles = [];
+      for (let i = 0; i < compiledContent.length; i += 2) {
+        const filePath = compiledContent[i];
+        let fileContent = compiledContent[i + 1];
+        // The build server detects #[program] to determine if Anchor
+        // Seahorse (without rustfmt) outputs # [program]
+        fileContent = fileContent.replace("# [program]", "#[program]");
+        files.push([filePath, fileContent]);
+      }
 
-    return files;
-  });
+      return files;
+    });
 
-  return await buildRust(rustFiles, signal);
-};
+    return await buildRustFor(target)(rustFiles, signal);
+  };
 
 /**
  * Build Rust files and return the output.
  *
+ * @param target the project the build started in; the build runs with it applied
  * @param files Rust files from `src/`
  * @param signal aborts the request to the build server
  * @returns the build response
  */
-const buildRust = async (files: TupleFiles, signal: AbortSignal) => {
-  if (!files.length) throw new Error("Couldn't find any Rust files.");
+const buildRustFor =
+  (target: BuildTarget) => async (files: TupleFiles, signal: AbortSignal) => {
+    if (!files.length) throw new Error("Couldn't find any Rust files.");
 
-  return await PgServer.build(
-    {
-      files,
-      uuid: PgProgramInfo.uuid,
-      flags: PgSettings.build.flags,
-    },
-    { signal }
-  );
+    return await PgServer.build(
+      {
+        files,
+        uuid: target.uuid,
+        flags: PgSettings.build.flags,
+        project: target.project,
+      },
+      { signal }
+    );
+  };
+
+/** The project a build belongs to: its server uuid, and its identity for the build audit */
+type BuildTarget = {
+  uuid: typeof PgProgramInfo.uuid;
+  /** None outside a workspace */
+  project: { id: string; name: string } | undefined;
+};
+
+/** The open project, as the build request carries it */
+const currentTarget = (): BuildTarget => {
+  const id = PgExplorer.currentWorkspaceId;
+  const name = PgExplorer.currentWorkspaceName;
+  return {
+    uuid: PgProgramInfo.uuid,
+    project: id && name ? { id, name } : undefined,
+  };
 };
 
 /**

@@ -61,6 +61,10 @@ export const lineTone = (error: unknown): LineTone => {
 const isTerminalLine = (error: unknown): error is TerminalLineError =>
   error instanceof TerminalLineError;
 
+/** An error that says it is its own line (`PgServerError.isPlain`) */
+const isPlainRefusal = (error: unknown): error is Error =>
+  error instanceof Error && (error as { isPlain?: unknown }).isPlain === true;
+
 /**
  * The line the terminal prints for a command that threw.
  *
@@ -70,9 +74,23 @@ const isTerminalLine = (error: unknown): error is TerminalLineError =>
  */
 export const processErrorLine = (error: unknown) => {
   if (isStopped(error) || isTerminalLine(error)) return error.message;
+  // A refusal the person can act on, such as signing in to build (HOO-2422)
+  if (isPlainRefusal(error)) return error.message;
   const message = error instanceof Error ? error.message : undefined;
   return `Process error: ${message || error}`;
 };
+
+/**
+ * The line the terminal prints for a command that threw, coloured by its
+ * variant. A refusal the person can act on, such as signing in to build, prints
+ * uncoloured, as the Build stage shows it neutral: it asks, nothing failed.
+ *
+ * @param error what the command threw
+ * @param line its plain line, from `processErrorLine`
+ * @returns the line ready to print
+ */
+export const toneErrorLine = (error: unknown, line: string) =>
+  isPlainRefusal(error) ? line : toneWith(lineTone(error))(line);
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -83,6 +101,28 @@ if (import.meta.vitest) {
       expect(processErrorLine(offline)).toBe("You're offline.");
       expect(lineTone(offline)).toBe("error");
       expect(offline).toBeInstanceOf(TerminalLineError);
+    });
+
+    it("prints a refusal that is its own line without the prefix", () => {
+      const refusal = Object.assign(
+        new Error("Sign in with GitHub to build."),
+        { isPlain: true }
+      );
+      expect(processErrorLine(refusal)).toBe("Sign in with GitHub to build.");
+      expect(processErrorLine(new Error("boom"))).toBe("Process error: boom");
+    });
+
+    it("prints a refusal uncoloured and any other failure in its tone", () => {
+      const refusal = Object.assign(
+        new Error("Sign in with GitHub to build."),
+        { isPlain: true }
+      );
+      expect(toneErrorLine(refusal, refusal.message)).toBe(
+        "Sign in with GitHub to build."
+      );
+      expect(toneErrorLine(new Error("boom"), "Process error: boom")).toBe(
+        "\x1b[1;31mProcess error: boom\x1b[0m"
+      );
     });
 
     it("reads a stop as a warning", () => {

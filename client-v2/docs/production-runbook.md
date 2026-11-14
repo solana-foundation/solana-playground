@@ -34,7 +34,7 @@ or Vercel, and none is a secret. Have each ready before step 1; the table says w
 | `<DOPPLER_PROJECT>`, `<DOPPLER_CONFIG>` | The Doppler project and config that hold production's variables, for example `solana-playground` and `prd` | Your team; created in step 1 if new |
 | `<OPERATOR>` | The Google account of each person who runs migrations, lower case | Your team |
 | `<GITHUB_OWNER>` | The GitHub organization that will own the production OAuth app | Your team |
-| `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` on the build server (App Engine) | Your team |
+| `<BUILD_SERVER_CONTACT>` | Whoever sets `PG_CLIENT_URLS` and `PG_API_KEY` on the build server (App Engine) | Your team |
 | `<BUILD_SERVER_URL>` | The build server's `https://` origin, the one whose `PG_CLIENT_URLS` lists production | `<BUILD_SERVER_CONTACT>` |
 | `<NOUS_ACCOUNT>` | The Nous Research account whose credits the assistant spends | Your team |
 | `<TOP_UP_OWNER>` | The person who adds Nous credits when the balance runs low. Nous has no auto top-up: an empty balance stops the assistant for everyone | Your team |
@@ -188,7 +188,9 @@ Optional. Without them the app uses the public Solana endpoints.
 
 | Variable | Value | In Doppler | Set in |
 | --- | --- | --- | --- |
-| `REACT_APP_SERVER_URL` | `<BUILD_SERVER_URL>`, no trailing slash. **Required**: the build server every profile starts on | Unmasked | Step 6 |
+| `REACT_APP_SERVER_URL` | `/api/build-server`, exactly. **Required**: builds go through this deployment's own route, which needs a GitHub sign-in and records each build in `build_audit` | Unmasked | Step 6 |
+| `PG_BUILD_SERVER_URL` | `<BUILD_SERVER_URL>`, no trailing slash: where `/api/build-server` forwards builds. **Required**: unset, the route refuses every build | Unmasked | Step 6 |
+| `PG_BUILD_SERVER_API_KEY` | The build server's `PG_API_KEY`, sent as `x-api-key`. Unset, no key is sent and production reports an error once per instance | Masked | Step 6 |
 | `REACT_APP_SERVER_UNSTABLE` | Never `true`: a Vercel build with it fails | | |
 | `REACT_APP_VERCEL_ENV`, `REACT_APP_VERCEL_GIT_COMMIT_SHA` | Never: `scripts/vercel-build.sh` sets both | | |
 | `USE_WASM_STUBS` | Never: a deployment with it fails its install (`scripts/vercel-install.sh`) | | |
@@ -382,11 +384,12 @@ first deployment in step 7. Give write access to `<DOPPLER_CONFIG>` only to the 
 **Run:** set each variable the tables mark "Step 6" in `<DOPPLER_CONFIG>`, with the visibility in its "In Doppler"
 column. `AUTH_BASE_URL` is `https://<VERCEL_APP_DOMAIN>` for now.
 
-Then ask `<BUILD_SERVER_CONTACT>` to add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
+Then ask `<BUILD_SERVER_CONTACT>` for the build server's `PG_API_KEY` (the value of `PG_BUILD_SERVER_API_KEY`) and to
+add `https://<VERCEL_APP_DOMAIN>` to `PG_CLIENT_URLS` on the build server.
 
 **Check:** `npx vercel@62.7.0 env ls production` lists the step 3 variables, `SYNC_ENABLED`, `AUTH_SECRET`,
 `AUTH_BASE_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY`,
-`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN` and `REACT_APP_SERVER_URL`, plus any optional ones you set,
+`REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `REACT_APP_SERVER_URL`, `PG_BUILD_SERVER_URL` and `PG_BUILD_SERVER_API_KEY`, plus any optional ones you set,
 with no `AGENT_*`, `DATABASE_URL` or `AUTH_OAUTH_PROXY_*` name. Only the Masked ones carry the Secret badge in the
 dashboard.
 

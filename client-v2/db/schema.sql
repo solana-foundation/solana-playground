@@ -103,6 +103,47 @@ ALTER SEQUENCE public.agent_turn_id_seq OWNED BY public.agent_turn.id;
 
 
 --
+-- Name: build_audit; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.build_audit (
+    id bigint NOT NULL,
+    user_id text NOT NULL,
+    login text,
+    github_id text,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    project_id text,
+    project_name text,
+    program_uuid text,
+    unstable boolean NOT NULL,
+    request_bytes integer NOT NULL,
+    status integer,
+    duration_ms integer,
+    CONSTRAINT build_audit_duration_check CHECK (((duration_ms IS NULL) OR (duration_ms >= 0))),
+    CONSTRAINT build_audit_request_bytes_check CHECK ((request_bytes >= 0))
+);
+
+
+--
+-- Name: build_audit_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.build_audit_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: build_audit_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.build_audit_id_seq OWNED BY public.build_audit.id;
+
+
+--
 -- Name: conversations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -222,6 +263,13 @@ ALTER TABLE ONLY public.agent_turn ALTER COLUMN id SET DEFAULT nextval('public.a
 
 
 --
+-- Name: build_audit id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.build_audit ALTER COLUMN id SET DEFAULT nextval('public.build_audit_id_seq'::regclass);
+
+
+--
 -- Name: account account_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -243,6 +291,14 @@ ALTER TABLE ONLY public.agent_spend
 
 ALTER TABLE ONLY public.agent_turn
     ADD CONSTRAINT agent_turn_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: build_audit build_audit_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.build_audit
+    ADD CONSTRAINT build_audit_pkey PRIMARY KEY (id);
 
 
 --
@@ -337,6 +393,13 @@ CREATE INDEX "account_userId_idx" ON public.account USING btree ("userId");
 --
 
 CREATE INDEX agent_turn_user_at ON public.agent_turn USING btree (user_id, at);
+
+
+--
+-- Name: build_audit_user_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX build_audit_user_at_idx ON public.build_audit USING btree (user_id, at);
 
 
 --
@@ -490,6 +553,7 @@ COPY public.schema_migrations (version) FROM stdin;
 20261029120000
 20261102190000
 20261105120000
+20261106120000
 \.
 
 

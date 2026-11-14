@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  flow: { build: "done", deploy: "active" } as Record<string, string>,
+  flow: { build: "done", deploy: "active" } as Record<string, unknown>,
 }));
 
 // The real flow store pulls in the whole playground; only its state is read
@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 /** Runs the rejection through the stage's catch, then the button's */
-const settle = (stage: Stage, status: string, error: unknown) => {
+const settle = (stage: Stage, status: string) => (error: unknown) => {
   mocks.flow = { build: "done", deploy: "active", [stage]: status };
   const toast = vi.spyOn(PgView, "setToast").mockImplementation(() => "");
   expect(() => toldByStage(stage)(error)).toThrow(error as Error);
@@ -38,12 +38,12 @@ const settle = (stage: Stage, status: string, error: unknown) => {
 
 describe("toldByStage", () => {
   it("a build that left its stage failed is not toasted as well", () => {
-    expect(settle("build", "failed", new Error("down"))).not.toHaveBeenCalled();
+    expect(settle("build", "failed")(new Error("down"))).not.toHaveBeenCalled();
   });
 
   it("a deploy that left its stage failed is not toasted as well", () => {
     expect(
-      settle("deploy", "failed", new Error("no SOL"))
+      settle("deploy", "failed")(new Error("no SOL"))
     ).not.toHaveBeenCalled();
   });
 
@@ -51,7 +51,21 @@ describe("toldByStage", () => {
   // still shows the run before it
   it("a run that never started is still toasted", () => {
     expect(
-      settle("deploy", "active", new Error("no terminal"))
+      settle("deploy", "active")(new Error("no terminal"))
     ).toHaveBeenCalledOnce();
+  });
+
+  // A sign-in refusal leaves Build where it was; its surface asks to sign in
+  it("a build refused for sign-in is not toasted as well", () => {
+    mocks.flow = {
+      build: "done",
+      deploy: "active",
+      buildFailure: { kind: "signed-out", message: "Sign in" },
+    };
+    const toast = vi.spyOn(PgView, "setToast").mockImplementation(() => "");
+    const error = new Error("Sign in");
+    expect(() => toldByStage("build")(error)).toThrow(error);
+    reportButtonFailure("build")(error);
+    expect(toast).not.toHaveBeenCalled();
   });
 });

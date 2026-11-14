@@ -5,6 +5,7 @@ import type { statusDotVariants } from "@/shared/ui/status-dot";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { parseBuildReport } from "../stages/build-report";
 import { msLabel } from "../stages/build-view";
+import { isSignInRefusal } from "../state/sign-in-refusal";
 import type { FlowState, RunKind } from "../state/stage";
 
 type StatusDotVariant = NonNullable<
@@ -86,6 +87,9 @@ export const describeConsoleStatus = (
   if (flow.stopped === "build") return { text: "Build stopped", tone: "idle" };
   if (flow.stopped === "deploy") {
     return { text: "Deploy stopped", tone: "idle" };
+  }
+  if (isSignInRefusal(flow.buildFailure)) {
+    return { text: "Sign in to build", tone: "idle" };
   }
   if (flow.deploy === "failed") {
     return { text: "Deploy failed", tone: "error" };
