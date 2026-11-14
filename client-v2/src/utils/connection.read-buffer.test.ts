@@ -184,13 +184,19 @@ describe("utils/connection", () => {
     expect(PgConnection.getSendTxPerSecond(connectionTo(endpoint))).toBe(4);
   });
 
-  it("caps no sends when a custom endpoint is not the selected one", async () => {
+  it.each([
+    { label: "the cluster is Localnet", endpoint: Endpoint.LOCALNET },
+    {
+      label: "a custom endpoint is not the selected one",
+      endpoint: "https://custom.test",
+    },
+  ])("caps no sends when $label", async ({ endpoint }) => {
     const { PgConnection, connectionTo } = await pgConnectionWith({
       REACT_APP_DEVNET_SEND_TX_PER_SECOND: "5",
     });
 
     expect(
-      PgConnection.getSendTxPerSecond(connectionTo("https://custom.test"))
+      PgConnection.getSendTxPerSecond(connectionTo(endpoint))
     ).toBeUndefined();
   });
 });

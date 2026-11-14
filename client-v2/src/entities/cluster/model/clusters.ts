@@ -37,8 +37,6 @@ export interface ClusterInfo {
   publicUrl: string;
   /** What a connection uses: the platform RPC the env sets, else `publicUrl` */
   url: string;
-  /** Whether Settings offers it as a network chip */
-  isOffered: boolean;
   /** The cluster's native RPC, which airdrops and buffer reads go through; `undefined` uses the selected endpoint */
   nativeRpcUrl: string | undefined;
   /** The most `sendTransaction` calls per second a deploy sends; `undefined` caps nothing */
@@ -58,12 +56,11 @@ const perSecondOf = (value: string | undefined) => {
 
 /** One of our endpoints with no send cap: Localnet and Surfpool run on the person's machine */
 const infoOf = (
-  [key, cluster, name, publicUrl, isOffered]: readonly [
+  [key, cluster, name, publicUrl]: readonly [
     ClusterKey,
     Cluster,
     string,
-    Endpoint,
-    boolean
+    Endpoint
   ],
   env: ClusterEnv
 ): ClusterInfo => ({
@@ -73,7 +70,6 @@ const infoOf = (
   publicUrl,
   // `||` not `??`: sourcing an env file leaves unfilled keys as "", which is not nullish and would win
   url: env.rpcUrl || publicUrl,
-  isOffered,
   nativeRpcUrl: env.nativeRpcUrl || undefined,
   sendTxPerSecond: undefined,
 });
@@ -98,25 +94,19 @@ export const clustersFor = (
   env: Partial<Record<EnvCluster, ClusterEnv>>
 ): Clusters => ({
   mainnet: envInfoOf(
-    ["mainnet", "mainnet", "Mainnet", Endpoint.MAINNET, true],
+    ["mainnet", "mainnet", "Mainnet", Endpoint.MAINNET],
     env.mainnet ?? {}
   ),
   devnet: envInfoOf(
-    ["devnet", "devnet", "Devnet", Endpoint.DEVNET, true],
+    ["devnet", "devnet", "Devnet", Endpoint.DEVNET],
     env.devnet ?? {}
   ),
   testnet: envInfoOf(
-    ["testnet", "testnet", "Testnet", Endpoint.TESTNET, true],
+    ["testnet", "testnet", "Testnet", Endpoint.TESTNET],
     env.testnet ?? {}
   ),
-  localnet: infoOf(
-    ["localnet", "localnet", "Localnet", Endpoint.LOCALNET, true],
-    {}
-  ),
-  surfpool: infoOf(
-    ["surfpool", "localnet", "Surfpool", Endpoint.SURFPOOL, true],
-    {}
-  ),
+  localnet: infoOf(["localnet", "localnet", "Localnet", Endpoint.LOCALNET], {}),
+  surfpool: infoOf(["surfpool", "localnet", "Surfpool", Endpoint.SURFPOOL], {}),
 });
 
 const envOf = (cluster: EnvCluster): ClusterEnv => ({
@@ -132,9 +122,9 @@ export const CLUSTERS = clustersFor({
   mainnet: envOf("mainnet"),
 });
 
-/** The network chips Settings offers, in its order */
+/** The network chips Settings offers, in chip order: every endpoint of ours */
 export const offeredOf = (clusters: Clusters): ReadonlyArray<ClusterInfo> =>
-  Object.values(clusters).filter((c) => c.isOffered);
+  Object.values(clusters);
 
 const MONIKERS: ReadonlySet<string> = new Set<Cluster>([
   "devnet",

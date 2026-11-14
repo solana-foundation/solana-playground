@@ -75,8 +75,8 @@ export const OFFLINE_LINE =
 export interface NetworkInput {
   /** The cluster's name as the connection has it: "devnet" */
   name: string;
-  /** `PgConnection.isConnected`: null or undefined until it first answers */
-  isConnected: boolean | null | undefined;
+  /** `PgConnection.isConnected`: undefined until it first answers */
+  isConnected: boolean | undefined;
   /** `PgConnection.isClusterDown`: answering with a slot that does not move */
   slotStalled: boolean | null | undefined;
 }
@@ -150,7 +150,9 @@ export const networkIndicator = (
       "The cluster is not responding. Write and Build work; Deploy and Interact wait for it."
     );
   }
-  if (isConnected == null) return view("working", "connecting", undefined);
+  if (isConnected === undefined) {
+    return view("working", "connecting", undefined);
+  }
   return view("ready", undefined, undefined);
 };
 
@@ -433,7 +435,7 @@ if (import.meta.vitest) {
 
       it("is connecting until the connection first answers", () => {
         const n = networkIndicator(
-          { name: "devnet", isConnected: null, slotStalled: null },
+          { name: "devnet", isConnected: undefined, slotStalled: null },
           true
         );
         expect([n.state, n.words, n.label, n.tip]).toEqual([

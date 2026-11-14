@@ -21,10 +21,10 @@ import SetupList from "./SetupList";
 
 const cluster = vi.hoisted(() => ({ name: "devnet" as string | null }));
 // Whether the cluster answers and whether its slot stalls, as the connection
-// derives them; `null` while not yet asked
+// derives them; `undefined` while not yet asked
 const health = vi.hoisted(() => ({
-  isConnected: true as boolean | null,
-  slotStalled: false as boolean | null,
+  isConnected: true as boolean | undefined,
+  slotStalled: false as boolean | null | undefined,
 }));
 const connection = vi.hoisted(() => {
   const subscription = () => ({ dispose: () => {} });
@@ -405,8 +405,8 @@ describe("the network row", () => {
   });
 
   it("ticks while the cluster has not been asked yet", () => {
-    health.isConnected = null;
-    health.slotStalled = null;
+    health.isConnected = undefined;
+    health.slotStalled = undefined;
     draw();
     expect(networkRow().getAttribute("data-status")).toBe("done");
   });
