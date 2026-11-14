@@ -11,6 +11,7 @@ import { Observability } from "./Observability";
 
 vi.mock("@sentry/react", () => ({
   init: vi.fn(),
+  withStaticSpan: vi.fn((callback: unknown) => callback),
   withScope: vi.fn(),
   captureException: vi.fn(),
   captureMessage: vi.fn(),

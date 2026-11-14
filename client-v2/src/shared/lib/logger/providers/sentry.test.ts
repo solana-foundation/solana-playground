@@ -9,6 +9,7 @@ vi.mock("@sentry/react", () => {
   return {
     init: vi.fn(),
     browserTracingIntegration: vi.fn(() => ({ name: "BrowserTracing" })),
+    withStaticSpan: vi.fn((callback: unknown) => callback),
     captureException: vi.fn(),
     captureMessage: vi.fn(),
     addBreadcrumb: vi.fn(),
@@ -53,9 +54,7 @@ it("should leave out Sentry's global handlers and console breadcrumbs", () => {
     { name: "Console" },
     { name: "Dedupe" },
   ]).map((i) => i.name);
-  expect(names).toContain("Dedupe");
-  expect(names).not.toContain("GlobalHandlers");
-  expect(names).not.toContain("Console");
+  expect(names).toEqual(["Dedupe", "BrowserTracing", "ScrubSamplingContext"]);
 });
 
 // Which levels are reported is `isReported`'s rule; the provider follows `entry.report`
