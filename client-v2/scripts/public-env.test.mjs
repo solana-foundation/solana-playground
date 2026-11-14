@@ -34,6 +34,7 @@ const PRODUCTION_LIKE = {
   REACT_APP_TESTNET_RPC_URL: TEST_ENDPOINT.TESTNET,
   REACT_APP_SENTRY_DSN:
     "https://0123456789abcdef0123456789abcdef@o123456.ingest.us.sentry.io/4507",
+  REACT_APP_SENTRY_TRACES_SAMPLE_RATE: "0.1",
   REACT_APP_GA_MEASUREMENT_ID: "G-ABC123XYZ9",
   REACT_APP_VERCEL_ENV: "production",
   REACT_APP_VERCEL_GIT_COMMIT_SHA: "58bed70ea0000000000000000000000000000000",
@@ -53,6 +54,7 @@ test("reads every REACT_APP_* name client-env.ts reads", () => {
     "REACT_APP_MAINNET_RPC_URL",
     "REACT_APP_MAINNET_SEND_TX_PER_SECOND",
     "REACT_APP_SENTRY_DSN",
+    "REACT_APP_SENTRY_TRACES_SAMPLE_RATE",
     "REACT_APP_SERVER_UNSTABLE",
     "REACT_APP_SERVER_URL",
     "REACT_APP_TESTNET_READ_BUFFER_RPC_URL",
@@ -264,6 +266,11 @@ for (const [label, env, expected] of [
     "fails a send rate that is not a number",
     { REACT_APP_DEVNET_SEND_TX_PER_SECOND: "fast" },
     /REACT_APP_DEVNET_SEND_TX_PER_SECOND is not a number/,
+  ],
+  [
+    "fails a traces sample rate that is not a number",
+    { REACT_APP_SENTRY_TRACES_SAMPLE_RATE: "abc" },
+    /REACT_APP_SENTRY_TRACES_SAMPLE_RATE is not a number/,
   ],
   [
     "fails a GA id that is not a GA4 id",

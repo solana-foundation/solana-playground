@@ -16,6 +16,7 @@ createRoot(document.getElementById("root")!).render(
         dsn: env.SENTRY_DSN,
         release: env.VERCEL_GIT_COMMIT_SHA,
         environment: env.VERCEL_ENV,
+        tracesSampleRate: env.SENTRY_TRACES_SAMPLE_RATE,
       }}
       googleAnalytics={{ measurementId: env.GA_MEASUREMENT_ID }}
       fallback={<CrashFallback />}

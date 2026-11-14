@@ -8,6 +8,7 @@ vi.mock("@sentry/react", () => {
   const scope = { setLevel: vi.fn(), setTag: vi.fn(), setExtras: vi.fn() };
   return {
     init: vi.fn(),
+    browserTracingIntegration: vi.fn(() => ({ name: "BrowserTracing" })),
     captureException: vi.fn(),
     captureMessage: vi.fn(),
     addBreadcrumb: vi.fn(),
@@ -33,7 +34,7 @@ const entry = (
 const DSN = "https://key@o0.ingest.sentry.io/0";
 
 it("should initialise nothing and send nothing without a DSN", () => {
-  const provider = sentryProvider({});
+  const provider = sentryProvider({ tracesSampleRate: 0 });
 
   provider.log(entry({ level: "panic", report: true, error: new Error("x") }));
 
@@ -42,7 +43,7 @@ it("should initialise nothing and send nothing without a DSN", () => {
 });
 
 it("should leave out Sentry's global handlers and console breadcrumbs", () => {
-  sentryProvider({ dsn: DSN });
+  sentryProvider({ dsn: DSN, tracesSampleRate: 0 });
 
   const { integrations } = vi.mocked(Sentry.init).mock.calls[0][0] as {
     integrations: (defaults: { name: string }[]) => { name: string }[];
@@ -53,7 +54,7 @@ it("should leave out Sentry's global handlers and console breadcrumbs", () => {
       { name: "Console" },
       { name: "Dedupe" },
     ]).map((i) => i.name)
-  ).toEqual(["Dedupe"]);
+  ).toEqual(["Dedupe", "BrowserTracing"]);
 });
 
 // Which levels are reported is `isReported`'s rule; the provider follows `entry.report`
@@ -61,7 +62,7 @@ it.each([
   [true, true],
   [false, false],
 ])("should send an entry with report=%s: %s", (report, sent) => {
-  sentryProvider({ dsn: DSN }).log(
+  sentryProvider({ dsn: DSN, tracesSampleRate: 0 }).log(
     entry({ level: "panic", report, error: new Error("e") })
   );
 
@@ -70,7 +71,7 @@ it.each([
 
 it("should tag a reported exception with its namespace and severity", () => {
   const error = new Error("push rejected");
-  sentryProvider({ dsn: DSN }).log(
+  sentryProvider({ dsn: DSN, tracesSampleRate: 0 }).log(
     entry({ level: "error", report: true, error, context: { projectId: "p1" } })
   );
 
@@ -82,7 +83,7 @@ it("should tag a reported exception with its namespace and severity", () => {
 
 it("should mark an error from a global handler as unhandled", () => {
   const error = new Error("boom");
-  sentryProvider({ dsn: DSN }).log(
+  sentryProvider({ dsn: DSN, tracesSampleRate: 0 }).log(
     entry({ level: "panic", report: true, error, unhandled: true })
   );
 
@@ -92,7 +93,7 @@ it("should mark an error from a global handler as unhandled", () => {
 });
 
 it("should prefix a reported warning with its namespace", () => {
-  sentryProvider({ dsn: DSN }).log(
+  sentryProvider({ dsn: DSN, tracesSampleRate: 0 }).log(
     entry({ level: "warn", report: true, message: "slow push" })
   );
 
@@ -124,7 +125,7 @@ it.each([
   ({ level, message, error, severity, text }) => {
     vi.mocked(Sentry.addBreadcrumb).mockClear();
 
-    sentryProvider({ dsn: DSN }).log(
+    sentryProvider({ dsn: DSN, tracesSampleRate: 0 }).log(
       entry({
         level,
         report: false,
@@ -148,7 +149,7 @@ it("should leave a reported entry as a breadcrumb only after its report", () => 
   vi.mocked(Sentry.captureException).mockClear();
   const error = new Error("push rejected");
 
-  sentryProvider({ dsn: DSN }).log(
+  sentryProvider({ dsn: DSN, tracesSampleRate: 0 }).log(
     entry({ level: "error", report: true, error })
   );
 
@@ -164,7 +165,7 @@ it("should leave a reported entry as a breadcrumb only after its report", () => 
 it("should leave no breadcrumb for an entry below warn", () => {
   vi.mocked(Sentry.addBreadcrumb).mockClear();
 
-  sentryProvider({ dsn: DSN }).log(
+  sentryProvider({ dsn: DSN, tracesSampleRate: 0 }).log(
     entry({ level: "info", report: false, message: "pushed" })
   );
 

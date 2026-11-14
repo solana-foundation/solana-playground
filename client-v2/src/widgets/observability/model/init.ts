@@ -15,7 +15,13 @@ import {
 import { observabilityTelemetry } from "./telemetry";
 
 export interface ObservabilityConfig {
-  sentry: { dsn?: string; release?: string; environment?: string };
+  sentry: {
+    dsn?: string;
+    release?: string;
+    environment?: string;
+    /** `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` as built; {@link parseTracesSampleRate} reads it */
+    tracesSampleRate?: string;
+  };
   googleAnalytics: { measurementId?: string };
   /** Console threshold; the console provider's default when absent */
   logLevel?: Level;
@@ -40,6 +46,24 @@ const warnAboutMissingIds = ({
   }
 };
 
+/** Every page load, as Sentry advises and as the server's `SENTRY_TRACES_SAMPLE_RATE` defaults */
+const DEFAULT_TRACES_SAMPLE_RATE = 1;
+
+/**
+ * The share of page loads to trace: {@link DEFAULT_TRACES_SAMPLE_RATE} when
+ * unset or empty, and the same with a warning when the value is not a number
+ * from 0 to 1.
+ */
+const parseTracesSampleRate = (value: string | undefined) => {
+  if (value === undefined || value === "") return DEFAULT_TRACES_SAMPLE_RATE;
+  const rate = Number(value);
+  if (rate >= 0 && rate <= 1) return rate;
+  log.warn(
+    `REACT_APP_SENTRY_TRACES_SAMPLE_RATE is "${value}", not a number from 0 to 1; tracing every page load`
+  );
+  return DEFAULT_TRACES_SAMPLE_RATE;
+};
+
 /** Runs once per page: React's StrictMode renders twice, and `Sentry.init` must not */
 export const initObservability = ({
   sentry,
@@ -50,7 +74,15 @@ export const initObservability = ({
   initialised = true;
 
   initLogger({
-    providers: [consoleProvider({ level: logLevel }), sentryProvider(sentry)],
+    providers: [
+      consoleProvider({ level: logLevel }),
+      sentryProvider({
+        dsn: sentry.dsn,
+        release: sentry.release,
+        environment: sentry.environment,
+        tracesSampleRate: parseTracesSampleRate(sentry.tracesSampleRate),
+      }),
+    ],
   });
   warnAboutMissingIds({ sentry, googleAnalytics });
   installGlobalHandlers();
@@ -64,3 +96,35 @@ export const initObservability = ({
 export const resetObservability = () => {
   initialised = false;
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect, vi, afterEach } = import.meta.vitest;
+
+  describe("widgets/observability/model/init", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it.each([
+      { value: undefined, rate: 1, warnings: 0 },
+      { value: "", rate: 1, warnings: 0 },
+      { value: "0", rate: 0, warnings: 0 },
+      { value: "0.25", rate: 0.25, warnings: 0 },
+      { value: "1", rate: 1, warnings: 0 },
+      { value: "abc", rate: 1, warnings: 1 },
+      { value: "1.5", rate: 1, warnings: 1 },
+      { value: "-1", rate: 1, warnings: 1 },
+    ])(
+      "parseTracesSampleRate reads $value as $rate with $warnings warnings",
+      ({ value, rate, warnings }) => {
+        const warn = vi.spyOn(log, "warn").mockImplementation(() => {});
+
+        expect(parseTracesSampleRate(value)).toBe(rate);
+        expect(warn).toHaveBeenCalledTimes(warnings);
+        if (warnings) {
+          expect(warn.mock.calls[0][0]).toContain(
+            `REACT_APP_SENTRY_TRACES_SAMPLE_RATE is "${value}"`
+          );
+        }
+      }
+    );
+  });
+}

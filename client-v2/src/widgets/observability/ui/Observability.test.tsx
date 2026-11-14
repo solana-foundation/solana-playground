@@ -34,7 +34,10 @@ const renderObservability = (
   render(
     <StrictMode>
       <Observability
-        sentry={{ dsn: "https://key@o0.ingest.sentry.io/0" }}
+        sentry={{
+          dsn: "https://key@o0.ingest.sentry.io/0",
+          tracesSampleRate: "0.25",
+        }}
         googleAnalytics={googleAnalytics}
         logLevel="error"
         fallback={<p role="alert">fallback</p>}
@@ -61,6 +64,14 @@ it("should initialise Sentry and queue obs_initialised once under StrictMode's d
   expect(
     document.querySelectorAll('script[src*="googletagmanager"]')
   ).toHaveLength(1);
+});
+
+it("should pass the traces sample rate, parsed, to Sentry.init", () => {
+  renderObservability(<p>app</p>);
+
+  expect(vi.mocked(Sentry.init).mock.calls[0][0]).toMatchObject({
+    tracesSampleRate: 0.25,
+  });
 });
 
 it("should have Sentry initialised before a child's first render", () => {

@@ -248,6 +248,7 @@ Every `REACT_APP_*` variable a build sees is public: every visitor can read it i
 | `REACT_APP_{DEVNET,TESTNET,MAINNET}_READ_BUFFER_RPC_URL` | the RPC a deploy reads its program buffer through |
 | `REACT_APP_{DEVNET,TESTNET,MAINNET}_SEND_TX_PER_SECOND` | a deploy's buffer writes per second |
 | `REACT_APP_SENTRY_DSN` | Sentry's DSN, which is public by design; never an auth token |
+| `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` | optional: the share of page loads and navigations Sentry traces, `0` to `1`; unset or empty, all of them, and `0` turns tracing off; a non-number fails the build |
 | `REACT_APP_GA_MEASUREMENT_ID` | the GA4 id |
 | `REACT_APP_LOG_LEVEL` | the console log level |
 | `REACT_APP_VERCEL_GIT_COMMIT_SHA`, `REACT_APP_VERCEL_ENV` | set by `scripts/vercel-build.sh`, which also unsets `REACT_APP_VERCEL_OBSERVABILITY_CLIENT_CONFIG`, added by Vercel for `@vercel/analytics` and `@vercel/speed-insights`, which the client does not install; never set them in the project |
@@ -646,7 +647,8 @@ before this existed.
 The functions report to the same Sentry project as the browser, through
 `withObservability` (`src/features/api/server/with-observability.mjs`). They
 share the browser's `REACT_APP_SENTRY_DSN` and `SENTRY_PREVIEW_ENABLED`;
-`SENTRY_TRACES_SAMPLE_RATE` is theirs alone. All three are described in
+`SENTRY_TRACES_SAMPLE_RATE` is theirs alone, and the browser's rate is
+`REACT_APP_SENTRY_TRACES_SAMPLE_RATE`. All are described in
 `.env.example`. A function loads `@sentry/node` and sends to Sentry only with a
 DSN and a Production deployment, or a Preview one with
 `SENTRY_PREVIEW_ENABLED=true`; otherwise it does neither.

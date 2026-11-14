@@ -44,6 +44,7 @@ export const SEND_TX_PER_SECOND = {
  */
 export const observabilityEnv = () => ({
   SENTRY_DSN: process.env.REACT_APP_SENTRY_DSN,
+  SENTRY_TRACES_SAMPLE_RATE: process.env.REACT_APP_SENTRY_TRACES_SAMPLE_RATE,
   // Vercel copies its system variables with the CRA prefix at build time
   VERCEL_GIT_COMMIT_SHA: process.env.REACT_APP_VERCEL_GIT_COMMIT_SHA,
   VERCEL_ENV: process.env.REACT_APP_VERCEL_ENV,
