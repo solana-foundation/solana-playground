@@ -34,6 +34,7 @@ const PRODUCTION_LIKE = {
   REACT_APP_TESTNET_RPC_URL: TEST_ENDPOINT.TESTNET,
   REACT_APP_SENTRY_DSN:
     "https://0123456789abcdef0123456789abcdef@o123456.ingest.us.sentry.io/4507",
+  REACT_APP_SENTRY_TRACES_SAMPLE_RATE: "0.1",
   REACT_APP_GA_MEASUREMENT_ID: "G-ABC123XYZ9",
   REACT_APP_VERCEL_ENV: "production",
   REACT_APP_VERCEL_GIT_COMMIT_SHA: "58bed70ea0000000000000000000000000000000",
@@ -53,6 +54,7 @@ test("reads every REACT_APP_* name client-env.ts reads", () => {
     "REACT_APP_MAINNET_RPC_URL",
     "REACT_APP_MAINNET_SEND_TX_PER_SECOND",
     "REACT_APP_SENTRY_DSN",
+    "REACT_APP_SENTRY_TRACES_SAMPLE_RATE",
     "REACT_APP_SERVER_UNSTABLE",
     "REACT_APP_SERVER_URL",
     "REACT_APP_TESTNET_READ_BUFFER_RPC_URL",
@@ -291,6 +293,29 @@ for (const [label, env, expected] of [
     const problems = publicEnvProblems(ALLOWED, env);
     assert.equal(problems.length, patterns.length, problems.join("\n"));
     patterns.forEach((pattern, i) => assert.match(problems[i], pattern));
+  });
+}
+
+const OUT_OF_RANGE = [
+  "REACT_APP_SENTRY_TRACES_SAMPLE_RATE is not a decimal from 0 to 1",
+];
+
+for (const [value, expected] of [
+  ["0", []],
+  ["0.25", []],
+  ["1", []],
+  [".5", []],
+  ["1.5", OUT_OF_RANGE],
+  ["-1", OUT_OF_RANGE],
+  ["abc", OUT_OF_RANGE],
+]) {
+  test(`checks a traces sample rate of "${value}" against 0 to 1`, () => {
+    assert.deepEqual(
+      publicEnvProblems(ALLOWED, {
+        REACT_APP_SENTRY_TRACES_SAMPLE_RATE: value,
+      }),
+      expected
+    );
   });
 }
 

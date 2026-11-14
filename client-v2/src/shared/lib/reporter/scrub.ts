@@ -1,7 +1,9 @@
 // What a report from the browser must never carry: the user's program output,
 // which their tests print to this window's console, and a secret key. The
-// reporter passes these rules to Sentry as `beforeBreadcrumb` and `beforeSend`
-// (`sentryOptions` in `reporter/sentry.ts`).
+// reporter passes these rules to Sentry as `beforeBreadcrumb`, `beforeSend`,
+// `beforeSendTransaction` and `beforeSendSpan` (`sentryOptions` in `reporter/sentry.ts`).
+
+import { maskUrlWith } from "../url-secret.mjs";
 
 const REDACTED = "[redacted]";
 
@@ -45,11 +47,69 @@ const SECRET_PATTERNS: [RegExp, string][] = [
 /** Past this depth a value is replaced rather than walked; Sentry's own normalising stops at 3 */
 const MAX_DEPTH = 12;
 
+/**
+ * An `http(s)://` URL in running text, up to whitespace, a quote, an angle
+ * bracket, a brace or a character a URL escapes; brackets and parentheses stay
+ * in, for an IPv6 host and a path such as `/rpc(v1)/`, and {@link urlPartOf}
+ * trims what only ends or wraps the sentence.
+ */
+const URL_IN_TEXT = /https?:\/\/[^\s"'`<>{}\\^|]+/gi;
+
+/** Punctuation that ends a sentence after a URL more often than it ends the URL */
+const SENTENCE_END = new Set([".", ",", ";", ":", "!", "?"]);
+
+/** The opening bracket of each closing one a URL may hold */
+const OPENER: Record<string, string> = { ")": "(", "]": "[" };
+
+const countOf = (char: string) => (text: string) => text.split(char).length - 1;
+
+/** `match` less its trailing sentence punctuation and the closing brackets it does not open, as in `(see https://x.test/a)` */
+const urlPartOf = (match: string) => {
+  let url = match;
+  while (url !== "") {
+    const last = url.slice(-1);
+    const opener = OPENER[last];
+    const isUnopened =
+      opener !== undefined && countOf(last)(url) > countOf(opener)(url);
+    if (!SENTENCE_END.has(last) && !isUnopened) break;
+    url = url.slice(0, -1);
+  }
+  return url;
+};
+
+/** A string that is one `http(s)://` URL from its first character to its last, as a span's `url.full` is */
+const isWholeUrl = (text: string) => {
+  if (!/^https?:\/\/\S+$/i.test(text)) return false;
+  try {
+    return new URL(text).href !== "";
+  } catch {
+    // Not a URL: the running-text finder still looks inside it
+    return false;
+  }
+};
+
+const maskUrl = maskUrlWith(REDACTED);
+
+/** `url` with its secrets masked; a URL with none stays as written, unnormalised */
+const maskedUrl = (url: string) => {
+  const { text: shown, masked } = maskUrl(url);
+  return masked ? shown : url;
+};
+
+/** `text` with the secrets of each URL in it masked */
+const maskUrlsIn = (text: string) =>
+  isWholeUrl(text)
+    ? maskedUrl(text)
+    : text.replace(URL_IN_TEXT, (match) => {
+        const url = urlPartOf(match);
+        return maskedUrl(url) + match.slice(url.length);
+      });
+
 const redactText = (text: string) =>
   SECRET_PATTERNS.reduce(
     (scrubbed, [pattern, replacement]) =>
       scrubbed.replace(pattern, replacement),
-    text
+    maskUrlsIn(text)
   );
 
 const isByte = (value: unknown) =>
@@ -123,6 +183,10 @@ interface Breadcrumb {
   timestamp?: number;
   message?: string;
   data?: Record<string, unknown>;
+}
+
+interface WithBreadcrumbs {
+  breadcrumbs?: Breadcrumb[];
 }
 
 /** `read()`, or `undefined` if it throws: what a withheld copy keeps of a hostile value */
@@ -214,18 +278,89 @@ const withheld = <E extends ScrubbableEvent>(event: E, failure: unknown): E => {
   } as unknown as E;
 };
 
+/**
+ * `event` with its breadcrumbs re-checked and every value in it redacted;
+ * throws when the walk does. Sentry merges the scope's breadcrumbs into
+ * transactions too, so both kinds of event go through it.
+ */
+const scrubbedOf = <E extends object>(event: E): E => {
+  const breadcrumbs = (event as WithBreadcrumbs).breadcrumbs
+    ?.map(scrubBreadcrumb)
+    .filter((crumb): crumb is Breadcrumb => crumb !== null);
+  const scrubbed = redact(event) as E;
+  if (breadcrumbs !== undefined) {
+    (scrubbed as WithBreadcrumbs).breadcrumbs = breadcrumbs;
+  }
+  return scrubbed;
+};
+
 /** An error event with its breadcrumbs re-checked and every value in it redacted */
 export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
   try {
-    const breadcrumbs = event.breadcrumbs
-      ?.map(scrubBreadcrumb)
-      .filter((crumb): crumb is Breadcrumb => crumb !== null);
-    const scrubbed = redact(event) as E;
-    if (breadcrumbs !== undefined) scrubbed.breadcrumbs = breadcrumbs;
-    return scrubbed;
+    return scrubbedOf(event);
   } catch (failure) {
     // Not logged: the logger reports through this reporter, and would loop
     return withheld(event, failure);
+  }
+};
+
+/**
+ * A transaction scrubbed as {@link scrubEvent} scrubs an error, its spans
+ * included, or `null` to drop it when the walk throws: a withheld stand-in
+ * would carry no measurement and still cost quota.
+ */
+export const scrubTransaction = <E extends object>(event: E): E | null => {
+  try {
+    return scrubbedOf(event);
+  } catch {
+    // Not logged: importing the logger would close a cycle (logger, providers/sentry, reporter, scrub); Sentry's client reports count the drop as `before_send` for category `transaction`
+    // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
+    return null;
+  }
+};
+
+/**
+ * Redacts, in place, the root span's name in a dynamic sampling context: a
+ * standalone span's envelope header carries it, and `beforeSendSpan` never
+ * sees the header. Sentry's `createDsc` hook passes the context to change.
+ */
+export const scrubSamplingContext = (context: { transaction?: string }) => {
+  if (context.transaction !== undefined) {
+    context.transaction = redactText(context.transaction);
+  }
+};
+
+interface ScrubbableSpan {
+  span_id?: string;
+  trace_id?: string;
+  parent_span_id?: string;
+  op?: string;
+  status?: string;
+  start_timestamp?: number;
+  timestamp?: number;
+}
+
+/**
+ * A span with every value in it redacted: `beforeSendSpan` sees the
+ * standalone INP span that {@link scrubTransaction} never does. Sentry cannot
+ * drop a span there, so one the walk cannot finish keeps only its ids, op,
+ * status and timing.
+ */
+export const scrubSpan = <S extends ScrubbableSpan>(span: S): S => {
+  try {
+    return redact(span) as S;
+  } catch {
+    // Not logged, as in `scrubTransaction`: the logger would close an import cycle
+    return {
+      span_id: attempt(() => textOf(span.span_id)),
+      trace_id: attempt(() => textOf(span.trace_id)),
+      parent_span_id: attempt(() => textOf(span.parent_span_id)),
+      op: attempt(() => textOf(span.op)),
+      status: attempt(() => textOf(span.status)),
+      start_timestamp: attempt(() => span.start_timestamp),
+      timestamp: attempt(() => span.timestamp),
+      data: {},
+    } as unknown as S;
   }
 };
 
@@ -238,6 +373,8 @@ if (import.meta.vitest) {
     const PUBKEY = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
     const bytes = (length: number) =>
       Array.from({ length }, (_, i) => (i * 7) % 256);
+    // eslint-disable-next-line no-restricted-syntax -- shared cannot import Endpoint from entities, and the URL is only text here
+    const DEVNET = "https://api.devnet.solana.com/";
 
     describe("redact", () => {
       it("should replace a base58 secret key inside a sentence", () => {
@@ -431,6 +568,78 @@ if (import.meta.vitest) {
         const endless = (): object => ({ toJSON: endless });
 
         expect(redact(endless())).toBe("[redacted]");
+      });
+
+      it.each([
+        {
+          url: "https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789",
+          shown: "https://solana-mainnet.g.alchemy.com/v2/[redacted]",
+        },
+        {
+          url: "https://x.solana-mainnet.quiknode.pro/0123456789abcdef0123456789abcdef01234567/",
+          shown: "https://x.solana-mainnet.quiknode.pro/[redacted]/",
+        },
+        {
+          url: "https://devnet.helius-rpc.com/?api-key=abc",
+          shown: "https://devnet.helius-rpc.com/?api-key=[redacted]",
+        },
+        { url: DEVNET, shown: DEVNET },
+      ])("should show $url as $shown", ({ url, shown }) => {
+        expect(redact(url)).toBe(shown);
+      });
+
+      it("should mask a URL inside a span description", () => {
+        expect(
+          redact(
+            "POST https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789 (200)"
+          )
+        ).toBe("POST https://solana-mainnet.g.alchemy.com/v2/[redacted] (200)");
+      });
+
+      it.each([
+        {
+          name: "an IPv6 host, whole",
+          text: "https://[2001:db8::1]/v2/abc123def456ghi789",
+          shown: "https://[2001:db8::1]/v2/[redacted]",
+        },
+        {
+          name: "an IPv6 host, in a sentence",
+          text: "GET https://[2001:db8::1]/v2/abc123def456ghi789 failed",
+          shown: "GET https://[2001:db8::1]/v2/[redacted] failed",
+        },
+        {
+          name: "parentheses in the path, whole",
+          text: "https://rpc.example.com/rpc(v1)/abc123def456ghi789",
+          shown: "https://rpc.example.com/rpc(v1)/[redacted]",
+        },
+        {
+          name: "parentheses in the path, in a sentence",
+          text: "GET https://rpc.example.com/rpc(v1)/abc123def456ghi789 failed",
+          shown: "GET https://rpc.example.com/rpc(v1)/[redacted] failed",
+        },
+        {
+          name: "parentheses around the URL",
+          text: "(see https://x.test/a/abc123def456ghi789)",
+          shown: "(see https://x.test/a/[redacted])",
+        },
+        {
+          name: "a full stop after the URL",
+          text: "Failed at https://x.test/a/abc123def456ghi789.",
+          shown: "Failed at https://x.test/a/[redacted].",
+        },
+        // Whole, the dot is the URL's own: the finder would leave it outside
+        {
+          name: "a whole URL ending in a dot",
+          text: "https://x.test/a/abc123def456ghi789.",
+          shown: "https://x.test/a/[redacted]",
+        },
+        {
+          name: "the devnet URL in a sentence",
+          text: `(see ${DEVNET}).`,
+          shown: `(see ${DEVNET}).`,
+        },
+      ])("should mask a URL with $name", ({ text, shown }) => {
+        expect(redact(text)).toBe(shown);
       });
 
       it("should leave numbers, booleans and null as they are", () => {
@@ -643,6 +852,68 @@ if (import.meta.vitest) {
           expect(JSON.stringify(scrubbed)).not.toContain(KEY);
         }
       );
+    });
+
+    describe("scrubTransaction", () => {
+      it("should drop a console breadcrumb merged into the transaction", () => {
+        expect(
+          scrubTransaction({
+            type: "transaction",
+            breadcrumbs: [
+              { category: "console", message: "  1) failing test" },
+              { category: "ui.click", message: "button.deploy" },
+            ],
+          })
+        ).toEqual({
+          type: "transaction",
+          breadcrumbs: [{ category: "ui.click", message: "button.deploy" }],
+        });
+      });
+
+      it("should drop a transaction it cannot walk", () => {
+        const hostile = {
+          get boom(): string {
+            throw new TypeError(`getter ${KEY}`);
+          },
+        };
+
+        expect(
+          scrubTransaction({ type: "transaction", spans: [{ data: hostile }] })
+        ).toBeNull();
+      });
+    });
+
+    describe("scrubSpan", () => {
+      it("should keep only the ids, op, status and timing of a span it cannot walk", () => {
+        const hostile = {
+          get boom(): string {
+            throw new TypeError(`getter ${KEY}`);
+          },
+        };
+
+        expect(
+          scrubSpan({
+            span_id: "s1",
+            trace_id: "t1",
+            parent_span_id: "p1",
+            op: "ui.interaction.click",
+            status: "ok",
+            start_timestamp: 1,
+            timestamp: 2,
+            description: `button#k-${KEY}`,
+            data: { hostile },
+          })
+        ).toEqual({
+          span_id: "s1",
+          trace_id: "t1",
+          parent_span_id: "p1",
+          op: "ui.interaction.click",
+          status: "ok",
+          start_timestamp: 1,
+          timestamp: 2,
+          data: {},
+        });
+      });
     });
   });
 }

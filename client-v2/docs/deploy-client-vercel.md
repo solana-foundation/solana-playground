@@ -248,6 +248,7 @@ Every `REACT_APP_*` variable a build sees is public: every visitor can read it i
 | `REACT_APP_{DEVNET,TESTNET,MAINNET}_READ_BUFFER_RPC_URL` | the RPC a deploy reads its program buffer through |
 | `REACT_APP_{DEVNET,TESTNET,MAINNET}_SEND_TX_PER_SECOND` | a deploy's buffer writes per second |
 | `REACT_APP_SENTRY_DSN` | Sentry's DSN, which is public by design; never an auth token |
+| `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` | optional: the share of page loads and navigations Sentry traces, `0` to `1`; unset or empty, all of them, and `0` turns tracing off; anything other than a decimal from 0 to 1 fails the build |
 | `REACT_APP_GA_MEASUREMENT_ID` | the GA4 id |
 | `REACT_APP_LOG_LEVEL` | the console log level |
 | `REACT_APP_VERCEL_GIT_COMMIT_SHA`, `REACT_APP_VERCEL_ENV` | set by `scripts/vercel-build.sh`, which also unsets `REACT_APP_VERCEL_OBSERVABILITY_CLIENT_CONFIG`, added by Vercel for `@vercel/analytics` and `@vercel/speed-insights`, which the client does not install; never set them in the project |
@@ -257,7 +258,7 @@ Every other variable stays on the server, read by `api/*.mjs` through `src/share
 Two checks in `scripts/public-env.mjs` cover both sides:
 
 - **Before webpack runs**, in every production `craco build` (`build-fast` included), `craco.config.js` fails the build on a `REACT_APP_*` the client does not read, whatever its letter case (CRA matches the prefix that way), and on a public value that:
-  - is outside its variable's shape in `VALUE_SHAPES`: a log level, a GA4 id, a number, a sha, a Sentry DSN that is an `https` URL with a public key and no legacy secret key. A name the client reads without an entry there fails too, so a new public variable states what it may hold.
+  - is outside its variable's shape in `VALUE_SHAPES`: a log level, a GA4 id, a number, a trace sample rate that is a decimal from 0 to 1 (`SAMPLE_RATE` in `src/shared/lib/sample-rate.mjs`, which the browser's parser reads by too), a sha, a Sentry DSN that is an `https` URL with a public key and no legacy secret key. A name the client reads without an entry there fails too, so a new public variable states what it may hold.
   - is a URL with a user or password before the host, or with a query term, path segment or fragment that `src/shared/lib/url-secret.mjs` reads as a key, the same code the custom RPC list masks by. The query is judged as written, not decoded. Host labels are left out: a keyless provider hostname can hold a long label with a digit.
   - starts like a token (`sk-`, `sntrys_`, `ghp_`, `postgres://`, …), or equals a secret variable's value.
 - **After `craco build`**, in `build:bundle`, which every deployment runs, before the source maps go to Sentry: `node scripts/public-env.mjs check-build build` fails when any file in `build/` holds the value of a secret variable, as written or escaped inside a double- or single-quoted string literal. A secret variable is one whose name `isSecretName` matches, in any letter case (it contains `SECRET`, `TOKEN`, `PASSWORD`, `PASSWD`, `CREDENTIAL`, `PRIVATE` or `BYPASS`, is `KEY` or ends in `_KEY`, or starts with `DATABASE_URL`), or one whose value is a URL with a password, such as `POSTGRES_URL`. It reads the process environment and the `.env` files CRA reads, parsed both by `util.parseEnv` and by CRA's dotenv with dotenv-expand. A local `vercel build` sees a Sensitive variable as empty and cannot look for its value; only the build on Vercel can.
@@ -646,7 +647,10 @@ before this existed.
 The functions report to the same Sentry project as the browser, through
 `withObservability` (`src/features/api/server/with-observability.mjs`). They
 share the browser's `REACT_APP_SENTRY_DSN` and `SENTRY_PREVIEW_ENABLED`;
-`SENTRY_TRACES_SAMPLE_RATE` is theirs alone. All three are described in
+`SENTRY_TRACES_SAMPLE_RATE` alone sets their rate: the browser's rate is
+`REACT_APP_SENTRY_TRACES_SAMPLE_RATE`, and the browser sends no `sentry-trace`
+or `baggage` header that would carry its sampling decision to a function. All
+are described in
 `.env.example`. A function loads `@sentry/node` and sends to Sentry only with a
 DSN and a Production deployment, or a Preview one with
 `SENTRY_PREVIEW_ENABLED=true`; otherwise it does neither.

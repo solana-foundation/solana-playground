@@ -3,7 +3,12 @@ import * as Sentry from "@sentry/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireFor } from "../../../test-utils/require-for";
-import { scrubBreadcrumb, scrubEvent } from "./scrub";
+import {
+  scrubBreadcrumb,
+  scrubEvent,
+  scrubSpan,
+  scrubTransaction,
+} from "./scrub";
 import { reporter, sentryOptions } from "./sentry";
 
 type Transport = NonNullable<
@@ -117,6 +122,64 @@ describe("reporter.sendFeedback", () => {
   });
 });
 
+// Ahead of "reporter scrub": Sentry wraps the `fetch` it finds once per module, so the spy must be there first
+describe("trace headers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // The fetch and transaction breadcrumbs would reach the next describe's events
+    Sentry.getIsolationScope().clearBreadcrumbs();
+  });
+
+  it("should add neither sentry-trace nor baggage to a same-origin or a cross-origin fetch in a sampled span", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response("{}"));
+    const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+    Sentry.init({
+      dsn: options.dsn,
+      tracesSampleRate: options.tracesSampleRate,
+      tracePropagationTargets: options.tracePropagationTargets,
+      traceLifecycle: options.traceLifecycle,
+      integrations: options.integrations,
+      transport: () => ({
+        send: async (envelope) => {
+          envelopes.push(envelope);
+          return { statusCode: 200 };
+        },
+        flush: async () => true,
+      }),
+    });
+
+    await Sentry.startNewTrace(() =>
+      Sentry.startSpan({ name: "/", op: "pageload" }, async () => {
+        await fetch("/api/sync");
+        await fetch("https://build.example.test/build");
+      })
+    );
+    await Sentry.flush();
+
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      "/api/sync",
+      "https://build.example.test/build",
+    ]);
+    for (const [, init] of fetchSpy.mock.calls) {
+      const headers = new Headers(init?.headers);
+      expect(headers.has("sentry-trace")).toBe(false);
+      expect(headers.has("baggage")).toBe(false);
+    }
+    // Both requests became spans, so Sentry's fetch wrapper ran over the spy
+    const [transaction] = envelopes
+      .map((envelope) => itemsOf(envelope)[0])
+      .filter(([header]) => header.type === "transaction")
+      .map(([, event]) => event as unknown as { spans?: { op?: string }[] });
+    expect(
+      transaction.spans?.filter((span) => span.op === "http.client")
+    ).toHaveLength(2);
+  });
+});
+
 describe("reporter scrub", () => {
   // A 64-byte secret key's length in base58, and a 44-character public key
   const KEY = "3Xz9".repeat(22);
@@ -134,6 +197,10 @@ describe("reporter scrub", () => {
     extra?: Record<string, unknown>;
     contexts?: { feedback?: Record<string, unknown> };
   }
+  interface ScrubbedTransaction {
+    transaction?: string;
+    spans?: { description?: string; data?: Record<string, unknown> }[];
+  }
   // The session integration sends envelopes of its own; these are the events and feedback
   const eventsOf = () =>
     envelopes
@@ -143,12 +210,21 @@ describe("reporter scrub", () => {
       )
       .map(([, event]) => event as ScrubbedEvent);
 
+  const recording: Transport = () => ({
+    send: async (envelope) => {
+      envelopes.push(envelope);
+      return { statusCode: 200 };
+    },
+    flush: async () => true,
+  });
+
   /** Starts Sentry with the production options, over the recording transport */
   const start = (integrations: Sentry.BrowserOptions["integrations"]) => {
     const options = sentryOptions({
       dsn: DSN,
       release: "abc123",
       environment: "production",
+      tracesSampleRate: 0,
     });
     Sentry.init({
       dsn: options.dsn,
@@ -157,13 +233,7 @@ describe("reporter scrub", () => {
       integrations,
       beforeBreadcrumb: options.beforeBreadcrumb,
       beforeSend: options.beforeSend,
-      transport: () => ({
-        send: async (envelope) => {
-          envelopes.push(envelope);
-          return { statusCode: 200 };
-        },
-        flush: async () => true,
-      }),
+      transport: recording,
     });
   };
 
@@ -173,19 +243,105 @@ describe("reporter scrub", () => {
     envelopes.length = 0;
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
-    start(sentryOptions({ dsn: DSN }).integrations);
+    start(sentryOptions({ dsn: DSN, tracesSampleRate: 0 }).integrations);
   });
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("should install the scrub and leave out console breadcrumbs when the reporter initialises", async () => {
+  it("should install the scrub, tracing and no console breadcrumbs when the reporter initialises", async () => {
     await Sentry.close();
-    reporter.init({ dsn: DSN });
+    reporter.init({ dsn: DSN, tracesSampleRate: 0 });
 
     const client = Sentry.getClient();
     expect(client?.getOptions().beforeSend).toBe(scrubEvent);
     expect(client?.getOptions().beforeBreadcrumb).toBe(scrubBreadcrumb);
+    expect(client?.getOptions().beforeSendTransaction).toBe(scrubTransaction);
+    expect(client?.getOptions().beforeSendSpan).toBe(scrubSpan);
+    expect(client?.getOptions().traceLifecycle).toBe("static");
     expect(client?.getIntegrationByName("Console")).toBeUndefined();
+    expect(client?.getIntegrationByName("BrowserTracing")).toBeDefined();
+  });
+
+  it("should send a transaction with a secret key redacted in its name and its spans", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+    Sentry.init({
+      dsn: options.dsn,
+      tracesSampleRate: options.tracesSampleRate,
+      traceLifecycle: options.traceLifecycle,
+      beforeSendTransaction: options.beforeSendTransaction,
+      defaultIntegrations: false,
+      transport: recording,
+    });
+
+    // A new trace: an earlier test's unsampled page-load span stays active, and its children go unsampled
+    Sentry.startNewTrace(() =>
+      Sentry.startSpan({ name: `/share?k=${KEY}`, op: "pageload" }, () => {
+        Sentry.startSpan(
+          {
+            name: `GET /api/x?k=${KEY}`,
+            op: "http.client",
+            attributes: { url: `/api/x?k=${KEY}` },
+          },
+          () => {}
+        );
+      })
+    );
+    await Sentry.flush();
+
+    const transactions = envelopes
+      .map((envelope) => itemsOf(envelope)[0])
+      .filter(([header]) => header.type === "transaction")
+      .map(([, event]) => event as unknown as ScrubbedTransaction);
+    expect(transactions).toHaveLength(1);
+    const [transaction] = transactions;
+    expect(transaction.transaction).toBe("/share?k=[redacted]");
+    expect(transaction.spans).toEqual([
+      expect.objectContaining({
+        description: "GET /api/x?k=[redacted]",
+        data: expect.objectContaining({ url: "/api/x?k=[redacted]" }),
+      }),
+    ]);
+    expect(JSON.stringify(envelopes)).not.toContain(KEY);
+  });
+
+  it("should send a standalone span, as INP is sent, with a secret key redacted in its attributes", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+    Sentry.init({
+      dsn: options.dsn,
+      tracesSampleRate: options.tracesSampleRate,
+      traceLifecycle: options.traceLifecycle,
+      beforeSendSpan: options.beforeSendSpan,
+      // The defaults filtered: `ScrubSamplingContext` among them scrubs the envelope header
+      integrations: options.integrations,
+      transport: recording,
+    });
+
+    // The options `_emitWebVitalSpan` in `@sentry/browser-utils` starts an INP span with in static mode
+    Sentry.startNewTrace(() =>
+      Sentry.startInactiveSpan({
+        name: `button#k-${KEY}`,
+        op: "ui.interaction.click",
+        attributes: {
+          "sentry.transaction": `/share?k=${KEY}`,
+          "browser.web_vital.inp.target": `button#k-${KEY}`,
+        },
+        experimental: { standalone: true },
+      }).end()
+    );
+    await Sentry.flush();
+
+    const spans = envelopes
+      .flatMap((envelope) => itemsOf(envelope))
+      .filter(([header]) => header.type === "span");
+    expect(spans).toHaveLength(1);
+    const sent = JSON.stringify(spans);
+    expect(sent).toContain("/share?k=[redacted]");
+    expect(sent).toContain("button#k-[redacted]");
+    expect(JSON.stringify(envelopes)).not.toContain(KEY);
   });
 
   /** Stands in for the user's test printing through mocha to this window's console */

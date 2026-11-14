@@ -170,6 +170,7 @@ spend](deploy-client-vercel.md#default-backend-spend)); do not set it up for the
 | `REACT_APP_SENTRY_DSN` | The DSN of Sentry project `solana-playground` in organization `solana-fndn`. Public: the browser and the functions share it | Unmasked | Step 6 |
 | `SENTRY_AUTH_TOKEN` | A Sentry auth token that may upload source maps to that project. Read by the build only | **Unmasked**: a local build pulls a Vercel Secret as empty, and then fails | Step 6 |
 | `SENTRY_TRACES_SAMPLE_RATE` | `0` to `1`. Unset traces every API request | Unmasked | |
+| `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` | Optional. `0` to `1`, the share of page loads and navigations traced; unset or empty traces every one, and `0` turns tracing off. Set it lower when the organization's Sentry quota needs it. Anything other than a decimal from 0 to 1 fails the build. The browser sends no trace headers, so `SENTRY_TRACES_SAMPLE_RATE` alone sets the API functions' rate. Inlined at build time, so a change needs a redeploy | Unmasked | |
 | `SENTRY_PREVIEW_ENABLED`, `SOURCEMAPS_PREVIEW_ENABLED` | Never on Production: Preview only | | |
 | `REACT_APP_GA_MEASUREMENT_ID` | `G-...`, the Google Analytics 4 measurement id, if the Foundation uses Google Analytics. Unset, the page carries no tag | Unmasked | Step 6 |
 | `REACT_APP_LOG_LEVEL` | Unset logs `warn` in production | Unmasked | |
@@ -367,7 +368,9 @@ first deployment in step 7. Give write access to `<DOPPLER_CONFIG>` only to the 
    Settings → Auth Tokens). Store the token as `SENTRY_AUTH_TOKEN`, **Unmasked** (a local build reads it); the DSN
    goes in as `REACT_APP_SENTRY_DSN` in step 6.
 5. **Optional:** a Google Analytics 4 property and its measurement id (`G-...`); the RPC provider's URLs, restricted
-   to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`, and its `sendTransaction` limit. They go in in step 6.
+   to `<VERCEL_APP_DOMAIN>` and `<CUSTOM_DOMAIN>`, and its `sendTransaction` limit; a browser trace rate,
+   `REACT_APP_SENTRY_TRACES_SAMPLE_RATE`, a decimal from 0 to 1, when tracing every page load and navigation would
+   exceed the Sentry quota. They go in in step 6.
 
 **Check:** in Vercel → Settings → Environment Variables, Production, `AUTH_SECRET`, `GITHUB_CLIENT_SECRET`,
 `PG_AI_API_KEY` and `PG_AI_NEWCOMER_API_KEY` carry the Secret badge, and
@@ -451,6 +454,11 @@ production without this command ([Deploying production](#deploying-production)).
      minute Issues lists `Error: sentry check: browser`. Resolve it afterwards.
    - **The functions.** Traces lists `GET /api/sync` spans from the requests of check 2: every API function sends a
      span per request while `SENTRY_TRACES_SAMPLE_RATE` is unset.
+   - **Page loads.** While `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` is unset or `1`, Traces lists a `pageload`
+     transaction from the page loads of checks 4 to 6, with LCP and CLS among its measurements, and the Web Vitals
+     dashboard shows environment `production`. At a lower rate a page load may go untraced, so this check does not
+     apply. The browser sends no trace headers, so the `GET /api/sync` spans of the functions check follow
+     `SENTRY_TRACES_SAMPLE_RATE` alone.
 9. With RPC URLs set: Settings › Network offers Mainnet, Devnet and Testnet on your provider's URLs, and a program
    deploy to Devnet completes.
 10. `make migrate-production-db` prints `nothing to apply`.
