@@ -75,8 +75,8 @@ export const OFFLINE_LINE =
 export interface NetworkInput {
   /** The cluster's name as the connection has it: "devnet" */
   name: string;
-  /** `PgConnection.isConnected`: null or undefined until it first answers */
-  isConnected: boolean | null | undefined;
+  /** `PgConnection.isConnected`: undefined until it first answers */
+  isConnected: boolean | undefined;
   /** `PgConnection.isClusterDown`: answering with a slot that does not move */
   slotStalled: boolean | null | undefined;
 }
@@ -118,8 +118,8 @@ export const networkIndicator = (
     // first load, and the settings' focus return and its tests look the
     // trigger up by its plain name meanwhile
     const spoken = suffix && state === "not-ready" ? `, ${suffix}` : "";
-    // Only ready and an unstarted Playnet come without a suffix
-    const tipWord = suffix ?? (state === "idle" ? "not started" : "ready");
+    // Only ready comes without a suffix
+    const tipWord = suffix ?? "ready";
     // Asking again only helps a cluster that is reached and does not answer:
     // offline, the line already says what it waits for
     const down = state === "not-ready" && online;
@@ -150,12 +150,9 @@ export const networkIndicator = (
       "The cluster is not responding. Write and Build work; Deploy and Interact wait for it."
     );
   }
-  // Playnet is not asked until it has started (`PgConnection.getIsConnected`),
-  // so its `null` can last: grey, not a pulse that never ends
-  if (isConnected == null && name === "playnet") {
-    return view("idle", undefined, "Playnet starts when a command needs it.");
+  if (isConnected === undefined) {
+    return view("working", "connecting", undefined);
   }
-  if (isConnected == null) return view("working", "connecting", undefined);
   return view("ready", undefined, undefined);
 };
 
@@ -438,7 +435,7 @@ if (import.meta.vitest) {
 
       it("is connecting until the connection first answers", () => {
         const n = networkIndicator(
-          { name: "devnet", isConnected: null, slotStalled: null },
+          { name: "devnet", isConnected: undefined, slotStalled: null },
           true
         );
         expect([n.state, n.words, n.label, n.tip]).toEqual([
@@ -446,19 +443,6 @@ if (import.meta.vitest) {
           "Devnet · Connecting",
           "Change cluster, currently devnet",
           "Devnet · Connecting",
-        ]);
-      });
-
-      it("keeps a Playnet that has not started grey and plain", () => {
-        const n = networkIndicator(
-          { name: "playnet", isConnected: null, slotStalled: null },
-          true
-        );
-        expect([n.state, n.words, n.label, n.tip]).toEqual([
-          "idle",
-          "Playnet",
-          "Change cluster, currently playnet",
-          "Playnet · Not started",
         ]);
       });
 

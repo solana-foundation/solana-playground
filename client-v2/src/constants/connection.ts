@@ -81,7 +81,6 @@ if (import.meta.vitest) {
       expect(networkInSentence("mainnet")).toBe("mainnet");
       expect(networkInSentence("testnet")).toBe("testnet");
       expect(networkInSentence("localnet")).toBe("localnet");
-      expect(networkInSentence("playnet")).toBe("playnet");
       expect(networkInSentence("Surfpool")).toBe("Surfpool");
       expect(networkInSentence(undefined)).toBeUndefined();
     });

@@ -91,7 +91,7 @@ if (import.meta.vitest) {
     };
     const CONNECTING: NetworkInput = {
       name: "devnet",
-      isConnected: null,
+      isConnected: undefined,
       slotStalled: null,
     };
 

@@ -339,7 +339,7 @@ never say you did.
 - **Airdrop.** The `airdrop` terminal command, or Get SOL on the wallet chip
   in the console bar, asks the network's faucet: 5 SOL at once on devnet, 1 on
   testnet. Automatic airdrop is off by default. Every network but a local
-  validator (localnet, playnet) asks for a GitHub sign-in first.
+  validator (localnet) asks for a GitHub sign-in first.
 - **The web faucet, when the airdrop is refused.** Once the faucet was asked
   and sent nothing, for a 429, its daily limit or any other failure, the
   terminal, the wallet chip, the wallet menu and the "Not enough SOL" cards

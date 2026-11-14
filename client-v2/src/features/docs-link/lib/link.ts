@@ -232,7 +232,7 @@ export const backToDocsHref = (from: string | undefined, referrer: string) => {
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi } = import.meta.vitest;
 
   describe("features/docs-link/lib/link", () => {
     const SCRIPT = [
@@ -332,13 +332,33 @@ if (import.meta.vitest) {
     });
 
     it("stops inflating a stream that grows past the cap", () => {
-      // 50 MB of one byte deflates to about 50 KB; only the cap stops it
+      // Ten times the cap deflates to a few kilobytes; a check after inflating would still return "size"
       const bomb = encodeDocsLink({
         name: "a.ts",
-        code: "a".repeat(50 * 1024 * 1024),
+        code: "a".repeat(MAX_DOCS_LINK_BYTES * 10),
       });
-      const decoded = decodeDocsLink(bomb);
-      expect(decoded.ok || decoded.reason).toBe("size");
+      const push = Inflate.prototype.push;
+      let inflated = 0;
+      const spy = vi
+        .spyOn(Inflate.prototype, "push")
+        .mockImplementation(function (this: Inflate, ...args) {
+          const onData = this.onData.bind(this);
+          this.onData = (chunk) => {
+            inflated += (chunk as Uint8Array).length;
+            onData(chunk);
+          };
+          return push.apply(this, args);
+        });
+
+      try {
+        const decoded = decodeDocsLink(bomb);
+
+        expect(decoded.ok || decoded.reason).toBe("size");
+        expect(inflated).toBeGreaterThan(MAX_DOCS_LINK_BYTES);
+        expect(inflated).toBeLessThanOrEqual(MAX_DOCS_LINK_BYTES + 16 * 1024);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it("never uses a source that is not an https Solana page", () => {

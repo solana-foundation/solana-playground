@@ -99,7 +99,6 @@ describe("block explorers", () => {
     expect(orb.opens("devnet")).toBe(true);
     expect(orb.opens("testnet")).toBe(true);
     expect(orb.opens("localnet")).toBe(false);
-    expect(orb.opens("playnet")).toBe(false);
     // `null` is a network with no cluster (a custom RPC), not the selected one
     // eslint-disable-next-line unicorn/no-null -- the explorer API's own value for it
     expect(orb.opens(null)).toBe(false);
@@ -111,7 +110,6 @@ describe("block explorers", () => {
     expect(solanaExplorer.opens("devnet")).toBe(true);
     expect(solanaExplorer.opens("mainnet")).toBe(true);
     expect(solscan.opens("localnet")).toBe(false);
-    expect(solanaExplorer.opens("playnet")).toBe(false);
   });
 
   it("fall back to Solana Explorer when the stored one is no longer offered", () => {

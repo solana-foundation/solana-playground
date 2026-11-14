@@ -164,7 +164,7 @@ connects in the dialog, `current` when the wallet chip makes it the current wall
 `fund_wallet_connect_started` `{ wallet: string }` when the wallet chip asks a wallet to connect;
 `fund_wallet_connect_failed` `{ wallet: string, reason: "rejected" | "network" | "unconfirmed" | "unknown" }`
 when that connect does not happen (`rejected` is the user's no); `fund_wallet_disconnected` `{ wallet: string }`
-when the chip disconnects the current wallet; `fund_sent` `{ cluster: "mainnet" | "devnet" | "testnet" | "localnet" | "playnet" }` (the Playground's cluster) when a
+when the chip disconnects the current wallet; `fund_sent` `{ cluster: "mainnet" | "devnet" | "testnet" | "localnet" }` (the Playground's cluster) when a
 transfer is confirmed; and
 `fund_failed` `{ stage: "connect" | "send", reason: "rejected" | "network" | "unconfirmed" | "unknown" }` when connecting or sending fails. `session_account_item_picked`
 SHALL carry `item: "fund-wallet"` when the menu item is picked. No event

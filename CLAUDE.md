@@ -160,11 +160,13 @@ Asked to build something in the client, look in `openspec/changes/` first.
   (`client-v2/docs/deploy-client-vercel.md`, "wasm-bindgen"). A bump changes
   the pin and the lockfile together.
 - **The wasm packages are real unless `USE_WASM_STUBS=true` says
-  otherwise.** Five of the seven local `wasm/*/pkg` deps compile from Rust, and
+  otherwise.** Five of the six local `wasm/*/pkg` deps compile from Rust, and
   `yarn install` refuses to run while those directories are missing. The fork
   has no `wasm/anchor-cli`, since the terminal's `anchor` command is TypeScript
-  (`client-v2/src/commands/anchor`); an upstream sync that changes that folder
-  keeps it deleted.
+  (`client-v2/src/commands/anchor`), and no `wasm/playnet` or
+  `wasm/pkgs/playnet`, since Playnet's binary was built from Solana forks the
+  repository does not hold; an upstream sync that changes these folders keeps
+  them deleted.
   `yarn setup` (`client-v2/scripts/setup-wasm.sh`) builds them into the
   checkout's own `wasm/target` and `wasm/rust-analyzer/target` (rust-analyzer is
   its own workspace). Never share one target folder between worktrees: cargo

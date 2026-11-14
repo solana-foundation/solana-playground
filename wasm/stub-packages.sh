@@ -15,8 +15,8 @@
 # `yarn install` refuses to run while these folders are missing, and a real
 # build takes about an hour on a cold target. A stub loses Rust intellisense in
 # the editor and the `solana`, `spl-token`, `sugar` terminal commands
-# plus Seahorse (Python) builds. The UI, Monaco, rustfmt, Playnet (local
-# validator), the wallet, and Rust program builds via the build server work.
+# plus Seahorse (Python) builds. The UI, Monaco, rustfmt, the wallet, and Rust
+# program builds via the build server work.
 #
 # Usage: yarn --cwd client-v2 setup:with-stubs
 # Back to the real packages: yarn --cwd client-v2 setup

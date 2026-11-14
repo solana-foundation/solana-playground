@@ -241,8 +241,6 @@ class _PgProgramInfo {
     if (!programId) throw new Error("Program id doesn't exist");
 
     const conn = PgConnection.current;
-    if (!PgConnection.isReady(conn)) throw new Error("Connection is not ready");
-
     const programAccountInfo = await conn.getAccountInfo(programId);
     const deployed = !!programAccountInfo;
     if (!deployed) return { deployed, upgradable: true };

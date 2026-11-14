@@ -592,7 +592,7 @@ describe("BaseDeploy", () => {
   it("leaves out an Explorer link the explorer cannot open", () => {
     const p = props({
       built: true,
-      history: [recordFor("playnet")("a", "5sig")],
+      history: [recordFor("localnet")("a", "5sig")],
     });
     p.addressUrl = () => undefined;
     p.txUrl = () => undefined;

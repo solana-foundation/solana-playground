@@ -58,8 +58,8 @@ const PUBLIC_ENDPOINTS: Record<string, string> = {
  * The endpoint an export writes as the cluster's fallback: the public one of
  * the cluster Playground is on, never the URL it uses. A platform or custom RPC
  * URL can carry an API key, and a zip gets shared. A local validator keeps its
- * URL; playnet runs only in the browser and an unknown cluster has no public
- * URL, so both fall back to devnet, Playground's default.
+ * URL; an unknown cluster has no public URL, so it falls back to devnet,
+ * Playground's default.
  *
  * @param cluster the cluster Playground is on, as `PgConnection.cluster` names
  * it; `null` before it is known
@@ -970,12 +970,6 @@ console.log(await pg.connection.getSlot());
         cluster: "localnet",
         endpoint: "http://localhost:8900",
         expected: "http://localhost:8900",
-      },
-      {
-        cluster: "playnet",
-        // eslint-disable-next-line @microsoft/sdl/no-insecure-url -- Endpoint.PLAYNET's placeholder, matched by name and never requested
-        endpoint: "http://playnet",
-        expected: Endpoint.DEVNET,
       },
       {
         // eslint-disable-next-line unicorn/no-null -- `PgConnection.cluster` is null until it is known

@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { isAirdropSignInGated } from "./sign-in-gate";
 
 describe("isAirdropSignInGated", () => {
-  it.each(["localnet", "playnet"])("opens the gate on %s", (cluster) => {
-    expect(isAirdropSignInGated(cluster)).toBe(false);
+  it("opens the gate on localnet", () => {
+    expect(isAirdropSignInGated("localnet")).toBe(false);
   });
 
   it.each(["devnet", "testnet", "mainnet"])(
