@@ -134,6 +134,10 @@ describe("reporter scrub", () => {
     extra?: Record<string, unknown>;
     contexts?: { feedback?: Record<string, unknown> };
   }
+  interface ScrubbedTransaction {
+    transaction?: string;
+    spans?: { description?: string; data?: Record<string, unknown> }[];
+  }
   // The session integration sends envelopes of its own; these are the events and feedback
   const eventsOf = () =>
     envelopes
@@ -143,12 +147,21 @@ describe("reporter scrub", () => {
       )
       .map(([, event]) => event as ScrubbedEvent);
 
+  const recording: Transport = () => ({
+    send: async (envelope) => {
+      envelopes.push(envelope);
+      return { statusCode: 200 };
+    },
+    flush: async () => true,
+  });
+
   /** Starts Sentry with the production options, over the recording transport */
   const start = (integrations: Sentry.BrowserOptions["integrations"]) => {
     const options = sentryOptions({
       dsn: DSN,
       release: "abc123",
       environment: "production",
+      tracesSampleRate: 0,
     });
     Sentry.init({
       dsn: options.dsn,
@@ -157,13 +170,7 @@ describe("reporter scrub", () => {
       integrations,
       beforeBreadcrumb: options.beforeBreadcrumb,
       beforeSend: options.beforeSend,
-      transport: () => ({
-        send: async (envelope) => {
-          envelopes.push(envelope);
-          return { statusCode: 200 };
-        },
-        flush: async () => true,
-      }),
+      transport: recording,
     });
   };
 
@@ -173,19 +180,64 @@ describe("reporter scrub", () => {
     envelopes.length = 0;
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
-    start(sentryOptions({ dsn: DSN }).integrations);
+    start(sentryOptions({ dsn: DSN, tracesSampleRate: 0 }).integrations);
   });
 
   afterEach(() => vi.restoreAllMocks());
 
-  it("should install the scrub and leave out console breadcrumbs when the reporter initialises", async () => {
+  it("should install the scrub, tracing and no console breadcrumbs when the reporter initialises", async () => {
     await Sentry.close();
-    reporter.init({ dsn: DSN });
+    reporter.init({ dsn: DSN, tracesSampleRate: 0 });
 
     const client = Sentry.getClient();
     expect(client?.getOptions().beforeSend).toBe(scrubEvent);
     expect(client?.getOptions().beforeBreadcrumb).toBe(scrubBreadcrumb);
     expect(client?.getIntegrationByName("Console")).toBeUndefined();
+    expect(client?.getIntegrationByName("BrowserTracing")).toBeDefined();
+  });
+
+  it("should send a transaction with a secret key redacted in its name and its spans", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+    Sentry.init({
+      dsn: options.dsn,
+      tracesSampleRate: options.tracesSampleRate,
+      traceLifecycle: options.traceLifecycle,
+      beforeSendTransaction: options.beforeSendTransaction,
+      defaultIntegrations: false,
+      transport: recording,
+    });
+
+    // A new trace: an earlier test's unsampled page-load span stays active, and its children go unsampled
+    Sentry.startNewTrace(() =>
+      Sentry.startSpan({ name: `/share?k=${KEY}`, op: "pageload" }, () => {
+        Sentry.startSpan(
+          {
+            name: `GET /api/x?k=${KEY}`,
+            op: "http.client",
+            attributes: { url: `/api/x?k=${KEY}` },
+          },
+          () => {}
+        );
+      })
+    );
+    await Sentry.flush();
+
+    const transactions = envelopes
+      .map((envelope) => itemsOf(envelope)[0])
+      .filter(([header]) => header.type === "transaction")
+      .map(([, event]) => event as unknown as ScrubbedTransaction);
+    expect(transactions).toHaveLength(1);
+    const [transaction] = transactions;
+    expect(transaction.transaction).toBe("/share?k=[redacted]");
+    expect(transaction.spans).toEqual([
+      expect.objectContaining({
+        description: "GET /api/x?k=[redacted]",
+        data: expect.objectContaining({ url: "/api/x?k=[redacted]" }),
+      }),
+    ]);
+    expect(JSON.stringify(envelopes)).not.toContain(KEY);
   });
 
   /** Stands in for the user's test printing through mocha to this window's console */

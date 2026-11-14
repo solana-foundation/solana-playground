@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/react";
 
 import type { Level } from "../logger/severity";
 import type { LogEntry } from "../logger/types";
-import { scrubBreadcrumb, scrubEvent } from "./scrub";
+import { scrubBreadcrumb, scrubEvent, scrubTransaction } from "./scrub";
 import type { Feedback, Reporter, ReporterConfig } from "./types";
 
 const SEVERITY: Record<Level, Sentry.SeverityLevel> = {
@@ -26,15 +26,22 @@ export const sentryOptions = ({
   dsn,
   release,
   environment,
+  tracesSampleRate,
 }: ReporterConfig): Sentry.BrowserOptions => ({
   dsn,
   release,
   environment,
-  integrations: (defaults) =>
-    defaults.filter((integration) => !LEFT_OUT.has(integration.name)),
+  tracesSampleRate,
+  // Only a static transaction runs `beforeSendTransaction`, the one hook that can drop it
+  traceLifecycle: "static",
+  integrations: (defaults) => [
+    ...defaults.filter((integration) => !LEFT_OUT.has(integration.name)),
+    Sentry.browserTracingIntegration(),
+  ],
   // Neither the user's program output nor a secret key leaves the page
   beforeBreadcrumb: scrubBreadcrumb,
   beforeSend: scrubEvent,
+  beforeSendTransaction: scrubTransaction,
 });
 
 const init = (config: ReporterConfig) => {

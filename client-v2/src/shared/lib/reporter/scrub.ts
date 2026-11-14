@@ -1,7 +1,7 @@
 // What a report from the browser must never carry: the user's program output,
 // which their tests print to this window's console, and a secret key. The
-// reporter passes these rules to Sentry as `beforeBreadcrumb` and `beforeSend`
-// (`sentryOptions` in `reporter/sentry.ts`).
+// reporter passes these rules to Sentry as `beforeBreadcrumb`, `beforeSend` and
+// `beforeSendTransaction` (`sentryOptions` in `reporter/sentry.ts`).
 
 const REDACTED = "[redacted]";
 
@@ -226,6 +226,21 @@ export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
   } catch (failure) {
     // Not logged: the logger reports through this reporter, and would loop
     return withheld(event, failure);
+  }
+};
+
+/**
+ * A transaction with every value in it redacted, its spans included, or `null`
+ * to drop it when the walk throws: a withheld stand-in would carry no
+ * measurement and still cost quota.
+ */
+export const scrubTransaction = <E extends object>(event: E): E | null => {
+  try {
+    return redact(event) as E;
+  } catch {
+    // Not logged: the logger reports through this reporter, and would loop
+    // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
+    return null;
   }
 };
 
@@ -643,6 +658,46 @@ if (import.meta.vitest) {
           expect(JSON.stringify(scrubbed)).not.toContain(KEY);
         }
       );
+    });
+
+    describe("scrubTransaction", () => {
+      it("should redact a key in the transaction's name and in a span's description", () => {
+        expect(
+          scrubTransaction({
+            type: "transaction",
+            transaction: `/share?k=${KEY}`,
+            spans: [
+              {
+                op: "http.client",
+                description: `GET /api/x?k=${KEY}`,
+                data: { url: `/api/x?k=${KEY}` },
+              },
+            ],
+          })
+        ).toEqual({
+          type: "transaction",
+          transaction: "/share?k=[redacted]",
+          spans: [
+            {
+              op: "http.client",
+              description: "GET /api/x?k=[redacted]",
+              data: { url: "/api/x?k=[redacted]" },
+            },
+          ],
+        });
+      });
+
+      it("should drop a transaction it cannot walk", () => {
+        const hostile = {
+          get boom(): string {
+            throw new TypeError(`getter ${KEY}`);
+          },
+        };
+
+        expect(
+          scrubTransaction({ type: "transaction", spans: [{ data: hostile }] })
+        ).toBeNull();
+      });
     });
   });
 }

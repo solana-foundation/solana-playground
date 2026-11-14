@@ -4,6 +4,8 @@ export interface ReporterConfig {
   dsn: string;
   release?: string;
   environment?: string;
+  /** The share of page loads and navigations traced, from 0 to 1 */
+  tracesSampleRate: number;
 }
 
 /** A message a user writes to the team, with what it was sent from */

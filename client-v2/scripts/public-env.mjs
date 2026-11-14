@@ -185,6 +185,11 @@ const VALUE_SHAPES = [
     (name) => name.endsWith("_SEND_TX_PER_SECOND"),
     checkWith(/^\d+(\.\d+)?$/, "a number"),
   ],
+  // Signed, so a rate outside 0 to 1 reaches the browser's warning instead of failing the build
+  [
+    (name) => name === "REACT_APP_SENTRY_TRACES_SAMPLE_RATE",
+    checkWith(/^-?\d+(\.\d+)?$/, "a number"),
+  ],
   [
     (name) => name === "REACT_APP_GA_MEASUREMENT_ID",
     checkWith(GA4_ID, "a GA4 measurement id"),
