@@ -268,11 +268,6 @@ for (const [label, env, expected] of [
     /REACT_APP_DEVNET_SEND_TX_PER_SECOND is not a number/,
   ],
   [
-    "fails a traces sample rate that is not a number",
-    { REACT_APP_SENTRY_TRACES_SAMPLE_RATE: "abc" },
-    /REACT_APP_SENTRY_TRACES_SAMPLE_RATE is not a number/,
-  ],
-  [
     "fails a GA id that is not a GA4 id",
     { REACT_APP_GA_MEASUREMENT_ID: "UA-12345-1" },
     /REACT_APP_GA_MEASUREMENT_ID is not a GA4 measurement id/,
@@ -298,6 +293,29 @@ for (const [label, env, expected] of [
     const problems = publicEnvProblems(ALLOWED, env);
     assert.equal(problems.length, patterns.length, problems.join("\n"));
     patterns.forEach((pattern, i) => assert.match(problems[i], pattern));
+  });
+}
+
+const OUT_OF_RANGE = [
+  "REACT_APP_SENTRY_TRACES_SAMPLE_RATE is not a decimal from 0 to 1",
+];
+
+for (const [value, expected] of [
+  ["0", []],
+  ["0.25", []],
+  ["1", []],
+  [".5", []],
+  ["1.5", OUT_OF_RANGE],
+  ["-1", OUT_OF_RANGE],
+  ["abc", OUT_OF_RANGE],
+]) {
+  test(`checks a traces sample rate of "${value}" against 0 to 1`, () => {
+    assert.deepEqual(
+      publicEnvProblems(ALLOWED, {
+        REACT_APP_SENTRY_TRACES_SAMPLE_RATE: value,
+      }),
+      expected
+    );
   });
 }
 

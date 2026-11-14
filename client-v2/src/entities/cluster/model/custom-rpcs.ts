@@ -1,9 +1,5 @@
 import { createLogger } from "@/shared/lib/logger";
-import {
-  isSecretQueryTerm,
-  isTokenLike,
-  queryTermsOf,
-} from "@/shared/lib/url-secret.mjs";
+import { maskUrlWith } from "@/shared/lib/url-secret.mjs";
 
 import { CLUSTERS, Endpoint, offeredOf } from "./clusters";
 
@@ -67,56 +63,21 @@ export interface MaskedUrl {
   masked: boolean;
 }
 
-/** What a stored value that is not a URL shows: nothing of it */
-const UNREADABLE: MaskedUrl = { text: MASK, masked: true };
+const maskWithDots = maskUrlWith(MASK);
 
 /**
  * A saved RPC's whole URL with every secret in it as `••••` (spec
- * `client-v2-custom-rpcs`): a non-empty query value under a key-like name;
- * a host label, path segment, query value or bare query term, or fragment
- * that looks like a token; and a username and password. Built from the
- * parsed URL's parts split by hand, not `URLSearchParams`, so names keep
- * their spelling and `••••` is never percent-encoded.
+ * `client-v2-custom-rpcs`), by {@link maskUrlWith}'s rule; a stored value
+ * that is not a URL shows as `••••` alone.
  */
 export const maskRpcUrl = (url: string): MaskedUrl => {
-  let parsed: URL;
   try {
-    parsed = new URL(url);
+    new URL(url);
   } catch {
     // Never the value, nor the error quoting it: it may be a key
     log.info("a saved RPC URL does not parse; drawn fully masked");
-    return UNREADABLE;
   }
-  let masked = false;
-  const mask = () => {
-    masked = true;
-    return MASK;
-  };
-  /** The part itself, or `••••` when it reads as a token */
-  const maskToken = (part: string) => (isTokenLike(part) ? mask() : part);
-
-  // A username and a password, either or both, show as one `••••`
-  const auth = parsed.username || parsed.password ? `${mask()}@` : "";
-  const host =
-    parsed.hostname.split(".").map(maskToken).join(".") +
-    (parsed.port ? `:${parsed.port}` : "");
-  const path = parsed.pathname.split("/").map(maskToken).join("/");
-  const query = parsed.search
-    ? "?" +
-      queryTermsOf(parsed.search)
-        .map(([name, value]) => {
-          if (value === undefined) return maskToken(name);
-          return `${name}=${isSecretQueryTerm(name, value) ? mask() : value}`;
-        })
-        .join("&")
-    : "";
-  const hash = parsed.hash.slice(1);
-  const fragment = parsed.hash ? `#${maskToken(hash)}` : "";
-
-  return {
-    text: `${parsed.protocol}//${auth}${host}${path}${query}${fragment}`,
-    masked,
-  };
+  return maskWithDots(url);
 };
 
 /** `new URL(value).href`, or the value itself when it is not a URL */

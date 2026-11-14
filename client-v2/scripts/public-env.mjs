@@ -185,10 +185,10 @@ const VALUE_SHAPES = [
     (name) => name.endsWith("_SEND_TX_PER_SECOND"),
     checkWith(/^\d+(\.\d+)?$/, "a number"),
   ],
-  // Signed, so a rate outside 0 to 1 reaches the browser's warning instead of failing the build
+  // A plain decimal from 0 to 1, `.5` included, so `10` meant as 10 % fails here rather than tracing every page load
   [
     (name) => name === "REACT_APP_SENTRY_TRACES_SAMPLE_RATE",
-    checkWith(/^-?\d+(\.\d+)?$/, "a number"),
+    checkWith(/^(0(\.\d*)?|\.\d+|1(\.0*)?)$/, "a decimal from 0 to 1"),
   ],
   [
     (name) => name === "REACT_APP_GA_MEASUREMENT_ID",

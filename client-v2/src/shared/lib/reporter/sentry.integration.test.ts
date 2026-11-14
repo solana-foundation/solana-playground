@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { requireFor } from "../../../test-utils/require-for";
-import { scrubBreadcrumb, scrubEvent } from "./scrub";
+import { scrubBreadcrumb, scrubEvent, scrubTransaction } from "./scrub";
 import { reporter, sentryOptions } from "./sentry";
 
 type Transport = NonNullable<
@@ -117,6 +117,64 @@ describe("reporter.sendFeedback", () => {
   });
 });
 
+// Ahead of "reporter scrub": Sentry wraps the `fetch` it finds once per module, so the spy must be there first
+describe("trace headers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // The fetch and transaction breadcrumbs would reach the next describe's events
+    Sentry.getIsolationScope().clearBreadcrumbs();
+  });
+
+  it("should add neither sentry-trace nor baggage to a same-origin or a cross-origin fetch in a sampled span", async () => {
+    await Sentry.close();
+    envelopes.length = 0;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response("{}"));
+    const options = sentryOptions({ dsn: DSN, tracesSampleRate: 1 });
+    Sentry.init({
+      dsn: options.dsn,
+      tracesSampleRate: options.tracesSampleRate,
+      tracePropagationTargets: options.tracePropagationTargets,
+      traceLifecycle: options.traceLifecycle,
+      integrations: options.integrations,
+      transport: () => ({
+        send: async (envelope) => {
+          envelopes.push(envelope);
+          return { statusCode: 200 };
+        },
+        flush: async () => true,
+      }),
+    });
+
+    await Sentry.startNewTrace(() =>
+      Sentry.startSpan({ name: "/", op: "pageload" }, async () => {
+        await fetch("/api/sync");
+        await fetch("https://build.example.test/build");
+      })
+    );
+    await Sentry.flush();
+
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      "/api/sync",
+      "https://build.example.test/build",
+    ]);
+    for (const [, init] of fetchSpy.mock.calls) {
+      const headers = new Headers(init?.headers);
+      expect(headers.has("sentry-trace")).toBe(false);
+      expect(headers.has("baggage")).toBe(false);
+    }
+    // Both requests became spans, so Sentry's fetch wrapper ran over the spy
+    const [transaction] = envelopes
+      .map((envelope) => itemsOf(envelope)[0])
+      .filter(([header]) => header.type === "transaction")
+      .map(([, event]) => event as unknown as { spans?: { op?: string }[] });
+    expect(
+      transaction.spans?.filter((span) => span.op === "http.client")
+    ).toHaveLength(2);
+  });
+});
+
 describe("reporter scrub", () => {
   // A 64-byte secret key's length in base58, and a 44-character public key
   const KEY = "3Xz9".repeat(22);
@@ -192,6 +250,8 @@ describe("reporter scrub", () => {
     const client = Sentry.getClient();
     expect(client?.getOptions().beforeSend).toBe(scrubEvent);
     expect(client?.getOptions().beforeBreadcrumb).toBe(scrubBreadcrumb);
+    expect(client?.getOptions().beforeSendTransaction).toBe(scrubTransaction);
+    expect(client?.getOptions().traceLifecycle).toBe("static");
     expect(client?.getIntegrationByName("Console")).toBeUndefined();
     expect(client?.getIntegrationByName("BrowserTracing")).toBeDefined();
   });

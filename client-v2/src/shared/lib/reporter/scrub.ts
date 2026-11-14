@@ -3,6 +3,8 @@
 // reporter passes these rules to Sentry as `beforeBreadcrumb`, `beforeSend` and
 // `beforeSendTransaction` (`sentryOptions` in `reporter/sentry.ts`).
 
+import { maskUrlWith } from "../url-secret.mjs";
+
 const REDACTED = "[redacted]";
 
 /** Fewer bytes than a secret key or its 32-byte seed is not a key */
@@ -45,11 +47,23 @@ const SECRET_PATTERNS: [RegExp, string][] = [
 /** Past this depth a value is replaced rather than walked; Sentry's own normalising stops at 3 */
 const MAX_DEPTH = 12;
 
+/** An `http(s)://` URL in running text: it ends at whitespace, a quote, a bracket or a character a URL escapes */
+const URL_IN_TEXT = /https?:\/\/[^\s"'`<>()[\]{}\\^|]+/gi;
+
+const maskUrl = maskUrlWith(REDACTED);
+
+/** `text` with the secrets of each URL in it masked; a URL with none stays as written, unnormalised */
+const maskUrlsIn = (text: string) =>
+  text.replace(URL_IN_TEXT, (url) => {
+    const { text: shown, masked } = maskUrl(url);
+    return masked ? shown : url;
+  });
+
 const redactText = (text: string) =>
   SECRET_PATTERNS.reduce(
     (scrubbed, [pattern, replacement]) =>
       scrubbed.replace(pattern, replacement),
-    text
+    maskUrlsIn(text)
   );
 
 const isByte = (value: unknown) =>
@@ -123,6 +137,10 @@ interface Breadcrumb {
   timestamp?: number;
   message?: string;
   data?: Record<string, unknown>;
+}
+
+interface WithBreadcrumbs {
+  breadcrumbs?: Breadcrumb[];
 }
 
 /** `read()`, or `undefined` if it throws: what a withheld copy keeps of a hostile value */
@@ -214,15 +232,26 @@ const withheld = <E extends ScrubbableEvent>(event: E, failure: unknown): E => {
   } as unknown as E;
 };
 
+/**
+ * `event` with its breadcrumbs re-checked and every value in it redacted;
+ * throws when the walk does. Sentry merges the scope's breadcrumbs into
+ * transactions too, so both kinds of event go through it.
+ */
+const scrubbedOf = <E extends object>(event: E): E => {
+  const breadcrumbs = (event as WithBreadcrumbs).breadcrumbs
+    ?.map(scrubBreadcrumb)
+    .filter((crumb): crumb is Breadcrumb => crumb !== null);
+  const scrubbed = redact(event) as E;
+  if (breadcrumbs !== undefined) {
+    (scrubbed as WithBreadcrumbs).breadcrumbs = breadcrumbs;
+  }
+  return scrubbed;
+};
+
 /** An error event with its breadcrumbs re-checked and every value in it redacted */
 export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
   try {
-    const breadcrumbs = event.breadcrumbs
-      ?.map(scrubBreadcrumb)
-      .filter((crumb): crumb is Breadcrumb => crumb !== null);
-    const scrubbed = redact(event) as E;
-    if (breadcrumbs !== undefined) scrubbed.breadcrumbs = breadcrumbs;
-    return scrubbed;
+    return scrubbedOf(event);
   } catch (failure) {
     // Not logged: the logger reports through this reporter, and would loop
     return withheld(event, failure);
@@ -230,15 +259,15 @@ export const scrubEvent = <E extends ScrubbableEvent>(event: E): E => {
 };
 
 /**
- * A transaction with every value in it redacted, its spans included, or `null`
- * to drop it when the walk throws: a withheld stand-in would carry no
- * measurement and still cost quota.
+ * A transaction scrubbed as {@link scrubEvent} scrubs an error, its spans
+ * included, or `null` to drop it when the walk throws: a withheld stand-in
+ * would carry no measurement and still cost quota.
  */
 export const scrubTransaction = <E extends object>(event: E): E | null => {
   try {
-    return redact(event) as E;
+    return scrubbedOf(event);
   } catch {
-    // Not logged: the logger reports through this reporter, and would loop
+    // Not logged: importing the logger would close a cycle (logger, providers/sentry, reporter, scrub); Sentry's client reports count the drop as `before_send` for category `transaction`
     // eslint-disable-next-line unicorn/no-null -- Sentry's `beforeSendTransaction` drops a transaction only on `null`
     return null;
   }
@@ -253,6 +282,8 @@ if (import.meta.vitest) {
     const PUBKEY = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
     const bytes = (length: number) =>
       Array.from({ length }, (_, i) => (i * 7) % 256);
+    // eslint-disable-next-line no-restricted-syntax -- shared cannot import Endpoint from entities, and the URL is only text here
+    const DEVNET = "https://api.devnet.solana.com/";
 
     describe("redact", () => {
       it("should replace a base58 secret key inside a sentence", () => {
@@ -446,6 +477,32 @@ if (import.meta.vitest) {
         const endless = (): object => ({ toJSON: endless });
 
         expect(redact(endless())).toBe("[redacted]");
+      });
+
+      it.each([
+        {
+          url: "https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789",
+          shown: "https://solana-mainnet.g.alchemy.com/v2/[redacted]",
+        },
+        {
+          url: "https://x.solana-mainnet.quiknode.pro/0123456789abcdef0123456789abcdef01234567/",
+          shown: "https://x.solana-mainnet.quiknode.pro/[redacted]/",
+        },
+        {
+          url: "https://devnet.helius-rpc.com/?api-key=abc",
+          shown: "https://devnet.helius-rpc.com/?api-key=[redacted]",
+        },
+        { url: DEVNET, shown: DEVNET },
+      ])("should show $url as $shown", ({ url, shown }) => {
+        expect(redact(url)).toBe(shown);
+      });
+
+      it("should mask a URL inside a span description", () => {
+        expect(
+          redact(
+            "POST https://solana-mainnet.g.alchemy.com/v2/abc123def456ghi789 (200)"
+          )
+        ).toBe("POST https://solana-mainnet.g.alchemy.com/v2/[redacted] (200)");
       });
 
       it("should leave numbers, booleans and null as they are", () => {
@@ -661,29 +718,18 @@ if (import.meta.vitest) {
     });
 
     describe("scrubTransaction", () => {
-      it("should redact a key in the transaction's name and in a span's description", () => {
+      it("should drop a console breadcrumb merged into the transaction", () => {
         expect(
           scrubTransaction({
             type: "transaction",
-            transaction: `/share?k=${KEY}`,
-            spans: [
-              {
-                op: "http.client",
-                description: `GET /api/x?k=${KEY}`,
-                data: { url: `/api/x?k=${KEY}` },
-              },
+            breadcrumbs: [
+              { category: "console", message: "  1) failing test" },
+              { category: "ui.click", message: "button.deploy" },
             ],
           })
         ).toEqual({
           type: "transaction",
-          transaction: "/share?k=[redacted]",
-          spans: [
-            {
-              op: "http.client",
-              description: "GET /api/x?k=[redacted]",
-              data: { url: "/api/x?k=[redacted]" },
-            },
-          ],
+          breadcrumbs: [{ category: "ui.click", message: "button.deploy" }],
         });
       });
 

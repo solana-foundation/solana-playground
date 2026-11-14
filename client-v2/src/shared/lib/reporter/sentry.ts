@@ -32,6 +32,8 @@ export const sentryOptions = ({
   release,
   environment,
   tracesSampleRate,
+  // No `sentry-trace` or `baggage` on any request, so the API functions sample at their own rate
+  tracePropagationTargets: [],
   // Only a static transaction runs `beforeSendTransaction`, the one hook that can drop it
   traceLifecycle: "static",
   integrations: (defaults) => [

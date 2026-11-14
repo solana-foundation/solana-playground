@@ -46,20 +46,21 @@ const warnAboutMissingIds = ({
   }
 };
 
-/** Every page load, as Sentry advises and as the server's `SENTRY_TRACES_SAMPLE_RATE` defaults */
+/** Every page load and navigation: `REACT_APP_SENTRY_TRACES_SAMPLE_RATE` exists to lower the rate */
 const DEFAULT_TRACES_SAMPLE_RATE = 1;
 
 /**
- * The share of page loads to trace: {@link DEFAULT_TRACES_SAMPLE_RATE} when
- * unset or empty, and the same with a warning when the value is not a number
- * from 0 to 1.
+ * The share of page loads and navigations to trace: {@link DEFAULT_TRACES_SAMPLE_RATE}
+ * when unset or blank, and the same with a warning when the value is not a
+ * number from 0 to 1.
  */
 const parseTracesSampleRate = (value: string | undefined) => {
-  if (value === undefined || value === "") return DEFAULT_TRACES_SAMPLE_RATE;
-  const rate = Number(value);
+  const text = value?.trim() ?? "";
+  if (text === "") return DEFAULT_TRACES_SAMPLE_RATE;
+  const rate = Number(text);
   if (rate >= 0 && rate <= 1) return rate;
   log.warn(
-    `REACT_APP_SENTRY_TRACES_SAMPLE_RATE is "${value}", not a number from 0 to 1; tracing every page load`
+    `REACT_APP_SENTRY_TRACES_SAMPLE_RATE is "${value}", not a number from 0 to 1; tracing every page load and navigation`
   );
   return DEFAULT_TRACES_SAMPLE_RATE;
 };
@@ -106,6 +107,7 @@ if (import.meta.vitest) {
     it.each([
       { value: undefined, rate: 1, warnings: 0 },
       { value: "", rate: 1, warnings: 0 },
+      { value: " ", rate: 1, warnings: 0 },
       { value: "0", rate: 0, warnings: 0 },
       { value: "0.25", rate: 0.25, warnings: 0 },
       { value: "1", rate: 1, warnings: 0 },
