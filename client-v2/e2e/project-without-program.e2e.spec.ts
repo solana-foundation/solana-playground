@@ -1,7 +1,12 @@
 import type { Page } from "@playwright/test";
 
 import { expect, json, LONG, test } from "./fixtures";
-import { openPhonePreview, PHONE } from "./viewports";
+import { DOCK_DESK, openPhonePreview, PHONE } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 const OWNER = "alice";
 const REPO = "ts-client";
@@ -226,11 +231,22 @@ test("project-without-program: An imported TypeScript project", async ({
   await importAndReturn(page);
   await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1, LONG);
 
-  await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
   await expect(page.locator("#flow-client-project")).toHaveText(
-    "Client project"
+    "Client project",
+    LONG
   );
+  // One lone Write tab read as broken, so the row draws no stepper
+  await expect(
+    page.getByRole("tablist", { name: "Development loop" })
+  ).toHaveCount(0);
+  await expect(page.locator("#flow-client-cluster")).not.toBeEmpty();
+  await expect(page.locator("#flow-add-program")).toHaveText("Add program");
+  await expect(page.locator("#flow-test")).toHaveText("Test");
   await expect(page.locator("#flow-run")).toHaveText("Run");
+  // The bar owns Run and Test, so the tree draws neither
+  await expect(
+    page.locator("#root-dir").getByRole("button", { name: /^(Run|Test)$/ })
+  ).toHaveCount(0);
   await page.keyboard.press("Control+2");
   await expect(page.locator("#flow-stage-panel-write")).toBeVisible();
   await expect(page.locator("#flow-stage-panel-build")).toHaveCount(0);
@@ -242,7 +258,7 @@ test("project-without-program: A project with no program on a phone", async ({
   await stubRepository(page, CLIENT_AND_TESTS);
   await importAndReturn(page);
   await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1, LONG);
-  await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
+  await expect(page.locator("#flow-client-project")).toBeVisible(LONG);
 
   await page.setViewportSize(PHONE);
 
@@ -260,7 +276,7 @@ test("project-without-program: The preview of a project with no program on a pho
   await stubRepository(page, CLIENT_AND_TESTS);
   await importAndReturn(page);
   await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1, LONG);
-  await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
+  await expect(page.locator("#flow-client-project")).toBeVisible(LONG);
 
   await page.setViewportSize(PHONE);
   await openPhonePreview(page);
@@ -286,14 +302,10 @@ test("project-without-program: A program is added", async ({
   await stubRepository(page, CLIENT_AND_TESTS);
   await importAndReturn(page);
   await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1, LONG);
-  await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
+  await expect(page.locator("#flow-client-project")).toBeVisible(LONG);
 
-  // The tree's add-program button, which scaffolds `src/lib.rs`
-  await page
-    .locator("#root-dir")
-    .getByRole("button", { name: "Add" })
-    .first()
-    .click();
+  // The bar's Add program, which scaffolds `src/lib.rs`
+  await page.locator("#flow-add-program").click();
   await expect(item(page, "src/lib.rs")).toHaveCount(1, LONG);
 
   await expect

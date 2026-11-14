@@ -48,6 +48,13 @@ type LayoutEvents = {
    * drag of its edge ends the widening, which are no one's choice of width.
    */
   layout_assistant_widened: { wide: boolean };
+  /**
+   * The project tree's dropdown under the editor head opened; `via` says
+   * whether the head's Files (or the empty editor's Show files) or ⌘E did
+   * it. Docking and undocking the tree send `layout_panel_toggled` with
+   * `panel: "files"` instead.
+   */
+  layout_files_dropdown_opened: { via: "button" | "key" };
 };
 
 export const layoutTelemetry = createTracker<LayoutEvents>();

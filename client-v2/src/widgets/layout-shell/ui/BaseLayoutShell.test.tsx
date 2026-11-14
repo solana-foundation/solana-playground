@@ -79,6 +79,7 @@ vi.mock("react-resizable-panels", async (importOriginal) => {
 });
 
 import { useSidebar } from "@/shared/ui/sidebar";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import type { AssistantWide, BaseLayoutShellProps } from "./BaseLayoutShell";
 import BaseLayoutShell, { PANEL_SIZES } from "./BaseLayoutShell";
@@ -1688,4 +1689,58 @@ describe("in a tutorial", () => {
       expect(drawer.className).toContain("max-h-[42dvh]");
     }
   );
+});
+
+describe("the docked project tree", () => {
+  it("draws the unpin at the files column's top when it can undock", () => {
+    const onUndockFiles = vi.fn();
+    render(
+      <TooltipProvider>
+        <BaseLayoutShell {...props("wide")} onUndockFiles={onUndockFiles} />
+      </TooltipProvider>
+    );
+    const files = requireFor("the files column")(
+      screen.getByText("files slot").parentElement
+    );
+    fireEvent.click(
+      within(files).getByRole("button", { name: "Undock the files" })
+    );
+    expect(onUndockFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it("draws no unpin without a way to undock", () => {
+    render(<BaseLayoutShell {...props("wide")} />);
+    expect(
+      screen.queryByRole("button", { name: "Undock the files" })
+    ).toBeNull();
+  });
+
+  it("reports the code area's width, the files column and the stage together", () => {
+    const observed: Array<{
+      el: Element;
+      cb: (entries: Array<{ contentRect: { width: number } }>) => void;
+    }> = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(
+          private cb: (
+            entries: Array<{ contentRect: { width: number } }>
+          ) => void
+        ) {}
+        observe(el: Element) {
+          observed.push({ el, cb: this.cb });
+        }
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    const onCodeWidth = vi.fn();
+    render(<BaseLayoutShell {...props("wide")} onCodeWidth={onCodeWidth} />);
+    // The shell's own observer, after the library's on the same element
+    const work = observed.filter(({ el }) => el.id === "layout-work").at(-1);
+    expect(work).toBeDefined();
+    act(() => work?.cb([{ contentRect: { width: 1000 } }]));
+    expect(onCodeWidth).toHaveBeenLastCalledWith(1000);
+  });
 });

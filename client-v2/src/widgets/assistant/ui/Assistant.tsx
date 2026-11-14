@@ -126,8 +126,14 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
   return (
     <div className="flex h-full max-h-full min-h-0 flex-1 flex-col">
       <BaseAssistantHead
-        // The composer's model, from the connection and the deployment's answer
-        label={headLabel(modelShown(PgAssistant.connection, defaultBackend))}
+        // The project it acts on: the work's one bar carries no name, and the
+        // composer already shows the model. With nothing open, the model,
+        // from the connection and the deployment's answer
+        label={
+          project
+            ? { kind: "plain", text: project }
+            : headLabel(modelShown(PgAssistant.connection, defaultBackend))
+        }
         // `aiOff` over the composer's own inputs, so head and off row never disagree
         off={aiOff({
           connected: PgAssistant.connection?.id,

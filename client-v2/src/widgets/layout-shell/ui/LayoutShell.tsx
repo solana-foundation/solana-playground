@@ -6,11 +6,15 @@ import { PgClientRun } from "@/features/docs-link";
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { isEditable } from "@/shared/lib/is-editable";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { canDockAt } from "@/shared/lib/tree-dock";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
+import { useCreateItem } from "@/views/sidebar/explorer/Component/useCreateItem";
 
+import { selectActiveFile } from "../model/active-file";
 import { onDidRequestConsole } from "../model/console-request";
 import { editorHeadHost } from "../model/editor-head-host";
 import { CONSOLE_KEY, FILES_KEY, keyLabel } from "../model/keys";
@@ -34,7 +38,7 @@ import { useLayoutState } from "../model/use-layout-state";
 import BaseEditorHead from "./BaseEditorHead";
 import type { AssistantWide, TutorialFrameSlot } from "./BaseLayoutShell";
 import BaseLayoutShell from "./BaseLayoutShell";
-import BaseStageBar from "./BaseStageBar";
+import BaseStageBar, { BaseBarControls } from "./BaseStageBar";
 
 /** The console as the stage sees it (`LayoutShellProps.stage`) */
 export interface StageConsole {
@@ -60,8 +64,8 @@ export interface LayoutShellProps {
     phone: boolean;
   }) => ReactNode;
   /**
-   * The stage tabs, in a row across the files column and the stage, under the
-   * shell's own stage bar; on a phone, in the preview page's bar
+   * The stage tabs, in a row across the files column and the stage, over the
+   * editor head; on a phone, in the preview page's bar
    */
   stageTabs: ReactNode;
   /**
@@ -70,9 +74,12 @@ export interface LayoutShellProps {
    */
   showTabs?: boolean;
   /**
-   * The files column. `collapsed` is never true in the phone's Files Sheet;
-   * `phone` says the column is in that Sheet, where `toggle` closes it. A
-   * tutorial's frame has no files column.
+   * The project tree. From `LAYOUT_BREAKPOINTS.phone` up it is drawn once,
+   * either as the files column (docked and the code area wide enough, where
+   * `toggle` undocks it) or in the dropdown under the editor head (where
+   * `toggle` closes it), never both; `collapsed` is false wherever it is
+   * drawn. `phone` says it is in the phone's Files Sheet, where `toggle`
+   * closes the Sheet. A tutorial's frame has no files column.
    */
   files: (panel: {
     collapsed: boolean;
@@ -129,8 +136,8 @@ export interface LayoutShellProps {
   /** While Home shows, keep the work mounted (`BaseLayoutShellProps.keepWork`) */
   keepWork?: boolean;
   /**
-   * Actions for the open project in the desktop stage bar, as the header's
-   * Share; not drawn under Home or over a page
+   * Actions for the open project in the desktop editor head, after its
+   * toggles, as the header's Share; not drawn under Home or over a page
    */
   stageBarActions?: ReactNode;
   /**
@@ -183,6 +190,7 @@ const LayoutShell = ({
   const [page, setPage] = useState<PhonePage>("work");
   const [view, setView] = useState<WorkView>("code");
   const [filesOpen, setFilesOpen] = useState(false);
+  const { createItem } = useCreateItem();
   const [phoneConsole, setPhoneConsole] = useState(false);
   // Held in state, not read off `PgFlow.state`, so a stage change re-renders
   const [flowStage, setFlowStage] = useState(PgFlow.state.stage);
@@ -210,8 +218,8 @@ const LayoutShell = ({
   const [homeSheetOpen, setHomeSheetOpen] = useState(false);
   const homeSheetNow = useRef(false);
   useExplorer();
-  // The project's name shows in the stage bar and the phone's bar; a rename
-  // opens no file, so `useExplorer`'s events miss it
+  // The project's name shows in the phone's bar; a rename opens no file, so
+  // `useExplorer`'s events miss it
   useRenderOnChange(PgExplorer.onDidRenameWorkspace);
   // Below `LAYOUT_BREAKPOINTS.compact` the assistant is a Sheet, closed on
   // arrival and never saved
@@ -228,6 +236,70 @@ const LayoutShell = ({
   // What a change nobody marked came from: a Sheet closed by Escape is a key,
   // one closed by a tap on its overlay a button
   const lastInput = useRef<ToggleSource>("key");
+
+  // The project tree as in a tutorial: `state.open.files` (saved) says docked;
+  // it shows as the column only while the code area is wide enough to dock,
+  // else, like an undocked tree, as the dropdown under the editor head. The
+  // code area is unmeasured until its first report, and wide until then.
+  // Only the side of `DOCK_MIN_PX` is kept, and only a change of side is set,
+  // so a resize that stays on one side renders nothing
+  const [canDock, setCanDock] = useState(true);
+  const canDockNow = useRef(true);
+  const handleCodeWidth = (width: number) => {
+    const next = canDockAt(width);
+    if (canDockNow.current === next) return;
+    canDockNow.current = next;
+    setCanDock(next);
+  };
+  const isDockedShown = state.open.files && canDock;
+  // The dropdown is the visit's, never saved
+  const [isTreeOpen, setTreeOpenState] = useState(false);
+  // Mirrors for ⌘E's handler, which is renewed only with the saved flag
+  const isTreeOpenNow = useRef(false);
+  const isDockedShownNow = useRef(isDockedShown);
+  isDockedShownNow.current = isDockedShown;
+  /** Opens the dropdown, measured by what opened it */
+  const openTree = (via: "button" | "key") => {
+    if (isTreeOpenNow.current) return;
+    isTreeOpenNow.current = true;
+    setTreeOpenState(true);
+    layoutTelemetry.track("layout_files_dropdown_opened", { via });
+  };
+  /** Closes the dropdown; a close is not measured */
+  const closeTree = () => {
+    if (!isTreeOpenNow.current) return;
+    isTreeOpenNow.current = false;
+    setTreeOpenState(false);
+  };
+  /** Docks the tree beside the editor; saved, and the dropdown closes */
+  const dockTree = (via: ToggleSource) => {
+    closeTree();
+    setOpen("files", { open: true, via });
+  };
+  /** Puts the tree back in its dropdown, closed; saved */
+  const undockTree = (via: ToggleSource) => {
+    closeTree();
+    setOpen("files", { open: false, via });
+  };
+  /**
+   * A file's pick closes the dropdown, as a tutorial's does. Closing on the
+   * pick itself, not on the editor taking focus: the open file's pick opens
+   * nothing, so nothing else would close it
+   */
+  const handleTreeClick = (target: EventTarget) => {
+    if (
+      target instanceof Element &&
+      target.closest(`.${PgView.classNames.FILE}`) !== null
+    ) {
+      closeTree();
+    }
+  };
+  /** "Files" and ⌘E: undock a docked, shown tree, else open or close the dropdown */
+  const toggleFiles = (via: "button" | "key") => {
+    if (isDockedShownNow.current) undockTree(via);
+    else if (isTreeOpenNow.current) closeTree();
+    else openTree(via);
+  };
 
   useEffect(() => {
     // Each input says what it was, for a Sheet that reports a change nobody
@@ -248,6 +320,19 @@ const LayoutShell = ({
       document.removeEventListener("keydown", onKey, true);
     };
   }, []);
+
+  // A docked tree that can show again takes the dropdown's place, and the
+  // dropdown goes with the head: off the work screen and on a phone, where the
+  // head is not drawn. Nobody closed it, so nothing is reported
+  const hasNoTreePlace = isDockedShown || phone || screen.kind !== "work";
+  // What the head draws: the dropdown's open and its body read this one value,
+  // so they agree in the render before the effect below closes the dropdown
+  const isTreeShown = isTreeOpen && !hasNoTreePlace;
+  useEffect(() => {
+    if (hasNoTreePlace) closeTree();
+    // `closeTree` reads only a ref and a stable setter
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasNoTreePlace]);
 
   useEffect(() => {
     layoutTelemetry.track("layout_viewport", { viewport });
@@ -372,18 +457,19 @@ const LayoutShell = ({
     return () => subs.forEach((sub) => sub.dispose());
   }, [phone]);
 
-  // The editor's "Show files", from inside the work: opens, never folds, and
-  // like Ctrl+E means nothing under Home or a page
+  // The editor's "Show files", from inside the work: opens, never folds (a
+  // docked, shown tree stays as it is, an undocked one drops under the head),
+  // and like Ctrl+E means nothing under Home or a page
   useEffect(() => {
     const sub = PgView.onDidRequestFiles(() => {
       if (isCovered(screenNow.current)) return;
       if (phone) setPhoneFiles(true, "button");
-      else setOpen("files", { open: true, via: "button" });
+      else if (!isDockedShownNow.current) openTree("button");
     });
     return () => sub.dispose();
-    // `setPhoneFiles` reads only refs and stable setters
+    // `setPhoneFiles` and `openTree` read only refs and stable setters
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phone, setOpen]);
+  }, [phone]);
 
   const wideOrSheet = viewport === "wide" ? state.open.assistant : sheetOpen;
   const pagerOrFrame = phone ? view === "chat" : wideOrSheet;
@@ -497,7 +583,7 @@ const LayoutShell = ({
           setPhoneFiles(!filesNow.current, "key");
           return;
         }
-        setOpen("files", { open: !state.open.files, via: "key" });
+        toggleFiles("key");
       },
       opts: { capture: true },
     },
@@ -604,13 +690,6 @@ const LayoutShell = ({
       ? () => onShare(shareName)
       : undefined;
 
-  // The bar names the project whether the assistant shows or not: the
-  // assistant's head names the model, so a toggle that took the name away
-  // left the work unnamed. Under Home it names Home, as the phone's bar does
-  const barTitle = homeShown
-    ? homeTitle
-    : PgExplorer.currentWorkspaceName ?? null;
-
   return (
     <BaseLayoutShell
       viewport={viewport}
@@ -628,10 +707,13 @@ const LayoutShell = ({
             ? setOpen("assistant", { open, via: "drag" })
             : setSheet(open, lastInput.current),
       }}
+      // The column is the tree docked and shown; a drag that folds it undocks
       filesState={{
-        open: state.open.files,
+        open: isDockedShown,
         onOpenChange: (open) => setOpen("files", { open, via: "drag" }),
       }}
+      onUndockFiles={() => undockTree("button")}
+      onCodeWidth={handleCodeWidth}
       consoleState={{
         open: state.open.console,
         onOpenChange: (open) => setOpen("console", { open, via: "drag" }),
@@ -661,10 +743,10 @@ const LayoutShell = ({
             phone: true,
           });
         }
+        // Drawn only while docked and shown, so a control of its own undocks
         return files({
-          collapsed: !state.open.files,
-          toggle: () =>
-            setOpen("files", { open: !state.open.files, via: "button" }),
+          collapsed: false,
+          toggle: () => undockTree("button"),
           phone: false,
         });
       }}
@@ -690,27 +772,43 @@ const LayoutShell = ({
         onShare: phoneShare,
         onConsoleClose: (via) => setPhoneConsoleOpen(false, via),
       }}
+      // Under Home the bar names Home and opens its Sheet; in an open project
+      // the editor head is the one bar and takes the bar's icons
       stageBar={
-        <BaseStageBar
-          title={barTitle}
-          // The panel's toggle on a wide window; below it, and at every width
-          // under Home, what opens the Sheet
-          assistant={{
-            open: assistantShown,
-            onToggle: () => setAssistant(!assistantShown, "button"),
-          }}
-          // Under Home Ctrl+R does nothing, so the hint names no key
-          assistantKey={homeShown ? null : "Ctrl+R"}
-          actions={homeShown ? undefined : stageBarActions}
-        />
+        homeShown && (
+          <BaseStageBar
+            title={homeTitle}
+            // At every width under Home, what opens the Sheet
+            assistant={{
+              open: assistantShown,
+              onToggle: () => setAssistant(!assistantShown, "button"),
+            }}
+            // Under Home Ctrl+R does nothing, so the hint names no key
+            assistantKey={null}
+          />
+        )
       }
       stageTabs={stageTabs}
       workHead={
         <BaseEditorHead
           files={{
-            open: state.open.files,
-            onToggle: () =>
-              setOpen("files", { open: !state.open.files, via: "button" }),
+            open: isDockedShown || isTreeShown,
+            onToggle: () => toggleFiles("button"),
+          }}
+          tree={{
+            open: isTreeShown,
+            canDock,
+            onClose: closeTree,
+            onDock: () => dockTree("button"),
+            onClick: handleTreeClick,
+            // The tree mounts once: here only while the column does not hold it
+            body: isTreeShown
+              ? files({
+                  collapsed: false,
+                  toggle: closeTree,
+                  phone: false,
+                })
+              : undefined,
           }}
           terminal={{
             open: state.open.console,
@@ -721,6 +819,40 @@ const LayoutShell = ({
           hostRef={editorHeadHost}
           filesKey={keyLabel(FILES_KEY, PgCommon.getOS())}
           terminalKey={keyLabel(CONSOLE_KEY, PgCommon.getOS())}
+          title={
+            assistantShown
+              ? undefined
+              : PgExplorer.currentWorkspaceName ?? undefined
+          }
+          onNewFile={() => {
+            PgView.showFiles();
+            // A folded column mounts on the request; the tree is drawn a
+            // moment after (`NoFileOpen` waits the same)
+            void PgCommon.sleep(100)
+              .then(() => {
+                // `createItem` starts beside the tree's selected row, which
+                // can be a folder picked since; the new file goes beside
+                // the active file
+                selectActiveFile();
+                return createItem();
+              })
+              .catch(reportButtonFailure("start a new file"));
+          }}
+          controls={
+            <BaseBarControls
+              // The assistant's head has its own Collapse, so the row offers
+              // the assistant only while it is folded, as the way back
+              assistant={
+                assistantShown
+                  ? null
+                  : {
+                      open: false,
+                      onToggle: () => setAssistant(true, "button"),
+                    }
+              }
+              actions={stageBarActions}
+            />
+          }
         />
       }
       stage={stage({

@@ -29,8 +29,10 @@ vi.mock("../../sidebar/explorer/Component", async () => {
     },
   };
 });
+
+const createItem = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock("../../sidebar/explorer/Component/useCreateItem", () => ({
-  useCreateItem: () => ({ createItem: vi.fn() }),
+  useCreateItem: () => ({ createItem }),
 }));
 
 import { requireFor } from "../../../test-utils/require-for";
@@ -38,7 +40,7 @@ import { forgetColumn } from "./kept-column";
 import LeftPanel from "./LeftPanel";
 
 const draw = (collapsed: boolean) =>
-  render(<LeftPanel collapsed={collapsed} />);
+  render(<LeftPanel collapsed={collapsed} hasProgram />);
 
 const body = () =>
   requireFor("the left panel body")(
@@ -62,11 +64,20 @@ describe("LeftPanel in the flush frame", () => {
     }
   );
 
-  it("shows the tree and its New file footer", () => {
+  // New file is the editor head's +, so the column has no footer
+  it("shows the tree with no New file footer", () => {
     draw(false);
     expect(document.getElementById("root-dir")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "+ New file" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /new file/i })).toBeNull();
     expect(given.treeMounts).toBe(1);
+  });
+
+  // The phone draws no editor head, so its sheet keeps the footer
+  it("keeps New file at the foot of the phone's sheet", () => {
+    createItem.mockClear();
+    render(<LeftPanel collapsed={false} sheet hasProgram />);
+    fireEvent.click(screen.getByRole("button", { name: "+ New file" }));
+    expect(createItem).toHaveBeenCalledTimes(1);
   });
 
   // The editor head names the column and hides it (DES-205)
@@ -97,7 +108,7 @@ describe("LeftPanel across an unmount", () => {
   });
 
   it("keeps nothing from the phone's sheet", () => {
-    const sheet = render(<LeftPanel collapsed={false} sheet />);
+    const sheet = render(<LeftPanel collapsed={false} sheet hasProgram />);
     body().scrollTop = 120;
     sheet.unmount();
 
@@ -109,8 +120,8 @@ describe("LeftPanel across an unmount", () => {
     const panel = draw(false);
     body().scrollTop = 120;
     fireEvent.scroll(body());
-    panel.rerender(<LeftPanel collapsed />);
-    panel.rerender(<LeftPanel collapsed={false} />);
+    panel.rerender(<LeftPanel collapsed hasProgram />);
+    panel.rerender(<LeftPanel collapsed={false} hasProgram />);
     expect(body().scrollTop).toBe(120);
   });
 

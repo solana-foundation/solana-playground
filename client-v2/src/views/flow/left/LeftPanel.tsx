@@ -1,6 +1,7 @@
 import type { FC } from "react";
 import { useLayoutEffect, useRef } from "react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 
 import { PgExplorer } from "../../../utils";
@@ -11,23 +12,30 @@ import { keepColumn, keptColumn } from "./kept-column";
 
 interface LeftPanelProps {
   /**
-   * Hidden by the editor head's Files or ⌘E: the column takes no width
-   * (design.md, "Frame chrome (5.25)"), so it draws nothing
+   * Defensive: the layout draws the tree only where it shows (the docked
+   * column, or the dropdown under the editor head), so this is false there;
+   * a collapsed panel draws nothing
    */
   collapsed: boolean;
   /** The phone's Files sheet, which keeps no scroll for the wide column */
   sheet?: boolean;
+  /**
+   * Whether the project has a program (`FlowState.hasProgram`): without one,
+   * the sheet keeps the tree's own actions (`SHEET_SECTIONS`)
+   */
+  hasProgram: boolean;
 }
 
 /**
  * Where you are inside the current project. Which project you are in is
- * the navigation's project list's job, and the stage bar's while the
+ * the navigation's project list's job, and the editor head's while the
  * assistant, whose head names it, is out of view; this column does not name
  * it too, since two controls for one question would disagree.
  */
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   collapsed,
   sheet = false,
+  hasProgram,
 }) => {
   // Hidden, the column unmounts (design.md, "Frame chrome (5.25)"), so its
   // scroll is kept for the next mount (`kept-column.ts`). It is tracked as it
@@ -65,8 +73,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
     // `collapsed`, but a `collapsed` column draws no body either
   }, [collapsed]);
   // The same upstream hook `ExplorerButtons.tsx` calls for its own hidden
-  // "New file" icon button (`NewItemButton` -> `useCreateItem`) -- no
-  // upstream edit, no programmatic `.click()` of a hidden button.
+  // "New file" icon button (`NewItemButton` -> `useCreateItem`)
   const { createItem } = useCreateItem();
 
   // Hidden, the column takes no width: no landmark either, since an empty,
@@ -93,22 +100,30 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
         }}
         id="flow-left-tabpanel"
       >
-        <div className={EXPLORER_CONTAINER}>
+        <div
+          className={cn(
+            EXPLORER_CONTAINER,
+            sheet && !hasProgram ? SHEET_SECTIONS : WIDE_SECTIONS
+          )}
+        >
           <Explorer />
         </div>
       </div>
-      {/* Quiet, full-width footer button pinned below the scrollable tree (a
-          sibling of the body, not inside it, so it never scrolls away).
-          Reuses `createItem` from `useCreateItem` -- the exact upstream
-          create-item flow, not a re-implementation. */}
-      <button
-        type="button"
-        className="flex w-full shrink-0 cursor-pointer items-center border-t border-border bg-transparent px-3 text-left font-[inherit] text-[var(--text-secondary)] hover:bg-surface-base hover:text-[var(--text-primary)] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary"
-        style={{ height: BOTTOM_BAR_HEIGHT }}
-        onClick={createItem}
-      >
-        + New file
-      </button>
+      {/* The phone's sheet keeps its footer button: the phone draws no editor
+          head, whose + starts a new file everywhere else. A sibling of the
+          body, not inside it, so it never scrolls away */}
+      {sheet && (
+        <button
+          type="button"
+          className="flex w-full shrink-0 cursor-pointer items-center border-t border-border bg-transparent px-3 text-left font-[inherit] text-[var(--text-secondary)] hover:bg-surface-base hover:text-[var(--text-primary)] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-primary"
+          style={{ height: BOTTOM_BAR_HEIGHT }}
+          onClick={() => {
+            createItem().catch(reportButtonFailure("start a new file"));
+          }}
+        >
+          + New file
+        </button>
+      )}
     </aside>
   );
 };
@@ -118,10 +133,12 @@ export default LeftPanel;
 /**
  * Quiets the upstream explorer down to the bare tree the board shows
  * (`src`, `client`, `tests` -- no workspace picker, no icon toolbar, no
- * per-section action buttons or labels): the stage bar's stepper already
- * owns Build/Deploy/Run/Test, and the footer button above already
- * owns "new file". A temporary project keeps one more row above the tree:
- * Workspaces's warning, whose Import is the only way to keep the project.
+ * per-section action buttons or labels): the stage bar already owns
+ * Build/Deploy/Run/Test and adding a program, and the editor head's +
+ * already owns "new file" (the phone's sheet, with no head, keeps the
+ * footer button above). A temporary project keeps one more row above the
+ * tree: Workspaces's warning, whose Import is the only way to keep the
+ * project.
  *
  * Every rule here is structural (`nth-child`), anchored either on
  * `#root-dir` (`PgView.ids.ROOT_DIR`, a stable id upstream itself relies
@@ -157,41 +174,27 @@ const EXPLORER_CONTAINER = cn(
   // warning's root carries.
   "[&>div>div:nth-child(1):not([data-temporary-warning])]:hidden!",
   "[&>div>div:nth-child(2)]:hidden!",
-  // Program section (#root-dir's own first child): hides the "Program"
-  // label and the Build/Deploy buttons, keeps a lone "+" (add-program,
-  // shown only when the project has no `src` yet -- `addProgram`
-  // scaffolds a real `lib.rs`, which the footer's plain `createItem`
-  // does not, so it stays reachable). `nth-child(2):nth-last-child(2)`
-  // only matches the first of *two* button siblings (Build);
-  // `nth-child(3)` only exists when there is a second (Deploy); the lone
-  // "+" is `nth-child(2)` with no `nth-child(3)`, so neither matches it.
-  // Anchor: `#root-dir` (stable). Safe guard: `:has(> button)` ensures
-  // the selector only matches a section header row (which contains direct
-  // `<button>` children), never a folder/file row (no direct `<button>`
-  // children). Failure mode: none -- always safe.
-  "[&_#root-dir>div:has(>button):first-child>div:first-child]:hidden!",
-  "[&_#root-dir>div:has(>button):first-child>button:nth-child(2):nth-last-child(2)]:hidden!",
-  "[&_#root-dir>div:has(>button):first-child>button:nth-child(3)]:hidden!",
-  // Client section ("Client" label + Run/Test, or their "Add client"/"Add
-  // tests" fallbacks): always exactly 2 buttons, so no lone-button case to
-  // preserve. Safe guard: `:has(> button)` ensures the selector only
-  // matches a section header row (which contains direct `<button>`
-  // children), never a folder/file row (no direct `<button>` children).
-  // Position: normally `#root-dir > div:nth-child(3)` when the Program
-  // row's own FolderGroup (the `src` tree) renders; shifts to
-  // `nth-child(2)` when no `src` exists. When `src` is absent, the
-  // Run/Test buttons (the "Add client"/"Add tests" fallbacks) simply stay
-  // VISIBLE, which is acceptable degradation -- the empty-state fallbacks
-  // are worth reaching. Folder rows are never matched because they contain
-  // no direct `<button>` children.
-  "[&_#root-dir>div:has(>button):nth-child(3)>div:first-child]:hidden!",
-  "[&_#root-dir>div:has(>button):nth-child(3)>button:nth-child(2)]:hidden!",
-  "[&_#root-dir>div:has(>button):nth-child(3)>button:nth-child(3)]:hidden!",
-  // With their labels and buttons hidden, the section tops above are only
-  // their margins: 16 over Client and 4 under each, a blank 20 px between
-  // `src` and `client` and none between `client` and `tests`. The tree reads
-  // as one list, so they take none. The rule reaches every section, so a
-  // label that stays visible ("Other", or Client before `src` exists) sits
-  // right under the row above it.
+  // A section top that stays takes no margin: the tree reads as one list,
+  // so its label sits right under the row above it.
   "[&_#root-dir>div[data-section]]:my-0!"
 );
+
+/**
+ * The wide column drops the Program and Client section rows whole ("Program"
+ * + Build/Deploy or the add-program "+", "Client" + Run/Test or their "Add
+ * client"/"Add tests" fallbacks): the stage bar owns those actions, in a
+ * project with no program too (`StageBar`'s Add program, Test and Run).
+ * `:has(> button)` matches only a section row with actions, so "Other",
+ * which has none, keeps its label; folder and file rows carry no
+ * `data-section`.
+ */
+const WIDE_SECTIONS = "[&_#root-dir>div[data-section]:has(>button)]:hidden!";
+
+/**
+ * The phone's bar carries only a project with no program's Run, so its sheet
+ * keeps the tree's Client row (Run, Test) and the add-program "+". Only the
+ * Program row's Build and Deploy go, which an empty `src` folder still draws:
+ * a third child the add-program row never has.
+ */
+const SHEET_SECTIONS =
+  "[&_#root-dir>div[data-section]:first-child:has(>button:nth-child(3))]:hidden!";

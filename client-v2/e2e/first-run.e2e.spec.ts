@@ -60,7 +60,7 @@ test.describe("on a desktop window", () => {
     const builds = await countBuilds(page);
     await page.goto("/");
     // A real first visitor has no saved layout; the suite's profile keeps
-    // the tree open (`playwright.config`), and is applied once, so a reload
+    // the tree docked (`playwright.config`), and is applied once, so a reload
     // stays clear
     await page.evaluate(() => localStorage.removeItem("layout"));
     await page.reload();
@@ -81,7 +81,8 @@ test.describe("on a desktop window", () => {
     await expect(
       page.getByRole("heading", { level: 3, name: "Ask about anchor-example" })
     ).toBeVisible();
-    // The tree stays closed, as a first visit leaves it
+    // A first visit docks the tree, but at 1280 the code area is too narrow
+    // to give it a column: it waits in its dropdown, closed
     await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
     expect(builds).toHaveLength(1);
   });

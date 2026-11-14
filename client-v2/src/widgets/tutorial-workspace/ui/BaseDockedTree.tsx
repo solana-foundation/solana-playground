@@ -1,8 +1,6 @@
-import { PinOff } from "lucide-react";
 import type { FC } from "react";
 
-import { Button } from "@/shared/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+import { UndockPin } from "@/shared/lib/tree-dock";
 
 import type { TreeRow } from "../model/tree";
 import BaseFileTreeList from "./BaseFileTreeList";
@@ -42,22 +40,7 @@ const BaseDockedTree: FC<BaseDockedTreeProps> = ({
     }}
   >
     <div className="relative pt-1.5" style={{ width: DOCKED_TREE_PX - 1 }}>
-      <div className="absolute top-1.5 right-1.5 z-10">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Undock the files"
-              onClick={onUndock}
-              className="text-muted-foreground"
-            >
-              <PinOff />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Undock</TooltipContent>
-        </Tooltip>
-      </div>
+      <UndockPin onUndock={onUndock} />
       <div className="px-1.5 pb-2">
         <BaseFileTreeList rows={rows} onPick={onPick} onPickDoc={onPickDoc} />
       </div>

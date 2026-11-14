@@ -4,7 +4,12 @@ import { expect, test } from "@playwright/test";
 import { hunkLineClass } from "../src/features/persistence/ui/merge-editor/hunk-class";
 import { requireFor } from "../src/test-utils/require-for";
 import { applyWrite, json, LONG, makeLocalProject, settled } from "./fixtures";
-import { PHONE } from "./viewports";
+import { DOCK_DESK, PHONE } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * The resolve view, against an account stubbed as `account-sync` stubs it.
@@ -463,7 +468,9 @@ test("project-conflict-resolution: Undoing a take", async ({ page }) => {
   await expect.poll(() => linesIn(pane.result)).toContain(MINE);
   await expect(take).toHaveCount(0);
 
-  await pane.result.locator(".view-lines").click();
+  // Focus the result on the line the take wrote: the middle of its lines can
+  // sit under a fold or the ribbon, depending on the window's size
+  await pane.result.locator(".view-line", { hasText: MINE }).click();
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+z" : "Control+z"
   );

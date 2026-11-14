@@ -180,15 +180,25 @@ Done:
   keeps the three status dots and an Account button that opens the same
   menu; on a phone the three fold into one status chip in the top bar that
   opens a sheet), the
-  assistant, then the work area. Across the top of the work area runs the
-  stage bar (the project's name, whether or not the assistant shows, the
-  assistant's toggle, Docs); under it the stepper (Write → Build → Deploy →
-  Interact, state derived from real build/deploy events); under that the
-  editor head, with the open files' tabs on the left and two toggles on the
-  right, Files and Terminal; under the head sit the Files column (closed on
-  a first visit; Files in the head opens and closes it and always works,
-  Cmd+E too, on a Mac not while the editor has focus, where the editor takes
-  the key) and the stage, with the terminal in a console
+  assistant, then the work area. The assistant's head names the open
+  project (beside a tutorial not yet started, its name; with neither, the
+  model; the composer's model button
+  always shows the model) and its Collapse hides the assistant. Across the
+  top of the work area runs the stepper (Write → Build → Deploy → Interact,
+  state derived from real build/deploy events); under it the editor head,
+  the work's one bar, with the open files' tabs on the left and, on the
+  right, Files, Terminal, Share, "Expand assistant" (only while the
+  assistant is hidden) and More (Solana documentation). Home keeps a bar of
+  its own. The project tree works as in a tutorial: docked, as a column left
+  of the stage with an unpin at its top, or as a dropdown under the head
+  with a pin that docks it. A first visit docks it, and it takes a column
+  only while the code area (the files column and the stage together) is
+  1100 px or wider; narrower, Files opens the dropdown, which then has no
+  pin. Files undocks a docked tree, and otherwise opens or closes the
+  dropdown; opening a file from the dropdown closes it. Cmd+E does what
+  Files does, on a Mac not while the editor has focus, where the editor
+  takes the key. Under the head sit the docked tree and the stage, with the
+  terminal in a console
   drawer under the stage (Cmd+J). The assistant is a resizable panel on
   screens 1024 px and wider and a side Sheet from 768 to 1023 px, where the
   navigation starts as a rail. Below 768 px the app is three swiped

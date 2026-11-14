@@ -11,7 +11,12 @@ import {
   seedWorkspace,
   test,
 } from "./fixtures";
-import { DESK, openPhonePreview, PHONE } from "./viewports";
+import { DESK, DOCK_DESK, openPhonePreview, PHONE } from "./viewports";
+
+// These tests drive the project tree as its docked column, which needs a code
+// area of 1100 px or more; the default window is too narrow and shows the
+// dropdown instead
+test.use({ viewport: DOCK_DESK });
 
 /**
  * The scenarios of `client-v2-stages`: what the Build, Deploy and Interact
@@ -468,14 +473,33 @@ test.describe("client-v2-stages: Interact", () => {
     );
   });
 
-  // At 1024 px in the suite's layout (TREE_OPEN_LAYOUT in playwright.config:
-  // the navigation, the files and the assistant open), the stage is about
-  // 240 px wide, less the scrollbar gutter on both edges: Upload IDL, the
-  // IDL's name and "Build the IDL locally" on one centred row lost both ends
+  // The stage at its 240 px minimum, less the scrollbar gutter on both
+  // edges: Upload IDL, the IDL's name and "Build the IDL locally" on one
+  // centred row lost both ends. Reached on this spec's 1920 px window with
+  // the assistant widened to its 560 px maximum (the code area still wide
+  // enough, 1100 px, for the docked tree) and the files column dragged as
+  // wide as the stage allows
   test("Interact keeps its IDL actions inside a narrow stage", async ({
     seededPage: page,
   }) => {
-    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.getByRole("button", { name: "Widen the assistant" }).click();
+    const handle = page.locator(
+      '[data-slot="resizable-handle"][aria-controls="files"]'
+    );
+    const handleBox = requireFor("the files column's handle box")(
+      await handle.boundingBox()
+    );
+    await page.mouse.move(
+      handleBox.x + handleBox.width / 2,
+      handleBox.y + handleBox.height / 2
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      handleBox.x + 900,
+      handleBox.y + handleBox.height / 2,
+      { steps: 10 }
+    );
+    await page.mouse.up();
     // eslint-disable-next-line unicorn/no-null -- the cluster's answer for an account that does not exist
     await stubProgramAccount(page, null);
     const panel = await buildThenInteract(page);
@@ -504,11 +528,11 @@ test.describe("client-v2-stages: Interact", () => {
     // The buttons, and the IDL's name beside Upload IDL
     const parts = actions.getByRole("button").or(actions.getByRole("status"));
     for (const part of await parts.all()) {
-      const box = requireFor("an action's bounding box")(
+      const partBox = requireFor("an action's bounding box")(
         await part.boundingBox()
       );
-      expect(box.x).toBeGreaterThanOrEqual(frame.left - 0.5);
-      expect(box.x + box.width).toBeLessThanOrEqual(frame.right + 0.5);
+      expect(partBox.x).toBeGreaterThanOrEqual(frame.left - 0.5);
+      expect(partBox.x + partBox.width).toBeLessThanOrEqual(frame.right + 0.5);
     }
   });
 });
@@ -568,7 +592,9 @@ test.describe("client-v2-stages on a phone", () => {
       [PROGRAM_ID, Date.now()] as const
     );
     await page.reload();
-    await expect(page.locator("#root-dir")).toBeAttached(LONG);
+    // The explorer back: at 1280 the tree is not on the page (its dropdown
+    // is closed), so the editor's tab says it
+    await expect(page.locator("#tabs")).toContainText("lib.rs", LONG);
     await page.setViewportSize(PHONE);
     await openPhonePreview(page);
 
